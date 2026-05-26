@@ -5,6 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { Check, LogOut, Mail, Settings } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { useSelectedMailbox } from "@/components/mailbox-provider";
+import { useMessageCounts } from "@/hooks/use-message-counts";
 import { cn } from "@/lib/utils";
 
 export function MailboxSelector() {
@@ -14,6 +15,7 @@ export function MailboxSelector() {
 	const router = useRouter();
 	const [open, setOpen] = useState(false);
 	const ref = useRef<HTMLDivElement>(null);
+	const { counts } = useMessageCounts();
 
 	useEffect(() => {
 		function onPointerDown(event: PointerEvent) {
@@ -73,6 +75,9 @@ export function MailboxSelector() {
 						const email = `${mb.localPart}@${mb.hostname}`;
 						const name = mb.displayName ?? mb.localPart;
 						const active = !adminActive && selectedMailbox?.id === mb.id;
+						const mailboxCount = counts.mailboxes.find((count) => count.mailboxId === mb.id);
+						const unread = mailboxCount?.unread ?? 0;
+						const inbox = mailboxCount?.inbox ?? 0;
 
 						return (
 							<button
@@ -100,8 +105,16 @@ export function MailboxSelector() {
 											</span>
 										)}
 									</div>
-									<p className="truncate text-xs text-neutral-500">{email}</p>
+									<p className="truncate text-xs text-neutral-500">
+										{email}
+										{inbox > 0 && ` · ${inbox} inbox`}
+									</p>
 								</div>
+								{unread > 0 && (
+									<span className="rounded-full bg-blue-100 px-2 py-0.5 text-[11px] font-semibold text-blue-700">
+										{unread > 99 ? "99+" : unread}
+									</span>
+								)}
 								{active && <Check className="h-4 w-4 text-blue-600" />}
 							</button>
 						);
@@ -120,7 +133,7 @@ export function MailboxSelector() {
 							</div>
 							<div>
 								<p className="text-sm font-medium text-neutral-900">Admin settings</p>
-								<p className="text-xs text-neutral-500">Domains, mailboxes, routing, API keys</p>
+								<p className="text-xs text-neutral-500">Domains, mailboxes, API keys</p>
 							</div>
 							{adminActive && <Check className="ml-auto h-4 w-4 text-blue-600" />}
 						</Link>

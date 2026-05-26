@@ -19,3 +19,28 @@ export type Message = {
 	threadId: string | null;
 	createdAt: string;
 };
+
+export type MessageReadFilter = "all" | "read" | "unread";
+
+export type MessageFilterOptions = {
+	query?: string;
+	read?: MessageReadFilter;
+	title?: string;
+};
+
+export type FolderCount = {
+	total: number;
+	unread: number;
+};
+
+export type MailboxCount = {
+	mailboxId: string;
+	total: number;
+	unread: number;
+	inbox: number;
+};
+
+export type MessageCounts = {
+	folders: Record<MessageFolder, FolderCount>;
+	mailboxes: MailboxCount[];
+};

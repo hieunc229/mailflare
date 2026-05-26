@@ -5,19 +5,24 @@ import { getDb } from "@/db";
 import { messageBodies, messages } from "@/db/schema";
 import { requireUser } from "@/lib/auth/cookies";
 import { buildSnippet } from "@/lib/email/parse";
+import type { DraftPayload, DraftRouteParams } from "./types";
+import { selectDraftWithBody } from "./utils";
 
-type Params = { params: Promise<{ id: string }> };
+export async function GET(_request: Request, { params }: DraftRouteParams) {
+	const { id } = await params;
+	const env = getEnv();
+	const user = await requireUser(env);
+	const db = getDb(env);
+	const draft = await selectDraftWithBody(db, user.id, id);
 
-type DraftPayload = {
-	mailboxId?: string | null;
-	from?: string;
-	to?: string;
-	subject?: string;
-	text?: string;
-	html?: string;
-};
+	if (!draft) {
+		return NextResponse.json({ error: "Draft not found" }, { status: 404 });
+	}
 
-export async function PATCH(request: Request, { params }: Params) {
+	return NextResponse.json({ draft });
+}
+
+export async function PATCH(request: Request, { params }: DraftRouteParams) {
 	const { id } = await params;
 	const env = getEnv();
 	const user = await requireUser(env);
@@ -53,7 +58,7 @@ export async function PATCH(request: Request, { params }: Params) {
 	return NextResponse.json({ draft: { id } });
 }
 
-export async function DELETE(_request: Request, { params }: Params) {
+export async function DELETE(_request: Request, { params }: DraftRouteParams) {
 	const { id } = await params;
 	const env = getEnv();
 	const user = await requireUser(env);

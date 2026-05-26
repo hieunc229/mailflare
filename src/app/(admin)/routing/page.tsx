@@ -51,7 +51,7 @@ export default function RoutingPage() {
 					<div className="space-y-2">
 						<Label>Domain</Label>
 						<select
-							className="w-full h-10 rounded-md border border-neutral-200 dark:border-neutral-800 px-3 text-sm"
+							className="w-full h-10 rounded-md border border-neutral-200 px-3 text-sm"
 							value={domainId}
 							onChange={(e) => setDomainId(e.target.value)}
 						>

@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { eq, desc, and } from "drizzle-orm";
+import { eq, desc, and, like, or } from "drizzle-orm";
 import { getEnv } from "@/lib/cloudflare";
 import { getCurrentUser } from "@/lib/auth/cookies";
 import { getDb } from "@/db";
@@ -16,6 +16,9 @@ export async function GET(request: Request) {
 	const direction = url.searchParams.get("direction");
 	const mailboxId = url.searchParams.get("mailboxId");
 	const status = url.searchParams.get("status");
+	const query = url.searchParams.get("q")?.trim();
+	const title = url.searchParams.get("title")?.trim();
+	const read = url.searchParams.get("read");
 	const limit = Math.min(Number(url.searchParams.get("limit") ?? 50), 100);
 
 	const db = getDb(env);
@@ -28,6 +31,25 @@ export async function GET(request: Request) {
 	}
 	if (status) {
 		conditions.push(eq(messages.status, status));
+	}
+	if (read === "read") {
+		conditions.push(eq(messages.read, true));
+	}
+	if (read === "unread") {
+		conditions.push(eq(messages.read, false));
+	}
+	if (query) {
+		const pattern = `%${query}%`;
+		const queryCondition = or(
+			like(messages.fromAddr, pattern),
+			like(messages.toAddr, pattern),
+			like(messages.subject, pattern),
+			like(messages.snippet, pattern),
+		);
+		if (queryCondition) conditions.push(queryCondition);
+	}
+	if (title) {
+		conditions.push(like(messages.subject, `%${title}%`));
 	}
 
 	const rows = await db

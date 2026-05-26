@@ -1,20 +1,20 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
 import {
   FileText,
   Inbox,
   MailPlus,
-  PanelLeft,
   Send,
   Settings,
   ShieldAlert,
   Trash2,
 } from "lucide-react";
-import { useCompose } from "@/components/compose/compose-context";
+import { useSelectedMailbox } from "@/components/mailbox-provider";
+import { useMessageCounts } from "@/hooks/use-message-counts";
 import { cn } from "@/lib/utils";
 import { NavItem } from "./components-nav";
+import { getFolderNavCount } from "./dashboard-nav-utils";
 
 const links = [
   { href: "/compose", label: "Compose", icon: MailPlus, primary: true },
@@ -28,8 +28,16 @@ const links = [
 ];
 
 export function DashboardNav({ className }: { className?: string }) {
-  const pathname = usePathname();
-  const { openComposer } = useCompose();
+  const { selectedMailbox } = useSelectedMailbox();
+  const { counts } = useMessageCounts(selectedMailbox?.id);
+  const linksWithCounts = links.map((link) => {
+    if (link.href === "/inbox") return { ...link, count: getFolderNavCount("inbox", counts.folders) };
+    if (link.href === "/sent") return { ...link, count: getFolderNavCount("sent", counts.folders) };
+    if (link.href === "/drafts") return { ...link, count: getFolderNavCount("drafts", counts.folders) };
+    if (link.href === "/spam") return { ...link, count: getFolderNavCount("spam", counts.folders) };
+    if (link.href === "/trash") return { ...link, count: getFolderNavCount("trash", counts.folders) };
+    return link;
+  });
 
   return (
     <nav className={cn("flex flex-col gap-1 flex-1", className)}>
@@ -40,7 +48,7 @@ export function DashboardNav({ className }: { className?: string }) {
         <img src="/icon-96.png" height={28} width={28} />
         <span className="text-lg font-semibold text-neutral-800">Mail</span>
       </Link>
-      {links.map((link, i) => <NavItem link={link} key={`nav-${link.href || i}`} />)}
+      {linksWithCounts.map((link, i) => <NavItem link={link} key={`nav-${link.href || i}`} />)}
     </nav>
   );
 }

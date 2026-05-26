@@ -17,4 +17,6 @@ export async function updateMessageFolder(messageId: string, status: MessageActi
 	if (!response.ok) {
 		throw new Error("Unable to update message");
 	}
+
+	window.dispatchEvent(new Event("mailflare:messages-changed"));
 }

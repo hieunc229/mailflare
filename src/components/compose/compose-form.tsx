@@ -8,17 +8,28 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { useSelectedMailbox } from "@/components/mailbox-provider";
 import { cn } from "@/lib/utils";
+import { fetchDraft } from "./utils";
 
 type Toast = { type: "success" | "error"; message: string } | null;
 
-export function ComposeForm({ mode = "page", onClose }: { mode?: "page" | "popup"; onClose?: () => void }) {
-	const { selectedMailbox } = useSelectedMailbox();
+export function ComposeForm({
+	mode = "page",
+	draftIdToLoad,
+	onClose,
+}: {
+	mode?: "page" | "popup";
+	draftIdToLoad?: string | null;
+	onClose?: () => void;
+}) {
+	const { selectedMailbox, setSelectedMailbox, mailboxes } = useSelectedMailbox();
 	const [draftId, setDraftId] = useState<string | null>(null);
 	const [to, setTo] = useState("");
 	const [subject, setSubject] = useState("");
 	const [text, setText] = useState("");
 	const [toast, setToast] = useState<Toast>(null);
 	const [loading, setLoading] = useState(false);
+	const [loadingDraft, setLoadingDraft] = useState(false);
+	const [loadedDraftMailboxId, setLoadedDraftMailboxId] = useState<string | null>(null);
 	const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
 	const fromAddr = useMemo(
@@ -33,8 +44,44 @@ export function ComposeForm({ mode = "page", onClose }: { mode?: "page" | "popup
 	}, [toast]);
 
 	useEffect(() => {
+		if (!draftIdToLoad) return;
+
+		let cancelled = false;
+		setLoadingDraft(true);
+		fetchDraft(draftIdToLoad)
+			.then((draft) => {
+				if (cancelled) return;
+
+				setDraftId(draft.id);
+				setTo(draft.toAddr);
+				setSubject(draft.subject ?? "");
+				setText(draft.textBody ?? "");
+				setLoadedDraftMailboxId(draft.mailboxId);
+			})
+			.catch((err) => {
+				if (cancelled) return;
+				const message = err instanceof Error ? err.message : "Failed to load draft";
+				setToast({ type: "error", message });
+			})
+			.finally(() => {
+				if (!cancelled) setLoadingDraft(false);
+			});
+
+		return () => {
+			cancelled = true;
+		};
+	}, [draftIdToLoad]);
+
+	useEffect(() => {
+		if (!loadedDraftMailboxId) return;
+
+		const draftMailbox = mailboxes.find((mailbox) => mailbox.id === loadedDraftMailboxId);
+		if (draftMailbox) setSelectedMailbox(draftMailbox);
+	}, [loadedDraftMailboxId, mailboxes, setSelectedMailbox]);
+
+	useEffect(() => {
 		const hasContent = to.trim() || subject.trim() || text.trim();
-		if (!fromAddr || !hasContent) return;
+		if (!fromAddr || !hasContent || loadingDraft) return;
 		if (saveTimer.current) clearTimeout(saveTimer.current);
 
 		saveTimer.current = setTimeout(async () => {
@@ -57,7 +104,7 @@ export function ComposeForm({ mode = "page", onClose }: { mode?: "page" | "popup
 		return () => {
 			if (saveTimer.current) clearTimeout(saveTimer.current);
 		};
-	}, [draftId, fromAddr, selectedMailbox?.id, subject, text, to]);
+	}, [draftId, fromAddr, loadingDraft, selectedMailbox?.id, subject, text, to]);
 
 	async function onSubmit(event: React.FormEvent<HTMLFormElement>) {
 		event.preventDefault();
@@ -82,13 +129,16 @@ export function ComposeForm({ mode = "page", onClose }: { mode?: "page" | "popup
 		}
 
 		if (draftId) {
-			void fetch(`/api/drafts/${draftId}`, { method: "DELETE" });
+			void fetch(`/api/drafts/${draftId}`, { method: "DELETE" }).finally(() => {
+				window.dispatchEvent(new Event("mailflare:messages-changed"));
+			});
 		}
 		setDraftId(null);
 		setTo("");
 		setSubject("");
 		setText("");
 		setToast({ type: "success", message: "Message sent" });
+		window.dispatchEvent(new Event("mailflare:messages-changed"));
 	}
 
 	const frameClass =
@@ -110,7 +160,7 @@ export function ComposeForm({ mode = "page", onClose }: { mode?: "page" | "popup
 			)}
 			<form onSubmit={onSubmit} className={frameClass}>
 				<div className="flex h-9 items-center justify-between bg-neutral-800 px-4 text-sm font-medium text-white">
-					<span>{draftId ? "Draft saved" : "New Message"}</span>
+					<span>{loadingDraft ? "Loading draft" : draftId ? "Draft saved" : "New Message"}</span>
 					{mode === "popup" && (
 						<div className="flex items-center gap-3 text-neutral-300">
 							<Minimize2 className="h-4 w-4" />
@@ -140,6 +190,7 @@ export function ComposeForm({ mode = "page", onClose }: { mode?: "page" | "popup
 						type="email"
 						placeholder="Recipients"
 						required
+						disabled={loadingDraft}
 						className="h-8 border-0 px-0 py-1 shadow-none focus-visible:ring-0"
 					/>
 				</div>
@@ -151,6 +202,7 @@ export function ComposeForm({ mode = "page", onClose }: { mode?: "page" | "popup
 						onChange={(event) => setSubject(event.target.value)}
 						placeholder="Subject"
 						required
+						disabled={loadingDraft}
 						className="h-8 border-0 px-0 py-1 shadow-none focus-visible:ring-0"
 					/>
 				</div>
@@ -161,13 +213,14 @@ export function ComposeForm({ mode = "page", onClose }: { mode?: "page" | "popup
 						value={text}
 						onChange={(event) => setText(event.target.value)}
 						required
+						disabled={loadingDraft}
 						className="h-full min-h-full resize-none border-0 px-0 shadow-none focus-visible:ring-0"
 					/>
 				</div>
 				<div className="flex items-center gap-3 border-t border-neutral-100 px-4 py-3">
 					<span className="flex-1" />
 					<p className="text-xs text-neutral-500">{draftId ? "Saved to drafts" : "Autosaves as draft"}</p>
-					<Button type="submit" disabled={loading || !fromAddr} className="rounded-full px-5">
+					<Button type="submit" disabled={loading || loadingDraft || !fromAddr} className="rounded-full px-5">
 						<Send className="h-4 w-4" />
 						{loading ? "Sending" : "Send"}
 					</Button>

@@ -24,7 +24,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
 			<head>
 				<link rel="icon" type="image/x-icon" href="/favicon.ico"></link>
 			</head>
-			<body className={`${geistSans.variable} ${geistMono.variable} antialiased`}>
+			<body className={`${geistSans.variable} ${geistMono.variable} antialiased light`}>
 				<Providers>{children}</Providers>
 			</body>
 		</html>

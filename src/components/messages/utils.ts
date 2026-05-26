@@ -2,6 +2,8 @@ import type { Message } from "@/hooks/types";
 import type { MessageFolderConfig } from "./types";
 
 export function getMessageParty(message: Message, folder: MessageFolderConfig["folder"]) {
+
+	console.log(message)
 	if (folder === "drafts") return "Draft";
 	if (folder === "sent") return message.toAddr || "No recipient";
 	return message.fromAddr || "Unknown sender";

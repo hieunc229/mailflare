@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Globe2, KeyRound, Mail, Route, Settings, Webhook } from "lucide-react";
+import { Globe2, KeyRound, Mail, Settings, Webhook } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
 const sections = [
@@ -14,12 +14,6 @@ const sections = [
 		title: "Domains",
 		description: "Add Cloudflare domains and inspect DNS state.",
 		icon: Globe2,
-	},
-	{
-		href: "/routing",
-		title: "Routing",
-		description: "Configure inbound handling and forwarding rules.",
-		icon: Route,
 	},
 	{
 		href: "/api-keys",
@@ -43,7 +37,7 @@ const sections = [
 
 export default function AdminSettingsPage() {
 	return (
-		<div className="h-full overflow-auto px-8 py-8">
+		<div className="h-full overflow-auto">
 			<div className="mb-8">
 				<h1 className="text-2xl font-normal text-neutral-900">Admin settings</h1>
 				<p className="mt-2 text-sm text-neutral-500">
