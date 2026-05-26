@@ -12,17 +12,17 @@ TypeScript email service on **Cloudflare Workers** (OpenNext + Next.js), **Drizz
 
 ### Features
 
-[x] Domain onboarding through Cloudflare, including inbound Email Routing DNS and sending DNS setup.
-[x] Domain removal cleanup for linked Cloudflare routing rules and sending subdomain resources.
-[x] Mailbox creation with automatic Cloudflare Email Routing rules.
-[x] Mailbox management with a grid view, mailbox detail page, and editable display name.
-[x] Inbox, sent, drafts, spam, and trash folders backed by a shared mail list component.
-[x] Popup composer with autosaved drafts and draft resume from the drafts folder.
-[x] Outbound send API, API keys, message read status, spam/trash moves, and seeded demo data.
-[] Advanced routing rules for catch-all addresses, forwarding, reject/block rules, and priorities.
-[] Webhook management UI and delivery retry visibility.
-[] Search, filtering, and richer mailbox/folder counts.
-[] Attachment support and richer compose formatting.
+- [x] Domain onboarding through Cloudflare, including inbound Email Routing DNS and sending DNS setup.
+- [x] Domain removal cleanup for linked Cloudflare routing rules and sending subdomain resources.
+- [x] Mailbox creation with automatic Cloudflare Email Routing rules.
+- [x] Mailbox management with a grid view, mailbox detail page, and editable display name.
+- [x] Inbox, sent, drafts, spam, and trash folders backed by a shared mail list component.
+- [x] Popup composer with autosaved drafts and draft resume from the drafts folder.
+- [x] Outbound send API, API keys, message read status, spam/trash moves, and seeded demo data.
+- [] Advanced routing rules for catch-all addresses, forwarding, reject/block rules, and priorities.
+- [] Webhook management UI and delivery retry visibility.
+- [] Search, filtering, and richer mailbox/folder counts.
+- [] Attachment support and richer compose formatting.
 
 ## Domain API (yes, programmatic)
 
