@@ -151,6 +151,18 @@ export async function listEmailRoutingRules(env: CloudflareEnv, zoneId: string) 
 	);
 }
 
+export async function deleteEmailRoutingRule(
+	env: CloudflareEnv,
+	zoneId: string,
+	ruleId: string,
+) {
+	return cfRequest<unknown>(
+		env,
+		`/zones/${zoneId}/email/routing/rules/${ruleId}`,
+		{ method: "DELETE" },
+	);
+}
+
 export async function createEmailRoutingRuleToWorker(
 	env: CloudflareEnv,
 	zoneId: string,

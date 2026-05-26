@@ -19,9 +19,7 @@ export default async function HomePage() {
           className="flex items-center gap-3"
           aria-label="Email Platform home"
         >
-          <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-600 text-white shadow-sm">
-            <Mail className="h-5 w-5" />
-          </span>
+          <img src="/icon-96.png" height={28} width={28} />
           <span className="text-base font-semibold tracking-tight">
             Mailflare
           </span>

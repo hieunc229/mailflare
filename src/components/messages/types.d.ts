@@ -7,7 +7,9 @@ export type MessageFolderConfig = {
 	emptyText: string;
 	hrefPrefix: string;
 	icon: LucideIcon;
+	headerIcons?: LucideIcon[];
 	badgeVariant?: "default" | "secondary" | "outline";
+	showRowBadge?: boolean;
 };
 
 export type MessageListRowProps = {

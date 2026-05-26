@@ -29,7 +29,7 @@ export default async function MessageDetailPage({
       {message.direction === "inbound" && !message.read && (
         <MarkAsRead messageId={message.id} />
       )}
-      <div className="flex py-2 items-center justify-between px-6">
+      <div className="flex py-2 items-center justify-between px-2">
         <div className="flex items-center flex-row gap-6">
           <Link
             href={getMessageBackHref(message.direction, message.status)}
@@ -46,7 +46,7 @@ export default async function MessageDetailPage({
           status={message.status}
         />
       </div>
-      <article className="mx-auto max-w-4xl px-8">
+      <article className="px-6">
         <h1 className="text-2xl text-neutral-900 mb-4">
           {message.subject ?? "(no subject)"}
         </h1>
