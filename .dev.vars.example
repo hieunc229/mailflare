@@ -1,0 +1,9 @@
+NEXTJS_ENV=development
+# Preferred: scoped API token.
+CF_TOKEN=your_api_token_with_zone_email_permissions
+CF_ACCOUNT_ID=your_account_id
+CF_EMAIL_WORKER_NAME=mailflare
+
+# Legacy Global API Key alternative. Use this only instead of CF_TOKEN.
+# CLOUDFLARE_EMAIL=you@example.com
+# CLOUDFLARE_API_KEY=your_global_api_key

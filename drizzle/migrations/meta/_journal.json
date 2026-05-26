@@ -1,0 +1,27 @@
+{
+  "version": "7",
+  "dialect": "sqlite",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "6",
+      "when": 1779256253875,
+      "tag": "0000_flowery_smasher",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "6",
+      "when": 1779256253876,
+      "tag": "0001_add_reset_email",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1779256253877,
+      "tag": "0002_add_message_read",
+      "breakpoints": true
+    }
+  ]
+}

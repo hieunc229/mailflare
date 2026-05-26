@@ -1,0 +1,75 @@
+{
+	"$schema": "node_modules/wrangler/config-schema.json",
+	"name": "mailflare",
+	"main": "./worker.ts",
+	"compatibility_date": "2026-05-20",
+	"compatibility_flags": [
+		"nodejs_compat",
+		"global_fetch_strictly_public"
+	],
+	"assets": {
+		"binding": "ASSETS",
+		"directory": ".open-next/assets",
+	},
+	"images": {
+		"binding": "IMAGES",
+	},
+	"services": [
+		{
+			"binding": "WORKER_SELF_REFERENCE",
+			"service": "mailflare",
+		},
+	],
+	"vars": {
+		"CF_TOKEN": "cf-token",
+		"CF_ACCOUNT_ID": "cf-account-id",
+	},
+	"observability": {
+		"enabled": true,
+	},
+	"upload_source_maps": true,
+	"send_email": [
+		{
+			"name": "EMAIL",
+			"remote": true,
+		},
+	],
+	"d1_databases": [
+		{
+			"binding": "DB",
+			"database_name": "mailflare",
+			"database_id": "your-d1-db-id",
+			"migrations_dir": "drizzle/migrations",
+		},
+	],
+	"r2_buckets": [
+		{
+			"binding": "BUCKET",
+			"bucket_name": "mailflare-raw",
+		},
+	],
+	"queues": {
+		"producers": [
+			{
+				"binding": "INBOUND_QUEUE",
+				"queue": "mailflare-inbound",
+			},
+			{
+				"binding": "OUTBOUND_QUEUE",
+				"queue": "mailflare-outbound",
+			},
+		],
+		"consumers": [
+			{
+				"queue": "mailflare-inbound",
+				"max_batch_size": 5,
+				"max_retries": 3,
+			},
+			{
+				"queue": "mailflare-outbound",
+				"max_batch_size": 5,
+				"max_retries": 3,
+			},
+		],
+	},
+}
