@@ -6,6 +6,7 @@ import { getDb } from "@/db";
 import { messages } from "@/db/schema";
 import { getContactDisplayNameMap } from "@/lib/contacts/service";
 import { normalizeEmailAddress } from "@/lib/email/address";
+import { getLatestEmailContent } from "@/lib/email/reply-content-utils";
 
 export async function GET(request: Request) {
 	const env = getEnv();
@@ -74,6 +75,7 @@ export async function GET(request: Request) {
 	);
 	const enrichedRows = rows.map((message) => ({
 		...message,
+		snippet: getLatestEmailContent(message.snippet),
 		fromContactName: contactMap.get(normalizeEmailAddress(message.fromAddr)) ?? null,
 		toContactName: contactMap.get(normalizeEmailAddress(message.toAddr)) ?? null,
 	}));

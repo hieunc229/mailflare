@@ -1,4 +1,5 @@
 import type { Message } from "@/hooks/types";
+import type { ReplyContentParts } from "@/lib/email/reply-content-types";
 
 export type MessageDetailResponse = {
 	message?: Message;
@@ -7,4 +8,9 @@ export type MessageDetailResponse = {
 		textBody: string | null;
 	} | null;
 	error?: string;
+};
+
+export type MessageBodyDisplay = ReplyContentParts & {
+	htmlBody: string | null;
+	hasQuotedContent: boolean;
 };

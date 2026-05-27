@@ -1,5 +1,6 @@
 import PostalMime from "postal-mime";
 import { formatPostalAddress, formatPostalAddressList } from "@/lib/email/address";
+import { getLatestEmailContent, htmlToReadableText } from "@/lib/email/reply-content-utils";
 
 export type ParsedEmail = {
 	subject: string | null;
@@ -23,6 +24,6 @@ export async function parseRawMime(raw: ArrayBuffer): Promise<ParsedEmail> {
 }
 
 export function buildSnippet(text: string | null, html: string | null, max = 200): string {
-	const source = text ?? html?.replace(/<[^>]+>/g, " ") ?? "";
+	const source = getLatestEmailContent(text ?? htmlToReadableText(html));
 	return source.replace(/\s+/g, " ").trim().slice(0, max);
 }

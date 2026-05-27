@@ -8,9 +8,8 @@ import dayjs from "dayjs";
 import { MarkAsRead } from "@/components/mark-read";
 import { MessageActions } from "@/components/message-actions/message-actions";
 import { getMessageBackHref } from "@/components/message-actions/utils";
-import { getEmailAddress, getEmailDisplayName } from "@/lib/email/address";
 import type { MessageDetailResponse } from "./types";
-import { fetchMessageDetail } from "./utils";
+import { fetchMessageDetail, getMessageBodyDisplay, getMessageHeaderParties } from "./utils";
 
 export default function MessageDetailPage() {
 	const params = useParams<{ messageId: string }>();
@@ -45,10 +44,8 @@ export default function MessageDetailPage() {
 	}
 
 	const { message, body } = data;
-	const fromName = message.fromContactName ?? getEmailDisplayName(message.fromAddr);
-	const fromAddress = getEmailAddress(message.fromAddr);
-	const toName = message.toContactName ?? getEmailDisplayName(message.toAddr);
-	const toAddress = getEmailAddress(message.toAddr);
+	const { fromName, fromAddress, toName } = getMessageHeaderParties(message);
+	const bodyDisplay = getMessageBodyDisplay(body?.textBody, body?.htmlBody, message.snippet);
 
 	return (
 		<div className="h-full overflow-auto">
@@ -78,12 +75,11 @@ export default function MessageDetailPage() {
 
 				<div className="mb-6 flex items-start justify-between border-b border-neutral-100 pb-5">
 					<div>
-						<p className="text-sm font-semibold text-neutral-900">{fromName}</p>
+						<p className="text-sm text-neutral-900">
+							<b>{fromName}</b> <span className="text-neutral-500">&lt;{fromAddress}&gt;</span>
+						</p>
 						<p className="text-xs text-neutral-500">
-							{fromAddress}
-							<span className="mx-1">to</span>
-							{toName}
-							{toAddress !== toName && <span className="ml-1">({toAddress})</span>}
+							to {toName}
 						</p>
 					</div>
 					<p className="text-xs text-neutral-400">
@@ -91,13 +87,26 @@ export default function MessageDetailPage() {
 					</p>
 				</div>
 				<div className="prose max-w-none text-neutral-900">
-					{body?.htmlBody ? (
-						<div dangerouslySetInnerHTML={{ __html: body.htmlBody }} />
+					{bodyDisplay.htmlBody ? (
+						<div dangerouslySetInnerHTML={{ __html: bodyDisplay.htmlBody }} />
 					) : (
 						<pre className="whitespace-pre-wrap text-sm">
-							{body?.textBody ?? message.snippet}
+							{bodyDisplay.latestContent}
 						</pre>
 					)}
+					{bodyDisplay.quotedContent.map((quotedContent) => (
+						<blockquote
+							key={`${quotedContent.dateLine}-${quotedContent.content.slice(0, 24)}`}
+							className="mt-6 border-l-2 border-neutral-300 pl-4 text-neutral-500"
+						>
+							<p className="mb-3 text-xs font-medium text-neutral-400">
+								{quotedContent.dateLine}
+							</p>
+							<pre className="whitespace-pre-wrap text-sm font-sans">
+								{quotedContent.content}
+							</pre>
+						</blockquote>
+					))}
 				</div>
 			</article>
 		</div>
