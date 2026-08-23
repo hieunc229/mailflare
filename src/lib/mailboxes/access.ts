@@ -39,6 +39,7 @@ export async function listAccessibleMailboxes(db: AppDatabase, user: Pick<Sessio
 			domainId: mailboxes.domainId,
 			localPart: mailboxes.localPart,
 			displayName: mailboxes.displayName,
+			forwardTo: mailboxes.forwardTo,
 			type: mailboxes.type,
 			disabled: mailboxes.disabled,
 			createdAt: mailboxes.createdAt,

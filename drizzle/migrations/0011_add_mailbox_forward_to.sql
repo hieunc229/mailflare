@@ -1,0 +1,1 @@
+ALTER TABLE `mailboxes` ADD `forward_to` text;

@@ -4,4 +4,5 @@ export type MailboxRouteParams = {
 
 export type MailboxUpdateValues = {
 	displayName?: string | null;
+	forwardTo?: string | null;
 };

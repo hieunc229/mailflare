@@ -12,6 +12,7 @@ export type ResolvedMailbox = {
 	localPart: string;
 	hostname: string;
 	displayName: string | null;
+	forwardTo: string | null;
 };
 
 export type RoutingDecision = {
@@ -58,8 +59,24 @@ export async function resolveInboundAddress(
 			localPart: mailbox.localPart,
 			hostname: domain.hostname,
 			displayName: mailbox.displayName,
+			forwardTo: mailbox.forwardTo,
 		},
 	};
+}
+
+/**
+ * Looks up just the forwarding address for an inbound recipient, independent
+ * of the full store/queue pipeline. Cloudflare's ForwardableEmailMessage.forward()
+ * can only be called from within the Worker's email() handler invocation that
+ * received the message — not later, from the queue consumer that actually
+ * processes it — so this is queried directly from email() before enqueueing.
+ */
+export async function resolveForwardTarget(
+	db: AppDatabase,
+	toAddress: string,
+): Promise<string | null> {
+	const decision = await resolveInboundAddress(db, toAddress);
+	return decision?.mailbox?.forwardTo ?? null;
 }
 
 export async function resolveInboxRuleDestination(

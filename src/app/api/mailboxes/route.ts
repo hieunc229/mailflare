@@ -61,6 +61,7 @@ export async function POST(request: Request) {
 		domainId: parsed.data.domainId,
 		localPart,
 		displayName: parsed.data.displayName,
+		forwardTo: parsed.data.forwardTo,
 		type: mailboxType,
 	});
 

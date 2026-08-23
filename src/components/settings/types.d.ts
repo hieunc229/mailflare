@@ -18,6 +18,7 @@ export type CurrentMailboxFormResponse = {
 		localPart: string;
 		hostname: string;
 		displayName: string | null;
+		forwardTo: string | null;
 		isPrimary?: boolean;
 	};
 	error?: unknown;

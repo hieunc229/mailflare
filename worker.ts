@@ -9,6 +9,8 @@ import { processOutboundQueue, type OutboundQueueMessage } from "./src/lib/email
 import { isInboundQueueMessage } from "./worker-utils";
 import { getUserFromSession } from "./src/lib/auth/session";
 import { getSessionTokenFromRequest } from "./src/lib/realtime/utils";
+import { getDb } from "./src/db";
+import { resolveForwardTarget } from "./src/lib/email/routing";
 export { RealtimeHub } from "./src/lib/realtime/hub";
 export { DatabaseBackupWorkflow } from "./src/lib/backups/workflow";
 
@@ -45,6 +47,23 @@ export default {
 		} catch (err) {
 			console.error("Inbound enqueue failed", err);
 			message.setReject("Processing failed");
+			return;
+		}
+
+		// Mailbox-level "also forward a copy to" setting. This must run here,
+		// synchronously within the same email() invocation, rather than in the
+		// queue consumer above: ForwardableEmailMessage.forward() is only valid
+		// for the duration of the handler call that received the message, so it
+		// can't be deferred to async queue processing. A forward failure (e.g.
+		// an unverified destination) is logged but never blocks ingestion, since
+		// the message has already been durably captured above.
+		try {
+			const forwardTo = await resolveForwardTarget(getDb(env), message.to);
+			if (forwardTo) {
+				await message.forward(forwardTo);
+			}
+		} catch (err) {
+			console.error("Mailbox forward failed", err);
 		}
 	},
 

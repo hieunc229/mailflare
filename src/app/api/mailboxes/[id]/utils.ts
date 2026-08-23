@@ -13,6 +13,7 @@ export function selectMailboxForUser(db: Db, userId: string, mailboxId: string) 
 			domainId: mailboxes.domainId,
 			localPart: mailboxes.localPart,
 			displayName: mailboxes.displayName,
+			forwardTo: mailboxes.forwardTo,
 			type: mailboxes.type,
 			disabled: mailboxes.disabled,
 			createdAt: mailboxes.createdAt,
@@ -25,8 +26,14 @@ export function selectMailboxForUser(db: Db, userId: string, mailboxId: string) 
 }
 
 export function getMailboxUpdateValues(input: MailboxUpdateValues): MailboxUpdateValues {
-	if (!("displayName" in input)) return {};
+	const updates: MailboxUpdateValues = {};
 
-	const displayName = input.displayName?.trim() || null;
-	return { displayName };
+	if ("displayName" in input) {
+		updates.displayName = input.displayName?.trim() || null;
+	}
+	if ("forwardTo" in input) {
+		updates.forwardTo = input.forwardTo?.trim() || null;
+	}
+
+	return updates;
 }

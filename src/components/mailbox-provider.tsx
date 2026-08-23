@@ -22,6 +22,7 @@ export type MailboxOption = {
 	localPart: string;
 	hostname: string;
 	displayName: string | null;
+	forwardTo?: string | null;
 	type?: "personal" | "shared";
 	permission?: "read_only" | "send_as" | "send_on_behalf" | "full_access";
 	isPrimary?: boolean;

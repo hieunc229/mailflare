@@ -54,6 +54,7 @@ export const mailboxes = sqliteTable(
 			.references(() => domains.id, { onDelete: "cascade" }),
 		localPart: text("local_part").notNull(),
 		displayName: text("display_name"),
+		forwardTo: text("forward_to"),
 		type: text("type", { enum: ["personal", "shared"] }).notNull().default("personal"),
 		disabled: integer("disabled", { mode: "boolean" }).notNull().default(false),
 		createdAt: integer("created_at", { mode: "timestamp" })

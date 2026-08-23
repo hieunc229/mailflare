@@ -57,11 +57,17 @@ export const domainSchema = z.object({
 	hostname: z.string().min(3),
 });
 
+const forwardToSchema = z.preprocess(
+	(value) => (typeof value === "string" ? value.trim() : value),
+	z.string().email().or(z.literal("")).optional().transform((value) => value || null),
+);
+
 export const mailboxSchema = z.object({
 	domainId: z.string().min(1),
 	localPart: z.string().min(1).max(64),
 	displayName: z.string().optional(),
 	type: z.enum(["personal", "shared"]).optional(),
+	forwardTo: forwardToSchema,
 });
 
 export const createAccountSchema = z.object({
@@ -103,6 +109,11 @@ export const accountMailboxSchema = z.object({
 
 export const updateMailboxSchema = z.object({
 	displayName: z.string().max(100).nullable().optional(),
+	// No preprocess/transform here (unlike forwardToSchema above): PATCH must
+	// distinguish "key omitted" (leave forwardTo untouched) from "explicitly
+	// cleared" (empty string/null), so the field's presence in parsed.data
+	// has to mirror its presence in the request body.
+	forwardTo: z.string().trim().email().or(z.literal("")).nullable().optional(),
 });
 
 export const folderSchema = z.object({

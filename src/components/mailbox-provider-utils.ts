@@ -32,6 +32,7 @@ export async function fetchMailboxOptions(force = false): Promise<MailboxOption[
 				localPart: m.localPart,
 				hostname: m.hostname,
 				displayName: m.displayName,
+				forwardTo: m.forwardTo,
 				type: m.type,
 				permission: m.permission,
 				isPrimary: m.isPrimary,

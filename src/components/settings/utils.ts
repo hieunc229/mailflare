@@ -6,11 +6,14 @@ export function getMailboxAddress(mailbox: Pick<MailboxOption, "localPart" | "ho
 	return `${mailbox.localPart}@${mailbox.hostname}`;
 }
 
-export async function updateCurrentMailboxName(id: string, displayName: string): Promise<MailboxOption> {
+export async function updateCurrentMailboxSettings(
+	id: string,
+	updates: { displayName: string; forwardTo: string },
+): Promise<MailboxOption> {
 	const res = await authFetch(`/api/mailboxes/${id}`, {
 		method: "PATCH",
 		headers: { "Content-Type": "application/json" },
-		body: JSON.stringify({ displayName }),
+		body: JSON.stringify(updates),
 	});
 	const data = (await res.json()) as CurrentMailboxFormResponse;
 
@@ -23,6 +26,7 @@ export async function updateCurrentMailboxName(id: string, displayName: string):
 		localPart: data.mailbox.localPart,
 		hostname: data.mailbox.hostname,
 		displayName: data.mailbox.displayName,
+		forwardTo: data.mailbox.forwardTo,
 		isPrimary: data.mailbox.isPrimary,
 	};
 }

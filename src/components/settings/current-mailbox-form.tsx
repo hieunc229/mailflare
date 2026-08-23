@@ -9,21 +9,26 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
-import { getMailboxAddress, updateCurrentMailboxName } from "./utils";
+import { getMailboxAddress, updateCurrentMailboxSettings } from "./utils";
 
 export function CurrentMailboxForm() {
 	const { selectedMailbox, setSelectedMailbox, isLoading } = useSelectedMailbox();
 	const [displayName, setDisplayName] = useState("");
 	const [savedDisplayName, setSavedDisplayName] = useState("");
+	const [forwardTo, setForwardTo] = useState("");
+	const [savedForwardTo, setSavedForwardTo] = useState("");
 	const [status, setStatus] = useState<string | null>(null);
 	const [saving, setSaving] = useState(false);
 
 	useEffect(() => {
 		const nextName = selectedMailbox?.displayName ?? "";
+		const nextForwardTo = selectedMailbox?.forwardTo ?? "";
 		setDisplayName(nextName);
 		setSavedDisplayName(nextName);
+		setForwardTo(nextForwardTo);
+		setSavedForwardTo(nextForwardTo);
 		setStatus(null);
-	}, [selectedMailbox?.id, selectedMailbox?.displayName]);
+	}, [selectedMailbox?.id, selectedMailbox?.displayName, selectedMailbox?.forwardTo]);
 
 	async function onSubmit(event: FormEvent<HTMLFormElement>) {
 		event.preventDefault();
@@ -32,10 +37,12 @@ export function CurrentMailboxForm() {
 		setSaving(true);
 		setStatus(null);
 		try {
-			const updated = await updateCurrentMailboxName(selectedMailbox.id, displayName);
+			const updated = await updateCurrentMailboxSettings(selectedMailbox.id, { displayName, forwardTo });
 			setSelectedMailbox(updated);
 			setSavedDisplayName(updated.displayName ?? "");
 			setDisplayName(updated.displayName ?? "");
+			setSavedForwardTo(updated.forwardTo ?? "");
+			setForwardTo(updated.forwardTo ?? "");
 			setStatus("Saved");
 		} catch (err) {
 			setStatus(err instanceof Error ? err.message : "Failed to update mailbox");
@@ -73,7 +80,7 @@ export function CurrentMailboxForm() {
 	}
 
 	const address = getMailboxAddress(selectedMailbox);
-	const hasChanges = displayName.trim() !== savedDisplayName;
+	const hasChanges = displayName.trim() !== savedDisplayName || forwardTo.trim() !== savedForwardTo;
 
 	return (
 		<div className="max-w-3xl space-y-8 p-8">
@@ -98,6 +105,21 @@ export function CurrentMailboxForm() {
 								placeholder={selectedMailbox.localPart}
 								disabled={saving}
 							/>
+						</div>
+						<div className="space-y-2">
+							<Label htmlFor="forwardTo">Also forward a copy to</Label>
+							<Input
+								id="forwardTo"
+								type="email"
+								value={forwardTo}
+								onChange={(event) => setForwardTo(event.target.value)}
+								placeholder="backup@example.com"
+								disabled={saving}
+							/>
+							<p className="text-xs text-neutral-500">
+								Optional. Every message sent to this mailbox will also be forwarded here as a safety-net
+								copy. The destination must already be a verified address in Cloudflare Email Routing.
+							</p>
 						</div>
 						<div className="grid gap-4 rounded-md border border-neutral-200 bg-neutral-50 px-3 py-3 sm:grid-cols-2">
 							<div className="space-y-1">
