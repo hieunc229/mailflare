@@ -20,6 +20,7 @@ export type AccountSettingsResponse = {
 		name: string;
 		resetEmail: string | null;
 		forwardingEmail: string | null;
+		barkUrl: string;
 		canForwardEmail: boolean;
 	};
 	error?: unknown;
@@ -27,6 +28,15 @@ export type AccountSettingsResponse = {
 
 export type ForwardingEmailFormProps = {
 	initialForwardingEmail: string;
+};
+
+export type BarkSettingsFormProps = {
+	initialBarkUrl: string;
+};
+
+export type BarkSettingsResponse = {
+	barkUrl?: string | null;
+	error?: unknown;
 };
 
 export type ForwardingEmailResponse = {

@@ -5,6 +5,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Skeleton } from "@/components/ui/skeleton";
 import { ChangePasswordForm } from "./change-password-form";
 import { ForwardingEmailForm } from "./forwarding-email-form";
+import { BarkSettingsForm } from "./bark-settings-form";
 import { MailboxSignatureForm } from "./mailbox-signature-form";
 import { ProfileForm } from "./profile-form";
 import { ProfileAvatarForm } from "./profile-avatar-form";
@@ -83,6 +84,16 @@ export function AccountSettings() {
 					</CardContent>
 				</Card>
 			)}
+
+			<Card className="rounded-3xl border-0 bg-white px-6">
+				<CardHeader>
+					<CardTitle>Bark push notifications</CardTitle>
+					<CardDescription>Get notified on your iPhone when new mail arrives.</CardDescription>
+				</CardHeader>
+				<CardContent className="pb-6">
+					<BarkSettingsForm initialBarkUrl={user.barkUrl ?? ""} />
+				</CardContent>
+			</Card>
 
 			<Card className="rounded-3xl border-0 bg-white px-6">
 				<CardHeader>
