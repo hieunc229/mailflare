@@ -29,6 +29,7 @@ export async function GET(request: Request) {
 			name: user.name,
 			resetEmail: user.resetEmail,
 			forwardingEmail: user.forwardingEmail,
+			barkUrl: user.barkUrl ?? "",
 			canForwardEmail: entitlements.canForwardEmail,
 			role: user.role,
 			canManageMailboxes: user.canManageMailboxes,

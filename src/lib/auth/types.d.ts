@@ -5,6 +5,7 @@ export type SessionUser = {
 	email: string;
 	resetEmail: string | null;
 	forwardingEmail: string | null;
+	barkUrl: string | null;
 	passwordHash: string;
 	name: string;
 	role: UserRole;

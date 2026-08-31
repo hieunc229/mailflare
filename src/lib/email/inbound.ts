@@ -11,6 +11,7 @@ import { sendMailboxAutoReply } from "@/lib/email/auto-reply";
 import { getMailboxAccessLevel } from "@/lib/mailboxes/access";
 import { listMessageAttachments, storeMessageAttachments } from "@/lib/email/attachments";
 import { getUnsubscribeUrlFromRawR2Key } from "@/lib/email/unsubscribe";
+import { notifyUserOfBarkMessage } from "@/lib/bark/service";
 import type { SessionUser } from "@/lib/auth/types";
 import {
 	getMailboxNotificationUserIds,
@@ -127,6 +128,26 @@ export async function processInboundMessage(
 		fromName: contact?.displayName ?? null,
 		subject: parsed.subject,
 	});
+
+	// Bark push notification for the receiving users (owner + shared members,
+	// mirroring the realtime notification user set). Failures never block the
+	// email pipeline.
+	if (destination.status === "received") {
+		try {
+			const barkUserIds = [...new Set(notificationUserIds)];
+			await Promise.allSettled(
+				barkUserIds.map((userId) =>
+					notifyUserOfBarkMessage(env, userId, {
+						toAddr,
+						subject: parsed.subject,
+					}),
+				),
+			);
+		} catch (error) {
+			console.error(`Bark notification failed for mailbox ${decision.mailbox.mailboxId}`, error);
+		}
+	}
+
 	await dispatchWebhooks(env, decision.mailbox.userId, "message.inbound", {
 		messageId,
 		from: fromAddr,

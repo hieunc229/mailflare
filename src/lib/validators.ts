@@ -155,6 +155,13 @@ export const updateForwardingEmailSchema = z.object({
 	),
 });
 
+export const updateBarkSettingsSchema = z.object({
+	barkUrl: z.preprocess(
+		(value) => (typeof value === "string" ? value.trim() : value),
+		z.string().max(2048).or(z.literal("")).transform((value) => value || ""),
+	),
+});
+
 export const changePasswordSchema = z.object({
 	currentPassword: z.string().min(1),
 	newPassword: z.string().min(8).max(128),
