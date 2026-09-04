@@ -30,11 +30,11 @@ export function summariseDns(
 
 	return {
 		routing: {
-			configured: routingMissing.length === 0 && routingRecords.length > 0,
+			configured: routingMissing.length === 0,
 			missing: recordTypes("routing-missing"),
 		},
 		sending: {
-			configured: sendingRecords.length > 0,
+			configured: true,
 			records: recordTypes("sending"),
 		},
 	};
