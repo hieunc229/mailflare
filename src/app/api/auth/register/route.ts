@@ -8,7 +8,9 @@ import { hasAdminAccount } from "@/lib/auth/setup";
 import { createSession, SESSION_COOKIE } from "@/lib/auth/session";
 import { newId } from "@/lib/ids";
 import { firstRunRegisterSchema } from "@/lib/validators";
-import { addDomainForUser, listUserDomains, removeDomainForUser } from "@/lib/domains/service";
+import { addDomainForUser } from "@/lib/domains/service";
+import { rollbackDomainProvisioning } from "@/lib/domains/rollback";
+import type { DomainProvisioningChanges } from "@/lib/domains/types";
 import { ensureEmailRoutingRuleToWorker } from "@/lib/cloudflare-api";
 import { ensureMailboxDomainRouting } from "@/lib/mailboxes/domain-addresses";
 import { readJsonBody } from "@/lib/http/request";
@@ -58,12 +60,21 @@ export async function POST(request: Request) {
 		role: "admin",
 	});
 
+	// Tracks what the attempt changed on the Cloudflare zone so a failure can undo
+	// precisely that. The DB is not a reliable source for this: the same errors that
+	// abort registration (an unmigrated schema, a dead D1 binding) also stop the
+	// domain row from ever being written, which is exactly when the orphaned zone
+	// config would go unnoticed.
+	let changes: DomainProvisioningChanges | null = null;
 	try {
-		const { domain } = await addDomainForUser(env, userId, domainName, {
+		const added = await addDomainForUser(env, userId, domainName, {
 			enableRouting: true,
 			enableSending: true,
 		});
+		const domain = added.domain;
+		changes = added.changes;
 		await ensureEmailRoutingRuleToWorker(env, domain.zoneId, email);
+		changes.createdAddressRules.push(email);
 		const mailboxId = newId("mbx");
 		await db.insert(mailboxes).values({
 			id: mailboxId,
@@ -74,13 +85,13 @@ export async function POST(request: Request) {
 		});
 		await ensureMailboxDomainRouting(env, db, { id: mailboxId, domainId: domain.id, localPart: username, useAllDomains: true });
 	} catch (err) {
+		if (changes) await rollbackDomainProvisioning(env, changes);
 		try {
-			const [domain] = await listUserDomains(env, userId);
-			if (domain) await removeDomainForUser(env, userId, domain.id);
+			// The domain row cascades with the user.
+			await db.delete(users).where(eq(users.id, userId));
 		} catch (cleanupError) {
-			console.warn("Failed to roll back domain after registration failure", cleanupError);
+			console.warn("Failed to remove the partial user after registration failure", cleanupError);
 		}
-		await db.delete(users).where(eq(users.id, userId));
 		const message = err instanceof Error ? err.message : "Domain setup failed";
 		return NextResponse.json({ error: message }, { status: 502 });
 	}
