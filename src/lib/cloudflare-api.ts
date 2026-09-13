@@ -208,6 +208,7 @@ export async function ensureEmailRoutingRuleToWorker(
 	zoneId: string,
 	address: string,
 ) {
+	if (zoneId === "manual") return;
 	const normalized = address.toLowerCase();
 	const workerName = getEmailWorkerName();
 	const rules = await listEmailRoutingRules(env, zoneId);
@@ -239,6 +240,7 @@ export async function deleteEmailRoutingRuleForAddress(
 	zoneId: string,
 	address: string,
 ): Promise<boolean> {
+	if (zoneId === "manual") return false;
 	const normalized = address.toLowerCase();
 	const workerName = getEmailWorkerName();
 	const rules = await listEmailRoutingRules(env, zoneId);

@@ -1,9 +1,13 @@
 import { NextResponse } from "next/server";
 import { authorizeAdminRequest, dispatchUpdateWorkflow, getUpdateStatus } from "./utils";
+import { isNodeRuntime } from "@/lib/runtime";
 
 export async function POST(request: Request) {
 	const authorization = await authorizeAdminRequest(request);
 	if ("error" in authorization) return authorization.error;
+	if (isNodeRuntime(authorization.env)) {
+		return NextResponse.json({ error: "Self-hosted installs update by pulling the new container image and restarting." }, { status: 400 });
+	}
 
 	try {
     // assume it's already passed

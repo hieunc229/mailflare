@@ -25,6 +25,12 @@ import { checkDomain } from "./utils";
 export default function DomainsPage() {
   const qc = useQueryClient();
   const [hostname, setHostname] = useState("");
+  // Self-hosted installs without Cloudflare credentials manage DNS by hand.
+  const { data: me } = useQuery({
+    queryKey: ["me"],
+    queryFn: async () => (await (await authFetch("/api/auth/me")).json()) as { managesDns?: boolean },
+  });
+  const managesDns = me?.managesDns ?? true;
   const [domainCheck, setDomainCheck] = useState<DomainPreflight | null>(null);
   const [domainChecking, setDomainChecking] = useState(false);
   const [enableSending, setEnableSending] = useState(false);
@@ -125,8 +131,9 @@ export default function DomainsPage() {
         <div>
           <h1 className="text-3xl font-medium">Domains</h1>
           <p className="mt-1 text-sm text-neutral-500">
-            Domains must be on your Cloudflare account. Email Routing is enabled
-            automatically, and Email Sending can be enabled when available.
+            {managesDns
+              ? "Domains must be on your Cloudflare account. Email Routing is enabled automatically, and Email Sending can be enabled when available."
+              : "Add the domains this server receives mail for. Open DNS on a domain to see the MX, SPF and DMARC records to create."}
           </p>
         </div>
         <Dialog open={createOpen} onOpenChange={setCreateOpen}>

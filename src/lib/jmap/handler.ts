@@ -34,7 +34,7 @@ export async function handleJmapRequest(request: Request, env: CloudflareEnv): P
 	if (!hasScope(auth.scopes, "jmap")) {
 		return new Response(JSON.stringify({ error: "This API key does not have the jmap scope" }), { status: 403, headers: JSON_HEADERS });
 	}
-	const ctx: JmapContext = { env, db: getDb(env), auth, accountId: auth.userId, origin: url.origin, createdIds: {} };
+	const ctx: JmapContext = { env, db: getDb(env), auth, accountId: auth.userId, origin: env.APP_URL?.trim() || url.origin, createdIds: {} };
 
 	if (path === "/jmap/session" && request.method === "GET") {
 		return new Response(JSON.stringify(buildSession(ctx, await sessionState(ctx))), { headers: JSON_HEADERS });

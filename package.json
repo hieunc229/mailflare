@@ -19,7 +19,10 @@
     "db:migrate:local": "wrangler d1 migrations apply DB --local",
     "db:migrate:remote": "wrangler d1 migrations apply DB --remote",
     "migrate": "wrangler d1 migrations apply DB",
-    "db:seed": "curl -X POST http://localhost:3000/api/seed"
+    "db:seed": "curl -X POST http://localhost:3000/api/seed",
+    "build:node": "MAILFLARE_RUNTIME=node next build && node scripts/build-server.mjs",
+    "start:node": "MAILFLARE_RUNTIME=node NODE_ENV=production node dist/server.mjs",
+    "dev:node": "MAILFLARE_RUNTIME=node node --import tsx server/index.ts"
   },
   "cloudflare": {
     "bindings": {
@@ -65,6 +68,7 @@
     "@radix-ui/react-toast": "^1.2.15",
     "@tanstack/react-query": "^5.100.11",
     "bcryptjs": "^3.0.3",
+    "better-sqlite3": "^13.0.3",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "dayjs": "^1.11.20",
@@ -73,10 +77,12 @@
     "mimetext": "^3.0.28",
     "nanoid": "^5.1.16",
     "next": "16.3.3",
+    "nodemailer": "^10.0.9",
     "postal-mime": "^2.7.4",
     "qrcode": "^1.5.4",
     "react": "^19.1.7",
     "react-dom": "^19.1.7",
+    "smtp-server": "^3.19.12",
     "tailwind-merge": "^3.6.0",
     "zod": "^4.4.3"
   },
@@ -85,14 +91,19 @@
     "@eslint/eslintrc": "^3",
     "@tailwindcss/postcss": "^4",
     "@types/bcryptjs": "^2.4.6",
+    "@types/better-sqlite3": "^9.6.0",
     "@types/node": "^20.19.41",
+    "@types/nodemailer": "^8.0.1",
     "@types/qrcode": "^1.5.6",
     "@types/react": "^19.1.7",
     "@types/react-dom": "^19.1.7",
+    "@types/smtp-server": "^3.5.13",
     "drizzle-kit": "^0.31.10",
+    "esbuild": "^0.28.2",
     "eslint": "^9",
     "eslint-config-next": "16.3.3",
     "tailwindcss": "^4",
+    "tsx": "^4.23.13",
     "typescript": "^5.7.4",
     "wrangler": "^4.127.1"
   },

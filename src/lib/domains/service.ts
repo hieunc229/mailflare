@@ -13,7 +13,8 @@ import {
 	type CfDnsRecord,
 } from "@/lib/cloudflare-api";
 import { deleteEmailRoutingRulesForDomain } from "@/lib/domains/cloudflare-cleanup";
-import { provisionDomainOnCloudflare } from "@/lib/domains/provision";
+import { isManualZone, provisionDomainOnCloudflare } from "@/lib/domains/provision";
+import { getManualDomainDns } from "@/lib/domains/manual-dns";
 import { rollbackDomainProvisioning } from "@/lib/domains/rollback";
 import type { DomainProvisioningChanges } from "@/lib/domains/types";
 import { findSendingSubdomain } from "@/lib/domains/sending-status";
@@ -110,6 +111,7 @@ export async function getDomainDns(
 	env: CloudflareEnv,
 	domain: typeof domains.$inferSelect,
 ): Promise<DomainDnsView> {
+	if (isManualZone(domain.zoneId)) return getManualDomainDns(env, domain.hostname);
 	const shouldInspectSending = domain.sendingRequested;
 	const [routingDns, routingSettings, sendingSubdomains] = await Promise.all([
 		getEmailRoutingDns(env, domain.zoneId),

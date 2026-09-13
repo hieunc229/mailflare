@@ -15,6 +15,7 @@ export async function deleteEmailRoutingRulesForDomain(
 	zoneId: string,
 	hostname: string,
 ): Promise<void> {
+	if (zoneId === "manual") return;
 	const normalizedHostname = hostname.toLowerCase();
 	const rules = await listEmailRoutingRules(env, zoneId);
 	const linkedRules = rules.filter((rule) =>

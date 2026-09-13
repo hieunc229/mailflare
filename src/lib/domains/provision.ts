@@ -10,7 +10,19 @@ import {
 	getEmailRoutingCatchAll,
 } from "@/lib/domains/catch-all-routing";
 import { isZoneApex } from "@/lib/domains/utils";
+import { hasCloudflareCredentials } from "@/lib/runtime";
 import type { DomainProvisioningChanges, DomainProvisioningResult } from "@/lib/domains/types";
+
+/**
+ * Zone id recorded for domains the app does not manage on Cloudflare (a
+ * self-hosted install without API credentials). Every Cloudflare call that
+ * receives it is a no-op, and the DNS page shows records to set by hand.
+ */
+export const MANUAL_ZONE_ID = "manual";
+
+export function isManualZone(zoneId: string | null | undefined): boolean {
+	return zoneId === MANUAL_ZONE_ID;
+}
 
 export async function provisionDomainOnCloudflare(
 	env: CloudflareEnv,
@@ -18,6 +30,20 @@ export async function provisionDomainOnCloudflare(
 	options?: { enableRouting?: boolean; enableSending?: boolean },
 ): Promise<DomainProvisioningResult> {
 	const normalized = hostname.toLowerCase().trim();
+	if (!hasCloudflareCredentials(env)) {
+		// Nothing to provision: the operator points MX at this server themselves.
+		return {
+			hostname: normalized,
+			zone: { id: MANUAL_ZONE_ID, name: normalized },
+			// Mail arrives whenever MX points at this server, so the domain is live at once.
+			routingEnabled: options?.enableRouting ?? true,
+			sendingRequested: options?.enableSending ?? true,
+			sendingEnabled: false,
+			sendingSubdomainTag: null,
+			routingStatus: "manual",
+			changes: { zoneId: MANUAL_ZONE_ID, enabledEmailRouting: false, createdSendingSubdomainTag: null, previousCatchAll: null, createdAddressRules: [] },
+		};
+	}
 	const zone = await findZoneByHostname(env, normalized);
 	if (!zone) {
 		throw new Error(

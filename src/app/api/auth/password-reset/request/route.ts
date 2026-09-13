@@ -31,7 +31,7 @@ export async function POST(request: Request) {
 		return NextResponse.json({ error: "Verification failed. Please try again." }, { status: 400 });
 	}
 
-	const origin = new URL(request.url).origin;
+	const origin = env.APP_URL?.trim() || new URL(request.url).origin;
 	try {
 		await requestPasswordReset(env, parsed.data.email, origin);
 	} catch (error) {

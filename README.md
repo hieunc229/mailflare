@@ -51,6 +51,17 @@ Getting started takes three steps:
 
 See the [deployment guide](docs/deployment.md) for required permissions, manual deployment, backups, and updates.
 
+### Self-host with Docker instead
+
+Mailflare also runs as one container on any server, with SQLite and local files in place of D1 and R2, a built-in SMTP listener for inbound mail (or a small Cloudflare relay Worker if you want to keep MX on Cloudflare), and any SMTP relay or Cloudflare Email Sending for outbound.
+
+```bash
+cp .env.docker.example .env.docker
+docker compose up -d --build
+```
+
+See [docs/self-hosting.md](docs/self-hosting.md).
+
 ## Local development
 
 ```bash
