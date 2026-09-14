@@ -258,7 +258,13 @@ export const domainRoutingRuleSchema = z
 		matchValue: z.string().trim().min(1).max(500),
 		action: z.enum(["store", "forward", "reject"]),
 		mailboxId: z.string().min(1).nullish(),
-		forwardTo: z.string().trim().email().nullish(),
+		// The rule form always submits every field, so a store or reject rule arrives
+		// with an empty forwarding address. Treat that as "not set" rather than
+		// failing the whole rule on an email check that does not apply to it.
+		forwardTo: z.preprocess(
+			(value) => (typeof value === "string" && value.trim() === "" ? null : value),
+			z.string().trim().email().nullish(),
+		),
 		keepCopy: z.boolean().default(false),
 		rejectReason: z.string().trim().max(200).nullish(),
 		priority: z.number().int().min(0).max(1000).default(0),
