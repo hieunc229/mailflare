@@ -7,6 +7,7 @@ import { dispatchWebhooks } from "@/lib/email/webhooks";
 import { upsertContactFromAddress } from "@/lib/contacts/service";
 import { getAuthorizedSenderAddress } from "@/lib/email/sender";
 import { getEmailAddressList, joinEmailAddressList, splitEmailAddressList } from "@/lib/email/address";
+import { toAsciiHeaderAddress } from "@/lib/email/idn";
 import { formatMessageIdHeader, normalizeMessageId, parseMessageIdList } from "@/lib/email/threading";
 import { createAuditLog } from "@/lib/mailboxes/audit";
 import { loadMessageAttachmentContents, storeMessageAttachments, validateAttachments } from "@/lib/email/attachments";
@@ -168,12 +169,19 @@ async function deliverEmail(env: CloudflareEnv, delivery: PreparedDelivery): Pro
 	const { input, messageId, jobId, from, mailboxId, to, cc, bcc, headers, attachments } = delivery;
 	const db = getDb(env);
 	const toAddr = joinEmailAddressList(to);
+	// Cloudflare authorises sending against the ASCII spelling of a domain, and SMTP
+	// carries addresses in that form, so a symbol domain goes onto the wire as
+	// punycode. Storage and the UI keep the readable spelling.
+	const wireFrom = toAsciiHeaderAddress(from);
+	const wireTo = to.map(toAsciiHeaderAddress);
+	const wireCc = cc.map(toAsciiHeaderAddress);
+	const wireBcc = bcc.map(toAsciiHeaderAddress);
 	try {
 		const response = await env.EMAIL.send({
-			from,
-			to,
-			...(cc.length ? { cc } : {}),
-			...(bcc.length ? { bcc } : {}),
+			from: wireFrom,
+			to: wireTo,
+			...(wireCc.length ? { cc: wireCc } : {}),
+			...(wireBcc.length ? { bcc: wireBcc } : {}),
 			subject: input.subject,
 			headers: Object.keys(headers).length ? headers : undefined,
 			html: input.html,

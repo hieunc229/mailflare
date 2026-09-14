@@ -2,6 +2,7 @@ import { eq, and, asc, desc } from "drizzle-orm";
 import type { AppDatabase } from "@/db";
 import { domains, folders, mailboxAliases, mailboxes, routingRules } from "@/db/schema";
 import { getEmailAddress } from "@/lib/email/address";
+import { toAsciiAddress, toAsciiHostname } from "@/lib/email/idn";
 import { getMailboxDomainAddresses } from "@/lib/mailboxes/domain-addresses";
 import { normalizeRecipientLocalPart, parseRecipientAddress } from "@/lib/email/recipient-address";
 
@@ -58,11 +59,15 @@ export async function resolveInboundAddress(
 	const parsed = parseRecipientAddress(toAddress);
 	if (!parsed) return null;
 
-	const [domain] = await db
+	const [exactDomain] = await db
 		.select()
 		.from(domains)
 		.where(and(eq(domains.hostname, parsed.domain), eq(domains.status, "active")))
 		.limit(1);
+
+	// An internationalised domain is stored as typed (π2.com) but delivered in
+	// punycode (xn--2-tmb.com), so fall back to comparing the ASCII forms.
+	const domain = exactDomain ?? await resolveDomainByAsciiHostname(db, parsed.domain);
 
 	if (!domain) return null;
 
@@ -125,6 +130,12 @@ export async function resolveInboundAddress(
 	}
 
 	return null;
+}
+
+async function resolveDomainByAsciiHostname(db: AppDatabase, hostname: string) {
+	const ascii = toAsciiHostname(hostname);
+	const active = await db.select().from(domains).where(eq(domains.status, "active"));
+	return active.find((domain) => toAsciiHostname(domain.hostname) === ascii) ?? null;
 }
 
 async function listDomainRules(db: AppDatabase, domainId: string): Promise<RuleRow[]> {
@@ -221,7 +232,13 @@ async function resolveMailboxDomainAlias(
 	for (const mailbox of candidates) {
 		if (normalizeRecipientLocalPart(mailbox.localPart) !== localPart) continue;
 		const addresses = await getMailboxDomainAddresses(db, mailbox);
-		if (addresses.some((address) => parseRecipientAddress(address)?.normalizedAddress === normalizedAddress)) {
+		// Addresses are built from the stored hostname, so compare on the ASCII form
+		// to keep symbol domains matching their delivered punycode spelling.
+		const target = toAsciiAddress(normalizedAddress);
+		if (addresses.some((address) => {
+			const candidate = parseRecipientAddress(address)?.normalizedAddress;
+			return !!candidate && toAsciiAddress(candidate) === target;
+		})) {
 			return mailbox;
 		}
 	}
