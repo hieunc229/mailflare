@@ -614,6 +614,25 @@ export const backups = sqliteTable(
 	],
 );
 
+export const deviceTokens = sqliteTable(
+	"device_tokens",
+	{
+		id: text("id").primaryKey(),
+		userId: text("user_id")
+			.notNull()
+			.references(() => users.id, { onDelete: "cascade" }),
+		token: text("token").notNull(),
+		platform: text("platform").notNull(),
+		createdAt: integer("created_at", { mode: "timestamp" })
+			.notNull()
+			.$defaultFn(() => new Date()),
+	},
+	(t) => [
+		uniqueIndex("device_tokens_user_token_idx").on(t.userId, t.token),
+		index("device_tokens_user_idx").on(t.userId),
+	],
+);
+
 export const schema = {
 	users,
 	domains,
@@ -641,4 +660,5 @@ export const schema = {
 	backups,
 	appSettings,
 	licenseSettings,
+	deviceTokens,
 };

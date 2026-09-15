@@ -1,4 +1,4 @@
-import { and, eq } from "drizzle-orm";
+﻿import { and, eq } from "drizzle-orm";
 import { getDb } from "@/db";
 import { messages, users } from "@/db/schema";
 import { newId } from "@/lib/ids";
@@ -20,6 +20,7 @@ import {
 	getMailboxNotificationUserIds,
 	notifyUsersOfNewMessage,
 } from "@/lib/realtime/utils";
+import { sendPushNotifications } from "@/lib/push/push-notifications";
 
 export type InboundQueueMessage = {
 	from: string;
@@ -199,6 +200,20 @@ export async function processInboundMessage(
 			fromName: contact?.displayName ?? null,
 			subject: parsed.subject,
 		});
+
+		// Push notifications to mobile devices (non-blocking)
+		try {
+			await sendPushNotifications(env, notificationUserIds, {
+				type: "new_message",
+				messageId,
+				mailboxId: decision.mailbox.mailboxId,
+				from: fromAddr,
+				fromName: contact?.displayName ?? null,
+				subject: parsed.subject,
+			});
+		} catch (error) {
+			console.error(`Push notification failed for ${messageId}`, error);
+		}
 	}
 	await dispatchWebhooks(env, decision.mailbox.userId, "message.inbound", {
 		messageId,

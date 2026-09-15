@@ -319,3 +319,12 @@ export const webhookUpdateSchema = z.object({
 	enabled: z.boolean().optional(),
 	maxAttempts: z.number().int().min(1).max(10).optional(),
 });
+
+export const deviceRegisterSchema = z.object({
+	token: z.string().min(1).max(500),
+	platform: z.enum(["ios", "android", "web"]),
+});
+
+export const deviceRevokeSchema = z.object({
+	token: z.string().min(1).max(500),
+});

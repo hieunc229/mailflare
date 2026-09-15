@@ -225,6 +225,13 @@
       "when": 1788850800003,
       "tag": "0031_add_password_reset_and_mfa",
       "breakpoints": true
+    },
+    {
+      "idx": 32,
+      "version": "6",
+      "when": 1788850800004,
+      "tag": "0032_add_device_tokens",
+      "breakpoints": true
     }
   ]
 }

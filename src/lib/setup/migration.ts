@@ -31,6 +31,7 @@ const MIGRATION_NAMES = [
 	"0029_add_spam_protection.sql",
 	"0030_add_message_search_index.sql",
 	"0031_add_password_reset_and_mfa.sql",
+	"0032_add_device_tokens.sql",
 ];
 
 const INITIAL_SCHEMA_SQL = `
@@ -112,6 +113,9 @@ CREATE TABLE IF NOT EXISTS app_settings (id text PRIMARY KEY NOT NULL, app_name 
 INSERT OR IGNORE INTO app_settings (id, app_name, updated_at) VALUES ('default', 'Mailflare', unixepoch());
 CREATE TABLE IF NOT EXISTS license_settings (id text PRIMARY KEY NOT NULL, instance_id text NOT NULL, instance_url text, license_key_hash text, plan text DEFAULT 'community' NOT NULL, state text DEFAULT 'inactive' NOT NULL, features text DEFAULT '[]' NOT NULL, activated_at integer, validated_at integer, updated_at integer NOT NULL);
 CREATE UNIQUE INDEX IF NOT EXISTS license_settings_instance_id_unique ON license_settings(instance_id);
+CREATE TABLE IF NOT EXISTS device_tokens (id text PRIMARY KEY NOT NULL, user_id text NOT NULL REFERENCES users(id) ON DELETE cascade, token text NOT NULL, platform text NOT NULL, created_at integer NOT NULL);
+CREATE UNIQUE INDEX IF NOT EXISTS device_tokens_user_token_idx ON device_tokens(user_id, token);
+CREATE INDEX IF NOT EXISTS device_tokens_user_idx ON device_tokens(user_id);
 CREATE TABLE IF NOT EXISTS d1_migrations (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT UNIQUE, applied_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL);
 `;
 
