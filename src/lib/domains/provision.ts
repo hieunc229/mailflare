@@ -10,8 +10,15 @@ import {
 	getEmailRoutingCatchAll,
 } from "@/lib/domains/catch-all-routing";
 import { isZoneApex } from "@/lib/domains/utils";
-import { hasCloudflareCredentials } from "@/lib/runtime";
+import { hasCloudflareCredentials, isNodeRuntime } from "@/lib/runtime";
 import type { DomainProvisioningChanges, DomainProvisioningResult } from "@/lib/domains/types";
+
+/** Node/Docker has no Email Worker; a catch-all PUT to one 404s (CF 2016). */
+export function shouldBindEmailCatchAllToWorker(
+	env?: Pick<CloudflareEnv, "MAILFLARE_RUNTIME">,
+): boolean {
+	return !isNodeRuntime(env);
+}
 
 /**
  * Zone id recorded for domains the app does not manage on Cloudflare (a
@@ -86,7 +93,9 @@ export async function provisionDomainOnCloudflare(
 		changes.enabledEmailRouting = !routingWasEnabled;
 		routingEnabled = routing.enabled ?? true;
 		routingStatus = routing.status;
-		await ensureEmailRoutingCatchAllToWorker(env, zone.id);
+		if (shouldBindEmailCatchAllToWorker(env)) {
+			await ensureEmailRoutingCatchAllToWorker(env, zone.id);
+		}
 	}
 
 	if (enableSending) {
