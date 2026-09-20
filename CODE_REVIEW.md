@@ -1,0 +1,95 @@
+# Claude Code Review — 2026-09-21
+
+Automated code review of **polidisio/mailflare** (fork of hieunc229/mailflare).
+Analysis performed via static review of source code.
+
+---
+
+## Findings
+
+### 🔴 HIGH — SPF/DKIM alignment not enforced on sender address
+
+**File:** `src/lib/email/sender.ts`
+
+The `getAuthorizedSenderAddress()` function validates that the `from` address belongs to the user's mailbox domains, but it does **not** verify **SPF or DKIM alignment**. An attacker who controls a domain MX can set an arbitrary `From:` header and bypass the domain check by matching against permitted addresses. This enables **email spoofing** if the attacker's domain happens to share a mailbox local part.
+
+**Recommendation:** Verify DMARC/SPF alignment for the sender domain, or require domain owners to publish appropriate SPF/DKIM records before allowing them to send from that domain.
+
+---
+
+### 🟡 MEDIUM — `sameSite: "lax"` on session cookie
+
+**File:** `src/app/api/auth/register/route.ts` (line 87), `src/app/api/auth/login/route.ts` (line 57), `src/app/api/auth/logout/route.ts` (line 22)
+
+Session cookies are set with `sameSite: "lax"`. In a modern web application where all traffic should be over HTTPS and the app is not embedded in third-party iframes, `sameSite: "strict"` is preferred to prevent CSRF attacks. The current `lax` setting allows cookie transmission on top-level navigation GET requests, which is not needed for an API-based session flow.
+
+**Recommendation:** Set `sameSite: "strict"` for session cookies. If SSE/realtime requires cross-site keepalive, use a separate non-session token.
+
+---
+
+### 🟡 MEDIUM — Inbound forwarding action silently drops content
+
+**File:** `src/lib/email/inbound.ts` (lines 30-33)
+
+When a routing rule matches with `action === "forward"`, the function logs the forward and immediately returns without processing or storing the message:
+
+```ts
+if (decision.action === "forward" && decision.forwardTo) {
+    console.info(`Forward ${payload.to} -> ${decision.forwardTo}`);
+    return; // message is discarded
+}
+```
+
+If the forwarding destination is unreachable, the email is **permanently lost** — no retry, no dead-letter queue, no copy stored in the user's mailbox.
+
+**Recommendation:** Store a copy of the message in the user's mailbox before forwarding, or implement a separate outbound queue for forward jobs with retry logic.
+
+---
+
+### 🟡 MEDIUM — No size limit on stored attachment R2 objects
+
+**File:** `src/lib/email/send.ts` / `src/lib/email/attachments.ts`
+
+Attachments are validated with `validateAttachments()` and limited to 14 MB per file in the schema. However, the **total request size** for `/api/send` is limited to 30 MB (`MAX_SEND_REQUEST_SIZE = 30 * 1024 * 1024`) in `parseSendRequest()`. If 10 attachments are submitted (10 × 14 MB = 140 MB), the request will be accepted and parsed, but then fail at the first attachment's R2 upload with an unclear error. This wastes user bandwidth and server CPU.
+
+**Recommendation:** Validate total request size before parsing. Enforce `MAX_SEND_REQUEST_SIZE` at the route level (Next.js body size limits) or add a pre-check summing attachment sizes against the limit.
+
+---
+
+### 🟢 LOW — `console.warn` used instead of structured logging in auth flows
+
+**File:** `src/lib/auth/rate-limit.ts` (line 12)
+
+When the rate limiter is unavailable, the error falls through and `allowLoginAttempt` returns `true` (allow by default). While this is a reasonable fail-open design for availability, it should be logged as an **error**, not a warning, since it represents a degraded security control.
+
+```ts
+console.warn("Login rate limiter unavailable", error);
+return true;
+```
+
+**Recommendation:** Use `console.error` here. Consider also emitting a metric/alert for security control failures.
+
+---
+
+### 🟢 LOW — `allow: "*"` missing in CSP for WebSocket connections
+
+**File:** `src/lib/security/headers.ts`
+
+The CSP `connect-src` directive is set to `'self' ws: wss:` but does not explicitly allow connections to the application's own WebSocket endpoint. While `ws:` and `wss:` schemes cover this for same-origin, explicit paths like `connect-src 'self' wss://mailflare.example.com` would be clearer and more auditable.
+
+**Recommendation:** Add explicit WebSocket host in `connect-src`.
+
+---
+
+### 🟢 LOW — Unbounded List-Unsubscribe header parsing
+
+**File:** `src/lib/email/unsubscribe.ts`
+
+`getHeaderBlock()` limits parsing to 64 KB (`maxHeaderBytes`). This prevents a malicious sender from consuming memory with an extremely large `List-Unsubscribe` header. However, the value of `allowedUnsubscribeProtocols` only includes `http:`, `https:`, and `mailto:` — **not** `sms:` or other valid List-Unsubscribe protocols per RFC 8058. Currently this is not exploitable since those URLs would be filtered out, but it could silently break List-Unsubscribe functionality for valid emails using SMS.
+
+**Recommendation:** Document this limitation or add `sms:` to the allowed set.
+
+---
+
+*Generated by Claude Code Review — 2026-09-21*
+*Powered by Claude Code (polidisio/mailflare fork)*
