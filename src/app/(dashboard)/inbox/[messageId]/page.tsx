@@ -190,7 +190,7 @@ export default function MessageDetailPage() {
         onExpandedAllChange={setThreadExpanded}
       />
       <article className="px-6 py-4">
-        <div className="flex items-start justify-between pb-5">
+        <div className="flex flex-wrap items-start justify-between gap-x-3 gap-y-1 pb-5">
           <div className="flex min-w-0 items-start gap-3">
             <ContactAvatar
               mailboxId={message.mailboxId}

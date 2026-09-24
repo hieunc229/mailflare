@@ -136,7 +136,7 @@ export function ConversationMessageCard({
 
 	return (
 		<article className={cn("bg-white transition-colors px-6", !expanded && "hover:bg-neutral-50")}>
-			<div className="flex w-full items-start gap-3 py-3">
+			<div className="flex w-full flex-wrap items-start gap-x-3 py-3">
 				<button
 					type="button"
 					onClick={() => {
@@ -147,7 +147,7 @@ export function ConversationMessageCard({
 						void runSingleMessageAction(message.id, "read").catch(() => setLocallyRead(false));
 					}}
 					aria-expanded={expanded}
-					className="flex min-w-0 flex-1 items-center gap-3 text-left cursor-pointer"
+					className="flex min-w-0 flex-1 basis-40 items-center gap-3 text-left cursor-pointer"
 				>
 					<ContactAvatar
 						mailboxId={mailboxId}

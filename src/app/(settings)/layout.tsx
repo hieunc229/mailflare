@@ -26,8 +26,8 @@ export default function DashboardLayout({
         <ComposeProvider>
           <MailSearchProvider>
             <ShortcutsProvider>
-            <div className="grid h-[100dvh] grid-cols-[var(--sidebar-width)_minmax(0,1fr)] overflow-hidden bg-[#f6f8fc] transition-[grid-template-columns] duration-200">
-              <aside className="min-h-0 overflow-y-auto overscroll-contain px-3 py-4 [scrollbar-gutter:stable]">
+            <div className="grid h-[100dvh] grid-cols-[72px_minmax(0,1fr)] md:grid-cols-[var(--sidebar-width)_minmax(0,1fr)] overflow-hidden bg-[#f6f8fc] transition-[grid-template-columns] duration-200">
+              <aside className="z-30 w-[var(--sidebar-width)] min-h-0 bg-[#f6f8fc] overflow-y-auto overscroll-contain px-3 py-4 [scrollbar-gutter:stable]">
                 <DashboardNav />
               </aside>
               <div className="flex min-h-0 min-w-0 flex-col">

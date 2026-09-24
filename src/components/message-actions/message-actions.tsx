@@ -223,9 +223,9 @@ export function MessageActions({
 	const moveActions = getMoveMessageActions(status, direction);
 
 	return (
-		<div className="flex items-center gap-3 text-neutral-600">
+		<div className="flex flex-wrap items-center justify-end gap-3 text-neutral-600">
 			{error && <span className="text-xs text-red-600">{error}</span>}
-			<div className="flex items-center gap-2">
+			<div className="flex flex-wrap items-center justify-end gap-1 sm:gap-2">
 				<Tooltip label={shortcutsEnabled ? "Reply (r)" : "Reply"}>
 					<Button
 						type="button"

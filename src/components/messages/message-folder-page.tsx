@@ -11,6 +11,7 @@ import { useCompose } from "@/components/compose/compose-context";
 import { useMailSearch } from "@/components/mail-search/mail-search-context";
 import { useSelectedMailbox } from "@/components/mailbox-provider";
 import { usePageLoading } from "@/components/page-loading";
+import { useIsMobile } from "@/components/sidebar-state";
 import { useMessageCounts } from "@/hooks/use-message-counts";
 import { useMessages } from "@/hooks/use-messages";
 import type { BulkMessageAction } from "@/app/api/messages/bulk/types";
@@ -244,6 +245,7 @@ export function MessageFolderPage({
 }: MessageFolderPageProps) {
 	const { selectedMailbox, isLoading: mailboxesLoading } = useSelectedMailbox();
 	const { query } = useMailSearch();
+	const isMobile = useIsMobile();
 	const [offset, setOffset] = useState(0);
 	const [internalSelectedMessages, setInternalSelectedMessages] = useState<
 		Array<{ id: string; read: boolean }>
@@ -456,7 +458,7 @@ export function MessageFolderPage({
 						config={config}
 						selected={selectedIds.includes(message.id)}
 						active={message.id === selectedMessageId}
-						compact={compact}
+						compact={compact || isMobile}
 						currentAccountName={currentAccountName}
 						onSelectedChange={updateSelectedMessage}
 						onMessageAction={(messageId, action) =>

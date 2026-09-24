@@ -10,7 +10,9 @@ export function SidebarResizeBoundary() {
 	const startWidth = useRef(width);
 	const resizedWidth = useRef(width);
 
+	// Hidden on phones, where the sidebar is a fixed icon rail and the handle would swallow touch scrolls.
 	return (
+		<div className="hidden md:block">
 		<ResizeHandle
 			label="Resize left menu"
 			onResizeStart={() => { startWidth.current = width; resizedWidth.current = width; }}
@@ -21,5 +23,6 @@ export function SidebarResizeBoundary() {
 			}}
 			onResizeEnd={() => saveColumnWidth(userId, "sidebar", resizedWidth.current)}
 		/>
+		</div>
 	);
 }
