@@ -11,7 +11,7 @@ import { hasValidSessionMutationOrigin } from "@/lib/auth/origin";
 
 const providerSchema = z.object({
 	provider: z.enum(["cloudflare", "compatible"]),
-	preset: z.enum(["openai", "openrouter", "groq", "custom"]),
+	preset: z.enum(["openai", "openrouter", "requesty", "groq", "custom"]),
 	baseUrl: z.string().max(500),
 	apiKey: z.string().max(2_000).optional(),
 	model: z.string().trim().min(1).max(5_000),
