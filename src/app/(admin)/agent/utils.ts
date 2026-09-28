@@ -6,6 +6,7 @@ import type { AgentAdminForm, AgentAdminModelsResponse, AgentAdminSettingsRespon
 export const PROVIDER_PRESETS: { id: AgentProviderPreset; label: string }[] = [
 	{ id: "openai", label: "OpenAI" },
 	{ id: "openrouter", label: "OpenRouter" },
+	{ id: "requesty", label: "Requesty" },
 	{ id: "groq", label: "Groq" },
 	{ id: "custom", label: "Custom endpoint" },
 ];
