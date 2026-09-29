@@ -19,12 +19,7 @@ export type CreateAccountResult = {
 	error?: unknown;
 };
 
-export type CreateUserAccountInput = {
-	username: string;
-	domainId: string;
-	password: string;
-	role: "admin" | "user";
-};
+export type CreateUserAccountInput = import("zod").output<typeof import("@/lib/validators").createUserAccountSchema>;
 
 export type AccountListResponse = {
 	accounts?: AccountListItem[];

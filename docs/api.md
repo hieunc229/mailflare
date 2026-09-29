@@ -40,7 +40,7 @@ Admin API keys cannot read or send mail. Enable **Allow MCP access** when creati
 | Scope | Mailflare route | Purpose |
 | --- | --- | --- |
 | `accounts` | `GET /api/v1/accounts` | List managed accounts |
-| `accounts` | `POST /api/v1/accounts` | Create an account and its mailbox (`{ username, domainId, password, role? }`) |
+| `accounts` | `POST /api/v1/accounts` | Create an account and its mailbox (`{ username, domainId, password, role?, useAllDomains?, aliases? }`) |
 | `accounts` | `GET /api/v1/accounts/[id]` | Get a managed account |
 | `accounts` | `PATCH /api/v1/accounts/[id]` | Update an account (`{ name, role, disabled, canManageMailboxes, forwardingEmail?, password? }`) |
 | `mailboxes` | `GET /api/v1/mailboxes` | List managed mailboxes |
@@ -48,6 +48,47 @@ Admin API keys cannot read or send mail. Enable **Allow MCP access** when creati
 | `mailboxes` | `GET /api/v1/mailboxes/[id]` | Get a managed mailbox |
 | `mailboxes` | `PATCH /api/v1/mailboxes/[id]` | Update mailbox settings |
 | `mailboxes` | `DELETE /api/v1/mailboxes/[id]` | Delete a mailbox and its routing rule |
+
+### Choose aliases when creating an account
+
+In **Admin > Accounts > New account**, the primary address is assigned by default.
+Add optional aliases by choosing each username and domain, or enable **Use all domains**
+to also receive and send as the primary username on every available active domain owned
+by the same admin, including domains added later. Existing addresses already assigned to
+another mailbox or explicit alias keep their precedence.
+
+The dashboard, admin API, and MCP `manage_accounts` create action share the same
+creation handler. For example, this API body creates `sam@example.com` with just
+`sales@example.net` as an additional alias:
+
+```json
+{
+  "username": "sam",
+  "domainId": "dom_example_com",
+  "password": "REPLACE_WITH_A_STRONG_PASSWORD",
+  "useAllDomains": false,
+  "aliases": [
+    { "domainId": "dom_example_net", "localPart": "sales" }
+  ]
+}
+```
+
+Pass the same object as `data` to `manage_accounts` with `action: "create"`.
+`aliases` defaults to an empty list and supports up to 50 entries. Alias domains must
+be active and owned by the admin creating the account. Duplicate addresses and conflicts
+with existing mailboxes or aliases are rejected, including equivalent dot/plus variants.
+An alias shares its mailbox's delivery, message storage, and sending permissions.
+
+For backward compatibility, API/MCP requests that omit `useAllDomains` still default
+to `true`; pass `false` explicitly for primary-only or selected-alias accounts. The
+dashboard sends `false` unless the checkbox is enabled. This changes initial address
+assignment, not existing mailbox management permissions. Existing accounts are not
+modified and no database migration is required.
+
+Creation validates all selected addresses before provisioning. Account, mailbox, and
+alias records are inserted atomically. If Cloudflare routing fails, the new records
+are removed and routing changes from that attempt are rolled back, preserving existing
+rules. If cleanup itself fails, the response reports that manual checking is needed.
 
 ## Sending email
 

@@ -145,11 +145,20 @@ export const createAccountSchema = z.object({
 	),
 });
 
+export const createMailboxAliasSchema = z.object({
+	domainId: z.string().min(1),
+	localPart: z.string().trim().min(1).max(64).regex(/^[a-zA-Z0-9._%+-]+$/)
+		.transform((value) => value.toLowerCase()),
+});
+
 export const createUserAccountSchema = z.object({
 	username: z.string().trim().min(1).max(64).regex(/^[a-zA-Z0-9._%+-]+$/),
 	domainId: z.string().min(1),
 	password: z.string().min(8).max(128),
 	role: z.enum(["admin", "user"]).default("user"),
+	// Existing API/MCP clients retain the previous behavior when this is omitted.
+	useAllDomains: z.boolean().default(true),
+	aliases: z.array(createMailboxAliasSchema).max(50).default([]),
 });
 
 export const updateAccountSchema = z.object({
@@ -185,17 +194,6 @@ export const updateMailboxSchema = z.object({
 	autoReplySubject: z.string().trim().max(200).optional(),
 	autoReplyBody: z.string().max(10_000).optional(),
 	useAllDomains: z.boolean().optional(),
-});
-
-export const createMailboxAliasSchema = z.object({
-	domainId: z.string().min(1),
-	localPart: z
-		.string()
-		.trim()
-		.min(1)
-		.max(64)
-		.regex(/^[a-zA-Z0-9._%+-]+$/)
-		.transform((value) => value.toLowerCase()),
 });
 
 export const folderSchema = z.object({

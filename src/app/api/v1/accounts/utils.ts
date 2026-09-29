@@ -2,14 +2,11 @@ import { NextResponse } from "next/server";
 import { eq, or } from "drizzle-orm";
 import { getEnv } from "@/lib/cloudflare";
 import { getDb } from "@/db";
-import { mailboxes, users } from "@/db/schema";
+import { users } from "@/db/schema";
 import { authenticateAdminApiKey, canManageAdminAccounts } from "@/lib/api/admin-auth";
-import { hashPassword } from "@/lib/auth/password";
-import { newId } from "@/lib/ids";
 import { createUserAccountSchema } from "@/lib/validators";
-import { ensureEmailRoutingRuleToWorker } from "@/lib/cloudflare-api";
-import { ensureMailboxDomainRouting } from "@/lib/mailboxes/domain-addresses";
-import { accountListItemFromUser, getDomainForAdmin, getExistingMailbox } from "@/app/api/accounts/utils";
+import { accountListItemFromUser } from "@/app/api/accounts/utils";
+import { createAccountResponse } from "@/app/api/accounts/create";
 
 export async function GET(request: Request) {
 	const env = getEnv();
@@ -27,30 +24,5 @@ export async function POST(request: Request) {
 	if (!(await canManageAdminAccounts(env))) return NextResponse.json({ error: "A Team license is required to manage accounts" }, { status: 403 });
 	const parsed = createUserAccountSchema.safeParse(await request.json().catch(() => null));
 	if (!parsed.success) return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
-	const db = getDb(env);
-	const domain = await getDomainForAdmin(db, auth.userId, parsed.data.domainId);
-	if (!domain) return NextResponse.json({ error: "Domain not found" }, { status: 404 });
-	const username = parsed.data.username.toLowerCase().trim();
-	const email = `${username}@${domain.hostname}`;
-	const [existing] = await db.select({ id: users.id }).from(users).where(eq(users.email, email)).limit(1);
-	if (existing || await getExistingMailbox(db, domain.id, username)) return NextResponse.json({ error: "Email address is already assigned" }, { status: 409 });
-	const userId = newId("usr");
-	try {
-		await ensureEmailRoutingRuleToWorker(env, domain.zoneId, email);
-		const [account] = await db.insert(users).values({
-			id: userId,
-			email,
-			passwordHash: hashPassword(parsed.data.password),
-			name: username,
-			role: parsed.data.role,
-			createdByUserId: auth.userId,
-		}).returning();
-		const mailboxId = newId("mbx");
-		await db.insert(mailboxes).values({ id: mailboxId, userId, domainId: domain.id, localPart: username, displayName: username });
-		await ensureMailboxDomainRouting(env, db, { id: mailboxId, domainId: domain.id, localPart: username, useAllDomains: true });
-		return NextResponse.json({ account: accountListItemFromUser(account) }, { status: 201 });
-	} catch (error) {
-		await db.delete(users).where(eq(users.id, userId));
-		return NextResponse.json({ error: error instanceof Error ? error.message : "Failed to create account mailbox" }, { status: 502 });
-	}
+	return createAccountResponse(env, auth.userId, parsed.data);
 }

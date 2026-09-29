@@ -62,3 +62,9 @@ export type CfSendingSubdomain = {
 	created?: string;
 	modified?: string;
 };
+
+export type CfEmailRoutingRuleChange = {
+	zoneId: string;
+	ruleId: string;
+	previous?: CfEmailRoutingRule;
+};

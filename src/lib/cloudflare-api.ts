@@ -1,6 +1,7 @@
 import type {
 	CfDnsRecord,
 	CfEmailRoutingRule,
+	CfEmailRoutingRuleChange,
 	CfResponse,
 	CfSendingSubdomain,
 } from "@/lib/cloudflare-api.types";
@@ -218,6 +219,7 @@ export async function ensureEmailRoutingRuleToWorker(
 	env: CloudflareEnv,
 	zoneId: string,
 	address: string,
+	changes?: CfEmailRoutingRuleChange[],
 ) {
 	if (zoneId === "manual") return;
 	const normalized = address.toLowerCase();
@@ -227,6 +229,7 @@ export async function ensureEmailRoutingRuleToWorker(
 
 	if (existing?.enabled) return existing;
 	if (existing?.id) {
+		changes?.push({ zoneId, ruleId: existing.id, previous: existing });
 		return cfRequest<CfEmailRoutingRule>(
 			env,
 			`/zones/${zoneId}/email/routing/rules/${existing.id}`,
@@ -243,7 +246,26 @@ export async function ensureEmailRoutingRuleToWorker(
 		);
 	}
 
-	return createEmailRoutingRuleToWorker(env, zoneId, normalized);
+	const created = await createEmailRoutingRuleToWorker(env, zoneId, normalized);
+	if (created.id) changes?.push({ zoneId, ruleId: created.id });
+	return created;
+}
+
+/** Undo only the rules created or re-enabled by a failed provisioning attempt. */
+export async function rollbackEmailRoutingRuleChanges(env: CloudflareEnv, changes: CfEmailRoutingRuleChange[]) {
+	const results = await Promise.allSettled(changes.map(({ zoneId, ruleId, previous }) =>
+		previous
+			? cfRequest(env, `/zones/${zoneId}/email/routing/rules/${ruleId}`, {
+				method: "PUT",
+				body: JSON.stringify({
+					actions: previous.actions, enabled: previous.enabled, matchers: previous.matchers,
+					name: previous.name, priority: previous.priority,
+				}),
+			})
+			: deleteEmailRoutingRule(env, zoneId, ruleId),
+	));
+	const failures = results.filter((result) => result.status === "rejected");
+	if (failures.length) throw new AggregateError(failures.map((result) => result.reason), "Unable to restore routing rules");
 }
 
 export async function deleteEmailRoutingRuleForAddress(
