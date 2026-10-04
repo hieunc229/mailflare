@@ -178,7 +178,7 @@ export function ConversationMessageCard({
 								{expanded && recipients && <span className="text-xs font-normal text-neutral-500">to {recipients}</span>}
 							</div>
 							{!expanded && (
-								<span className={clsx(!locallyRead ? "font-semibold" : "text-neutral-500", "block truncate text-[13px]")}>{message.snippet || "No preview"}</span>
+								<span className={clsx(!locallyRead ? "font-semibold" : "text-neutral-500", "block truncate text-[13px]")}><bdi>{message.snippet || "No preview"}</bdi></span>
 							)}
 						</span>
 					</button>
@@ -197,9 +197,9 @@ export function ConversationMessageCard({
 				{expanded && body && (
 					<div className="pb-4 pl-16 pt-2">
 						{body.html ? (
-							<div className="email-body max-w-none text-sm text-neutral-900" dangerouslySetInnerHTML={{ __html: body.html }} />
+							<div dir="auto" className="email-body max-w-none text-sm text-neutral-900" dangerouslySetInnerHTML={{ __html: body.html }} />
 						) : (
-							<pre className="whitespace-pre-wrap font-sans text-sm text-neutral-900">{body.text}</pre>
+							<pre className="whitespace-pre-wrap font-sans text-sm text-neutral-900 [unicode-bidi:plaintext] text-start">{body.text}</pre>
 						)}
 						{body.quotedHtml && <QuotedEmailToggle html={body.quotedHtml} />}
 						{attachments.length > 0 && (

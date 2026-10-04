@@ -8,6 +8,8 @@ import {
 	Link2,
 	List,
 	ListOrdered,
+	PilcrowLeft,
+	PilcrowRight,
 	Quote,
 	RemoveFormatting,
 	Strikethrough,
@@ -15,7 +17,8 @@ import {
 } from "lucide-react";
 import { Tooltip } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
-import type { RichTextEditorProps, ToolbarCommand } from "./rich-text-editor-types";
+import type { RichTextEditorProps, TextDirection, ToolbarCommand } from "./rich-text-editor-types";
+import { DIRECTION_BLOCK_SELECTOR, SIGNATURE_ATTRIBUTE, listDirection } from "./rich-text-utils";
 
 const COMMANDS: ToolbarCommand[] = [
 	{ command: "bold", label: "Bold (⌘B)", icon: Bold },
@@ -26,6 +29,63 @@ const COMMANDS: ToolbarCommand[] = [
 	{ command: "insertOrderedList", label: "Numbered list", icon: ListOrdered },
 	{ command: "formatBlock", label: "Quote", icon: Quote, value: "blockquote" },
 ];
+
+const DIRECTIONS: { direction: TextDirection; label: string; icon: ToolbarCommand["icon"] }[] = [
+	{ direction: "ltr", label: "Left-to-right text", icon: PilcrowRight },
+	{ direction: "rtl", label: "Right-to-left text", icon: PilcrowLeft },
+];
+
+function closestBlock(node: Node | null, root: HTMLElement): HTMLElement | null {
+	let current = node && node.nodeType === Node.ELEMENT_NODE ? (node as HTMLElement) : node?.parentElement ?? null;
+	while (current && current !== root && root.contains(current)) {
+		if (current.matches(DIRECTION_BLOCK_SELECTOR)) return current;
+		current = current.parentElement;
+	}
+	return null;
+}
+
+/** The innermost blocks the selection touches, or null while it sits in loose text that has no block yet. */
+function selectedBlocks(root: HTMLElement): HTMLElement[] | null {
+	const selection = window.getSelection();
+	if (!selection || selection.rangeCount === 0) return [];
+	const range = selection.getRangeAt(0);
+	if (!root.contains(range.commonAncestorContainer)) return [];
+	const start = closestBlock(range.startContainer, root);
+	const end = closestBlock(range.endContainer, root);
+	if (!start || !end) return null;
+	const blocks = new Set([start, end]);
+	for (const block of Array.from(root.querySelectorAll<HTMLElement>(DIRECTION_BLOCK_SELECTOR))) {
+		if (range.intersectsNode(block) && !block.querySelector(DIRECTION_BLOCK_SELECTOR)) blocks.add(block);
+	}
+	return Array.from(blocks);
+}
+
+/**
+ * Paragraphs without a chosen direction follow their own first strong
+ * character, and lists follow their first item so the indent sits on the
+ * bullets' side. The signature keeps its markup untouched so it can be swapped.
+ */
+function markAutoDirection(root: HTMLElement): void {
+	for (const block of Array.from(root.querySelectorAll<HTMLElement>(DIRECTION_BLOCK_SELECTOR))) {
+		if (block.closest(`[${SIGNATURE_ATTRIBUTE}]`)) continue;
+		if (block.tagName === "UL" || block.tagName === "OL") {
+			block.setAttribute("dir", listDirection(block) === "rtl" ? "rtl" : "auto");
+			continue;
+		}
+		if (block.hasAttribute("dir")) continue;
+		const chosen = block.parentElement?.closest("[dir]:not(ul, ol)");
+		if (chosen && chosen !== root && root.contains(chosen) && chosen.getAttribute("dir") !== "auto") continue;
+		block.setAttribute("dir", "auto");
+	}
+}
+
+function chosenDirection(root: HTMLElement): TextDirection | null {
+	const block = closestBlock(window.getSelection()?.anchorNode ?? null, root);
+	const value = block?.closest("[dir]");
+	if (!value || !root.contains(value)) return null;
+	const direction = value.getAttribute("dir");
+	return direction === "rtl" || direction === "ltr" ? direction : null;
+}
 
 /**
  * A small HTML editor built on contentEditable. It stays deliberately light:
@@ -46,6 +106,7 @@ export function RichTextEditor({
 }: RichTextEditorProps) {
 	const editorRef = useRef<HTMLDivElement | null>(null);
 	const [active, setActive] = useState<Record<string, boolean>>({});
+	const [direction, setDirection] = useState<TextDirection | null>(null);
 	const [linkOpen, setLinkOpen] = useState(false);
 	const [linkUrl, setLinkUrl] = useState("");
 	const [showQuoted, setShowQuoted] = useState(false);
@@ -54,7 +115,10 @@ export function RichTextEditor({
 	// Keep the DOM in step with the value without resetting the caret on every keystroke.
 	useEffect(() => {
 		const element = editorRef.current;
-		if (element && element.innerHTML !== value) element.innerHTML = value;
+		if (element && element.innerHTML !== value) {
+			element.innerHTML = value;
+			markAutoDirection(element);
+		}
 	}, [value]);
 
 	useEffect(() => {
@@ -70,13 +134,16 @@ export function RichTextEditor({
 				}
 			}
 			setActive(next);
+			setDirection(chosenDirection(element));
 		}
 		document.addEventListener("selectionchange", refresh);
 		return () => document.removeEventListener("selectionchange", refresh);
 	}, []);
 
 	function emit() {
-		onChange(editorRef.current?.innerHTML ?? "");
+		const element = editorRef.current;
+		if (element) markAutoDirection(element);
+		onChange(element?.innerHTML ?? "");
 	}
 
 	function run(command: string, commandValue?: string) {
@@ -86,6 +153,26 @@ export function RichTextEditor({
 		} else {
 			document.execCommand(command, false, commandValue);
 		}
+		emit();
+	}
+
+	/**
+	 * Paragraphs follow their own first strong character until the writer picks
+	 * a direction here; picking the current one again returns them to automatic.
+	 */
+	function applyDirection(next: TextDirection) {
+		const element = editorRef.current;
+		if (!element) return;
+		element.focus();
+		let blocks = selectedBlocks(element);
+		if (blocks === null) {
+			document.execCommand("formatBlock", false, "div");
+			blocks = selectedBlocks(element);
+		}
+		if (!blocks?.length) return;
+		const reset = blocks.every((block) => block.getAttribute("dir") === next);
+		for (const block of blocks) block.setAttribute("dir", reset ? "auto" : next);
+		setDirection(chosenDirection(element));
 		emit();
 	}
 
@@ -134,6 +221,7 @@ export function RichTextEditor({
 				<div
 					ref={editorRef}
 					id={id}
+					dir="auto"
 					role="textbox"
 					aria-multiline="true"
 					aria-label="Message body"
@@ -163,7 +251,8 @@ export function RichTextEditor({
 						</button>
 						{showQuoted && (
 							<div
-								className="email-body mt-2 max-w-none border-l-2 border-neutral-200 pl-3 text-sm text-neutral-600"
+								dir="auto"
+								className="email-body mt-2 max-w-none border-s-2 border-neutral-200 ps-3 text-sm text-neutral-600"
 								dangerouslySetInnerHTML={{ __html: quotedHtml }}
 							/>
 						)}
@@ -185,6 +274,24 @@ export function RichTextEditor({
 							className={cn(
 								"rounded-md p-1.5 text-neutral-500 hover:bg-neutral-100 hover:text-neutral-900",
 								active[item.command] && "bg-neutral-200 text-neutral-900",
+							)}
+						>
+							<item.icon className="h-4 w-4" />
+						</button>
+					</Tooltip>
+				))}
+				{DIRECTIONS.map((item) => (
+					<Tooltip key={item.direction} label={item.label}>
+						<button
+							type="button"
+							aria-label={item.label}
+							aria-pressed={direction === item.direction}
+							disabled={disabled}
+							onMouseDown={(event) => event.preventDefault()}
+							onClick={() => applyDirection(item.direction)}
+							className={cn(
+								"rounded-md p-1.5 text-neutral-500 hover:bg-neutral-100 hover:text-neutral-900",
+								direction === item.direction && "bg-neutral-200 text-neutral-900",
 							)}
 						>
 							<item.icon className="h-4 w-4" />

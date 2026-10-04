@@ -54,6 +54,7 @@ export function MailboxSignatureForm() {
 					id="mailboxSignature"
 					value={signature}
 					onChange={(event) => setSignature(event.target.value)}
+					dir="auto"
 					placeholder={"Your name\nRole or company\nContact details"}
 					rows={6}
 					disabled={!canManage || saving}
@@ -66,6 +67,7 @@ export function MailboxSignatureForm() {
 				<div className="space-y-2">
 					<p className="text-xs font-medium text-neutral-500">Preview</p>
 					<div
+						dir="auto"
 						className="rounded-md border border-neutral-200 bg-white p-4 text-sm text-neutral-900"
 						dangerouslySetInnerHTML={{ __html: signatureToHtml(signature) }}
 					/>

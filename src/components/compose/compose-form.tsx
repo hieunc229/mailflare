@@ -21,6 +21,7 @@ import { RichTextEditor } from "./rich-text-editor";
 import { ScheduleSendMenu } from "./schedule-send-menu";
 import {
 	applyMailboxSignatureHtml,
+	applyOutgoingTextDirection,
 	hasMeaningfulHtml,
 	htmlToPlainText,
 	joinQuotedHtml,
@@ -252,7 +253,7 @@ export function ComposeForm({
 			return;
 		}
 		setLoading(true);
-		const fullHtml = joinQuotedHtml(html, quotedHtml);
+		const fullHtml = joinQuotedHtml(applyOutgoingTextDirection(html), quotedHtml);
 		if (draftId && agentRevision !== null) {
 			try {
 				if (saveTimer.current) clearTimeout(saveTimer.current);
@@ -615,6 +616,7 @@ export function ComposeForm({
 						value={subject}
 						onChange={(event) => setSubject(event.target.value)}
 						placeholder="Subject"
+						dir="auto"
 						required
 						disabled={loadingDraft}
 						className="h-8 border-0 px-0 py-1 shadow-none focus-visible:ring-0"

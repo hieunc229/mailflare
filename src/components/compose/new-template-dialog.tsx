@@ -49,11 +49,11 @@ export function NewTemplateDialog({ open, onOpenChange, mailboxId, from }: NewTe
 					>
 						<div className="space-y-1.5">
 							<Label htmlFor="template-title">Title</Label>
-							<Input id="template-title" value={title} onChange={(event) => setTitle(event.target.value)} maxLength={200} required />
+							<Input id="template-title" value={title} onChange={(event) => setTitle(event.target.value)} maxLength={200} dir="auto" required />
 						</div>
 						<div className="space-y-1.5">
 							<Label htmlFor="template-content">Content</Label>
-							<Textarea id="template-content" value={content} onChange={(event) => setContent(event.target.value)} rows={8} required />
+							<Textarea id="template-content" value={content} onChange={(event) => setContent(event.target.value)} rows={8} dir="auto" required />
 						</div>
 						{error && <p className="text-sm text-red-600">{error}</p>}
 						<Button type="submit" disabled={saving || !title.trim() || !content.trim()}>

@@ -182,7 +182,7 @@ export default function MessageDetailPage() {
       {!message.read && <MarkAsRead messageId={message.id} />}
 
       <h1 className={clsx(!isAnyPanelVisible ? "pl-16" : "pl-10", "pr-6 pb-2 pt-2 text-2xl text-neutral-900")} title={message.subject ?? "(no subject)"}>
-        {message.subject ?? "(no subject)"}
+        <bdi>{message.subject ?? "(no subject)"}</bdi>
       </h1>
       {/* <div className="px-6">
         <div className="mx-auto w-full max-w-[640px]">
@@ -271,9 +271,9 @@ export default function MessageDetailPage() {
           </div>
           <div className="prose max-w-none pl-16 text-neutral-900">
             {htmlBody ? (
-              <div className="email-body mx-auto" dangerouslySetInnerHTML={{ __html: htmlBody }} />
+              <div dir="auto" className="email-body mx-auto" dangerouslySetInnerHTML={{ __html: htmlBody }} />
             ) : (
-              <pre className="whitespace-pre-wrap text-sm text mx-auto">
+              <pre className="whitespace-pre-wrap text-sm text mx-auto [unicode-bidi:plaintext] text-start">
                 {cloudAttachmentResult.content}
               </pre>
             )}
