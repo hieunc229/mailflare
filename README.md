@@ -1,5 +1,7 @@
 <img src="/public/icon-96.png" alt="Mailflare" width="72" />
 
+[![Deploy to Railyard](https://app.railyard.run/deploy/badge)](https://app.railyard.run/deploy?repo=https://github.com/hieunc229/mailflare)
+
 # Mailflare
 
 Mailflare is a self-hosted email inbox for custom domains, built on Cloudflare. Supports **Resend**, or **AWS SES**
