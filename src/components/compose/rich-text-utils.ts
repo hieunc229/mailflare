@@ -5,10 +5,11 @@
  */
 
 import { sanitizeEmailHtml } from "@/app/(dashboard)/inbox/[messageId]/email-html-sanitizer";
+import type { TextDirection } from "./rich-text-editor-types";
 
 export const QUOTE_ATTRIBUTE = "data-mailflare-quote";
 const QUOTE_OPEN = `<div class="mailflare-quote" ${QUOTE_ATTRIBUTE}="1">`;
-const SIGNATURE_ATTRIBUTE = "data-mailflare-signature";
+export const SIGNATURE_ATTRIBUTE = "data-mailflare-signature";
 
 export function escapeHtml(value: string): string {
 	return value
@@ -18,11 +19,45 @@ export function escapeHtml(value: string): string {
 		.replace(/"/g, "&quot;");
 }
 
-/** Plain text as HTML: escaped, with line breaks preserved. */
+// Hebrew, Arabic, Syriac, Thaana, N'Ko and the other right-to-left scripts,
+// with their presentation forms.
+const RTL_CHARACTERS = "\\u0590-\\u08FF\\uFB1D-\\uFDFF\\uFE70-\\uFEFF\\u{10800}-\\u{10FFF}\\u{1E800}-\\u{1EFFF}";
+const RTL_CHARACTER_RE = new RegExp(`[${RTL_CHARACTERS}]`, "u");
+const FIRST_STRONG_RE = new RegExp(`[${RTL_CHARACTERS}]|\\p{L}`, "u");
+
+/**
+ * The direction of the first strong character, the rule dir="auto" applies.
+ * Null when the text has no letters (empty, digits or punctuation only).
+ */
+export function detectTextDirection(text: string | null | undefined): TextDirection | null {
+	const match = FIRST_STRONG_RE.exec(text ?? "");
+	if (!match) return null;
+	return RTL_CHARACTER_RE.test(match[0]) ? "rtl" : "ltr";
+}
+
+export function containsRtlText(text: string | null | undefined): boolean {
+	return RTL_CHARACTER_RE.test(text ?? "");
+}
+
+/**
+ * Explicit direction markup for a block. Mail clients disagree about
+ * dir="auto" and Outlook ignores the attribute without the inline style, so
+ * outgoing mail always carries both.
+ */
+function directionAttributes(direction: TextDirection): string {
+	return ` dir="${direction}" style="direction: ${direction}; text-align: ${direction === "rtl" ? "right" : "left"}"`;
+}
+
+function textLinesToHtml(value: string): string {
+	return escapeHtml(value).replace(/\n/g, "<br>");
+}
+
+/** Plain text as HTML: escaped, with line breaks preserved and right-to-left text marked. */
 export function textToHtml(text: string | null | undefined): string {
 	const value = (text ?? "").replace(/\r\n?/g, "\n");
 	if (!value) return "";
-	return `<div>${escapeHtml(value).replace(/\n/g, "<br>")}</div>`;
+	const direction = detectTextDirection(value);
+	return `<div${direction === "rtl" ? directionAttributes(direction) : ""}>${textLinesToHtml(value)}</div>`;
 }
 
 /** Wrap quoted or forwarded content so the composer and reader can fold it. */
@@ -59,7 +94,8 @@ export function signatureToHtml(signature: string | null | undefined): string {
 	if (isHtmlSignature(value) && typeof DOMParser !== "undefined") {
 		return sanitizeEmailHtml(value, { forOutgoing: true }) ?? "";
 	}
-	return textToHtml(value).replace(/^<div>|<\/div>$/g, "");
+	const lines = textLinesToHtml(value.replace(/\r\n?/g, "\n"));
+	return detectTextDirection(value) === "rtl" ? `<div${directionAttributes("rtl")}>${lines}</div>` : lines;
 }
 
 function signatureBlock(signature: string | null | undefined): string {
@@ -142,4 +178,85 @@ function renderChildren(element: Element, state: RenderState): string {
 	return Array.from(element.childNodes)
 		.map((child) => renderNode(child, state))
 		.join("");
+}
+
+export const DIRECTION_BLOCK_SELECTOR = "div, p, li, ul, ol, blockquote, h1, h2, h3, h4, h5, h6, pre, td, th";
+
+function isDirectionBlock(node: Node): boolean {
+	return node.nodeType === Node.ELEMENT_NODE && (node as Element).matches(DIRECTION_BLOCK_SELECTOR);
+}
+
+/** Give loose text beside blocks its own block, so it can carry a direction like the composer's first line. */
+function wrapInlineRuns(container: Element): void {
+	const children = Array.from(container.childNodes);
+	if (container.tagName !== "BODY" && !children.some(isDirectionBlock)) return;
+	let run: ChildNode[] = [];
+	const flush = () => {
+		if (run.some((node) => (node.textContent ?? "").trim())) {
+			const wrapper = container.ownerDocument.createElement("div");
+			run[0].before(wrapper);
+			for (const node of run) wrapper.appendChild(node);
+		}
+		run = [];
+	};
+	for (const child of children) {
+		if (isDirectionBlock(child)) flush();
+		else run.push(child);
+	}
+	flush();
+}
+
+/**
+ * A list follows its first item: dir="auto" cannot resolve it, because every
+ * item carries its own dir and auto resolution skips those.
+ */
+export function listDirection(list: Element): TextDirection | null {
+	const first = list.querySelector(":scope > li");
+	const chosen = first?.getAttribute("dir");
+	if (chosen === "rtl" || chosen === "ltr") return chosen;
+	return detectTextDirection((first ?? list).textContent);
+}
+
+function explicitDirection(element: Element): TextDirection | null {
+	const value = element.closest("[dir]")?.getAttribute("dir")?.toLowerCase();
+	return value === "rtl" || value === "ltr" ? value : null;
+}
+
+const AUTO_DIRECTION_RE = /\sdir="auto"/g;
+const CHOSEN_DIRECTION_RE = /\sdir\s*=\s*["']?(?:rtl|ltr)\b/i;
+
+/**
+ * Resolve the composer's per-paragraph direction into explicit markup for mail
+ * clients. The editor marks each paragraph dir="auto" unless the writer chose a
+ * direction, but mail clients disagree about "auto", so this stamps the direction
+ * it resolves to on every block and Gmail, Outlook and Apple Mail render what the
+ * writer saw. Messages with no right-to-left text and no chosen direction go out
+ * as plain markup, exactly as before.
+ */
+export function applyOutgoingTextDirection(html: string): string {
+	if (!html) return html;
+	if ((!containsRtlText(html) && !CHOSEN_DIRECTION_RE.test(html)) || typeof DOMParser === "undefined") {
+		return html.replace(AUTO_DIRECTION_RE, "");
+	}
+	const doc = new DOMParser().parseFromString(`<body>${html}</body>`, "text/html");
+	wrapInlineRuns(doc.body);
+	for (const container of Array.from(doc.body.querySelectorAll(DIRECTION_BLOCK_SELECTOR))) wrapInlineRuns(container);
+	// Resolve every block before stamping any, so a stamped list does not read as
+	// a chosen direction for its own items.
+	const resolved = Array.from(doc.body.querySelectorAll<HTMLElement>(DIRECTION_BLOCK_SELECTOR))
+		.filter((element) => element.tagName === "UL" || element.tagName === "OL" || !element.querySelector(DIRECTION_BLOCK_SELECTOR))
+		.map((element) => ({
+			element,
+			direction: element.tagName === "UL" || element.tagName === "OL"
+				? listDirection(element)
+				: explicitDirection(element) ?? detectTextDirection(element.textContent),
+		}));
+	for (const { element, direction } of resolved) {
+		if (!direction) continue;
+		element.setAttribute("dir", direction);
+		element.style.direction = direction;
+		if (!element.style.textAlign) element.style.textAlign = direction === "rtl" ? "right" : "left";
+	}
+	for (const element of Array.from(doc.body.querySelectorAll('[dir="auto"]'))) element.removeAttribute("dir");
+	return doc.body.innerHTML;
 }

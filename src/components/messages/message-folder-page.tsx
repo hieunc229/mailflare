@@ -153,10 +153,10 @@ function MessageListRow({
 						className={`mt-1 block truncate text-sm ${unread ? "font-semibold text-neutral-900" : "text-neutral-700"
 							}`}
 					>
-						{message.subject ?? "(no subject)"}
+						<bdi>{message.subject ?? "(no subject)"}</bdi>
 					</span>
 					<span className="mt-0.5 block truncate text-xs leading-5 text-neutral-500">
-						{preview}
+						<bdi>{preview}</bdi>
 					</span>
 				</Link>
 			</div>
@@ -216,9 +216,9 @@ function MessageListRow({
 			</span>
 			<span className="truncate text-neutral-700">
 				<span className={unread ? "font-semibold text-neutral-900" : ""}>
-					{rowMessage.subject ?? "(no subject)"}
+					<bdi>{rowMessage.subject ?? "(no subject)"}</bdi>
 				</span>
-				<span className="text-neutral-500"> - {getMessagePreview(rowMessage, config.folder)}</span>
+				<span className="text-neutral-500"> - <bdi>{getMessagePreview(rowMessage, config.folder)}</bdi></span>
 			</span>
 			<time
 				dateTime={message.createdAt}
