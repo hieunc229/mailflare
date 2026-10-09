@@ -5,7 +5,7 @@ import { useLanguage } from "@/components/language-provider";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import type { AwsCapabilityReport, AwsConfigStatus } from "@/lib/aws/aws-types";
-import { requestJson } from "./api";
+import { ApiError, requestJson } from "./api";
 import { StatusRow } from "./status-row";
 
 type Props = {
@@ -17,6 +17,11 @@ type Props = {
 type PanelResponse = { status: AwsConfigStatus; policy: unknown };
 
 const REGION_HINTS = ["us-east-1", "us-east-2", "us-west-2", "eu-west-1", "eu-west-2", "eu-central-1", "ap-southeast-2", "ap-northeast-1", "ca-central-1"];
+
+/** Whether an error body carries the capability report the panel renders. */
+function isCapabilityReport(value: unknown): value is AwsCapabilityReport {
+	return typeof value === "object" && value !== null && Array.isArray((value as AwsCapabilityReport).missing);
+}
 
 /**
  * AWS credentials shared by SES sending and receiving. Saving validates them
@@ -34,6 +39,8 @@ export default function AwsCredentialsPanel({ need, onChanged }: Props) {
 	const [region, setRegion] = useState("us-east-1");
 	const [busy, setBusy] = useState<"save" | "check" | "remove" | null>(null);
 	const [error, setError] = useState("");
+	/** Capabilities of credentials a save refused, kept so their IAM policy can be shown next to the message. */
+	const [rejected, setRejected] = useState<AwsCapabilityReport | null>(null);
 
 	useEffect(() => {
 		let active = true;
@@ -59,9 +66,23 @@ export default function AwsCredentialsPanel({ need, onChanged }: Props) {
 	}
 
 	const save = () => run("save", async () => {
-		const data = await requestJson<{ status: AwsConfigStatus; report: AwsCapabilityReport }>("/api/admin/aws", "PUT", { accessKeyId, secretAccessKey, region });
+		let data: { status: AwsConfigStatus; report: AwsCapabilityReport };
+		try {
+			data = await requestJson<{ status: AwsConfigStatus; report: AwsCapabilityReport }>("/api/admin/aws", "PUT", { accessKeyId, secretAccessKey, region });
+		} catch (err) {
+			// The server refuses to save credentials that lack SES permissions, and answers with the report
+			// and the policy that would fix it. Keep both so the panel can show them under the message.
+			const body = err instanceof ApiError ? err.data as { report?: unknown; policy?: unknown } | undefined : undefined;
+			if (body && isCapabilityReport(body.report)) {
+				setReport(null);
+				setRejected(body.report);
+				if (body.policy) setPolicy(body.policy);
+			}
+			throw err;
+		}
 		setStatus(data.status);
 		setReport(data.report);
+		setRejected(null);
 		setEditing(false);
 		setSecretAccessKey("");
 		setAccessKeyId("");
@@ -70,6 +91,7 @@ export default function AwsCredentialsPanel({ need, onChanged }: Props) {
 	const check = () => run("check", async () => {
 		const data = await requestJson<{ report: AwsCapabilityReport }>("/api/admin/aws", "POST", {});
 		setReport(data.report);
+		setRejected(null);
 		onChanged?.(true, data.report);
 	});
 	const remove = () => run("remove", async () => {
@@ -77,12 +99,15 @@ export default function AwsCredentialsPanel({ need, onChanged }: Props) {
 		const data = await requestJson<{ status: AwsConfigStatus }>("/api/admin/aws", "DELETE", {});
 		setStatus(data.status);
 		setReport(null);
+		setRejected(null);
 		onChanged?.(false, null);
 	});
 
 	const configured = !!status?.configured;
 	const showForm = status !== null && (!configured || editing);
 	const fromEnvironment = status?.source === "environment";
+	// A save the server refused is not configured credentials, so its report drives the missing-permission block on its own.
+	const missingReport = rejected ?? (configured && !editing ? report : null);
 
 	return (
 		<div className="space-y-2">
@@ -94,7 +119,7 @@ export default function AwsCredentialsPanel({ need, onChanged }: Props) {
 					action={configured && !editing ? (
 						<>
 							<Button size="sm" variant="outline" className="bg-white" disabled={busy !== null} onClick={() => void check()}>{busy === "check" ? t("domains.checking") : t("aws.recheck")}</Button>
-							{!fromEnvironment && <Button size="sm" variant="outline" className="bg-white" disabled={busy !== null} onClick={() => setEditing(true)}>{t("resend.replace")}</Button>}
+							{!fromEnvironment && <Button size="sm" variant="outline" className="bg-white" disabled={busy !== null} onClick={() => { setEditing(true); setError(""); setRejected(null); }}>{t("resend.replace")}</Button>}
 							{!fromEnvironment && <Button size="sm" variant="outline" className="bg-white" disabled={busy !== null} onClick={() => void remove()}>{t("resend.remove")}</Button>}
 						</>
 					) : undefined}
@@ -107,7 +132,7 @@ export default function AwsCredentialsPanel({ need, onChanged }: Props) {
 							<datalist id="aws-regions">{REGION_HINTS.map((hint) => <option key={hint} value={hint} />)}</datalist>
 							<span className="flex gap-2">
 								<Button type="submit" size="sm" disabled={!accessKeyId.trim() || !secretAccessKey.trim() || !region.trim() || busy !== null}>{busy === "save" ? t("aws.validating") : t("aws.validateSave")}</Button>
-								{editing && <Button type="button" size="sm" variant="outline" className="bg-white" onClick={() => { setEditing(false); setError(""); }}>{t("common.cancel")}</Button>}
+								{editing && <Button type="button" size="sm" variant="outline" className="bg-white" onClick={() => { setEditing(false); setError(""); setRejected(null); }}>{t("common.cancel")}</Button>}
 							</span>
 						</form>
 					) : configured ? `${t("aws.keySummary", { hint: status?.accessKeyHint, region: status?.region })}${status?.accountId ? t("aws.accountSuffix", { id: status.accountId }) : ""}${fromEnvironment ? t("aws.envSuffix") : ""}` : t("domains.checking")}
@@ -133,10 +158,11 @@ export default function AwsCredentialsPanel({ need, onChanged }: Props) {
 					</>
 				)}
 			</ul>
-			{configured && !editing && report && report.missing.length > 0 && (
-				<details className="rounded-lg bg-white px-3 py-2 text-xs text-neutral-600">
+			{error && <p role="alert" className="text-xs text-red-600">{error}</p>}
+			{missingReport && missingReport.missing.length > 0 && (
+				<details open={rejected !== null} className="rounded-lg bg-white px-3 py-2 text-xs text-neutral-600">
 					<summary className="cursor-pointer font-medium text-neutral-800">{t("aws.missingSummary")}</summary>
-					<p className="mt-2">{t("aws.missingList", { list: report.missing.join(", ") })}</p>
+					<p className="mt-2">{t("aws.missingList", { list: missingReport.missing.join(", ") })}</p>
 					<pre className="mt-2 max-h-64 overflow-auto rounded bg-neutral-50 p-2">{JSON.stringify(policy, null, 2)}</pre>
 				</details>
 			)}
@@ -145,7 +171,6 @@ export default function AwsCredentialsPanel({ need, onChanged }: Props) {
 					{t("aws.createUserHint")}
 				</p>
 			)}
-			{error && <p role="alert" className="text-xs text-red-600">{error}</p>}
 		</div>
 	);
 }

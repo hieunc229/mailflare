@@ -1,6 +1,14 @@
 import { defaultTranslator } from "@/lib/i18n/utils";
 import { authFetch } from "@/lib/auth/client";
 
+/** A rejected response, keeping the parsed body so callers can read fields beyond `error`. */
+export class ApiError extends Error {
+	constructor(message: string, readonly data: unknown) {
+		super(message);
+		this.name = "ApiError";
+	}
+}
+
 export async function requestJson<T>(url: string, method: string, body?: unknown): Promise<T> {
 	const response = await authFetch(url, {
 		method,
@@ -9,7 +17,7 @@ export async function requestJson<T>(url: string, method: string, body?: unknown
 		cache: "no-store",
 	});
 	const data = (await response.json()) as T & { error?: string };
-	if (!response.ok) throw new Error(data.error ?? defaultTranslator("domains.requestFailed"));
+	if (!response.ok) throw new ApiError(data.error ?? defaultTranslator("domains.requestFailed"), data);
 	return data;
 }
 
