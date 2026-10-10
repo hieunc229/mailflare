@@ -4,17 +4,20 @@ export function collapseQuotedEmailHtml(html: string | null, preserveLeadingQuot
 	template.innerHTML = html;
 	const document = { body: template.content, createElement: window.document.createElement.bind(window.document) };
 
+	let skippedLeading = false;
 	for (const blockquote of Array.from(document.body.querySelectorAll("blockquote"))) {
 		const introduction = blockquote.previousElementSibling;
 		if (
 			!(introduction instanceof HTMLElement) ||
 			!/^On\b[\s\S]*\bwrote:\s*$/i.test(introduction.textContent?.trim() ?? "")
 		) continue;
-		if (
-			preserveLeadingQuote &&
-			introduction === document.body.firstElementChild &&
-			blockquote === introduction.nextElementSibling
-		) continue;
+		// The outer toggle already folded this quote, so its first attribution
+		// stays open. It need not be the first element: sanitising can leave
+		// a leading <br> or wrapper before it.
+		if (preserveLeadingQuote && !skippedLeading) {
+			skippedLeading = true;
+			continue;
+		}
 
 		const details = document.createElement("details");
 		details.className = "email-quote-toggle";
