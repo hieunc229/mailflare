@@ -45,16 +45,3 @@ export function driveContentDisposition(filename: string, inline: boolean): stri
 	const ascii = filename.replace(/[^\x20-\x7e]/g, "_").replace(/["\\]/g, "_");
 	return `${inline ? "inline" : "attachment"}; filename="${ascii}"; filename*=UTF-8''${encodeURIComponent(filename)}`;
 }
-
-/** Types that are safe to render in the browser; everything else (HTML, SVG, scripts) is forced to download. */
-export function isDriveInlineSafe(contentType: string): boolean {
-	return (
-		contentType === "application/pdf" ||
-		contentType.startsWith("audio/") ||
-		contentType.startsWith("video/") ||
-		(contentType.startsWith("image/") && contentType !== "image/svg+xml") ||
-		contentType === "text/plain" ||
-		contentType === "text/csv" ||
-		contentType === "application/json"
-	);
-}

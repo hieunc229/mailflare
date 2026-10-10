@@ -1,4 +1,5 @@
-import { driveContentDisposition, driveObjectKey, isDriveInlineSafe } from "./utils";
+import { getInlineContentType } from "@/lib/http/content-type";
+import { driveContentDisposition, driveObjectKey } from "./utils";
 import type { DriveRow } from "./types";
 
 /** Parses a single `bytes=` range. Returns null when absent or unusable (multi-range is served whole), "invalid" when unsatisfiable. */
@@ -22,17 +23,18 @@ export function parseByteRange(header: string | null, size: number): { start: nu
 /** Streams a stored file with support for resumable downloads and seeking (`Range` / `If-Range`). */
 export async function streamDriveFile(env: CloudflareEnv, request: Request, item: DriveRow, download: boolean): Promise<Response> {
 	if (item.kind !== "file") return new Response("Not a file", { status: 400 });
-	const inline = !download && isDriveInlineSafe(item.contentType);
+	// The uploader chooses the type, so HTML, SVG and anything unparsable download as opaque bytes.
+	const inlineType = download ? null : getInlineContentType(item.contentType);
 	const etag = `"${item.id}-${item.updatedAt.getTime().toString(36)}-${item.size.toString(36)}"`;
 	const headers = new Headers();
-	headers.set("Content-Type", inline ? item.contentType : "application/octet-stream");
-	headers.set("Content-Disposition", driveContentDisposition(item.name, inline));
+	headers.set("Content-Type", inlineType ?? "application/octet-stream");
+	headers.set("Content-Disposition", driveContentDisposition(item.name, inlineType !== null));
 	headers.set("Accept-Ranges", "bytes");
 	headers.set("ETag", etag);
 	headers.set("X-Content-Type-Options", "nosniff");
 	// Chrome's PDF viewer is blocked by a sandbox or a restrictive default-src (it needs object/plugin loads), and a
 	// PDF served with nosniff cannot run script, so it only gets the framing rule.
-	headers.set("Content-Security-Policy", inline && item.contentType === "application/pdf" ? "frame-ancestors 'self'" : "default-src 'none'; style-src 'unsafe-inline'; sandbox");
+	headers.set("Content-Security-Policy", inlineType === "application/pdf" ? "frame-ancestors 'self'" : "default-src 'none'; style-src 'unsafe-inline'; sandbox");
 	headers.set("Referrer-Policy", "no-referrer");
 	headers.set("Cache-Control", "private, no-store");
 
