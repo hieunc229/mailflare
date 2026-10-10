@@ -947,6 +947,7 @@
 	"update.pendingMigrations.other": "{count} database migrations are pending.",
 	"update.updatingDatabase": "Updating database...",
 	"update.updateDatabase": "Update database",
+	"update.databaseUpToDate": "Database schema is up to date.",
 	"update.deployMatching": "Deploy the matching Mailflare release before changing this database.",
 	"update.started": "Update started for {repo}@{ref}. Refresh this page after Cloudflare deploys it.",
 	"update.viewWorkflow": "View workflow",
