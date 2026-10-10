@@ -91,7 +91,7 @@ export default function BrandingPage() {
 							<Input ref={inputRef} type="file" accept={BRANDING_ICON_ACCEPT} className="hidden" onChange={(event) => pickIcon(event.target.files?.[0] ?? null)} />
 							<button type="button" onClick={() => inputRef.current?.click()} className="flex items-center gap-4 rounded-2xl border border-dashed border-neutral-300 p-4 text-left hover:bg-neutral-50">
 								<img src={preview ?? branding.iconUrl} alt={t("branding.iconPreview")} className="h-16 w-16 rounded-2xl object-cover" />
-								<span className="text-sm text-neutral-600"><ImagePlus className="mb-1 h-5 w-5" />{t("branding.chooseImage")}<br /><span className="text-xs text-neutral-400">{t("branding.maxSize")}</span></span>
+								<span className="text-sm text-neutral-600"><ImagePlus className="mb-1 h-5 w-5" />{t("branding.chooseImage")}<br /><span className="text-xs text-neutral-500">{t("branding.maxSize")}</span></span>
 							</button>
 						</div>
 						{status && <p role="status" className="text-sm text-neutral-600">{status}</p>}

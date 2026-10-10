@@ -313,7 +313,7 @@ export default function DrivePage() {
 									<button type="button" onClick={() => open(item)} aria-disabled={item.trashedAt ? true : undefined} className="flex min-w-0 items-center gap-3 py-3 text-left aria-disabled:cursor-default">
 										<Icon size={16} className={clsx("shrink-0", className)} fill={item.kind === "folder" ? "currentColor" : "none"} />
 										<span className="truncate text-neutral-900">{item.name}</span>
-										{item.shared && item.role === "owner" && <Share2 size={12} className="shrink-0 text-neutral-400" aria-label={t("drive.share")} />}
+										{item.shared && item.role === "owner" && <Share2 size={12} className="shrink-0 text-neutral-500" aria-label={t("drive.share")} />}
 									</button>
 									<span className="hidden md:block"><DriveOwnerAvatar item={item} /></span>
 									<span className="hidden text-neutral-600 md:block">{dateFormat.format(new Date(item.updatedAt))}</span>

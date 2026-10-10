@@ -196,7 +196,7 @@ export default function MailboxesPage() {
 										placeholder={t("mailboxes.localPlaceholder")}
 										className="min-w-0 flex-1 rounded-none border-0 shadow-none focus-visible:border-0"
 									/>
-									<span className="flex items-center text-sm text-neutral-400">@</span>
+									<span className="flex items-center text-sm text-neutral-500">@</span>
 									<Select
 										aria-label={t("accounts.domain")}
 										className="min-w-0 max-w-[55%] bg-transparent px-3 text-sm text-neutral-700 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50"

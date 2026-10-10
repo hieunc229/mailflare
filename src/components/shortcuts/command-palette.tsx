@@ -104,7 +104,7 @@ function CommandPaletteDialog({
             aria-label={t("palette.placeholder")}
             className="w-full bg-transparent text-neutral-900 placeholder-neutral-400 text-[15px] focus:outline-none"
           />
-          <kbd className="px-2 py-0.5 text-xs font-semibold text-neutral-400 bg-neutral-100 border border-neutral-200 rounded-md shadow-2xs">
+          <kbd className="px-2 py-0.5 text-xs font-semibold text-neutral-500 bg-neutral-100 border border-neutral-200 rounded-md shadow-2xs">
             ESC
           </kbd>
         </div>
@@ -112,13 +112,13 @@ function CommandPaletteDialog({
         {/* Results */}
         <div id={listboxId} role="listbox" aria-label={t("palette.placeholder")} className="max-h-80 overflow-y-auto p-2">
           {filteredCommands.length === 0 ? (
-            <div role="status" className="p-8 text-center text-sm text-neutral-400">
+            <div role="status" className="p-8 text-center text-sm text-neutral-500">
               {t("palette.noMatch", { query })}
             </div>
           ) : (
             Object.entries(grouped).map(([category, items]) => (
               <div key={category} role="group" aria-label={t(`shortcut.category.${category}` as TranslationKey)} className="mb-2 last:mb-0">
-                <div aria-hidden="true" className="px-3 py-1 text-[11px] font-semibold uppercase tracking-wider text-neutral-400">
+                <div aria-hidden="true" className="px-3 py-1 text-[11px] font-semibold uppercase tracking-wider text-neutral-500">
                   {t(`shortcut.category.${category}` as TranslationKey)}
                 </div>
                 {items.map((item) => {
@@ -146,7 +146,7 @@ function CommandPaletteDialog({
         </div>
 
         {/* Footer */}
-        <div className="px-4 py-2.5 bg-neutral-50 border-t border-neutral-100 flex items-center justify-between text-xs text-neutral-400">
+        <div className="px-4 py-2.5 bg-neutral-50 border-t border-neutral-100 flex items-center justify-between text-xs text-neutral-500">
           <div className="flex items-center gap-3">
             <span>
               <kbd className="px-1.5 py-0.5 bg-neutral-200 rounded mr-1 text-[10px]">

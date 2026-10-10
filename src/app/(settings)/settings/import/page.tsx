@@ -270,7 +270,7 @@ export default function SettingsImportPage() {
                 >
                   <label className="flex-1">{t("importPage.selected")}</label>
                   <span className="truncate">{sourceSummary}</span>
-                  <span className="text-neutral-400 px-2">▾</span>
+                  <span className="text-neutral-500 px-2">▾</span>
                 </button>
                 {sourceDropdownOpen && (
                   <div className="absolute z-20 mt-2 w-full rounded-xl border border-neutral-200 bg-white p-2 shadow-lg">

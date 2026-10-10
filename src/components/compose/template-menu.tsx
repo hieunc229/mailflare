@@ -38,7 +38,7 @@ export function TemplateMenu({ onApply, onNew }: TemplateMenuProps) {
 						className="z-50 flex max-h-80 w-64 flex-col rounded-lg border border-neutral-200 bg-white p-1 text-sm shadow-lg"
 					>
 						<div className="min-h-0 flex-1 overflow-y-auto">
-							{templates.length === 0 && <p className="px-3 py-2 text-xs text-neutral-400">{t("template.none")}</p>}
+							{templates.length === 0 && <p className="px-3 py-2 text-xs text-neutral-500">{t("template.none")}</p>}
 							{templates.map((template) => (
 								<DropdownMenu.Item
 									key={template.id}

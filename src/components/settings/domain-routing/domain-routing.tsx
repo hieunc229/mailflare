@@ -259,7 +259,7 @@ export function DomainRouting({ domain }: DomainRoutingProps = {}) {
 								<div className="flex items-center gap-2">
 									<Label htmlFor="rule-value">{t("routing.matchValue")}</Label>
 									<Tooltip label={t("routing.matchAllHint")}>
-										<span className="text-neutral-400"><Info className="h-4 w-4" /></span>
+										<span className="text-neutral-500"><Info className="h-4 w-4" /></span>
 									</Tooltip>
 								</div>
 								<Input
@@ -274,7 +274,7 @@ export function DomainRouting({ domain }: DomainRoutingProps = {}) {
 								<div className="flex items-center gap-2">
 									<Label htmlFor="rule-priority">{t("routing.priority")}</Label>
 									<Tooltip label={t("routing.priorityHint")}>
-										<span className="text-neutral-400"><Info className="h-4 w-4" /></span>
+										<span className="text-neutral-500"><Info className="h-4 w-4" /></span>
 									</Tooltip>
 								</div>
 								<Input
@@ -329,7 +329,7 @@ export function DomainRouting({ domain }: DomainRoutingProps = {}) {
 									<div className="flex items-center gap-2">
 										<p className="text-sm font-medium">{t("routing.keepCopy")}</p>
 										<Tooltip label={t("routing.keepCopyHint")}>
-											<span className="text-neutral-400"><Info className="h-4 w-4" /></span>
+											<span className="text-neutral-500"><Info className="h-4 w-4" /></span>
 										</Tooltip>
 									</div>
 								</div>
@@ -397,7 +397,7 @@ function RuleSection({
 				<div className="flex items-center gap-2">
 					<CardTitle className="text-xs uppercase">{title}</CardTitle>
 					<Tooltip label={description}>
-						<span className="text-neutral-400"><Info className="h-4 w-4" /></span>
+						<span className="text-neutral-500"><Info className="h-4 w-4" /></span>
 					</Tooltip>
 				</div>
 			</CardHeader>
@@ -425,7 +425,7 @@ function RuleSection({
 											{describeRule(rule, mailboxes, hostname, t)}
 										</p>
 									)}
-									<p className="text-xs text-neutral-400">
+									<p className="text-xs text-neutral-500">
 										{t("routing.stats", { priority: rule.priority, count: rule.matchCount, last: formatLastMatched(rule.lastMatchedAt, t) })}
 									</p>
 								</div>

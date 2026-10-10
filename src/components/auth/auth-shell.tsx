@@ -66,7 +66,7 @@ export function AuthShell({
                 <span key={step.label} className="flex items-center gap-2">
                   <span
                     className={
-                      step.active ? "text-blue-700" : "text-neutral-400"
+                      step.active ? "text-blue-700" : "text-neutral-500"
                     }
                   >
                     {index + 1} {step.label}

@@ -142,7 +142,7 @@ export default function ResendDomainSection({ domainId, onStatus }: { domainId: 
 							<span className="font-medium">{record.type}</span>
 							<span className="break-all">{record.name}</span>
 							<span className="break-all">{record.priority !== null ? `${record.priority} ` : ""}{record.value}</span>
-							<span className="uppercase text-neutral-400">{record.status.replace(/_/g, " ")}</span>
+							<span className="uppercase text-neutral-500">{record.status.replace(/_/g, " ")}</span>
 						</li>
 					))}
 				</ul>

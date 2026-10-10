@@ -151,7 +151,7 @@ function MessageListRow({
 								<span className="ml-2 text-xs font-normal text-neutral-500">{message.threadCount}</span>
 							)}
 						</span>
-						<span className={clsx(unread ?"font-medium":"text-neutral-400","shrink-0 text-[11px]")}>
+						<span className={clsx(unread ?"font-medium":"text-neutral-500","shrink-0 text-[11px]")}>
 							{message.scheduledAt ? formatScheduledSendTime(message.scheduledAt, t) : formatMessageListTimestamp(message.createdAt)}
 						</span>
 					</span>

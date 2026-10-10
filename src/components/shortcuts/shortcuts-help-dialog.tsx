@@ -89,7 +89,7 @@ function ShortcutsHelpDialogContent({
               <h2 id={titleId} className="text-base font-semibold text-neutral-900">
                 {t("shortcutsHelp.title")}
               </h2>
-              <p className="text-xs text-neutral-400">
+              <p className="text-xs text-neutral-500">
                 {t("shortcutsHelp.subtitle")}
               </p>
             </div>
@@ -109,7 +109,7 @@ function ShortcutsHelpDialogContent({
         <div className="overflow-y-auto p-6 grid grid-cols-1 md:grid-cols-2 gap-6">
           {Object.entries(grouped).map(([category, items]) => (
             <div key={category} className="space-y-3">
-              <h3 className="text-xs font-semibold uppercase tracking-wider text-neutral-400 border-b border-neutral-100 pb-1.5">
+              <h3 className="text-xs font-semibold uppercase tracking-wider text-neutral-500 border-b border-neutral-100 pb-1.5">
                 {t(`shortcut.category.${category}` as TranslationKey)}
               </h3>
               <div className="space-y-2">
@@ -132,7 +132,7 @@ function ShortcutsHelpDialogContent({
         </div>
 
         {/* Footer */}
-        <div className="px-6 py-3 bg-neutral-50 border-t border-neutral-100 flex items-center justify-between text-xs text-neutral-400">
+        <div className="px-6 py-3 bg-neutral-50 border-t border-neutral-100 flex items-center justify-between text-xs text-neutral-500">
           <span>{withKey(t("shortcutsHelp.pressToToggle", { key: "{key}" }), "?")}</span>
           <span>{withKey(t("shortcutsHelp.pressToClose", { key: "{key}" }), "ESC")}</span>
         </div>

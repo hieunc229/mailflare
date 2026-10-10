@@ -3,6 +3,7 @@
 @custom-variant dark (&:where(.dark, .dark *));
 
 :root {
+	--color-neutral-500: #6b6b6b;
 	--background: #f6f8fc;
 	--foreground: #202124;
 	--card: #ffffff;
@@ -209,8 +210,8 @@ button {
 	--color-neutral-100: #35363a;
 	--color-neutral-200: #3c4043;
 	--color-neutral-300: #5f6368;
-	--color-neutral-400: #80868b;
-	--color-neutral-500: #9aa0a6;
+	--color-neutral-400: #9aa0a6;
+	--color-neutral-500: #a8aeb4;
 	--color-neutral-600: #bdc1c6;
 	--color-neutral-700: #dadce0;
 	--color-neutral-800: #e8eaed;

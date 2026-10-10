@@ -132,11 +132,11 @@ export function ContactDetailsTrigger({
 						</div>
 						<div className="grid gap-3 rounded-lg bg-neutral-50 p-3 text-sm sm:grid-cols-2">
 							<div>
-								<p className="text-xs font-medium uppercase text-neutral-400">{t("contact.source")}</p>
+								<p className="text-xs font-medium uppercase text-neutral-500">{t("contact.source")}</p>
 								<p className="mt-1 capitalize text-neutral-700">{contact?.source ?? t("contact.sourceEmail")}</p>
 							</div>
 							<div>
-								<p className="text-xs font-medium uppercase text-neutral-400">{t("contact.lastSeen")}</p>
+								<p className="text-xs font-medium uppercase text-neutral-500">{t("contact.lastSeen")}</p>
 								<p className="mt-1 text-neutral-700">
 									{contact?.lastSeenAt ? formatUserDate(contact.lastSeenAt, { month: "short", day: "2-digit", year: "numeric" }) : t("contact.unknown")}
 								</p>

@@ -427,7 +427,7 @@ export default function CalendarPage() {
                       <button key={dateKey(day)} type="button" aria-label={formatUserDate(day, { weekday: "long", month: "long", day: "numeric", year: "numeric" })} aria-pressed={selected}
                         onClick={() => { setVisibleDate(day); setMonthPickerOpen(false); }}
                         className={clsx("mx-auto my-0.5 flex h-11 w-11 items-center justify-center rounded-full text-base font-medium hover:bg-neutral-200/80",
-                          selected ? "bg-blue-600 text-white hover:bg-blue-600" : isToday ? "bg-neutral-200 text-neutral-900" : outsideMonth ? "text-neutral-400" : "text-neutral-900")}>
+                          selected ? "bg-blue-600 text-white hover:bg-blue-600" : isToday ? "bg-neutral-200 text-neutral-900" : outsideMonth ? "text-neutral-500" : "text-neutral-900")}>
                         {formatUserDate(day, { day: "numeric" })}
                       </button>
                     );

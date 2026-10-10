@@ -166,19 +166,19 @@ export default function WebhooksPage() {
 									<span className="block text-xs text-neutral-500">{t("webhooks.stat.deliveries")}</span>
 								</div>
 								<div className="px-4 py-3">
-									<span className={`block text-lg font-semibold ${hook.stats.delivered ? "text-green-600" : "text-neutral-400"}`}>
+									<span className={`block text-lg font-semibold ${hook.stats.delivered ? "text-green-600" : "text-neutral-500"}`}>
 										{hook.stats.delivered}
 									</span>
 									<span className="block text-xs text-neutral-500">{t("webhooks.stat.delivered")}</span>
 								</div>
 								<div className="px-4 py-3">
-									<span className={`block text-lg font-semibold ${hook.stats.pending ? "text-amber-600" : "text-neutral-400"}`}>
+									<span className={`block text-lg font-semibold ${hook.stats.pending ? "text-amber-600" : "text-neutral-500"}`}>
 										{hook.stats.pending}
 									</span>
 									<span className="block text-xs text-neutral-500">{t("webhooks.stat.inFlight")}</span>
 								</div>
 								<div className="px-4 py-3">
-									<span className={`block text-lg font-semibold ${hook.stats.failing ? "text-red-600" : "text-neutral-400"}`}>
+									<span className={`block text-lg font-semibold ${hook.stats.failing ? "text-red-600" : "text-neutral-500"}`}>
 										{hook.stats.failing}
 									</span>
 									<span className="block text-xs text-neutral-500">{t("webhooks.stat.failed")}</span>

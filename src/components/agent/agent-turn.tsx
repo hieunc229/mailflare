@@ -20,7 +20,7 @@ export function AgentTurnView({ turn, draftActions, onOpenDraft, onApproveDraft,
 	}
 	const turnDraftActions = draftActions.filter((action) => turn.activity.some((item) => item.id === action.messageId));
 	const workContent = <div className="mt-2 space-y-2 text-xs">
-		{turn.activity.length ? turn.activity.map((item) => item.role === "reasoning" ? <p key={item.id} className="whitespace-pre-wrap break-words text-xs text-neutral-600 pl-5">{item.content}</p> : <AgentToolActivity key={item.id} item={item} forceOpen={turn.running} />) : <p className="text-neutral-400">{turn.running ? t("agent.turn.waiting") : t("agent.turn.noDetails")}</p>}
+		{turn.activity.length ? turn.activity.map((item) => item.role === "reasoning" ? <p key={item.id} className="whitespace-pre-wrap break-words text-xs text-neutral-600 pl-5">{item.content}</p> : <AgentToolActivity key={item.id} item={item} forceOpen={turn.running} />) : <p className="text-neutral-500">{turn.running ? t("agent.turn.waiting") : t("agent.turn.noDetails")}</p>}
 	</div>;
 	return <div className="space-y-3 py-2">
 		{turn.user && <div className="ml-auto w-fit max-w-[90%] whitespace-pre-wrap break-words rounded-2xl bg-blue-100/65 px-4 py-3 text-sm leading-relaxed text-black">{turn.user.content}</div>}
