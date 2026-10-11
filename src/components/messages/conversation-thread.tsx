@@ -148,9 +148,9 @@ export function ConversationMessageCard({
 
 
 	return (
-		<article className={cn("bg-white transition-colors px-6", !expanded && "hover:bg-neutral-50", !isAnyPanelVisible && "pl-12")}>
+		<article className={cn("bg-white transition-colors px-3 sm:px-6", !expanded && "hover:bg-neutral-50", !isAnyPanelVisible && "sm:pl-12")}>
 			<div className="w-full">
-				<div className="flex w-full flex-wrap items-start gap-x-3 py-3 pl-4">
+				<div className="flex w-full flex-wrap items-start gap-x-3 py-3 sm:pl-4">
 					<button
 						type="button"
 						onClick={() => {
@@ -197,7 +197,7 @@ export function ConversationMessageCard({
 					/>
 				</div>
 				{expanded && body && (
-					<div className="pb-4 pl-16 pt-2">
+					<div className="pb-4 pt-2 sm:pl-16">
 						{body.html ? (
 							<EmailHtmlRenderer html={body.html} />
 						) : (
