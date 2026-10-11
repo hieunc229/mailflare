@@ -46,7 +46,15 @@ export async function POST(
 		return NextResponse.json({ error: "This message is not scheduled" }, { status: 409 });
 	}
 
-	await db.delete(outboundJobs).where(eq(outboundJobs.id, job.id));
-	await db.update(messages).set({ status: "draft" }).where(eq(messages.id, message.id));
+	// Only a job that is still waiting can be cancelled; the queue consumer claims it
+	// (queued -> sending) before delivering, so a send already under way is left alone.
+	const deleted = await db
+		.delete(outboundJobs)
+		.where(and(eq(outboundJobs.id, job.id), eq(outboundJobs.status, "queued")))
+		.returning({ id: outboundJobs.id });
+	if (!deleted.length) {
+		return NextResponse.json({ error: "This message is already being sent" }, { status: 409 });
+	}
+	await db.update(messages).set({ status: "draft" }).where(and(eq(messages.id, message.id), eq(messages.status, "queued")));
 	return NextResponse.json({ ok: true });
 }
