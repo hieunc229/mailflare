@@ -793,6 +793,8 @@
 	"setup.schemaReady": "Tsarin bayanan yana shirye",
 	"setup.checkingShort": "Ana dubawa...",
 	"setup.checkAgain": "Duba sake",
+	"setup.setupCode": "Lambar saitawa",
+	"setup.setupCodeHint": "Mailflare na rubuta wannan lambar a cikin bayanan log ɗinsa idan aka buɗe wannan shafi. A Cloudflare: Workers & Pages → mailflare → Logs. Da Docker: docker compose logs. Idan an saita SETUP_TOKEN, shigar da ƙimarsa a maimakon haka.",
 	"setup.primaryDomain": "Babban yanki",
 	"setup.zoneHint": "Dole ne yankin ya riga ya zama yankin Cloudflare a wannan asusu.",
 	"setup.enableSending": "Kunna aikawa",

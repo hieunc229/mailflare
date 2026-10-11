@@ -791,6 +791,8 @@
 	"setup.schemaReady": "డేటాబేస్ స్కీమా సిద్ధంగా ఉంది",
 	"setup.checkingShort": "తనిఖీ చేస్తోంది...",
 	"setup.checkAgain": "మళ్లీ తనిఖీ చేయండి",
+	"setup.setupCode": "సెటప్ కోడ్",
+	"setup.setupCodeHint": "ఈ పేజీ తెరిచినప్పుడు Mailflare ఈ కోడ్‌ను తన లాగ్‌లలో రాస్తుంది. Cloudflareలో: Workers & Pages → mailflare → Logs. Dockerతో: docker compose logs. SETUP_TOKEN సెట్ చేసి ఉంటే, బదులుగా దాని విలువను నమోదు చేయండి.",
 	"setup.primaryDomain": "ప్రాథమిక డొమైన్",
 	"setup.zoneHint": "డొమైన్ ఈ ఖాతాలో ఇప్పటికే Cloudflare జోన్ అయి ఉండాలి.",
 	"setup.enableSending": "పంపడాన్ని ప్రారంభించండి",

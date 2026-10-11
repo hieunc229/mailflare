@@ -69,6 +69,9 @@ export function createNodeRuntime(): NodeRuntime {
 		CF_API_KEY: optional("CF_API_KEY"),
 		CF_EMAIL: optional("CF_EMAIL"),
 		TURNSTILE_SECRET_KEY: optional("TURNSTILE_SECRET_KEY"),
+		SETUP_TOKEN: optional("SETUP_TOKEN"),
+		// Without SETUP_TOKEN the setup code is derived from this, printed at start, and changes on restart.
+		SETUP_CODE_SECRET: crypto.randomUUID(),
 		GITHUB_UPDATE_TOKEN: optional("GITHUB_UPDATE_TOKEN"),
 		GITHUB_UPDATE_REF: optional("GITHUB_UPDATE_REF"),
 		GITHUB_UPDATE_REPO: optional("GITHUB_UPDATE_REPO"),

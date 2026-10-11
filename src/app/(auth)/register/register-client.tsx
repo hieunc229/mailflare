@@ -46,6 +46,8 @@ export function RegisterClient() {
   const [mxCheckRevision, setMxCheckRevision] = useState(0);
   const [loading, setLoading] = useState(false);
   const [turnstileReset, setTurnstileReset] = useState(0);
+  const [setupCode, setSetupCode] = useState("");
+  const [needsSetupCode, setNeedsSetupCode] = useState(false);
 
   useEffect(() => {
     void runPreparation();
@@ -62,7 +64,7 @@ export function RegisterClient() {
     setReplaceMxRecords(false);
     setError(null);
 
-    void checkExistingMx(accountDomain)
+    void checkExistingMx(accountDomain, setupCode)
       .then(({ ok, data }) => {
         if (!active) return;
         setMxChecking(false);
@@ -81,7 +83,7 @@ export function RegisterClient() {
     return () => {
       active = false;
     };
-  }, [step, accountDomain, mxCheckRevision, t]);
+  }, [step, accountDomain, mxCheckRevision, setupCode, t]);
 
   async function runPreparation() {
     setLoading(true);
@@ -89,11 +91,16 @@ export function RegisterClient() {
     setPreparationComplete(false);
 
     try {
-      const preparation = await prepareSetup();
+      const preparation = await prepareSetup(setupCode);
       setChecks(preparation.data.checks ?? []);
       setDatabaseMigrated(!!preparation.data.migrated);
       if (!preparation.ok) {
-        setError(preparation.data.error ?? t("setup.completeConfig"));
+        const code = preparation.data.code;
+        if (code === "SETUP_CODE_REQUIRED" || code === "SETUP_CODE_INVALID" || code === "SETUP_CODE_RATE_LIMITED") {
+          setNeedsSetupCode(true);
+        }
+        // The first visit is expected to ask for the code, so that is not an error.
+        setError(code === "SETUP_CODE_REQUIRED" ? null : preparation.data.error ?? t("setup.completeConfig"));
         return;
       }
 
@@ -119,7 +126,7 @@ export function RegisterClient() {
     const usedCachedCheck = domainCheck?.hostname === hostname;
     const result: { ok: boolean; data: DomainSetupResult } = usedCachedCheck
       ? { ok: true, data: { domain: domainCheck } }
-      : await submitPrimaryDomain(hostname);
+      : await submitPrimaryDomain(hostname, setupCode);
     const { ok, data } = result;
     setLoading(false);
     if (!ok || !data.domain) {
@@ -139,7 +146,7 @@ export function RegisterClient() {
 
     setDomainChecking(true);
     setError(null);
-    const { ok, data } = await submitPrimaryDomain(hostname);
+    const { ok, data } = await submitPrimaryDomain(hostname, setupCode);
     setDomainChecking(false);
     if (!ok || !data.domain) {
       setDomainCheck(null);
@@ -172,7 +179,7 @@ export function RegisterClient() {
         ? setupEnableSending
         : primaryDomainSendingRequested ?? undefined,
       replaceMxRecords,
-    });
+    }, setupCode);
     setLoading(false);
     if (!ok) {
       if (data.code === "MX_RECORDS_CONFLICT") {
@@ -242,7 +249,14 @@ export function RegisterClient() {
       }
     >
       {step === 1 ? (
-        <div className="space-y-5">
+        <form
+          method="post"
+          onSubmit={(event) => {
+            event.preventDefault();
+            void runPreparation();
+          }}
+          className="space-y-5"
+        >
           <p className="text-sm leading-6 text-neutral-600">
             {t("setup.prepareIntro")}
           </p>
@@ -273,6 +287,25 @@ export function RegisterClient() {
               </div>
             )}
           </div>
+          {needsSetupCode && !preparationComplete && (
+            <div className="space-y-2">
+              <Label htmlFor="setupCode">{t("setup.setupCode")}</Label>
+              <Input
+                id="setupCode"
+                name="setupCode"
+                value={setupCode}
+                onChange={(event) => setSetupCode(event.currentTarget.value)}
+                placeholder="XXXX-XXXX-XXXX-XXXX"
+                autoComplete="off"
+                spellCheck={false}
+                aria-describedby="setupCode-hint"
+                required
+              />
+              <p id="setupCode-hint" className="text-xs leading-5 text-neutral-500">
+                {t("setup.setupCodeHint")}
+              </p>
+            </div>
+          )}
           {error && (
             <p role="alert" className="rounded-2xl border border-red-100 bg-red-50 px-4 py-3 text-sm font-medium text-red-700">
               {error}
@@ -288,16 +321,15 @@ export function RegisterClient() {
             </Button>
           ) : (
             <Button
-              type="button"
-              variant="outline"
+              type="submit"
+              variant={needsSetupCode ? "default" : "outline"}
               className="h-11 w-full rounded-full px-6 active:scale-[0.98]"
               disabled={loading}
-              onClick={() => void runPreparation()}
             >
-              {loading ? t("setup.checkingShort") : t("setup.checkAgain")}
+              {loading ? t("setup.checkingShort") : needsSetupCode ? t("common.continue") : t("setup.checkAgain")}
             </Button>
           )}
-        </div>
+        </form>
       ) : showDomainStep ? (
         <form method="post" onSubmit={onDomainSubmit} className="space-y-5">
           <div className="space-y-2">

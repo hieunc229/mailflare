@@ -1,4 +1,5 @@
 import { clearClientSessionToken } from "@/lib/auth/client";
+import { SETUP_CODE_HEADER } from "@/lib/auth/setup-code-utils";
 import type {
 	DomainSetupResult,
 	MxCheckResult,
@@ -7,8 +8,14 @@ import type {
 	SetupStatus,
 } from "./types";
 
-export async function prepareSetup(): Promise<{ ok: boolean; data: SetupPreparationResult }> {
-	const res = await fetch("/api/setup/prepare", { method: "POST" });
+function setupHeaders(setupCode: string, json = false): HeadersInit {
+	const headers: Record<string, string> = json ? { "Content-Type": "application/json" } : {};
+	if (setupCode.trim()) headers[SETUP_CODE_HEADER] = setupCode.trim();
+	return headers;
+}
+
+export async function prepareSetup(setupCode: string): Promise<{ ok: boolean; data: SetupPreparationResult }> {
+	const res = await fetch("/api/setup/prepare", { method: "POST", headers: setupHeaders(setupCode) });
 	return {
 		ok: res.ok,
 		data: (await res.json()) as SetupPreparationResult,
@@ -22,10 +29,10 @@ export async function getSetupStatus(): Promise<SetupStatus> {
 	return data;
 }
 
-export async function submitPrimaryDomain(hostname: string): Promise<{ ok: boolean; data: DomainSetupResult }> {
+export async function submitPrimaryDomain(hostname: string, setupCode: string): Promise<{ ok: boolean; data: DomainSetupResult }> {
 	const res = await fetch("/api/setup/domain", {
 		method: "POST",
-		headers: { "Content-Type": "application/json" },
+		headers: setupHeaders(setupCode, true),
 		body: JSON.stringify({ hostname }),
 	});
 
@@ -35,10 +42,10 @@ export async function submitPrimaryDomain(hostname: string): Promise<{ ok: boole
 	};
 }
 
-export async function checkExistingMx(hostname: string): Promise<{ ok: boolean; data: MxCheckResult }> {
+export async function checkExistingMx(hostname: string, setupCode: string): Promise<{ ok: boolean; data: MxCheckResult }> {
 	const res = await fetch("/api/setup/domain/mx", {
 		method: "POST",
-		headers: { "Content-Type": "application/json" },
+		headers: setupHeaders(setupCode, true),
 		body: JSON.stringify({ hostname }),
 	});
 
@@ -51,10 +58,11 @@ export async function checkExistingMx(hostname: string): Promise<{ ok: boolean; 
 export async function submitRegistration(
 	form: FormData,
 	payload: { firstRun: boolean; domain: string; enableSending?: boolean; replaceMxRecords?: boolean },
+	setupCode: string,
 ): Promise<{ ok: boolean; data: RegisterResult }> {
 	const res = await fetch("/api/auth/register", {
 		method: "POST",
-		headers: { "Content-Type": "application/json" },
+		headers: setupHeaders(setupCode, true),
 		body: JSON.stringify(
 			payload.firstRun
 				? {

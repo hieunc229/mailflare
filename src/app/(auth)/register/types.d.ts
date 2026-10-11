@@ -15,6 +15,7 @@ export type SetupPreparationResult = {
 	checks?: SetupRequirementCheck[];
 	migrated?: boolean;
 	error?: string;
+	code?: "SETUP_CODE_REQUIRED" | "SETUP_CODE_INVALID" | "SETUP_CODE_RATE_LIMITED" | "SETUP_CODE_UNAVAILABLE";
 };
 
 export type DomainPreflight = {

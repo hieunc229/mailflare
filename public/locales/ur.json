@@ -791,6 +791,8 @@
 	"setup.schemaReady": "ڈیٹا بیس اسکیما تیار ہے",
 	"setup.checkingShort": "جانچ ہو رہی ہے...",
 	"setup.checkAgain": "دوبارہ جانچیں",
+	"setup.setupCode": "سیٹ اپ کوڈ",
+	"setup.setupCodeHint": "یہ صفحہ کھلنے پر Mailflare یہ کوڈ اپنے لاگز میں لکھتا ہے۔ Cloudflare پر: Workers & Pages → mailflare → Logs۔ Docker کے ساتھ: docker compose logs۔ اگر SETUP_TOKEN سیٹ ہے تو اس کے بجائے اس کی قدر درج کریں۔",
 	"setup.primaryDomain": "بنیادی ڈومین",
 	"setup.zoneHint": "ڈومین اس اکاؤنٹ میں پہلے سے Cloudflare زون ہونا چاہیے۔",
 	"setup.enableSending": "بھیجنا فعال کریں",

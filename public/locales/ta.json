@@ -793,6 +793,8 @@
 	"setup.schemaReady": "தரவுத்தள ஸ்கீமா தயாராக உள்ளது",
 	"setup.checkingShort": "சரிபார்க்கப்படுகிறது...",
 	"setup.checkAgain": "மீண்டும் சரிபார்",
+	"setup.setupCode": "அமைவுக் குறியீடு",
+	"setup.setupCodeHint": "இந்தப் பக்கம் திறக்கும்போது Mailflare இந்தக் குறியீட்டை அதன் பதிவுகளில் எழுதுகிறது. Cloudflare இல்: Workers & Pages → mailflare → Logs. Docker உடன்: docker compose logs. SETUP_TOKEN அமைக்கப்பட்டிருந்தால், அதற்குப் பதிலாக அதன் மதிப்பை உள்ளிடவும்.",
 	"setup.primaryDomain": "முதன்மை டொமைன்",
 	"setup.zoneHint": "டொமைன் ஏற்கனவே இந்தக் கணக்கில் ஒரு Cloudflare மண்டலமாக இருக்க வேண்டும்.",
 	"setup.enableSending": "அனுப்புவதை இயக்கு",

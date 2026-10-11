@@ -793,6 +793,8 @@
 	"setup.schemaReady": "ഡാറ്റാബേസ് സ്കീമ തയ്യാറാണ്",
 	"setup.checkingShort": "പരിശോധിക്കുന്നു...",
 	"setup.checkAgain": "വീണ്ടും പരിശോധിക്കുക",
+	"setup.setupCode": "സജ്ജീകരണ കോഡ്",
+	"setup.setupCodeHint": "ഈ പേജ് തുറക്കുമ്പോൾ Mailflare ഈ കോഡ് അതിന്റെ ലോഗുകളിൽ എഴുതുന്നു. Cloudflare-ൽ: Workers & Pages → mailflare → Logs. Docker-ൽ: docker compose logs. SETUP_TOKEN സജ്ജമാക്കിയിട്ടുണ്ടെങ്കിൽ, പകരം അതിന്റെ മൂല്യം നൽകുക.",
 	"setup.primaryDomain": "പ്രാഥമിക ഡൊമെയ്ൻ",
 	"setup.zoneHint": "ഡൊമെയ്ൻ ഇതിനകം ഈ അക്കൗണ്ടിലെ ഒരു Cloudflare സോൺ ആയിരിക്കണം.",
 	"setup.enableSending": "അയയ്ക്കൽ പ്രവർത്തനക്ഷമമാക്കുക",

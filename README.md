@@ -66,7 +66,7 @@ You choose the provider per domain and can switch anytime (see [Sending and rece
 ## Deploy
 
 1. **Deploy the app.** Click **Deploy to Cloudflare**. Keep the app name `mailflare`. Other Worker names will break the app.
-2. **Finish setup.** Open the deployed app and follow `/setup` to check the install and create your admin account.
+2. **Finish setup.** Open the deployed app and follow `/setup` to check the install and create your admin account. Setup asks for a one-time code that Mailflare writes to the Worker's logs (**Workers & Pages → mailflare → Logs**, or `npx wrangler tail mailflare`), so nobody who finds a fresh install first can claim it.
 3. **Connect a domain.** Add a domain from the same Cloudflare account and choose which service receives its mail. Mailflare sets up Email Routing, or guides you through Resend or Amazon SES. Then create your first mailbox. Add Resend or AWS credentials on the domain page when you need them.
 
 ⚠️ **`CF_TOKEN` is required during deployment.** Create a scoped [Cloudflare API token with these permissions](https://github.com/hieunc229/mailflare/issues/24#issuecomment-5523686105) for the domains you want to connect:
@@ -97,7 +97,8 @@ run npm run deploy, and set the runtime CF_TOKEN as a Worker secret. Do not run
 remote D1 migrations manually; the /setup flow initializes the database.
 
 Give me the deployed URL and any remaining Cloudflare account actions. I will
-open /setup, create the first admin account, and connect my domain there.
+open /setup, enter the setup code from the Worker's logs, create the first admin
+account, and connect my domain there.
 ```
 
 See the [deployment guide](docs/deployment.md) for permissions, manual deployment, backups, and updates.

@@ -13,8 +13,11 @@ cp .env.docker.example .env.docker      # edit: how to receive and send mail
 docker compose up -d --build
 ```
 
-Open `http://your-host:3000/setup`, create the admin account and add your
-domain. All data lives in the `mailflare-data` volume (`/data` in the
+Open `http://your-host:3000/setup`, enter the setup code, create the admin
+account and add your domain. Until the first admin exists, the container prints
+`Mailflare first-run setup code: ...` when it starts (`docker compose logs
+mailflare`); the code changes on every restart. Set `SETUP_TOKEN` to choose the
+code yourself instead. All data lives in the `mailflare-data` volume (`/data` in the
 container): the SQLite database, raw messages, attachments and backups.
 
 Behind a reverse proxy, set `APP_URL=https://mail.example.com` so links in

@@ -793,6 +793,8 @@
 	"setup.schemaReady": "สคีมาฐานข้อมูลพร้อมแล้ว",
 	"setup.checkingShort": "กำลังตรวจสอบ...",
 	"setup.checkAgain": "ตรวจสอบอีกครั้ง",
+	"setup.setupCode": "รหัสตั้งค่า",
+	"setup.setupCodeHint": "Mailflare จะเขียนรหัสนี้ลงในบันทึกเมื่อเปิดหน้านี้ บน Cloudflare: Workers & Pages → mailflare → Logs สำหรับ Docker: docker compose logs หากตั้งค่า SETUP_TOKEN ไว้ ให้ใส่ค่านั้นแทน",
 	"setup.primaryDomain": "โดเมนหลัก",
 	"setup.zoneHint": "โดเมนต้องเป็นโซน Cloudflare ในบัญชีนี้อยู่แล้ว",
 	"setup.enableSending": "เปิดการส่ง",

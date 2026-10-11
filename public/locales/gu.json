@@ -793,6 +793,8 @@
 	"setup.schemaReady": "ડેટાબેઝ સ્કીમા તૈયાર છે",
 	"setup.checkingShort": "તપાસી રહ્યા છીએ...",
 	"setup.checkAgain": "ફરી તપાસો",
+	"setup.setupCode": "સેટઅપ કોડ",
+	"setup.setupCodeHint": "આ પેજ ખૂલે ત્યારે Mailflare આ કોડ તેના લૉગમાં લખે છે. Cloudflare પર: Workers & Pages → mailflare → Logs. Docker સાથે: docker compose logs. જો SETUP_TOKEN સેટ હોય, તો તેના બદલે તેની કિંમત દાખલ કરો.",
 	"setup.primaryDomain": "મુખ્ય ડોમેન",
 	"setup.zoneHint": "ડોમેન આ એકાઉન્ટ પર પહેલેથી Cloudflare ઝોન હોવું જોઈએ.",
 	"setup.enableSending": "મોકલવાનું ચાલુ કરો",

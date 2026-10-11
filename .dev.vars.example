@@ -1,6 +1,9 @@
 # Preferred: scoped API token.
 # This is an app runtime token, not the Cloudflare deploy/build token.
 CF_TOKEN=your_api_token_with_zone_email_permissions
+# Optional: the code /setup asks for before the first admin exists. Without it,
+# Mailflare derives one from CF_TOKEN and writes it to the logs when /setup opens.
+# SETUP_TOKEN=choose_a_long_random_value
 # Optional: lets the admin dashboard trigger the GitHub update workflow.
 # GITHUB_UPDATE_TOKEN=github_pat_with_actions_write
 # GITHUB_UPDATE_REPO=owner/repo

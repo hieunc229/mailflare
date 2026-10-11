@@ -787,6 +787,8 @@
 	"setup.schemaReady": "数据库结构已就绪",
 	"setup.checkingShort": "正在检查…",
 	"setup.checkAgain": "重新检查",
+	"setup.setupCode": "设置代码",
+	"setup.setupCodeHint": "打开此页面时，Mailflare 会将此代码写入其日志。Cloudflare：Workers & Pages → mailflare → Logs。Docker：docker compose logs。如果设置了 SETUP_TOKEN，请改为输入其值。",
 	"setup.primaryDomain": "主域名",
 	"setup.zoneHint": "该域名必须已是此账户下的 Cloudflare 区域。",
 	"setup.enableSending": "启用发送",

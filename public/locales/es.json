@@ -793,6 +793,8 @@
 	"setup.schemaReady": "El esquema de la base de datos está listo",
 	"setup.checkingShort": "Comprobando...",
 	"setup.checkAgain": "Comprobar de nuevo",
+	"setup.setupCode": "Código de configuración",
+	"setup.setupCodeHint": "Mailflare escribe este código en sus registros al abrir esta página. En Cloudflare: Workers & Pages → mailflare → Logs. Con Docker: docker compose logs. Si SETUP_TOKEN está definido, escribe su valor en su lugar.",
 	"setup.primaryDomain": "Dominio principal",
 	"setup.zoneHint": "El dominio ya debe ser una zona de Cloudflare en esta cuenta.",
 	"setup.enableSending": "Activar el envío",

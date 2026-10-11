@@ -793,6 +793,8 @@
 	"setup.schemaReady": "طرح‌واره پایگاه داده آماده است",
 	"setup.checkingShort": "در حال بررسی...",
 	"setup.checkAgain": "بررسی دوباره",
+	"setup.setupCode": "کد راه‌اندازی",
+	"setup.setupCodeHint": "Mailflare هنگام باز شدن این صفحه این کد را در گزارش‌های خود می‌نویسد. در Cloudflare: Workers & Pages → mailflare → Logs. با Docker: docker compose logs. اگر SETUP_TOKEN تنظیم شده است، به‌جای آن مقدارش را وارد کنید.",
 	"setup.primaryDomain": "دامنه اصلی",
 	"setup.zoneHint": "دامنه باید از قبل یک ناحیه Cloudflare در این حساب باشد.",
 	"setup.enableSending": "فعال‌سازی ارسال",

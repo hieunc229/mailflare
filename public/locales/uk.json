@@ -797,6 +797,8 @@
 	"setup.schemaReady": "Схема бази даних готова",
 	"setup.checkingShort": "Перевірка...",
 	"setup.checkAgain": "Перевірити ще раз",
+	"setup.setupCode": "Код налаштування",
+	"setup.setupCodeHint": "Mailflare записує цей код у свої журнали під час відкриття цієї сторінки. У Cloudflare: Workers & Pages → mailflare → Logs. У Docker: docker compose logs. Якщо задано SETUP_TOKEN, введіть натомість його значення.",
 	"setup.primaryDomain": "Основний домен",
 	"setup.zoneHint": "Домен уже має бути зоною Cloudflare в цьому обліковому записі.",
 	"setup.enableSending": "Увімкнути надсилання",

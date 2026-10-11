@@ -793,6 +793,8 @@
 	"setup.schemaReady": "Veritabanı şeması hazır",
 	"setup.checkingShort": "Kontrol ediliyor...",
 	"setup.checkAgain": "Tekrar kontrol et",
+	"setup.setupCode": "Kurulum kodu",
+	"setup.setupCodeHint": "Mailflare bu sayfa açıldığında bu kodu günlüklerine yazar. Cloudflare'de: Workers & Pages → mailflare → Logs. Docker ile: docker compose logs. SETUP_TOKEN ayarlıysa bunun yerine onun değerini girin.",
 	"setup.primaryDomain": "Birincil alan adı",
 	"setup.zoneHint": "Alan adı, bu hesapta zaten bir Cloudflare bölgesi olmalıdır.",
 	"setup.enableSending": "Göndermeyi etkinleştir",

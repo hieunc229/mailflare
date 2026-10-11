@@ -800,6 +800,8 @@
 	"setup.schemaReady": "Database schema is ready",
 	"setup.checkingShort": "Checking...",
 	"setup.checkAgain": "Check again",
+	"setup.setupCode": "Setup code",
+	"setup.setupCodeHint": "Mailflare writes this code to its logs when this page opens. On Cloudflare: Workers & Pages → mailflare → Logs. With Docker: docker compose logs. If SETUP_TOKEN is set, enter its value instead.",
 	"setup.primaryDomain": "Primary domain",
 	"setup.zoneHint": "The domain must already be a Cloudflare zone on this account.",
 	"setup.enableSending": "Enable sending",

@@ -793,6 +793,8 @@
 	"setup.schemaReady": "Databaseschema is gereed",
 	"setup.checkingShort": "Controleren...",
 	"setup.checkAgain": "Opnieuw controleren",
+	"setup.setupCode": "Installatiecode",
+	"setup.setupCodeHint": "Mailflare schrijft deze code naar zijn logs wanneer deze pagina wordt geopend. Op Cloudflare: Workers & Pages → mailflare → Logs. Met Docker: docker compose logs. Is SETUP_TOKEN ingesteld, voer dan in plaats daarvan die waarde in.",
 	"setup.primaryDomain": "Primair domein",
 	"setup.zoneHint": "Het domein moet al een Cloudflare-zone zijn in dit account.",
 	"setup.enableSending": "Verzenden inschakelen",

@@ -55,10 +55,13 @@ across deployments so existing browser subscriptions remain valid.
 
 1. Open the URL of the deployed `mailflare` Worker.
 2. Go to `/setup` if Mailflare does not take you there automatically.
-3. Let Mailflare check the required Cloudflare configuration and initialize the empty D1 database.
-4. Create the first admin account when prompted.
+3. Enter the setup code. Opening `/setup` writes it to the Worker's logs: in the Cloudflare dashboard open **Workers & Pages → mailflare → Logs** and look for `Mailflare first-run setup code`, or run `npx wrangler tail mailflare` and reload `/setup`.
+4. Let Mailflare check the required Cloudflare configuration and initialize the empty D1 database.
+5. Create the first admin account when prompted.
 
 Setup applies the committed migrations through the Worker's D1 binding before creating the first admin account.
+
+The setup code stops anyone who reaches a new install before you from creating the admin account and using your `CF_TOKEN`. It is derived from `CF_TOKEN`, so it stays the same until that secret changes, and it is no longer accepted once the first admin exists. To choose the code yourself instead, add a `SETUP_TOKEN` secret to the Worker before opening `/setup`; Mailflare then accepts that value and does not log a code.
 
 ## Step 4: Connect your primary domain and create an account
 

@@ -787,6 +787,8 @@
 	"setup.schemaReady": "Lược đồ cơ sở dữ liệu đã sẵn sàng",
 	"setup.checkingShort": "Đang kiểm tra...",
 	"setup.checkAgain": "Kiểm tra lại",
+	"setup.setupCode": "Mã thiết lập",
+	"setup.setupCodeHint": "Mailflare ghi mã này vào nhật ký khi trang này được mở. Trên Cloudflare: Workers & Pages → mailflare → Logs. Với Docker: docker compose logs. Nếu đã đặt SETUP_TOKEN, hãy nhập giá trị đó thay thế.",
 	"setup.primaryDomain": "Tên miền chính",
 	"setup.zoneHint": "Tên miền phải là một vùng Cloudflare trong tài khoản này.",
 	"setup.enableSending": "Bật gửi thư",

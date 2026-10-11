@@ -4,6 +4,8 @@ import { parse } from "node:url";
 import next from "next";
 import { WebSocketServer } from "ws";
 import { getUserFromSession } from "@/lib/auth/session";
+import { hasAdminAccount } from "@/lib/auth/setup";
+import { getSetupCode, logSetupCode } from "@/lib/auth/setup-code-utils";
 import { getSessionTokenFromRequest } from "@/lib/realtime/utils";
 import { processInboundMessage } from "@/lib/email/inbound";
 import { processAgentDraftJob } from "@/lib/agent/jobs/utils";
@@ -30,6 +32,10 @@ async function main() {
 
 	const migrated = await applyMigrations(runtime.database, resolve(process.env.MIGRATIONS_DIR ?? join(process.cwd(), "drizzle", "migrations")));
 	if (migrated.length) console.log(`Applied ${migrated.length} migration(s): ${migrated.join(", ")}`);
+	if (!(await hasAdminAccount(env))) {
+		const setup = await getSetupCode(env);
+		if (setup?.derived) logSetupCode(setup.code);
+	}
 
 	runtime.inboundQueue.setConsumer(async (body) => {
 		if (isInboundQueueMessage(body)) await processInboundMessage(env, body);

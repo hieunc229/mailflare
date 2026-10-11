@@ -5,6 +5,7 @@ import { getDb } from "@/db";
 import { mailboxes, users } from "@/db/schema";
 import { hashPassword } from "@/lib/auth/password";
 import { hasAdminAccount } from "@/lib/auth/setup";
+import { requireSetupCode } from "@/lib/auth/setup-code";
 import { SESSION_COOKIE } from "@/lib/auth/session";
 import { newId } from "@/lib/ids";
 import { firstRunRegisterSchema } from "@/lib/validators";
@@ -25,6 +26,8 @@ export async function POST(request: Request) {
 	if (await hasAdminAccount(env)) {
 		return NextResponse.json({ error: "Registration is closed after the first account is created" }, { status: 403 });
 	}
+	const denied = await requireSetupCode(env, request);
+	if (denied) return denied;
 
 	let body: unknown;
 	try {

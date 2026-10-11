@@ -41,6 +41,10 @@ interface CloudflareEnv {
 	CF_API_KEY?: string;
 	CF_EMAIL?: string;
 	TURNSTILE_SECRET_KEY?: string;
+	/** Optional code the deployer chooses for first-run setup; without it one is derived and written to the logs. */
+	SETUP_TOKEN?: string;
+	/** Random per-process secret the Node runtime derives the setup code from; unset on Workers. */
+	SETUP_CODE_SECRET?: string;
 	GITHUB_UPDATE_TOKEN?: string;
 	GITHUB_UPDATE_REF?: string;
 	GITHUB_UPDATE_REPO?: string;

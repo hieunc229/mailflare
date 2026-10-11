@@ -796,6 +796,8 @@
 	"setup.schemaReady": "Schemat bazy danych jest gotowy",
 	"setup.checkingShort": "Sprawdzanie...",
 	"setup.checkAgain": "Sprawdź ponownie",
+	"setup.setupCode": "Kod konfiguracji",
+	"setup.setupCodeHint": "Mailflare zapisuje ten kod w swoich logach po otwarciu tej strony. W Cloudflare: Workers & Pages → mailflare → Logs. W Dockerze: docker compose logs. Jeśli ustawiono SETUP_TOKEN, wpisz zamiast tego jego wartość.",
 	"setup.primaryDomain": "Domena główna",
 	"setup.zoneHint": "Domena musi już być strefą Cloudflare na tym koncie.",
 	"setup.enableSending": "Włącz wysyłanie",

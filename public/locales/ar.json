@@ -817,6 +817,8 @@
 	"setup.schemaReady": "مخطط قاعدة البيانات جاهز",
 	"setup.checkingShort": "جارٍ الفحص...",
 	"setup.checkAgain": "افحص مجددًا",
+	"setup.setupCode": "رمز الإعداد",
+	"setup.setupCodeHint": "يكتب Mailflare هذا الرمز في سجلاته عند فتح هذه الصفحة. على Cloudflare: Workers & Pages → mailflare → Logs. مع Docker: docker compose logs. إذا كان SETUP_TOKEN معيّنًا، فأدخل قيمته بدلًا من ذلك.",
 	"setup.primaryDomain": "النطاق الأساسي",
 	"setup.zoneHint": "يجب أن يكون النطاق منطقة Cloudflare بالفعل في هذا الحساب.",
 	"setup.enableSending": "تفعيل الإرسال",

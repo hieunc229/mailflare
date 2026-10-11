@@ -787,6 +787,8 @@
 	"setup.schemaReady": "Skema database siap",
 	"setup.checkingShort": "Memeriksa...",
 	"setup.checkAgain": "Periksa lagi",
+	"setup.setupCode": "Kode penyiapan",
+	"setup.setupCodeHint": "Mailflare menulis kode ini ke log-nya saat halaman ini dibuka. Di Cloudflare: Workers & Pages → mailflare → Logs. Dengan Docker: docker compose logs. Jika SETUP_TOKEN diatur, masukkan nilainya sebagai gantinya.",
 	"setup.primaryDomain": "Domain utama",
 	"setup.zoneHint": "Domain harus sudah menjadi zona Cloudflare di akun ini.",
 	"setup.enableSending": "Aktifkan pengiriman",

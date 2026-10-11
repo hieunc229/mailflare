@@ -787,6 +787,8 @@
 	"setup.schemaReady": "データベーススキーマの準備ができました",
 	"setup.checkingShort": "確認中…",
 	"setup.checkAgain": "再確認",
+	"setup.setupCode": "セットアップコード",
+	"setup.setupCodeHint": "このページを開くと、Mailflare はこのコードをログに書き込みます。Cloudflare の場合: Workers & Pages → mailflare → Logs。Docker の場合: docker compose logs。SETUP_TOKEN を設定している場合は、その値を入力してください。",
 	"setup.primaryDomain": "プライマリドメイン",
 	"setup.zoneHint": "ドメインは、このアカウントの Cloudflare ゾーンとして登録されている必要があります。",
 	"setup.enableSending": "送信を有効にする",

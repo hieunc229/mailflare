@@ -793,6 +793,8 @@
 	"setup.schemaReady": "Muundo wa hifadhidata uko tayari",
 	"setup.checkingShort": "Inakagua...",
 	"setup.checkAgain": "Kagua tena",
+	"setup.setupCode": "Msimbo wa usanidi",
+	"setup.setupCodeHint": "Mailflare huandika msimbo huu kwenye kumbukumbu zake ukurasa huu unapofunguliwa. Kwenye Cloudflare: Workers & Pages → mailflare → Logs. Kwa Docker: docker compose logs. Ikiwa SETUP_TOKEN imewekwa, weka thamani yake badala yake.",
 	"setup.primaryDomain": "Kikoa kikuu",
 	"setup.zoneHint": "Kikoa lazima tayari kiwe eneo la Cloudflare kwenye akaunti hii.",
 	"setup.enableSending": "Wezesha kutuma",
