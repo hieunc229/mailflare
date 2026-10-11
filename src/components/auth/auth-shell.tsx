@@ -12,6 +12,7 @@ export function AuthShell({
   children,
   footer,
   steps,
+  variant = "split",
 }: AuthShellProps) {
   const branding = useBranding();
   const [iconUrl, setIconUrl] = useState(branding.iconUrl);
@@ -22,30 +23,61 @@ export function AuthShell({
     setIconFailed(false);
   }, [branding.iconUrl]);
 
+  const brand = (
+    <div className={variant === "centered" ? "flex items-center justify-center gap-2" : "flex items-center gap-2"}>
+      <span className="flex items-center justify-center overflow-hidden">
+        {iconFailed ? (
+          <Icon className="h-8 w-8 text-blue-600" />
+        ) : (
+          <img
+            src={iconUrl}
+            onError={() => {
+              if (iconUrl !== "/icon-96.png") setIconUrl("/icon-96.png");
+              else setIconFailed(true);
+            }}
+            alt=""
+            className="h-8 w-8 object-contain"
+          />
+        )}
+      </span>
+      <span className="truncate text-md font-semibold text-neutral-800">
+        {branding.appName}
+      </span>
+    </div>
+  );
+
+  if (variant === "centered") {
+    return (
+      <div className="flex min-h-dvh flex-col items-center justify-center bg-[#f1f4fa] px-4 py-10 text-neutral-900">
+        <main className="w-full max-w-md rounded-3xl bg-white p-7 sm:p-10">
+          {brand}
+          <h1 className="mt-6 text-center text-2xl font-medium tracking-tight text-neutral-950">
+            {title}
+          </h1>
+          {description && (
+            <p className="mt-2 text-center text-sm leading-6 text-neutral-600">
+              {description}
+            </p>
+          )}
+          <div className="mt-8">{children}</div>
+          {footer && (
+            <div className="mt-6 text-center text-sm font-medium text-blue-700">
+              {footer}
+            </div>
+          )}
+        </main>
+        <div className="mt-6 w-48">
+          <LanguageSelector />
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-dvh bg-[#f1f4fa] px-4 py-6 text-neutral-900 sm:px-6 lg:flex lg:items-center lg:px-10 lg:py-10">
       <main className="mx-auto grid w-full max-w-6xl overflow-hidden rounded-4xl bg-white lg:grid-cols-[minmax(0,0.92fr)_minmax(0,1.08fr)]">
         <section className="flex flex-col p-7 sm:p-10 lg:p-14">
-          <div className="flex items-center gap-2">
-            <span className="flex items-center justify-center overflow-hidden">
-              {iconFailed ? (
-                <Icon className="h-8 w-8 text-blue-600" />
-              ) : (
-                <img
-                  src={iconUrl}
-                  onError={() => {
-                    if (iconUrl !== "/icon-96.png") setIconUrl("/icon-96.png");
-                    else setIconFailed(true);
-                  }}
-                  alt=""
-                  className="h-8 w-8 object-contain"
-                />
-              )}
-            </span>
-            <span className="truncate text-md font-semibold text-neutral-800">
-              {branding.appName}
-            </span>
-          </div>
+          {brand}
 
           <div className="mt-2 lg:mt-8">
             <h1 className="max-w-md text-xl font-medium leading-tight tracking-tight text-neutral-950 sm:text-4xl">

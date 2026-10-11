@@ -12,7 +12,7 @@ import { Label } from "@/components/ui/label";
 import { TurnstileField } from "@/components/auth/turnstile";
 import { submitLogin, submitMfaCode } from "./utils";
 
-export function LoginClient({ adding = false }: { adding?: boolean }) {
+export function LoginClient({ adding = false, centered = false }: { adding?: boolean; centered?: boolean }) {
   const { t } = useLanguage();
   const router = useRouter();
   const [error, setError] = useState<string | null>(null);
@@ -86,6 +86,7 @@ export function LoginClient({ adding = false }: { adding?: boolean }) {
         icon={ShieldCheck}
         title={t("auth.mfaTitle")}
         description={t("auth.mfaDescription")}
+        variant={centered ? "centered" : "split"}
       >
         <form onSubmit={onSubmitCode} className="space-y-5">
           <div className="space-y-2">
@@ -133,8 +134,11 @@ export function LoginClient({ adding = false }: { adding?: boolean }) {
       description={
         adding
           ? t("auth.addDescription")
-          : t("auth.signInDescription")
+          : centered
+            ? undefined
+            : t("auth.signInDescription")
       }
+      variant={centered ? "centered" : "split"}
     >
       <form method="post" onSubmit={onSubmit} className="space-y-5">
         <div className="space-y-2">
