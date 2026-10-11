@@ -43,6 +43,7 @@ export const locales = {
 	ml: { label: "മലയാളം" },
 	pa: { label: "ਪੰਜਾਬੀ" },
 	ha: { label: "Hausa" },
+	si: { label: "සිංහල" },
 } satisfies Record<string, LocaleEntry>;
 
 export type Locale = keyof typeof locales;
