@@ -6,20 +6,15 @@ import { ChevronDown, X } from "lucide-react";
 import { useLanguage } from "@/components/language-provider";
 import { NewTemplateDialog } from "./new-template-dialog";
 import { TemplateMenu } from "./template-menu";
-import {
-	formatDateTimeLocal,
-	formatScheduledSend,
-	getScheduleSendOptions,
-	parseDateTimeLocal,
-} from "./schedule-send-utils";
+import { formatScheduledSend } from "./schedule-send-utils";
+import { ScheduleSendDialog } from "./schedule-send-dialog";
+import { ScheduledSendIcon } from "@/components/icons/scheduled-send-icon";
 import type { ScheduleSendMenuProps } from "./schedule-send-types";
-import { getUserTimeZone } from "@/lib/time/utils";
 
-export function ScheduleSendMenu({ disabled, value, onChange, mailboxId, from, onApplyTemplate }: ScheduleSendMenuProps) {
+export function ScheduleSendMenu({ disabled, value, onChange, onScheduleSend, mailboxId, from, onApplyTemplate }: ScheduleSendMenuProps) {
 	const { t } = useLanguage();
 	const [newTemplateOpen, setNewTemplateOpen] = useState(false);
-	const options = getScheduleSendOptions();
-	const minimum = new Date(Date.now() + 5 * 60 * 1000);
+	const [scheduleOpen, setScheduleOpen] = useState(false);
 
 	return (
 		<>
@@ -40,46 +35,26 @@ export function ScheduleSendMenu({ disabled, value, onChange, mailboxId, from, o
 				>
 					<TemplateMenu onApply={onApplyTemplate} onNew={() => setNewTemplateOpen(true)} />
 					<DropdownMenu.Separator className="my-1 h-px bg-neutral-100" />
-					<DropdownMenu.Label className="px-3 pb-1 pt-2 text-xs font-medium text-neutral-500">{t("schedule.heading")}</DropdownMenu.Label>
+					<DropdownMenu.Item
+						onSelect={() => setScheduleOpen(true)}
+						className="flex cursor-pointer items-center rounded-md px-3 py-2 outline-none hover:bg-neutral-100 focus:bg-neutral-100"
+					>
+						<ScheduledSendIcon className="mr-2 h-4 w-4" />
+						{t("schedule.send")}
+					</DropdownMenu.Item>
 					{value && (
-						<>
-							<DropdownMenu.Item
-								onSelect={() => onChange(null)}
-								className="flex cursor-pointer items-center rounded-md px-3 py-2 outline-none hover:bg-neutral-100 focus:bg-neutral-100"
-							>
-								<X className="mr-2 h-4 w-4" />
-								{t("schedule.clear")}
-							</DropdownMenu.Item>
-							<DropdownMenu.Separator className="my-1 h-px bg-neutral-100" />
-						</>
-					)}
-					{options.map((option) => (
 						<DropdownMenu.Item
-							key={option.labelKey}
-							onSelect={() => onChange(option.value)}
-							className="cursor-pointer rounded-md px-3 py-2 outline-none hover:bg-neutral-100 focus:bg-neutral-100"
+							onSelect={() => onChange(null)}
+							className="flex cursor-pointer items-center rounded-md px-3 py-2 outline-none hover:bg-neutral-100 focus:bg-neutral-100"
 						>
-							{t(option.labelKey)}
-							<span className="ml-2 text-xs text-neutral-500">
-								{option.value && formatScheduledSend(option.value)}
-							</span>
+							<X className="mr-2 h-4 w-4" />
+							{t("schedule.clear")} <span className="ml-2 text-xs text-neutral-500">{formatScheduledSend(value)}</span>
 						</DropdownMenu.Item>
-					))}
-					<DropdownMenu.Separator className="my-1 h-px bg-neutral-100" />
-					<DropdownMenu.Label className="px-3 pb-1 pt-2 text-xs font-medium text-neutral-500">
-						{t("schedule.pick", { timeZone: getUserTimeZone() })}
-					</DropdownMenu.Label>
-					<input
-						type="datetime-local"
-						min={formatDateTimeLocal(minimum)}
-						value={value ? formatDateTimeLocal(value) : ""}
-						onChange={(event) => onChange(parseDateTimeLocal(event.target.value))}
-						onKeyDown={(event) => event.stopPropagation()}
-						className="mx-2 mb-2 h-9 rounded-md border border-neutral-200 px-2 text-sm outline-none focus:border-blue-400"
-					/>
+					)}
 				</DropdownMenu.Content>
 			</DropdownMenu.Portal>
 		</DropdownMenu.Root>
+		<ScheduleSendDialog open={scheduleOpen} onOpenChange={setScheduleOpen} onSchedule={onScheduleSend} />
 		<NewTemplateDialog open={newTemplateOpen} onOpenChange={setNewTemplateOpen} mailboxId={mailboxId} from={from} />
 		</>
 	);

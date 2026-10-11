@@ -1863,5 +1863,15 @@
 	"layout.resizeMenu": "Formaat van linkermenu aanpassen",
 	"nav.loadingPage": "Pagina laden",
 	"message.blockRemote": "Externe inhoud blokkeren",
-	"message.allowRemote": "Externe inhoud toestaan"
+	"message.allowRemote": "Externe inhoud toestaan",
+	"schedule.tomorrowAfternoon": "Morgenmiddag",
+	"schedule.send": "Verzenden plannen",
+	"schedule.pickDateTime": "Datum en tijd kiezen",
+	"schedule.optionTime": "{date} om {time}",
+	"schedule.timeZoneNote": "Alle tijden zijn in {zone}",
+	"schedule.back": "Terug",
+	"schedule.date": "Datum",
+	"schedule.time": "Tijd",
+	"compose.moreOptions": "Meer opties",
+	"compose.discard": "Verwijderen"
 }

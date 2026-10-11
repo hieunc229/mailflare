@@ -1863,5 +1863,15 @@
 	"message.blockRemote": "দূরবর্তী বিষয়বস্তু ব্লক করুন",
 	"message.allowRemote": "দূরবর্তী বিষয়বস্তুর অনুমতি দিন",
 	"settings.account.generalTitle": "সাধারণ",
-	"settings.account.generalDescription": "আপনার অ্যাকাউন্টের ভাষা ও টাইম জোন।"
+	"settings.account.generalDescription": "আপনার অ্যাকাউন্টের ভাষা ও টাইম জোন।",
+	"schedule.tomorrowAfternoon": "আগামীকাল বিকেল",
+	"schedule.send": "পাঠানোর সময় নির্ধারণ",
+	"schedule.pickDateTime": "তারিখ ও সময় বাছুন",
+	"schedule.optionTime": "{date} {time}-এ",
+	"schedule.timeZoneNote": "সব সময় {zone} অনুযায়ী",
+	"schedule.back": "ফিরে যান",
+	"schedule.date": "তারিখ",
+	"schedule.time": "সময়",
+	"compose.moreOptions": "আরও বিকল্প",
+	"compose.discard": "বাতিল করুন"
 }

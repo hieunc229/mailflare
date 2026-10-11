@@ -1923,5 +1923,15 @@
 	"layout.resizeMenu": "تغيير حجم القائمة اليسرى",
 	"nav.loadingPage": "جارٍ تحميل الصفحة",
 	"message.blockRemote": "حظر المحتوى الخارجي",
-	"message.allowRemote": "السماح بالمحتوى الخارجي"
+	"message.allowRemote": "السماح بالمحتوى الخارجي",
+	"schedule.tomorrowAfternoon": "بعد ظهر الغد",
+	"schedule.send": "جدولة الإرسال",
+	"schedule.pickDateTime": "اختيار التاريخ والوقت",
+	"schedule.optionTime": "{date} في {time}",
+	"schedule.timeZoneNote": "جميع الأوقات بتوقيت {zone}",
+	"schedule.back": "رجوع",
+	"schedule.date": "التاريخ",
+	"schedule.time": "الوقت",
+	"compose.moreOptions": "خيارات إضافية",
+	"compose.discard": "تجاهل"
 }

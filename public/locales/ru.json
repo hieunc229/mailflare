@@ -1878,5 +1878,15 @@
 	"layout.resizeMenu": "Изменить размер левого меню",
 	"nav.loadingPage": "Загрузка страницы",
 	"message.blockRemote": "Блокировать внешнее содержимое",
-	"message.allowRemote": "Разрешить внешнее содержимое"
+	"message.allowRemote": "Разрешить внешнее содержимое",
+	"schedule.tomorrowAfternoon": "Завтра днём",
+	"schedule.send": "Запланировать отправку",
+	"schedule.pickDateTime": "Выбрать дату и время",
+	"schedule.optionTime": "{date} в {time}",
+	"schedule.timeZoneNote": "Всё время указано в часовом поясе {zone}",
+	"schedule.back": "Назад",
+	"schedule.date": "Дата",
+	"schedule.time": "Время",
+	"compose.moreOptions": "Другие действия",
+	"compose.discard": "Удалить"
 }

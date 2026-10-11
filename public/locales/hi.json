@@ -1863,5 +1863,15 @@
 	"layout.resizeMenu": "बायाँ मेन्यू आकार बदलें",
 	"nav.loadingPage": "पृष्ठ लोड हो रहा है",
 	"message.blockRemote": "बाहरी सामग्री ब्लॉक करें",
-	"message.allowRemote": "बाहरी सामग्री की अनुमति दें"
+	"message.allowRemote": "बाहरी सामग्री की अनुमति दें",
+	"schedule.tomorrowAfternoon": "कल दोपहर",
+	"schedule.send": "भेजने का समय तय करें",
+	"schedule.pickDateTime": "तारीख और समय चुनें",
+	"schedule.optionTime": "{date} को {time} बजे",
+	"schedule.timeZoneNote": "सभी समय {zone} में हैं",
+	"schedule.back": "वापस",
+	"schedule.date": "तारीख",
+	"schedule.time": "समय",
+	"compose.moreOptions": "अधिक विकल्प",
+	"compose.discard": "रद्द करें"
 }

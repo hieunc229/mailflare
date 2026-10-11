@@ -1863,5 +1863,15 @@
 	"layout.resizeMenu": "ਖੱਬੇ ਮੀਨੂ ਦਾ ਆਕਾਰ ਬਦਲੋ",
 	"nav.loadingPage": "ਪੰਨਾ ਲੋਡ ਹੋ ਰਿਹਾ ਹੈ",
 	"message.blockRemote": "ਰਿਮੋਟ ਸਮੱਗਰੀ ਬਲੌਕ ਕਰੋ",
-	"message.allowRemote": "ਰਿਮੋਟ ਸਮੱਗਰੀ ਦੀ ਇਜਾਜ਼ਤ ਦਿਓ"
+	"message.allowRemote": "ਰਿਮੋਟ ਸਮੱਗਰੀ ਦੀ ਇਜਾਜ਼ਤ ਦਿਓ",
+	"schedule.tomorrowAfternoon": "ਕੱਲ੍ਹ ਦੁਪਹਿਰ",
+	"schedule.send": "ਭੇਜਣ ਦਾ ਸਮਾਂ ਤੈਅ ਕਰੋ",
+	"schedule.pickDateTime": "ਤਾਰੀਖ ਅਤੇ ਸਮਾਂ ਚੁਣੋ",
+	"schedule.optionTime": "{date} ਨੂੰ {time}",
+	"schedule.timeZoneNote": "ਸਾਰੇ ਸਮੇਂ {zone} ਵਿੱਚ ਹਨ",
+	"schedule.back": "ਪਿੱਛੇ",
+	"schedule.date": "ਤਾਰੀਖ",
+	"schedule.time": "ਸਮਾਂ",
+	"compose.moreOptions": "ਹੋਰ ਵਿਕਲਪ",
+	"compose.discard": "ਰੱਦ ਕਰੋ"
 }

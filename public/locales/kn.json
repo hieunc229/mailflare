@@ -1863,5 +1863,15 @@
 	"layout.resizeMenu": "ಎಡ ಮೆನುವಿನ ಗಾತ್ರ ಬದಲಿಸಿ",
 	"nav.loadingPage": "ಪುಟ ಲೋಡ್ ಆಗುತ್ತಿದೆ",
 	"message.blockRemote": "ರಿಮೋಟ್ ವಿಷಯವನ್ನು ನಿರ್ಬಂಧಿಸಿ",
-	"message.allowRemote": "ರಿಮೋಟ್ ವಿಷಯವನ್ನು ಅನುಮತಿಸಿ"
+	"message.allowRemote": "ರಿಮೋಟ್ ವಿಷಯವನ್ನು ಅನುಮತಿಸಿ",
+	"schedule.tomorrowAfternoon": "ನಾಳೆ ಮಧ್ಯಾಹ್ನ",
+	"schedule.send": "ಕಳುಹಿಸುವುದನ್ನು ನಿಗದಿಪಡಿಸಿ",
+	"schedule.pickDateTime": "ದಿನಾಂಕ ಮತ್ತು ಸಮಯ ಆಯ್ಕೆಮಾಡಿ",
+	"schedule.optionTime": "{date} ರಂದು {time}",
+	"schedule.timeZoneNote": "ಎಲ್ಲಾ ಸಮಯಗಳು {zone} ನಲ್ಲಿವೆ",
+	"schedule.back": "ಹಿಂದೆ",
+	"schedule.date": "ದಿನಾಂಕ",
+	"schedule.time": "ಸಮಯ",
+	"compose.moreOptions": "ಇನ್ನಷ್ಟು ಆಯ್ಕೆಗಳು",
+	"compose.discard": "ತ್ಯಜಿಸಿ"
 }

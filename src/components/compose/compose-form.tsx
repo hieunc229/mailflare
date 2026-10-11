@@ -2,7 +2,10 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { DragEvent } from "react";
-import { ChevronUp, FileText, Forward, Maximize2, Minimize2, Minus, Paperclip, Reply, Trash2, X } from "lucide-react";
+import { ChevronUp, Ellipsis, FileText, Forward, Maximize2, Minimize2, Minus, Paperclip, Reply, Trash2, X } from "lucide-react";
+import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
+import { ScheduleSendDialog } from "./schedule-send-dialog";
+import { ScheduledSendIcon } from "@/components/icons/scheduled-send-icon";
 import { useRouter } from "next/navigation";
 import { useLanguage } from "@/components/language-provider";
 import { Button } from "@/components/ui/button";
@@ -68,6 +71,7 @@ export function ComposeForm({
 	const [draggingFiles, setDraggingFiles] = useState(false);
 	const [modalMode, setModalMode] = useState(false);
 	const [minimized, setMinimized] = useState(false);
+	const [headerScheduleOpen, setHeaderScheduleOpen] = useState(false);
 	const [toast, setToast] = useState<Toast>(null);
 	const [loading, setLoading] = useState(false);
 	const [loadingDraft, setLoadingDraft] = useState(false);
@@ -257,8 +261,15 @@ export function ComposeForm({
 		formRef.current?.querySelector<HTMLElement>("[contenteditable='true']")?.focus();
 	}, [draftIdToLoad, loadingDraft]);
 
-	async function onSubmit(event: React.FormEvent<HTMLFormElement>) {
+	function onSubmit(event: React.FormEvent<HTMLFormElement>) {
 		event.preventDefault();
+		void submit();
+	}
+
+	/** Sends now, or at `sendAtOverride` when a schedule option was just chosen. */
+	async function submit(sendAtOverride?: Date) {
+		const sendAt = sendAtOverride ?? scheduledAt;
+		if (sendAtOverride) setScheduledAt(sendAtOverride);
 		if (to.length === 0) {
 			setToast({ type: "error", message: t("compose.error.noRecipient") });
 			return;
@@ -288,7 +299,7 @@ export function ComposeForm({
 					setStoredAttachments((current) => [...current, ...(result.attachments ?? [])]);
 					setAttachments([]);
 				}
-				const updated = await authFetch(`/api/drafts/${draftId}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ mailboxId: selectedMailbox?.id, from: fromAddr, to: recipientsToHeader(to), cc: recipientsToHeader(cc), bcc: recipientsToHeader(bcc), subject, html: fullHtml, text: htmlToPlainText(fullHtml), inReplyTo: threading?.inReplyTo ?? null, references: threading?.references ?? null, threadId: threading?.threadId ?? null, scheduledAt: scheduledAt?.toISOString() ?? null }) });
+				const updated = await authFetch(`/api/drafts/${draftId}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ mailboxId: selectedMailbox?.id, from: fromAddr, to: recipientsToHeader(to), cc: recipientsToHeader(cc), bcc: recipientsToHeader(bcc), subject, html: fullHtml, text: htmlToPlainText(fullHtml), inReplyTo: threading?.inReplyTo ?? null, references: threading?.references ?? null, threadId: threading?.threadId ?? null, scheduledAt: sendAt?.toISOString() ?? null }) });
 				if (!updated.ok) throw new Error(t("compose.error.saveForReview"));
 				const current = await fetchDraft(draftId);
 				if (!current.agent) throw new Error(t("compose.error.aiMetadata"));
@@ -318,7 +329,7 @@ export function ComposeForm({
 					mailboxId: selectedMailbox?.id,
 					threading: threading ?? undefined,
 					draftId,
-					scheduledAt,
+					scheduledAt: sendAt,
 				}),
 			});
 			data = (await res.json()) as { messageId?: string; scheduled?: boolean; error?: string };
@@ -576,8 +587,26 @@ export function ComposeForm({
 										? t("compose.title.saved")
 										: t("compose.title.new")}
 					</span>
+					<div className="flex shrink-0 items-center gap-3 text-neutral-300 dark:text-neutral-600">
+					<DropdownMenu.Root>
+						<DropdownMenu.Trigger type="button" aria-label={t("compose.moreOptions")} disabled={loading || loadingDraft} className="rounded-full p-1 hover:bg-neutral-700 hover:text-white dark:hover:bg-neutral-200 disabled:opacity-50">
+							<Ellipsis className="h-4 w-4" />
+						</DropdownMenu.Trigger>
+						<DropdownMenu.Portal>
+							<DropdownMenu.Content align="end" sideOffset={6} className="z-50 min-w-52 rounded-2xl border border-neutral-200 bg-white p-1.5 text-[15px] shadow-xl">
+								<DropdownMenu.Item onSelect={() => setHeaderScheduleOpen(true)} disabled={!fromAddr} className="flex cursor-pointer items-center gap-3 rounded-xl px-3 py-2.5 text-neutral-900 outline-none hover:bg-neutral-100 focus:bg-neutral-100 data-[disabled]:opacity-50">
+									<ScheduledSendIcon className="h-5 w-5" />
+									{t("schedule.send")}
+								</DropdownMenu.Item>
+								<DropdownMenu.Item onSelect={() => void deleteDraftAndClose()} disabled={deletingDraft} className="flex cursor-pointer items-center gap-3 rounded-xl px-3 py-2.5 text-red-600 outline-none hover:bg-red-50 focus:bg-red-50 data-[disabled]:opacity-50">
+									<Trash2 className="h-5 w-5" />
+									{t("compose.discard")}
+								</DropdownMenu.Item>
+							</DropdownMenu.Content>
+						</DropdownMenu.Portal>
+					</DropdownMenu.Root>
 					{mode === "popup" && (
-						<div className="flex shrink-0 items-center gap-3 text-neutral-300">
+						<>
 							<button type="button" onClick={() => { setMinimized((current) => !current); setDraggingFiles(false); }} aria-label={minimized ? t("compose.restore") : t("compose.minimize")} title={minimized ? t("compose.restore") : t("compose.minimize")} className="rounded p-1 hover:bg-neutral-700 dark:hover:bg-neutral-200 hover:text-white">
 								{minimized ? <ChevronUp className="h-4 w-4" /> : <Minus className="h-4 w-4" />}
 							</button>
@@ -587,8 +616,10 @@ export function ComposeForm({
 							<button type="button" onClick={onClose} aria-label={t("compose.close")} className="rounded p-1 hover:bg-neutral-700 dark:hover:bg-neutral-200 hover:text-white">
 								<X className="h-4 w-4" />
 							</button>
-						</div>
+						</>
 					)}
+					</div>
+					<ScheduleSendDialog open={headerScheduleOpen} onOpenChange={setHeaderScheduleOpen} onSchedule={(value) => void submit(value)} />
 				</div>
 				<div className={cn("flex min-h-0 flex-1 flex-col", minimized && "hidden")}>
 				<div className="border-b border-neutral-100 px-4 py-1 flex flex-row items-center">
@@ -691,6 +722,7 @@ export function ComposeForm({
 									disabled={loading || loadingDraft || !fromAddr}
 									value={scheduledAt}
 									onChange={setScheduledAt}
+									onScheduleSend={(value) => void submit(value)}
 									mailboxId={selectedMailbox?.id}
 									from={fromAddr}
 									onApplyTemplate={({ title, html: templateHtml }) => {

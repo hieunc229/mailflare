@@ -1863,5 +1863,15 @@
 	"layout.resizeMenu": "Redimensionar menu lateral",
 	"nav.loadingPage": "Carregando página",
 	"message.blockRemote": "Bloquear conteúdo remoto",
-	"message.allowRemote": "Permitir conteúdo remoto"
+	"message.allowRemote": "Permitir conteúdo remoto",
+	"schedule.tomorrowAfternoon": "Amanhã à tarde",
+	"schedule.send": "Programar envio",
+	"schedule.pickDateTime": "Escolher data e hora",
+	"schedule.optionTime": "{date} às {time}",
+	"schedule.timeZoneNote": "Todos os horários estão em {zone}",
+	"schedule.back": "Voltar",
+	"schedule.date": "Data",
+	"schedule.time": "Hora",
+	"compose.moreOptions": "Mais opções",
+	"compose.discard": "Descartar"
 }

@@ -1863,5 +1863,15 @@
 	"layout.resizeMenu": "Ubah saiz menu kiri",
 	"nav.loadingPage": "Memuatkan halaman",
 	"message.blockRemote": "Sekat kandungan jauh",
-	"message.allowRemote": "Benarkan kandungan jauh"
+	"message.allowRemote": "Benarkan kandungan jauh",
+	"schedule.tomorrowAfternoon": "Esok petang",
+	"schedule.send": "Jadualkan penghantaran",
+	"schedule.pickDateTime": "Pilih tarikh & masa",
+	"schedule.optionTime": "{date} pada {time}",
+	"schedule.timeZoneNote": "Semua masa dalam {zone}",
+	"schedule.back": "Kembali",
+	"schedule.date": "Tarikh",
+	"schedule.time": "Masa",
+	"compose.moreOptions": "Lagi pilihan",
+	"compose.discard": "Buang"
 }

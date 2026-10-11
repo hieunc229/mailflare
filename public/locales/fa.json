@@ -1863,5 +1863,15 @@
 	"layout.resizeMenu": "تغییر اندازه منوی چپ",
 	"nav.loadingPage": "در حال بارگذاری صفحه",
 	"message.blockRemote": "مسدود کردن محتوای راه دور",
-	"message.allowRemote": "اجازه محتوای راه دور"
+	"message.allowRemote": "اجازه محتوای راه دور",
+	"schedule.tomorrowAfternoon": "فردا بعدازظهر",
+	"schedule.send": "زمان‌بندی ارسال",
+	"schedule.pickDateTime": "انتخاب تاریخ و ساعت",
+	"schedule.optionTime": "{date} ساعت {time}",
+	"schedule.timeZoneNote": "همه زمان‌ها به وقت {zone} است",
+	"schedule.back": "بازگشت",
+	"schedule.date": "تاریخ",
+	"schedule.time": "ساعت",
+	"compose.moreOptions": "گزینه‌های بیشتر",
+	"compose.discard": "دور انداختن"
 }

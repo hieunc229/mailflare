@@ -1863,5 +1863,15 @@
 	"message.blockRemote": "रिमोट मजकूर ब्लॉक करा",
 	"message.allowRemote": "रिमोट मजकुराला परवानगी द्या",
 	"settings.account.generalTitle": "सामान्य",
-	"settings.account.generalDescription": "तुमच्या खात्याची भाषा आणि वेळ क्षेत्र."
+	"settings.account.generalDescription": "तुमच्या खात्याची भाषा आणि वेळ क्षेत्र.",
+	"schedule.tomorrowAfternoon": "उद्या दुपारी",
+	"schedule.send": "पाठवणे शेड्यूल करा",
+	"schedule.pickDateTime": "तारीख आणि वेळ निवडा",
+	"schedule.optionTime": "{date} रोजी {time}",
+	"schedule.timeZoneNote": "सर्व वेळा {zone} नुसार आहेत",
+	"schedule.back": "मागे",
+	"schedule.date": "तारीख",
+	"schedule.time": "वेळ",
+	"compose.moreOptions": "अधिक पर्याय",
+	"compose.discard": "टाकून द्या"
 }

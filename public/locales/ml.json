@@ -1863,5 +1863,15 @@
 	"layout.resizeMenu": "ഇടത് മെനുവിന്റെ വലിപ്പം മാറ്റുക",
 	"nav.loadingPage": "പേജ് ലോഡ് ചെയ്യുന്നു",
 	"message.blockRemote": "വിദൂര ഉള്ളടക്കം തടയുക",
-	"message.allowRemote": "വിദൂര ഉള്ളടക്കം അനുവദിക്കുക"
+	"message.allowRemote": "വിദൂര ഉള്ളടക്കം അനുവദിക്കുക",
+	"schedule.tomorrowAfternoon": "നാളെ ഉച്ചകഴിഞ്ഞ്",
+	"schedule.send": "അയയ്‌ക്കൽ ഷെഡ്യൂൾ ചെയ്യുക",
+	"schedule.pickDateTime": "തീയതിയും സമയവും തിരഞ്ഞെടുക്കുക",
+	"schedule.optionTime": "{date}, {time}",
+	"schedule.timeZoneNote": "എല്ലാ സമയങ്ങളും {zone} പ്രകാരം",
+	"schedule.back": "തിരികെ",
+	"schedule.date": "തീയതി",
+	"schedule.time": "സമയം",
+	"compose.moreOptions": "കൂടുതൽ ഓപ്ഷനുകൾ",
+	"compose.discard": "നിരസിക്കുക"
 }

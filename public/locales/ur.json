@@ -1863,5 +1863,15 @@
 	"message.blockRemote": "بیرونی مواد بلاک کریں",
 	"message.allowRemote": "بیرونی مواد کی اجازت دیں",
 	"settings.account.generalTitle": "عمومی",
-	"settings.account.generalDescription": "آپ کے اکاؤنٹ کی زبان اور ٹائم زون۔"
+	"settings.account.generalDescription": "آپ کے اکاؤنٹ کی زبان اور ٹائم زون۔",
+	"schedule.tomorrowAfternoon": "کل سہ پہر",
+	"schedule.send": "بھیجنے کا شیڈول بنائیں",
+	"schedule.pickDateTime": "تاریخ اور وقت منتخب کریں",
+	"schedule.optionTime": "{date} کو {time}",
+	"schedule.timeZoneNote": "تمام اوقات {zone} میں ہیں",
+	"schedule.back": "واپس",
+	"schedule.date": "تاریخ",
+	"schedule.time": "وقت",
+	"compose.moreOptions": "مزید اختیارات",
+	"compose.discard": "رد کریں"
 }

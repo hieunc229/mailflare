@@ -1863,5 +1863,15 @@
 	"layout.resizeMenu": "Canza girman menu na hagu",
 	"nav.loadingPage": "Ana loda shafi",
 	"message.blockRemote": "Toshe abun ciki na nesa",
-	"message.allowRemote": "Ba da izinin abun ciki na nesa"
+	"message.allowRemote": "Ba da izinin abun ciki na nesa",
+	"schedule.tomorrowAfternoon": "Gobe da rana",
+	"schedule.send": "Tsara aikawa",
+	"schedule.pickDateTime": "Zaɓi kwanan wata da lokaci",
+	"schedule.optionTime": "{date} da {time}",
+	"schedule.timeZoneNote": "Duk lokuta suna cikin {zone}",
+	"schedule.back": "Koma baya",
+	"schedule.date": "Kwanan wata",
+	"schedule.time": "Lokaci",
+	"compose.moreOptions": "Ƙarin zaɓuɓɓuka",
+	"compose.discard": "Watsar"
 }

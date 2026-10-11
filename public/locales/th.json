@@ -1863,5 +1863,15 @@
 	"layout.resizeMenu": "ปรับขนาดเมนูด้านซ้าย",
 	"nav.loadingPage": "กำลังโหลดหน้า",
 	"message.blockRemote": "บล็อกเนื้อหาระยะไกล",
-	"message.allowRemote": "อนุญาตเนื้อหาระยะไกล"
+	"message.allowRemote": "อนุญาตเนื้อหาระยะไกล",
+	"schedule.tomorrowAfternoon": "พรุ่งนี้ช่วงบ่าย",
+	"schedule.send": "ตั้งเวลาส่ง",
+	"schedule.pickDateTime": "เลือกวันที่และเวลา",
+	"schedule.optionTime": "{date} เวลา {time}",
+	"schedule.timeZoneNote": "เวลาทั้งหมดเป็น {zone}",
+	"schedule.back": "กลับ",
+	"schedule.date": "วันที่",
+	"schedule.time": "เวลา",
+	"compose.moreOptions": "ตัวเลือกเพิ่มเติม",
+	"compose.discard": "ทิ้ง"
 }

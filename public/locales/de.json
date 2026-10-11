@@ -1863,5 +1863,15 @@
 	"layout.resizeMenu": "Linkes Menü in der Größe ändern",
 	"nav.loadingPage": "Seite wird geladen",
 	"message.blockRemote": "Externe Inhalte blockieren",
-	"message.allowRemote": "Externe Inhalte zulassen"
+	"message.allowRemote": "Externe Inhalte zulassen",
+	"schedule.tomorrowAfternoon": "Morgen Nachmittag",
+	"schedule.send": "Senden planen",
+	"schedule.pickDateTime": "Datum und Uhrzeit auswählen",
+	"schedule.optionTime": "{date} um {time}",
+	"schedule.timeZoneNote": "Alle Zeiten in {zone}",
+	"schedule.back": "Zurück",
+	"schedule.date": "Datum",
+	"schedule.time": "Uhrzeit",
+	"compose.moreOptions": "Weitere Optionen",
+	"compose.discard": "Verwerfen"
 }

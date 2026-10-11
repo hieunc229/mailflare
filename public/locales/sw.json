@@ -1863,5 +1863,15 @@
 	"layout.resizeMenu": "Badilisha ukubwa wa menyu ya kushoto",
 	"nav.loadingPage": "Inapakia ukurasa",
 	"message.blockRemote": "Zuia maudhui ya mbali",
-	"message.allowRemote": "Ruhusu maudhui ya mbali"
+	"message.allowRemote": "Ruhusu maudhui ya mbali",
+	"schedule.tomorrowAfternoon": "Kesho mchana",
+	"schedule.send": "Ratibu kutuma",
+	"schedule.pickDateTime": "Chagua tarehe na saa",
+	"schedule.optionTime": "{date} saa {time}",
+	"schedule.timeZoneNote": "Saa zote ziko katika {zone}",
+	"schedule.back": "Rudi",
+	"schedule.date": "Tarehe",
+	"schedule.time": "Saa",
+	"compose.moreOptions": "Chaguo zaidi",
+	"compose.discard": "Tupa"
 }

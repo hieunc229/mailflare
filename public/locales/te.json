@@ -1863,5 +1863,15 @@
 	"message.blockRemote": "రిమోట్ కంటెంట్‌ను బ్లాక్ చేయండి",
 	"message.allowRemote": "రిమోట్ కంటెంట్‌ను అనుమతించండి",
 	"settings.account.generalTitle": "సాధారణం",
-	"settings.account.generalDescription": "మీ ఖాతా భాష మరియు సమయ మండలం."
+	"settings.account.generalDescription": "మీ ఖాతా భాష మరియు సమయ మండలం.",
+	"schedule.tomorrowAfternoon": "రేపు మధ్యాహ్నం",
+	"schedule.send": "పంపడాన్ని షెడ్యూల్ చేయండి",
+	"schedule.pickDateTime": "తేదీ & సమయం ఎంచుకోండి",
+	"schedule.optionTime": "{date} న {time}",
+	"schedule.timeZoneNote": "అన్ని సమయాలు {zone} లో ఉన్నాయి",
+	"schedule.back": "వెనుకకు",
+	"schedule.date": "తేదీ",
+	"schedule.time": "సమయం",
+	"compose.moreOptions": "మరిన్ని ఎంపికలు",
+	"compose.discard": "విస్మరించు"
 }

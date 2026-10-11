@@ -8,7 +8,6 @@ import { useEffect, useState } from "react";
 import { usePathname } from "next/navigation";
 import {
   Archive,
-  CalendarClock,
   Clock,
   FileText,
   Folder,
@@ -20,6 +19,7 @@ import {
   Star,
   Trash2,
 } from "lucide-react";
+import { ScheduledSendIcon } from "@/components/icons/scheduled-send-icon";
 import { useSelectedMailbox } from "@/components/mailbox-provider";
 import { Button } from "@/components/ui/button";
 import {
@@ -62,7 +62,7 @@ const links = [
   { href: "/starred", labelKey: "navigation.starred", icon: Star, preloadMessages: true },
   { href: "/snoozed", labelKey: "navigation.snoozed", icon: Clock, preloadMessages: true },
   { href: "/sent", labelKey: "navigation.sent", icon: Send, preloadMessages: true },
-  { href: "/scheduled", labelKey: "navigation.scheduled", icon: CalendarClock, preloadMessages: true },
+  { href: "/scheduled", labelKey: "navigation.scheduled", icon: ScheduledSendIcon, preloadMessages: true },
   { href: "/drafts", labelKey: "navigation.drafts", icon: FileText, preloadMessages: true },
   {
     href: "/archived",

@@ -1867,5 +1867,15 @@
 	"layout.resizeMenu": "Змінити розмір лівого меню",
 	"nav.loadingPage": "Завантаження сторінки",
 	"message.blockRemote": "Блокувати віддалений вміст",
-	"message.allowRemote": "Дозволити віддалений вміст"
+	"message.allowRemote": "Дозволити віддалений вміст",
+	"schedule.tomorrowAfternoon": "Завтра вдень",
+	"schedule.send": "Запланувати надсилання",
+	"schedule.pickDateTime": "Вибрати дату й час",
+	"schedule.optionTime": "{date} о {time}",
+	"schedule.timeZoneNote": "Увесь час указано в поясі {zone}",
+	"schedule.back": "Назад",
+	"schedule.date": "Дата",
+	"schedule.time": "Час",
+	"compose.moreOptions": "Інші дії",
+	"compose.discard": "Відхилити"
 }

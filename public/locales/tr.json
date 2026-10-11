@@ -1863,5 +1863,15 @@
 	"layout.resizeMenu": "Sol menüyü yeniden boyutlandır",
 	"nav.loadingPage": "Sayfa yükleniyor",
 	"message.blockRemote": "Uzak içeriği engelle",
-	"message.allowRemote": "Uzak içeriğe izin ver"
+	"message.allowRemote": "Uzak içeriğe izin ver",
+	"schedule.tomorrowAfternoon": "Yarın öğleden sonra",
+	"schedule.send": "Göndermeyi planla",
+	"schedule.pickDateTime": "Tarih ve saat seç",
+	"schedule.optionTime": "{date}, {time}",
+	"schedule.timeZoneNote": "Tüm saatler {zone} saat dilimindedir",
+	"schedule.back": "Geri",
+	"schedule.date": "Tarih",
+	"schedule.time": "Saat",
+	"compose.moreOptions": "Diğer seçenekler",
+	"compose.discard": "Sil"
 }

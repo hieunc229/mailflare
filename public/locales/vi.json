@@ -1848,5 +1848,15 @@
 	"layout.resizeMenu": "Đổi kích thước menu bên trái",
 	"nav.loadingPage": "Đang tải trang",
 	"message.blockRemote": "Chặn nội dung từ xa",
-	"message.allowRemote": "Cho phép nội dung từ xa"
+	"message.allowRemote": "Cho phép nội dung từ xa",
+	"schedule.tomorrowAfternoon": "Chiều mai",
+	"schedule.send": "Lên lịch gửi",
+	"schedule.pickDateTime": "Chọn ngày và giờ",
+	"schedule.optionTime": "{date} lúc {time}",
+	"schedule.timeZoneNote": "Tất cả thời gian theo {zone}",
+	"schedule.back": "Quay lại",
+	"schedule.date": "Ngày",
+	"schedule.time": "Giờ",
+	"compose.moreOptions": "Tùy chọn khác",
+	"compose.discard": "Hủy bỏ"
 }

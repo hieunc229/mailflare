@@ -1848,5 +1848,15 @@
 	"layout.resizeMenu": "调整左侧菜单大小",
 	"nav.loadingPage": "正在加载页面",
 	"message.blockRemote": "阻止远程内容",
-	"message.allowRemote": "允许远程内容"
+	"message.allowRemote": "允许远程内容",
+	"schedule.tomorrowAfternoon": "明天下午",
+	"schedule.send": "定时发送",
+	"schedule.pickDateTime": "选择日期和时间",
+	"schedule.optionTime": "{date} {time}",
+	"schedule.timeZoneNote": "所有时间均为{zone}",
+	"schedule.back": "返回",
+	"schedule.date": "日期",
+	"schedule.time": "时间",
+	"compose.moreOptions": "更多选项",
+	"compose.discard": "舍弃"
 }

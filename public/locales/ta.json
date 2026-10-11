@@ -1863,5 +1863,15 @@
 	"layout.resizeMenu": "இடது மெனுவின் அளவை மாற்று",
 	"nav.loadingPage": "பக்கம் ஏற்றப்படுகிறது",
 	"message.blockRemote": "தொலைநிலை உள்ளடக்கத்தைத் தடு",
-	"message.allowRemote": "தொலைநிலை உள்ளடக்கத்தை அனுமதி"
+	"message.allowRemote": "தொலைநிலை உள்ளடக்கத்தை அனுமதி",
+	"schedule.tomorrowAfternoon": "நாளை மதியம்",
+	"schedule.send": "அனுப்புவதைத் திட்டமிடு",
+	"schedule.pickDateTime": "தேதி & நேரத்தைத் தேர்ந்தெடு",
+	"schedule.optionTime": "{date} அன்று {time}",
+	"schedule.timeZoneNote": "எல்லா நேரங்களும் {zone} இல் உள்ளன",
+	"schedule.back": "பின்செல்",
+	"schedule.date": "தேதி",
+	"schedule.time": "நேரம்",
+	"compose.moreOptions": "மேலும் விருப்பங்கள்",
+	"compose.discard": "நிராகரி"
 }

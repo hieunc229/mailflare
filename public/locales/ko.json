@@ -1863,5 +1863,15 @@
 	"layout.resizeMenu": "왼쪽 메뉴 크기 조절",
 	"nav.loadingPage": "페이지 불러오는 중",
 	"message.blockRemote": "원격 콘텐츠 차단",
-	"message.allowRemote": "원격 콘텐츠 허용"
+	"message.allowRemote": "원격 콘텐츠 허용",
+	"schedule.tomorrowAfternoon": "내일 오후",
+	"schedule.send": "예약 전송",
+	"schedule.pickDateTime": "날짜 및 시간 선택",
+	"schedule.optionTime": "{date} {time}",
+	"schedule.timeZoneNote": "모든 시간은 {zone} 기준입니다",
+	"schedule.back": "뒤로",
+	"schedule.date": "날짜",
+	"schedule.time": "시간",
+	"compose.moreOptions": "옵션 더보기",
+	"compose.discard": "삭제"
 }

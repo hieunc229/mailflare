@@ -1848,5 +1848,15 @@
 	"layout.resizeMenu": "Ubah ukuran menu kiri",
 	"nav.loadingPage": "Memuat halaman",
 	"message.blockRemote": "Blokir konten jarak jauh",
-	"message.allowRemote": "Izinkan konten jarak jauh"
+	"message.allowRemote": "Izinkan konten jarak jauh",
+	"schedule.tomorrowAfternoon": "Besok siang",
+	"schedule.send": "Jadwalkan pengiriman",
+	"schedule.pickDateTime": "Pilih tanggal & waktu",
+	"schedule.optionTime": "{date} pukul {time}",
+	"schedule.timeZoneNote": "Semua waktu dalam {zone}",
+	"schedule.back": "Kembali",
+	"schedule.date": "Tanggal",
+	"schedule.time": "Waktu",
+	"compose.moreOptions": "Opsi lainnya",
+	"compose.discard": "Buang"
 }
