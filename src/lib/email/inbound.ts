@@ -268,19 +268,12 @@ export async function getMessageWithBody(env: CloudflareEnv, userId: string, mes
 	const contactNames = await getMessageContactNames(env, userId, message.fromAddr, message.toAddr);
 	const attachments = await listMessageAttachments(env, messageId);
 	const unsubscribeUrl = await getUnsubscribeUrlFromRawR2Key(env, message.rawR2Key);
-	const [scheduledJob] = message.direction === "outbound" && message.status === "queued"
-		? await db
-			.select({ scheduledAt: outboundJobs.scheduledAt })
-			.from(outboundJobs)
-			.where(and(eq(outboundJobs.messageId, messageId), eq(outboundJobs.status, "queued"), isNotNull(outboundJobs.scheduledAt)))
-			.limit(1)
-		: [];
 	return {
 		message: { ...message, ...contactNames },
 		body: message,
 		attachments,
 		unsubscribeUrl,
-		scheduledAt: scheduledJob?.scheduledAt?.toISOString() ?? null,
+		scheduledAt: await getScheduledSendTime(db, message),
 	};
 }
 
@@ -293,7 +286,24 @@ export async function getMessageWithBodyForUser(env: CloudflareEnv, user: Sessio
 	const contactNames = await getMessageContactNames(env, message.userId, message.fromAddr, message.toAddr);
 	const attachments = await listMessageAttachments(env, messageId);
 	const unsubscribeUrl = await getUnsubscribeUrlFromRawR2Key(env, message.rawR2Key);
-	return { message: { ...message, ...contactNames }, body: message, attachments, unsubscribeUrl };
+	return {
+		message: { ...message, ...contactNames },
+		body: message,
+		attachments,
+		unsubscribeUrl,
+		scheduledAt: await getScheduledSendTime(db, message),
+	};
+}
+
+/** When a queued outbound message is scheduled to go out, as an ISO string; null otherwise. */
+async function getScheduledSendTime(db: ReturnType<typeof getDb>, message: Pick<typeof messages.$inferSelect, "id" | "direction" | "status">): Promise<string | null> {
+	if (message.direction !== "outbound" || message.status !== "queued") return null;
+	const [job] = await db
+		.select({ scheduledAt: outboundJobs.scheduledAt })
+		.from(outboundJobs)
+		.where(and(eq(outboundJobs.messageId, message.id), eq(outboundJobs.status, "queued"), isNotNull(outboundJobs.scheduledAt)))
+		.limit(1);
+	return job?.scheduledAt?.toISOString() ?? null;
 }
 
 export async function getMessageMetadataForUser(env: CloudflareEnv, user: SessionUser, messageId: string) {
