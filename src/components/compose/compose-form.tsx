@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { DragEvent } from "react";
-import { ChevronUp, Ellipsis, FileText, Forward, Maximize2, Minimize2, Minus, Paperclip, Reply, Trash2, X } from "lucide-react";
+import { ChevronDown, ChevronUp, Ellipsis, FileText, Forward, Maximize2, Minimize2, Minus, Paperclip, Reply, SendHorizontal, Trash2, Type, X } from "lucide-react";
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import { ScheduleSendDialog } from "./schedule-send-dialog";
 import { ScheduledSendIcon } from "@/components/icons/scheduled-send-icon";
@@ -35,6 +35,11 @@ import {
 import { headerToRecipients, isValidRecipient, recipientsToHeader } from "./recipient-utils";
 import type { ComposeAttachment, ComposeStoredAttachment, ComposeThreading } from "./types";
 import type { ComposeAttachmentPolicy } from "./attachment-policy-types";
+import { NewTemplateDialog } from "./new-template-dialog";
+import { TemplatesSheet } from "./templates-sheet";
+import { usePhoneScrollLock, usePhoneSheetPosition } from "./use-keyboard-inset";
+import { focusEditableEnd, handOffPhoneKeyboard } from "./phone-keyboard-utils";
+import { useIsMobile } from "@/components/sidebar-mobile-utils";
 
 type Toast = { type: "success" | "error"; message: string } | null;
 
@@ -80,7 +85,20 @@ export function ComposeForm({
 	const [loadedDraftMailboxId, setLoadedDraftMailboxId] = useState<string | null>(null);
 	const [loadedDraftFrom, setLoadedDraftFrom] = useState<string | null>(null);
 	const [selectedFrom, setSelectedFrom] = useState("");
+	const [templatesSheetOpen, setTemplatesSheetOpen] = useState(false);
+	const [newTemplateOpen, setNewTemplateOpen] = useState(false);
+	const isPhone = useIsMobile();
+	// The floating composer is a Gmail-style sheet on phones: it slides up, the page behind shrinks
+	// back into a card, and it can be swiped down to close.
+	const phoneSheet = mode === "popup" && isPhone;
+	// Phones: the formatting row is opened from a button in the top bar instead of following focus.
+	const [formatOpen, setFormatOpen] = useState(false);
+	const [closing, setClosing] = useState(false);
+	const [dragY, setDragY] = useState(0);
+	const dragStart = useRef<number | null>(null);
 	const formRef = useRef<HTMLFormElement>(null);
+	usePhoneSheetPosition(formRef, null, isPhone && !minimized);
+	usePhoneScrollLock(isPhone && !minimized);
 	const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 	const pendingSave = useRef<(() => Promise<void>) | null>(null);
 	const draftGeneration = useRef(0);
@@ -368,7 +386,7 @@ export function ComposeForm({
 		window.dispatchEvent(new Event("mailflare:messages-changed"));
 
 		if (onClose) {
-			onClose();
+			closeComposer();
 			return;
 		}
 		router.push("/sent");
@@ -411,7 +429,7 @@ export function ComposeForm({
 		window.dispatchEvent(new Event("mailflare:messages-changed"));
 
 		if (onClose) {
-			onClose();
+			closeComposer();
 			return;
 		}
 		setDeletingDraft(false);
@@ -552,10 +570,83 @@ export function ComposeForm({
 				: "fixed bottom-0 right-8 z-40 flex h-[min(520px,calc(100vh-88px))] w-[min(560px,calc(100vw-32px))] flex-col overflow-hidden rounded-t-lg border border-neutral-200 bg-white shadow-2xl"
 			: "relative flex h-full min-h-[720px] w-full max-w-4xl flex-col overflow-hidden rounded-xl border border-neutral-200 bg-white shadow-sm";
 
+	// Phones always get Gmail's stacked-card sheet, whichever way the composer was opened. It runs to
+	// the bottom of the screen (white under the keyboard and Safari's bars) below a small gap.
+	// The large downward shadow paints the sheet's colour below its edge, so wherever Safari's
+	// keyboard bars end up there is never a gap of page or black under the sheet.
+	const mobileFrameClass = "max-md:fixed max-md:inset-x-0 max-md:bottom-0 max-md:top-5 max-md:z-50 max-md:h-auto max-md:min-h-0 max-md:w-full max-md:max-w-none max-md:translate-x-0 max-md:rounded-b-none max-md:rounded-t-[14px] max-md:border-0 max-md:shadow-[0_calc(100vh+16px)_0_100vh_var(--color-white)]";
+
+	function closeComposer() {
+		if (!onClose) { router.push("/inbox"); return; }
+		if (!phoneSheet) { onClose(); return; }
+		// Slide the sheet away and let the page grow back, then unmount.
+		setClosing(true);
+		document.body.classList.remove("mf-sheet-open");
+		window.setTimeout(onClose, 260);
+	}
+
+	useEffect(() => {
+		if (!phoneSheet || minimized) return;
+		document.body.classList.add("mf-sheet-open");
+		return () => document.body.classList.remove("mf-sheet-open");
+	}, [phoneSheet, minimized]);
+
+	// Phones: focus To once the sheet has landed, not while it is still below the screen (which
+	// makes Safari pan the page). The tap that opened the sheet already raised the keyboard.
+	useEffect(() => {
+		if (!isPhone || draftIdToLoad) return;
+		const timer = window.setTimeout(() => handOffPhoneKeyboard(document.getElementById(`${mode}-to`)), 380);
+		return () => window.clearTimeout(timer);
+	}, [isPhone, draftIdToLoad, mode]);
+
+	const sheetDrag = phoneSheet ? {
+		onTouchStart: (event: React.TouchEvent) => { dragStart.current = event.touches[0].clientY; },
+		onTouchMove: (event: React.TouchEvent) => {
+			if (dragStart.current === null) return;
+			setDragY(Math.max(0, event.touches[0].clientY - dragStart.current));
+		},
+		onTouchEnd: () => {
+			dragStart.current = null;
+			if (dragY > 110) closeComposer();
+			setDragY(0);
+		},
+	} : {};
+
+	function applyTemplate({ title, html: templateHtml }: { title: string; html: string }) {
+		setSubject((current) => current.trim() ? current : title);
+		setHtml((current) => (hasMeaningfulHtml(current) ? `${current}${templateHtml}` : templateHtml));
+	}
+
+	const menuItemClass = "flex cursor-pointer items-center gap-3 rounded-xl px-3 py-2.5 text-neutral-900 outline-none hover:bg-neutral-100 focus:bg-neutral-100 data-[disabled]:opacity-50";
+	const moreMenuItems = (phone: boolean) => (
+		<>
+			<DropdownMenu.Item onSelect={() => setHeaderScheduleOpen(true)} disabled={!fromAddr} className={menuItemClass}>
+				<ScheduledSendIcon className="h-5 w-5" />
+				{t("schedule.send")}
+			</DropdownMenu.Item>
+			{phone && scheduledAt && (
+				<DropdownMenu.Item onSelect={() => setScheduledAt(null)} className={menuItemClass}>
+					<X className="h-5 w-5" />
+					{t("schedule.clear")}
+				</DropdownMenu.Item>
+			)}
+			{phone && (
+				<DropdownMenu.Item onSelect={() => setTemplatesSheetOpen(true)} className={menuItemClass}>
+					<FileText className="h-5 w-5" />
+					{t("template.templates")}
+				</DropdownMenu.Item>
+			)}
+			<DropdownMenu.Item onSelect={() => void deleteDraftAndClose()} disabled={deletingDraft} className="flex cursor-pointer items-center gap-3 rounded-xl px-3 py-2.5 text-red-600 outline-none hover:bg-red-50 focus:bg-red-50 data-[disabled]:opacity-50">
+				<Trash2 className="h-5 w-5" />
+				{t("compose.discard")}
+			</DropdownMenu.Item>
+		</>
+	);
+
 	return (
 		<>
 			{agentReview && <SendReview approvalId={agentReview.approvalId} snapshot={agentReview.snapshot} onClose={() => setAgentReview(null)} onSent={() => { setAgentReview(null); if (onClose) onClose(); else router.push("/sent"); }} />}
-			{mode === "popup" && modalMode && !minimized && <div className="fixed inset-0 z-40 bg-neutral-950/65" aria-hidden="true" />}
+			{mode === "popup" && modalMode && !minimized && <div className="fixed inset-0 z-40 bg-neutral-950/65 max-md:hidden" aria-hidden="true" />}
 			{toast && (
 				<div
 					role={toast.type === "error" ? "alert" : "status"}
@@ -567,13 +658,51 @@ export function ComposeForm({
 					{toast.message}
 				</div>
 			)}
-			<form onSubmit={onSubmit} className={frameClass} ref={formRef} role={modalMode && !minimized ? "dialog" : mode === "popup" ? "region" : undefined} aria-modal={modalMode && !minimized || undefined} aria-label={mode === "popup" ? t("compose.dialogLabel") : undefined} onKeyDown={(event) => { if (modalMode && !minimized && event.key === "Escape") { event.preventDefault(); setModalMode(false); } }} onDragEnterCapture={minimized ? undefined : onFileDragEnter} onDragOverCapture={minimized ? undefined : onFileDragOver} onDragLeaveCapture={minimized ? undefined : onFileDragLeave} onDropCapture={minimized ? undefined : onFileDrop}>
+			<form onSubmit={onSubmit} className={cn(frameClass, mobileFrameClass, phoneSheet && "mf-sheet", closing && "mf-sheet-closing")} style={dragY ? { transform: `translateY(${dragY}px)`, transition: "none" } : undefined} ref={formRef} role={modalMode && !minimized ? "dialog" : mode === "popup" ? "region" : undefined} aria-modal={modalMode && !minimized || undefined} aria-label={mode === "popup" ? t("compose.dialogLabel") : undefined} onKeyDown={(event) => { if (modalMode && !minimized && event.key === "Escape") { event.preventDefault(); setModalMode(false); } }} onDragEnterCapture={minimized ? undefined : onFileDragEnter} onDragOverCapture={minimized ? undefined : onFileDragOver} onDragLeaveCapture={minimized ? undefined : onFileDragLeave} onDropCapture={minimized ? undefined : onFileDrop}>
 				{draggingFiles && !minimized && (
 					<div className="pointer-events-none absolute inset-0 z-30 flex items-center justify-center border-2 border-dashed border-blue-400 bg-blue-50/90 text-sm font-medium text-blue-700" aria-hidden="true">
 						{t("compose.dropFiles")}
 					</div>
 				)}
-				<div className="flex h-9 shrink-0 items-center justify-between bg-neutral-800 text-white dark:bg-neutral-100 px-4 text-sm font-medium">
+				<div className="flex h-14 shrink-0 touch-none items-center gap-1 px-2 md:hidden" {...sheetDrag}>
+					<button type="button" onClick={closeComposer} aria-label={t("compose.close")} className="rounded-full bg-neutral-100 p-2 text-neutral-700"><X className="h-5 w-5" /></button>
+					<span className="flex-1" />
+					<button
+						type="button"
+						aria-label={t("editor.formatting")}
+						aria-pressed={formatOpen}
+						onMouseDown={(event) => event.preventDefault()}
+						onClick={() => {
+							// Formatting applies to the message, so opening it moves the caret there and keeps the keyboard up.
+							const editor = formRef.current?.querySelector<HTMLElement>("[contenteditable='true']");
+							if (!formatOpen && editor && !editor.contains(document.activeElement)) focusEditableEnd(editor);
+							setFormatOpen((open) => !open);
+						}}
+						className={cn("rounded-full p-2.5 text-neutral-800", formatOpen && "bg-blue-100 text-blue-900")}
+					>
+						<Type className="h-5.5 w-5.5" />
+					</button>
+					<button type="button" onClick={() => attachmentInput.current?.click()} disabled={loading || loadingDraft} aria-label={t("compose.attachFiles")} className="rounded-full p-2.5 text-neutral-800 disabled:opacity-40"><Paperclip className="h-5.5 w-5.5" /></button>
+					<button
+						type="submit"
+						disabled={loading || loadingDraft || !fromAddr}
+						aria-label={scheduledAt ? t("compose.schedule") : agentRevision !== null ? t("compose.reviewSend") : t("compose.send")}
+						className={cn("rounded-full p-2.5 disabled:opacity-40", to.length > 0 ? "text-blue-600" : "text-neutral-400")}
+					>
+						{scheduledAt ? <ScheduledSendIcon className="h-6 w-6" /> : <SendHorizontal className="h-6 w-6" />}
+					</button>
+					<DropdownMenu.Root>
+						<DropdownMenu.Trigger type="button" aria-label={t("compose.moreOptions")} disabled={loading || loadingDraft} className="rounded-full p-2.5 text-neutral-800 disabled:opacity-40">
+							<Ellipsis className="h-6 w-6" />
+						</DropdownMenu.Trigger>
+						<DropdownMenu.Portal>
+							<DropdownMenu.Content align="end" sideOffset={6} className="z-[60] min-w-56 rounded-2xl border border-neutral-200 bg-white p-1.5 text-base shadow-xl">
+								{moreMenuItems(true)}
+							</DropdownMenu.Content>
+						</DropdownMenu.Portal>
+					</DropdownMenu.Root>
+				</div>
+				<div className="flex h-9 shrink-0 items-center justify-between bg-neutral-800 text-white dark:bg-neutral-100 px-4 text-sm font-medium max-md:hidden">
 					<span className="flex min-w-0 items-center gap-2 truncate  dark:text-neutral-900">
 						{threading?.inReplyTo && <Reply className="h-3.5 w-3.5 text-neutral-300" />}
 						{!threading?.inReplyTo && /^fwd?:/i.test(subject) && <Forward className="h-3.5 w-3.5 text-neutral-300" />}
@@ -594,14 +723,7 @@ export function ComposeForm({
 						</DropdownMenu.Trigger>
 						<DropdownMenu.Portal>
 							<DropdownMenu.Content align="end" sideOffset={6} className="z-50 min-w-52 rounded-2xl border border-neutral-200 bg-white p-1.5 text-[15px] shadow-xl">
-								<DropdownMenu.Item onSelect={() => setHeaderScheduleOpen(true)} disabled={!fromAddr} className="flex cursor-pointer items-center gap-3 rounded-xl px-3 py-2.5 text-neutral-900 outline-none hover:bg-neutral-100 focus:bg-neutral-100 data-[disabled]:opacity-50">
-									<ScheduledSendIcon className="h-5 w-5" />
-									{t("schedule.send")}
-								</DropdownMenu.Item>
-								<DropdownMenu.Item onSelect={() => void deleteDraftAndClose()} disabled={deletingDraft} className="flex cursor-pointer items-center gap-3 rounded-xl px-3 py-2.5 text-red-600 outline-none hover:bg-red-50 focus:bg-red-50 data-[disabled]:opacity-50">
-									<Trash2 className="h-5 w-5" />
-									{t("compose.discard")}
-								</DropdownMenu.Item>
+								{moreMenuItems(false)}
 							</DropdownMenu.Content>
 						</DropdownMenu.Portal>
 					</DropdownMenu.Root>
@@ -620,10 +742,12 @@ export function ComposeForm({
 					)}
 					</div>
 					<ScheduleSendDialog open={headerScheduleOpen} onOpenChange={setHeaderScheduleOpen} onSchedule={(value) => void submit(value)} />
+					<TemplatesSheet open={templatesSheetOpen} onOpenChange={setTemplatesSheetOpen} onApply={applyTemplate} onNew={() => setNewTemplateOpen(true)} />
+					<NewTemplateDialog open={newTemplateOpen} onOpenChange={setNewTemplateOpen} mailboxId={selectedMailbox?.id} from={fromAddr} />
 				</div>
 				<div className={cn("flex min-h-0 flex-1 flex-col", minimized && "hidden")}>
-				<div className="border-b border-neutral-100 px-4 py-1 flex flex-row items-center">
-					<Label htmlFor={`${mode}-from`} className="text-sm text-neutral-500">{t("compose.from")}</Label>
+				<div className="border-b border-neutral-100 px-4 py-1 flex flex-row items-center max-md:order-4 max-md:min-h-12">
+					<Label htmlFor={`${mode}-from`} className="text-sm text-neutral-500 max-md:w-12 max-md:text-base">{t("compose.from")}</Label>
 					<Select
 						id={`${mode}-from`}
 						value={selectedMailbox && selectedFrom ? `${selectedMailbox.id}|${selectedFrom}` : ""}
@@ -631,7 +755,7 @@ export function ComposeForm({
 						// placeholder="Select a mailbox first"
 						required
 						disabled={loadingDraft || senderOptions.length === 0}
-						className="h-8 px-0 py-1 text-sm shadow-none focus-visible:ring-0"
+						className="h-8 px-0 py-1 text-sm shadow-none focus-visible:ring-0 max-md:h-10 max-md:appearance-none max-md:text-base"
 						containerClassName="border-0 flex-1"
 					>
 						{senderOptions.length === 0 && <option value="">{t("compose.selectMailboxFirst")}</option>}
@@ -639,15 +763,17 @@ export function ComposeForm({
 							<option key={`${mailbox.id}|${address}`} value={`${mailbox.id}|${address}`}>{address}</option>
 						))}
 					</Select>
+					<ChevronDown className="pointer-events-none -ml-6 h-5 w-5 shrink-0 text-neutral-600 md:hidden" aria-hidden />
 				</div>
 				<RecipientInput
 					id={`${mode}-to`}
+					className="max-md:order-1"
 					label={t("compose.to")}
 					value={to}
 					onChange={setTo}
 					placeholder={t("compose.toPlaceholder")}
 					required
-					autoFocus={!draftIdToLoad}
+					autoFocus={!draftIdToLoad && !isPhone}
 					disabled={loadingDraft}
 					trailing={
 						<>
@@ -667,6 +793,7 @@ export function ComposeForm({
 				{showCc && (
 					<RecipientInput
 						id={`${mode}-cc`}
+						className="max-md:order-2"
 						label={t("compose.cc")}
 						value={cc}
 						onChange={setCc}
@@ -678,6 +805,7 @@ export function ComposeForm({
 				{showBcc && (
 					<RecipientInput
 						id={`${mode}-bcc`}
+						className="max-md:order-3"
 						label={t("compose.bcc")}
 						value={bcc}
 						onChange={setBcc}
@@ -686,7 +814,7 @@ export function ComposeForm({
 						autoFocus={!loadingDraft && bcc.length === 0}
 					/>
 				)}
-				<div className="border-b border-neutral-100 px-4 py-1">
+				<div className="border-b border-neutral-100 px-4 py-1 max-md:order-5">
 					<Label htmlFor={`${mode}-subject`} className="sr-only">{t("compose.subject")}</Label>
 					<Input
 						id={`${mode}-subject`}
@@ -695,17 +823,19 @@ export function ComposeForm({
 						placeholder={t("compose.subject")}
 						required
 						disabled={loadingDraft}
-						className="h-8 border-0 px-0 py-1 shadow-none focus-visible:ring-0"
+						className="h-8 border-0 px-0 py-1 shadow-none focus-visible:ring-0 max-md:h-10 max-md:text-base"
 					/>
 				</div>
 				<Label htmlFor={`${mode}-text`} className="sr-only">{t("compose.body")}</Label>
 				<RichTextEditor
 					id={`${mode}-text`}
+					className="max-md:order-6"
 					value={html}
 					onChange={setHtml}
 					quotedHtml={quotedHtml}
 					disabled={loadingDraft}
 					placeholder={t("compose.bodyPlaceholder")}
+					phoneToolbarOpen={formatOpen}
 					footerContent={attachmentContent}
 					toolbarStart={
 						<>
@@ -725,10 +855,7 @@ export function ComposeForm({
 									onScheduleSend={(value) => void submit(value)}
 									mailboxId={selectedMailbox?.id}
 									from={fromAddr}
-									onApplyTemplate={({ title, html: templateHtml }) => {
-										setSubject((current) => current.trim() ? current : title);
-										setHtml((current) => (hasMeaningfulHtml(current) ? `${current}${templateHtml}` : templateHtml));
-									}}
+									onApplyTemplate={applyTemplate}
 								/>
 							</div>
 						</>

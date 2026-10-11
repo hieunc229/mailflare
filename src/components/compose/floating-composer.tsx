@@ -2,12 +2,19 @@
 
 import { usePathname, useRouter } from "next/navigation";
 import { ComposeForm } from "@/components/compose/compose-form";
+import { useEffect } from "react";
 import { useCompose } from "@/components/compose/compose-context";
+import { useSidebar } from "@/components/sidebar-state";
 
 export function FloatingComposer() {
 	const { open, draftId, closeComposer, notice } = useCompose();
 	const pathname = usePathname();
 	const router = useRouter();
+	const { mobile, mobileOpen, toggle } = useSidebar();
+	// Opening the composer from the phone menu closes the menu, so it never sits over the sheet.
+	useEffect(() => {
+		if (open && mobile && mobileOpen) toggle();
+	}, [open, mobile, mobileOpen, toggle]);
 	return (
 		<>
 			{notice && (

@@ -12,6 +12,8 @@ export type RichTextEditorProps = {
 	toolbarStart?: React.ReactNode;
 	toolbarEnd?: React.ReactNode;
 	footerContent?: React.ReactNode;
+	/** Phones: show the formatting row (toggled by the compose sheet's formatting button) under the subject. */
+	phoneToolbarOpen?: boolean;
 };
 
 export type ToolbarCommand = {

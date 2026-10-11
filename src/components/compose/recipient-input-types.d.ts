@@ -10,4 +10,5 @@ export type RecipientInputProps = {
 	autoFocus?: boolean;
 	/** Rendered at the right edge of the row, e.g. the Cc/Bcc toggles. */
 	trailing?: React.ReactNode;
+	className?: string;
 };

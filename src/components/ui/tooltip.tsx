@@ -6,6 +6,11 @@ import { createPortal } from "react-dom";
 import type { TooltipPosition, TooltipProps } from "./tooltip-types";
 import { getTooltipPosition } from "./tooltip-utils";
 
+/** Touch screens have no hover: a tooltip would pop up on tap and stay until something else is touched. */
+function canHover(): boolean {
+	return typeof window === "undefined" || window.matchMedia("(hover: hover)").matches;
+}
+
 export function Tooltip({ label, children, className, placement = "auto" }: TooltipProps) {
 	const [open, setOpen] = useState(false);
 	const [position, setPosition] = useState<TooltipPosition | null>(null);
@@ -45,9 +50,9 @@ export function Tooltip({ label, children, className, placement = "auto" }: Tool
 		<span
 			ref={triggerRef}
 			className={cn("inline-flex", className)}
-			onFocusCapture={() => setOpen(true)}
+			onFocusCapture={() => { if (canHover()) setOpen(true); }}
 			onBlurCapture={() => setOpen(false)}
-			onMouseEnter={() => setOpen(true)}
+			onMouseEnter={() => { if (canHover()) setOpen(true); }}
 			onMouseLeave={() => setOpen(false)}
 			onClickCapture={() => setOpen(false)}
 		>

@@ -7,6 +7,7 @@ import { useLanguage } from "@/components/language-provider";
 import { AuthGuard } from "@/components/auth/auth-guard";
 import { ComposeProvider } from "@/components/compose/compose-context";
 import { FloatingComposer } from "@/components/compose/floating-composer";
+import { MobileComposeFab } from "@/components/compose/mobile-compose-fab";
 import { MailSearchInput } from "@/components/mail-search/mail-search-input";
 import { MailSearchProvider } from "@/components/mail-search/mail-search-context";
 import { MailboxProvider } from "@/components/mailbox-provider";
@@ -50,7 +51,7 @@ export default function DashboardLayout({
             <MailSearchProvider>
               <ShortcutsProvider>
                 <RouteTitle />
-                <div className="grid h-dvh grid-cols-[minmax(0,1fr)] overflow-hidden bg-[#f6f8fc] transition-[grid-template-columns] md:grid-cols-[var(--sidebar-width)_minmax(0,1fr)]" style={{ transitionDuration: "var(--sidebar-transition-duration)" }}>
+                <div className="mf-app-root grid h-dvh grid-cols-[minmax(0,1fr)] overflow-hidden bg-[#f6f8fc] transition-[grid-template-columns] md:grid-cols-[var(--sidebar-width)_minmax(0,1fr)]" style={{ transitionDuration: "var(--sidebar-transition-duration)" }}>
                   <SkipToContent />
                   <SidebarAside>
                     <div className="h-full">
@@ -84,8 +85,10 @@ export default function DashboardLayout({
                       </aside>
                     </div>
                   </div>
-                  <FloatingComposer />
                 </div>
+                {/* Outside the app root: on phones the root shrinks behind the compose sheet. */}
+                <FloatingComposer />
+                <MobileComposeFab />
               </ShortcutsProvider>
             </MailSearchProvider>
           </ComposeProvider>

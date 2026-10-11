@@ -479,3 +479,56 @@ button {
 		padding-inline: 0;
 	}
 }
+
+/* ── Phone sheets ────────────────────────────────────────────────────────────
+   Gmail's iOS compose: the sheet slides up from the bottom while the page behind shrinks into a
+   dimmed, rounded card (body.mf-sheet-open is set by the composer). Swiping down or closing slides
+   it away again. Bottom-sheet dialogs use the same motion. */
+@keyframes mf-sheet-in {
+	from { transform: translateY(100%); }
+	to { transform: translateY(0); }
+}
+@keyframes mf-sheet-out {
+	from { transform: translateY(0); }
+	to { transform: translateY(100%); }
+}
+@media (max-width: 767px) {
+	.mf-app-root {
+		transform-origin: 50% 0;
+		/* !important: the root's inline transition-duration is for the desktop sidebar. */
+		transition: transform 360ms cubic-bezier(0.2, 0.8, 0.2, 1), border-radius 360ms, filter 360ms !important;
+	}
+	html:has(body.mf-sheet-open),
+	body.mf-sheet-open {
+		background: #000;
+		overflow: hidden;
+		overscroll-behavior: none;
+	}
+	/* A scroller inside a sheet that reaches its end must not hand the drag on to the page. */
+	.mf-sheet,
+	.mf-sheet * {
+		overscroll-behavior: contain;
+	}
+	body.mf-sheet-open .mf-app-root {
+		transform: translateY(8px) scale(0.93);
+		/* Follows Safari's keyboard pan instantly (not animated with transform), so the card stays put. */
+		translate: 0 var(--mf-vv-top, 0px);
+		border-radius: 14px;
+		overflow: hidden;
+		filter: brightness(0.8);
+	}
+	.mf-sheet {
+		animation: mf-sheet-in 360ms cubic-bezier(0.2, 0.8, 0.2, 1);
+		transition: transform 280ms cubic-bezier(0.2, 0.8, 0.2, 1);
+	}
+	.mf-sheet.mf-sheet-closing {
+		transform: translateY(100%) !important;
+		transition: transform 260ms cubic-bezier(0.4, 0, 1, 1) !important;
+	}
+	.mf-sheet[data-state="open"] {
+		animation: mf-sheet-in 360ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+	}
+	.mf-sheet[data-state="closed"] {
+		animation: mf-sheet-out 240ms cubic-bezier(0.4, 0, 1, 1) both;
+	}
+}
