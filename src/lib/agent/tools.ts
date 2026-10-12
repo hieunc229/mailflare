@@ -17,6 +17,7 @@ import { getReplyRecipients } from "./reply";
 import { formatAgentDraftBody } from "./draft-format";
 import { editAgentDraft } from "./edit-draft";
 import { requestAgentSend } from "./approvals/utils";
+import { toolEmailSchema } from "./schema-utils";
 import type { AgentDraftEditInput } from "./types";
 
 const id = z.string().min(1).max(160);
@@ -28,7 +29,7 @@ export const emailToolSchemas = {
 	get_email: z.object({ emailId: id }),
 	get_thread: z.object({ emailId: id }),
 	search_emails: z.object({ query: z.string().trim().min(1).max(300), folder: z.enum(["inbox", "sent", "draft", "archived", "trash", "spam"]).optional(), limit }),
-	draft_email: z.object({ to: z.string().email(), subject: z.string().trim().min(1).max(500), body }),
+	draft_email: z.object({ to: toolEmailSchema, subject: z.string().trim().min(1).max(500), body }),
 	draft_reply: z.object({ emailId: id, body, replyAll: z.boolean().default(false) }),
 	edit_draft: z.object({
 		draftId: id, expectedRevision: z.number().int().positive(),

@@ -2,6 +2,7 @@ import { and, eq, gte, lt, ne, or } from "drizzle-orm";
 import { z } from "zod";
 import { getDb } from "@/db";
 import { calendarEvents } from "@/db/schema";
+import { toolEmailSchema } from "@/lib/agent/schema-utils";
 import { newId } from "@/lib/ids";
 import { normalizeTimeZone, zonedDateFields } from "@/lib/time/utils";
 import { normalizeCalendarColor } from "./colors";
@@ -16,7 +17,7 @@ const repeat = z.enum(["none", "daily", "weekly", "monthly", "weekdays"]);
 const fields = {
 	title: z.string().trim().min(1).max(500), description: z.string().max(10_000), location: z.string().max(500),
 	startsAt: instant, endsAt: instant, timeZone: z.string().max(80), color: z.string().max(30),
-	repeat, repeatDays: z.array(z.number().int().min(0).max(6)).max(7), attendees: z.array(z.string().email()).max(50),
+	repeat, repeatDays: z.array(z.number().int().min(0).max(6)).max(7), attendees: z.array(toolEmailSchema).max(50),
 };
 const update = z.object({ eventId: id, title: fields.title.optional(), description: fields.description.optional(), location: fields.location.optional(), startsAt: instant.optional(), endsAt: instant.optional(), timeZone: fields.timeZone.optional(), color: fields.color.optional(), repeat: repeat.optional(), repeatDays: fields.repeatDays.optional(), attendees: fields.attendees.optional() });
 
