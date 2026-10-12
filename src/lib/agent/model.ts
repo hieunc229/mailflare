@@ -3,11 +3,57 @@ import { createWorkersAI } from "workers-ai-provider";
 import { getAgentProviderConfig } from "./provider";
 import { agentTimeContext } from "./time";
 
+// workers-ai-provider 4.0.0 maps both `response` and `choices[0].delta` from the same SSE event, so models that send
+// both (e.g. Llama 3.3 70B) repeat their text and tool calls. Drop the native copy until cloudflare/ai#615 is released.
+function dropDuplicateNativeFields(line: string) {
+	const match = /^(data: ?)(\{.*\})(\r?)$/s.exec(line);
+	if (!match) return line;
+	try {
+		const event = JSON.parse(match[2]);
+		const delta = event?.choices?.[0]?.delta;
+		if (!delta) return line;
+		delete event.response;
+		if (delta.tool_calls) delete event.tool_calls;
+		return `${match[1]}${JSON.stringify(event)}${match[3]}`;
+	} catch {
+		return line;
+	}
+}
+
+function dedupeWorkersAIStream(stream: ReadableStream) {
+	const decoder = new TextDecoder();
+	const encoder = new TextEncoder();
+	let pending = "";
+	return stream.pipeThrough(new TransformStream<Uint8Array | string, Uint8Array>({
+		transform(chunk, controller) {
+			const lines = (pending + (typeof chunk === "string" ? chunk : decoder.decode(chunk, { stream: true }))).split("\n");
+			pending = lines.pop() ?? "";
+			for (const line of lines) controller.enqueue(encoder.encode(`${dropDuplicateNativeFields(line)}\n`));
+		},
+		flush(controller) {
+			const rest = pending + decoder.decode();
+			if (rest) controller.enqueue(encoder.encode(dropDuplicateNativeFields(rest)));
+		},
+	}));
+}
+
+function withDedupedStreams(binding: Ai): Ai {
+	return new Proxy(binding, {
+		get(target, prop, receiver) {
+			if (prop !== "run") return Reflect.get(target, prop, receiver);
+			return async (...args: unknown[]) => {
+				const result = await (target.run as (...runArgs: unknown[]) => Promise<unknown>).apply(target, args);
+				return result instanceof ReadableStream ? dedupeWorkersAIStream(result) : result;
+			};
+		},
+	});
+}
+
 export async function getAgentModel(env: CloudflareEnv, requestedModel?: string | null) {
 	const config = await getAgentProviderConfig(env);
 	const modelId = requestedModel && config.models.includes(requestedModel) ? requestedModel : config.model;
 	const details = { modelId, provider: config.provider === "cloudflare" ? "cloudflare" : config.preset, rates: config.rates[modelId] };
-	if (config.provider === "cloudflare") return env.AI ? { model: createWorkersAI({ binding: env.AI })(modelId), ...details } : null;
+	if (config.provider === "cloudflare") return env.AI ? { model: createWorkersAI({ binding: withDedupedStreams(env.AI) })(modelId), ...details } : null;
 	if (config.baseUrl && config.apiKey && modelId) {
 		const provider = createOpenAICompatible({ name: "mailflare", baseURL: config.baseUrl, apiKey: config.apiKey });
 		return { model: provider.chatModel(modelId), ...details };
