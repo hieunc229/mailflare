@@ -54,6 +54,7 @@ export default function MessageDetailPage() {
   const [previewAttachment, setPreviewAttachment] =
     useState<MessageAttachment | null>(null);
   const [threadExpanded, setThreadExpanded] = useState(false);
+  const [detailsOpen, setDetailsOpen] = useState(false);
   const [latestMessagesFirst] = useLatestMessagesFirst();
   const { enabled: showFullRecipientAddresses } = useShowFullRecipientAddresses();
   const { visible: messageListVisible } = useMessageListVisibility();
@@ -96,6 +97,7 @@ export default function MessageDetailPage() {
 
   useEffect(() => {
     setThreadExpanded(false);
+    setDetailsOpen(false);
   }, [messageId]);
 
   if (loading) {
@@ -149,6 +151,11 @@ export default function MessageDetailPage() {
   const cloudAttachmentResult = extractCloudAttachments(
     bodyDisplay.latestContent,
   );
+  const messageDate = (withTime: boolean) => scheduledAt
+    ? formatScheduledSendTime(scheduledAt, t)
+    : formatUserDate(message.createdAt, withTime
+      ? { month: "short", day: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" }
+      : { month: "short", day: "2-digit", year: "numeric" });
   return (<>
 
     <div className={clsx("flex py-2 h-12 items-center px-2 border-b sticky top-0 bg-white z-40 gap-3", scrolled ? "border-neutral-200" : "border-transparent")}>
@@ -237,7 +244,7 @@ export default function MessageDetailPage() {
                       fromName
                     )}
                   </b>{" "}
-                  <span className="text-neutral-500 text-xs flex-1 overflow-hidden text-ellipsis min-w-0">&lt;{fromAddress}&gt;</span>
+                  <span className="hidden sm:block text-neutral-500 text-xs flex-1 overflow-hidden text-ellipsis min-w-0">&lt;{fromAddress}&gt;</span>
                 </p>
                 <p className="text-xs text-neutral-500">
                   {t("source.to").toLowerCase()}{" "}
@@ -247,6 +254,12 @@ export default function MessageDetailPage() {
                     style={showFullRecipientAddresses ? "full" : "address"}
                   />
                 </p>
+                <div className="sm:hidden flex items-center gap-2 text-xs text-neutral-500">
+                  <span>{messageDate(false)}</span>
+                  <button type="button" className="text-blue-600 hover:underline" aria-expanded={detailsOpen} onClick={() => setDetailsOpen((open) => !open)}>
+                    {t("message.details")}
+                  </button>
+                </div>
                 {ccEntries.length > 0 && (
                   <p className="text-xs text-neutral-500">
                     {t("message.cc")} <RecipientList entries={ccEntries} mailboxId={message.mailboxId} style={showFullRecipientAddresses ? "full" : "address"} />
@@ -260,11 +273,7 @@ export default function MessageDetailPage() {
               </div>
             </div>
             <div className="flex shrink-0 items-center gap-2">
-              <p className="text-xs">
-                {scheduledAt
-                  ? formatScheduledSendTime(scheduledAt, t)
-                  : formatUserDate(message.createdAt, { month: "short", day: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" })}
-              </p>
+              <p className="hidden text-xs sm:block">{messageDate(true)}</p>
               <ThreadMessageActions
                 message={currentThreadMessage}
                 mailboxId={message.mailboxId}
@@ -273,6 +282,13 @@ export default function MessageDetailPage() {
                 starOnly={!thread.messages.some((threadMessage) => threadMessage.id === message.id) || !thread.messages.some((threadMessage) => threadMessage.id !== message.id)}
               />
             </div>
+            {detailsOpen && (
+              <dl className="sm:hidden w-full space-y-0.5 break-words pt-2 text-xs text-neutral-500">
+                <div><dt className="inline font-medium">{t("source.from")}:</dt> <dd className="inline">{fromName} &lt;{fromAddress}&gt;</dd></div>
+                <div><dt className="inline font-medium">{t("source.to")}:</dt> <dd className="inline">{toEntries.join(", ")}</dd></div>
+                <div><dt className="inline font-medium">{t("message.date")}:</dt> <dd className="inline">{messageDate(true)}</dd></div>
+              </dl>
+            )}
           </div>
           {scheduledAt && <div className="sm:pl-10"><ScheduledSendBanner messageId={message.id} scheduledAt={scheduledAt} /></div>}
           <div className="prose max-w-none text-neutral-900 sm:pl-16">
