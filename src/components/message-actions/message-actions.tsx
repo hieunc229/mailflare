@@ -262,16 +262,6 @@ export function MessageActions({
 			{isMobile && (
 				<>
 					<Button
-						type="button"
-						variant="ghost"
-						size="roundedSM"
-						aria-label={t("message.reply")}
-						disabled={disabled}
-						onClick={() => handleReply("reply")}
-					>
-						<Reply size={iconSize} />
-					</Button>
-					<Button
 						variant="ghost"
 						size="roundedSM"
 						aria-label={trashLabel}
@@ -407,6 +397,10 @@ export function MessageActions({
 								<button type="button" className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm text-neutral-700 hover:bg-neutral-100 disabled:text-neutral-400" disabled={status === "archived"} onClick={() => void runAction("archive")}>
 									<Archive className="h-4 w-4" />
 									{t("common.archive")}
+								</button>
+								<button type="button" className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm text-neutral-700 hover:bg-neutral-100 disabled:text-neutral-400" onClick={() => { setMoreOpen(false); void handleReply("reply"); }}>
+									<Reply className="h-4 w-4" />
+									{t("message.reply")}
 								</button>
 								{canReplyAll && (
 									<button type="button" className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm text-neutral-700 hover:bg-neutral-100 disabled:text-neutral-400" onClick={() => { setMoreOpen(false); void handleReply("replyAll"); }}>

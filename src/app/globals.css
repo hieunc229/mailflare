@@ -66,6 +66,39 @@ pre {
 	}
 }
 
+/* Phone compose sheet: full height, slides up from the bottom;
+   on close it slides away again. */
+@keyframes compose-sheet-in {
+	from { transform: translateY(100%); }
+	to { transform: translateY(0); }
+}
+
+@media (max-width: 767px) {
+	.compose-sheet {
+		overscroll-behavior: contain;
+		transition: transform 280ms cubic-bezier(0.2, 0.8, 0.2, 1);
+	}
+	.compose-sheet-closing {
+		transform: translateY(100%) !important;
+		transition: transform 260ms cubic-bezier(0.4, 0, 1, 1) !important;
+	}
+}
+
+@media (max-width: 767px) and (prefers-reduced-motion: no-preference) {
+	.compose-sheet { animation: compose-sheet-in 360ms cubic-bezier(0.2, 0.8, 0.2, 1); }
+}
+
+/* Bottom-sheet dialogs (send options): slide up from the bottom edge. */
+@keyframes slide-sheet-out {
+	from { transform: translateY(0); }
+	to { transform: translateY(100%); }
+}
+
+.slide-sheet[data-state="open"] { animation: compose-sheet-in 300ms cubic-bezier(0.2, 0.8, 0.2, 1) both; }
+.slide-sheet[data-state="closed"] { animation: slide-sheet-out 200ms cubic-bezier(0.4, 0, 1, 1) both; }
+.slide-sheet-overlay[data-state="open"] { animation: dialog-overlay-show 200ms ease-out both; }
+.slide-sheet-overlay[data-state="closed"] { animation: dialog-overlay-hide 160ms ease-in both; }
+
 .dialog-overlay[data-state="open"] {
 	animation: dialog-overlay-show 180ms ease-out both;
 }

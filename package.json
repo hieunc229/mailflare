@@ -3,16 +3,16 @@
   "version": "0.5.2",
   "private": true,
   "scripts": {
-    "dev": "npm run db:bundle && vite dev --port 3000",
-    "build": "npm run db:bundle && vite build",
+    "dev": "npm run db:bundle && vp dev --port 3000",
+    "build": "npm run db:bundle && vp build",
     "build:next": "npm run db:bundle && MAILFLARE_RUNTIME=node next build",
-    "start": "vite preview --port 3000",
-    "lint": "eslint .",
+    "start": "vp preview --port 3000",
+    "lint": "vp lint .",
     "deploy": "npm run build && npm run deploy:worker",
     "deploy:worker": "wrangler deploy",
     "deploy:local": "npm run deploy",
     "upload": "npm run build && wrangler versions upload",
-    "preview": "npm run build && vite preview --port 3000",
+    "preview": "npm run build && vp preview --port 3000",
     "cf-typegen": "wrangler types --env-interface CloudflareEnv ./cloudflare-env.d.ts",
 		"push:keys": "node scripts/generate-vapid-keys.mjs",
     "db:bundle": "node scripts/generate-migration-bundle.mjs",
@@ -105,8 +105,10 @@
   "devDependencies": {
     "@cloudflare/vite-plugin": "^1.61.0",
     "@cloudflare/workers-types": "^5.20260828.1",
-    "@eslint/eslintrc": "^3",
+    "@next/eslint-plugin-next": "16.3.3",
     "@tailwindcss/postcss": "^4",
+    "@typescript-eslint/eslint-plugin": "8.59.4",
+    "@typescript-eslint/parser": "8.59.4",
     "@types/bcryptjs": "^2.4.6",
     "@types/better-sqlite3": "^9.6.0",
     "@types/css-tree": "^3.2.0",
@@ -121,18 +123,21 @@
     "drizzle-kit": "^0.31.10",
     "esbuild": "^0.28.2",
     "eslint": "^9",
-    "eslint-config-next": "16.3.3",
+    "eslint-plugin-react": "7.37.5",
+    "eslint-plugin-react-hooks": "7.1.1",
     "jsdom": "^30.1.2",
     "tailwindcss": "^4",
     "tsx": "^4.23.13",
     "typescript": "^5.7.4",
-    "vite": "^8.0.0",
+    "vite": "npm:@voidzero-dev/vite-plus-core@1.0.0",
+    "vite-plus": "1.0.0",
     "wrangler": "^4.127.1"
   },
   "overrides": {
     "@esbuild-kit/core-utils": {
       "esbuild": "^0.25.4"
-    }
+    },
+    "vite": "npm:@voidzero-dev/vite-plus-core@1.0.0"
   },
   "type": "module"
 }

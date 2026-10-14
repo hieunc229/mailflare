@@ -84,7 +84,7 @@ export default function DashboardLayout({
                       </aside>
                     </div>
                   </div>
-                  <FloatingComposer />
+                  <FloatingComposer showButton />
                 </div>
               </ShortcutsProvider>
             </MailSearchProvider>
