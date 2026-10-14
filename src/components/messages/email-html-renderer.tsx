@@ -2,7 +2,7 @@
 
 import { useLanguage } from "@/components/language-provider";
 import { useEffect, useRef, useState } from "react";
-import { prepareEmailHtml } from "@/lib/email/html";
+import { prepareReaderEmailHtml } from "@/lib/remote-images/reader";
 import { collapseQuotedEmailHtml } from "@/app/(dashboard)/inbox/[messageId]/quote-collapse-utils";
 
 const BASE_STYLE = `
@@ -43,7 +43,11 @@ export function EmailHtmlRenderer({ html, className, preserveLeadingQuote = fals
 		if (!host.current) return;
 		host.current.dir = document.documentElement.dir || "ltr";
 		const root = host.current.shadowRoot ?? host.current.attachShadow({ mode: "open" });
-		const prepared = prepareEmailHtml(html, { reader: true, allowRemote });
+		const prepared = prepareReaderEmailHtml(html, {
+			reader: true,
+			allowRemote,
+			proxyRemote: document.documentElement.dataset.remoteImageProxy !== "disabled",
+		});
 		setHasRemote(prepared.hasRemote);
 		const base = document.createElement("style");
 		base.textContent = `${BASE_STYLE}\n${prepared.rootTag} { display:block; font:14px/1.5 Arial,sans-serif; color:#202124; background:#fff; color-scheme:light; }\n${prepared.bodyTag} { display:block; }\n:host(.mf-dark) ${prepared.rootTag} { background:transparent; }`;
