@@ -13,4 +13,5 @@ export type AuthShellProps = {
 	children: ReactNode;
 	footer?: ReactNode;
 	steps?: AuthShellStep[];
+	variant?: "split" | "centered";
 };
