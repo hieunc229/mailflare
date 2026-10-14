@@ -229,28 +229,28 @@ export function RichTextEditor({
 				<div className="contents max-md:hidden">{formatButtons}</div>
 				{toolbarEnd}
 				{linkOpen && (
-					<form
+					<div
 						className="absolute bottom-full left-2 z-10 mb-1 flex items-center gap-2 rounded-lg border border-neutral-200 bg-white p-2 shadow-lg"
-						onSubmit={(event) => {
-							event.preventDefault();
-							applyLink();
-						}}
 					>
 						<input
 							autoFocus
 							value={linkUrl}
 							onChange={(event) => setLinkUrl(event.target.value)}
 							onKeyDown={(event) => {
+								if (event.key === "Enter") {
+									event.preventDefault();
+									applyLink();
+								}
 								if (event.key === "Escape") setLinkOpen(false);
 							}}
 							placeholder="https://example.com"
 							aria-label={t("editor.insertLink")}
 							className="h-8 w-64 rounded-md border border-neutral-200 px-2 text-sm outline-none focus:border-blue-400"
 						/>
-						<button type="submit" className="rounded-md bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-700">
+						<button type="button" onClick={applyLink} className="rounded-md bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-700">
 							{t("editor.apply")}
 						</button>
-					</form>
+					</div>
 				)}
 			</div>
 		</div>
