@@ -17,8 +17,10 @@ export type CurrentUser = {
 
 let cachedUser: CurrentUser | null = null;
 let inflight: Promise<CurrentUser | null> | null = null;
+let generation = 0;
 
 export function clearCurrentUserCache(): void {
+	generation += 1;
 	cachedUser = null;
 	inflight = null;
 }
@@ -26,16 +28,19 @@ export function clearCurrentUserCache(): void {
 export function fetchCurrentUser(): Promise<CurrentUser | null> {
 	if (cachedUser) return Promise.resolve(cachedUser);
 	if (!inflight) {
-		inflight = authFetch("/api/auth/me", { redirectOnUnauthorized: false })
+		const requestGeneration = generation;
+		const request = authFetch("/api/auth/me", { redirectOnUnauthorized: false })
 			.then((response) => (response.ok ? response.json() : null))
 			.then((data) => {
+				if (requestGeneration !== generation) return null;
 				cachedUser = (data as { user?: CurrentUser } | null)?.user ?? null;
 				return cachedUser;
 			})
 			.catch(() => null)
 			.finally(() => {
-				inflight = null;
+				if (inflight === request) inflight = null;
 			});
+		inflight = request;
 	}
 	return inflight;
 }
@@ -46,8 +51,9 @@ export function useCurrentUser(): CurrentUser | null {
 
 	useEffect(() => {
 		let active = true;
+		const requestGeneration = generation;
 		void fetchCurrentUser().then((next) => {
-			if (active) setUser(next);
+			if (active && requestGeneration === generation) setUser(next);
 		});
 		return () => {
 			active = false;
@@ -58,6 +64,7 @@ export function useCurrentUser(): CurrentUser | null {
 	useEffect(() => {
 		function onSessionChanged() {
 			clearCurrentUserCache();
+			setUser(null);
 			setReloadKey((key) => key + 1);
 		}
 		window.addEventListener(AUTH_SESSION_CHANGED_EVENT, onSessionChanged);

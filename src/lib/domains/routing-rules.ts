@@ -1,8 +1,9 @@
-import { and, asc, desc, eq } from "drizzle-orm";
+import { and, asc, desc, eq, inArray } from "drizzle-orm";
 import type { AppDatabase } from "@/db";
 import { domains, mailboxes, routingRules } from "@/db/schema";
 import type { SessionUser } from "@/lib/auth/types";
 import { getMailboxAccessLevel, listAccessibleMailboxes } from "@/lib/mailboxes/access";
+import { canManageDomains } from "@/lib/auth/admin";
 
 export type DomainRuleInput = {
 	domainId: string;
@@ -50,17 +51,26 @@ export async function listManagedDomainMailboxes(
 		.sort((a, b) => a.localPart.localeCompare(b.localPart));
 }
 
+export async function listAdminRoutingDomains(
+	db: AppDatabase,
+	user: Pick<SessionUser, "id" | "role" | "isPrimaryAdmin" | "canManageDomains" | "createdByUserId">,
+) {
+	if (!canManageDomains(user)) return null;
+	const ownerIds = !user.isPrimaryAdmin && user.createdByUserId ? [user.id, user.createdByUserId] : [user.id];
+	return db.select().from(domains).where(inArray(domains.userId, ownerIds)).orderBy(asc(domains.hostname));
+}
+
 export async function getAdminDomain(
 	db: AppDatabase,
-	user: Pick<SessionUser, "id" | "role" | "canManageMailboxes" | "createdByUserId">,
+	user: Pick<SessionUser, "id" | "role" | "isPrimaryAdmin" | "canManageDomains" | "createdByUserId">,
 	domainId: string,
 ) {
-	if (user.role !== "admin") return null;
-	const ownerId = user.canManageMailboxes && user.createdByUserId ? user.createdByUserId : user.id;
+	if (!canManageDomains(user)) return null;
+	const ownerIds = !user.isPrimaryAdmin && user.createdByUserId ? [user.id, user.createdByUserId] : [user.id];
 	const [domain] = await db
 		.select()
 		.from(domains)
-		.where(and(eq(domains.id, domainId), eq(domains.userId, ownerId)))
+		.where(and(eq(domains.id, domainId), inArray(domains.userId, ownerIds)))
 		.limit(1);
 	return domain ?? null;
 }

@@ -47,7 +47,7 @@ const sections: { id?: string; labelKey?: TranslationKey; links: AdminNavLink[] 
     links: [
       { href: "/mailboxes", labelKey: "admin.nav.mailboxes", icon: Mail },
       { href: "/domains", labelKey: "admin.nav.domains", icon: Globe2, permission: "domains" },
-      { href: "/routing", labelKey: "admin.nav.routing", icon: Route },
+      { href: "/routing", labelKey: "admin.nav.routing", icon: Route, permission: "domains" },
       { href: "/webhooks", labelKey: "admin.nav.webhooks", icon: Webhook, permission: "primary" },
     ],
   },
