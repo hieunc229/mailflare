@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useLayoutEffect, useState } from "react";
-import { authFetch } from "@/lib/auth/client";
+import { fetchCurrentUser } from "@/hooks/use-current-user";
 import { readInitialAssistantPanelState, saveAssistantPanelState } from "./dashboard-state-utils";
 
 export function useDashboardState() {
@@ -19,11 +19,9 @@ export function useDashboardState() {
 
 	useEffect(() => {
 		let cancelled = false;
-		void authFetch("/api/auth/me", { redirectOnUnauthorized: false }).then(async (response) => {
-			if (!response.ok) return;
-			const data = await response.json() as { user?: { id?: string } };
-			if (cancelled || !data.user?.id) return;
-			const prefix = `mailflare-dashboard:${data.user.id}`;
+		void fetchCurrentUser().then((user) => {
+			if (cancelled || !user?.id) return;
+			const prefix = `mailflare-dashboard:${user.id}`;
 			try {
 				const savedOpen = localStorage.getItem(`${prefix}:assistant-open`);
 				const savedFullSize = localStorage.getItem(`${prefix}:assistant-full-size`);

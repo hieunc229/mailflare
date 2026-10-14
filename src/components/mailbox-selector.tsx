@@ -10,7 +10,7 @@ import { useSelectedMailbox } from "@/components/mailbox-provider";
 import { ProgressiveAvatarImage } from "@/components/progressive-avatar-image";
 import { isIdentityMailbox } from "@/components/mailbox-provider-utils";
 import { useMessageCounts } from "@/hooks/use-message-counts";
-import { authFetch } from "@/lib/auth/client";
+import { clearCurrentUserCache, fetchCurrentUser } from "@/hooks/use-current-user";
 import { getAvatarColorStyle } from "@/lib/avatar-colors";
 import { logoutClientSession } from "@/lib/auth/logout";
 import { fetchBrowserAccounts, switchBrowserAccount, type BrowserAccount } from "@/lib/auth/accounts-client";
@@ -146,18 +146,20 @@ export function MailboxSelector({ initialUser }: MailboxSelectorProps = {}) {
 	useDismissible(open, () => setOpen(false), ref);
 
 	useEffect(() => {
-		authFetch("/api/auth/me", { redirectOnUnauthorized: false })
-			.then((response) => (response.ok ? response.json() : null))
-			.then((data) => {
-				const authData = data as { user?: MailboxSelectorUser } | null;
-				setUser(authData?.user ?? null);
-				setHasAvatar(!!authData?.user?.hasAvatar);
+		let active = true;
+		void fetchCurrentUser()
+			.then((user) => {
+				if (!active) return;
+				setUser(user);
+				setHasAvatar(!!user?.hasAvatar);
 			})
-			.catch(() => setUser(null));
+			.catch(() => { if (active) setUser(null); });
+		return () => { active = false; };
 	}, []);
 
 	useEffect(() => {
 		function onAvatarChanged(event: Event) {
+			clearCurrentUserCache();
 			const detail = (event as CustomEvent<ProfileAvatarChangedDetail>).detail;
 			setAvatarUrl(detail?.url ?? getProfileAvatarUrl());
 			setHasAvatar(true);
@@ -179,6 +181,7 @@ export function MailboxSelector({ initialUser }: MailboxSelectorProps = {}) {
 
 	useEffect(() => {
 		function onNameChanged(event: Event) {
+			clearCurrentUserCache();
 			const { name } = (event as CustomEvent<ProfileNameChangedDetail>).detail;
 			setUser((current) => current ? { ...current, name } : current);
 		}

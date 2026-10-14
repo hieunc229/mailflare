@@ -3,7 +3,7 @@
 import { Folder } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useSelectedMailbox } from "@/components/mailbox-provider";
-import { authFetch } from "@/lib/auth/client";
+import { getMailboxFolders } from "@/lib/folders/client";
 import type { CustomFolderSummary } from "./custom-folder-config-types";
 import type { MessageFolderConfig } from "./types";
 
@@ -14,10 +14,7 @@ export function useCustomFolderConfig(folderId: string): MessageFolderConfig {
 	useEffect(() => {
 		if (!selectedMailbox?.id) return;
 		let cancelled = false;
-		const search = new URLSearchParams({ mailboxId: selectedMailbox.id });
-
-		authFetch(`/api/folders?${search.toString()}`)
-			.then((response) => response.json() as Promise<{ folders?: CustomFolderSummary[] }>)
+		getMailboxFolders<{ folders?: CustomFolderSummary[] }>(selectedMailbox.id)
 			.then((data) => {
 				if (cancelled) return;
 				const folder = data.folders?.find((item) => item.id === folderId);

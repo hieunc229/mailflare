@@ -1,5 +1,6 @@
 import { defaultTranslator, type Translator } from "@/lib/i18n/utils";
 import { authFetch } from "@/lib/auth/client";
+import { getMailboxFolders, invalidateFolderCache } from "@/lib/folders/client";
 import type {
 	ImapFormState,
 	ImportFolderSummary,
@@ -85,14 +86,12 @@ export async function ensureImportDestination(
 	});
 	const data = (await response.json()) as ImportFolderSummary & { error?: string };
 	if (!response.ok) throw new Error(data.error ?? `Unable to create folder ${source.folderName}`);
+	invalidateFolderCache();
 	return `folder:${data.id}`;
 }
 
 async function fetchMailboxFolders(mailboxId: string): Promise<ImportFolderSummary[]> {
-	const params = new URLSearchParams({ mailboxId });
-	const response = await authFetch(`/api/folders?${params.toString()}`);
-	const data = (await response.json()) as { folders?: ImportFolderSummary[]; error?: string };
-	if (!response.ok) throw new Error(data.error ?? "Unable to load folders");
+	const data = await getMailboxFolders<{ folders?: ImportFolderSummary[] }>(mailboxId);
 	return data.folders ?? [];
 }
 
