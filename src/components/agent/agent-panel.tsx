@@ -7,6 +7,7 @@ import { usePathname } from "next/navigation";
 import { ArrowLeft, FileText, ListChecks, LoaderCircle, Maximize2, Minimize2, Pause, PauseCircle, PenLine, Plus, Send, Settings2, Sparkles, Square, Trash2, X } from "lucide-react";
 import { useLanguage } from "@/components/language-provider";
 import { authFetch } from "@/lib/auth/client";
+import { fetchCachedMessageDetail } from "@/lib/messages/detail-cache";
 import { getUserTimeZone } from "@/lib/time/utils";
 import { useSelectedMailbox } from "@/components/mailbox-provider";
 import { useCompose } from "@/components/compose/compose-context";
@@ -56,6 +57,10 @@ export function AgentPanel({ open, fullSize, onClose, onToggleFullSize }: AgentP
 	const selectedConversationRef = useRef<string | null>(null);
 	const mailboxId = selectedMailbox?.id;
 	const selectedMessageId = pathname.match(/^\/(?:inbox|sent|archived|spam|trash|starred|snoozed|folders\/[^/]+)\/([^/]+)/)?.[1] ?? null;
+	const [openEmailSubjects, setOpenEmailSubjects] = useState<Record<string, string>>({});
+	const [dismissedMessageId, setDismissedMessageId] = useState<string | null>(null);
+	const openEmailId = selectedMessageId && selectedMessageId in openEmailSubjects && selectedMessageId !== dismissedMessageId ? selectedMessageId : null;
+	const openEmailIdRef = useRef<string | null>(null);
 	const welcomePrompts = selectedMessageId ? [
 		{ label: t("agent.welcome.sumThis"), detail: t("agent.welcome.sumThisDetail"), prompt: `Read the thread containing email ${selectedMessageId} and summarize its key points.`, icon: FileText },
 		{ label: t("agent.welcome.reply"), detail: t("agent.welcome.replyDetail"), prompt: `Read the thread containing email ${selectedMessageId} and draft a reply.`, icon: PenLine },
@@ -90,6 +95,18 @@ export function AgentPanel({ open, fullSize, onClose, onToggleFullSize }: AgentP
 		if (conversationsResponse.ok) setConversations(((await conversationsResponse.json()) as AgentConversationsResponse).conversations ?? []);
 		if (jobsResponse.ok) setJobs(((await jobsResponse.json()) as AgentJobsResponse).jobs ?? []);
 	}, [mailboxId, t]);
+
+	useEffect(() => {
+		if (!selectedMessageId || !mailboxId) return;
+		let active = true;
+		void fetchCachedMessageDetail(selectedMessageId).then(({ message }) => {
+			if (active && message?.mailboxId === mailboxId) setOpenEmailSubjects((current) => ({ ...current, [selectedMessageId]: message.subject ?? "" }));
+		}).catch(() => {});
+		return () => { active = false; };
+	}, [selectedMessageId, mailboxId]);
+
+	// Queued messages send later, so they read the email that is open at that moment.
+	useEffect(() => { openEmailIdRef.current = openEmailId; }, [openEmailId]);
 
 	useEffect(() => {
 		abort.current?.abort();
@@ -233,7 +250,7 @@ export function AgentPanel({ open, fullSize, onClose, onToggleFullSize }: AgentP
 		setError(null);
 		setMessages((current) => [...current, { id: userMessageId, role: "user", content: text, createdAt: new Date(startedAt).toISOString() }, { id: assistantMessageId, role: "assistant", content: "", pending: true }]);
 		try {
-			const response = await authFetch("/api/agent/chat", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ mailboxId, ...(selectedConversationRef.current ? { conversationId: selectedConversationRef.current } : {}), text, timeZone: getUserTimeZone() }), signal: controller.signal });
+			const response = await authFetch("/api/agent/chat", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ mailboxId, ...(selectedConversationRef.current ? { conversationId: selectedConversationRef.current } : {}), ...(openEmailIdRef.current ? { currentMessageId: openEmailIdRef.current } : {}), text, timeZone: getUserTimeZone() }), signal: controller.signal });
 			if (!response.ok) throw new Error(((await response.json()) as AgentErrorResponse).error || t("agent.panel.unavailable"));
 			accepted = true;
 			const responseConversationId = response.headers.get("X-Conversation-Id");
@@ -364,6 +381,9 @@ export function AgentPanel({ open, fullSize, onClose, onToggleFullSize }: AgentP
 			{busy && <div role="status" aria-live="polite" className="mx-auto w-full max-w-3xl space-y-1 px-5 py-2 text-sm text-neutral-500">
 				{activeTool && <div className="flex items-center gap-2"><LoaderCircle size={14} className="shrink-0 animate-spin" aria-hidden="true" /><span>{activeAgentToolLabel(activeTool.toolName, t)}</span></div>}
 				<div className="flex items-center gap-2"><LoaderCircle size={14} className="shrink-0 animate-spin" aria-hidden="true" /><span>{t("agent.panel.working")}</span></div>
+			</div>}
+			{openEmailId && <div className="mx-auto flex w-full max-w-3xl px-4 pb-1.5">
+				<span className="inline-flex max-w-full items-center gap-1.5 rounded-full bg-neutral-100 py-1 pl-3 pr-1 text-xs text-neutral-600"><FileText size={12} className="shrink-0" aria-hidden="true" /><span className="truncate">{t("agent.panel.currentEmail", { subject: openEmailSubjects[openEmailId] || t("list.noSubject") })}</span><button type="button" onClick={() => setDismissedMessageId(openEmailId)} className="shrink-0 rounded-full p-0.5 hover:bg-neutral-200" aria-label={t("agent.panel.removeCurrentEmail")} title={t("agent.panel.removeCurrentEmail")}><X size={12} aria-hidden="true" /></button></span>
 			</div>}
 			<form className="relative mx-auto w-full max-w-3xl pb-2 px-3" onSubmit={(event) => { event.preventDefault(); submitMessage(input); }}><textarea ref={inputRef} rows={1} className="block w-full resize-none rounded-4xl bg-blue-100/40 px-4 py-3 pr-20 text-sm leading-5 outline-none focus:border-blue-300 disabled:opacity-50" value={input} onChange={(event) => setInput(event.target.value)} onKeyDown={(event) => { if (!shouldSubmitAgentInput(event)) return; event.preventDefault(); if (input.trim() && settings && providerConfigured && !loadingConversation) event.currentTarget.form?.requestSubmit(); }} placeholder={t("agent.panel.promptPlaceholder")} name="message" disabled={!settings || !providerConfigured || loadingConversation} />
 				<div className="absolute bottom-3.5 right-4 flex justify-end gap-2">

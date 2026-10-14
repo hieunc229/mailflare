@@ -8,7 +8,7 @@ import { hasValidSessionMutationOrigin } from "@/lib/auth/origin";
 import { agentProviderErrorMessage } from "@/lib/agent/errors";
 import { getRequestTimeZone } from "@/lib/time/utils";
 
-const schema = z.object({ mailboxId: z.string().min(1), conversationId: z.string().nullish(), text: z.string().trim().min(1).max(4_000), timeZone: z.string().max(80).optional() });
+const schema = z.object({ mailboxId: z.string().min(1), conversationId: z.string().nullish(), text: z.string().trim().min(1).max(4_000), timeZone: z.string().max(80).optional(), currentMessageId: z.string().max(100).nullish() });
 
 export async function POST(request: Request) {
 	const env = getEnv();
@@ -20,7 +20,7 @@ export async function POST(request: Request) {
 	const parsed = schema.safeParse(raw);
 	if (!parsed.success) return Response.json({ error: "Invalid request" }, { status: 400 });
 	try {
-		const { conversationId, stream } = await createAgentChatStream({ env, user, mailboxId: parsed.data.mailboxId, origin: "chat" }, parsed.data.text, parsed.data.conversationId ?? undefined, request.signal, getRequestTimeZone(request, user.timeZone));
+		const { conversationId, stream } = await createAgentChatStream({ env, user, mailboxId: parsed.data.mailboxId, origin: "chat" }, parsed.data.text, parsed.data.conversationId ?? undefined, request.signal, getRequestTimeZone(request, user.timeZone), parsed.data.currentMessageId ?? undefined);
 		return new Response(stream, { headers: { "Content-Type": "application/x-ndjson; charset=utf-8", "Cache-Control": "no-store", "X-Conversation-Id": conversationId } });
 	} catch (error) {
 		return Response.json({ error: agentProviderErrorMessage(error) }, { status: 400 });

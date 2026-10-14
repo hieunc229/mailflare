@@ -1799,6 +1799,8 @@
 	"agent.panel.discard": "Discard",
 	"agent.panel.working": "Working...",
 	"agent.panel.promptPlaceholder": "Enter a prompt here",
+	"agent.panel.currentEmail": "Current email: {subject}",
+	"agent.panel.removeCurrentEmail": "Don’t use this email",
 	"agent.panel.stop": "Stop response",
 	"agent.panel.send": "Send message",
 	"agent.panel.needPermission": "Mailbox management permission is required to change these settings.",

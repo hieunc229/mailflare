@@ -1,10 +1,10 @@
 import { and, asc, desc, eq } from "drizzle-orm";
 import { streamText, stepCountIs } from "ai";
 import { getDb } from "@/db";
-import { agentChatMessages, agentConversations, mailboxAgentSettings } from "@/db/schema";
+import { agentChatMessages, agentConversations, mailboxAgentSettings, messages } from "@/db/schema";
 import { getMailboxAccessLevel } from "@/lib/mailboxes/access";
 import { newId } from "@/lib/ids";
-import { agentSystemPrompt, getAgentModel } from "./model";
+import { agentCurrentEmailContext, agentSystemPrompt, getAgentModel } from "./model";
 import { agentProviderErrorMessage } from "./errors";
 import { getAgentEnabled } from "./provider";
 import { recordAiUsage } from "@/lib/ai/usage";
@@ -31,7 +31,7 @@ export async function getAgentChatHistory(context: AgentToolContext, conversatio
 	return getDb(context.env).select().from(agentChatMessages).where(eq(agentChatMessages.conversationId, conversationId)).orderBy(asc(agentChatMessages.createdAt)).limit(200);
 }
 
-export async function createAgentChatStream(context: AgentToolContext, text: string, conversationId?: string, signal?: AbortSignal, timeZone?: string) {
+export async function createAgentChatStream(context: AgentToolContext, text: string, conversationId?: string, signal?: AbortSignal, timeZone?: string, currentMessageId?: string) {
 	timeZone = normalizeTimeZone(timeZone ?? context.timeZone);
 	context = { ...context, timeZone };
 	const db = getDb(context.env);
@@ -41,6 +41,9 @@ export async function createAgentChatStream(context: AgentToolContext, text: str
 	const [settings] = await db.select().from(mailboxAgentSettings).where(eq(mailboxAgentSettings.mailboxId, context.mailboxId)).limit(1);
 	const selection = await getAgentModel(context.env, settings?.modelId);
 	if (!selection) throw new Error("AI provider is not configured");
+	// Ignored unless it is in this mailbox and visible to the user, matching get_email.
+	const [current] = currentMessageId ? await db.select({ id: messages.id, status: messages.status, userId: messages.userId }).from(messages).where(and(eq(messages.id, currentMessageId), eq(messages.mailboxId, context.mailboxId))).limit(1) : [];
+	const openEmailId = current && (current.status !== "draft" || current.userId === context.user.id) ? current.id : null;
 	let conversation = conversationId ? await getAgentConversation(context, conversationId) : null;
 	if (conversationId && !conversation) throw new Error("Conversation not found");
 	if (!conversation) {
@@ -52,8 +55,8 @@ export async function createAgentChatStream(context: AgentToolContext, text: str
 	const history = await db.select().from(agentChatMessages).where(eq(agentChatMessages.conversationId, conversation.id)).orderBy(desc(agentChatMessages.createdAt)).limit(30);
 	await db.insert(agentChatMessages).values({ id: newId("chat"), conversationId: conversation.id, role: "user", content: text });
 	const prompt = history.reverse().filter((row) => row.role === "user" || row.role === "assistant").map((row) => ({ role: row.role as "user" | "assistant", content: row.content }));
-	prompt.push({ role: "user", content: text });
-	const tools = Object.fromEntries(EMAIL_TOOL_NAMES.map((name) => [name, {
+	// Sent with the latest turn rather than the system prompt so it outweighs emails named earlier in the history; never stored.
+	prompt.push({ role: "user", content: openEmailId ? `${text}\n\n(${agentCurrentEmailContext(openEmailId)})` : text });	const tools = Object.fromEntries(EMAIL_TOOL_NAMES.map((name) => [name, {
 		description: emailToolDescriptions[name], inputSchema: emailToolSchemas[name],
 		execute: async (input: unknown) => runEmailTool(context, name, input),
 	}]));

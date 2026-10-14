@@ -1794,6 +1794,8 @@
 	"agent.panel.discard": "ඉවත දමන්න",
 	"agent.panel.working": "ක්‍රියා කරමින්...",
 	"agent.panel.promptPlaceholder": "මෙහි විමසුමක් ඇතුළත් කරන්න",
+	"agent.panel.currentEmail": "වත්මන් ඊමේල්: {subject}",
+	"agent.panel.removeCurrentEmail": "මෙම ඊමේල් භාවිත නොකරන්න",
 	"agent.panel.stop": "ප්‍රතිචාරය නවත්වන්න",
 	"agent.panel.send": "පණිවිඩය යවන්න",
 	"agent.panel.needPermission": "මෙම සැකසීම් වෙනස් කිරීමට තැපැල් පෙට්ටි කළමනාකරණ අවසරය අවශ්‍යයි.",
