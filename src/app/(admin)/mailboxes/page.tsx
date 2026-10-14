@@ -18,7 +18,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Select } from "@/components/ui/select";
+import { CustomSelect } from "@/components/ui/custom-select";
 import { List, ListRow } from "@/components/ui/list";
 import { SectionRowSkeleton } from "@/components/page-skeletons";
 import { clearMailboxesCache } from "@/components/mailbox-provider-utils";
@@ -142,21 +142,21 @@ export default function MailboxesPage() {
 							{mailboxes.data?.canCreateShared && (
 								<div className="space-y-2">
 									<Label htmlFor="mailbox-type">{t("mailboxes.type")}</Label>
-									<Select
+									<CustomSelect
 										id="mailbox-type"
 										value={mailboxType}
 										onChange={(event) => setMailboxType(event.target.value as "personal" | "shared")}
-										className="flex h-10 w-full rounded-md border border-neutral-200 bg-white px-3 text-sm shadow-sm shadow-neutral-200/50 focus-visible:border-blue-600 focus-visible:outline-none"
+										className="h-10 w-full px-3 text-sm shadow-sm shadow-neutral-200/50"
 									>
 										<option value="personal">{t("mailboxes.personalInbox")}</option>
 										<option value="shared">{t("mailboxes.sharedInbox")}</option>
-									</Select>
+									</CustomSelect>
 								</div>
 							)}
 							{mailboxType === "personal" ? (
 							<div className="space-y-2">
 								<Label htmlFor="mailbox-owner">{t("mailboxes.account")}</Label>
-								<Select
+								<CustomSelect
 									id="mailbox-owner"
 									value={ownerUserId}
 									onChange={(event) => {
@@ -164,14 +164,14 @@ export default function MailboxesPage() {
 										setOwnerUserId(event.target.value);
 										if (owner) setDisplayName(owner.name);
 									}}
-									className="flex h-10 w-full rounded-md border border-neutral-200 bg-white px-3 text-sm shadow-sm shadow-neutral-200/50 focus-visible:border-blue-600 focus-visible:outline-none"
+									className="h-10 w-full px-3 text-sm shadow-sm shadow-neutral-200/50"
 								>
 									{mailboxOwners.map((owner) => (
 										<option key={owner.id} value={owner.id}>
 											{owner.name} ({owner.email})
 										</option>
 									))}
-								</Select>
+								</CustomSelect>
 							</div>
 							) : (
 								<p className="rounded-2xl bg-blue-50 px-4 py-3 text-sm text-blue-800">
@@ -197,10 +197,10 @@ export default function MailboxesPage() {
 										placeholder={t("mailboxes.localPlaceholder")}
 										className="min-w-0 flex-1 rounded-none border-0 shadow-none focus-visible:border-0"
 									/>
-									<span className="flex items-center text-sm text-neutral-500">@</span>
-									<Select
+									<span className="flex shrink-0 items-center text-sm text-neutral-500">@</span>
+									<CustomSelect
 										aria-label={t("accounts.domain")}
-										className="min-w-0 max-w-[55%] bg-transparent px-3 text-sm text-neutral-700 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50"
+										className="h-full w-[55%] min-w-0 shrink-0 overflow-hidden whitespace-nowrap rounded-none border-0 bg-transparent px-3 text-sm text-neutral-700"
 										value={domainId}
 										onChange={(event) => setDomainId(event.target.value)}
 									>
@@ -210,7 +210,7 @@ export default function MailboxesPage() {
 												{domain.hostname}
 											</option>
 										))}
-									</Select>
+									</CustomSelect>
 								</div>
 							</div>
 							{create.isError && (

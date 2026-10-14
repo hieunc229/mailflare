@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { usePathname, useSearchParams } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import clsx from "clsx";
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import toast from "react-hot-toast";
@@ -47,9 +47,11 @@ export function DriveNav({ onNavigate }: { onNavigate?: () => void }) {
 	const { t } = useLanguage();
 	const { minimal, mobile } = useSidebar();
 	const pathname = usePathname();
+	const router = useRouter();
 	const params = useSearchParams();
 	const view = params.get("view") ?? "my";
 	const activeFolder = params.get("folder");
+	const showMyDriveDestination = view !== "my" && !(view === "shared" && activeFolder);
 	const [storage, setStorage] = useState<DriveStorageDetail | null>(null);
 	const [foldersOpen, setFoldersOpen] = useState(false);
 	const [folders, setFolders] = useState<FolderNode[]>([]);
@@ -106,6 +108,7 @@ export function DriveNav({ onNavigate }: { onNavigate?: () => void }) {
 			if (!foldersOpen) toggleFolders();
 			void loadFolders();
 			window.dispatchEvent(new Event(DRIVE_REFRESH_EVENT));
+			router.push("/drive");
 		} catch (error) {
 			toast.error(error instanceof Error && error.message ? error.message : t("drive.actionFailed"));
 		} finally { setSaving(false); }
@@ -141,9 +144,9 @@ export function DriveNav({ onNavigate }: { onNavigate?: () => void }) {
 					</DropdownMenu.Trigger>
 					<DropdownMenu.Portal>
 						<DropdownMenu.Content align="start" sideOffset={6} className="z-[200] min-w-52 rounded-xl border border-neutral-200 bg-white p-1.5 shadow-xl">
-							<DropdownMenu.Item className={itemClass} onSelect={() => { window.dispatchEvent(new Event(DRIVE_NEW_FOLDER_EVENT)); onNavigate?.(); }}><FolderPlus size={18} />{t("drive.newFolder")}</DropdownMenu.Item>
+							<DropdownMenu.Item className={itemClass} onSelect={() => { window.dispatchEvent(new Event(DRIVE_NEW_FOLDER_EVENT)); onNavigate?.(); }}><FolderPlus size={18} />{t("drive.newFolder")}{showMyDriveDestination && <span className="ml-auto text-xs text-neutral-500">{t("drive.myDrive")}</span>}</DropdownMenu.Item>
 							<DropdownMenu.Separator className="my-1 h-px bg-neutral-100" />
-							<DropdownMenu.Item className={itemClass} onSelect={() => { window.dispatchEvent(new Event(DRIVE_UPLOAD_EVENT)); onNavigate?.(); }}><UploadCloud size={18} />{t("drive.fileUpload")}</DropdownMenu.Item>
+							<DropdownMenu.Item className={itemClass} onSelect={() => { window.dispatchEvent(new Event(DRIVE_UPLOAD_EVENT)); onNavigate?.(); }}><UploadCloud size={18} />{t("drive.fileUpload")}{showMyDriveDestination && <span className="ml-auto text-xs text-neutral-500">{t("drive.myDrive")}</span>}</DropdownMenu.Item>
 						</DropdownMenu.Content>
 					</DropdownMenu.Portal>
 				</DropdownMenu.Root>
@@ -166,7 +169,7 @@ export function DriveNav({ onNavigate }: { onNavigate?: () => void }) {
 							<button type="button" onClick={toggleFolders} aria-expanded={foldersOpen} aria-label={t("drive.foldersToggle")} className="flex h-9 min-w-0 flex-1 items-center gap-2 rounded-full px-4 text-xs font-semibold uppercase tracking-wide text-neutral-500 hover:bg-neutral-200/60">
 								<ChevronRight size={14} className={clsx("transition-transform", foldersOpen && "rotate-90")} />{t("drive.folders")}
 							</button>
-							<button type="button" onClick={() => { setFolderName(""); setCreating(true); }} aria-label={t("drive.newFolder")} title={t("drive.newFolder")} className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-neutral-500 hover:bg-neutral-200/60 hover:text-neutral-800"><Plus size={16} /></button>
+							<button type="button" onClick={() => { setFolderName(""); setCreating(true); }} aria-label={`${t("drive.newFolder")} · ${t("drive.myDrive")}`} title={`${t("drive.newFolder")} · ${t("drive.myDrive")}`} className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-neutral-500 hover:bg-neutral-200/60 hover:text-neutral-800"><Plus size={16} /></button>
 						</div>
 						{foldersOpen && (
 							<ul className="mt-0.5 space-y-0.5">
@@ -200,7 +203,7 @@ export function DriveNav({ onNavigate }: { onNavigate?: () => void }) {
 			)}
 			<Dialog open={creating} onOpenChange={(open) => { if (!saving) setCreating(open); }}>
 				<DialogContent>
-					<DialogHeader><DialogTitle>{t("drive.newFolder")}</DialogTitle></DialogHeader>
+					<DialogHeader><DialogTitle>{t("drive.newFolder")} · {t("drive.myDrive")}</DialogTitle></DialogHeader>
 					<form onSubmit={(event) => void createFolder(event)} className="space-y-5">
 						<Input autoFocus value={folderName} onChange={(event) => setFolderName(event.target.value)} placeholder={t("drive.folderName")} aria-label={t("drive.folderName")} maxLength={255} />
 						<div className="flex justify-end gap-2">

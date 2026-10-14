@@ -4,6 +4,7 @@ import * as DialogPrimitive from "@radix-ui/react-dialog";
 import { useEffect, useRef, useState } from "react";
 import { CalendarClock, ChevronLeft, ChevronRight, FileText, Plus, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { useLanguage } from "@/components/language-provider";
 import { authFetch } from "@/lib/auth/client";
 import { cn } from "@/lib/utils";
@@ -115,7 +116,7 @@ export function ScheduleSendSheet({ open, onOpenChange, value, onChange, onApply
 							</div>
 							<div ref={(node) => { pageRefs.current.date = node; }} className={pageClass} inert={page !== "date"}>
 								<div className="min-h-0 flex-1 overflow-y-auto px-2">
-									<input
+									<Input
 										type="datetime-local"
 										min={minimum}
 										value={draftDate}

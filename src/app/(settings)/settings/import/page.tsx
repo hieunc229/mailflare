@@ -18,6 +18,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
+import { CustomMultiSelect } from "@/components/ui/custom-multi-select";
 import { importMessageFiles } from "@/components/settings/import-messages-utils";
 import type {
   ImapFormState,
@@ -262,35 +263,15 @@ export default function SettingsImportPage() {
             <div className="space-y-2">
               <Label>{t("importPage.chooseSections")}</Label>
 
-              <div className="relative">
-                <button
-                  type="button"
-                  onClick={() => setSourceDropdownOpen((open) => !open)}
-                  className="flex w-full items-center justify-between rounded-md border border-neutral-200 bg-white px-3 py-2 text-left text-sm shadow-sm shadow-neutral-200/50"
-                >
-                  <label className="flex-1">{t("importPage.selected")}</label>
-                  <span className="truncate">{sourceSummary}</span>
-                  <span className="text-neutral-500 px-2">▾</span>
-                </button>
-                {sourceDropdownOpen && (
-                  <div className="absolute z-20 mt-2 w-full rounded-xl border border-neutral-200 bg-white p-2 shadow-lg">
-                    {importSourceOptions.map((option) => (
-                      <label
-                        key={option.value}
-                        className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm text-neutral-700 hover:bg-neutral-50"
-                      >
-                        <Checkbox
-                          checked={selectedSections.includes(option.value)}
-                          onChange={(event) =>
-                            toggleSection(option.value, event.target.checked)
-                          }
-                        />
-                        {t(SECTION_LABEL_KEYS[option.value])}
-                      </label>
-                    ))}
-                  </div>
-                )}
-              </div>
+              <CustomMultiSelect
+                label={t("importPage.chooseSections")}
+                summary={sourceSummary}
+                options={importSourceOptions.map((option) => ({ value: option.value, label: t(SECTION_LABEL_KEYS[option.value]) }))}
+                values={selectedSections}
+                open={sourceDropdownOpen}
+                onOpenChange={setSourceDropdownOpen}
+                onToggle={(value, checked) => toggleSection(value as ImportSourceSection, checked)}
+              />
               {/* <p className="text-xs leading-5 text-neutral-500">
             Select Folders to import every source IMAP folder into matching
             Mailflare folders.
@@ -381,6 +362,8 @@ export default function SettingsImportPage() {
                       <Input
                         id="imap-port"
                         type="number"
+                        min={1}
+                        max={65535}
                         value={imapForm.port}
                         onChange={(event) =>
                           setImapForm({ ...imapForm, port: event.target.value })

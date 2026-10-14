@@ -1,9 +1,12 @@
 "use client";
 
+import { confirmAction } from "@/components/ui/installation-dialogs";
+
 import { useEffect, useState } from "react";
 import { useLanguage } from "@/components/language-provider";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { CustomCombobox } from "@/components/ui/custom-combobox";
 import type { AwsCapabilityReport, AwsConfigStatus } from "@/lib/aws/aws-types";
 import { ApiError, requestJson } from "./api";
 import { StatusRow } from "./status-row";
@@ -95,7 +98,7 @@ export default function AwsCredentialsPanel({ need, onChanged }: Props) {
 		onChanged?.(true, data.report);
 	});
 	const remove = () => run("remove", async () => {
-		if (!window.confirm(t("aws.removeConfirm"))) return;
+		if (!(await confirmAction(t("aws.removeConfirm")))) return;
 		const data = await requestJson<{ status: AwsConfigStatus }>("/api/admin/aws", "DELETE", {});
 		setStatus(data.status);
 		setReport(null);
@@ -128,8 +131,7 @@ export default function AwsCredentialsPanel({ need, onChanged }: Props) {
 						<form className="grid gap-2" onSubmit={(event) => { event.preventDefault(); void save(); }}>
 							<Input autoComplete="off" aria-label={t("aws.accessKeyId")} placeholder={t("aws.accessKeyId")} value={accessKeyId} onChange={(event) => setAccessKeyId(event.target.value)} className="max-w-sm bg-white" />
 							<Input type="password" autoComplete="off" aria-label={t("aws.secretKey")} placeholder={t("aws.secretKey")} value={secretAccessKey} onChange={(event) => setSecretAccessKey(event.target.value)} className="max-w-sm bg-white" />
-							<Input list="aws-regions" aria-label={t("aws.region")} placeholder={t("aws.region")} value={region} onChange={(event) => setRegion(event.target.value)} className="max-w-[12rem] bg-white" />
-							<datalist id="aws-regions">{REGION_HINTS.map((hint) => <option key={hint} value={hint} />)}</datalist>
+							<CustomCombobox aria-label={t("aws.region")} placeholder={t("aws.region")} value={region} onChange={setRegion} options={REGION_HINTS} className="max-w-[12rem] bg-white" />
 							<span className="flex gap-2">
 								<Button type="submit" size="sm" disabled={!accessKeyId.trim() || !secretAccessKey.trim() || !region.trim() || busy !== null}>{busy === "save" ? t("aws.validating") : t("aws.validateSave")}</Button>
 								{editing && <Button type="button" size="sm" variant="outline" className="bg-white" onClick={() => { setEditing(false); setError(""); setRejected(null); }}>{t("common.cancel")}</Button>}

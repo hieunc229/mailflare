@@ -1,5 +1,7 @@
 "use client";
 
+import { CustomSelect } from "@/components/ui/custom-select";
+
 import { useEffect, useState } from "react";
 import { useLanguage } from "@/components/language-provider";
 import { authFetch } from "@/lib/auth/client";
@@ -59,7 +61,7 @@ export function TrashRetentionSettings() {
 						{t("settings.trash.description")}
 					</span>
 				</span>
-				<select
+				<CustomSelect
 					value={days ?? ""}
 					disabled={loading}
 					onChange={(event) => void updateDays(event.target.value ? Number(event.target.value) : null)}
@@ -70,7 +72,7 @@ export function TrashRetentionSettings() {
 					{options.map((value) => (
 						<option key={value} value={value}>{describeTrashRetention(value, t)}</option>
 					))}
-				</select>
+				</CustomSelect>
 			</label>
 			{error && <p role="alert" className="mt-2 px-4 text-sm text-red-600">{error}</p>}
 		</div>

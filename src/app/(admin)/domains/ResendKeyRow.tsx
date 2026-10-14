@@ -1,5 +1,7 @@
 "use client";
 
+import { confirmAction } from "@/components/ui/installation-dialogs";
+
 import { useState } from "react";
 import { useLanguage } from "@/components/language-provider";
 import { Button } from "@/components/ui/button";
@@ -35,7 +37,7 @@ export default function ResendKeyRow({ configured, onChanged, onError }: Props) 
 		onChanged(true);
 	});
 	const remove = () => run(async () => {
-		if (!window.confirm(t("resend.removeConfirm"))) return;
+		if (!(await confirmAction(t("resend.removeConfirm")))) return;
 		await postJson("/api/admin/resend-key", "DELETE", {});
 		onChanged(false);
 	});

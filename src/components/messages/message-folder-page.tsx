@@ -1,5 +1,7 @@
 "use client";
 
+import { confirmAction, notifyAction } from "@/components/ui/installation-dialogs";
+
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import type { MouseEvent } from "react";
@@ -128,6 +130,7 @@ function MessageListRow({
 		const compactRow = (
 			<div
 				role={swipeable ? undefined : "listitem"}
+				data-message-selected={active || selected ? "true" : undefined}
 				className={`group grid grid-cols-[20px_minmax(0,1fr)] gap-3 border-l-2 px-4 py-3 transition-colors ${active
 					? "border-l-blue-600 bg-blue-50"
 					: selected
@@ -253,7 +256,7 @@ function MessageListRow({
 
 	if (config.folder === "drafts") {
 		return (
-			<div role="listitem" className={className}>
+			<div role="listitem" className={className} data-message-selected={active || selected ? "true" : undefined}>
 				<Checkbox
 					checked={selected}
 					onChange={(event) => onSelectedChange(message.id, event.target.checked)}
@@ -269,6 +272,7 @@ function MessageListRow({
 		<div
 			role="listitem"
 			className={className}
+			data-message-selected={active || selected ? "true" : undefined}
 			draggable={draggable}
 			onDragStart={(event) => {
 				if (!draggable) return;
@@ -417,14 +421,14 @@ export function MessageFolderPage({
 	const permanentDeleteFolder = !config.folderId && supportsPermanentDelete(config.folder) ? config.folder : null;
 	async function emptyFolder() {
 		if (!permanentDeleteFolder || !selectedMailbox?.id) return;
-		if (!window.confirm(getEmptyFolderConfirmText(permanentDeleteFolder, titleTotal, t))) return;
+		if (!(await confirmAction(getEmptyFolderConfirmText(permanentDeleteFolder, titleTotal, t)))) return;
 		setEmptyingFolder(true);
 		try {
 			await emptyMessageFolder(selectedMailbox.id, permanentDeleteFolder);
 			setOffset(0);
 		} catch (error) {
 			console.error(error);
-			window.alert(t("list.emptyFailed", { folder: getPermanentDeleteFolderLabel(permanentDeleteFolder, t) }));
+			notifyAction(t("list.emptyFailed", { folder: getPermanentDeleteFolderLabel(permanentDeleteFolder, t) }));
 		} finally {
 			setEmptyingFolder(false);
 		}
@@ -449,7 +453,7 @@ export function MessageFolderPage({
 		if (selectedIds.length === 0) return;
 		if (action === "delete") {
 			const ids = expandSelectedIds(selectedIds);
-			if (!window.confirm(getPermanentDeleteConfirmText(ids.length, t))) return;
+			if (!(await confirmAction(getPermanentDeleteConfirmText(ids.length, t)))) return;
 		}
 
 		setPendingBulkAction(true);

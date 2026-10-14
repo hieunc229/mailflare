@@ -9,14 +9,10 @@ interface UseHotkeysOptions {
 }
 
 export function isTypingInInput(target: EventTarget | null): boolean {
-  if (!target || !(target instanceof HTMLElement)) return false;
-  const tagName = target.tagName.toUpperCase();
-  const isInputOrTextarea =
-    tagName === "INPUT" || tagName === "TEXTAREA" || tagName === "SELECT";
-  const isContentEditable =
-    target.isContentEditable ||
-    target.getAttribute("contenteditable") === "true";
-  return isInputOrTextarea || isContentEditable;
+  if (!target || !(target instanceof Element)) return false;
+  return Boolean(target.closest(
+    'input, textarea, select, [contenteditable]:not([contenteditable="false"]), [role="textbox"], [role="searchbox"], [role="combobox"], [role="spinbutton"]'
+  ));
 }
 
 function matchModifiers(
@@ -43,6 +39,7 @@ function matchModifiers(
 
   if (requiresAlt && !hasAlt) return false;
   if (requiresShift && !hasShift) return false;
+  if (!requiresShift && hasShift && /^[a-z0-9]$/i.test(e.key)) return false;
 
   if (!requiresCtrl && !requiresMeta && (hasCtrl || hasMeta)) return false;
   if (!requiresAlt && hasAlt) return false;
@@ -66,8 +63,16 @@ export function useHotkeys(
     if (options.enabled === false) return;
 
     const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.defaultPrevented || typeof e.key !== "string" || e.isComposing) return;
       const isInput = isTypingInInput(e.target);
       const key = e.key.toLowerCase();
+      const resetSequence = () => {
+        sequenceBufferRef.current = [];
+        if (sequenceTimerRef.current) clearTimeout(sequenceTimerRef.current);
+        sequenceTimerRef.current = null;
+      };
+      const modified = e.metaKey || e.ctrlKey || e.altKey;
+      if (modified) resetSequence();
 
       // Always allow Cmd+K / Ctrl+K
       if ((e.metaKey || e.ctrlKey) && key === "k") {
@@ -76,7 +81,7 @@ export function useHotkeys(
             s.key.toLowerCase() === "k" &&
             (s.modifiers?.includes("meta") || s.modifiers?.includes("ctrl"))
         );
-        if (cmdK) {
+        if (cmdK && matchModifiers(e, cmdK)) {
           e.preventDefault();
           cmdK.action();
           return;
@@ -84,6 +89,7 @@ export function useHotkeys(
       }
 
       if (isInput) {
+        resetSequence();
         if (e.key === "Escape") {
           const esc = shortcutsRef.current.find(
             (s) => s.key.toLowerCase() === "escape" || s.key.toLowerCase() === "esc"
@@ -93,24 +99,32 @@ export function useHotkeys(
         return;
       }
 
-      if (isModifierKey(key)) return;
+      if (isModifierKey(key)) {
+        if (key !== "shift") resetSequence();
+        return;
+      }
 
       if (e.target instanceof Element && e.target.closest('[role="dialog"], [role="menu"], [role="listbox"]')) return;
 
+      if (!modified && key !== "escape" && window.getSelection()?.toString()) {
+        resetSequence();
+        return;
+      }
+
       // Handle sequence buffer
-      sequenceBufferRef.current.push(key);
+      if (!modified) sequenceBufferRef.current.push(key);
 
       if (sequenceTimerRef.current) {
         clearTimeout(sequenceTimerRef.current);
       }
 
-      sequenceTimerRef.current = setTimeout(() => {
+      if (!modified) sequenceTimerRef.current = setTimeout(() => {
         sequenceBufferRef.current = [];
       }, 800);
 
-      const sequenceMatch = findSequenceMatch(sequenceBufferRef.current, shortcutsRef.current);
+      const sequenceMatch = modified ? undefined : findSequenceMatch(sequenceBufferRef.current, shortcutsRef.current);
 
-      if (sequenceMatch) {
+      if (sequenceMatch && matchModifiers(e, sequenceMatch)) {
         e.preventDefault();
         sequenceBufferRef.current = [];
         sequenceMatch.action();
@@ -118,10 +132,6 @@ export function useHotkeys(
       }
 
       const singleMatch = shortcutsRef.current.find((s) => {
-        if (s.key === "?" && e.key === "?") return true;
-        if (s.key === "/" && e.key === "/") return true;
-        if (s.key === "#" && e.key === "#") return true;
-
         if (s.key.toLowerCase() !== key) return false;
         return matchModifiers(e, s);
       });

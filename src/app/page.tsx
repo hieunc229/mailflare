@@ -26,14 +26,14 @@ export default async function HomePage() {
   return (
     <HomeAuthProvider>
     <div className="min-h-dvh bg-[#f6f8fc] text-neutral-900">
-      <header className="mx-auto flex h-16 w-full max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
+      <header className="mx-auto flex h-16 w-full max-w-7xl items-center justify-between gap-3 px-4 sm:px-6 lg:px-8">
         <Link
           href="/"
-          className="flex items-center gap-3"
+          className="flex min-w-0 items-center gap-3"
           aria-label={t("home.homeLabel", { app: branding.appName })}
         >
-          <img src={branding.hasCustomIcon ? "/api/branding/icon" : "/icon-96.png"} height={32} width={32} alt="" />
-          <span className="hidden text-base font-semibold tracking-tight sm:inline">
+          <img src={branding.hasCustomIcon ? "/api/branding/icon" : "/icon-96.png"} height={32} width={32} className="shrink-0" alt="" />
+          <span className="min-w-0 truncate text-base font-semibold tracking-tight">
             {branding.appName}
           </span>
         </Link>
@@ -46,7 +46,7 @@ export default async function HomePage() {
 					))}
 				</nav> */}
 
-        <div className="flex items-center gap-2">
+        <div className="flex shrink-0 items-center justify-end gap-2">
           <div className="hidden sm:block">
             <LanguageSelector variant="text" />
           </div>
@@ -70,8 +70,8 @@ export default async function HomePage() {
             <HomeHeroActions />
           </div>
 
-          <div className="relative min-h-[520px] overflow-hidden rounded-[2rem] border border-neutral-100 shadow-[0_24px_70px_-45px_rgba(30,64,175,0.55)]">
-            <div className="grid h-full min-h-[520px] grid-cols-[176px_1fr] bg-white">
+          <div className="relative min-h-[520px] overflow-hidden rounded-[2rem] border border-neutral-300 shadow-[0_24px_70px_-45px_rgba(30,64,175,0.55)]">
+            <div className="grid h-full min-h-[520px] grid-cols-[176px_1fr] bg-[#f6f8fc]">
               <aside className="hidden flex-col gap-2 bg-[#f6f8fc] px-3 py-5 sm:flex">
                 <div className="mb-4 flex items-center gap-3 px-3 text-neutral-700">
                   <Inbox className="h-5 w-5" />
@@ -117,7 +117,7 @@ export default async function HomePage() {
                   </div>
                 </div>
 
-                <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-tl-3xl bg-white">
+                <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-tl-3xl border-t border-neutral-200 bg-white sm:border-s">
                   <div className="flex h-14 items-center justify-between border-b border-neutral-200 px-6">
                     <div className="flex items-center gap-3">
                       <h2 className="text-xl font-medium text-neutral-800">

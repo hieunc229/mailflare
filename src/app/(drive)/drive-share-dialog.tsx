@@ -1,5 +1,7 @@
 "use client";
 
+import { CustomSelect } from "@/components/ui/custom-select";
+
 import { useCallback, useEffect, useState } from "react";
 import toast from "react-hot-toast";
 import { Copy, Link2, X } from "lucide-react";
@@ -73,10 +75,10 @@ export function DriveShareDialog({ item, onClose, onChanged }: { item: DriveItem
 				<DialogHeader><DialogTitle className="pr-6 truncate">{t("drive.shareTitle", { name: item?.name ?? "" })}</DialogTitle></DialogHeader>
 				<form onSubmit={addPerson} className="flex gap-2">
 					<Input type="email" value={email} onChange={(event) => setEmail(event.target.value)} placeholder={t("drive.shareEmail")} aria-label={t("drive.shareEmail")} />
-					<select value={role} onChange={(event) => setRole(event.target.value as DriveShareRole)} className={selectClass} aria-label={t("drive.peopleWithAccess")}>
+					<CustomSelect value={role} onChange={(event) => setRole(event.target.value as DriveShareRole)} className={selectClass} aria-label={t("drive.peopleWithAccess")}>
 						<option value="view">{t("drive.canView")}</option>
 						<option value="edit">{t("drive.canEdit")}</option>
-					</select>
+					</CustomSelect>
 					<Button type="submit" disabled={busy || !email.trim()}>{t("drive.shareAdd")}</Button>
 				</form>
 				<h3 className="mb-2 mt-6 text-sm font-medium text-neutral-900">{t("drive.peopleWithAccess")}</h3>

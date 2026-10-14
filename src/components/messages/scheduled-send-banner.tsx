@@ -1,5 +1,7 @@
 "use client";
 
+import { notifyAction } from "@/components/ui/installation-dialogs";
+
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { CalendarClock } from "lucide-react";
@@ -23,7 +25,7 @@ export function ScheduledSendBanner({ messageId, scheduledAt }: { messageId: str
 			window.dispatchEvent(new Event("mailflare:messages-changed"));
 			router.push("/drafts");
 		} catch {
-			window.alert(t("schedule.cancelFailed"));
+			notifyAction(t("schedule.cancelFailed"));
 			setCancelling(false);
 		}
 	}

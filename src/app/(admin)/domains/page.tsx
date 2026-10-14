@@ -1,5 +1,7 @@
 "use client";
 
+import { CustomSelect } from "@/components/ui/custom-select";
+
 import { mobilePrimaryActionClass } from "@/components/page-header-utils";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRef, useState } from "react";
@@ -325,7 +327,7 @@ export default function DomainsPage() {
                         : t("domains.providerHintLater")}
                   </p>
                 </div>
-                <select
+                <CustomSelect
                   id="receiving-provider"
                   value={receivingProvider}
                   onChange={(e) => setReceivingProvider(e.target.value as ReceivingProvider)}
@@ -335,7 +337,7 @@ export default function DomainsPage() {
                   <option value="resend">Resend</option>
                   <option value="ses">Amazon SES</option>
                   <option value="none">{t("domains.notSelected")}</option>
-                </select>
+                </CustomSelect>
               </div>
               <div className="flex items-center justify-between gap-4 rounded-xl bg-neutral-50 px-4 py-3">
                 <div>
@@ -351,7 +353,7 @@ export default function DomainsPage() {
                   </p>
                 </div>
                 {domainChecking && <LoaderCircle className="h-4 w-4 shrink-0 animate-spin text-neutral-500" />}
-                <select
+                <CustomSelect
                   id="sending-provider"
                   value={sendingProvider}
                   onChange={(e) => setSendingProvider(e.target.value as SendingProvider)}
@@ -361,7 +363,7 @@ export default function DomainsPage() {
                   <option value="resend">Resend</option>
                   <option value="ses">Amazon SES</option>
                   <option value="none">{t("domains.notSelected")}</option>
-                </select>
+                </CustomSelect>
               </div>
               {domainCheck && (
                 <div className="flex items-center gap-3 rounded-xl bg-green-50 px-4 py-3 text-sm text-green-700">

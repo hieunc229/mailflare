@@ -9,6 +9,7 @@ const BASE_STYLE = `
 :host { display:block; min-width:0; isolation:isolate; contain:paint; }
 :host(.mf-dark) { filter:invert(1) hue-rotate(180deg); }
 :host(.mf-dark) img, :host(.mf-dark) video, :host(.mf-dark) picture { filter:invert(1) hue-rotate(180deg); }
+::selection { background:#8ab4f8; color:#202124; }
 .email-quote-toggle { margin-top:1.4em; }
 .email-quote-toggle > summary { cursor:pointer; list-style:none; width:26px; border-radius:20px; background:#ececec; text-align:center; }
 .email-quote-toggle > summary::-webkit-details-marker { display:none; }

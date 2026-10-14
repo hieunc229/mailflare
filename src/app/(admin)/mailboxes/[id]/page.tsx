@@ -1,5 +1,7 @@
 "use client";
 
+import { confirmAction } from "@/components/ui/installation-dialogs";
+
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AtSign, Save, Trash2, UserPlus } from "lucide-react";
 import { useParams, usePathname, useRouter } from "next/navigation";
@@ -395,11 +397,11 @@ export default function MailboxSettingsPage() {
             type="button"
             variant="destructive"
             disabled={!mailbox.data || removeMailbox.isPending}
-            onClick={() => {
+            onClick={async () => {
               if (
-                !window.confirm(
+                !(await confirmAction(
                   t("mailbox.deleteConfirm", { address }),
-                )
+                ))
               )
                 return;
               removeMailbox.mutate();

@@ -1,5 +1,7 @@
 "use client";
 
+import { confirmAction } from "@/components/ui/installation-dialogs";
+
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { DragEvent } from "react";
 import { createPortal } from "react-dom";
@@ -35,6 +37,7 @@ import { clearDriveListings, readDriveListing, saveDriveListing } from "../drive
 import type { DriveListing } from "../drive-cache";
 import { Skeleton } from "@/components/ui/skeleton";
 import { canDropDrive, driveDropHandlers, endDriveDrag, isDriveDraggable, startDriveDrag } from "../drive-drag";
+import { createsDriveItemInCurrentListing, newDriveItemParent } from "../drive-destination";
 
 const menuItemClass = "flex cursor-pointer items-center gap-3 rounded-lg px-3 py-2 text-sm text-neutral-700 outline-none data-[highlighted]:bg-neutral-100";
 const dateFormat = new Intl.DateTimeFormat(undefined, { year: "numeric", month: "short", day: "numeric" });
@@ -60,7 +63,7 @@ export default function DrivePage() {
 	const [headerTarget, setHeaderTarget] = useState<HTMLElement | null>(null);
 	const [preview, setPreview] = useState<DriveItemDto | null>(null);
 	const [sharing, setSharing] = useState<DriveItemDto | null>(null);
-	const [naming, setNaming] = useState<{ mode: "create" | "rename"; item?: DriveItemDto; value: string } | null>(null);
+	const [naming, setNaming] = useState<{ mode: "create" | "rename"; item?: DriveItemDto; parentId?: string | null; value: string } | null>(null);
 	const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 	const selectAllRef = useRef<HTMLInputElement | null>(null);
 	const fileInput = useRef<HTMLInputElement | null>(null);
@@ -119,7 +122,10 @@ export default function DrivePage() {
 	const patchUpload = useCallback((id: string, patch: Partial<DriveUploadEntry>) => setUploads((list) => list.map((entry) => (entry.id === id ? { ...entry, ...patch } : entry))), []);
 
 	const upload = useCallback(async (files: File[]) => {
-		if (!canWrite || !files.length) return;
+		if (!files.length) return;
+		const parentId = newDriveItemParent(view, canWrite, folder);
+		const uploadsHere = createsDriveItemInCurrentListing(view, canWrite, folder);
+		if (!uploadsHere) router.push("/drive");
 		const accepted: { id: string; file: File }[] = [];
 		for (const file of files) {
 			if (file.size > DRIVE_MAX_FILE_BYTES) toast.error(t("drive.tooLarge", { name: file.name, size: formatDriveSize(DRIVE_MAX_FILE_BYTES) }));
@@ -131,25 +137,29 @@ export default function DrivePage() {
 		for (const { id, file } of accepted) {
 			patchUpload(id, { status: "uploading" });
 			try {
-				await uploadDriveFile(file, folder, (percent, resumed) => patchUpload(id, { percent, resumed }));
+				await uploadDriveFile(file, parentId, (percent, resumed) => patchUpload(id, { percent, resumed }));
 				done += 1;
 				patchUpload(id, { status: "done", percent: 100 });
 			} catch (error) {
 				patchUpload(id, { status: "failed", error: error instanceof Error && error.message ? error.message : t("drive.uploadFailed", { name: file.name }) });
 			}
 		}
-		if (done) await refresh();
-	}, [canWrite, folder, refresh, patchUpload, t]);
+		if (done) {
+			if (uploadsHere) await refresh();
+			else window.dispatchEvent(new Event(DRIVE_REFRESH_EVENT));
+		}
+	}, [canWrite, folder, refresh, patchUpload, router, t, view]);
 
-	const canWriteRef = useRef(canWrite);
-	useEffect(() => { canWriteRef.current = canWrite; }, [canWrite]);
 	useEffect(() => {
-		const onUpload = () => { if (canWriteRef.current) fileInput.current?.click(); };
-		const onFolder = () => { if (canWriteRef.current) setNaming({ mode: "create", value: t("drive.untitledFolder") }); };
+		const onUpload = () => fileInput.current?.click();
+		const onFolder = () => {
+			const parentId = newDriveItemParent(view, canWrite, folder);
+			setNaming({ mode: "create", parentId, value: t("drive.untitledFolder") });
+		};
 		window.addEventListener(DRIVE_UPLOAD_EVENT, onUpload);
 		window.addEventListener(DRIVE_NEW_FOLDER_EVENT, onFolder);
 		return () => { window.removeEventListener(DRIVE_UPLOAD_EVENT, onUpload); window.removeEventListener(DRIVE_NEW_FOLDER_EVENT, onFolder); };
-	}, [t]);
+	}, [canWrite, folder, t, view]);
 
 	async function mutate(url: string, init: RequestInit, successMessage?: string) {
 		try {
@@ -173,9 +183,12 @@ export default function DrivePage() {
 		event.preventDefault();
 		if (!naming || !naming.value.trim()) return;
 		const ok = naming.mode === "create"
-			? await mutate("/api/drive/items", json("POST", { name: naming.value, parentId: folder }))
+			? await mutate("/api/drive/items", json("POST", { name: naming.value, parentId: naming.parentId ?? null }))
 			: await mutate(`/api/drive/items/${naming.item!.id}`, json("PATCH", { name: naming.value }));
-		if (ok) setNaming(null);
+		if (ok) {
+			if (naming.mode === "create" && !createsDriveItemInCurrentListing(view, canWrite, folder)) router.push("/drive");
+			setNaming(null);
+		}
 	}
 
 	function open(item: DriveItemDto) {
@@ -332,7 +345,7 @@ export default function DrivePage() {
 												{item.source?.canDelete && !item.trashedAt && <DropdownMenu.Item className={menuItemClass} onSelect={() => void mutate("/api/drive/attachments", json("POST", { action: "trash", ids: [item.id] }), t("drive.trashed"))}><Trash2 size={16} />{t("drive.moveToTrash")}</DropdownMenu.Item>}
 												{canEditDrive(item.role) && !item.source && !item.trashedAt && <DropdownMenu.Item className={menuItemClass} onSelect={() => void mutate(`/api/drive/items/${item.id}`, json("PATCH", { trashed: true }), t("drive.trashed"))}><Trash2 size={16} />{t("drive.moveToTrash")}</DropdownMenu.Item>}
 												{item.trashedAt && <DropdownMenu.Item className={menuItemClass} onSelect={() => void (item.source ? mutate("/api/drive/attachments", json("POST", { action: "restore", ids: [item.id] }), t("drive.restored")) : mutate(`/api/drive/items/${item.id}`, json("PATCH", { trashed: false }), t("drive.restored")))}><RotateCcw size={16} />{t("drive.restore")}</DropdownMenu.Item>}
-												{item.trashedAt && <DropdownMenu.Item className={clsx(menuItemClass, "text-red-600")} onSelect={() => { if (window.confirm(t("drive.confirmDelete", { name: item.name }))) void (item.source ? mutate("/api/drive/attachments", json("POST", { action: "delete", ids: [item.id] }), t("drive.deleted")) : mutate(`/api/drive/items/${item.id}`, { method: "DELETE" }, t("drive.deleted"))); }}><X size={16} />{t("drive.deleteForever")}</DropdownMenu.Item>}
+												{item.trashedAt && <DropdownMenu.Item className={clsx(menuItemClass, "text-red-600")} onSelect={async () => { if ((await confirmAction(t("drive.confirmDelete", { name: item.name })))) void (item.source ? mutate("/api/drive/attachments", json("POST", { action: "delete", ids: [item.id] }), t("drive.deleted")) : mutate(`/api/drive/items/${item.id}`, { method: "DELETE" }, t("drive.deleted"))); }}><X size={16} />{t("drive.deleteForever")}</DropdownMenu.Item>}
 											</DropdownMenu.Content>
 										</DropdownMenu.Portal>
 									</DropdownMenu.Root>
@@ -345,7 +358,7 @@ export default function DrivePage() {
 
 			<Dialog open={!!naming} onOpenChange={(openState) => { if (!openState) setNaming(null); }}>
 				<DialogContent>
-					<DialogHeader><DialogTitle>{naming?.mode === "create" ? t("drive.newFolder") : t("drive.renameTitle")}</DialogTitle></DialogHeader>
+					<DialogHeader><DialogTitle>{naming?.mode === "create" ? <>{t("drive.newFolder")}{naming.parentId === null && (view !== "my" || !canWrite) && <> · {t("drive.myDrive")}</>}</> : t("drive.renameTitle")}</DialogTitle></DialogHeader>
 					<form onSubmit={submitName} className="space-y-5">
 						<Input autoFocus value={naming?.value ?? ""} onChange={(event) => setNaming((current) => current && { ...current, value: event.target.value })} onFocus={(event) => event.currentTarget.select()} aria-label={t("drive.folderName")} maxLength={255} />
 						<div className="flex justify-end gap-2">

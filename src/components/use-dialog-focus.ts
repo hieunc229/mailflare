@@ -11,6 +11,23 @@ export function getFocusable(container: HTMLElement): HTMLElement[] {
 	return [...container.querySelectorAll<HTMLElement>(FOCUSABLE)].filter((element) => element.offsetParent !== null || element === document.activeElement);
 }
 
+function ownsPortaledFocus(root: HTMLElement, active: Element): boolean {
+	const scopes = [root];
+	const seen = new Set<Element>(scopes);
+	for (const scope of scopes) {
+		for (const controller of scope.querySelectorAll<HTMLElement>("[aria-controls]")) {
+			for (const id of controller.getAttribute("aria-controls")!.split(/\s+/)) {
+				const controlled = document.getElementById(id);
+				if (!controlled || seen.has(controlled) || !controlled.matches('[role="dialog"], [role="listbox"], [role="menu"], [data-ui-popup]')) continue;
+				if (controlled.contains(active)) return true;
+				seen.add(controlled);
+				scopes.push(controlled);
+			}
+		}
+	}
+	return false;
+}
+
 export function useDialogFocus(container: RefObject<HTMLElement | null>, initialFocus?: RefObject<HTMLElement | null>) {
 	const [opener] = useState(() => (typeof document !== "undefined" && document.activeElement instanceof HTMLElement ? document.activeElement : null));
 
@@ -20,6 +37,9 @@ export function useDialogFocus(container: RefObject<HTMLElement | null>, initial
 
 		function onKeyDown(event: KeyboardEvent) {
 			if (event.key !== "Tab" || !root) return;
+			const topmostDialog = [...document.querySelectorAll<HTMLElement>('[role="dialog"]')].at(-1);
+			if (topmostDialog && topmostDialog !== root && !topmostDialog.contains(root) && topmostDialog.contains(document.activeElement)) return;
+			if (document.activeElement && !root.contains(document.activeElement) && ownsPortaledFocus(root, document.activeElement)) return;
 			const focusable = getFocusable(root);
 			if (focusable.length === 0) {
 				event.preventDefault();

@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { Providers } from "@/components/providers";
+import { InstallationDialogs } from "@/components/ui/installation-dialogs";
 import { LanguageProvider } from "@/components/language-provider";
 import { DEFAULT_LOCALE, getDirection } from "@/lib/i18n/utils";
 import { getRequestLocale, loadServerMessages } from "@/lib/i18n/server";
@@ -8,6 +9,7 @@ import { sidebarBootstrapScript } from "@/components/sidebar-state-utils";
 import { themeBootstrapScript } from "@/components/theme-utils";
 import { getHomeBranding } from "./home-server-utils";
 import "./globals.css";
+import "@/styles/installation-overrides.css";
 
 const geistSans = Geist({
 	variable: "--font-geist-sans",
@@ -58,8 +60,8 @@ export default async function RootLayout({ children }: Readonly<{ children: Reac
 				<script dangerouslySetInnerHTML={{ __html: themeBootstrapScript }} />
 				<link rel="icon" href="/api/branding/icon"></link>
 			</head>
-			<body className={`${geistSans.variable} ${geistMono.variable} antialiased`}>
-				<LanguageProvider initialLocale={locale} initialMessages={messages}><Providers initialBranding={branding}>{children}</Providers></LanguageProvider>
+			<body data-ui-overrides className={`${geistSans.variable} ${geistMono.variable} antialiased`}>
+				<LanguageProvider initialLocale={locale} initialMessages={messages}><InstallationDialogs /><Providers initialBranding={branding}>{children}</Providers></LanguageProvider>
 			</body>
 		</html>
 	);

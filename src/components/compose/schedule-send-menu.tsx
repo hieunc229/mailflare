@@ -4,6 +4,7 @@ import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import { useState } from "react";
 import { ChevronDown, X } from "lucide-react";
 import { useLanguage } from "@/components/language-provider";
+import { Input } from "@/components/ui/input";
 import { NewTemplateDialog } from "./new-template-dialog";
 import { TemplateMenu } from "./template-menu";
 import {
@@ -95,7 +96,7 @@ export function ScheduleSendMenu({ disabled, value, onChange, mailboxId, from, o
 					<DropdownMenu.Label className="px-3 pb-1 pt-2 text-xs font-medium text-neutral-500">
 						{t("schedule.pick", { timeZone: getUserTimeZone() })}
 					</DropdownMenu.Label>
-					<input
+					<Input
 						type="datetime-local"
 						min={formatDateTimeLocal(new Date())}
 						value={pickedText ?? (value ? formatDateTimeLocal(value) : "")}
@@ -103,6 +104,7 @@ export function ScheduleSendMenu({ disabled, value, onChange, mailboxId, from, o
 						onKeyDown={(event) => event.stopPropagation()}
 						aria-invalid={pastPicked}
 						aria-describedby={pastPicked ? "schedule-past-time" : undefined}
+						aria-label={t("schedule.pick", { timeZone: getUserTimeZone() })}
 						className="mx-2 mb-2 h-9 rounded-md border border-neutral-200 px-2 text-sm outline-none focus:border-blue-400"
 					/>
 					{pastPicked && <p id="schedule-past-time" role="alert" className="mx-2 mb-2 text-xs text-red-600">{t("schedule.pastTime")}</p>}

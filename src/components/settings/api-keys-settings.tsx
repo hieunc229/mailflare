@@ -1,5 +1,7 @@
 "use client";
 
+import { confirmAction } from "@/components/ui/installation-dialogs";
+
 import { mobilePrimaryActionAboveNavClass } from "@/components/page-header-utils";
 import { useEffect, useState } from "react";
 import { Copy, KeyRound, Plus, Trash2 } from "lucide-react";
@@ -62,7 +64,7 @@ export function ApiKeysSettings() {
 	}
 
 	async function revoke(key: ManagedApiKey) {
-		if (!window.confirm(t("apiKeys.revokeConfirm", { name: key.name }))) return;
+		if (!(await confirmAction(t("apiKeys.revokeConfirm", { name: key.name })))) return;
 		setRevokingId(key.id);
 		setError(null);
 		try {

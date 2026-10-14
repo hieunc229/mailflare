@@ -33,8 +33,8 @@ test("a sequence matches when it ends the buffer", () => {
 	assert.equal(findSequenceMatch(["g", "!"], shortcuts), shortcuts[1]);
 });
 
-test("a lone key only matches when it is the whole buffer", () => {
-	assert.equal(findSequenceMatch(["e"], shortcuts), shortcuts[2]);
+test("single keys are left to the modifier-aware shortcut handler", () => {
+	assert.equal(findSequenceMatch(["e"], shortcuts), undefined);
 	assert.equal(findSequenceMatch(["j", "e"], shortcuts), undefined);
 	assert.equal(findSequenceMatch([], shortcuts), undefined);
 });

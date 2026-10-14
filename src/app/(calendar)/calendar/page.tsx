@@ -1,5 +1,9 @@
 "use client";
 
+import { confirmAction } from "@/components/ui/installation-dialogs";
+
+import { CustomSelect } from "@/components/ui/custom-select";
+
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import type { DragEvent, PointerEvent as ReactPointerEvent } from "react";
@@ -215,7 +219,7 @@ export default function CalendarPage() {
 
   async function deleteEvent(id: string) {
     const recurring = editing && editing.repeat !== "none";
-    if (!window.confirm(recurring ? t("calendar.deleteFuture") : t("calendar.deleteEvent"))) return;
+    if (!(await confirmAction(recurring ? t("calendar.deleteFuture") : t("calendar.deleteEvent")))) return;
     setPendingAction(id);
     try {
       const effectiveFrom = recurring ? new Date().toISOString() : undefined;
@@ -456,11 +460,11 @@ export default function CalendarPage() {
               </DropdownMenu.Portal>
             </DropdownMenu.Root>
             <div className="relative max-md:hidden">
-              <select value={view} onChange={(event) => setView(event.target.value as CalendarView)} aria-label={t("calendar.view")} className="h-10 appearance-none rounded-full border-0 bg-white pl-4 pr-10 text-sm font-medium text-neutral-700 hover:bg-neutral-50">
+              <CustomSelect value={view} onChange={(event) => setView(event.target.value as CalendarView)} aria-label={t("calendar.view")} className="h-10 appearance-none rounded-full border-0 bg-white pl-4 pr-10 text-sm font-medium text-neutral-700 hover:bg-neutral-50">
                 <option value="week">{t("calendar.week")}</option>
                 <option value="day">{t("calendar.day")}</option>
-              </select>
-              <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-5 w-5 -translate-y-1/2 text-neutral-600" />
+              </CustomSelect>
+
             </div>
             <Button disabled={pendingAction !== null} onClick={() => openNewEvent()} className={clsx("ml-1 max-md:ml-0 h-10 rounded-full bg-blue-600 px-4 text-white hover:bg-blue-500", mobilePrimaryActionClass)}><Plus className="h-5 w-5" />{t("calendar.newEvent")}</Button>
           </div>
@@ -575,15 +579,15 @@ export default function CalendarPage() {
                 <Repeat2 aria-hidden="true" className="mt-2 h-5 w-5 text-neutral-600" />
                 <div className="min-w-0">
                   <div className="relative">
-                    <select value={repeat} onChange={(event) => setRepeat(event.target.value as CalendarRepeat)} aria-label={t("calendar.repeat")}
+                    <CustomSelect value={repeat} onChange={(event) => setRepeat(event.target.value as CalendarRepeat)} aria-label={t("calendar.repeat")}
                     className="h-9 w-full appearance-none rounded-md border border-transparent bg-transparent pl-2 pr-8 text-sm text-neutral-700 outline-none hover:bg-neutral-50 focus:border-blue-600 focus:bg-white">
                     <option value="none">{t("calendar.repeat.none")}</option>
                     <option value="daily">{t("calendar.repeat.daily")}</option>
                     <option value="weekly">{t("calendar.repeat.weekly")}</option>
                     <option value="monthly">{t("calendar.repeat.monthly")}</option>
                     <option value="weekdays">{t("calendar.repeat.weekdays")}</option>
-                    </select>
-                    <ChevronDown aria-hidden="true" className="pointer-events-none absolute right-2 top-1/2 h-4 w-4 -translate-y-1/2 text-neutral-500" />
+                    </CustomSelect>
+
                   </div>
                   {repeat === "weekdays" && (
                     <div role="group" aria-label={t("calendar.repeatOnWeekdays")} className="flex flex-wrap gap-1.5 px-2 pt-1">

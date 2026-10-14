@@ -1,0 +1,128 @@
+/* Shared control styling is scoped so component integrations stay small. */
+:root {
+	--mf-control-border: var(--border);
+	--mf-control-surface: var(--card);
+	--mf-control-hover: var(--muted);
+}
+
+body[data-ui-overrides] *,
+body[data-ui-overrides] *::before,
+body[data-ui-overrides] *::after {
+	box-shadow: none !important;
+	text-shadow: none !important;
+}
+
+body[data-ui-overrides] :is(button, a, input, textarea, [tabindex]):focus-visible {
+	outline: 2px solid var(--primary) !important;
+	outline-offset: 2px;
+	border-color: var(--primary) !important;
+}
+
+body[data-ui-overrides] :is(a, button:not([data-ui-select-trigger]):not([aria-haspopup="dialog"])):focus-visible {
+	text-decoration: underline;
+	text-underline-offset: 0.2em;
+}
+
+body[data-ui-overrides] [data-ui-popup="select"] [role="option"] > span:first-child {
+	min-inline-size: 0;
+	flex: 1;
+	overflow-wrap: anywhere;
+	white-space: normal;
+}
+
+body[data-ui-overrides] [data-ui-select-trigger] {
+	padding-inline-end: 0.75rem;
+}
+
+body[data-ui-overrides] input[type="number"] {
+	appearance: textfield;
+	-moz-appearance: textfield;
+}
+
+body[data-ui-overrides] input[type="number"]::-webkit-inner-spin-button,
+body[data-ui-overrides] input[type="number"]::-webkit-outer-spin-button {
+	-webkit-appearance: none;
+	margin: 0;
+}
+
+body[data-ui-overrides] :is(.dialog-content, [role="menu"], [role="listbox"], [data-mf-popup]) {
+	border: 1px solid var(--mf-control-border);
+}
+
+body[data-ui-overrides] :is([role="menu"], [role="listbox"], [data-mf-popup]) {
+	background: var(--mf-control-surface);
+	color: var(--foreground);
+	border-radius: 0.625rem;
+}
+
+body[data-ui-overrides] :is([role="menuitem"], [role="menuitemcheckbox"], [role="option"]) {
+	border-radius: 0.375rem;
+	line-height: 1.5;
+}
+
+body[data-ui-overrides] :is([role="menuitem"], [role="menuitemcheckbox"], [role="option"])[data-highlighted] {
+	background: var(--mf-control-hover);
+}
+
+body[data-ui-overrides] :is(input, textarea) {
+	caret-color: var(--primary);
+}
+
+body[data-ui-overrides] input[type="checkbox"]:not(.sr-only):not([class*="appearance-none"]) {
+	appearance: none;
+	inline-size: 1rem;
+	block-size: 1rem;
+	border: 1px solid var(--mf-control-border);
+	border-radius: 0.25rem;
+	background: var(--mf-control-surface);
+	vertical-align: middle;
+	cursor: pointer;
+}
+
+body[data-ui-overrides] input[type="checkbox"]:not(.sr-only):not([class*="appearance-none"]):checked {
+	border-color: var(--primary);
+	background: var(--primary) center / 0.875rem no-repeat url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='m3 8 3 3 7-7' fill='none' stroke='white' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+}
+
+body[data-ui-overrides] input[type="checkbox"]:not(.sr-only):not([class*="appearance-none"]):indeterminate {
+	border-color: var(--primary);
+	background: var(--primary) center / 0.875rem no-repeat url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M4 8h8' stroke='white' stroke-width='2' stroke-linecap='round'/%3E%3C/svg%3E");
+}
+
+body[data-ui-overrides] input[type="radio"]:not(.sr-only) {
+	appearance: none;
+	inline-size: 1rem;
+	block-size: 1rem;
+	border: 1px solid var(--mf-control-border);
+	border-radius: 50%;
+	background: var(--mf-control-surface);
+}
+
+body[data-ui-overrides] input[type="radio"]:checked {
+	border-color: var(--primary);
+	background: radial-gradient(circle, var(--primary) 0 38%, var(--mf-control-surface) 42%);
+}
+
+body[data-ui-overrides] input:is([type="checkbox"], [type="radio"]):disabled {
+	opacity: 0.5;
+	cursor: not-allowed;
+}
+
+body[data-ui-overrides] ::selection {
+	background: var(--primary);
+	color: var(--primary-foreground);
+}
+
+body[data-ui-overrides] [data-message-selected="true"] {
+	background-color: color-mix(in srgb, var(--primary) 24%, var(--card)) !important;
+}
+
+.dark body[data-ui-overrides] [data-message-selected="true"] {
+	background-color: color-mix(in srgb, var(--primary) 36%, var(--card)) !important;
+}
+
+body[data-ui-overrides] :is([role="listbox"], [role="menu"], [data-mf-popup]) {
+	scrollbar-width: thin;
+	scrollbar-color: var(--mf-control-border) transparent;
+	overscroll-behavior: contain;
+}
