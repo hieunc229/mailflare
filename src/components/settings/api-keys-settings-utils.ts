@@ -5,6 +5,7 @@ import type { ManagedApiKey, McpKeyScope } from "./api-keys-settings-types";
 
 export const MCP_KEY_SCOPES: { value: McpKeyScope; labelKey: TranslationKey; descriptionKey: TranslationKey }[] = [
 	{ value: "mcp:read", labelKey: "apiKeys.mcpRead.label", descriptionKey: "apiKeys.mcpRead.description" },
+	{ value: "mcp:note", labelKey: "apiKeys.mcpNote.label", descriptionKey: "apiKeys.mcpNote.description" },
 	{ value: "mcp:draft", labelKey: "apiKeys.mcpDraft.label", descriptionKey: "apiKeys.mcpDraft.description" },
 	{ value: "mcp:organize", labelKey: "apiKeys.mcpOrganize.label", descriptionKey: "apiKeys.mcpOrganize.description" },
 	{ value: "mcp:request-send", labelKey: "apiKeys.mcpRequestSend.label", descriptionKey: "apiKeys.mcpRequestSend.description" },

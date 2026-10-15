@@ -2006,5 +2006,16 @@
 	"drive.noPreview": "Não há pré-visualização para este tipo de arquivo.",
 	"drive.publicNotFound": "Este link não está disponível. Ele pode ter sido desativado ou o arquivo pode ter sido removido.",
 	"drive.sharedBy": "Compartilhado por {name}",
-	"drive.save": "Salvar"
+	"drive.save": "Salvar",
+	"note.add": "Add a note",
+	"note.placeholder": "Only people who can read this mailbox can see this.",
+	"note.save": "Save",
+	"note.clear": "Clear",
+	"note.edit": "Edit",
+	"note.cancel": "Cancel",
+	"note.savedBy": "Saved by {name}",
+	"note.failed": "Unable to save the note",
+	"note.tooLong": "Note is too long",
+	"apiKeys.mcpNote.label": "Write notes",
+	"apiKeys.mcpNote.description": "Save the note on a conversation. It is never sent."
 }

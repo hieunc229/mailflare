@@ -65,7 +65,7 @@ There are no AI SDK/Agents/MCP dependencies in the inspected `package.json`.
 - Draft cards offer Open in composer, Regenerate, and Discard. Regenerate creates a new suggestion or requires explicit replacement; it must not overwrite a human-edited draft.
 - Render chat Markdown without raw HTML or automatic remote images. Generate email text separately from chat commentary; convert text safely for the existing rich-text composer and apply signatures once.
 
-### 2. Nine built-in email tools
+### 2. Ten built-in email tools
 
 Use one schema/handler registry with adapters for the model and MCP. Chat binds its mailbox on the server; the model cannot switch it by inventing an argument. MCP accepts a mailbox ID and validates it against the authenticated principal's allowed mailboxes.
 
@@ -73,7 +73,8 @@ Use one schema/handler registry with adapters for the model and MCP. Chat binds 
 | --- | --- | --- |
 | `list_emails` | Folder/status filter, cursor, bounded limit; returns metadata and next cursor. | Authorized mailbox only; default 20, maximum 50. Show only the caller's drafts. |
 | `get_email` | Message ID; returns text body, metadata, attachment metadata, and truncation information. | Verify message belongs to the active mailbox; omit attachment bytes and internal storage keys. |
-| `get_thread` | Anchor message ID; returns chronological messages and continuation/truncation information. | Adapt existing thread service; enforce mailbox and draft-owner boundaries on every returned row. |
+| `get_thread` | Anchor message ID; returns chronological messages, the internal note, and continuation/truncation information. | Adapt existing thread service; enforce mailbox and draft-owner boundaries on every returned row. The note is beside the messages, marked internal, and is not a message. |
+| `set_note` | Anchor message ID and body; returns the saved note, or null when cleared. | One note per conversation, visible to whoever can already read the mailbox. Never quoted, forwarded, searched, or sent. An empty body clears it. MCP scope is `mcp:note`. The in-app assistant does not call it. |
 | `search_emails` | Query, optional folder, cursor; returns snippets and IDs. | Reuse Mailflare search semantics and indexes; no model-supplied SQL. |
 | `draft_email` | Recipients, subject, body; returns draft ID and composer link. | Require sender permission; resolve From server-side. Save under the requesting user. |
 | `draft_reply` | Source message ID, body, reply/reply-all mode; returns linked draft. | Derive recipients and RFC threading headers server-side. Handle Reply-To, aliases, and self-address exclusion using shared reply logic. |
@@ -87,7 +88,7 @@ Return structured results such as IDs, operation status, revision, pagination, a
 
 ### 3. Explicit send approval
 
-The nine model tools cannot invoke `sendEmail`, enqueue outbound jobs, approve messages, or change scheduling. A user asking “send it” in chat opens a review action; natural-language assent is not a reusable authorization token.
+These tools cannot invoke `sendEmail`, enqueue outbound jobs, approve messages, or change scheduling. A user asking “send it” in chat opens a review action; natural-language assent is not a reusable authorization token.
 
 1. Persist a draft revision before presenting approval. Show From, To, CC, BCC, subject, body, attachment list, and any scheduled delivery time.
 2. Create a pending approval bound to the user, mailbox, draft ID/revision, and a server-calculated hash of the complete outgoing payload, including attachment identifiers/content hashes and threading headers.
@@ -128,9 +129,9 @@ Expose an MCP **server** for external clients; the built-in assistant calls the 
 
 - Serve `/mcp` over HTTPS with the official SDK's Streamable HTTP implementation. Prefer request-scoped/stateless transport. Pin a supported protocol/SDK combination and document client compatibility instead of hand-writing JSON-RPC or copying the reference's transport unchanged. MCP transport/version semantics have evolved; consult the [transport specification](https://modelcontextprotocol.io/specification/2026-07-28/basic/transports) during implementation.
 - MVP authentication: dedicated revocable Bearer API keys for clients that support custom headers. Reuse key verification, but require an explicit MCP credential kind/opt-in and mailbox allowlist; existing keys gain no new rights automatically. This is a limited compatibility mode, not a claim of universal OAuth-based MCP compatibility.
-- Add `mcp:read`, `mcp:draft`, `mcp:organize`, and `mcp:request-send` scopes. Require the matching scope plus current user/mailbox permission. `list_mailboxes` returns the intersection of current access and the key allowlist. Carry key ID in auth context for revocation/auditing; it is absent from the current `ApiAuthResult`.
+- Add `mcp:read`, `mcp:note`, `mcp:draft`, `mcp:organize`, and `mcp:request-send` scopes. Require the matching scope plus current user/mailbox permission. `list_mailboxes` returns the intersection of current access and the key allowlist. Carry key ID in auth context for revocation/auditing; it is absent from the current `ApiAuthResult`. `set_note` uses `mcp:note`, not `mcp:read`.
 - Reject mixed MCP/legacy-send/JMAP/wildcard credentials in this mode. Do not accept browser session cookies as MCP authentication. Never put keys in URLs or chat messages.
-- Expose the nine shared tools plus `list_mailboxes`, `update_draft` with expected revision, `request_send`, and `get_send_request`. Map each tool to its scope, and check scope in execution as well as discovery.
+- Expose the shared email tools, including `set_note`, plus `list_mailboxes`, `update_draft` with expected revision, `request_send`, and `get_send_request`. Map each tool to its scope, and check scope in execution as well as discovery. The in-app assistant does not receive `set_note`.
 - `request_send(draftId, expectedRevision)` returns `pending_approval`, an approval ID, and a Mailflare review URL. `get_send_request` returns pending/sent/failed/expired status to the originating authorized principal. Neither operation grants approval or sends directly. Document this intentional difference from upstream `send_email`/`send_reply`.
 - Validate Origin when present, bound inputs/results and request rates, and authenticate every request. If compatibility requires stateful sessions, bind each session to the same user/key and recheck access; a session ID is not authorization.
 - Add a connection screen showing the endpoint, supported client/auth mode, selected mailboxes, scopes, last use, and revocation. Show newly generated secrets only once; generated examples use placeholders after that.

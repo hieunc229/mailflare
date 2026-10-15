@@ -42,7 +42,9 @@ export function RichTextEditor({
 	quotedHtml,
 	disabled,
 	placeholder,
+	label,
 	className,
+	bodyClassName,
 	toolbarStart,
 	toolbarEnd,
 	footerContent,
@@ -191,7 +193,7 @@ export function RichTextEditor({
 					id={id}
 					role="textbox"
 					aria-multiline="true"
-					aria-label={t("editor.messageBody")}
+					aria-label={label ?? t("editor.messageBody")}
 					contentEditable={!disabled}
 					suppressContentEditableWarning
 					data-placeholder={placeholder}
@@ -202,6 +204,7 @@ export function RichTextEditor({
 					className={cn(
 						"email-body max-w-none px-4 py-3 text-sm text-neutral-900 outline-none",
 						"min-h-32 empty:before:pointer-events-none empty:before:text-neutral-400 empty:before:content-[attr(data-placeholder)]",
+						bodyClassName,
 						disabled && "cursor-not-allowed opacity-60",
 					)}
 				/>

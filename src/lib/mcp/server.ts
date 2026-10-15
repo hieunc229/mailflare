@@ -14,7 +14,7 @@ import { registerAdminMcpTools } from "./admin-tools";
 import { CALENDAR_TOOL_NAMES, calendarToolDescriptions, calendarToolSchemas, calendarToolScope, runCalendarTool } from "@/lib/calendar/tools";
 
 const scopeByTool: Record<EmailToolName, string> = {
-	list_emails: "mcp:read", get_email: "mcp:read", get_thread: "mcp:read", search_emails: "mcp:read",
+	list_emails: "mcp:read", get_email: "mcp:read", get_thread: "mcp:read", search_emails: "mcp:read", set_note: "mcp:note",
 	draft_email: "mcp:draft", draft_reply: "mcp:draft", edit_draft: "mcp:draft", review_draft_send: "mcp:request-send", mark_email_read: "mcp:organize", move_email: "mcp:organize", move_emails: "mcp:organize", discard_draft: "mcp:draft",
 };
 

@@ -56,7 +56,9 @@ export async function createAgentChatStream(context: AgentToolContext, text: str
 	await db.insert(agentChatMessages).values({ id: newId("chat"), conversationId: conversation.id, role: "user", content: text });
 	const prompt = history.reverse().filter((row) => row.role === "user" || row.role === "assistant").map((row) => ({ role: row.role as "user" | "assistant", content: row.content }));
 	// Sent with the latest turn rather than the system prompt so it outweighs emails named earlier in the history; never stored.
-	prompt.push({ role: "user", content: openEmailId ? `${text}\n\n(${agentCurrentEmailContext(openEmailId)})` : text });	const tools = Object.fromEntries(EMAIL_TOOL_NAMES.map((name) => [name, {
+	prompt.push({ role: "user", content: openEmailId ? `${text}\n\n(${agentCurrentEmailContext(openEmailId)})` : text });
+	// set_note is an MCP write. The in-app assistant must not save a shared note while it is drafting a reply.
+	const tools = Object.fromEntries(EMAIL_TOOL_NAMES.filter((name) => name !== "set_note").map((name) => [name, {
 		description: emailToolDescriptions[name], inputSchema: emailToolSchemas[name],
 		execute: async (input: unknown) => runEmailTool(context, name, input),
 	}]));

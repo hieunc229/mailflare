@@ -2021,5 +2021,16 @@
 	"drive.noPreview": "Для цього типу файлу попередній перегляд недоступний.",
 	"drive.publicNotFound": "Це посилання недоступне. Можливо, його вимкнено або файл видалено.",
 	"drive.sharedBy": "Поділився {name}",
-	"drive.save": "Зберегти"
+	"drive.save": "Зберегти",
+	"note.add": "Add a note",
+	"note.placeholder": "Only people who can read this mailbox can see this.",
+	"note.save": "Save",
+	"note.clear": "Clear",
+	"note.edit": "Edit",
+	"note.cancel": "Cancel",
+	"note.savedBy": "Saved by {name}",
+	"note.failed": "Unable to save the note",
+	"note.tooLong": "Note is too long",
+	"apiKeys.mcpNote.label": "Write notes",
+	"apiKeys.mcpNote.description": "Save the note on a conversation. It is never sent."
 }

@@ -6,7 +6,7 @@ import { getMailboxAccessLevel } from "@/lib/mailboxes/access";
 import { ADMIN_API_KEY_SCOPES } from "@/lib/api/scopes";
 import type { McpPrincipal } from "./types";
 
-const MCP_SCOPES = new Set(["mcp:read", "mcp:draft", "mcp:organize", "mcp:request-send", "mcp:calendar-read", "mcp:calendar-write"]);
+const MCP_SCOPES = new Set(["mcp:read", "mcp:note", "mcp:draft", "mcp:organize", "mcp:request-send", "mcp:calendar-read", "mcp:calendar-write"]);
 const ADMIN_SCOPES = new Set<string>(ADMIN_API_KEY_SCOPES);
 
 export async function authenticateMcpRequest(env: CloudflareEnv, request: Request): Promise<McpPrincipal | null> {

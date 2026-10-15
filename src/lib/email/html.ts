@@ -31,7 +31,9 @@ function mailDocument(source: string, outgoing = false): MailDocument {
 	const head = html.childNodes.find((node): node is DefaultTreeAdapterTypes.Element => "tagName" in node && node.tagName === "head")!;
 	const body = html.childNodes.find((node): node is DefaultTreeAdapterTypes.Element => "tagName" in node && node.tagName === "body")!;
 	// Fresh element names avoid collisions with mail classes/IDs and never define custom elements.
-	const token = outgoing ? outgoingScope(source) : window.crypto.randomUUID().replaceAll("-", "");
+	// randomUUID exists only in a secure context (HTTPS or localhost).
+	const randomId = window.crypto.randomUUID?.() ?? `${Date.now().toString(16)}${Math.random().toString(16).slice(2)}`;
+	const token = outgoing ? outgoingScope(source) : randomId.replaceAll("-", "");
 	const rootTag = `mail-root-${token}`;
 	const bodyTag = `mail-body-${token}`;
 	html.tagName = html.nodeName = rootTag;

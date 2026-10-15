@@ -1991,5 +1991,16 @@
 	"drive.noPreview": "ਇਸ ਫ਼ਾਈਲ ਕਿਸਮ ਲਈ ਕੋਈ ਝਲਕ ਉਪਲਬਧ ਨਹੀਂ।",
 	"drive.publicNotFound": "ਇਹ ਲਿੰਕ ਉਪਲਬਧ ਨਹੀਂ ਹੈ। ਇਹ ਬੰਦ ਕੀਤਾ ਗਿਆ ਹੋ ਸਕਦਾ ਹੈ ਜਾਂ ਫ਼ਾਈਲ ਹਟਾਈ ਗਈ ਹੋ ਸਕਦੀ ਹੈ।",
 	"drive.sharedBy": "{name} ਵੱਲੋਂ ਸਾਂਝਾ ਕੀਤਾ",
-	"drive.save": "ਸੰਭਾਲੋ"
+	"drive.save": "ਸੰਭਾਲੋ",
+	"note.add": "Add a note",
+	"note.placeholder": "Only people who can read this mailbox can see this.",
+	"note.save": "Save",
+	"note.clear": "Clear",
+	"note.edit": "Edit",
+	"note.cancel": "Cancel",
+	"note.savedBy": "Saved by {name}",
+	"note.failed": "Unable to save the note",
+	"note.tooLong": "Note is too long",
+	"apiKeys.mcpNote.label": "Write notes",
+	"apiKeys.mcpNote.description": "Save the note on a conversation. It is never sent."
 }

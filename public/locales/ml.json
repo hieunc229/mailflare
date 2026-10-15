@@ -1991,5 +1991,16 @@
 	"drive.noPreview": "ഈ ഫയൽ തരത്തിന് പ്രിവ്യൂ ലഭ്യമല്ല.",
 	"drive.publicNotFound": "ഈ ലിങ്ക് ലഭ്യമല്ല. ഇത് ഓഫാക്കിയിരിക്കാം അല്ലെങ്കിൽ ഫയൽ നീക്കം ചെയ്തിരിക്കാം.",
 	"drive.sharedBy": "{name} പങ്കിട്ടത്",
-	"drive.save": "സംരക്ഷിക്കുക"
+	"drive.save": "സംരക്ഷിക്കുക",
+	"note.add": "Add a note",
+	"note.placeholder": "Only people who can read this mailbox can see this.",
+	"note.save": "Save",
+	"note.clear": "Clear",
+	"note.edit": "Edit",
+	"note.cancel": "Cancel",
+	"note.savedBy": "Saved by {name}",
+	"note.failed": "Unable to save the note",
+	"note.tooLong": "Note is too long",
+	"apiKeys.mcpNote.label": "Write notes",
+	"apiKeys.mcpNote.description": "Save the note on a conversation. It is never sent."
 }

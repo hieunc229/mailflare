@@ -2006,5 +2006,16 @@
 	"drive.noPreview": "Anteprima non disponibile per questo tipo di file.",
 	"drive.publicNotFound": "Questo link non è disponibile. Potrebbe essere stato disattivato o il file rimosso.",
 	"drive.sharedBy": "Condiviso da {name}",
-	"drive.save": "Salva"
+	"drive.save": "Salva",
+	"note.add": "Add a note",
+	"note.placeholder": "Only people who can read this mailbox can see this.",
+	"note.save": "Save",
+	"note.clear": "Clear",
+	"note.edit": "Edit",
+	"note.cancel": "Cancel",
+	"note.savedBy": "Saved by {name}",
+	"note.failed": "Unable to save the note",
+	"note.tooLong": "Note is too long",
+	"apiKeys.mcpNote.label": "Write notes",
+	"apiKeys.mcpNote.description": "Save the note on a conversation. It is never sent."
 }

@@ -180,7 +180,7 @@ To send a reply that threads correctly in the recipient's client, pass the paren
 }
 ```
 
-`GET /api/messages/{id}/thread` (session auth) returns every stored message in the same conversation, oldest first, excluding drafts and trash. `GET /api/messages?group=thread` collapses a list to one row per conversation (its newest message matching the filter) and adds `threadCount`, `threadUnread` and `threadMessageIds`, the ids that row stands for within the current filter, so bulk actions can act on the whole conversation.
+`GET /api/messages/{id}/thread` (session auth) returns every stored message in the same conversation, oldest first, excluding drafts and trash. The same response includes `note`, the one note on that conversation, or `null`. `PUT /api/messages/{id}/note` with `{ body }` saves it and `DELETE` clears it. Anyone who can read the mailbox can see it. Reply, forward, search, and JMAP do not include it, and it is never sent. `GET /api/messages?group=thread` collapses a list to one row per conversation (its newest message matching the filter) and adds `threadCount`, `threadUnread` and `threadMessageIds`, the ids that row stands for within the current filter, so bulk actions can act on the whole conversation.
 
 `POST /api/messages/bulk` (session auth) with `action: "delete"` permanently removes the given messages, including their raw MIME and attachment objects, but only those already in Trash or Spam; others are skipped and counted in `skipped`. `POST /api/messages/empty` with `{ mailboxId, folder: "trash" | "spam" }` permanently deletes that folder's messages in batches of 100 and returns `{ deleted, remaining }`; call it again until `remaining` is 0. Both write an `email.delete` audit entry per message with `permanent: true`.
 
@@ -222,7 +222,7 @@ When two-factor authentication is on, `POST /api/auth/login` returns `{ ok: true
 | `is:unread`, `is:read`, `is:starred` | flags |
 | `after:2026-09-01`, `before:2026-09-30` | date bounds (UTC, `before` exclusive) |
 
-Terms combine with AND. Admins can check or rebuild the index with `GET` / `POST /api/admin/search-index`; triggers keep it current, so a rebuild is only needed after restoring a backup made before the index existed.
+Terms combine with AND. Notes are not in this index, so a word that appears only in a note is not a hit. Admins can check or rebuild the index with `GET` / `POST /api/admin/search-index`; triggers keep it current, so a rebuild is only needed after restoring a backup made before the index existed.
 
 ## Real-time updates
 
