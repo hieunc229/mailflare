@@ -1991,5 +1991,16 @@
 	"drive.noPreview": "இந்தக் கோப்பு வகைக்கு முன்னோட்டம் இல்லை.",
 	"drive.publicNotFound": "இந்த இணைப்பு கிடைக்கவில்லை. அது முடக்கப்பட்டிருக்கலாம் அல்லது கோப்பு அகற்றப்பட்டிருக்கலாம்.",
 	"drive.sharedBy": "{name} பகிர்ந்தது",
-	"drive.save": "சேமி"
+	"drive.save": "சேமி",
+	"note.add": "Add a note",
+	"note.placeholder": "Only people who can read this mailbox can see this.",
+	"note.save": "Save",
+	"note.clear": "Clear",
+	"note.edit": "Edit",
+	"note.cancel": "Cancel",
+	"note.savedBy": "Saved by {name}",
+	"note.failed": "Unable to save the note",
+	"note.tooLong": "Note is too long",
+	"apiKeys.mcpNote.label": "Write notes",
+	"apiKeys.mcpNote.description": "Save the note on a conversation. It is never sent."
 }

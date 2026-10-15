@@ -1976,5 +1976,16 @@
 	"drive.noPreview": "此文件类型无法预览。",
 	"drive.publicNotFound": "此链接不可用。它可能已被关闭，或文件已被删除。",
 	"drive.sharedBy": "由 {name} 共享",
-	"drive.save": "保存"
+	"drive.save": "保存",
+	"note.add": "Add a note",
+	"note.placeholder": "Only people who can read this mailbox can see this.",
+	"note.save": "Save",
+	"note.clear": "Clear",
+	"note.edit": "Edit",
+	"note.cancel": "Cancel",
+	"note.savedBy": "Saved by {name}",
+	"note.failed": "Unable to save the note",
+	"note.tooLong": "Note is too long",
+	"apiKeys.mcpNote.label": "Write notes",
+	"apiKeys.mcpNote.description": "Save the note on a conversation. It is never sent."
 }

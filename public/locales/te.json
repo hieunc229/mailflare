@@ -1991,5 +1991,16 @@
 	"drive.sharedBy": "{name} షేర్ చేశారు",
 	"drive.save": "సేవ్ చేయండి",
 	"settings.account.generalTitle": "సాధారణం",
-	"settings.account.generalDescription": "మీ ఖాతా భాష మరియు సమయ మండలం."
+	"settings.account.generalDescription": "మీ ఖాతా భాష మరియు సమయ మండలం.",
+	"note.add": "Add a note",
+	"note.placeholder": "Only people who can read this mailbox can see this.",
+	"note.save": "Save",
+	"note.clear": "Clear",
+	"note.edit": "Edit",
+	"note.cancel": "Cancel",
+	"note.savedBy": "Saved by {name}",
+	"note.failed": "Unable to save the note",
+	"note.tooLong": "Note is too long",
+	"apiKeys.mcpNote.label": "Write notes",
+	"apiKeys.mcpNote.description": "Save the note on a conversation. It is never sent."
 }

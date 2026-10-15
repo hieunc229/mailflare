@@ -1991,5 +1991,16 @@
 	"drive.noPreview": "මෙම ගොනු වර්ගය සඳහා පෙරදසුනක් නොමැත.",
 	"drive.publicNotFound": "මෙම සබැඳිය ලබාගත නොහැක. එය අක්‍රීය කර හෝ ගොනුව ඉවත් කර තිබිය හැක.",
 	"drive.sharedBy": "{name} විසින් බෙදාගන්නා ලදී",
-	"drive.save": "සුරකින්න"
+	"drive.save": "සුරකින්න",
+	"note.add": "Add a note",
+	"note.placeholder": "Only people who can read this mailbox can see this.",
+	"note.save": "Save",
+	"note.clear": "Clear",
+	"note.edit": "Edit",
+	"note.cancel": "Cancel",
+	"note.savedBy": "Saved by {name}",
+	"note.failed": "Unable to save the note",
+	"note.tooLong": "Note is too long",
+	"apiKeys.mcpNote.label": "Write notes",
+	"apiKeys.mcpNote.description": "Save the note on a conversation. It is never sent."
 }

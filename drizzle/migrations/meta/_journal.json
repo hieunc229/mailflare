@@ -393,6 +393,13 @@
       "when": 1788850804023,
       "tag": "0063_add_account_deletion",
       "breakpoints": true
+    },
+    {
+      "idx": 56,
+      "version": "6",
+      "when": 1788850805023,
+      "tag": "0064_add_thread_notes",
+      "breakpoints": true
     }
   ]
 }

@@ -10,7 +10,7 @@ import { getMailboxAccessLevel } from "@/lib/mailboxes/access";
 import { newId } from "@/lib/ids";
 import { hasValidSessionMutationOrigin } from "@/lib/auth/origin";
 
-const createSchema = z.object({ name: z.string().trim().min(1).max(100), mailboxIds: z.array(z.string()).max(30), scopes: z.array(z.enum(["mcp:read", "mcp:draft", "mcp:organize", "mcp:request-send", "mcp:calendar-read", "mcp:calendar-write"])).min(1) });
+const createSchema = z.object({ name: z.string().trim().min(1).max(100), mailboxIds: z.array(z.string()).max(30), scopes: z.array(z.enum(["mcp:read", "mcp:note", "mcp:draft", "mcp:organize", "mcp:request-send", "mcp:calendar-read", "mcp:calendar-write"])).min(1) });
 const ADMIN_SCOPES = new Set<string>(ADMIN_API_KEY_SCOPES);
 
 export async function GET(request: Request) {

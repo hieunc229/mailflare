@@ -12,6 +12,7 @@ import { newId } from "@/lib/ids";
 import { deleteMessageWithObjects } from "@/lib/email/message-cleanup";
 import { listMessageAttachments } from "@/lib/email/attachments";
 import { htmlToReadableText } from "@/lib/email/reply-content-utils";
+import { THREAD_NOTE_MAX_LENGTH, getThreadNote, saveThreadNote, threadKeyFor } from "@/lib/email/thread-note";
 import { updateMessageStatusForUser } from "@/lib/user";
 import type { AgentToolContext, EmailToolName } from "./types";
 import { getReplyRecipients } from "./reply";
@@ -29,6 +30,10 @@ export const emailToolSchemas = {
 	list_emails: z.object({ folder: z.enum(["inbox", "sent", "scheduled", "draft", "archived", "trash", "spam"]).default("inbox"), limit, cursor: id.nullish().describe("Omit or set to null for the first page. For subsequent pages, use only the exact nextCursor returned by list_emails for this mailbox and folder. Stop when nextCursor is null. Never invent a cursor or use a page number or offset such as '0'.") }),
 	get_email: z.object({ emailId: id }),
 	get_thread: z.object({ emailId: id }),
+	set_note: z.object({
+		emailId: id,
+		body: z.string().max(THREAD_NOTE_MAX_LENGTH).describe("Note text seen only by people who can read this mailbox. Plain text is kept. An empty string clears the note. This never sends."),
+	}),
 	search_emails: z.object({ query: z.string().trim().min(1).max(300), folder: z.enum(["inbox", "sent", "scheduled", "draft", "archived", "trash", "spam"]).optional(), limit }),
 	draft_email: z.object({ to: toolEmailSchema, subject: z.string().trim().min(1).max(500), body }),
 	draft_reply: z.object({ emailId: id, body, replyAll: z.boolean().default(false) }),
@@ -51,7 +56,8 @@ export const emailToolSchemas = {
 export const emailToolDescriptions: Record<EmailToolName, string> = {
 	list_emails: "List email metadata in a mailbox folder with pagination. Omit cursor or set it to null for the first page; use the returned nextCursor for subsequent pages.",
 	get_email: "Read one email and its attachment metadata without marking it read.",
-	get_thread: "Read the recent conversation containing an email before drafting a reply.",
+	get_thread: "Read the recent conversation containing an email before drafting a reply. Includes the internal note when one is saved. The note is not part of the email.",
+	set_note: "Save the internal note on this conversation. People who can read the mailbox can see it. It is never quoted, forwarded, or sent. An empty body clears it.",
 	search_emails: "Search email subject and body in this mailbox.",
 	draft_email: "Save a new email draft. This never sends.",
 	draft_reply: "Save a reply draft with recipients and threading derived from the source email. This never sends.",
@@ -152,7 +158,18 @@ export async function runEmailTool(context: AgentToolContext, name: EmailToolNam
 		const rows = anchor.threadId
 			? await db.select().from(messages).where(and(eq(messages.mailboxId, context.mailboxId), eq(messages.threadId, anchor.threadId))).orderBy(desc(messages.createdAt)).limit(21)
 			: [anchor];
-		return { emails: rows.slice(0, 20).reverse().filter((row) => row.status !== "draft" || row.userId === context.user.id).map((row) => ({ ...publicMessage(row), text: (row.textBody || htmlToReadableText(row.htmlBody)).slice(0, 5_000) })), truncated: rows.length > 20 };
+		const note = await getThreadNote(db, context.mailboxId, threadKeyFor(anchor));
+		return { emails: rows.slice(0, 20).reverse().filter((row) => row.status !== "draft" || row.userId === context.user.id).map((row) => ({ ...publicMessage(row), text: (row.textBody || htmlToReadableText(row.htmlBody)).slice(0, 5_000) })), truncated: rows.length > 20, note: note ? { ...note, internal: true } : null };
+	}
+	if (name === "set_note") {
+		const anchor = await ownMessage(context, input.emailId as string);
+		const note = await saveThreadNote(db, {
+			mailboxId: context.mailboxId,
+			threadKey: threadKeyFor(anchor),
+			body: input.body as string,
+			userId: context.user.id,
+		});
+		return { note: note ? { ...note, internal: true } : null };
 	}
 	if (name === "draft_email") return createDraft(context, { to: input.to as string, subject: input.subject as string, body: input.body as string });
 	if (name === "draft_reply") {

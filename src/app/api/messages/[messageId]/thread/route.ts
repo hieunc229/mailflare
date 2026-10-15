@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/auth/cookies";
 import { getEnv } from "@/lib/cloudflare";
 import { getMessageThreadForUser } from "@/lib/email/thread-view";
+import { getThreadNoteForMessage } from "@/lib/email/thread-note";
 
 type MessageRouteParams = {
 	params: Promise<{ messageId: string }>;
@@ -20,6 +21,7 @@ export async function GET(request: Request, { params }: MessageRouteParams) {
 	if (!data) {
 		return NextResponse.json({ error: "Not found" }, { status: 404 });
 	}
+	const note = await getThreadNoteForMessage(env, user, messageId);
 
-	return NextResponse.json(data);
+	return NextResponse.json({ ...data, note: note === "missing" ? null : note });
 }

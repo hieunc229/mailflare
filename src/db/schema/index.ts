@@ -351,6 +351,28 @@ export const spamFeedback = sqliteTable(
 	(t) => [index("spam_feedback_mailbox_idx").on(t.mailboxId)],
 );
 
+/** One note per conversation. The body is composer HTML. Mail, reply, forward, JMAP, and search never read this table. */
+export const threadNotes = sqliteTable(
+	"thread_notes",
+	{
+		id: text("id").primaryKey(),
+		mailboxId: text("mailbox_id")
+			.notNull()
+			.references(() => mailboxes.id, { onDelete: "cascade" }),
+		threadKey: text("thread_key").notNull(),
+		body: text("body").notNull(),
+		createdByUserId: text("created_by_user_id").references(() => users.id, { onDelete: "set null" }),
+		updatedByUserId: text("updated_by_user_id").references(() => users.id, { onDelete: "set null" }),
+		createdAt: integer("created_at", { mode: "timestamp" })
+			.notNull()
+			.$defaultFn(() => new Date()),
+		updatedAt: integer("updated_at", { mode: "timestamp" })
+			.notNull()
+			.$defaultFn(() => new Date()),
+	},
+	(t) => [uniqueIndex("thread_notes_mailbox_thread_idx").on(t.mailboxId, t.threadKey)],
+);
+
 export const messageAttachments = sqliteTable(
 	"message_attachments",
 	{
@@ -889,6 +911,7 @@ export const schema = {
 	folders,
 	apiKeys,
 	messages,
+	threadNotes,
 	spamTokenStats,
 	spamReputation,
 	spamFeedback,

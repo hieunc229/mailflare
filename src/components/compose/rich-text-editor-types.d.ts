@@ -8,7 +8,10 @@ export type RichTextEditorProps = {
 	quotedHtml?: string | null;
 	disabled?: boolean;
 	placeholder?: string;
+	/** Accessible name. Defaults to the message-body label. */
+	label?: string;
 	className?: string;
+	bodyClassName?: string;
 	toolbarStart?: React.ReactNode;
 	toolbarEnd?: React.ReactNode;
 	footerContent?: React.ReactNode;

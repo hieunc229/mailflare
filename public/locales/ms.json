@@ -1991,5 +1991,16 @@
 	"drive.noPreview": "Tiada pratonton tersedia untuk jenis fail ini.",
 	"drive.publicNotFound": "Pautan ini tidak tersedia. Pautan mungkin telah dimatikan atau fail telah dialih keluar.",
 	"drive.sharedBy": "Dikongsi oleh {name}",
-	"drive.save": "Simpan"
+	"drive.save": "Simpan",
+	"note.add": "Add a note",
+	"note.placeholder": "Only people who can read this mailbox can see this.",
+	"note.save": "Save",
+	"note.clear": "Clear",
+	"note.edit": "Edit",
+	"note.cancel": "Cancel",
+	"note.savedBy": "Saved by {name}",
+	"note.failed": "Unable to save the note",
+	"note.tooLong": "Note is too long",
+	"apiKeys.mcpNote.label": "Write notes",
+	"apiKeys.mcpNote.description": "Save the note on a conversation. It is never sent."
 }

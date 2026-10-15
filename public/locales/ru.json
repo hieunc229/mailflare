@@ -2021,5 +2021,16 @@
 	"drive.noPreview": "Для этого типа файлов просмотр недоступен.",
 	"drive.publicNotFound": "Эта ссылка недоступна. Возможно, она отключена или файл удалён.",
 	"drive.sharedBy": "Поделился(-ась): {name}",
-	"drive.save": "Сохранить"
+	"drive.save": "Сохранить",
+	"note.add": "Add a note",
+	"note.placeholder": "Only people who can read this mailbox can see this.",
+	"note.save": "Save",
+	"note.clear": "Clear",
+	"note.edit": "Edit",
+	"note.cancel": "Cancel",
+	"note.savedBy": "Saved by {name}",
+	"note.failed": "Unable to save the note",
+	"note.tooLong": "Note is too long",
+	"apiKeys.mcpNote.label": "Write notes",
+	"apiKeys.mcpNote.description": "Save the note on a conversation. It is never sent."
 }

@@ -1991,5 +1991,16 @@
 	"drive.noPreview": "ಈ ಫೈಲ್ ಪ್ರಕಾರಕ್ಕೆ ಪೂರ್ವವೀಕ್ಷಣೆ ಲಭ್ಯವಿಲ್ಲ.",
 	"drive.publicNotFound": "ಈ ಲಿಂಕ್ ಲಭ್ಯವಿಲ್ಲ. ಇದನ್ನು ಆಫ್ ಮಾಡಿರಬಹುದು ಅಥವಾ ಫೈಲ್ ತೆಗೆದುಹಾಕಿರಬಹುದು.",
 	"drive.sharedBy": "{name} ಹಂಚಿಕೊಂಡಿದ್ದಾರೆ",
-	"drive.save": "ಉಳಿಸಿ"
+	"drive.save": "ಉಳಿಸಿ",
+	"note.add": "Add a note",
+	"note.placeholder": "Only people who can read this mailbox can see this.",
+	"note.save": "Save",
+	"note.clear": "Clear",
+	"note.edit": "Edit",
+	"note.cancel": "Cancel",
+	"note.savedBy": "Saved by {name}",
+	"note.failed": "Unable to save the note",
+	"note.tooLong": "Note is too long",
+	"apiKeys.mcpNote.label": "Write notes",
+	"apiKeys.mcpNote.description": "Save the note on a conversation. It is never sent."
 }
