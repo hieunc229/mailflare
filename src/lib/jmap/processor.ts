@@ -36,6 +36,9 @@ const METHODS: Record<string, JmapMethodHandler> = {
 
 export const SUPPORTED_CAPABILITIES = new Set([CAPABILITY_CORE, CAPABILITY_MAIL, CAPABILITY_SUBMISSION]);
 
+/** Every IETF JMAP capability lives in this namespace, including optional extensions. */
+const JMAP_CAPABILITY_NAMESPACE = "urn:ietf:params:jmap:";
+
 /** JSON Pointer lookup with the JMAP `*` array-flattening extension. */
 function resolvePointer(value: unknown, path: string): unknown {
 	const segments = path.split("/").slice(1).map((segment) => segment.replace(/~1/g, "/").replace(/~0/g, "~"));
@@ -131,7 +134,13 @@ export function validateRequest(body: unknown): JmapRequest {
 	const request = body as Partial<JmapRequest>;
 	if (!Array.isArray(request.using) || !Array.isArray(request.methodCalls)) throw new JmapError("notRequest");
 	for (const capability of request.using) {
-		if (!SUPPORTED_CAPABILITIES.has(String(capability))) throw new JmapError("unknownCapability", String(capability));
+		const name = String(capability);
+		// A client may list optional IETF extension capabilities on every request, even ones it never
+		// calls into, and RFC 8620 §3.3 lets it do that. Ignoring an unimplemented extension only
+		// pushes the failure to its method calls, which already answer `unknownMethod`. Capability
+		// URNs from any other namespace are a real mismatch between the client and this server.
+		if (SUPPORTED_CAPABILITIES.has(name) || name.startsWith(JMAP_CAPABILITY_NAMESPACE)) continue;
+		throw new JmapError("unknownCapability", name);
 	}
 	if (request.methodCalls.length > LIMITS.maxCallsInRequest) throw new JmapError("limit", "Too many method calls", { limit: "maxCallsInRequest" });
 	for (const call of request.methodCalls) {
