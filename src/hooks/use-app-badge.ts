@@ -2,7 +2,6 @@ import { useEffect, useState } from "react";
 import { setAppBadgeCount } from "@/lib/push/app-badge";
 import { useMessageCounts } from "./use-message-counts";
 
-/** Mirrors the all-mailbox inbox unread count onto the installed app's icon. */
 export function useAppBadge() {
 	const [supported] = useState(() => typeof navigator !== "undefined" && "setAppBadge" in navigator);
 	const { counts, isLoading } = useMessageCounts(null, supported);
@@ -12,6 +11,6 @@ export function useAppBadge() {
 	const known = !isLoading && counts !== placeholderCounts;
 
 	useEffect(() => {
-		if (supported && known) setAppBadgeCount(unread);
-	}, [supported, known, unread]);
+		if (known) setAppBadgeCount(unread);
+	}, [known, unread]);
 }
