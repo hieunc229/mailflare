@@ -139,11 +139,17 @@ export function buildEmailObject(row: MessageRow, attachments: AttachmentRow[], 
 export async function loadAttachmentsByMessage(ctx: JmapContext, messageIds: string[]): Promise<Map<string, AttachmentRow[]>> {
 	const result = new Map<string, AttachmentRow[]>();
 	if (messageIds.length === 0) return result;
-	const rows = await ctx.db.select().from(messageAttachments).where(and(inArray(messageAttachments.messageId, messageIds), isNull(messageAttachments.trashedAt)));
-	for (const row of rows) {
-		const list = result.get(row.messageId) ?? [];
-		list.push(row);
-		result.set(row.messageId, list);
+	// D1 caps bound parameters per query at 100; this predicate binds only
+	// message ids, so slice at exactly 100 (mirroring the revision query).
+	// Dedupe so a repeated id cannot append its attachments twice.
+	const unique = [...new Set(messageIds)];
+	for (let offset = 0; offset < unique.length; offset += 100) {
+		const rows = await ctx.db.select().from(messageAttachments).where(and(inArray(messageAttachments.messageId, unique.slice(offset, offset + 100)), isNull(messageAttachments.trashedAt)));
+		for (const row of rows) {
+			const list = result.get(row.messageId) ?? [];
+			list.push(row);
+			result.set(row.messageId, list);
+		}
 	}
 	return result;
 }

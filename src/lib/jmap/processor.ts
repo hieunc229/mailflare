@@ -117,7 +117,9 @@ export async function processRequest(ctx: JmapContext, request: JmapRequest): Pr
 				responses.push(["error", error.toMethodError(), callId]);
 			} else {
 				console.error(`JMAP ${name} failed`, error);
-				responses.push(["error", { type: "serverFail", description: error instanceof Error ? error.message : "Unexpected error" }, callId]);
+			// error.message can embed SQL text with bound parameters; the client
+			// only needs the logged detail, not the query.
+			responses.push(["error", { type: "serverFail", description: "The method failed on the server" }, callId]);
 			}
 		}
 	}
