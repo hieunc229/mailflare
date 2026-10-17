@@ -1,4 +1,5 @@
 import { authFetch, clearClientSessionToken, setClientSessionToken } from "@/lib/auth/client";
+import { setAppBadgeCount } from "@/lib/push/app-badge";
 
 /** Returns true when another signed-in account on this browser took over. */
 export async function logoutClientSession(): Promise<boolean> {
@@ -13,6 +14,7 @@ export async function logoutClientSession(): Promise<boolean> {
 		// Local logout must complete even when the server request is unavailable.
 	} finally {
 		clearClientSessionToken();
+		setAppBadgeCount(0);
 	}
 	if (!nextToken) return false;
 	setClientSessionToken(nextToken);
