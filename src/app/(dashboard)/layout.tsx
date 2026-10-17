@@ -24,6 +24,7 @@ import clsx from "clsx";
 import { useDashboardState } from "./dashboard-state";
 import { useAssistantAvailability } from "./use-assistant-availability";
 import { RouteTitle } from "@/components/route-title";
+import { useAppBadge } from "@/hooks/use-app-badge";
 
 export default function DashboardLayout({
   children,
@@ -34,6 +35,7 @@ export default function DashboardLayout({
   const { assistantOpen, setAssistantOpen, assistantFullSize, setAssistantFullSize } = useDashboardState();
   const assistantEnabled = useAssistantAvailability();
   const assistantVisible = assistantEnabled === true && assistantOpen;
+  useAppBadge();
 
   useEffect(() => {
     if (assistantEnabled === false && (assistantOpen || assistantFullSize)) {
