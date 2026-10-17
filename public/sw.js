@@ -6,6 +6,19 @@ const DEFAULT_NOTIFICATION = {
 	url: "/inbox",
 };
 
+async function syncAppBadge() {
+	if (!("setAppBadge" in self.navigator)) return;
+	try {
+		const response = await fetch("/api/messages/counts", { credentials: "include" });
+		if (!response.ok) return;
+		const unread = (await response.json())?.counts?.folders?.inbox?.unread;
+		if (typeof unread !== "number") return;
+		await (unread > 0 ? self.navigator.setAppBadge(unread) : self.navigator.clearAppBadge());
+	} catch {
+		// Leave the badge as it was when the network is down or the API rejects outside an installed app.
+	}
+}
+
 self.addEventListener("push", (event) => {
 	event.waitUntil(
 		(async () => {
@@ -19,13 +32,16 @@ self.addEventListener("push", (event) => {
 				// Keep the generic notification if a provider delivers an empty or malformed payload.
 			}
 
-			await self.registration.showNotification(payload.title, {
-				body: payload.body,
-				icon: payload.icon,
-				badge: payload.badge,
-				tag: payload.tag,
-				data: { url: payload.url },
-			});
+			await Promise.all([
+				self.registration.showNotification(payload.title, {
+					body: payload.body,
+					icon: payload.icon,
+					badge: payload.badge,
+					tag: payload.tag,
+					data: { url: payload.url },
+				}),
+				syncAppBadge(),
+			]);
 		})(),
 	);
 });
