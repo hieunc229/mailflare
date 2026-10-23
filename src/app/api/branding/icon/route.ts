@@ -10,14 +10,17 @@ export const revalidate = 0;
 
 async function getDefaultIcon(env: CloudflareEnv): Promise<Response> {
 	const asset = await env.ASSETS.fetch("https://mailflare.local/icon-96.png");
-	return new Response(await asset.arrayBuffer(), {
+	const headers = new Headers(asset.headers);
+	// The asset binding defaults to revalidation; this endpoint uses a versioned URL on changes.
+	if (asset.ok) headers.set("Cache-Control", "public, max-age=3600");
+	return new Response(asset.body, {
 		status: asset.status,
 		statusText: asset.statusText,
-		headers: asset.headers,
+		headers,
 	});
 }
 
-export async function GET(request: Request) {
+export async function GET() {
 	const env = await getEnvAsync();
 	if (!(await getLicenseEntitlements(env)).canCustomizeBranding) return getDefaultIcon(env);
 	try {

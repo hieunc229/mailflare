@@ -47,9 +47,13 @@ export async function getAvatarImageResponse(
 		"Content-Type": object.httpMetadata?.contentType ?? "application/octet-stream",
 		"X-Content-Type-Options": "nosniff",
 		"Content-Security-Policy": "default-src 'none'; img-src 'self'; sandbox",
+		// Uploads change the URL's version. Unversioned URLs refresh within five minutes
+		// without an authenticated DB/storage round trip on every component remount.
 		"Cache-Control": url.searchParams.has("v")
 			? "private, max-age=31536000, immutable"
-			: "private, no-cache",
+			: "private, max-age=300",
+		// The same URL can resolve to different images after switching accounts.
+		Vary: "Cookie, Authorization",
 		ETag: object.httpEtag,
 	});
 	if (request.headers.get("If-None-Match") === object.httpEtag) {
