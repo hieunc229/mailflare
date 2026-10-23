@@ -110,6 +110,13 @@ export function ComposeForm({
 	const pendingSave = useRef<(() => Promise<void>) | null>(null);
 	const draftGeneration = useRef(0);
 	const draftIdRef = useRef<string | null>(null);
+	const agentRevisionRef = useRef(agentRevision);
+	useEffect(() => {
+		agentRevisionRef.current = agentRevision;
+	}, [agentRevision]);
+	// A pending human send review owns this snapshot. Autosaving after creating
+	// an approval increments its revision and makes confirmation impossible.
+	const reviewInProgressRef = useRef(false);
 	const saveQueue = useRef<Promise<void>>(Promise.resolve());
 	const uploadedFiles = useRef(new WeakSet<File>());
 	const rejectedFiles = useRef(new WeakSet<File>());
@@ -243,13 +250,13 @@ export function ComposeForm({
 		const signatureOnly = bodyContent === (selectedMailbox?.signature?.trim() ?? "");
 		const hasContent =
 			to.length > 0 || cc.length > 0 || bcc.length > 0 || subject.trim() || quotedHtml || attachments.length > 0 || (bodyContent && !signatureOnly);
-		if (!fromAddr || !hasContent || loadingDraft) return;
+		if (!fromAddr || !hasContent || loadingDraft || reviewInProgressRef.current) return;
 		if (saveTimer.current) clearTimeout(saveTimer.current);
 
 		const generation = draftGeneration.current;
 		const save = () => {
 			const run = saveQueue.current.then(async () => {
-				if (generation !== draftGeneration.current) return;
+				if (generation !== draftGeneration.current || reviewInProgressRef.current) return;
 				const payload = {
 					mailboxId: selectedMailbox?.id,
 					from: fromAddr,
@@ -278,7 +285,7 @@ export function ComposeForm({
 				draftIdRef.current = data.draft.id;
 				setDraftId(data.draft.id);
 				const pending = attachments.filter((attachment) => !uploadedFiles.current.has(attachment.file) && !rejectedFiles.current.has(attachment.file));
-				if (agentRevision !== null || pending.length === 0) return;
+				if (agentRevisionRef.current !== null || pending.length === 0) return;
 				const form = new FormData();
 				for (const attachment of pending) form.append("attachments", attachment.file);
 				const uploaded = await authFetch(`/api/drafts/${data.draft.id}/attachments`, { method: "POST", body: form });
@@ -304,7 +311,7 @@ export function ComposeForm({
 		return () => {
 			if (saveTimer.current) clearTimeout(saveTimer.current);
 		};
-	}, [agentRevision, attachments, bcc, cc, fromAddr, html, loadingDraft, quotedHtml, selectedMailbox?.id, selectedMailbox?.signature, subject, threading, to]);
+	}, [attachments, bcc, cc, fromAddr, html, loadingDraft, quotedHtml, selectedMailbox?.id, selectedMailbox?.signature, subject, threading, to]);
 
 	useEffect(() => {
 		if (!draftIdToLoad || loadingDraft) return;
@@ -330,6 +337,9 @@ export function ComposeForm({
 			setToast({ type: "error", message: t("schedule.pastTime") });
 			return;
 		}
+		// Freeze autosave for an AI draft before waiting for any queued save.
+		// Otherwise a debounced PATCH can invalidate the approval snapshot.
+		if (draftId && agentRevision !== null) reviewInProgressRef.current = true;
 		if (saveTimer.current) clearTimeout(saveTimer.current);
 		pendingSave.current = null;
 		setLoading(true);
@@ -358,7 +368,10 @@ export function ComposeForm({
 				const result = await response.json() as { approvalId?: string; snapshot?: ReviewSnapshot; error?: string };
 				if (!response.ok || !result.approvalId || !result.snapshot) throw new Error(result.error || t("compose.error.createReview"));
 				setAgentReview({ approvalId: result.approvalId, snapshot: result.snapshot });
-			} catch (cause) { setToast({ type: "error", message: cause instanceof Error ? cause.message : t("compose.error.reviewDraft") }); }
+			} catch (cause) {
+				reviewInProgressRef.current = false;
+				setToast({ type: "error", message: cause instanceof Error ? cause.message : t("compose.error.reviewDraft") });
+			}
 			finally { setLoading(false); }
 			return;
 		}
@@ -637,7 +650,7 @@ export function ComposeForm({
 
 	return (
 		<>
-			{agentReview && <SendReview approvalId={agentReview.approvalId} snapshot={agentReview.snapshot} onClose={() => setAgentReview(null)} onSent={() => { setAgentReview(null); if (onClose) dismiss(); else router.push("/sent"); }} />}
+			{agentReview && <SendReview approvalId={agentReview.approvalId} snapshot={agentReview.snapshot} onClose={() => { reviewInProgressRef.current = false; setAgentReview(null); }} onSent={() => { reviewInProgressRef.current = false; setAgentReview(null); if (onClose) dismiss(); else router.push("/sent"); }} />}
 			{mode === "popup" && modalMode && !minimized && <div className="fixed inset-0 z-40 bg-neutral-950/65" aria-hidden="true" />}
 			{toast && (
 				<div
