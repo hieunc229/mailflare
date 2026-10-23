@@ -41,7 +41,7 @@ function displayName(from: string | null | undefined): string {
 
 /**
  * Sender impersonation: a display name that claims a brand or another address, and sender domains made to
- * look like a domain the user really corresponds with (`techgarage-email.com`, `paypa1.com`).
+ * look like a domain the user really corresponds with (`paypa1.com`, `rnicrosoft.com`).
  * `knownDomains` are domains the user has written to or owns.
  */
 export function analyzeImpersonation(from: string | null | undefined, knownDomains: string[], customBrands: SpamBrand[] = []): SpamSignal[] {

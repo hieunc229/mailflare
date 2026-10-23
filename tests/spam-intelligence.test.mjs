@@ -94,18 +94,18 @@ test("lookalike domains and brand display names are flagged, real senders are no
 	assert.equal(spam.registrableDomain("mail.shop.example.co.uk"), "example.co.uk");
 	assert.equal(spam.isLookalikeDomain("paypa1.com", "paypal.com"), true);
 	assert.equal(spam.isLookalikeDomain("rnicrosoft.com", "microsoft.com"), true);
-	assert.equal(spam.isLookalikeDomain("techgarage-email.com", "techgarage.email"), false);
-	assert.equal(spam.isLookalikeDomain("techgarag.email", "techgarage.email"), true);
+	assert.equal(spam.isLookalikeDomain("northwind-email.com", "northwind.email"), false);
+	assert.equal(spam.isLookalikeDomain("northwnd.email", "northwind.email"), true);
 	assert.equal(spam.isLookalikeDomain("example.ch", "example.com"), false);
 	assert.equal(spam.isLookalikeDomain("github.com", "gitlab.com"), false);
 
-	const known = ["techgarage.email", "gmail.com"];
+	const known = ["northwind.email", "gmail.com"];
 	assert.deepEqual(ids(spam.analyzeImpersonation('"PayPal Service" <notice@secure-verify.top>', known)), ["brand_display_name"]);
 	assert.deepEqual(ids(spam.analyzeImpersonation('"PayPal" <service@paypal.ch>', known)), []);
 	assert.deepEqual(ids(spam.analyzeImpersonation('"Weekly Outlook" <news@markets.example>', known)), []);
-	assert.deepEqual(ids(spam.analyzeImpersonation('"kevin@techgarage.email" <x@other.example>', known)), ["address_in_display_name"]);
-	assert.deepEqual(ids(spam.analyzeImpersonation("Kevin <kevin@techgarag.email>", known)), ["lookalike_domain"]);
-	assert.deepEqual(ids(spam.analyzeImpersonation("Kevin <kevin@techgarage.email>", known)), []);
+	assert.deepEqual(ids(spam.analyzeImpersonation('"anna@northwind.email" <x@other.example>', known)), ["address_in_display_name"]);
+	assert.deepEqual(ids(spam.analyzeImpersonation("Anna <anna@northwnd.email>", known)), ["lookalike_domain"]);
+	assert.deepEqual(ids(spam.analyzeImpersonation("Anna <anna@northwind.email>", known)), []);
 });
 
 test("brands added by the administrator are checked alongside the built-in list", () => {
