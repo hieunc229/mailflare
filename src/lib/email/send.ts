@@ -14,6 +14,8 @@ import type { AttachmentContent } from "@/lib/email/attachment-types";
 import { getOutboundAttachmentMaxMb } from "@/lib/email/attachment-policy";
 import { getOutboundProviderConfig, sendThroughProvider } from "@/lib/email/outbound-provider";
 import { prepareCloudflareAttachments } from "@/lib/email/cloud-attachment-utils";
+import { ensureTrackingToken, getTrackingHostForSender } from "@/lib/tracking/open-tracking";
+import { buildTrackingPixelUrl, injectTrackingPixel, resolveTrackingOrigin } from "@/lib/tracking/open-tracking-utils";
 
 export type SendEmailInput = {
 	userId: string;
@@ -38,6 +40,8 @@ export type SendEmailInput = {
 	scheduledAt?: string | Date;
 	/** Hold the send for UNDO_SEND_SECONDS (via the scheduled queue) so the user can cancel it. */
 	undoSend?: boolean;
+	/** Add a read-receipt pixel to the HTML part (the stored Sent copy stays without it). */
+	trackOpens?: boolean;
 	publicOrigin?: string;
 };
 
@@ -206,6 +210,7 @@ async function deliverEmail(env: CloudflareEnv, delivery: PreparedDelivery): Pro
 		if (prepared.text !== input.text || prepared.html !== input.html) {
 			await db.update(messages).set({ textBody: prepared.text ?? null, htmlBody: prepared.html ?? null }).where(eq(messages.id, messageId));
 		}
+		const html = input.trackOpens && prepared.html ? await withTrackingPixel(env, messageId, from, prepared.html, input.publicOrigin) : prepared.html;
 		const response = await sendThroughProvider(
 			env,
 			provider,
@@ -216,7 +221,7 @@ async function deliverEmail(env: CloudflareEnv, delivery: PreparedDelivery): Pro
 				bcc,
 				subject: input.subject,
 				headers,
-				html: prepared.html,
+				html,
 				text: prepared.text,
 				attachments: prepared.attachments.map((attachment) => ({
 					filename: attachment.filename,
@@ -263,6 +268,23 @@ async function deliverEmail(env: CloudflareEnv, delivery: PreparedDelivery): Pro
 			.where(eq(outboundJobs.id, jobId));
 		await dispatchWebhooks(env, input.userId, "message.failed", { messageId, error });
 		throw err;
+	}
+}
+
+/**
+ * The sender domain's own pixel host wins over APP_URL so the pixel matches the From domain.
+ * A missing origin or an unapplied migration sends the message untracked rather than failing it.
+ */
+async function withTrackingPixel(env: CloudflareEnv, messageId: string, from: string, html: string, publicOrigin: string | undefined): Promise<string> {
+	try {
+		const host = await getTrackingHostForSender(env, from);
+		const origin = host ? `https://${host}` : resolveTrackingOrigin(env.APP_URL, publicOrigin);
+		if (!origin) return html;
+		const token = await ensureTrackingToken(env, messageId);
+		return injectTrackingPixel(html, buildTrackingPixelUrl(origin, token));
+	} catch (error) {
+		console.error("Read receipt skipped", error);
+		return html;
 	}
 }
 

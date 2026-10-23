@@ -14,6 +14,7 @@ import { getRequestTimeZone } from "@/lib/time/utils";
 import { scheduledMessageCondition } from "@/lib/email/scheduled";
 import { getMessageListColumns, loadConversationPage } from "./utils";
 import type { ListMessage } from "./types";
+import { getOpenCounts } from "@/lib/tracking/open-tracking";
 
 export async function GET(request: Request) {
 	const env = getEnv();
@@ -176,6 +177,7 @@ export async function GET(request: Request) {
 			if (job.messageId && job.scheduledAt) scheduledAtByMessageId.set(job.messageId, job.scheduledAt.toISOString());
 		}
 	}
+	const openCounts = await getOpenCounts(env, rows.filter((row) => row.direction === "outbound").map((row) => row.id));
 	const mailboxNameMap = new Map(
 		accessibleMailboxes.map((mailbox) => [
 			mailbox.id,
@@ -210,6 +212,7 @@ export async function GET(request: Request) {
 			...message,
 			snippet: message.snippet,
 			...(scheduledAtByMessageId.has(message.id) ? { scheduledAt: scheduledAtByMessageId.get(message.id) } : {}),
+			...(openCounts.has(message.id) ? { openCount: openCounts.get(message.id) } : {}),
 			fromContactName:
 				(message.direction === "outbound" ? accountName : null) ??
 				contactMap?.get(normalizeEmailAddress(message.fromAddr)) ??

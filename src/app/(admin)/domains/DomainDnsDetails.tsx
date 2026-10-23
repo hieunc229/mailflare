@@ -5,6 +5,7 @@ import { ROW_GRID, StatusBadge, StatusRow } from "./status-row";
 import CloudflareReceivingConfig from "./CloudflareReceivingConfig";
 import ReceivingSetupSection from "./ReceivingSetupSection";
 import SendingSetupSection from "./SendingSetupSection";
+import TrackingHostSection from "./TrackingHostSection";
 import type { DnsAuthRecord, DomainDnsDetailsProps } from "./types";
 
 export default function DomainDnsDetails({
@@ -115,6 +116,7 @@ export default function DomainDnsDetails({
 				cloudflareConfig={cloudflareConfig}
 				cloudflareOk={!!sendingOk && audit?.dkim.status === "ok"}
 			/>
+			{domain.sendingProvider !== "none" && <TrackingHostSection domain={domain} />}
 		</div>
 	);
 }

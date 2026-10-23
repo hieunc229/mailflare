@@ -416,10 +416,24 @@
       "breakpoints": true
     },
     {
-      "idx": 59,
+      "idx": 60,
       "version": "6",
-      "when": 1792743600000,
-      "tag": "0067_add_spam_intelligence_settings",
+      "when": 1792830000000,
+      "tag": "0068_add_message_tracking",
+      "breakpoints": true
+    },
+    {
+      "idx": 61,
+      "version": "6",
+      "when": 1792833600000,
+      "tag": "0069_add_domain_tracking_hosts",
+      "breakpoints": true
+    },
+    {
+      "idx": 62,
+      "version": "6",
+      "when": 1792836000000,
+      "tag": "0070_add_spam_intelligence_settings",
       "breakpoints": true
     }
   ]

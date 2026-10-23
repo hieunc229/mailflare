@@ -429,6 +429,47 @@ export const outboundJobs = sqliteTable("outbound_jobs", {
 		.$defaultFn(() => new Date()),
 });
 
+/** One row per sent message that carries an open-tracking pixel; the token is the pixel URL's secret. */
+export const messageTracking = sqliteTable(
+	"message_tracking",
+	{
+		token: text("token").primaryKey(),
+		messageId: text("message_id").notNull().references(() => messages.id, { onDelete: "cascade" }),
+		/** Opens that were not classified as automated prefetches. */
+		openCount: integer("open_count").notNull().default(0),
+		firstOpenedAt: integer("first_opened_at", { mode: "timestamp" }),
+		lastOpenedAt: integer("last_opened_at", { mode: "timestamp" }),
+		createdAt: integer("created_at", { mode: "timestamp" }).notNull().$defaultFn(() => new Date()),
+	},
+	(t) => [uniqueIndex("message_tracking_message_idx").on(t.messageId)],
+);
+
+/** Hostname under a domain that serves its read-receipt pixels, so the pixel matches the sender. Kept out of `domains` so sending works before the migration. */
+export const domainTrackingHosts = sqliteTable(
+	"domain_tracking_hosts",
+	{
+		domainId: text("domain_id").primaryKey().references(() => domains.id, { onDelete: "cascade" }),
+		hostname: text("hostname").notNull(),
+		createdAt: integer("created_at", { mode: "timestamp" }).notNull().$defaultFn(() => new Date()),
+	},
+	(t) => [uniqueIndex("domain_tracking_hosts_hostname_idx").on(t.hostname)],
+);
+
+export const messageOpens = sqliteTable(
+	"message_opens",
+	{
+		id: text("id").primaryKey(),
+		token: text("token").notNull().references(() => messageTracking.token, { onDelete: "cascade" }),
+		openedAt: integer("opened_at", { mode: "timestamp" }).notNull(),
+		client: text("client"),
+		device: text("device"),
+		country: text("country"),
+		city: text("city"),
+		automated: integer("automated", { mode: "boolean" }).notNull().default(false),
+	},
+	(t) => [index("message_opens_token_idx").on(t.token, t.openedAt)],
+);
+
 export const emailTemplates = sqliteTable(
 	"email_templates",
 	{

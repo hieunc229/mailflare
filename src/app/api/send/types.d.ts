@@ -18,4 +18,6 @@ export interface SendRequestPayload {
 	scheduledAt?: string;
 	/** Hold the send for the undo window so it can be cancelled. */
 	undoSend?: boolean;
+	/** Add a read-receipt pixel. */
+	trackOpens?: boolean;
 }

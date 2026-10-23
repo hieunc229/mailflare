@@ -15,7 +15,7 @@ export const spamBrandSchema = z.object({
 
 type StoredSettings = { spamhausDqsKey: string | null; abusechAuthKey: string | null; spamDomainAgeCheck: boolean; spamBrands: string | null };
 
-/** Null until migration 0067 adds the columns, so spam analysis keeps running on env vars alone. */
+/** Null until migration 0070 adds the columns, so spam analysis keeps running on env vars alone. */
 async function readStoredSettings(env: CloudflareEnv): Promise<StoredSettings | null> {
 	try {
 		const [row] = await getDb(env).select({
