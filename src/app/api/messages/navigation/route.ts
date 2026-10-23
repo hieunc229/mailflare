@@ -79,9 +79,13 @@ export async function GET(request: Request) {
 			if (existing) existing.unread ||= unread;
 			else byThread.set(key, { id: row.id, unread });
 		}
-		entries.push(...byThread.values());
+		// push(...spread) passes each entry as an argument and RangeErrors on
+		// large folders (~100k+ messages); append in a loop instead.
+		for (const entry of byThread.values()) entries.push(entry);
 	} else {
-		entries.push(...rows.map((row) => ({ id: row.id, unread: row.direction === "inbound" && !row.read })));
+		for (const row of rows) {
+			entries.push({ id: row.id, unread: row.direction === "inbound" && !row.read });
+		}
 	}
 
 	return NextResponse.json({ messages: entries });
