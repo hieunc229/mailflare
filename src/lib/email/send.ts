@@ -14,7 +14,7 @@ import type { AttachmentContent } from "@/lib/email/attachment-types";
 import { getOutboundAttachmentMaxMb } from "@/lib/email/attachment-policy";
 import { getOutboundProviderConfig, sendThroughProvider } from "@/lib/email/outbound-provider";
 import { prepareCloudflareAttachments } from "@/lib/email/cloud-attachment-utils";
-import { ensureTrackingToken } from "@/lib/tracking/open-tracking";
+import { ensureTrackingToken, getTrackingHostForSender } from "@/lib/tracking/open-tracking";
 import { buildTrackingPixelUrl, injectTrackingPixel, resolveTrackingOrigin } from "@/lib/tracking/open-tracking-utils";
 
 export type SendEmailInput = {
@@ -210,7 +210,7 @@ async function deliverEmail(env: CloudflareEnv, delivery: PreparedDelivery): Pro
 		if (prepared.text !== input.text || prepared.html !== input.html) {
 			await db.update(messages).set({ textBody: prepared.text ?? null, htmlBody: prepared.html ?? null }).where(eq(messages.id, messageId));
 		}
-		const html = input.trackOpens && prepared.html ? await withTrackingPixel(env, messageId, prepared.html, input.publicOrigin) : prepared.html;
+		const html = input.trackOpens && prepared.html ? await withTrackingPixel(env, messageId, from, prepared.html, input.publicOrigin) : prepared.html;
 		const response = await sendThroughProvider(
 			env,
 			provider,
@@ -271,11 +271,15 @@ async function deliverEmail(env: CloudflareEnv, delivery: PreparedDelivery): Pro
 	}
 }
 
-/** A missing origin or an unapplied migration sends the message untracked rather than failing it. */
-async function withTrackingPixel(env: CloudflareEnv, messageId: string, html: string, publicOrigin: string | undefined): Promise<string> {
-	const origin = resolveTrackingOrigin(env.APP_URL, publicOrigin);
-	if (!origin) return html;
+/**
+ * The sender domain's own pixel host wins over APP_URL so the pixel matches the From domain.
+ * A missing origin or an unapplied migration sends the message untracked rather than failing it.
+ */
+async function withTrackingPixel(env: CloudflareEnv, messageId: string, from: string, html: string, publicOrigin: string | undefined): Promise<string> {
 	try {
+		const host = await getTrackingHostForSender(env, from);
+		const origin = host ? `https://${host}` : resolveTrackingOrigin(env.APP_URL, publicOrigin);
+		if (!origin) return html;
 		const token = await ensureTrackingToken(env, messageId);
 		return injectTrackingPixel(html, buildTrackingPixelUrl(origin, token));
 	} catch (error) {

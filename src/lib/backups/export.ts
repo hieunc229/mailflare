@@ -2,14 +2,14 @@ import type { BackupTableGroupId, DatabaseBackupDocument, DatabaseBackupTable, D
 import { mergeLegacyMessageBodies } from "./utils";
 import { BACKUP_TABLE_GROUPS, getSelectedBackupTables } from "./table-groups";
 
-export const BACKUP_TABLES: DatabaseBackupTable[] = ["users", "domains", "mailboxes", "mailbox_access", "contacts", "folders", "api_keys", "messages", "message_attachments", "shared_attachment_links", "outbound_jobs", "message_tracking", "message_opens", "routing_rules", "webhooks", "webhook_deliveries", "sessions", "audit_logs", "backup_settings", "backups", "app_settings", "license_settings", "email_templates", "calendar_events", "booking_events", "auto_reply_deliveries", "spam_token_stats", "spam_reputation", "spam_feedback", "mailbox_aliases", "password_reset_tokens", "mfa_recovery_codes", "login_challenges", "mailbox_agent_settings", "agent_conversations", "agent_chat_messages", "agent_jobs", "agent_draft_metadata", "agent_send_approvals", "mcp_key_mailboxes", "ai_usage", "drive_items", "drive_upload_parts", "drive_shares"];
+export const BACKUP_TABLES: DatabaseBackupTable[] = ["users", "domains", "domain_tracking_hosts", "mailboxes", "mailbox_access", "contacts", "folders", "api_keys", "messages", "message_attachments", "shared_attachment_links", "outbound_jobs", "message_tracking", "message_opens", "routing_rules", "webhooks", "webhook_deliveries", "sessions", "audit_logs", "backup_settings", "backups", "app_settings", "license_settings", "email_templates", "calendar_events", "booking_events", "auto_reply_deliveries", "spam_token_stats", "spam_reputation", "spam_feedback", "mailbox_aliases", "password_reset_tokens", "mfa_recovery_codes", "login_challenges", "mailbox_agent_settings", "agent_conversations", "agent_chat_messages", "agent_jobs", "agent_draft_metadata", "agent_send_approvals", "mcp_key_mailboxes", "ai_usage", "drive_items", "drive_upload_parts", "drive_shares"];
 /**
  * Tables every backup document must contain. Tables added to BACKUP_TABLES
  * after the format shipped are absent from older documents, so they stay
  * optional here and are filled in as empty on restore.
  */
-/** Added by migration 0068; databases that have not applied it yet back up and restore without them. */
-const OPEN_TRACKING_TABLES: DatabaseBackupTable[] = ["message_tracking", "message_opens"];
+/** Added by migrations 0068 and 0069; databases that have not applied them yet back up and restore without them. */
+const OPEN_TRACKING_TABLES: DatabaseBackupTable[] = ["domain_tracking_hosts", "message_tracking", "message_opens"];
 const REQUIRED_BACKUP_TABLES: DatabaseBackupTable[] = ["users", "domains", "mailboxes", "mailbox_access", "contacts", "folders", "api_keys", "messages", "message_attachments", "outbound_jobs", "routing_rules", "webhooks", "webhook_deliveries", "sessions", "audit_logs", "backup_settings", "backups", "app_settings", "license_settings"];
 const INSERT_BATCH_SIZE = 50;
 
@@ -111,9 +111,9 @@ export async function restoreDatabaseRecords(db: D1Database, content: ArrayBuffe
 	).results.map((row) => row.name);
 	if (["drive_items", "drive_upload_parts", "drive_shares"].some((table) => document.tables[table]?.length) && driveTableNames.length !== 3) throw new Error("Apply pending database migrations before restoring the Drive tables.");
 	const trackingTableNames = (
-		await db.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name IN ('message_tracking', 'message_opens')").all<{ name: string }>()
+		await db.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name IN ('domain_tracking_hosts', 'message_tracking', 'message_opens')").all<{ name: string }>()
 	).results.map((row) => row.name);
-	if (OPEN_TRACKING_TABLES.some((table) => document.tables[table]?.length) && trackingTableNames.length !== OPEN_TRACKING_TABLES.length) throw new Error("Apply pending database migrations before restoring read receipts.");
+	if (OPEN_TRACKING_TABLES.some((table) => document.tables[table]?.length && !trackingTableNames.includes(table))) throw new Error("Apply pending database migrations before restoring read receipts.");
 	const restoreTables = BACKUP_TABLES.filter((table) => (table !== "shared_attachment_links" || sharedLinksTable) && (table !== "booking_events" || bookingTable) && (!table.startsWith("drive_") || driveTableNames.includes(table)) && (!OPEN_TRACKING_TABLES.includes(table) || trackingTableNames.includes(table)));
 	const userColumns = new Set((await db.prepare("PRAGMA table_info(users)").all<{ name: string }>()).results.map((column) => column.name));
 	const bookingColumns = bookingTable ? new Set((await db.prepare("PRAGMA table_info(booking_events)").all<{ name: string }>()).results.map((column) => column.name)) : null;

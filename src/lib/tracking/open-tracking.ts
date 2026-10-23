@@ -1,6 +1,7 @@
 import { desc, eq, inArray, sql } from "drizzle-orm";
+import { getEmailAddress } from "@/lib/email/address";
 import { getDb } from "@/db";
-import { messageOpens, messageTracking, messages } from "@/db/schema";
+import { domains, domainTrackingHosts, messageOpens, messageTracking, messages } from "@/db/schema";
 import { newId } from "@/lib/ids";
 import { classifyOpen, createTrackingToken, isDuplicateOpen, MAX_STORED_OPENS } from "./open-tracking-utils";
 import type { MessageTrackingSummary } from "./types";
@@ -95,7 +96,68 @@ export async function getOpenCounts(env: CloudflareEnv, messageIds: string[]): P
 		for (const row of rows) counts.set(row.messageId, row.openCount);
 	} catch (error) {
 		// Lists keep working before migration 0068 is applied.
-		if (!String(error).includes("no such table")) throw error;
+		if (!isMissingTable(error)) throw error;
 	}
 	return counts;
+}
+
+function isMissingTable(error: unknown): boolean {
+	return String(error).includes("no such table");
+}
+
+/** The pixel hostname configured for the sender's domain, if any. */
+export async function getTrackingHostForSender(env: CloudflareEnv, from: string): Promise<string | null> {
+	const domain = getEmailAddress(from).split("@")[1]?.toLowerCase();
+	if (!domain) return null;
+	try {
+		const [row] = await getDb(env)
+			.select({ hostname: domainTrackingHosts.hostname })
+			.from(domainTrackingHosts)
+			.innerJoin(domains, eq(domains.id, domainTrackingHosts.domainId))
+			.where(eq(domains.hostname, domain))
+			.limit(1);
+		return row?.hostname ?? null;
+	} catch (error) {
+		if (isMissingTable(error)) return null;
+		throw error;
+	}
+}
+
+/** Null when unset; throws `TrackingHostsUnavailableError` before migration 0069. */
+export async function getDomainTrackingHost(env: CloudflareEnv, domainId: string): Promise<string | null> {
+	try {
+		const [row] = await getDb(env)
+			.select({ hostname: domainTrackingHosts.hostname })
+			.from(domainTrackingHosts)
+			.where(eq(domainTrackingHosts.domainId, domainId))
+			.limit(1);
+		return row?.hostname ?? null;
+	} catch (error) {
+		if (isMissingTable(error)) throw new TrackingHostsUnavailableError();
+		throw error;
+	}
+}
+
+export async function setDomainTrackingHost(env: CloudflareEnv, domainId: string, hostname: string | null): Promise<void> {
+	const db = getDb(env);
+	try {
+		if (!hostname) {
+			await db.delete(domainTrackingHosts).where(eq(domainTrackingHosts.domainId, domainId));
+			return;
+		}
+		await db
+			.insert(domainTrackingHosts)
+			.values({ domainId, hostname })
+			.onConflictDoUpdate({ target: domainTrackingHosts.domainId, set: { hostname } });
+	} catch (error) {
+		if (isMissingTable(error)) throw new TrackingHostsUnavailableError();
+		throw error;
+	}
+}
+
+export class TrackingHostsUnavailableError extends Error {
+	constructor() {
+		super("Apply pending database migrations to set a read-receipt address");
+		this.name = "TrackingHostsUnavailableError";
+	}
 }

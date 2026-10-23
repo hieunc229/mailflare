@@ -45,6 +45,16 @@ test("APP_URL wins over the request origin and non-HTTP origins are refused", ()
 	assert.equal(tracking.resolveTrackingOrigin(" ", undefined), null);
 });
 
+test("a domain's pixel host must be that domain or one of its subdomains", () => {
+	assert.deepEqual(tracking.normalizeTrackingHost(" HTTPS://Mail.Kyburz.Email/ ", "kyburz.email"), { hostname: "mail.kyburz.email" });
+	assert.deepEqual(tracking.normalizeTrackingHost("kyburz.email.", "kyburz.email"), { hostname: "kyburz.email" });
+	assert.deepEqual(tracking.normalizeTrackingHost("mail.techgarage.email", "kyburz.email"), { error: "outsideDomain" });
+	assert.deepEqual(tracking.normalizeTrackingHost("evilkyburz.email", "kyburz.email"), { error: "outsideDomain" });
+	assert.deepEqual(tracking.normalizeTrackingHost("-bad.kyburz.email", "kyburz.email"), { error: "invalid" });
+	assert.deepEqual(tracking.normalizeTrackingHost("mail kyburz.email", "kyburz.email"), { error: "invalid" });
+	assert.deepEqual(tracking.normalizeTrackingHost("", "kyburz.email"), { error: "invalid" });
+});
+
 test("the pixel goes inside <body> and its URL is attribute-escaped", () => {
 	const url = "https://mail.example.com/api/i/abc.gif?a=1&b=\"2\"";
 	const wrapped = tracking.injectTrackingPixel("<html><body><p>Hi</p></body></html>", url);

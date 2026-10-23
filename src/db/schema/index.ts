@@ -444,6 +444,17 @@ export const messageTracking = sqliteTable(
 	(t) => [uniqueIndex("message_tracking_message_idx").on(t.messageId)],
 );
 
+/** Hostname under a domain that serves its read-receipt pixels, so the pixel matches the sender. Kept out of `domains` so sending works before the migration. */
+export const domainTrackingHosts = sqliteTable(
+	"domain_tracking_hosts",
+	{
+		domainId: text("domain_id").primaryKey().references(() => domains.id, { onDelete: "cascade" }),
+		hostname: text("hostname").notNull(),
+		createdAt: integer("created_at", { mode: "timestamp" }).notNull().$defaultFn(() => new Date()),
+	},
+	(t) => [uniqueIndex("domain_tracking_hosts_hostname_idx").on(t.hostname)],
+);
+
 export const messageOpens = sqliteTable(
 	"message_opens",
 	{

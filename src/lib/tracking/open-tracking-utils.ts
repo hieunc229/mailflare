@@ -52,6 +52,20 @@ export function resolveTrackingOrigin(appUrl: string | undefined, publicOrigin: 
 	return null;
 }
 
+const HOSTNAME_LABEL = /^(?!-)[a-z0-9-]{1,63}(?<!-)$/;
+
+/**
+ * Normalises a domain's pixel hostname. It must be the domain itself or one of
+ * its subdomains, so the pixel never names a host the sender does not own.
+ */
+export function normalizeTrackingHost(input: string, domainHostname: string): { hostname: string } | { error: "invalid" | "outsideDomain" } {
+	const hostname = input.trim().toLowerCase().replace(/^https?:\/\//, "").replace(/\/.*$/, "").replace(/\.$/, "");
+	const domain = domainHostname.trim().toLowerCase();
+	if (!hostname || hostname.length > 253 || !hostname.split(".").every((label) => HOSTNAME_LABEL.test(label))) return { error: "invalid" };
+	if (hostname !== domain && !hostname.endsWith(`.${domain}`)) return { error: "outsideDomain" };
+	return { hostname };
+}
+
 /** Appends the pixel inside `<body>` when there is one, otherwise at the end. */
 export function injectTrackingPixel(html: string, pixelUrl: string): string {
 	const escaped = pixelUrl.replaceAll("&", "&amp;").replaceAll("\"", "&quot;");
