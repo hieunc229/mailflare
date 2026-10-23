@@ -34,11 +34,11 @@ export function useMessageCounts(mailboxId?: string | null, enabled = true) {
 		let refreshTimer: number | null = null;
 		let requestNumber = 0;
 
-		async function loadCounts(force = false) {
+		async function loadCounts() {
 			const currentRequest = ++requestNumber;
 			setIsLoading(true);
 			try {
-				const nextCounts = await fetchMessageCounts(mailboxId, force);
+				const nextCounts = await fetchMessageCounts(mailboxId);
 				if (!cancelled && currentRequest === requestNumber) setCounts(nextCounts ?? emptyCounts);
 			} finally {
 				if (!cancelled && currentRequest === requestNumber) setIsLoading(false);
@@ -52,7 +52,8 @@ export function useMessageCounts(mailboxId?: string | null, enabled = true) {
 			if (refreshTimer) window.clearTimeout(refreshTimer);
 			refreshTimer = window.setTimeout(() => {
 				refreshTimer = null;
-				void loadCounts(true);
+				// The cache was cleared above, so hooks refreshing for the same change share one request.
+				void loadCounts();
 			}, REFRESH_DEBOUNCE_MS);
 		}
 		function onMessageCountsDelta(event: Event) {

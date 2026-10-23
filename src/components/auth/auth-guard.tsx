@@ -2,7 +2,7 @@
 
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import { authFetch } from "@/lib/auth/client";
+import { fetchSessionInfo, peekSessionInfo } from "@/hooks/use-current-user";
 import type { AuthGuardProps } from "./auth-guard-types";
 import { LoadingTransition } from "@/components/loading-transition";
 import { saveUserTimeZonePreference } from "@/lib/time/client";
@@ -17,25 +17,24 @@ export function AuthGuard({ children, mode = "protected", requireMailbox, requir
 
 		async function checkSession() {
 			try {
-				const cookieResponse = await fetch("/api/auth/me", {
-					cache: "no-store",
-					signal: AbortSignal.timeout(5_000),
-				});
-				const response = cookieResponse.ok || cookieResponse.status !== 401
-					? cookieResponse
-					: await authFetch("/api/auth/me", {
-						redirectOnUnauthorized: false,
-						signal: AbortSignal.timeout(5_000),
-					});
+				// Login pages and onboarding change the answer, so only a finished setup is reused across navigations.
+				const cached = mode === "protected" ? peekSessionInfo() : null;
+				const response = cached && cached.isSetup !== false && cached.hasMailboxes !== false
+					? cached
+					: await fetchSessionInfo({ fresh: true });
 				if (cancelled) return;
+				if (!response) {
+					setAuthorized(true);
+					return;
+				}
 
-				if (!response.ok) {
+				if (response.status !== 200) {
 					if (mode === "protected" && response.status === 401) router.replace("/login");
 					else setAuthorized(true);
 					return;
 				}
 
-				const data = (await response.json()) as { hasMailboxes?: boolean; isSetup?: boolean; user?: { id?: string; role?: string; isPrimaryAdmin?: boolean; timeZone?: string | null } };
+				const data = response;
 				if (data.user?.id) saveUserTimeZonePreference(data.user.id, data.user.timeZone ?? null);
 				if (mode === "public") {
 					if (!allowAuthenticated) router.replace("/inbox");
