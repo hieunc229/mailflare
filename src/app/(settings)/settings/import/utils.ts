@@ -117,9 +117,19 @@ export async function importFromImap(
 			offset,
 		}),
 	});
-	const data = (await response.json()) as ImportResult;
+	const data = await readImportJson<ImportResult>(response);
 	if (!response.ok) throw new Error(data.error ?? "IMAP import failed");
 	return data;
+}
+
+async function readImportJson<T extends { error?: string }>(response: Response): Promise<T> {
+	const text = await response.text();
+	try {
+		return JSON.parse(text) as T;
+	} catch {
+		const status = response.status === 503 ? "the Worker exceeded its resource limits" : `HTTP ${response.status}`;
+		throw new Error(`Import request failed (${status}). Try again with a smaller batch size.`);
+	}
 }
 
 export async function fetchImapFolders(form: ImapFormState): Promise<string[]> {
@@ -134,7 +144,7 @@ export async function fetchImapFolders(form: ImapFormState): Promise<string[]> {
 			password: form.password,
 		}),
 	});
-	const data = (await response.json()) as { folders?: string[]; error?: string };
+	const data = await readImportJson<{ folders?: string[]; error?: string }>(response);
 	if (!response.ok) throw new Error(data.error ?? "Unable to list IMAP folders");
 	return data.folders ?? [];
 }
@@ -155,7 +165,7 @@ function getFolderAliases(section: ImportSourceSection): string[] {
 	if (section === "drafts") return ["Drafts", "[Gmail]/Drafts"];
 	if (section === "archived") return ["Archive", "Archived", "[Gmail]/All Mail"];
 	if (section === "spam") return ["Spam", "Junk", "Junk Email", "[Gmail]/Spam"];
-	if (section === "trash") return ["Trash", "Deleted", "Deleted Items", "Deleted Messages", "[Gmail]/Trash"];
+	if (section === "trash") return ["Trash", "Deleted", "Deleted Items", "Deleted Messages", "[Gmail]/Trash", "[Gmail]/Bin"];
 	return [];
 }
 
