@@ -85,11 +85,35 @@ function resolveCreatedIds(args: Record<string, unknown>, createdIds: Record<str
 	return walk(args) as Record<string, unknown>;
 }
 
+/** Requests slower than this are logged with the shape of each call, so expensive client patterns show up in the Worker logs. */
+const SLOW_REQUEST_MS = 200;
+
+/** What a call asked for, without ids, filters' values or content. */
+function describeCall(name: string, args: Record<string, unknown>, ms: number) {
+	const size = (value: unknown) => (Array.isArray(value) ? value.length : value === null || value === undefined ? undefined : typeof value === "object" ? "ref" : value);
+	return {
+		name,
+		ms,
+		ids: size(args.ids ?? args["#ids"]),
+		properties: Array.isArray(args.properties) ? args.properties.length : undefined,
+		bodyProperties: Array.isArray(args.bodyProperties) ? args.bodyProperties.length : undefined,
+		fetchBodyValues: args.fetchTextBodyValues || args.fetchHTMLBodyValues || args.fetchAllBodyValues ? true : undefined,
+		limit: typeof args.limit === "number" ? args.limit : undefined,
+		position: typeof args.position === "number" ? args.position : undefined,
+		filter: args.filter && typeof args.filter === "object" ? Object.keys(args.filter as object).join(",") : undefined,
+		collapseThreads: args.collapseThreads === true ? true : undefined,
+		sinceState: typeof args.sinceState === "string" ? true : undefined,
+	};
+}
+
 export async function processRequest(ctx: JmapContext, request: JmapRequest): Promise<JmapResponse> {
 	const responses: JmapInvocation[] = [];
 	Object.assign(ctx.createdIds, request.createdIds ?? {});
+	const startedAt = Date.now();
+	const calls: ReturnType<typeof describeCall>[] = [];
 
 	for (const [name, rawArgs, callId] of request.methodCalls) {
+		const callStartedAt = Date.now();
 		const handler = METHODS[name];
 		if (!handler) {
 			responses.push(["error", { type: "unknownMethod" }, callId]);
@@ -102,6 +126,7 @@ export async function processRequest(ctx: JmapContext, request: JmapRequest): Pr
 				continue;
 			}
 			const result = await handler(ctx, args);
+			calls.push(describeCall(name, args, Date.now() - callStartedAt));
 			if ("type" in result && typeof result.type === "string" && !("accountId" in result) && !("list" in result)) {
 				responses.push(["error", result, callId]);
 				continue;
@@ -124,7 +149,11 @@ export async function processRequest(ctx: JmapContext, request: JmapRequest): Pr
 		}
 	}
 
-	return { methodResponses: responses, createdIds: Object.keys(ctx.createdIds).length ? ctx.createdIds : undefined, sessionState: await sessionState(ctx) };
+	const stateStartedAt = Date.now();
+	const state = await sessionState(ctx);
+	const totalMs = Date.now() - startedAt;
+	if (totalMs >= SLOW_REQUEST_MS) console.log("JMAP slow request", JSON.stringify({ totalMs, stateMs: Date.now() - stateStartedAt, calls }));
+	return { methodResponses: responses, createdIds: Object.keys(ctx.createdIds).length ? ctx.createdIds : undefined, sessionState: state };
 }
 
 export async function sessionState(ctx: JmapContext): Promise<string> {
