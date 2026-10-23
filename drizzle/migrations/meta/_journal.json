@@ -414,6 +414,13 @@
       "when": 1789023605023,
       "tag": "0066_add_domain_dns_skipped",
       "breakpoints": true
+    },
+    {
+      "idx": 59,
+      "version": "6",
+      "when": 1792743600000,
+      "tag": "0067_add_spam_intelligence_settings",
+      "breakpoints": true
     }
   ]
 }

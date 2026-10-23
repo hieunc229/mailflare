@@ -14,14 +14,6 @@ type BlocklistResult = { codes: string[] };
 type UrlhausResult = { online: number };
 type RdapResult = { registered: string | null };
 
-export function getSpamIntelligenceConfig(env: CloudflareEnv): SpamIntelligenceConfig {
-	return {
-		spamhausDqsKey: env.SPAMHAUS_DQS_KEY?.trim() || undefined,
-		abuseChAuthKey: env.ABUSECH_AUTH_KEY?.trim() || undefined,
-		domainAge: env.SPAM_DOMAIN_AGE_CHECK?.trim().toLowerCase() !== "off",
-	};
-}
-
 function withTimeout<T>(promise: Promise<T>): Promise<T> {
 	let timer: ReturnType<typeof setTimeout> | undefined;
 	const timeout = new Promise<never>((_, reject) => { timer = setTimeout(() => reject(new Error("timeout")), LOOKUP_TIMEOUT_MS); });

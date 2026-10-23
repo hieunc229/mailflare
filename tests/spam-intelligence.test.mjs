@@ -19,6 +19,8 @@ await build({
 			`export { ExternalSpamIntelligenceProvider } from "./src/lib/spam/providers/external";`,
 			`export { readSesTrace } from "./src/lib/email/provider-trace";`,
 			`export { parseSesNotification } from "./src/lib/aws/ses-notification";`,
+			`export { getSpamIntelligenceConfig } from "./src/lib/spam/settings";`,
+			`export { formatBrandLines, parseBrandLines } from "./src/app/(admin)/spam-filter/utils";`,
 		].join("\n"),
 		resolveDir: root,
 		loader: "ts",
@@ -104,6 +106,29 @@ test("lookalike domains and brand display names are flagged, real senders are no
 	assert.deepEqual(ids(spam.analyzeImpersonation('"kevin@techgarage.email" <x@other.example>', known)), ["address_in_display_name"]);
 	assert.deepEqual(ids(spam.analyzeImpersonation("Kevin <kevin@techgarag.email>", known)), ["lookalike_domain"]);
 	assert.deepEqual(ids(spam.analyzeImpersonation("Kevin <kevin@techgarage.email>", known)), []);
+});
+
+test("brands added by the administrator are checked alongside the built-in list", () => {
+	const brands = [{ name: "PostFinance", domains: ["postfinance.ch"] }, { name: "Swiss Post", domains: ["post.ch", "swisspost.ch"] }];
+	assert.deepEqual(ids(spam.analyzeImpersonation('"PostFinance Kundendienst" <info@pf-secure.top>', [], brands)), ["brand_display_name"]);
+	assert.deepEqual(ids(spam.analyzeImpersonation('"PostFinance" <noreply@postfinance.ch>', [], brands)), []);
+	assert.deepEqual(ids(spam.analyzeImpersonation('"SwissPost Paket" <x@parcel-track.top>', [], brands)), ["brand_display_name"]);
+	assert.deepEqual(ids(spam.analyzeImpersonation('"Die Post" <news@post.ch>', [], brands)), []);
+	assert.deepEqual(ids(spam.analyzeImpersonation('"PostFinance" <info@pf-secure.top>', [])), [], "regional brands are not built in");
+	assert.deepEqual(ids(spam.analyzeImpersonation('"Postfinancer Club" <a@club.example>', [], brands)), [], "only whole words match");
+});
+
+test("the brand list round-trips through its one-brand-per-line text form", () => {
+	const parsed = spam.parseBrandLines("PostFinance = postfinance.ch, @PostFinance.com\n\nSwisscom=swisscom.ch\nbroken line\nX = a.ch\nUBS = not a domain");
+	assert.deepEqual(parsed.brands, [{ name: "PostFinance", domains: ["postfinance.ch", "postfinance.com"] }, { name: "Swisscom", domains: ["swisscom.ch"] }]);
+	assert.deepEqual(parsed.invalidLines, [4, 5, 6]);
+	assert.equal(spam.formatBrandLines(parsed.brands), "PostFinance = postfinance.ch, postfinance.com\nSwisscom = swisscom.ch");
+});
+
+test("before the settings migration runs, lookups fall back to environment variables", async () => {
+	const DB = { prepare() { throw new Error("no such column: spamhaus_dqs_key"); } };
+	const config = await spam.getSpamIntelligenceConfig({ DB, SPAMHAUS_DQS_KEY: " dqs-key ", SPAM_DOMAIN_AGE_CHECK: "off" });
+	assert.deepEqual(config, { spamhausDqsKey: "dqs-key", abuseChAuthKey: undefined, domainAge: false, brands: [] });
 });
 
 function stubFetch(routes) {

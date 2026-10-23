@@ -13,6 +13,7 @@ import {
   Webhook,
   KeyRound,
   Bot,
+  ShieldCheck,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useLanguage } from "./language-provider";
@@ -49,6 +50,7 @@ const sections: { id?: string; labelKey?: TranslationKey; links: AdminNavLink[] 
       { href: "/domains", labelKey: "admin.nav.domains", icon: Globe2, permission: "domains" },
       { href: "/routing", labelKey: "admin.nav.routing", icon: Route, permission: "domains" },
       { href: "/webhooks", labelKey: "admin.nav.webhooks", icon: Webhook, permission: "primary" },
+      { href: "/spam-filter", labelKey: "admin.nav.spamFilter", icon: ShieldCheck, permission: "primary" },
     ],
   },
   {

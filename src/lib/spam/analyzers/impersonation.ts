@@ -1,10 +1,15 @@
 import { getEmailAddress } from "@/lib/email/address";
 import { domainOwnerLabel, isLookalikeDomain, registrableDomain } from "../domain-utils";
-import type { SpamSignal } from "../types";
+import type { SpamBrand, SpamSignal } from "../types";
 import { SPAM_WEIGHTS } from "../weights";
 
-/** Brands phishing commonly pretends to be, with the owner labels of the domains they really send from. */
-const BRANDS: { pattern: RegExp; owners: string[] }[] = [
+type BrandMatcher = { pattern: RegExp; owners: string[] };
+
+/**
+ * Global brands phishing commonly pretends to be, with the owner labels of the domains they really send from.
+ * Regional banks, carriers and telcos are added per installation in the admin spam filter settings.
+ */
+const BRANDS: BrandMatcher[] = [
 	{ pattern: /\bpaypal\b/i, owners: ["paypal", "paypal-communication", "paypalobjects"] },
 	{ pattern: /\bapple\b|\bicloud\b|\bitunes\b/i, owners: ["apple", "icloud", "me", "mac", "itunes"] },
 	{ pattern: /\bmicrosoft\b|\boffice ?365\b|\bonedrive\b/i, owners: ["microsoft", "office", "office365", "outlook", "live", "hotmail", "microsoftonline", "sharepoint", "onedrive", "azure"] },
@@ -15,13 +20,6 @@ const BRANDS: { pattern: RegExp; owners: string[] }[] = [
 	{ pattern: /\bfedex\b/i, owners: ["fedex"] },
 	{ pattern: /\bups\b/i, owners: ["ups"] },
 	{ pattern: /\bdpd\b/i, owners: ["dpd"] },
-	{ pattern: /\bswiss ?post\b|\bdie post\b|\bla poste\b/i, owners: ["post", "swisspost", "laposte"] },
-	{ pattern: /\bpostfinance\b/i, owners: ["postfinance"] },
-	{ pattern: /\bubs\b/i, owners: ["ubs"] },
-	{ pattern: /\braiffeisen\b/i, owners: ["raiffeisen"] },
-	{ pattern: /\btwint\b/i, owners: ["twint"] },
-	{ pattern: /\bswisscom\b/i, owners: ["swisscom"] },
-	{ pattern: /\bsparkasse\b/i, owners: ["sparkasse"] },
 	{ pattern: /\brevolut\b/i, owners: ["revolut"] },
 	{ pattern: /\bcoinbase\b/i, owners: ["coinbase"] },
 	{ pattern: /\bbinance\b/i, owners: ["binance"] },
@@ -30,6 +28,11 @@ const BRANDS: { pattern: RegExp; owners: string[] }[] = [
 	{ pattern: /\blinkedin\b/i, owners: ["linkedin"] },
 	{ pattern: /\bfacebook\b|\bmeta\b|\binstagram\b|\bwhatsapp\b/i, owners: ["facebook", "facebookmail", "meta", "metamail", "instagram", "whatsapp"] },
 ];
+
+function customBrandMatcher(brand: SpamBrand): BrandMatcher {
+	const name = brand.name.trim().replace(/[.*+?^${}()|[\]\\]/g, "\\$&").replace(/\s+/g, "\\s*");
+	return { pattern: new RegExp(`(?<![\\p{L}\\p{N}])${name}(?![\\p{L}\\p{N}])`, "iu"), owners: brand.domains.map(domainOwnerLabel) };
+}
 
 function displayName(from: string | null | undefined): string {
 	const match = (from ?? "").match(/^\s*"?([^"<]*?)"?\s*</);
@@ -41,7 +44,7 @@ function displayName(from: string | null | undefined): string {
  * look like a domain the user really corresponds with (`techgarage-email.com`, `paypa1.com`).
  * `knownDomains` are domains the user has written to or owns.
  */
-export function analyzeImpersonation(from: string | null | undefined, knownDomains: string[]): SpamSignal[] {
+export function analyzeImpersonation(from: string | null | undefined, knownDomains: string[], customBrands: SpamBrand[] = []): SpamSignal[] {
 	const address = getEmailAddress(from ?? "").toLowerCase();
 	const senderDomain = address.includes("@") ? address.slice(address.lastIndexOf("@") + 1) : "";
 	if (!senderDomain) return [];
@@ -50,7 +53,7 @@ export function analyzeImpersonation(from: string | null | undefined, knownDomai
 	const owner = domainOwnerLabel(senderDomain);
 
 	if (name) {
-		const brand = BRANDS.find((item) => item.pattern.test(name));
+		const brand = [...customBrands.map(customBrandMatcher), ...BRANDS].find((item) => item.pattern.test(name));
 		if (brand && !brand.owners.some((label) => owner === label || owner.startsWith(`${label}-`) || owner.endsWith(`-${label}`))) {
 			signals.push({ id: "brand_display_name", score: SPAM_WEIGHTS.impersonation.brandDisplayName, reason: "The sender name claims a well-known brand the sending domain does not belong to", metadata: { name } });
 		}

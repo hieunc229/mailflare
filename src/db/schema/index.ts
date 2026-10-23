@@ -757,6 +757,12 @@ export const appSettings = sqliteTable("app_settings", {
 	agentApiKey: text("agent_api_key"),
 	agentModel: text("agent_model"),
 	agentModelRates: text("agent_model_rates"),
+	/** Spam analysis lookups; the SPAMHAUS_DQS_KEY and ABUSECH_AUTH_KEY env vars apply when these are null. */
+	spamhausDqsKey: text("spamhaus_dqs_key"),
+	abusechAuthKey: text("abusech_auth_key"),
+	spamDomainAgeCheck: integer("spam_domain_age_check", { mode: "boolean" }).notNull().default(true),
+	/** JSON: brands the administrator added for display-name impersonation checks (see src/lib/spam/settings.ts). */
+	spamBrands: text("spam_brands"),
 	updatedAt: integer("updated_at", { mode: "timestamp" })
 		.notNull()
 		.$defaultFn(() => new Date()),

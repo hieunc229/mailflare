@@ -36,7 +36,7 @@ export async function analyzeSpam(db: AppDatabase, input: SpamAnalysisInput): Pr
 		...analyzeAuthentication(input.headers, input.verdicts),
 		...analyzeUrls(input.message, prepared),
 		...analyzeStructure(input.message, input.headers, prepared),
-		...analyzeImpersonation(input.message.fromAddr ?? input.envelopeFrom, await listKnownDomains(db, input.userId)),
+		...analyzeImpersonation(input.message.fromAddr ?? input.envelopeFrom, await listKnownDomains(db, input.userId), input.brands),
 	];
 	const intelligenceProvider = input.intelligenceProvider ?? new LocalSpamIntelligenceProvider();
 	signals.push(...await intelligenceProvider.check({
