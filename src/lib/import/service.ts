@@ -29,6 +29,8 @@ export async function importMessagesToMailbox(
 				destination: input.destination,
 				filename: message.filename,
 				raw: message.raw,
+				read: message.read,
+				starred: message.starred,
 			});
 			if (imported) {
 				result.imported += 1;
@@ -51,6 +53,8 @@ async function importMessageToMailbox(
 		destination: ImportDestination;
 		filename: string;
 		raw: ArrayBuffer;
+		read?: boolean;
+		starred?: boolean;
 	},
 ): Promise<boolean> {
 	const parsed = await parseRawMime(input.raw);
@@ -58,11 +62,19 @@ async function importMessageToMailbox(
 	const providerMessageId = parsed.messageId ?? `import:${input.filename}:${input.raw.byteLength}`;
 
 	const [existing] = await db
-		.select({ id: messages.id })
+		.select({ id: messages.id, read: messages.read, starred: messages.starred })
 		.from(messages)
 		.where(and(eq(messages.mailboxId, input.mailboxId), eq(messages.providerMessageId, providerMessageId)))
 		.limit(1);
-	if (existing) return false;
+	if (existing) {
+		// Re-imports only add read/starred state, so local changes are never undone.
+		const read = existing.read || input.read === true;
+		const starred = existing.starred || input.starred === true;
+		if (read !== existing.read || starred !== existing.starred) {
+			await db.update(messages).set({ read, starred }).where(eq(messages.id, existing.id));
+		}
+		return false;
+	}
 
 	const messageId = newId("msg");
 	const rawR2Key = `imports/${messageId}.eml`;
@@ -88,7 +100,8 @@ async function importMessageToMailbox(
 		htmlBody: parsed.html,
 		rawR2Key,
 		status: placement.status,
-		read: placement.direction === "outbound",
+		read: input.read ?? placement.direction === "outbound",
+		starred: input.starred ?? false,
 		threadId: await resolveThreadId(db, {
 			mailboxId: input.mailboxId,
 			messageId: parsed.messageId,

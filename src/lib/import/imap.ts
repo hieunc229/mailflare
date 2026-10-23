@@ -4,6 +4,7 @@ import {
 	assertSafeImapHost,
 	getLiteralLength,
 	isTaggedCompletion,
+	parseFetchFlags,
 	parseListMailboxName,
 	parseSearchUids,
 	quoteImapString,
@@ -80,13 +81,16 @@ class ImapConnection {
 		}
 	}
 
-	async fetchMessage(uid: string): Promise<ArrayBuffer> {
+	async fetchMessage(uid: string): Promise<{ raw: ArrayBuffer; flags: string[] }> {
 		const tag = this.nextTag();
-		await this.write(`${tag} UID FETCH ${uid} (RFC822)\r\n`);
+		// BODY.PEEK[] leaves the source's \Seen flag untouched, unlike RFC822.
+		await this.write(`${tag} UID FETCH ${uid} (FLAGS BODY.PEEK[])\r\n`);
 		let raw: ArrayBuffer | null = null;
+		let flags: string[] = [];
 
 		while (true) {
 			const line = await this.readLine();
+			flags = parseFetchFlags(line) ?? flags;
 			const literalLength = getLiteralLength(line);
 			if (literalLength !== null) {
 				raw = await this.readBytes(literalLength);
@@ -97,7 +101,7 @@ class ImapConnection {
 					throw new Error(`IMAP fetch failed: ${line}`);
 				}
 				if (!raw) throw new Error("IMAP fetch returned no message");
-				return raw;
+				return { raw, flags };
 			}
 		}
 	}
@@ -187,16 +191,21 @@ export async function fetchImapMessages(input: ImapImportInput): Promise<ImapFet
 	try {
 		await imap.readGreeting();
 		await imap.command(`LOGIN ${quoteImapString(input.username)} ${quoteImapString(input.password)}`);
-		await imap.command(`SELECT ${quoteImapString(input.folder)}`);
+		await imap.command(`EXAMINE ${quoteImapString(input.folder)}`);
 		const searchLines = await imap.command("UID SEARCH ALL");
 		const batch = selectImapUidBatch(searchLines.flatMap(parseSearchUids), input.limit, input.offset);
 		const messages: ImportMessageInput[] = [];
 		let fetchedBytes = 0;
 		for (const uid of [...batch.uids].reverse()) {
 			if (messages.length > 0 && fetchedBytes >= MAX_IMAP_BATCH_BYTES) break;
-			const raw = await imap.fetchMessage(uid);
+			const { raw, flags } = await imap.fetchMessage(uid);
 			fetchedBytes += raw.byteLength;
-			messages.push({ filename: `${input.folder}-${uid}.eml`, raw });
+			messages.push({
+				filename: `${input.folder}-${uid}.eml`,
+				raw,
+				read: flags.includes("\\SEEN"),
+				starred: flags.includes("\\FLAGGED"),
+			});
 		}
 		await imap.command("LOGOUT").catch(() => undefined);
 		const complete = messages.length === batch.uids.length;

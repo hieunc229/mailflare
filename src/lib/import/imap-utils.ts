@@ -34,6 +34,13 @@ export function getLiteralLength(line: string): number | null {
 	return match ? Number(match[1]) : null;
 }
 
+/** Uppercased flags from a FETCH response line, or null when the line has none. */
+export function parseFetchFlags(line: string): string[] | null {
+	const match = line.match(/\bFLAGS \(([^)]*)\)/i);
+	if (!match) return null;
+	return match[1].trim().split(/\s+/).filter(Boolean).map((flag) => flag.toUpperCase());
+}
+
 export function isTaggedCompletion(line: string, tag: string): boolean {
 	return line.toUpperCase().startsWith(`${tag.toUpperCase()} `);
 }
