@@ -31,6 +31,8 @@ export type Message = {
 	snoozedUntil?: string | null;
 	/** When a scheduled send will go out; set on rows in the Scheduled list. */
 	scheduledAt?: string | null;
+	/** Opens counted by the read-receipt pixel; absent when the message was sent without one. */
+	openCount?: number;
 	threadId: string | null;
 	inReplyTo?: string | null;
 	references?: string | null;

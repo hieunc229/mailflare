@@ -31,6 +31,7 @@ export const sendEmailSchema = z.object({
 	mailboxId: z.string().min(1).max(200),
 	scheduledAt: z.string().datetime().optional(),
 	undoSend: z.boolean().optional(),
+	trackOpens: z.boolean().optional(),
 	attachments: z
 		.array(
 			z.object({

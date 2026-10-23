@@ -28,6 +28,8 @@ export function buildSendFormData(input: {
 	scheduledAt?: Date | null;
 	/** Hold the send briefly so it can be cancelled. */
 	undoSend?: boolean;
+	/** Add a read-receipt pixel to the sent message. */
+	trackOpens?: boolean;
 }): FormData {
 	const form = new FormData();
 	form.set("from", input.from);
@@ -44,6 +46,7 @@ export function buildSendFormData(input: {
 	if (input.draftId) form.set("draftId", input.draftId);
 	if (input.scheduledAt) form.set("scheduledAt", input.scheduledAt.toISOString());
 	else if (input.undoSend) form.set("undoSend", "true");
+	if (input.trackOpens) form.set("trackOpens", "true");
 	for (const attachment of input.attachments) {
 		form.append("attachments", attachment.file);
 	}

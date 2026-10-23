@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { DragEvent } from "react";
-import { ChevronUp, FileText, Forward, Maximize2, Minimize2, Minus, Paperclip, Reply, Trash2, X } from "lucide-react";
+import { ChevronUp, Eye, EyeOff, FileText, Forward, Maximize2, Minimize2, Minus, Paperclip, Reply, Trash2, X } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useLanguage } from "@/components/language-provider";
 import { Button } from "@/components/ui/button";
@@ -19,6 +19,7 @@ import { SendReview } from "@/components/agent/send-review";
 import type { ReviewSnapshot } from "@/components/agent/send-review-types";
 import { useIsMobile } from "@/components/sidebar-mobile-utils";
 import { useSheetViewport } from "./use-sheet-viewport";
+import { useTrackOpens } from "./use-track-opens";
 import { buildSendFormData, fetchDraft, formatAttachmentSize } from "./utils";
 import { RecipientInput } from "./recipient-input";
 import { RichTextEditor } from "./rich-text-editor";
@@ -76,6 +77,7 @@ export function ComposeForm({
 	const [loadingDraft, setLoadingDraft] = useState(false);
 	const [deletingDraft, setDeletingDraft] = useState(false);
 	const [scheduledAt, setScheduledAt] = useState<Date | null>(null);
+	const [trackOpens, setTrackOpens] = useTrackOpens();
 	const [loadedDraftMailboxId, setLoadedDraftMailboxId] = useState<string | null>(null);
 	const [loadedDraftFrom, setLoadedDraftFrom] = useState<string | null>(null);
 	const [selectedFrom, setSelectedFrom] = useState("");
@@ -381,6 +383,7 @@ export function ComposeForm({
 					draftId,
 					scheduledAt,
 					undoSend: true,
+					trackOpens,
 				}),
 			});
 			data = (await res.json()) as { messageId?: string; scheduled?: boolean; undoSeconds?: number; error?: string };
@@ -817,6 +820,21 @@ export function ComposeForm({
 									className="rounded-md p-1.5 text-neutral-500 hover:bg-neutral-100 hover:text-neutral-900 disabled:pointer-events-none disabled:opacity-50 max-md:px-2"
 								>
 									<Paperclip className="h-4 w-4" />
+								</button>
+							</Tooltip>
+							<Tooltip label={trackOpens ? t("compose.trackOpensOn") : t("compose.trackOpensOff")}>
+								<button
+									type="button"
+									aria-label={t("compose.trackOpens")}
+									aria-pressed={trackOpens}
+									onClick={() => setTrackOpens(!trackOpens)}
+									disabled={loading || loadingDraft}
+									className={cn(
+										"rounded-md p-1.5 hover:bg-neutral-100 disabled:pointer-events-none disabled:opacity-50 max-md:px-2",
+										trackOpens ? "text-blue-600 hover:text-blue-700" : "text-neutral-500 hover:text-neutral-900",
+									)}
+								>
+									{trackOpens ? <Eye className="h-4 w-4" /> : <EyeOff className="h-4 w-4" />}
 								</button>
 							</Tooltip>
 							<span className="flex-1 max-md:hidden" />
