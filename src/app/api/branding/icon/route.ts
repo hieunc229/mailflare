@@ -32,7 +32,8 @@ export async function GET(request: Request) {
 				return new Response(object.body, {
 					headers: {
 						"Content-Type": object.httpMetadata?.contentType ?? "image/png",
-						"Cache-Control": "no-cache",
+						// Changing the icon bumps the `v` query in this tab; other tabs pick it up within the hour.
+						"Cache-Control": "public, max-age=3600",
 						"X-Content-Type-Options": "nosniff",
 					},
 				});

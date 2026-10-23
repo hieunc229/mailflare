@@ -30,7 +30,8 @@ export async function GET(request: Request) {
 		.where(and(eq(contacts.userId, access.mailbox.userId), eq(contacts.email, email)))
 		.limit(1);
 	const avatarKey = account ? account.avatarKey : contact?.avatarKey;
-	if (!avatarKey) return new Response("Not found", { status: 404 });
+	// Uploading an avatar changes the URL's version, so a cached miss never hides a new one.
+	if (!avatarKey) return new Response("Not found", { status: 404, headers: { "Cache-Control": "private, max-age=600" } });
 
 	return getAvatarImageResponse(request, env.BUCKET, avatarKey);
 }
