@@ -328,6 +328,31 @@ export const messages = sqliteTable(
 			t.createdAt,
 		),
 		index("messages_mailbox_thread_key_idx").on(t.mailboxId, sql`coalesce(${t.threadId}, ${t.id})`),
+		// Covering index for the folder-counts GROUP BY: lets the counts
+		// endpoint stream grouped rows straight off the index instead of
+		// sorting the whole table.
+		index("messages_counts_cover_idx").on(
+			t.mailboxId,
+			t.folderId,
+			t.direction,
+			t.status,
+			t.read,
+			t.starred,
+			t.snoozedUntil,
+		),
+		// Conversation paging partitions by coalesce(thread_id, id) and orders
+		// each partition by created_at desc, so the thread key must precede
+		// created_at for the index to feed the window in sorted order. The
+		// snoozed_until filter rides the tail column and never touches the
+		// table.
+		index("messages_conv_cover_idx").on(
+			t.mailboxId,
+			t.status,
+			sql`coalesce(${t.threadId}, ${t.id})`,
+			t.createdAt,
+			t.id,
+			t.snoozedUntil,
+		),
 	],
 );
 

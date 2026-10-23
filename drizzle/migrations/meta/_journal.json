@@ -456,6 +456,13 @@
       "when": 1792844400000,
       "tag": "0073_add_undo_send_seconds",
       "breakpoints": true
+    },
+    {
+      "idx": 66,
+      "version": "6",
+      "when": 1792844400001,
+      "tag": "0074_add_counts_conversation_indexes",
+      "breakpoints": true
     }
   ]
 }
