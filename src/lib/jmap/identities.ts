@@ -12,9 +12,10 @@ import type { JmapContext, JmapMethodHandler } from "./types";
 /** One Identity per address the account may send from. */
 export async function buildIdentities(ctx: JmapContext) {
 	const list: Array<Record<string, unknown>> = [];
-	for (const mailbox of await listJmapMailboxes(ctx)) {
-		if (mailbox.permission === "read_only") continue;
-		for (const address of await listSendableAddresses(ctx, mailbox)) {
+	const sendable = (await listJmapMailboxes(ctx)).filter((mailbox) => mailbox.permission !== "read_only");
+	const addresses = await Promise.all(sendable.map((mailbox) => listSendableAddresses(ctx, mailbox)));
+	for (const [index, mailbox] of sendable.entries()) {
+		for (const address of addresses[index]) {
 			list.push({
 				id: identityId(mailbox.id, address),
 				name: mailbox.displayName ?? "",

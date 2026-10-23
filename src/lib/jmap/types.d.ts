@@ -1,5 +1,6 @@
 import type { ApiAuthResult } from "@/lib/api/key-auth-types";
 import type { AppDatabase } from "@/db";
+import type { ChangeScope } from "./changes";
 
 export type JmapId = string;
 
@@ -31,6 +32,11 @@ export type JmapContext = {
 	origin: string;
 	/** Client-assigned creation ids resolved so far in this request. */
 	createdIds: Record<string, JmapId>;
+	/**
+	 * Lookups shared by the read-only calls of one request. `null` while a
+	 * write runs, since it reads the state before and after its change.
+	 */
+	memo?: { mailboxes?: Promise<AccessibleMailbox[]>; scope?: Promise<ChangeScope> } | null;
 };
 
 export type JmapMethodHandler = (ctx: JmapContext, args: Record<string, unknown>) => Promise<Record<string, unknown> | JmapMethodError>;

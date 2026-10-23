@@ -88,6 +88,9 @@ function resolveCreatedIds(args: Record<string, unknown>, createdIds: Record<str
 /** Requests slower than this are logged with the shape of each call, so expensive client patterns show up in the Worker logs. */
 const SLOW_REQUEST_MS = 200;
 
+/** Calls that cannot change mailboxes or move the state, so later calls may reuse what they looked up. */
+const READ_ONLY_METHOD = /\/(get|query|changes|queryChanges)$|^Core\/echo$/;
+
 /** What a call asked for, without ids, filters' values or content. */
 function describeCall(name: string, args: Record<string, unknown>, ms: number) {
 	const size = (value: unknown) => (Array.isArray(value) ? value.length : value === null || value === undefined ? undefined : typeof value === "object" ? "ref" : value);
@@ -114,6 +117,8 @@ export async function processRequest(ctx: JmapContext, request: JmapRequest): Pr
 
 	for (const [name, rawArgs, callId] of request.methodCalls) {
 		const callStartedAt = Date.now();
+		const readOnly = READ_ONLY_METHOD.test(name);
+		if (!readOnly) ctx.memo = undefined;
 		const handler = METHODS[name];
 		if (!handler) {
 			responses.push(["error", { type: "unknownMethod" }, callId]);
@@ -125,7 +130,7 @@ export async function processRequest(ctx: JmapContext, request: JmapRequest): Pr
 				responses.push(["error", { type: "accountNotFound" }, callId]);
 				continue;
 			}
-			const result = await handler(ctx, args);
+			const result = await handler(readOnly ? ctx : { ...ctx, memo: null }, args);
 			calls.push(describeCall(name, args, Date.now() - callStartedAt));
 			if ("type" in result && typeof result.type === "string" && !("accountId" in result) && !("list" in result)) {
 				responses.push(["error", result, callId]);
@@ -149,6 +154,7 @@ export async function processRequest(ctx: JmapContext, request: JmapRequest): Pr
 		}
 	}
 
+	if (request.methodCalls.some(([name]) => !READ_ONLY_METHOD.test(name))) ctx.memo = undefined;
 	const stateStartedAt = Date.now();
 	const state = await sessionState(ctx);
 	const totalMs = Date.now() - startedAt;

@@ -42,7 +42,20 @@ export type ChangeScope = {
 	state: string;
 };
 
-export async function currentChangeScope(ctx: JmapContext): Promise<ChangeScope> {
+export function currentChangeScope(ctx: JmapContext): Promise<ChangeScope> {
+	if (ctx.memo === null) return loadChangeScope(ctx);
+	const memo = (ctx.memo ??= {});
+	if (!memo.scope) {
+		const pending = loadChangeScope(ctx);
+		memo.scope = pending;
+		pending.catch(() => {
+			if (memo.scope === pending) memo.scope = undefined;
+		});
+	}
+	return memo.scope;
+}
+
+async function loadChangeScope(ctx: JmapContext): Promise<ChangeScope> {
 	const mailboxes = await listJmapMailboxes(ctx);
 	const [seq, fingerprint, floor] = await Promise.all([latestSeq(ctx, mailboxes.map((m) => m.id)), accessFingerprint(mailboxes), floorSeq(ctx)]);
 	const effective = Math.max(seq, floor);

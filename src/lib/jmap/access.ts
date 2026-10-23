@@ -5,7 +5,21 @@ import { getMailboxDomainAddresses } from "@/lib/mailboxes/domain-addresses";
 import type { AccessibleMailbox, JmapContext } from "./types";
 
 /** Every Mailflare mailbox the key's user can read, in a JMAP-shaped record. */
-export async function listJmapMailboxes(ctx: JmapContext): Promise<AccessibleMailbox[]> {
+export function listJmapMailboxes(ctx: JmapContext): Promise<AccessibleMailbox[]> {
+	if (ctx.memo === null) return loadJmapMailboxes(ctx);
+	const memo = (ctx.memo ??= {});
+	if (!memo.mailboxes) {
+		const pending = loadJmapMailboxes(ctx);
+		memo.mailboxes = pending;
+		// A failed lookup is retried by the next call instead of failing it too.
+		pending.catch(() => {
+			if (memo.mailboxes === pending) memo.mailboxes = undefined;
+		});
+	}
+	return memo.mailboxes;
+}
+
+async function loadJmapMailboxes(ctx: JmapContext): Promise<AccessibleMailbox[]> {
 	const rows = await listAccessibleMailboxes(ctx.db, ctx.auth.user);
 	return rows.filter((row) => !ctx.auth.mailboxIds || ctx.auth.mailboxIds.includes(row.id)).map((row) => ({
 		id: row.id,
