@@ -39,7 +39,7 @@ export async function importMessagesToMailbox(
 			}
 		} catch (error) {
 			result.skipped += 1;
-			result.errors.push(`${message.filename}: ${error instanceof Error ? error.message : "Import failed"}`);
+			result.errors.push(`${message.filename}: ${describeImportError(error)}`);
 		}
 	}
 	return result;
@@ -118,16 +118,26 @@ async function importMessageToMailbox(
 			httpMetadata: { contentType: "message/rfc822" },
 		});
 		await storeMessageAttachments(env, messageId, parsed.attachments, { validate: false });
-		const contactAddress = placement.direction === "outbound" ? toAddr : fromAddr;
-		await upsertContactFromAddress(env, {
-			userId: input.userId,
-			address: contactAddress,
-			source: placement.direction === "outbound" ? "outbound" : "inbound",
-		});
 	} catch (error) {
 		await deleteMessageWithObjects(env, db, messageId, rawR2Key);
 		throw error;
 	}
 
+	// The contact is a by-product: the message is already stored, so a failed update must not discard it.
+	await upsertContactFromAddress(env, {
+		userId: input.userId,
+		address: placement.direction === "outbound" ? toAddr : fromAddr,
+		source: placement.direction === "outbound" ? "outbound" : "inbound",
+	}).catch((error) => console.error("Import contact update failed", input.filename, describeImportError(error)));
+
 	return true;
+}
+
+/**
+ * Drizzle wraps driver errors as "Failed query: <sql> params: <values>", which
+ * hides the reason and repeats message data; the driver's own message is on `cause`.
+ */
+export function describeImportError(error: unknown): string {
+	if (!(error instanceof Error)) return "Import failed";
+	return error.cause instanceof Error && error.message.startsWith("Failed query") ? error.cause.message : error.message;
 }
