@@ -81,6 +81,7 @@ test("SES notifications parse S3 receipts and ignore everything else", () => {
 	});
 	assert.deepEqual(notification.parseSesNotification(message), {
 		from: "sender@example.net", recipients: ["a@example.com"], bucket: "b", key: "inbound/abc", virusFailed: false, headers: { subject: "Hi" },
+		verdicts: { spf: undefined, dkim: undefined, dmarc: undefined, spam: undefined, virus: "PASS" },
 	});
 	assert.equal(notification.parseSesNotification(JSON.stringify({ notificationType: "Bounce" })), null);
 	assert.equal(notification.parseSesNotification("not json"), null);

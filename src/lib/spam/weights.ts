@@ -5,6 +5,10 @@ export const SPAM_WEIGHTS = {
 	relationships: { manuallySavedContact: -15, previouslySentTo: -25 },
 	reputation: { establishedSpam: 25, establishedHam: -15 },
 	content: { maximum: 30 },
+	provider: { spamVerdict: 25 },
+	blocklists: { ipListed: 30, ipDynamic: 12, domainSpam: 30, domainPhishOrMalware: 45, domainAbusedLegit: 10, urlMalware: 40 },
+	domainAge: { underWeek: 25, underMonth: 15, linkUnderWeek: 10 },
+	impersonation: { brandDisplayName: 18, addressInDisplayName: 12, lookalikeDomain: 30 },
 } as const;
 
 export const MAX_CANDIDATE_TOKENS = 500;

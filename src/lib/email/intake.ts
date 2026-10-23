@@ -37,7 +37,7 @@ export async function intakeIncomingMail(env: CloudflareEnv, input: IntakeInput,
 		httpMetadata: { contentType: "message/rfc822" },
 		customMetadata: { from: input.from, to: input.to },
 	});
-	const payload: InboundQueueMessage = { from: input.from, to: input.to, rawR2Key, headers: input.headers };
+	const payload: InboundQueueMessage = { from: input.from, to: input.to, rawR2Key, headers: input.headers, verdicts: input.verdicts, senderIp: input.senderIp };
 	await env.INBOUND_QUEUE.send(payload);
 	return { action: "store", rawR2Key, forwardedTo };
 }

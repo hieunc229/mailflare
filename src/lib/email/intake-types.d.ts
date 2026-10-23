@@ -1,3 +1,5 @@
+import type { ProviderVerdicts } from "@/lib/spam/types";
+
 export type IntakeInput = {
 	/** Envelope sender. */
 	from: string;
@@ -6,6 +8,10 @@ export type IntakeInput = {
 	raw: ArrayBuffer;
 	/** Lower-cased header names to values, as the Worker handler receives them. */
 	headers: Record<string, string>;
+	/** Authentication and spam verdicts the receiving provider computed (SES), for spam analysis. */
+	verdicts?: ProviderVerdicts;
+	/** The IP that connected to the provider's MX, when the headers do not carry it. */
+	senderIp?: string;
 };
 
 export type IntakeActions = {

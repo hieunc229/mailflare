@@ -17,6 +17,8 @@ import { resolveThreadId } from "@/lib/email/threading";
 import { normalizeMessageId } from "@/lib/email/thread-lookup";
 import type { SessionUser } from "@/lib/auth/types";
 import { analyzeSpam } from "@/lib/spam/engine";
+import { ExternalSpamIntelligenceProvider, getSpamIntelligenceConfig } from "@/lib/spam/providers/external";
+import type { ProviderVerdicts } from "@/lib/spam/types";
 import { getReputationKeys } from "@/lib/spam/analyzers/reputation";
 import { recordReputationObservation } from "@/lib/spam/repository";
 import {
@@ -30,6 +32,8 @@ export type InboundQueueMessage = {
 	to: string;
 	rawR2Key: string;
 	headers?: Record<string, string>;
+	verdicts?: ProviderVerdicts;
+	senderIp?: string;
 };
 
 /** True when the address is a mailbox or alias owned by the user, so their own mail never counts as unread. */
@@ -128,7 +132,10 @@ export async function processInboundMessage(
 				userId: decision.mailbox.userId,
 				envelopeFrom: payload.from,
 				headers: payload.headers,
+				verdicts: payload.verdicts,
+				senderIp: payload.senderIp,
 				message: parsed,
+				intelligenceProvider: new ExternalSpamIntelligenceProvider(getSpamIntelligenceConfig(env), env.BUCKET),
 			});
 		} catch (error) {
 			spamAnalysisError = error instanceof Error ? error.message.slice(0, 300) : "Spam analysis failed";

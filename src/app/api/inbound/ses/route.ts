@@ -47,7 +47,7 @@ export async function POST(request: Request) {
 		return NextResponse.json({ dropped: "Message failed the virus scan" });
 	}
 	const raw = await getObject(config, state.bucket, notification.key);
-	const result = await intakeProviderMail(env, { from: notification.from, recipients: notification.recipients, raw, headers: notification.headers });
+	const result = await intakeProviderMail(env, { from: notification.from, recipients: notification.recipients, raw, headers: notification.headers, verdicts: notification.verdicts });
 	// Only after intake succeeded: a failure above returns 500 so SNS retries with the object intact.
 	await deleteObject(config, state.bucket, notification.key);
 	return NextResponse.json(result);

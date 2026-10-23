@@ -29,6 +29,12 @@ interface CloudflareEnv {
 	APNS_PRIVATE_KEY?: string;
 	/** Origin of a Mailflare push relay (mailflare-relay); lets this server push without APNS_* keys. */
 	APNS_RELAY_URL?: string;
+	/** Spamhaus Data Query Service key; enables ZEN (sending IP) and DBL (domain) checks in spam analysis. */
+	SPAMHAUS_DQS_KEY?: string;
+	/** abuse.ch Auth-Key; enables URLhaus malware-host checks for links in incoming mail. */
+	ABUSECH_AUTH_KEY?: string;
+	/** "off" disables the RDAP domain-age check in spam analysis. */
+	SPAM_DOMAIN_AGE_CHECK?: string;
 	AGENT_RATE_LIMIT?: RateLimit;
 	/**
 	 * Backblaze B2 storage. When all four are set, B2 replaces the R2 binding for raw mail, attachments, Drive,

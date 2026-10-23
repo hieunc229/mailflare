@@ -4,6 +4,8 @@ import { domains } from "@/db/schema";
 import { normalizeEmailAddress } from "@/lib/email/address";
 import { inboundAttachmentLimitReasonFromRaw } from "@/lib/email/inbound-attachments";
 import { intakeIncomingMail } from "@/lib/email/intake";
+import { readSesTrace } from "@/lib/email/provider-trace";
+import type { ProviderVerdicts } from "@/lib/spam/types";
 
 export const MAX_PROVIDER_MESSAGE_BYTES = 25 * 1024 * 1024;
 
@@ -16,11 +18,14 @@ export const MAX_PROVIDER_MESSAGE_BYTES = 25 * 1024 * 1024;
  */
 export async function intakeProviderMail(
 	env: CloudflareEnv,
-	input: { from: string; recipients: string[]; raw: ArrayBuffer; headers?: Record<string, string> },
+	input: { from: string; recipients: string[]; raw: ArrayBuffer; headers?: Record<string, string>; verdicts?: ProviderVerdicts },
 ): Promise<{ delivered: number; dropped: string | null }> {
 	if (input.raw.byteLength > MAX_PROVIDER_MESSAGE_BYTES) return { delivered: 0, dropped: "Message exceeds the 25 MiB receiving limit" };
 	const limit = await inboundAttachmentLimitReasonFromRaw(input.raw);
 	if (limit) return { delivered: 0, dropped: limit };
+	const trace = readSesTrace(input.raw);
+	const verdicts = input.verdicts ?? trace.verdicts;
+	if (verdicts?.virus?.toUpperCase() === "FAIL") return { delivered: 0, dropped: "Message failed the virus scan" };
 
 	const db = getDb(env);
 	let delivered = 0;
@@ -30,7 +35,7 @@ export async function intakeProviderMail(
 		if (!domain) continue;
 		const result = await intakeIncomingMail(
 			env,
-			{ from: normalizeEmailAddress(input.from), to: recipient, raw: input.raw, headers: input.headers ?? {} },
+			{ from: normalizeEmailAddress(input.from), to: recipient, raw: input.raw, headers: input.headers ?? {}, verdicts, senderIp: trace.senderIp },
 			{ forward: async () => false },
 		);
 		if (result.action === "store") delivered += 1;
