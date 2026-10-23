@@ -33,7 +33,8 @@ import { parseArgs } from "node:util";
 const MAX_BATCH_MESSAGES = 100;
 const MAX_BATCH_BYTES = 20 * 1024 * 1024;
 const MAX_BUFFERED_BYTES = 60 * 1024 * 1024;
-const MAX_MESSAGE_BYTES = 25 * 1024 * 1024;
+// The import endpoint caps a whole request at 25 MiB, form overhead included.
+const MAX_MESSAGE_BYTES = 24 * 1024 * 1024;
 const MAX_FOLDER_NAME = 80;
 
 const SYSTEM_LABELS = {
@@ -225,7 +226,7 @@ class MailflareClient {
 
 	async findMailbox(selector) {
 		const { response, data } = await this.request("/api/mailboxes");
-		if (!response.ok) throw new Error(`Could not list mailboxes (${response.status}): ${data.error ?? ""}`);
+		if (!response.ok) throw new Error(`Could not list mailboxes (${response.status}): ${data.error ?? ""}. Check that the session token is valid.`);
 		const wanted = selector.toLowerCase();
 		const mailbox = data.mailboxes.find((item) =>
 			item.id === selector || (item.senderAddresses ?? []).some((address) => address.toLowerCase() === wanted),
@@ -311,10 +312,14 @@ async function uploadWithRetry(client, mailboxId, destination, messages, totals)
 			totals.errors.push(...(result.data.errors ?? []));
 			return;
 		}
-		if (status === 413 && messages.length > 1) {
+		if (messages.length > 1 && (status === 413 || (status >= 500 && attempt >= 2))) {
 			const middle = Math.ceil(messages.length / 2);
 			await uploadWithRetry(client, mailboxId, destination, messages.slice(0, middle), totals);
 			await uploadWithRetry(client, mailboxId, destination, messages.slice(middle), totals);
+			return;
+		}
+		if (status === 413) {
+			totals.errors.push(`${messages[0].filename}: too large for one upload`);
 			return;
 		}
 		const retryable = status === 0 || status === 429 || status >= 500;
@@ -423,7 +428,7 @@ async function main() {
 	console.log(`\n\n${index} messages in file${startAt ? `, first ${startAt} skipped` : ""}.`);
 	for (const [key, count] of [...destinations.entries()].sort((a, b) => b[1] - a[1])) console.log(`  ${String(count).padStart(7)}  ${key}`);
 	if (ignored) console.log(`  ${ignored} spam/trash messages skipped by option`);
-	if (tooLarge) console.log(`  ${tooLarge} messages over 25 MB skipped (Mailflare's message size limit)`);
+	if (tooLarge) console.log(`  ${tooLarge} messages over 24 MB skipped (Mailflare's upload size limit)`);
 	if (!values["dry-run"]) {
 		console.log(`Imported ${totals.imported}, skipped ${totals.skipped} (already present or failed).`);
 		if (totals.errors.length) {
