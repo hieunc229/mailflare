@@ -28,7 +28,7 @@ export type ImportSourceOption = {
 	system?: boolean;
 };
 
-export type ImportTab = "file" | "imap";
+export type ImportTab = "file" | "imap" | "takeout";
 
 export type ImportSourceItem = {
 	id: string;

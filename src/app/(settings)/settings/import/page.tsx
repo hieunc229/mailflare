@@ -19,6 +19,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
 import { importMessageFiles } from "@/components/settings/import-messages-utils";
+import { TakeoutImport } from "@/components/settings/takeout-import";
 import type {
   ImapFormState,
   ImportResult,
@@ -257,8 +258,13 @@ export default function SettingsImportPage() {
               >
                 <option value="file">{t("importPage.backupFile")}</option>
                 <option value="imap">{t("importPage.imap")}</option>
+                <option value="takeout">{t("importPage.takeout")}</option>
               </Select>
             </div>
+            {activeTab === "takeout" ? (
+              <TakeoutImport />
+            ) : (
+            <>
             <div className="space-y-2">
               <Label>{t("importPage.chooseSections")}</Label>
 
@@ -517,6 +523,8 @@ export default function SettingsImportPage() {
                   )}
                 </form>
               </>
+            )}
+            </>
             )}
           </CardContent>
         </div>
