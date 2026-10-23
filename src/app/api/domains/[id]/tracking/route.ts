@@ -6,6 +6,7 @@ import { hasValidSessionMutationOrigin } from "@/lib/auth/origin";
 import { getDomainForUser } from "@/lib/domains/service";
 import { getDomainTrackingHost, setDomainTrackingHost, TrackingHostsUnavailableError } from "@/lib/tracking/open-tracking";
 import { normalizeTrackingHost } from "@/lib/tracking/open-tracking-utils";
+import { isUniqueConstraintError } from "@/lib/database-errors";
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -54,7 +55,7 @@ export async function PUT(request: Request, { params }: Params) {
 		await setDomainTrackingHost(env, id, hostname);
 	} catch (error) {
 		if (error instanceof TrackingHostsUnavailableError) return NextResponse.json(MIGRATION_REQUIRED, { status: 409 });
-		if (String(error).includes("UNIQUE")) return NextResponse.json({ error: "Another domain already uses this hostname" }, { status: 409 });
+		if (isUniqueConstraintError(error)) return NextResponse.json({ error: "Another domain already uses this hostname" }, { status: 409 });
 		throw error;
 	}
 	return NextResponse.json({ hostname, available: true });

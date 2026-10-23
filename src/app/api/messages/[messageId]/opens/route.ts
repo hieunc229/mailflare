@@ -4,6 +4,7 @@ import { getDb } from "@/db";
 import { messages } from "@/db/schema";
 import { getCurrentUser } from "@/lib/auth/cookies";
 import { getEnv } from "@/lib/cloudflare";
+import { isMissingTableError } from "@/lib/database-errors";
 import { getMailboxAccessLevel } from "@/lib/mailboxes/access";
 import { getMessageTrackingSummary } from "@/lib/tracking/open-tracking";
 
@@ -30,7 +31,7 @@ export async function GET(
 	try {
 		return NextResponse.json({ tracking: await getMessageTrackingSummary(env, messageId) });
 	} catch (error) {
-		if (String(error).includes("no such table")) return NextResponse.json({ tracking: null });
+		if (isMissingTableError(error)) return NextResponse.json({ tracking: null });
 		throw error;
 	}
 }

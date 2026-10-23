@@ -5,6 +5,7 @@ import { domains, domainTrackingHosts, messageOpens, messageTracking, messages }
 import { newId } from "@/lib/ids";
 import { classifyOpen, createTrackingToken, isDuplicateOpen, MAX_STORED_OPENS } from "./open-tracking-utils";
 import type { MessageTrackingSummary } from "./types";
+import { isMissingTableError } from "@/lib/database-errors";
 
 /** Returns the message's pixel token, creating it on the first delivery attempt. */
 export async function ensureTrackingToken(env: CloudflareEnv, messageId: string): Promise<string> {
@@ -96,13 +97,9 @@ export async function getOpenCounts(env: CloudflareEnv, messageIds: string[]): P
 		for (const row of rows) counts.set(row.messageId, row.openCount);
 	} catch (error) {
 		// Lists keep working before migration 0068 is applied.
-		if (!isMissingTable(error)) throw error;
+		if (!isMissingTableError(error)) throw error;
 	}
 	return counts;
-}
-
-function isMissingTable(error: unknown): boolean {
-	return String(error).includes("no such table");
 }
 
 /** The pixel hostname configured for the sender's domain, if any. */
@@ -118,7 +115,7 @@ export async function getTrackingHostForSender(env: CloudflareEnv, from: string)
 			.limit(1);
 		return row?.hostname ?? null;
 	} catch (error) {
-		if (isMissingTable(error)) return null;
+		if (isMissingTableError(error)) return null;
 		throw error;
 	}
 }
@@ -133,7 +130,7 @@ export async function getDomainTrackingHost(env: CloudflareEnv, domainId: string
 			.limit(1);
 		return row?.hostname ?? null;
 	} catch (error) {
-		if (isMissingTable(error)) throw new TrackingHostsUnavailableError();
+		if (isMissingTableError(error)) throw new TrackingHostsUnavailableError();
 		throw error;
 	}
 }
@@ -150,7 +147,7 @@ export async function setDomainTrackingHost(env: CloudflareEnv, domainId: string
 			.values({ domainId, hostname })
 			.onConflictDoUpdate({ target: domainTrackingHosts.domainId, set: { hostname } });
 	} catch (error) {
-		if (isMissingTable(error)) throw new TrackingHostsUnavailableError();
+		if (isMissingTableError(error)) throw new TrackingHostsUnavailableError();
 		throw error;
 	}
 }
