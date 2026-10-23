@@ -96,6 +96,18 @@ export class SqliteDatabase {
 		this.db.pragma("journal_mode = WAL");
 		this.db.pragma("foreign_keys = ON");
 		this.db.pragma("busy_timeout = 5000");
+		// better-sqlite3 defaults give us ~2MB of page cache and no mmap, which
+		// makes every uncached read hit the disk. mmap_size lets SQLite serve
+		// pages straight from the OS page cache; cache_size is the in-process
+		// fallback; temp_store keeps sort materialization off the disk.
+		// synchronous=NORMAL is safe under WAL (no corruption risk) and removes
+		// an fsync per commit.
+		const cacheKb = Number(process.env.SQLITE_CACHE_KB ?? 65536);
+		const mmapBytes = Number(process.env.SQLITE_MMAP_BYTES ?? 536870912);
+		if (Number.isFinite(cacheKb) && cacheKb > 0) this.db.pragma(`cache_size = -${Math.floor(cacheKb)}`);
+		if (Number.isFinite(mmapBytes) && mmapBytes > 0) this.db.pragma(`mmap_size = ${Math.floor(mmapBytes)}`);
+		this.db.pragma("temp_store = memory");
+		this.db.pragma("synchronous = NORMAL");
 	}
 
 	prepare(sql: string) {
