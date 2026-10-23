@@ -23,7 +23,7 @@ import type { DnsAuthRecord, DnsStatusSummary, Domain, DomainDnsCache, DomainDns
 import DomainItemCard from "./DomainItemCard";
 import { SectionRowSkeleton } from "@/components/page-skeletons";
 import { checkDomain } from "./utils";
-import { confirmMxReplacement } from "./api";
+import { confirmMxReplacement, createDomain, isMxConflictError } from "./api";
 
 export default function DomainsPage() {
   const { t } = useLanguage();
@@ -77,20 +77,13 @@ export default function DomainsPage() {
       }
       if (!checkedDomain) throw new Error(t("onboarding.domainCheckFailed"));
 
-      const res = await authFetch("/api/domains", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          hostname: checkedDomain.hostname,
-          enableRouting: true,
-          skipDns,
-          sendingProvider,
-          receivingProvider,
-        }),
+      return createDomain({
+        hostname: checkedDomain.hostname,
+        enableRouting: true,
+        skipDns,
+        sendingProvider,
+        receivingProvider,
       });
-      const json = (await res.json()) as { error?: string };
-      if (!res.ok) throw new Error(json.error ?? t("mailboxes.failed"));
-      return json;
     },
     onSuccess: () => {
       setHostname("");
@@ -403,19 +396,21 @@ export default function DomainsPage() {
               {create.isError && (
                 <div className="space-y-3 rounded-xl bg-red-50 px-4 py-3 text-sm text-red-700">
                   <p>{(create.error as Error).message}</p>
-                  <div className="space-y-2">
-                    <p className="font-medium">
-                      {t("domains.tokenPermissions")}
-                    </p>
-                    <ul className="list-disc space-y-1 pl-5">
-                      <li>
-                        {t("domains.tokenAccounts")}
-                      </li>
-                      <li>
-                        {t("domains.tokenZones")}
-                      </li>
-                    </ul>
-                  </div>
+                  {!isMxConflictError(create.error) && (
+                    <div className="space-y-2">
+                      <p className="font-medium">
+                        {t("domains.tokenPermissions")}
+                      </p>
+                      <ul className="list-disc space-y-1 pl-5">
+                        <li>
+                          {t("domains.tokenAccounts")}
+                        </li>
+                        <li>
+                          {t("domains.tokenZones")}
+                        </li>
+                      </ul>
+                    </div>
+                  )}
                 </div>
               )}
               <Button

@@ -27,9 +27,16 @@ type SetupResponse = { error?: string; code?: string; records?: { content: strin
 
 /** Whether a response is a 409 MX_CONFLICT the user agreed to resolve by replacing the listed MX records. */
 export function confirmMxReplacement(response: Response, data: SetupResponse): boolean {
-	if (response.status !== 409 || data.code !== "MX_CONFLICT") return false;
+	if (response.status !== 409 || (data.code !== "MX_CONFLICT" && data.code !== "MX_RECORDS_CONFLICT")) return false;
 	const list = (data.records ?? []).map((record) => `  ${record.priority} ${record.content}`).join("\n");
-	return window.confirm(`${data.error}\n\n${list}\n\nReplace them? Mail will stop going to the current service.`);
+	const details = list ? `\n\n${list}` : "";
+	return window.confirm(`${data.error}${details}\n\nReplace them? Mail will stop going to the current service.`);
+}
+
+export function isMxConflictError(error: unknown): boolean {
+	if (!(error instanceof ApiError) || !error.data || typeof error.data !== "object") return false;
+	const code = (error.data as { code?: unknown }).code;
+	return code === "MX_CONFLICT" || code === "MX_RECORDS_CONFLICT";
 }
 
 /**
@@ -53,4 +60,39 @@ export async function runReceivingSetup(domainId: string, provider: "cloudflare"
 	}
 	if (!response.ok) throw new Error(data.error ?? defaultTranslator("domains.setupFailed"));
 	return true;
+}
+
+export type CreateDomainInput = {
+	hostname: string;
+	enableRouting?: boolean;
+	enableSending?: boolean;
+	replaceMxRecords?: boolean;
+	skipDns?: boolean;
+	sendingProvider?: "none" | "cloudflare" | "resend" | "ses";
+	receivingProvider?: "none" | "cloudflare" | "resend" | "ses";
+};
+
+export type DomainCreateResponse = SetupResponse & { domain?: unknown; [key: string]: unknown };
+
+/**
+ * Creates a domain. On a 409 MX conflict, confirms replacement with the user
+ * and retries with replaceMxRecords set.
+ */
+export async function createDomain(input: CreateDomainInput): Promise<DomainCreateResponse> {
+	const call = async (replaceMxRecords: boolean) => {
+		const response = await authFetch("/api/domains", {
+			method: "POST",
+			headers: { "Content-Type": "application/json" },
+			body: JSON.stringify(replaceMxRecords ? { ...input, replaceMxRecords: true } : input),
+		});
+		const data = (await response.json()) as DomainCreateResponse;
+		return { response, data };
+	};
+
+	let { response, data } = await call(false);
+	if (confirmMxReplacement(response, data)) {
+		({ response, data } = await call(true));
+	}
+	if (!response.ok) throw new ApiError(data.error ?? defaultTranslator("mailboxes.failed"), data);
+	return data;
 }
