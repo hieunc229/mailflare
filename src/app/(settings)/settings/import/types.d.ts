@@ -1,12 +1,3 @@
-export type ImportResult = {
-	imported?: number;
-	skipped?: number;
-	errors?: string[];
-	error?: string;
-	total?: number;
-	nextOffset?: number | null;
-};
-
 export type ImapFormState = {
 	host: string;
 	port: string;

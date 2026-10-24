@@ -39,6 +39,8 @@ export const INTERNAL_TABLES = [
 	// Web-push subscriptions are saved again by each client whenever it resolves
 	// its push state, and they reference sessions whose rows a restore replaces.
 	"push_subscriptions",
+	// Import jobs are transient progress records tied to staged objects that a backup does not carry.
+	"import_jobs",
 ];
 
 /**

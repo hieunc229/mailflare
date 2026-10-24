@@ -9,7 +9,8 @@ import { processInboundMessage } from "@/lib/email/inbound";
 import { processAgentDraftJob } from "@/lib/agent/jobs/utils";
 import { processOutboundQueue, type OutboundQueueMessage } from "@/lib/email/send";
 import { processWebhookRetry, type WebhookRetryMessage } from "@/lib/email/webhooks";
-import { isInboundQueueMessage, isWebhookRetryMessage } from "../worker-utils";
+import { processImportJob } from "@/lib/import/jobs";
+import { isImportJobMessage, isInboundQueueMessage, isWebhookRetryMessage } from "../worker-utils";
 import { createNodeRuntime } from "./runtime/env";
 import { applyMigrations } from "./runtime/migrate";
 import { startScheduler } from "./runtime/scheduler";
@@ -36,6 +37,7 @@ async function main() {
 	});
 	runtime.outboundQueue.setConsumer(async (body) => {
 		if (isWebhookRetryMessage(body)) await processWebhookRetry(env, body as WebhookRetryMessage);
+		else if (isImportJobMessage(body)) await processImportJob(env, body);
 		else await processOutboundQueue(env, body as OutboundQueueMessage);
 	});
 	runtime.agentQueue.setConsumer(async (body) => {

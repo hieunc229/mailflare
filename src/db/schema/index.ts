@@ -933,6 +933,31 @@ export const driveShares = sqliteTable("drive_shares", {
 	index("drive_shares_user_idx").on(t.userId),
 ]);
 
+export const importJobs = sqliteTable("import_jobs", {
+	id: text("id").primaryKey(),
+	userId: text("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+	mailboxId: text("mailbox_id").notNull().references(() => mailboxes.id, { onDelete: "cascade" }),
+	kind: text("kind", { enum: ["file", "imap"] }).notNull(),
+	label: text("label").notNull(),
+	status: text("status", { enum: ["queued", "running", "completed", "failed", "cancelled"] }).notNull().default("queued"),
+	// Messages known to be part of the job; for IMAP it grows as each source folder is counted.
+	total: integer("total").notNull().default(0),
+	processed: integer("processed").notNull().default(0),
+	imported: integer("imported").notNull().default(0),
+	skipped: integer("skipped").notNull().default(0),
+	// What to import (JSON, never credentials) and where the next queue message resumes (JSON).
+	spec: text("spec").notNull(),
+	cursor: text("cursor").notNull().default("{}"),
+	// Up to a handful of per-message error strings (JSON array); errorCount is the true total.
+	errors: text("errors").notNull().default("[]"),
+	errorCount: integer("error_count").notNull().default(0),
+	error: text("error"),
+	createdAt: integer("created_at", { mode: "timestamp" }).notNull().$defaultFn(() => new Date()),
+	startedAt: integer("started_at", { mode: "timestamp" }),
+	updatedAt: integer("updated_at", { mode: "timestamp" }).notNull().$defaultFn(() => new Date()),
+	finishedAt: integer("finished_at", { mode: "timestamp" }),
+}, (t) => [index("import_jobs_user_idx").on(t.userId, t.createdAt), index("import_jobs_status_idx").on(t.status, t.updatedAt)]);
+
 export const schema = {
 	users,
 	domains,
@@ -974,4 +999,5 @@ export const schema = {
 	agentDraftMetadata,
 	agentSendApprovals,
 	mcpKeyMailboxes,
+	importJobs,
 };

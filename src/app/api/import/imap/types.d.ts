@@ -5,8 +5,9 @@ export type ImapImportRequest = {
 	secure?: boolean;
 	username?: string;
 	password?: string;
-	folder?: string;
+	/** Messages per batch, or the cap per folder when importAll is off. */
 	limit?: number;
-	offset?: number;
-	destination?: string;
+	importAll?: boolean;
+	/** Folders to read, each with the Mailflare destination it lands in. */
+	sources?: { folder?: string; destination?: string }[];
 };

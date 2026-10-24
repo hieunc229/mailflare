@@ -18,10 +18,10 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
+import { ImportJobs } from "@/components/settings/import-jobs";
 import { importMessageFiles } from "@/components/settings/import-messages-utils";
 import type {
   ImapFormState,
-  ImportResult,
   ImportSourceItem,
   ImportSourceSection,
   ImportTab,
@@ -31,13 +31,12 @@ import {
   ensureImportDestination,
   fetchImapFolders,
   filterCustomImapFolders,
-  formatImportResult,
   getFileImportSource,
   getFolderImportSource,
   getSelectedImportSources,
-  importFromImap,
   importSourceOptions,
   resolveImapSourceFolder,
+  startImapImport,
 } from "./utils";
 
 const initialImapForm: ImapFormState = {
@@ -73,12 +72,13 @@ export default function SettingsImportPage() {
     useState<ImportSourceSection[]>(defaultSections);
   const [sourceDropdownOpen, setSourceDropdownOpen] = useState(false);
   const [files, setFiles] = useState<File[]>([]);
-  const [fileResult, setFileResult] = useState<ImportResult | null>(null);
+  const [fileStarted, setFileStarted] = useState(false);
   const [fileError, setFileError] = useState<string | null>(null);
   const [fileLoading, setFileLoading] = useState(false);
   const [fileProgress, setFileProgress] = useState<ImportProgress | null>(null);
   const [imapForm, setImapForm] = useState<ImapFormState>(initialImapForm);
-  const [imapResult, setImapResult] = useState<ImportResult | null>(null);
+  const [imapStarted, setImapStarted] = useState(false);
+  const [jobsRefresh, setJobsRefresh] = useState(0);
   const [imapError, setImapError] = useState<string | null>(null);
   const [imapLoading, setImapLoading] = useState(false);
   const [imapProgress, setImapProgress] = useState<ImportProgress | null>(null);
@@ -111,11 +111,11 @@ export default function SettingsImportPage() {
 
     setFileLoading(true);
     setFileError(null);
-    setFileResult(null);
+    setFileStarted(false);
     setFileProgress({ completed: 0, total: 100, label: t("importPage.preparing") });
     try {
       const destination = await getDestination(fileImportSource);
-      const result = await importMessageFiles(
+      await importMessageFiles(
         selectedMailbox.id,
         files,
         destination,
@@ -123,17 +123,18 @@ export default function SettingsImportPage() {
           setFileProgress({
             completed: percentage,
             total: 100,
-            label: percentage < 70 ? t("importPage.uploading") : t("importPage.importingMessages"),
+            label: t("importPage.uploading"),
           }),
       );
-      setFileResult(result);
-      window.dispatchEvent(new Event("mailflare:messages-changed"));
+      setFileStarted(true);
+      setJobsRefresh((count) => count + 1);
     } catch (error) {
       setFileError(
         error instanceof Error ? error.message : t("importPage.fileFailed"),
       );
     } finally {
       setFileLoading(false);
+      setFileProgress(null);
     }
   }
 
@@ -142,14 +143,13 @@ export default function SettingsImportPage() {
     if (!selectedMailbox?.id || selectedSources.length === 0) return;
     setImapLoading(true);
     setImapError(null);
-    setImapResult(null);
+    setImapStarted(false);
     setImapProgress({
       completed: 0,
       total: 1,
       label: t("importPage.discovering"),
     });
     try {
-      const total: ImportResult = { imported: 0, skipped: 0, errors: [] };
       const discoveredFolders = await fetchImapFolders(imapForm);
       const expandedSources: ImportSourceItem[] = [];
       for (const source of selectedSources) {
@@ -164,61 +164,24 @@ export default function SettingsImportPage() {
         }
       }
 
-      for (const [index, source] of expandedSources.entries()) {
-        setImapProgress({
-          completed: index,
-          total: expandedSources.length,
-          label: t("importPage.importingSource", { source: sourceLabel(source) }),
-        });
-        const destination = await getDestination(source);
-        const folder = resolveImapSourceFolder(source, discoveredFolders);
-        let offset = 0;
-        let processed = 0;
-        // Newest messages first, one batch per request. Without "import all"
-        // only the newest batch is imported.
-        while (true) {
-          const result = await importFromImap(
-            selectedMailbox.id,
-            { ...imapForm, folder },
-            destination,
-            offset,
-          );
-          total.imported = (total.imported ?? 0) + (result.imported ?? 0);
-          total.skipped = (total.skipped ?? 0) + (result.skipped ?? 0);
-          total.errors = [...(total.errors ?? []), ...(result.errors ?? [])];
-          processed +=
-            (result.imported ?? 0) +
-            (result.skipped ?? 0) +
-            (result.errors?.length ?? 0);
-          if (
-            !imapForm.importAll ||
-            result.nextOffset === null ||
-            result.nextOffset === undefined ||
-            result.nextOffset <= offset
-          )
-            break;
-          offset = result.nextOffset;
-          setImapProgress({
-            completed: index,
-            total: expandedSources.length,
-            label: t("importPage.importingSourceProgress", { source: sourceLabel(source), processed, total: result.total ?? "?" }),
-          });
-        }
-        setImapProgress({
-          completed: index + 1,
-          total: expandedSources.length,
-          label: t("importPage.importedSource", { source: sourceLabel(source) }),
+      const sources: { folder: string; destination: string }[] = [];
+      for (const source of expandedSources) {
+        sources.push({
+          folder: resolveImapSourceFolder(source, discoveredFolders),
+          destination: await getDestination(source),
         });
       }
-      setImapResult(total);
+      await startImapImport(selectedMailbox.id, imapForm, sources);
+      setImapStarted(true);
+      setJobsRefresh((count) => count + 1);
       setImapForm((current) => ({ ...current, password: "" }));
-      window.dispatchEvent(new Event("mailflare:messages-changed"));
     } catch (error) {
       setImapError(
         error instanceof Error ? error.message : t("importPage.imapFailed"),
       );
     } finally {
       setImapLoading(false);
+      setImapProgress(null);
     }
   }
 
@@ -349,9 +312,9 @@ export default function SettingsImportPage() {
                       </div>
                     </div>
                   )}
-                  {fileResult && (
+                  {fileStarted && (
                     <p className="rounded-lg border border-green-100 bg-green-50 px-4 py-3 text-sm text-green-700">
-                      {formatImportResult(fileResult, t)}
+                      {t("importJobs.started")}
                     </p>
                   )}
                   {fileError && (
@@ -505,9 +468,9 @@ export default function SettingsImportPage() {
                       </div>
                     </div>
                   )}
-                  {imapResult && (
+                  {imapStarted && (
                     <p className="rounded-lg border border-green-100 bg-green-50 px-4 py-3 text-sm text-green-700">
-                      {formatImportResult(imapResult, t)}
+                      {t("importJobs.started")}
                     </p>
                   )}
                   {imapError && (
@@ -521,6 +484,7 @@ export default function SettingsImportPage() {
           </CardContent>
         </div>
       </section>
+      <ImportJobs refreshKey={jobsRefresh} />
     </div>
   );
 }

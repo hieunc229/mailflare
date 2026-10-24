@@ -10,7 +10,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import type { ImportMessagesProps, ImportMessagesResult } from "./import-messages-types";
-import { getImportSummary, importMessageFiles } from "./import-messages-utils";
+import { importMessageFiles } from "./import-messages-utils";
 
 export function ImportMessages({ destination, sourceLabel }: ImportMessagesProps) {
 	const { t } = useLanguage();
@@ -30,7 +30,6 @@ export function ImportMessages({ destination, sourceLabel }: ImportMessagesProps
 		try {
 			const nextResult = await importMessageFiles(selectedMailbox.id, files, destination);
 			setResult(nextResult);
-			window.dispatchEvent(new Event("mailflare:messages-changed"));
 		} catch (err) {
 			setError(err instanceof Error ? err.message : t("import.failed"));
 		} finally {
@@ -70,17 +69,10 @@ export function ImportMessages({ destination, sourceLabel }: ImportMessagesProps
 						{loading ? t("import.importing") : t("import.submit")}
 					</Button>
 
-					{result && (
-						<div className="rounded-lg border border-green-100 bg-green-50 px-4 py-3 text-sm text-green-700">
-							<p className="font-medium">{getImportSummary(result, t)}</p>
-							{(result.errors ?? []).length > 0 && (
-								<ul className="mt-2 list-disc space-y-1 pl-5 text-xs">
-									{(result.errors ?? []).slice(0, 5).map((item) => (
-										<li key={item}>{item}</li>
-									))}
-								</ul>
-							)}
-						</div>
+					{result?.job && (
+						<p className="rounded-lg border border-green-100 bg-green-50 px-4 py-3 text-sm text-green-700">
+							{t("importJobs.started")}
+						</p>
 					)}
 
 					{error && (

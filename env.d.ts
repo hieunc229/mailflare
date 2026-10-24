@@ -8,10 +8,11 @@ interface CloudflareEnv {
 	AI_MODEL?: string;
 	AI_BASE_URL?: string;
 	AI_API_KEY?: string;
-	// The outbound queue also carries webhook retries so that scheduled redelivery needs no extra binding.
+	// The outbound queue also carries webhook retries and import job chunks so that scheduled redelivery needs no extra binding.
 	OUTBOUND_QUEUE: Queue<
 		| import("./src/lib/email/send").OutboundQueueMessage
 		| import("./src/lib/email/webhooks").WebhookRetryMessage
+		| import("./src/lib/import/jobs-types").ImportJobMessage
 	>;
 	ASSETS: Fetcher;
 	IMAGES: ImagesBinding;

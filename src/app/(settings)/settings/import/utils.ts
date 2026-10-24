@@ -1,10 +1,9 @@
-import { defaultTranslator, type Translator } from "@/lib/i18n/utils";
+import type { ImportJobSummary } from "@/lib/import/jobs-types";
 import { authFetch } from "@/lib/auth/client";
 import { getMailboxFolders, invalidateFolderCache } from "@/lib/folders/client";
 import type {
 	ImapFormState,
 	ImportFolderSummary,
-	ImportResult,
 	ImportSourceItem,
 	ImportSourceOption,
 	ImportSourceSection,
@@ -95,31 +94,41 @@ async function fetchMailboxFolders(mailboxId: string): Promise<ImportFolderSumma
 	return data.folders ?? [];
 }
 
-export async function importFromImap(
+export async function startImapImport(
 	mailboxId: string,
 	form: ImapFormState,
-	destination: string,
-	offset = 0,
-): Promise<ImportResult> {
+	sources: { folder: string; destination: string }[],
+): Promise<ImportJobSummary> {
 	const response = await authFetch("/api/import/imap", {
 		method: "POST",
 		headers: { "Content-Type": "application/json" },
 		body: JSON.stringify({
 			mailboxId,
-			destination,
+			sources,
 			host: form.host,
 			port: Number(form.port),
 			secure: form.secure,
 			username: form.username,
 			password: form.password,
-			folder: form.folder,
 			limit: Number(form.limit),
-			offset,
+			importAll: form.importAll,
 		}),
 	});
-	const data = (await response.json()) as ImportResult;
-	if (!response.ok) throw new Error(data.error ?? "IMAP import failed");
-	return data;
+	const data = (await response.json()) as { job?: ImportJobSummary; error?: string };
+	if (!response.ok || !data.job) throw new Error(data.error ?? "IMAP import failed");
+	return data.job;
+}
+
+export async function fetchImportJobs(): Promise<ImportJobSummary[]> {
+	const response = await authFetch("/api/import/jobs");
+	if (!response.ok) throw new Error("Unable to load imports");
+	return ((await response.json()) as { jobs?: ImportJobSummary[] }).jobs ?? [];
+}
+
+/** Cancels a running import, or removes a finished one from the list. */
+export async function removeImportJob(id: string): Promise<void> {
+	const response = await authFetch(`/api/import/jobs/${encodeURIComponent(id)}`, { method: "DELETE" });
+	if (!response.ok) throw new Error("Unable to update the import");
 }
 
 export async function fetchImapFolders(form: ImapFormState): Promise<string[]> {
@@ -137,11 +146,6 @@ export async function fetchImapFolders(form: ImapFormState): Promise<string[]> {
 	const data = (await response.json()) as { folders?: string[]; error?: string };
 	if (!response.ok) throw new Error(data.error ?? "Unable to list IMAP folders");
 	return data.folders ?? [];
-}
-
-export function formatImportResult(result: ImportResult | null, t: Translator = defaultTranslator): string {
-	if (!result) return "";
-	return t("import.summary", { imported: result.imported ?? 0, skipped: result.skipped ?? 0 });
 }
 
 function findFolderMatch(folders: string[], aliases: string[]): string | null {

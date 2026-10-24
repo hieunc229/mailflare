@@ -1,7 +1,7 @@
+import type { ImportJobSummary } from "@/lib/import/jobs-types";
+
 export type ImportMessagesResult = {
-	imported?: number;
-	skipped?: number;
-	errors?: string[];
+	job?: ImportJobSummary;
 	error?: string;
 };
 
