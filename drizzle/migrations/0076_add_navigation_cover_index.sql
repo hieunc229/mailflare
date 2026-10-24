@@ -1,0 +1,12 @@
+-- The navigation endpoint streams every row in a folder ordered by
+-- created_at desc, selecting id/read/direction/thread_id with filters on
+-- mailbox/status/folder/direction/snoozed_until. messages_inbox_page_idx
+-- supplies the sort order but lacks direction/read/thread_id/snoozed_until,
+-- so the plan was covering-sort + a table lookup per row: ~54s for a 155k
+-- inbox. This index carries the payload columns in the tail, making the
+-- scan fully covering: ~400ms for the same folder.
+-- Column order matters: direction/read/thread_id/snoozed_until go AFTER
+-- created_at/id. Putting direction between folder_id and created_at would
+-- break ordering for queries that do not filter on direction (the plain
+-- inbox list), forcing a temp b-tree over every matching row.
+CREATE INDEX IF NOT EXISTS `messages_nav_cover_idx` ON `messages` (`mailbox_id`, `status`, `folder_id`, `created_at` DESC, `id` DESC, `direction`, `read`, `thread_id`, `snoozed_until`);
