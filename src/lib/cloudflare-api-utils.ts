@@ -51,6 +51,11 @@ export function getCloudflareAuthHint(errors: CfApiError[], path = "") {
 	if (path.includes("/email/sending/") && errors.some((error) => error.code === 2036)) {
 		return " If the token has Email Sending permissions, check the domain for MX records pointing at another mail service; Cloudflare refuses sending setup until they are removed.";
 	}
+	// 6003 wraps 6102 (bad X-Auth-Key) and 6111 (bad Authorization): the credential is
+	// malformed, not merely unauthorized. Global key + email take precedence over CF_TOKEN.
+	if (errors.some((error) => error.code === 6003 || error.code === 6102 || error.code === 6111)) {
+		return " Cloudflare rejected the auth header format. Check CF_TOKEN / CF_API_KEY for stray quotes, spaces, newlines or a `Bearer ` prefix. An API token pasted into CF_API_KEY fails this way, and CF_API_KEY + CF_EMAIL override CF_TOKEN, so remove them if you use a token. CF_API_KEY must be the Global API Key.";
+	}
 	const hasAuthError = errors.some(
 		(error) =>
 			error.code === 10000 ||
