@@ -48,6 +48,7 @@ export function RegisterClient() {
   const [mxCheckRevision, setMxCheckRevision] = useState(0);
   const [loading, setLoading] = useState(false);
   const [turnstileReset, setTurnstileReset] = useState(0);
+  const [usePasskey, setUsePasskey] = useState(false);
 
   useEffect(() => {
     void runPreparation();
@@ -203,7 +204,9 @@ export function RegisterClient() {
         return;
       }
       setError(
-        typeof data.error === "string" ? data.error : t("setup.registrationFailed"),
+        data.code === "passkey_unavailable"
+          ? t("authError.passkeyUnavailable")
+          : typeof data.error === "string" ? data.error : t("setup.registrationFailed"),
       );
       setTurnstileReset((value) => value + 1);
       return;
@@ -445,17 +448,31 @@ export function RegisterClient() {
               </span>
             </div>
           </div>
-          <div className="space-y-2">
-            <Label htmlFor="password">{t("auth.password")}</Label>
-            <Input
-              id="password"
-              name="password"
-              type="password"
-              minLength={8}
-              autoComplete="new-password"
-              required
+          <label className="flex cursor-pointer items-start gap-3 rounded-2xl bg-neutral-50 px-4 py-3">
+            <Checkbox
+              name="usePasskey"
+              checked={usePasskey}
+              onChange={(event) => setUsePasskey(event.target.checked)}
+              className="mt-1"
             />
-          </div>
+            <span>
+              <span className="block text-sm font-medium text-neutral-800">{t("auth.usePasskeyInstead")}</span>
+              <span className="mt-1 block text-xs leading-5 text-neutral-500">{t("auth.usePasskeyInsteadHint")}</span>
+            </span>
+          </label>
+          {!usePasskey && (
+            <div className="space-y-2">
+              <Label htmlFor="password">{t("auth.password")}</Label>
+              <Input
+                id="password"
+                name="password"
+                type="password"
+                minLength={8}
+                autoComplete="new-password"
+                required
+              />
+            </div>
+          )}
 
           <div className="space-y-2">
             <Label htmlFor="resetEmail">{t("setup.recoveryEmail")}</Label>

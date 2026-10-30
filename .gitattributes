@@ -1,0 +1,4 @@
+# Drizzle schema snapshots are generated metadata, not handwritten application code.
+drizzle/migrations/meta/*_snapshot.json linguist-generated=true
+drizzle/migrations-pg/meta/*_snapshot.json linguist-generated=true
+drizzle/migrations-mysql/meta/*_snapshot.json linguist-generated=true

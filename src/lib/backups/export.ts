@@ -4,7 +4,7 @@ import type { BackupTableGroupId, DatabaseBackupDocument, DatabaseBackupTable, D
 import { mergeLegacyMessageBodies } from "./utils";
 import { BACKUP_TABLE_GROUPS, getSelectedBackupTables } from "./table-groups";
 
-export const BACKUP_TABLES: DatabaseBackupTable[] = ["users", "user_compose_preferences", "domains", "domain_tracking_hosts", "mailboxes", "mailbox_access", "contacts", "folders", "api_keys", "messages", "message_attachments", "shared_attachment_links", "outbound_jobs", "message_tracking", "message_opens", "follow_ups", "routing_rules", "webhooks", "webhook_deliveries", "sessions", "audit_logs", "backup_settings", "backups", "app_settings", "license_settings", "email_templates", "calendar_events", "booking_events", "auto_reply_deliveries", "spam_token_stats", "spam_reputation", "spam_feedback", "mailbox_aliases", "password_reset_tokens", "mfa_recovery_codes", "login_challenges", "mailbox_agent_settings", "agent_conversations", "agent_chat_messages", "agent_jobs", "agent_draft_metadata", "agent_send_approvals", "mcp_key_mailboxes", "ai_usage", "drive_items", "drive_upload_parts", "drive_shares"];
+export const BACKUP_TABLES: DatabaseBackupTable[] = ["users", "user_compose_preferences", "domains", "domain_tracking_hosts", "mailboxes", "mailbox_access", "contacts", "folders", "api_keys", "messages", "message_attachments", "shared_attachment_links", "outbound_jobs", "message_tracking", "message_opens", "follow_ups", "routing_rules", "webhooks", "webhook_deliveries", "sessions", "audit_logs", "backup_settings", "backups", "app_settings", "license_settings", "email_templates", "calendar_events", "booking_events", "auto_reply_deliveries", "spam_token_stats", "spam_reputation", "spam_feedback", "mailbox_aliases", "password_reset_tokens", "mfa_recovery_codes", "login_challenges", "passkey_credentials", "mailbox_agent_settings", "agent_conversations", "agent_chat_messages", "agent_jobs", "agent_draft_metadata", "agent_send_approvals", "mcp_key_mailboxes", "ai_usage", "drive_items", "drive_upload_parts", "drive_shares"];
 /**
  * Tables every backup document must contain. Tables added to BACKUP_TABLES
  * after the format shipped are absent from older documents, so they stay
@@ -48,6 +48,12 @@ export const INTERNAL_TABLES = [
 	"push_subscriptions",
 	// Import jobs are transient progress records tied to staged objects that a backup does not carry.
 	"import_jobs",
+	// WebAuthn ceremonies, step-up grants and enrolment links are short-lived,
+	// single-use bearer secrets. Restoring a stale one would be useless at best
+	// and dangerous at worst, so backups deliberately omit them.
+	"webauthn_challenges",
+	"passkey_enrollment_grants",
+	"auth_step_ups",
 ];
 
 /**
@@ -84,7 +90,7 @@ export async function exportDatabaseRecords(db: D1Database, excludedGroups: Back
 	if (!includedTables.length) throw new Error("Select at least one backup table group");
 	const tables: DatabaseBackupDocument["tables"] = {};
 	for (const table of includedTables) {
-		if ((table === "shared_attachment_links" || table === "booking_events" || table.startsWith("drive_") || LATER_MIGRATION_TABLES.includes(table)) && !databaseTables.has(table)) {
+		if ((table === "shared_attachment_links" || table === "booking_events" || table === "passkey_credentials" || table.startsWith("drive_") || LATER_MIGRATION_TABLES.includes(table)) && !databaseTables.has(table)) {
 			tables[table] = [];
 			continue;
 		}
@@ -110,20 +116,40 @@ export async function restoreDatabaseRecords(db: D1Database, content: ArrayBuffe
 	if (!sharedLinksTable && document.tables.shared_attachment_links?.length) throw new Error("Apply pending database migrations before restoring shared attachment links.");
 	const bookingTable = existing.has("booking_events");
 	if (!bookingTable && document.tables.booking_events?.length) throw new Error("Apply pending database migrations before restoring booking events.");
+	const passkeyTable = existing.has("passkey_credentials");
+	if (!passkeyTable && document.tables.passkey_credentials?.length) throw new Error("Apply pending database migrations before restoring passkeys.");
 	// Drive migrations ship later than the backup format, so an installation can have a database without them yet.
 	const driveTableNames = ["drive_items", "drive_upload_parts", "drive_shares"].filter((table) => existing.has(table));
 	if (["drive_items", "drive_upload_parts", "drive_shares"].some((table) => document.tables[table]?.length) && driveTableNames.length !== 3) throw new Error("Apply pending database migrations before restoring the Drive tables.");
 	const laterTableNames = LATER_MIGRATION_TABLES.filter((table) => existing.has(table));
 	const unmigrated = LATER_MIGRATION_TABLES.filter((table) => document.tables[table]?.length && !laterTableNames.includes(table));
 	if (unmigrated.length) throw new Error(`Apply pending database migrations before restoring ${unmigrated.join(", ")}.`);
-	const restoreTables = BACKUP_TABLES.filter((table) => (table !== "shared_attachment_links" || sharedLinksTable) && (table !== "booking_events" || bookingTable) && (!table.startsWith("drive_") || driveTableNames.includes(table)) && (!LATER_MIGRATION_TABLES.includes(table) || laterTableNames.includes(table)));
+	const restoreTables = BACKUP_TABLES.filter((table) => (table !== "shared_attachment_links" || sharedLinksTable) && (table !== "booking_events" || bookingTable) && (table !== "passkey_credentials" || passkeyTable) && (!table.startsWith("drive_") || driveTableNames.includes(table)) && (!LATER_MIGRATION_TABLES.includes(table) || laterTableNames.includes(table)));
 	const userColumns = await listColumnNames(db, "users");
 	const bookingColumns = bookingTable ? await listColumnNames(db, "booking_events") : null;
-	for (const table of [...restoreTables].reverse()) await db.prepare(`DELETE FROM ${table}`).run();
+	// The passkey table can predate later credential columns (aaguid); filter
+	// those out instead of failing after the restore has already torn down data.
+	const passkeyColumns = passkeyTable ? await listColumnNames(db, "passkey_credentials") : null;
+	// Mark users deleted before removing them: the passkey trigger permits the
+	// cascade to remove the last credential only for an account that is being
+	// purged. Deleting users first also empties the table the restore inserts
+	// into last, so the rest of the teardown has no live accounts to protect.
+	await db.prepare("UPDATE users SET deleted_at = ?").bind(Math.floor(Date.now() / 1000)).run();
+	await db.prepare("DELETE FROM users").run();
+	for (const table of [...restoreTables].reverse()) {
+		if (table === "users") continue;
+		await db.prepare(`DELETE FROM ${table}`).run();
+	}
 	for (const table of restoreTables) {
 		const rows = document.tables[table] ?? [];
 		for (let index = 0; index < rows.length; index += INSERT_BATCH_SIZE) {
-			const columns = table === "users" ? userColumns : table === "booking_events" ? bookingColumns : null;
+			const columns = table === "users"
+				? userColumns
+				: table === "booking_events"
+					? bookingColumns
+					: table === "passkey_credentials"
+						? passkeyColumns
+						: null;
 			const statements = rows.slice(index, index + INSERT_BATCH_SIZE).map((row) => createInsertStatement(db, dialect, table, row, columns));
 			// MySQL checks foreign keys per statement, so the batch suspends them for its own connection.
 			if (statements.length > 0) await db.batch(dialect === "mysql" ? [db.prepare("SET FOREIGN_KEY_CHECKS = 0"), ...statements, db.prepare("SET FOREIGN_KEY_CHECKS = 1")] : statements);
@@ -167,6 +193,17 @@ function fillMissingBackupTables(document: DatabaseBackupDocument): void {
 	}
 	for (const row of document.tables.booking_events ?? []) {
 		if (row.slug === undefined && typeof row.id === "string") row.slug = Array.from(new TextEncoder().encode(row.id)).map((byte) => byte.toString(16).padStart(2, "0")).join("");
+	}
+	// `require_second_factor` was added after TOTP already existed. A backup from
+	// before that column restores with the default false unless it is derived,
+	// which would silently turn MFA off for a TOTP-protected user.
+	for (const row of document.tables.users ?? []) {
+		if (row.require_second_factor === undefined) {
+			row.require_second_factor = Number(row.totp_enabled) === 1 ? 1 : 0;
+		}
+		// The passkey triggers recount credentials as the table is restored.
+		// Resetting avoids counting the exported value twice.
+		row.passkey_count = 0;
 	}
 }
 

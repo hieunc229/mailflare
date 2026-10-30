@@ -498,6 +498,13 @@
       "when": 1793260800000,
       "tag": "0079_remote_content_ask",
       "breakpoints": true
+    },
+    {
+      "idx": 72,
+      "version": "6",
+      "when": 1793280375889,
+      "tag": "0080_passkeys_and_step_up_grants",
+      "breakpoints": true
     }
   ]
 }

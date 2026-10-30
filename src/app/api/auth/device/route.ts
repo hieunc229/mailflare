@@ -11,6 +11,7 @@ import { RequestBodyTooLargeError } from "@/lib/http/errors";
 import { recordAuthActivity } from "@/lib/auth/activity";
 import { consumeLoginChallenge, createLoginChallenge, getLoginChallengeUserId } from "@/lib/auth/login-challenge";
 import { verifySecondFactor } from "@/lib/auth/mfa";
+import { countUnusedRecoveryCodes } from "@/lib/auth/recovery-codes";
 import { createDeviceKey, revokeDeviceKey } from "@/lib/auth/device-keys";
 import { authenticateApiRequest } from "@/lib/api/key-auth";
 
@@ -44,7 +45,14 @@ export async function POST(request: Request) {
 		const [user] = await db.select().from(users).where(eq(users.email, parsed.data.email)).limit(1);
 		if (!user || !verifyPassword(parsed.data.password, user.passwordHash)) return json({ error: "Invalid credentials" }, 401);
 		if (user.disabled || user.deletedAt) return json({ error: "Account disabled" }, 403);
-		if (user.totpEnabled && user.totpSecret) {
+		if (user.requireSecondFactor) {
+			// The app can only finish with TOTP or a recovery code. Without one of
+			// those, point the user at an app password rather than issuing a key
+			// after the password alone.
+			const codesAvailable = user.totpEnabled && (await countUnusedRecoveryCodes(env, user.id)) > 0;
+			if (!(user.totpEnabled && user.totpSecret) && !codesAvailable) {
+				return json({ error: "This account requires a passkey. Create an app password in the web app instead." }, 403);
+			}
 			return json({ ok: true, mfaRequired: true, challengeToken: await createLoginChallenge(env, user.id) });
 		}
 		userId = user.id;
@@ -54,7 +62,9 @@ export async function POST(request: Request) {
 		const [user] = await db.select().from(users).where(eq(users.id, challengeUserId)).limit(1);
 		if (!user || user.disabled || user.deletedAt) return json({ error: "Account disabled" }, 403);
 		if (!(await verifySecondFactor(env, user, parsed.data.code))) return json({ error: "That code did not match" }, 401);
-		await consumeLoginChallenge(env, parsed.data.challengeToken);
+		if (!(await consumeLoginChallenge(env, parsed.data.challengeToken))) {
+			return json({ error: "This sign-in attempt has expired. Start again." }, 401);
+		}
 		userId = user.id;
 	}
 

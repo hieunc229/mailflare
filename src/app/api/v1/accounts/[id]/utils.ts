@@ -7,8 +7,9 @@ import { authenticateAdminApiKey, canManageAdminAccounts } from "@/lib/api/admin
 import { isPrimaryAdmin } from "@/lib/auth/admin";
 import { updateManagedAccountSchema } from "@/lib/validators";
 import { getLicenseEntitlements } from "@/lib/licenses/service";
-import { selectAccountById, updateAccountCredentials } from "@/app/api/accounts/[id]/utils";
+import { AccountSecurityChangedError, PasskeyOnlyPasswordError, selectAccountById, updateAccountCredentials } from "@/app/api/accounts/[id]/utils";
 import { deleteUserSessions } from "@/lib/auth/session";
+import { createAuditLog } from "@/lib/mailboxes/audit";
 import type { AdminAccountRouteParams } from "./types";
 
 export async function GET(request: Request, { params }: AdminAccountRouteParams) {
@@ -42,8 +43,26 @@ export async function PATCH(request: Request, { params }: AdminAccountRouteParam
 	}
 	const canForwardEmail = (await getLicenseEntitlements(env)).canForwardEmail;
 	if (!canForwardEmail && parsed.data.forwardingEmail && parsed.data.forwardingEmail !== account.forwardingEmail) return NextResponse.json({ error: "A Pro or Team license is required for email forwarding" }, { status: 403 });
-	await updateAccountCredentials(db, id, { name: parsed.data.name, password: parsed.data.password ?? null });
-	if (parsed.data.password) await deleteUserSessions(env, id);
+	try {
+		await updateAccountCredentials(db, id, { name: parsed.data.name, password: parsed.data.password ?? null });
+	} catch (error) {
+		if (error instanceof PasskeyOnlyPasswordError) {
+			return NextResponse.json({ error: "This account uses passkeys only. Send it a recovery link instead.", code: "passkey_only_password" }, { status: 409 });
+		}
+		if (error instanceof AccountSecurityChangedError) {
+			return NextResponse.json({ error: "Another security change is in progress. Refresh and try again.", code: "action_conflict" }, { status: 409 });
+		}
+		throw error;
+	}
+	if (parsed.data.password) {
+		await deleteUserSessions(env, id);
+		await createAuditLog(env, {
+			actorUserId: auth.userId,
+			targetUserId: id,
+			action: "auth.admin_password_reset",
+			metadata: { ipAddress: request.headers.get("cf-connecting-ip") ?? "unknown" },
+		});
+	}
 	await db.update(users).set({
 		role: account.isPrimaryAdmin ? "admin" : parsed.data.role,
 		disabled: account.isPrimaryAdmin ? false : parsed.data.disabled,

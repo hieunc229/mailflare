@@ -7,7 +7,7 @@ import {
 	outboundJobs,
 	users,
 } from "@/db/schema";
-import { hashPassword } from "@/lib/auth/password";
+import { hasPasswordHash, hashPassword } from "@/lib/auth/password";
 import { ensureBookingUsername } from "@/lib/booking/username";
 import { upsertContactFromAddress } from "@/lib/contacts/service";
 import { buildSnippet } from "@/lib/email/parse";
@@ -363,6 +363,14 @@ export async function ensureDemoUser(env: CloudflareEnv) {
 		.limit(1);
 	const [admin] = await db.select({ id: users.id }).from(users).where(eq(users.role, "admin")).limit(1);
 	if (existing) {
+		// A passkey lifecycle test can leave the demo account passwordless.
+		// Seeding prints the demo credentials, so restore the documented
+		// password instead of advertising a sign-in that no longer works.
+		if (!hasPasswordHash(existing.passwordHash)) {
+			const passwordHash = hashPassword(demoCredentials.password);
+			await db.update(users).set({ passwordHash }).where(eq(users.id, existing.id));
+			existing.passwordHash = passwordHash;
+		}
 		// Repair demos seeded before the login page required an admin account.
 		if (!admin) {
 			await db.update(users).set({ role: "admin", isPrimaryAdmin: true }).where(eq(users.id, existing.id));

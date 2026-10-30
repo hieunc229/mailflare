@@ -2,7 +2,7 @@ import { and, eq, gt, isNull } from "drizzle-orm";
 import { getDb } from "@/db";
 import { passwordResetTokens, users } from "@/db/schema";
 import { newId } from "@/lib/ids";
-import { hashPassword } from "@/lib/auth/password";
+import { hasPasswordHash, hashPassword } from "@/lib/auth/password";
 import { deleteUserSessions, hashSessionToken } from "@/lib/auth/session";
 import { getBranding } from "@/lib/branding/service";
 import { sendSystemEmail } from "@/lib/email/system-mail";
@@ -21,7 +21,8 @@ const TOKEN_MINUTES = 30;
 export async function requestPasswordReset(env: CloudflareEnv, email: string, origin: string, t: Translator): Promise<void> {
 	const db = getDb(env);
 	const [user] = await db.select().from(users).where(eq(users.email, email.trim().toLowerCase())).limit(1);
-	if (!user || user.disabled || !user.resetEmail) return;
+	// A passkey-only account must not regain password sign-in through email.
+	if (!user || user.disabled || !user.resetEmail || !hasPasswordHash(user.passwordHash)) return;
 
 	const token = newId("prt");
 	await db.insert(passwordResetTokens).values({
@@ -49,8 +50,16 @@ export async function completePasswordReset(
 ): Promise<{ ok: true } | { ok: false; error: string }> {
 	const db = getDb(env);
 	const [row] = await db
-		.select({ id: passwordResetTokens.id, userId: passwordResetTokens.userId })
+		.select({
+			id: passwordResetTokens.id,
+			userId: passwordResetTokens.userId,
+			passwordHash: users.passwordHash,
+			securityVersion: users.securityVersion,
+			totpEnabled: users.totpEnabled,
+			requireSecondFactor: users.requireSecondFactor,
+		})
 		.from(passwordResetTokens)
+		.innerJoin(users, eq(users.id, passwordResetTokens.userId))
 		.where(
 			and(
 				eq(passwordResetTokens.tokenHash, await hashSessionToken(token)),
@@ -59,10 +68,31 @@ export async function completePasswordReset(
 			),
 		)
 		.limit(1);
-	if (!row) return { ok: false, error: "This reset link is invalid or has expired. Request a new one." };
+	if (!row || !hasPasswordHash(row.passwordHash)) return { ok: false, error: "This reset link is invalid or has expired. Request a new one." };
 
-	await db.update(users).set({ passwordHash: hashPassword(newPassword) }).where(eq(users.id, row.userId));
-	await db.update(passwordResetTokens).set({ usedAt: new Date() }).where(eq(passwordResetTokens.id, row.id));
+	// A password reset never creates a password for a passkey-only account; a
+	// token issued before the password was removed must not become a bypass.
+	const consumed = await db
+		.update(passwordResetTokens)
+		.set({ usedAt: new Date() })
+		.where(and(eq(passwordResetTokens.id, row.id), isNull(passwordResetTokens.usedAt)))
+		.returning({ id: passwordResetTokens.id });
+	if (!consumed.length) return { ok: false, error: "This reset link is invalid or has expired. Request a new one." };
+	// The token read above is only a snapshot. Re-check the account's complete
+	// security state in the write itself so a concurrent passkey-only recovery,
+	// password change or MFA change cannot be overwritten by this request.
+	const [updated] = await db
+		.update(users)
+		.set({ passwordHash: hashPassword(newPassword) })
+		.where(and(
+			eq(users.id, row.userId),
+			eq(users.passwordHash, row.passwordHash),
+			eq(users.securityVersion, row.securityVersion),
+			eq(users.totpEnabled, row.totpEnabled),
+			eq(users.requireSecondFactor, row.requireSecondFactor),
+		))
+		.returning({ id: users.id });
+	if (!updated) return { ok: false, error: "This reset link is invalid or has expired. Request a new one." };
 	await deleteUserSessions(env, row.userId);
 	await createAuditLog(env, {
 		actorUserId: row.userId,

@@ -27,13 +27,6 @@ export type AccountSettingsResponse = {
 	error?: unknown;
 };
 
-export type MfaStatusResponse = {
-	enabled: boolean;
-	confirmedAt: string | null;
-	recoveryCodesLeft: number;
-	error?: unknown;
-};
-
 export type MfaEnrollmentResponse = {
 	secret?: string;
 	otpauthUrl?: string;

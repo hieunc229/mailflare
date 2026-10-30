@@ -15,7 +15,7 @@ export async function createLoginChallenge(env: CloudflareEnv, userId: string): 
 	return token;
 }
 
-/** Look a challenge up without consuming it, so a wrong code can be retried within the window. */
+/** Look a challenge up without consuming it, so a wrong factor can be retried within the window. */
 export async function getLoginChallengeUserId(env: CloudflareEnv, token: string): Promise<string | null> {
 	const db = getDb(env);
 	const [row] = await db
@@ -26,7 +26,12 @@ export async function getLoginChallengeUserId(env: CloudflareEnv, token: string)
 	return row?.userId ?? null;
 }
 
-export async function consumeLoginChallenge(env: CloudflareEnv, token: string): Promise<void> {
+/** Returns false when another request already redeemed this challenge. */
+export async function consumeLoginChallenge(env: CloudflareEnv, token: string): Promise<boolean> {
 	const db = getDb(env);
-	await db.delete(loginChallenges).where(eq(loginChallenges.tokenHash, await hashSessionToken(token)));
+	const rows = await db
+		.delete(loginChallenges)
+		.where(and(eq(loginChallenges.tokenHash, await hashSessionToken(token)), gt(loginChallenges.expiresAt, new Date())))
+		.returning({ id: loginChallenges.id });
+	return rows.length > 0;
 }

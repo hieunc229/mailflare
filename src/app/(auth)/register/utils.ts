@@ -63,13 +63,15 @@ export async function submitRegistration(
 						replaceMxRecords: payload.replaceMxRecords,
 						skipDns: payload.skipDns,
 						username: form.get("username"),
-						password: form.get("password"),
+						password: form.get("usePasskey") === "on" ? undefined : form.get("password"),
+						usePasskey: form.get("usePasskey") === "on",
 						resetEmail: form.get("resetEmail"),
 						turnstileToken: form.get("turnstileToken"),
 					}
 				: {
 						username: form.get("username"),
-						password: form.get("password"),
+						password: form.get("usePasskey") === "on" ? undefined : form.get("password"),
+						usePasskey: form.get("usePasskey") === "on",
 						resetEmail: form.get("resetEmail"),
 						turnstileToken: form.get("turnstileToken"),
 					},

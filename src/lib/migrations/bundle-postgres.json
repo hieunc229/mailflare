@@ -275,6 +275,37 @@
       "statements": [
         "UPDATE \"users\" SET \"remote_content_mode\" = 'ask' WHERE \"remote_content_mode\" = 'allow';"
       ]
+    },
+    {
+      "name": "0004_passkeys_and_step_up_grants.sql",
+      "statements": [
+        "ALTER TABLE \"users\" ADD COLUMN \"require_second_factor\" boolean DEFAULT false NOT NULL;",
+        "ALTER TABLE \"users\" ADD COLUMN \"passkey_count\" bigint DEFAULT 0 NOT NULL;",
+        "ALTER TABLE \"users\" ADD COLUMN \"security_version\" bigint DEFAULT 0 NOT NULL;",
+        "UPDATE \"users\" SET \"require_second_factor\" = \"totp_enabled\";",
+        "CREATE TABLE \"passkey_credentials\" (\n\t\"id\" text PRIMARY KEY NOT NULL,\n\t\"user_id\" text NOT NULL,\n\t\"credential_id\" text NOT NULL,\n\t\"credential_hash\" text NOT NULL,\n\t\"public_key\" text NOT NULL,\n\t\"counter\" bigint DEFAULT 0 NOT NULL,\n\t\"transports\" text,\n\t\"device_type\" text NOT NULL,\n\t\"backed_up\" boolean DEFAULT false NOT NULL,\n\t\"aaguid\" text,\n\t\"name\" text NOT NULL,\n\t\"last_used_at\" bigint,\n\t\"created_at\" bigint NOT NULL,\n\tCONSTRAINT \"passkey_credentials_credential_hash_unique\" UNIQUE(\"credential_hash\")\n);",
+        "CREATE INDEX \"passkey_credentials_user_idx\" ON \"passkey_credentials\" USING btree (\"user_id\");",
+        "CREATE TABLE \"webauthn_challenges\" (\n\t\"id\" text PRIMARY KEY NOT NULL,\n\t\"ceremony_hash\" text NOT NULL,\n\t\"challenge\" text NOT NULL,\n\t\"purpose\" text NOT NULL,\n\t\"user_id\" text,\n\t\"binding_hash\" text NOT NULL,\n\t\"expires_at\" bigint NOT NULL,\n\t\"used_at\" bigint,\n\t\"created_at\" bigint NOT NULL,\n\tCONSTRAINT \"webauthn_challenges_ceremony_hash_unique\" UNIQUE(\"ceremony_hash\")\n);",
+        "CREATE INDEX \"webauthn_challenges_user_idx\" ON \"webauthn_challenges\" USING btree (\"user_id\");",
+        "CREATE INDEX \"webauthn_challenges_expires_idx\" ON \"webauthn_challenges\" USING btree (\"expires_at\");",
+        "CREATE TABLE \"passkey_enrollment_grants\" (\n\t\"id\" text PRIMARY KEY NOT NULL,\n\t\"user_id\" text NOT NULL,\n\t\"token_hash\" text NOT NULL,\n\t\"kind\" text NOT NULL,\n\t\"created_by_user_id\" text,\n\t\"expires_at\" bigint NOT NULL,\n\t\"used_at\" bigint,\n\t\"created_at\" bigint NOT NULL,\n\tCONSTRAINT \"passkey_enrollment_grants_token_hash_unique\" UNIQUE(\"token_hash\")\n);",
+        "CREATE INDEX \"passkey_enrollment_grants_user_idx\" ON \"passkey_enrollment_grants\" USING btree (\"user_id\");",
+        "CREATE TABLE \"auth_step_ups\" (\n\t\"id\" text PRIMARY KEY NOT NULL,\n\t\"user_id\" text NOT NULL,\n\t\"session_hash\" text NOT NULL,\n\t\"token_hash\" text NOT NULL,\n\t\"purpose\" text NOT NULL,\n\t\"target_user_id\" text,\n\t\"security_version\" bigint DEFAULT 0 NOT NULL,\n\t\"actor_security_version\" bigint DEFAULT 0 NOT NULL,\n\t\"expires_at\" bigint NOT NULL,\n\t\"used_at\" bigint,\n\t\"created_at\" bigint NOT NULL,\n\tCONSTRAINT \"auth_step_ups_token_hash_unique\" UNIQUE(\"token_hash\")\n);",
+        "CREATE INDEX \"auth_step_ups_user_idx\" ON \"auth_step_ups\" USING btree (\"user_id\");",
+        "ALTER TABLE \"passkey_credentials\" ADD CONSTRAINT \"passkey_credentials_user_id_users_id_fk\" FOREIGN KEY (\"user_id\") REFERENCES \"public\".\"users\"(\"id\") ON DELETE cascade ON UPDATE no action;",
+        "ALTER TABLE \"webauthn_challenges\" ADD CONSTRAINT \"webauthn_challenges_user_id_users_id_fk\" FOREIGN KEY (\"user_id\") REFERENCES \"public\".\"users\"(\"id\") ON DELETE cascade ON UPDATE no action;",
+        "ALTER TABLE \"passkey_enrollment_grants\" ADD CONSTRAINT \"passkey_enrollment_grants_user_id_users_id_fk\" FOREIGN KEY (\"user_id\") REFERENCES \"public\".\"users\"(\"id\") ON DELETE cascade ON UPDATE no action;",
+        "ALTER TABLE \"passkey_enrollment_grants\" ADD CONSTRAINT \"passkey_enrollment_grants_created_by_user_id_users_id_fk\" FOREIGN KEY (\"created_by_user_id\") REFERENCES \"public\".\"users\"(\"id\") ON DELETE set null ON UPDATE no action;",
+        "ALTER TABLE \"auth_step_ups\" ADD CONSTRAINT \"auth_step_ups_user_id_users_id_fk\" FOREIGN KEY (\"user_id\") REFERENCES \"public\".\"users\"(\"id\") ON DELETE cascade ON UPDATE no action;",
+        "CREATE FUNCTION mailflare_passkey_count_insert() RETURNS trigger AS $$\nBEGIN\n\tUPDATE users SET passkey_count = passkey_count + 1 WHERE id = NEW.user_id;\n\tRETURN NEW;\nEND;\n$$ LANGUAGE plpgsql;",
+        "CREATE TRIGGER passkey_credentials_count_insert AFTER INSERT ON passkey_credentials\nFOR EACH ROW EXECUTE FUNCTION mailflare_passkey_count_insert();",
+        "CREATE FUNCTION mailflare_passkey_count_delete() RETURNS trigger AS $$\nBEGIN\n\tUPDATE users SET passkey_count = passkey_count - 1 WHERE id = OLD.user_id;\n\tUPDATE users SET require_second_factor = false\n\tWHERE id = OLD.user_id\n\t\tAND passkey_count = 0\n\t\tAND NOT totp_enabled\n\t\tAND deleted_at IS NULL;\n\tIF (SELECT passkey_count FROM users WHERE id = OLD.user_id) = 0\n\t\tAND (SELECT deleted_at FROM users WHERE id = OLD.user_id) IS NULL\n\t\tAND (SELECT password_hash FROM users WHERE id = OLD.user_id) = '!passkey-only' THEN\n\t\tRAISE EXCEPTION 'last-auth-method';\n\tEND IF;\n\tRETURN OLD;\nEND;\n$$ LANGUAGE plpgsql;",
+        "CREATE TRIGGER passkey_credentials_count_delete AFTER DELETE ON passkey_credentials\nFOR EACH ROW EXECUTE FUNCTION mailflare_passkey_count_delete();",
+        "CREATE FUNCTION mailflare_last_password_update() RETURNS trigger AS $$\nBEGIN\n\tIF NEW.password_hash = '!passkey-only' AND NEW.passkey_count = 0 THEN\n\t\tRAISE EXCEPTION 'last-auth-method';\n\tEND IF;\n\tRETURN NEW;\nEND;\n$$ LANGUAGE plpgsql;",
+        "CREATE TRIGGER users_last_password_update BEFORE UPDATE OF password_hash ON users\nFOR EACH ROW EXECUTE FUNCTION mailflare_last_password_update();",
+        "CREATE FUNCTION mailflare_require_second_factor_update() RETURNS trigger AS $$\nBEGIN\n\tIF NEW.require_second_factor AND NEW.passkey_count = 0 AND NOT NEW.totp_enabled AND NEW.deleted_at IS NULL THEN\n\t\tRAISE EXCEPTION 'second-factor-unavailable';\n\tEND IF;\n\tRETURN NEW;\nEND;\n$$ LANGUAGE plpgsql;",
+        "CREATE TRIGGER users_require_second_factor_update BEFORE UPDATE OF require_second_factor ON users\nFOR EACH ROW EXECUTE FUNCTION mailflare_require_second_factor_update();"
+      ]
     }
   ]
 }

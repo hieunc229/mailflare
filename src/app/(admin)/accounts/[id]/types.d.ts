@@ -11,6 +11,8 @@ export type ManagedAccount = {
 	forwardingEmail: string | null;
 	canForwardEmail: boolean;
 	hasAvatar: boolean;
+	/** False for a passkey-only account, which cannot be given a password here. */
+	passwordSet: boolean;
 	/** Whether the signed-in admin may modify this account. */
 	editable: boolean;
 	/** Whether the signed-in admin may change this account's role. */
