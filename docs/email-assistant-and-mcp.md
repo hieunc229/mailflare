@@ -12,6 +12,17 @@ To connect an external AI client, create a key in **Settings → API keys** and 
 
 MCP clients can use `update_draft` for the same draft fields and attachments, then `request_send` to create a human review for immediate or scheduled delivery. Attachment additions copy an existing file from an email in the key's permitted mailbox; local files are added through the composer.
 
+The mail tools a key can reach depend on its permissions:
+
+| Permission | Tools |
+| --- | --- |
+| Read mail (`mcp:read`) | `list_mailboxes`, `list_folders`, `list_emails`, `get_email`, `get_thread`, `search_emails`, `search_contacts`, `get_scheduled_send` |
+| Manage drafts (`mcp:draft`) | `draft_email`, `draft_reply`, `update_draft`, `discard_draft`, `cancel_scheduled_send` |
+| Organize mail (`mcp:organize`) | `mark_email_read`, `star_email`, `snooze_email`, `move_email`, `move_emails`, `move_to_folder` |
+| Request send review (`mcp:request-send`) | `request_send`, `get_send_request` |
+
+`list_emails` and `search_emails` take a `folder` (`inbox`, `starred`, `snoozed`, `sent`, `scheduled`, `draft`, `archived`, `trash` or `spam`) or a custom folder's `folderId` from `list_folders`. Inbox leaves out snoozed mail, as it does in the dashboard. `snooze_email` takes an ISO 8601 time with a timezone offset, or `null` to unsnooze. `move_to_folder` files up to 20 received emails into a custom folder, or back to Inbox with `folderId: null`. Moving, snoozing and filing need permission to manage the mailbox. `search_contacts` searches your saved contacts by name or address and returns only people who have mail in the key's mailboxes, so a key limited to one mailbox does not reveal who writes to your others.
+
 Calendar access uses separate **Read calendar** and **Manage calendar** MCP permissions. The personal calendar exposes `get_calendars`, `get_schedule`, `search_events`, `get_event`, `find_free_time`, `create_event`, `update_events`, and `delete_events`. Calendar-only keys need no mailbox selection. Calendar writes save immediately. Event updates and deletes use series IDs and affect the entire recurring series; these tools record attendees but do not send invitations or cancellations. Supply absolute ISO 8601 times with offsets. Schedule and availability ranges are limited to 90 days.
 
 For management tools, create a separate MCP key in **Admin → API keys**. Its selected domain, account, and mailbox management permissions do not grant access to mail content. This page also provides copyable AI agent instructions after key creation.

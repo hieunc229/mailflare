@@ -6,3 +6,5 @@ export type McpPrincipal = {
 	scopes: string[];
 	mailboxIds: string[];
 };
+
+export type McpMailToolName = "list_folders" | "star_email" | "snooze_email" | "move_to_folder" | "search_contacts";

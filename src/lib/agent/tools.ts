@@ -1,4 +1,4 @@
-import { and, desc, eq, isNull, lt, or } from "drizzle-orm";
+import { and, desc, eq, gt, isNull, lt, lte, or } from "drizzle-orm";
 import { z } from "zod";
 import { scheduledMessageCondition } from "@/lib/email/scheduled";
 import { getDb } from "@/db";
@@ -26,10 +26,10 @@ const body = z.string().trim().min(1).max(40_000).describe("The recipient-facing
 const limit = z.number().int().min(1).max(50).default(20);
 
 export const emailToolSchemas = {
-	list_emails: z.object({ folder: z.enum(["inbox", "sent", "scheduled", "draft", "archived", "trash", "spam"]).default("inbox"), limit, cursor: id.nullish().describe("Omit or set to null for the first page. For subsequent pages, use only the exact nextCursor returned by list_emails for this mailbox and folder. Stop when nextCursor is null. Never invent a cursor or use a page number or offset such as '0'.") }),
+	list_emails: z.object({ folder: z.enum(["inbox", "starred", "snoozed", "sent", "scheduled", "draft", "archived", "trash", "spam"]).default("inbox"), folderId: id.optional().describe("A custom folder ID from list_folders. Lists that folder instead of the named folder."), limit, cursor: id.nullish().describe("Omit or set to null for the first page. For subsequent pages, use only the exact nextCursor returned by list_emails for this mailbox and folder. Stop when nextCursor is null. Never invent a cursor or use a page number or offset such as '0'.") }),
 	get_email: z.object({ emailId: id }),
 	get_thread: z.object({ emailId: id }),
-	search_emails: z.object({ query: z.string().trim().min(1).max(300), folder: z.enum(["inbox", "sent", "scheduled", "draft", "archived", "trash", "spam"]).optional(), limit }),
+	search_emails: z.object({ query: z.string().trim().min(1).max(300), folder: z.enum(["inbox", "starred", "snoozed", "sent", "scheduled", "draft", "archived", "trash", "spam"]).optional(), folderId: id.optional().describe("Limit results to a custom folder ID from list_folders."), limit }),
 	draft_email: z.object({ to: toolEmailSchema, subject: z.string().trim().min(1).max(500), body }),
 	draft_reply: z.object({ emailId: id, body, replyAll: z.boolean().default(false) }),
 	edit_draft: z.object({
@@ -49,7 +49,7 @@ export const emailToolSchemas = {
 } as const;
 
 export const emailToolDescriptions: Record<EmailToolName, string> = {
-	list_emails: "List email metadata in a mailbox folder with pagination. Omit cursor or set it to null for the first page; use the returned nextCursor for subsequent pages.",
+	list_emails: "List email metadata in a mailbox folder, or in a custom folder by folderId, with pagination. Inbox excludes snoozed mail; use the snoozed folder for it. Omit cursor or set it to null for the first page; use the returned nextCursor for subsequent pages.",
 	get_email: "Read one email and its attachment metadata without marking it read.",
 	get_thread: "Read the recent conversation containing an email before drafting a reply.",
 	search_emails: "Search email subject and body in this mailbox.",
@@ -69,7 +69,8 @@ function publicMessage(row: typeof messages.$inferSelect) {
 	return {
 		id: row.id, mailboxId: row.mailboxId, from: row.fromAddr, to: row.toAddr,
 		cc: row.ccAddr, subject: row.subject, snippet: row.snippet, direction: row.direction,
-		status: row.status, read: row.read, starred: row.starred, threadId: row.threadId,
+		status: row.status, read: row.read, starred: row.starred, threadId: row.threadId, folderId: row.folderId,
+		snoozedUntil: row.snoozedUntil && row.snoozedUntil > new Date() ? row.snoozedUntil : null,
 		url: `/${row.status === "draft" ? "drafts" : row.status === "received" ? "inbox" : row.status}/${encodeURIComponent(row.id)}`,
 		createdAt: row.createdAt,
 	};
@@ -125,10 +126,13 @@ export async function runEmailTool(context: AgentToolContext, name: EmailToolNam
 		await requireAccess(context);
 		const folder = (name === "list_emails" ? input.folder : input.folder) as string | undefined;
 		const conditions = [eq(messages.mailboxId, context.mailboxId)];
-		if (folder === "draft") conditions.push(eq(messages.status, "draft"), eq(messages.userId, context.user.id));
+		if (input.folderId) conditions.push(eq(messages.folderId, input.folderId as string), or(eq(messages.userId, context.user.id), eq(messages.direction, "inbound"))!);
+		else if (folder === "draft") conditions.push(eq(messages.status, "draft"), eq(messages.userId, context.user.id));
 		else if (folder === "sent") conditions.push(eq(messages.status, "sent"));
 		else if (folder === "scheduled") conditions.push(scheduledMessageCondition(db));
-		else if (folder === "inbox") conditions.push(eq(messages.status, "received"), isNull(messages.folderId));
+		else if (folder === "inbox") conditions.push(eq(messages.status, "received"), isNull(messages.folderId), or(isNull(messages.snoozedUntil), lte(messages.snoozedUntil, new Date()))!);
+		else if (folder === "starred") conditions.push(eq(messages.starred, true), or(eq(messages.userId, context.user.id), eq(messages.direction, "inbound"))!);
+		else if (folder === "snoozed") conditions.push(eq(messages.status, "received"), isNull(messages.folderId), gt(messages.snoozedUntil, new Date()));
 		else if (folder === "archived" || folder === "trash" || folder === "spam") conditions.push(eq(messages.status, folder));
 		else conditions.push(or(eq(messages.userId, context.user.id), eq(messages.direction, "inbound"))!);
 		if (name === "search_emails") conditions.push(...buildSearchConditions(input.query as string, context.timeZone));
@@ -186,6 +190,8 @@ export async function runEmailTool(context: AgentToolContext, name: EmailToolNam
 		for (const row of rows) {
 			const moved = await updateMessageStatusForUser(context.env, context.user, row.id, destination === "inbox" ? "received" : destination);
 			if (!moved) throw new Error("Message could not be moved");
+			// Leave the custom folder and any snooze too, as the dashboard does, so "inbox" means the message shows in Inbox.
+			if (row.folderId || (destination === "inbox" && row.snoozedUntil)) await db.update(messages).set({ folderId: null, ...(destination === "inbox" ? { snoozedUntil: null } : {}) }).where(eq(messages.id, row.id));
 		}
 		return { emailIds: ids, destination, status: "approved" };
 	}
