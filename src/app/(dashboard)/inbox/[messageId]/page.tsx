@@ -231,7 +231,7 @@ export default function MessageDetailPage() {
           />
         </div>
       </div> */}
-      <ConversationNote messageId={message.id} />
+      <ConversationNote key={message.id} messageId={message.id} />
       <ConversationThread
         currentMessageId={message.id}
         position={latestMessagesFirst ? "after" : "before"}

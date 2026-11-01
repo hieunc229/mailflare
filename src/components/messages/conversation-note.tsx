@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { PenLine, Pencil, Plus } from "@/components/icons";
 import { useLanguage } from "@/components/language-provider";
 import { RichTextEditor } from "@/components/compose/rich-text-editor";
@@ -25,8 +25,7 @@ export function ConversationNote({ messageId, className }: ConversationNoteProps
 	const [saving, setSaving] = useState(false);
 	const [failed, setFailed] = useState(false);
 
-	// Navigating to another conversation drops a half-written note edit.
-	useEffect(() => setEditing(false), [messageId]);
+	// Navigating to another conversation remounts this (key={messageId} at the call site), dropping a half-written edit.
 
 	function startEditing() {
 		setDraft(note?.html ?? "");
