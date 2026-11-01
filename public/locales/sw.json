@@ -292,6 +292,8 @@
 	"schedule.sendScheduledFor": "Kutuma kumepangwa {when}",
 	"schedule.cancelSend": "Ghairi kutuma",
 	"schedule.cancelFailed": "Imeshindwa kughairi kutuma kulikopangwa.",
+	"schedule.reschedule": "Panga upya",
+	"schedule.rescheduleFailed": "Imeshindwa kupanga upya kutuma.",
 	"schedule.optionsLabel": "Chaguo za kupanga kutuma",
 	"schedule.heading": "Panga",
 	"schedule.clear": "Futa ratiba",

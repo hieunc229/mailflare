@@ -292,6 +292,8 @@
 	"schedule.sendScheduledFor": "Versand geplant für {when}",
 	"schedule.cancelSend": "Versand abbrechen",
 	"schedule.cancelFailed": "Der geplante Versand konnte nicht abgebrochen werden.",
+	"schedule.reschedule": "Neu planen",
+	"schedule.rescheduleFailed": "Der Versand konnte nicht neu geplant werden.",
 	"schedule.optionsLabel": "Optionen für geplanten Versand",
 	"schedule.heading": "Planen",
 	"schedule.clear": "Planung aufheben",

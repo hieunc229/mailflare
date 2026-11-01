@@ -292,6 +292,8 @@
 	"schedule.sendScheduledFor": "ਭੇਜਣਾ {when} ਲਈ ਨਿਯਤ ਕੀਤਾ ਗਿਆ",
 	"schedule.cancelSend": "ਭੇਜਣਾ ਰੱਦ ਕਰੋ",
 	"schedule.cancelFailed": "ਨਿਯਤ ਕੀਤਾ ਭੇਜਣਾ ਰੱਦ ਨਹੀਂ ਕੀਤਾ ਜਾ ਸਕਿਆ।",
+	"schedule.reschedule": "ਦੁਬਾਰਾ ਨਿਰਧਾਰਤ ਕਰੋ",
+	"schedule.rescheduleFailed": "ਭੇਜਣਾ ਦੁਬਾਰਾ ਨਿਰਧਾਰਤ ਨਹੀਂ ਕੀਤਾ ਜਾ ਸਕਿਆ।",
 	"schedule.optionsLabel": "ਨਿਯਤ ਭੇਜਣ ਦੇ ਵਿਕਲਪ",
 	"schedule.heading": "ਨਿਯਤ ਕਰੋ",
 	"schedule.clear": "ਸਮਾਂ-ਸਾਰਣੀ ਸਾਫ਼ ਕਰੋ",

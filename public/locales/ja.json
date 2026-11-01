@@ -288,6 +288,8 @@
 	"schedule.sendScheduledFor": "{when}に送信予約済み",
 	"schedule.cancelSend": "送信をキャンセル",
 	"schedule.cancelFailed": "予約送信をキャンセルできません。",
+	"schedule.reschedule": "再設定",
+	"schedule.rescheduleFailed": "送信予約を再設定できません。",
 	"schedule.optionsLabel": "予約送信のオプション",
 	"schedule.heading": "予約送信",
 	"schedule.clear": "予約を解除",

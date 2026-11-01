@@ -288,6 +288,8 @@
 	"schedule.sendScheduledFor": "Đã lên lịch gửi vào {when}",
 	"schedule.cancelSend": "Hủy gửi",
 	"schedule.cancelFailed": "Không thể hủy lịch gửi.",
+	"schedule.reschedule": "Đổi lịch gửi",
+	"schedule.rescheduleFailed": "Không thể đổi lịch gửi.",
 	"schedule.optionsLabel": "Tùy chọn lên lịch gửi",
 	"schedule.heading": "Lên lịch",
 	"schedule.clear": "Xóa lịch",

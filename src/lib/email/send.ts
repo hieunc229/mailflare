@@ -312,9 +312,11 @@ export type OutboundQueueMessage = {
 	scheduledAt: string;
 };
 
-async function enqueueScheduledDelivery(
+/** Wakes the outbound queue when a job is due; runs again at the delay cap for later times. */
+export async function enqueueOutboundJob(
 	env: CloudflareEnv,
-	delivery: PreparedDelivery,
+	jobId: string,
+	messageId: string,
 	scheduledAt: Date,
 ): Promise<void> {
 	const delaySeconds = Math.min(
@@ -324,12 +326,20 @@ async function enqueueScheduledDelivery(
 	await env.OUTBOUND_QUEUE.send(
 		{
 			kind: "email.scheduled",
-			jobId: delivery.jobId,
-			messageId: delivery.messageId,
+			jobId,
+			messageId,
 			scheduledAt: scheduledAt.toISOString(),
 		},
 		{ delaySeconds },
 	);
+}
+
+async function enqueueScheduledDelivery(
+	env: CloudflareEnv,
+	delivery: PreparedDelivery,
+	scheduledAt: Date,
+): Promise<void> {
+	await enqueueOutboundJob(env, delivery.jobId, delivery.messageId, scheduledAt);
 }
 
 function deliveryFromJob(jobId: string, messageId: string, payload: string): PreparedDelivery {
@@ -394,12 +404,14 @@ export async function processOutboundQueue(
 ): Promise<void> {
 	const db = getDb(env);
 	const [job] = await db
-		.select({ status: outboundJobs.status, payload: outboundJobs.payload })
+		.select({ status: outboundJobs.status, payload: outboundJobs.payload, scheduledAt: outboundJobs.scheduledAt })
 		.from(outboundJobs)
 		.where(eq(outboundJobs.id, payload.jobId))
 		.limit(1);
 	if (!job || job.status !== "queued") return;
-	const scheduledAt = new Date(payload.scheduledAt);
+	// The job row is authoritative: rescheduling edits it while queued messages
+	// already in flight still carry the old time.
+	const scheduledAt = job.scheduledAt ?? new Date(payload.scheduledAt);
 	const delivery = deliveryFromJob(payload.jobId, payload.messageId, job.payload);
 	if (scheduledAt.getTime() > Date.now()) {
 		await enqueueScheduledDelivery(env, delivery, scheduledAt);

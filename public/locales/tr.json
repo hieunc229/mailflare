@@ -2032,6 +2032,8 @@
 	"schedule.sendScheduledFor": "Gönderim {when} için zamanlandı",
 	"schedule.cancelSend": "Gönderimi iptal et",
 	"schedule.cancelFailed": "Zamanlanmış gönderim iptal edilemedi.",
+	"schedule.reschedule": "Yeniden zamanla",
+	"schedule.rescheduleFailed": "Gönderim yeniden zamanlanamadı.",
 	"general.drive": "Drive depolaması",
 	"general.driveUnlimited": "Sınırsız depolama",
 	"general.driveLimit": "Kullanıcı başına depolama sınırı (GB)",

@@ -292,6 +292,8 @@
 	"schedule.sendScheduledFor": "{when} ಕ್ಕೆ ಕಳುಹಿಸಲು ನಿಗದಿಪಡಿಸಲಾಗಿದೆ",
 	"schedule.cancelSend": "ಕಳುಹಿಸುವುದನ್ನು ರದ್ದುಮಾಡಿ",
 	"schedule.cancelFailed": "ನಿಗದಿತ ಕಳುಹಿಸುವಿಕೆಯನ್ನು ರದ್ದುಮಾಡಲು ಸಾಧ್ಯವಾಗಲಿಲ್ಲ.",
+	"schedule.reschedule": "ಮರುನಿಗದಿ ಮಾಡಿ",
+	"schedule.rescheduleFailed": "ಕಳುಹಿಸುವಿಕೆಯನ್ನು ಮರುನಿಗದಿ ಮಾಡಲು ಸಾಧ್ಯವಾಗಲಿಲ್ಲ.",
 	"schedule.optionsLabel": "ನಿಗದಿತ ಕಳುಹಿಸುವ ಆಯ್ಕೆಗಳು",
 	"schedule.heading": "ನಿಗದಿಪಡಿಸಿ",
 	"schedule.clear": "ನಿಗದಿಯನ್ನು ತೆರವುಗೊಳಿಸಿ",

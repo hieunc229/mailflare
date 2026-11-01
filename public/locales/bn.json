@@ -292,6 +292,8 @@
 	"schedule.sendScheduledFor": "{when}-এর জন্য পাঠানো নির্ধারিত",
 	"schedule.cancelSend": "পাঠানো বাতিল করুন",
 	"schedule.cancelFailed": "নির্ধারিত পাঠানো বাতিল করা যায়নি।",
+	"schedule.reschedule": "পুনঃনির্ধারণ করুন",
+	"schedule.rescheduleFailed": "পাঠানো পুনঃনির্ধারণ করা যায়নি।",
 	"schedule.optionsLabel": "নির্ধারিত পাঠানোর বিকল্প",
 	"schedule.heading": "নির্ধারণ করুন",
 	"schedule.clear": "সময়সূচি মুছুন",

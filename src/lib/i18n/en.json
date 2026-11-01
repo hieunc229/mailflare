@@ -292,6 +292,8 @@
 	"schedule.sendScheduledFor": "Send scheduled for {when}",
 	"schedule.cancelSend": "Cancel send",
 	"schedule.cancelFailed": "Unable to cancel the scheduled send.",
+	"schedule.reschedule": "Reschedule",
+	"schedule.rescheduleFailed": "Unable to reschedule the send.",
 	"schedule.optionsLabel": "Schedule send options",
 	"schedule.heading": "Schedule",
 	"schedule.clear": "Clear schedule",

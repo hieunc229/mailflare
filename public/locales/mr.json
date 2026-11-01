@@ -292,6 +292,8 @@
 	"schedule.sendScheduledFor": "{when} ला पाठवण्यासाठी शेड्यूल केले",
 	"schedule.cancelSend": "पाठवणे रद्द करा",
 	"schedule.cancelFailed": "शेड्यूल केलेले पाठवणे रद्द करता आले नाही.",
+	"schedule.reschedule": "पुन्हा शेड्यूल करा",
+	"schedule.rescheduleFailed": "पाठवणे पुन्हा शेड्यूल करता आले नाही.",
 	"schedule.optionsLabel": "शेड्यूल करून पाठवण्याचे पर्याय",
 	"schedule.heading": "शेड्यूल करा",
 	"schedule.clear": "शेड्यूल साफ करा",

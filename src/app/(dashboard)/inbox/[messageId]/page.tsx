@@ -321,7 +321,7 @@ export default function MessageDetailPage() {
               <MessageDetailsPanel message={message} onClose={() => setDetailsOpen(false)} />
             </div>
           )}
-          {scheduledAt && <div className="px-4 sm:px-0 sm:pl-10"><ScheduledSendBanner messageId={message.id} scheduledAt={scheduledAt} /></div>}
+          {scheduledAt && <div className="px-4 sm:px-0 sm:pl-10"><ScheduledSendBanner messageId={message.id} scheduledAt={scheduledAt} onRescheduled={(next) => setData((current) => current ? { ...current, scheduledAt: next } : current)} /></div>}
           <div className="prose max-w-none px-4 text-neutral-900 sm:px-0 sm:pl-16">
             {htmlBody ? (
               <EmailHtmlRenderer key={message.id} className="mx-auto" html={htmlBody} autoAllowRemote={remote.autoAllow} onAllowRemote={remote.allowSender} />

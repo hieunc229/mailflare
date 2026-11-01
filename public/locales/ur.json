@@ -292,6 +292,8 @@
 	"schedule.sendScheduledFor": "ارسال {when} کے لیے شیڈول ہے",
 	"schedule.cancelSend": "ارسال منسوخ کریں",
 	"schedule.cancelFailed": "شیڈول شدہ ارسال منسوخ نہیں ہو سکا۔",
+	"schedule.reschedule": "دوبارہ شیڈول کریں",
+	"schedule.rescheduleFailed": "ارسال دوبارہ شیڈول نہیں ہو سکا۔",
 	"schedule.optionsLabel": "شیڈول شدہ ارسال کے اختیارات",
 	"schedule.heading": "شیڈول کریں",
 	"schedule.clear": "شیڈول صاف کریں",

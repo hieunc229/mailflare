@@ -296,6 +296,8 @@
 	"schedule.sendScheduledFor": "Envio agendado para {when}",
 	"schedule.cancelSend": "Cancelar envio",
 	"schedule.cancelFailed": "Não foi possível cancelar o envio agendado.",
+	"schedule.reschedule": "Reagendar",
+	"schedule.rescheduleFailed": "Não foi possível reagendar o envio.",
 	"schedule.optionsLabel": "Opções de agendamento de envio",
 	"schedule.heading": "Agendar",
 	"schedule.clear": "Limpar agendamento",

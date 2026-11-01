@@ -292,6 +292,8 @@
 	"schedule.sendScheduledFor": "An tsara aikawa a {when}",
 	"schedule.cancelSend": "Soke aikawa",
 	"schedule.cancelFailed": "Ba a iya soke aikawar da aka tsara ba.",
+	"schedule.reschedule": "Sake tsarawa",
+	"schedule.rescheduleFailed": "Ba a iya sake tsara aikawar ba.",
 	"schedule.optionsLabel": "Zaɓuɓɓukan aikawa da aka tsara",
 	"schedule.heading": "Tsara",
 	"schedule.clear": "Share jadawali",
