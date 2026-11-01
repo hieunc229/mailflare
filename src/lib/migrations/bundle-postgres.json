@@ -275,6 +275,12 @@
       "statements": [
         "UPDATE \"users\" SET \"remote_content_mode\" = 'ask' WHERE \"remote_content_mode\" = 'allow';"
       ]
+    },
+    {
+      "name": "0004_add_accent_color.sql",
+      "statements": [
+        "ALTER TABLE \"app_settings\" ADD COLUMN \"accent_color\" text;"
+      ]
     }
   ]
 }
