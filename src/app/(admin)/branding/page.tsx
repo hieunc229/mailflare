@@ -9,12 +9,15 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import type { AccentColorId } from "@/lib/branding/accents";
+import { AccentColorPicker } from "./accent-color-picker";
 import { BRANDING_ICON_ACCEPT, saveBranding } from "./utils";
 
 export default function BrandingPage() {
 	const { t } = useLanguage();
 	const branding = useBranding();
 	const [appName, setAppName] = useState(branding.appName);
+	const [accentColor, setAccentColor] = useState<AccentColorId>(branding.accentColor);
 	const [icon, setIcon] = useState<File | null>(null);
 	const [preview, setPreview] = useState<string | null>(null);
 	const [status, setStatus] = useState<string | null>(null);
@@ -24,6 +27,16 @@ export default function BrandingPage() {
 	useEffect(() => {
 		setAppName(branding.appName);
 	}, [branding.appName]);
+
+	useEffect(() => {
+		setAccentColor(branding.accentColor);
+	}, [branding.accentColor]);
+
+	// Preview the selected accent on the page; leaving the page restores the saved one.
+	useEffect(() => {
+		document.documentElement.dataset.accent = accentColor;
+		return () => { document.documentElement.dataset.accent = branding.accentColor; };
+	}, [accentColor, branding.accentColor]);
 
 	if (!branding.canCustomizeBranding) {
 		return (
@@ -58,7 +71,7 @@ export default function BrandingPage() {
 		setSaving(true);
 		setStatus(null);
 		try {
-			await saveBranding(appName.trim(), icon);
+			await saveBranding(appName.trim(), accentColor, icon);
 			await branding.refreshBranding();
 			setIcon(null);
 			setStatus(t("branding.updated"));
@@ -85,6 +98,11 @@ export default function BrandingPage() {
 						<div className="space-y-2">
 							<Label htmlFor="appName">{t("branding.appName")}</Label>
 							<Input id="appName" value={appName} maxLength={60} onChange={(event) => setAppName(event.target.value)} required />
+						</div>
+						<div className="space-y-2">
+							<Label>{t("branding.accentColor")}</Label>
+							<p className="text-xs text-neutral-500">{t("branding.accentNote")}</p>
+							<AccentColorPicker value={accentColor} onChange={setAccentColor} />
 						</div>
 						<div className="space-y-2">
 							<Label>{t("branding.appIcon")}</Label>

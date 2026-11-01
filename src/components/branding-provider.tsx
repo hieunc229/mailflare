@@ -24,6 +24,10 @@ export function BrandingProvider({ children, initialBranding }: { children: Reac
 		void refreshBranding();
 	}, []);
 
+	useEffect(() => {
+		document.documentElement.dataset.accent = branding.accentColor;
+	}, [branding.accentColor]);
+
 	return (
 		<BrandingContext.Provider value={{
 			...branding,
