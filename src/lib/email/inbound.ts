@@ -337,7 +337,14 @@ export async function getMessageWithBodyForUser(env: CloudflareEnv, user: Sessio
 	const contactNames = await getMessageContactNames(env, message.userId, message.fromAddr, message.toAddr);
 	const attachments = await listMessageAttachments(env, messageId);
 	const unsubscribeUrl = await getUnsubscribeUrlFromRawR2Key(env, message.rawR2Key);
-	return { message: { ...message, ...contactNames }, body: message, attachments, unsubscribeUrl };
+	const [scheduledJob] = message.direction === "outbound" && message.status === "queued"
+		? await db
+			.select({ scheduledAt: outboundJobs.scheduledAt })
+			.from(outboundJobs)
+			.where(and(eq(outboundJobs.messageId, messageId), eq(outboundJobs.status, "queued"), isNotNull(outboundJobs.scheduledAt)))
+			.limit(1)
+		: [];
+	return { message: { ...message, ...contactNames }, body: message, attachments, unsubscribeUrl, scheduledAt: scheduledJob?.scheduledAt?.toISOString() ?? null };
 }
 
 export async function getMessageMetadataForUser(env: CloudflareEnv, user: SessionUser, messageId: string) {
