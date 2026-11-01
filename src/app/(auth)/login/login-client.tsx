@@ -12,6 +12,22 @@ import { Label } from "@/components/ui/label";
 import { TurnstileField } from "@/components/auth/turnstile";
 import { submitLogin, submitMfaCode } from "./utils";
 
+function formatAuthError(error: unknown, fallback: string): string {
+  if (typeof error === "string") return error;
+  if (typeof error === "object" && error !== null) {
+    const { formErrors, fieldErrors } = error as {
+      formErrors?: string[];
+      fieldErrors?: Record<string, string[]>;
+    };
+    const messages = [
+      ...(formErrors ?? []),
+      ...Object.values(fieldErrors ?? {}).flat(),
+    ].filter(Boolean);
+    if (messages.length > 0) return messages.join(", ");
+  }
+  return fallback;
+}
+
 export function LoginClient({ adding = false }: { adding?: boolean }) {
   const { t } = useLanguage();
   const router = useRouter();
@@ -35,7 +51,7 @@ export function LoginClient({ adding = false }: { adding?: boolean }) {
     try {
       const { ok, data } = await submitLogin(new FormData(e.currentTarget));
       if (!ok) {
-        setError(data.error ?? t("auth.loginFailed"));
+        setError(formatAuthError(data.error, t("auth.loginFailed")));
         setTurnstileReset((value) => value + 1);
         return;
       }
@@ -64,9 +80,9 @@ export function LoginClient({ adding = false }: { adding?: boolean }) {
     try {
       const { ok, data } = await submitMfaCode(challengeToken, code);
       if (!ok) {
-        setError(data.error ?? t("auth.codeMismatch"));
+        setError(formatAuthError(data.error, t("auth.codeMismatch")));
         // An expired challenge sends the user back to the password step.
-        if (data.error?.includes("expired")) {
+        if (typeof data.error === "string" && data.error.includes("expired")) {
           setChallengeToken(null);
           setCode("");
         }
