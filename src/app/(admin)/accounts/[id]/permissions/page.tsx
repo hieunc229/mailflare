@@ -56,6 +56,8 @@ export default function AccountPermissionsPage() {
 		setMessage(null);
 		try {
 			await saveManagedAccount(account);
+			// Editing your own flags changes what your navigation shows; drop the cached user.
+			if (currentUser?.id === account.id) clearCurrentUserCache();
 			setMessage(t("account.permissions.updated"));
 		} catch (error) {
 			setMessage(error instanceof Error ? error.message : t("account.permissions.updateFailed"));
@@ -167,6 +169,44 @@ export default function AccountPermissionsPage() {
 					</tbody>
 				</table>
 			</div>
+			<section className="overflow-hidden rounded-3xl bg-white">
+				<div className="border-b border-neutral-100 bg-neutral-50 px-5 py-3">
+					<h2 className="text-xs font-semibold uppercase tracking-wide text-neutral-500">{t("account.permissions.features")}</h2>
+					<p className="mt-1 text-xs text-neutral-500">{t("account.permissions.featuresHint")}</p>
+				</div>
+				<table className="w-full text-left">
+					<tbody className="divide-y divide-neutral-100">
+						<tr>
+							<td className="px-5 py-4">
+								<p className="text-sm font-semibold text-neutral-900">{t("account.calendar")}</p>
+								<p className="mt-1 text-xs text-neutral-500">{t("account.permissions.calendarHint")}</p>
+							</td>
+							<td className="w-28 px-5 py-4 text-center">
+								<Checkbox
+									aria-label={t("account.permissions.allowCalendar")}
+									checked={account?.calendarEnabled ?? true}
+									disabled={!account || !editable}
+									onChange={(event) => account && setAccount({ ...account, calendarEnabled: event.target.checked })}
+								/>
+							</td>
+						</tr>
+						<tr>
+							<td className="px-5 py-4">
+								<p className="text-sm font-semibold text-neutral-900">{t("account.drive")}</p>
+								<p className="mt-1 text-xs text-neutral-500">{t("account.permissions.driveHint")}</p>
+							</td>
+							<td className="w-28 px-5 py-4 text-center">
+								<Checkbox
+									aria-label={t("account.permissions.allowDrive")}
+									checked={account?.driveEnabled ?? true}
+									disabled={!account || !editable}
+									onChange={(event) => account && setAccount({ ...account, driveEnabled: event.target.checked })}
+								/>
+							</td>
+						</tr>
+					</tbody>
+				</table>
+			</section>
 			{editable && (
 				<Button onClick={() => void savePermissions()} disabled={saving}>
 					{saving ? t("common.saving") : t("account.permissions.save")}

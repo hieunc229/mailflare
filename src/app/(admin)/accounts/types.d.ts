@@ -32,6 +32,8 @@ export type Account = {
 	canManageMailboxes?: boolean;
 	canManageDomains?: boolean;
 	canManageUsers?: boolean;
+	calendarEnabled?: boolean;
+	driveEnabled?: boolean;
 	createdAt: string;
 	lastSignInAt?: string | null;
 	deletedAt?: string | null;

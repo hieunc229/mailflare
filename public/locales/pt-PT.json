@@ -2207,5 +2207,11 @@
 	"calendar.reminder.m120": "2 hours before",
 	"calendar.reminder.m1440": "1 day before",
 	"calendar.reminder.m2880": "2 days before",
-	"calendar.reminder.m10080": "1 week before"
+	"calendar.reminder.m10080": "1 week before",
+	"account.permissions.features": "Feature access",
+	"account.permissions.featuresHint": "Apps turned off are hidden and blocked for this account.",
+	"account.permissions.calendarHint": "Events, reminders, and booking pages.",
+	"account.permissions.driveHint": "Files, saved attachments, and shared links.",
+	"account.permissions.allowCalendar": "Allow Calendar",
+	"account.permissions.allowDrive": "Allow Drive"
 }

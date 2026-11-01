@@ -143,6 +143,8 @@ export const updateManagedAccountSchema = z.object({
 	canManageMailboxes: z.boolean(),
 	canManageDomains: z.boolean().optional(),
 	canManageUsers: z.boolean().optional(),
+	calendarEnabled: z.boolean().optional(),
+	driveEnabled: z.boolean().optional(),
 	forwardingEmail: z.preprocess(
 		(value) => (typeof value === "string" ? value.trim() : value),
 		z.string().email().or(z.literal("")).nullable().optional().transform((value) => value === undefined ? undefined : value || null),

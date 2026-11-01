@@ -498,6 +498,13 @@
       "when": 1793260800000,
       "tag": "0079_remote_content_ask",
       "breakpoints": true
+    },
+    {
+      "idx": 72,
+      "version": "6",
+      "when": 1793260803000,
+      "tag": "0080_add_feature_access",
+      "breakpoints": true
     }
   ]
 }

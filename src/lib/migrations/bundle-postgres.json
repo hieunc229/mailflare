@@ -275,6 +275,13 @@
       "statements": [
         "UPDATE \"users\" SET \"remote_content_mode\" = 'ask' WHERE \"remote_content_mode\" = 'allow';"
       ]
+    },
+    {
+      "name": "0004_feature_access.sql",
+      "statements": [
+        "ALTER TABLE \"users\" ADD COLUMN \"calendar_enabled\" boolean DEFAULT true NOT NULL;",
+        "ALTER TABLE \"users\" ADD COLUMN \"drive_enabled\" boolean DEFAULT true NOT NULL;"
+      ]
     }
   ]
 }

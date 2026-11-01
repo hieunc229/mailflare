@@ -44,7 +44,7 @@ function DriveFrame({ children }: { children: React.ReactNode }) {
 
 export default function DriveLayout({ children }: { children: React.ReactNode }) {
 	return (
-		<AuthGuard>
+		<AuthGuard requireFeature="drive">
 			<SidebarProvider mobileOverlay>
 				<MailboxProvider>
 					<ComposeProvider>

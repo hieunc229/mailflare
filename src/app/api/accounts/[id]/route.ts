@@ -31,6 +31,8 @@ export async function GET(request: Request, { params }: AccountRouteParams) {
 			canManageMailboxes: account.canManageMailboxes,
 			canManageDomains: account.canManageDomains,
 			canManageUsers: account.canManageUsers,
+			calendarEnabled: account.calendarEnabled,
+			driveEnabled: account.driveEnabled,
 			forwardingEmail: account.forwardingEmail,
 			canForwardEmail: (await getLicenseEntitlements(access.env)).canForwardEmail,
 			hasAvatar: !!account.avatarKey,
@@ -87,6 +89,8 @@ export async function PATCH(request: Request, { params }: AccountRouteParams) {
 		canManageMailboxes: parsed.data.canManageMailboxes,
 		...(actorIsPrimary && parsed.data.canManageDomains !== undefined ? { canManageDomains: parsed.data.canManageDomains } : {}),
 		...(actorIsPrimary && parsed.data.canManageUsers !== undefined ? { canManageUsers: parsed.data.canManageUsers } : {}),
+		...(parsed.data.calendarEnabled !== undefined ? { calendarEnabled: parsed.data.calendarEnabled } : {}),
+		...(parsed.data.driveEnabled !== undefined ? { driveEnabled: parsed.data.driveEnabled } : {}),
 		...(parsed.data.forwardingEmail !== undefined ? { forwardingEmail: parsed.data.forwardingEmail } : {}),
 	}).where(eq(users.id, id));
 	return NextResponse.json({ ok: true });

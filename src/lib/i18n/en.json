@@ -2214,5 +2214,11 @@
 	"drive.save": "Save",
 	"compose.cancelSend": "Cancel",
 	"compose.sendCancelled": "Sending cancelled. Message moved to Drafts.",
-	"compose.cancelTooLate": "Too late to cancel: the message is already being sent."
+	"compose.cancelTooLate": "Too late to cancel: the message is already being sent.",
+	"account.permissions.features": "Feature access",
+	"account.permissions.featuresHint": "Apps turned off are hidden and blocked for this account.",
+	"account.permissions.calendarHint": "Events, reminders, and booking pages.",
+	"account.permissions.driveHint": "Files, saved attachments, and shared links.",
+	"account.permissions.allowCalendar": "Allow Calendar",
+	"account.permissions.allowDrive": "Allow Drive"
 }

@@ -11,11 +11,14 @@ import { newId } from "@/lib/ids";
 import { ensureBookingUsername } from "@/lib/booking/username";
 import { validBookingHostIds } from "@/lib/booking/hosts";
 import { getLicenseEntitlements } from "@/lib/licenses/service";
+import { calendarAccessError } from "@/lib/calendar/api-auth";
 
 export async function GET(request: Request) {
 	const env = getEnv();
 	const user = await getCurrentUser(env, request);
 	if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+	const denied = calendarAccessError(user);
+	if (denied) return denied;
 	const username = await ensureBookingUsername(env, user.id, user.email);
 	const db = getDb(env);
 	const events = await db.select().from(bookingEvents).where(eq(bookingEvents.userId, user.id)).orderBy(bookingEvents.createdAt);
@@ -28,6 +31,8 @@ export async function POST(request: Request) {
 	const env = getEnv();
 	const user = await getCurrentUser(env, request);
 	if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+	const denied = calendarAccessError(user);
+	if (denied) return denied;
 	if (!hasValidSessionMutationOrigin(request)) return NextResponse.json({ error: "Invalid origin" }, { status: 403 });
 	const input = parseBookingEventInput(await request.json().catch(() => null));
 	if (!input) return NextResponse.json({ error: "Enter valid booking details and availability." }, { status: 400 });

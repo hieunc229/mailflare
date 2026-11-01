@@ -25,6 +25,9 @@ export const users = sqliteTable("users", {
 	// Capabilities the primary admin grants to other admins.
 	canManageDomains: bool("can_manage_domains").notNull().default(false),
 	canManageUsers: bool("can_manage_users").notNull().default(false),
+	// Apps an admin can hide per account. Off removes the nav entry and blocks the app's API.
+	calendarEnabled: bool("calendar_enabled").notNull().default(true),
+	driveEnabled: bool("drive_enabled").notNull().default(true),
 	keyboardShortcutsEnabled: bool("keyboard_shortcuts_enabled").notNull().default(true),
 	spamProtectionEnabled: bool("spam_protection_enabled").notNull().default(true),
 	/** Days a message may stay in Trash or Spam before the scheduled purge deletes it; null keeps it forever. */
