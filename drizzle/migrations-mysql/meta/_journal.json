@@ -29,6 +29,13 @@
       "when": 1793260802000,
       "tag": "0003_remote_content_ask",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "5",
+      "when": 1793543194669,
+      "tag": "0004_add_api_key_sha256",
+      "breakpoints": true
     }
   ]
 }

@@ -1,7 +1,8 @@
 import { and, eq, lt, or, isNull } from "drizzle-orm";
 import { getDb } from "@/db";
 import { apiKeys, mcpKeyMailboxes, users } from "@/db/schema";
-import { parseScopes, verifyApiKey } from "@/lib/api-keys";
+import { parseScopes } from "@/lib/api-keys";
+import { findApiKeyForSecret } from "@/lib/api/find-api-key";
 import { getMailboxAccessLevel } from "@/lib/mailboxes/access";
 import { ADMIN_API_KEY_SCOPES } from "@/lib/api/scopes";
 import type { McpPrincipal } from "./types";
@@ -15,9 +16,8 @@ export async function authenticateMcpRequest(env: CloudflareEnv, request: Reques
 	const key = authorization.slice(7).trim();
 	if (!key.startsWith("ep_") || key.length > 256) return null;
 	const db = getDb(env);
-	const candidates = await db.select().from(apiKeys).where(and(eq(apiKeys.prefix, key.slice(0, 12)), eq(apiKeys.kind, "mcp")));
-	for (const candidate of candidates) {
-		if (!verifyApiKey(key, candidate.keyHash)) continue;
+	const candidate = await findApiKeyForSecret(db, key, { kind: "mcp" });
+	if (candidate) {
 		const allScopes = parseScopes(candidate.scopes);
 		const isMailKey = allScopes.length > 0 && allScopes.every((scope) => MCP_SCOPES.has(scope));
 		const isAdminKey = allScopes.length > 0 && allScopes.every((scope) => ADMIN_SCOPES.has(scope));

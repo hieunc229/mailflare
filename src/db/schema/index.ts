@@ -262,14 +262,24 @@ export const apiKeys = sqliteTable("api_keys", {
 		.references(() => users.id, { onDelete: "cascade" }),
 	name: text("name").notNull(),
 	prefix: text("prefix").notNull(),
+	/**
+	 * bcrypt for keys issued before SHA-256 lookups. Newer keys store the same
+	 * SHA-256 hex as `keySha256` so creation does not run bcrypt either.
+	 */
 	keyHash: text("key_hash").notNull(),
+	/**
+	 * SHA-256 hex of the secret. High-entropy API keys and app passwords are
+	 * verified with this so auth stays inside the Workers free-tier CPU limit.
+	 * Null on rows that only have a bcrypt hash.
+	 */
+	keySha256: text("key_sha256"),
 	scopes: text("scopes").notNull(),
 	mailboxScopeEnabled: bool("mailbox_scope_enabled").notNull().default(false),
 	createdAt: timestamp("created_at")
 		.notNull()
 		.$defaultFn(() => new Date()),
 	lastUsedAt: timestamp("last_used_at"),
-}, (t) => [index("api_keys_user_idx").on(t.userId)]);
+}, (t) => [index("api_keys_user_idx").on(t.userId), uniqueIndex("api_keys_key_sha256_idx").on(t.keySha256)]);
 
 export const messages = sqliteTable(
 	"messages",
