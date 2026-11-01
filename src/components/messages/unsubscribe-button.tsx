@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { BellOff, MailCheck } from "@/components/icons";
 import { useCompose } from "@/components/compose/compose-context";
 import { useLanguage } from "@/components/language-provider";
@@ -19,8 +19,6 @@ export function MessageUnsubscribeButton({ messageId }: { messageId: string }) {
 	const { showNotice } = useCompose();
 	const [pending, setPending] = useState(false);
 	const [done, setDone] = useState(false);
-
-	useEffect(() => setDone(false), [messageId]);
 
 	async function onUnsubscribe() {
 		setPending(true);
