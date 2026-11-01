@@ -16,6 +16,7 @@ import { MessageDetailSkeleton } from "@/components/page-skeletons";
 import { usePageLoading } from "@/components/page-loading";
 import { PreviousMessage } from "@/components/previous-message";
 import { ConversationThread } from "@/components/messages/conversation-thread";
+import { ConversationNote } from "@/components/messages/conversation-note";
 import { MessageDetailNavigation } from "@/components/messages/message-detail-navigation";
 import { MessageReadingHeaderButton } from "@/components/messages/message-reading-header-button";
 import { ScheduledSendBanner } from "@/components/messages/scheduled-send-banner";
@@ -230,6 +231,7 @@ export default function MessageDetailPage() {
           />
         </div>
       </div> */}
+      <ConversationNote messageId={message.id} />
       <ConversationThread
         currentMessageId={message.id}
         position={latestMessagesFirst ? "after" : "before"}
