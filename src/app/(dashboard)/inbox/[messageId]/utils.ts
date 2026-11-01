@@ -17,7 +17,7 @@ export function getCachedMessageDetailForDisplay(messageId: string): MessageDeta
 	return getCachedMessageDetail(messageId) as MessageDetailResponse | undefined;
 }
 
-export async function fetchMessageMetadata(messageId: string): Promise<Pick<MessageDetailResponse, "attachments" | "unsubscribeUrl">> {
+export async function fetchMessageMetadata(messageId: string): Promise<Pick<MessageDetailResponse, "attachments" | "unsubscribeUrl" | "unsubscribeViaBody">> {
 	return (await authFetch(`/api/messages/${messageId}/metadata`)).json();
 }
 

@@ -22,6 +22,7 @@ import { ScheduledSendBanner } from "@/components/messages/scheduled-send-banner
 import { formatScheduledSendTime } from "@/components/messages/scheduled-send-utils";
 import { QuotedEmailToggle } from "@/components/messages/quoted-email-toggle";
 import { ThreadMessageActions } from "@/components/messages/thread-message-actions";
+import { MessageUnsubscribeButton } from "@/components/messages/unsubscribe-button";
 import { MessageDetailsPanel } from "@/components/messages/message-details-panel";
 import { SenderCheckNotice } from "@/components/messages/sender-check-notice";
 import { useMessageThread } from "@/components/messages/use-message-thread";
@@ -204,7 +205,7 @@ export default function MessageDetailPage() {
         direction={message.direction}
         status={message.status}
         read={message.read}
-        unsubscribeUrl={data.unsubscribeUrl}
+        unsubscribeUrl={data.unsubscribeUrl ?? data.unsubscribeViaBody}
         subject={message.subject}
         bodyText={body?.textBody}
         ownAddress={ownAddress}
@@ -297,6 +298,9 @@ export default function MessageDetailPage() {
             </div>
             <div className="flex shrink-0 items-center gap-2">
               <p className="hidden text-xs sm:block">{messageDate(true)}</p>
+              {message.direction === "inbound" && (data.unsubscribeUrl || data.unsubscribeViaBody) && (
+                <MessageUnsubscribeButton messageId={message.id} />
+              )}
               <ThreadMessageActions
                 message={currentThreadMessage}
                 mailboxId={message.mailboxId}
