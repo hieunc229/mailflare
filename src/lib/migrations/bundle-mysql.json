@@ -254,6 +254,15 @@
       "statements": [
         "UPDATE `users` SET `remote_content_mode` = 'ask' WHERE `remote_content_mode` = 'allow';"
       ]
+    },
+    {
+      "name": "0004_conversation_notes.sql",
+      "statements": [
+        "CREATE TABLE `conversation_notes` (\n\t`id` varchar(191) NOT NULL,\n\t`mailbox_id` varchar(191) NOT NULL,\n\t`thread_key` varchar(512) NOT NULL,\n\t`html` longtext NOT NULL,\n\t`saved_by_user_id` varchar(191),\n\t`created_at` bigint NOT NULL,\n\t`updated_at` bigint NOT NULL,\n\tCONSTRAINT `conversation_notes_id` PRIMARY KEY(`id`),\n\tCONSTRAINT `conversation_notes_mailbox_thread_idx` UNIQUE(`mailbox_id`,`thread_key`)\n);",
+        "ALTER TABLE `conversation_notes` ADD CONSTRAINT `conversation_notes_mailbox_id_mailboxes_id_fk` FOREIGN KEY (`mailbox_id`) REFERENCES `mailboxes`(`id`) ON DELETE cascade ON UPDATE no action;",
+        "ALTER TABLE `conversation_notes` ADD CONSTRAINT `conversation_notes_saved_by_user_id_users_id_fk` FOREIGN KEY (`saved_by_user_id`) REFERENCES `users`(`id`) ON DELETE set null ON UPDATE no action;",
+        "CREATE INDEX `conversation_notes_saved_by_idx` ON `conversation_notes` (`saved_by_user_id`);"
+      ]
     }
   ]
 }

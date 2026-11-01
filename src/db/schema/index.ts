@@ -552,6 +552,28 @@ export const followUps = sqliteTable(
 	],
 );
 
+/**
+ * One note per conversation, shared with everyone who can read the mailbox.
+ * `threadKey` is the conversation key the message list uses: the thread id, or
+ * the lone message's id when the conversation was never threaded.
+ */
+export const conversationNotes = sqliteTable(
+	"conversation_notes",
+	{
+		id: text("id").primaryKey(),
+		mailboxId: text("mailbox_id").notNull().references(() => mailboxes.id, { onDelete: "cascade" }),
+		threadKey: text("thread_key").notNull(),
+		html: text("html").notNull(),
+		savedByUserId: text("saved_by_user_id").references((): AnySQLiteColumn => users.id, { onDelete: "set null" }),
+		createdAt: timestamp("created_at").notNull().$defaultFn(() => new Date()),
+		updatedAt: timestamp("updated_at").notNull().$defaultFn(() => new Date()),
+	},
+	(t) => [
+		uniqueIndex("conversation_notes_mailbox_thread_idx").on(t.mailboxId, t.threadKey),
+		index("conversation_notes_saved_by_idx").on(t.savedByUserId),
+	],
+);
+
 export const emailTemplates = sqliteTable(
 	"email_templates",
 	{
