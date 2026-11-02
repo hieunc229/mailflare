@@ -18,6 +18,7 @@ export type FeedEvent = {
 	timeZone: string | null;
 	attendees: string;
 	updatedAt?: Date | null;
+	responseStatus?: string | null;
 };
 
 const BYDAY = ["SU", "MO", "TU", "WE", "TH", "FR", "SA"];
@@ -73,6 +74,7 @@ export function buildCalendarFeed(events: FeedEvent[], options: { name: string; 
 			lines.push(rule);
 			for (const excluded of parseExcludedOccurrences(event.excludedOccurrences)) lines.push(dateProperty("EXDATE", new Date(excluded), zone));
 		}
+		if (event.responseStatus === "tentative") lines.push("STATUS:TENTATIVE");
 		if (event.updatedAt) lines.push(`LAST-MODIFIED:${utc(event.updatedAt)}`);
 		lines.push("END:VEVENT");
 	}

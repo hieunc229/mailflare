@@ -589,6 +589,16 @@ export const calendarEvents = sqliteTable(
 		reminderMinutes: integer("reminder_minutes"),
 		/** Start of the latest occurrence a reminder was sent for; dedupes the five-minute cron. */
 		lastRemindedStart: timestamp("last_reminded_start"),
+		/** null for events the user made; "needs-action", "tentative" or "accepted" for events created from an emailed invitation. */
+		responseStatus: text("response_status"),
+		/** Message that carried the invitation, so the calendar can answer it. */
+		inviteMessageId: text("invite_message_id"),
+		/** Lower-case address of the sender whose invitation created the event; only that sender's mail may change it. */
+		inviteSender: text("invite_sender"),
+		/** SEQUENCE of the invitation revision the event reflects, so an older revision arriving late is ignored. */
+		inviteSequence: integer("invite_sequence"),
+		/** JSON map of guest address to accepted, tentative or declined, filled from their replies to an invitation this user sent. */
+		attendeeResponses: text("attendee_responses"),
 		createdAt: timestamp("created_at").notNull().$defaultFn(() => new Date()),
 		updatedAt: timestamp("updated_at").notNull().$defaultFn(() => new Date()),
 	},

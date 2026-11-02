@@ -28,10 +28,11 @@ import { UpcomingSidebar } from "../upcoming-sidebar";
 import { DayEvents } from "./day-events";
 import { MonthGrid } from "./month-grid";
 import { CalendarSubscribeDialog } from "./subscribe-dialog";
+import { InviteResponseDialog } from "./invite-response-dialog";
 import type { CalendarEvent, CalendarView, EventDragPreview, EventResizeEdge, EventResizeSession } from "./types";
 import {
   addDays, addMonths, calendarAnchorDay, CALENDAR_END_HOUR, CALENDAR_HOUR_HEIGHT, CALENDAR_START_HOUR,
-  currentTimePosition, dateKey, defaultCalendarStart, dropStartForPosition, EVENT_COLOR_CLASSES, eventEndAfterMinutes, eventPosition, expandCalendarEvents,
+  currentTimePosition, isPendingInvite, dateKey, defaultCalendarStart, dropStartForPosition, EVENT_COLOR_CLASSES, eventEndAfterMinutes, eventPosition, expandCalendarEvents,
   formatEventRange, formatHour, formatLocalDateTime,
   monthGridDates, PAST_EVENT_COLOR_CLASSES, rescheduleCalendarOccurrence, resizeEventTimes, startOfDay, startOfMonth, startOfWeek, WEEKDAY_OPTIONS,
 } from "./utils";
@@ -48,6 +49,7 @@ export default function CalendarPage() {
   const [currentTime, setCurrentTime] = useState(() => Date.now());
   const [visibleDate, setVisibleDate] = useState(() => new Date());
   const [view, setView] = useState<CalendarView>("week");
+  const [pendingInvite, setPendingInvite] = useState<CalendarEvent | null>(null);
   // Only a choice made in the view switcher is remembered; jumping into a day from the month grid is not.
   useEffect(() => {
     try {
@@ -86,6 +88,12 @@ export default function CalendarPage() {
   const [location, setLocation] = useState("");
   const [description, setDescription] = useState("");
   const [editing, setEditing] = useState<CalendarEvent | null>(null);
+  const guestReplies = (() => {
+    try {
+      const responses = JSON.parse(editing?.attendeeResponses || "{}") as Record<string, string>;
+      return Object.entries(responses).map(([email, status]) => `${email} ${t(`calendar.guestResponse.${status}` as Parameters<typeof t>[0])}`).join(", ");
+    } catch { return ""; }
+  })();
   const [pendingAction, setPendingAction] = useState<"save" | string | null>(null);
   const router = useRouter();
   const eventFromUrl = useSearchParams().get("event");
@@ -253,6 +261,7 @@ export default function CalendarPage() {
   }
 
   function editEvent(event: CalendarEvent) {
+    if (isPendingInvite(event)) { setPendingInvite(event); return; }
     setEditing(event);
     setTitle(event.title);
     setColor(normalizeCalendarColor(event.color));
@@ -559,6 +568,7 @@ export default function CalendarPage() {
       </section>
 
       <CalendarSubscribeDialog open={subscribeOpen} onOpenChange={setSubscribeOpen} />
+      <InviteResponseDialog event={pendingInvite} onClose={() => setPendingInvite(null)} onAnswered={() => setEventsVersion((version) => version + 1)} />
 
       {adding && (
         <div className={clsx("dialog-overlay fixed inset-0 z-50 flex items-center justify-center bg-neutral-950/35 p-4", closingEventEditor && "pointer-events-none")} data-state={closingEventEditor ? "closed" : "open"}>
@@ -643,6 +653,7 @@ export default function CalendarPage() {
               <div className="grid grid-cols-[24px_minmax(0,1fr)] items-center gap-3">
                 <UsersRound aria-hidden="true" className="h-5 w-5 text-neutral-600" />
                 <Input value={guests} onChange={(event) => setGuests(event.target.value)} placeholder={t("calendar.addGuests")} aria-label={t("calendar.guestsLabel")} className={eventFieldClass} />
+                {guestReplies && <p className="mt-1 px-2 text-xs text-neutral-600">{t("calendar.guestResponses", { list: guestReplies })}</p>}
               </div>
               <div className="grid grid-cols-[24px_minmax(0,1fr)] items-center gap-3">
                 <MapPin aria-hidden="true" className="h-5 w-5 text-neutral-600" />

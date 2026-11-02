@@ -254,6 +254,16 @@
       "statements": [
         "UPDATE `users` SET `remote_content_mode` = 'ask' WHERE `remote_content_mode` = 'allow';"
       ]
+    },
+    {
+      "name": "0004_calendar_invitations.sql",
+      "statements": [
+        "ALTER TABLE `calendar_events` ADD `response_status` text;",
+        "ALTER TABLE `calendar_events` ADD `invite_message_id` text;",
+        "ALTER TABLE `calendar_events` ADD `attendee_responses` text;",
+        "ALTER TABLE `calendar_events` ADD `invite_sender` text;",
+        "ALTER TABLE `calendar_events` ADD `invite_sequence` bigint;"
+      ]
     }
   ]
 }

@@ -19,6 +19,7 @@ export async function GET(request: Request) {
 	// nothing but read the calendar is accepted here. A mail, JMAP or write key in this position is refused.
 	if (!key || key.scopes.length !== 1 || !hasScope(key.scopes, "calendar:read")) return new Response("Unauthorized", { status: 401, headers: { "Cache-Control": "no-store" } });
 	const events = await getDb(env).select().from(calendarEvents).where(eq(calendarEvents.userId, key.user.id)).orderBy(calendarEvents.startsAt);
-	const body = buildCalendarFeed(events.map((event) => ({ ...event, repeat: event.repeat })), { name: "Mailflare" });
+	// Invitations still waiting for an answer are not on the calendar yet, so other apps do not see them.
+	const body = buildCalendarFeed(events.filter((event) => event.responseStatus !== "needs-action").map((event) => ({ ...event, repeat: event.repeat })), { name: "Mailflare" });
 	return new Response(body, { headers: { "Content-Type": "text/calendar; charset=utf-8", "Content-Disposition": 'inline; filename="mailflare.ics"', "Cache-Control": "private, max-age=300", "X-Robots-Tag": "noindex" } });
 }

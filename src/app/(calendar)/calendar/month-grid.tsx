@@ -5,7 +5,7 @@ import clsx from "clsx";
 import { useLanguage } from "@/components/language-provider";
 import { normalizeCalendarColor } from "@/lib/calendar/colors";
 import { formatUserDate } from "@/lib/time/utils";
-import { addDays, dateKey, EVENT_COLOR_CLASSES, formatEventRange, monthGridDates, PAST_EVENT_COLOR_CLASSES } from "./utils";
+import { addDays, dateKey, EVENT_COLOR_CLASSES, formatEventRange, isPendingInvite, monthGridDates, PAST_EVENT_COLOR_CLASSES, PENDING_EVENT_CLASSES } from "./utils";
 import type { CalendarEvent } from "./types";
 
 const MAX_VISIBLE = 3;
@@ -63,7 +63,7 @@ export function MonthGrid({ month, today, events, currentTime, onSelectDay, onOp
 									const past = new Date(event.endsAt).getTime() <= currentTime;
 									return (
 										<button key={`${event.id}-${event.startsAt}`} type="button" onClick={() => onEdit(event)} title={`${event.title} · ${formatEventRange(event)}`}
-											className={clsx("block w-full truncate rounded px-1.5 py-0.5 text-left text-[11px] font-medium hover:brightness-95", past ? PAST_EVENT_COLOR_CLASSES[color] : EVENT_COLOR_CLASSES[color])}>
+											className={clsx("block w-full truncate rounded px-1.5 py-0.5 text-left text-[11px] font-medium hover:brightness-95", isPendingInvite(event) ? PENDING_EVENT_CLASSES : past ? PAST_EVENT_COLOR_CLASSES[color] : EVENT_COLOR_CLASSES[color])}>
 											{event.title}
 										</button>
 									);
