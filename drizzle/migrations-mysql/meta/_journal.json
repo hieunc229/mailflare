@@ -29,6 +29,13 @@
       "when": 1793260802000,
       "tag": "0003_remote_content_ask",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1793347201000,
+      "tag": "0004_calendar_invitations",
+      "breakpoints": true
     }
   ]
 }

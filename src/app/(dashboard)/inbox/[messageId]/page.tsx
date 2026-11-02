@@ -12,6 +12,7 @@ import { ContactAvatar } from "@/components/contacts/contact-avatar";
 import { MessageActions } from "@/components/message-actions/message-actions";
 import { MessageAttachmentViewer } from "@/components/message-attachment-viewer";
 import { MessageAttachmentCard } from "@/components/message-attachment-card";
+import { MessageInviteCard } from "@/components/message-invite-card";
 import { MessageDetailSkeleton } from "@/components/page-skeletons";
 import { usePageLoading } from "@/components/page-loading";
 import { PreviousMessage } from "@/components/previous-message";
@@ -28,6 +29,7 @@ import { useMessageThread } from "@/components/messages/use-message-thread";
 import { useLatestMessagesFirst } from "@/components/messages/use-latest-messages-first";
 import { useMessageListVisibility } from "@/components/messages/message-list-visibility";
 import { splitEmailAddressList } from "@/lib/email/address";
+import { findInviteAttachment } from "@/lib/calendar/invite-attachment";
 import { RecipientList } from "@/components/messages/recipient-list";
 import { useShowFullRecipientAddresses } from "@/components/messages/use-show-full-recipient-addresses";
 import type { MessageAttachment, MessageDetailResponse } from "./types";
@@ -368,6 +370,7 @@ export default function MessageDetailPage() {
               </div>
             </section>
           )}
+          <MessageInviteCard messageId={message.id} hasCalendarAttachment={!!findInviteAttachment(attachments)} />
           {attachments.length > 0 && (
             <section className="mt-8 border-t border-neutral-100 px-4 py-6 sm:px-0 sm:pl-16">
               <h2 className="mb-3 text-sm font-semibold text-neutral-900">
