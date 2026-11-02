@@ -19,7 +19,7 @@ export type CalendarEvent = {
   seriesStartsAt?: string;
 };
 
-export type CalendarView = "week" | "day";
+export type CalendarView = "month" | "week" | "day";
 
 export type CalendarEventTimes = { startsAt: Date; endsAt: Date };
 
