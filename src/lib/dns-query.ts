@@ -1,5 +1,14 @@
 export type DnsQueryType = "MX" | "TXT" | "A" | "AAAA" | "CNAME";
 
+/** RR type numbers for the types we query; used to drop CNAME chain records. */
+const RECORD_TYPE_NUMBERS: Record<DnsQueryType, number> = {
+	MX: 15,
+	TXT: 16,
+	A: 1,
+	AAAA: 28,
+	CNAME: 5,
+};
+
 type DohAnswer = {
 	name: string;
 	type: number;
@@ -26,6 +35,11 @@ function decodeTxt(data: string): string {
  * (no Node `dns` module) and in the self-hosted runtime. `NXDOMAIN` and an
  * empty `NOERROR` answer both map to an empty list; any other failure throws so
  * callers can tell "missing" apart from "could not check".
+ *
+ * A recursive resolver answers CNAME-chained lookups with the whole chain, so
+ * the `A`/`AAAA` helpers drop those records: callers that treat the data as
+ * addresses would otherwise reject chain hostnames and fail a publicly
+ * resolvable host.
  */
 export async function queryDns(name: string, type: DnsQueryType): Promise<string[]> {
 	const controller = new AbortController();
@@ -45,7 +59,13 @@ export async function queryDns(name: string, type: DnsQueryType): Promise<string
 		if (json.Status !== 0 && json.Status !== 3) {
 			throw new Error(`DNS query for ${name} ${type} returned status ${json.Status}`);
 		}
-		return (json.Answer ?? []).map((answer) =>
+		// DoH resolvers prepend the CNAME chain (and the zone may still publish
+		// a stale CNAME after the address record moved), so callers that treat
+		// the data as addresses must not see chain hostnames.
+		const answers = type === "A" || type === "AAAA"
+			? (json.Answer ?? []).filter((answer) => answer.type !== RECORD_TYPE_NUMBERS.CNAME)
+			: json.Answer ?? [];
+		return answers.map((answer) =>
 			type === "TXT" ? decodeTxt(answer.data) : answer.data,
 		);
 	} finally {
