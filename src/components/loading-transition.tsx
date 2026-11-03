@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useBranding } from "@/components/branding-provider";
 import { useLanguage } from "@/components/language-provider";
 import { PageLoadingContext } from "@/components/page-loading";
@@ -13,38 +13,41 @@ let hasShownInitialLoadingTransition = false;
 export function LoadingTransition({ children, ready }: LoadingTransitionProps) {
 	const { t } = useLanguage();
 	const branding = useBranding();
-	const showInitialLoader = useRef(!hasShownInitialLoadingTransition).current;
-	const [splashVisible, setSplashVisible] = useState(false);
-	const [iconUrl, setIconUrl] = useState(branding.iconUrl);
-	const [visibleLoads, setVisibleLoads] = useState(0);
-	const visibleIds = useRef(new Set<string>());
+	const [showInitialLoader] = useState(() => !hasShownInitialLoadingTransition);
+	const [splashRequested, setSplashRequested] = useState(false);
+	const [failedIconUrl, setFailedIconUrl] = useState<string | null>(null);
+	const [visibleIds, setVisibleIds] = useState<Set<string>>(() => new Set());
+	const iconUrl = !branding.iconUrl || failedIconUrl === branding.iconUrl ? "/icon-192.png" : branding.iconUrl;
 
 	const reportLoading = useCallback((id: string, loading: boolean, silent = false) => {
-		if (loading && !silent) visibleIds.current.add(id);
-		else visibleIds.current.delete(id);
-		setVisibleLoads(visibleIds.current.size);
+		setVisibleIds((current) => {
+			const has = current.has(id);
+			if (loading && !silent) {
+				if (has) return current;
+				const next = new Set(current);
+				next.add(id);
+				return next;
+			}
+			if (!has) return current;
+			const next = new Set(current);
+			next.delete(id);
+			return next;
+		});
 	}, []);
 	const loadingContext = useMemo(() => ({ reportLoading }), [reportLoading]);
-
-	useEffect(() => {
-		setIconUrl(branding.iconUrl);
-	}, [branding.iconUrl]);
 
 	useEffect(() => {
 		if (!showInitialLoader) return;
 		hasShownInitialLoadingTransition = true;
 		if (ready) return;
-		const timer = window.setTimeout(() => setSplashVisible(true), SPLASH_DELAY_MS);
+		const timer = window.setTimeout(() => setSplashRequested(true), SPLASH_DELAY_MS);
 		return () => window.clearTimeout(timer);
 	}, [ready, showInitialLoader]);
 
-	useEffect(() => {
-		if (ready) setSplashVisible(false);
-	}, [ready]);
-
+	const splashVisible = splashRequested && !ready;
 	const initialLoadComplete = !showInitialLoader || ready;
 	const contentVisible = !showInitialLoader || ready;
-	const showTopLoadingBar = initialLoadComplete && (!ready || visibleLoads > 0);
+	const showTopLoadingBar = initialLoadComplete && (!ready || visibleIds.size > 0);
 
 	return (
 		<PageLoadingContext.Provider value={loadingContext}>
@@ -67,7 +70,7 @@ export function LoadingTransition({ children, ready }: LoadingTransitionProps) {
 					<div aria-hidden="true" className="flex w-64 flex-col items-center gap-6">
 						<img
 							src={iconUrl}
-							onError={() => setIconUrl("/icon-192.png")}
+							onError={() => setFailedIconUrl(branding.iconUrl)}
 							alt=""
 							className="h-20 w-20 rounded-2xl object-contain"
 						/>

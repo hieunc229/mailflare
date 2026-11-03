@@ -31,7 +31,7 @@ export type MessageListRowProps = {
 	onMessageAction: (messageId: string, action: RowMessageAction) => Promise<void>;
 	onOpening?: (messageId: string) => void;
 	dragMessageIds?: string[];
-	today: Date;
+	todayKey: string;
 };
 
 export type RowMessageAction = "archive" | "trash" | "read" | "unread";

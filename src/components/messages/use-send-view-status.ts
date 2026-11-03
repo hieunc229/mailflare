@@ -55,6 +55,9 @@ export function useSendViewStatus(messageId: string, scheduledAt?: string | null
 				if (delay <= 0) startFallback();
 				else deadlineTimer = window.setTimeout(startFallback, delay);
 			}
+		} else if (scheduled) {
+			// The detail response may not have supplied the job's time yet.
+			fallbackTimer = window.setInterval(onChange, 15_000);
 		}
 
 		window.addEventListener("mailflare:messages-changed", onChange);

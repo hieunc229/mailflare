@@ -55,6 +55,8 @@ export async function upsertContactFromAddress(env: CloudflareEnv, input: Contac
 	return created ?? null;
 }
 
+const MAX_AVATAR_LOOKUPS = 20;
+
 export async function upsertContactsFromAddresses(
 	env: CloudflareEnv,
 	userId: string,
@@ -109,6 +111,18 @@ export async function upsertContactsFromAddresses(
 	}
 	for (let index = 0; index < updateQueries.length; index += 10) {
 		await Promise.all(updateQueries.slice(index, index + 10));
+	}
+
+	const newEmails = insertRows.slice(0, MAX_AVATAR_LOOKUPS).map((row) => row.email);
+	for (let index = 0; index < newEmails.length; index += 4) {
+		const batch = newEmails.slice(index, index + 4);
+		const avatars = await Promise.all(batch.map(async (email) => ({
+			email,
+			avatarKey: await importGravatarAvatar(env, userId, email),
+		})));
+		await Promise.all(avatars.flatMap(({ email, avatarKey }) => avatarKey
+			? [db.update(contacts).set({ avatarKey }).where(eq(contacts.id, getContactId(userId, email)))]
+			: []));
 	}
 }
 

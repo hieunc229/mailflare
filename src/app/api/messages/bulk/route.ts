@@ -17,24 +17,32 @@ import {
 	isPermanentlyDeletableStatus,
 } from "./utils";
 
-const MAX_BULK_MESSAGES = 200;
+const MAX_BULK_MESSAGES = 5000;
 const MESSAGE_ID_CHUNK = 90;
+const MESSAGE_QUERY_CONCURRENCY = 5;
 
 async function loadMessagesByIds(db: AppDatabase, ids: string[]) {
 	const chunks: string[][] = [];
 	for (let index = 0; index < ids.length; index += MESSAGE_ID_CHUNK) {
 		chunks.push(ids.slice(index, index + MESSAGE_ID_CHUNK));
 	}
-	const rows = await Promise.all(chunks.map((chunk) => db
-		.select({
-			id: messages.id,
-			mailboxId: messages.mailboxId,
-			rawR2Key: messages.rawR2Key,
-			status: messages.status,
-		})
+	const rows: Awaited<ReturnType<typeof selectMessageChunk>> = [];
+	for (let index = 0; index < chunks.length; index += MESSAGE_QUERY_CONCURRENCY) {
+		const batch = await Promise.all(chunks.slice(index, index + MESSAGE_QUERY_CONCURRENCY).map((chunk) => selectMessageChunk(db, chunk)));
+		rows.push(...batch.flat());
+	}
+	return rows;
+}
+
+function selectMessageChunk(db: AppDatabase, chunk: string[]) {
+	return db.select({
+		id: messages.id,
+		mailboxId: messages.mailboxId,
+		rawR2Key: messages.rawR2Key,
+		status: messages.status,
+	})
 		.from(messages)
-		.where(inArray(messages.id, chunk))));
-	return rows.flat();
+		.where(inArray(messages.id, chunk));
 }
 
 export async function POST(request: Request) {
@@ -46,8 +54,11 @@ export async function POST(request: Request) {
 
 	const payload = (await request.json()) as BulkMessagePayload;
 	const messageIds = [...new Set(payload.messageIds?.filter(Boolean) ?? [])];
-	if (messageIds.length === 0 || messageIds.length > MAX_BULK_MESSAGES || !isAllowedBulkMessageAction(payload.action)) {
+	if (messageIds.length === 0 || !isAllowedBulkMessageAction(payload.action)) {
 		return NextResponse.json({ error: "Invalid bulk message action" }, { status: 400 });
+	}
+	if (messageIds.length > MAX_BULK_MESSAGES) {
+		return NextResponse.json({ error: `Select up to ${MAX_BULK_MESSAGES} messages at a time` }, { status: 400 });
 	}
 
 	const status = getStatusForBulkAction(payload.action);

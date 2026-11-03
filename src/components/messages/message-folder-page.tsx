@@ -59,6 +59,21 @@ function getRowMessageIds(message: Message): string[] {
 	return message.threadMessageIds ?? [message.id];
 }
 
+let todayCacheZone = "";
+let todayCacheValue = "";
+let todayCacheExpiresAt = 0;
+
+function getTodayKey(): string {
+	const zone = getUserTimeZone();
+	const now = Date.now();
+	if (todayCacheZone !== zone || now >= todayCacheExpiresAt) {
+		todayCacheZone = zone;
+		todayCacheExpiresAt = now + 60_000;
+		todayCacheValue = zonedDateFields(new Date(now), zone).toISOString().slice(0, 10);
+	}
+	return todayCacheValue;
+}
+
 function MessageListRowComponent({
 	message,
 	config,
@@ -71,7 +86,7 @@ function MessageListRowComponent({
 	onMessageAction,
 	onOpening,
 	dragMessageIds,
-	today,
+	todayKey,
 }: MessageListRowProps) {
 	const { t } = useLanguage();
 	const Icon = config.icon;
@@ -81,7 +96,10 @@ function MessageListRowComponent({
 	useEffect(() => setRead(message.read), [message.read]);
 	useEffect(() => setThreadUnread(message.threadUnread), [message.threadUnread]);
 	useEffect(() => setStarred(message.starred), [message.starred]);
-	const rowMessage = { ...message, read, starred, threadUnread };
+	const rowMessage = useMemo(
+		() => ({ ...message, read, starred, threadUnread }),
+		[message, read, starred, threadUnread],
+	);
 	const unread = isMessageListRowUnread(rowMessage);
 	const draggable = config.folder === "inbox" && message.direction === "inbound";
 	const party = getMessageParty(rowMessage, config.folder, currentAccountName, t);
@@ -91,7 +109,7 @@ function MessageListRowComponent({
 
 	const affectsInboxCount = config.folder === "inbox" && !config.folderId;
 
-	async function runRowAction(action: RowMessageAction) {
+	const runRowAction = useCallback(async (action: RowMessageAction) => {
 		const previousRead = read;
 		const previousThreadUnread = threadUnread;
 		const unreadDelta = !affectsInboxCount || (action !== "read" && action !== "unread")
@@ -115,7 +133,7 @@ function MessageListRowComponent({
 			}
 			throw error;
 		}
-	}
+	}, [affectsInboxCount, message.id, message.threadMessageIds, onMessageAction, read, rowMessage, threadUnread]);
 
 	const swipeable = compact && (config.folder === "inbox" || config.folder === "snoozed") && message.direction === "inbound";
 
@@ -150,7 +168,7 @@ function MessageListRowComponent({
 				draggable={draggable}
 				onDragStart={(event) => {
 					if (!draggable) return;
-					setMessageDragData(event.dataTransfer, { messageIds: dragMessageIds ?? [message.id] });
+					setMessageDragData(event.dataTransfer, { messageIds: dragMessageIds ?? message.threadMessageIds ?? [message.id] });
 				}}
 			>
 				<Checkbox
@@ -181,7 +199,7 @@ function MessageListRowComponent({
 						</span>
 						<span className={clsx(unread ?"font-medium":"text-neutral-500","shrink-0 text-[11px]")}>
 							<OpenedIndicator count={message.openCount} />
-							{message.scheduledAt ? formatScheduledSendTime(message.scheduledAt, t) : formatMessageListTimestamp(message.createdAt, today)}
+							{message.scheduledAt ? formatScheduledSendTime(message.scheduledAt, t) : formatMessageListTimestamp(message.createdAt, todayKey)}
 						</span>
 					</span>
 					<span
@@ -275,7 +293,7 @@ function MessageListRowComponent({
 					}`}
 			>
 				<OpenedIndicator count={message.openCount} />
-				{message.scheduledAt ? formatScheduledSendTime(message.scheduledAt, t) : formatMessageListTimestamp(message.createdAt, today)}
+				{message.scheduledAt ? formatScheduledSendTime(message.scheduledAt, t) : formatMessageListTimestamp(message.createdAt, todayKey)}
 			</time>
 		</>
 	);
@@ -301,7 +319,7 @@ function MessageListRowComponent({
 			draggable={draggable}
 			onDragStart={(event) => {
 				if (!draggable) return;
-				setMessageDragData(event.dataTransfer, { messageIds: dragMessageIds ?? [message.id] });
+				setMessageDragData(event.dataTransfer, { messageIds: dragMessageIds ?? message.threadMessageIds ?? [message.id] });
 			}}
 		>
 			<Checkbox
@@ -347,8 +365,7 @@ export function MessageFolderPage({
 	const openingTimer = useRef<number | null>(null);
 	const [conversationView] = useConversationView();
 	const visibleOpeningMessageId = openingMessageId === selectedMessageId ? null : openingMessageId;
-	const todayKey = new Date().toDateString();
-	const today = useMemo(() => zonedDateFields(new Date(), getUserTimeZone()), [todayKey]);
+	const todayKey = getTodayKey();
 
 	useEffect(() => () => {
 		if (openingTimer.current) window.clearTimeout(openingTimer.current);
@@ -667,7 +684,7 @@ export function MessageFolderPage({
 							onSelectedChange={updateSelectedMessage}
 							onMessageAction={handleMessageAction}
 							dragMessageIds={selectedIdSet.has(message.id) ? selectedDragIds : undefined}
-							today={today}
+							todayKey={todayKey}
 						/>
 					))}
 				</div>

@@ -33,6 +33,7 @@ export function useMessagePolling(): MessageRealtimeState {
 		let revision: string | null = null;
 		let connected = false;
 		let hadConnection = false;
+		let lastForegroundRefreshAt = 0;
 		let leader = false;
 		let sessionToken = getClientSessionToken();
 		let stopped = false;
@@ -176,7 +177,9 @@ export function useMessagePolling(): MessageRealtimeState {
 			if (message?.type === "status_request" && leader) {
 				channel?.postMessage({ type: "status", connected } satisfies RealtimeChannelMessage);
 			} else if (message?.type === "status" && !leader) {
+				const wasConnected = connected;
 				setConnected(message.connected);
+				if (message.connected && !wasConnected) dispatchMessagesChanged();
 			} else if (message?.type === "notification" && !leader) {
 				handleNotification(message.payload, false);
 			} else if (message?.type === "refresh") {
@@ -190,10 +193,22 @@ export function useMessagePolling(): MessageRealtimeState {
 			channel?.postMessage({ type: "refresh", detail } satisfies RealtimeChannelMessage);
 		}
 
+		function refreshOnForeground(force: boolean) {
+			if (document.visibilityState !== "visible") return;
+			const now = Date.now();
+			if (connected && !force) return;
+			if (now - lastForegroundRefreshAt < 1_000) return;
+			lastForegroundRefreshAt = now;
+			dispatchMessagesChanged();
+		}
+
 		function onVisibilityChange() {
 			if (document.visibilityState !== "visible") return;
-			if (connected) return;
-			dispatchMessagesChanged();
+			refreshOnForeground(true);
+		}
+
+		function onFocus() {
+			refreshOnForeground(false);
 		}
 
 		function onStorageChange() {
@@ -209,7 +224,7 @@ export function useMessagePolling(): MessageRealtimeState {
 		window.addEventListener("storage", onStorageChange);
 		window.addEventListener("mailflare:messages-changed", onLocalMessagesChanged);
 		document.addEventListener("visibilitychange", onVisibilityChange);
-		window.addEventListener("focus", onVisibilityChange);
+		window.addEventListener("focus", onFocus);
 		startFallbackRefresh();
 		requestLeadership();
 
@@ -219,7 +234,7 @@ export function useMessagePolling(): MessageRealtimeState {
 			window.removeEventListener("storage", onStorageChange);
 			window.removeEventListener("mailflare:messages-changed", onLocalMessagesChanged);
 			document.removeEventListener("visibilitychange", onVisibilityChange);
-			window.removeEventListener("focus", onVisibilityChange);
+			window.removeEventListener("focus", onFocus);
 			if (leader) channel?.postMessage({ type: "status", connected: false } satisfies RealtimeChannelMessage);
 			lockAbort?.abort();
 			releaseLeader?.();

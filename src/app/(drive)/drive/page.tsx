@@ -224,7 +224,7 @@ export default function DrivePage() {
 	// Attachments can only be selected when the user may delete them.
 	const selectable = useMemo(() => sorted.filter((item) => (item.source ? item.source.canDelete : canEditDrive(item.role))), [sorted]);
 	const selectableIds = useMemo(() => new Set(selectable.map((item) => item.id)), [selectable]);
-	const selectedItems = useMemo(() => selectable.filter((item) => selectedIds.has(item.id)), [selectable, selectedIds]);
+	const selectedItems = selectable.filter((item) => selectedIds.has(item.id));
 	const allSelected = selectable.length > 0 && selectedItems.length === selectable.length;
 	useEffect(() => { if (selectAllRef.current) selectAllRef.current.indeterminate = selectedItems.length > 0 && !allSelected; }, [selectedItems.length, allSelected]);
 	const toggleItem = (id: string) => setSelectedIds((current) => { const next = new Set(current); if (!next.delete(id)) next.add(id); return next; });
