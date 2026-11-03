@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { memo, useState } from "react";
 import { Archive, Clock, Mail, MailOpen, Trash2 } from "@/components/icons";
 import { useLanguage } from "@/components/language-provider";
 import { Button } from "@/components/ui/button";
@@ -9,18 +9,26 @@ import { Input } from "@/components/ui/input";
 import { Tooltip } from "@/components/ui/tooltip";
 import type { MessageListRowActionsProps } from "./types";
 import { MessageUnsubscribeButton } from "./unsubscribe-button";
+import type { SnoozePreset } from "./message-list-row-actions-utils";
 import { getSnoozePresets, isMessageSnoozed, snoozeMessage, unsnoozeMessage } from "./message-list-row-actions-utils";
 import { getUserTimeZone } from "@/lib/time/utils";
 
-export function MessageListRowActions({ message, onAction }: MessageListRowActionsProps) {
+function MessageListRowActionsComponent({ message, onAction }: MessageListRowActionsProps) {
 	const { t } = useLanguage();
 	const [snoozeOpen, setSnoozeOpen] = useState(false);
-	const [snoozedUntil, setSnoozedUntil] = useState(() => getSnoozePresets()[0].value);
+	const [snoozedUntil, setSnoozedUntil] = useState("");
+	const [snoozePresets, setSnoozePresets] = useState<SnoozePreset[]>([]);
 	const [snoozing, setSnoozing] = useState(false);
 	const [error, setError] = useState<string | null>(null);
-	const snoozePresets = getSnoozePresets();
 	const snoozed = isMessageSnoozed(message.snoozedUntil);
 	const readAction = message.read ? "unread" : "read";
+
+	function openSnooze() {
+		const presets = getSnoozePresets();
+		setSnoozePresets(presets);
+		if (!snoozedUntil) setSnoozedUntil(presets[0].value);
+		setSnoozeOpen(true);
+	}
 
 	async function handleSnooze() {
 		setSnoozing(true);
@@ -60,7 +68,7 @@ export function MessageListRowActions({ message, onAction }: MessageListRowActio
 							void unsnoozeMessage(message.id);
 							return;
 						}
-						setSnoozeOpen(true);
+						openSnooze();
 					}} aria-label={snoozed ? t("common.unsnooze") : t("common.snooze")}>
 						<Clock className="h-4 w-4" />
 					</Button>
@@ -95,3 +103,5 @@ export function MessageListRowActions({ message, onAction }: MessageListRowActio
 		</>
 	);
 }
+
+export const MessageListRowActions = memo(MessageListRowActionsComponent);
