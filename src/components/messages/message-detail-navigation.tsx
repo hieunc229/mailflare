@@ -15,7 +15,7 @@ import { useConversationView } from "./use-conversation-view";
 
 const NavigationContext = createContext<MessageDetailNavigationContextValue | null>(null);
 
-export function MessageDetailNavigationProvider({ children, config }: MessageDetailNavigationProviderProps) {
+export function MessageDetailNavigationProvider({ children, config, currentMessageId }: MessageDetailNavigationProviderProps) {
 	const { selectedMailbox, isLoading: mailboxesLoading } = useSelectedMailbox();
 	const [conversationView] = useConversationView();
 	const grouped = conversationView && config.folder !== "drafts";
@@ -36,26 +36,40 @@ export function MessageDetailNavigationProvider({ children, config }: MessageDet
 		if (messageId) recordUnread(messageId);
 	}, [recordUnread]);
 
+	// The window around one message is enough for day-to-day reading. Opening a
+	// message outside it, or reaching a truncated edge, asks for a window around
+	// that message so prev/next never dead-ends while messages remain. The value
+	// is derived, so a window that already covers the message does not refetch.
+	const currentIndex = snapshot.key === key && currentMessageId
+		? snapshot.entries.findIndex((entry) => entry.id === currentMessageId)
+		: -1;
+	const beyondWindow = snapshot.key !== key
+		|| (snapshot.entries.length > 0 && currentIndex === -1)
+		|| (currentIndex === 0 && snapshot.hasNewer === true)
+		|| (currentIndex === snapshot.entries.length - 1 && snapshot.hasOlder === true);
+	const requestAnchor = currentMessageId && beyondWindow ? currentMessageId : undefined;
+
 	useEffect(() => {
-		if (mailboxesLoading) return;
+		if (mailboxesLoading || !requestAnchor) return;
 		let cancelled = false;
 		const params = new URLSearchParams({ folder: config.folder });
 		if (config.folderId) params.set("folderId", config.folderId);
 		if (mailboxId) params.set("mailboxId", mailboxId);
 		if (grouped) params.set("group", "thread");
+		params.set("around", requestAnchor);
 		void authFetch(`/api/messages/navigation?${params.toString()}`)
 			.then((response) => {
 				if (!response.ok) throw new Error("Unable to load message navigation");
 				return response.json() as Promise<MessageNavigationResponse>;
 			})
 			.then((response) => {
-				if (!cancelled) setSnapshot({ key, entries: response.messages });
+				if (!cancelled) setSnapshot({ key, entries: response.messages, hasNewer: response.hasNewer, hasOlder: response.hasOlder });
 			})
 			.catch(() => {
 				if (!cancelled) setSnapshot({ key, entries: [] });
 			});
 		return () => { cancelled = true; };
-	}, [config.folder, config.folderId, grouped, key, mailboxId, mailboxesLoading]);
+	}, [config.folder, config.folderId, grouped, key, mailboxId, mailboxesLoading, requestAnchor]);
 
 	const unreadIds = openedUnread.key === key ? openedUnread.ids : null;
 	const entries = snapshot.key === key

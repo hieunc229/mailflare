@@ -150,7 +150,16 @@ function MessageListRow({
 					className="mt-1 h-4 w-4 rounded border-neutral-300"
 					aria-label={t("list.selectFrom", { sender: party })}
 				/>
-				<Link href={href} onClick={config.folder === "drafts" ? undefined : onMessageNavigate} aria-current={active ? "true" : undefined} className="min-w-0">
+				<Link
+					href={href}
+					onClick={config.folder === "drafts" ? undefined : onMessageNavigate}
+					onPointerEnter={config.folder === "drafts" ? undefined : navigation.prefetch}
+					onPointerLeave={config.folder === "drafts" ? undefined : navigation.cancelPrefetch}
+					onFocus={config.folder === "drafts" ? undefined : navigation.prefetch}
+					onBlur={config.folder === "drafts" ? undefined : navigation.cancelPrefetch}
+					aria-current={active ? "true" : undefined}
+					className="min-w-0"
+				>
 					<span className="flex items-baseline justify-between gap-3">
 						<span className={clsx(unread && "font-semibold",getMessagePartyClassName(rowMessage, config.folder))}>
 							{unread && <span className="sr-only">{t("list.unread")} </span>}
@@ -236,6 +245,10 @@ function MessageListRow({
 				<Link
 					href={href}
 					onClick={config.folder === "drafts" ? undefined : onMessageNavigate}
+					onPointerEnter={config.folder === "drafts" ? undefined : navigation.prefetch}
+					onPointerLeave={config.folder === "drafts" ? undefined : navigation.cancelPrefetch}
+					onFocus={config.folder === "drafts" ? undefined : navigation.prefetch}
+					onBlur={config.folder === "drafts" ? undefined : navigation.cancelPrefetch}
 					aria-current={active ? "true" : undefined}
 					className="focus-visible:outline-none after:absolute after:inset-0"
 				>

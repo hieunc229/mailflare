@@ -79,16 +79,31 @@ export default function MessageDetailPage() {
 
     async function loadMessage() {
       const cachedData = getCachedMessageDetailForDisplay(messageId);
-      if (cachedData?.message && cachedData.body) {
+      if (cachedData?.message) {
+        // The list row already provides the header, so paint it and keep the
+        // global loading UI off while only the body is outstanding.
         setData(cachedData);
         setLoading(false);
         if (!cachedData.message.read) void markMessageRead(cachedData.message.id);
-        if (cachedData.attachments !== undefined) return;
+        if (cachedData.body) {
+          if (cachedData.attachments !== undefined) return;
+          try {
+            const metadata = await fetchMessageMetadata(messageId);
+            if (!cancelled) setData((current) => current ? { ...current, ...metadata } : current);
+          } catch {
+            // The message body remains usable if supplemental metadata is unavailable.
+          }
+          return;
+        }
         try {
-          const metadata = await fetchMessageMetadata(messageId);
-          if (!cancelled) setData((current) => current ? { ...current, ...metadata } : current);
+          const full = await fetchMessageDetail(messageId, true);
+          if (!cancelled) setData((current) => {
+            // A prefetched response can predate the read flip the row just sent.
+            if (current?.message?.read && full.message) return { ...full, message: { ...full.message, read: true } };
+            return full;
+          });
         } catch {
-          // The message body remains usable if supplemental metadata is unavailable.
+          // Keep the header; reopening the message retries the body.
         }
         return;
       }

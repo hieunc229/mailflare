@@ -1,16 +1,20 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { usePathname, useRouter } from "next/navigation";
+import { useEffect, useRef, useState } from "react";
 import type { MouseEvent } from "react";
-import { primeMessageDetail } from "@/lib/messages/detail-cache";
+import { usePathname, useRouter } from "next/navigation";
+import { fetchCachedMessageDetail, getCachedMessageDetail, primeMessageDetail } from "@/lib/messages/detail-cache";
 import type { Message } from "@/hooks/types";
 import type { MessageNavigationState } from "./message-navigation-types";
+
+const HOVER_PREFETCH_DELAY_MS = 120;
 
 export function useMessageNavigation(href: string, message: Message): MessageNavigationState {
 	const pathname = usePathname();
 	const router = useRouter();
 	const [progress, setProgress] = useState<number | null>(null);
+	const hoverTimer = useRef<number | null>(null);
+	const idleCallback = useRef<number | null>(null);
 
 	useEffect(() => {
 		if (progress === null) return;
@@ -18,6 +22,38 @@ export function useMessageNavigation(href: string, message: Message): MessageNav
 		const timer = window.setTimeout(() => setProgress(null), 220);
 		return () => window.clearTimeout(timer);
 	}, [pathname]);
+
+	useEffect(() => () => {
+		if (hoverTimer.current) window.clearTimeout(hoverTimer.current);
+		if (idleCallback.current !== null && "cancelIdleCallback" in window) window.cancelIdleCallback(idleCallback.current);
+	}, []);
+
+	function prefetch() {
+		if (hoverTimer.current || getCachedMessageDetail(message.id)?.body) return;
+		hoverTimer.current = window.setTimeout(() => {
+			hoverTimer.current = null;
+			// Seed the header at once so the reader has something to paint while
+			// the body request is in flight.
+			primeMessageDetail({ ...message, read: message.read });
+			const warm = () => { void fetchCachedMessageDetail(message.id, true).catch(() => {}); };
+			if ("requestIdleCallback" in window) {
+				idleCallback.current = window.requestIdleCallback(warm, { timeout: 400 });
+			} else {
+				warm();
+			}
+		}, HOVER_PREFETCH_DELAY_MS);
+	}
+
+	function cancelPrefetch() {
+		if (hoverTimer.current) {
+			window.clearTimeout(hoverTimer.current);
+			hoverTimer.current = null;
+		}
+		if (idleCallback.current !== null && "cancelIdleCallback" in window) {
+			window.cancelIdleCallback(idleCallback.current);
+			idleCallback.current = null;
+		}
+	}
 
 	function onNavigate(event: MouseEvent<HTMLAnchorElement>, markRead = false) {
 		if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
@@ -31,7 +67,7 @@ export function useMessageNavigation(href: string, message: Message): MessageNav
 		}
 	}
 
-	return { progress, onNavigate };
+	return { progress, onNavigate, prefetch, cancelPrefetch };
 }
 
 export function MessageNavigationProgress({ progress }: { progress: number | null }) {

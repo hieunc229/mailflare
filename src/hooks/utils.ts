@@ -2,6 +2,7 @@ import { authFetch } from "@/lib/auth/client";
 import { parseSearchQuery } from "@/lib/search/query-utils";
 import { getUserTimeZone } from "@/lib/time/utils";
 import { setCachedMessageRead } from "@/lib/messages/detail-cache";
+import { isReadOnlyChange } from "@/lib/messages/change-events";
 import type { MessageFilterOptions, MessageFolder } from "./types";
 import type { MessageCounts, MessageListResponse } from "./types";
 
@@ -93,20 +94,23 @@ export function clearMessageListCache() {
  * Mirror a read/unread change into the cached lists and details, so a list
  * remounted later (or a detail reopened) never shows the old state.
  */
+/** Mirrors a read/unread flip into cached pages, counting only the members that flipped. */
 export function markMessagesReadInCaches(messageIds: string[], read: boolean) {
 	const ids = new Set(messageIds);
 	for (const [key, response] of messageListCache) {
-		if (!response.messages?.some((message) => ids.has(message.id))) continue;
+		if (!response.messages?.some((message) => ids.has(message.id)
+			|| message.threadMessageIds?.some((id) => ids.has(id)))) continue;
 		messageListCache.set(key, {
 			...response,
 			messages: response.messages.map((message) => {
-				if (!ids.has(message.id)) return message;
-				const threadSize = message.threadMessageIds?.length;
-				return {
-					...message,
-					read,
-					...(threadSize !== undefined ? { threadUnread: read ? 0 : threadSize } : {}),
-				};
+				if (message.threadMessageIds) {
+					const threadSize = message.threadMessageIds.length;
+					const flipped = message.threadMessageIds.reduce((total, id) => total + (ids.has(id) ? 1 : 0), 0);
+					if (!flipped) return message;
+					const threadUnread = Math.min(threadSize, Math.max(0, (message.threadUnread ?? 0) + (read ? -flipped : flipped)));
+					return { ...message, read: threadUnread === 0, threadUnread };
+				}
+				return ids.has(message.id) ? { ...message, read } : message;
 			}),
 		});
 	}
@@ -116,8 +120,10 @@ export function markMessagesReadInCaches(messageIds: string[], read: boolean) {
 // Caches must drop on every change, including ones made while no list is mounted
 // (e.g. reading a message from the popup on a page without the inbox list).
 if (typeof window !== "undefined") {
-	window.addEventListener("mailflare:messages-changed", () => {
-		clearMessageListCache();
+	window.addEventListener("mailflare:messages-changed", (event) => {
+		// Read flips are mirrored into the caches by their dispatcher; only the
+		// unread totals still need a refresh.
+		if (!isReadOnlyChange(event)) clearMessageListCache();
 		clearMessageCountsCache();
 	});
 }
@@ -163,11 +169,15 @@ export async function fetchMessageCounts(mailboxId?: string | null, force = fals
 	return request;
 }
 
+/** A warm list page, so a remount can paint before its fetch resolves. */
+export function peekMessageList(params: URLSearchParams): MessageListResponse | undefined {
+	return messageListCache.get(params.toString());
+}
+
 export async function fetchMessageList(params: URLSearchParams, force = false): Promise<MessageListResponse> {
 	const key = params.toString();
 	if (!force && messageListCache.has(key)) return messageListCache.get(key) ?? {};
 	if (!force && messageListRequests.has(key)) return messageListRequests.get(key) ?? {};
-
 	const requestGeneration = messageCacheGeneration;
 	const request = authFetch(`/api/messages?${key}`)
 		.then((res) => res.json())
