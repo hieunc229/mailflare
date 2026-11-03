@@ -4,7 +4,7 @@ import { messages, outboundJobs } from "@/db/schema";
 import { newId } from "@/lib/ids";
 import { buildSnippet } from "@/lib/email/parse";
 import { dispatchWebhooks } from "@/lib/email/webhooks";
-import { upsertContactFromAddress } from "@/lib/contacts/service";
+import { upsertContactsFromAddresses } from "@/lib/contacts/service";
 import { getAuthorizedSenderAddress } from "@/lib/email/sender";
 import { getEmailAddressList, joinEmailAddressList, splitEmailAddressList } from "@/lib/email/address";
 import { formatMessageIdHeader, normalizeMessageId, parseMessageIdList } from "@/lib/email/threading";
@@ -102,9 +102,7 @@ export async function sendEmail(
 	if (to.length + cc.length + bcc.length > MAX_RECIPIENTS) {
 		throw new Error(`A message can have at most ${MAX_RECIPIENTS} recipients`);
 	}
-	for (const address of [...to, ...cc, ...bcc]) {
-		await upsertContactFromAddress(env, { userId: input.userId, address, source: "outbound" });
-	}
+	await upsertContactsFromAddresses(env, input.userId, [...to, ...cc, ...bcc], "outbound");
 
 	const inReplyTo = normalizeMessageId(input.inReplyTo);
 	const references = Array.isArray(input.references)
