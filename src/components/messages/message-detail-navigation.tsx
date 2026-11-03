@@ -8,6 +8,8 @@ import { Button } from "@/components/ui/button";
 import { Tooltip } from "@/components/ui/tooltip";
 import { useSelectedMailbox } from "@/components/mailbox-provider";
 import { authFetch } from "@/lib/auth/client";
+import { fetchCachedMessageDetail, getCachedMessageDetail } from "@/lib/messages/detail-cache";
+import { FULL_ROUTE_PREFETCH } from "@/lib/navigation/prefetch";
 import type { MessageNavigationResponse } from "@/app/api/messages/navigation/types";
 import type { MessageDetailNavigationContextValue, MessageDetailNavigationProps, MessageDetailNavigationProviderProps, MessageDetailNavigationSnapshot, OpenedUnreadMessages } from "./message-detail-navigation-types";
 import { getMessageDetailNavigationState, takeOpenedUnreadMessage } from "./message-detail-navigation-utils";
@@ -81,12 +83,48 @@ export function MessageDetailNavigationProvider({ children, config, currentMessa
 export function MessageDetailNavigation({ messageId, unread }: MessageDetailNavigationProps) {
 	const { t } = useLanguage();
 	const context = useContext(NavigationContext);
+	const recordUnread = context?.recordUnread;
 	const router = useRouter();
 	useEffect(() => {
-		if (unread) context?.recordUnread(messageId);
-	}, [context?.recordUnread, messageId, unread]);
+		if (unread) recordUnread?.(messageId);
+	}, [recordUnread, messageId, unread]);
+
+	const navigation = context
+		? getMessageDetailNavigationState(context.entries, messageId)
+		: null;
+	const previousId = navigation?.previousId ?? null;
+	const nextId = navigation?.nextId ?? null;
+	const unreadOrder = navigation?.unreadOrder ?? 0;
+	const totalUnread = navigation?.totalUnread ?? 0;
+
+	// Reading in one direction usually continues in the same direction, so the
+	// neighbours are warmed once the current window has settled.
+	useEffect(() => {
+		if (!previousId && !nextId) return;
+		const warm = (id: string | null) => {
+			if (!id || getCachedMessageDetail(id)?.body) return;
+			void fetchCachedMessageDetail(id, true).catch(() => {});
+		};
+		const run = () => {
+			warm(previousId);
+			warm(nextId);
+		};
+		if ("requestIdleCallback" in window) {
+			const id = window.requestIdleCallback(run, { timeout: 1000 });
+			return () => window.cancelIdleCallback(id);
+		}
+		const timer = setTimeout(run, 250);
+		return () => clearTimeout(timer);
+	}, [nextId, previousId]);
+
 	if (!context) return null;
-	const { previousId, nextId, unreadOrder, totalUnread } = getMessageDetailNavigationState(context.entries, messageId);
+	const hrefPrefix = context.hrefPrefix;
+
+	function prefetchMessage(id: string | null) {
+		if (!id) return;
+		router.prefetch(`${hrefPrefix}/${id}`, FULL_ROUTE_PREFETCH);
+		if (!getCachedMessageDetail(id)?.body) void fetchCachedMessageDetail(id, true).catch(() => {});
+	}
 
 	return (
 		<div className="ml-auto flex shrink-0 items-center gap-2 text-neutral-500">
@@ -96,12 +134,38 @@ export function MessageDetailNavigation({ messageId, unread }: MessageDetailNavi
 			</span>
 			)}
 			<Tooltip label={t("message.nav.newer")}>
-				<Button type="button" variant="ghost" size="roundedSM" aria-label={t("message.nav.newer")} disabled={!previousId} onClick={() => previousId && router.push(`${context.hrefPrefix}/${previousId}`)}>
+				<Button
+					type="button"
+					variant="ghost"
+					size="roundedSM"
+					aria-label={t("message.nav.newer")}
+					disabled={!previousId}
+					onPointerEnter={() => prefetchMessage(previousId)}
+					onFocus={() => prefetchMessage(previousId)}
+					onTouchStart={() => prefetchMessage(previousId)}
+					onClick={() => {
+						prefetchMessage(previousId);
+						if (previousId) router.push(`${hrefPrefix}/${previousId}`);
+					}}
+				>
 					<ChevronLeft size={18} />
 				</Button>
 			</Tooltip>
 			<Tooltip label={t("message.nav.older")}>
-				<Button type="button" variant="ghost" size="roundedSM" aria-label={t("message.nav.older")} disabled={!nextId} onClick={() => nextId && router.push(`${context.hrefPrefix}/${nextId}`)}>
+				<Button
+					type="button"
+					variant="ghost"
+					size="roundedSM"
+					aria-label={t("message.nav.older")}
+					disabled={!nextId}
+					onPointerEnter={() => prefetchMessage(nextId)}
+					onFocus={() => prefetchMessage(nextId)}
+					onTouchStart={() => prefetchMessage(nextId)}
+					onClick={() => {
+						prefetchMessage(nextId);
+						if (nextId) router.push(`${hrefPrefix}/${nextId}`);
+					}}
+				>
 					<ChevronRight size={18} />
 				</Button>
 			</Tooltip>

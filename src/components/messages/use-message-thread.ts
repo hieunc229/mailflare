@@ -1,25 +1,43 @@
 import { useEffect, useState } from "react";
-import { authFetch } from "@/lib/auth/client";
-import type { ThreadMessage, ThreadResponse } from "@/hooks/types";
+import type { ThreadMessage } from "@/hooks/types";
+import {
+	fetchMessageThread,
+	getCachedMessageThread,
+	isMessageThreadInvalidated,
+	markMessageThreadReadInCaches,
+} from "./message-thread-cache";
 import type { UseMessageThreadResult } from "./conversation-thread-types";
 
 /** Loads every message in the conversation of `messageId`; refetches when mail changes. */
 export function useMessageThread(messageId: string, threadId: string | null | undefined): UseMessageThreadResult {
-	const [messages, setMessages] = useState<ThreadMessage[]>([]);
-	const [loading, setLoading] = useState(false);
+	const [messages, setMessages] = useState<ThreadMessage[]>(
+		() => (threadId ? getCachedMessageThread(messageId) ?? [] : []),
+	);
+	const [loading, setLoading] = useState(
+		() => !!threadId && !getCachedMessageThread(messageId),
+	);
 
 	useEffect(() => {
 		if (!threadId) return;
 		let cancelled = false;
 		let refreshTimer: number | null = null;
 		async function load() {
+			const cached = getCachedMessageThread(messageId);
+			if (cached) {
+				if (!cancelled) {
+					setMessages(cached);
+					setLoading(false);
+				}
+				return;
+			}
 			setLoading(true);
 			try {
-				const response = await authFetch(`/api/messages/${messageId}/thread`);
-				const data = (await response.json()) as ThreadResponse;
-				if (!cancelled) setMessages(response.ok ? data.messages ?? [] : []);
-			} catch {
-				if (!cancelled) setMessages([]);
+				const next = await fetchMessageThread(messageId);
+				if (!cancelled) setMessages(next);
+			} catch (error) {
+				// Invalidation means a newer load is already queued; keep the
+				// current conversation on screen instead of flashing empty.
+				if (!cancelled && !isMessageThreadInvalidated(error)) setMessages([]);
 			} finally {
 				if (!cancelled) setLoading(false);
 			}
@@ -30,6 +48,7 @@ export function useMessageThread(messageId: string, threadId: string | null | un
 			if (detail?.kind !== "read" || !detail.messageIds?.length) return;
 			const ids = new Set(detail.messageIds);
 			const read = detail.read !== false;
+			markMessageThreadReadInCaches(detail.messageIds, read);
 			setMessages((current) => current.map((message) => (ids.has(message.id) ? { ...message, read } : message)));
 		}
 		function scheduleLoad(event?: Event) {

@@ -11,6 +11,7 @@ import { useSelectedMailbox } from "./mailbox-provider";
 import { useSidebar } from "./sidebar-state";
 import { useCompose } from "./compose/compose-context";
 import { Tooltip } from "./ui/tooltip";
+import { FULL_ROUTE_PREFETCH } from "@/lib/navigation/prefetch";
 import { preloadMailboxPage } from "./components-nav-utils";
 import type { NavLink } from "./components-nav-types";
 
@@ -105,7 +106,7 @@ export function NavItem({ link, iconClassName, labelClassName, wrap }: Props) {
     const key = [link.href, selectedMailbox?.id ?? "", query, conversationView].join("\u0000");
     if (prefetchedKey.current === key) return;
     prefetchedKey.current = key;
-    router.prefetch(link.href);
+    router.prefetch(link.href, FULL_ROUTE_PREFETCH);
     void preloadMailboxPage(link.href, selectedMailbox?.id, { query, grouped: conversationView })
       .catch(() => { prefetchedKey.current = null; });
   }

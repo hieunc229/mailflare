@@ -24,10 +24,13 @@ export type MessageListRowProps = {
 	config: MessageFolderConfig;
 	selected: boolean;
 	active?: boolean;
+	/** Highlight a row whose navigation is still in flight. */
+	opening?: boolean;
 	compact?: boolean;
 	currentAccountName?: string;
 	onSelectedChange: (messageId: string, selected: boolean) => void;
 	onMessageAction: (messageId: string, action: RowMessageAction) => Promise<void>;
+	onOpening?: () => void;
 	dragMessageIds: string[];
 };
 

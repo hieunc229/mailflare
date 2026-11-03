@@ -1,47 +1,59 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef } from "react";
 import type { MouseEvent } from "react";
-import { usePathname, useRouter } from "next/navigation";
+import { useRouter } from "next/navigation";
 import { fetchCachedMessageDetail, getCachedMessageDetail, primeMessageDetail } from "@/lib/messages/detail-cache";
+import { FULL_ROUTE_PREFETCH } from "@/lib/navigation/prefetch";
 import type { Message } from "@/hooks/types";
 import type { MessageNavigationState } from "./message-navigation-types";
 
 const HOVER_PREFETCH_DELAY_MS = 120;
 
 export function useMessageNavigation(href: string, message: Message): MessageNavigationState {
-	const pathname = usePathname();
 	const router = useRouter();
-	const [progress, setProgress] = useState<number | null>(null);
 	const hoverTimer = useRef<number | null>(null);
 	const idleCallback = useRef<number | null>(null);
-
-	useEffect(() => {
-		if (progress === null) return;
-		setProgress(100);
-		const timer = window.setTimeout(() => setProgress(null), 220);
-		return () => window.clearTimeout(timer);
-	}, [pathname]);
+	const routePrefetched = useRef(false);
 
 	useEffect(() => () => {
 		if (hoverTimer.current) window.clearTimeout(hoverTimer.current);
 		if (idleCallback.current !== null && "cancelIdleCallback" in window) window.cancelIdleCallback(idleCallback.current);
 	}, []);
 
+	function prefetchRoute() {
+		if (routePrefetched.current) return;
+		routePrefetched.current = true;
+		// A message route is dynamic, so the runtime's automatic Link prefetch
+		// only warms a loading shell. The reader needs the full payload.
+		router.prefetch(href, FULL_ROUTE_PREFETCH);
+	}
+
+	function warmDetail() {
+		if (getCachedMessageDetail(message.id)?.body) return;
+		// Seed the header at once so the reader has something to paint while
+		// the body request is in flight.
+		primeMessageDetail({ ...message, read: message.read });
+		void fetchCachedMessageDetail(message.id, true).catch(() => {});
+	}
+
 	function prefetch() {
+		prefetchRoute();
 		if (hoverTimer.current || getCachedMessageDetail(message.id)?.body) return;
 		hoverTimer.current = window.setTimeout(() => {
 			hoverTimer.current = null;
-			// Seed the header at once so the reader has something to paint while
-			// the body request is in flight.
-			primeMessageDetail({ ...message, read: message.read });
-			const warm = () => { void fetchCachedMessageDetail(message.id, true).catch(() => {}); };
 			if ("requestIdleCallback" in window) {
-				idleCallback.current = window.requestIdleCallback(warm, { timeout: 400 });
+				idleCallback.current = window.requestIdleCallback(warmDetail, { timeout: 400 });
 			} else {
-				warm();
+				warmDetail();
 			}
 		}, HOVER_PREFETCH_DELAY_MS);
+	}
+
+	/** Touch and keyboard taps do not get a hover delay. */
+	function prefetchNow() {
+		prefetchRoute();
+		warmDetail();
 	}
 
 	function cancelPrefetch() {
@@ -58,23 +70,10 @@ export function useMessageNavigation(href: string, message: Message): MessageNav
 	function onNavigate(event: MouseEvent<HTMLAnchorElement>, markRead = false) {
 		if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
 		event.preventDefault();
+		prefetchRoute();
 		primeMessageDetail({ ...message, read: markRead || message.read });
-		setProgress(12);
-		try {
-			router.push(href);
-		} catch {
-			setProgress(null);
-		}
+		router.push(href);
 	}
 
-	return { progress, onNavigate, prefetch, cancelPrefetch };
-}
-
-export function MessageNavigationProgress({ progress }: { progress: number | null }) {
-	if (progress === null) return null;
-	return (
-		<div className="fixed inset-x-0 top-0 z-[120] h-1 bg-blue-100">
-			<div className="h-full bg-blue-600 transition-[width] duration-100 ease-out" style={{ width: `${progress}%` }} />
-		</div>
-	);
+	return { onNavigate, prefetch, prefetchNow, cancelPrefetch };
 }
