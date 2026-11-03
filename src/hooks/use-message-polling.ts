@@ -32,12 +32,13 @@ export function useMessagePolling(): MessageRealtimeState {
 		let reconnectAttempt = 0;
 		let revision: string | null = null;
 		let connected = false;
+		let hadConnection = false;
 		let leader = false;
 		let sessionToken = getClientSessionToken();
 		let stopped = false;
 
-		function dispatchMessagesChanged() {
-			window.dispatchEvent(new CustomEvent("mailflare:messages-changed", { detail: { realtime: true } }));
+		function dispatchMessagesChanged(detail?: Record<string, unknown>) {
+			window.dispatchEvent(new CustomEvent("mailflare:messages-changed", { detail: { ...detail, realtime: true } }));
 		}
 
 		function clearConnectionTimers() {
@@ -113,8 +114,10 @@ export function useMessagePolling(): MessageRealtimeState {
 			socket.onopen = () => {
 				reconnectAttempt = 0;
 				revision = null;
+				const reconnected = hadConnection;
+				hadConnection = true;
 				setConnected(true);
-				dispatchMessagesChanged();
+				if (reconnected) dispatchMessagesChanged();
 				sendHeartbeat();
 				heartbeatTimer = window.setInterval(sendHeartbeat, REALTIME_HEARTBEAT_INTERVAL_MS);
 			};
@@ -163,6 +166,7 @@ export function useMessagePolling(): MessageRealtimeState {
 			leader = false;
 			reconnectAttempt = 0;
 			revision = null;
+			hadConnection = false;
 			setNotification(null);
 			requestLeadership();
 		}
@@ -173,21 +177,23 @@ export function useMessagePolling(): MessageRealtimeState {
 				channel?.postMessage({ type: "status", connected } satisfies RealtimeChannelMessage);
 			} else if (message?.type === "status" && !leader) {
 				setConnected(message.connected);
-				if (message.connected) dispatchMessagesChanged();
 			} else if (message?.type === "notification" && !leader) {
 				handleNotification(message.payload, false);
 			} else if (message?.type === "refresh") {
-				dispatchMessagesChanged();
+				dispatchMessagesChanged(message.detail);
 			}
 		}
 
 		function onLocalMessagesChanged(event: Event) {
-			if ((event as CustomEvent<{ realtime?: boolean }>).detail?.realtime) return;
-			channel?.postMessage({ type: "refresh" } satisfies RealtimeChannelMessage);
+			const detail = (event as CustomEvent<Record<string, unknown> | undefined>).detail;
+			if (detail?.realtime) return;
+			channel?.postMessage({ type: "refresh", detail } satisfies RealtimeChannelMessage);
 		}
 
 		function onVisibilityChange() {
-			if (document.visibilityState === "visible") dispatchMessagesChanged();
+			if (document.visibilityState !== "visible") return;
+			if (connected) return;
+			dispatchMessagesChanged();
 		}
 
 		function onStorageChange() {
