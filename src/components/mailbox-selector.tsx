@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { CalendarDays, Check, HardDrive, ChevronDown, Inbox, LogOut, Settings, ShieldCheck, UserPlus, UserRound, UsersRound } from "@/components/icons";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { useDismissible } from "@/components/use-dismissible";
 import { useLanguage } from "@/components/language-provider";
 import { useSelectedMailbox } from "@/components/mailbox-provider";
@@ -37,16 +37,24 @@ import {
 	isAdminPath,
 } from "./mailbox-selector-utils";
 
+// A server-rendered trigger has no click handler until hydration. Keep it a
+// real link for that window so the first click is never lost.
+const subscribeNothing = () => () => {};
+const hydratedOnClient = () => true;
+const hydratedOnServer = () => false;
+
 function AccountAvatar({
 	name,
 	colorSeed = name,
 	hasAvatar = false,
 	avatarUrl = "/api/profile/avatar",
 	size = "small",
+	placeholder = false,
 	onAvatarError,
 }: AccountAvatarProps) {
 	const { t } = useLanguage();
 	const sizeClass = size === "large" ? "h-16 w-16 text-xl" : "h-10 w-10 text-sm";
+	const iconClass = size === "large" ? "h-7 w-7" : "h-5 w-5";
 	const [imageFailed, setImageFailed] = useState(false);
 
 	useEffect(() => {
@@ -65,6 +73,19 @@ function AccountAvatar({
 					onAvatarError?.();
 				}}
 			/>
+		);
+	}
+
+	// The account name is not the mailbox identity; showing its initial first
+	// makes the chip flip (D -> S). Until the mailbox loads, use a neutral icon.
+	if (placeholder) {
+		return (
+			<div
+				className={`${sizeClass} flex shrink-0 items-center justify-center rounded-full bg-neutral-200 text-neutral-500`}
+				aria-hidden="true"
+			>
+				<UserRound className={iconClass} />
+			</div>
 		);
 	}
 
@@ -129,6 +150,7 @@ export function MailboxSelector({ initialUser }: MailboxSelectorProps = {}) {
 	const [mailboxAvatarUrls, setMailboxAvatarUrls] = useState<Record<string, string>>({});
 	const [inboxesOpen, setInboxesOpen] = useState(false);
 	const [browserAccounts, setBrowserAccounts] = useState<BrowserAccount[]>([]);
+	const hydrated = useSyncExternalStore(subscribeNothing, hydratedOnClient, hydratedOnServer);
 
 	useEffect(() => {
 		if (!open) return;
@@ -223,6 +245,7 @@ export function MailboxSelector({ initialUser }: MailboxSelectorProps = {}) {
 	const selectedAvatarUrl = selectedMailbox
 		? selectedMailboxAvatarUrl ?? `/api/mailboxes/${selectedMailbox.id}/avatar`
 		: avatarUrl;
+	const identityPending = isLoading && !selectedMailbox;
 	const otherMailboxes = mailboxes.filter((mailbox) => mailbox.id !== selectedMailbox?.id);
 	const adminActive = isAdminPath(pathname);
 
@@ -244,25 +267,40 @@ export function MailboxSelector({ initialUser }: MailboxSelectorProps = {}) {
 		router.refresh();
 	}
 
+	const triggerAvatar = (
+		<AccountAvatar
+			name={selectedName}
+			colorSeed={selectedEmail || selectedName}
+			hasAvatar={selectedHasAvatar}
+			avatarUrl={selectedAvatarUrl}
+			placeholder={identityPending}
+			onAvatarError={() => {
+				if (!selectedMailbox) setHasAvatar(false);
+			}}
+		/>
+	);
+
 	return (
 		<div ref={ref} className="relative">
-			<button
-				type="button"
-				onClick={() => setOpen((value) => !value)}
-				className="rounded-full p-1 transition-colors hover:bg-neutral-200"
-				aria-label={t("account.openMenu")}
-				aria-expanded={open}
-			>
-				<AccountAvatar
-					name={selectedName}
-					colorSeed={selectedEmail || selectedName}
-					hasAvatar={selectedHasAvatar}
-					avatarUrl={selectedAvatarUrl}
-					onAvatarError={() => {
-						if (!selectedMailbox) setHasAvatar(false);
-					}}
-				/>
-			</button>
+			{hydrated ? (
+				<button
+					type="button"
+					onClick={() => setOpen((value) => !value)}
+					className="rounded-full p-1 transition-colors hover:bg-neutral-200"
+					aria-label={t("account.openMenu")}
+					aria-expanded={open}
+				>
+					{triggerAvatar}
+				</button>
+			) : (
+				<Link
+					href="/inbox"
+					className="inline-flex rounded-full p-1 transition-colors hover:bg-neutral-200"
+					aria-label={t("navigation.inbox")}
+				>
+					{triggerAvatar}
+				</Link>
+			)}
 
 			{open && (
 				<div className="absolute right-0 top-14 w-[360px] overflow-hidden rounded-[28px] border border-neutral-200 bg-[#eef3fb] p-3 shadow-2xl shadow-neutral-900/20 max-h-[82vh] overflow-y-auto z-90">
@@ -274,6 +312,7 @@ export function MailboxSelector({ initialUser }: MailboxSelectorProps = {}) {
 								hasAvatar={selectedHasAvatar}
 								avatarUrl={selectedAvatarUrl}
 								size="large"
+								placeholder={identityPending}
 								onAvatarError={() => {
 									if (!selectedMailbox) setHasAvatar(false);
 								}}
