@@ -21,8 +21,10 @@ export function BrandingProvider({ children, initialBranding }: { children: Reac
 	}
 
 	useEffect(() => {
-		void refreshBranding();
-	}, []);
+		// The server layout already supplied the branding; refetching it on mount is
+		// a second round trip that competes with the rest of the boot.
+		if (!initialBranding) void refreshBranding();
+	}, [initialBranding]);
 
 	return (
 		<BrandingContext.Provider value={{

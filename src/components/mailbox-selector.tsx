@@ -59,6 +59,7 @@ function AccountAvatar({
 				src={avatarUrl}
 				alt={t("account.profilePicture", { name })}
 				className={`${sizeClass} shrink-0 rounded-full border border-neutral-200 object-cover`}
+				skipPreview={size === "small"}
 				onError={() => {
 					setImageFailed(true);
 					onAvatarError?.();
@@ -146,6 +147,9 @@ export function MailboxSelector({ initialUser }: MailboxSelectorProps = {}) {
 	useDismissible(open, () => setOpen(false), ref);
 
 	useEffect(() => {
+		// The landing page passes the account the server already resolved; fetching
+		// it again here would duplicate the same /api/auth/me request.
+		if (initialUser) return;
 		let active = true;
 		void fetchCurrentUser()
 			.then((user) => {
@@ -155,7 +159,7 @@ export function MailboxSelector({ initialUser }: MailboxSelectorProps = {}) {
 			})
 			.catch(() => { if (active) setUser(null); });
 		return () => { active = false; };
-	}, []);
+	}, [initialUser]);
 
 	useEffect(() => {
 		function onAvatarChanged(event: Event) {
