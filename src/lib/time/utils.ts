@@ -18,10 +18,6 @@ function getFieldFormatter(timeZone: string): Intl.DateTimeFormat {
 	return formatter;
 }
 
-/**
- * `Intl.DateTimeFormat` construction is expensive and lists format one timestamp
- * per row, so display formatters are reused by locale + options + zone.
- */
 function getDisplayFormatter(locale: string | undefined, options: Intl.DateTimeFormatOptions, timeZone: string): Intl.DateTimeFormat {
 	const key = `${locale ?? "default"}\u0000${timeZone}\u0000${JSON.stringify(options)}`;
 	let formatter = displayFormatters.get(key);
@@ -69,7 +65,6 @@ export function getUserTimeZone(): string {
 	return zone;
 }
 
-/** Drop the memoized zone after the preference changes. */
 export function clearUserTimeZoneCache(): void {
 	resolvedUserTimeZone = undefined;
 }

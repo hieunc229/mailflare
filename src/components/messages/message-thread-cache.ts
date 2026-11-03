@@ -7,8 +7,7 @@ const CACHE_LIMIT = 20;
 const MAX_CACHED_MESSAGES = 50;
 const MAX_CACHED_BODY_CHARS = 2_000_000;
 
-// The response is scoped by mailbox and can include the opened spam message,
-// so it is keyed by the anchor message rather than the shared thread id.
+// Key by anchor message: thread ids are shared across mailboxes.
 const threadCache = new Map<string, { messages: ThreadMessage[]; expiresAt: number }>();
 const threadRequests = new Map<string, Promise<ThreadMessage[]>>();
 let generation = 0;
@@ -29,8 +28,6 @@ function bodyChars(messages: ThreadMessage[]): number {
 }
 
 function cacheThread(messageId: string, messages: ThreadMessage[]): void {
-	// Long conversations are the expensive ones, but keeping every body would
-	// also make the reader's memory use unpredictable. Let those refetch.
 	if (messages.length > MAX_CACHED_MESSAGES || bodyChars(messages) > MAX_CACHED_BODY_CHARS) return;
 	threadCache.delete(messageId);
 	threadCache.set(messageId, { messages, expiresAt: Date.now() + CACHE_TTL_MS });
@@ -40,7 +37,6 @@ function cacheThread(messageId: string, messages: ThreadMessage[]): void {
 	}
 }
 
-/** A warm conversation, so reopening a message does not fetch every body again. */
 export function getCachedMessageThread(messageId: string | null | undefined): ThreadMessage[] | undefined {
 	if (!messageId) return undefined;
 	const cached = threadCache.get(messageId);
@@ -77,7 +73,6 @@ export function fetchMessageThread(messageId: string): Promise<ThreadMessage[]> 
 	return request;
 }
 
-/** Mirror a read/unread flip into cached conversations. */
 export function markMessageThreadReadInCaches(messageIds: string[], read: boolean): void {
 	if (messageIds.length === 0) return;
 	const ids = new Set(messageIds);

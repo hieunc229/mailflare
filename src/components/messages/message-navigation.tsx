@@ -24,15 +24,13 @@ export function useMessageNavigation(href: string, message: Message): MessageNav
 	function prefetchRoute() {
 		if (routePrefetched.current) return;
 		routePrefetched.current = true;
-		// A message route is dynamic, so the runtime's automatic Link prefetch
-		// only warms a loading shell. The reader needs the full payload.
+		// A dynamic route only gets a shell from automatic prefetch.
 		router.prefetch(href, FULL_ROUTE_PREFETCH);
 	}
 
 	function warmDetail() {
 		if (getCachedMessageDetail(message.id)?.body) return;
-		// Seed the header at once so the reader has something to paint while
-		// the body request is in flight.
+		// Seed the header while the body loads.
 		primeMessageDetail({ ...message, read: message.read });
 		void fetchCachedMessageDetail(message.id, true).catch(() => {});
 	}
@@ -50,7 +48,6 @@ export function useMessageNavigation(href: string, message: Message): MessageNav
 		}, HOVER_PREFETCH_DELAY_MS);
 	}
 
-	/** Touch and keyboard taps do not get a hover delay. */
 	function prefetchNow() {
 		prefetchRoute();
 		warmDetail();

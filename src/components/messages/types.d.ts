@@ -24,7 +24,6 @@ export type MessageListRowProps = {
 	config: MessageFolderConfig;
 	selected: boolean;
 	active?: boolean;
-	/** Highlight a row whose navigation is still in flight. */
 	opening?: boolean;
 	compact?: boolean;
 	currentAccountName?: string;

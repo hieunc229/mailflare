@@ -96,8 +96,6 @@ function MessageDetailContent({ messageId }: { messageId: string }) {
     async function loadMessage() {
       const cachedData = getCachedMessageDetailForDisplay(messageId);
       if (cachedData?.message) {
-        // The list row already provides the header, so paint it and keep the
-        // global loading UI off while only the body is outstanding.
         setData(cachedData);
         setLoading(false);
         if (!cachedData.message.read) void markMessageRead(cachedData.message.id);
@@ -107,9 +105,7 @@ function MessageDetailContent({ messageId }: { messageId: string }) {
           try {
             const metadata = await fetchMessageMetadata(messageId);
             if (!cancelled) setData((current) => current ? { ...current, ...metadata } : current);
-          } catch {
-            // The message body remains usable if supplemental metadata is unavailable.
-          }
+          } catch { /* Metadata is optional. */ }
           return;
         }
         setBodyPending(true);
@@ -118,7 +114,7 @@ function MessageDetailContent({ messageId }: { messageId: string }) {
           const full = await fetchMessageDetail(messageId, true);
           if (!cancelled) {
             setData((current) => {
-              // A prefetched response can predate the read flip the row just sent.
+              // A prefetched body may predate the read flip.
               if (current?.message?.read && full.message) return { ...full, message: { ...full.message, read: true } };
               return full;
             });
@@ -198,8 +194,6 @@ function MessageDetailContent({ messageId }: { messageId: string }) {
       : [`${messageMailbox.localPart}@${messageMailbox.hostname}`]
     : [];
   const ownAddress = message ? getOwnAddressForMessage(message, ownAddresses) : "";
-  // Parsing body text and rewriting inline attachment URLs is expensive for
-  // large newsletters, and these values do not change when the panel state does.
   const bodyDisplay = useMemo(
     () => getMessageBodyDisplay(body?.textBody, body?.htmlBody, message?.snippet, ownAddress),
     [body?.textBody, body?.htmlBody, message?.snippet, ownAddress],

@@ -22,7 +22,6 @@ function subscribe(onStoreChange: () => void): () => void {
 	};
 }
 
-// Server-rendered markup starts grouped, matching the default preference.
 function getServerSnapshot(): boolean {
 	return true;
 }
@@ -30,9 +29,6 @@ function getServerSnapshot(): boolean {
 /**
  * Whether lists collapse each conversation to one row. On by default and
  * remembered per browser; every open list follows a change immediately.
- *
- * The stored value is available on the first client render, so the first list
- * request already carries the right `group` parameter.
  */
 export function useConversationView(): [boolean, (next: boolean) => void] {
 	const enabled = useSyncExternalStore(subscribe, readStored, getServerSnapshot);

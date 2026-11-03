@@ -99,8 +99,6 @@ export function NavItem({ link, iconClassName, labelClassName, wrap }: Props) {
     return minimal && link.label ? <Tooltip label={link.label} placement="right" className="mx-auto">{composeButton}</Tooltip> : composeButton;
   }
 
-  // The list is prefetched while the pointer is over the link, so the click
-  // itself navigates immediately. `router.prefetch` covers the route payload.
   function prefetch() {
     if (!link.preloadMessages || active || !link.href) return;
     const key = [link.href, selectedMailbox?.id ?? "", query, conversationView].join("\u0000");

@@ -38,10 +38,7 @@ export function MessageDetailNavigationProvider({ children, config, currentMessa
 		if (messageId) recordUnread(messageId);
 	}, [recordUnread]);
 
-	// The window around one message is enough for day-to-day reading. Opening a
-	// message outside it, or reaching a truncated edge, asks for a window around
-	// that message so prev/next never dead-ends while messages remain. The value
-	// is derived, so a window that already covers the message does not refetch.
+	// Re-anchor if the open message falls outside the loaded window.
 	const currentIndex = snapshot.key === key && currentMessageId
 		? snapshot.entries.findIndex((entry) => entry.id === currentMessageId)
 		: -1;
@@ -97,8 +94,6 @@ export function MessageDetailNavigation({ messageId, unread }: MessageDetailNavi
 	const unreadOrder = navigation?.unreadOrder ?? 0;
 	const totalUnread = navigation?.totalUnread ?? 0;
 
-	// Reading in one direction usually continues in the same direction, so the
-	// neighbours are warmed once the current window has settled.
 	useEffect(() => {
 		if (!previousId && !nextId) return;
 		const warm = (id: string | null) => {

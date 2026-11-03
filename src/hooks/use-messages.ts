@@ -17,8 +17,7 @@ export function useMessages(
 	enabled = true,
 	folderId?: string | null,
 ) {
-	// A folder switch remounts this hook. Starting from the cached page means the
-	// list paints on the first frame instead of flashing empty.
+	// A folder switch remounts this hook, so paint the cached page immediately.
 	const [initialPage] = useState(() => (
 		enabled ? peekMessageList(getMessageQueryParams(folder, mailboxId, filters, folderId)) : undefined
 	));
@@ -60,8 +59,7 @@ export function useMessages(
 			const read = detail.read !== false;
 			setMessages((current) => current.map((message) => {
 				if (message.threadMessageIds) {
-					// A row stands for a whole conversation, so only the members
-					// named by the event change its unread count.
+					// Only the flipped members change a conversation row's unread count.
 					const threadSize = message.threadMessageIds.length;
 					const flipped = message.threadMessageIds.reduce((total, id) => total + (ids.has(id) ? 1 : 0), 0);
 					if (!flipped) return message;
@@ -70,13 +68,10 @@ export function useMessages(
 				}
 				return ids.has(message.id) ? { ...message, read } : message;
 			}));
-			// Rows that no longer match "unread only" have to leave the list; that
-			// needs the server's filter rather than a flag flip. Handled below.
 		}
 		function onMessagesChanged(event: Event) {
 			const readOnly = (event as CustomEvent<{ kind?: string }>).detail?.kind === "read";
-			// Read flips reach this hook as a patch; only real mailbox changes force
-			// a refetch. The unread-only filter is the exception: read rows must go.
+			// Read flips patch in place; "unread only" still needs a server refetch.
 			if (readOnly && filters?.read !== "unread") return;
 			if (!readOnly) {
 				clearMessageListCache();

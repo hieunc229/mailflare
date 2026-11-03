@@ -35,8 +35,7 @@ export function useMessageThread(messageId: string, threadId: string | null | un
 				const next = await fetchMessageThread(messageId);
 				if (!cancelled) setMessages(next);
 			} catch (error) {
-				// Invalidation means a newer load is already queued; keep the
-				// current conversation on screen instead of flashing empty.
+				// A newer load is queued; keep the conversation on screen.
 				if (!cancelled && !isMessageThreadInvalidated(error)) setMessages([]);
 			} finally {
 				if (!cancelled) setLoading(false);
@@ -52,7 +51,6 @@ export function useMessageThread(messageId: string, threadId: string | null | un
 			setMessages((current) => current.map((message) => (ids.has(message.id) ? { ...message, read } : message)));
 		}
 		function scheduleLoad(event?: Event) {
-			// A read flip does not change the conversation's bodies.
 			if ((event as CustomEvent<{ kind?: string }> | undefined)?.detail?.kind === "read") return;
 			if (document.visibilityState !== "visible") return;
 			if (refreshTimer) window.clearTimeout(refreshTimer);

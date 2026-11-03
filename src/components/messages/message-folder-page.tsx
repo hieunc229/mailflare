@@ -338,8 +338,6 @@ export function MessageFolderPage({
 	const [openingMessageId, setOpeningMessageId] = useState<string | null>(null);
 	const openingTimer = useRef<number | null>(null);
 	const [conversationView] = useConversationView();
-	// Once the route catches up, the active row carries the highlight. Keeping
-	// one opening id also prevents a previously clicked row from staying blue.
 	const visibleOpeningMessageId = openingMessageId === selectedMessageId ? null : openingMessageId;
 
 	useEffect(() => () => {

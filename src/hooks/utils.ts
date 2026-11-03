@@ -94,7 +94,6 @@ export function clearMessageListCache() {
  * Mirror a read/unread change into the cached lists and details, so a list
  * remounted later (or a detail reopened) never shows the old state.
  */
-/** Mirrors a read/unread flip into cached pages, counting only the members that flipped. */
 export function markMessagesReadInCaches(messageIds: string[], read: boolean) {
 	const ids = new Set(messageIds);
 	for (const [key, response] of messageListCache) {
@@ -121,8 +120,6 @@ export function markMessagesReadInCaches(messageIds: string[], read: boolean) {
 // (e.g. reading a message from the popup on a page without the inbox list).
 if (typeof window !== "undefined") {
 	window.addEventListener("mailflare:messages-changed", (event) => {
-		// Read flips are mirrored into the caches by their dispatcher; only the
-		// unread totals still need a refresh.
 		if (!isReadOnlyChange(event)) clearMessageListCache();
 		clearMessageCountsCache();
 	});
@@ -169,7 +166,6 @@ export async function fetchMessageCounts(mailboxId?: string | null, force = fals
 	return request;
 }
 
-/** A warm list page, so a remount can paint before its fetch resolves. */
 export function peekMessageList(params: URLSearchParams): MessageListResponse | undefined {
 	return messageListCache.get(params.toString());
 }

@@ -27,8 +27,6 @@ export async function GET(request: Request) {
 	const mailboxId = params.get("mailboxId");
 	const folderId = params.get("folderId");
 	const grouped = params.get("group") === "thread";
-	// The reader only needs enough neighbours around the open message; a whole
-	// large folder would be megabytes of ids. No `around` keeps the old reply.
 	const around = params.get("around");
 	const windowSize = Math.min(Math.max(Number(params.get("limit") ?? 250) || 250, 25), 1000);
 	const db = getDb(env);
@@ -107,16 +105,10 @@ type NavigationRow = {
 
 type NavigationRows = {
 	rows: NavigationRow[];
-	/** The window stopped before the folder's ends, so navigation can still move on. */
 	hasNewer: boolean;
 	hasOlder: boolean;
 };
 
-/**
- * Rows for prev/next navigation. With `around`, only the window on either side
- * of that message is loaded, newest-first, so a 100k-message folder no longer
- * ships 100k ids to the reader.
- */
 async function loadNavigationRows(
 	db: AppDatabase,
 	conditions: SQL[],
@@ -160,13 +152,11 @@ async function loadNavigationRows(
 			.orderBy(desc(messages.createdAt), desc(messages.id))
 			.limit(windowSize + 2),
 	]);
-	// The extra rows only tell whether more exists beyond the window.
 	const hasNewer = newerRows.length > windowSize;
 	const hasOlder = olderRows.length > windowSize + 1;
 	const nearerNewer = hasNewer ? newerRows.slice(0, windowSize) : newerRows;
 	const nearerOlder = hasOlder ? olderRows.slice(0, windowSize + 1) : olderRows;
-	// Newest-first, like the unbounded list: farther newer rows, the anchor,
-	// then older rows.
+	// Newest-first: newer rows reversed, the anchor, then older rows.
 	return {
 		rows: [...nearerNewer.reverse(), ...nearerOlder],
 		hasNewer,

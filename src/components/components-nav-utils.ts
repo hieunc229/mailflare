@@ -2,9 +2,7 @@ import { getMessageQueryParams, fetchMessageList } from "@/hooks/utils";
 import type { MessageFolder } from "@/hooks/types";
 
 export type MailboxPrefetchOptions = {
-	/** The active search, so the prefetched key matches the page's first request. */
 	query?: string;
-	/** Conversation view state, which the list sends as `group=thread`. */
 	grouped?: boolean;
 };
 

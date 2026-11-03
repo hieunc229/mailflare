@@ -334,7 +334,6 @@ export async function getMessageWithBodyForUser(env: CloudflareEnv, user: Sessio
 	if (!message?.mailboxId) return null;
 	const access = await getMailboxAccessLevel(db, user, message.mailboxId);
 	if (!access?.canRead) return null;
-	// The enrichments are independent, so they share one round of latency.
 	const [contactNames, attachments, unsubscribeUrl, [scheduledJob]] = await Promise.all([
 		getMessageContactNames(env, message.userId, message.fromAddr, message.toAddr),
 		listMessageAttachments(env, messageId),
@@ -347,8 +346,6 @@ export async function getMessageWithBodyForUser(env: CloudflareEnv, user: Sessio
 				.limit(1)
 			: Promise.resolve([]),
 	]);
-	// Bodies travel once, under `body`; the header row stays small and the R2
-	// pointer never leaves the server.
 	const { rawR2Key, textBody, htmlBody, ...header } = message;
 	void rawR2Key;
 	return {

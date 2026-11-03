@@ -40,12 +40,7 @@ export function setCachedMessageRead(messageId: string, read: boolean): void {
 	if (cached?.message) cacheDetail(messageId, { ...cached, message: { ...cached.message, read } });
 }
 
-/**
- * Seed the reader with the row the list already rendered. Bodies stay out of
- * list responses, so this is a header-only entry and the reader fetches the
- * body in the background. An existing entry keeps its body and attachments,
- * and a row that does carry a body fills it in.
- */
+/** Merge the row header into the cache; a missing body is fetched separately. */
 export function primeMessageDetail(message: Message): void {
 	const cached = getCachedMessageDetail(message.id);
 	const hasBody = message.textBody !== undefined || message.htmlBody !== undefined;

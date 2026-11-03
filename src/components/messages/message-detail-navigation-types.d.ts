@@ -5,7 +5,6 @@ import type { MessageFolderConfig } from "./types";
 export type MessageDetailNavigationProviderProps = {
 	children: ReactNode;
 	config: MessageFolderConfig;
-	/** The message on screen, which anchors the loaded navigation window. */
 	currentMessageId?: string;
 };
 
