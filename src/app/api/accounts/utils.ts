@@ -1,4 +1,4 @@
-import { and, desc, eq } from "drizzle-orm";
+import { and, desc, eq, inArray } from "drizzle-orm";
 import { NextResponse } from "next/server";
 import type { getDb } from "@/db";
 import { domains, mailboxes, users } from "@/db/schema";
@@ -31,11 +31,22 @@ export function listAccountsForAdmin(db: Db) {
 		.orderBy(desc(users.createdAt));
 }
 
-export async function getDomainForAdmin(db: Db, adminUserId: string, domainId: string) {
+/** Domains a mailbox manager may address on behalf of the account that created it (mirrors mailbox creation). */
+export function allowedDomainOwnerIds(admin: { id: string; canManageMailboxes?: boolean; createdByUserId?: string | null }) {
+	const ids = [admin.id];
+	if (admin.canManageMailboxes && admin.createdByUserId) ids.push(admin.createdByUserId);
+	return ids;
+}
+
+export async function getDomainForAdmin(
+	db: Db,
+	admin: { id: string; canManageMailboxes?: boolean; createdByUserId?: string | null },
+	domainId: string,
+) {
 	const [domain] = await db
 		.select()
 		.from(domains)
-		.where(and(eq(domains.id, domainId), eq(domains.userId, adminUserId)))
+		.where(and(eq(domains.id, domainId), inArray(domains.userId, allowedDomainOwnerIds(admin))))
 		.limit(1);
 	return domain ?? null;
 }
