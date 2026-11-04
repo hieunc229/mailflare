@@ -73,6 +73,7 @@ export async function handleJmapRequest(request: Request, env: CloudflareEnv): P
 				"Content-Disposition": `attachment; filename*=UTF-8''${encodeURIComponent(name)}`,
 				"Cache-Control": "private, max-age=3600",
 				"Content-Security-Policy": "default-src 'none'; sandbox",
+				"X-Content-Type-Options": "nosniff",
 				...corsHeaders(),
 			},
 		});

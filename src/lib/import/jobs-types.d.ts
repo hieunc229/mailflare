@@ -52,10 +52,16 @@ export type ImapImportCursor = {
 	done: number;
 	/** Whether the current source's size was added to the job total. */
 	counted: boolean;
+	/** Chunk size after earlier failures; absent means the default. */
+	size?: number;
+	/** Consecutive failed chunks. */
+	failures?: number;
 };
 
 export type ImportJobMessage = {
 	kind: "import.run";
 	jobId: string;
 	imapPassword?: string;
+	/** Delivery count from the queue; set by the consumer, never stored. */
+	attempt?: number;
 };

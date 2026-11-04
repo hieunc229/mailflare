@@ -2,7 +2,7 @@
 
 import type { FormEvent } from "react";
 import { useMemo, useState } from "react";
-import { Folder, Server, Upload } from "lucide-react";
+import { Folder, Server, Upload } from "@/components/icons";
 import { useLanguage } from "@/components/language-provider";
 import type { TranslationKey } from "@/lib/i18n/types";
 import { useSelectedMailbox } from "@/components/mailbox-provider";
@@ -196,6 +196,8 @@ export default function SettingsImportPage() {
           the current mailbox.
         </p>
       </div> */}
+
+      <ImportJobs refreshKey={jobsRefresh} />
 
       <section className="space-y-4">
         <div>
@@ -492,7 +494,6 @@ export default function SettingsImportPage() {
           </CardContent>
         </div>
       </section>
-      <ImportJobs refreshKey={jobsRefresh} />
     </div>
   );
 }

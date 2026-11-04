@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { ArrowRight, Clock3, MapPin } from "lucide-react";
+import { ArrowRight, Clock3, MapPin } from "@/components/icons";
 import { useLanguage } from "@/components/language-provider";
 import { LanguageSelector } from "@/components/language-selector";
 import { useBranding } from "@/components/branding-provider";

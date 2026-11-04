@@ -55,6 +55,8 @@ export async function POST(request: Request) {
 	const userId = newId("usr");
 	await db.insert(users).values({
 		id: userId,
+		// Opening a message must not tell the sender; the column default predates this and stays "allow".
+		remoteContentMode: "ask",
 		email,
 		resetEmail: firstRunParsed.data.resetEmail,
 		passwordHash: hashPassword(password),

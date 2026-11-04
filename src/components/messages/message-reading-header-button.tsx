@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { ArrowLeft, Columns2 } from "lucide-react";
+import { ArrowLeft, Columns2 } from "@/components/icons";
 import clsx from "clsx";
 import { useLanguage } from "@/components/language-provider";
 import { Tooltip } from "@/components/ui/tooltip";

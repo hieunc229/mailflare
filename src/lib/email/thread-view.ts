@@ -1,7 +1,8 @@
-import { and, asc, eq, inArray, isNull, notInArray } from "drizzle-orm";
+import { and, asc, eq, inArray, isNull, ne, notInArray, or } from "drizzle-orm";
 import { getDb } from "@/db";
 import { messageAttachments, messages } from "@/db/schema";
 import { getContactAvatarMap, getContactDisplayNameMap } from "@/lib/contacts/service";
+import { getSenderDisplayName } from "@/lib/contacts/utils";
 import { getFirstEmailAddressEntry, normalizeEmailAddress } from "@/lib/email/address";
 import { getMailboxAccessLevel } from "@/lib/mailboxes/access";
 import type { SessionUser } from "@/lib/auth/types";
@@ -39,6 +40,8 @@ export async function getMessageThreadForUser(env: CloudflareEnv, user: SessionU
 						eq(messages.mailboxId, message.mailboxId),
 						eq(messages.threadId, message.threadId),
 						notInArray(messages.status, ["draft", "trash"]),
+						// Spam stays out of a conversation unless it is the message being opened.
+						or(ne(messages.status, "spam"), eq(messages.id, messageId)),
 					),
 				)
 				.orderBy(asc(messages.createdAt))
@@ -82,9 +85,10 @@ export async function getMessageThreadForUser(env: CloudflareEnv, user: SessionU
 		threadId: message.threadId,
 		messages: rows.map((row) => ({
 			...withoutRawKey(row),
-			fromContactName: contactMap.get(normalizeEmailAddress(row.fromAddr)) ?? null,
+			fromContactName: getSenderDisplayName(row.fromAddr, contactMap.get(normalizeEmailAddress(row.fromAddr))),
 			fromContactHasAvatar: contactAvatarMap.get(normalizeEmailAddress(row.fromAddr)) ?? false,
-			toContactName: contactMap.get(normalizeEmailAddress(getFirstEmailAddressEntry(row.toAddr))) ?? null,
+			toContactName:
+				contactMap.get(normalizeEmailAddress(getFirstEmailAddressEntry(row.toAddr)))?.displayName ?? null,
 			attachments: attachmentsByMessage.get(row.id) ?? [],
 		})),
 	};

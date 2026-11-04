@@ -1,6 +1,6 @@
 "use client";
 
-import { Folder } from "lucide-react";
+import { Folder } from "@/components/icons";
 import { useEffect, useMemo, useState } from "react";
 import { useSelectedMailbox } from "@/components/mailbox-provider";
 import { getMailboxFolders } from "@/lib/folders/client";

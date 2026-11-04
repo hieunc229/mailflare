@@ -40,6 +40,14 @@ export type RuleMatchInput = {
 	content?: string | null;
 };
 
+export type ResolveInboundOptions = {
+	/**
+	 * Apply the mailbox owner's own forwarding rules. Only the receiving handlers set this:
+	 * they can still forward the live message, and they know the subject.
+	 */
+	mailboxForwards?: { subject?: string | null };
+};
+
 /**
  * Resolves what should happen to an inbound message addressed to `toAddress`.
  *
@@ -54,6 +62,7 @@ export async function resolveInboundAddress(
 	db: AppDatabase,
 	toAddress: string,
 	fromAddress?: string | null,
+	options: ResolveInboundOptions = {},
 ): Promise<RoutingDecision | null> {
 	const parsed = parseRecipientAddress(toAddress);
 	if (!parsed) return null;
@@ -94,10 +103,20 @@ export async function resolveInboundAddress(
 		?? await resolveMailboxDomainAlias(db, parsed.localPart, parsed.normalizedAddress);
 
 	if (mailbox) {
-		return {
-			action: "store",
-			mailbox: toResolvedMailbox(mailbox, domain.id, domain.hostname),
-		};
+		const resolved = toResolvedMailbox(mailbox, domain.id, domain.hostname);
+		const forward = options.mailboxForwards
+			? await findMailboxForward(db, mailbox.id, { ...matchInput, subject: options.mailboxForwards.subject })
+			: null;
+		if (forward?.forwardTo) {
+			return {
+				action: "forward",
+				forwardTo: forward.forwardTo,
+				keepCopy: forward.keepCopy,
+				mailbox: resolved,
+				ruleId: forward.id,
+			};
+		}
+		return { action: "store", mailbox: resolved };
 	}
 
 	// Phase 3 — catch-all and forwarding fallbacks.
@@ -125,6 +144,27 @@ export async function resolveInboundAddress(
 	}
 
 	return null;
+}
+
+/** The first enabled forward rule of a mailbox that matches, by descending priority. */
+async function findMailboxForward(
+	db: AppDatabase,
+	mailboxId: string,
+	input: RuleMatchInput,
+): Promise<RuleRow | null> {
+	const rules = await db
+		.select()
+		.from(routingRules)
+		.where(
+			and(
+				eq(routingRules.mailboxId, mailboxId),
+				eq(routingRules.scope, "mailbox"),
+				eq(routingRules.action, "forward"),
+				eq(routingRules.enabled, true),
+			),
+		)
+		.orderBy(desc(routingRules.priority), asc(routingRules.createdAt));
+	return rules.find((rule) => rule.forwardTo?.trim() && matchesRule(rule, input)) ?? null;
 }
 
 async function listDomainRules(db: AppDatabase, domainId: string): Promise<RuleRow[]> {
@@ -251,6 +291,7 @@ export async function resolveInboxRuleDestination(
 		.orderBy(desc(routingRules.priority), asc(routingRules.createdAt));
 
 	for (const rule of rules) {
+		if (rule.action === "forward") continue;
 		if (!matchesRule(rule, input)) continue;
 
 		if (rule.action === "spam" || rule.action === "trash") {

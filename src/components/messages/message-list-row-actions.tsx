@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Archive, Clock, Mail, MailOpen, Trash2 } from "lucide-react";
+import { Archive, Clock, Mail, MailOpen, Trash2 } from "@/components/icons";
 import { useLanguage } from "@/components/language-provider";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";

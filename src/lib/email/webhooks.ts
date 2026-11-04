@@ -3,6 +3,7 @@ import { getDb } from "@/db";
 import type { AppDatabase } from "@/db";
 import { webhookDeliveries, webhooks } from "@/db/schema";
 import { newId } from "@/lib/ids";
+import { assertResolvesPublic, isPublicHttpsUrl, PUBLIC_HTTPS_URL_MESSAGE } from "@/lib/security/public-url";
 
 export type WebhookEventType = "message.inbound" | "message.outbound" | "message.failed";
 
@@ -98,6 +99,9 @@ async function attemptDelivery(
 	let error: string | null = null;
 
 	try {
+		// Hooks saved before URL validation existed must not become an SSRF path.
+		if (!isPublicHttpsUrl(hook.url)) throw new Error(PUBLIC_HTTPS_URL_MESSAGE);
+		await assertResolvesPublic(new URL(hook.url).hostname);
 		const signature = await signPayload(hook.secret, delivery.payload);
 		const res = await fetch(hook.url, {
 			method: "POST",

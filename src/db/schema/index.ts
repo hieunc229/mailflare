@@ -585,6 +585,10 @@ export const calendarEvents = sqliteTable(
 		timeZone: text("time_zone"),
 		startsAt: timestamp("starts_at").notNull(),
 		endsAt: timestamp("ends_at").notNull(),
+		/** Minutes before an occurrence's start to send a push reminder; null means no reminder. */
+		reminderMinutes: integer("reminder_minutes"),
+		/** Start of the latest occurrence a reminder was sent for; dedupes the five-minute cron. */
+		lastRemindedStart: timestamp("last_reminded_start"),
 		createdAt: timestamp("created_at").notNull().$defaultFn(() => new Date()),
 		updatedAt: timestamp("updated_at").notNull().$defaultFn(() => new Date()),
 	},

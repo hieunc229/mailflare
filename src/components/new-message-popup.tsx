@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { Mail, X } from "lucide-react";
+import { Mail, X } from "@/components/icons";
 import { getEmailDisplayName } from "@/lib/email/address";
 import { useLanguage } from "@/components/language-provider";
 import type { NewMessagePopupProps } from "./new-message-popup-types";

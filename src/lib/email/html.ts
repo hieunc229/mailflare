@@ -26,7 +26,11 @@ function outgoingScope(source: string): string {
 
 /** Parse without a browser DOM, then populate an inert template. No network is possible. */
 function mailDocument(source: string, outgoing = false): MailDocument {
-	const parsed = parse(source);
+	// A document starting with <frameset> has no body; frames cannot be shown, so drop them.
+	let parsed = parse(source);
+	if (!parsed.childNodes.some((node) => "tagName" in node && node.tagName === "html") || /<frameset\b/i.test(source)) {
+		parsed = parse(source.replace(/<\/?frame(?:set)?\b[^>]*>/gi, ""));
+	}
 	const html = parsed.childNodes.find((node): node is DefaultTreeAdapterTypes.Element => "tagName" in node && node.tagName === "html")!;
 	const head = html.childNodes.find((node): node is DefaultTreeAdapterTypes.Element => "tagName" in node && node.tagName === "head")!;
 	const body = html.childNodes.find((node): node is DefaultTreeAdapterTypes.Element => "tagName" in node && node.tagName === "body")!;
@@ -300,7 +304,7 @@ export function prepareEmailHtml(source: string, options: Options = {}) {
 			if (options.editor) element.setAttribute("data-mailflare-srcset", original);
 			if (value) element.setAttribute("srcset", value); else element.removeAttribute("srcset");
 		}
-		if (element.tagName === "A") {
+		if (element.tagName === "A" || element.tagName === "AREA") {
 			const original = element.getAttribute("href") ?? "";
 			if (original.startsWith("#")) {
 				element.removeAttribute("target");
@@ -315,6 +319,7 @@ export function prepareEmailHtml(source: string, options: Options = {}) {
 				element.setAttribute("rel", "noopener noreferrer");
 			}
 		}
+		if (element.tagName === "AREA") element.setAttribute("referrerpolicy", "no-referrer");
 		if (element.tagName === "IMG") {
 			element.setAttribute("referrerpolicy", "no-referrer");
 			element.setAttribute("loading", "lazy");
@@ -327,7 +332,7 @@ export function prepareEmailHtml(source: string, options: Options = {}) {
 		ADD_TAGS: ["style", rootTag, bodyTag],
 		ADD_ATTR: ["target", "loading", "referrerpolicy", ...(options.forOutgoing || options.editor ? ["data-mailflare-quote", "data-mailflare-signature"] : []), ...(options.editor ? EDITOR_ATTRIBUTES : [])],
 		FORBID_TAGS: ["script", "iframe", "object", "embed", "form", "input", "button", "select", "textarea", "link", "base", "meta", "audio", "video", "source", "template"],
-		FORBID_ATTR: ["is", "slot"],
+		FORBID_ATTR: ["is", "slot", "popover", "popovertarget", "popovertargetaction", "command", "commandfor", "interestfor"],
 		ALLOW_DATA_ATTR: false,
 		RETURN_DOM_FRAGMENT: true,
 	});

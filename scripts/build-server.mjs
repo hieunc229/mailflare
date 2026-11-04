@@ -13,7 +13,7 @@ await build({
 	sourcemap: true,
 	tsconfig: "tsconfig.json",
 	external: [
-		"next", "better-sqlite3", "nodemailer", "smtp-server", "ws", "react", "react-dom",
+		"next", "better-sqlite3", "nodemailer", "smtp-server", "mailauth", "ws", "react", "react-dom",
 		// Database drivers, loaded only when DATABASE_URL selects them.
 		"pg", "postgres", "mysql2", "@libsql/client", "@neondatabase/serverless", "@planetscale/database", "@electric-sql/pglite",
 	],

@@ -60,7 +60,7 @@ export async function createAccountResponse(env: CloudflareEnv, adminUserId: str
 	try {
 		const accountInsert = db.insert(users).values({
 			id: userId, email, passwordHash: hashPassword(input.password), name: username,
-			role: input.role, createdByUserId: adminUserId,
+			role: input.role, createdByUserId: adminUserId, remoteContentMode: "ask",
 		}).returning();
 		const mailboxInsert = db.insert(mailboxes).values(mailbox);
 		// Five bound columns per alias: 20 rows fit D1's 100-parameter limit.

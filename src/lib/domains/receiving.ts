@@ -64,8 +64,11 @@ export async function setupReceiving(
 	options: { replaceMx: boolean },
 ): Promise<void> {
 	if (provider === "cloudflare") return setupCloudflareReceiving(env, domain, options);
-	if (provider === "resend") return setupResendReceiving(env, domain, origin, options);
-	return setupSesReceiving(env, domain, origin, options);
+	if (provider === "resend") await setupResendReceiving(env, domain, origin, options);
+	else await setupSesReceiving(env, domain, origin, options);
+	// Same as a domain created with DNS: once receiving works, inbound routing
+	// (which only resolves active domains) must see this domain.
+	await getDb(env).update(domains).set({ status: "active" }).where(eq(domains.id, domain.id));
 }
 
 export async function removeReceiving(env: CloudflareEnv, domain: DomainRow, provider: ConfigurableReceiving): Promise<void> {

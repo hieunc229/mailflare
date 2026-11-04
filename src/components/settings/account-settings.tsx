@@ -4,7 +4,6 @@ import { useEffect, useState } from "react";
 import { useLanguage } from "@/components/language-provider";
 import { LanguageSelector } from "@/components/language-selector";
 import { Skeleton } from "@/components/ui/skeleton";
-import { ForwardingEmailForm } from "./forwarding-email-form";
 import { MailboxSignatureForm } from "./mailbox-signature-form";
 import { ProfileForm } from "./profile-form";
 import { TimeZoneForm } from "./time-zone-form";
@@ -60,20 +59,9 @@ export function AccountSettings() {
 				</div>
 				<div className="space-y-1 overflow-hidden rounded-3xl">
 					<ProfileForm
-						initialName={user.name}
+						accountName={user.name}
 						initialResetEmail={user.resetEmail ?? ""}
-						email={user.email}
 					/>
-
-					{user.canForwardEmail && (
-						<div className="space-y-4 rounded-lg bg-white p-6">
-							<div>
-								<h3 className="text-lg font-semibold text-neutral-900">{t("settings.account.forwardingTitle")}</h3>
-								<p className="mt-1 text-sm text-neutral-500">{t("settings.account.forwardingDescription")}</p>
-							</div>
-						<ForwardingEmailForm initialForwardingEmail={user.forwardingEmail ?? ""} />
-						</div>
-					)}
 
 					<div className="space-y-4 rounded-b-3xl rounded-t-lg bg-white p-6">
 						<div>

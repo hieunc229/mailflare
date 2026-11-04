@@ -15,6 +15,20 @@
       "when": 1792869793885,
       "tag": "0001_triggers_and_seeds",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "5",
+      "when": 1793174353930,
+      "tag": "0002_calendar_reminders",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "5",
+      "when": 1793260802000,
+      "tag": "0003_remote_content_ask",
+      "breakpoints": true
     }
   ]
 }

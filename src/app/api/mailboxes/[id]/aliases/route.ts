@@ -6,17 +6,18 @@ import { requireUser } from "@/lib/auth/cookies";
 import { getEnv } from "@/lib/cloudflare";
 import { deleteEmailRoutingRuleForAddress, ensureEmailRoutingRuleToWorker } from "@/lib/cloudflare-api";
 import { newId } from "@/lib/ids";
-import { getMailboxAccessLevel } from "@/lib/mailboxes/access";
+import { getMailboxSettingsAccess } from "@/lib/mailboxes/settings-access";
 import { createMailboxAliasSchema } from "@/lib/validators";
 import type { MailboxRouteParams } from "../types";
 
 async function getManagedMailbox(
-	db: ReturnType<typeof getDb>,
+	env: CloudflareEnv,
 	user: Awaited<ReturnType<typeof requireUser>>,
 	mailboxId: string,
 ) {
-	const access = await getMailboxAccessLevel(db, user, mailboxId);
+	const access = await getMailboxSettingsAccess(env, user, mailboxId);
 	if (!access?.canManage) return null;
+	const db = getDb(env);
 	const [mailbox] = await db
 		.select({ id: mailboxes.id, domainId: mailboxes.domainId, localPart: mailboxes.localPart })
 		.from(mailboxes)
@@ -53,7 +54,7 @@ export async function GET(request: Request, { params }: MailboxRouteParams) {
 	const env = getEnv();
 	const user = await requireUser(env, request);
 	const db = getDb(env);
-	const mailbox = await getManagedMailbox(db, user, id);
+	const mailbox = await getManagedMailbox(env, user, id);
 	if (!mailbox) return NextResponse.json({ error: "Mailbox not found" }, { status: 404 });
 
 	const ownerId = await getDomainOwnerId(db, mailbox.domainId);
@@ -80,7 +81,7 @@ export async function POST(request: Request, { params }: MailboxRouteParams) {
 	}
 
 	const db = getDb(env);
-	const mailbox = await getManagedMailbox(db, user, id);
+	const mailbox = await getManagedMailbox(env, user, id);
 	if (!mailbox) return NextResponse.json({ error: "Mailbox not found" }, { status: 404 });
 
 	const ownerId = await getDomainOwnerId(db, mailbox.domainId);
@@ -153,7 +154,7 @@ export async function DELETE(request: Request, { params }: MailboxRouteParams) {
 	if (!aliasId) return NextResponse.json({ error: "Alias is required" }, { status: 400 });
 
 	const db = getDb(env);
-	const mailbox = await getManagedMailbox(db, user, id);
+	const mailbox = await getManagedMailbox(env, user, id);
 	if (!mailbox) return NextResponse.json({ error: "Mailbox not found" }, { status: 404 });
 
 	const [alias] = await db

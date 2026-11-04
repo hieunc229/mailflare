@@ -11,6 +11,8 @@ export type InboxRule = {
 	matchValue: string;
 	action: "store" | "forward" | "reject" | "spam" | "trash";
 	folderId: string | null;
+	forwardTo: string | null;
+	keepCopy: boolean;
 	priority: number;
 };
 
@@ -20,6 +22,8 @@ export type InboxRuleInput = {
 	matchOperator: "contains" | "exact";
 	matchValue: string;
 	destination: string;
+	forwardTo?: string;
+	keepCopy?: boolean;
 	priority: number;
 };
 

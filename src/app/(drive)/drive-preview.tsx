@@ -1,6 +1,6 @@
 "use client";
 
-import { Download } from "lucide-react";
+import { Download } from "@/components/icons";
 import { useLanguage } from "@/components/language-provider";
 import { canPreview } from "./drive-utils";
 

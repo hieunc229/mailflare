@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { formatUserDate } from "@/lib/time/utils";
-import { ChevronsUpDown, Paperclip } from "lucide-react";
+import { ChevronsUpDown, Paperclip } from "@/components/icons";
 import { ContactAvatar } from "@/components/contacts/contact-avatar";
 import { QuotedEmailToggle } from "@/components/messages/quoted-email-toggle";
 import { runSingleMessageAction } from "@/components/message-actions/utils";
@@ -14,6 +14,8 @@ import { useLanguage } from "@/components/language-provider";
 import { cn } from "@/lib/utils";
 import type { ConversationMessageCardProps, ConversationThreadProps } from "./conversation-thread-types";
 import { ThreadMessageActions } from "./thread-message-actions";
+import { MessageDetailsPanel } from "./message-details-panel";
+import { SenderCheckBadge, SenderCheckNotice } from "./sender-check-notice";
 import { MessageOpenStatus } from "./message-open-status";
 import { MessageFollowUpStatus } from "@/components/follow-ups/message-follow-up-status";
 import {
@@ -187,6 +189,7 @@ export function ConversationMessageCard({
 							{!expanded && (
 								<span className={clsx(!locallyRead ? "font-semibold" : "text-neutral-500", "block truncate text-[13px]")}>{message.snippet || t("thread.noPreview")}</span>
 							)}
+							{!expanded && <SenderCheckBadge message={message} />}
 						</span>
 					</button>
 					<span className={clsx(!locallyRead ? "font-semibold" : "", "shrink-0 items-center gap-2 text-xs mr-2 mt-2", "hidden sm:flex")}>
@@ -199,22 +202,27 @@ export function ConversationMessageCard({
 						ownAddress={ownAddress}
 						ownAddresses={ownAddresses}
 						starOnly={!expanded}
+						detailsOpen={detailsOpen}
+						onToggleDetails={() => setDetailsOpen((open) => !open)}
 					/>
 					<div className={clsx("sm:hidden flex w-full items-center gap-2 pl-12 text-xs", locallyRead ? "text-neutral-500" : "font-semibold text-neutral-700")}>
 						{attachments.length > 0 && <Paperclip className="h-3.5 w-3.5" aria-label={t("thread.attachmentCount", { count: attachments.length })} />}
 						<span>{formatUserDate(message.createdAt, { month: "short", day: "2-digit", year: "numeric" })}</span>
-							<button type="button" className="text-blue-600 hover:underline" aria-expanded={detailsOpen} onClick={() => setDetailsOpen((open) => !open)}>
-							{t("message.details")}
-						</button>
 					</div>
-					{detailsOpen && (
-						<dl className="sm:hidden w-full space-y-0.5 break-words pt-2 text-xs text-neutral-500">
-							<div><dt className="inline font-medium">{t("source.from")}:</dt> <dd className="inline">{sender} &lt;{senderEmail}&gt;</dd></div>
-							{recipients && <div><dt className="inline font-medium">{t("source.to")}:</dt> <dd className="inline">{recipients}</dd></div>}
-							<div><dt className="inline font-medium">{t("message.date")}:</dt> <dd className="inline">{formatUserDate(message.createdAt, { month: "short", day: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" })}</dd></div>
-						</dl>
-					)}
 				</div>
+				{expanded && (
+					<SenderCheckNotice
+						message={message}
+						detailsOpen={detailsOpen}
+						onViewDetails={() => setDetailsOpen((open) => !open)}
+						className="mb-3 sm:ml-16"
+					/>
+				)}
+				{detailsOpen && (
+					<div className="mb-3 sm:pl-16">
+						<MessageDetailsPanel message={message} onClose={() => setDetailsOpen(false)} />
+					</div>
+				)}
 				{expanded && body && (
 					<div className="pb-4 pt-2 sm:pl-16">
 						{outbound && <MessageOpenStatus messageId={message.id} />}

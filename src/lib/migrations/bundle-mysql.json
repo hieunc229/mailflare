@@ -241,6 +241,19 @@
         "CREATE TRIGGER mailbox_aliases_jmap_au AFTER UPDATE ON mailbox_aliases FOR EACH ROW\nBEGIN\n\tINSERT INTO jmap_mailbox_revisions (mailbox_id, revision) VALUES (NEW.mailbox_id, 1) ON DUPLICATE KEY UPDATE revision = revision + 1;\n\tIF NOT (OLD.mailbox_id <=> NEW.mailbox_id) THEN\n\t\tINSERT INTO jmap_mailbox_revisions (mailbox_id, revision) VALUES (OLD.mailbox_id, 1) ON DUPLICATE KEY UPDATE revision = revision + 1;\n\tEND IF;\nEND;",
         "CREATE TRIGGER mailbox_aliases_jmap_ad AFTER DELETE ON mailbox_aliases FOR EACH ROW\nBEGIN\n\tINSERT INTO jmap_mailbox_revisions (mailbox_id, revision) VALUES (OLD.mailbox_id, 1) ON DUPLICATE KEY UPDATE revision = revision + 1;\nEND;"
       ]
+    },
+    {
+      "name": "0002_calendar_reminders.sql",
+      "statements": [
+        "ALTER TABLE `calendar_events` ADD `reminder_minutes` bigint;",
+        "ALTER TABLE `calendar_events` ADD `last_reminded_start` bigint;"
+      ]
+    },
+    {
+      "name": "0003_remote_content_ask.sql",
+      "statements": [
+        "UPDATE `users` SET `remote_content_mode` = 'ask' WHERE `remote_content_mode` = 'allow';"
+      ]
     }
   ]
 }

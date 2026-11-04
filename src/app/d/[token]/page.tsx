@@ -1,7 +1,7 @@
 "use client";
 
 import { use, useEffect, useState } from "react";
-import { ChevronRight, Download } from "lucide-react";
+import { ChevronRight, Download } from "@/components/icons";
 import { useLanguage } from "@/components/language-provider";
 import { formatDriveSize } from "@/lib/drive/utils";
 import { DrivePreviewBody } from "@/app/(drive)/drive-preview";

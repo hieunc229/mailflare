@@ -6,7 +6,7 @@ import { updateManagedAccountSchema } from "@/lib/validators";
 import { requireTeamAdmin } from "../utils";
 import { getAccountSeatError } from "@/lib/licenses/seats";
 import { getLicenseEntitlements } from "@/lib/licenses/service";
-import { canManageUsers, isPrimaryAdmin } from "@/lib/auth/admin";
+import { canManageUserAccount, canManageUsers, isPrimaryAdmin } from "@/lib/auth/admin";
 import type { AccountRouteParams } from "./types";
 import { selectAccountById, updateAccountCredentials } from "./utils";
 import { deleteUserSessions } from "@/lib/auth/session";
@@ -34,7 +34,7 @@ export async function GET(request: Request, { params }: AccountRouteParams) {
 			forwardingEmail: account.forwardingEmail,
 			canForwardEmail: (await getLicenseEntitlements(access.env)).canForwardEmail,
 			hasAvatar: !!account.avatarKey,
-			editable: isPrimaryAdmin(actor) || (canManageUsers(actor) && account.role === "user" && !account.isPrimaryAdmin),
+			editable: canManageUserAccount(actor, account),
 			canChangeRole: isPrimaryAdmin(actor),
 			canTransferPrimary: isPrimaryAdmin(actor) && !account.isPrimaryAdmin && !account.disabled,
 		},
@@ -59,7 +59,7 @@ export async function PATCH(request: Request, { params }: AccountRouteParams) {
 		return NextResponse.json({ error: "You do not have permission to manage users" }, { status: 403 });
 	}
 	// Admins without the primary role can only manage plain user accounts.
-	if (!actorIsPrimary && (account.role === "admin" || account.isPrimaryAdmin)) {
+	if (!canManageUserAccount(actor, account)) {
 		return NextResponse.json({ error: "Only the primary admin can manage admin accounts" }, { status: 403 });
 	}
 	const parsed = updateManagedAccountSchema.safeParse(await request.json());

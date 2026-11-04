@@ -73,15 +73,15 @@ async function fixture(t) {
 		async contacts(userId, addresses) {
 			await this.read(`contacts:${userId}`);
 			assert.ok(addresses.includes("friend@example.com"));
-			return new Map([["friend@example.com", `Friend of ${userId}`]]);
+			return new Map([["friend@example.com", { displayName: `Friend of ${userId}`, source: "inbound" }]]);
 		},
 		async opens(ids) {
 			await this.read("opens");
 			return new Map(ids.map((id) => [id, 3]));
 		},
-		message(id, { mailbox = "mine", user = "owner", thread = "thread", status = "received", direction = "inbound", read = false, time = 1 } = {}) {
+		message(id, { mailbox = "mine", user = "owner", thread = "thread", status = "received", direction = "inbound", read = false, time = 1, fromAddr = "friend@example.com" } = {}) {
 			database.db.prepare(`INSERT INTO messages (id, user_id, mailbox_id, direction, from_addr, to_addr, status, read, thread_id, snippet, text_body, html_body, raw_r2_key, created_at)
-				VALUES (?, ?, ?, ?, 'friend@example.com', 'friend@example.com', ?, ?, ?, 'preview', 'private body', '<p>private</p>', 'raw-key', ?)`).run(id, user, mailbox, direction, status, Number(read), thread, time);
+				VALUES (?, ?, ?, ?, ?, 'friend@example.com', ?, ?, ?, 'preview', 'private body', '<p>private</p>', 'raw-key', ?)`).run(id, user, mailbox, direction, fromAddr, status, Number(read), thread, time);
 		},
 	};
 	const prepare = database.prepare.bind(database);
@@ -232,6 +232,24 @@ test("all-mailbox lists keep per-owner contacts and reflect revoked sharing on t
 	f.database.db.exec("DELETE FROM mailbox_access");
 	assert.deepEqual((await (await GET(request())).json()).messages.map((row) => row.id), ["own"]);
 	assert.equal((await GET(request("mailboxId=shared"))).status, 404);
+});
+
+test("a shared sender address keeps each message's own display name", async (t) => {
+	const f = await fixture(t);
+	f.message("posthog", { fromAddr: '"PostHog Team" <no-reply@ashbyhq.com>', time: 1 });
+	f.message("livekit", { fromAddr: '"LiveKit Hiring Team" <no-reply@ashbyhq.com>', time: 2 });
+	// The contact learned the most recent sender's name for the shared address.
+	f.contacts = async () => new Map([["no-reply@ashbyhq.com", { displayName: "LiveKit Hiring Team", source: "inbound" }]]);
+	const body = await (await GET(request("mailboxId=mine"))).json();
+	assert.deepEqual(body.messages.map((row) => [row.id, row.fromContactName]), [
+		["livekit", "LiveKit Hiring Team"],
+		["posthog", "PostHog Team"],
+	]);
+
+	// A name the user set on the contact is deliberate and wins for every message.
+	f.contacts = async () => new Map([["no-reply@ashbyhq.com", { displayName: "Ashby Recruiting", source: "manual" }]]);
+	const manual = await (await GET(request("mailboxId=mine"))).json();
+	assert.deepEqual(manual.messages.map((row) => row.fromContactName), ["Ashby Recruiting", "Ashby Recruiting"]);
 });
 
 test("empty pages preserve total and skip unnecessary thread and scheduled reads", async (t) => {

@@ -1,4 +1,5 @@
 import { queryDns } from "@/lib/dns-query";
+import { isPublicHttpsUrl } from "@/lib/security/public-url";
 import { registrableDomain } from "../domain-utils";
 import { cachedLookup } from "../lookup-cache";
 import type { SpamIntelligenceConfig, SpamIntelligenceInput, SpamIntelligenceProvider, SpamSignal } from "../types";
@@ -8,6 +9,22 @@ const LOOKUP_TIMEOUT_MS = 2500;
 const MAX_LINK_DOMAINS = 5;
 const MAX_AGE_LINK_DOMAINS = 3;
 const DAY = 24 * 60 * 60;
+const MAX_REDIRECTS = 3;
+
+/** Follows redirects by hand so every hop must stay on a public https host. */
+async function fetchPublic(fetcher: typeof fetch, url: string, init: RequestInit): Promise<Response> {
+	let current = url;
+	for (let hop = 0; hop <= MAX_REDIRECTS; hop += 1) {
+		const response = await fetcher(current, { ...init, redirect: "manual" });
+		if (response.status < 300 || response.status >= 400) return response;
+		const location = response.headers.get("location");
+		if (!location) return response;
+		current = new URL(location, current).href;
+		if (!isPublicHttpsUrl(current)) throw new Error("Lookup redirected to a non-public address");
+	}
+	throw new Error("Lookup redirected too many times");
+}
+
 const VALID_HOST = /^(?=.{3,253}$)[a-z0-9](?:[a-z0-9-]*[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]*[a-z0-9])?)+$/;
 
 type BlocklistResult = { codes: string[] };
@@ -104,7 +121,7 @@ export class ExternalSpamIntelligenceProvider implements SpamIntelligenceProvide
 
 	private async checkUrlhaus(domain: string): Promise<SpamSignal[]> {
 		const { online } = await cachedLookup<UrlhausResult>(this.bucket, `urlhaus/${domain}`, () => DAY / 4, async () => {
-			const response = await this.fetcher("https://urlhaus-api.abuse.ch/v1/host/", {
+			const response = await fetchPublic(this.fetcher, "https://urlhaus-api.abuse.ch/v1/host/", {
 				method: "POST",
 				headers: { "Auth-Key": this.config.abuseChAuthKey!, "Content-Type": "application/x-www-form-urlencoded" },
 				body: new URLSearchParams({ host: domain }),
@@ -124,7 +141,7 @@ export class ExternalSpamIntelligenceProvider implements SpamIntelligenceProvide
 			`rdap/${domain}`,
 			(value) => (value.registered && Date.now() - Date.parse(value.registered) > 60 * DAY * 1000 ? 30 * DAY : DAY),
 			async () => {
-				const response = await this.fetcher(`https://rdap.org/domain/${domain}`, { headers: { accept: "application/rdap+json" } });
+				const response = await fetchPublic(this.fetcher, `https://rdap.org/domain/${domain}`, { headers: { accept: "application/rdap+json" } });
 				if (response.status === 404) return { registered: null };
 				if (!response.ok) throw new Error(`RDAP ${response.status}`);
 				const data = (await response.json()) as { events?: { eventAction?: string; eventDate?: string }[] };

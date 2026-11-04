@@ -19,7 +19,7 @@ import {
   ShieldAlert,
   Star,
   Trash2,
-} from "lucide-react";
+} from "@/components/icons";
 import { useSelectedMailbox } from "@/components/mailbox-provider";
 import { Button } from "@/components/ui/button";
 import {

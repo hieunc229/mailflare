@@ -2,11 +2,12 @@ import { NextResponse } from "next/server";
 import { and, eq } from "drizzle-orm";
 import { getEnv } from "@/lib/cloudflare";
 import { getDb } from "@/db";
-import { folders, routingRules } from "@/db/schema";
+import { routingRules } from "@/db/schema";
 import { requireUser } from "@/lib/auth/cookies";
 import { newId } from "@/lib/ids";
 import { getMailboxAccessLevel } from "@/lib/mailboxes/access";
 import { routingRuleSchema } from "@/lib/validators";
+import { resolveRuleTarget } from "./utils";
 
 export async function GET(request: Request) {
 	const env = getEnv();
@@ -45,23 +46,9 @@ export async function POST(request: Request) {
 	}
 	const mailbox = access.mailbox;
 
-	const destination = parsed.data.destination ?? (parsed.data.folderId ? `folder:${parsed.data.folderId}` : "");
-	const systemAction = destination === "spam" || destination === "trash" ? destination : null;
-	const folderId = destination.startsWith("folder:") ? destination.slice("folder:".length) : null;
-
-	if (!systemAction && !folderId) {
-		return NextResponse.json({ error: "Destination is required" }, { status: 400 });
-	}
-
-	if (folderId) {
-		const [folder] = await db
-			.select()
-			.from(folders)
-			.where(and(eq(folders.id, folderId), eq(folders.mailboxId, mailbox.id)))
-			.limit(1);
-		if (!folder) {
-			return NextResponse.json({ error: "Folder not found" }, { status: 404 });
-		}
+	const target = await resolveRuleTarget(db, mailbox.id, parsed.data);
+	if ("error" in target) {
+		return NextResponse.json({ error: target.error }, { status: target.status });
 	}
 
 	const id = newId("rule");
@@ -74,10 +61,11 @@ export async function POST(request: Request) {
 		matchField: parsed.data.matchField,
 		matchOperator: parsed.data.matchOperator,
 		matchValue: parsed.data.matchValue.trim(),
-		action: systemAction ?? "store",
+		action: target.action,
 		mailboxId: mailbox.id,
-		folderId,
-		forwardTo: null,
+		folderId: target.folderId,
+		forwardTo: target.forwardTo,
+		keepCopy: target.keepCopy,
 		priority: parsed.data.priority,
 	});
 

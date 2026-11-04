@@ -32,6 +32,9 @@ export function useCompose() { return { showNotice() {}, openComposer() {} }; }
   ["@/lib/auth/client", `
 export function authFetch(...args) { return globalThis.__reviewTestFetch(...args); }
 `],
+  ["@/lib/messages/detail-cache", `
+export function clearMessageDetailCache() {}
+`],
   ["@/components/compose/utils", `
 export async function fetchDraft() { return globalThis.__reviewTestDraft(); }
 export function formatAttachmentSize(bytes) { return String(bytes); }

@@ -2,6 +2,8 @@ import { and, eq, isNull } from "drizzle-orm";
 import { getDb } from "@/db";
 import { messageAttachments, messages } from "@/db/schema";
 import { newId } from "@/lib/ids";
+import { assessAttachmentRisk, inspectZipDirectory, locateZipDirectory, mergeRisks, type AttachmentRisk } from "@/lib/email/attachment-risk";
+import { truncateUtf8 } from "@/lib/email/inbound-limits";
 import { getMailboxAccessLevel } from "@/lib/mailboxes/access";
 import type { SessionUser } from "@/lib/auth/types";
 import type {
@@ -35,9 +37,17 @@ export function normalizeAttachmentContent(
 	return new TextEncoder().encode(content).buffer;
 }
 
-function sanitizeFilename(filename: string): string {
-	const normalized = filename.trim().replace(/[/\\\0]/g, "_");
-	return normalized || "attachment";
+const MAX_FILENAME_BYTES = 180;
+
+export function sanitizeFilename(filename: string): string {
+	// Control and bidi characters are dropped so a name cannot reorder or hide its extension.
+	// eslint-disable-next-line no-control-regex
+	const normalized = filename.replace(/[\u0000-\u001f\u007f-\u009f\u200e\u200f\u202a-\u202e\u2066-\u2069]/g, "").trim().replace(/[/\\]/g, "_");
+	if (!normalized || /^\.+$/.test(normalized)) return "attachment";
+	if (new TextEncoder().encode(normalized).byteLength <= MAX_FILENAME_BYTES) return normalized;
+	// Keep a short extension so the file type survives truncation.
+	const extension = normalized.match(/\.[A-Za-z0-9]{1,10}$/)?.[0] ?? "";
+	return `${truncateUtf8(normalized.slice(0, normalized.length - extension.length), MAX_FILENAME_BYTES - extension.length)}${extension}`;
 }
 
 export function validateAttachments(attachments: AttachmentContent[]): void {
@@ -126,7 +136,7 @@ export async function copyMessageAttachments(
 		const object = await env.BUCKET.get(row.r2Key);
 		if (!object) continue;
 		const id = newId("att");
-		const r2Key = `attachments/${toMessageId}/${id}/${row.filename}`;
+		const r2Key = `attachments/${toMessageId}/${id}/${sanitizeFilename(row.filename)}`;
 		await env.BUCKET.put(r2Key, await object.arrayBuffer(), {
 			httpMetadata: { contentType: row.contentType },
 			customMetadata: { filename: row.filename, messageId: toMessageId },
@@ -259,4 +269,29 @@ export async function getAttachmentForUser(
 	const object = await env.BUCKET.get(attachment.r2Key);
 	if (!object) return null;
 	return { attachment, object };
+}
+
+/**
+ * Name-based risk plus, for ZIP files, the names inside the archive (read with two bounded range
+ * requests, never extracted). Used before a download and to label attachments in the reader.
+ */
+export async function assessStoredAttachment(env: CloudflareEnv, attachment: { filename: string; type: string; size: number; r2Key: string }): Promise<AttachmentRisk> {
+	const byName = assessAttachmentRisk(attachment);
+	const isZip = /\.zip$/i.test(attachment.filename) || attachment.type === "application/zip" || attachment.type === "application/x-zip-compressed";
+	if (!isZip || attachment.size < 22) return byName;
+	try {
+		const tailObject = await env.BUCKET.get(attachment.r2Key, { range: { suffix: Math.min(attachment.size, 65_557) } });
+		if (!tailObject) return byName;
+		const tail = new Uint8Array(await tailObject.arrayBuffer());
+		const located = locateZipDirectory(tail);
+		if (!located) return byName;
+		let directory: Uint8Array | null = null;
+		if (located.size > 0 && located.size <= 1024 * 1024 && located.offset + located.size <= attachment.size) {
+			const object = await env.BUCKET.get(attachment.r2Key, { range: { offset: located.offset, length: located.size } });
+			if (object) directory = new Uint8Array(await object.arrayBuffer());
+		}
+		return mergeRisks(byName, inspectZipDirectory(tail, () => directory));
+	} catch {
+		return mergeRisks(byName, { level: "warning", reasons: ["This archive could not be checked."] });
+	}
 }

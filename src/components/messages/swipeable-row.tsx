@@ -2,7 +2,7 @@
 
 import clsx from "clsx";
 import { useRef, useState, type PointerEvent, type ReactNode } from "react";
-import type { LucideIcon } from "lucide-react";
+import type { LucideIcon } from "@/components/icons";
 
 type SwipeAction = {
 	label: string;

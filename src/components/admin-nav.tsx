@@ -14,7 +14,7 @@ import {
   KeyRound,
   Bot,
   ShieldCheck,
-} from "lucide-react";
+} from "@/components/icons";
 import { cn } from "@/lib/utils";
 import { useLanguage } from "./language-provider";
 import type { TranslationKey } from "@/lib/i18n/types";

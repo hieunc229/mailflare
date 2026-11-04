@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Camera, LoaderCircle, User } from "lucide-react";
+import { Camera, LoaderCircle, User } from "@/components/icons";
 import { authFetch } from "@/lib/auth/client";
 import { getAvatarColorStyle } from "@/lib/avatar-colors";
 import {

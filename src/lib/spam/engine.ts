@@ -47,12 +47,22 @@ export async function analyzeSpam(db: AppDatabase, input: SpamAnalysisInput): Pr
 		senderIp: input.senderIp ?? extractSenderIp(input.headers),
 	}).catch(() => []));
 
+	// Relationship trust must not offset a failed authentication: a spoofed known contact is the attack.
+	const failed = new Set(signals.map((signal) => signal.id));
+	const authPolicyReason = failed.has("dmarc_failed")
+		? "DMARC authentication failed"
+		: failed.has("spf_failed") && failed.has("dkim_failed")
+			? "Both SPF and DKIM authentication failed"
+			: failed.has("provider_spam_verdict")
+				? "The receiving mail provider classified this message as spam"
+				: null;
+
 	const [contact] = sender ? await db.select().from(contacts).where(and(eq(contacts.userId, input.userId), eq(contacts.email, sender))).limit(1) : [];
 	if (contact?.blocked) {
 		return { score: 100, verdict: "spam", signals: [{ id: "blocked_sender", score: 100, reason: "Sender is blocked" }], fingerprint };
 	}
-	if (contact?.source === "manual") signals.push({ id: "manual_contact", score: SPAM_WEIGHTS.relationships.manuallySavedContact, reason: "Sender is in your manually saved contacts" });
-	if (contact?.source === "outbound") signals.push({ id: "previously_sent", score: SPAM_WEIGHTS.relationships.previouslySentTo, reason: "You have previously sent email to this address" });
+	if (!authPolicyReason && contact?.source === "manual") signals.push({ id: "manual_contact", score: SPAM_WEIGHTS.relationships.manuallySavedContact, reason: "Sender is in your manually saved contacts" });
+	if (!authPolicyReason && contact?.source === "outbound") signals.push({ id: "previously_sent", score: SPAM_WEIGHTS.relationships.previouslySentTo, reason: "You have previously sent email to this address" });
 
 	const identities = getReputationKeys(input.message, fingerprint);
 	const reputationRecords = await Promise.all(identities.map(async (identity) => {
@@ -80,6 +90,9 @@ export async function analyzeSpam(db: AppDatabase, input: SpamAnalysisInput): Pr
 		reason: bayesian.contribution > 0 ? "Content resembles messages previously marked as spam" : "Content resembles messages previously marked as legitimate",
 		metadata: { probability: Number(bayesian.probability.toFixed(3)), trainedMessages: bayesian.trainedMessages },
 	});
+
+	const scoreBeforePolicy = signals.reduce((total, signal) => total + signal.score, 0);
+	if (authPolicyReason && scoreBeforePolicy < SPAM_THRESHOLDS.spam) signals.push({ id: "auth_policy", score: SPAM_THRESHOLDS.spam - scoreBeforePolicy, reason: `${authPolicyReason}; filed as spam by authentication policy` });
 
 	const rawScore = signals.reduce((total, signal) => total + signal.score, 0);
 	const score = Math.max(0, Math.min(100, rawScore));

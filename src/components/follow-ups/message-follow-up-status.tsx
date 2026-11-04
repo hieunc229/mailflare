@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { BellRing, Check } from "lucide-react";
+import { BellRing, Check } from "@/components/icons";
 import { useLanguage } from "@/components/language-provider";
 import type { MessageFollowUp } from "@/lib/follow-ups/types";
 import { formatUserDate } from "@/lib/time/utils";

@@ -68,22 +68,28 @@ function startServer(messages) {
 		send("* OK ready\r\n");
 		const writable = new WritableStream({
 			write(chunk) {
-				const line = Buffer.from(chunk).toString().trim();
-				commands.push(line);
-				const [tag, ...rest] = line.split(" ");
-				const command = rest.join(" ");
-				if (command.startsWith("UID SEARCH")) send(`* SEARCH ${Object.keys(messages).join(" ")}\r\n`);
-				const fetch = command.match(/^UID FETCH (\d+)/);
-				if (fetch) {
-					const { body, flags, flagsAfterBody } = messages[fetch[1]];
-					const head = `* ${fetch[1]} FETCH (UID ${fetch[1]} `;
-					send(
-						flagsAfterBody
-							? Buffer.concat([Buffer.from(`${head}BODY[] {${body.length}}\r\n`), body, Buffer.from(` FLAGS (${flags}))\r\n`)])
-							: Buffer.concat([Buffer.from(`${head}FLAGS (${flags}) BODY[] {${body.length}}\r\n`), body, Buffer.from(")\r\n")]),
-					);
+				// Pipelined commands arrive in one write, so answer each line in order.
+				for (const line of Buffer.from(chunk).toString().split("\r\n").filter(Boolean)) {
+					commands.push(line);
+					const [tag, ...rest] = line.split(" ");
+					const command = rest.join(" ");
+					if (command.startsWith("UID SEARCH")) send(`* SEARCH ${Object.keys(messages).join(" ")}\r\n`);
+					const sizes = command.match(/^UID FETCH ([\d,]+) \(RFC822\.SIZE\)/);
+					if (sizes) {
+						for (const uid of sizes[1].split(",")) send(`* ${uid} FETCH (UID ${uid} RFC822.SIZE ${messages[uid].body.length})\r\n`);
+					}
+					const fetch = command.match(/^UID FETCH (\d+) \(FLAGS/);
+					if (fetch) {
+						const { body, flags, flagsAfterBody } = messages[fetch[1]];
+						const head = `* ${fetch[1]} FETCH (UID ${fetch[1]} `;
+						send(
+							flagsAfterBody
+								? Buffer.concat([Buffer.from(`${head}BODY[] {${body.length}}\r\n`), body, Buffer.from(` FLAGS (${flags}))\r\n`)])
+								: Buffer.concat([Buffer.from(`${head}FLAGS (${flags}) BODY[] {${body.length}}\r\n`), body, Buffer.from(")\r\n")]),
+						);
+					}
+					send(`${tag} OK done\r\n`);
 				}
-				send(`${tag} OK done\r\n`);
 			},
 		});
 		return { readable, writable };
@@ -125,7 +131,8 @@ test("imports keep read and starred state without marking the source read", asyn
 	);
 	assert.ok(commands.some((line) => line.includes("EXAMINE")));
 	assert.ok(!commands.some((line) => / SELECT /.test(line)));
-	assert.ok(commands.filter((line) => line.includes("UID FETCH")).every((line) => line.includes("BODY.PEEK[]")));
+	assert.ok(commands.filter((line) => line.includes("FLAGS BODY")).every((line) => line.includes("BODY.PEEK[]")));
+	assert.equal(commands.filter((line) => line.includes("RFC822.SIZE")).length, 1);
 });
 
 test("large messages arrive intact and a batch stops at the byte budget", async () => {

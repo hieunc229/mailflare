@@ -1,4 +1,4 @@
-import { and, eq } from "drizzle-orm";
+import { and, eq, isNotNull } from "drizzle-orm";
 import { getDb } from "@/db";
 import { messages, outboundJobs } from "@/db/schema";
 import { newId } from "@/lib/ids";
@@ -82,7 +82,7 @@ function toRecipientList(value: string | string[] | undefined): string[] {
 export async function sendEmail(
 	env: CloudflareEnv,
 	input: SendEmailInput,
-): Promise<{ messageId: string; scheduled?: boolean; undoSeconds?: number }> {
+): Promise<{ messageId: string; scheduled?: boolean; undoSeconds?: number; undoRemainingMs?: number; scheduledAt?: string }> {
 	const db = getDb(env);
 	const sender = await getAuthorizedSenderAddress(env, input);
 	const attachments = input.attachments ?? [];
@@ -187,7 +187,16 @@ export async function sendEmail(
 	};
 	if (scheduledAt) {
 		await enqueueScheduledDelivery(env, delivery, scheduledAt);
-		return userScheduledAt ? { messageId, scheduled: true } : { messageId, scheduled: true, undoSeconds };
+		if (userScheduledAt) {
+			return { messageId, scheduled: true, scheduledAt: scheduledAt.toISOString() };
+		}
+		// Send the window as a duration: client and server clocks need not agree.
+		return {
+			messageId,
+			scheduled: true,
+			undoSeconds,
+			undoRemainingMs: Math.max(0, scheduledAt.getTime() - Date.now()),
+		};
 	}
 
 	await deliverEmail(env, delivery);
@@ -323,6 +332,62 @@ async function enqueueScheduledDelivery(
 	);
 }
 
+function deliveryFromJob(jobId: string, messageId: string, payload: string): PreparedDelivery {
+	const input = JSON.parse(payload) as SendEmailInput;
+	const to = toRecipientList(input.to);
+	const cc = toRecipientList(input.cc);
+	const bcc = toRecipientList(input.bcc);
+	const inReplyTo = normalizeMessageId(input.inReplyTo);
+	const references = Array.isArray(input.references)
+		? input.references.map((id) => normalizeMessageId(id)).filter((id): id is string => !!id)
+		: parseMessageIdList(input.references);
+	const headers: Record<string, string> = { ...input.headers };
+	if (inReplyTo) headers["In-Reply-To"] = `<${inReplyTo}>`;
+	if (references.length > 0) headers.References = formatMessageIdHeader(references);
+	return {
+		input,
+		messageId,
+		jobId,
+		from: input.from,
+		mailboxId: input.mailboxId,
+		to,
+		cc,
+		bcc,
+		headers,
+		attachments: [],
+	};
+}
+
+function claimJob(db: ReturnType<typeof getDb>, jobId: string) {
+	return db
+		.update(outboundJobs)
+		.set({ status: "sending", updatedAt: new Date() })
+		.where(and(eq(outboundJobs.id, jobId), eq(outboundJobs.status, "queued")))
+		.returning({ id: outboundJobs.id });
+}
+
+/**
+ * Sends a scheduled message before its due time. The job is claimed the same way
+ * the queue consumer claims it, so send-now and the queued delivery cannot both send.
+ * Returns false when the message has already left the queue.
+ */
+export async function sendScheduledMessageNow(env: CloudflareEnv, messageId: string): Promise<boolean> {
+	const db = getDb(env);
+	const [job] = await db
+		.select({ id: outboundJobs.id, payload: outboundJobs.payload })
+		.from(outboundJobs)
+		.where(and(eq(outboundJobs.messageId, messageId), eq(outboundJobs.status, "queued"), isNotNull(outboundJobs.scheduledAt)))
+		.limit(1);
+	if (!job) return false;
+	const delivery = deliveryFromJob(job.id, messageId, job.payload);
+	// Load first: a failure here must leave the job queued so the scheduled send can retry.
+	delivery.attachments = await loadMessageAttachmentContents(env, messageId);
+	const claimed = await claimJob(db, job.id);
+	if (!claimed.length) return false;
+	await deliverEmail(env, delivery);
+	return true;
+}
+
 export async function processOutboundQueue(
 	env: CloudflareEnv,
 	payload: OutboundQueueMessage,
@@ -335,40 +400,14 @@ export async function processOutboundQueue(
 		.limit(1);
 	if (!job || job.status !== "queued") return;
 	const scheduledAt = new Date(payload.scheduledAt);
-	const input = JSON.parse(job.payload) as SendEmailInput;
-	const to = toRecipientList(input.to);
-	const cc = toRecipientList(input.cc);
-	const bcc = toRecipientList(input.bcc);
-	const inReplyTo = normalizeMessageId(input.inReplyTo);
-	const references = Array.isArray(input.references)
-		? input.references.map((id) => normalizeMessageId(id)).filter((id): id is string => !!id)
-		: parseMessageIdList(input.references);
-	const headers: Record<string, string> = { ...input.headers };
-	if (inReplyTo) headers["In-Reply-To"] = `<${inReplyTo}>`;
-	if (references.length > 0) headers.References = formatMessageIdHeader(references);
-	const delivery: PreparedDelivery = {
-		input,
-		messageId: payload.messageId,
-		jobId: payload.jobId,
-		from: input.from,
-		mailboxId: input.mailboxId,
-		to,
-		cc,
-		bcc,
-		headers,
-		attachments: [],
-	};
+	const delivery = deliveryFromJob(payload.jobId, payload.messageId, job.payload);
 	if (scheduledAt.getTime() > Date.now()) {
 		await enqueueScheduledDelivery(env, delivery, scheduledAt);
 		return;
 	}
 	// Claim the job before delivering. Cancelling deletes only a job that is still
 	// "queued", so exactly one of cancel and delivery wins.
-	const claimed = await db
-		.update(outboundJobs)
-		.set({ status: "sending", updatedAt: new Date() })
-		.where(and(eq(outboundJobs.id, payload.jobId), eq(outboundJobs.status, "queued")))
-		.returning({ id: outboundJobs.id });
+	const claimed = await claimJob(db, payload.jobId);
 	if (!claimed.length) return;
 	delivery.attachments = await loadMessageAttachmentContents(env, payload.messageId);
 	await deliverEmail(env, delivery);

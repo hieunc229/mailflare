@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Copy } from "lucide-react";
+import { Copy } from "@/components/icons";
 import { useLanguage } from "@/components/language-provider";
 import { Button } from "@/components/ui/button";
 import { buildMcpAgentPrompt } from "./mcp-agent-instructions-utils";

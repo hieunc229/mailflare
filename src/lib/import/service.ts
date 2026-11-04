@@ -9,6 +9,7 @@ import { upsertContactFromAddress } from "@/lib/contacts/service";
 import { newId } from "@/lib/ids";
 import { getImportMessagePlacement } from "./destination";
 import type { ImportDestination } from "./destination-types";
+import { applyImportHints, getImportMessageHints } from "./message-hints-utils";
 import type { ImportMailboxResult, ImportMessageInput } from "./types";
 
 export async function importMessagesToMailbox(
@@ -81,7 +82,10 @@ async function importMessageToMailbox(
 	const fromAddr = parsed.fromAddr ?? "unknown";
 	const toAddr = parsed.toAddr ?? "";
 	const createdAt = parsed.date ?? new Date();
-	const placement = getImportMessagePlacement(input.destination);
+	const hints = getImportMessageHints(input.raw);
+	const placement = getImportMessagePlacement(applyImportHints(input.destination, hints));
+	const read = input.read ?? hints.read ?? placement.direction === "outbound";
+	const starred = input.starred ?? hints.starred ?? false;
 
 	await db.insert(messages).values({
 		id: messageId,
@@ -100,8 +104,8 @@ async function importMessageToMailbox(
 		htmlBody: parsed.html,
 		rawR2Key,
 		status: placement.status,
-		read: input.read ?? placement.direction === "outbound",
-		starred: input.starred ?? false,
+		read,
+		starred,
 		threadId: await resolveThreadId(db, {
 			mailboxId: input.mailboxId,
 			messageId: parsed.messageId,

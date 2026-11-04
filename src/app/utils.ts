@@ -1,4 +1,4 @@
-import { FileText, Inbox, MailCheck, Send, ShieldAlert, Trash2 } from "lucide-react";
+import { FileText, Inbox, MailCheck, Send, ShieldAlert, Trash2 } from "@/components/icons";
 import type { HomeAction, LandingNavItem, LandingStat, MailPreview, SidebarItem } from "./types";
 
 export const landingNavItems: LandingNavItem[] = [

@@ -5,7 +5,7 @@ import { domains, mailboxes, users } from "@/db/schema";
 import { requireUser } from "@/lib/auth/cookies";
 import { getEnv } from "@/lib/cloudflare";
 import { getAvatarImageResponse, getOptimizedAvatarFiles, storeAvatarImages } from "@/lib/avatar-images";
-import { getMailboxAccessLevel } from "@/lib/mailboxes/access";
+import { getMailboxSettingsAccess } from "@/lib/mailboxes/settings-access";
 import { avatarKeyFor } from "@/app/api/profile/avatar/utils";
 import { tracksAccountIdentity } from "@/lib/profile/identity-utils";
 import { syncPersonalIdentity } from "@/lib/profile/sync";
@@ -17,7 +17,7 @@ export async function GET(request: Request, { params }: MailboxAvatarRouteParams
 	const env = getEnv();
 	const user = await requireUser(env, request);
 	const db = getDb(env);
-	const access = await getMailboxAccessLevel(db, user, id);
+	const access = await getMailboxSettingsAccess(env, user, id);
 	if (!access?.canRead) return new Response("Not found", { status: 404 });
 
 	const [mailbox] = await db
@@ -47,7 +47,7 @@ export async function POST(request: Request, { params }: MailboxAvatarRouteParam
 	const env = getEnv();
 	const user = await requireUser(env, request);
 	const db = getDb(env);
-	const access = await getMailboxAccessLevel(db, user, id);
+	const access = await getMailboxSettingsAccess(env, user, id);
 	if (!access?.canManage) {
 		return NextResponse.json({ error: "Mailbox not found" }, { status: 404 });
 	}

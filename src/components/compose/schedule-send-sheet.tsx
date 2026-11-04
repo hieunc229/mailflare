@@ -2,7 +2,7 @@
 
 import * as DialogPrimitive from "@radix-ui/react-dialog";
 import { useEffect, useRef, useState } from "react";
-import { CalendarClock, ChevronLeft, ChevronRight, FileText, Plus, X } from "lucide-react";
+import { CalendarClock, ChevronLeft, ChevronRight, FileText, Plus, X } from "@/components/icons";
 import { Button } from "@/components/ui/button";
 import { useLanguage } from "@/components/language-provider";
 import { authFetch } from "@/lib/auth/client";

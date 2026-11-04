@@ -25,7 +25,7 @@ import {
   ShieldIcon,
   Trash2Icon,
   TrashIcon,
-} from "lucide-react";
+} from "@/components/icons";
 
 export function getMessageBackHref(
   direction: "inbound" | "outbound",

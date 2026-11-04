@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import clsx from "clsx";
-import { Search } from "lucide-react";
+import { Search } from "@/components/icons";
 import { Input } from "@/components/ui/input";
 import type { HeaderSearchProps } from "./header-search-types";
 

@@ -14,6 +14,7 @@ export type CalendarEvent = {
   repeatAnchorDay: number | null;
   repeatUntil: string | null;
   excludedOccurrences: string;
+  reminderMinutes?: number | null;
   timeZone?: string | null;
   seriesStartsAt?: string;
 };

@@ -2,7 +2,7 @@
 
 import { useRef, useState } from "react";
 import type { KeyboardEvent } from "react";
-import { X } from "lucide-react";
+import { X } from "@/components/icons";
 import { useLanguage } from "@/components/language-provider";
 import { Label } from "@/components/ui/label";
 import { getEmailAddress } from "@/lib/email/address";

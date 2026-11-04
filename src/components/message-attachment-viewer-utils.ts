@@ -4,9 +4,9 @@ import type { AttachmentPreviewKind } from "./message-attachment-viewer-types";
 export function getAttachmentFileUrl(
 	messageId: string,
 	attachmentId: string,
-	mode: "download" | "preview" = "download",
+	mode: "download" | "preview" | "risk" | "acknowledged-download" = "download",
 ): string {
-	const suffix = mode === "preview" ? "?preview=1" : "?download=1";
+	const suffix = { preview: "?preview=1", risk: "?risk=1", download: "?download=1", "acknowledged-download": "?download=1&acknowledge=1" }[mode];
 	return `/api/messages/${messageId}/attachments/${attachmentId}${suffix}`;
 }
 

@@ -1,7 +1,7 @@
 "use client";
 
 import { useId } from "react";
-import { ChevronDown } from "lucide-react";
+import { ChevronDown } from "@/components/icons";
 import { locales, supportedLocales } from "@/lib/i18n/locales";
 import { resolveLocale } from "@/lib/i18n/utils";
 import { useLanguage } from "./language-provider";

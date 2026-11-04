@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useId, useState, useEffect, useRef, useMemo } from "react";
-import { Search, CornerDownLeft } from "lucide-react";
+import { Search, CornerDownLeft } from "@/components/icons";
 import { useLanguage } from "@/components/language-provider";
 import type { CommandItem } from "./types";
 import type { TranslationKey } from "@/lib/i18n/types";

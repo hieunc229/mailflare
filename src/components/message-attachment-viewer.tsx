@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { ArrowDownToLine, FileWarning } from "lucide-react";
+import { ArrowDownToLine, FileWarning } from "@/components/icons";
 import { Button } from "@/components/ui/button";
 import {
 	Dialog,
@@ -13,6 +13,7 @@ import {
 import { useLanguage } from "@/components/language-provider";
 import { authFetch } from "@/lib/auth/client";
 import { Skeleton } from "@/components/ui/skeleton";
+import type { AttachmentRisk } from "@/lib/email/attachment-risk";
 import type { MessageAttachmentViewerProps } from "./message-attachment-viewer-types";
 import {
 	getAttachmentFileUrl,
@@ -33,9 +34,24 @@ export function MessageAttachmentViewer({
 	const previewUrl = attachment
 		? getAttachmentFileUrl(messageId, attachment.id, "preview")
 		: "";
+	const [risk, setRisk] = useState<AttachmentRisk | null>(null);
+	const [acknowledged, setAcknowledged] = useState(false);
+	const flagged = !!risk && risk.level !== "ok";
 	const downloadUrl = attachment
-		? getAttachmentFileUrl(messageId, attachment.id, "download")
+		? getAttachmentFileUrl(messageId, attachment.id, flagged ? "acknowledged-download" : "download")
 		: "";
+
+	useEffect(() => {
+		setRisk(null);
+		setAcknowledged(false);
+		if (!open || !attachment) return;
+		let cancelled = false;
+		void authFetch(getAttachmentFileUrl(messageId, attachment.id, "risk"))
+			.then(async (response): Promise<AttachmentRisk | null> => (response.ok ? await response.json() : null))
+			.then((data) => { if (!cancelled && data) setRisk(data); })
+			.catch(() => undefined);
+		return () => { cancelled = true; };
+	}, [attachment, messageId, open]);
 
 	useEffect(() => {
 		if (!open || !attachment || previewKind !== "text") return;
@@ -114,13 +130,34 @@ export function MessageAttachmentViewer({
 					)}
 				</div>
 
-				<div className="flex shrink-0 justify-end">
-					<Button asChild>
-						<a href={downloadUrl} download={attachment.filename}>
+				{risk && flagged && (
+					<div role="alert" className={`shrink-0 rounded-lg border p-3 text-sm ${risk.level === "blocked" ? "border-red-300 bg-red-50 text-red-900" : "border-amber-300 bg-amber-50 text-amber-900"}`}>
+						<p className="font-medium">{risk.level === "blocked" ? t("attachment.risk.blocked") : t("attachment.risk.warning")}</p>
+						<ul className="mt-1 list-disc pl-5">
+							{risk.reasons.map((reason) => <li key={reason}>{reason}</li>)}
+						</ul>
+						<label className="mt-2 flex items-center gap-2">
+							<input type="checkbox" checked={acknowledged} onChange={(event) => setAcknowledged(event.target.checked)} />
+							{t("attachment.risk.acknowledge")}
+						</label>
+					</div>
+				)}
+
+				<div className="flex shrink-0 items-center justify-end gap-3">
+					{risk && !flagged && <span className="text-xs text-neutral-500">{t("attachment.risk.ok")}</span>}
+					{flagged && !acknowledged ? (
+						<Button disabled>
 							<ArrowDownToLine className="h-4 w-4" />
 							{t("attachment.download")}
-						</a>
-					</Button>
+						</Button>
+					) : (
+						<Button asChild>
+							<a href={downloadUrl} download={attachment.filename}>
+								<ArrowDownToLine className="h-4 w-4" />
+								{t("attachment.download")}
+							</a>
+						</Button>
+					)}
 				</div>
 			</DialogContent>
 		</Dialog>

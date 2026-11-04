@@ -131,6 +131,19 @@ export async function removeImportJob(id: string): Promise<void> {
 	if (!response.ok) throw new Error("Unable to update the import");
 }
 
+/** Continues a failed import. IMAP imports need the password again, since it is never stored. */
+export async function resumeImportJob(id: string, password?: string): Promise<void> {
+	const response = await authFetch(`/api/import/jobs/${encodeURIComponent(id)}/resume`, {
+		method: "POST",
+		headers: { "Content-Type": "application/json" },
+		body: JSON.stringify({ password }),
+	});
+	if (!response.ok) {
+		const data = (await response.json().catch(() => null)) as { error?: string } | null;
+		throw new Error(data?.error || "Unable to resume the import");
+	}
+}
+
 async function readImportJson<T extends object>(response: Response): Promise<T> {
 	const text = await response.text();
 	try {

@@ -2,7 +2,7 @@
 
 import { SkipToContent } from "@/components/skip-to-content";
 import { useEffect } from "react";
-import {  Sparkles } from "lucide-react";
+import {  Sparkles } from "@/components/icons";
 import { useLanguage } from "@/components/language-provider";
 import { AuthGuard } from "@/components/auth/auth-guard";
 import { ComposeProvider } from "@/components/compose/compose-context";

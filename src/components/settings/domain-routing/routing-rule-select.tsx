@@ -1,5 +1,5 @@
 import * as React from "react";
-import { ChevronDown } from "lucide-react";
+import { ChevronDown } from "@/components/icons";
 import type { SelectProps } from "@/components/ui/select-types";
 import { cn } from "@/lib/utils";
 

@@ -1,5 +1,5 @@
 import { defaultTranslator, type Translator } from "@/lib/i18n/utils";
-import { Building2, Sparkles } from "lucide-react";
+import { Building2, Sparkles } from "@/components/icons";
 import type { LicensePlan } from "./types";
 import { authFetch } from "@/lib/auth/client";
 import { formatUserDate } from "@/lib/time/utils";

@@ -6,4 +6,6 @@ export type ThreadMessageActionsProps = {
 	ownAddress?: string | null;
 	ownAddresses?: string[];
 	starOnly?: boolean;
+	detailsOpen?: boolean;
+	onToggleDetails?: () => void;
 };

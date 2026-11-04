@@ -53,6 +53,6 @@ export function getRuleOperatorLabel(operator: string, t: Translator = defaultTr
 }
 
 export function getInboxRuleDestination(rule: Pick<InboxRule, "action" | "folderId">): string {
-	if (rule.action === "spam" || rule.action === "trash") return rule.action;
+	if (rule.action === "spam" || rule.action === "trash" || rule.action === "forward") return rule.action;
 	return rule.folderId ? `folder:${rule.folderId}` : "";
 }

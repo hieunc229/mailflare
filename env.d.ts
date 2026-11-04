@@ -72,6 +72,8 @@ interface CloudflareEnv {
 	MAILFLARE_RUNTIME?: "node";
 	/** Shared secret the Cloudflare email relay signs inbound webhooks with (self-hosted only). */
 	INBOUND_WEBHOOK_SECRET?: string;
+	/** "1" refuses relays that do not sign the header map with a timestamp (relay Worker v2). */
+	INBOUND_REQUIRE_SIGNED_HEADERS?: string;
 	/** Cloudflare account id, needed for the Email Sending REST API off Workers. */
 	CF_ACCOUNT_ID?: string;
 	/** Public origin of this install (https://mail.example.com) when it sits behind a proxy. */

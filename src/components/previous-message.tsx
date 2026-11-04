@@ -1,4 +1,4 @@
-import { ChevronRight } from "lucide-react";
+import { ChevronRight } from "@/components/icons";
 import { useLanguage } from "@/components/language-provider";
 import type { PreviousMessageProps } from "./previous-message-types";
 

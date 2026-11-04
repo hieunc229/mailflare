@@ -62,12 +62,37 @@ export function getLatestEmailContent(content: string | null | undefined): strin
 	return splitRepliedEmailContent(content).latestContent;
 }
 
+const MAX_READABLE_HTML = 250_000;
+
+function stripBlocks(html: string, names: string[]): string {
+	const lower = html.toLowerCase();
+	const missingClose = new Set<string>();
+	let out = "";
+	let cursor = 0;
+	const open = /<(style|script|head)\b[^>]*>/gi;
+	let match: RegExpExecArray | null;
+	while ((match = open.exec(html))) {
+		const name = match[1].toLowerCase();
+		if (match.index < cursor || !names.includes(name)) continue;
+		// An unclosed block would otherwise rescan to the end of the input for every opener.
+		const close = missingClose.has(name) ? -1 : lower.indexOf(`</${name}`, match.index + match[0].length);
+		if (close === -1) {
+			missingClose.add(name);
+			continue;
+		}
+		const closeEnd = html.indexOf(">", close);
+		out += `${html.slice(cursor, match.index)} `;
+		cursor = closeEnd === -1 ? html.length : closeEnd + 1;
+		open.lastIndex = cursor;
+	}
+	return out + html.slice(cursor);
+}
+
 export function htmlToReadableText(html: string | null | undefined): string {
-	return (html ?? "")
-		.replace(/<(style|script|head)\b[^>]*>[\s\S]*?<\/\1>/gi, " ")
+	return stripBlocks((html ?? "").slice(0, MAX_READABLE_HTML), ["style", "script", "head"])
 		.replace(/<br\s*\/?>/gi, "\n")
 		.replace(/<\/(p|div|li|tr|blockquote|h[1-6])>/gi, "\n")
-		.replace(/<[^>]+>/g, " ")
+		.replace(/<[^<>]*>/g, " ")
 		.replace(/&nbsp;/g, " ")
 		.replace(/&amp;/g, "&")
 		.replace(/&lt;/g, "<")

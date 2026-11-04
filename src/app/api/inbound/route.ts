@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { getEnv } from "@/lib/cloudflare";
 import { intakeIncomingMail } from "@/lib/email/intake";
-import { verifyInboundSignature } from "@/lib/email/intake-signature";
+import { verifyInboundSignature, verifyInboundSignatureV2 } from "@/lib/email/intake-signature";
 import { inboundAttachmentLimitReasonFromRaw } from "@/lib/email/inbound-attachments";
 
 export const dynamic = "force-dynamic";
@@ -22,15 +22,27 @@ export async function POST(request: Request) {
 	const from = request.headers.get("x-mailflare-from") ?? "";
 	const to = request.headers.get("x-mailflare-to") ?? "";
 	const signature = request.headers.get("x-mailflare-signature") ?? "";
-	if (!from || !to || !(await verifyInboundSignature(secret, signature, raw, from, to))) {
-		return NextResponse.json({ error: "Invalid signature" }, { status: 401 });
+	const headerMap = request.headers.get("x-mailflare-headers") ?? "{}";
+	const timestamp = request.headers.get("x-mailflare-timestamp");
+	// Relays that send a timestamp sign the header map too and cannot be replayed; older relays only
+	// sign the body, which stays accepted unless INBOUND_REQUIRE_SIGNED_HEADERS is set.
+	const valid = !from || !to
+		? false
+		: timestamp
+			? await verifyInboundSignatureV2(secret, signature, raw, from, to, headerMap, timestamp)
+			: env.INBOUND_REQUIRE_SIGNED_HEADERS !== "1" && await verifyInboundSignature(secret, signature, raw, from, to);
+	if (!valid) return NextResponse.json({ error: "Invalid signature" }, { status: 401 });
+	if (timestamp) {
+		const seenKey = `relay-seen/${signature}`;
+		if (await env.BUCKET.head(seenKey)) return NextResponse.json({ error: "Replayed request" }, { status: 409 });
+		await env.BUCKET.put(seenKey, new Uint8Array(0));
 	}
 	const attachmentLimitReason = await inboundAttachmentLimitReasonFromRaw(raw);
 	if (attachmentLimitReason) return NextResponse.json({ action: "reject", reason: attachmentLimitReason });
 
 	let headers: Record<string, string> = {};
 	try {
-		headers = JSON.parse(request.headers.get("x-mailflare-headers") ?? "{}") as Record<string, string>;
+		headers = JSON.parse(headerMap) as Record<string, string>;
 	} catch {
 		// The header map is advisory; the raw message is authoritative.
 	}

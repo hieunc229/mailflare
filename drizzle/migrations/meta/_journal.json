@@ -484,6 +484,20 @@
       "when": 1792855200000,
       "tag": "0077_add_import_jobs",
       "breakpoints": true
+    },
+    {
+      "idx": 70,
+      "version": "6",
+      "when": 1792858800000,
+      "tag": "0078_add_calendar_reminders",
+      "breakpoints": true
+    },
+    {
+      "idx": 71,
+      "version": "6",
+      "when": 1793260800000,
+      "tag": "0079_remote_content_ask",
+      "breakpoints": true
     }
   ]
 }

@@ -1,5 +1,5 @@
 import type { TranslationKey } from "@/lib/i18n/types";
-import type { LucideIcon } from "lucide-react";
+import type { LucideIcon } from "@/components/icons";
 import type { LicenseStatus } from "@/lib/licenses/types";
 
 export type LicensePlan = {

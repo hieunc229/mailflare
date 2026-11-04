@@ -25,6 +25,6 @@ export default function AgentReviewPage() {
 		{error && <p role="alert" className="mt-4 text-red-600">{error}</p>}
 		{!error && !request && <p className="mt-4">{t("agent.review.loading")}</p>}
 		{request && (request.status !== "pending" || request.stale || !request.snapshot) && <p className="mt-4">{request.stale ? t("agent.review.stale") : t("agent.review.status", { status: request.status })}</p>}
-		{request?.status === "pending" && !request.stale && request.snapshot && <SendReview approvalId={id} snapshot={request.snapshot} onClose={() => router.push("/drafts")} onSent={() => router.push("/sent")} />}
+		{request?.status === "pending" && !request.stale && request.snapshot && <SendReview approvalId={id} snapshot={request.snapshot} unfamiliarRecipients={request.unfamiliarRecipients} onClose={() => router.push("/drafts")} onSent={() => router.push("/sent")} />}
 	</div>;
 }

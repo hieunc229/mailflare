@@ -1,7 +1,7 @@
 "use client";
 
 import clsx from "clsx";
-import { AlertCircle, CheckCircle2, X } from "lucide-react";
+import { AlertCircle, CheckCircle2, X } from "@/components/icons";
 import { useLanguage } from "@/components/language-provider";
 import type { DriveUploadEntry } from "./drive-upload-types";
 

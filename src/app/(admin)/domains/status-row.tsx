@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { AlertTriangle, Check } from "lucide-react";
+import { AlertTriangle, Check } from "@/components/icons";
 
 export const ROW_GRID = "grid gap-3 rounded-xl px-4 py-3 text-sm sm:grid-cols-[auto_minmax(8rem,14rem)_minmax(0,1fr)_auto] sm:items-start";
 

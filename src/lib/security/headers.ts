@@ -1,6 +1,9 @@
+// Dev tooling (HMR, source maps) evaluates strings; production never needs to.
+const scriptEval = process.env.NODE_ENV === "production" ? "" : " 'unsafe-eval'";
+
 const csp = [
 	"default-src 'self'",
-	"script-src 'self' 'unsafe-inline' 'unsafe-eval' https://challenges.cloudflare.com",
+	`script-src 'self' 'unsafe-inline'${scriptEval} https://challenges.cloudflare.com`,
 	"style-src 'self' 'unsafe-inline'",
 	"img-src 'self' data: blob: https:",
 	"font-src 'self' data:",
@@ -21,6 +24,8 @@ export function getSecurityHeaders() {
 		{ key: "Strict-Transport-Security", value: "max-age=31536000; includeSubDomains" },
 		{ key: "X-Content-Type-Options", value: "nosniff" },
 		{ key: "X-Frame-Options", value: "SAMEORIGIN" },
+		// No window the app opens or that opens the app keeps a reference to it.
+		{ key: "Cross-Origin-Opener-Policy", value: "same-origin" },
 		{ key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
 		{
 			key: "Permissions-Policy",

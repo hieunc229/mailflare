@@ -1,7 +1,7 @@
 import { requireSessionUser } from "@/lib/api/auth";
 import { getEnv } from "@/lib/cloudflare";
 import { fetchRemoteImage, RemoteImageError } from "@/lib/remote-images/fetch";
-import { isNodeRuntime } from "@/lib/runtime";
+import { allowRemoteImageRequest } from "@/lib/remote-images/rate-limit";
 
 const IMAGE_HEADERS = {
 	"Cache-Control": "private, no-store",
@@ -14,12 +14,8 @@ export async function GET(request: Request) {
 	const env = getEnv();
 	const auth = await requireSessionUser(env, request);
 	if (auth.error) return auth.error;
-
-	if (isNodeRuntime(env)) {
-		return Response.json(
-			{ error: "Remote images are unavailable in the self-hosted runtime" },
-			{ status: 503, headers: { "Cache-Control": "no-store" } },
-		);
+	if (!allowRemoteImageRequest(auth.user.id)) {
+		return Response.json({ error: "Too many remote image requests" }, { status: 429, headers: { "Cache-Control": "no-store", "Retry-After": "60" } });
 	}
 
 	const requestUrl = new URL(request.url);

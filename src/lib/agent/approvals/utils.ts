@@ -1,6 +1,7 @@
 import { and, eq, inArray } from "drizzle-orm";
 import { getDb } from "@/db";
-import { agentDraftMetadata, agentSendApprovals, messageAttachments, messages } from "@/db/schema";
+import { agentDraftMetadata, agentSendApprovals, contacts, messageAttachments, messages } from "@/db/schema";
+import { getEmailAddress, splitEmailAddressList } from "@/lib/email/address";
 import { getAuthorizedSenderAddress } from "@/lib/email/sender";
 import { loadMessageAttachmentContents } from "@/lib/email/attachments";
 import { sendEmail } from "@/lib/email/send";
@@ -56,6 +57,15 @@ export async function requestAgentSend(env: CloudflareEnv, user: SessionUser, dr
 	return { approvalId: id, status: "pending_approval", expiresAt, snapshot: payload, reviewUrl: `/agent/review/${id}` };
 }
 
+/** Recipients the user has never written to or saved: where an injected instruction would send private text. */
+async function unfamiliarRecipients(env: CloudflareEnv, userId: string, snapshot: AgentSendSnapshot): Promise<string[]> {
+	const addresses = [...new Set([snapshot.to, snapshot.cc, snapshot.bcc].flatMap((list) => splitEmailAddressList(list)).map((entry) => (getEmailAddress(entry) || entry).toLowerCase()).filter(Boolean))];
+	if (!addresses.length) return [];
+	const known = await getDb(env).select({ email: contacts.email }).from(contacts).where(and(eq(contacts.userId, userId), inArray(contacts.email, addresses), inArray(contacts.source, ["outbound", "manual"])));
+	const familiar = new Set(known.map((row) => row.email));
+	return addresses.filter((address) => !familiar.has(address));
+}
+
 export async function getAgentSendRequest(env: CloudflareEnv, user: SessionUser, approvalId: string) {
 	const [approval] = await getDb(env).select().from(agentSendApprovals).where(and(eq(agentSendApprovals.id, approvalId), eq(agentSendApprovals.userId, user.id))).limit(1);
 	if (!approval) throw new Error("Approval not found");
@@ -69,7 +79,8 @@ export async function getAgentSendRequest(env: CloudflareEnv, user: SessionUser,
 			if (!stale) current = read.payload;
 		} catch { stale = true; }
 	}
-	return { approvalId, status: approval.status, draftId: approval.draftId, messageId: approval.messageId, expiresAt: approval.expiresAt, snapshot: current, stale };
+	const unfamiliar = current ? await unfamiliarRecipients(env, user.id, current) : [];
+	return { approvalId, status: approval.status, draftId: approval.draftId, messageId: approval.messageId, expiresAt: approval.expiresAt, snapshot: current, stale, unfamiliarRecipients: unfamiliar };
 }
 
 export async function confirmAgentSend(env: CloudflareEnv, user: SessionUser, approvalId: string, publicOrigin?: string) {

@@ -2,7 +2,7 @@
 
 import { SkipToContent } from "@/components/skip-to-content";
 import Link from "next/link";
-import { HelpCircle, Search } from "lucide-react";
+import { HelpCircle, Search } from "@/components/icons";
 import { useLanguage } from "@/components/language-provider";
 import { AuthGuard } from "@/components/auth/auth-guard";
 import { ComposeProvider } from "@/components/compose/compose-context";

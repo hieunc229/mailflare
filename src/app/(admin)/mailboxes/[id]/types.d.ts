@@ -7,7 +7,8 @@ export type MailboxDetail = {
 	useAllDomains: boolean;
 	hasAvatar?: boolean;
 	type?: "personal" | "shared";
-	permission?: "read_only" | "send_as" | "send_on_behalf" | "full_access";
+	permission?: "read_only" | "send_as" | "send_on_behalf" | "full_access" | null;
+	canManageSharing?: boolean;
 	disabled?: boolean;
 	createdAt: string;
 	hostname: string;

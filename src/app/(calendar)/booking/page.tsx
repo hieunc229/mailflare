@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { mobilePrimaryActionClass } from "@/components/page-header-utils";
 import clsx from "clsx";
-import { CalendarDays, Check, Clock3, Copy, ExternalLink, MapPin, MoreHorizontal, Plus } from "lucide-react";
+import { CalendarDays, Check, Clock3, Copy, ExternalLink, MapPin, MoreHorizontal, Plus } from "@/components/icons";
 import toast, { Toaster } from "react-hot-toast";
 import { useLanguage } from "@/components/language-provider";
 import { Button } from "@/components/ui/button";

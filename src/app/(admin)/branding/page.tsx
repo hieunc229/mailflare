@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { ArrowRight, ExternalLink, ImagePlus, LockKeyhole, Palette } from "lucide-react";
+import { ArrowRight, ExternalLink, ImagePlus, LockKeyhole, Palette } from "@/components/icons";
 import { useLanguage } from "@/components/language-provider";
 import { useBranding } from "@/components/branding-provider";
 import { Button } from "@/components/ui/button";

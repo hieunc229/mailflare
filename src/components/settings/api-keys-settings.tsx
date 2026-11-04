@@ -2,7 +2,7 @@
 
 import { mobilePrimaryActionAboveNavClass } from "@/components/page-header-utils";
 import { useEffect, useState } from "react";
-import { Copy, KeyRound, Plus, Trash2 } from "lucide-react";
+import { Copy, KeyRound, Plus, Trash2 } from "@/components/icons";
 import { useLanguage } from "@/components/language-provider";
 import { useSelectedMailbox } from "@/components/mailbox-provider";
 import { Badge } from "@/components/ui/badge";

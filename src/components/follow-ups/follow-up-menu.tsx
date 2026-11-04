@@ -2,7 +2,7 @@
 
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import type { ReactNode } from "react";
-import { X } from "lucide-react";
+import { X } from "@/components/icons";
 import { useLanguage } from "@/components/language-provider";
 import { FOLLOW_UP_DAY_OPTIONS } from "@/lib/follow-ups/follow-up-utils";
 import { followUpOptionKey } from "./follow-up-client-utils";

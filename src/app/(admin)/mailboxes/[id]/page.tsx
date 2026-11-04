@@ -1,7 +1,7 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { AtSign, Save, Trash2, UserPlus } from "lucide-react";
+import { AtSign, Save, Trash2, UserPlus } from "@/components/icons";
 import { useParams, usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { useLanguage } from "@/components/language-provider";
@@ -101,7 +101,7 @@ export default function MailboxSettingsPage() {
   const sharedAccess = useQuery({
     queryKey: ["mailbox", mailboxId, "access"],
     queryFn: () => fetchSharedInboxAccess(mailboxId),
-    enabled: mailbox.data?.type === "shared",
+    enabled: mailbox.data?.canManageSharing === true,
   });
   const addMember = useMutation({
     mutationFn: () => grantSharedInboxAccess(mailboxId, selectedUserId),
@@ -296,7 +296,7 @@ export default function MailboxSettingsPage() {
         </CardContent>
       </Card>
 
-      {mailbox.data?.type === "shared" && (
+      {mailbox.data?.canManageSharing && (
         <Card className="rounded-3xl border-0 bg-white p-6">
           <CardHeader className="py-0">
             <CardTitle>{t("mailbox.sharedAccess")}</CardTitle>

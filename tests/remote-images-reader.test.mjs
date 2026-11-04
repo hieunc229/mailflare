@@ -83,10 +83,10 @@ test("self-hosted rendering preserves permitted direct URLs without an unsupport
 	assert.doesNotMatch(result.html, /<script/);
 });
 
-test("permitted font sources remain direct while CSS raster images use the image proxy", () => {
+test("remote font sources are dropped while CSS raster images use the image proxy", () => {
 	const html = '<style>@font-face{font-family:mail;src:url(https://cdn.example/font.woff2) format("woff2")}.hero{background-image:url(https://cdn.example/bg.png)}</style><div class="hero">Mail</div>';
 	const result = prepareReaderEmailHtml(html, { reader: true, allowRemote: true });
-	assert.match(result.html, /https:\/\/cdn\.example\/font\.woff2/);
+	assert.ok(!result.html.includes("font.woff2"), "a remote font would bypass the proxy");
 	assert.ok(result.html.includes(endpoint("https://cdn.example/bg.png")));
 	assert.ok(!result.html.includes(endpoint("https://cdn.example/font.woff2")));
 });

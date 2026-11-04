@@ -1,4 +1,4 @@
-import { File as FileIcon, FileArchive, FileAudio, FileCode, FileImage, FileSpreadsheet, FileText, FileVideo, Folder, Presentation } from "lucide-react";
+import { File as FileIcon, FileArchive, FileAudio, FileCode, FileImage, FileSpreadsheet, FileText, FileVideo, Folder, Presentation } from "@/components/icons";
 import type { DriveItemDto } from "@/lib/drive/types";
 
 const extensionOf = (name: string) => name.slice(name.lastIndexOf(".") + 1).toLowerCase();

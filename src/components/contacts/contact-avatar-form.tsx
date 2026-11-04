@@ -1,7 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { Camera, LoaderCircle } from "lucide-react";
+import { Camera, LoaderCircle } from "@/components/icons";
 import { dispatchContactAvatarChanged } from "@/lib/contacts/avatar-client";
 import { normalizeEmailAddress } from "@/lib/email/address";
 import { Input } from "@/components/ui/input";

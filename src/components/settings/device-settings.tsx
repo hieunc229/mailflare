@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Bell, Smartphone } from "lucide-react";
+import { Bell, Smartphone } from "@/components/icons";
 import { useLanguage } from "@/components/language-provider";
 import { Button } from "@/components/ui/button";
 import { formatUserDate } from "@/lib/time/utils";

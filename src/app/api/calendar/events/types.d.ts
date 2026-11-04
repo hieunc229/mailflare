@@ -9,6 +9,7 @@ export type CalendarEventInput = {
 	repeat?: CalendarRepeat;
 	repeatDays?: number[];
 	repeatAnchorDay?: number;
+	reminderMinutes?: number | null;
 	timeZone?: string;
 	effectiveFrom?: string;
 	moveOccurrenceToPast?: boolean;

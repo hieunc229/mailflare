@@ -14,7 +14,7 @@ import {
   MailPlus,
   Settings,
   HelpCircle,
-} from "lucide-react";
+} from "@/components/icons";
 import { useLanguage } from "@/components/language-provider";
 import { useCompose } from "@/components/compose/compose-context";
 import type { ShortcutDefinition, CommandItem } from "./types";

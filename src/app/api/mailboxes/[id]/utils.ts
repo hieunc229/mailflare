@@ -5,7 +5,7 @@ import type { MailboxUpdateValues } from "./types";
 
 type Db = ReturnType<typeof getDb>;
 
-export function selectMailboxForUser(db: Db, userId: string, mailboxId: string) {
+export function selectMailboxById(db: Db, mailboxId: string) {
 	return db
 		.select({
 			id: mailboxes.id,
@@ -20,6 +20,7 @@ export function selectMailboxForUser(db: Db, userId: string, mailboxId: string) 
 		useAllDomains: mailboxes.useAllDomains,
 			avatarKey: mailboxes.avatarKey,
 			ownerName: users.name,
+			ownerEmail: users.email,
 			ownerAvatarKey: users.avatarKey,
 			type: mailboxes.type,
 			disabled: mailboxes.disabled,

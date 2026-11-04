@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { ChevronLeft, Wrench } from "lucide-react";
+import { ChevronLeft, Wrench } from "@/components/icons";
 import { useLanguage } from "@/components/language-provider";
 import type { AgentDraftAction, AgentEmailReference, AgentMessage, AgentTurnProps } from "./types";
 import { agentActionProposal, agentToolLabel, draftFromToolContent, parseAgentToolContent } from "./utils";

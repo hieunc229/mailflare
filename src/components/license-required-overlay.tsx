@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { LockKeyhole } from "lucide-react";
+import { LockKeyhole } from "@/components/icons";
 import { Button } from "@/components/ui/button";
 import { useLanguage } from "@/components/language-provider";
 import type { LicenseRequiredOverlayProps } from "./license-required-overlay-types";

@@ -8,7 +8,7 @@ import {
 	Image,
 	Music,
 	Presentation,
-} from "lucide-react";
+} from "@/components/icons";
 import type { MessageAttachment } from "@/app/(dashboard)/inbox/[messageId]/types";
 import type { AttachmentVisual } from "./message-attachment-card-types";
 import { getAttachmentPreviewKind } from "./message-attachment-viewer-utils";

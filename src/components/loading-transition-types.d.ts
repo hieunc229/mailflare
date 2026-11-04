@@ -6,5 +6,5 @@ export type LoadingTransitionProps = {
 };
 
 export type PageLoadingContextValue = {
-	reportLoading(id: string, loading: boolean): void;
+	reportLoading(id: string, loading: boolean, silent?: boolean): void;
 };

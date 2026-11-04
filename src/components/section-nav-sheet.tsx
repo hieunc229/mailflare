@@ -1,7 +1,7 @@
 "use client";
 
 import clsx from "clsx";
-import { ChevronUp } from "lucide-react";
+import { ChevronUp } from "@/components/icons";
 import { usePathname } from "next/navigation";
 import { useEffect, useState, type ReactNode } from "react";
 import { useIsMobile } from "./sidebar-mobile-utils";

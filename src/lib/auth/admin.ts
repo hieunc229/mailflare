@@ -41,3 +41,11 @@ export function canManageUsers(
 ): boolean {
 	return isPrimaryAdmin(user) || (user.role === "admin" && user.canManageUsers);
 }
+
+/** Only the primary admin can manage another administrator's account. */
+export function canManageUserAccount(
+	user: Pick<SessionUser, "role" | "isPrimaryAdmin" | "canManageUsers">,
+	account: Pick<SessionUser, "role" | "isPrimaryAdmin">,
+): boolean {
+	return isPrimaryAdmin(user) || (canManageUsers(user) && account.role === "user" && !account.isPrimaryAdmin);
+}

@@ -1,7 +1,7 @@
 "use client";
 
 import clsx from "clsx";
-import { Menu } from "lucide-react";
+import { Menu } from "@/components/icons";
 import Link from "next/link";
 import { useEffect } from "react";
 import type { ReactNode } from "react";

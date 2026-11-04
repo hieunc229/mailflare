@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useId, useRef } from "react";
-import { X, Keyboard } from "lucide-react";
+import { X, Keyboard } from "@/components/icons";
 import { useLanguage } from "@/components/language-provider";
 import type { TranslationKey } from "@/lib/i18n/types";
 import type { ShortcutDefinition } from "./types";

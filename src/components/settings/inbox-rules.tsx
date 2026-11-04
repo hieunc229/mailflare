@@ -3,7 +3,7 @@
 import type { FormEvent, KeyboardEvent } from "react";
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Folder, Plus, ShieldAlert, Trash2 } from "lucide-react";
+import { Folder, Forward, Plus, ShieldAlert, Trash2 } from "@/components/icons";
 import { useLanguage } from "@/components/language-provider";
 import { useSelectedMailbox } from "@/components/mailbox-provider";
 import { Button } from "@/components/ui/button";
@@ -15,6 +15,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { RoutingRuleSelect } from "./domain-routing/routing-rule-select";
@@ -44,6 +45,9 @@ export function InboxRules() {
   );
   const [matchValue, setMatchValue] = useState("");
   const [destination, setDestination] = useState("");
+  const [forwardTo, setForwardTo] = useState("");
+  const [keepCopy, setKeepCopy] = useState(false);
+  const isForward = destination === "forward";
   const mailboxId = selectedMailbox?.id ?? "";
 
   const folders = useQuery({
@@ -65,6 +69,7 @@ export function InboxRules() {
         matchOperator,
         matchValue,
         destination,
+        ...(isForward ? { forwardTo: forwardTo.trim(), keepCopy } : {}),
         priority: editingRule?.priority ?? 10,
       };
       return editingRule
@@ -88,8 +93,11 @@ export function InboxRules() {
   );
 
   function getRuleDestinationLabel(
-    rule: Pick<InboxRule, "action" | "folderId">,
+    rule: Pick<InboxRule, "action" | "folderId" | "forwardTo" | "keepCopy">,
   ) {
+    if (rule.action === "forward") {
+      return t(rule.keepCopy ? "rules.forwardCopyTo" : "rules.forwardTo", { to: rule.forwardTo ?? "—" });
+    }
     if (rule.action === "spam") return t("navigation.spam");
     if (rule.action === "trash") return t("navigation.trash");
     return folderMap.get(rule.folderId ?? "") ?? t("rules.unknownFolder");
@@ -101,6 +109,8 @@ export function InboxRules() {
     setMatchOperator("contains");
     setMatchValue("");
     setDestination("");
+    setForwardTo("");
+    setKeepCopy(false);
     save.reset();
     setDialogOpen(true);
   }
@@ -111,6 +121,8 @@ export function InboxRules() {
     setMatchOperator(rule.matchOperator);
     setMatchValue(rule.matchValue || rule.pattern);
     setDestination(getInboxRuleDestination(rule));
+    setForwardTo(rule.forwardTo ?? "");
+    setKeepCopy(rule.keepCopy);
     save.reset();
     setDialogOpen(true);
   }
@@ -161,7 +173,9 @@ export function InboxRules() {
               className="group flex cursor-pointer items-center gap-3 rounded-xl bg-neutral-50 px-3 py-3 outline-none transition-colors hover:bg-neutral-100 focus-visible:ring-2 focus-visible:ring-blue-200"
             >
               <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-blue-50 text-blue-700">
-                {rule.action === "spam" ? (
+                {rule.action === "forward" ? (
+                  <Forward className="h-4 w-4" />
+                ) : rule.action === "spam" ? (
                   <ShieldAlert className="h-4 w-4" />
                 ) : rule.action === "trash" ? (
                   <Trash2 className="h-4 w-4" />
@@ -216,11 +230,12 @@ export function InboxRules() {
                 <RoutingRuleSelect
                   id="matchField"
                   value={matchField}
-                  onChange={(event) =>
-                    setMatchField(
-                      event.target.value as "email" | "content" | "title",
-                    )
-                  }
+                  onChange={(event) => {
+                    const next = event.target.value as "email" | "content" | "title";
+                    setMatchField(next);
+                    // Forwarding happens before the body is read, so it cannot match on content.
+                    if (next === "content" && isForward) setDestination("");
+                  }}
                 >
                   <option value="email">{t("rules.field.email")}</option>
                   <option value="content">{t("rules.field.content")}</option>
@@ -261,6 +276,9 @@ export function InboxRules() {
                   onChange={(event) => setDestination(event.target.value)}
                 >
                   <option value="">{t("rules.selectDestination")}</option>
+                  {matchField !== "content" && (
+                    <option value="forward">{t("rules.forwardOption")}</option>
+                  )}
                   <option value="spam">{t("navigation.spam")}</option>
                   <option value="trash">{t("navigation.trash")}</option>
                   {(folders.data?.folders ?? []).map((folder) => (
@@ -271,6 +289,29 @@ export function InboxRules() {
                 </RoutingRuleSelect>
               </div>
             </div>
+            {isForward && (
+              <div className="grid gap-3">
+                <div className="grid min-w-0 gap-2">
+                  <Label htmlFor="forwardTo">{t("rules.forwardAddress")}</Label>
+                  <Input
+                    id="forwardTo"
+                    type="email"
+                    autoComplete="email"
+                    value={forwardTo}
+                    onChange={(event) => setForwardTo(event.target.value)}
+                    placeholder="destination@example.com"
+                  />
+                  <p className="text-xs leading-5 text-neutral-500">{t("rules.forwardHint")}</p>
+                </div>
+                <label className="flex items-center gap-2 text-sm text-neutral-700">
+                  <Checkbox
+                    checked={keepCopy}
+                    onChange={(event) => setKeepCopy(event.target.checked)}
+                  />
+                  {t("rules.forwardKeepCopy")}
+                </label>
+              </div>
+            )}
             {save.isError && (
               <p role="alert" className="text-sm text-red-600">{save.error.message}</p>
             )}
@@ -287,6 +328,7 @@ export function InboxRules() {
                 disabled={
                   !mailboxId ||
                   !destination ||
+                  (isForward && !forwardTo.trim()) ||
                   !matchValue.trim() ||
                   save.isPending
                 }

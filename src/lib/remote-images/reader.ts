@@ -48,7 +48,11 @@ function proxyStrings(node: css.CssNode) {
 function proxyCss(ast: css.CssNode, proxyNames: Map<string, string>): string {
 	css.walk(ast, {
 		enter(node, item, list) {
-			if (node.type === "Declaration" && css.ident.decode(node.property).toLowerCase() === "src") return css.walk.skip;
+			// Remote fonts cannot go through the image proxy; drop the source so they never load.
+			if (node.type === "Declaration" && css.ident.decode(node.property).toLowerCase() === "src") {
+				if (item && list) list.remove(item);
+				return css.walk.skip;
+			}
 			if (node.type !== "Declaration") return;
 			const property = css.ident.decode(node.property);
 			if (property.startsWith("--")) {
@@ -76,9 +80,14 @@ function proxyCss(ast: css.CssNode, proxyNames: Map<string, string>): string {
 			return css.walk.skip;
 		},
 	});
-	css.walk(ast, node => {
-		if (node.type === "Declaration" && css.ident.decode(node.property).toLowerCase() === "src") return css.walk.skip;
-		if (node.type === "Url") node.value = remoteImageUrl(node.value);
+	css.walk(ast, {
+		enter(node, item, list) {
+			if (node.type === "Declaration" && css.ident.decode(node.property).toLowerCase() === "src") {
+				if (item && list) list.remove(item);
+				return css.walk.skip;
+			}
+			if (node.type === "Url") node.value = remoteImageUrl(node.value);
+		},
 	});
 	return css.generate(ast);
 }

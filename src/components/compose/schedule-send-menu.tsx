@@ -2,7 +2,7 @@
 
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import { useState } from "react";
-import { ChevronDown, X } from "lucide-react";
+import { ChevronDown, X } from "@/components/icons";
 import { useLanguage } from "@/components/language-provider";
 import { NewTemplateDialog } from "./new-template-dialog";
 import { TemplateMenu } from "./template-menu";

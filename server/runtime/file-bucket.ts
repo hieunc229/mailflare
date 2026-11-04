@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { createReadStream, createWriteStream } from "node:fs";
-import { mkdir, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { mkdir, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { dirname, join, resolve, sep } from "node:path";
 import { Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
@@ -204,8 +204,35 @@ export class FileBucket {
 		}
 	}
 
-	async list() {
-		throw new Error("FileBucket.list is not implemented");
+	/** Lists objects under a prefix in key order; the cursor is the last key returned. */
+	async list(options: { prefix?: string; cursor?: string; limit?: number } = {}) {
+		const prefix = options.prefix ?? "";
+		const limit = Math.min(options.limit ?? 1000, 1000);
+		const keys: string[] = [];
+		const walk = async (directory: string, relative: string): Promise<void> => {
+			let entries;
+			try {
+				entries = await readdir(directory, { withFileTypes: true });
+			} catch {
+				return;
+			}
+			for (const entry of entries) {
+				const key = relative ? `${relative}/${entry.name}` : entry.name;
+				if (entry.isDirectory()) await walk(join(directory, entry.name), key);
+				else if (!entry.name.endsWith(".meta.json") && key.startsWith(prefix)) keys.push(key);
+			}
+		};
+		await walk(this.root, "");
+		keys.sort();
+		const after = options.cursor ? keys.filter((key) => key > options.cursor!) : keys;
+		const page = after.slice(0, limit);
+		const objects: { key: string; size: number; uploaded: Date }[] = [];
+		for (const key of page) {
+			const meta = await this.readMeta(key);
+			if (meta) objects.push({ key, size: meta.size, uploaded: new Date(meta.uploaded) });
+		}
+		const truncated = after.length > limit;
+		return { objects, truncated, cursor: truncated ? page[page.length - 1] : undefined };
 	}
 }
 

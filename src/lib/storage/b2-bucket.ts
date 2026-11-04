@@ -1,5 +1,5 @@
 import { awsRequest, AwsError } from "@/lib/aws/client";
-import { xmlTag } from "@/lib/aws/xml";
+import { xmlBlocks, xmlTag } from "@/lib/aws/xml";
 import type { AwsConfig } from "@/lib/aws/aws-types";
 import type { B2Config, B2HttpMetadata } from "@/lib/storage/b2-types";
 
@@ -136,8 +136,19 @@ export class B2Bucket {
 		}
 	}
 
-	async list(): Promise<never> {
-		throw new Error("B2Bucket.list is not implemented");
+	/** ListObjectsV2 with the shape of R2's `list`: only key, size and upload time of each object. */
+	async list(options: { prefix?: string; cursor?: string; limit?: number } = {}): Promise<{ objects: { key: string; size: number; uploaded: Date }[]; truncated: boolean; cursor?: string }> {
+		const query: Record<string, string> = { "list-type": "2", "max-keys": String(Math.min(options.limit ?? 1000, 1000)) };
+		if (options.prefix) query.prefix = options.prefix;
+		if (options.cursor) query["continuation-token"] = options.cursor;
+		const xml = await (await this.request(null, { query })).text();
+		const objects = xmlBlocks(xml, "Contents").map((block) => ({
+			key: xmlTag(block, "Key") ?? "",
+			size: Number(xmlTag(block, "Size") ?? 0),
+			uploaded: new Date(xmlTag(block, "LastModified") ?? Date.now()),
+		})).filter((object) => object.key);
+		const truncated = xmlTag(xml, "IsTruncated") === "true";
+		return { objects, truncated, cursor: truncated ? xmlTag(xml, "NextContinuationToken") ?? undefined : undefined };
 	}
 
 	async createMultipartUpload(key: string, options?: { httpMetadata?: B2HttpMetadata; customMetadata?: Record<string, string> }) {

@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowDownToLine, Play } from "lucide-react";
+import { ArrowDownToLine, Play } from "@/components/icons";
 import { formatAttachmentSize } from "@/app/(dashboard)/inbox/[messageId]/utils";
 import { useLanguage } from "@/components/language-provider";
 import type { MessageAttachmentCardProps } from "./message-attachment-card-types";

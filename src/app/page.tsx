@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { heroMessages, sidebarItems } from "./utils";
-import { Inbox, Mail, Search, ShieldCheck } from "lucide-react";
+import { Inbox, Mail, Search, ShieldCheck } from "@/components/icons";
 import { getServerTranslator } from "@/lib/i18n/server";
 import { LanguageSelector } from "@/components/language-selector";
 import { getHomeBranding } from "./home-server-utils";

@@ -32,7 +32,7 @@ export function browserSupportsPush(): boolean {
 
 export async function registerMailflareServiceWorker(): Promise<ServiceWorkerRegistration> {
 	if (!("serviceWorker" in navigator)) throw new Error("Service workers are not supported by this browser");
-	const registration = await navigator.serviceWorker.register("/sw.js", { scope: "/" });
+	const registration = await navigator.serviceWorker.register("/sw.js", { scope: "/", updateViaCache: "none" });
 	return registration;
 }
 

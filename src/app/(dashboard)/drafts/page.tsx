@@ -1,6 +1,6 @@
 "use client";
 
-import { FileText } from "lucide-react";
+import { FileText } from "@/components/icons";
 import { MessageFolderPage } from "@/components/messages/message-folder-page";
 
 export default function DraftsPage() {

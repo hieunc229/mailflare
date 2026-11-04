@@ -2,7 +2,7 @@
 
 import { mobilePrimaryActionClass } from "@/components/page-header-utils";
 import { useEffect, useState } from "react";
-import { Plus } from "lucide-react";
+import { Plus } from "@/components/icons";
 import { useLanguage } from "@/components/language-provider";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";

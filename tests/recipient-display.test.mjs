@@ -30,6 +30,7 @@ async function bundle(entry, outfile) {
 
 const display = await bundle("src/lib/email/recipient-display.ts", "display.mjs");
 const thread = await bundle("src/components/messages/conversation-thread-utils.ts", "thread.mjs");
+const contacts = await bundle("src/lib/contacts/utils.ts", "contacts.mjs");
 const parties = await bundle("src/app/(dashboard)/inbox/[messageId]/utils.ts", "parties.mjs");
 const validators = await bundle("src/lib/validators.ts", "validators.mjs");
 
@@ -91,6 +92,30 @@ test("outbound To still prefers the contact name", () => {
 		toContactName: "Ada Lovelace",
 	});
 	assert.equal(header.toName, "Ada Lovelace");
+});
+
+test("a message's own From name beats a shared contact's learned name", () => {
+	const shared = { displayName: "LiveKit Hiring Team", source: "inbound" };
+	assert.equal(contacts.getSenderDisplayName('"PostHog Team" <no-reply@ashbyhq.com>', shared), "PostHog Team");
+	assert.equal(
+		contacts.getSenderDisplayName('"LiveKit Hiring Team" <no-reply@ashbyhq.com>', { displayName: "PostHog Team", source: "outbound" }),
+		"LiveKit Hiring Team",
+	);
+});
+
+test("a manually named contact overrides the message's From name", () => {
+	assert.equal(
+		contacts.getSenderDisplayName('"PostHog Team" <no-reply@ashbyhq.com>', { displayName: "Ashby Recruiting", source: "manual" }),
+		"Ashby Recruiting",
+	);
+});
+
+test("the learned contact name fills in when the message has no From name", () => {
+	assert.equal(
+		contacts.getSenderDisplayName("no-reply@ashbyhq.com", { displayName: "PostHog Team", source: "inbound" }),
+		"PostHog Team",
+	);
+	assert.equal(contacts.getSenderDisplayName("no-reply@ashbyhq.com", null), null);
 });
 
 test("the setting accepts only a boolean", () => {

@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import clsx from "clsx";
-import { Check, ListFilter } from "lucide-react";
+import { Check, ListFilter } from "@/components/icons";
 import { useLanguage } from "@/components/language-provider";
 import { DRIVE_CATEGORIES } from "@/lib/drive/category-names";
 import type { DriveCategory } from "@/lib/drive/category-names";

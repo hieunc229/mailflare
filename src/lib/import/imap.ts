@@ -3,6 +3,7 @@ import type { ImapImportInput } from "./imap-types";
 import {
 	assertSafeImapHost,
 	getLiteralLength,
+	planImapFetchGroups,
 	isTaggedCompletion,
 	parseFetchFlags,
 	parseListMailboxName,
@@ -10,10 +11,6 @@ import {
 	quoteImapString,
 	selectImapUidBatch,
 } from "./imap-utils";
-
-// Every fetched message is held in memory and then parsed and stored within one
-// Worker request, so a batch stops early once it holds this much raw mail.
-const MAX_IMAP_BATCH_BYTES = 20 * 1024 * 1024;
 
 type CloudflareSocketConnect = (
 	address: { hostname: string; port: number },
@@ -81,10 +78,34 @@ class ImapConnection {
 		}
 	}
 
-	async fetchMessage(uid: string): Promise<{ raw: ArrayBuffer; flags: string[] }> {
-		const tag = this.nextTag();
+	/** Sizes in bytes by UID, so a batch can be planned against the memory budget before any body is read. */
+	async fetchSizes(uids: string[]): Promise<Map<string, number>> {
+		const sizes = new Map<string, number>();
+		if (!uids.length) return sizes;
+		for (const line of await this.command(`UID FETCH ${uids.join(",")} (RFC822.SIZE)`)) {
+			const uid = line.match(/\bUID (\d+)/i)?.[1];
+			const size = line.match(/\bRFC822\.SIZE (\d+)/i)?.[1];
+			if (uid && size) sizes.set(uid, Number(size));
+		}
+		return sizes;
+	}
+
+	/**
+	 * Sends every FETCH before reading any reply, so a group costs one round trip
+	 * instead of one per message. Replies come back in command order.
+	 */
+	async fetchMessages(uids: string[]): Promise<{ uid: string; raw: ArrayBuffer; flags: string[] }[]> {
+		const tags = uids.map(() => this.nextTag());
 		// BODY.PEEK[] leaves the source's \Seen flag untouched, unlike RFC822.
-		await this.write(`${tag} UID FETCH ${uid} (FLAGS BODY.PEEK[])\r\n`);
+		await this.write(uids.map((uid, index) => `${tags[index]} UID FETCH ${uid} (FLAGS BODY.PEEK[])\r\n`).join(""));
+		const fetched: { uid: string; raw: ArrayBuffer; flags: string[] }[] = [];
+		for (const [index, uid] of uids.entries()) {
+			fetched.push({ uid, ...(await this.readFetchReply(tags[index])) });
+		}
+		return fetched;
+	}
+
+	private async readFetchReply(tag: string): Promise<{ raw: ArrayBuffer; flags: string[] }> {
 		let raw: ArrayBuffer | null = null;
 		let flags: string[] = [];
 
@@ -195,17 +216,17 @@ export async function fetchImapMessages(input: ImapImportInput): Promise<ImapFet
 		const searchLines = await imap.command("UID SEARCH ALL");
 		const batch = selectImapUidBatch(searchLines.flatMap(parseSearchUids), input.limit, input.offset);
 		const messages: ImportMessageInput[] = [];
-		let fetchedBytes = 0;
-		for (const uid of [...batch.uids].reverse()) {
-			if (messages.length > 0 && fetchedBytes >= MAX_IMAP_BATCH_BYTES) break;
-			const { raw, flags } = await imap.fetchMessage(uid);
-			fetchedBytes += raw.byteLength;
-			messages.push({
-				filename: `${input.folder}-${uid}.eml`,
-				raw,
-				read: flags.includes("\\SEEN"),
-				starred: flags.includes("\\FLAGGED"),
-			});
+		const newestFirst = [...batch.uids].reverse();
+		const sizes = await imap.fetchSizes(newestFirst);
+		for (const group of planImapFetchGroups(newestFirst, sizes)) {
+			for (const { uid, raw, flags } of await imap.fetchMessages(group)) {
+				messages.push({
+					filename: `${input.folder}-${uid}.eml`,
+					raw,
+					read: flags.includes("\\SEEN"),
+					starred: flags.includes("\\FLAGGED"),
+				});
+			}
 		}
 		await imap.command("LOGOUT").catch(() => undefined);
 		const complete = messages.length === batch.uids.length;

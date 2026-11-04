@@ -262,6 +262,19 @@
         "CREATE TRIGGER mailbox_aliases_jmap_changed AFTER INSERT OR UPDATE OR DELETE ON mailbox_aliases\nFOR EACH ROW EXECUTE FUNCTION mailflare_aliases_changed();",
         "DO $$\nBEGIN\n\tCREATE EXTENSION IF NOT EXISTS pg_trgm;\n\tCREATE INDEX messages_subject_trgm_idx ON messages USING gin (lower(subject) gin_trgm_ops);\n\tCREATE INDEX messages_text_body_trgm_idx ON messages USING gin (lower(text_body) gin_trgm_ops);\nEXCEPTION WHEN OTHERS THEN\n\tRAISE NOTICE 'pg_trgm is unavailable; message search will scan with ILIKE instead (%).', SQLERRM;\nEND;\n$$;"
       ]
+    },
+    {
+      "name": "0002_calendar_reminders.sql",
+      "statements": [
+        "ALTER TABLE \"calendar_events\" ADD COLUMN \"reminder_minutes\" bigint;",
+        "ALTER TABLE \"calendar_events\" ADD COLUMN \"last_reminded_start\" bigint;"
+      ]
+    },
+    {
+      "name": "0003_remote_content_ask.sql",
+      "statements": [
+        "UPDATE \"users\" SET \"remote_content_mode\" = 'ask' WHERE \"remote_content_mode\" = 'allow';"
+      ]
     }
   ]
 }

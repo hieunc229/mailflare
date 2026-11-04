@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
-import { ChevronRight, FileText, Plus, Trash2 } from "lucide-react";
+import { ChevronRight, FileText, Plus, Trash2 } from "@/components/icons";
 import { useLanguage } from "@/components/language-provider";
 import { authFetch } from "@/lib/auth/client";
 import { textToHtml } from "./rich-text-utils";

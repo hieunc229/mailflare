@@ -1,5 +1,5 @@
 import { and, eq } from "drizzle-orm";
-import { messages } from "@/db/schema";
+import { agentDraftMetadata, messages } from "@/db/schema";
 import { sendEmail } from "@/lib/email/send";
 import { loadMessageAttachmentContents } from "@/lib/email/attachments";
 import { deleteMessageWithObjects } from "@/lib/email/message-cleanup";
@@ -75,6 +75,12 @@ export const emailSubmissionSet: JmapMethodHandler = async (ctx, args) => {
 		const [draft] = await ctx.db.select().from(messages).where(and(eq(messages.id, emailId), eq(messages.status, "draft"))).limit(1);
 		if (!draft || draft.userId !== ctx.auth.userId || draft.mailboxId !== identity.mailboxId) {
 			notCreated[creationId] = { type: "invalidProperties", properties: ["emailId"], description: "Not a draft of this account" };
+			continue;
+		}
+		// AI drafts must pass the human review step that /api/send enforces.
+		const [agentDraft] = await ctx.db.select({ draftId: agentDraftMetadata.draftId }).from(agentDraftMetadata).where(eq(agentDraftMetadata.draftId, draft.id)).limit(1);
+		if (agentDraft) {
+			notCreated[creationId] = { type: "forbidden", description: "Review and confirm this AI draft in Mailflare before sending" };
 			continue;
 		}
 		try {

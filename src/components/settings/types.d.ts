@@ -1,7 +1,6 @@
 export type ProfileFormProps = {
-	initialName: string;
+	accountName: string;
 	initialResetEmail: string;
-	email: string;
 };
 
 export type ProfileFormResponse = {

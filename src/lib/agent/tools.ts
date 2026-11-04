@@ -152,7 +152,7 @@ export async function runEmailTool(context: AgentToolContext, name: EmailToolNam
 		const rows = anchor.threadId
 			? await db.select().from(messages).where(and(eq(messages.mailboxId, context.mailboxId), eq(messages.threadId, anchor.threadId))).orderBy(desc(messages.createdAt)).limit(21)
 			: [anchor];
-		return { emails: rows.slice(0, 20).reverse().filter((row) => row.status !== "draft" || row.userId === context.user.id).map((row) => ({ ...publicMessage(row), text: (row.textBody || htmlToReadableText(row.htmlBody)).slice(0, 5_000) })), truncated: rows.length > 20 };
+		return { emails: rows.slice(0, 20).reverse().filter((row) => row.status === "draft" ? row.userId === context.user.id : (row.status !== "spam" && row.status !== "trash") || row.id === anchor.id).map((row) => ({ ...publicMessage(row), text: (row.textBody || htmlToReadableText(row.htmlBody)).slice(0, 5_000) })), truncated: rows.length > 20 };
 	}
 	if (name === "draft_email") return createDraft(context, { to: input.to as string, subject: input.subject as string, body: input.body as string });
 	if (name === "draft_reply") {

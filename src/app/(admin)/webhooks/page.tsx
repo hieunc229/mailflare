@@ -3,7 +3,7 @@
 import { mobilePrimaryActionClass } from "@/components/page-header-utils";
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Activity, Plus, RefreshCw, Send, Trash2 } from "lucide-react";
+import { Activity, Plus, RefreshCw, Send, Trash2 } from "@/components/icons";
 import { useLanguage } from "@/components/language-provider";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";

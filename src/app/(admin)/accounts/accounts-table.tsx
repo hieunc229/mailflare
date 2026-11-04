@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
-import { MoreVertical, RotateCcw, Trash2 } from "lucide-react";
+import { MoreVertical, RotateCcw, Trash2 } from "@/components/icons";
 import { useLanguage } from "@/components/language-provider";
 import { ProgressiveAvatarImage } from "@/components/progressive-avatar-image";
 import { Button } from "@/components/ui/button";

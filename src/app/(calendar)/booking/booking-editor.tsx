@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { CalendarDays, ChevronDown, Clock3, MapPin, MoreHorizontal, Plus, Trash2, UserRound } from "lucide-react";
+import { CalendarDays, ChevronDown, Clock3, MapPin, MoreHorizontal, Plus, Trash2, UserRound } from "@/components/icons";
 import clsx from "clsx";
 import { useLanguage } from "@/components/language-provider";
 import { folderColorKeys } from "@/lib/folders/color-keys";

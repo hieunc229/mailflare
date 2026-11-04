@@ -14,7 +14,7 @@ import {
   Settings,
   Trash2,
   Upload,
-} from "lucide-react";
+} from "@/components/icons";
 import { useLanguage } from "@/components/language-provider";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";

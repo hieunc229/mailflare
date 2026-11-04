@@ -16,7 +16,7 @@ import {
   Globe2,
   MoreVertical,
   Trash2,
-} from "lucide-react";
+} from "@/components/icons";
 import type { DomainItemCardProps } from "./types";
 
 function StatusIcon({ ok, className }: { ok: boolean; className?: string }) {

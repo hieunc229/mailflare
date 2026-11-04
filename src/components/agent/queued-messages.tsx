@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { CornerDownRight, Pencil, Trash2 } from "lucide-react";
+import { CornerDownRight, Pencil, Trash2 } from "@/components/icons";
 import { useLanguage } from "@/components/language-provider";
 import type { QueuedAgentMessagesProps } from "./types";
 

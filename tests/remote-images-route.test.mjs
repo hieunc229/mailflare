@@ -20,14 +20,23 @@ await build({ entryPoints: [join(project, "src/app/api/remote-images/route.ts")]
 const { GET } = await import(pathToFileURL(join(temporary, "route.mjs")).href);
 const request = () => new Request("https://mail.example/api/remote-images?url=https%3A%2F%2Fcdn.example%2Flogo.png");
 
-test("unauthenticated and self-hosted requests never make outbound proxy requests", async () => {
+test("unauthenticated requests never make outbound proxy requests", async () => {
 	globalThis.proxyEnv = {};
 	globalThis.proxyFetch = () => { throw new Error("Unexpected outbound request"); };
 	globalThis.proxyAuth = { error: Response.json({ error: "Unauthorized" }, { status: 401 }) };
 	assert.equal((await GET(request())).status, 401);
-	globalThis.proxyAuth = { user: { id: "user" }, error: null };
+});
+
+test("the self-hosted runtime proxies images too, and one user is rate limited", async () => {
+	globalThis.proxyAuth = { user: { id: "node-user" }, error: null };
 	globalThis.proxyEnv = { MAILFLARE_RUNTIME: "node" };
-	assert.equal((await GET(request())).status, 503);
+	globalThis.proxyFetch = async () => ({ body: new Uint8Array([1]), contentType: "image/png" });
+	assert.equal((await GET(request())).status, 200);
+	let limited = 0;
+	for (let index = 0; index < 400; index += 1) if ((await GET(request())).status === 429) limited += 1;
+	assert.ok(limited > 0);
+	globalThis.proxyAuth = { user: { id: "someone-else" }, error: null };
+	assert.equal((await GET(request())).status, 200);
 });
 
 test("authenticated Worker responses use private image headers and block the app origin", async () => {

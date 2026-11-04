@@ -4,7 +4,7 @@ import { useMemo, useRef, useState } from "react";
 import toast from "react-hot-toast";
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import clsx from "clsx";
-import { Folder, FolderInput, FolderPlus, HardDrive, RotateCcw, Trash2, X } from "lucide-react";
+import { Folder, FolderInput, FolderPlus, HardDrive, RotateCcw, Trash2, X } from "@/components/icons";
 import { useLanguage } from "@/components/language-provider";
 import { Button } from "@/components/ui/button";
 import { authFetch } from "@/lib/auth/client";

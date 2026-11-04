@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { CheckCircle2, Copy, Download, LoaderCircle } from "lucide-react";
+import { CheckCircle2, Copy, Download, LoaderCircle } from "@/components/icons";
 import { useLanguage } from "@/components/language-provider";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";

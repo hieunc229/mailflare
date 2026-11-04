@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
-import { AlertTriangle } from "lucide-react";
+import { AlertTriangle } from "@/components/icons";
 import { authFetch } from "@/lib/auth/client";
 import { useCurrentUser } from "@/hooks/use-current-user";
 import { useLanguage } from "@/components/language-provider";

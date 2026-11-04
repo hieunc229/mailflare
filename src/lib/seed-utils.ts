@@ -12,6 +12,7 @@ import { ensureBookingUsername } from "@/lib/booking/username";
 import { upsertContactFromAddress } from "@/lib/contacts/service";
 import { buildSnippet } from "@/lib/email/parse";
 import { newId } from "@/lib/ids";
+import { buildSeedRawMessage } from "@/lib/seed-raw";
 import type {
 	SeedMailboxKey,
 	SeedMailboxMap,
@@ -34,7 +35,7 @@ const seedMailboxDefinitions: {
 	{ key: "billing", localPart: "billing", displayName: "Billing" },
 ];
 
-const seedMessages: SeedMessageDefinition[] = [
+export const seedMessages: SeedMessageDefinition[] = [
 	{
 		mailbox: "support",
 		direction: "inbound",
@@ -223,6 +224,134 @@ const seedMessages: SeedMessageDefinition[] = [
 		read: true,
 		minutesAgo: 181,
 	},
+	// Sender-details demo set: threading, Reply-To, impersonation, and auth edge cases.
+	{
+		mailbox: "support",
+		direction: "inbound",
+		status: "received",
+		fromAddr: `"Lumen Recruiting" <no-reply@lumenhq.test>`,
+		toAddr: `"Support" <support@${demoDomain}>`,
+		ccAddr: `"Maya Chen" <maya@acme.test>`,
+		replyTo: `"Lumen Talent" <reply@lumenhq.test>`,
+		subject: "Application received: Maya Chen",
+		textBody:
+			"We received Maya Chen's application for the platform engineer role. The hiring team will review it and follow up with next steps.",
+		read: false,
+		minutesAgo: 11,
+		providerMessageId: "<seed-lumen-received@example.test>",
+		threadId: "<seed-thread-lumen@example.test>",
+		raw: {
+			trusted: true,
+			signedBy: "lumenhq.test",
+			mailedBy: "lumenhq.test",
+			senderIp: "203.0.113.24",
+		},
+	},
+	{
+		mailbox: "support",
+		direction: "inbound",
+		status: "received",
+		fromAddr: `"Lumen Scheduling" <no-reply@lumenhq.test>`,
+		toAddr: `"Support" <support@${demoDomain}>`,
+		replyTo: `"Lumen Talent" <reply@lumenhq.test>`,
+		subject: "Interview scheduled: Maya Chen",
+		textBody:
+			"Maya Chen's first interview is confirmed for Thursday at 10:00. The calendar invitation includes the meeting link and interviewer list.",
+		read: false,
+		minutesAgo: 7,
+		providerMessageId: "<seed-lumen-scheduled@example.test>",
+		threadId: "<seed-thread-lumen@example.test>",
+		inReplyTo: "<seed-lumen-received@example.test>",
+		references: "<seed-lumen-received@example.test>",
+		raw: {
+			trusted: true,
+			signedBy: "lumenhq.test",
+			mailedBy: "lumenhq.test",
+			senderIp: "203.0.113.24",
+		},
+	},
+	{
+		mailbox: "billing",
+		direction: "inbound",
+		status: "received",
+		fromAddr: `"Cobalt Finance" <finance@cobalt.test>`,
+		toAddr: `"Billing" <billing@${demoDomain}>`,
+		ccAddr: `"Maya Chen" <maya@acme.test>, "Northwind AP" <ap@northwind.test>`,
+		bccAddr: `"Archive" <archive@example.com>`,
+		replyTo: `"Cobalt Accounts" <accounts@cobalt.test>`,
+		subject: "Invoice 2048 is ready",
+		textBody:
+			"Invoice 2048 is attached to the billing portal. The payment window closes at the end of the month, and the accounts team can answer questions about the purchase order.",
+		read: true,
+		minutesAgo: 38,
+		providerMessageId: "<seed-cobalt-invoice@example.test>",
+		raw: {
+			trusted: true,
+			signedBy: "cobalt.test",
+			mailedBy: "cobalt.test",
+			senderIp: "203.0.113.51",
+		},
+	},
+	{
+		mailbox: "billing",
+		direction: "inbound",
+		status: "received",
+		fromAddr: `"Meridian Billing" <billing@meridian.test>`,
+		toAddr: `"Billing" <billing@${demoDomain}>`,
+		replyTo: `"Meridian Payments" <pay@meridian-payments.test>`,
+		subject: "Payment method needs attention",
+		textBody:
+			"The card on file was declined for the latest subscription renewal. Update the payment method before Friday to avoid an interruption.",
+		read: false,
+		minutesAgo: 64,
+		providerMessageId: "<seed-meridian-payment@example.test>",
+		raw: {
+			trusted: true,
+			signedBy: "meridian.test",
+			mailedBy: "meridian.test",
+			senderIp: "203.0.113.77",
+		},
+	},
+	{
+		mailbox: "support",
+		direction: "inbound",
+		status: "received",
+		fromAddr: `"security@cobaltbank.test" <alerts@cobalt-secure.test>`,
+		toAddr: `"Support" <support@${demoDomain}>`,
+		replyTo: `"Cobalt Security" <help@cobalt-help.test>`,
+		subject: "Unusual sign-in attempt",
+		textBody:
+			"We blocked a sign-in from an unrecognized device. Confirm your identity and reset your password to protect the account.",
+		read: false,
+		minutesAgo: 92,
+		providerMessageId: "<seed-cobalt-signin@example.test>",
+		raw: {
+			trusted: true,
+			spf: "fail",
+			dkim: "fail",
+			dmarc: "fail",
+			signedBy: "cobalt-secure.test",
+			mailedBy: "cobalt-secure.test",
+			senderIp: "198.51.100.42",
+			tls: "TLSv1.2",
+		},
+	},
+	{
+		mailbox: "support",
+		direction: "inbound",
+		status: "received",
+		fromAddr: `"Vendor Notice" <notice@vendor.test>`,
+		toAddr: `"Support" <support@${demoDomain}>`,
+		subject: "Updated vendor terms",
+		textBody:
+			"Review the updated vendor terms before the next renewal. This demo message carries a forged authentication header but no trusted delivery trace.",
+		read: true,
+		minutesAgo: 126,
+		providerMessageId: "<seed-vendor-terms@example.test>",
+		raw: {
+			trusted: false,
+		},
+	},
 ];
 
 export async function ensureDemoUser(env: CloudflareEnv) {
@@ -245,6 +374,7 @@ export async function ensureDemoUser(env: CloudflareEnv) {
 	const id = newId("usr");
 	await db.insert(users).values({
 		id,
+		remoteContentMode: "ask",
 		email: demoCredentials.email,
 		passwordHash: hashPassword(demoCredentials.password),
 		name: "Demo User",
@@ -336,6 +466,12 @@ export async function insertDemoMessages(
 		const id = newId("msg");
 		const createdAt = new Date(now - seedMessage.minutesAgo * 60 * 1000);
 		const mailbox = mailboxMap[seedMessage.mailbox];
+		const rawR2Key = seedMessage.raw ? `seed/${id}.eml` : null;
+		if (rawR2Key) {
+			await env.BUCKET.put(rawR2Key, buildSeedRawMessage(seedMessage, createdAt), {
+				httpMetadata: { contentType: "message/rfc822" },
+			});
+		}
 
 		await db.insert(messages).values({
 			id,
@@ -345,13 +481,19 @@ export async function insertDemoMessages(
 			providerMessageId: seedMessage.providerMessageId ?? null,
 			fromAddr: seedMessage.fromAddr,
 			toAddr: seedMessage.toAddr,
+			ccAddr: seedMessage.ccAddr ?? null,
+			bccAddr: seedMessage.bccAddr ?? null,
+			replyTo: seedMessage.replyTo ?? null,
 			subject: seedMessage.subject,
 			snippet: buildSnippet(seedMessage.textBody, null),
 			textBody: seedMessage.textBody,
 			htmlBody: null,
+			rawR2Key,
 			status: seedMessage.status,
 			read: seedMessage.read ?? true,
-			threadId: seedMessage.providerMessageId ?? null,
+			threadId: seedMessage.threadId ?? seedMessage.providerMessageId ?? null,
+			inReplyTo: seedMessage.inReplyTo ?? null,
+			references: seedMessage.references ?? null,
 			createdAt,
 		});
 

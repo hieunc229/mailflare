@@ -2,9 +2,16 @@ import type { ProviderVerdicts } from "@/lib/spam/types";
 
 export type SnsEnvelope = {
 	Type?: string;
+	MessageId?: string;
 	TopicArn?: string;
 	Message?: string;
+	Subject?: string;
+	Timestamp?: string;
 	SubscribeURL?: string;
+	Token?: string;
+	SignatureVersion?: string;
+	Signature?: string;
+	SigningCertURL?: string;
 };
 
 export type SesNotification = {

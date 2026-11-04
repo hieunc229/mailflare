@@ -1,3 +1,17 @@
+self.addEventListener("install", () => {
+	console.log("[sw] installed, activating immediately");
+	self.skipWaiting();
+});
+
+self.addEventListener("activate", (event) => {
+	console.log("[sw] activated, claiming clients");
+	event.waitUntil(self.clients.claim());
+});
+
+self.addEventListener("message", (event) => {
+	if (event.data?.type === "SKIP_WAITING") self.skipWaiting();
+});
+
 const DEFAULT_NOTIFICATION = {
 	title: "New email",
 	body: "You have a new message",

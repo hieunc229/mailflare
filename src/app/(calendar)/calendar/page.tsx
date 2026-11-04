@@ -5,7 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import type { DragEvent, PointerEvent as ReactPointerEvent } from "react";
 import { createPortal } from "react-dom";
 import toast, { Toaster } from "react-hot-toast";
-import { AlignLeft, CalendarPlus2, Check, ChevronDown, ChevronLeft, ChevronRight, Clock3, MapPin, MoreVertical, Palette, Plus, Repeat2, Trash2, UsersRound, X } from "lucide-react";
+import { AlignLeft, CalendarPlus2, Check, ChevronDown, ChevronLeft, ChevronRight, Clock3, MapPin, MoreVertical, Palette, Bell, Plus, Repeat2, Trash2, UsersRound, X } from "@/components/icons";
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import { mobilePrimaryActionClass } from "@/components/page-header-utils";
 import { Button } from "@/components/ui/button";
@@ -15,6 +15,7 @@ import { RouteLoadingBarPortal } from "@/components/route-loading-bar-portal";
 import { authFetch } from "@/lib/auth/client";
 import { formatUserDate, getUserTimeZone, parseUserDateTimeLocal } from "@/lib/time/utils";
 import { normalizeCalendarColor } from "@/lib/calendar/colors";
+import { REMINDER_MINUTE_OPTIONS } from "@/lib/calendar/reminder-utils";
 import { DEFAULT_REPEAT_DAYS, parseCalendarRepeatDays } from "@/lib/calendar/recurrence";
 import { DEFAULT_FOLDER_COLOR, FOLDER_COLOR_OPTIONS } from "@/lib/folders/colors";
 import type { TranslationKey } from "@/lib/i18n/types";
@@ -61,6 +62,7 @@ export default function CalendarPage() {
   const [color, setColor] = useState<string>(DEFAULT_FOLDER_COLOR);
   const [repeat, setRepeat] = useState<CalendarRepeat>("none");
   const [repeatDays, setRepeatDays] = useState<number[]>(DEFAULT_REPEAT_DAYS);
+  const [reminderMinutes, setReminderMinutes] = useState<number | null>(null);
   const [startsAt, setStartsAt] = useState("");
   const [endsAt, setEndsAt] = useState("");
   const [durationOptionsOpen, setDurationOptionsOpen] = useState(false);
@@ -157,6 +159,7 @@ export default function CalendarPage() {
     setColor(DEFAULT_FOLDER_COLOR);
     setRepeat("none");
     setRepeatDays(DEFAULT_REPEAT_DAYS);
+    setReminderMinutes(null);
     setGuests("");
     setLocation("");
     setDescription("");
@@ -190,7 +193,7 @@ export default function CalendarPage() {
         method: editing ? "PATCH" : "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          title, startsAt: savedStart.toISOString(), endsAt: savedEnd.toISOString(), color, repeat, repeatDays, repeatAnchorDay, effectiveFrom: effectiveFrom?.toISOString(), moveOccurrenceToPast: movingToPast, attendees: guests.split(","),
+          title, startsAt: savedStart.toISOString(), endsAt: savedEnd.toISOString(), color, repeat, repeatDays, repeatAnchorDay, reminderMinutes, effectiveFrom: effectiveFrom?.toISOString(), moveOccurrenceToPast: movingToPast, attendees: guests.split(","),
           timeZone: getUserTimeZone(),
           description,
           location,
@@ -239,6 +242,7 @@ export default function CalendarPage() {
     setTitle(event.title);
     setColor(normalizeCalendarColor(event.color));
     setRepeat(event.repeat);
+    setReminderMinutes(event.reminderMinutes ?? null);
     setRepeatDays(event.repeat === "weekdays" ? parseCalendarRepeatDays(event.repeatDays) : DEFAULT_REPEAT_DAYS);
     setLocation(event.location ?? "");
     setDescription(event.description ?? "");
@@ -569,6 +573,19 @@ export default function CalendarPage() {
                       </Button>
                     ))}
                   </div>}
+                </div>
+              </div>
+              <div className="grid grid-cols-[24px_minmax(0,1fr)] items-start gap-3">
+                <Bell aria-hidden="true" className="mt-2 h-5 w-5 text-neutral-600" />
+                <div className="relative min-w-0">
+                  <select value={reminderMinutes ?? ""} onChange={(event) => setReminderMinutes(event.target.value === "" ? null : Number(event.target.value))} aria-label={t("calendar.reminder")}
+                    className="h-9 w-full appearance-none rounded-md border border-transparent bg-transparent pl-2 pr-8 text-sm text-neutral-700 outline-none hover:bg-neutral-50 focus:border-blue-600 focus:bg-white">
+                    <option value="">{t("calendar.reminder.none")}</option>
+                    {REMINDER_MINUTE_OPTIONS.map((minutes) => (
+                      <option key={minutes} value={minutes}>{t(`calendar.reminder.m${minutes}` as TranslationKey)}</option>
+                    ))}
+                  </select>
+                  <ChevronDown aria-hidden="true" className="pointer-events-none absolute right-2 top-1/2 h-4 w-4 -translate-y-1/2 text-neutral-500" />
                 </div>
               </div>
               <div className="grid grid-cols-[24px_minmax(0,1fr)] items-start gap-3">

@@ -1,6 +1,6 @@
 "use client";
 
-import { X } from "lucide-react";
+import { X } from "@/components/icons";
 import { useLanguage } from "@/components/language-provider";
 import { HeaderSearch } from "@/components/header-search";
 import { useMailSearch } from "./mail-search-context";

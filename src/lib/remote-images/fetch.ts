@@ -1,3 +1,6 @@
+import { queryDns } from "@/lib/dns-query";
+import { isPublicIpv4 } from "@/lib/spam/domain-utils";
+
 export const REMOTE_IMAGE_MAX_URL_LENGTH = 4096;
 export const REMOTE_IMAGE_MAX_BYTES = 5 * 1024 * 1024;
 export const REMOTE_IMAGE_MAX_REDIRECTS = 3;
@@ -32,6 +35,8 @@ export type RemoteImageResult = {
 
 export type RemoteImageFetchOptions = {
 	fetch?: RemoteImageFetch;
+	/** Resolves a hostname to its A and AAAA addresses; every one must be public. Defaults to DNS-over-HTTPS. */
+	resolveHost?: (hostname: string) => Promise<string[]>;
 	blockedOrigins?: Iterable<string>;
 	timeoutMs?: number;
 	maxBytes?: number;
@@ -42,12 +47,24 @@ function invalidUrl(message = "Invalid remote image URL"): never {
 	throw new RemoteImageError(message, 400, "invalid_url");
 }
 
-function isIpLiteral(hostname: string): boolean {
+export function isIpLiteral(hostname: string): boolean {
 	return hostname.startsWith("[") || /^\d{1,3}(?:\.\d{1,3}){3}$/.test(hostname);
 }
 
-function isForbiddenHostname(hostname: string): boolean {
+// Wildcard DNS services that resolve an embedded address, e.g. 127.0.0.1.nip.io.
+const WILDCARD_DNS_SUFFIXES = ["nip.io", "sslip.io", "xip.io", "traefik.me", "localtest.me", "lvh.me", "localhost.run"];
+
+function embedsNonPublicIpv4(host: string): boolean {
+	for (const match of host.matchAll(/(?<![\d])(\d{1,3})[.-](\d{1,3})[.-](\d{1,3})[.-](\d{1,3})(?![\d])/g)) {
+		if (!isPublicIpv4(`${match[1]}.${match[2]}.${match[3]}.${match[4]}`)) return true;
+	}
+	return false;
+}
+
+export function isForbiddenHostname(hostname: string): boolean {
 	const host = hostname.toLowerCase().replace(/\.$/, "");
+	if (embedsNonPublicIpv4(host)) return true;
+	if (WILDCARD_DNS_SUFFIXES.some((suffix) => host === suffix || host.endsWith(`.${suffix}`))) return true;
 	return host === "localhost"
 		|| host === "local"
 		|| host === "internal"
@@ -155,17 +172,45 @@ async function readLimitedBody(response: Response, maxBytes: number): Promise<Ui
 	return body;
 }
 
+export function isPublicAddress(address: string): boolean {
+	const value = address.trim().toLowerCase();
+	if (!value.includes(":")) return isPublicIpv4(value);
+	const mapped = /^::ffff:(\d{1,3}(?:\.\d{1,3}){3})$/.exec(value);
+	if (mapped) return isPublicIpv4(mapped[1]);
+	if (value === "::" || value === "::1") return false;
+	// Unique local (fc00::/7), link-local (fe80::/10) and multicast (ff00::/8).
+	return !/^(f[cd]|fe[89ab]|ff)/.test(value);
+}
+
+async function defaultResolveHost(hostname: string): Promise<string[]> {
+	const [v4, v6] = await Promise.all([queryDns(hostname, "A"), queryDns(hostname, "AAAA")]);
+	return [...v4, ...v6];
+}
+
+/** A public-looking name can still resolve to a private address, so check what it resolves to. */
+async function assertPublicHost(resolve: (hostname: string) => Promise<string[]>, hostname: string): Promise<void> {
+	let addresses: string[];
+	try {
+		addresses = await resolve(hostname);
+	} catch {
+		throw new RemoteImageError("Could not verify remote image host", 502, "upstream_error");
+	}
+	if (!addresses.length || addresses.some((address) => !isPublicAddress(address))) invalidUrl("Remote image host is not public");
+}
+
 export async function fetchRemoteImage(value: string, options: RemoteImageFetchOptions = {}): Promise<RemoteImageResult> {
 	const fetchImpl = options.fetch ?? fetch;
 	const blockedOrigins = [...(options.blockedOrigins ?? [])];
 	const maxBytes = options.maxBytes ?? REMOTE_IMAGE_MAX_BYTES;
 	const maxRedirects = options.maxRedirects ?? REMOTE_IMAGE_MAX_REDIRECTS;
+	const resolveHost = options.resolveHost ?? defaultResolveHost;
 	let current = parseRemoteImageUrl(value, blockedOrigins);
 	const controller = new AbortController();
 	const timeout = setTimeout(() => controller.abort(), options.timeoutMs ?? REMOTE_IMAGE_TIMEOUT_MS);
 
 	try {
 		for (let redirects = 0; ; redirects += 1) {
+			await assertPublicHost(resolveHost, current.hostname);
 			let response: Response;
 			try {
 				response = await fetchImpl(current.href, {

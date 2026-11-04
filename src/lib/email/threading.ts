@@ -1,6 +1,7 @@
-import { and, asc, eq, inArray } from "drizzle-orm";
+import { and, asc, eq, inArray, or } from "drizzle-orm";
 import type { getDb } from "@/db";
 import { messages } from "@/db/schema";
+import { insensitiveLike } from "@/db/sql";
 import { newId } from "@/lib/ids";
 import type { ResolveThreadInput } from "@/lib/email/threading-types";
 import { normalizeMessageId, selectThreadLookupIds } from "@/lib/email/thread-lookup";
@@ -59,9 +60,39 @@ export async function resolveThreadId(db: Db, input: ResolveThreadInput): Promis
 			.orderBy(asc(messages.createdAt))
 			.limit(1);
 		if (parent) {
-			return parent.threadId ?? normalizeMessageId(parent.providerMessageId) ?? newId("thr");
+			const threadId = parent.threadId ?? normalizeMessageId(parent.providerMessageId) ?? newId("thr");
+			// In-Reply-To is attacker-controlled, so an inbound message only joins a conversation
+			// that its sender already takes part in.
+			if (!input.senderAddress || await isThreadParticipant(db, input.mailboxId, threadId, input.senderAddress)) return threadId;
+			return newId("thr");
 		}
 	}
 
-	return normalizeMessageId(input.messageId) ?? newId("thr");
+	const own = normalizeMessageId(input.messageId);
+	// A Message-ID that is already some stored thread's id must not pull this message into it.
+	if (own && input.mailboxId && input.senderAddress) {
+		const [taken] = await db.select({ id: messages.id }).from(messages).where(and(eq(messages.mailboxId, input.mailboxId), eq(messages.threadId, own))).limit(1);
+		if (taken) return newId("thr");
+	}
+	return own ?? newId("thr");
+}
+
+async function isThreadParticipant(db: Db, mailboxId: string, threadId: string, address: string): Promise<boolean> {
+	// "_" in an address only widens the match to a one-character wildcard; "%" is dropped.
+	const pattern = `%${address.trim().toLowerCase().replace(/%/g, "")}%`;
+	const [match] = await db
+		.select({ id: messages.id })
+		.from(messages)
+		.where(and(
+			eq(messages.mailboxId, mailboxId),
+			eq(messages.threadId, threadId),
+			or(
+				insensitiveLike(messages.fromAddr, pattern),
+				insensitiveLike(messages.toAddr, pattern),
+				insensitiveLike(messages.ccAddr, pattern),
+				insensitiveLike(messages.replyTo, pattern),
+			),
+		))
+		.limit(1);
+	return Boolean(match);
 }

@@ -4,4 +4,6 @@ export type ResolveThreadInput = {
 	messageId: string | null;
 	inReplyTo?: string | null;
 	references?: string[];
+	/** Bare sender address of an inbound message; a stranger cannot join a conversation by naming its Message-ID. */
+	senderAddress?: string | null;
 };

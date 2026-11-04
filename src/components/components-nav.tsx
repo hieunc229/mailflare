@@ -88,6 +88,7 @@ export function NavItem({ link, iconClassName, labelClassName, wrap }: Props) {
           size={19}
           style={{ color: link.iconColor }}
           className={iconClassName}
+          strokeWidth={2}
         />
         {!minimal && <span className={cn("flex-1", typeof link.count === "number" && link.count > 0 && "font-semibold")}>{link.label}</span>}
         {!minimal && typeof link.count === "number" && link.count > 0 && (
@@ -150,6 +151,7 @@ export function NavItem({ link, iconClassName, labelClassName, wrap }: Props) {
         // className={minimal ? "h-4 w-4" : "h-5 w-5"}
         style={{ color: link.iconColor }}
         size={16}
+        strokeWidth={2}
         className={cn("max-md:h-5 max-md:w-5", wrap && !minimal && "mt-0.5 shrink-0", iconClassName)}
       />
       {!minimal && <span className={cn("flex-1", wrap && "min-w-0 break-words leading-5 max-md:leading-6", labelClassName, typeof link.count === "number" && link.count > 0 && "font-semibold")}>{link.label}</span>}

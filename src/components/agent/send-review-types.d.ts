@@ -13,8 +13,10 @@ export type ReviewSnapshot = {
 export type SendReviewProps = {
 	approvalId: string;
 	snapshot: ReviewSnapshot;
+	/** Recipients that are not saved contacts or people the user has written to before. */
+	unfamiliarRecipients?: string[];
 	onClose?: () => void;
 	onSent?: (messageId: string) => void;
 };
 
-export type AgentReviewResponse = { status: string; snapshot: ReviewSnapshot | null; stale: boolean; error?: string };
+export type AgentReviewResponse = { status: string; snapshot: ReviewSnapshot | null; stale: boolean; unfamiliarRecipients?: string[]; error?: string };

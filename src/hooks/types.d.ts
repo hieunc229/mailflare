@@ -18,6 +18,7 @@ export type Message = {
 	bccAddr?: string | null;
 	/** Comma-separated Reply-To list; replies go here instead of `fromAddr` when set. */
 	replyTo?: string | null;
+	/** Resolved sender label: a manually named contact, otherwise this message's From name. */
 	fromContactName?: string | null;
 	fromContactHasAvatar?: boolean;
 	toContactName?: string | null;

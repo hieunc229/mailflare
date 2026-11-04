@@ -4,7 +4,7 @@ import { useState } from "react";
 import ReactMarkdown from "react-markdown";
 import Link from "next/link";
 import remarkGfm from "remark-gfm";
-import { ChevronDown, Clock3 } from "lucide-react";
+import { ChevronDown, Clock3 } from "@/components/icons";
 import { useLanguage } from "@/components/language-provider";
 import type { AgentTurnProps } from "./types";
 import { agentDraftIdFromHref, formatAgentDuration } from "./utils";

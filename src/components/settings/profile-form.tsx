@@ -1,29 +1,43 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useLanguage } from "@/components/language-provider";
+import { useSelectedMailbox } from "@/components/mailbox-provider";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { authFetch } from "@/lib/auth/client";
 import { dispatchProfileNameChanged } from "@/lib/profile/name-client";
+import { InboxSwitcher } from "./inbox-switcher";
 import { ProfileAvatarForm } from "./profile-avatar-form";
 import type { ProfileFormProps, ProfileFormResponse } from "./types";
+import { getMailboxAddress, updateCurrentMailboxName } from "./utils";
 
 export function ProfileForm({
-  initialName,
+  accountName,
   initialResetEmail,
-  email,
 }: ProfileFormProps) {
   const { t } = useLanguage();
-  const [name, setName] = useState(initialName);
+  const { selectedMailbox, setSelectedMailbox, isLoading } = useSelectedMailbox();
+  const [name, setName] = useState("");
+  const [savedName, setSavedName] = useState("");
   const [resetEmail, setResetEmail] = useState(initialResetEmail);
-  const [savedName, setSavedName] = useState(initialName);
   const [savedResetEmail, setSavedResetEmail] = useState(initialResetEmail);
   const [profileStatus, setProfileStatus] = useState<string | null>(null);
   const [recoveryStatus, setRecoveryStatus] = useState<string | null>(null);
   const [savingProfile, setSavingProfile] = useState(false);
   const [savingRecovery, setSavingRecovery] = useState(false);
+
+  useEffect(() => {
+    const nextName = selectedMailbox?.displayName ?? "";
+    setName(nextName);
+    setSavedName(nextName);
+    setProfileStatus(null);
+  }, [selectedMailbox?.id, selectedMailbox?.displayName]);
+
+  // Name and avatar belong to the selected inbox. Only the primary inbox is the
+  // account itself, so the recovery email applies to it alone.
+  const isPrimary = !!selectedMailbox?.isPrimary && selectedMailbox.type === "personal";
 
   async function saveProfile(nextName: string, nextResetEmail: string) {
     try {
@@ -42,13 +56,9 @@ export function ProfileForm({
         );
       }
 
-      const savedName = data.user?.name ?? nextName.trim();
-      const savedResetEmail = data.user?.resetEmail ?? "";
-      setName(savedName);
-      setResetEmail(savedResetEmail);
-      setSavedName(savedName);
-      setSavedResetEmail(savedResetEmail);
-      dispatchProfileNameChanged(savedName);
+      const nextSavedResetEmail = data.user?.resetEmail ?? "";
+      setResetEmail(nextSavedResetEmail);
+      setSavedResetEmail(nextSavedResetEmail);
     } catch (error) {
       throw error instanceof Error
         ? error
@@ -61,7 +71,13 @@ export function ProfileForm({
     setSavingProfile(true);
     setProfileStatus(null);
     try {
-      await saveProfile(name, savedResetEmail);
+      if (!selectedMailbox) return;
+      const updated = await updateCurrentMailboxName(selectedMailbox.id, name);
+      setSelectedMailbox({ ...selectedMailbox, ...updated });
+      setName(updated.displayName ?? "");
+      setSavedName(updated.displayName ?? "");
+      // The primary inbox is the account, so its name is the profile name.
+      if (isPrimary) dispatchProfileNameChanged(updated.displayName ?? "");
       setProfileStatus(t("common.saved"));
     } catch (error) {
       setProfileStatus(
@@ -77,7 +93,7 @@ export function ProfileForm({
     setSavingRecovery(true);
     setRecoveryStatus(null);
     try {
-      await saveProfile(savedName, resetEmail);
+      await saveProfile(accountName, resetEmail);
       setRecoveryStatus(t("common.saved"));
     } catch (error) {
       setRecoveryStatus(
@@ -90,14 +106,30 @@ export function ProfileForm({
     }
   }
 
+  if (isLoading) {
+    return <p className="rounded-t-3xl rounded-b-lg bg-white p-6 text-sm text-neutral-500">{t("settings.signature.loadingInbox")}</p>;
+  }
+  if (!selectedMailbox) {
+    return <p className="rounded-t-3xl rounded-b-lg bg-white p-6 text-sm text-neutral-500">{t("settings.signature.selectInbox")}</p>;
+  }
+
+  const address = getMailboxAddress(selectedMailbox);
+  const canManage = selectedMailbox.permission === "full_access";
+
   return (
     <>
       <form
         onSubmit={onProfileSubmit}
         className="space-y-6 rounded-b-lg rounded-t-3xl bg-white p-6"
       >
+        <InboxSwitcher />
         <div className="flex items-center gap-4">
-          <ProfileAvatarForm name={name} colorSeed={email} />
+          <ProfileAvatarForm
+            mailboxId={selectedMailbox.id}
+            initialHasAvatar={!!selectedMailbox.hasAvatar}
+            name={savedName || selectedMailbox.localPart}
+            colorSeed={address}
+          />
           <div>
             <p className="text-sm font-medium text-neutral-900">
               {t("settings.profile.pictureTitle")}
@@ -115,7 +147,9 @@ export function ProfileForm({
             autoComplete="name"
             value={name}
             onChange={(event) => setName(event.target.value)}
-            required
+            placeholder={selectedMailbox.localPart}
+            required={isPrimary}
+            disabled={!canManage || savingProfile}
           />
         </div>
         <div className="space-y-2">
@@ -123,7 +157,7 @@ export function ProfileForm({
           <Input
             id="accountEmail"
             autoComplete="email"
-            value={email}
+            value={address}
             type="email"
             readOnly
             aria-readonly="true"
@@ -134,7 +168,7 @@ export function ProfileForm({
         <div className="flex items-center gap-3">
           <Button
             type="submit"
-            disabled={savingProfile || name.trim() === savedName}
+            disabled={!canManage || savingProfile || name.trim() === savedName}
           >
             {savingProfile ? t("common.saving") : t("settings.profile.save")}
           </Button>
@@ -144,7 +178,7 @@ export function ProfileForm({
         </div>
       </form>
 
-      <form
+      {isPrimary && <form
         onSubmit={onRecoverySubmit}
         className="space-y-4 rounded-lg bg-white p-6"
       >
@@ -178,7 +212,7 @@ export function ProfileForm({
             <p className="text-sm text-neutral-500">{recoveryStatus}</p>
           )}
         </div>
-      </form>
+      </form>}
     </>
   );
 }

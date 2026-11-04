@@ -1,7 +1,7 @@
 "use client";
 
 import { createElement, useEffect, useRef, useState } from "react";
-import { Ban, FileCode2, Forward, Mail, MailOpen, MoreVertical, Reply, ReplyAll, Star } from "lucide-react";
+import { Ban, FileCode2, Forward, Info, Mail, MailOpen, MoreVertical, Reply, ReplyAll, Star } from "@/components/icons";
 import { useCompose } from "@/components/compose/compose-context";
 import { MessageSourceDialog } from "@/components/messages/message-source-dialog";
 import { useDismissible } from "@/components/use-dismissible";
@@ -9,6 +9,7 @@ import { getOwnAddressForMessage } from "@/app/(dashboard)/inbox/[messageId]/uti
 import { useLanguage } from "@/components/language-provider";
 import { Button } from "@/components/ui/button";
 import { Tooltip } from "@/components/ui/tooltip";
+import { cn } from "@/lib/utils";
 import {
 	blockMessageContact,
 	createForwardDraft,
@@ -29,6 +30,8 @@ export function ThreadMessageActions({
 	ownAddress,
 	ownAddresses = [],
 	starOnly = false,
+	detailsOpen = false,
+	onToggleDetails,
 }: ThreadMessageActionsProps) {
 	const { t } = useLanguage();
 	const { openDraftComposer } = useCompose();
@@ -137,6 +140,21 @@ export function ThreadMessageActions({
 	return (
 		<div className="flex items-center gap-0.5">
 			{error && <span role="alert" className="mr-1 max-w-32 truncate text-xs text-red-600" title={error}>{error}</span>}
+			{onToggleDetails && (
+				<Tooltip label={t("message.details")}>
+					<Button
+						type="button"
+						variant="ghost"
+						size="sm"
+						className={cn("h-8 w-8 px-0", detailsOpen && "bg-neutral-100 text-neutral-900")}
+						aria-label={t("message.details")}
+						aria-expanded={detailsOpen}
+						onClick={onToggleDetails}
+					>
+						<Info className="h-4 w-4" />
+					</Button>
+				</Tooltip>
+			)}
 			<Tooltip label={starred ? t("message.removeStar") : t("message.star")}>
 				<Button
 					type="button"
