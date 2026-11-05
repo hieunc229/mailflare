@@ -8,4 +8,6 @@ export type ThreadMessageActionsProps = {
 	starOnly?: boolean;
 	detailsOpen?: boolean;
 	onToggleDetails?: () => void;
+	/** Adds a note about this email; the menu entry shows only when given. */
+	onAddNote?: (messageId: string) => void;
 };

@@ -279,11 +279,19 @@
     {
       "name": "0004_conversation_notes.sql",
       "statements": [
-        "CREATE TABLE \"conversation_notes\" (\n\t\"id\" text PRIMARY KEY NOT NULL,\n\t\"mailbox_id\" text NOT NULL,\n\t\"thread_key\" text NOT NULL,\n\t\"html\" text NOT NULL,\n\t\"saved_by_user_id\" text,\n\t\"created_at\" bigint NOT NULL,\n\t\"updated_at\" bigint NOT NULL\n);",
+        "CREATE TABLE \"conversation_notes\" (\n\t\"id\" text PRIMARY KEY NOT NULL,\n\t\"mailbox_id\" text NOT NULL,\n\t\"thread_key\" text NOT NULL,\n\t\"body\" text NOT NULL,\n\t\"saved_by_user_id\" text,\n\t\"created_at\" bigint NOT NULL\n);",
         "ALTER TABLE \"conversation_notes\" ADD CONSTRAINT \"conversation_notes_mailbox_id_mailboxes_id_fk\" FOREIGN KEY (\"mailbox_id\") REFERENCES \"public\".\"mailboxes\"(\"id\") ON DELETE cascade ON UPDATE no action;",
         "ALTER TABLE \"conversation_notes\" ADD CONSTRAINT \"conversation_notes_saved_by_user_id_users_id_fk\" FOREIGN KEY (\"saved_by_user_id\") REFERENCES \"public\".\"users\"(\"id\") ON DELETE set null ON UPDATE no action;",
-        "CREATE UNIQUE INDEX \"conversation_notes_mailbox_thread_idx\" ON \"conversation_notes\" USING btree (\"mailbox_id\",\"thread_key\");",
+        "CREATE INDEX \"conversation_notes_mailbox_thread_idx\" ON \"conversation_notes\" USING btree (\"mailbox_id\",\"thread_key\");",
         "CREATE INDEX \"conversation_notes_saved_by_idx\" ON \"conversation_notes\" USING btree (\"saved_by_user_id\");"
+      ]
+    },
+    {
+      "name": "0005_conversation_note_message.sql",
+      "statements": [
+        "ALTER TABLE \"conversation_notes\" ADD COLUMN \"message_id\" text;",
+        "ALTER TABLE \"conversation_notes\" ADD CONSTRAINT \"conversation_notes_message_id_messages_id_fk\" FOREIGN KEY (\"message_id\") REFERENCES \"public\".\"messages\"(\"id\") ON DELETE set null ON UPDATE no action;",
+        "CREATE INDEX \"conversation_notes_message_idx\" ON \"conversation_notes\" USING btree (\"message_id\");"
       ]
     }
   ]

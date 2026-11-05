@@ -505,6 +505,13 @@
       "when": 1793347200000,
       "tag": "0080_add_conversation_notes",
       "breakpoints": true
+    },
+    {
+      "idx": 73,
+      "version": "6",
+      "when": 1793347300000,
+      "tag": "0081_conversation_note_message",
+      "breakpoints": true
     }
   ]
 }

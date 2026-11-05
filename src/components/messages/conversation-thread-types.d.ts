@@ -14,6 +14,7 @@ export type ConversationThreadProps = {
 	expandedAll: boolean;
 	onExpandedAllChange: (expanded: boolean) => void;
 	showFullRecipientAddresses?: boolean;
+	onAddNote?: (messageId: string) => void;
 };
 
 export type ConversationMessageCardProps = {
@@ -24,6 +25,7 @@ export type ConversationMessageCardProps = {
 	ownAddresses?: string[];
 	defaultExpanded?: boolean;
 	showFullRecipientAddresses?: boolean;
+	onAddNote?: (messageId: string) => void;
 };
 
 export type UseMessageThreadResult = {

@@ -553,7 +553,8 @@ export const followUps = sqliteTable(
 );
 
 /**
- * One note per conversation, shared with everyone who can read the mailbox.
+ * Notes on a conversation, oldest first, shared with everyone who can read the
+ * mailbox. A note is plain text and is never edited once added.
  * `threadKey` is the conversation key the message list uses: the thread id, or
  * the lone message's id when the conversation was never threaded.
  */
@@ -563,14 +564,16 @@ export const conversationNotes = sqliteTable(
 		id: text("id").primaryKey(),
 		mailboxId: text("mailbox_id").notNull().references(() => mailboxes.id, { onDelete: "cascade" }),
 		threadKey: text("thread_key").notNull(),
-		html: text("html").notNull(),
+		body: text("body").notNull(),
+		/** An email of the conversation the note is about; cleared if that email is deleted. */
+		messageId: text("message_id").references((): AnySQLiteColumn => messages.id, { onDelete: "set null" }),
 		savedByUserId: text("saved_by_user_id").references((): AnySQLiteColumn => users.id, { onDelete: "set null" }),
 		createdAt: timestamp("created_at").notNull().$defaultFn(() => new Date()),
-		updatedAt: timestamp("updated_at").notNull().$defaultFn(() => new Date()),
 	},
 	(t) => [
-		uniqueIndex("conversation_notes_mailbox_thread_idx").on(t.mailboxId, t.threadKey),
+		index("conversation_notes_mailbox_thread_idx").on(t.mailboxId, t.threadKey),
 		index("conversation_notes_saved_by_idx").on(t.savedByUserId),
+		index("conversation_notes_message_idx").on(t.messageId),
 	],
 );
 

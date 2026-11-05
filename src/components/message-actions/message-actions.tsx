@@ -2,7 +2,8 @@
 
 import { createElement, useState, useMemo, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
-import { Archive, Ban, BellOff, Clock, FileCode2, Forward, Mail, MailOpen, MoreVertical, Reply, ReplyAll, ShieldAlert, Trash2 } from "@/components/icons";
+import { Archive, Ban, BellOff, Clock, FileCode2, Forward, Mail, MailOpen, MoreVertical, Note01, Reply, ReplyAll, ShieldAlert, Trash2 } from "@/components/icons";
+import { cn } from "@/lib/utils";
 import { useLanguage } from "@/components/language-provider";
 import { useCompose } from "@/components/compose/compose-context";
 import { MessageSourceDialog } from "@/components/messages/message-source-dialog";
@@ -47,6 +48,9 @@ export function MessageActions({
 	message,
 	messageMeta,
 	bodyHtml,
+	notesCount = 0,
+	notesOpen = false,
+	onToggleNotes,
 }: MessageActionsProps) {
 	const { t } = useLanguage();
 	const router = useRouter();
@@ -321,6 +325,26 @@ export function MessageActions({
 			<span className="h-5 mx-2 bg-gray-200 w-px inline-block" />
 
 
+			{onToggleNotes && (
+				<Tooltip label={t("note.toggle")}>
+					<Button
+						type="button"
+						variant="ghost"
+						size="roundedSM"
+						className={cn("relative", notesCount > 0 && "text-[var(--primary)] hover:text-[var(--primary)]", notesOpen && "bg-neutral-100")}
+						aria-label={notesCount > 0 ? `${t("note.toggle")} (${notesCount})` : t("note.toggle")}
+						aria-expanded={notesOpen}
+						onClick={onToggleNotes}
+					>
+						<Note01 size={iconSize} />
+						{notesCount > 1 && (
+							<span aria-hidden="true" className="absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-[var(--primary)] px-1 text-[10px] font-semibold leading-none text-[var(--primary-foreground)]">
+								{notesCount > 99 ? "99+" : notesCount}
+							</span>
+						)}
+					</Button>
+				</Tooltip>
+			)}
 			<Tooltip label={shortcutsEnabled ? t("actions.replyHint") : t("message.reply")}>
 				<Button
 					type="button"

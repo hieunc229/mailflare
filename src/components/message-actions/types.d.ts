@@ -21,6 +21,10 @@ export type MessageActionsProps = {
 	/** Needed by Forward, which quotes the original header block. */
 	messageMeta?: Pick<Message, "id" | "subject" | "createdAt">;
 	bodyHtml?: string | null;
+	/** Notes on the conversation; the toggle shows only when a handler is given. */
+	notesCount?: number;
+	notesOpen?: boolean;
+	onToggleNotes?: () => void;
 };
 
 export type MessageSnoozeDialogProps = {

@@ -16,7 +16,8 @@ import { MessageDetailSkeleton } from "@/components/page-skeletons";
 import { usePageLoading } from "@/components/page-loading";
 import { PreviousMessage } from "@/components/previous-message";
 import { ConversationThread } from "@/components/messages/conversation-thread";
-import { ConversationNote } from "@/components/messages/conversation-note";
+import { ConversationNotesPanel } from "@/components/messages/conversation-notes-panel";
+import { useConversationNotes } from "@/components/messages/use-conversation-notes";
 import { MessageDetailNavigation } from "@/components/messages/message-detail-navigation";
 import { MessageReadingHeaderButton } from "@/components/messages/message-reading-header-button";
 import { ScheduledSendBanner } from "@/components/messages/scheduled-send-banner";
@@ -62,6 +63,9 @@ export default function MessageDetailPage() {
     useState<MessageAttachment | null>(null);
   const [threadExpanded, setThreadExpanded] = useState(false);
   const [detailsOpen, setDetailsOpen] = useState(false);
+  const [notesOpen, setNotesOpen] = useState(false);
+  const [noteAttachmentId, setNoteAttachmentId] = useState<string | null>(null);
+  const conversationNotes = useConversationNotes(messageId);
   const [latestMessagesFirst] = useLatestMessagesFirst();
   const { enabled: showFullRecipientAddresses } = useShowFullRecipientAddresses();
   const remote = useRemoteContent(
@@ -148,6 +152,13 @@ export default function MessageDetailPage() {
     htmlBody: body?.htmlBody ?? null,
     attachments,
   };
+  const noteThreadMessages = thread.messages.some((threadMessage) => threadMessage.id === message.id)
+    ? thread.messages
+    : [...thread.messages, currentThreadMessage];
+  function addNoteAbout(emailId: string) {
+    setNoteAttachmentId(emailId);
+    setNotesOpen(true);
+  }
   const messageMailbox =
     mailboxes.find((mailbox) => mailbox.id === message.mailboxId) ?? selectedMailbox;
   const currentAccountName =
@@ -213,6 +224,9 @@ export default function MessageDetailPage() {
         message={message}
         messageMeta={message}
         bodyHtml={body?.htmlBody}
+        notesCount={conversationNotes.notes.length}
+        notesOpen={notesOpen}
+        onToggleNotes={() => setNotesOpen((open) => !open)}
       />
       <MessageDetailNavigation messageId={message.id} unread={message.direction === "inbound" && !message.read} />
     </div>
@@ -231,7 +245,6 @@ export default function MessageDetailPage() {
           />
         </div>
       </div> */}
-      <ConversationNote key={message.id} messageId={message.id} />
       <ConversationThread
         currentMessageId={message.id}
         position={latestMessagesFirst ? "after" : "before"}
@@ -244,8 +257,10 @@ export default function MessageDetailPage() {
         showFullRecipientAddresses={showFullRecipientAddresses}
         expandedAll={threadExpanded}
         onExpandedAllChange={setThreadExpanded}
+        onAddNote={addNoteAbout}
       />
-      <article className={clsx("py-4 sm:px-6", !isAnyPanelVisible && "sm:pl-12")}>
+      <div className="@container relative flex flex-col">
+      <article className={clsx("min-w-0 flex-1 py-4 sm:px-6", !isAnyPanelVisible && "sm:pl-12", notesOpen && "@5xl:pr-[28.5rem]")}>
         <div className="w-full">
           <div className="flex flex-wrap items-start justify-between gap-x-3 gap-y-1 px-4 pb-5 sm:px-0 sm:pl-4">
             <div className="flex min-w-0 items-start gap-3">
@@ -307,6 +322,7 @@ export default function MessageDetailPage() {
                 starOnly={!thread.messages.some((threadMessage) => threadMessage.id === message.id) || !thread.messages.some((threadMessage) => threadMessage.id !== message.id)}
                 detailsOpen={detailsOpen}
                 onToggleDetails={() => setDetailsOpen((open) => !open)}
+                onAddNote={addNoteAbout}
               />
             </div>
           </div>
@@ -389,6 +405,27 @@ export default function MessageDetailPage() {
           )}
         </div>
       </article>
+      {notesOpen && (
+        <div className="order-first px-4 pt-4 @2xl:absolute @2xl:right-6 @2xl:top-0 @2xl:order-none @2xl:z-20 @2xl:w-[26rem] @2xl:max-w-[calc(100%-3rem)] @2xl:px-0">
+          <div className="@2xl:shadow-xl">
+            <ConversationNotesPanel
+              messageId={message.id}
+              notes={conversationNotes.notes}
+              loading={conversationNotes.loading}
+              onAdd={conversationNotes.add}
+              threadMessages={noteThreadMessages}
+              mailboxId={message.mailboxId}
+              currentAccountName={currentAccountName}
+              attachmentId={noteAttachmentId}
+              onAttachmentChange={setNoteAttachmentId}
+              onUpdate={conversationNotes.update}
+              onRemove={conversationNotes.remove}
+              onClose={() => setNotesOpen(false)}
+            />
+          </div>
+        </div>
+      )}
+      </div>
       <ConversationThread
         currentMessageId={message.id}
         position={latestMessagesFirst ? "before" : "after"}
@@ -401,6 +438,7 @@ export default function MessageDetailPage() {
         showFullRecipientAddresses={showFullRecipientAddresses}
         expandedAll={threadExpanded}
         onExpandedAllChange={setThreadExpanded}
+        onAddNote={addNoteAbout}
       />
       <MessageAttachmentViewer
         attachment={previewAttachment}

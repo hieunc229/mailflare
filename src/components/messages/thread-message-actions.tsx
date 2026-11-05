@@ -1,7 +1,7 @@
 "use client";
 
 import { createElement, useEffect, useRef, useState } from "react";
-import { Ban, FileCode2, Forward, Info, Mail, MailOpen, MoreVertical, Reply, ReplyAll, Star } from "@/components/icons";
+import { Ban, FileCode2, Forward, Info, Mail, MailOpen, MoreVertical, Note01, Reply, ReplyAll, Star } from "@/components/icons";
 import { useCompose } from "@/components/compose/compose-context";
 import { MessageSourceDialog } from "@/components/messages/message-source-dialog";
 import { useDismissible } from "@/components/use-dismissible";
@@ -32,6 +32,7 @@ export function ThreadMessageActions({
 	starOnly = false,
 	detailsOpen = false,
 	onToggleDetails,
+	onAddNote,
 }: ThreadMessageActionsProps) {
 	const { t } = useLanguage();
 	const { openDraftComposer } = useCompose();
@@ -212,6 +213,11 @@ export function ThreadMessageActions({
 						<button type="button" className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm hover:bg-neutral-100" onClick={() => void onForward()}>
 							<Forward className="h-4 w-4" /> {t("message.forward")}
 						</button>
+						{onAddNote && (
+							<button type="button" className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm hover:bg-neutral-100" onClick={() => { setMoreOpen(false); onAddNote(message.id); }}>
+								<Note01 className="h-4 w-4" /> {t("note.add")}
+							</button>
+						)}
 						<button type="button" className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm hover:bg-neutral-100" onClick={() => { setMoreOpen(false); setSourceOpen(true); }}>
 							<FileCode2 className="h-4 w-4" /> {t("message.showOriginal")}
 						</button>

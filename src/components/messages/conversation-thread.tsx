@@ -44,6 +44,7 @@ export function ConversationThread({
 	expandedAll,
 	onExpandedAllChange,
 	showFullRecipientAddresses = false,
+	onAddNote,
 }: ConversationThreadProps) {
 	const { t } = useLanguage();
 	const slice = partitionThread(messages, currentMessageId, position, latestMessagesFirst);
@@ -68,6 +69,7 @@ export function ConversationThread({
 						ownAddress={ownAddress}
 						ownAddresses={ownAddresses}
 						showFullRecipientAddresses={showFullRecipientAddresses}
+						onAddNote={onAddNote}
 					/>
 				</li>
 				{collapsed ? (
@@ -95,6 +97,7 @@ export function ConversationThread({
 								ownAddress={ownAddress}
 								ownAddresses={ownAddresses}
 								showFullRecipientAddresses={showFullRecipientAddresses}
+						onAddNote={onAddNote}
 							/>
 						</li>
 					))
@@ -108,6 +111,7 @@ export function ConversationThread({
 							ownAddress={ownAddress}
 							ownAddresses={ownAddresses}
 							showFullRecipientAddresses={showFullRecipientAddresses}
+						onAddNote={onAddNote}
 						/>
 					</li>
 				)}
@@ -124,6 +128,7 @@ export function ConversationMessageCard({
 	ownAddresses,
 	defaultExpanded = false,
 	showFullRecipientAddresses = false,
+	onAddNote,
 }: ConversationMessageCardProps) {
 	const { t } = useLanguage();
 	const [locallyExpanded, setLocallyExpanded] = useState(defaultExpanded);
@@ -204,6 +209,7 @@ export function ConversationMessageCard({
 						starOnly={!expanded}
 						detailsOpen={detailsOpen}
 						onToggleDetails={() => setDetailsOpen((open) => !open)}
+						onAddNote={onAddNote}
 					/>
 					<div className={clsx("sm:hidden flex w-full items-center gap-2 pl-12 text-xs", locallyRead ? "text-neutral-500" : "font-semibold text-neutral-700")}>
 						{attachments.length > 0 && <Paperclip className="h-3.5 w-3.5" aria-label={t("thread.attachmentCount", { count: attachments.length })} />}

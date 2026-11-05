@@ -36,6 +36,13 @@
       "when": 1793347202000,
       "tag": "0004_conversation_notes",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "5",
+      "when": 1793347302000,
+      "tag": "0005_conversation_note_message",
+      "breakpoints": true
     }
   ]
 }

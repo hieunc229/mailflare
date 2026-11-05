@@ -8,7 +8,7 @@ import { runEmailTool, EMAIL_TOOL_NAMES, emailToolDescriptions, emailToolSchemas
 import { editAgentDraft } from "@/lib/agent/edit-draft";
 import { requestAgentSend, getAgentSendRequest } from "@/lib/agent/approvals/utils";
 import { cancelScheduledSend, getScheduledTime } from "@/lib/email/scheduled";
-import { clearConversationNote, conversationAnchorForUser, CONVERSATION_NOTE_MAX_LENGTH, setConversationNote } from "@/lib/notes/service";
+import { addConversationNote, conversationAnchorForUser, CONVERSATION_NOTE_MAX_LENGTH } from "@/lib/notes/service";
 import type { EmailToolName } from "@/lib/agent/types";
 import type { McpPrincipal } from "./types";
 import { registerAdminMcpTools } from "./admin-tools";
@@ -93,19 +93,14 @@ export function createMailflareMcpHandler(env: CloudflareEnv, principal: McpPrin
 				? output({ messageId, status: "cancelled", draftId: messageId })
 				: output({ error: "This email is already being sent" }, true);
 		});
-		server.registerTool("set_conversation_note", { description: "Set or replace the note on the conversation containing an email. The note sits above the thread and is visible to everyone who can read the mailbox. Pass empty html to remove it.", inputSchema: z.object({ mailboxId: z.string(), messageId: z.string(), html: z.string().max(CONVERSATION_NOTE_MAX_LENGTH) }), annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false } }, async ({ mailboxId, messageId, html }) => {
+		server.registerTool("add_conversation_note", { description: "Add a plain-text note to the conversation containing an email. Notes are listed beside the thread, oldest first, and are visible to everyone who can read the mailbox. They are never sent to anyone.", inputSchema: z.object({ mailboxId: z.string(), messageId: z.string(), text: z.string().trim().min(1).max(CONVERSATION_NOTE_MAX_LENGTH) }), annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false } }, async ({ mailboxId, messageId, text }) => {
 			if (!principal.scopes.includes("mcp:organize") || !principal.mailboxIds.includes(mailboxId)) return output({ error: "Permission denied" }, true);
-			audit(principal, "set_conversation_note", mailboxId);
+			audit(principal, "add_conversation_note", mailboxId);
 			try {
 				const db = getDb(env);
 				const conversation = await conversationAnchorForUser(db, principal.user, messageId);
 				if (!conversation || conversation.mailboxId !== mailboxId) return output({ error: "Email not found" }, true);
-				if (!html.trim()) {
-					await clearConversationNote(db, conversation.mailboxId, conversation.threadKey);
-					return output({ messageId, note: null });
-				}
-				const note = await setConversationNote(db, conversation.mailboxId, conversation.threadKey, html.trim(), principal.user.id);
-				return output({ messageId, note });
+				return output({ messageId, note: await addConversationNote(db, conversation.mailboxId, conversation.threadKey, text, principal.user.id) });
 			}
 			catch (error) { return output({ error: error instanceof Error ? error.message : "Tool failed" }, true); }
 		});
