@@ -20,7 +20,9 @@ import { EmailHtmlRenderer } from "@/components/messages/email-html-renderer";
 import { sanitizeEmailHtml, sanitizeEditorHtml } from "@/lib/email/html";
 import type { RichTextEditorProps, ToolbarCommand } from "./rich-text-editor-types";
 
-const COMMANDS: ToolbarCommand[] = [
+const BASIC_COMMANDS = new Set(["bold", "italic", "underline", "insertUnorderedList", "insertOrderedList"]);
+
+const ALL_COMMANDS: ToolbarCommand[] = [
 	{ command: "bold", labelKey: "editor.bold", icon: Bold },
 	{ command: "italic", labelKey: "editor.italic", icon: Italic },
 	{ command: "underline", labelKey: "editor.underline", icon: Underline },
@@ -46,8 +48,15 @@ export function RichTextEditor({
 	toolbarStart,
 	toolbarEnd,
 	footerContent,
+	toolbarPosition = "bottom",
+	formats = "full",
+	compact = false,
+	ariaLabel,
+	onSubmitShortcut,
 }: RichTextEditorProps) {
 	const { t } = useLanguage();
+	const basic = formats === "basic";
+	const COMMANDS = basic ? ALL_COMMANDS.filter((item) => BASIC_COMMANDS.has(item.command)) : ALL_COMMANDS;
 	const editorRef = useRef<HTMLDivElement | null>(null);
 	const [active, setActive] = useState<Record<string, boolean>>({});
 	const [linkOpen, setLinkOpen] = useState(false);
@@ -137,7 +146,34 @@ export function RichTextEditor({
 			event.preventDefault();
 			openLink();
 		}
+		if (onSubmitShortcut && (event.metaKey || event.ctrlKey) && event.key === "Enter") {
+			event.preventDefault();
+			onSubmitShortcut();
+		}
 	}
+
+	const linkPopup = (placement: "above" | "below") => linkOpen && (
+		<div className={cn("absolute left-2 z-20 flex items-center gap-2 rounded-lg border border-neutral-200 bg-white p-2 shadow-lg", placement === "above" ? "bottom-full mb-1" : "top-full mt-1")}>
+			<input
+				autoFocus
+				value={linkUrl}
+				onChange={(event) => setLinkUrl(event.target.value)}
+				onKeyDown={(event) => {
+					if (event.key === "Enter") {
+						event.preventDefault();
+						applyLink();
+					}
+					if (event.key === "Escape") setLinkOpen(false);
+				}}
+				placeholder="https://example.com"
+				aria-label={t("editor.insertLink")}
+				className="h-8 w-64 max-w-[60vw] rounded-md border border-neutral-200 px-2 text-sm outline-none focus:border-blue-400"
+			/>
+			<button type="button" onClick={applyLink} className="rounded-md bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-700">
+				{t("editor.apply")}
+			</button>
+		</div>
+	);
 
 	const formatButtons = (
 		<>
@@ -171,6 +207,7 @@ export function RichTextEditor({
 				<Link2 className="h-4 w-4" />
 			</button>
 		</Tooltip>
+		{!basic && (
 		<Tooltip label={t("editor.clearFormatting")}>
 			<button
 				type="button"
@@ -183,19 +220,27 @@ export function RichTextEditor({
 				<RemoveFormatting className="h-4 w-4" />
 			</button>
 		</Tooltip>
+		)}
 		</>
 	);
 
 	return (
 		<div className={cn("flex min-h-0 flex-1 flex-col", className)}>
-			<div className="sticky top-0 z-10 flex shrink-0 items-center gap-0.5 overflow-x-auto bg-white px-2 py-1 md:hidden">{formatButtons}</div>
+			{toolbarPosition === "top" ? (
+				<div className="relative shrink-0 border-b border-neutral-100">
+					<div className="flex items-center gap-0.5 overflow-x-auto px-2 py-1">{formatButtons}</div>
+					{linkPopup("below")}
+				</div>
+			) : (
+				<div className="sticky top-0 z-10 flex shrink-0 items-center gap-0.5 overflow-x-auto bg-white px-2 py-1 md:hidden">{formatButtons}</div>
+			)}
 			<div className="relative flex min-h-0 flex-1 flex-col overflow-y-auto">
 				<div
 					ref={editorRef}
 					id={id}
 					role="textbox"
 					aria-multiline="true"
-					aria-label={t("editor.messageBody")}
+					aria-label={ariaLabel ?? t("editor.messageBody")}
 					contentEditable={!disabled}
 					suppressContentEditableWarning
 					data-placeholder={placeholder}
@@ -205,7 +250,8 @@ export function RichTextEditor({
 					onKeyDown={onKeyDown}
 					className={cn(
 						"email-body max-w-none px-4 py-3 text-sm text-neutral-900 outline-none",
-						"min-h-32 grow shrink-0 empty:before:pointer-events-none empty:before:text-neutral-400 empty:before:content-[attr(data-placeholder)]",
+						compact ? "min-h-20 grow shrink-0 px-3 py-2" : "min-h-32 grow shrink-0",
+						"empty:before:pointer-events-none empty:before:text-neutral-400 empty:before:content-[attr(data-placeholder)]",
 						disabled && "cursor-not-allowed opacity-60",
 					)}
 				/>
@@ -228,35 +274,14 @@ export function RichTextEditor({
 				)}
 			</div>
 			{footerContent}
+			{toolbarPosition === "bottom" && (
 			<div className="relative flex items-center gap-0.5 max-md:gap-2 border-t border-neutral-100 px-4 py-3 max-md:border-t-0">
 				{toolbarStart}
 				<div className="contents max-md:hidden">{formatButtons}</div>
 				{toolbarEnd}
-				{linkOpen && (
-					<div
-						className="absolute bottom-full left-2 z-10 mb-1 flex items-center gap-2 rounded-lg border border-neutral-200 bg-white p-2 shadow-lg"
-					>
-						<input
-							autoFocus
-							value={linkUrl}
-							onChange={(event) => setLinkUrl(event.target.value)}
-							onKeyDown={(event) => {
-								if (event.key === "Enter") {
-									event.preventDefault();
-									applyLink();
-								}
-								if (event.key === "Escape") setLinkOpen(false);
-							}}
-							placeholder="https://example.com"
-							aria-label={t("editor.insertLink")}
-							className="h-8 w-64 rounded-md border border-neutral-200 px-2 text-sm outline-none focus:border-blue-400"
-						/>
-						<button type="button" onClick={applyLink} className="rounded-md bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-700">
-							{t("editor.apply")}
-						</button>
-					</div>
-				)}
+				{linkPopup("above")}
 			</div>
+			)}
 		</div>
 	);
 }

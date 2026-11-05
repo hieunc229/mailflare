@@ -12,6 +12,16 @@ export type RichTextEditorProps = {
 	toolbarStart?: React.ReactNode;
 	toolbarEnd?: React.ReactNode;
 	footerContent?: React.ReactNode;
+	/** "top" puts the format buttons above the text on every screen size and drops the bottom bar. */
+	toolbarPosition?: "bottom" | "top";
+	/** "basic" offers bold, italic, underline, lists and links only. */
+	formats?: "full" | "basic";
+	/** A shorter text area for small surfaces such as note panels. */
+	compact?: boolean;
+	/** Accessible name of the text area; defaults to the message body label. */
+	ariaLabel?: string;
+	/** Called on Ctrl/Cmd+Enter. */
+	onSubmitShortcut?: () => void;
 };
 
 export type ToolbarCommand = {

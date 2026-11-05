@@ -6,8 +6,8 @@ import { newId } from "@/lib/ids";
 import type { SessionUser } from "@/lib/auth/types";
 import type { ConversationNote } from "./types";
 
-/** Longest note the API accepts. */
-export const CONVERSATION_NOTE_MAX_LENGTH = 10_000;
+/** Longest note the API accepts, in characters of HTML. */
+export const CONVERSATION_NOTE_MAX_LENGTH = 40_000;
 
 /**
  * The conversation `messageId` sits in, when the user may read its mailbox.

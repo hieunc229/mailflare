@@ -8,6 +8,7 @@ import { runEmailTool, EMAIL_TOOL_NAMES, emailToolDescriptions, emailToolSchemas
 import { editAgentDraft } from "@/lib/agent/edit-draft";
 import { requestAgentSend, getAgentSendRequest } from "@/lib/agent/approvals/utils";
 import { cancelScheduledSend, getScheduledTime } from "@/lib/email/scheduled";
+import { plainTextToNoteHtml } from "@/lib/notes/html";
 import { addConversationNote, conversationAnchorForUser, CONVERSATION_NOTE_MAX_LENGTH } from "@/lib/notes/service";
 import type { EmailToolName } from "@/lib/agent/types";
 import type { McpPrincipal } from "./types";
@@ -100,7 +101,7 @@ export function createMailflareMcpHandler(env: CloudflareEnv, principal: McpPrin
 				const db = getDb(env);
 				const conversation = await conversationAnchorForUser(db, principal.user, messageId);
 				if (!conversation || conversation.mailboxId !== mailboxId) return output({ error: "Email not found" }, true);
-				return output({ messageId, note: await addConversationNote(db, conversation.mailboxId, conversation.threadKey, text, principal.user.id) });
+				return output({ messageId, note: await addConversationNote(db, conversation.mailboxId, conversation.threadKey, plainTextToNoteHtml(text), principal.user.id) });
 			}
 			catch (error) { return output({ error: error instanceof Error ? error.message : "Tool failed" }, true); }
 		});

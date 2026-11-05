@@ -1,12 +1,15 @@
 "use client";
 
 import { useState } from "react";
+import { RichTextEditor } from "@/components/compose/rich-text-editor";
 import { ContactAvatar } from "@/components/contacts/contact-avatar";
 import { Edit03, Trash2 } from "@/components/icons";
 import { useLanguage } from "@/components/language-provider";
 import { Button } from "@/components/ui/button";
 import { Tooltip } from "@/components/ui/tooltip";
+import { noteBodyToHtml, noteHasContent } from "@/lib/notes/html";
 import { ConversationNoteEmail } from "./conversation-note-email";
+import { EmailHtmlRenderer } from "./email-html-renderer";
 import { formatUserDate } from "@/lib/time/utils";
 import type { ConversationNoteItemProps } from "./conversation-notes-types";
 
@@ -16,21 +19,21 @@ const NOTE_DATE_FORMAT: Intl.DateTimeFormatOptions = { month: "short", day: "num
 export function ConversationNoteItem({ messageId, attachedMessage, mailboxId, currentAccountName, note, canModify, onUpdate, onRemove }: ConversationNoteItemProps) {
 	const { t } = useLanguage();
 	const [mode, setMode] = useState<"view" | "edit" | "delete">("view");
-	const [draft, setDraft] = useState(note.body);
+	const [draft, setDraft] = useState(() => noteBodyToHtml(note.body));
 	const [busy, setBusy] = useState(false);
 	const [error, setError] = useState<string | null>(null);
 	const name = note.authorName ?? t("note.deletedAuthor");
 
 	function startEditing() {
-		setDraft(note.body);
+		setDraft(noteBodyToHtml(note.body));
 		setError(null);
 		setMode("edit");
 	}
 
 	async function save() {
 		const body = draft.trim();
-		if (!body || busy) return;
-		if (body === note.body) {
+		if (!noteHasContent(body) || busy) return;
+		if (body === noteBodyToHtml(note.body)) {
 			setMode("view");
 			return;
 		}
@@ -74,32 +77,28 @@ export function ConversationNoteItem({ messageId, attachedMessage, mailboxId, cu
 			</div>
 			{mode === "edit" ? (
 				<div className="mt-2 space-y-2">
-					<textarea
-						value={draft}
-						onChange={(event) => setDraft(event.target.value)}
-						onKeyDown={(event) => {
-							if (event.key === "Escape") setMode("view");
-							if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) {
-								event.preventDefault();
-								void save();
-							}
-						}}
-						disabled={busy}
-						rows={3}
-						maxLength={10_000}
-						aria-label={t("note.edit")}
-						autoFocus
-						className="w-full resize-y rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm outline-none focus:border-blue-400 disabled:opacity-60"
-					/>
+					<div className="flex max-h-56 flex-col overflow-hidden rounded-lg border border-neutral-200 bg-white focus-within:border-blue-400">
+						<RichTextEditor
+							id={`note-edit-${note.id}`}
+							value={draft}
+							onChange={setDraft}
+							disabled={busy}
+							toolbarPosition="top"
+							formats="basic"
+							compact
+							ariaLabel={t("note.edit")}
+							onSubmitShortcut={() => void save()}
+						/>
+					</div>
 					<div className="flex items-center justify-end gap-2">
 						{error && <span role="alert" className="mr-auto text-xs text-red-600">{error}</span>}
 						<Button type="button" variant="ghost" size="sm" disabled={busy} onClick={() => setMode("view")}>{t("common.cancel")}</Button>
-						<Button type="button" size="sm" disabled={busy || !draft.trim()} onClick={() => void save()}>{busy ? t("common.saving") : t("note.save")}</Button>
+						<Button type="button" size="sm" disabled={busy || !noteHasContent(draft)} onClick={() => void save()}>{busy ? t("common.saving") : t("note.save")}</Button>
 					</div>
 				</div>
 			) : (
 				<div className="relative mt-2">
-					<p className="whitespace-pre-wrap break-words text-sm text-neutral-800">{note.body}</p>
+					<EmailHtmlRenderer html={noteBodyToHtml(note.body)} />
 				{canModify && mode === "view" && (
 					<div className="absolute bottom-0 right-0 flex items-center rounded-md bg-white/95 opacity-0 shadow-sm transition-opacity focus-within:opacity-100 group-hover:opacity-100 [@media(hover:none)]:opacity-100">
 						<Tooltip label={t("note.edit")}>

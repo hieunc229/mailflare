@@ -3,6 +3,7 @@ import { getDb } from "@/db";
 import { getCurrentUser } from "@/lib/auth/cookies";
 import { getEnv } from "@/lib/cloudflare";
 import { isMissingTableError } from "@/lib/database-errors";
+import { noteHasContent } from "@/lib/notes/html";
 import {
 	conversationAnchorForUser,
 	CONVERSATION_NOTE_MAX_LENGTH,
@@ -29,7 +30,7 @@ export async function PATCH(request: Request, context: RouteContext) {
 	if ("error" in loaded) return loaded.error;
 	const body = (await request.json().catch(() => null)) as { body?: unknown } | null;
 	const text = typeof body?.body === "string" ? body.body.trim() : "";
-	if (!text) return NextResponse.json({ error: "Note is empty" }, { status: 400 });
+	if (!noteHasContent(text)) return NextResponse.json({ error: "Note is empty" }, { status: 400 });
 	if (text.length > CONVERSATION_NOTE_MAX_LENGTH) return NextResponse.json({ error: "Note is too long" }, { status: 400 });
 	try {
 		const note = await updateConversationNote(loaded.db, loaded.mailboxId, loaded.threadKey, loaded.noteId, loaded.user.id, text);

@@ -554,7 +554,7 @@ export const followUps = sqliteTable(
 
 /**
  * Notes on a conversation, oldest first, shared with everyone who can read the
- * mailbox. A note is plain text and is never edited once added.
+ * mailbox. A note is HTML from the note editor, written and edited by its author.
  * `threadKey` is the conversation key the message list uses: the thread id, or
  * the lone message's id when the conversation was never threaded.
  */

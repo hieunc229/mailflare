@@ -1,6 +1,6 @@
 export type ConversationNote = {
 	id: string;
-	/** Plain text; render it as text, never as HTML. */
+	/** HTML from the note editor; the reader sanitizes it. Older notes may be plain text. */
 	body: string;
 	/** The email of the conversation this note is attached to, if any. */
 	messageId: string | null;

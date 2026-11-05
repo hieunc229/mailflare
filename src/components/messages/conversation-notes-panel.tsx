@@ -1,12 +1,14 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
+import { RichTextEditor } from "@/components/compose/rich-text-editor";
 import { ContactAvatar } from "@/components/contacts/contact-avatar";
 import { X } from "@/components/icons";
 import { useLanguage } from "@/components/language-provider";
 import { Button } from "@/components/ui/button";
 import { Tooltip } from "@/components/ui/tooltip";
 import { useCurrentUser } from "@/hooks/use-current-user";
+import { noteHasContent } from "@/lib/notes/html";
 import { ConversationNoteEmail } from "./conversation-note-email";
 import { ConversationNoteItem } from "./conversation-note-item";
 import { cn } from "@/lib/utils";
@@ -23,17 +25,17 @@ export function ConversationNotesPanel({ messageId, notes, loading, onAdd, threa
 	const [draft, setDraft] = useState("");
 	const [saving, setSaving] = useState(false);
 	const [failed, setFailed] = useState(false);
-	const inputRef = useRef<HTMLTextAreaElement>(null);
+	const editorId = `new-note-${messageId}`;
 	const findMessage = (id: string | null) => threadMessages.find((item) => item.id === id) ?? null;
 
 	// Choosing "Add note" on an email lands the cursor in the new note.
 	useEffect(() => {
-		if (attachmentId) inputRef.current?.focus();
-	}, [attachmentId]);
+		if (attachmentId) document.getElementById(editorId)?.focus();
+	}, [attachmentId, editorId]);
 
 	async function submit() {
 		const body = draft.trim();
-		if (!body || saving) return;
+		if (!noteHasContent(body) || saving) return;
 		setSaving(true);
 		setFailed(false);
 		try {
@@ -94,29 +96,26 @@ export function ConversationNotesPanel({ messageId, notes, loading, onAdd, threa
 					/>
 					<p className="truncate text-sm font-medium text-neutral-900">{user?.name}</p>
 				</div>
-				<textarea
-					ref={inputRef}
-					value={draft}
-					onChange={(event) => setDraft(event.target.value)}
-					onKeyDown={(event) => {
-						if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) {
-							event.preventDefault();
-							void submit();
-						}
-					}}
-					disabled={saving}
-					rows={3}
-					maxLength={10_000}
-					placeholder={t("note.placeholder")}
-					aria-label={t("note.placeholder")}
-					className="w-full resize-y rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm outline-none focus:border-blue-400 disabled:opacity-60"
-				/>
+				<div className="flex max-h-56 flex-col overflow-hidden rounded-lg border border-neutral-200 bg-white focus-within:border-blue-400">
+					<RichTextEditor
+						id={editorId}
+						value={draft}
+						onChange={setDraft}
+						disabled={saving}
+						toolbarPosition="top"
+						formats="basic"
+						compact
+						placeholder={t("note.placeholder")}
+						ariaLabel={t("note.placeholder")}
+						onSubmitShortcut={() => void submit()}
+					/>
+				</div>
 				{attachmentId && (
 					<ConversationNoteEmail message={findMessage(attachmentId)} mailboxId={mailboxId} currentAccountName={currentAccountName} onRemove={() => onAttachmentChange(null)} />
 				)}
 				<div className="flex items-center justify-end gap-2">
 					{failed && <span role="alert" className="mr-auto text-xs text-red-600">{t("note.addFailed")}</span>}
-					<Button type="submit" size="sm" disabled={saving || !draft.trim()}>
+					<Button type="submit" size="sm" disabled={saving || !noteHasContent(draft)}>
 						{saving ? t("note.adding") : t("note.add")}
 					</Button>
 				</div>
