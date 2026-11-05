@@ -42,8 +42,12 @@ export async function consumeRecoveryCode(env: CloudflareEnv, userId: string, co
 		.where(and(eq(mfaRecoveryCodes.userId, userId), eq(mfaRecoveryCodes.codeHash, codeHash), isNull(mfaRecoveryCodes.usedAt)))
 		.limit(1);
 	if (!row) return false;
-	await db.update(mfaRecoveryCodes).set({ usedAt: new Date() }).where(eq(mfaRecoveryCodes.id, row.id));
-	return true;
+	const used = await db
+		.update(mfaRecoveryCodes)
+		.set({ usedAt: new Date() })
+		.where(and(eq(mfaRecoveryCodes.id, row.id), isNull(mfaRecoveryCodes.usedAt)))
+		.returning({ id: mfaRecoveryCodes.id });
+	return used.length > 0;
 }
 
 export async function countUnusedRecoveryCodes(env: CloudflareEnv, userId: string): Promise<number> {

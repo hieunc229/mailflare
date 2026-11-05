@@ -3,9 +3,10 @@ import { eq } from "drizzle-orm";
 import { getEnv } from "@/lib/cloudflare";
 import { getDb } from "@/db";
 import { mailboxes, users } from "@/db/schema";
-import { hashPassword } from "@/lib/auth/password";
+import { hashPassword, PASSWORDLESS_PASSWORD_HASH } from "@/lib/auth/password";
 import { hasAdminAccount } from "@/lib/auth/setup";
 import { SESSION_COOKIE } from "@/lib/auth/session";
+import { createEnrollmentGrant, SETUP_COOKIE } from "@/lib/auth/webauthn/grants";
 import { newId } from "@/lib/ids";
 import { firstRunRegisterSchema } from "@/lib/validators";
 import { addDomainForUser } from "@/lib/domains/service";
@@ -45,6 +46,7 @@ export async function POST(request: Request) {
 	const username = firstRunParsed.data.username.toLowerCase().trim();
 	const email = `${username}@${domainName}`;
 	const password = firstRunParsed.data.password;
+	const usePasskey = !!firstRunParsed.data.usePasskey;
 	const name = username;
 
 	const [existing] = await db.select().from(users).where(eq(users.email, email)).limit(1);
@@ -59,11 +61,25 @@ export async function POST(request: Request) {
 		remoteContentMode: "ask",
 		email,
 		resetEmail: firstRunParsed.data.resetEmail,
-		passwordHash: hashPassword(password),
+		passwordHash: usePasskey ? PASSWORDLESS_PASSWORD_HASH : hashPassword(password!),
 		name,
 		role: "admin",
 		isPrimaryAdmin: true,
 	});
+
+	// Create the setup grant before touching DNS. If it cannot be written, the
+	// account has no usable sign-in method and registration is already closed,
+	// so remove it rather than leaving an unreachable administrator behind.
+	let setupToken: string | null = null;
+	if (usePasskey) {
+		try {
+			setupToken = await createEnrollmentGrant(env, { userId, kind: "setup" });
+		} catch (error) {
+			console.error("Could not create the first-run passkey setup grant", error);
+			await db.delete(users).where(eq(users.id, userId)).catch(() => undefined);
+			return NextResponse.json({ error: "Could not start passkey setup. Try again.", code: "passkey_unavailable" }, { status: 500 });
+		}
+	}
 
 	// Tracks what the attempt changed on the Cloudflare zone so a failure can undo
 	// precisely that. The DB is not a reliable source for this: the same errors that
@@ -107,8 +123,23 @@ export async function POST(request: Request) {
 		);
 	}
 
-	const response = NextResponse.json({ ok: true, redirect: "/login" });
+	// A passkey-only first account has no password, so it gets a one-time link
+	// that can only enrol a passkey. A session is issued after that succeeds.
+	const response = NextResponse.json({
+		ok: true,
+		redirect: setupToken ? "/setup/passkey" : "/login",
+		...(setupToken ? { requiresPasskeySetup: true } : {}),
+	});
 	response.headers.set("Cache-Control", "no-store");
+	if (setupToken) {
+		response.cookies.set(SETUP_COOKIE, setupToken, {
+			httpOnly: true,
+			secure: process.env.NODE_ENV === "production",
+			sameSite: "lax",
+			path: "/",
+			maxAge: 24 * 60 * 60,
+		});
+	}
 	response.cookies.set(SESSION_COOKIE, "", {
 		httpOnly: true,
 		secure: process.env.NODE_ENV === "production",

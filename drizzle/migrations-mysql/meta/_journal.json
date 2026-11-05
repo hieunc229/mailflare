@@ -29,6 +29,13 @@
       "when": 1793260802000,
       "tag": "0003_remote_content_ask",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "5",
+      "when": 1793280375889,
+      "tag": "0004_passkeys_and_step_up_grants",
+      "breakpoints": true
     }
   ]
 }
