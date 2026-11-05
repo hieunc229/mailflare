@@ -2396,5 +2396,11 @@
 	"agent.calendarReview.done": "Done. The calendar was updated.",
 	"agent.calendarReview.failed": "The change could not be applied",
 	"agent.review.aiWritten": "This message was written by the AI assistant from email content that anyone could have written. Read it before sending.",
-	"agent.review.unfamiliarRecipients": "You have not written to or saved: {list}. Check that you intend to send this to them."
+	"agent.review.unfamiliarRecipients": "You have not written to or saved: {list}. Check that you intend to send this to them.",
+	"account.permissions.features": "Feature access",
+	"account.permissions.featuresHint": "Apps turned off are hidden and blocked for this account.",
+	"account.permissions.calendarHint": "Events, reminders, and booking pages.",
+	"account.permissions.driveHint": "Files, saved attachments, and shared links.",
+	"account.permissions.allowCalendar": "Allow Calendar",
+	"account.permissions.allowDrive": "Allow Drive"
 }

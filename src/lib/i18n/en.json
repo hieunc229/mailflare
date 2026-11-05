@@ -2340,5 +2340,11 @@
 	"passkey.choiceTwoSteps": "The authenticator app and your password are removed one at a time.",
 	"passkey.authenticatorOffNotice": "Authenticator codes are off. Your password still works.",
 	"passkey.setupRecoveryDescription": "This passkey replaces the account's password, authenticator codes and recovery codes. Your other sessions are signed out.",
-	"passkey.removePasswordRecommended": "Recommended: your passkey signs you in on its own, so the password is no longer needed."
+	"passkey.removePasswordRecommended": "Recommended: your passkey signs you in on its own, so the password is no longer needed.",
+	"account.permissions.features": "Feature access",
+	"account.permissions.featuresHint": "Apps turned off are hidden and blocked for this account.",
+	"account.permissions.calendarHint": "Events, reminders, and booking pages.",
+	"account.permissions.driveHint": "Files, saved attachments, and shared links.",
+	"account.permissions.allowCalendar": "Allow Calendar",
+	"account.permissions.allowDrive": "Allow Drive"
 }

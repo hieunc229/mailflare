@@ -122,6 +122,8 @@ export async function saveManagedAccount(account: ManagedAccount, stepUpToken?: 
 			canManageMailboxes: account.canManageMailboxes,
 			canManageDomains: account.canManageDomains,
 			canManageUsers: account.canManageUsers,
+			calendarEnabled: account.calendarEnabled,
+			driveEnabled: account.driveEnabled,
 			forwardingEmail: account.forwardingEmail,
 			password: account.newPassword || undefined,
 			stepUpToken,

@@ -96,7 +96,7 @@ Admin API keys cannot read or send mail. Enable **Allow MCP access** when creati
 | `accounts` | `GET /api/v1/accounts` | List managed accounts |
 | `accounts` | `POST /api/v1/accounts` | Create an account and its mailbox (`{ username, domainId, password, role?, useAllDomains?, aliases? }`) |
 | `accounts` | `GET /api/v1/accounts/[id]` | Get a managed account |
-| `accounts` | `PATCH /api/v1/accounts/[id]` | Update an account (`{ name, role, disabled, canManageMailboxes, forwardingEmail?, password? }`) |
+| `accounts` | `PATCH /api/v1/accounts/[id]` | Update an account (`{ name, role, disabled, canManageMailboxes, calendarEnabled?, driveEnabled?, forwardingEmail?, password? }`) |
 | `mailboxes` | `GET /api/v1/mailboxes` | List managed mailboxes |
 | `mailboxes` | `POST /api/v1/mailboxes` | Create a mailbox (`{ domainId, localPart, displayName?, type?, ownerUserId? }`) |
 | `mailboxes` | `GET /api/v1/mailboxes/[id]` | Get a managed mailbox |

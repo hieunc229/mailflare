@@ -306,6 +306,13 @@
         "CREATE FUNCTION mailflare_require_second_factor_update() RETURNS trigger AS $$\nBEGIN\n\tIF NEW.require_second_factor AND NEW.passkey_count = 0 AND NOT NEW.totp_enabled AND NEW.deleted_at IS NULL THEN\n\t\tRAISE EXCEPTION 'second-factor-unavailable';\n\tEND IF;\n\tRETURN NEW;\nEND;\n$$ LANGUAGE plpgsql;",
         "CREATE TRIGGER users_require_second_factor_update BEFORE UPDATE OF require_second_factor ON users\nFOR EACH ROW EXECUTE FUNCTION mailflare_require_second_factor_update();"
       ]
+    },
+    {
+      "name": "0005_feature_access.sql",
+      "statements": [
+        "ALTER TABLE \"users\" ADD COLUMN \"calendar_enabled\" boolean DEFAULT true NOT NULL;",
+        "ALTER TABLE \"users\" ADD COLUMN \"drive_enabled\" boolean DEFAULT true NOT NULL;"
+      ]
     }
   ]
 }
