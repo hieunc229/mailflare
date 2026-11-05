@@ -288,6 +288,13 @@
         "ALTER TABLE `users` ADD `calendar_enabled` boolean NOT NULL DEFAULT true;",
         "ALTER TABLE `users` ADD `drive_enabled` boolean NOT NULL DEFAULT true;"
       ]
+    },
+    {
+      "name": "0006_add_api_key_sha256.sql",
+      "statements": [
+        "ALTER TABLE `api_keys` ADD `key_sha256` varchar(191);",
+        "ALTER TABLE `api_keys` ADD CONSTRAINT `api_keys_key_sha256_idx` UNIQUE(`key_sha256`);"
+      ]
     }
   ]
 }

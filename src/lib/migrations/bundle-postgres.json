@@ -313,6 +313,13 @@
         "ALTER TABLE \"users\" ADD COLUMN \"calendar_enabled\" boolean DEFAULT true NOT NULL;",
         "ALTER TABLE \"users\" ADD COLUMN \"drive_enabled\" boolean DEFAULT true NOT NULL;"
       ]
+    },
+    {
+      "name": "0006_add_api_key_sha256.sql",
+      "statements": [
+        "ALTER TABLE \"api_keys\" ADD COLUMN \"key_sha256\" text;",
+        "CREATE UNIQUE INDEX \"api_keys_key_sha256_idx\" ON \"api_keys\" USING btree (\"key_sha256\");"
+      ]
     }
   ]
 }
