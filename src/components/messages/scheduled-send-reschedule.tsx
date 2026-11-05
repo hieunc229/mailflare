@@ -16,15 +16,20 @@ export function ScheduledSendReschedule({ scheduledAt, disabled, onPick }: { sch
 	const { t } = useLanguage();
 	const isPhone = useIsMobile();
 	const [sheetOpen, setSheetOpen] = useState(false);
+	const [menuOpen, setMenuOpen] = useState(false);
 	const [pickedText, setPickedText] = useState<string | null>(null);
 	const options = getScheduleSendOptions();
 	const picked = pickedText === null ? null : parseDateTimeLocal(pickedText);
 	const pastPicked = picked !== null && isPastSchedule(picked);
 
-	function pick(text: string) {
-		setPickedText(text);
-		const parsed = parseDateTimeLocal(text);
-		if (parsed && !isPastSchedule(parsed)) onPick(parsed);
+	// The date input fires change for every valid half-typed value, so the time is
+	// committed once, on Enter or when the field loses focus.
+	function commit() {
+		if (pickedText === null) return;
+		const parsed = parseDateTimeLocal(pickedText);
+		if (!parsed || isPastSchedule(parsed) || parsed.getTime() === new Date(scheduledAt).getTime()) return;
+		setMenuOpen(false);
+		onPick(parsed);
 	}
 
 	if (isPhone) {
@@ -45,7 +50,7 @@ export function ScheduledSendReschedule({ scheduledAt, disabled, onPick }: { sch
 	}
 
 	return (
-		<DropdownMenu.Root onOpenChange={() => setPickedText(null)}>
+		<DropdownMenu.Root open={menuOpen} onOpenChange={(next) => { setMenuOpen(next); setPickedText(null); }}>
 			<DropdownMenu.Trigger type="button" disabled={disabled} className={buttonClass}>
 				{t("schedule.reschedule")}
 			</DropdownMenu.Trigger>
@@ -69,8 +74,12 @@ export function ScheduledSendReschedule({ scheduledAt, disabled, onPick }: { sch
 						type="datetime-local"
 						min={formatDateTimeLocal(new Date())}
 						value={pickedText ?? formatDateTimeLocal(new Date(scheduledAt))}
-						onChange={(event) => pick(event.target.value)}
-						onKeyDown={(event) => event.stopPropagation()}
+						onChange={(event) => setPickedText(event.target.value)}
+						onBlur={commit}
+						onKeyDown={(event) => {
+							event.stopPropagation();
+							if (event.key === "Enter") commit();
+						}}
 						aria-invalid={pastPicked}
 						aria-describedby={pastPicked ? "schedule-past-time" : undefined}
 						className="mx-2 mb-2 h-9 rounded-md border border-neutral-200 px-2 text-sm outline-none focus:border-blue-400"

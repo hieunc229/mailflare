@@ -368,11 +368,17 @@ function deliveryFromJob(jobId: string, messageId: string, payload: string): Pre
 	};
 }
 
-function claimJob(db: ReturnType<typeof getDb>, jobId: string) {
+/** With `dueAt`, the claim also requires the job to still hold that send time, so a
+ * reschedule that lands after the due check cannot be overtaken by the old time. */
+function claimJob(db: ReturnType<typeof getDb>, jobId: string, dueAt?: Date | null) {
 	return db
 		.update(outboundJobs)
 		.set({ status: "sending", updatedAt: new Date() })
-		.where(and(eq(outboundJobs.id, jobId), eq(outboundJobs.status, "queued")))
+		.where(and(
+			eq(outboundJobs.id, jobId),
+			eq(outboundJobs.status, "queued"),
+			...(dueAt ? [eq(outboundJobs.scheduledAt, dueAt)] : []),
+		))
 		.returning({ id: outboundJobs.id });
 }
 
@@ -419,8 +425,14 @@ export async function processOutboundQueue(
 	}
 	// Claim the job before delivering. Cancelling deletes only a job that is still
 	// "queued", so exactly one of cancel and delivery wins.
-	const claimed = await claimJob(db, payload.jobId);
-	if (!claimed.length) return;
+	const claimed = await claimJob(db, payload.jobId, job.scheduledAt);
+	if (!claimed.length) {
+		// Lost to a cancel or another consumer, or the send time moved after we
+		// read it. In the last case the job is still queued: look again.
+		const [current] = await db.select({ status: outboundJobs.status }).from(outboundJobs).where(eq(outboundJobs.id, payload.jobId)).limit(1);
+		if (current?.status === "queued") await processOutboundQueue(env, payload);
+		return;
+	}
 	delivery.attachments = await loadMessageAttachmentContents(env, payload.messageId);
 	await deliverEmail(env, delivery);
 }
