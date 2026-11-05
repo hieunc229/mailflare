@@ -6,6 +6,8 @@ export type MailboxSelectorUser = {
 	name: string;
 	role: "admin" | "user";
 	hasAvatar: boolean;
+	calendarEnabled: boolean;
+	driveEnabled: boolean;
 };
 
 export type MailboxSelectorProps = {

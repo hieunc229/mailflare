@@ -19,7 +19,8 @@ container): the SQLite database, raw messages, attachments and backups.
 
 Behind a reverse proxy, set `APP_URL=https://mail.example.com` so links in
 password-reset mail and the JMAP session point at the public address, and
-forward WebSocket upgrades for `/api/realtime`.
+forward WebSocket upgrades for `/api/realtime`. Passkeys also bind to this
+origin, so they need `APP_URL` (or a direct HTTPS connection) to work.
 
 ### PWA and push notifications
 

@@ -41,6 +41,9 @@ export async function getDriveRole(db: Db, userId: string, item: DriveRow, allow
 export async function getPublicDriveItem(db: Db, token: string, itemId?: string | null): Promise<{ root: DriveRow; item: DriveRow } | null> {
 	const [root] = await db.select().from(driveItems).where(eq(driveItems.linkToken, token)).limit(1);
 	if (!root || root.trashedAt) return null;
+	// A hidden Drive turns its shared links off too, so a blocked owner cannot use them either.
+	const [owner] = await db.select({ driveEnabled: users.driveEnabled }).from(users).where(eq(users.id, root.ownerId)).limit(1);
+	if (owner && !owner.driveEnabled) return null;
 	if (!itemId || itemId === root.id) return { root, item: root };
 	const item = await getDriveItem(db, itemId);
 	if (!item) return null;

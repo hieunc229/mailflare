@@ -35,5 +35,5 @@ export type MxCheckResult = {
 export type RegisterResult = {
 	redirect?: string;
 	error?: string;
-	code?: "MX_RECORDS_CONFLICT";
+	code?: "MX_RECORDS_CONFLICT" | "passkey_unavailable";
 };

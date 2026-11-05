@@ -16,12 +16,12 @@ export function parseBookingGuestEmails(value: unknown, bookerEmail: string): st
 
 export async function loadPublicBookingEvent(eventId: string, username?: string | null) {
 	const db = getDb(getEnv());
-	const [matchedUser] = username ? await db.select({ id: users.id }).from(users).where(and(eq(users.bookingUsername, username.toLowerCase()), eq(users.disabled, false))).limit(1) : [];
+	const [matchedUser] = username ? await db.select({ id: users.id }).from(users).where(and(eq(users.bookingUsername, username.toLowerCase()), eq(users.disabled, false), eq(users.calendarEnabled, true))).limit(1) : [];
 	if (username && !matchedUser) return null;
 	const [event] = await db.select().from(bookingEvents).where(and(username ? eq(bookingEvents.slug, eventId) : eq(bookingEvents.id, eventId), username ? eq(bookingEvents.userId, matchedUser!.id) : undefined, eq(bookingEvents.enabled, true))).limit(1);
 	if (!event) return null;
 	const hostIds = parseBookingHostIds(event.hostIds, event.userId);
-	const hosts = await db.select({ id: users.id, name: users.name }).from(users).where(and(inArray(users.id, hostIds), eq(users.disabled, false)));
+	const hosts = await db.select({ id: users.id, name: users.name }).from(users).where(and(inArray(users.id, hostIds), eq(users.disabled, false), eq(users.calendarEnabled, true)));
 	if (hosts.length !== hostIds.length) return null;
 	return { event: { ...event, hostIds, weekdays: parseBookingWeekdays(event.weekdays), timeRanges: parseBookingTimeRanges(event.timeRanges, { startTime: event.startTime, endTime: event.endTime }) } as BookingEventRecord, hostName: hostIds.map((id) => hosts.find((host) => host.id === id)?.name).join(", ") };
 }

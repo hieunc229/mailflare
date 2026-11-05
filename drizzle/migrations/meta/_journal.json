@@ -502,8 +502,22 @@
     {
       "idx": 72,
       "version": "6",
-      "when": 1793347200000,
-      "tag": "0080_add_api_key_sha256",
+      "when": 1793280375889,
+      "tag": "0080_passkeys_and_step_up_grants",
+      "breakpoints": true
+    },
+    {
+      "idx": 73,
+      "version": "6",
+      "when": 1793280376889,
+      "tag": "0081_add_feature_access",
+      "breakpoints": true
+    },
+    {
+      "idx": 74,
+      "version": "6",
+      "when": 1793280377889,
+      "tag": "0082_add_api_key_sha256",
       "breakpoints": true
     }
   ]

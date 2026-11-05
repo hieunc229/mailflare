@@ -8,6 +8,8 @@ export type Mailbox = {
 	type?: "personal" | "shared";
 	permission?: "read_only" | "send_as" | "send_on_behalf" | "full_access";
 	isPrimary?: boolean;
+	status?: "active" | "disabled" | "pendingDeletion";
+	lastSignInAt?: string | null;
 };
 
 export type Domain = {

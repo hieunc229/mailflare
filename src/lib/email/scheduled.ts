@@ -27,6 +27,17 @@ export async function getScheduledTime(db: ReturnType<typeof getDb>, messageId: 
 	return job?.scheduledAt ?? null;
 }
 
+/** Moves a still-queued scheduled send to a new time. Returns the job id so the caller can
+ * wake the queue at the new time, or null when the send already left the queue. */
+export async function rescheduleScheduledSend(db: ReturnType<typeof getDb>, messageId: string, scheduledAt: Date): Promise<string | null> {
+	const [job] = await db
+		.update(outboundJobs)
+		.set({ scheduledAt, updatedAt: new Date() })
+		.where(and(eq(outboundJobs.messageId, messageId), eq(outboundJobs.status, "queued"), isNotNull(outboundJobs.scheduledAt)))
+		.returning({ id: outboundJobs.id });
+	return job?.id ?? null;
+}
+
 /** Cancels a scheduled send and returns the message to Drafts. Deletes only a job that is
  * still waiting: the queue consumer claims it (queued -> sending) before delivering, so a
  * send already under way is left alone. Returns false when there was nothing to cancel. */
