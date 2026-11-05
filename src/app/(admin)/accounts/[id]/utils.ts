@@ -1,4 +1,5 @@
 import { authFetch } from "@/lib/auth/client";
+import { requestError } from "@/lib/http/client-error";
 import { appendOptimizedAvatar } from "@/lib/avatar-upload-client";
 import type {
 	AccountDetail,
@@ -110,7 +111,7 @@ export async function fetchManagedAccount(accountId: string): Promise<ManagedAcc
 	return data.account;
 }
 
-export async function saveManagedAccount(account: ManagedAccount): Promise<void> {
+export async function saveManagedAccount(account: ManagedAccount, stepUpToken?: string): Promise<void> {
 	const response = await authFetch(`/api/accounts/${account.id}`, {
 		method: "PATCH",
 		headers: { "Content-Type": "application/json" },
@@ -123,10 +124,11 @@ export async function saveManagedAccount(account: ManagedAccount): Promise<void>
 			canManageUsers: account.canManageUsers,
 			forwardingEmail: account.forwardingEmail,
 			password: account.newPassword || undefined,
+			stepUpToken,
 		}),
 	});
-	const data = (await response.json()) as { error?: string };
-	if (!response.ok) throw new Error(data.error ?? "Unable to update account");
+	const data = (await response.json()) as { error?: string; code?: string };
+	if (!response.ok) throw requestError(data, "Unable to update account");
 }
 
 export type TransferCandidate = {
