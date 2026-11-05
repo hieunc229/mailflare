@@ -292,6 +292,8 @@
 	"schedule.sendScheduledFor": "{when} அன்று அனுப்பத் திட்டமிடப்பட்டுள்ளது",
 	"schedule.cancelSend": "அனுப்புவதை ரத்துசெய்",
 	"schedule.cancelFailed": "திட்டமிட்ட அனுப்புதலை ரத்துசெய்ய இயலவில்லை.",
+	"schedule.reschedule": "மீண்டும் திட்டமிடு",
+	"schedule.rescheduleFailed": "அனுப்புதலை மீண்டும் திட்டமிட இயலவில்லை.",
 	"schedule.optionsLabel": "திட்டமிட்டு அனுப்பும் விருப்பங்கள்",
 	"schedule.heading": "திட்டமிடு",
 	"schedule.clear": "திட்டத்தை அழி",

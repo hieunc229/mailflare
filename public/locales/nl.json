@@ -292,6 +292,8 @@
 	"schedule.sendScheduledFor": "Verzenden ingepland voor {when}",
 	"schedule.cancelSend": "Verzenden annuleren",
 	"schedule.cancelFailed": "Het ingeplande verzenden kon niet worden geannuleerd.",
+	"schedule.reschedule": "Opnieuw plannen",
+	"schedule.rescheduleFailed": "Het verzenden kon niet opnieuw worden gepland.",
 	"schedule.optionsLabel": "Opties voor ingepland verzenden",
 	"schedule.heading": "Inplannen",
 	"schedule.clear": "Planning wissen",

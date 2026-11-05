@@ -292,6 +292,8 @@
 	"schedule.sendScheduledFor": "{when} සඳහා යැවීම කාලසටහන්ගත කර ඇත",
 	"schedule.cancelSend": "යැවීම අවලංගු කරන්න",
 	"schedule.cancelFailed": "කාලසටහන්ගත යැවීම අවලංගු කළ නොහැක.",
+	"schedule.reschedule": "නැවත කාලසටහන්ගත කරන්න",
+	"schedule.rescheduleFailed": "යැවීම නැවත කාලසටහන්ගත කළ නොහැක.",
 	"schedule.optionsLabel": "කාලසටහන්ගත යැවීමේ විකල්ප",
 	"schedule.heading": "කාලසටහන",
 	"schedule.clear": "කාලසටහන ඉවත් කරන්න",

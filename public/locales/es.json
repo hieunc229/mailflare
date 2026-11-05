@@ -296,6 +296,8 @@
 	"schedule.sendScheduledFor": "Envío programado para {when}",
 	"schedule.cancelSend": "Cancelar envío",
 	"schedule.cancelFailed": "No se pudo cancelar el envío programado.",
+	"schedule.reschedule": "Reprogramar",
+	"schedule.rescheduleFailed": "No se pudo reprogramar el envío.",
 	"schedule.optionsLabel": "Opciones de envío programado",
 	"schedule.heading": "Programar",
 	"schedule.clear": "Quitar programación",

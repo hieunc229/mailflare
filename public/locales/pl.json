@@ -300,6 +300,8 @@
 	"schedule.sendScheduledFor": "Wysyłka zaplanowana na {when}",
 	"schedule.cancelSend": "Anuluj wysyłkę",
 	"schedule.cancelFailed": "Nie można anulować zaplanowanej wysyłki.",
+	"schedule.reschedule": "Zmień termin",
+	"schedule.rescheduleFailed": "Nie można zmienić terminu wysyłki.",
 	"schedule.optionsLabel": "Opcje zaplanowanego wysłania",
 	"schedule.heading": "Zaplanuj",
 	"schedule.clear": "Wyczyść harmonogram",

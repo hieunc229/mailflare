@@ -292,6 +292,8 @@
 	"schedule.sendScheduledFor": "{when}కు పంపడానికి షెడ్యూల్ చేయబడింది",
 	"schedule.cancelSend": "పంపడాన్ని రద్దు చేయండి",
 	"schedule.cancelFailed": "షెడ్యూల్ చేసిన పంపడాన్ని రద్దు చేయలేకపోయాం.",
+	"schedule.reschedule": "మళ్లీ షెడ్యూల్ చేయండి",
+	"schedule.rescheduleFailed": "పంపడాన్ని మళ్లీ షెడ్యూల్ చేయలేకపోయాం.",
 	"schedule.optionsLabel": "షెడ్యూల్ చేసి పంపే ఎంపికలు",
 	"schedule.heading": "షెడ్యూల్ చేయండి",
 	"schedule.clear": "షెడ్యూల్‌ను తొలగించండి",

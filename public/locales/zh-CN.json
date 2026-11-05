@@ -288,6 +288,8 @@
 	"schedule.sendScheduledFor": "已定于 {when} 发送",
 	"schedule.cancelSend": "取消发送",
 	"schedule.cancelFailed": "无法取消定时发送。",
+	"schedule.reschedule": "重新安排",
+	"schedule.rescheduleFailed": "无法重新安排发送。",
 	"schedule.optionsLabel": "定时发送选项",
 	"schedule.heading": "定时发送",
 	"schedule.clear": "清除定时",

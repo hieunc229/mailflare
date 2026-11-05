@@ -292,6 +292,8 @@
 	"schedule.sendScheduledFor": "ارسال برای {when} زمان‌بندی شده است",
 	"schedule.cancelSend": "لغو ارسال",
 	"schedule.cancelFailed": "لغو ارسال زمان‌بندی‌شده ممکن نشد.",
+	"schedule.reschedule": "زمان‌بندی مجدد",
+	"schedule.rescheduleFailed": "زمان‌بندی مجدد ارسال ممکن نشد.",
 	"schedule.optionsLabel": "گزینه‌های ارسال زمان‌بندی‌شده",
 	"schedule.heading": "زمان‌بندی",
 	"schedule.clear": "پاک کردن زمان‌بندی",

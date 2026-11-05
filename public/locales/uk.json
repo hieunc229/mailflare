@@ -300,6 +300,8 @@
 	"schedule.sendScheduledFor": "Надсилання заплановано на {when}",
 	"schedule.cancelSend": "Скасувати надсилання",
 	"schedule.cancelFailed": "Не вдалося скасувати заплановане надсилання.",
+	"schedule.reschedule": "Перенести",
+	"schedule.rescheduleFailed": "Не вдалося перенести надсилання.",
 	"schedule.optionsLabel": "Параметри запланованого надсилання",
 	"schedule.heading": "Запланувати",
 	"schedule.clear": "Очистити розклад",

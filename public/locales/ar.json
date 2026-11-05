@@ -308,6 +308,8 @@
 	"schedule.sendScheduledFor": "الإرسال مجدول في {when}",
 	"schedule.cancelSend": "إلغاء الإرسال",
 	"schedule.cancelFailed": "تعذّر إلغاء الإرسال المجدول.",
+	"schedule.reschedule": "إعادة الجدولة",
+	"schedule.rescheduleFailed": "تعذّرت إعادة جدولة الإرسال.",
 	"schedule.optionsLabel": "خيارات جدولة الإرسال",
 	"schedule.heading": "جدولة",
 	"schedule.clear": "مسح الجدولة",

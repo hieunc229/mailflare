@@ -288,6 +288,8 @@
 	"schedule.sendScheduledFor": "Pengiriman dijadwalkan untuk {when}",
 	"schedule.cancelSend": "Batalkan pengiriman",
 	"schedule.cancelFailed": "Tidak dapat membatalkan pengiriman terjadwal.",
+	"schedule.reschedule": "Jadwalkan ulang",
+	"schedule.rescheduleFailed": "Tidak dapat menjadwalkan ulang pengiriman.",
 	"schedule.optionsLabel": "Opsi jadwal pengiriman",
 	"schedule.heading": "Jadwalkan",
 	"schedule.clear": "Hapus jadwal",

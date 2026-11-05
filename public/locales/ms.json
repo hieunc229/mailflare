@@ -292,6 +292,8 @@
 	"schedule.sendScheduledFor": "Penghantaran dijadualkan pada {when}",
 	"schedule.cancelSend": "Batalkan penghantaran",
 	"schedule.cancelFailed": "Tidak dapat membatalkan penghantaran berjadual.",
+	"schedule.reschedule": "Jadualkan semula",
+	"schedule.rescheduleFailed": "Tidak dapat menjadualkan semula penghantaran.",
 	"schedule.optionsLabel": "Pilihan hantar berjadual",
 	"schedule.heading": "Jadualkan",
 	"schedule.clear": "Kosongkan jadual",

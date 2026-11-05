@@ -292,6 +292,8 @@
 	"schedule.sendScheduledFor": "{when}에 발송 예약됨",
 	"schedule.cancelSend": "발송 취소",
 	"schedule.cancelFailed": "예약 발송을 취소할 수 없습니다.",
+	"schedule.reschedule": "일정 변경",
+	"schedule.rescheduleFailed": "발송 일정을 변경할 수 없습니다.",
 	"schedule.optionsLabel": "예약 발송 옵션",
 	"schedule.heading": "예약",
 	"schedule.clear": "예약 지우기",

@@ -300,6 +300,8 @@
 	"schedule.sendScheduledFor": "Отправка запланирована на {when}",
 	"schedule.cancelSend": "Отменить отправку",
 	"schedule.cancelFailed": "Не удалось отменить запланированную отправку.",
+	"schedule.reschedule": "Перенести",
+	"schedule.rescheduleFailed": "Не удалось перенести отправку.",
 	"schedule.optionsLabel": "Параметры отложенной отправки",
 	"schedule.heading": "Запланировать",
 	"schedule.clear": "Отменить планирование",

@@ -292,6 +292,8 @@
 	"schedule.sendScheduledFor": "ตั้งเวลาส่งไว้ {when}",
 	"schedule.cancelSend": "ยกเลิกการส่ง",
 	"schedule.cancelFailed": "ไม่สามารถยกเลิกการส่งที่ตั้งเวลาไว้ได้",
+	"schedule.reschedule": "ตั้งเวลาใหม่",
+	"schedule.rescheduleFailed": "ไม่สามารถตั้งเวลาการส่งใหม่ได้",
 	"schedule.optionsLabel": "ตัวเลือกการตั้งเวลาส่ง",
 	"schedule.heading": "ตั้งเวลา",
 	"schedule.clear": "ล้างการตั้งเวลา",
