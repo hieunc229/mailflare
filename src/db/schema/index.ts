@@ -1029,6 +1029,8 @@ export const appSettings = sqliteTable("app_settings", {
 	resendWebhookId: text("resend_webhook_id"),
 	resendWebhookSecret: text("resend_webhook_secret"),
 	iconKey: text("icon_key"),
+	/** Accent palette id (see src/lib/branding/accents.ts); "blue" is the default. */
+	accentColor: text("accent_color"),
 	agentEnabled: bool("agent_enabled").notNull().default(true),
 	agentProvider: text("agent_provider", { enum: ["cloudflare", "compatible"] }),
 	agentPreset: text("agent_preset", { enum: ["openai", "openrouter", "groq", "custom"] }),
