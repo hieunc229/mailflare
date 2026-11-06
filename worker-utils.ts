@@ -76,7 +76,13 @@ export function withD1ReadSession(env: CloudflareEnv, request: Request): D1ReadS
 	const database = env.DB;
 	if (!database || typeof database.withSession !== "function") return null;
 	const session = database.withSession(d1SessionBookmark(request) ?? "first-unconstrained");
-	const proxied = new Proxy(env, { get: (target, property) => (property === "DB" ? session : Reflect.get(target, property)) });
+	// `DB_PRIMARY` keeps the raw primary binding reachable: authentication reads must not
+	// accept a lagging replica's copy of sessions/users (a session revoked on another
+	// device, or a freshly disabled account, has no bookmark covering it).
+	const proxied = new Proxy(env, {
+		get: (target, property) =>
+			property === "DB" ? session : property === "DB_PRIMARY" ? target.DB : Reflect.get(target, property),
+	});
 	return { env: proxied, session };
 }
 
@@ -84,8 +90,14 @@ export function withD1ReadSession(env: CloudflareEnv, request: Request): D1ReadS
  * Stores the session's newest bookmark on the client so the next request continues where this
  * one left off. `getBookmark()` is null until a query ran on the session (and missing on
  * stand-in `env.DB` implementations), in which case the response is returned untouched.
+ *
+ * Only mutations (and the cookie-less first visit) set the cookie: a slow read-only request
+ * finishing after a write would otherwise overwrite the newer bookmark with an older one and
+ * break the read-your-writes guarantee. Concurrent mutation bookmarks are ordered on the
+ * primary, so whichever lands last stays consistent.
  */
-export function withD1BookmarkCookie(response: Response, session: D1ReadSession["session"] | null | undefined): Response {
+export function withD1BookmarkCookie(request: Request, response: Response, session: D1ReadSession["session"] | null | undefined): Response {
+	if ((request.method === "GET" || request.method === "HEAD") && d1SessionBookmark(request)) return response;
 	const bookmark = typeof session?.getBookmark === "function" ? session.getBookmark() : null;
 	if (!bookmark) return response;
 	const copy = new Response(response.body, response);

@@ -65,7 +65,7 @@ export default {
 		}
 
 		const response = await vinextHandler.fetch(request, env, ctx);
-		return withD1BookmarkCookie(response, d1Session?.session);
+		return withD1BookmarkCookie(request, response, d1Session?.session);
 	},
 
 	async email(message: ForwardableEmailMessage, rawEnv: CloudflareEnv, ctx: ExecutionContext) {

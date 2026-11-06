@@ -112,7 +112,7 @@ test("withD1ReadSession skips bindings without withSession", () => {
 
 test("withD1BookmarkCookie sets the newest bookmark on the response", () => {
 	const { session } = fakeD1("bm-new");
-	const response = withD1BookmarkCookie(new Response("body", { status: 200 }), session);
+	const response = withD1BookmarkCookie(req(), new Response("body", { status: 200 }), session);
 	const setCookie = response.headers.get("set-cookie");
 	assert.ok(setCookie);
 	assert.match(setCookie, new RegExp(`^${D1_SESSION_COOKIE}=bm-new`));
@@ -123,16 +123,50 @@ test("withD1BookmarkCookie sets the newest bookmark on the response", () => {
 
 test("withD1BookmarkCookie encodes the bookmark value", () => {
 	const { session } = fakeD1("bm:with/special");
-	const response = withD1BookmarkCookie(new Response("body"), session);
+	const response = withD1BookmarkCookie(req(), new Response("body"), session);
 	assert.match(response.headers.get("set-cookie"), new RegExp(`${D1_SESSION_COOKIE}=${encodeURIComponent("bm:with/special")}`));
 });
 
 test("withD1BookmarkCookie returns the response untouched when there is no bookmark", () => {
 	const { session } = fakeD1(null);
 	const original = new Response("body");
-	assert.equal(withD1BookmarkCookie(original, session), original);
-	assert.equal(withD1BookmarkCookie(original, null), original);
+	assert.equal(withD1BookmarkCookie(req(), original, session), original);
+	assert.equal(withD1BookmarkCookie(req(), original, null), original);
 	// Stand-in env.DB implementations may lack getBookmark entirely.
-	assert.equal(withD1BookmarkCookie(original, { prepare() {} }), original);
+	assert.equal(withD1BookmarkCookie(req(), original, { prepare() {} }), original);
 	assert.equal(original.headers.get("set-cookie"), null);
+});
+
+const req = (method = "GET", cookie) =>
+	new Request("https://app.test/x", {
+		method,
+		headers: cookie ? { cookie: `${D1_SESSION_COOKIE}=${encodeURIComponent(cookie)}` } : {},
+	});
+
+test("DB_PRIMARY stays the raw binding while DB is the session", () => {
+	const session = { getBookmark: () => "bm1" };
+	const db = { withSession: () => session };
+	const env = { DB: db };
+	const result = withD1ReadSession(env, req());
+	assert.equal(result.env.DB, session);
+	assert.equal(result.env.DB_PRIMARY, db);
+});
+
+test("read-only responses cannot regress an existing bookmark cookie", () => {
+	const session = { getBookmark: () => "older-bookmark" };
+	const original = new Response("body");
+	const response = withD1BookmarkCookie(req("GET", "newer-bookmark"), original, session);
+	assert.equal(response, original);
+});
+
+test("mutation responses still store the newest bookmark", () => {
+	const session = { getBookmark: () => "post-write-bm" };
+	const response = withD1BookmarkCookie(req("POST", "old-bm"), new Response("body"), session);
+	assert.match(response.headers.get("set-cookie"), /mf-d1-bm=post-write-bm/);
+});
+
+test("the cookie-less first visit stores the bookmark", () => {
+	const session = { getBookmark: () => "first-bm" };
+	const response = withD1BookmarkCookie(req("GET"), new Response("body"), session);
+	assert.match(response.headers.get("set-cookie"), /mf-d1-bm=first-bm/);
 });
