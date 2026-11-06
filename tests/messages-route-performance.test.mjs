@@ -79,9 +79,9 @@ async function fixture(t) {
 			await this.read("opens");
 			return new Map(ids.map((id) => [id, 3]));
 		},
-		message(id, { mailbox = "mine", user = "owner", thread = "thread", status = "received", direction = "inbound", read = false, time = 1, fromAddr = "friend@example.com" } = {}) {
+		message(id, { mailbox = "mine", user = "owner", thread = "thread", status = "received", direction = "inbound", read = false, time = 1, fromAddr = "friend@example.com", toAddr = "friend@example.com" } = {}) {
 			database.db.prepare(`INSERT INTO messages (id, user_id, mailbox_id, direction, from_addr, to_addr, status, read, thread_id, snippet, text_body, html_body, raw_r2_key, created_at)
-				VALUES (?, ?, ?, ?, ?, 'friend@example.com', ?, ?, ?, 'preview', 'private body', '<p>private</p>', 'raw-key', ?)`).run(id, user, mailbox, direction, fromAddr, status, Number(read), thread, time);
+				VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'preview', 'private body', '<p>private</p>', 'raw-key', ?)`).run(id, user, mailbox, direction, fromAddr, toAddr, status, Number(read), thread, time);
 		},
 	};
 	const prepare = database.prepare.bind(database);
@@ -250,6 +250,24 @@ test("a shared sender address keeps each message's own display name", async (t) 
 	f.contacts = async () => new Map([["no-reply@ashbyhq.com", { displayName: "Ashby Recruiting", source: "manual" }]]);
 	const manual = await (await GET(request("mailboxId=mine"))).json();
 	assert.deepEqual(manual.messages.map((row) => row.fromContactName), ["Ashby Recruiting", "Ashby Recruiting"]);
+});
+
+test("a shared recipient address keeps each outbound message's own display name", async (t) => {
+	const f = await fixture(t);
+	f.message("posthog", { direction: "outbound", toAddr: '"PostHog Team" <no-reply@ashbyhq.com>', time: 1 });
+	f.message("livekit", { direction: "outbound", toAddr: '"LiveKit Hiring Team" <no-reply@ashbyhq.com>', time: 2 });
+	// The contact learned the most recent recipient's name for the shared address.
+	f.contacts = async () => new Map([["no-reply@ashbyhq.com", { displayName: "PostHog Team", source: "outbound" }]]);
+	const body = await (await GET(request("mailboxId=mine&direction=outbound"))).json();
+	assert.deepEqual(body.messages.map((row) => [row.id, row.toContactName]), [
+		["livekit", "LiveKit Hiring Team"],
+		["posthog", "PostHog Team"],
+	]);
+
+	// A name the user set on the contact is deliberate and wins for every message.
+	f.contacts = async () => new Map([["no-reply@ashbyhq.com", { displayName: "Ashby Recruiting", source: "manual" }]]);
+	const manual = await (await GET(request("mailboxId=mine&direction=outbound"))).json();
+	assert.deepEqual(manual.messages.map((row) => row.toContactName), ["Ashby Recruiting", "Ashby Recruiting"]);
 });
 
 test("empty pages preserve total and skip unnecessary thread and scheduled reads", async (t) => {

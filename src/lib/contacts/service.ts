@@ -3,7 +3,7 @@ import { getDb } from "@/db";
 import { contacts, routingRules } from "@/db/schema";
 import { getFirstEmailAddressEntry, normalizeEmailAddress } from "@/lib/email/address";
 import type { BlockContactInput, ContactDisplayName, ContactInput, MessageContactNames } from "@/lib/contacts/types";
-import { getContactId, getContactNameFromAddress, getSenderDisplayName } from "@/lib/contacts/utils";
+import { getContactId, getContactNameFromAddress, getPartyDisplayName } from "@/lib/contacts/utils";
 import { importGravatarAvatar } from "@/lib/contacts/gravatar";
 
 export async function upsertContactFromAddress(env: CloudflareEnv, input: ContactInput) {
@@ -97,8 +97,8 @@ export async function getMessageContactNames(
 	const contactMap = await getContactDisplayNameMap(env, userId, [fromAddr, firstTo]);
 
 	return {
-		fromContactName: getSenderDisplayName(fromAddr, contactMap.get(normalizeEmailAddress(fromAddr))),
-		toContactName: contactMap.get(normalizeEmailAddress(firstTo))?.displayName ?? null,
+		fromContactName: getPartyDisplayName(fromAddr, contactMap.get(normalizeEmailAddress(fromAddr))),
+		toContactName: getPartyDisplayName(firstTo, contactMap.get(normalizeEmailAddress(firstTo))),
 	};
 }
 

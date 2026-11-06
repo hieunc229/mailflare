@@ -29,6 +29,7 @@ export function NewMessagePopup({
 						{notification.subject || t("list.noSubject")}
 					</p>
 					<p className="mt-1 truncate text-xs text-neutral-500">
+						{/* In-app popup keeps the short name; OS notifications add the real address. */}
 						{t("notification.from", { sender: notification.fromName ?? getEmailDisplayName(notification.from) })}
 					</p>
 				</Link>
