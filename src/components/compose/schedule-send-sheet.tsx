@@ -21,7 +21,7 @@ const pageClass = "flex max-h-[calc(85dvh-3.5rem)] w-full shrink-0 flex-col px-2
 const rowClass = "flex min-h-12 w-full items-center gap-3 rounded-xl px-3 text-left text-base text-neutral-900 active:bg-neutral-100";
 
 /** Phone version of the Send options menu: a bottom sheet whose pages slide in (root → date, templates). */
-export function ScheduleSendSheet({ open, onOpenChange, value, onChange, onApplyTemplate, onNewTemplate }: ScheduleSendSheetProps) {
+export function ScheduleSendSheet({ open, onOpenChange, value, onChange, allowClear = true, onApplyTemplate, onNewTemplate }: ScheduleSendSheetProps) {
 	const { t } = useLanguage();
 	const [page, setPage] = useState<Page>("root");
 	const [templates, setTemplates] = useState<ComposeTemplate[]>([]);
@@ -40,10 +40,13 @@ export function ScheduleSendSheet({ open, onOpenChange, value, onChange, onApply
 		return () => observer.disconnect();
 	}, [open, page, templates.length, value]);
 
+	const showTemplates = !!(onApplyTemplate && onNewTemplate);
+
 	useEffect(() => {
 		if (!open) return;
 		setPage("root");
 		setDraftDate(value ? formatDateTimeLocal(value) : "");
+		if (!showTemplates) return;
 		void authFetch("/api/templates", { cache: "no-store" })
 			.then(async (response) => {
 				if (response.ok) setTemplates(((await response.json()) as { templates: ComposeTemplate[] }).templates);
@@ -89,7 +92,7 @@ export function ScheduleSendSheet({ open, onOpenChange, value, onChange, onApply
 						<div className="flex items-start transition-transform duration-300 ease-[cubic-bezier(0.2,0.8,0.2,1)] motion-reduce:transition-none" style={{ transform: `translateX(-${PAGES.indexOf(page) * 100}%)` }}>
 							<div ref={(node) => { pageRefs.current.root = node; }} className={pageClass} inert={page !== "root"}>
 								<div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
-									{value && (
+									{allowClear && value && (
 										<button type="button" onClick={() => choose(null)} className={rowClass}>
 											<X className="h-5 w-5 text-neutral-500" />
 											{t("schedule.clear")}
@@ -107,10 +110,12 @@ export function ScheduleSendSheet({ open, onOpenChange, value, onChange, onApply
 										<span className="flex items-center gap-3"><CalendarClock className="h-5 w-5 text-neutral-500" />{t("schedule.pick", { timeZone: getUserTimeZone() })}</span>
 										<ChevronRight className="h-5 w-5 text-neutral-400" />
 									</button>
-									<button type="button" onClick={() => setPage("templates")} className={cn(rowClass, "justify-between")}>
-										<span className="flex items-center gap-3"><FileText className="h-5 w-5 text-neutral-500" />{t("template.menu")}</span>
-										<ChevronRight className="h-5 w-5 text-neutral-400" />
-									</button>
+									{showTemplates && (
+										<button type="button" onClick={() => setPage("templates")} className={cn(rowClass, "justify-between")}>
+											<span className="flex items-center gap-3"><FileText className="h-5 w-5 text-neutral-500" />{t("template.menu")}</span>
+											<ChevronRight className="h-5 w-5 text-neutral-400" />
+										</button>
+									)}
 								</div>
 							</div>
 							<div ref={(node) => { pageRefs.current.date = node; }} className={pageClass} inert={page !== "date"}>
@@ -133,29 +138,31 @@ export function ScheduleSendSheet({ open, onOpenChange, value, onChange, onApply
 									</Button>
 								</div>
 							</div>
-							<div ref={(node) => { pageRefs.current.templates = node; }} className={pageClass} inert={page !== "templates"}>
-								<div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
-									{templates.length === 0 && <p className="px-3 py-3 text-sm text-neutral-500">{t("template.none")}</p>}
-									{templates.map((template) => (
-										<button
-											key={template.id}
-											type="button"
-											onClick={() => {
-												onApplyTemplate({ title: template.subject ?? "", html: template.htmlBody ?? textToHtml(template.textBody ?? "") });
-												onOpenChange(false);
-											}}
-											className={rowClass}
-										>
-											<span className="break-words">{template.subject || t("template.untitled")}</span>
+							{showTemplates && (
+								<div ref={(node) => { pageRefs.current.templates = node; }} className={pageClass} inert={page !== "templates"}>
+									<div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
+										{templates.length === 0 && <p className="px-3 py-3 text-sm text-neutral-500">{t("template.none")}</p>}
+										{templates.map((template) => (
+											<button
+												key={template.id}
+												type="button"
+												onClick={() => {
+													onApplyTemplate?.({ title: template.subject ?? "", html: template.htmlBody ?? textToHtml(template.textBody ?? "") });
+													onOpenChange(false);
+												}}
+												className={rowClass}
+											>
+												<span className="break-words">{template.subject || t("template.untitled")}</span>
+											</button>
+										))}
+									</div>
+									<div className="shrink-0 pt-2">
+										<button type="button" onClick={() => { onOpenChange(false); onNewTemplate?.(); }} className={cn(rowClass, "text-blue-600")}>
+											<Plus className="h-5 w-5" />{t("template.new")}
 										</button>
-									))}
+									</div>
 								</div>
-								<div className="shrink-0 pt-2">
-									<button type="button" onClick={() => { onOpenChange(false); onNewTemplate(); }} className={cn(rowClass, "text-blue-600")}>
-										<Plus className="h-5 w-5" />{t("template.new")}
-									</button>
-								</div>
-							</div>
+							)}
 						</div>
 					</div>
 				</DialogPrimitive.Content>

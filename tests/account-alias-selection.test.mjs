@@ -41,7 +41,7 @@ const {
 	SqliteDatabase, applyMigrations, getDb, createSession, generateApiKey, createUserAccountSchema,
 	dashboardCreate, apiCreate, registerAdminMcpTools, getMailboxDomainAddresses, resolveInboundAddress, getAuthorizedSenderAddress,
 } = await import(pathToFileURL(join(directory, "entry.mjs")).href);
-const key = generateApiKey();
+const key = await generateApiKey();
 
 async function fixture(t, { rules = [], failAddress, slowAddress } = {}) {
 	const database = new SqliteDatabase(":memory:");
@@ -59,8 +59,8 @@ async function fixture(t, { rules = [], failAddress, slowAddress } = {}) {
 		INSERT INTO license_settings (id, instance_id, plan, state, features, updated_at)
 			VALUES ('default', 'test-instance', 'team', 'active', '[]', 1);
 	`);
-	database.db.prepare("INSERT INTO api_keys (id, user_id, name, prefix, key_hash, scopes, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)")
-		.run("key", "admin", "Test", key.prefix, key.hash, '["accounts"]', 1);
+	database.db.prepare("INSERT INTO api_keys (id, user_id, name, prefix, key_hash, key_sha256, scopes, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)")
+		.run("key", "admin", "Test", key.prefix, key.hash, key.sha256, '["accounts"]', 1);
 	const env = { DB: database, CF_TOKEN: "test-only", MAILFLARE_RUNTIME: "node" };
 	globalThis.__mailflareNodeEnv = env;
 	t.after(() => { delete globalThis.__mailflareNodeEnv; });

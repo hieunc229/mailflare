@@ -1,6 +1,6 @@
 import { and, eq, gt, isNotNull, lte, or, ne, isNull, sql } from "drizzle-orm";
 import { getDb } from "@/db";
-import { calendarEvents } from "@/db/schema";
+import { calendarEvents, users } from "@/db/schema";
 import { isMissingColumnError } from "@/lib/database-errors";
 import { sendPushContent } from "@/lib/push/server";
 import { normalizeTimeZone } from "@/lib/time/utils";
@@ -22,8 +22,10 @@ export async function runCalendarReminders(env: CloudflareEnv, now: Date): Promi
 		const db = getDb(env);
 		const horizon = new Date(now.getTime() + MAX_REMINDER_MINUTES * 60_000);
 		const rows = await db
-			.select()
+			.select({ event: calendarEvents })
 			.from(calendarEvents)
+			// Accounts with Calendar hidden get no reminders: they cannot open the event anyway.
+			.innerJoin(users, and(eq(users.id, calendarEvents.userId), eq(users.calendarEnabled, true)))
 			.where(and(
 				isNotNull(calendarEvents.reminderMinutes),
 				lte(calendarEvents.startsAt, horizon),
@@ -32,7 +34,7 @@ export async function runCalendarReminders(env: CloudflareEnv, now: Date): Promi
 			))
 			.limit(REMINDER_BATCH);
 
-		for (const event of rows) {
+		for (const { event } of rows) {
 			const lead = (event.reminderMinutes ?? 0) * 60_000;
 			const last = event.lastRemindedStart?.getTime() ?? 0;
 			const due = expandToolEvents([event], now, new Date(now.getTime() + lead + 1))
@@ -63,7 +65,7 @@ export async function runCalendarReminders(env: CloudflareEnv, now: Date): Promi
 			}
 		}
 	} catch (error) {
-		// Before migration 0078 the reminder columns do not exist; there is nothing to remind about yet.
+		// Before migrations 0078/0080 the reminder and calendar_enabled columns do not exist; nothing to remind about yet.
 		if (!isMissingColumnError(error)) throw error;
 	}
 }
