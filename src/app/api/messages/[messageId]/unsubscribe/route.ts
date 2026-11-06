@@ -66,20 +66,18 @@ export async function POST(request: Request, { params }: UnsubscribeRouteParams)
 	const candidate = await getUnsubscribeUrlFromRawR2Key(env, message.rawR2Key);
 	const url = candidate?.url ?? null;
 
-	if (url?.startsWith("mailto:")) {
-		const target = parseMailtoUnsubscribe(url);
+	// Gmail's order: RFC 8058 one-click POST, then an unsubscribe email, then
+	// the sender's page for the person to finish.
+	if (url?.startsWith("https://") && candidate?.oneClick && (await postOneClickUnsubscribe(url))) {
+		return NextResponse.json({ ok: true, method: "one-click" });
+	}
+
+	const mailtoUrl = candidate?.mailto ?? null;
+	if (mailtoUrl) {
+		const target = parseMailtoUnsubscribe(mailtoUrl);
 		if (target && (await sendUnsubscribeEmail(env, user.id, message.mailboxId, target))) {
 			return NextResponse.json({ ok: true, method: "mailto" });
 		}
-		return NextResponse.json({ ok: true, method: "link", url });
-	}
-
-	if (url && url.startsWith("https://")) {
-		// A failed one-click still leaves the link as the way out.
-		if (candidate?.oneClick && (await postOneClickUnsubscribe(url))) {
-			return NextResponse.json({ ok: true, method: "one-click" });
-		}
-		return NextResponse.json({ ok: true, method: "link", url });
 	}
 
 	if (url) return NextResponse.json({ ok: true, method: "link", url });

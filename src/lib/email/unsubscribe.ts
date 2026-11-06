@@ -65,7 +65,8 @@ export function extractUnsubscribeUrlFromRaw(raw: ArrayBuffer): UnsubscribeUrl {
 	const url = candidates.find((candidate) => candidate.startsWith("https://") || candidate.startsWith("http://"))
 		?? candidates.find((candidate) => candidate.startsWith("mailto:"))
 		?? null;
-	return url ? { url, oneClick: hasOneClickPost(headers) } : null;
+	const mailto = candidates.find((candidate) => candidate.startsWith("mailto:")) ?? null;
+	return url ? { url, oneClick: hasOneClickPost(headers), mailto } : null;
 }
 
 export async function getUnsubscribeUrlFromRawR2Key(env: CloudflareEnv, rawR2Key: string | null): Promise<UnsubscribeUrl> {

@@ -3,6 +3,8 @@ export type UnsubscribeCandidate = {
 	url: string;
 	/** RFC 8058: the header block carries `List-Unsubscribe-Post: List-Unsubscribe=One-Click`. */
 	oneClick: boolean;
+	/** The `mailto:` target when the header also lists one, so a failed or unsupported one-click can fall back to email. */
+	mailto: string | null;
 };
 
 export type UnsubscribeUrl = UnsubscribeCandidate | null;

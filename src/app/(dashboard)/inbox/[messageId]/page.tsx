@@ -272,6 +272,9 @@ export default function MessageDetailPage() {
                     )}
                   </b>{" "}
                   <span className="hidden sm:block text-neutral-500 text-xs flex-1 overflow-hidden text-ellipsis min-w-0">&lt;{fromAddress}&gt;</span>
+                  {message.direction === "inbound" && message.hasUnsubscribe && (
+                    <MessageUnsubscribeButton key={message.id} messageId={message.id} />
+                  )}
                 </p>
                 <p className="text-xs text-neutral-500">
                   {t("source.to").toLowerCase()}{" "}
@@ -298,9 +301,6 @@ export default function MessageDetailPage() {
             </div>
             <div className="flex shrink-0 items-center gap-2">
               <p className="hidden text-xs sm:block">{messageDate(true)}</p>
-              {message.direction === "inbound" && (data.unsubscribeUrl || data.unsubscribeViaBody) && (
-                <MessageUnsubscribeButton key={message.id} messageId={message.id} />
-              )}
               <ThreadMessageActions
                 message={currentThreadMessage}
                 mailboxId={message.mailboxId}
