@@ -1,4 +1,4 @@
-import { and, desc, eq } from "drizzle-orm";
+import { and, desc, eq, inArray } from "drizzle-orm";
 import { NextResponse } from "next/server";
 import type { getDb } from "@/db";
 import { domains, mailboxes, users } from "@/db/schema";
@@ -33,11 +33,29 @@ export function listAccountsForAdmin(db: Db) {
 		.orderBy(desc(users.createdAt));
 }
 
-export async function getDomainForAdmin(db: Db, adminUserId: string, domainId: string) {
+type DomainAdminActor = {
+	id: string;
+	canManageMailboxes: boolean;
+	createdByUserId: string | null;
+};
+
+/**
+ * Domains an admin may use for mailboxes and account addresses.
+ * Matches mailbox creation and the domains API: a mailbox manager created by
+ * another admin may use that creator's domains as well as their own.
+ */
+export function domainOwnerIdsForAdmin(actor: DomainAdminActor): string[] {
+	if (actor.canManageMailboxes && actor.createdByUserId) {
+		return [actor.id, actor.createdByUserId];
+	}
+	return [actor.id];
+}
+
+export async function getDomainForAdmin(db: Db, actor: DomainAdminActor, domainId: string) {
 	const [domain] = await db
 		.select()
 		.from(domains)
-		.where(and(eq(domains.id, domainId), eq(domains.userId, adminUserId)))
+		.where(and(eq(domains.id, domainId), inArray(domains.userId, domainOwnerIdsForAdmin(actor))))
 		.limit(1);
 	return domain ?? null;
 }

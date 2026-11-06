@@ -28,5 +28,5 @@ export async function POST(request: Request) {
 	if (parsed.data.role === "admin" && !isPrimaryAdmin(auth.user)) {
 		return NextResponse.json({ error: "Only the primary admin can create admin accounts" }, { status: 403 });
 	}
-	return createAccountResponse(env, auth.userId, parsed.data);
+	return createAccountResponse(env, auth.user, parsed.data);
 }

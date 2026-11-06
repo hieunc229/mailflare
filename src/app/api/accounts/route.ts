@@ -33,7 +33,7 @@ export async function POST(request: Request) {
 	if (parsed.data.role === "admin" && !isPrimaryAdmin(actor)) {
 		return NextResponse.json({ error: "Only the primary admin can create admin accounts" }, { status: 403 });
 	}
-	return createAccountResponse(access.env, actor.id, parsed.data);
+	return createAccountResponse(access.env, actor, parsed.data);
 }
 
 export async function DELETE(request: Request) {
