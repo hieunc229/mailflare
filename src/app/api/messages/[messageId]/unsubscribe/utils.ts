@@ -1,40 +1,44 @@
-import type { MailtoUnsubscribeTarget } from "./types";
+import { assertResolvesPublic, isPublicHttpsUrl } from "@/lib/security/public-url";
 
 const ONE_CLICK_TIMEOUT_MS = 10_000;
+const WINDOW_MS = 60_000;
+const MAX_REQUESTS = 30;
+
+const windows = new Map<string, { start: number; count: number }>();
+
+/** Fixed-window limit on unsubscribe attempts per user; keeps the mailto path from being an outbound amplifier. */
+export function allowUnsubscribeRequest(userId: string, now = Date.now()): boolean {
+	const current = windows.get(userId);
+	if (!current || now - current.start >= WINDOW_MS) {
+		windows.set(userId, { start: now, count: 1 });
+		return true;
+	}
+	current.count += 1;
+	return current.count <= MAX_REQUESTS;
+}
 
 /**
  * RFC 8058 one-click: POST `List-Unsubscribe=One-Click` to the https URI.
- * Any 2xx or 3xx counts as success. Redirects are followed because an
- * opaqueredirect reports status 0 outside Workers and would read as a failure.
+ * Any 2xx or 3xx counts as success; redirects are never followed, so the
+ * endpoint cannot bounce the request to an internal address.
  */
 export async function postOneClickUnsubscribe(url: string): Promise<boolean> {
+	if (!isPublicHttpsUrl(url)) return false;
+	try {
+		await assertResolvesPublic(new URL(url).hostname);
+	} catch {
+		return false;
+	}
 	try {
 		const response = await fetch(url, {
 			method: "POST",
 			headers: { "Content-Type": "application/x-www-form-urlencoded" },
 			body: "List-Unsubscribe=One-Click",
-			redirect: "follow",
+			redirect: "manual",
 			signal: AbortSignal.timeout(ONE_CLICK_TIMEOUT_MS),
 		});
 		return response.status >= 200 && response.status < 400;
 	} catch {
 		return false;
-	}
-}
-
-/** Pulls the recipient out of a `mailto:` candidate, honouring its subject/body params for automated processors. */
-export function parseMailtoUnsubscribe(url: string): MailtoUnsubscribeTarget | null {
-	try {
-		const parsed = new URL(url);
-		if (parsed.protocol !== "mailto:") return null;
-		const to = decodeURIComponent(parsed.pathname).trim();
-		if (!to) return null;
-		return {
-			to,
-			subject: parsed.searchParams.get("subject")?.trim() || "unsubscribe",
-			text: parsed.searchParams.get("body")?.trim() || "unsubscribe",
-		};
-	} catch {
-		return null;
 	}
 }

@@ -298,7 +298,7 @@ export default function MessageDetailPage() {
             </div>
             <div className="flex shrink-0 items-center gap-2">
               <p className="hidden text-xs sm:block">{messageDate(true)}</p>
-              {message.direction === "inbound" && (data.unsubscribeUrl || data.unsubscribeViaBody) && (
+              {message.direction === "inbound" && message.status !== "spam" && (data.unsubscribeUrl || data.unsubscribeViaBody) && (
                 <MessageUnsubscribeButton key={message.id} messageId={message.id} />
               )}
               <ThreadMessageActions

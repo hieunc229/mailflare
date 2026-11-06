@@ -2350,5 +2350,8 @@
 	"account.permissions.calendarHint": "Events, reminders, and booking pages.",
 	"account.permissions.driveHint": "Files, saved attachments, and shared links.",
 	"account.permissions.allowCalendar": "Allow Calendar",
-	"account.permissions.allowDrive": "Allow Drive"
+	"account.permissions.allowDrive": "Allow Drive",
+	"actions.unsubscribeDeleteAll": "Abbestellen & alle löschen",
+	"actions.unsubscribeDeleteConfirm": "{count} ältere E-Mails dieses Absenders in den Papierkorb verschieben?",
+	"actions.unsubscribeTrashDone": "Abbestellt und {count} E-Mails in den Papierkorb verschoben"
 }

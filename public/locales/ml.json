@@ -2350,5 +2350,8 @@
 	"account.permissions.calendarHint": "Events, reminders, and booking pages.",
 	"account.permissions.driveHint": "Files, saved attachments, and shared links.",
 	"account.permissions.allowCalendar": "Allow Calendar",
-	"account.permissions.allowDrive": "Allow Drive"
+	"account.permissions.allowDrive": "Allow Drive",
+	"actions.unsubscribeDeleteAll": "സബ്‌സ്‌ക്രിപ്‌ഷൻ റദ്ദാക്കി എല്ലാം നീക്കുക",
+	"actions.unsubscribeDeleteConfirm": "ഈ അയച്ചയാളുടെ {count} പഴയ ഇമെയിലുകൾ ട്രാഷിലേക്ക് മാറ്റണോ?",
+	"actions.unsubscribeTrashDone": "സബ്‌സ്‌ക്രിപ്‌ഷൻ റദ്ദായി; {count} ഇമെയിലുകൾ ട്രാഷിലേക്ക് മാറ്റി"
 }

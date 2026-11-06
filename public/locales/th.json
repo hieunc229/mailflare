@@ -2347,5 +2347,8 @@
 	"account.permissions.calendarHint": "Events, reminders, and booking pages.",
 	"account.permissions.driveHint": "Files, saved attachments, and shared links.",
 	"account.permissions.allowCalendar": "Allow Calendar",
-	"account.permissions.allowDrive": "Allow Drive"
+	"account.permissions.allowDrive": "Allow Drive",
+	"actions.unsubscribeDeleteAll": "ยกเลิกการสมัครรับและลบทั้งหมด",
+	"actions.unsubscribeDeleteConfirm": "ย้ายอีเมลเดิม {count} ฉบับจากผู้ส่งรายนี้ไปถังขยะ?",
+	"actions.unsubscribeTrashDone": "ยกเลิกการสมัครรับแล้ว ย้าย {count} ฉบับไปถังขยะ"
 }

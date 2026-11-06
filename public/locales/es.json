@@ -2364,5 +2364,8 @@
 	"account.permissions.calendarHint": "Events, reminders, and booking pages.",
 	"account.permissions.driveHint": "Files, saved attachments, and shared links.",
 	"account.permissions.allowCalendar": "Allow Calendar",
-	"account.permissions.allowDrive": "Allow Drive"
+	"account.permissions.allowDrive": "Allow Drive",
+	"actions.unsubscribeDeleteAll": "Darse de baja y borrar todo",
+	"actions.unsubscribeDeleteConfirm": "¿Mover {count} correos anteriores de este remitente a la Papelera?",
+	"actions.unsubscribeTrashDone": "Dado de baja; {count} correos movidos a la Papelera"
 }

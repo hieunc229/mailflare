@@ -2378,5 +2378,8 @@
 	"account.permissions.calendarHint": "Events, reminders, and booking pages.",
 	"account.permissions.driveHint": "Files, saved attachments, and shared links.",
 	"account.permissions.allowCalendar": "Allow Calendar",
-	"account.permissions.allowDrive": "Allow Drive"
+	"account.permissions.allowDrive": "Allow Drive",
+	"actions.unsubscribeDeleteAll": "Отписаться и удалить всё",
+	"actions.unsubscribeDeleteConfirm": "Переместить {count} писем от этого отправителя в корзину?",
+	"actions.unsubscribeTrashDone": "Отписано; {count} писем перемещено в корзину"
 }

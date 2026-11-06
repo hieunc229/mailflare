@@ -1,15 +1,19 @@
-export type UnsubscribeMethod = "one-click" | "mailto" | "link";
+import type { MailtoUnsubscribeTarget, UnsubscribeMethod } from "@/lib/email/unsubscribe-types";
+
+export type { MailtoUnsubscribeTarget };
+
+export type UnsubscribeAction = "unsubscribe" | "unsubscribe_and_trash";
+
+export type UnsubscribePayload = {
+	action?: UnsubscribeAction;
+	/** Report how many past messages the sender trash sweep would move, without changing anything. */
+	previewOnly?: boolean;
+};
 
 export type UnsubscribeResult =
-	| { ok: true; method: "one-click" }
-	| { ok: true; method: "mailto" }
-	| { ok: true; method: "link"; url: string };
-
-export type MailtoUnsubscribeTarget = {
-	to: string;
-	subject: string;
-	text: string;
-};
+	| { ok: true; method: Exclude<UnsubscribeMethod, "link">; trashedCount?: number }
+	| { ok: true; method: "link"; url: string; trashedCount?: number }
+	| { ok: true; preview: { sender: string; count: number } };
 
 export type UnsubscribeRouteParams = {
 	params: Promise<{ messageId: string }>;

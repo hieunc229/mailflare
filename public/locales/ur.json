@@ -2350,5 +2350,8 @@
 	"account.permissions.calendarHint": "Events, reminders, and booking pages.",
 	"account.permissions.driveHint": "Files, saved attachments, and shared links.",
 	"account.permissions.allowCalendar": "Allow Calendar",
-	"account.permissions.allowDrive": "Allow Drive"
+	"account.permissions.allowDrive": "Allow Drive",
+	"actions.unsubscribeDeleteAll": "سبسکرپشن ختم کریں اور سب حذف کریں",
+	"actions.unsubscribeDeleteConfirm": "اس مرسل کے {count} پرانے ای میلز کو ٹریش میں منتقل کریں؟",
+	"actions.unsubscribeTrashDone": "سبسکرپشن ختم؛ {count} ای میلز ٹریش میں منتقل کر دی گئیں"
 }

@@ -58,6 +58,23 @@ function hasOneClickPost(headers: Map<string, string[]>): boolean {
 	return (headers.get("list-unsubscribe-post") ?? []).some((value) => /list-unsubscribe\s*=\s*one-click/i.test(value));
 }
 
+/**
+ * Every header name covered by any `DKIM-Signature` `h=` list, lower-cased.
+ * RFC 8058 expects the List-Unsubscribe headers to be signed; when none of the
+ * message's signatures covers them, the one-click header could have been added
+ * by a relay and is safer treated as an ordinary link. A forged signature can
+ * still claim coverage, so this stays a best-effort gate, not a verification.
+ */
+export function dkimCoveredHeaders(headers: Map<string, string[]>): Set<string> {
+	const covered = new Set<string>();
+	for (const value of headers.get("dkim-signature") ?? []) {
+		const match = /(?:^|;)\s*h\s*=\s*([^;]+)/i.exec(value);
+		if (!match) continue;
+		for (const name of match[1]!.split(":")) covered.add(name.trim().toLowerCase());
+	}
+	return covered;
+}
+
 export function extractUnsubscribeUrlFromRaw(raw: ArrayBuffer): UnsubscribeUrl {
 	const headers = parseHeaders(getHeaderBlock(raw));
 	const values = headers.get("list-unsubscribe") ?? [];
@@ -65,7 +82,8 @@ export function extractUnsubscribeUrlFromRaw(raw: ArrayBuffer): UnsubscribeUrl {
 	const url = candidates.find((candidate) => candidate.startsWith("https://") || candidate.startsWith("http://"))
 		?? candidates.find((candidate) => candidate.startsWith("mailto:"))
 		?? null;
-	return url ? { url, oneClick: hasOneClickPost(headers) } : null;
+	if (!url) return null;
+	return { url, oneClick: hasOneClickPost(headers), dkimCoversUnsubscribe: dkimCoveredHeaders(headers).has("list-unsubscribe") };
 }
 
 export async function getUnsubscribeUrlFromRawR2Key(env: CloudflareEnv, rawR2Key: string | null): Promise<UnsubscribeUrl> {
@@ -109,4 +127,27 @@ export function extractUnsubscribeLinkFromBody(htmlBody: string | null, textBody
 		}
 	}
 	return null;
+}
+
+function sanitizeHeaderValue(value: string, max: number): string {
+	// A mailto body/subject must never smuggle extra headers into the composed message.
+	// eslint-disable-next-line no-control-regex
+	return value.replace(/[\u0000-\u001f\u007f]/g, " ").replace(/\s+/g, " ").trim().slice(0, max);
+}
+
+/** Pulls the recipient out of a `mailto:` candidate, honouring its subject/body params for automated processors. */
+export function parseMailtoUnsubscribe(url: string): import("@/lib/email/unsubscribe-types").MailtoUnsubscribeTarget | null {
+	try {
+		const parsed = new URL(url);
+		if (parsed.protocol !== "mailto:") return null;
+		const to = sanitizeHeaderValue(decodeURIComponent(parsed.pathname).split(",")[0] ?? "", 253);
+		if (!to || !to.includes("@")) return null;
+		return {
+			to,
+			subject: sanitizeHeaderValue(parsed.searchParams.get("subject") ?? "", 200) || "unsubscribe",
+			text: sanitizeHeaderValue(parsed.searchParams.get("body") ?? "", 1_000) || "unsubscribe",
+		};
+	} catch {
+		return null;
+	}
 }

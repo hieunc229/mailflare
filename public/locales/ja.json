@@ -2333,5 +2333,8 @@
 	"account.permissions.calendarHint": "Events, reminders, and booking pages.",
 	"account.permissions.driveHint": "Files, saved attachments, and shared links.",
 	"account.permissions.allowCalendar": "Allow Calendar",
-	"account.permissions.allowDrive": "Allow Drive"
+	"account.permissions.allowDrive": "Allow Drive",
+	"actions.unsubscribeDeleteAll": "登録解除してすべて削除",
+	"actions.unsubscribeDeleteConfirm": "この差出人の過去のメール {count} 件をゴミ箱に移動しますか？",
+	"actions.unsubscribeTrashDone": "登録解除し、{count} 件をゴミ箱に移動しました"
 }

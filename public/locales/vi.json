@@ -2333,5 +2333,8 @@
 	"account.permissions.calendarHint": "Events, reminders, and booking pages.",
 	"account.permissions.driveHint": "Files, saved attachments, and shared links.",
 	"account.permissions.allowCalendar": "Allow Calendar",
-	"account.permissions.allowDrive": "Allow Drive"
+	"account.permissions.allowDrive": "Allow Drive",
+	"actions.unsubscribeDeleteAll": "Hủy đăng ký & xóa tất cả",
+	"actions.unsubscribeDeleteConfirm": "Chuyển {count} email cũ của người gửi này vào Thùng rác?",
+	"actions.unsubscribeTrashDone": "Đã hủy đăng ký; {count} email đã chuyển vào Thùng rác"
 }

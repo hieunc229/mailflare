@@ -2350,5 +2350,8 @@
 	"account.permissions.calendarHint": "Events, reminders, and booking pages.",
 	"account.permissions.driveHint": "Files, saved attachments, and shared links.",
 	"account.permissions.allowCalendar": "Allow Calendar",
-	"account.permissions.allowDrive": "Allow Drive"
+	"account.permissions.allowDrive": "Allow Drive",
+	"actions.unsubscribeDeleteAll": "දායකත්වය අවලංගු කර සියල්ල මකන්න",
+	"actions.unsubscribeDeleteConfirm": "මෙම යවන්නාගේ පැරණි විද්‍යුත් තැපෑල {count} කුණු කූඩයට ගෙනයාමටද?",
+	"actions.unsubscribeTrashDone": "දායකත්වය අවලංගුයි; විද්‍යුත් තැපෑල {count} කුණු කූඩයට ගියේය"
 }

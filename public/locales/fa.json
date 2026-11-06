@@ -2350,5 +2350,8 @@
 	"account.permissions.calendarHint": "Events, reminders, and booking pages.",
 	"account.permissions.driveHint": "Files, saved attachments, and shared links.",
 	"account.permissions.allowCalendar": "Allow Calendar",
-	"account.permissions.allowDrive": "Allow Drive"
+	"account.permissions.allowDrive": "Allow Drive",
+	"actions.unsubscribeDeleteAll": "لغو اشتراک و حذف همه",
+	"actions.unsubscribeDeleteConfirm": "آیا {count} ایمیل قدیمی این فرستنده به سطل زباله منتقل شود؟",
+	"actions.unsubscribeTrashDone": "اشتراک لغو شد؛ {count} ایمیل به سطل زباله منتقل شد"
 }

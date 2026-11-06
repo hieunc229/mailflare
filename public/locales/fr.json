@@ -2364,5 +2364,8 @@
 	"account.permissions.calendarHint": "Events, reminders, and booking pages.",
 	"account.permissions.driveHint": "Files, saved attachments, and shared links.",
 	"account.permissions.allowCalendar": "Allow Calendar",
-	"account.permissions.allowDrive": "Allow Drive"
+	"account.permissions.allowDrive": "Allow Drive",
+	"actions.unsubscribeDeleteAll": "Se désabonner et tout supprimer",
+	"actions.unsubscribeDeleteConfirm": "Déplacer {count} anciens e-mails de cet expéditeur dans la corbeille ?",
+	"actions.unsubscribeTrashDone": "Désabonné, {count} e-mails placés dans la corbeille"
 }

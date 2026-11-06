@@ -2350,5 +2350,8 @@
 	"account.permissions.calendarHint": "Events, reminders, and booking pages.",
 	"account.permissions.driveHint": "Files, saved attachments, and shared links.",
 	"account.permissions.allowCalendar": "Allow Calendar",
-	"account.permissions.allowDrive": "Allow Drive"
+	"account.permissions.allowDrive": "Allow Drive",
+	"actions.unsubscribeDeleteAll": "সাবস্ক্রিপশন বাতিল ও সব মুছুন",
+	"actions.unsubscribeDeleteConfirm": "এই প্রেরকের {count}টি পুরনো ইমেইল ট্র্যাশে নেবেন?",
+	"actions.unsubscribeTrashDone": "সাবস্ক্রিপশন বাতিল; {count}টি ইমেইল ট্র্যাশে গেছে"
 }

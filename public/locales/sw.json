@@ -2350,5 +2350,8 @@
 	"account.permissions.calendarHint": "Events, reminders, and booking pages.",
 	"account.permissions.driveHint": "Files, saved attachments, and shared links.",
 	"account.permissions.allowCalendar": "Allow Calendar",
-	"account.permissions.allowDrive": "Allow Drive"
+	"account.permissions.allowDrive": "Allow Drive",
+	"actions.unsubscribeDeleteAll": "Ondoa usajili & futa zote",
+	"actions.unsubscribeDeleteConfirm": "Uhamishe barua pepe {count} za zamu za mtumaji huyu kwenda Taka?",
+	"actions.unsubscribeTrashDone": "Usajili umeondolewa; barua pepe {count} zimehamishiwa Taka"
 }

@@ -2350,5 +2350,8 @@
 	"account.permissions.calendarHint": "Events, reminders, and booking pages.",
 	"account.permissions.driveHint": "Files, saved attachments, and shared links.",
 	"account.permissions.allowCalendar": "Allow Calendar",
-	"account.permissions.allowDrive": "Allow Drive"
+	"account.permissions.allowDrive": "Allow Drive",
+	"actions.unsubscribeDeleteAll": "చందా రద్దు & అన్నీ తొలగించు",
+	"actions.unsubscribeDeleteConfirm": "ఈ పంపిణీదారి {count} పాత ఇమెయిల్‌లను ట్రాష్‌కు తరలించాలా?",
+	"actions.unsubscribeTrashDone": "చందా రద్దైంది; {count} ఇమెయిల్‌లు ట్రాష్‌కు వెళ్లాయి"
 }

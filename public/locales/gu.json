@@ -2350,5 +2350,8 @@
 	"account.permissions.calendarHint": "Events, reminders, and booking pages.",
 	"account.permissions.driveHint": "Files, saved attachments, and shared links.",
 	"account.permissions.allowCalendar": "Allow Calendar",
-	"account.permissions.allowDrive": "Allow Drive"
+	"account.permissions.allowDrive": "Allow Drive",
+	"actions.unsubscribeDeleteAll": "સભ્યતા રદ કરો અને બધું કાઢી નાખો",
+	"actions.unsubscribeDeleteConfirm": "આ મોકલનારના {count} જૂના ઇમેઇલ ટ્રેશમાં ખસેડવા?",
+	"actions.unsubscribeTrashDone": "સભ્યતા રદ; {count} ઇમેઇલ ટ્રેશમાં ગયા"
 }
