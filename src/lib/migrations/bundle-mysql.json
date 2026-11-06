@@ -256,6 +256,12 @@
       ]
     },
     {
+      "name": "0004_add_accent_color.sql",
+      "statements": [
+        "ALTER TABLE `app_settings` ADD `accent_color` text;"
+      ]
+    },
+    {
       "name": "0004_passkeys_and_step_up_grants.sql",
       "statements": [
         "ALTER TABLE `users` ADD `require_second_factor` boolean DEFAULT false NOT NULL;",
