@@ -2350,5 +2350,6 @@
 	"account.permissions.calendarHint": "Events, reminders, and booking pages.",
 	"account.permissions.driveHint": "Files, saved attachments, and shared links.",
 	"account.permissions.allowCalendar": "Allow Calendar",
-	"account.permissions.allowDrive": "Allow Drive"
+	"account.permissions.allowDrive": "Allow Drive",
+	"attachment.downloadAllFlagged": "ಕೆಲವು ಲಗತ್ತುಗಳು ಸಂಭಾವ್ಯ ಅಪಾಯಕಾರಿ ಎಂದು ಗುರುತಿಸಲಾಗಿವೆ. ಹೇಗೂ ಆರ್ಕೈವ್ ಡೌನ್‌ಲೋಡ್ ಮಾಡಬೇಕೆ?"
 }

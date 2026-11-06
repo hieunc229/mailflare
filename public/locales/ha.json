@@ -2350,5 +2350,6 @@
 	"account.permissions.calendarHint": "Events, reminders, and booking pages.",
 	"account.permissions.driveHint": "Files, saved attachments, and shared links.",
 	"account.permissions.allowCalendar": "Allow Calendar",
-	"account.permissions.allowDrive": "Allow Drive"
+	"account.permissions.allowDrive": "Allow Drive",
+	"attachment.downloadAllFlagged": "Wasu abubuwan da ake da su an yi su tambarin yiwuwa hadari. Duk da haka a sauke ajiya?"
 }

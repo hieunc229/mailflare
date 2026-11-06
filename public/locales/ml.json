@@ -2350,5 +2350,6 @@
 	"account.permissions.calendarHint": "Events, reminders, and booking pages.",
 	"account.permissions.driveHint": "Files, saved attachments, and shared links.",
 	"account.permissions.allowCalendar": "Allow Calendar",
-	"account.permissions.allowDrive": "Allow Drive"
+	"account.permissions.allowDrive": "Allow Drive",
+	"attachment.downloadAllFlagged": "ചില അറ്റാച്ച്‌മെന്റുകൾ അപകടകരമെന്ന് അടയാളപ്പെടുത്തിയിരിക്കുന്നു. എങ്കിലും ആർക്കൈവ് ഡൗൺലോഡ് ചെയ്യണോ?"
 }

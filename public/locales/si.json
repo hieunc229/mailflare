@@ -2350,5 +2350,6 @@
 	"account.permissions.calendarHint": "Events, reminders, and booking pages.",
 	"account.permissions.driveHint": "Files, saved attachments, and shared links.",
 	"account.permissions.allowCalendar": "Allow Calendar",
-	"account.permissions.allowDrive": "Allow Drive"
+	"account.permissions.allowDrive": "Allow Drive",
+	"attachment.downloadAllFlagged": "සමහර ඇමුණුම් අන්තරායන්හි ලෙස සලකුණු කර ඇත. තවදුරටත් සංරක්ෂණාගාරය බාගන්නවාද?"
 }

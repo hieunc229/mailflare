@@ -2350,5 +2350,6 @@
 	"account.permissions.calendarHint": "Events, reminders, and booking pages.",
 	"account.permissions.driveHint": "Files, saved attachments, and shared links.",
 	"account.permissions.allowCalendar": "Allow Calendar",
-	"account.permissions.allowDrive": "Allow Drive"
+	"account.permissions.allowDrive": "Allow Drive",
+	"attachment.downloadAllFlagged": "కొన్ని అటాచ్‌మెంట్‌లు ప్రమాదకరంగా గుర్తు పెట్టబడ్డాయి. అయినా ఆర్కైవ్ డౌన్‌లోడ్ చేయాలా?"
 }
