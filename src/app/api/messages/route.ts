@@ -6,7 +6,7 @@ import { getCurrentUser } from "@/lib/auth/cookies";
 import { getDb } from "@/db";
 import { messages, outboundJobs } from "@/db/schema";
 import { getContactDisplayNameMap } from "@/lib/contacts/service";
-import { getSenderDisplayName } from "@/lib/contacts/utils";
+import { getPartyDisplayName } from "@/lib/contacts/utils";
 import { getFirstEmailAddressEntry, normalizeEmailAddress } from "@/lib/email/address";
 import { getMailboxAccessLevel, hasMailboxPermission, listAccessibleMailboxes } from "@/lib/mailboxes/access";
 import { tracksAccountIdentity } from "@/lib/profile/identity-utils";
@@ -219,6 +219,7 @@ export async function GET(request: Request) {
 		const folderUnread = scopedThreadCounts.get(message.threadId ?? message.id)?.unread;
 		const contactMap = contactMapsByUserId.get(message.userId);
 		const accountName = message.mailboxId ? mailboxNameMap.get(message.mailboxId) : null;
+		const firstTo = getFirstEmailAddressEntry(message.toAddr);
 		return {
 			...message,
 			snippet: message.snippet,
@@ -226,9 +227,8 @@ export async function GET(request: Request) {
 			...(openCounts.has(message.id) ? { openCount: openCounts.get(message.id) } : {}),
 			fromContactName:
 				(message.direction === "outbound" ? accountName : null) ??
-				getSenderDisplayName(message.fromAddr, contactMap?.get(normalizeEmailAddress(message.fromAddr))),
-			toContactName:
-				contactMap?.get(normalizeEmailAddress(getFirstEmailAddressEntry(message.toAddr)))?.displayName ?? null,
+				getPartyDisplayName(message.fromAddr, contactMap?.get(normalizeEmailAddress(message.fromAddr))),
+			toContactName: getPartyDisplayName(firstTo, contactMap?.get(normalizeEmailAddress(firstTo))),
 			threadCount: threadStats?.total || 1,
 			threadUnread: (groupByThread ? folderUnread : threadStats?.unread) || 0,
 			...(groupByThread

@@ -2,7 +2,7 @@ import { and, asc, eq, inArray, isNull, ne, notInArray, or } from "drizzle-orm";
 import { getDb } from "@/db";
 import { messageAttachments, messages } from "@/db/schema";
 import { getContactAvatarMap, getContactDisplayNameMap } from "@/lib/contacts/service";
-import { getSenderDisplayName } from "@/lib/contacts/utils";
+import { getPartyDisplayName } from "@/lib/contacts/utils";
 import { getFirstEmailAddressEntry, normalizeEmailAddress } from "@/lib/email/address";
 import { getMailboxAccessLevel } from "@/lib/mailboxes/access";
 import type { SessionUser } from "@/lib/auth/types";
@@ -83,13 +83,15 @@ export async function getMessageThreadForUser(env: CloudflareEnv, user: SessionU
 
 	return {
 		threadId: message.threadId,
-		messages: rows.map((row) => ({
-			...withoutRawKey(row),
-			fromContactName: getSenderDisplayName(row.fromAddr, contactMap.get(normalizeEmailAddress(row.fromAddr))),
-			fromContactHasAvatar: contactAvatarMap.get(normalizeEmailAddress(row.fromAddr)) ?? false,
-			toContactName:
-				contactMap.get(normalizeEmailAddress(getFirstEmailAddressEntry(row.toAddr)))?.displayName ?? null,
-			attachments: attachmentsByMessage.get(row.id) ?? [],
-		})),
+		messages: rows.map((row) => {
+			const firstTo = getFirstEmailAddressEntry(row.toAddr);
+			return {
+				...withoutRawKey(row),
+				fromContactName: getPartyDisplayName(row.fromAddr, contactMap.get(normalizeEmailAddress(row.fromAddr))),
+				fromContactHasAvatar: contactAvatarMap.get(normalizeEmailAddress(row.fromAddr)) ?? false,
+				toContactName: getPartyDisplayName(firstTo, contactMap.get(normalizeEmailAddress(firstTo))),
+				attachments: attachmentsByMessage.get(row.id) ?? [],
+			};
+		}),
 	};
 }
