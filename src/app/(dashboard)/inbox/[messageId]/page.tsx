@@ -272,7 +272,7 @@ export default function MessageDetailPage() {
                     )}
                   </b>{" "}
                   <span className="hidden sm:block text-neutral-500 text-xs flex-1 overflow-hidden text-ellipsis min-w-0">&lt;{fromAddress}&gt;</span>
-                  {message.direction === "inbound" && message.hasUnsubscribe && (
+                  {message.direction === "inbound" && message.status !== "spam" && message.hasUnsubscribe && (
                     <MessageUnsubscribeButton key={message.id} messageId={message.id} />
                   )}
                 </p>
@@ -325,7 +325,7 @@ export default function MessageDetailPage() {
               <MessageDetailsPanel message={message} onClose={() => setDetailsOpen(false)} />
             </div>
           )}
-          {scheduledAt && <div className="px-4 sm:px-0 sm:pl-10"><ScheduledSendBanner messageId={message.id} scheduledAt={scheduledAt} /></div>}
+          {scheduledAt && <div className="px-4 sm:px-0 sm:pl-10"><ScheduledSendBanner messageId={message.id} scheduledAt={scheduledAt} onRescheduled={(next) => setData((current) => current ? { ...current, scheduledAt: next } : current)} /></div>}
           <div className="prose max-w-none px-4 text-neutral-900 sm:px-0 sm:pl-16">
             {htmlBody ? (
               <EmailHtmlRenderer key={message.id} className="mx-auto" html={htmlBody} autoAllowRemote={remote.autoAllow} onAllowRemote={remote.allowSender} />

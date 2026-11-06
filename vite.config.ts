@@ -16,6 +16,8 @@ export default defineConfig({
 	plugins: lazyPlugins(() => [
 		vinext({ images: { optimizer: imagesOptimizer() } }),
 		cloudflare({
+			// Browser tests can use disposable storage without resetting the local demo database.
+			persistState: process.env.MAILFLARE_TEST_STATE_PATH ? { path: process.env.MAILFLARE_TEST_STATE_PATH } : true,
 			remoteBindings: process.env.CLOUDFLARE_REMOTE_BINDINGS === "true",
 			viteEnvironment: { name: "rsc", childEnvironments: ["ssr"] },
 		}),

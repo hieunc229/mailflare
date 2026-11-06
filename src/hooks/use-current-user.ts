@@ -12,6 +12,8 @@ export type CurrentUser = {
 	canManageMailboxes: boolean;
 	canManageDomains: boolean;
 	canManageUsers: boolean;
+	calendarEnabled: boolean;
+	driveEnabled: boolean;
 	hasAvatar: boolean;
 };
 

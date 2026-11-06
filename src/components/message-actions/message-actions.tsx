@@ -9,6 +9,7 @@ import { MessageSourceDialog } from "@/components/messages/message-source-dialog
 import { useDismissible } from "@/components/use-dismissible";
 import { useMessageListVisibility } from "@/components/messages/message-list-visibility";
 import { MessageSnoozeDialog } from "./message-snooze-dialog";
+import { requestUnsubscribe } from "@/components/messages/unsubscribe-button-utils";
 import { useIsMobile } from "@/components/sidebar-mobile-utils";
 import { useHotkeys, useShortcuts } from "@/components/shortcuts";
 import { Button } from "@/components/ui/button";
@@ -191,7 +192,22 @@ export function MessageActions({
 		setMoreOpen(false);
 		setError(null);
 		if (unsubscribeUrl) {
-			openUnsubscribeUrl(unsubscribeUrl);
+			setPendingAction("unsubscribe");
+			try {
+				const result = await requestUnsubscribe(messageId);
+				if (result.method === "link") {
+					openUnsubscribeUrl(result.url);
+					showNotice(t("actions.unsubscribeLinkOpened"));
+				} else if (result.method === "mailto") {
+					showNotice(t("actions.unsubscribeEmailSent"));
+				} else {
+					showNotice(t("actions.unsubscribed"));
+				}
+			} catch {
+				openUnsubscribeUrl(unsubscribeUrl);
+			} finally {
+				setPendingAction(null);
+			}
 			return;
 		}
 
@@ -247,6 +263,25 @@ export function MessageActions({
 			router.refresh();
 		} catch (blockError) {
 			setError(blockError instanceof Error ? blockError.message : t("message.error.block"));
+		} finally {
+			setPendingAction(null);
+		}
+	}
+
+	async function onUnsubscribeDeleteAll() {
+		setMoreOpen(false);
+		setError(null);
+		setPendingAction("unsubscribe");
+		try {
+			const preview = await requestUnsubscribe(messageId, { action: "unsubscribe_and_trash", previewOnly: true });
+			const count = "preview" in preview ? preview.preview.count : 0;
+			if (!window.confirm(t("actions.unsubscribeDeleteConfirm", { count }))) return;
+			const result = await requestUnsubscribe(messageId, { action: "unsubscribe_and_trash" });
+			if (result.method === "link") openUnsubscribeUrl(result.url);
+			showNotice(t("actions.unsubscribeTrashDone", { count: result.trashedCount ?? 0 }));
+			router.refresh();
+		} catch {
+			setError(t("actions.unsubscribeFailed"));
 		} finally {
 			setPendingAction(null);
 		}
@@ -443,6 +478,17 @@ export function MessageActions({
 									<BellOff className="h-4 w-4 shrink-0" />
 									{t("actions.unsubscribe")}
 								</button>
+								{unsubscribeUrl && (
+									<button
+										type="button"
+										className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm text-neutral-700 hover:bg-neutral-100 disabled:cursor-not-allowed disabled:text-neutral-400"
+										disabled={status === "trash" || status === "spam"}
+										onClick={() => void onUnsubscribeDeleteAll()}
+									>
+										<Ban className="h-4 w-4 shrink-0" />
+										{t("actions.unsubscribeDeleteAll")}
+									</button>
+								)}
 								<button
 									type="button"
 									className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm text-neutral-700 hover:bg-neutral-100"
