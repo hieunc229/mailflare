@@ -536,7 +536,7 @@ export default function CalendarPage() {
       </section>
 
       {adding && (
-        <div className={clsx("dialog-overlay fixed inset-0 z-50 flex items-center justify-center bg-neutral-950/35 p-4", closingEventEditor && "pointer-events-none")} data-state={closingEventEditor ? "closed" : "open"}>
+        <div className={clsx("dialog-overlay fixed inset-0 z-50 flex items-center justify-center bg-black/35 p-4 dark:bg-black/55", closingEventEditor && "pointer-events-none")} data-state={closingEventEditor ? "closed" : "open"}>
           <DialogFrame label={editing ? t("calendar.editEvent") : t("calendar.createEvent")} onClose={() => { if (pendingAction !== "save") setClosingEventEditor(true); }} className="dialog-content max-h-[calc(100dvh-2rem)] w-full max-w-xl overflow-y-auto rounded-2xl bg-white p-5 shadow-2xl sm:p-6" data-state={closingEventEditor ? "closed" : "open"}
             onAnimationEnd={(event) => {
               if (!closingEventEditor || event.target !== event.currentTarget) return;
