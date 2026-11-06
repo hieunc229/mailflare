@@ -144,7 +144,7 @@ export function MessageSplitLayout({
 				</aside>
 				)}
 				<MessageListVisibilityContext.Provider value={{ visible: listVisible, toggle: () => { const visible = !manualListVisible; setManualListVisible(visible); saveMessageListVisible(visible); }, singleColumn: !twoColumnReading, backHref: config.hrefPrefix, backLabel: config.titleKey ? t(config.titleKey) : config.title }}>
-				<MessageDetailNavigationProvider config={config}>
+				<MessageDetailNavigationProvider config={config} currentMessageId={selectedMessageId}>
 				<section className="min-h-0 min-w-0 overflow-hidden bg-white flex flex-col h-full">
 					{showBulkBar && (
 						<BulkMessageActionBar

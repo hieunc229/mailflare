@@ -5,6 +5,7 @@ import {
 	clearMessageListCache,
 	fetchMessageList,
 	getMessageQueryParams,
+	peekMessageList,
 } from "./utils";
 
 const REFRESH_DEBOUNCE_MS = 150;
@@ -16,11 +17,15 @@ export function useMessages(
 	enabled = true,
 	folderId?: string | null,
 ) {
-	const [messages, setMessages] = useState<Message[]>([]);
-	const [isLoading, setIsLoading] = useState(true);
-	const [total, setTotal] = useState(0);
-	const [limit, setLimit] = useState(filters?.limit ?? 25);
-	const [offset, setOffset] = useState(filters?.offset ?? 0);
+	// A folder switch remounts this hook, so paint the cached page immediately.
+	const [initialPage] = useState(() => (
+		enabled ? peekMessageList(getMessageQueryParams(folder, mailboxId, filters, folderId)) : undefined
+	));
+	const [messages, setMessages] = useState<Message[]>(initialPage?.messages ?? []);
+	const [isLoading, setIsLoading] = useState(enabled && !initialPage);
+	const [total, setTotal] = useState(initialPage?.total ?? 0);
+	const [limit, setLimit] = useState(initialPage?.limit ?? filters?.limit ?? 25);
+	const [offset, setOffset] = useState(initialPage?.offset ?? filters?.offset ?? 0);
 
 	const unreadCount = messages.filter((m) => m.direction === "inbound" && !m.read).length;
 
@@ -46,10 +51,32 @@ export function useMessages(
 			}
 		}
 
-		void loadMessages(false, true);
-		function onMessagesChanged() {
-			clearMessageListCache();
-			clearMessageCountsCache();
+		void loadMessages(false, !peekMessageList(getMessageQueryParams(folder, mailboxId, filters, folderId)));
+		function patchReadState(event: Event) {
+			const detail = (event as CustomEvent<{ kind?: string; messageIds?: string[]; read?: boolean }>).detail;
+			if (detail?.kind !== "read" || !detail.messageIds?.length) return;
+			const ids = new Set(detail.messageIds);
+			const read = detail.read !== false;
+			setMessages((current) => current.map((message) => {
+				if (message.threadMessageIds) {
+					// Only the flipped members change a conversation row's unread count.
+					const threadSize = message.threadMessageIds.length;
+					const flipped = message.threadMessageIds.reduce((total, id) => total + (ids.has(id) ? 1 : 0), 0);
+					if (!flipped) return message;
+					const threadUnread = Math.min(threadSize, Math.max(0, (message.threadUnread ?? 0) + (read ? -flipped : flipped)));
+					return { ...message, read: threadUnread === 0, threadUnread };
+				}
+				return ids.has(message.id) ? { ...message, read } : message;
+			}));
+		}
+		function onMessagesChanged(event: Event) {
+			const readOnly = (event as CustomEvent<{ kind?: string }>).detail?.kind === "read";
+			// Read flips patch in place; "unread only" still needs a server refetch.
+			if (readOnly && filters?.read !== "unread") return;
+			if (!readOnly) {
+				clearMessageListCache();
+				clearMessageCountsCache();
+			}
 			if (document.visibilityState !== "visible") return;
 			if (refreshTimer) window.clearTimeout(refreshTimer);
 			refreshTimer = window.setTimeout(() => {
@@ -58,10 +85,12 @@ export function useMessages(
 			}, REFRESH_DEBOUNCE_MS);
 		}
 		window.addEventListener("mailflare:messages-changed", onMessagesChanged);
+		window.addEventListener("mailflare:messages-changed", patchReadState);
 
 		return () => {
 			cancelled = true;
 			window.removeEventListener("mailflare:messages-changed", onMessagesChanged);
+			window.removeEventListener("mailflare:messages-changed", patchReadState);
 			if (refreshTimer) window.clearTimeout(refreshTimer);
 		};
 	}, [enabled, filters?.group, filters?.limit, filters?.offset, filters?.query, filters?.read, filters?.title, folder, folderId, mailboxId]);

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { formatUserDate } from "@/lib/time/utils";
 import { ChevronsUpDown, Paperclip } from "@/components/icons";
 import { ContactAvatar } from "@/components/contacts/contact-avatar";
@@ -143,15 +143,15 @@ export function ConversationMessageCard({
 
 	useEffect(() => setLocallyRead(message.read), [message.read]);
 
-	let body: { html: string | null; text: string; quotedHtml: string | null } | null = null;
-	if (expanded) {
+	const body = useMemo(() => {
+		if (!expanded) return null;
 		const display = getMessageBodyDisplay(message.textBody, message.htmlBody, message.snippet);
-		body = {
+		return {
 			html: resolveInlineAttachmentUrls(display.htmlBody, message.id, message.attachments),
 			text: display.latestContent,
 			quotedHtml: resolveInlineAttachmentUrls(display.quotedHtml, message.id, message.attachments),
 		};
-	}
+	}, [expanded, message.id, message.htmlBody, message.snippet, message.textBody, message.attachments]);
 
 
 	return (

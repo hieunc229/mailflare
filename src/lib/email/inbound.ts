@@ -336,22 +336,26 @@ export async function getMessageWithBodyForUser(env: CloudflareEnv, user: Sessio
 	if (!message?.mailboxId) return null;
 	const access = await getMailboxAccessLevel(db, user, message.mailboxId);
 	if (!access?.canRead) return null;
-	const contactNames = await getMessageContactNames(env, message.userId, message.fromAddr, message.toAddr);
-	const attachments = await listMessageAttachments(env, messageId);
-	const unsubscribe = await getUnsubscribeUrlFromRawR2Key(env, message.rawR2Key);
-	const [scheduledJob] = message.direction === "outbound" && message.status === "queued"
-		? await db
-			.select({ scheduledAt: outboundJobs.scheduledAt })
-			.from(outboundJobs)
-			.where(and(eq(outboundJobs.messageId, messageId), eq(outboundJobs.status, "queued"), isNotNull(outboundJobs.scheduledAt)))
-			.limit(1)
-		: [];
+	const [contactNames, attachments, unsubscribe, [scheduledJob]] = await Promise.all([
+		getMessageContactNames(env, message.userId, message.fromAddr, message.toAddr),
+		listMessageAttachments(env, messageId),
+		getUnsubscribeUrlFromRawR2Key(env, message.rawR2Key),
+		message.direction === "outbound" && message.status === "queued"
+			? db
+				.select({ scheduledAt: outboundJobs.scheduledAt })
+				.from(outboundJobs)
+				.where(and(eq(outboundJobs.messageId, messageId), eq(outboundJobs.status, "queued"), isNotNull(outboundJobs.scheduledAt)))
+				.limit(1)
+			: Promise.resolve([]),
+	]);
+	const { rawR2Key, textBody, htmlBody, ...header } = message;
+	void rawR2Key;
 	return {
-		message: { ...message, ...contactNames },
-		body: message,
+		message: { ...header, ...contactNames },
+		body: { textBody: textBody ?? null, htmlBody: htmlBody ?? null },
 		attachments,
 		unsubscribeUrl: unsubscribe?.url ?? null,
-		unsubscribeViaBody: unsubscribe ? null : extractUnsubscribeLinkFromBody(message.htmlBody, message.textBody),
+		unsubscribeViaBody: unsubscribe ? null : extractUnsubscribeLinkFromBody(htmlBody, textBody),
 		scheduledAt: scheduledJob?.scheduledAt?.toISOString() ?? null,
 	};
 }

@@ -24,10 +24,12 @@ export type MessageListRowProps = {
 	config: MessageFolderConfig;
 	selected: boolean;
 	active?: boolean;
+	opening?: boolean;
 	compact?: boolean;
 	currentAccountName?: string;
 	onSelectedChange: (messageId: string, selected: boolean) => void;
 	onMessageAction: (messageId: string, action: RowMessageAction) => Promise<void>;
+	onOpening?: () => void;
 	dragMessageIds: string[];
 };
 

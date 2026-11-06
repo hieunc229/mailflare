@@ -1,18 +1,18 @@
 import Link from "next/link";
-import type { DragEvent, MouseEvent } from "react";
-import { useEffect, useState } from "react";
+import type { DragEvent } from "react";
+import { useRef, useState } from "react";
 
 import { cn } from "@/lib/utils";
 import { usePathname, useRouter } from "next/navigation";
 import { getMessageDragData } from "@/lib/messages/drag-utils";
+import { useMailSearch } from "@/components/mail-search/mail-search-context";
+import { useConversationView } from "@/components/messages/use-conversation-view";
 import { useSelectedMailbox } from "./mailbox-provider";
 import { useSidebar } from "./sidebar-state";
 import { useCompose } from "./compose/compose-context";
 import { Tooltip } from "./ui/tooltip";
-import {
-  preloadMailboxPage,
-  waitForNavigationProgress,
-} from "./components-nav-utils";
+import { FULL_ROUTE_PREFETCH } from "@/lib/navigation/prefetch";
+import { preloadMailboxPage } from "./components-nav-utils";
 import type { NavLink } from "./components-nav-types";
 
 type Props = {
@@ -27,17 +27,10 @@ export function NavItem({ link, iconClassName, labelClassName, wrap }: Props) {
   const { openComposer } = useCompose();
   const { selectedMailbox } = useSelectedMailbox();
   const { minimal } = useSidebar();
+  const { query } = useMailSearch();
+  const [conversationView] = useConversationView();
   const [dragOver, setDragOver] = useState(false);
-  const [navigationProgress, setNavigationProgress] = useState<number | null>(
-    null,
-  );
-
-  useEffect(() => {
-    if (navigationProgress === null) return;
-    setNavigationProgress(100);
-    const timer = window.setTimeout(() => setNavigationProgress(null), 220);
-    return () => window.clearTimeout(timer);
-  }, [pathname]);
+  const prefetchedKey = useRef<string | null>(null);
 
   if (!link.href) {
     return <span className="flex-1" />;
@@ -106,43 +99,21 @@ export function NavItem({ link, iconClassName, labelClassName, wrap }: Props) {
     return minimal && link.label ? <Tooltip label={link.label} placement="right" className="mx-auto">{composeButton}</Tooltip> : composeButton;
   }
 
-  async function navigate(event: MouseEvent<HTMLAnchorElement>) {
-    if (
-      !link.preloadMessages ||
-      active ||
-      event.metaKey ||
-      event.ctrlKey ||
-      event.shiftKey ||
-      event.altKey
-    )
-      return;
-    event.preventDefault();
-    setNavigationProgress(12);
-    const timer = window.setInterval(() => {
-      setNavigationProgress((current) =>
-        current === null ? 12 : Math.min(90, current + 8),
-      );
-    }, 80);
-    try {
-      router.prefetch(link.href!);
-      await Promise.all([
-        preloadMailboxPage(link.href!, selectedMailbox?.id),
-        waitForNavigationProgress(),
-      ]);
-      setNavigationProgress(100);
-      await waitForNavigationProgress(160);
-      router.push(link.href!);
-    } catch {
-      setNavigationProgress(null);
-    } finally {
-      window.clearInterval(timer);
-    }
+  function prefetch() {
+    if (!link.preloadMessages || active || !link.href) return;
+    const key = [link.href, selectedMailbox?.id ?? "", query, conversationView].join("\u0000");
+    if (prefetchedKey.current === key) return;
+    prefetchedKey.current = key;
+    router.prefetch(link.href, FULL_ROUTE_PREFETCH);
+    void preloadMailboxPage(link.href, selectedMailbox?.id, { query, grouped: conversationView })
+      .catch(() => { prefetchedKey.current = null; });
   }
 
   const navLink = (
     <Link
       href={link.href}
-      onClick={navigate}
+      onPointerEnter={prefetch}
+      onFocus={prefetch}
       aria-label={minimal ? link.label : undefined}
       className={cn(!minimal && "pl-6", classes)}
       {...dropProps}
@@ -170,14 +141,6 @@ export function NavItem({ link, iconClassName, labelClassName, wrap }: Props) {
 
   return (
     <>
-      {navigationProgress !== null && (
-        <div className="fixed inset-x-0 top-0 z-[120] h-1 bg-blue-100">
-          <div
-            className="h-full bg-blue-600 transition-[width] duration-100 ease-out"
-            style={{ width: `${navigationProgress}%` }}
-          />
-        </div>
-      )}
       {minimal && link.label ? <Tooltip label={link.label} placement="right" className="mx-auto">{navLink}</Tooltip> : navLink}
     </>
   );
