@@ -155,6 +155,13 @@
 	"actions.deleteHint": "حذف (#)",
 	"actions.replyHint": "پاسخ (r)",
 	"actions.unsubscribe": "لغو اشتراک",
+	"actions.unsubscribeFailed": "Could not unsubscribe",
+	"actions.unsubscribeLinkOpened": "Unsubscribe page opened in a new tab",
+	"actions.unsubscribeEmailSent": "Unsubscribe email sent",
+	"actions.unsubscribed": "Unsubscribed",
+	"actions.unsubscribeConfirmTitle": "Unsubscribe from this sender?",
+	"actions.unsubscribeConfirmDescription": "We'll ask the sender to remove you from their mailing list. If they don't support one-click unsubscribe, we'll send an unsubscribe email or open their page.",
+	"actions.unsubscribing": "Unsubscribing…",
 	"shortcut.archiveMessage": "بایگانی پیام",
 	"shortcut.moveToTrash": "انتقال به سطل زباله",
 	"shortcut.replyToMessage": "پاسخ به پیام",
@@ -2346,5 +2353,8 @@
 	"account.permissions.calendarHint": "Events, reminders, and booking pages.",
 	"account.permissions.driveHint": "Files, saved attachments, and shared links.",
 	"account.permissions.allowCalendar": "Allow Calendar",
-	"account.permissions.allowDrive": "Allow Drive"
+	"account.permissions.allowDrive": "Allow Drive",
+	"actions.unsubscribeDeleteAll": "لغو اشتراک و حذف همه",
+	"actions.unsubscribeDeleteConfirm": "آیا {count} ایمیل قدیمی این فرستنده به سطل زباله منتقل شود؟",
+	"actions.unsubscribeTrashDone": "اشتراک لغو شد؛ {count} ایمیل به سطل زباله منتقل شد"
 }

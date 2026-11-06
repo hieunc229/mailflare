@@ -295,6 +295,12 @@
         "ALTER TABLE `api_keys` ADD `key_sha256` varchar(191);",
         "ALTER TABLE `api_keys` ADD CONSTRAINT `api_keys_key_sha256_idx` UNIQUE(`key_sha256`);"
       ]
+    },
+    {
+      "name": "0007_message_has_unsubscribe.sql",
+      "statements": [
+        "ALTER TABLE `messages` ADD `has_unsubscribe` boolean NOT NULL DEFAULT false;"
+      ]
     }
   ]
 }

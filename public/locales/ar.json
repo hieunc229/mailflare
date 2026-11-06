@@ -167,6 +167,13 @@
 	"actions.deleteHint": "حذف (#)",
 	"actions.replyHint": "ردّ (r)",
 	"actions.unsubscribe": "إلغاء الاشتراك",
+	"actions.unsubscribeFailed": "Could not unsubscribe",
+	"actions.unsubscribeLinkOpened": "Unsubscribe page opened in a new tab",
+	"actions.unsubscribeEmailSent": "Unsubscribe email sent",
+	"actions.unsubscribed": "Unsubscribed",
+	"actions.unsubscribeConfirmTitle": "Unsubscribe from this sender?",
+	"actions.unsubscribeConfirmDescription": "We'll ask the sender to remove you from their mailing list. If they don't support one-click unsubscribe, we'll send an unsubscribe email or open their page.",
+	"actions.unsubscribing": "Unsubscribing…",
 	"shortcut.archiveMessage": "أرشفة الرسالة",
 	"shortcut.moveToTrash": "نقل إلى سلة المحذوفات",
 	"shortcut.replyToMessage": "الرد على الرسالة",
@@ -2402,5 +2409,8 @@
 	"account.permissions.calendarHint": "Events, reminders, and booking pages.",
 	"account.permissions.driveHint": "Files, saved attachments, and shared links.",
 	"account.permissions.allowCalendar": "Allow Calendar",
-	"account.permissions.allowDrive": "Allow Drive"
+	"account.permissions.allowDrive": "Allow Drive",
+	"actions.unsubscribeDeleteAll": "إلغاء الاشتراك وحذف الكل",
+	"actions.unsubscribeDeleteConfirm": "نقل {count} من الرسائل القديمة لهذا المرسل إلى سلة المهملات؟",
+	"actions.unsubscribeTrashDone": "تم إلغاء الاشتراك ونُقل {count} رسالة إلى سلة المهملات"
 }

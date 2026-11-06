@@ -161,6 +161,13 @@
 	"actions.deleteHint": "Удалить (#)",
 	"actions.replyHint": "Ответить (r)",
 	"actions.unsubscribe": "Отписаться",
+	"actions.unsubscribeFailed": "Could not unsubscribe",
+	"actions.unsubscribeLinkOpened": "Unsubscribe page opened in a new tab",
+	"actions.unsubscribeEmailSent": "Unsubscribe email sent",
+	"actions.unsubscribed": "Unsubscribed",
+	"actions.unsubscribeConfirmTitle": "Unsubscribe from this sender?",
+	"actions.unsubscribeConfirmDescription": "We'll ask the sender to remove you from their mailing list. If they don't support one-click unsubscribe, we'll send an unsubscribe email or open their page.",
+	"actions.unsubscribing": "Unsubscribing…",
 	"shortcut.archiveMessage": "Архивировать сообщение",
 	"shortcut.moveToTrash": "Переместить в корзину",
 	"shortcut.replyToMessage": "Ответить на сообщение",
@@ -2374,5 +2381,8 @@
 	"account.permissions.calendarHint": "Events, reminders, and booking pages.",
 	"account.permissions.driveHint": "Files, saved attachments, and shared links.",
 	"account.permissions.allowCalendar": "Allow Calendar",
-	"account.permissions.allowDrive": "Allow Drive"
+	"account.permissions.allowDrive": "Allow Drive",
+	"actions.unsubscribeDeleteAll": "Отписаться и удалить всё",
+	"actions.unsubscribeDeleteConfirm": "Переместить {count} писем от этого отправителя в корзину?",
+	"actions.unsubscribeTrashDone": "Отписано; {count} писем перемещено в корзину"
 }

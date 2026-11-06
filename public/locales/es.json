@@ -158,6 +158,13 @@
 	"actions.deleteHint": "Eliminar (#)",
 	"actions.replyHint": "Responder (r)",
 	"actions.unsubscribe": "Cancelar suscripción",
+	"actions.unsubscribeFailed": "Could not unsubscribe",
+	"actions.unsubscribeLinkOpened": "Unsubscribe page opened in a new tab",
+	"actions.unsubscribeEmailSent": "Unsubscribe email sent",
+	"actions.unsubscribed": "Unsubscribed",
+	"actions.unsubscribeConfirmTitle": "Unsubscribe from this sender?",
+	"actions.unsubscribeConfirmDescription": "We'll ask the sender to remove you from their mailing list. If they don't support one-click unsubscribe, we'll send an unsubscribe email or open their page.",
+	"actions.unsubscribing": "Unsubscribing…",
 	"shortcut.archiveMessage": "Archivar mensaje",
 	"shortcut.moveToTrash": "Mover a la papelera",
 	"shortcut.replyToMessage": "Responder al mensaje",
@@ -2360,5 +2367,8 @@
 	"account.permissions.calendarHint": "Events, reminders, and booking pages.",
 	"account.permissions.driveHint": "Files, saved attachments, and shared links.",
 	"account.permissions.allowCalendar": "Allow Calendar",
-	"account.permissions.allowDrive": "Allow Drive"
+	"account.permissions.allowDrive": "Allow Drive",
+	"actions.unsubscribeDeleteAll": "Darse de baja y borrar todo",
+	"actions.unsubscribeDeleteConfirm": "¿Mover {count} correos anteriores de este remitente a la Papelera?",
+	"actions.unsubscribeTrashDone": "Dado de baja; {count} correos movidos a la Papelera"
 }

@@ -334,6 +334,8 @@ export const messages = sqliteTable(
 		// and so outgoing replies can carry them on to the recipient's client.
 		inReplyTo: text("in_reply_to"),
 		references: text("references_header"),
+		/** Whether the message offers a way to unsubscribe (List-Unsubscribe header or a body link), so lists can show the action without reading the raw MIME. */
+		hasUnsubscribe: bool("has_unsubscribe").notNull().default(false),
 		spamScore: integer("spam_score"),
 		spamVerdict: text("spam_verdict", { enum: ["inbox", "suspicious", "spam"] }),
 		spamSignals: text("spam_signals"),

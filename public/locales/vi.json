@@ -152,6 +152,13 @@
 	"actions.deleteHint": "Xóa (#)",
 	"actions.replyHint": "Trả lời (r)",
 	"actions.unsubscribe": "Hủy đăng ký",
+	"actions.unsubscribeFailed": "Could not unsubscribe",
+	"actions.unsubscribeLinkOpened": "Unsubscribe page opened in a new tab",
+	"actions.unsubscribeEmailSent": "Unsubscribe email sent",
+	"actions.unsubscribed": "Unsubscribed",
+	"actions.unsubscribeConfirmTitle": "Unsubscribe from this sender?",
+	"actions.unsubscribeConfirmDescription": "We'll ask the sender to remove you from their mailing list. If they don't support one-click unsubscribe, we'll send an unsubscribe email or open their page.",
+	"actions.unsubscribing": "Unsubscribing…",
 	"shortcut.archiveMessage": "Lưu trữ thư",
 	"shortcut.moveToTrash": "Chuyển vào thùng rác",
 	"shortcut.replyToMessage": "Trả lời thư",
@@ -2329,5 +2336,8 @@
 	"account.permissions.calendarHint": "Events, reminders, and booking pages.",
 	"account.permissions.driveHint": "Files, saved attachments, and shared links.",
 	"account.permissions.allowCalendar": "Allow Calendar",
-	"account.permissions.allowDrive": "Allow Drive"
+	"account.permissions.allowDrive": "Allow Drive",
+	"actions.unsubscribeDeleteAll": "Hủy đăng ký & xóa tất cả",
+	"actions.unsubscribeDeleteConfirm": "Chuyển {count} email cũ của người gửi này vào Thùng rác?",
+	"actions.unsubscribeTrashDone": "Đã hủy đăng ký; {count} email đã chuyển vào Thùng rác"
 }

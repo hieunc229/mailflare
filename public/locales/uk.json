@@ -161,6 +161,13 @@
 	"actions.deleteHint": "Видалити (#)",
 	"actions.replyHint": "Відповісти (r)",
 	"actions.unsubscribe": "Скасувати підписку",
+	"actions.unsubscribeFailed": "Could not unsubscribe",
+	"actions.unsubscribeLinkOpened": "Unsubscribe page opened in a new tab",
+	"actions.unsubscribeEmailSent": "Unsubscribe email sent",
+	"actions.unsubscribed": "Unsubscribed",
+	"actions.unsubscribeConfirmTitle": "Unsubscribe from this sender?",
+	"actions.unsubscribeConfirmDescription": "We'll ask the sender to remove you from their mailing list. If they don't support one-click unsubscribe, we'll send an unsubscribe email or open their page.",
+	"actions.unsubscribing": "Unsubscribing…",
 	"shortcut.archiveMessage": "Архівувати повідомлення",
 	"shortcut.moveToTrash": "Перемістити в кошик",
 	"shortcut.replyToMessage": "Відповісти на повідомлення",
@@ -2374,5 +2381,8 @@
 	"account.permissions.calendarHint": "Events, reminders, and booking pages.",
 	"account.permissions.driveHint": "Files, saved attachments, and shared links.",
 	"account.permissions.allowCalendar": "Allow Calendar",
-	"account.permissions.allowDrive": "Allow Drive"
+	"account.permissions.allowDrive": "Allow Drive",
+	"actions.unsubscribeDeleteAll": "Відписатися й видалити все",
+	"actions.unsubscribeDeleteConfirm": "Перемістити {count} листів від цього відправника до кошика?",
+	"actions.unsubscribeTrashDone": "Відписано; {count} листів переміщено до кошика"
 }

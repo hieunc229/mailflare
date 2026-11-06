@@ -155,6 +155,13 @@
 	"actions.deleteHint": "ഇല്ലാതാക്കുക (#)",
 	"actions.replyHint": "മറുപടി നൽകുക (r)",
 	"actions.unsubscribe": "സബ്സ്ക്രിപ്ഷൻ റദ്ദാക്കുക",
+	"actions.unsubscribeFailed": "Could not unsubscribe",
+	"actions.unsubscribeLinkOpened": "Unsubscribe page opened in a new tab",
+	"actions.unsubscribeEmailSent": "Unsubscribe email sent",
+	"actions.unsubscribed": "Unsubscribed",
+	"actions.unsubscribeConfirmTitle": "Unsubscribe from this sender?",
+	"actions.unsubscribeConfirmDescription": "We'll ask the sender to remove you from their mailing list. If they don't support one-click unsubscribe, we'll send an unsubscribe email or open their page.",
+	"actions.unsubscribing": "Unsubscribing…",
 	"shortcut.archiveMessage": "സന്ദേശം ആർക്കൈവ് ചെയ്യുക",
 	"shortcut.moveToTrash": "ചവറ്റുകുട്ടയിലേക്ക് നീക്കുക",
 	"shortcut.replyToMessage": "സന്ദേശത്തിന് മറുപടി നൽകുക",
@@ -2346,5 +2353,8 @@
 	"account.permissions.calendarHint": "Events, reminders, and booking pages.",
 	"account.permissions.driveHint": "Files, saved attachments, and shared links.",
 	"account.permissions.allowCalendar": "Allow Calendar",
-	"account.permissions.allowDrive": "Allow Drive"
+	"account.permissions.allowDrive": "Allow Drive",
+	"actions.unsubscribeDeleteAll": "സബ്‌സ്‌ക്രിപ്‌ഷൻ റദ്ദാക്കി എല്ലാം നീക്കുക",
+	"actions.unsubscribeDeleteConfirm": "ഈ അയച്ചയാളുടെ {count} പഴയ ഇമെയിലുകൾ ട്രാഷിലേക്ക് മാറ്റണോ?",
+	"actions.unsubscribeTrashDone": "സബ്‌സ്‌ക്രിപ്‌ഷൻ റദ്ദായി; {count} ഇമെയിലുകൾ ട്രാഷിലേക്ക് മാറ്റി"
 }

@@ -63,6 +63,7 @@
   },
   "license": "SEE LICENSE IN LICENSE",
   "dependencies": {
+    "@ai-sdk/openai": "4.0.75",
     "@ai-sdk/openai-compatible": "^3.0.55",
     "@ai-sdk/react": "^4.0.116",
     "@hugeicons/core-free-icons": "^4.3.5",

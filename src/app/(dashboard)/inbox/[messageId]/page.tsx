@@ -24,6 +24,7 @@ import { ScheduledSendBanner } from "@/components/messages/scheduled-send-banner
 import { formatScheduledSendTime } from "@/components/messages/scheduled-send-utils";
 import { QuotedEmailToggle } from "@/components/messages/quoted-email-toggle";
 import { ThreadMessageActions } from "@/components/messages/thread-message-actions";
+import { MessageUnsubscribeButton } from "@/components/messages/unsubscribe-button";
 import { MessageDetailsPanel } from "@/components/messages/message-details-panel";
 import { SenderCheckNotice } from "@/components/messages/sender-check-notice";
 import { useMessageThread } from "@/components/messages/use-message-thread";
@@ -257,7 +258,7 @@ function MessageDetailContent({ messageId }: { messageId: string }) {
         direction={message.direction}
         status={message.status}
         read={message.read}
-        unsubscribeUrl={data.unsubscribeUrl}
+        unsubscribeUrl={data.unsubscribeUrl ?? data.unsubscribeViaBody}
         subject={message.subject}
         bodyText={body?.textBody}
         ownAddress={ownAddress}
@@ -324,6 +325,9 @@ function MessageDetailContent({ messageId }: { messageId: string }) {
                     )}
                   </b>{" "}
                   <span className="hidden sm:block text-neutral-500 text-xs flex-1 overflow-hidden text-ellipsis min-w-0">&lt;{fromAddress}&gt;</span>
+                  {message.direction === "inbound" && message.status !== "spam" && message.hasUnsubscribe && (
+                    <MessageUnsubscribeButton key={message.id} messageId={message.id} />
+                  )}
                 </p>
                 <p className="text-xs text-neutral-500">
                   {t("source.to").toLowerCase()}{" "}

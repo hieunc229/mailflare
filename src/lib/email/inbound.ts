@@ -13,7 +13,7 @@ import { getMailboxAccessLevel } from "@/lib/mailboxes/access";
 import { listMessageAttachments, storeMessageAttachments } from "@/lib/email/attachments";
 import { inboundAttachmentLimitReason } from "@/lib/email/inbound-attachments";
 import { inboundMessageId } from "@/lib/email/inbound-id";
-import { getUnsubscribeUrlFromRawR2Key } from "@/lib/email/unsubscribe";
+import { extractUnsubscribeLinkFromBody, extractUnsubscribeUrlFromRaw, getUnsubscribeUrlFromRawR2Key } from "@/lib/email/unsubscribe";
 import { resolveThreadId } from "@/lib/email/threading";
 import { normalizeMessageId } from "@/lib/email/thread-lookup";
 import type { SessionUser } from "@/lib/auth/types";
@@ -210,6 +210,7 @@ export async function processInboundMessage(
 			threadId,
 			inReplyTo: parsed.inReplyTo,
 			references: parsed.references.length ? parsed.references.join(" ") : null,
+			hasUnsubscribe: !!extractUnsubscribeUrlFromRaw(buffer) || !!extractUnsubscribeLinkFromBody(parsed.html, parsed.text),
 			spamScore: spamAnalysis?.score ?? null,
 			spamVerdict: spamAnalysis?.verdict ?? null,
 			spamSignals: spamAnalysis ? JSON.stringify(spamAnalysis.signals) : null,
@@ -311,7 +312,7 @@ export async function getMessageWithBody(env: CloudflareEnv, userId: string, mes
 	if (!message || message.userId !== userId) return null;
 	const contactNames = await getMessageContactNames(env, userId, message.fromAddr, message.toAddr);
 	const attachments = await listMessageAttachments(env, messageId);
-	const unsubscribeUrl = await getUnsubscribeUrlFromRawR2Key(env, message.rawR2Key);
+	const unsubscribe = await getUnsubscribeUrlFromRawR2Key(env, message.rawR2Key);
 	const [scheduledJob] = message.direction === "outbound" && message.status === "queued"
 		? await db
 			.select({ scheduledAt: outboundJobs.scheduledAt })
@@ -323,7 +324,8 @@ export async function getMessageWithBody(env: CloudflareEnv, userId: string, mes
 		message: { ...message, ...contactNames },
 		body: message,
 		attachments,
-		unsubscribeUrl,
+		unsubscribeUrl: unsubscribe?.url ?? null,
+		unsubscribeViaBody: unsubscribe ? null : extractUnsubscribeLinkFromBody(message.htmlBody, message.textBody),
 		scheduledAt: scheduledJob?.scheduledAt?.toISOString() ?? null,
 	};
 }
@@ -334,7 +336,7 @@ export async function getMessageWithBodyForUser(env: CloudflareEnv, user: Sessio
 	if (!message?.mailboxId) return null;
 	const access = await getMailboxAccessLevel(db, user, message.mailboxId);
 	if (!access?.canRead) return null;
-	const [contactNames, attachments, unsubscribeUrl, [scheduledJob]] = await Promise.all([
+	const [contactNames, attachments, unsubscribe, [scheduledJob]] = await Promise.all([
 		getMessageContactNames(env, message.userId, message.fromAddr, message.toAddr),
 		listMessageAttachments(env, messageId),
 		getUnsubscribeUrlFromRawR2Key(env, message.rawR2Key),
@@ -352,7 +354,8 @@ export async function getMessageWithBodyForUser(env: CloudflareEnv, user: Sessio
 		message: { ...header, ...contactNames },
 		body: { textBody: textBody ?? null, htmlBody: htmlBody ?? null },
 		attachments,
-		unsubscribeUrl,
+		unsubscribeUrl: unsubscribe?.url ?? null,
+		unsubscribeViaBody: unsubscribe ? null : extractUnsubscribeLinkFromBody(htmlBody, textBody),
 		scheduledAt: scheduledJob?.scheduledAt?.toISOString() ?? null,
 	};
 }
@@ -360,16 +363,20 @@ export async function getMessageWithBodyForUser(env: CloudflareEnv, user: Sessio
 export async function getMessageMetadataForUser(env: CloudflareEnv, user: SessionUser, messageId: string) {
 	const db = getDb(env);
 	const [message] = await db
-		.select({ mailboxId: messages.mailboxId, rawR2Key: messages.rawR2Key })
+		.select({ mailboxId: messages.mailboxId, rawR2Key: messages.rawR2Key, htmlBody: messages.htmlBody, textBody: messages.textBody })
 		.from(messages)
 		.where(eq(messages.id, messageId))
 		.limit(1);
 	if (!message?.mailboxId) return null;
 	const access = await getMailboxAccessLevel(db, user, message.mailboxId);
 	if (!access?.canRead) return null;
-	const [attachments, unsubscribeUrl] = await Promise.all([
+	const [attachments, unsubscribe] = await Promise.all([
 		listMessageAttachments(env, messageId),
 		getUnsubscribeUrlFromRawR2Key(env, message.rawR2Key),
 	]);
-	return { attachments, unsubscribeUrl };
+	return {
+		attachments,
+		unsubscribeUrl: unsubscribe?.url ?? null,
+		unsubscribeViaBody: unsubscribe ? null : extractUnsubscribeLinkFromBody(message.htmlBody, message.textBody),
+	};
 }

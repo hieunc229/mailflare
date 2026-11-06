@@ -152,6 +152,13 @@
 	"actions.deleteHint": "删除 (#)",
 	"actions.replyHint": "回复 (r)",
 	"actions.unsubscribe": "退订",
+	"actions.unsubscribeFailed": "Could not unsubscribe",
+	"actions.unsubscribeLinkOpened": "Unsubscribe page opened in a new tab",
+	"actions.unsubscribeEmailSent": "Unsubscribe email sent",
+	"actions.unsubscribed": "Unsubscribed",
+	"actions.unsubscribeConfirmTitle": "Unsubscribe from this sender?",
+	"actions.unsubscribeConfirmDescription": "We'll ask the sender to remove you from their mailing list. If they don't support one-click unsubscribe, we'll send an unsubscribe email or open their page.",
+	"actions.unsubscribing": "Unsubscribing…",
 	"shortcut.archiveMessage": "归档邮件",
 	"shortcut.moveToTrash": "移到垃圾箱",
 	"shortcut.replyToMessage": "回复邮件",
@@ -2329,5 +2336,8 @@
 	"account.permissions.calendarHint": "Events, reminders, and booking pages.",
 	"account.permissions.driveHint": "Files, saved attachments, and shared links.",
 	"account.permissions.allowCalendar": "Allow Calendar",
-	"account.permissions.allowDrive": "Allow Drive"
+	"account.permissions.allowDrive": "Allow Drive",
+	"actions.unsubscribeDeleteAll": "退订并全部删除",
+	"actions.unsubscribeDeleteConfirm": "将此发件人的 {count} 封旧邮件移至垃圾箱？",
+	"actions.unsubscribeTrashDone": "已退订，并将 {count} 封邮件移至垃圾箱"
 }

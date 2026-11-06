@@ -155,6 +155,13 @@
 	"actions.deleteHint": "ಅಳಿಸಿ (#)",
 	"actions.replyHint": "ಪ್ರತ್ಯುತ್ತರಿಸಿ (r)",
 	"actions.unsubscribe": "ಚಂದಾದಾರಿಕೆ ರದ್ದುಮಾಡಿ",
+	"actions.unsubscribeFailed": "Could not unsubscribe",
+	"actions.unsubscribeLinkOpened": "Unsubscribe page opened in a new tab",
+	"actions.unsubscribeEmailSent": "Unsubscribe email sent",
+	"actions.unsubscribed": "Unsubscribed",
+	"actions.unsubscribeConfirmTitle": "Unsubscribe from this sender?",
+	"actions.unsubscribeConfirmDescription": "We'll ask the sender to remove you from their mailing list. If they don't support one-click unsubscribe, we'll send an unsubscribe email or open their page.",
+	"actions.unsubscribing": "Unsubscribing…",
 	"shortcut.archiveMessage": "ಸಂದೇಶವನ್ನು ಆರ್ಕೈವ್ ಮಾಡಿ",
 	"shortcut.moveToTrash": "ಕಸದ ಬುಟ್ಟಿಗೆ ಸರಿಸಿ",
 	"shortcut.replyToMessage": "ಸಂದೇಶಕ್ಕೆ ಪ್ರತ್ಯುತ್ತರಿಸಿ",
@@ -2346,5 +2353,8 @@
 	"account.permissions.calendarHint": "Events, reminders, and booking pages.",
 	"account.permissions.driveHint": "Files, saved attachments, and shared links.",
 	"account.permissions.allowCalendar": "Allow Calendar",
-	"account.permissions.allowDrive": "Allow Drive"
+	"account.permissions.allowDrive": "Allow Drive",
+	"actions.unsubscribeDeleteAll": "ಚಂದಾದಾರಿಕೆ ರದ್ದು ಮತ್ತು ಎಲ್ಲಾ ಅಳಿಸಿ",
+	"actions.unsubscribeDeleteConfirm": "ಈ ಕಳುಹಿಸುವವರ {count} ಹಳೆಯ ಇಮెයిల್‌ಗಳನ್ನು ಟ್ರ್ಯಾಶ್‌ಗೆ ಸರಿಸಬೇಕೆ?",
+	"actions.unsubscribeTrashDone": "ಚಂದಾದಾರಿಕೆ ರದ್ದಾಯಿತು; {count} ಇಮೆಯಿಲ್‌ಗಳು ಟ್ರ್ಯಾಶ್‌ಗೆ ಹೋದವು"
 }

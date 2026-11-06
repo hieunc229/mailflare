@@ -13,6 +13,7 @@ export type CachedMessageDetail = {
 		type: string;
 	}>;
 	unsubscribeUrl?: string | null;
+	unsubscribeViaBody?: string | null;
 	scheduledAt?: string | null;
 	error?: string;
 };

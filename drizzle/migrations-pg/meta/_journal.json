@@ -50,6 +50,13 @@
       "when": 1793280377889,
       "tag": "0006_add_api_key_sha256",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1793280378890,
+      "tag": "0007_message_has_unsubscribe",
+      "breakpoints": true
     }
   ]
 }
