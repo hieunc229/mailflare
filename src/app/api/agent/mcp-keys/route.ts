@@ -35,9 +35,9 @@ export async function POST(request: Request) {
 	const mailboxIds = [...new Set(parsed.data.mailboxIds)];
 	if (!mailboxIds.length && parsed.data.scopes.some((scope) => !scope.startsWith("mcp:calendar-"))) return Response.json({ error: "Choose a mailbox for mail permissions" }, { status: 400 });
 	for (const mailboxId of mailboxIds) if (!(await getMailboxAccessLevel(db, user, mailboxId))?.canRead) return Response.json({ error: "Mailbox not found" }, { status: 403 });
-	const { fullKey, prefix, hash } = generateApiKey();
+	const { fullKey, prefix, hash, sha256 } = await generateApiKey();
 	const id = newId("key");
-	await db.insert(apiKeys).values({ id, kind: "mcp", userId: user.id, name: parsed.data.name, prefix, keyHash: hash, scopes: scopesToJson([...new Set(parsed.data.scopes)]) });
+	await db.insert(apiKeys).values({ id, kind: "mcp", userId: user.id, name: parsed.data.name, prefix, keyHash: hash, keySha256: sha256, scopes: scopesToJson([...new Set(parsed.data.scopes)]) });
 	if (mailboxIds.length) await db.insert(mcpKeyMailboxes).values(mailboxIds.map((mailboxId) => ({ keyId: id, mailboxId })));
 	return Response.json({ id, name: parsed.data.name, prefix, key: fullKey, mailboxIds, scopes: parsed.data.scopes });
 }

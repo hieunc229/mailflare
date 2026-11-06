@@ -15,6 +15,6 @@ export function parseBookingHostIds(value: string, ownerId: string): string[] {
 export async function validBookingHostIds(db: Db, ownerId: string, requested: string[], canManageHosts: boolean): Promise<string[] | null> {
 	const hostIds = [ownerId, ...requested.filter((id) => id !== ownerId)];
 	if (hostIds.length > 20 || (!canManageHosts && hostIds.length > 1)) return null;
-	const active = await db.select({ id: users.id }).from(users).where(and(inArray(users.id, hostIds), eq(users.disabled, false)));
+	const active = await db.select({ id: users.id }).from(users).where(and(inArray(users.id, hostIds), eq(users.disabled, false), eq(users.calendarEnabled, true)));
 	return active.length === hostIds.length ? hostIds : null;
 }

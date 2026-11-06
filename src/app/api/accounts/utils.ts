@@ -23,6 +23,8 @@ export function listAccountsForAdmin(db: Db) {
 			canManageMailboxes: users.canManageMailboxes,
 			canManageDomains: users.canManageDomains,
 			canManageUsers: users.canManageUsers,
+			calendarEnabled: users.calendarEnabled,
+			driveEnabled: users.driveEnabled,
 			createdAt: users.createdAt,
 			lastSignInAt: users.lastSignInAt,
 			deletedAt: users.deletedAt,
@@ -61,6 +63,8 @@ export function accountListItemFromUser(user: {
 	canManageMailboxes?: boolean;
 	canManageDomains?: boolean;
 	canManageUsers?: boolean;
+	calendarEnabled?: boolean;
+	driveEnabled?: boolean;
 	createdAt: Date;
 	lastSignInAt?: Date | null;
 	deletedAt?: Date | null;
@@ -77,6 +81,8 @@ export function accountListItemFromUser(user: {
 		canManageMailboxes: !!user.canManageMailboxes,
 		canManageDomains: !!user.canManageDomains,
 		canManageUsers: !!user.canManageUsers,
+		calendarEnabled: user.calendarEnabled !== false,
+		driveEnabled: user.driveEnabled !== false,
 		createdAt: user.createdAt,
 		lastSignInAt: user.lastSignInAt ?? null,
 		deletedAt: user.deletedAt ?? null,

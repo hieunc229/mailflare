@@ -124,6 +124,12 @@ test("translation uses the requested catalog and falls back per key", async () =
 	assert.equal(i18n.translate({}, "navigation.inbox"), "Inbox");
 });
 
+test("existing locale-specific plural translations remain available", async () => {
+	const catalog = await i18n.loadMessages("pl");
+	assert.equal(catalog["thread.attachmentCount.few"], "{count} załączniki");
+	assert.equal(i18n.createTranslator("pl", catalog)("thread.attachmentCount", { count: 3 }), "3 załączniki");
+});
+
 test("preference cookie persists for a year, covers every path and is Secure on HTTPS", () => {
 	assert.equal(i18n.serializeLocaleCookie("pt-BR", true), "mailflare-locale=pt-BR; Path=/; Max-Age=31536000; SameSite=Lax; Secure");
 	assert.equal(i18n.serializeLocaleCookie("en", false), "mailflare-locale=en; Path=/; Max-Age=31536000; SameSite=Lax");
