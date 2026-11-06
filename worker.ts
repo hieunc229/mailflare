@@ -7,7 +7,13 @@ import {
 	type InboundQueueMessage,
 } from "./src/lib/email/inbound";
 import { processOutboundQueue, type OutboundQueueMessage } from "./src/lib/email/send";
-import { isImportJobMessage, isInboundQueueMessage, isWebhookRetryMessage } from "./worker-utils";
+import {
+	isImportJobMessage,
+	isInboundQueueMessage,
+	isWebhookRetryMessage,
+	withD1BookmarkCookie,
+	withD1ReadSession,
+} from "./worker-utils";
 import { sweepOrphanedRawMail } from "./src/lib/email/raw-sweeper";
 import { processImportJob, sweepImportJobs } from "./src/lib/import/jobs";
 import { processWebhookRetry, type WebhookRetryMessage } from "./src/lib/email/webhooks";
@@ -34,7 +40,10 @@ export { RealtimeHub } from "./src/lib/realtime/hub";
 
 export default {
 	async fetch(request: Request, rawEnv: CloudflareEnv, ctx: ExecutionContext) {
-		const env = withDatabase(withStorage(rawEnv));
+		// Reads go through a D1 session anchored at the client's bookmark cookie so D1 can serve
+		// them from read replicas; email/queue/scheduled below keep primary reads on purpose.
+		const d1Session = withD1ReadSession(rawEnv, request);
+		const env = withDatabase(withStorage(d1Session?.env ?? rawEnv));
 		const url = new URL(request.url);
 		if (url.pathname === "/api/realtime") {
 			if (request.headers.get("Upgrade")?.toLowerCase() !== "websocket") {
@@ -55,7 +64,8 @@ export default {
 			return hub.fetch(hubRequest);
 		}
 
-		return vinextHandler.fetch(request, env, ctx);
+		const response = await vinextHandler.fetch(request, env, ctx);
+		return withD1BookmarkCookie(request, response, d1Session?.session);
 	},
 
 	async email(message: ForwardableEmailMessage, rawEnv: CloudflareEnv, ctx: ExecutionContext) {
