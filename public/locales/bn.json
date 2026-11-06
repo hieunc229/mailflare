@@ -2360,5 +2360,6 @@
 	"account.permissions.allowDrive": "Allow Drive",
 	"actions.unsubscribeDeleteAll": "সাবস্ক্রিপশন বাতিল ও সব মুছুন",
 	"actions.unsubscribeDeleteConfirm": "এই প্রেরকের {count}টি পুরনো ইমেইল ট্র্যাশে নেবেন?",
-	"actions.unsubscribeTrashDone": "সাবস্ক্রিপশন বাতিল; {count}টি ইমেইল ট্র্যাশে গেছে"
+	"actions.unsubscribeTrashDone": "সাবস্ক্রিপশন বাতিল; {count}টি ইমেইল ট্র্যাশে গেছে",
+	"attachment.downloadAllFlagged": "কিছু সংযুক্তি সম্ভাব্য বিপজ্জনক হিসেবে চিহ্নিত। তবুও আর্কাইভ ডাউনলোড করবেন?"
 }

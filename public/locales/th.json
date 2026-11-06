@@ -2357,5 +2357,6 @@
 	"account.permissions.allowDrive": "Allow Drive",
 	"actions.unsubscribeDeleteAll": "ยกเลิกการสมัครรับและลบทั้งหมด",
 	"actions.unsubscribeDeleteConfirm": "ย้ายอีเมลเดิม {count} ฉบับจากผู้ส่งรายนี้ไปถังขยะ?",
-	"actions.unsubscribeTrashDone": "ยกเลิกการสมัครรับแล้ว ย้าย {count} ฉบับไปถังขยะ"
+	"actions.unsubscribeTrashDone": "ยกเลิกการสมัครรับแล้ว ย้าย {count} ฉบับไปถังขยะ",
+	"attachment.downloadAllFlagged": "ไฟล์แนบบางไฟล์ถูกตั้งค่าสถานะว่าอาจเป็นอันตราย ดาวน์โหลดไฟล์เก็บถาวรต่อไหม"
 }

@@ -1,5 +1,6 @@
 "use client";
 
+import { authFetch } from "@/lib/auth/client";
 import { useParams } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { ArrowDownToLine, Cloud, ExternalLink } from "@/components/icons";
@@ -233,6 +234,17 @@ function MessageDetailContent({ messageId }: { messageId: string }) {
   const toEntries = splitEmailAddressList(message.toAddr);
   const ccEntries = splitEmailAddressList(message.ccAddr);
   const bccEntries = splitEmailAddressList(message.bccAddr);
+  const onDownloadAllAttachments = async () => {
+    const url = `/api/messages/${message.id}/attachments.zip`;
+    try {
+      const response = await authFetch(url, { method: "HEAD" });
+      if (response.status === 409 && !window.confirm(t("attachment.downloadAllFlagged"))) return;
+      window.location.assign(response.status === 409 ? `${url}?acknowledge=1` : url);
+    } catch {
+      window.location.assign(url);
+    }
+  };
+
   const messageDate = (withTime: boolean) => scheduledAt
     ? formatScheduledSendTime(scheduledAt, t)
     : formatUserDate(message.createdAt, withTime
@@ -445,14 +457,14 @@ function MessageDetailContent({ messageId }: { messageId: string }) {
                 <h2 className="text-sm font-semibold text-neutral-900">
                   {t("message.attachments", { count: attachments.length })}
                 </h2>
-                <a
-                  href={`/api/messages/${message.id}/attachments.zip`}
-                  download
+                <button
+                  type="button"
                   className="inline-flex shrink-0 items-center gap-1.5 text-xs font-medium text-blue-600 hover:text-blue-700"
+                  onClick={() => void onDownloadAllAttachments()}
                 >
                   <ArrowDownToLine className="h-3.5 w-3.5" />
                   {t("attachment.downloadAll")}
-                </a>
+                </button>
               </div>
               <div className="grid gap-2 sm:grid-cols-2">
                 {attachments.map((attachment) => (

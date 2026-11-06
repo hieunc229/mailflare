@@ -2360,5 +2360,6 @@
 	"account.permissions.allowDrive": "Allow Drive",
 	"actions.unsubscribeDeleteAll": "Ondoa usajili & futa zote",
 	"actions.unsubscribeDeleteConfirm": "Uhamishe barua pepe {count} za zamu za mtumaji huyu kwenda Taka?",
-	"actions.unsubscribeTrashDone": "Usajili umeondolewa; barua pepe {count} zimehamishiwa Taka"
+	"actions.unsubscribeTrashDone": "Usajili umeondolewa; barua pepe {count} zimehamishiwa Taka",
+	"attachment.downloadAllFlagged": "Baadhi ya viambatisho vimepigwa bendera kuwa hatari. Bila shaka upakue kumbukumbu?"
 }

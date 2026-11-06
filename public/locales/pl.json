@@ -2388,5 +2388,6 @@
 	"account.permissions.allowDrive": "Allow Drive",
 	"actions.unsubscribeDeleteAll": "Wypisz się i usuń wszystko",
 	"actions.unsubscribeDeleteConfirm": "Przenieść {count} wcześniejszych wiadomości tego nadawcy do Kosza?",
-	"actions.unsubscribeTrashDone": "Wypisano; {count} wiadomości przeniesiono do Kosza"
+	"actions.unsubscribeTrashDone": "Wypisano; {count} wiadomości przeniesiono do Kosza",
+	"attachment.downloadAllFlagged": "Niektóre załączniki są oznaczone jako potencjalnie niebezpieczne. Pobrać archiwum mimo to?"
 }

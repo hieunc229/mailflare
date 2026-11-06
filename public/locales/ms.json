@@ -2357,5 +2357,6 @@
 	"account.permissions.allowDrive": "Allow Drive",
 	"actions.unsubscribeDeleteAll": "Berhenti melanggan & padam semua",
 	"actions.unsubscribeDeleteConfirm": "Alihkan {count} e-mel lama daripada penghantar ini ke Sampah?",
-	"actions.unsubscribeTrashDone": "Berhenti melanggan; {count} e-mel dialihkan ke Sampah"
+	"actions.unsubscribeTrashDone": "Berhenti melanggan; {count} e-mel dialihkan ke Sampah",
+	"attachment.downloadAllFlagged": "Some attachments are flagged as potentially dangerous. Download the archive anyway?"
 }

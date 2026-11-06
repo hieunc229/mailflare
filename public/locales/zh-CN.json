@@ -2343,5 +2343,6 @@
 	"account.permissions.allowDrive": "Allow Drive",
 	"actions.unsubscribeDeleteAll": "退订并全部删除",
 	"actions.unsubscribeDeleteConfirm": "将此发件人的 {count} 封旧邮件移至垃圾箱？",
-	"actions.unsubscribeTrashDone": "已退订，并将 {count} 封邮件移至垃圾箱"
+	"actions.unsubscribeTrashDone": "已退订，并将 {count} 封邮件移至垃圾箱",
+	"attachment.downloadAllFlagged": "部分附件被标记为可能存在危险。仍要下载该压缩包吗？"
 }

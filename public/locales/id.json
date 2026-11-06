@@ -2343,5 +2343,6 @@
 	"account.permissions.allowDrive": "Allow Drive",
 	"actions.unsubscribeDeleteAll": "Berhenti berlangganan & hapus semua",
 	"actions.unsubscribeDeleteConfirm": "Pindahkan {count} email lama dari pengirim ini ke Sampah?",
-	"actions.unsubscribeTrashDone": "Berhenti berlangganan; {count} email dipindahkan ke Sampah"
+	"actions.unsubscribeTrashDone": "Berhenti berlangganan; {count} email dipindahkan ke Sampah",
+	"attachment.downloadAllFlagged": "Beberapa lampiran ditandai berpotensi berbahaya. Tetap unduh arsip?"
 }

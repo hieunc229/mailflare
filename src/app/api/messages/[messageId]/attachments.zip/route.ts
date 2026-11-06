@@ -5,6 +5,7 @@ import { getCurrentUser } from "@/lib/auth/cookies";
 import { getEnv } from "@/lib/cloudflare";
 import { getMailboxAccessLevel } from "@/lib/mailboxes/access";
 import { createZipStream } from "@/lib/zip";
+import { assessStoredAttachment } from "@/lib/email/attachments";
 import { getAttachmentContentDisposition } from "../attachments/[attachmentId]/utils";
 import { attachmentsZipName } from "./utils";
 import type { AttachmentsZipRouteParams } from "./types";
@@ -31,10 +32,38 @@ export async function GET(request: Request, { params }: AttachmentsZipRouteParam
 	}
 
 	const rows = await db
-		.select({ filename: messageAttachments.filename, r2Key: messageAttachments.r2Key })
+		.select({
+			filename: messageAttachments.filename,
+			r2Key: messageAttachments.r2Key,
+			contentType: messageAttachments.contentType,
+			size: messageAttachments.size,
+		})
 		.from(messageAttachments)
 		.where(and(eq(messageAttachments.messageId, messageId), isNull(messageAttachments.trashedAt)));
 	if (!rows.length) return new Response("Message has no attachments", { status: 404 });
+
+	// Same gate the per-attachment download applies: flagged files need an explicit
+	// acknowledgement before the archive may stream them.
+	const risks = await Promise.all(
+		rows.map((row) => assessStoredAttachment(env, { filename: row.filename, type: row.contentType, size: row.size, r2Key: row.r2Key })),
+	);
+	const flagged = rows.filter((_, index) => risks[index]?.level !== "ok").map((row) => row.filename);
+	if (flagged.length && new URL(request.url).searchParams.get("acknowledge") !== "1") {
+		return Response.json(
+			{ error: "Some attachments are flagged. Review the warning before downloading them.", flagged },
+			{ status: 409, headers: { "Cache-Control": "private, no-store" } },
+		);
+	}
+
+	// A missing object must not silently produce a partial archive.
+	const heads = await Promise.all(rows.map((row) => env.BUCKET.head(row.r2Key)));
+	const missing = rows.filter((_, index) => !heads[index]).map((row) => row.filename);
+	if (missing.length) {
+		return Response.json(
+			{ error: `${missing.length} attachment(s) are missing from storage`, missing },
+			{ status: 404, headers: { "Cache-Control": "private, no-store" } },
+		);
+	}
 
 	const stream = createZipStream(rows.map((row) => ({
 		name: row.filename,

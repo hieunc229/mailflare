@@ -2360,5 +2360,6 @@
 	"account.permissions.allowDrive": "Allow Drive",
 	"actions.unsubscribeDeleteAll": "ಚಂದಾದಾರಿಕೆ ರದ್ದು ಮತ್ತು ಎಲ್ಲಾ ಅಳಿಸಿ",
 	"actions.unsubscribeDeleteConfirm": "ಈ ಕಳುಹಿಸುವವರ {count} ಹಳೆಯ ಇಮెයిల್‌ಗಳನ್ನು ಟ್ರ್ಯಾಶ್‌ಗೆ ಸರಿಸಬೇಕೆ?",
-	"actions.unsubscribeTrashDone": "ಚಂದಾದಾರಿಕೆ ರದ್ದಾಯಿತು; {count} ಇಮೆಯಿಲ್‌ಗಳು ಟ್ರ್ಯಾಶ್‌ಗೆ ಹೋದವು"
+	"actions.unsubscribeTrashDone": "ಚಂದಾದಾರಿಕೆ ರದ್ದಾಯಿತು; {count} ಇಮೆಯಿಲ್‌ಗಳು ಟ್ರ್ಯಾಶ್‌ಗೆ ಹೋದವು",
+	"attachment.downloadAllFlagged": "ಕೆಲವು ಲಗತ್ತುಗಳು ಸಂಭಾವ್ಯ ಅಪಾಯಕಾರಿ ಎಂದು ಗುರುತಿಸಲಾಗಿವೆ. ಹೇಗೂ ಆರ್ಕೈವ್ ಡೌನ್‌ಲೋಡ್ ಮಾಡಬೇಕೆ?"
 }

@@ -2388,5 +2388,6 @@
 	"account.permissions.allowDrive": "Allow Drive",
 	"actions.unsubscribeDeleteAll": "Отписаться и удалить всё",
 	"actions.unsubscribeDeleteConfirm": "Переместить {count} писем от этого отправителя в корзину?",
-	"actions.unsubscribeTrashDone": "Отписано; {count} писем перемещено в корзину"
+	"actions.unsubscribeTrashDone": "Отписано; {count} писем перемещено в корзину",
+	"attachment.downloadAllFlagged": "Некоторые вложения помечены как потенциально опасные. Всё равно скачать архив?"
 }

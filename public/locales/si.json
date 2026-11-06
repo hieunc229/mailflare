@@ -2360,5 +2360,6 @@
 	"account.permissions.allowDrive": "Allow Drive",
 	"actions.unsubscribeDeleteAll": "දායකත්වය අවලංගු කර සියල්ල මකන්න",
 	"actions.unsubscribeDeleteConfirm": "මෙම යවන්නාගේ පැරණි විද්‍යුත් තැපෑල {count} කුණු කූඩයට ගෙනයාමටද?",
-	"actions.unsubscribeTrashDone": "දායකත්වය අවලංගුයි; විද්‍යුත් තැපෑල {count} කුණු කූඩයට ගියේය"
+	"actions.unsubscribeTrashDone": "දායකත්වය අවලංගුයි; විද්‍යුත් තැපෑල {count} කුණු කූඩයට ගියේය",
+	"attachment.downloadAllFlagged": "සමහර ඇමුණුම් අන්තරායන්හි ලෙස සලකුණු කර ඇත. තවදුරටත් සංරක්ෂණාගාරය බාගන්නවාද?"
 }

@@ -2360,5 +2360,6 @@
 	"account.permissions.allowDrive": "Allow Drive",
 	"actions.unsubscribeDeleteAll": "સભ્યતા રદ કરો અને બધું કાઢી નાખો",
 	"actions.unsubscribeDeleteConfirm": "આ મોકલનારના {count} જૂના ઇમેઇલ ટ્રેશમાં ખસેડવા?",
-	"actions.unsubscribeTrashDone": "સભ્યતા રદ; {count} ઇમેઇલ ટ્રેશમાં ગયા"
+	"actions.unsubscribeTrashDone": "સભ્યતા રદ; {count} ઇમેઇલ ટ્રેશમાં ગયા",
+	"attachment.downloadAllFlagged": "કેટલીક જોડાણો સંભવિત જોખમી તરીકે ચિહ્નિત છે. તેમ છતાં આર્કાઇવ ડાઉનલોડ કરવું?"
 }

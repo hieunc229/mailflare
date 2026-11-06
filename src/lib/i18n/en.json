@@ -2360,5 +2360,6 @@
 	"account.permissions.allowDrive": "Allow Drive",
 	"actions.unsubscribeDeleteAll": "Unsubscribe & delete all",
 	"actions.unsubscribeDeleteConfirm": "Move {count} past emails from this sender to Trash?",
-	"actions.unsubscribeTrashDone": "Unsubscribed and moved {count} emails to Trash"
+	"actions.unsubscribeTrashDone": "Unsubscribed and moved {count} emails to Trash",
+	"attachment.downloadAllFlagged": "Some attachments are flagged as potentially dangerous. Download the archive anyway?"
 }

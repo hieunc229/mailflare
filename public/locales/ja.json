@@ -2343,5 +2343,6 @@
 	"account.permissions.allowDrive": "Allow Drive",
 	"actions.unsubscribeDeleteAll": "登録解除してすべて削除",
 	"actions.unsubscribeDeleteConfirm": "この差出人の過去のメール {count} 件をゴミ箱に移動しますか？",
-	"actions.unsubscribeTrashDone": "登録解除し、{count} 件をゴミ箱に移動しました"
+	"actions.unsubscribeTrashDone": "登録解除し、{count} 件をゴミ箱に移動しました",
+	"attachment.downloadAllFlagged": "一部の添付ファイルに危険の可能性のフラグがあります。それでもアーカイブをダウンロードしますか？"
 }

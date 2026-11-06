@@ -2374,5 +2374,6 @@
 	"account.permissions.allowDrive": "Allow Drive",
 	"actions.unsubscribeDeleteAll": "Anular subscrição e eliminar tudo",
 	"actions.unsubscribeDeleteConfirm": "Mover {count} e-mails anteriores deste remetente para o Lixo?",
-	"actions.unsubscribeTrashDone": "Subscrição anulada; {count} e-mails movidos para o Lixo"
+	"actions.unsubscribeTrashDone": "Subscrição anulada; {count} e-mails movidos para o Lixo",
+	"attachment.downloadAllFlagged": "Alguns anexos estão marcados como potencialmente perigosos. Transferir o ficheiro mesmo assim?"
 }

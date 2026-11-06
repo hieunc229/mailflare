@@ -2360,5 +2360,6 @@
 	"account.permissions.allowDrive": "Allow Drive",
 	"actions.unsubscribeDeleteAll": "سبسکرپشن ختم کریں اور سب حذف کریں",
 	"actions.unsubscribeDeleteConfirm": "اس مرسل کے {count} پرانے ای میلز کو ٹریش میں منتقل کریں؟",
-	"actions.unsubscribeTrashDone": "سبسکرپشن ختم؛ {count} ای میلز ٹریش میں منتقل کر دی گئیں"
+	"actions.unsubscribeTrashDone": "سبسکرپشن ختم؛ {count} ای میلز ٹریش میں منتقل کر دی گئیں",
+	"attachment.downloadAllFlagged": "بعض منسلکات کو ممکنہ طور پر خطرناک قرار دیا گیا ہے۔ پھر بھی آرکائیو ڈاؤن لوڈ کریں؟"
 }

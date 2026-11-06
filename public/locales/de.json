@@ -2360,5 +2360,6 @@
 	"account.permissions.allowDrive": "Allow Drive",
 	"actions.unsubscribeDeleteAll": "Abbestellen & alle löschen",
 	"actions.unsubscribeDeleteConfirm": "{count} ältere E-Mails dieses Absenders in den Papierkorb verschieben?",
-	"actions.unsubscribeTrashDone": "Abbestellt und {count} E-Mails in den Papierkorb verschoben"
+	"actions.unsubscribeTrashDone": "Abbestellt und {count} E-Mails in den Papierkorb verschoben",
+	"attachment.downloadAllFlagged": "Einige Anhänge sind als potenziell gefährlich markiert. Archiv trotzdem herunterladen?"
 }

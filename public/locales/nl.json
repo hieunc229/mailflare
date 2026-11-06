@@ -2360,5 +2360,6 @@
 	"account.permissions.allowDrive": "Allow Drive",
 	"actions.unsubscribeDeleteAll": "Afmelden & alles verwijderen",
 	"actions.unsubscribeDeleteConfirm": "{count} eerdere e-mails van deze afzender naar de prullenbak verplaatsen?",
-	"actions.unsubscribeTrashDone": "Afgemeld en {count} e-mails naar de prullenbak verplaatst"
+	"actions.unsubscribeTrashDone": "Afgemeld en {count} e-mails naar de prullenbak verplaatst",
+	"attachment.downloadAllFlagged": "Sommige bijlagen zijn gemarkeerd als mogelijk gevaarlijk. Het archief toch downloaden?"
 }

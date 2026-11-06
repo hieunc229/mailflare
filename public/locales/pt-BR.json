@@ -2374,5 +2374,6 @@
 	"account.permissions.allowDrive": "Allow Drive",
 	"actions.unsubscribeDeleteAll": "Cancelar inscrição e apagar tudo",
 	"actions.unsubscribeDeleteConfirm": "Mover {count} e-mails antigos deste remetente para a Lixeira?",
-	"actions.unsubscribeTrashDone": "Inscrição cancelada; {count} e-mails movidos para a Lixeira"
+	"actions.unsubscribeTrashDone": "Inscrição cancelada; {count} e-mails movidos para a Lixeira",
+	"attachment.downloadAllFlagged": "Alguns anexos estão marcados como potencialmente perigosos. Baixar o arquivo mesmo assim?"
 }

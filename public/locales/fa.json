@@ -2360,5 +2360,6 @@
 	"account.permissions.allowDrive": "Allow Drive",
 	"actions.unsubscribeDeleteAll": "لغو اشتراک و حذف همه",
 	"actions.unsubscribeDeleteConfirm": "آیا {count} ایمیل قدیمی این فرستنده به سطل زباله منتقل شود؟",
-	"actions.unsubscribeTrashDone": "اشتراک لغو شد؛ {count} ایمیل به سطل زباله منتقل شد"
+	"actions.unsubscribeTrashDone": "اشتراک لغو شد؛ {count} ایمیل به سطل زباله منتقل شد",
+	"attachment.downloadAllFlagged": "برخی پیوست‌ها به‌عنوان بالقوه خطرناک پرچم‌گذاری شده‌اند. با این حال آرشیو دانلود شود؟"
 }
