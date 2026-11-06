@@ -320,6 +320,15 @@
         "ALTER TABLE \"api_keys\" ADD COLUMN \"key_sha256\" text;",
         "CREATE UNIQUE INDEX \"api_keys_key_sha256_idx\" ON \"api_keys\" USING btree (\"key_sha256\");"
       ]
+    },
+    {
+      "name": "0007_database_object_storage.sql",
+      "statements": [
+        "CREATE TABLE \"storage_objects\" (\n\t\"object_key\" text PRIMARY KEY NOT NULL,\n\t\"size\" bigint NOT NULL,\n\t\"etag\" text NOT NULL,\n\t\"uploaded\" bigint NOT NULL,\n\t\"http_metadata\" text DEFAULT '{}' NOT NULL,\n\t\"custom_metadata\" text DEFAULT '{}' NOT NULL\n);",
+        "CREATE TABLE \"storage_object_chunks\" (\n\t\"object_key\" text NOT NULL,\n\t\"chunk_index\" bigint NOT NULL,\n\t\"bytes\" bigint NOT NULL,\n\t\"data\" text NOT NULL\n);",
+        "ALTER TABLE \"storage_object_chunks\" ADD CONSTRAINT \"storage_object_chunks_object_key_storage_objects_object_key_fk\" FOREIGN KEY (\"object_key\") REFERENCES \"public\".\"storage_objects\"(\"object_key\") ON DELETE cascade ON UPDATE no action;",
+        "CREATE UNIQUE INDEX \"storage_object_chunks_idx\" ON \"storage_object_chunks\" USING btree (\"object_key\",\"chunk_index\");"
+      ]
     }
   ]
 }

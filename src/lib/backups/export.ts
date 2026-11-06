@@ -48,6 +48,12 @@ export const INTERNAL_TABLES = [
 	"push_subscriptions",
 	// Import jobs are transient progress records tied to staged objects that a backup does not carry.
 	"import_jobs",
+	// Database-backed object storage (STORAGE_DRIVER=database). Backups have never carried object
+	// payloads — with R2, B2, S3 or the file store they live outside the database entirely — and
+	// exporting these tables would be worse than useless: backup files are written into the same
+	// store, so each backup would embed the chunks of every previous one and grow without bound.
+	"storage_objects",
+	"storage_object_chunks",
 	// WebAuthn ceremonies, step-up grants and enrolment links are short-lived,
 	// single-use bearer secrets. Restoring a stale one would be useless at best
 	// and dangerous at worst, so backups deliberately omit them.

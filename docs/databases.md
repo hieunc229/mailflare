@@ -90,7 +90,7 @@ Why search is the main difference: FTS5 is an SQLite extension, PostgreSQL's equ
 
 Other things to know:
 
-- **Moving between databases** is done with **Admin → Backups**: take a backup, point `DATABASE_URL` at the new empty database, finish setup, restore. Raw mail and attachments live in object storage and are unaffected.
+- **Moving between databases** is done with **Admin → Backups**: take a backup, point `DATABASE_URL` at the new empty database, finish setup, restore. Raw mail and attachments live in object storage and are unaffected — including when `STORAGE_DRIVER=database`, where their rows are deliberately excluded from backups so each backup does not embed the ones before it.
 - **Connections.** Self-hosted (Node) uses a connection pool. On Workers a TCP connection cannot outlive a request, so each query opens its own connection; put Hyperdrive (or a pooler such as Supabase's, Neon's or PlanetScale's) in front, or pick an HTTP driver (`neon`, `planetscale`, `libsql`).
 - **Case sensitivity.** SQLite and PostgreSQL compare text case-sensitively; MySQL's default collations do not, so on MySQL two accounts whose emails differ only by case collide on the unique index.
 - **Reserved words.** All SQL is generated with quoted identifiers; hand-written SQL in your own migrations should quote `key`, `read`, `repeat`, `change` and friends for MySQL.

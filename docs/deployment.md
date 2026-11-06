@@ -124,7 +124,11 @@ Remote migrations require the target account's `database_id` in your local `wran
 
 ## Object storage (R2, Backblaze B2 or AWS S3)
 
-Raw mail, attachments, Drive files, avatars, branding icons, JMAP uploads and backups all live in one bucket. By default that is the `BUCKET` R2 binding in `wrangler.jsonc`. To use Backblaze B2 instead, set four Worker variables (as secrets, or in `.dev.vars` locally):
+Raw mail, attachments, Drive files, avatars, branding icons, JMAP uploads and backups all live in one bucket. By default that is the `BUCKET` R2 binding in `wrangler.jsonc`.
+
+**No object store at all?** Mailflare can keep objects in the database instead — a fallback for environments where R2 cannot be enabled (Cloudflare requires a payment method even for the free tier) and no B2/S3 bucket is available. Set `STORAGE_DRIVER=database` as a Worker variable, or simply deploy without a `BUCKET` binding and it is used automatically. Objects are stored as ~1 MiB chunks in the `storage_objects` / `storage_object_chunks` tables of the same database `env.DB` points at (D1, PostgreSQL, MySQL or SQLite), and `GET /api/v1/storage` reports provider `"database"`. Limits: uploads larger than 256 MiB are refused, and the whole store shares the database's own space budget — D1's free tier is around 500 MB total — so an S3-compatible bucket remains the right choice for anything but small personal installs. Databases that predate the feature need the pending migrations applied first.
+
+To use Backblaze B2 instead, set four Worker variables (as secrets, or in `.dev.vars` locally):
 
 | Variable | Example | Purpose |
 | --- | --- | --- |

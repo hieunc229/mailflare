@@ -295,6 +295,14 @@
         "ALTER TABLE `api_keys` ADD `key_sha256` varchar(191);",
         "ALTER TABLE `api_keys` ADD CONSTRAINT `api_keys_key_sha256_idx` UNIQUE(`key_sha256`);"
       ]
+    },
+    {
+      "name": "0007_database_object_storage.sql",
+      "statements": [
+        "CREATE TABLE `storage_objects` (\n\t`object_key` varchar(512) NOT NULL,\n\t`size` bigint NOT NULL,\n\t`etag` longtext NOT NULL,\n\t`uploaded` bigint NOT NULL,\n\t`http_metadata` longtext NOT NULL DEFAULT ('{}'),\n\t`custom_metadata` longtext NOT NULL DEFAULT ('{}'),\n\tCONSTRAINT `storage_objects_object_key` PRIMARY KEY(`object_key`)\n);",
+        "CREATE TABLE `storage_object_chunks` (\n\t`object_key` varchar(512) NOT NULL,\n\t`chunk_index` bigint NOT NULL,\n\t`bytes` bigint NOT NULL,\n\t`data` longtext NOT NULL,\n\tCONSTRAINT `storage_object_chunks_idx` UNIQUE(`object_key`,`chunk_index`)\n);",
+        "ALTER TABLE `storage_object_chunks` ADD CONSTRAINT `storage_object_chunks_object_key_storage_objects_object_key_fk` FOREIGN KEY (`object_key`) REFERENCES `storage_objects`(`object_key`) ON DELETE cascade ON UPDATE no action;"
+      ]
     }
   ]
 }

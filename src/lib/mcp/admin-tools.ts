@@ -93,7 +93,7 @@ export function registerAdminMcpTools(server: McpServer, principal: McpPrincipal
 	});
 
 	if (principal.scopes.includes("storage")) server.registerTool("manage_storage", {
-		description: "Show which object storage holds raw mail, attachments, Drive files, avatars and backups, and test it. Actions: status (provider, bucket, endpoint), test (writes, reads and deletes a small object to prove the credentials work). Backblaze B2 (B2_* variables) or AWS S3 (S3_* variables) replaces R2 when configured in the Worker environment; credentials are never returned.",
+		description: "Show which object storage holds raw mail, attachments, Drive files, avatars and backups, and test it. Actions: status (provider, bucket, endpoint), test (writes, reads and deletes a small object to prove the credentials work). Backblaze B2 (B2_* variables) or AWS S3 (S3_* variables) replaces R2 when configured in the Worker environment, and STORAGE_DRIVER=database uses the database instead; credentials are never returned.",
 		inputSchema: adminInput,
 	}, async ({ action }) => {
 		if (!principal.scopes.includes("storage")) return result({ error: "Permission denied" }, true);

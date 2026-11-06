@@ -87,7 +87,7 @@ On a Team license an administrator can add other users as hosts of a booking eve
 
 Admin > API keys can also grant the `accounts`, `mailboxes` and `storage` scopes independently. These routes use `Authorization: Bearer <key>` and require the key owner to retain the admin role. Account management requires a Team license; creating a shared mailbox also requires a Team license. Each key can access only accounts created by its owner and mailboxes owned by those accounts or the admin.
 
-The `storage` scope reports and tests object storage: `GET /api/v1/storage` returns `{ storage: { provider: "backblaze" | "s3" | "r2" | "files", configured, bucket, endpoint }, warning }` (credentials are never returned; `warning` explains a half-set `B2_*` configuration), and `POST /api/v1/storage` round-trips a small object and returns `{ ok, error?, latencyMs, storage }` (HTTP 502 on failure). Backblaze B2 (`B2_KEY_ID`, `B2_APPLICATION_KEY`, `B2_BUCKET`, `B2_ENDPOINT`) or AWS S3 (`S3_BUCKET`, `S3_REGION`, credentials) replaces R2 for all stored objects when configured.
+The `storage` scope reports and tests object storage: `GET /api/v1/storage` returns `{ storage: { provider: "backblaze" | "s3" | "r2" | "files" | "database", configured, bucket, endpoint }, warning }` (credentials are never returned; `warning` explains a half-set `B2_*` configuration), and `POST /api/v1/storage` round-trips a small object and returns `{ ok, error?, latencyMs, storage }` (HTTP 502 on failure). Backblaze B2 (`B2_KEY_ID`, `B2_APPLICATION_KEY`, `B2_BUCKET`, `B2_ENDPOINT`) or AWS S3 (`S3_BUCKET`, `S3_REGION`, credentials) replaces R2 for all stored objects when configured; `STORAGE_DRIVER=database` stores objects in the database instead.
 
 Admin API keys cannot read or send mail. Enable **Allow MCP access** when creating an admin key to use its selected `domains`, `accounts`, `mailboxes`, and `storage` permissions through `/mcp`. The `manage_domains`, `manage_accounts`, `manage_mailboxes`, and `manage_storage` (`status`, `test`) tools expose the corresponding management actions below. Admin MCP keys do not expose mail tools. Use Settings > API keys for mail and mail MCP access.
 
@@ -102,7 +102,7 @@ Admin API keys cannot read or send mail. Enable **Allow MCP access** when creati
 | `mailboxes` | `GET /api/v1/mailboxes/[id]` | Get a managed mailbox |
 | `mailboxes` | `PATCH /api/v1/mailboxes/[id]` | Update mailbox settings |
 | `mailboxes` | `DELETE /api/v1/mailboxes/[id]` | Delete a mailbox and its routing rule |
-| `storage` | `GET /api/v1/storage` | Active object storage (R2, Backblaze B2, AWS S3 or local files) |
+| `storage` | `GET /api/v1/storage` | Active object storage (R2, Backblaze B2, AWS S3, the database or local files) |
 | `storage` | `POST /api/v1/storage` | Write, read and delete a test object to verify storage |
 
 ### Choose aliases when creating an account

@@ -10,7 +10,7 @@ export type B2Config = {
 };
 
 export type StorageStatus = {
-	provider: "backblaze" | "s3" | "r2" | "files";
+	provider: "backblaze" | "s3" | "r2" | "files" | "database";
 	configured: boolean;
 	bucket: string | null;
 	endpoint: string | null;

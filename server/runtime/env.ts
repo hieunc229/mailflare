@@ -68,6 +68,7 @@ export function createNodeRuntime(): NodeRuntime {
 		S3_REGION: optional("S3_REGION") ?? optional("AWS_REGION"),
 		S3_ACCESS_KEY_ID: optional("S3_ACCESS_KEY_ID") ?? optional("AWS_ACCESS_KEY_ID"),
 		S3_SECRET_ACCESS_KEY: optional("S3_SECRET_ACCESS_KEY") ?? optional("AWS_SECRET_ACCESS_KEY"),
+		STORAGE_DRIVER: optional("STORAGE_DRIVER"),
 		CF_TOKEN: optional("CF_TOKEN"),
 		CF_API_KEY: optional("CF_API_KEY"),
 		CF_EMAIL: optional("CF_EMAIL"),

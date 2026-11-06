@@ -61,6 +61,12 @@ interface CloudflareEnv {
 	S3_REGION?: string;
 	S3_ACCESS_KEY_ID?: string;
 	S3_SECRET_ACCESS_KEY?: string;
+	/**
+	 * "database" stores objects (raw mail, attachments, Drive files, backups) in the database
+	 * itself instead of R2/B2/S3 — a fallback for environments where no object store is
+	 * available. It is also used automatically when no BUCKET binding exists.
+	 */
+	STORAGE_DRIVER?: string;
 	CF_TOKEN?: string;
 	CF_API_KEY?: string;
 	CF_EMAIL?: string;

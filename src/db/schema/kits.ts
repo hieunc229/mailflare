@@ -68,6 +68,7 @@ const LONG_KEYS: Record<string, number> = {
 	thread_id: 512,
 	raw_r2_key: 512,
 	r2_key: 512,
+	object_key: 512,
 	endpoint: 512,
 	email: 320,
 	recipient: 320,

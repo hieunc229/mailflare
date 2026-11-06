@@ -1260,6 +1260,32 @@ export const importJobs = sqliteTable("import_jobs", {
 	finishedAt: timestamp("finished_at"),
 }, (t) => [index("import_jobs_user_idx").on(t.userId, t.createdAt), index("import_jobs_status_idx").on(t.status, t.updatedAt)]);
 
+/**
+ * Database-backed object storage (STORAGE_DRIVER=database, or the automatic fallback when no
+ * bucket is bound): raw mail, attachments, Drive files and backups as rows. Each object's bytes
+ * live as ~768 KiB base64 chunks in `storage_object_chunks`, ordered by chunk_index; multipart
+ * uploads stage their parts under a reserved key prefix and are rekeyed on completion.
+ */
+export const storageObjects = sqliteTable("storage_objects", {
+	key: text("object_key").primaryKey(),
+	size: integer("size").notNull(),
+	etag: text("etag").notNull(),
+	uploaded: timestamp("uploaded").notNull(),
+	httpMetadata: text("http_metadata").notNull().default("{}"),
+	customMetadata: text("custom_metadata").notNull().default("{}"),
+});
+
+export const storageObjectChunks = sqliteTable("storage_object_chunks", {
+	objectKey: text("object_key").notNull().references((): AnySQLiteColumn => storageObjects.key, { onDelete: "cascade" }),
+	chunkIndex: integer("chunk_index").notNull(),
+	// Chunk size in bytes: rekeyed multipart parts keep their own boundaries, so chunk_index does
+	// not map to fixed byte windows and reads walk the per-chunk sizes to find a byte range.
+	bytes: integer("bytes").notNull(),
+	// Chunk contents as base64: a text parameter survives every driver, including the HTTP-only
+	// ones (Neon, PlanetScale) that JSON-serialize bound values and so cannot carry binary.
+	data: text("data").notNull(),
+}, (t) => [uniqueIndex("storage_object_chunks_idx").on(t.objectKey, t.chunkIndex)]);
+
 export const schema = {
 	users,
 	domains,
@@ -1302,4 +1328,6 @@ export const schema = {
 	agentSendApprovals,
 	mcpKeyMailboxes,
 	importJobs,
+	storageObjects,
+	storageObjectChunks,
 };
