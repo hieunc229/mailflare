@@ -54,13 +54,16 @@ export function RichTextEditor({
 	const [linkUrl, setLinkUrl] = useState("");
 	const [showQuoted, setShowQuoted] = useState(false);
 	const savedRange = useRef<Range | null>(null);
+	const lastEmitted = useRef<string | null>(null);
 
 	// Keep the DOM in step with the value without resetting the caret on every keystroke.
 	useEffect(() => {
 		const element = editorRef.current;
 		if (!element) return;
+		if (lastEmitted.current !== null && value === lastEmitted.current) return;
 		const safeValue = sanitizeEditorHtml(value);
 		if (element.innerHTML !== safeValue) element.innerHTML = safeValue;
+		lastEmitted.current = null;
 	}, [value]);
 
 	useEffect(() => {
@@ -83,7 +86,9 @@ export function RichTextEditor({
 
 	function emit() {
 		// Export validated original resource addresses, never the blocked preview placeholders.
-		onChange(sanitizeEmailHtml(editorRef.current?.innerHTML ?? "", { forOutgoing: true }) ?? "");
+		const output = sanitizeEmailHtml(editorRef.current?.innerHTML ?? "", { forOutgoing: true }) ?? "";
+		lastEmitted.current = output;
+		onChange(output);
 	}
 
 	function run(command: string, commandValue?: string) {
