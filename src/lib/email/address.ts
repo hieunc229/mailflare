@@ -16,11 +16,14 @@ export function formatEmailAddress(address: string, name?: string | null): strin
 
 export function parseEmailAddressParts(value: string): EmailAddressParts {
 	const trimmed = value.trim();
-	const headerMatch = trimmed.match(/^(?:"([^"]+)"|([^<"]+))\s*<([^>]+)>$/);
+	// A quoted display name may contain backslash-escaped quotes and
+	// backslashes, as written by formatEmailAddress (`"Maya \"MJ\" Chen"`).
+	const headerMatch = trimmed.match(/^(?:"((?:[^"\\]|\\.)*)"|([^<"]+))\s*<([^>]+)>$/);
 
 	if (headerMatch) {
+		const quotedName = headerMatch[1]?.replace(/\\(.)/g, "$1");
 		return {
-			name: (headerMatch[1] ?? headerMatch[2] ?? "").trim() || null,
+			name: (quotedName ?? headerMatch[2] ?? "").trim() || null,
 			address: headerMatch[3].trim(),
 		};
 	}
@@ -77,8 +80,19 @@ export function splitEmailAddressList(value: string | null | undefined): string[
 	let current = "";
 	let inQuotes = false;
 	let inAngle = false;
+	let escaped = false;
 
 	for (const char of value ?? "") {
+		if (escaped) {
+			escaped = false;
+			current += char;
+			continue;
+		}
+		if (char === "\\" && inQuotes) {
+			escaped = true;
+			current += char;
+			continue;
+		}
 		if (char === '"' && !inAngle) inQuotes = !inQuotes;
 		else if (char === "<" && !inQuotes) inAngle = true;
 		else if (char === ">" && !inQuotes) inAngle = false;
