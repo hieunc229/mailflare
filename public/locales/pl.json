@@ -342,6 +342,10 @@
 	"attachment.loadFailed": "Nie można załadować tego załącznika",
 	"attachment.unsupported": "Tego typu pliku nie można bezpiecznie wyświetlić w podglądzie w przeglądarce.",
 	"attachment.download": "Pobierz",
+	"attachment.downloadAll": "Pobierz wszystkie",
+	"attachment.saveToDrive": "Zapisz na Drive",
+	"attachment.savedToDrive": "Zapisano na Drive",
+	"attachment.saveToDriveFailed": "Nie można zapisać na Drive",
 	"auth.logout": "Wyloguj się",
 	"license.upgrade": "Ulepsz",
 	"contact.title": "Szczegóły kontaktu",
@@ -2374,5 +2378,6 @@
 	"account.permissions.calendarHint": "Events, reminders, and booking pages.",
 	"account.permissions.driveHint": "Files, saved attachments, and shared links.",
 	"account.permissions.allowCalendar": "Allow Calendar",
-	"account.permissions.allowDrive": "Allow Drive"
+	"account.permissions.allowDrive": "Allow Drive",
+	"attachment.downloadAllFlagged": "Niektóre załączniki są oznaczone jako potencjalnie niebezpieczne. Pobrać archiwum mimo to?"
 }

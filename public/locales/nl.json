@@ -334,6 +334,10 @@
 	"attachment.loadFailed": "Deze bijlage kan niet worden geladen",
 	"attachment.unsupported": "Dit bestandstype kan niet veilig in de browser worden bekeken.",
 	"attachment.download": "Downloaden",
+	"attachment.downloadAll": "Alles downloaden",
+	"attachment.saveToDrive": "Opslaan in Drive",
+	"attachment.savedToDrive": "Opgeslagen in Drive",
+	"attachment.saveToDriveFailed": "Opslaan in Drive mislukt",
 	"auth.logout": "Uitloggen",
 	"license.upgrade": "Upgraden",
 	"contact.title": "Contactgegevens",
@@ -2346,5 +2350,6 @@
 	"account.permissions.calendarHint": "Events, reminders, and booking pages.",
 	"account.permissions.driveHint": "Files, saved attachments, and shared links.",
 	"account.permissions.allowCalendar": "Allow Calendar",
-	"account.permissions.allowDrive": "Allow Drive"
+	"account.permissions.allowDrive": "Allow Drive",
+	"attachment.downloadAllFlagged": "Sommige bijlagen zijn gemarkeerd als mogelijk gevaarlijk. Het archief toch downloaden?"
 }

@@ -350,6 +350,10 @@
 	"attachment.loadFailed": "تعذّر تحميل هذا المرفق",
 	"attachment.unsupported": "لا يمكن معاينة هذا النوع من الملفات بأمان في المتصفح.",
 	"attachment.download": "تنزيل",
+	"attachment.downloadAll": "تنزيل الكل",
+	"attachment.saveToDrive": "حفظ في Drive",
+	"attachment.savedToDrive": "تم الحفظ في Drive",
+	"attachment.saveToDriveFailed": "تعذر الحفظ في Drive",
 	"auth.logout": "تسجيل الخروج",
 	"license.upgrade": "ترقية",
 	"contact.title": "تفاصيل جهة الاتصال",
@@ -2402,5 +2406,6 @@
 	"account.permissions.calendarHint": "Events, reminders, and booking pages.",
 	"account.permissions.driveHint": "Files, saved attachments, and shared links.",
 	"account.permissions.allowCalendar": "Allow Calendar",
-	"account.permissions.allowDrive": "Allow Drive"
+	"account.permissions.allowDrive": "Allow Drive",
+	"attachment.downloadAllFlagged": "بعض المرفقات معلَّمة بأنها قد تكون خطيرة. هل تريد تنزيل الأرشيف على أي حال؟"
 }

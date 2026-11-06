@@ -330,6 +330,10 @@
 	"attachment.loadFailed": "无法加载此附件",
 	"attachment.unsupported": "无法在浏览器中安全预览此文件类型。",
 	"attachment.download": "下载",
+	"attachment.downloadAll": "全部下载",
+	"attachment.saveToDrive": "保存到 Drive",
+	"attachment.savedToDrive": "已保存到 Drive",
+	"attachment.saveToDriveFailed": "无法保存到 Drive",
 	"auth.logout": "退出登录",
 	"license.upgrade": "升级",
 	"contact.title": "联系人详情",
@@ -2329,5 +2333,6 @@
 	"account.permissions.calendarHint": "Events, reminders, and booking pages.",
 	"account.permissions.driveHint": "Files, saved attachments, and shared links.",
 	"account.permissions.allowCalendar": "Allow Calendar",
-	"account.permissions.allowDrive": "Allow Drive"
+	"account.permissions.allowDrive": "Allow Drive",
+	"attachment.downloadAllFlagged": "部分附件被标记为可能存在危险。仍要下载该压缩包吗？"
 }

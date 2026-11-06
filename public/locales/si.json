@@ -334,6 +334,10 @@
 	"attachment.loadFailed": "මෙම ඇමුණුම පූරණය කළ නොහැකි විය",
 	"attachment.unsupported": "මෙම ගොනු වර්ගය බ්‍රවුසරයේ ආරක්ෂිතව පෙරදසුන් කළ නොහැක.",
 	"attachment.download": "බාගන්න",
+	"attachment.downloadAll": "සියල්ල බාගන්න",
+	"attachment.saveToDrive": "Drive වෙත සුරකින්න",
+	"attachment.savedToDrive": "Drive වෙත සුරකින ලදී",
+	"attachment.saveToDriveFailed": "Drive වෙත සුරැකීමට නොහැකි විය",
 	"auth.logout": "වරන්න",
 	"license.upgrade": "උත්ශ්‍රේණි කරන්න",
 	"contact.title": "සම්බන්ධතා විස්තර",
@@ -2346,5 +2350,6 @@
 	"account.permissions.calendarHint": "Events, reminders, and booking pages.",
 	"account.permissions.driveHint": "Files, saved attachments, and shared links.",
 	"account.permissions.allowCalendar": "Allow Calendar",
-	"account.permissions.allowDrive": "Allow Drive"
+	"account.permissions.allowDrive": "Allow Drive",
+	"attachment.downloadAllFlagged": "සමහර ඇමුණුම් අන්තරායන්හි ලෙස සලකුණු කර ඇත. තවදුරටත් සංරක්ෂණාගාරය බාගන්නවාද?"
 }

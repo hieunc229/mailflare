@@ -334,6 +334,10 @@
 	"attachment.loadFailed": "بارگذاری این پیوست ممکن نشد",
 	"attachment.unsupported": "این نوع فایل را نمی‌توان به‌طور امن در مرورگر پیش‌نمایش داد.",
 	"attachment.download": "دانلود",
+	"attachment.downloadAll": "دانلود همه",
+	"attachment.saveToDrive": "ذخیره در Drive",
+	"attachment.savedToDrive": "در Drive ذخیره شد",
+	"attachment.saveToDriveFailed": "ذخیره در Drive ممکن نشد",
 	"auth.logout": "خروج",
 	"license.upgrade": "ارتقا",
 	"contact.title": "جزئیات مخاطب",
@@ -2346,5 +2350,6 @@
 	"account.permissions.calendarHint": "Events, reminders, and booking pages.",
 	"account.permissions.driveHint": "Files, saved attachments, and shared links.",
 	"account.permissions.allowCalendar": "Allow Calendar",
-	"account.permissions.allowDrive": "Allow Drive"
+	"account.permissions.allowDrive": "Allow Drive",
+	"attachment.downloadAllFlagged": "برخی پیوست‌ها به‌عنوان بالقوه خطرناک پرچم‌گذاری شده‌اند. با این حال آرشیو دانلود شود؟"
 }

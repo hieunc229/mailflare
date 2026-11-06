@@ -330,6 +330,10 @@
 	"attachment.loadFailed": "Không thể tải tệp đính kèm này",
 	"attachment.unsupported": "Không thể xem trước loại tệp này một cách an toàn trong trình duyệt.",
 	"attachment.download": "Tải xuống",
+	"attachment.downloadAll": "Tải xuống tất cả",
+	"attachment.saveToDrive": "Lưu vào Drive",
+	"attachment.savedToDrive": "Đã lưu vào Drive",
+	"attachment.saveToDriveFailed": "Không thể lưu vào Drive",
 	"auth.logout": "Đăng xuất",
 	"license.upgrade": "Nâng cấp",
 	"contact.title": "Chi tiết liên hệ",
@@ -2329,5 +2333,6 @@
 	"account.permissions.calendarHint": "Events, reminders, and booking pages.",
 	"account.permissions.driveHint": "Files, saved attachments, and shared links.",
 	"account.permissions.allowCalendar": "Allow Calendar",
-	"account.permissions.allowDrive": "Allow Drive"
+	"account.permissions.allowDrive": "Allow Drive",
+	"attachment.downloadAllFlagged": "Một số tệp đính kèm bị gắn cờ là có khả năng nguy hiểm. Vẫn tải xuống tệp nén?"
 }

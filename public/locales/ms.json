@@ -334,6 +334,10 @@
 	"attachment.loadFailed": "Tidak dapat memuatkan lampiran ini",
 	"attachment.unsupported": "Jenis fail ini tidak dapat dipratonton dengan selamat dalam pelayar.",
 	"attachment.download": "Muat turun",
+	"attachment.downloadAll": "Muat turun semua",
+	"attachment.saveToDrive": "Simpan ke Drive",
+	"attachment.savedToDrive": "Disimpan ke Drive",
+	"attachment.saveToDriveFailed": "Tidak dapat menyimpan ke Drive",
 	"auth.logout": "Log keluar",
 	"license.upgrade": "Naik taraf",
 	"contact.title": "Butiran kenalan",
@@ -2343,5 +2347,6 @@
 	"account.permissions.calendarHint": "Events, reminders, and booking pages.",
 	"account.permissions.driveHint": "Files, saved attachments, and shared links.",
 	"account.permissions.allowCalendar": "Allow Calendar",
-	"account.permissions.allowDrive": "Allow Drive"
+	"account.permissions.allowDrive": "Allow Drive",
+	"attachment.downloadAllFlagged": "Some attachments are flagged as potentially dangerous. Download the archive anyway?"
 }

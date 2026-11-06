@@ -334,6 +334,10 @@
 	"attachment.loadFailed": "Dieser Anhang konnte nicht geladen werden",
 	"attachment.unsupported": "Dieser Dateityp kann im Browser nicht sicher angezeigt werden.",
 	"attachment.download": "Herunterladen",
+	"attachment.downloadAll": "Alle herunterladen",
+	"attachment.saveToDrive": "In Drive speichern",
+	"attachment.savedToDrive": "In Drive gespeichert",
+	"attachment.saveToDriveFailed": "Speichern in Drive fehlgeschlagen",
 	"auth.logout": "Abmelden",
 	"license.upgrade": "Upgrade",
 	"contact.title": "Kontaktdetails",
@@ -2346,5 +2350,6 @@
 	"account.permissions.calendarHint": "Events, reminders, and booking pages.",
 	"account.permissions.driveHint": "Files, saved attachments, and shared links.",
 	"account.permissions.allowCalendar": "Allow Calendar",
-	"account.permissions.allowDrive": "Allow Drive"
+	"account.permissions.allowDrive": "Allow Drive",
+	"attachment.downloadAllFlagged": "Einige Anhänge sind als potenziell gefährlich markiert. Archiv trotzdem herunterladen?"
 }

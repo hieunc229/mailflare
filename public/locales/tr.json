@@ -325,6 +325,10 @@
 	"attachment.loadFailed": "Bu ek yüklenemedi",
 	"attachment.unsupported": "Bu dosya türü tarayıcıda güvenli şekilde önizlenemez.",
 	"attachment.download": "İndir",
+	"attachment.downloadAll": "Tümünü indir",
+	"attachment.saveToDrive": "Drive'a kaydet",
+	"attachment.savedToDrive": "Drive'a kaydedildi",
+	"attachment.saveToDriveFailed": "Drive'a kaydedilemedi",
 	"auth.logout": "Çıkış yap",
 	"license.upgrade": "Planı yükselt",
 	"contact.title": "Kişi ayrıntıları",
@@ -2346,5 +2350,6 @@
 	"account.permissions.calendarHint": "Events, reminders, and booking pages.",
 	"account.permissions.driveHint": "Files, saved attachments, and shared links.",
 	"account.permissions.allowCalendar": "Allow Calendar",
-	"account.permissions.allowDrive": "Allow Drive"
+	"account.permissions.allowDrive": "Allow Drive",
+	"attachment.downloadAllFlagged": "Bazı ekler potansiyel olarak tehlikeli olarak işaretlendi. Yine de arşiv indirilsin mi?"
 }

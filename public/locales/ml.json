@@ -334,6 +334,10 @@
 	"attachment.loadFailed": "ഈ അറ്റാച്ച്‌മെന്റ് ലോഡ് ചെയ്യാൻ കഴിഞ്ഞില്ല",
 	"attachment.unsupported": "ഈ ഫയൽ തരം ബ്രൗസറിൽ സുരക്ഷിതമായി പ്രിവ്യൂ ചെയ്യാൻ കഴിയില്ല.",
 	"attachment.download": "ഡൗൺലോഡ് ചെയ്യുക",
+	"attachment.downloadAll": "എല്ലാം ഡൗൺലോഡ് ചെയ്യുക",
+	"attachment.saveToDrive": "Drive-ലേക്ക് സേവ് ചെയ്യുക",
+	"attachment.savedToDrive": "Drive-ലേക്ക് സേവ് ചെയ്തു",
+	"attachment.saveToDriveFailed": "Drive-ലേക്ക് സേവ് ചെയ്യാൻ കഴിഞ്ഞില്ല",
 	"auth.logout": "ലോഗ് ഔട്ട് ചെയ്യുക",
 	"license.upgrade": "അപ്ഗ്രേഡ് ചെയ്യുക",
 	"contact.title": "കോൺടാക്റ്റ് വിശദാംശങ്ങൾ",
@@ -2346,5 +2350,6 @@
 	"account.permissions.calendarHint": "Events, reminders, and booking pages.",
 	"account.permissions.driveHint": "Files, saved attachments, and shared links.",
 	"account.permissions.allowCalendar": "Allow Calendar",
-	"account.permissions.allowDrive": "Allow Drive"
+	"account.permissions.allowDrive": "Allow Drive",
+	"attachment.downloadAllFlagged": "ചില അറ്റാച്ച്‌മെന്റുകൾ അപകടകരമെന്ന് അടയാളപ്പെടുത്തിയിരിക്കുന്നു. എങ്കിലും ആർക്കൈവ് ഡൗൺലോഡ് ചെയ്യണോ?"
 }

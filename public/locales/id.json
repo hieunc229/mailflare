@@ -330,6 +330,10 @@
 	"attachment.loadFailed": "Tidak dapat memuat lampiran ini",
 	"attachment.unsupported": "Jenis file ini tidak dapat dipratinjau dengan aman di browser.",
 	"attachment.download": "Unduh",
+	"attachment.downloadAll": "Unduh semua",
+	"attachment.saveToDrive": "Simpan ke Drive",
+	"attachment.savedToDrive": "Tersimpan di Drive",
+	"attachment.saveToDriveFailed": "Tidak dapat menyimpan ke Drive",
 	"auth.logout": "Keluar",
 	"license.upgrade": "Tingkatkan",
 	"contact.title": "Detail kontak",
@@ -2329,5 +2333,6 @@
 	"account.permissions.calendarHint": "Events, reminders, and booking pages.",
 	"account.permissions.driveHint": "Files, saved attachments, and shared links.",
 	"account.permissions.allowCalendar": "Allow Calendar",
-	"account.permissions.allowDrive": "Allow Drive"
+	"account.permissions.allowDrive": "Allow Drive",
+	"attachment.downloadAllFlagged": "Beberapa lampiran ditandai berpotensi berbahaya. Tetap unduh arsip?"
 }

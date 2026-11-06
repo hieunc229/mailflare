@@ -338,6 +338,10 @@
 	"attachment.loadFailed": "Não foi possível carregar este anexo",
 	"attachment.unsupported": "Este tipo de ficheiro não pode ser visualizado com segurança no navegador.",
 	"attachment.download": "Transferir",
+	"attachment.downloadAll": "Transferir tudo",
+	"attachment.saveToDrive": "Guardar no Drive",
+	"attachment.savedToDrive": "Guardado no Drive",
+	"attachment.saveToDriveFailed": "Não foi possível guardar no Drive",
 	"auth.logout": "Terminar sessão",
 	"license.upgrade": "Fazer upgrade",
 	"contact.title": "Detalhes do contacto",
@@ -2360,5 +2364,6 @@
 	"account.permissions.calendarHint": "Events, reminders, and booking pages.",
 	"account.permissions.driveHint": "Files, saved attachments, and shared links.",
 	"account.permissions.allowCalendar": "Allow Calendar",
-	"account.permissions.allowDrive": "Allow Drive"
+	"account.permissions.allowDrive": "Allow Drive",
+	"attachment.downloadAllFlagged": "Alguns anexos estão marcados como potencialmente perigosos. Transferir o ficheiro mesmo assim?"
 }

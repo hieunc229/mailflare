@@ -334,6 +334,10 @@
 	"attachment.loadFailed": "यह अटैचमेंट लोड नहीं हो सका",
 	"attachment.unsupported": "इस फ़ाइल प्रकार का ब्राउज़र में सुरक्षित पूर्वावलोकन नहीं किया जा सकता।",
 	"attachment.download": "डाउनलोड करें",
+	"attachment.downloadAll": "सभी डाउनलोड करें",
+	"attachment.saveToDrive": "Drive में सहेजें",
+	"attachment.savedToDrive": "Drive में सहेजा गया",
+	"attachment.saveToDriveFailed": "Drive में सहेजा नहीं जा सका",
 	"auth.logout": "लॉग आउट करें",
 	"license.upgrade": "अपग्रेड करें",
 	"contact.title": "संपर्क का विवरण",
@@ -2346,5 +2350,6 @@
 	"account.permissions.calendarHint": "Events, reminders, and booking pages.",
 	"account.permissions.driveHint": "Files, saved attachments, and shared links.",
 	"account.permissions.allowCalendar": "Allow Calendar",
-	"account.permissions.allowDrive": "Allow Drive"
+	"account.permissions.allowDrive": "Allow Drive",
+	"attachment.downloadAllFlagged": "कुछ अटैचमेंट संभावित रूप से खतरनाक चिह्नित हैं। फिर भी संग्रह डाउनलोड करें?"
 }

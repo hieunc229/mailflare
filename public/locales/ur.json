@@ -334,6 +334,10 @@
 	"attachment.loadFailed": "یہ منسلکہ لوڈ نہیں ہو سکا",
 	"attachment.unsupported": "اس قسم کی فائل کا براؤزر میں محفوظ پیش منظر نہیں دیکھا جا سکتا۔",
 	"attachment.download": "ڈاؤن لوڈ",
+	"attachment.downloadAll": "سب ڈاؤن لوڈ کریں",
+	"attachment.saveToDrive": "Drive میں محفوظ کریں",
+	"attachment.savedToDrive": "Drive میں محفوظ ہو گیا",
+	"attachment.saveToDriveFailed": "Drive میں محفوظ نہیں ہو سکا",
 	"auth.logout": "لاگ آؤٹ",
 	"license.upgrade": "اپ گریڈ کریں",
 	"contact.title": "رابطے کی تفصیلات",
@@ -2346,5 +2350,6 @@
 	"account.permissions.calendarHint": "Events, reminders, and booking pages.",
 	"account.permissions.driveHint": "Files, saved attachments, and shared links.",
 	"account.permissions.allowCalendar": "Allow Calendar",
-	"account.permissions.allowDrive": "Allow Drive"
+	"account.permissions.allowDrive": "Allow Drive",
+	"attachment.downloadAllFlagged": "بعض منسلکات کو ممکنہ طور پر خطرناک قرار دیا گیا ہے۔ پھر بھی آرکائیو ڈاؤن لوڈ کریں؟"
 }

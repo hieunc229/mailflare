@@ -338,6 +338,10 @@
 	"attachment.loadFailed": "Impossible de charger cette pièce jointe",
 	"attachment.unsupported": "Ce type de fichier ne peut pas être prévisualisé en toute sécurité dans le navigateur.",
 	"attachment.download": "Télécharger",
+	"attachment.downloadAll": "Tout télécharger",
+	"attachment.saveToDrive": "Enregistrer dans Drive",
+	"attachment.savedToDrive": "Enregistré dans Drive",
+	"attachment.saveToDriveFailed": "Impossible d'enregistrer dans Drive",
 	"auth.logout": "Se déconnecter",
 	"license.upgrade": "Passer à l'offre supérieure",
 	"contact.title": "Détails du contact",
@@ -2360,5 +2364,6 @@
 	"account.permissions.calendarHint": "Events, reminders, and booking pages.",
 	"account.permissions.driveHint": "Files, saved attachments, and shared links.",
 	"account.permissions.allowCalendar": "Allow Calendar",
-	"account.permissions.allowDrive": "Allow Drive"
+	"account.permissions.allowDrive": "Allow Drive",
+	"attachment.downloadAllFlagged": "Certaines pièces jointes sont signalées comme potentiellement dangereuses. Télécharger l'archive quand même ?"
 }

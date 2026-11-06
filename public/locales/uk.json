@@ -342,6 +342,10 @@
 	"attachment.loadFailed": "Не вдалося завантажити це вкладення",
 	"attachment.unsupported": "Цей тип файлу неможливо безпечно переглянути в браузері.",
 	"attachment.download": "Завантажити",
+	"attachment.downloadAll": "Завантажити все",
+	"attachment.saveToDrive": "Зберегти на Drive",
+	"attachment.savedToDrive": "Збережено на Drive",
+	"attachment.saveToDriveFailed": "Не вдалося зберегти на Drive",
 	"auth.logout": "Вийти",
 	"license.upgrade": "Оновити тариф",
 	"contact.title": "Відомості про контакт",
@@ -2374,5 +2378,6 @@
 	"account.permissions.calendarHint": "Events, reminders, and booking pages.",
 	"account.permissions.driveHint": "Files, saved attachments, and shared links.",
 	"account.permissions.allowCalendar": "Allow Calendar",
-	"account.permissions.allowDrive": "Allow Drive"
+	"account.permissions.allowDrive": "Allow Drive",
+	"attachment.downloadAllFlagged": "Деякі вкладення позначено як потенційно небезпечні. Завантажити архів усе одно?"
 }

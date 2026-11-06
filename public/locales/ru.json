@@ -342,6 +342,10 @@
 	"attachment.loadFailed": "Не удалось загрузить это вложение",
 	"attachment.unsupported": "Этот тип файла нельзя безопасно просмотреть в браузере.",
 	"attachment.download": "Скачать",
+	"attachment.downloadAll": "Скачать все",
+	"attachment.saveToDrive": "Сохранить на Drive",
+	"attachment.savedToDrive": "Сохранено на Drive",
+	"attachment.saveToDriveFailed": "Не удалось сохранить на Drive",
 	"auth.logout": "Выйти",
 	"license.upgrade": "Улучшить тариф",
 	"contact.title": "Сведения о контакте",
@@ -2374,5 +2378,6 @@
 	"account.permissions.calendarHint": "Events, reminders, and booking pages.",
 	"account.permissions.driveHint": "Files, saved attachments, and shared links.",
 	"account.permissions.allowCalendar": "Allow Calendar",
-	"account.permissions.allowDrive": "Allow Drive"
+	"account.permissions.allowDrive": "Allow Drive",
+	"attachment.downloadAllFlagged": "Некоторые вложения помечены как потенциально опасные. Всё равно скачать архив?"
 }
