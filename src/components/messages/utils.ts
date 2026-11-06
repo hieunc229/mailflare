@@ -61,12 +61,11 @@ export function getMessagePreview(message: Message, folder: MessageFolderConfig[
 	return message.snippet || t("thread.noPreview");
 }
 
-export function formatMessageListTimestamp(createdAt: string): string {
+export function formatMessageListTimestamp(createdAt: string, todayKey: string): string {
 	const zone = getUserTimeZone();
 	const date = zonedDateFields(new Date(createdAt), zone);
-	const today = zonedDateFields(new Date(), zone);
-	if (date.toISOString().slice(0, 10) === today.toISOString().slice(0, 10)) return formatUserDate(createdAt, { hour: "2-digit", minute: "2-digit" });
-	if (date.getUTCFullYear() === today.getUTCFullYear()) return formatUserDate(createdAt, { month: "short", day: "2-digit" });
+	if (date.toISOString().slice(0, 10) === todayKey) return formatUserDate(createdAt, { hour: "2-digit", minute: "2-digit" });
+	if (date.getUTCFullYear().toString() === todayKey.slice(0, 4)) return formatUserDate(createdAt, { month: "short", day: "2-digit" });
 	return formatUserDate(createdAt, { month: "short", day: "2-digit", year: "numeric" });
 }
 

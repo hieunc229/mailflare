@@ -62,10 +62,10 @@ export default function MessageDetailPage() {
 function MessageDetailContent({ messageId }: { messageId: string }) {
   const { t } = useLanguage();
   const { selectedMailbox, mailboxes } = useSelectedMailbox();
-  useSendViewStatus(messageId);
   const [data, setData] = useState<MessageDetailResponse | null>(
     () => getCachedMessageDetailForDisplay(messageId) ?? null,
   );
+  useSendViewStatus(messageId, data?.scheduledAt);
   const [loading, setLoading] = useState(
     () => !getCachedMessageDetailForDisplay(messageId)?.message,
   );

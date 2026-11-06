@@ -1,4 +1,4 @@
-import { and, count, eq, inArray } from "drizzle-orm";
+import { and, count, eq, inArray, sql } from "drizzle-orm";
 import type { SQL } from "drizzle-orm";
 import { NextResponse } from "next/server";
 import { getDb } from "@/db";
@@ -46,6 +46,7 @@ export async function GET(request: Request) {
 			starred: messages.starred,
 			snoozedUntil: messages.snoozedUntil,
 			total: count(),
+			scheduledTotal: sql<number>`sum(case when ${scheduledMessageCondition(db)} then 1 else 0 end)`,
 		})
 		.from(messages)
 		.where(and(...conditions))
@@ -59,12 +60,8 @@ export async function GET(request: Request) {
 			messages.snoozedUntil,
 		);
 
-	const [scheduledRow] = await db
-		.select({ total: count() })
-		.from(messages)
-		.where(and(...conditions, scheduledMessageCondition(db)));
 	const counts = buildMessageCounts(rows);
-	counts.folders.scheduled.total = scheduledRow?.total ?? 0;
+	counts.folders.scheduled.total = rows.reduce((total, row) => total + (Number(row.scheduledTotal) || 0), 0);
 
 	return NextResponse.json({ counts });
 }

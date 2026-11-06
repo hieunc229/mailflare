@@ -336,10 +336,7 @@ export async function getMessageWithBodyForUser(env: CloudflareEnv, user: Sessio
 	if (!message?.mailboxId) return null;
 	const access = await getMailboxAccessLevel(db, user, message.mailboxId);
 	if (!access?.canRead) return null;
-	const [contactNames, attachments, unsubscribe, [scheduledJob]] = await Promise.all([
-		getMessageContactNames(env, message.userId, message.fromAddr, message.toAddr),
-		listMessageAttachments(env, messageId),
-		getUnsubscribeUrlFromRawR2Key(env, message.rawR2Key),
+	const [scheduledJob, contactNames, attachments, unsubscribe] = await Promise.all([
 		message.direction === "outbound" && message.status === "queued"
 			? db
 				.select({ scheduledAt: outboundJobs.scheduledAt })
@@ -347,6 +344,9 @@ export async function getMessageWithBodyForUser(env: CloudflareEnv, user: Sessio
 				.where(and(eq(outboundJobs.messageId, messageId), eq(outboundJobs.status, "queued"), isNotNull(outboundJobs.scheduledAt)))
 				.limit(1)
 			: Promise.resolve([]),
+		getMessageContactNames(env, message.userId, message.fromAddr, message.toAddr),
+		listMessageAttachments(env, messageId),
+		getUnsubscribeUrlFromRawR2Key(env, message.rawR2Key),
 	]);
 	const { rawR2Key, textBody, htmlBody, ...header } = message;
 	void rawR2Key;
@@ -356,7 +356,7 @@ export async function getMessageWithBodyForUser(env: CloudflareEnv, user: Sessio
 		attachments,
 		unsubscribeUrl: unsubscribe?.url ?? null,
 		unsubscribeViaBody: unsubscribe ? null : extractUnsubscribeLinkFromBody(htmlBody, textBody),
-		scheduledAt: scheduledJob?.scheduledAt?.toISOString() ?? null,
+		scheduledAt: scheduledJob[0]?.scheduledAt?.toISOString() ?? null,
 	};
 }
 
