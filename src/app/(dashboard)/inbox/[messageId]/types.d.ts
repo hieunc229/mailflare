@@ -9,6 +9,8 @@ export type MessageDetailResponse = {
 	} | null;
 	attachments?: MessageAttachment[];
 	unsubscribeUrl?: string | null;
+	/** Unsubscribe link found in the body when the message has no List-Unsubscribe header. */
+	unsubscribeViaBody?: string | null;
 	/** ISO time a queued message is waiting to be sent, when it is a scheduled send. */
 	scheduledAt?: string | null;
 	error?: string;

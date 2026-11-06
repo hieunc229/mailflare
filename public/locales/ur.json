@@ -155,6 +155,13 @@
 	"actions.deleteHint": "حذف کریں (#)",
 	"actions.replyHint": "جواب دیں (r)",
 	"actions.unsubscribe": "رکنیت ختم کریں",
+	"actions.unsubscribeFailed": "Could not unsubscribe",
+	"actions.unsubscribeLinkOpened": "Unsubscribe page opened in a new tab",
+	"actions.unsubscribeEmailSent": "Unsubscribe email sent",
+	"actions.unsubscribed": "Unsubscribed",
+	"actions.unsubscribeConfirmTitle": "Unsubscribe from this sender?",
+	"actions.unsubscribeConfirmDescription": "We'll ask the sender to remove you from their mailing list. If they don't support one-click unsubscribe, we'll send an unsubscribe email or open their page.",
+	"actions.unsubscribing": "Unsubscribing…",
 	"shortcut.archiveMessage": "پیغام محفوظ کریں",
 	"shortcut.moveToTrash": "ردی میں منتقل کریں",
 	"shortcut.replyToMessage": "پیغام کا جواب دیں",
@@ -2346,5 +2353,8 @@
 	"account.permissions.calendarHint": "Events, reminders, and booking pages.",
 	"account.permissions.driveHint": "Files, saved attachments, and shared links.",
 	"account.permissions.allowCalendar": "Allow Calendar",
-	"account.permissions.allowDrive": "Allow Drive"
+	"account.permissions.allowDrive": "Allow Drive",
+	"actions.unsubscribeDeleteAll": "سبسکرپشن ختم کریں اور سب حذف کریں",
+	"actions.unsubscribeDeleteConfirm": "اس مرسل کے {count} پرانے ای میلز کو ٹریش میں منتقل کریں؟",
+	"actions.unsubscribeTrashDone": "سبسکرپشن ختم؛ {count} ای میلز ٹریش میں منتقل کر دی گئیں"
 }

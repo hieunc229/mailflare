@@ -154,6 +154,13 @@
 	"actions.deleteHint": "Sil (#)",
 	"actions.replyHint": "Yanıtla (r)",
 	"actions.unsubscribe": "Abonelikten çık",
+	"actions.unsubscribeFailed": "Could not unsubscribe",
+	"actions.unsubscribeLinkOpened": "Unsubscribe page opened in a new tab",
+	"actions.unsubscribeEmailSent": "Unsubscribe email sent",
+	"actions.unsubscribed": "Unsubscribed",
+	"actions.unsubscribeConfirmTitle": "Unsubscribe from this sender?",
+	"actions.unsubscribeConfirmDescription": "We'll ask the sender to remove you from their mailing list. If they don't support one-click unsubscribe, we'll send an unsubscribe email or open their page.",
+	"actions.unsubscribing": "Unsubscribing…",
 	"shortcut.archiveMessage": "İletiyi Arşivle",
 	"shortcut.moveToTrash": "Çöp Kutusuna Taşı",
 	"shortcut.replyToMessage": "İletiyi Yanıtla",
@@ -2346,5 +2353,8 @@
 	"account.permissions.calendarHint": "Events, reminders, and booking pages.",
 	"account.permissions.driveHint": "Files, saved attachments, and shared links.",
 	"account.permissions.allowCalendar": "Allow Calendar",
-	"account.permissions.allowDrive": "Allow Drive"
+	"account.permissions.allowDrive": "Allow Drive",
+	"actions.unsubscribeDeleteAll": "Abonelikten çık ve tümünü sil",
+	"actions.unsubscribeDeleteConfirm": "Bu gönderenin {count} eski e-postası Çöp Kutusuna taşınsın mı?",
+	"actions.unsubscribeTrashDone": "Abonelikten çıkıldı; {count} e-posta Çöp Kutusuna taşındı"
 }

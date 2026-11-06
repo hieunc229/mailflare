@@ -155,6 +155,13 @@
 	"actions.deleteHint": "삭제 (#)",
 	"actions.replyHint": "답장 (r)",
 	"actions.unsubscribe": "구독 취소",
+	"actions.unsubscribeFailed": "Could not unsubscribe",
+	"actions.unsubscribeLinkOpened": "Unsubscribe page opened in a new tab",
+	"actions.unsubscribeEmailSent": "Unsubscribe email sent",
+	"actions.unsubscribed": "Unsubscribed",
+	"actions.unsubscribeConfirmTitle": "Unsubscribe from this sender?",
+	"actions.unsubscribeConfirmDescription": "We'll ask the sender to remove you from their mailing list. If they don't support one-click unsubscribe, we'll send an unsubscribe email or open their page.",
+	"actions.unsubscribing": "Unsubscribing…",
 	"shortcut.archiveMessage": "메시지 보관처리",
 	"shortcut.moveToTrash": "휴지통으로 이동",
 	"shortcut.replyToMessage": "메시지에 답장",
@@ -2343,5 +2350,8 @@
 	"account.permissions.calendarHint": "Events, reminders, and booking pages.",
 	"account.permissions.driveHint": "Files, saved attachments, and shared links.",
 	"account.permissions.allowCalendar": "Allow Calendar",
-	"account.permissions.allowDrive": "Allow Drive"
+	"account.permissions.allowDrive": "Allow Drive",
+	"actions.unsubscribeDeleteAll": "구독 해지 및 모두 삭제",
+	"actions.unsubscribeDeleteConfirm": "이 발신자의 이전 이메일 {count}개를 휴지통으로 옮길까요?",
+	"actions.unsubscribeTrashDone": "구독을 해지하고 이메일 {count}개를 휴지통으로 옮겼습니다"
 }

@@ -155,6 +155,13 @@
 	"actions.deleteHint": "हटाएँ (#)",
 	"actions.replyHint": "उत्तर दें (r)",
 	"actions.unsubscribe": "सदस्यता छोड़ें",
+	"actions.unsubscribeFailed": "Could not unsubscribe",
+	"actions.unsubscribeLinkOpened": "Unsubscribe page opened in a new tab",
+	"actions.unsubscribeEmailSent": "Unsubscribe email sent",
+	"actions.unsubscribed": "Unsubscribed",
+	"actions.unsubscribeConfirmTitle": "Unsubscribe from this sender?",
+	"actions.unsubscribeConfirmDescription": "We'll ask the sender to remove you from their mailing list. If they don't support one-click unsubscribe, we'll send an unsubscribe email or open their page.",
+	"actions.unsubscribing": "Unsubscribing…",
 	"shortcut.archiveMessage": "संदेश संग्रहीत करें",
 	"shortcut.moveToTrash": "ट्रैश में ले जाएँ",
 	"shortcut.replyToMessage": "संदेश का उत्तर दें",
@@ -2346,5 +2353,8 @@
 	"account.permissions.calendarHint": "Events, reminders, and booking pages.",
 	"account.permissions.driveHint": "Files, saved attachments, and shared links.",
 	"account.permissions.allowCalendar": "Allow Calendar",
-	"account.permissions.allowDrive": "Allow Drive"
+	"account.permissions.allowDrive": "Allow Drive",
+	"actions.unsubscribeDeleteAll": "सदस्यता रद्द करें और सब हटाएँ",
+	"actions.unsubscribeDeleteConfirm": "इस प्रेषक के {count} पुराने ईमेल ट्रैश में ले जाएँ?",
+	"actions.unsubscribeTrashDone": "सदस्यता रद्द; {count} ईमेल ट्रैश में ले जाए गए"
 }

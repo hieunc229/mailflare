@@ -155,6 +155,13 @@
 	"actions.deleteHint": "Padam (#)",
 	"actions.replyHint": "Balas (r)",
 	"actions.unsubscribe": "Berhenti melanggan",
+	"actions.unsubscribeFailed": "Could not unsubscribe",
+	"actions.unsubscribeLinkOpened": "Unsubscribe page opened in a new tab",
+	"actions.unsubscribeEmailSent": "Unsubscribe email sent",
+	"actions.unsubscribed": "Unsubscribed",
+	"actions.unsubscribeConfirmTitle": "Unsubscribe from this sender?",
+	"actions.unsubscribeConfirmDescription": "We'll ask the sender to remove you from their mailing list. If they don't support one-click unsubscribe, we'll send an unsubscribe email or open their page.",
+	"actions.unsubscribing": "Unsubscribing…",
 	"shortcut.archiveMessage": "Arkibkan Mesej",
 	"shortcut.moveToTrash": "Alihkan ke Tong Sampah",
 	"shortcut.replyToMessage": "Balas Mesej",
@@ -2343,5 +2350,8 @@
 	"account.permissions.calendarHint": "Events, reminders, and booking pages.",
 	"account.permissions.driveHint": "Files, saved attachments, and shared links.",
 	"account.permissions.allowCalendar": "Allow Calendar",
-	"account.permissions.allowDrive": "Allow Drive"
+	"account.permissions.allowDrive": "Allow Drive",
+	"actions.unsubscribeDeleteAll": "Berhenti melanggan & padam semua",
+	"actions.unsubscribeDeleteConfirm": "Alihkan {count} e-mel lama daripada penghantar ini ke Sampah?",
+	"actions.unsubscribeTrashDone": "Berhenti melanggan; {count} e-mel dialihkan ke Sampah"
 }

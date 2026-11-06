@@ -152,6 +152,13 @@
 	"actions.deleteHint": "削除 (#)",
 	"actions.replyHint": "返信 (r)",
 	"actions.unsubscribe": "配信停止",
+	"actions.unsubscribeFailed": "Could not unsubscribe",
+	"actions.unsubscribeLinkOpened": "Unsubscribe page opened in a new tab",
+	"actions.unsubscribeEmailSent": "Unsubscribe email sent",
+	"actions.unsubscribed": "Unsubscribed",
+	"actions.unsubscribeConfirmTitle": "Unsubscribe from this sender?",
+	"actions.unsubscribeConfirmDescription": "We'll ask the sender to remove you from their mailing list. If they don't support one-click unsubscribe, we'll send an unsubscribe email or open their page.",
+	"actions.unsubscribing": "Unsubscribing…",
 	"shortcut.archiveMessage": "メールをアーカイブ",
 	"shortcut.moveToTrash": "ゴミ箱に移動",
 	"shortcut.replyToMessage": "メールに返信",
@@ -2329,5 +2336,8 @@
 	"account.permissions.calendarHint": "Events, reminders, and booking pages.",
 	"account.permissions.driveHint": "Files, saved attachments, and shared links.",
 	"account.permissions.allowCalendar": "Allow Calendar",
-	"account.permissions.allowDrive": "Allow Drive"
+	"account.permissions.allowDrive": "Allow Drive",
+	"actions.unsubscribeDeleteAll": "登録解除してすべて削除",
+	"actions.unsubscribeDeleteConfirm": "この差出人の過去のメール {count} 件をゴミ箱に移動しますか？",
+	"actions.unsubscribeTrashDone": "登録解除し、{count} 件をゴミ箱に移動しました"
 }

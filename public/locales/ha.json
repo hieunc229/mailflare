@@ -155,6 +155,13 @@
 	"actions.deleteHint": "Share (#)",
 	"actions.replyHint": "Amsa (r)",
 	"actions.unsubscribe": "Fita daga rajista",
+	"actions.unsubscribeFailed": "Could not unsubscribe",
+	"actions.unsubscribeLinkOpened": "Unsubscribe page opened in a new tab",
+	"actions.unsubscribeEmailSent": "Unsubscribe email sent",
+	"actions.unsubscribed": "Unsubscribed",
+	"actions.unsubscribeConfirmTitle": "Unsubscribe from this sender?",
+	"actions.unsubscribeConfirmDescription": "We'll ask the sender to remove you from their mailing list. If they don't support one-click unsubscribe, we'll send an unsubscribe email or open their page.",
+	"actions.unsubscribing": "Unsubscribing…",
 	"shortcut.archiveMessage": "Adana Saƙo",
 	"shortcut.moveToTrash": "Mayar zuwa Shara",
 	"shortcut.replyToMessage": "Amsa Saƙo",
@@ -2346,5 +2353,8 @@
 	"account.permissions.calendarHint": "Events, reminders, and booking pages.",
 	"account.permissions.driveHint": "Files, saved attachments, and shared links.",
 	"account.permissions.allowCalendar": "Allow Calendar",
-	"account.permissions.allowDrive": "Allow Drive"
+	"account.permissions.allowDrive": "Allow Drive",
+	"actions.unsubscribeDeleteAll": "Soke rajin & goge duk",
+	"actions.unsubscribeDeleteConfirm": "Aka mika saƙonni {count} na tsoho daga wannan mai aikawa zuwa Trash?",
+	"actions.unsubscribeTrashDone": "An soke rajin; aka mika saƙonni {count} zuwa Trash"
 }
