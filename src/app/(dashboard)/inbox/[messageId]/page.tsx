@@ -2,7 +2,7 @@
 
 import { useParams } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
-import { Cloud, ExternalLink } from "@/components/icons";
+import { ArrowDownToLine, Cloud, ExternalLink } from "@/components/icons";
 import { useLanguage } from "@/components/language-provider";
 import { formatUserDate } from "@/lib/time/utils";
 import { markMessageRead } from "@/components/mark-read";
@@ -441,9 +441,19 @@ function MessageDetailContent({ messageId }: { messageId: string }) {
           )}
           {attachments.length > 0 && (
             <section className="mt-8 border-t border-neutral-100 px-4 py-6 sm:px-0 sm:pl-16">
-              <h2 className="mb-3 text-sm font-semibold text-neutral-900">
-                {t("message.attachments", { count: attachments.length })}
-              </h2>
+              <div className="mb-3 flex items-center justify-between gap-3">
+                <h2 className="text-sm font-semibold text-neutral-900">
+                  {t("message.attachments", { count: attachments.length })}
+                </h2>
+                <a
+                  href={`/api/messages/${message.id}/attachments.zip`}
+                  download
+                  className="inline-flex shrink-0 items-center gap-1.5 text-xs font-medium text-blue-600 hover:text-blue-700"
+                >
+                  <ArrowDownToLine className="h-3.5 w-3.5" />
+                  {t("attachment.downloadAll")}
+                </a>
+              </div>
               <div className="grid gap-2 sm:grid-cols-2">
                 {attachments.map((attachment) => (
                   <MessageAttachmentCard
