@@ -19,6 +19,9 @@ export type ScheduleSendSheetProps = {
 	onOpenChange: (open: boolean) => void;
 	value: Date | null;
 	onChange: (value: Date | null) => void;
-	onApplyTemplate: (template: { title: string; html: string }) => void;
-	onNewTemplate: () => void;
+	/** Shows the "Clear schedule" row; defaults to true. Rescheduling hides it. */
+	allowClear?: boolean;
+	/** Template rows render only when both handlers are provided. */
+	onApplyTemplate?: (template: { title: string; html: string }) => void;
+	onNewTemplate?: () => void;
 };

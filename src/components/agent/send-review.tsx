@@ -33,7 +33,7 @@ export function SendReview({ approvalId, snapshot, unfamiliarRecipients: provide
 		} catch (cause) { setError(cause instanceof Error ? cause.message : t("agent.review.couldNotSend")); }
 		finally { setBusy(false); }
 	}
-	return <div className="fixed inset-0 z-[70] flex items-center justify-center bg-neutral-950/60 p-4" role="dialog" aria-modal="true" aria-label={t("agent.review.dialog")}>
+	return <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/60 p-4 dark:bg-black/70" role="dialog" aria-modal="true" aria-label={t("agent.review.dialog")}>
 		<div className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-xl bg-white p-5 shadow-2xl">
 			<h2 className="text-lg font-semibold">{snapshot.scheduledAt ? t("agent.review.reviewSchedule") : t("agent.review.reviewSend")}</h2>
 			<p className="mt-1 text-sm text-neutral-500">{snapshot.scheduledAt ? t("agent.review.confirmScheduled") : t("agent.review.confirmDelivered")}</p>

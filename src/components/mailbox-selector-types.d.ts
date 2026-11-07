@@ -6,6 +6,8 @@ export type MailboxSelectorUser = {
 	name: string;
 	role: "admin" | "user";
 	hasAvatar: boolean;
+	calendarEnabled: boolean;
+	driveEnabled: boolean;
 };
 
 export type MailboxSelectorProps = {
@@ -18,6 +20,8 @@ export type AccountAvatarProps = {
 	hasAvatar?: boolean;
 	avatarUrl?: string;
 	size?: "small" | "large";
+	/** Show a neutral person icon while the real mailbox identity is still loading. */
+	placeholder?: boolean;
 	onAvatarError?: () => void;
 };
 

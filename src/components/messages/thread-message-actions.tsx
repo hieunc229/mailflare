@@ -1,10 +1,10 @@
 "use client";
 
-import { createElement, useEffect, useRef, useState } from "react";
+import { createElement, useEffect, useState } from "react";
 import { Ban, FileCode2, Forward, Info, Mail, MailOpen, MoreVertical, Reply, ReplyAll, Star } from "@/components/icons";
 import { useCompose } from "@/components/compose/compose-context";
 import { MessageSourceDialog } from "@/components/messages/message-source-dialog";
-import { useDismissible } from "@/components/use-dismissible";
+import { MessageActionMenu, MessageActionMenuItem, MessageActionMenuSeparator } from "@/components/message-actions/action-menu";
 import { getOwnAddressForMessage } from "@/app/(dashboard)/inbox/[messageId]/utils";
 import { useLanguage } from "@/components/language-provider";
 import { Button } from "@/components/ui/button";
@@ -36,9 +36,6 @@ export function ThreadMessageActions({
 	const { t } = useLanguage();
 	const { openDraftComposer } = useCompose();
 	const [starred, setStarred] = useState(message.starred);
-	const [moreOpen, setMoreOpen] = useState(false);
-	const moreRef = useRef<HTMLDivElement>(null);
-	useDismissible(moreOpen, () => setMoreOpen(false), moreRef);
 	const [sourceOpen, setSourceOpen] = useState(false);
 	const [pending, setPending] = useState(false);
 	const [error, setError] = useState<string | null>(null);
@@ -49,9 +46,6 @@ export function ThreadMessageActions({
 		: ownAddress;
 
 	useEffect(() => setStarred(message.starred), [message.starred]);
-	useEffect(() => {
-		if (starOnly) setMoreOpen(false);
-	}, [starOnly]);
 
 	async function onToggleStar() {
 		setPending(true);
@@ -66,7 +60,6 @@ export function ThreadMessageActions({
 	}
 
 	async function onReply(mode: ReplyMode) {
-		setMoreOpen(false);
 		setPending(true);
 		setError(null);
 		try {
@@ -90,7 +83,6 @@ export function ThreadMessageActions({
 	}
 
 	async function onForward() {
-		setMoreOpen(false);
 		setPending(true);
 		setError(null);
 		try {
@@ -110,7 +102,6 @@ export function ThreadMessageActions({
 	}
 
 	async function onMessageAction(action: Parameters<typeof runSingleMessageAction>[1]) {
-		setMoreOpen(false);
 		setPending(true);
 		setError(null);
 		try {
@@ -124,7 +115,6 @@ export function ThreadMessageActions({
 
 	async function onBlock() {
 		if (!mailboxId) return;
-		setMoreOpen(false);
 		setPending(true);
 		setError(null);
 		try {
@@ -171,72 +161,74 @@ export function ThreadMessageActions({
 			</Tooltip>
 			{!starOnly && (
 				<>
-			<Tooltip label={t("message.reply")}>
-				<Button
-					type="button"
-					variant="ghost"
-					size="sm"
-					className="h-8 w-8 px-0"
-					aria-label={t("message.reply")}
-					disabled={pending}
-					onClick={() => void onReply("reply")}
-				>
-					<Reply className="h-4 w-4" />
-				</Button>
-			</Tooltip>
-			<div ref={moreRef} className="relative">
-				<Tooltip label={t("common.moreActions")}>
-					<Button
-						type="button"
-						variant="ghost"
-						size="sm"
-						className="h-8 w-8 px-0"
-						aria-label={t("common.moreActions")}
-						aria-expanded={moreOpen}
-						disabled={pending}
-						onClick={() => setMoreOpen((open) => !open)}
+					<Tooltip label={t("message.reply")}>
+						<Button
+							type="button"
+							variant="ghost"
+							size="sm"
+							className="h-8 w-8 px-0"
+							aria-label={t("message.reply")}
+							disabled={pending}
+							onClick={() => void onReply("reply")}
+						>
+							<Reply className="h-4 w-4" />
+						</Button>
+					</Tooltip>
+					<MessageActionMenu
+						label={t("common.moreActions")}
+						trigger={
+							<Button
+								type="button"
+								variant="ghost"
+								size="sm"
+								className="h-8 w-8 px-0"
+								aria-label={t("common.moreActions")}
+								disabled={pending}
+							>
+								<MoreVertical className="h-4 w-4" />
+							</Button>
+						}
 					>
-						<MoreVertical className="h-4 w-4" />
-					</Button>
-				</Tooltip>
-				{moreOpen && (
-					<div className="absolute right-0 z-30 mt-1 w-56 rounded-xl border border-neutral-200 bg-white p-2 text-neutral-700 shadow-lg">
-						<button type="button" className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm hover:bg-neutral-100" onClick={() => void onReply("reply")}>
-							<Reply className="h-4 w-4" /> {t("message.reply")}
-						</button>
+						<MessageActionMenuItem icon={<Reply className="h-4 w-4" />} onSelect={() => void onReply("reply")}>
+							{t("message.reply")}
+						</MessageActionMenuItem>
 						{canReplyAll && (
-							<button type="button" className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm hover:bg-neutral-100" onClick={() => void onReply("replyAll")}>
-								<ReplyAll className="h-4 w-4" /> {t("message.replyAll")}
-							</button>
+							<MessageActionMenuItem icon={<ReplyAll className="h-4 w-4" />} onSelect={() => void onReply("replyAll")}>
+								{t("message.replyAll")}
+							</MessageActionMenuItem>
 						)}
-						<button type="button" className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm hover:bg-neutral-100" onClick={() => void onForward()}>
-							<Forward className="h-4 w-4" /> {t("message.forward")}
-						</button>
-						<button type="button" className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm hover:bg-neutral-100" onClick={() => { setMoreOpen(false); setSourceOpen(true); }}>
-							<FileCode2 className="h-4 w-4" /> {t("message.showOriginal")}
-						</button>
-						<hr className="my-1 border-neutral-100" />
-						<button type="button" className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm hover:bg-neutral-100" onClick={() => void onMessageAction(message.read ? "unread" : "read")}>
-							{message.read ? <Mail className="h-4 w-4" /> : <MailOpen className="h-4 w-4" />}
+						<MessageActionMenuItem icon={<Forward className="h-4 w-4" />} onSelect={() => void onForward()}>
+							{t("message.forward")}
+						</MessageActionMenuItem>
+						<MessageActionMenuItem icon={<FileCode2 className="h-4 w-4" />} onSelect={() => setSourceOpen(true)}>
+							{t("message.showOriginal")}
+						</MessageActionMenuItem>
+						<MessageActionMenuSeparator />
+						<MessageActionMenuItem
+							icon={message.read ? <Mail className="h-4 w-4" /> : <MailOpen className="h-4 w-4" />}
+							onSelect={() => void onMessageAction(message.read ? "unread" : "read")}
+						>
 							{message.read ? t("common.markUnread") : t("common.markRead")}
-						</button>
+						</MessageActionMenuItem>
 						{moveActions.map((item) => (
-							<button key={item.action} type="button" className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm hover:bg-neutral-100" onClick={() => void onMessageAction(item.action)}>
-								{createElement(item.icon, { size: 16 })} {t(item.labelKey)}
-							</button>
+							<MessageActionMenuItem
+								key={item.action}
+								icon={createElement(item.icon, { size: 16 })}
+								onSelect={() => void onMessageAction(item.action)}
+							>
+								{t(item.labelKey)}
+							</MessageActionMenuItem>
 						))}
 						{message.direction === "inbound" && mailboxId && (
 							<>
-								<hr className="my-1 border-neutral-100" />
-								<button type="button" className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm hover:bg-neutral-100" onClick={() => void onBlock()}>
-									<Ban className="h-4 w-4" /> {t("message.blockContact")}
-								</button>
+								<MessageActionMenuSeparator />
+								<MessageActionMenuItem icon={<Ban className="h-4 w-4" />} onSelect={() => void onBlock()}>
+									{t("message.blockContact")}
+								</MessageActionMenuItem>
 							</>
 						)}
-					</div>
-				)}
-			</div>
-			<MessageSourceDialog messageId={message.id} open={sourceOpen} onOpenChange={setSourceOpen} />
+					</MessageActionMenu>
+					<MessageSourceDialog messageId={message.id} open={sourceOpen} onOpenChange={setSourceOpen} />
 				</>
 			)}
 		</div>

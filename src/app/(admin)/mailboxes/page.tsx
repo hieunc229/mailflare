@@ -5,7 +5,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import { Plus, UsersRound } from "@/components/icons";
+import { Plus } from "@/components/icons";
 import { useLanguage } from "@/components/language-provider";
 import { Button } from "@/components/ui/button";
 import {
@@ -25,7 +25,15 @@ import { clearMailboxesCache } from "@/components/mailbox-provider-utils";
 import { ProgressiveAvatarImage } from "@/components/progressive-avatar-image";
 import { authFetch } from "@/lib/auth/client";
 import type { CurrentAccountResponse, Domain, MailboxOwner, MailboxesResponse } from "./types";
+import { formatAccountDateTime } from "../accounts/utils";
 import { getMailboxAddress, getMailboxesBase, getMailboxName } from "./utils";
+
+const COLUMNS = "grid grid-cols-[auto_minmax(0,1fr)] items-center gap-x-4 md:grid-cols-[auto_minmax(0,2fr)_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)]";
+const STATUS_STYLES = {
+	active: "bg-green-600/10 text-green-800",
+	disabled: "bg-neutral-100 text-neutral-600",
+	pendingDeletion: "bg-red-100 text-red-700",
+};
 
 export default function MailboxesPage() {
 	const { t } = useLanguage();
@@ -241,6 +249,13 @@ export default function MailboxesPage() {
 					</p>
 				)}
 				<List>
+					<div className={`${COLUMNS} bg-white px-5 py-3 text-xs font-medium uppercase text-neutral-500`}>
+						<span className="w-10" />
+						<span>{t("common.name")}</span>
+						<span className="hidden md:block">{t("mailboxes.type")}</span>
+						<span className="hidden md:block">{t("accounts.colStatus")}</span>
+						<span className="hidden md:block">{t("accounts.colLastSignIn")}</span>
+					</div>
 					{(mailboxes.data?.mailboxes ?? []).map((mailbox) => {
 						const mailboxWithHostname = {
 							...mailbox,
@@ -248,10 +263,10 @@ export default function MailboxesPage() {
 						};
 
 						return (
-							<ListRow key={mailbox.id} asChild>
+							<ListRow key={mailbox.id} asChild className={`${COLUMNS} px-5 py-4`}>
 								<Link
 									href={`${base}/${mailbox.id}`}
-									className="group px-5 py-4 transition-colors hover:bg-blue-50/40"
+									className="group transition-colors hover:bg-blue-50/40"
 								>
 									<span className="relative flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-full bg-blue-100 text-sm font-semibold text-blue-700">
 										{getMailboxName(mailboxWithHostname).trim().charAt(0).toUpperCase() || "?"}
@@ -268,16 +283,23 @@ export default function MailboxesPage() {
 											<span className="block truncate text-sm font-semibold text-neutral-900">
 												{getMailboxName(mailboxWithHostname)}
 											</span>
-											{mailbox.type === "shared" && (
-												<span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-blue-50 px-2 py-0.5 text-xs font-medium text-blue-700">
-													<UsersRound className="h-3 w-3" />
-													{t("mailboxes.shared")}
-												</span>
-											)}
 										</span>
 										<span className="block truncate no-font-mono text-sm text-neutral-500">
 											{getMailboxAddress(mailboxWithHostname)}
 										</span>
+									</span>
+									<span className="hidden md:block">
+										<span className={`rounded-full px-2 py-0.5 text-xs font-medium ${mailbox.type === "shared" ? "bg-blue-50 text-blue-700" : "bg-neutral-100 text-neutral-600"}`}>
+											{mailbox.type === "shared" ? t("mailboxes.sharedInbox") : t("mailboxes.personalInbox")}
+										</span>
+									</span>
+									<span className="hidden md:block">
+										<span className={`rounded-full px-2 py-0.5 text-xs font-medium ${STATUS_STYLES[mailbox.status ?? "active"]}`}>
+											{t(`accounts.status.${mailbox.status ?? "active"}`, { date: "" })}
+										</span>
+									</span>
+									<span className="hidden text-sm text-neutral-500 md:block">
+										{mailbox.type === "shared" ? "—" : mailbox.lastSignInAt ? formatAccountDateTime(mailbox.lastSignInAt) : t("accounts.neverSignedIn")}
 									</span>
 								</Link>
 							</ListRow>

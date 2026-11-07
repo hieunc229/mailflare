@@ -11,7 +11,7 @@ import { newId } from "@/lib/ids";
  * are revoked with the user's sessions.
  */
 export async function createDeviceKey(env: CloudflareEnv, userId: string, deviceName: string): Promise<{ id: string; key: string }> {
-	const { fullKey, prefix, hash } = generateApiKey();
+	const { fullKey, prefix, hash, sha256 } = await generateApiKey();
 	const id = newId("key");
 	await getDb(env).insert(apiKeys).values({
 		id,
@@ -20,6 +20,7 @@ export async function createDeviceKey(env: CloudflareEnv, userId: string, device
 		name: deviceName.slice(0, 100),
 		prefix,
 		keyHash: hash,
+		keySha256: sha256,
 		scopes: scopesToJson(["jmap"]),
 		mailboxScopeEnabled: false,
 	});

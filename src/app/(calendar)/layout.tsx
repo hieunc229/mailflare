@@ -42,7 +42,7 @@ export default function CalendarLayout({ children }: { children: React.ReactNode
   }, [assistantEnabled, assistantOpen, assistantFullSize, setAssistantOpen, setAssistantFullSize]);
 
   return (
-    <AuthGuard>
+    <AuthGuard requireFeature="calendar">
       <SidebarProvider mobileOverlay>
         <MailboxProvider>
           <ComposeProvider>

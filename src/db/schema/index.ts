@@ -11,6 +11,12 @@ export const users = sqliteTable("users", {
 	email: text("email").notNull().unique(),
 	resetEmail: text("reset_email"),
 	forwardingEmail: text("forwarding_email"),
+	/**
+	 * A bcrypt hash, or PASSWORDLESS_PASSWORD_HASH when the account signs in only
+	 * with passkeys. Kept NOT NULL so the column needs no lossy table rebuild on
+	 * SQLite; every password check goes through password.ts, which rejects the
+	 * sentinel.
+	 */
 	passwordHash: text("password_hash").notNull(),
 	name: text("name").notNull(),
 	bookingUsername: text("booking_username"),
@@ -25,6 +31,9 @@ export const users = sqliteTable("users", {
 	// Capabilities the primary admin grants to other admins.
 	canManageDomains: bool("can_manage_domains").notNull().default(false),
 	canManageUsers: bool("can_manage_users").notNull().default(false),
+	// Apps an admin can hide per account. Off removes the nav entry and blocks the app's API.
+	calendarEnabled: bool("calendar_enabled").notNull().default(true),
+	driveEnabled: bool("drive_enabled").notNull().default(true),
 	keyboardShortcutsEnabled: bool("keyboard_shortcuts_enabled").notNull().default(true),
 	spamProtectionEnabled: bool("spam_protection_enabled").notNull().default(true),
 	/** Days a message may stay in Trash or Spam before the scheduled purge deletes it; null keeps it forever. */
@@ -38,6 +47,19 @@ export const users = sqliteTable("users", {
 	totpSecret: text("totp_secret"),
 	totpEnabled: bool("totp_enabled").notNull().default(false),
 	totpConfirmedAt: timestamp("totp_confirmed_at"),
+	/**
+	 * Password sign-ins must prove a second factor (a passkey or TOTP/recovery
+	 * code). Passkey sign-ins already satisfy it, so they need no extra step.
+	 */
+	requireSecondFactor: bool("require_second_factor").notNull().default(false),
+	/** Kept current by passkey_credentials triggers; lets the database reject the last-method removal. */
+	passkeyCount: integer("passkey_count").notNull().default(0),
+	/**
+	 * Bumped whenever a sign-in method or second-factor policy changes. Step-up
+	 * grants capture the value they were issued under, so a proof obtained
+	 * before a security change cannot be replayed after it.
+	 */
+	securityVersion: integer("security_version").notNull().default(0),
 	lastSignInAt: timestamp("last_sign_in_at"),
 	// Set when an admin deletes the account. The account is also `disabled` and can be restored until the
 	// retention window ends, after which the scheduled purge removes it and its data.
@@ -262,14 +284,24 @@ export const apiKeys = sqliteTable("api_keys", {
 		.references(() => users.id, { onDelete: "cascade" }),
 	name: text("name").notNull(),
 	prefix: text("prefix").notNull(),
+	/**
+	 * bcrypt for keys issued before SHA-256 lookups. Newer keys store the same
+	 * SHA-256 hex as `keySha256` so creation does not run bcrypt either.
+	 */
 	keyHash: text("key_hash").notNull(),
+	/**
+	 * SHA-256 hex of the secret. High-entropy API keys and app passwords are
+	 * verified with this so auth stays inside the Workers free-tier CPU limit.
+	 * Null on rows that only have a bcrypt hash.
+	 */
+	keySha256: text("key_sha256"),
 	scopes: text("scopes").notNull(),
 	mailboxScopeEnabled: bool("mailbox_scope_enabled").notNull().default(false),
 	createdAt: timestamp("created_at")
 		.notNull()
 		.$defaultFn(() => new Date()),
 	lastUsedAt: timestamp("last_used_at"),
-}, (t) => [index("api_keys_user_idx").on(t.userId)]);
+}, (t) => [index("api_keys_user_idx").on(t.userId), uniqueIndex("api_keys_key_sha256_idx").on(t.keySha256)]);
 
 export const messages = sqliteTable(
 	"messages",
@@ -302,6 +334,8 @@ export const messages = sqliteTable(
 		// and so outgoing replies can carry them on to the recipient's client.
 		inReplyTo: text("in_reply_to"),
 		references: text("references_header"),
+		/** Whether the message offers a way to unsubscribe (List-Unsubscribe header or a body link), so lists can show the action without reading the raw MIME. */
+		hasUnsubscribe: bool("has_unsubscribe").notNull().default(false),
 		spamScore: integer("spam_score"),
 		spamVerdict: text("spam_verdict", { enum: ["inbox", "suspicious", "spam"] }),
 		spamSignals: text("spam_signals"),
@@ -835,6 +869,113 @@ export const loginChallenges = sqliteTable("login_challenges", {
 		.notNull()
 		.$defaultFn(() => new Date()),
 }, (t) => [index("login_challenges_user_idx").on(t.userId)]);
+
+/**
+ * A WebAuthn credential. The credential id is public, so it is stored in full
+ * for backup and display; lookups go through its SHA-256 hash, which stays
+ * within MySQL's indexed-text limit. Key material is stored as base64url text
+ * so backups remain portable across all three dialects.
+ */
+export const passkeyCredentials = sqliteTable(
+	"passkey_credentials",
+	{
+		id: text("id").primaryKey(),
+		userId: text("user_id")
+			.notNull()
+			.references(() => users.id, { onDelete: "cascade" }),
+		credentialId: text("credential_id").notNull(),
+		credentialHash: text("credential_hash").notNull().unique(),
+		publicKey: text("public_key").notNull(),
+		counter: integer("counter").notNull().default(0),
+		transports: text("transports"),
+		deviceType: text("device_type").notNull(),
+		backedUp: bool("backed_up").notNull().default(false),
+		/** Authenticator model identifier, used only to suggest a friendly default name. */
+		aaguid: text("aaguid"),
+		/** Empty means "show the provider or a dated default"; the user can rename it. */
+		name: text("name").notNull(),
+		lastUsedAt: timestamp("last_used_at"),
+		createdAt: timestamp("created_at")
+			.notNull()
+			.$defaultFn(() => new Date()),
+	},
+	(t) => [index("passkey_credentials_user_idx").on(t.userId)],
+);
+
+/**
+ * Server-side WebAuthn ceremony state. Every row is single-use and bound to a
+ * browser cookie, session, login challenge, or enrollment grant.
+ */
+export const webauthnChallenges = sqliteTable(
+	"webauthn_challenges",
+	{
+		id: text("id").primaryKey(),
+		ceremonyHash: text("ceremony_hash").notNull().unique(),
+		challenge: text("challenge").notNull(),
+		purpose: text("purpose", { enum: ["login", "mfa", "register", "step_up", "check", "enroll", "recovery"] }).notNull(),
+		userId: text("user_id").references(() => users.id, { onDelete: "cascade" }),
+		bindingHash: text("binding_hash").notNull(),
+		expiresAt: timestamp("expires_at").notNull(),
+		usedAt: timestamp("used_at"),
+		createdAt: timestamp("created_at")
+			.notNull()
+			.$defaultFn(() => new Date()),
+	},
+	(t) => [index("webauthn_challenges_user_idx").on(t.userId), index("webauthn_challenges_expires_idx").on(t.expiresAt)],
+);
+
+/**
+ * A short-lived, single-use permission to enrol a passkey. Created for the
+ * first-run passkey account, a recovery-code flow, or an administrator who
+ * sends a recovery link. Never a session: it may only reach enrolment routes.
+ */
+export const passkeyEnrollmentGrants = sqliteTable(
+	"passkey_enrollment_grants",
+	{
+		id: text("id").primaryKey(),
+		userId: text("user_id")
+			.notNull()
+			.references(() => users.id, { onDelete: "cascade" }),
+		tokenHash: text("token_hash").notNull().unique(),
+		kind: text("kind", { enum: ["setup", "recovery", "admin"] }).notNull(),
+		createdByUserId: text("created_by_user_id").references(() => users.id, { onDelete: "set null" }),
+		expiresAt: timestamp("expires_at").notNull(),
+		usedAt: timestamp("used_at"),
+		createdAt: timestamp("created_at")
+			.notNull()
+			.$defaultFn(() => new Date()),
+	},
+	(t) => [index("passkey_enrollment_grants_user_idx").on(t.userId)],
+);
+
+/**
+ * Proof that the current session re-authenticated recently, for one sensitive
+ * security change. Bound to the session token hash and consumed once.
+ */
+export const authStepUps = sqliteTable(
+	"auth_step_ups",
+	{
+		id: text("id").primaryKey(),
+		userId: text("user_id")
+			.notNull()
+			.references(() => users.id, { onDelete: "cascade" }),
+		sessionHash: text("session_hash").notNull(),
+		tokenHash: text("token_hash").notNull().unique(),
+		/** The exact action and, for administrator actions, the account it may affect. */
+		purpose: text("purpose").notNull(),
+		targetUserId: text("target_user_id"),
+		/** The target account's security_version at the time the grant was issued. */
+		securityVersion: integer("security_version").notNull().default(0),
+		/** The acting account's security_version at the time the grant was issued. */
+		actorSecurityVersion: integer("actor_security_version").notNull().default(0),
+		expiresAt: timestamp("expires_at").notNull(),
+		usedAt: timestamp("used_at"),
+		createdAt: timestamp("created_at")
+			.notNull()
+			.$defaultFn(() => new Date()),
+	},
+	(t) => [index("auth_step_ups_user_idx").on(t.userId)],
+);
 
 export const auditLogs = sqliteTable(
 	"audit_logs",

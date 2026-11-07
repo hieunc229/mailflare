@@ -5,4 +5,6 @@ export type MessageNavigationEntry = {
 
 export type MessageNavigationResponse = {
 	messages: MessageNavigationEntry[];
+	hasNewer?: boolean;
+	hasOlder?: boolean;
 };

@@ -41,7 +41,7 @@ const {
 	SqliteDatabase, applyMigrations, getDb, createSession, generateApiKey, createUserAccountSchema,
 	dashboardCreate, apiCreate, registerAdminMcpTools, getMailboxDomainAddresses, resolveInboundAddress, getAuthorizedSenderAddress,
 } = await import(pathToFileURL(join(directory, "entry.mjs")).href);
-const key = generateApiKey();
+const key = await generateApiKey();
 
 async function fixture(t, { rules = [], failAddress, slowAddress } = {}) {
 	const database = new SqliteDatabase(":memory:");
@@ -59,8 +59,8 @@ async function fixture(t, { rules = [], failAddress, slowAddress } = {}) {
 		INSERT INTO license_settings (id, instance_id, plan, state, features, updated_at)
 			VALUES ('default', 'test-instance', 'team', 'active', '[]', 1);
 	`);
-	database.db.prepare("INSERT INTO api_keys (id, user_id, name, prefix, key_hash, scopes, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)")
-		.run("key", "admin", "Test", key.prefix, key.hash, '["accounts"]', 1);
+	database.db.prepare("INSERT INTO api_keys (id, user_id, name, prefix, key_hash, key_sha256, scopes, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)")
+		.run("key", "admin", "Test", key.prefix, key.hash, key.sha256, '["accounts"]', 1);
 	const env = { DB: database, CF_TOKEN: "test-only", MAILFLARE_RUNTIME: "node" };
 	globalThis.__mailflareNodeEnv = env;
 	t.after(() => { delete globalThis.__mailflareNodeEnv; });
@@ -286,3 +286,23 @@ test("the all-domain boolean rejects truthy strings", () => {
 	const input = { username: "sam", domainId: "one", password: "test-password" };
 	assert.equal(createUserAccountSchema.safeParse({ ...input, useAllDomains: "false" }).success, false);
 });
+
+for (const kind of ["dashboard", "api"]) {
+	test(`${kind}: mailbox manager may create accounts on the creator's domains`, async (t) => {
+		const f = await fixture(t);
+		f.database.db.exec(`
+			INSERT INTO users (id, email, password_hash, name, role, can_manage_mailboxes, can_manage_domains, can_manage_users, created_by_user_id, created_at)
+			VALUES ('manager', 'manager@one.test', 'hash', 'Manager', 'admin', 1, 1, 1, 'admin', 1)
+		`);
+		const managerKey = generateApiKey();
+		f.database.db.prepare("INSERT INTO api_keys (id, user_id, name, prefix, key_hash, scopes, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)")
+			.run("manager-key", "manager", "Manager", managerKey.prefix, managerKey.hash, '["accounts"]', 1);
+		const managerSession = await createSession(f.env, "manager");
+		const token = kind === "dashboard" ? managerSession : managerKey.fullKey;
+		const created = await f.post(kind, { useAllDomains: false }, token);
+		assert.equal(created.status, 201, await created.clone().text());
+		assert.equal(f.mailbox().domainId, "one");
+		assert.equal((await f.post(kind, { username: "foreign", domainId: "foreign", useAllDomains: false }, token)).status, 404);
+		assert.equal((await f.post(kind, { username: "solo", domainId: "two", useAllDomains: false }, token)).status, 201);
+	});
+}

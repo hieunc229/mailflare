@@ -114,8 +114,7 @@ export function DueFollowUps() { return null; }
 const relativeStub = `
 import React from "react";
 export function MessageDetailNavigationProvider({ children }) { return children; }
-export function useMessageNavigation() { return { progress: null, onNavigate() {} }; }
-export function MessageNavigationProgress() { return null; }
+export function useMessageNavigation() { return { onNavigate() {}, prefetch() {}, prefetchNow() {}, cancelPrefetch() {} }; }
 export function MessageListRowActions() { return null; }
 export function SwipeableRow({ children }) { return children; }
 `;

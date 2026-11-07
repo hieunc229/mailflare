@@ -1,6 +1,9 @@
+import { createOpenAI } from "@ai-sdk/openai";
 import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
+import { defaultSettingsMiddleware, wrapLanguageModel } from "ai";
 import { createWorkersAI } from "workers-ai-provider";
 import { getAgentProviderConfig } from "./provider";
+import { PROVIDER_BASE_URLS } from "./provider-constants";
 import { agentTimeContext } from "./time";
 
 // workers-ai-provider 4.0.0 maps both `response` and `choices[0].delta` from the same SSE event, so models that send
@@ -55,6 +58,18 @@ export async function getAgentModel(env: CloudflareEnv, requestedModel?: string 
 	const details = { modelId, provider: config.provider === "cloudflare" ? "cloudflare" : config.preset, rates: config.rates[modelId] };
 	if (config.provider === "cloudflare") return env.AI ? { model: createWorkersAI({ binding: withDedupedStreams(env.AI) })(modelId), ...details } : null;
 	if (config.baseUrl && config.apiKey && modelId) {
+		// Match the endpoint so custom/environment configurations work too.
+		if (config.baseUrl.replace(/\/+$/, "") === PROVIDER_BASE_URLS.openai) {
+			const provider = createOpenAI({ baseURL: config.baseUrl, apiKey: config.apiKey });
+			const baseModelId = modelId.startsWith("ft:") ? modelId.split(":")[1] : modelId;
+			const gptVersion = /^gpt-(\d+)(?:[.-]|$)/.exec(baseModelId);
+			// GPT-5 and later use Responses to support reasoning together with tools.
+			// Keep older models on Chat Completions and preserve local-only history.
+			if (gptVersion && Number(gptVersion[1]) >= 5) {
+				return { model: wrapLanguageModel({ model: provider.responses(modelId), middleware: defaultSettingsMiddleware({ settings: { providerOptions: { openai: { store: false } } } }) }), ...details };
+			}
+			return { model: provider.chat(modelId), ...details };
+		}
 		const provider = createOpenAICompatible({ name: "mailflare", baseURL: config.baseUrl, apiKey: config.apiKey });
 		return { model: provider.chatModel(modelId), ...details };
 	}
