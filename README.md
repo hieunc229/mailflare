@@ -123,7 +123,8 @@ Add your Cloudflare credentials to `.dev.vars`, then open [localhost:3000](http:
 - `npm run deploy`: build and deploy
 - `npm run lint`: lint and type check
 
-A schema change needs a migration for each database type. See [Databases](docs/databases.md#migrations).
+
+To add a language, create `public/locales/<code>.json` with the same keys as `src/lib/i18n/en.json`, then register it in `src/lib/i18n/locales.ts` with its native name (add `dir: "rtl"` for right-to-left scripts). The selector, validation, and cookie handling pick it up from that registry. Missing keys fall back to English. English ships in the main bundle; other catalogs are static assets loaded on demand, outside the Worker size limit.
 
 ## Documentation
 
