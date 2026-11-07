@@ -1,4 +1,4 @@
-import { and, desc, eq } from "drizzle-orm";
+import { and, desc, eq, inArray } from "drizzle-orm";
 import { NextResponse } from "next/server";
 import type { getDb } from "@/db";
 import { domains, mailboxes, users } from "@/db/schema";
@@ -31,11 +31,39 @@ export function listAccountsForAdmin(db: Db) {
 		.orderBy(desc(users.createdAt));
 }
 
+export async function getAllowedDomainOwnerIdsForAdmin(db: Db, adminUserId: string): Promise<string[] | null> {
+	const [actor] = await db
+		.select({ id: users.id, role: users.role, isPrimaryAdmin: users.isPrimaryAdmin, createdByUserId: users.createdByUserId })
+		.from(users)
+		.where(eq(users.id, adminUserId))
+		.limit(1);
+
+	// STRICT SECURITY: Sirf Admin ke liye chalay ga, regular user ko null (Forbidden) return karega
+	if (!actor || actor.role !== "admin") return null;
+
+	const [primaryAdmin] = await db
+		.select({ id: users.id })
+		.from(users)
+		.where(eq(users.isPrimaryAdmin, true))
+		.limit(1);
+
+	return Array.from(
+		new Set(
+			[actor.id, actor.createdByUserId, primaryAdmin?.id].filter(
+				(id): id is string => typeof id === "string" && id.length > 0,
+			),
+		),
+	);
+}
+
 export async function getDomainForAdmin(db: Db, adminUserId: string, domainId: string) {
+	const allowedOwnerIds = await getAllowedDomainOwnerIdsForAdmin(db, adminUserId);
+	if (!allowedOwnerIds || allowedOwnerIds.length === 0) return null;
+
 	const [domain] = await db
 		.select()
 		.from(domains)
-		.where(and(eq(domains.id, domainId), eq(domains.userId, adminUserId)))
+		.where(and(eq(domains.id, domainId), inArray(domains.userId, allowedOwnerIds)))
 		.limit(1);
 	return domain ?? null;
 }
