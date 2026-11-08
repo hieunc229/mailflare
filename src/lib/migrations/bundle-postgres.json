@@ -326,6 +326,14 @@
       "statements": [
         "ALTER TABLE \"messages\" ADD COLUMN \"has_unsubscribe\" boolean DEFAULT false NOT NULL;"
       ]
+    },
+    {
+      "name": "0008_masked_aliases.sql",
+      "statements": [
+        "ALTER TABLE \"mailbox_aliases\" ADD COLUMN \"label\" text;",
+        "ALTER TABLE \"mailbox_aliases\" ADD COLUMN \"enabled\" boolean DEFAULT true NOT NULL;",
+        "ALTER TABLE \"mailbox_aliases\" ADD COLUMN \"masked\" boolean DEFAULT false NOT NULL;"
+      ]
     }
   ]
 }

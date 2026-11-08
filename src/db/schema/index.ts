@@ -142,6 +142,15 @@ export const mailboxAliases = sqliteTable(
 			.notNull()
 			.references(() => domains.id, { onDelete: "cascade" }),
 		localPart: text("local_part").notNull(),
+		// User-facing name for the alias ("Shopping", "Newsletter"). Masked aliases
+		// use it as their only identity so the account name stays hidden.
+		label: text("label"),
+		// Disabled aliases reject inbound mail before catch-all rules and cannot
+		// be used as a sender address.
+		enabled: bool("enabled").notNull().default(true),
+		// Masked aliases are generated addresses that hide the account name when
+		// sending ("Hide My Email"-style), unlike manually created aliases.
+		masked: bool("masked").notNull().default(false),
 		createdAt: timestamp("created_at")
 			.notNull()
 			.$defaultFn(() => new Date()),

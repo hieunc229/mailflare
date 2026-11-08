@@ -71,9 +71,10 @@ export async function createAccountResponse(env: CloudflareEnv, actor: AccountAd
 			role: input.role, createdByUserId: adminUserId, remoteContentMode: "ask",
 		}).returning();
 		const mailboxInsert = db.insert(mailboxes).values(mailbox);
-		// Five bound columns per alias: 20 rows fit D1's 100-parameter limit.
-		const aliasInserts = Array.from({ length: Math.ceil(input.aliases.length / 20) }, (_, index) =>
-			db.insert(mailboxAliases).values(input.aliases.slice(index * 20, (index + 1) * 20).map((alias) => ({
+		// Seven bound columns per alias — the four fields below plus the
+		// created_at, enabled and masked defaults: 14 rows fit D1's 100-parameter limit.
+		const aliasInserts = Array.from({ length: Math.ceil(input.aliases.length / 14) }, (_, index) =>
+			db.insert(mailboxAliases).values(input.aliases.slice(index * 14, (index + 1) * 14).map((alias) => ({
 				id: newId("als"), mailboxId, domainId: alias.domainId, localPart: alias.localPart,
 			}))),
 		);

@@ -98,9 +98,13 @@ export async function resolveInboundAddress(
 	const exactMailbox = exactMailboxes.find(
 		(mailbox) => normalizeRecipientLocalPart(mailbox.localPart) === parsed.localPart,
 	);
-	const mailbox = exactMailbox
-		?? await resolveMailboxAlias(db, domain.id, parsed.localPart)
-		?? await resolveMailboxDomainAlias(db, parsed.localPart, parsed.normalizedAddress);
+	let mailbox = exactMailbox ?? await resolveMailboxAlias(db, domain.id, parsed.localPart);
+	// A disabled alias keeps owning its address: reject instead of letting a
+	// use-all-domains mailbox or a catch-all rule deliver its mail elsewhere.
+	if (!mailbox && await findDisabledAlias(db, domain.id, parsed.localPart)) {
+		return { action: "reject", rejectReason: "Mailbox unavailable" };
+	}
+	mailbox ??= await resolveMailboxDomainAlias(db, parsed.localPart, parsed.normalizedAddress);
 
 	if (mailbox) {
 		const resolved = toResolvedMailbox(mailbox, domain.id, domain.hostname);
@@ -240,12 +244,21 @@ async function resolveMailboxAlias(db: AppDatabase, domainId: string, localPart:
 		.innerJoin(mailboxes, eq(mailboxAliases.mailboxId, mailboxes.id))
 		.where(and(
 			eq(mailboxAliases.domainId, domainId),
+			eq(mailboxAliases.enabled, true),
 			eq(mailboxes.disabled, false),
 		));
 	const row = rows.find(
 		(item) => normalizeRecipientLocalPart(item.aliasLocalPart) === localPart,
 	);
 	return row?.mailbox ?? null;
+}
+
+async function findDisabledAlias(db: AppDatabase, domainId: string, localPart: string): Promise<boolean> {
+	const rows = await db
+		.select({ localPart: mailboxAliases.localPart })
+		.from(mailboxAliases)
+		.where(and(eq(mailboxAliases.domainId, domainId), eq(mailboxAliases.enabled, false)));
+	return rows.some((row) => normalizeRecipientLocalPart(row.localPart) === localPart);
 }
 
 async function resolveMailboxDomainAlias(

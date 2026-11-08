@@ -301,6 +301,14 @@
       "statements": [
         "ALTER TABLE `messages` ADD `has_unsubscribe` boolean NOT NULL DEFAULT false;"
       ]
+    },
+    {
+      "name": "0008_masked_aliases.sql",
+      "statements": [
+        "ALTER TABLE `mailbox_aliases` ADD `label` text;",
+        "ALTER TABLE `mailbox_aliases` ADD `enabled` boolean NOT NULL DEFAULT true;",
+        "ALTER TABLE `mailbox_aliases` ADD `masked` boolean NOT NULL DEFAULT false;"
+      ]
     }
   ]
 }
