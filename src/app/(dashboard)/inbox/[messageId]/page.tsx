@@ -18,6 +18,9 @@ import { Button } from "@/components/ui/button";
 import { usePageLoading } from "@/components/page-loading";
 import { PreviousMessage } from "@/components/previous-message";
 import { ConversationThread } from "@/components/messages/conversation-thread";
+import { getConversationSender } from "@/components/messages/conversation-thread-utils";
+import { ConversationNotes } from "@/components/messages/conversation-notes";
+import { ConversationNotesProvider } from "@/components/messages/conversation-notes-context";
 import { MessageDetailNavigation } from "@/components/messages/message-detail-navigation";
 import { MessageReadingHeaderButton } from "@/components/messages/message-reading-header-button";
 import { ScheduledSendBanner } from "@/components/messages/scheduled-send-banner";
@@ -31,6 +34,7 @@ import { useMessageThread } from "@/components/messages/use-message-thread";
 import { useLatestMessagesFirst } from "@/components/messages/use-latest-messages-first";
 import { useMessageListVisibility } from "@/components/messages/message-list-visibility";
 import { splitEmailAddressList } from "@/lib/email/address";
+import { formatRecipientAddressList, type RecipientAddressStyle } from "@/lib/email/recipient-display";
 import { RecipientList } from "@/components/messages/recipient-list";
 import { useShowFullRecipientAddresses } from "@/components/messages/use-show-full-recipient-addresses";
 import type { MessageAttachment, MessageDetailResponse } from "./types";
@@ -211,6 +215,19 @@ function MessageDetailContent({ messageId }: { messageId: string }) {
     () => extractCloudAttachments(bodyDisplay.latestContent),
     [bodyDisplay.latestContent],
   );
+  const noteEmails = useMemo(() => {
+    const style: RecipientAddressStyle = showFullRecipientAddresses ? "full" : "address";
+    const emails = thread.messages.map((item) => ({
+      id: item.id,
+      sender: getConversationSender(item, currentAccountName),
+      recipient: item.direction === "outbound" ? noteRecipient(item, style) : undefined,
+      createdAt: item.createdAt,
+    }));
+    if (message && !emails.some((item) => item.id === message.id)) {
+      emails.push({ id: message.id, sender: fromName, recipient: message.direction === "outbound" ? noteRecipient(message, style) : undefined, createdAt: message.createdAt });
+    }
+    return emails;
+  }, [thread.messages, message, fromName, currentAccountName, showFullRecipientAddresses]);
 
   if (loading) {
     return <MessageDetailSkeleton />;
@@ -238,7 +255,7 @@ function MessageDetailContent({ messageId }: { messageId: string }) {
     : formatUserDate(message.createdAt, withTime
       ? { month: "short", day: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" }
       : { month: "short", day: "2-digit", year: "numeric" });
-  return (<>
+  return (<ConversationNotesProvider key={message.threadId ?? message.id} messageId={message.id} emails={noteEmails}>
 
     <div className={clsx("flex py-2 h-12 items-center px-2 border-b sticky top-0 bg-white z-40 gap-3", scrolled ? "border-neutral-200" : "border-transparent")}>
       <MessageReadingHeaderButton assistantVisible={assistantVisible} />
@@ -274,6 +291,10 @@ function MessageDetailContent({ messageId }: { messageId: string }) {
       <h1 className={clsx(!isAnyPanelVisible ? "sm:pl-16" : "sm:pl-10", "px-4 pb-2 pt-2 text-2xl text-neutral-900 sm:pr-6")} title={message.subject ?? t("list.noSubject")}>
         {message.subject ?? t("list.noSubject")}
       </h1>
+      <ConversationNotes
+        className={clsx(!isAnyPanelVisible ? "sm:pl-16" : "sm:pl-10", "px-4 pb-3 sm:pr-6")}
+        contentInset={!isAnyPanelVisible ? "sm:pl-16" : "sm:pl-10"}
+      />
       {/* <div className="px-6">
         <div className="mx-auto w-full max-w-[640px]">
           <SpamScoreDetails
@@ -297,7 +318,7 @@ function MessageDetailContent({ messageId }: { messageId: string }) {
         expandedAll={threadExpanded}
         onExpandedAllChange={setThreadExpanded}
       />
-      <article className={clsx("py-4 sm:px-6", !isAnyPanelVisible && "sm:pl-12")}>
+      <article data-message-id={message.id} className={clsx("py-4 sm:px-6", !isAnyPanelVisible && "sm:pl-12")}>
         <div className="w-full">
           <div className="flex flex-wrap items-start justify-between gap-x-3 gap-y-1 px-4 pb-5 sm:px-0 sm:pl-4">
             <div className="flex min-w-0 items-start gap-3">
@@ -480,6 +501,15 @@ function MessageDetailContent({ messageId }: { messageId: string }) {
         }}
       />
     </div>
-  </>
+  </ConversationNotesProvider>
   );
+}
+
+/** The To and Cc names of an email, for naming an outbound email on a note chip. */
+function noteRecipient(message: { toAddr: string; ccAddr?: string | null }, style: RecipientAddressStyle): string | undefined {
+  const recipients = [message.toAddr, message.ccAddr]
+    .map((list) => formatRecipientAddressList(list, style))
+    .filter(Boolean)
+    .join(", ");
+  return recipients || undefined;
 }
