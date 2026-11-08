@@ -2,6 +2,7 @@ import { z } from "zod";
 import { isPublicHttpsUrl, PUBLIC_HTTPS_URL_MESSAGE } from "@/lib/security/public-url";
 import { isValidHostname, normalizeHostname } from "@/lib/domains/utils";
 import { getEmailAddress, splitEmailAddressList } from "@/lib/email/address";
+import { normalizeRecipientLocalPart } from "@/lib/email/recipient-address";
 import { DEFAULT_FOLDER_COLOR, FOLDER_COLOR_VALUES } from "@/lib/folders/colors";
 import { MAX_FOLLOW_UP_DAYS } from "@/lib/follow-ups/follow-up-utils";
 import { isValidBase64 } from "@/lib/email/base64";
@@ -274,6 +275,34 @@ export const createMailboxAliasSchema = z.object({
 	domainId: z.string().min(1),
 	localPart: z.string().trim().min(1).max(64).regex(/^[a-zA-Z0-9._%+-]+$/)
 		.transform((value) => value.toLowerCase()),
+});
+
+// The aliases endpoint additionally accepts a label, a masked flag, and
+// `generate` to mint a random masked address without a client-chosen local part.
+// Labels become outbound display names, so control and format characters that
+// could corrupt headers are refused.
+const aliasLabelSchema = z.string().trim().max(100).regex(/^[^\p{Cc}\p{Cf}]*$/u);
+
+export const mailboxAliasBodySchema = createMailboxAliasSchema
+	.partial({ localPart: true })
+	.extend({
+		label: aliasLabelSchema.optional(),
+		masked: z.boolean().default(false),
+		generate: z.boolean().default(false),
+	})
+	.refine((value) => value.generate || !!value.localPart, {
+		message: "Enter an alias username or request a generated address",
+	})
+	// A local part made only of dots or a +tag normalizes to nothing: inbound
+	// routing could never match it, so the alias would be unreachable.
+	.refine((value) => !value.localPart || normalizeRecipientLocalPart(value.localPart).length > 0, {
+		message: "Alias username needs at least one letter or digit outside dots and +tags",
+	});
+
+export const updateMailboxAliasSchema = z.object({
+	aliasId: z.string().min(1),
+	label: aliasLabelSchema.nullable().optional(),
+	enabled: z.boolean().optional(),
 });
 
 export const createUserAccountSchema = z.object({

@@ -1,12 +1,12 @@
 import { and, eq, isNotNull } from "drizzle-orm";
 import { getDb } from "@/db";
-import { conversationNotes, messages, outboundJobs } from "@/db/schema";
+import { conversationNotes, mailboxes, messages, outboundJobs } from "@/db/schema";
 import { newId } from "@/lib/ids";
 import { buildSnippet } from "@/lib/email/parse";
 import { dispatchWebhooks } from "@/lib/email/webhooks";
 import { upsertContactsFromAddresses } from "@/lib/contacts/service";
 import { getAuthorizedSenderAddress } from "@/lib/email/sender";
-import { getEmailAddressList, joinEmailAddressList, splitEmailAddressList } from "@/lib/email/address";
+import { getEmailAddress, getEmailAddressList, joinEmailAddressList, splitEmailAddressList } from "@/lib/email/address";
 import { formatMessageIdHeader, normalizeMessageId, parseMessageIdList } from "@/lib/email/threading";
 import { createAuditLog } from "@/lib/mailboxes/audit";
 import { loadMessageAttachmentContents, storeMessageAttachments, validateAttachments } from "@/lib/email/attachments";
@@ -18,6 +18,7 @@ import { ensureTrackingToken, getTrackingHostForSender } from "@/lib/tracking/op
 import { setFollowUp } from "@/lib/follow-ups/service";
 import { buildTrackingPixelUrl, injectTrackingPixel, resolveTrackingOrigin } from "@/lib/tracking/open-tracking-utils";
 import { getComposePreferences } from "@/lib/compose/preferences";
+import { getMailboxDomainAddresses } from "@/lib/mailboxes/domain-addresses";
 
 export type SendEmailInput = {
 	userId: string;
@@ -206,6 +207,24 @@ async function deliverEmail(env: CloudflareEnv, delivery: PreparedDelivery): Pro
 	const db = getDb(env);
 	const toAddr = joinEmailAddressList(to);
 	try {
+		// The sender address was validated at queue time; recheck that the mailbox
+		// still owns it before delivery so a disabled or deleted alias — or a
+		// use-all-domains change — cannot still send from it.
+		const [mailbox] = await db
+			.select({
+				id: mailboxes.id,
+				domainId: mailboxes.domainId,
+				localPart: mailboxes.localPart,
+				useAllDomains: mailboxes.useAllDomains,
+				disabled: mailboxes.disabled,
+			})
+			.from(mailboxes)
+			.where(eq(mailboxes.id, mailboxId))
+			.limit(1);
+		const fromAddress = getEmailAddress(from).toLowerCase();
+		if (!mailbox || mailbox.disabled || !(await getMailboxDomainAddresses(db, mailbox)).includes(fromAddress)) {
+			throw new Error("The sender address is no longer available for this mailbox");
+		}
 		const provider = await getOutboundProviderConfig(env, from);
 		// Cloudflare's 5 MiB cap forces big files into download links; Resend takes
 		// the attachments directly (the admin's outgoing limit still applies).
