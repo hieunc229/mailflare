@@ -54,9 +54,9 @@ export default {
 			decision = (await response.json()) as Decision;
 		} catch (error) {
 			console.error("Relay to Mailflare failed", error);
-			// A rejection with a temporary-sounding reason makes most senders retry later.
-			message.setReject("Mailflare is temporarily unavailable, please retry");
-			return;
+			// setReject is a permanent SMTP failure, so the sender would bounce the message.
+			// Throwing makes Email Routing answer with a temporary failure and the sender retries.
+			throw error;
 		}
 
 		if (decision.action === "reject") {

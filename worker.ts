@@ -107,7 +107,9 @@ export default {
 			await env.INBOUND_QUEUE.send(payload);
 		} catch (err) {
 			console.error("Inbound enqueue failed", err);
-			message.setReject("Processing failed");
+			// setReject would bounce the message permanently; a thrown error is a temporary
+			// SMTP failure, so the sender retries.
+			throw err;
 		}
 	},
 
