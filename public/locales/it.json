@@ -102,6 +102,7 @@
 	"message.senderCheckShort": "Controlla mittente",
 	"message.senderCheckTitle": "I controlli sul mittente richiedono attenzione",
 	"message.senderCheckViewDetails": "Esamina i dettagli del mittente",
+	"message.mailingListNotice": "Questo messaggio proviene da una mailing list.",
 	"message.date": "Data",
 	"message.blockContact": "Blocca contatto",
 	"message.star": "Contrassegna",

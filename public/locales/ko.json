@@ -99,6 +99,7 @@
 	"message.senderCheckShort": "발신자 확인",
 	"message.senderCheckTitle": "발신자 확인에 주의가 필요합니다",
 	"message.senderCheckViewDetails": "발신자 세부정보 검토",
+	"message.mailingListNotice": "이 메시지는 메일링 리스트에서 온 것입니다.",
 	"message.date": "날짜",
 	"message.blockContact": "연락처 차단",
 	"message.star": "별표",

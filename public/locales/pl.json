@@ -105,6 +105,7 @@
 	"message.senderCheckShort": "Sprawdź nadawcę",
 	"message.senderCheckTitle": "Sprawdzenia nadawcy wymagają uwagi",
 	"message.senderCheckViewDetails": "Sprawdź szczegóły nadawcy",
+	"message.mailingListNotice": "Ta wiadomość pochodzi z listy mailingowej.",
 	"message.date": "Data",
 	"message.blockContact": "Zablokuj kontakt",
 	"message.star": "Oznacz gwiazdką",

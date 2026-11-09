@@ -99,6 +99,7 @@
 	"message.senderCheckShort": "প্রেরক যাচাই করুন",
 	"message.senderCheckTitle": "প্রেরক যাচাইয়ে মনোযোগ প্রয়োজন",
 	"message.senderCheckViewDetails": "প্রেরকের বিবরণ দেখুন",
+	"message.mailingListNotice": "এই বার্তাটি একটি মেইলিং তালিকা থেকে এসেছে।",
 	"message.date": "তারিখ",
 	"message.blockContact": "যোগাযোগ ব্লক করুন",
 	"message.star": "তারকা দিন",

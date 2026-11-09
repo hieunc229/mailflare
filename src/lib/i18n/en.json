@@ -99,6 +99,7 @@
 	"message.senderCheckShort": "Check sender",
 	"message.senderCheckTitle": "Sender checks need attention",
 	"message.senderCheckViewDetails": "Review sender details",
+	"message.mailingListNotice": "This message is from a mailing list.",
 	"message.date": "Date",
 	"message.blockContact": "Block contact",
 	"message.star": "Star",

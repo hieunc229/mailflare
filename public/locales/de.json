@@ -99,6 +99,7 @@
 	"message.senderCheckShort": "Absender prüfen",
 	"message.senderCheckTitle": "Absenderprüfungen erfordern Aufmerksamkeit",
 	"message.senderCheckViewDetails": "Absenderdetails prüfen",
+	"message.mailingListNotice": "Diese Nachricht stammt von einer Mailingliste.",
 	"message.date": "Datum",
 	"message.blockContact": "Kontakt blockieren",
 	"message.star": "Markieren",

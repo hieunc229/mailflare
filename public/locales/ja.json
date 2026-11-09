@@ -96,6 +96,7 @@
 	"message.senderCheckShort": "送信者を確認",
 	"message.senderCheckTitle": "送信者の確認に注意が必要です",
 	"message.senderCheckViewDetails": "送信者の詳細を確認",
+	"message.mailingListNotice": "このメッセージはメーリングリストからのものです。",
 	"message.date": "日付",
 	"message.blockContact": "連絡先をブロック",
 	"message.star": "スターを付ける",

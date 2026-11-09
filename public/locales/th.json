@@ -99,6 +99,7 @@
 	"message.senderCheckShort": "ตรวจสอบผู้ส่ง",
 	"message.senderCheckTitle": "การตรวจสอบผู้ส่งต้องได้รับความสนใจ",
 	"message.senderCheckViewDetails": "ตรวจสอบรายละเอียดผู้ส่ง",
+	"message.mailingListNotice": "ข้อความนี้มาจากเมลลิงลิสต์",
 	"message.date": "วันที่",
 	"message.blockContact": "บล็อกผู้ติดต่อ",
 	"message.star": "ติดดาว",

@@ -96,6 +96,7 @@
 	"message.senderCheckShort": "检查发件人",
 	"message.senderCheckTitle": "发件人检查需要关注",
 	"message.senderCheckViewDetails": "查看发件人详情",
+	"message.mailingListNotice": "此邮件来自邮件列表。",
 	"message.date": "日期",
 	"message.blockContact": "屏蔽联系人",
 	"message.star": "加星标",

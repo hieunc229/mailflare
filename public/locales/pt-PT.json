@@ -102,6 +102,7 @@
 	"message.senderCheckShort": "Verificar remetente",
 	"message.senderCheckTitle": "As verificações do remetente requerem atenção",
 	"message.senderCheckViewDetails": "Rever detalhes do remetente",
+	"message.mailingListNotice": "Esta mensagem é de uma lista de distribuição.",
 	"message.date": "Data",
 	"message.blockContact": "Bloquear contacto",
 	"message.star": "Marcar com estrela",

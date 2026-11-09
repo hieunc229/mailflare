@@ -102,6 +102,7 @@
 	"message.senderCheckShort": "Vérifier l'expéditeur",
 	"message.senderCheckTitle": "Les vérifications de l'expéditeur nécessitent votre attention",
 	"message.senderCheckViewDetails": "Examiner les détails de l'expéditeur",
+	"message.mailingListNotice": "Ce message provient d'une liste de diffusion.",
 	"message.date": "Date",
 	"message.blockContact": "Bloquer le contact",
 	"message.star": "Suivre",

@@ -105,6 +105,7 @@
 	"message.senderCheckShort": "Проверить отправителя",
 	"message.senderCheckTitle": "Проверки отправителя требуют внимания",
 	"message.senderCheckViewDetails": "Проверить сведения об отправителе",
+	"message.mailingListNotice": "Это письмо пришло из списка рассылки.",
 	"message.date": "Дата",
 	"message.blockContact": "Заблокировать контакт",
 	"message.star": "Пометить",
