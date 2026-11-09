@@ -266,6 +266,29 @@ export const createMailboxAliasSchema = z.object({
 		.transform((value) => value.toLowerCase()),
 });
 
+// The aliases endpoint additionally accepts a label, a masked flag, and
+// `generate` to mint a random masked address without a client-chosen local part.
+// Labels become outbound display names, so control and format characters that
+// could corrupt headers are refused.
+const aliasLabelSchema = z.string().trim().max(100).regex(/^[^\p{Cc}\p{Cf}]*$/u);
+
+export const mailboxAliasBodySchema = createMailboxAliasSchema
+	.partial({ localPart: true })
+	.extend({
+		label: aliasLabelSchema.optional(),
+		masked: z.boolean().default(false),
+		generate: z.boolean().default(false),
+	})
+	.refine((value) => value.generate || !!value.localPart, {
+		message: "Enter an alias username or request a generated address",
+	});
+
+export const updateMailboxAliasSchema = z.object({
+	aliasId: z.string().min(1),
+	label: aliasLabelSchema.nullable().optional(),
+	enabled: z.boolean().optional(),
+});
+
 export const createUserAccountSchema = z.object({
 	username: z.string().trim().min(1).max(64).regex(/^[a-zA-Z0-9._%+-]+$/),
 	domainId: z.string().min(1),

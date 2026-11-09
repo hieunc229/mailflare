@@ -70,7 +70,7 @@ export async function fetchMailboxAliases(id: string): Promise<MailboxAliasesRes
 
 export async function createMailboxAlias(
 	id: string,
-	input: { domainId: string; localPart: string },
+	input: { domainId: string; localPart?: string; label?: string; masked?: boolean; generate?: boolean },
 ): Promise<void> {
 	const res = await authFetch(`/api/mailboxes/${id}/aliases`, {
 		method: "POST",
@@ -79,6 +79,21 @@ export async function createMailboxAlias(
 	});
 	const json = (await res.json()) as { error?: string };
 	if (!res.ok) throw new Error(json.error ?? "Failed to add alias");
+
+	clearMailboxesCache();
+}
+
+export async function updateMailboxAlias(
+	id: string,
+	input: { aliasId: string; label?: string | null; enabled?: boolean },
+): Promise<void> {
+	const res = await authFetch(`/api/mailboxes/${id}/aliases`, {
+		method: "PATCH",
+		headers: { "Content-Type": "application/json" },
+		body: JSON.stringify(input),
+	});
+	const json = (await res.json()) as { error?: string };
+	if (!res.ok) throw new Error(json.error ?? "Failed to update alias");
 
 	clearMailboxesCache();
 }

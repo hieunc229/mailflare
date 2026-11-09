@@ -1,7 +1,7 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { AtSign, Save, Trash2, UserPlus } from "@/components/icons";
+import { AtSign, Check, Copy, Save, Sparkles, Trash2, UserPlus } from "@/components/icons";
 import { useParams, usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { useLanguage } from "@/components/language-provider";
@@ -19,6 +19,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Switch } from "@/components/ui/switch";
 import {
   createMailboxAlias,
   deleteMailbox,
@@ -29,6 +30,7 @@ import {
   getMailboxAddress,
   grantSharedInboxAccess,
   revokeSharedInboxAccess,
+  updateMailboxAlias,
   updateMailboxSettings,
 } from "./utils";
 import { getMailboxesBase } from "../utils";
@@ -44,6 +46,8 @@ export default function MailboxSettingsPage() {
   const [selectedUserId, setSelectedUserId] = useState("");
   const [aliasLocalPart, setAliasLocalPart] = useState("");
   const [aliasDomainId, setAliasDomainId] = useState("");
+  const [aliasLabel, setAliasLabel] = useState("");
+  const [copiedAliasId, setCopiedAliasId] = useState<string | null>(null);
 
   const mailbox = useQuery({
     queryKey: ["mailbox", mailboxId],
@@ -87,16 +91,41 @@ export default function MailboxSettingsPage() {
       createMailboxAlias(mailboxId, {
         domainId: aliasDomainId,
         localPart: aliasLocalPart.trim(),
+        label: aliasLabel.trim() || undefined,
       }),
     onSuccess: async () => {
       setAliasLocalPart("");
+      setAliasLabel("");
       await qc.invalidateQueries({ queryKey: ["mailbox", mailboxId, "aliases"] });
     },
+  });
+  const generateAlias = useMutation({
+    mutationFn: () =>
+      createMailboxAlias(mailboxId, {
+        domainId: aliasDomainId,
+        generate: true,
+        label: aliasLabel.trim() || undefined,
+      }),
+    onSuccess: async () => {
+      setAliasLabel("");
+      await qc.invalidateQueries({ queryKey: ["mailbox", mailboxId, "aliases"] });
+    },
+  });
+  const updateAlias = useMutation({
+    mutationFn: (input: { aliasId: string; enabled?: boolean; label?: string | null }) =>
+      updateMailboxAlias(mailboxId, input),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["mailbox", mailboxId, "aliases"] }),
   });
   const removeAlias = useMutation({
     mutationFn: (aliasId: string) => deleteMailboxAlias(mailboxId, aliasId),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["mailbox", mailboxId, "aliases"] }),
   });
+
+  function copyAlias(aliasId: string, address: string) {
+    void navigator.clipboard?.writeText(address);
+    setCopiedAliasId(aliasId);
+    setTimeout(() => setCopiedAliasId((current) => (current === aliasId ? null : current)), 1500);
+  }
 
   const sharedAccess = useQuery({
     queryKey: ["mailbox", mailboxId, "access"],
@@ -217,29 +246,61 @@ export default function MailboxSettingsPage() {
         </CardHeader>
         <CardContent className="space-y-4 pt-5">
           {aliases.isLoading && <Skeleton className="h-12 w-full rounded-2xl" />}
-          {(aliases.data?.aliases ?? []).map((alias) => (
-            <div
-              key={alias.id}
-              className="flex items-center justify-between gap-3 rounded-2xl bg-neutral-50 px-4 py-3"
-            >
-              <div className="flex min-w-0 items-center gap-2">
-                <AtSign className="h-4 w-4 shrink-0 text-neutral-400" />
-                <p className="truncate no-font-mono text-sm font-medium text-neutral-900">
-                  {alias.localPart}@{alias.hostname}
-                </p>
-              </div>
-              <Button
-                type="button"
-                size="icon"
-                variant="ghost"
-                aria-label={t("mailbox.removeAddress", { address: `${alias.localPart}@${alias.hostname}` })}
-                disabled={removeAlias.isPending}
-                onClick={() => removeAlias.mutate(alias.id)}
+          {(aliases.data?.aliases ?? []).map((alias) => {
+            const address = `${alias.localPart}@${alias.hostname}`;
+            return (
+              <div
+                key={alias.id}
+                className="flex items-center justify-between gap-3 rounded-2xl bg-neutral-50 px-4 py-3"
               >
-                <Trash2 className="h-4 w-4 text-red-600" />
-              </Button>
-            </div>
-          ))}
+                <div className="flex min-w-0 items-center gap-2">
+                  <AtSign className="h-4 w-4 shrink-0 text-neutral-400" />
+                  <p
+                    className={`truncate no-font-mono text-sm font-medium ${
+                      alias.enabled ? "text-neutral-900" : "text-neutral-400 line-through"
+                    }`}
+                  >
+                    {address}
+                  </p>
+                  {alias.masked && <Badge variant="secondary">{t("mailbox.masked")}</Badge>}
+                  {alias.label && (
+                    <span className="truncate text-sm text-neutral-500">{alias.label}</span>
+                  )}
+                </div>
+                <div className="flex shrink-0 items-center gap-1">
+                  <Button
+                    type="button"
+                    size="icon"
+                    variant="ghost"
+                    aria-label={t("mailbox.copyAddress", { address })}
+                    onClick={() => copyAlias(alias.id, address)}
+                  >
+                    {copiedAliasId === alias.id ? (
+                      <Check className="h-4 w-4 text-green-600" />
+                    ) : (
+                      <Copy className="h-4 w-4" />
+                    )}
+                  </Button>
+                  <Switch
+                    checked={alias.enabled}
+                    disabled={updateAlias.isPending}
+                    aria-label={t(alias.enabled ? "mailbox.disableAlias" : "mailbox.enableAlias", { address })}
+                    onCheckedChange={(enabled) => updateAlias.mutate({ aliasId: alias.id, enabled })}
+                  />
+                  <Button
+                    type="button"
+                    size="icon"
+                    variant="ghost"
+                    aria-label={t("mailbox.removeAddress", { address })}
+                    disabled={removeAlias.isPending}
+                    onClick={() => removeAlias.mutate(alias.id)}
+                  >
+                    <Trash2 className="h-4 w-4 text-red-600" />
+                  </Button>
+                </div>
+              </div>
+            );
+          })}
           {aliases.data && aliases.data.aliases.length === 0 && (
             <p className="rounded-2xl bg-neutral-50 px-4 py-3 text-sm text-neutral-500">
               {t("mailbox.noAliases")}
@@ -281,9 +342,37 @@ export default function MailboxSettingsPage() {
               {addAlias.isPending ? t("account.mailboxes.adding") : t("mailbox.addAlias")}
             </Button>
           </div>
+          <div className="flex gap-2">
+            <Input
+              value={aliasLabel}
+              onChange={(event) => setAliasLabel(event.target.value)}
+              placeholder={t("mailbox.aliasLabelPlaceholder")}
+              className="min-w-0 flex-1"
+              disabled={addAlias.isPending || generateAlias.isPending}
+            />
+            <Button
+              type="button"
+              variant="secondary"
+              disabled={!aliasDomainId || generateAlias.isPending || addAlias.isPending}
+              onClick={() => generateAlias.mutate()}
+            >
+              <Sparkles className="h-4 w-4" />
+              {generateAlias.isPending ? t("account.mailboxes.adding") : t("mailbox.generateMasked")}
+            </Button>
+          </div>
           {addAlias.isError && (
             <p className="text-sm text-red-600">
               {addAlias.error instanceof Error ? addAlias.error.message : t("mailbox.aliasAddFailed")}
+            </p>
+          )}
+          {generateAlias.isError && (
+            <p className="text-sm text-red-600">
+              {generateAlias.error instanceof Error ? generateAlias.error.message : t("mailbox.aliasAddFailed")}
+            </p>
+          )}
+          {updateAlias.isError && (
+            <p className="text-sm text-red-600">
+              {updateAlias.error instanceof Error ? updateAlias.error.message : t("mailbox.aliasUpdateFailed")}
             </p>
           )}
           {removeAlias.isError && (
