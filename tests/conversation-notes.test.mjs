@@ -173,8 +173,13 @@ test("notes on a self-keyed email survive its thread_id being set on send", asyn
 	const after = await conversation(owner, "queued");
 	assert.equal(after.threadKey, "provider-key");
 	assert.deepEqual((await notes.listConversationNotes(db, after, owner.id)).map((n) => n.id), [note.id]);
-	assert.equal((await notes.updateConversationNote(db, after, owner.id, note.id, "<p>still reachable</p>")).ok, true);
-	assert.deepEqual(await notes.deleteConversationNote(db, after, owner.id, note.id), { ok: true });
+
+	// A reply joins under the provider key; the note must still be found from it.
+	run("INSERT INTO messages (id, mailbox_id, user_id, direction, from_addr, to_addr, subject, status, thread_id, created_at) VALUES ('reply', 'support', 'owner', 'inbound', 'sam@acme.test', 'support@example.com', 'Re: Hi', 'received', 'provider-key', ?)", seconds(new Date()));
+	const fromReply = await conversation(owner, "reply");
+	assert.deepEqual((await notes.listConversationNotes(db, fromReply, owner.id)).map((n) => n.id), [note.id]);
+	assert.equal((await notes.updateConversationNote(db, fromReply, owner.id, note.id, "<p>still reachable</p>")).ok, true);
+	assert.deepEqual(await notes.deleteConversationNote(db, fromReply, owner.id, note.id), { ok: true });
 });
 
 test("a read-only member can write notes but cannot change or delete someone else's", async (t) => {

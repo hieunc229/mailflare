@@ -25,7 +25,15 @@ export async function conversationForUser(db: AppDatabase, user: SessionUser, me
 	const access = await getMailboxAccessLevel(db, user, message.mailboxId);
 	if (!access?.canRead) return null;
 	const threadKey = message.threadId ?? message.id;
-	return { mailboxId: message.mailboxId, threadKey, threadKeys: [...new Set([threadKey, message.id])], messageId: message.id, canManage: access.canManage };
+	// Sending a queued message rekeys its thread by the provider Message-ID
+	// (send.ts), so a note written while it was its own conversation stays under
+	// the message id. Accepting every member's id keeps such notes reachable
+	// from any email of the thread, e.g. a reply that arrives after the send.
+	const members = await db
+		.select({ id: messages.id })
+		.from(messages)
+		.where(and(eq(messages.mailboxId, message.mailboxId), eq(messages.threadId, threadKey)));
+	return { mailboxId: message.mailboxId, threadKey, threadKeys: [...new Set([threadKey, message.id, ...members.map((member) => member.id)])], messageId: message.id, canManage: access.canManage };
 }
 
 /** Every note of the conversation, oldest first. */

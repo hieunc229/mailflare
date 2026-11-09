@@ -18,9 +18,11 @@ export type NoteConversation = {
 	mailboxId: string;
 	threadKey: string;
 	/**
-	 * threadKey plus the looked-up email's own id. Sending a queued message
-	 * rewrites its thread_id (send.ts), so notes keyed before that move hide
-	 * under the message id; lookups must accept either key.
+	 * threadKey plus the id of every email in the conversation. A queued
+	 * message keys its conversation by its own id; send.ts rekeys the thread
+	 * by the provider Message-ID, so notes taken before that move hide under
+	 * the message id and must be found from any other email of the thread,
+	 * e.g. a reply that arrives after the send.
 	 */
 	threadKeys: string[];
 	/** The email the conversation was looked up from. */
