@@ -41,9 +41,21 @@ export function MessageAttachmentViewer({
 		? getAttachmentFileUrl(messageId, attachment.id, flagged ? "acknowledged-download" : "download")
 		: "";
 
+	// Reset per-attachment state while rendering, before the effects below refetch it.
+	const [prevView, setPrevView] = useState({ attachment, messageId, open, t });
+	if (attachment !== prevView.attachment || messageId !== prevView.messageId || open !== prevView.open || t !== prevView.t) {
+		setPrevView({ attachment, messageId, open, t });
+		if (attachment !== prevView.attachment || messageId !== prevView.messageId || open !== prevView.open) {
+			setRisk(null);
+			setAcknowledged(false);
+		}
+		if (open && attachment && previewKind === "text") {
+			setTextContent("");
+			setTextError("");
+		}
+	}
+
 	useEffect(() => {
-		setRisk(null);
-		setAcknowledged(false);
 		if (!open || !attachment) return;
 		let cancelled = false;
 		void authFetch(getAttachmentFileUrl(messageId, attachment.id, "risk"))
@@ -56,8 +68,6 @@ export function MessageAttachmentViewer({
 	useEffect(() => {
 		if (!open || !attachment || previewKind !== "text") return;
 		let cancelled = false;
-		setTextContent("");
-		setTextError("");
 
 		authFetch(previewUrl)
 			.then(async (response) => {

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { formatUserDate } from "@/lib/time/utils";
 import { ChevronsUpDown, Paperclip } from "@/components/icons";
 import { ContactAvatar } from "@/components/contacts/contact-avatar";
@@ -141,7 +141,11 @@ export function ConversationMessageCard({
 	const isAssistantOpen = useAssistantOpen();
 	const isAnyPanelVisible = messageListVisible || isAssistantOpen;
 
-	useEffect(() => setLocallyRead(message.read), [message.read]);
+	const [prevRead, setPrevRead] = useState(message.read);
+	if (message.read !== prevRead) {
+		setPrevRead(message.read);
+		setLocallyRead(message.read);
+	}
 
 	const body = useMemo(() => {
 		if (!expanded) return null;

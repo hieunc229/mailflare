@@ -80,5 +80,5 @@ export type BlockMessageContactInput = {
 export type MoveMessageActionItem = {
 	action: BulkMessageAction;
 	labelKey: TranslationKey;
-	icon: any
+	icon: IconNode
 };

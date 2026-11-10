@@ -56,10 +56,11 @@ function AccountAvatar({
 	const sizeClass = size === "large" ? "h-16 w-16 text-xl" : "h-10 w-10 text-sm";
 	const iconClass = size === "large" ? "h-7 w-7" : "h-5 w-5";
 	const [imageFailed, setImageFailed] = useState(false);
-
-	useEffect(() => {
+	const [prevImage, setPrevImage] = useState({ avatarUrl, hasAvatar });
+	if (avatarUrl !== prevImage.avatarUrl || hasAvatar !== prevImage.hasAvatar) {
+		setPrevImage({ avatarUrl, hasAvatar });
 		setImageFailed(false);
-	}, [avatarUrl, hasAvatar]);
+	}
 
 	if (hasAvatar && !imageFailed) {
 		return (

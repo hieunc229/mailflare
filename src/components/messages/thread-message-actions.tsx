@@ -1,6 +1,6 @@
 "use client";
 
-import { createElement, useEffect, useState } from "react";
+import { createElement, useState } from "react";
 import { Ban, FileCode2, Forward, Info, Mail, MailOpen, MoreVertical, Reply, ReplyAll, Star } from "@/components/icons";
 import { useCompose } from "@/components/compose/compose-context";
 import { MessageSourceDialog } from "@/components/messages/message-source-dialog";
@@ -45,7 +45,11 @@ export function ThreadMessageActions({
 		? getOwnAddressForMessage(message, ownAddresses)
 		: ownAddress;
 
-	useEffect(() => setStarred(message.starred), [message.starred]);
+	const [prevStarred, setPrevStarred] = useState(message.starred);
+	if (message.starred !== prevStarred) {
+		setPrevStarred(message.starred);
+		setStarred(message.starred);
+	}
 
 	async function onToggleStar() {
 		setPending(true);

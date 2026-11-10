@@ -111,6 +111,7 @@ export function MessageActions({
 	}, [message, direction, senderAddress]);
 	const canReplyAll = hasAdditionalRecipients(replyable, ownAddresses);
 
+	const sentAt = messageMeta?.createdAt;
 	const handleReply = useCallback(async (mode: ReplyMode) => {
 		setPendingAction(mode);
 		setError(null);
@@ -122,7 +123,7 @@ export function MessageActions({
 				subject,
 				bodyText,
 				bodyHtml,
-				sentAt: messageMeta?.createdAt,
+				sentAt,
 				recipients: getReplyRecipients(replyable, ownAddresses, mode),
 				threading: getReplyThreading(replyable),
 			});
@@ -132,7 +133,7 @@ export function MessageActions({
 		} finally {
 			setPendingAction(null);
 		}
-	}, [mailboxId, senderAddress, ownAddress, subject, bodyText, bodyHtml, messageMeta?.createdAt, replyable, ownAddresses, openDraftComposer, t]);
+	}, [mailboxId, senderAddress, ownAddress, subject, bodyText, bodyHtml, sentAt, replyable, ownAddresses, openDraftComposer, t]);
 
 	const shortcuts = useMemo(
 		() => [
