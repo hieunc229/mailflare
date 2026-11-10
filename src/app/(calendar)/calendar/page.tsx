@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import type { DragEvent, PointerEvent as ReactPointerEvent } from "react";
 import { createPortal } from "react-dom";
@@ -37,6 +37,10 @@ import clsx from "clsx";
 import { DialogFrame } from "@/components/dialog-frame";
 
 const eventFieldClass = "h-9 border-transparent bg-transparent px-2 shadow-none hover:bg-white/60 focus:border-blue-600 focus:bg-white focus:shadow-sm";
+// The header slot is a node in the layout; it never changes once mounted, so there is nothing to subscribe to.
+const subscribeToHeaderSlot = () => () => {};
+const getHeaderSlot = () => document.getElementById("calendar-header-slot");
+const getServerHeaderSlot = () => null;
 
 export default function CalendarPage() {
   const { t } = useLanguage();
@@ -52,7 +56,7 @@ export default function CalendarPage() {
   const monthPickerPopupRef = useRef<HTMLDivElement | null>(null);
   const [monthPickerPos, setMonthPickerPos] = useState<{ top: number; left: number } | null>(null);
   const openedEventFromUrl = useRef<string | null>(null);
-  const [headerTarget, setHeaderTarget] = useState<HTMLElement | null>(null);
+  const headerTarget = useSyncExternalStore(subscribeToHeaderSlot, getHeaderSlot, getServerHeaderSlot);
   const [draggedEvent, setDraggedEvent] = useState<CalendarEvent | null>(null);
   const [resizingEvent, setResizingEvent] = useState<CalendarEvent | null>(null);
   const [dragPreview, setDragPreview] = useState<EventDragPreview | null>(null);
@@ -100,10 +104,6 @@ export default function CalendarPage() {
     : null, [dragPreview, previewEvent]);
 
   useEffect(() => {
-    setHeaderTarget(document.getElementById("calendar-header-slot"));
-  }, []);
-
-  useEffect(() => {
     const interval = window.setInterval(() => setCurrentTime(Date.now()), 60_000);
     return () => window.clearInterval(interval);
   }, []);
@@ -125,9 +125,15 @@ export default function CalendarPage() {
     };
   }, [monthPickerOpen]);
 
+  // Every refetch shows the loading bar until it settles.
+  const [loadingFor, setLoadingFor] = useState({ today, visibleDate, eventsVersion, t });
+  if (loadingFor.today !== today || loadingFor.visibleDate !== visibleDate || loadingFor.eventsVersion !== eventsVersion || loadingFor.t !== t) {
+    setLoadingFor({ today, visibleDate, eventsVersion, t });
+    setLoading(true);
+  }
+
   useEffect(() => {
     let active = true;
-    setLoading(true);
     const start = new Date(Math.min(today.getTime(), weekStart.getTime(), startOfDay(visibleDate).getTime()));
     const end = new Date(Math.max(addDays(today, 90).getTime(), addDays(weekStart, 7).getTime(), addDays(visibleDate, 1).getTime()));
     void authFetch(`/api/calendar/events?start=${start.toISOString()}&end=${end.toISOString()}`)
