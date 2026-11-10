@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import {
@@ -52,7 +52,8 @@ export default function BackupsPage() {
   const queryClient = useQueryClient();
   const restoreInput = useRef<HTMLInputElement | null>(null);
   const savedSettings = useRef<BackupSettings | null>(null);
-  const [settings, setSettings] = useState<BackupSettings | null>(null);
+  // Local edits to the backup settings; until the first edit the loaded settings are shown.
+  const [editedSettings, setSettings] = useState<BackupSettings | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const backups = useQuery({
     queryKey: ["backups"],
@@ -65,12 +66,8 @@ export default function BackupsPage() {
         : false,
   });
 
-  useEffect(() => {
-    if (backups.data?.settings && !settings) {
-      savedSettings.current = backups.data.settings;
-      setSettings(backups.data.settings);
-    }
-  }, [backups.data?.settings, settings]);
+  const settings = editedSettings ?? backups.data?.settings ?? null;
+  const lastSavedSettings = () => savedSettings.current ?? backups.data?.settings ?? null;
 
   const saveSettings = useMutation({
     mutationFn: saveBackupSettings,
@@ -85,7 +82,7 @@ export default function BackupsPage() {
     mutationFn: saveBackupSettings,
     onMutate: (nextSettings) => setSettings(nextSettings),
     onSuccess: (_data, nextSettings) => { savedSettings.current = nextSettings; },
-    onError: () => { if (savedSettings.current) setSettings(savedSettings.current); },
+    onError: () => { const saved = lastSavedSettings(); if (saved) setSettings(saved); },
   });
 
   const runBackup = useMutation({
@@ -333,7 +330,7 @@ export default function BackupsPage() {
                           }
                           onBlur={(event) => {
                             if (event.currentTarget.checkValidity()) autoSaveSettings.mutate(settings);
-                            else setSettings({ ...settings, scheduleValue: savedSettings.current?.scheduleValue ?? 1 });
+                            else setSettings({ ...settings, scheduleValue: lastSavedSettings()?.scheduleValue ?? 1 });
                           }}
                         />
                       </div>
@@ -377,7 +374,7 @@ export default function BackupsPage() {
                           }
                           onBlur={(event) => {
                             if (event.currentTarget.checkValidity()) autoSaveSettings.mutate(settings);
-                            else setSettings({ ...settings, retentionDays: savedSettings.current?.retentionDays ?? 30 });
+                            else setSettings({ ...settings, retentionDays: lastSavedSettings()?.retentionDays ?? 30 });
                           }}
                         />
                         <span className="text-sm text-neutral-500 absolute z-10 right-6">{t("backups.days")}</span>

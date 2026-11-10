@@ -11,8 +11,7 @@ export function BrandingProvider({ children, initialBranding }: { children: Reac
 	const [branding, setBranding] = useState(initialBranding ?? DEFAULT_BRANDING);
 	const [iconVersion, setIconVersion] = useState(0);
 
-	async function refreshBranding() {
-		const nextBranding = await fetchBranding();
+	function applyBranding(nextBranding: Branding) {
 		setBranding(nextBranding);
 		setIconVersion(Date.now());
 		if (document.title === "Mailflare" || document.title === branding.appName) {
@@ -20,10 +19,14 @@ export function BrandingProvider({ children, initialBranding }: { children: Reac
 		}
 	}
 
+	async function refreshBranding() {
+		applyBranding(await fetchBranding());
+	}
+
 	useEffect(() => {
 		// The server layout already supplied the branding; refetching it on mount is
 		// a second round trip that competes with the rest of the boot.
-		if (!initialBranding) void refreshBranding();
+		if (!initialBranding) void fetchBranding().then(applyBranding);
 	}, [initialBranding]);
 
 	return (
