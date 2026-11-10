@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useSyncExternalStore } from "react";
 import { useLanguage } from "@/components/language-provider";
 import type { TranslationKey } from "@/lib/i18n/types";
 import { Select } from "@/components/ui/select";
@@ -18,16 +18,16 @@ const OPTIONS: { value: ThemePreference; labelKey: TranslationKey }[] = [
 	{ value: "dark", labelKey: "settings.theme.dark" },
 ];
 
+function subscribeThemePreference(onChange: () => void) {
+	window.addEventListener(THEME_CHANGED_EVENT, onChange);
+	return () => window.removeEventListener(THEME_CHANGED_EVENT, onChange);
+}
+
+const serverThemePreference = (): ThemePreference => "system";
+
 export function AppearanceSettings() {
 	const { t } = useLanguage();
-	const [preference, setPreference] = useState<ThemePreference>("system");
-
-	useEffect(() => {
-		setPreference(readThemePreference());
-		const sync = () => setPreference(readThemePreference());
-		window.addEventListener(THEME_CHANGED_EVENT, sync);
-		return () => window.removeEventListener(THEME_CHANGED_EVENT, sync);
-	}, []);
+	const preference = useSyncExternalStore(subscribeThemePreference, readThemePreference, serverThemePreference);
 
 	return (
 		<label className="flex items-start gap-3 rounded-xl bg-neutral-50 p-4">
@@ -44,7 +44,6 @@ export function AppearanceSettings() {
 				onChange={(event) => {
 					const next = event.target.value;
 					if (!isThemePreference(next)) return;
-					setPreference(next);
 					saveThemePreference(next);
 				}}
 			>

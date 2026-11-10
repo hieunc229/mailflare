@@ -1,17 +1,20 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState, useSyncExternalStore } from "react";
 import { Copy } from "@/components/icons";
 import { useLanguage } from "@/components/language-provider";
 import { Button } from "@/components/ui/button";
 import { buildMcpAgentPrompt } from "./mcp-agent-instructions-utils";
 import type { McpAgentInstructionsProps } from "./mcp-agent-instructions-types";
 
+const subscribeNothing = () => () => {};
+const clientOrigin = () => window.location.origin;
+const serverOrigin = () => "";
+
 export function McpAgentInstructions(props: McpAgentInstructionsProps) {
 	const { t } = useLanguage();
-	const [origin, setOrigin] = useState("");
+	const origin = useSyncExternalStore(subscribeNothing, clientOrigin, serverOrigin);
 	const [copied, setCopied] = useState(false);
-	useEffect(() => setOrigin(window.location.origin), []);
 	const prompt = buildMcpAgentPrompt(origin, props);
 
 	return <div className="space-y-2 rounded-lg border border-neutral-200 p-3">
