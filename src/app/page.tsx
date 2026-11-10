@@ -37,6 +37,8 @@ export default async function HomePage() {
         name: sessionUser.name,
         role: sessionUser.role,
         hasAvatar: !!sessionUser.avatarKey,
+        calendarEnabled: sessionUser.calendarEnabled,
+        driveEnabled: sessionUser.driveEnabled,
       }
     : null;
 
