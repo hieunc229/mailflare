@@ -51,7 +51,9 @@ export function DriveNav({ onNavigate }: { onNavigate?: () => void }) {
 	const view = params.get("view") ?? "my";
 	const activeFolder = params.get("folder");
 	const [storage, setStorage] = useState<DriveStorageDetail | null>(null);
-	const [foldersOpen, setFoldersOpen] = useState(false);
+	const [foldersOpen, setFoldersOpen] = useState(() => {
+		try { return localStorage.getItem(FOLDERS_OPEN_KEY) === "1"; } catch { /* storage unavailable */ return false; }
+	});
 	const [folders, setFolders] = useState<FolderNode[]>([]);
 	const compact = minimal && !mobile;
 	const [creating, setCreating] = useState(false);
@@ -66,16 +68,9 @@ export function DriveNav({ onNavigate }: { onNavigate?: () => void }) {
 		return () => window.removeEventListener(DRIVE_STORAGE_EVENT, onStorage);
 	}, []);
 
-	useEffect(() => {
-		try { setFoldersOpen(localStorage.getItem(FOLDERS_OPEN_KEY) === "1"); } catch { /* storage unavailable */ }
-	}, []);
-
-	const loadFolders = useCallback(async () => {
-		try {
-			const response = await authFetch("/api/drive/folders", { redirectOnUnauthorized: false });
-			if (response.ok) setFolders((await response.json() as { folders: FolderNode[] }).folders);
-		} catch { /* the list stays as it was */ }
-	}, []);
+	const loadFolders = useCallback(() => authFetch("/api/drive/folders", { redirectOnUnauthorized: false })
+		.then(async (response) => { if (response.ok) setFolders((await response.json() as { folders: FolderNode[] }).folders); })
+		.catch(() => { /* the list stays as it was */ }), []);
 
 	useEffect(() => {
 		if (!foldersOpen) return;
