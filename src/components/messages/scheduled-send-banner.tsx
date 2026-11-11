@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { alertDialog } from "@/components/ui/confirm-dialog";
 import { useRouter } from "next/navigation";
 import { CalendarClock } from "@/components/icons";
 import { useLanguage } from "@/components/language-provider";
@@ -29,7 +30,7 @@ export function ScheduledSendBanner({ messageId, scheduledAt, onRescheduled }: {
 			router.push("/drafts");
 			if (edit) openDraftComposer(messageId);
 		} catch {
-			window.alert(t("schedule.cancelFailed"));
+			void alertDialog(t("schedule.cancelFailed"));
 			setCancelling(false);
 		}
 	}
@@ -47,7 +48,7 @@ export function ScheduledSendBanner({ messageId, scheduledAt, onRescheduled }: {
 			window.dispatchEvent(new Event("mailflare:messages-changed"));
 			onRescheduled?.(date.toISOString());
 		} catch {
-			window.alert(t("schedule.rescheduleFailed"));
+			void alertDialog(t("schedule.rescheduleFailed"));
 		} finally {
 			setRescheduling(false);
 		}

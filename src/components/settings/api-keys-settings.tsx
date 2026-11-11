@@ -1,6 +1,7 @@
 "use client";
 
 import { mobilePrimaryActionAboveNavClass } from "@/components/page-header-utils";
+import { confirmDestructive } from "@/components/ui/confirm-dialog";
 import { useEffect, useState } from "react";
 import { Copy, KeyRound, Plus, Trash2 } from "@/components/icons";
 import { useLanguage } from "@/components/language-provider";
@@ -62,7 +63,7 @@ export function ApiKeysSettings() {
 	}
 
 	async function revoke(key: ManagedApiKey) {
-		if (!window.confirm(t("apiKeys.revokeConfirm", { name: key.name }))) return;
+		if (!await confirmDestructive(t("apiKeys.revokeConfirm", { name: key.name }))) return;
 		setRevokingId(key.id);
 		setError(null);
 		try {

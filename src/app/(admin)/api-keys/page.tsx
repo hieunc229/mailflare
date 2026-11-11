@@ -1,6 +1,7 @@
 "use client";
 
 import { mobilePrimaryActionClass } from "@/components/page-header-utils";
+import { confirmDestructive } from "@/components/ui/confirm-dialog";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { Copy, KeyRound, Plus, Trash2 } from "@/components/icons";
@@ -160,7 +161,7 @@ export default function ApiKeysPage() {
 									))}
 								</span>
 							</span>
-						<Button type="button" size="sm" variant="outline" disabled={revoke.isPending} onClick={() => { if (window.confirm(t("apiKeys.revokeConfirm", { name: key.name }))) revoke.mutate(key.id); }}><Trash2 className="h-4 w-4" />{t("common.revoke")}</Button>
+						<Button type="button" size="sm" variant="outline" disabled={revoke.isPending} onClick={async () => { if (await confirmDestructive(t("apiKeys.revokeConfirm", { name: key.name }))) revoke.mutate(key.id); }}><Trash2 className="h-4 w-4" />{t("common.revoke")}</Button>
 						</ListRow>
 					))}
 				</List>

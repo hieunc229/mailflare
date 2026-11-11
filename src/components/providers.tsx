@@ -1,6 +1,7 @@
 "use client";
 
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { ConfirmDialogHost } from "@/components/ui/confirm-dialog";
 import { useEffect, useState } from "react";
 import { clearMailboxClientState } from "@/components/mailbox-provider-utils";
 import { BrandingProvider } from "@/components/branding-provider";
@@ -55,6 +56,7 @@ export function Providers({ children, initialBranding }: { children: React.React
 				<PwaServiceWorker />
 				{children}
 				<ThemeSync />
+				<ConfirmDialogHost />
 				<div role="status" aria-live="polite">
 					{realtime.notification && (
 						<NewMessagePopup

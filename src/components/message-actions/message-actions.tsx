@@ -1,6 +1,7 @@
 "use client";
 
 import { createElement, Fragment, useCallback, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { confirmDestructive } from "@/components/ui/confirm-dialog";
 import type { ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import { Archive, ArchiveRestore, Ban, BellOff, Clock, FileCode2, Forward, Mail, MailOpen, MoreVertical, Reply, ReplyAll, ShieldAlert, ShieldCheck, Trash2 } from "@/components/icons";
@@ -84,7 +85,7 @@ export function MessageActions({
 	// being a no-op, after the user confirms.
 	const canDeleteForever = supportsPermanentDelete(status);
 	const deleteForever = useCallback(async () => {
-		if (!window.confirm(getPermanentDeleteConfirmText(1, t))) return;
+		if (!await confirmDestructive(getPermanentDeleteConfirmText(1, t))) return;
 		setPendingAction("delete");
 		setError(null);
 		try {
@@ -208,7 +209,7 @@ export function MessageActions({
 			return;
 		}
 
-		if (!confirmTrashWithoutUnsubscribe()) return;
+		if (!await confirmTrashWithoutUnsubscribe()) return;
 		setPendingAction("unsubscribe");
 		if (!mailboxId) {
 			setError(t("actions.error.trashRule"));
@@ -270,7 +271,7 @@ export function MessageActions({
 		try {
 			const preview = await requestUnsubscribe(messageId, { action: "unsubscribe_and_trash", previewOnly: true });
 			const count = "preview" in preview ? preview.preview.count : 0;
-			if (!window.confirm(t("actions.unsubscribeDeleteConfirm", { count }))) return;
+			if (!await confirmDestructive(t("actions.unsubscribeDeleteConfirm", { count }))) return;
 			const result = await requestUnsubscribe(messageId, { action: "unsubscribe_and_trash" });
 			if (result.method === "link") openUnsubscribeUrl(result.url);
 			showNotice(t("actions.unsubscribeTrashDone", { count: result.trashedCount ?? 0 }));

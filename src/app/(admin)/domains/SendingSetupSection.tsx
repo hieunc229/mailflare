@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, type ReactNode } from "react";
+import { confirmDestructive } from "@/components/ui/confirm-dialog";
 import { useLanguage } from "@/components/language-provider";
 import type { TranslationKey } from "@/lib/i18n/types";
 import { requestJson } from "./api";
@@ -54,7 +55,7 @@ export default function SendingSetupSection({ domain, onChange, busy, message, c
 	}, [domain.id, domain.sendingProvider, reload]);
 
 	async function cleanUp(option: Option, title: string) {
-		if (!window.confirm(t("domains.removeSendingConfirm", { title, host: domain.hostname }))) return;
+		if (!await confirmDestructive(t("domains.removeSendingConfirm", { title, host: domain.hostname }))) return;
 		setRemoving(option);
 		setError("");
 		try {

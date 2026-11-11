@@ -1,4 +1,5 @@
 import { Fragment } from "react";
+import { confirmDestructive } from "@/components/ui/confirm-dialog";
 import { useLanguage } from "@/components/language-provider";
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import { Button } from "@/components/ui/button";
@@ -190,11 +191,11 @@ export default function DomainItemCard({
           >
             <DropdownMenu.Item
               disabled={remove.isPending}
-              onSelect={() => {
+              onSelect={async () => {
                 // Removing a domain deletes its mailboxes (and all their mail)
                 // and disables Email Routing on the zone, so require the hostname.
-                const typed = window.prompt(t("domains.removeConfirm", { host: item.hostname }));
-                if (typed?.trim().toLowerCase() !== item.hostname.toLowerCase()) return;
+                const confirmed = await confirmDestructive({ message: t("domains.removeConfirm", { host: item.hostname }), requireText: item.hostname });
+                if (!confirmed) return;
                 remove.mutate(item.id);
               }}
               className="flex cursor-pointer items-center gap-2 rounded-md px-3 py-2 text-red-600 outline-none hover:bg-red-50 focus:bg-red-50 data-[disabled]:pointer-events-none data-[disabled]:opacity-50"

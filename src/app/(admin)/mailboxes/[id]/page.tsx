@@ -1,6 +1,7 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { confirmDestructive } from "@/components/ui/confirm-dialog";
 import { AtSign, Save, Trash2, UserPlus } from "@/components/icons";
 import { useParams, usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
@@ -395,13 +396,8 @@ export default function MailboxSettingsPage() {
             type="button"
             variant="destructive"
             disabled={!mailbox.data || removeMailbox.isPending}
-            onClick={() => {
-              if (
-                !window.confirm(
-                  t("mailbox.deleteConfirm", { address }),
-                )
-              )
-                return;
+            onClick={async () => {
+              if (!await confirmDestructive(t("mailbox.deleteConfirm", { address }))) return;
               removeMailbox.mutate();
             }}
           >

@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { confirmDestructive, alertDialog } from "@/components/ui/confirm-dialog";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { MouseEvent } from "react";
 import { Archive, ChevronLeft, ChevronRight, ListFilter, Mail, MailOpen, Trash2 } from "@/components/icons";
@@ -462,14 +463,14 @@ export function MessageFolderPage({
 	const permanentDeleteFolder = !config.folderId && supportsPermanentDelete(config.folder) ? config.folder : null;
 	async function emptyFolder() {
 		if (!permanentDeleteFolder || !selectedMailbox?.id) return;
-		if (!window.confirm(getEmptyFolderConfirmText(permanentDeleteFolder, titleTotal, t))) return;
+		if (!await confirmDestructive(getEmptyFolderConfirmText(permanentDeleteFolder, titleTotal, t))) return;
 		setEmptyingFolder(true);
 		try {
 			await emptyMessageFolder(selectedMailbox.id, permanentDeleteFolder);
 			setOffset(0);
 		} catch (error) {
 			console.error(error);
-			window.alert(t("list.emptyFailed", { folder: getPermanentDeleteFolderLabel(permanentDeleteFolder, t) }));
+			void alertDialog(t("list.emptyFailed", { folder: getPermanentDeleteFolderLabel(permanentDeleteFolder, t) }));
 		} finally {
 			setEmptyingFolder(false);
 		}
@@ -494,7 +495,7 @@ export function MessageFolderPage({
 		if (selectedIds.length === 0) return;
 		if (action === "delete") {
 			const ids = expandSelectedIds(selectedIds);
-			if (!window.confirm(getPermanentDeleteConfirmText(ids.length, t))) return;
+			if (!await confirmDestructive(getPermanentDeleteConfirmText(ids.length, t))) return;
 		}
 
 		setPendingBulkAction(true);
