@@ -10,4 +10,6 @@ export type RecipientInputProps = {
 	autoFocus?: boolean;
 	/** Rendered at the right edge of the row, e.g. the Cc/Bcc toggles. */
 	trailing?: React.ReactNode;
+	/** Enables contact suggestions while typing; suggestions come from the mailbox owner's contacts. */
+	mailboxId?: string;
 };

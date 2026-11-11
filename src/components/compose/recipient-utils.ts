@@ -19,6 +19,11 @@ export function parseRecipientEntries(value: string, existing: string[] = []): s
 	return result;
 }
 
+/** Appends entries the list does not already have, deduplicated by bare address. */
+export function mergeRecipients(current: string[], additions: string[]): string[] {
+	return [...current, ...parseRecipientEntries(additions.join(", "), current)];
+}
+
 export function recipientsToHeader(entries: string[]): string {
 	return joinEmailAddressList(entries);
 }

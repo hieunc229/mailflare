@@ -72,7 +72,7 @@ export function NavItem({ link, iconClassName, labelClassName, wrap }: Props) {
     const composeButton = (
       <button
         type="button"
-        onClick={openComposer}
+        onClick={() => openComposer()}
         className={cn(!minimal && "ml-3", classes)}
         aria-label={minimal ? link.label : undefined}
         {...dropProps}
