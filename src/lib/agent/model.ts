@@ -1,3 +1,4 @@
+import { createAnthropic } from "@ai-sdk/anthropic";
 import { createOpenAI } from "@ai-sdk/openai";
 import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
 import { defaultSettingsMiddleware, wrapLanguageModel } from "ai";
@@ -69,6 +70,13 @@ export async function getAgentModel(env: CloudflareEnv, requestedModel?: string 
 				return { model: wrapLanguageModel({ model: provider.responses(modelId), middleware: defaultSettingsMiddleware({ settings: { providerOptions: { openai: { store: false } } } }) }), ...details };
 			}
 			return { model: provider.chat(modelId), ...details };
+		}
+		if (config.baseUrl.replace(/\/+$/, "") === PROVIDER_BASE_URLS.anthropic) {
+			const model = createAnthropic({ baseURL: config.baseUrl, apiKey: config.apiKey })(modelId);
+			// Claude 5.x models think by default, and thinking counts against the small output caps of chat
+			// and auto-drafts. Low effort keeps it short; older models do not think unless asked.
+			if (!/^claude-[a-z]+-5(?:-|$)/.test(modelId)) return { model, ...details };
+			return { model: wrapLanguageModel({ model, middleware: defaultSettingsMiddleware({ settings: { providerOptions: { anthropic: { effort: "low" } } } }) }), ...details };
 		}
 		const provider = createOpenAICompatible({ name: "mailflare", baseURL: config.baseUrl, apiKey: config.apiKey });
 		return { model: provider.chatModel(modelId), ...details };

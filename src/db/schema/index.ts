@@ -1031,7 +1031,7 @@ export const appSettings = sqliteTable("app_settings", {
 	iconKey: text("icon_key"),
 	agentEnabled: bool("agent_enabled").notNull().default(true),
 	agentProvider: text("agent_provider", { enum: ["cloudflare", "compatible"] }),
-	agentPreset: text("agent_preset", { enum: ["openai", "openrouter", "groq", "custom"] }),
+	agentPreset: text("agent_preset", { enum: ["openai", "anthropic", "openrouter", "groq", "custom"] }),
 	agentBaseUrl: text("agent_base_url"),
 	agentApiKey: text("agent_api_key"),
 	agentModel: text("agent_model"),
