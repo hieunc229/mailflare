@@ -632,6 +632,8 @@
 	"import.summary": "{imported} importadas, {skipped} ignoradas",
 	"settings.reading.title": "Leitura em duas colunas",
 	"settings.reading.description": "Mostra a lista de e-mails ao lado do e-mail aberto. Desative para ler e-mails em uma coluna.",
+	"settings.reading.autoAdvanceTitle": "Avanço automático",
+	"settings.reading.autoAdvanceDescription": "Mostra o próximo e-mail em vez da lista depois de arquivar, excluir ou mover um e-mail aberto.",
 	"settings.shortcuts.title": "Atalhos de teclado",
 	"settings.shortcuts.description": "Use teclas rápidas para navegar, escrever e gerenciar mensagens nesta conta.",
 	"settings.shortcuts.failed": "Falha ao atualizar as configurações de atalhos",

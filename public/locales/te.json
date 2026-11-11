@@ -626,6 +626,8 @@
 	"import.summary": "{imported} దిగుమతి అయ్యాయి, {skipped} దాటవేయబడ్డాయి",
 	"settings.reading.title": "రెండు నిలువు వరుసల పఠన వీక్షణ",
 	"settings.reading.description": "తెరిచిన ఇమెయిల్ పక్కన ఇమెయిల్ జాబితాను చూపించండి. ఇమెయిల్‌లను ఒకే నిలువు వరుసలో చదవడానికి దీన్ని ఆఫ్ చేయండి.",
+	"settings.reading.autoAdvanceTitle": "ఆటోమేటిక్‌గా ముందుకు",
+	"settings.reading.autoAdvanceDescription": "తెరిచిన ఇమెయిల్‌ను ఆర్కైవ్ చేసిన, తొలగించిన లేదా తరలించిన తర్వాత జాబితాకు బదులుగా తదుపరి ఇమెయిల్‌ను చూపండి.",
 	"settings.shortcuts.title": "కీబోర్డ్ షార్ట్‌కట్‌లు",
 	"settings.shortcuts.description": "ఈ ఖాతాలో నావిగేట్ చేయడానికి, రాయడానికి మరియు సందేశాలను నిర్వహించడానికి త్వరిత కీలను ఉపయోగించండి.",
 	"settings.shortcuts.failed": "షార్ట్‌కట్ సెట్టింగ్‌లను నవీకరించడం విఫలమైంది",

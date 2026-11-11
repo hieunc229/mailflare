@@ -8,6 +8,7 @@ import { useLanguage } from "@/components/language-provider";
 import { useCompose } from "@/components/compose/compose-context";
 import { MessageSourceDialog } from "@/components/messages/message-source-dialog";
 import { useMessageListVisibility } from "@/components/messages/message-list-visibility";
+import { useAutoAdvance } from "@/components/messages/message-detail-navigation";
 import { MessageSnoozeDialog } from "./message-snooze-dialog";
 import { requestUnsubscribe } from "@/components/messages/unsubscribe-button-utils";
 import { MessageActionMenu, MessageActionMenuItem, MessageActionMenuLabel, MessageActionMenuSeparator } from "./action-menu";
@@ -56,6 +57,7 @@ export function MessageActions({
 	const { openDraftComposer, showNotice } = useCompose();
 	const { backHref: listHref } = useMessageListVisibility();
 	const { shortcutsEnabled } = useShortcuts();
+	const autoAdvance = useAutoAdvance(messageId);
 	const [pendingAction, setPendingAction] = useState<
 		BulkMessageAction | "unsubscribe" | ReplyMode | "forward" | "block" | null
 	>(null);
@@ -71,14 +73,14 @@ export function MessageActions({
 		try {
 			await runSingleMessageAction(messageId, action);
 			const redirect = getMessageActionRedirect(action, listHref);
-			if (redirect) router.push(redirect);
+			if (redirect) router.push(autoAdvance() ?? redirect);
 			router.refresh();
 		} catch {
 			setError(t("actions.error.update"));
 		} finally {
 			setPendingAction(null);
 		}
-	}, [messageId, listHref, router, t]);
+	}, [messageId, listHref, router, t, autoAdvance]);
 
 	// In Trash and Spam the delete button removes the message for good instead of
 	// being a no-op, after the user confirms.
@@ -89,13 +91,13 @@ export function MessageActions({
 		setError(null);
 		try {
 			await runSingleMessageAction(messageId, "delete");
-			router.push(getMessageBackHref(direction, status));
+			router.push(autoAdvance() ?? getMessageBackHref(direction, status));
 			router.refresh();
 		} catch (deleteError) {
 			setError(deleteError instanceof PartialDeleteError ? t("actions.error.deleteSkipped") : t("actions.error.delete"));
 			setPendingAction(null);
 		}
-	}, [messageId, direction, status, router, t]);
+	}, [messageId, direction, status, router, t, autoAdvance]);
 	const onTrashClick = () => (canDeleteForever ? void deleteForever() : void runAction("trash"));
 	const trashLabel = canDeleteForever ? t("common.deleteForever") : t("actions.moveToTrash");
 
@@ -255,7 +257,7 @@ export function MessageActions({
 		try {
 			await blockMessageContact({ mailboxId, senderAddress });
 			await runSingleMessageAction(messageId, "trash");
-			router.push(listHref);
+			router.push(autoAdvance() ?? listHref);
 			router.refresh();
 		} catch (blockError) {
 			setError(blockError instanceof Error ? blockError.message : t("message.error.block"));

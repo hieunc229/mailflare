@@ -628,6 +628,8 @@
 	"import.summary": "{imported} इंपोर्ट हुए, {skipped} छोड़े गए",
 	"settings.reading.title": "दो कॉलम वाला पठन दृश्य",
 	"settings.reading.description": "खुले ईमेल के बगल में ईमेल सूची दिखाएँ। ईमेल एक कॉलम में पढ़ने के लिए इसे बंद करें।",
+	"settings.reading.autoAdvanceTitle": "स्वतः आगे बढ़ें",
+	"settings.reading.autoAdvanceDescription": "खुले ईमेल को संग्रहित करने, हटाने या ले जाने के बाद सूची के बजाय अगला ईमेल दिखाएँ।",
 	"settings.shortcuts.title": "कीबोर्ड शॉर्टकट",
 	"settings.shortcuts.description": "इस खाते पर नेविगेट करने, लिखने और संदेश प्रबंधित करने के लिए त्वरित कुंजियाँ उपयोग करें।",
 	"settings.shortcuts.failed": "शॉर्टकट सेटिंग अपडेट नहीं हो सकी",

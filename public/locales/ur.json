@@ -626,6 +626,8 @@
 	"import.summary": "{imported} درآمد ہوئے، {skipped} چھوڑے گئے",
 	"settings.reading.title": "دو کالم والا مطالعہ منظر",
 	"settings.reading.description": "کھلی ای میل کے ساتھ ای میل فہرست دکھائیں۔ ای میلز ایک کالم میں پڑھنے کے لیے اسے بند کریں۔",
+	"settings.reading.autoAdvanceTitle": "خودکار آگے بڑھیں",
+	"settings.reading.autoAdvanceDescription": "کھلی ای میل کو آرکائیو، حذف یا منتقل کرنے کے بعد فہرست کے بجائے اگلی ای میل دکھائیں۔",
 	"settings.shortcuts.title": "کی بورڈ شارٹ کٹس",
 	"settings.shortcuts.description": "اس اکاؤنٹ پر نیویگیٹ کرنے، لکھنے اور پیغامات سنبھالنے کے لیے فوری کیز استعمال کریں۔",
 	"settings.shortcuts.failed": "شارٹ کٹ کی ترتیبات اپ ڈیٹ نہیں ہو سکیں",

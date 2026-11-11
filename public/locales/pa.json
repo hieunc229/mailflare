@@ -628,6 +628,8 @@
 	"import.summary": "{imported} ਆਯਾਤ ਕੀਤੇ, {skipped} ਛੱਡੇ ਗਏ",
 	"settings.reading.title": "ਦੋ ਕਾਲਮ ਪੜ੍ਹਨ ਦਾ ਦ੍ਰਿਸ਼",
 	"settings.reading.description": "ਖੁੱਲ੍ਹੀ ਈਮੇਲ ਦੇ ਨਾਲ ਈਮੇਲ ਸੂਚੀ ਦਿਖਾਓ। ਈਮੇਲਾਂ ਨੂੰ ਇੱਕ ਕਾਲਮ ਵਿੱਚ ਪੜ੍ਹਨ ਲਈ ਇਸਨੂੰ ਬੰਦ ਕਰੋ।",
+	"settings.reading.autoAdvanceTitle": "ਆਪਣੇ-ਆਪ ਅੱਗੇ",
+	"settings.reading.autoAdvanceDescription": "ਖੁੱਲ੍ਹੀ ਈਮੇਲ ਨੂੰ ਆਰਕਾਈਵ, ਮਿਟਾਉਣ ਜਾਂ ਹਿਲਾਉਣ ਤੋਂ ਬਾਅਦ ਸੂਚੀ ਦੀ ਬਜਾਏ ਅਗਲੀ ਈਮੇਲ ਦਿਖਾਓ।",
 	"settings.shortcuts.title": "ਕੀਬੋਰਡ ਸ਼ਾਰਟਕੱਟ",
 	"settings.shortcuts.description": "ਇਸ ਖਾਤੇ 'ਤੇ ਸੁਨੇਹਿਆਂ ਨੂੰ ਨੈਵੀਗੇਟ ਕਰਨ, ਲਿਖਣ ਅਤੇ ਸੰਭਾਲਣ ਲਈ ਤੇਜ਼ ਕੁੰਜੀਆਂ ਵਰਤੋ।",
 	"settings.shortcuts.failed": "ਸ਼ਾਰਟਕੱਟ ਸੈਟਿੰਗਾਂ ਅੱਪਡੇਟ ਕਰਨਾ ਅਸਫਲ",

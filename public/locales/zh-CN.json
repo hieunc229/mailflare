@@ -624,6 +624,8 @@
 	"import.summary": "已导入 {imported} 封，已跳过 {skipped} 封",
 	"settings.reading.title": "双栏阅读视图",
 	"settings.reading.description": "在打开的邮件旁显示邮件列表。关闭后将以单栏阅读邮件。",
+	"settings.reading.autoAdvanceTitle": "自动前进",
+	"settings.reading.autoAdvanceDescription": "归档、删除或移动已打开的邮件后，显示下一封邮件而不是返回列表。",
 	"settings.shortcuts.title": "键盘快捷键",
 	"settings.shortcuts.description": "使用快捷键在此账户上导航、撰写和管理邮件。",
 	"settings.shortcuts.failed": "无法更新快捷键设置",

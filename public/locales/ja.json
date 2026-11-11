@@ -624,6 +624,8 @@
 	"import.summary": "{imported} 件をインポート、{skipped} 件をスキップ",
 	"settings.reading.title": "2 カラムの閲覧ビュー",
 	"settings.reading.description": "開いているメールの横にメール一覧を表示します。オフにすると 1 カラムで閲覧します。",
+	"settings.reading.autoAdvanceTitle": "自動で次へ",
+	"settings.reading.autoAdvanceDescription": "開いているメールをアーカイブ、削除、移動したあと、一覧ではなく次のメールを表示します。",
 	"settings.shortcuts.title": "キーボードショートカット",
 	"settings.shortcuts.description": "このアカウントで、ショートカットキーを使って移動、作成、メール管理を行います。",
 	"settings.shortcuts.failed": "ショートカット設定を更新できませんでした",

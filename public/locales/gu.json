@@ -628,6 +628,8 @@
 	"import.summary": "{imported} આયાત થયા, {skipped} છોડ્યા",
 	"settings.reading.title": "બે સ્તંભ વાંચન દૃશ્ય",
 	"settings.reading.description": "ખુલ્લા ઇમેઇલની બાજુમાં ઇમેઇલ સૂચિ બતાવો. ઇમેઇલ એક સ્તંભમાં વાંચવા આ બંધ કરો.",
+	"settings.reading.autoAdvanceTitle": "આપમેળે આગળ વધો",
+	"settings.reading.autoAdvanceDescription": "ખુલ્લો ઇમેઇલ આર્કાઇવ, કાઢી નાખ્યા કે ખસેડ્યા પછી સૂચિને બદલે આગળનો ઇમેઇલ બતાવો.",
 	"settings.shortcuts.title": "કીબોર્ડ શૉર્ટકટ",
 	"settings.shortcuts.description": "આ એકાઉન્ટ પર સંદેશા નેવિગેટ કરવા, લખવા અને સંચાલિત કરવા ઝડપી કી વાપરો.",
 	"settings.shortcuts.failed": "શૉર્ટકટ સેટિંગ્સ અપડેટ કરવામાં નિષ્ફળ",

@@ -29,6 +29,8 @@ export type MessageDetailNavigationContextValue = {
 	entries: MessageNavigationEntry[];
 	hrefPrefix: string;
 	recordUnread: (messageId: string) => void;
+	/** Hides a message that was moved out of this list until the window reloads. */
+	dropEntry: (messageId: string) => void;
 };
 
 export type MessageDetailNavigationState = {

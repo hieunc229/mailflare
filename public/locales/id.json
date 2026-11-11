@@ -624,6 +624,8 @@
 	"import.summary": "{imported} diimpor, {skipped} dilewati",
 	"settings.reading.title": "Tampilan baca dua kolom",
 	"settings.reading.description": "Tampilkan daftar email di samping email yang terbuka. Nonaktifkan untuk membaca email dalam satu kolom.",
+	"settings.reading.autoAdvanceTitle": "Maju otomatis",
+	"settings.reading.autoAdvanceDescription": "Tampilkan email berikutnya, bukan daftar, setelah Anda mengarsipkan, menghapus, atau memindahkan email yang terbuka.",
 	"settings.shortcuts.title": "Pintasan keyboard",
 	"settings.shortcuts.description": "Gunakan tombol cepat untuk bernavigasi, menulis, dan mengelola pesan di akun ini.",
 	"settings.shortcuts.failed": "Gagal memperbarui pengaturan pintasan",

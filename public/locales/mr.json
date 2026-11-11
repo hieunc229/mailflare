@@ -626,6 +626,8 @@
 	"import.summary": "{imported} आयात झाले, {skipped} वगळले",
 	"settings.reading.title": "दोन स्तंभांचे वाचन दृश्य",
 	"settings.reading.description": "उघडलेल्या ईमेलच्या शेजारी ईमेल यादी दाखवा. ईमेल एका स्तंभात वाचण्यासाठी हे बंद करा.",
+	"settings.reading.autoAdvanceTitle": "आपोआप पुढे जा",
+	"settings.reading.autoAdvanceDescription": "उघडलेला ईमेल संग्रहित, हटवल्यानंतर किंवा हलवल्यानंतर सूचीऐवजी पुढील ईमेल दाखवा.",
 	"settings.shortcuts.title": "कीबोर्ड शॉर्टकट",
 	"settings.shortcuts.description": "या खात्यावर नेव्हिगेट करण्यासाठी, लिहिण्यासाठी आणि संदेश व्यवस्थापित करण्यासाठी झटपट कीज वापरा.",
 	"settings.shortcuts.failed": "शॉर्टकट सेटिंग्ज अद्यतनित करता आल्या नाहीत",

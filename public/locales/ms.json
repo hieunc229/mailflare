@@ -628,6 +628,8 @@
 	"import.summary": "{imported} diimport, {skipped} dilangkau",
 	"settings.reading.title": "Paparan bacaan dua lajur",
 	"settings.reading.description": "Tunjukkan senarai e-mel di sebelah e-mel yang dibuka. Matikan ini untuk membaca e-mel dalam satu lajur.",
+	"settings.reading.autoAdvanceTitle": "Maju automatik",
+	"settings.reading.autoAdvanceDescription": "Tunjukkan e-mel seterusnya dan bukan senarai selepas anda mengarkib, memadam atau memindahkan e-mel yang dibuka.",
 	"settings.shortcuts.title": "Pintasan papan kekunci",
 	"settings.shortcuts.description": "Gunakan kekunci pantas untuk menavigasi, menulis dan mengurus mesej pada akaun ini.",
 	"settings.shortcuts.failed": "Gagal mengemas kini tetapan pintasan",

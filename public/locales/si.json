@@ -628,6 +628,8 @@
 	"import.summary": "{imported}ක් ආයාත කරන ලදී, {skipped}ක් මඟ හරින ලදී",
 	"settings.reading.title": "තීරු දෙකේ කියවීමේ දසුන",
 	"settings.reading.description": "විවෘත ඊමේල් එකක් අසලින් ඊමේල් ලැයිස්තුව පෙන්වන්න. ඊමේල් එක් තීරුවක කියවීමට මෙය අක්‍රීය කරන්න.",
+	"settings.reading.autoAdvanceTitle": "ස්වයංක්‍රීයව ඉදිරියට",
+	"settings.reading.autoAdvanceDescription": "විවෘත ඊමේලයක් සංරක්ෂණය කළ, මැකූ හෝ ගෙන ගිය පසු ලැයිස්තුව වෙනුවට ඊළඟ ඊමේලය පෙන්වන්න.",
 	"settings.shortcuts.title": "යතුරුපුවරු කෙටිමං",
 	"settings.shortcuts.description": "මෙම ගිණුමේ සංචාලනය කිරීමට, ලිවීමට සහ පණිවිඩ කළමනාකරණය කිරීමට ඉක්මන් යතුරු භාවිත කරන්න.",
 	"settings.shortcuts.failed": "කෙටිමං සැකසීම් යාවත්කාලීන කිරීම අසාර්ථකයි",

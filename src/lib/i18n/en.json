@@ -633,6 +633,8 @@
 	"import.summary": "{imported} imported, {skipped} skipped",
 	"settings.reading.title": "Two column reading view",
 	"settings.reading.description": "Show the email list beside an open email. Turn this off to read emails in one column.",
+	"settings.reading.autoAdvanceTitle": "Auto-advance",
+	"settings.reading.autoAdvanceDescription": "Show the next email instead of the list after you archive, delete or move an open email.",
 	"settings.shortcuts.title": "Keyboard shortcuts",
 	"settings.shortcuts.description": "Use quick keys to navigate, compose, and manage messages on this account.",
 	"settings.shortcuts.failed": "Failed to update shortcut settings",

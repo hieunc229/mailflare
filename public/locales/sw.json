@@ -628,6 +628,8 @@
 	"import.summary": "{imported} zimeletwa, {skipped} zimerukwa",
 	"settings.reading.title": "Mwonekano wa kusoma wa safu mbili",
 	"settings.reading.description": "Onyesha orodha ya barua pepe kando ya barua pepe iliyofunguliwa. Zima ili kusoma barua pepe katika safu moja.",
+	"settings.reading.autoAdvanceTitle": "Endelea kiotomatiki",
+	"settings.reading.autoAdvanceDescription": "Onyesha barua pepe inayofuata badala ya orodha baada ya kuhifadhi, kufuta au kuhamisha barua pepe iliyofunguliwa.",
 	"settings.shortcuts.title": "Njia za mkato za kibodi",
 	"settings.shortcuts.description": "Tumia funguo za haraka kuelekea, kuandika na kusimamia jumbe kwenye akaunti hii.",
 	"settings.shortcuts.failed": "Imeshindwa kusasisha mipangilio ya njia za mkato",

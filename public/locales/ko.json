@@ -628,6 +628,8 @@
 	"import.summary": "{imported}개 가져옴, {skipped}개 건너뜀",
 	"settings.reading.title": "2열 읽기 보기",
 	"settings.reading.description": "열려 있는 이메일 옆에 이메일 목록을 표시합니다. 끄면 이메일을 한 열로 읽습니다.",
+	"settings.reading.autoAdvanceTitle": "자동 다음 메일",
+	"settings.reading.autoAdvanceDescription": "열려 있는 메일을 보관, 삭제 또는 이동한 후 목록 대신 다음 메일을 표시합니다.",
 	"settings.shortcuts.title": "키보드 단축키",
 	"settings.shortcuts.description": "단축키로 이 계정의 메시지를 탐색하고, 작성하고, 관리합니다.",
 	"settings.shortcuts.failed": "단축키 설정을 업데이트하지 못했습니다",

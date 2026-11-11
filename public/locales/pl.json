@@ -636,6 +636,8 @@
 	"import.summary": "Zaimportowano: {imported}, pominięto: {skipped}",
 	"settings.reading.title": "Dwukolumnowy widok czytania",
 	"settings.reading.description": "Pokazuj listę e-maili obok otwartego e-maila. Wyłącz, aby czytać e-maile w jednej kolumnie.",
+	"settings.reading.autoAdvanceTitle": "Automatyczne przejście",
+	"settings.reading.autoAdvanceDescription": "Po zarchiwizowaniu, usunięciu lub przeniesieniu otwartego e-maila pokazuj następny e-mail zamiast listy.",
 	"settings.shortcuts.title": "Skróty klawiszowe",
 	"settings.shortcuts.description": "Używaj szybkich klawiszy do nawigowania, pisania i zarządzania wiadomościami na tym koncie.",
 	"settings.shortcuts.failed": "Nie udało się zaktualizować ustawień skrótów",

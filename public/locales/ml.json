@@ -628,6 +628,8 @@
 	"import.summary": "{imported} ഇറക്കുമതി ചെയ്തു, {skipped} ഒഴിവാക്കി",
 	"settings.reading.title": "രണ്ട് നിര വായന കാഴ്ച",
 	"settings.reading.description": "തുറന്ന ഇമെയിലിന് അടുത്തായി ഇമെയിൽ പട്ടിക കാണിക്കുക. ഇമെയിലുകൾ ഒറ്റ നിരയിൽ വായിക്കാൻ ഇത് ഓഫാക്കുക.",
+	"settings.reading.autoAdvanceTitle": "സ്വയം മുന്നോട്ട്",
+	"settings.reading.autoAdvanceDescription": "തുറന്ന ഇമെയിൽ ആർക്കൈവ് ചെയ്യുകയോ ഇല്ലാതാക്കുകയോ നീക്കുകയോ ചെയ്‌ത ശേഷം പട്ടികയ്‌ക്കു പകരം അടുത്ത ഇമെയിൽ കാണിക്കുക.",
 	"settings.shortcuts.title": "കീബോർഡ് കുറുക്കുവഴികൾ",
 	"settings.shortcuts.description": "ഈ അക്കൗണ്ടിൽ സന്ദേശങ്ങൾ നാവിഗേറ്റ് ചെയ്യാനും എഴുതാനും നിയന്ത്രിക്കാനും വേഗത്തിലുള്ള കീകൾ ഉപയോഗിക്കുക.",
 	"settings.shortcuts.failed": "കുറുക്കുവഴി ക്രമീകരണങ്ങൾ അപ്ഡേറ്റ് ചെയ്യുന്നതിൽ പരാജയപ്പെട്ടു",

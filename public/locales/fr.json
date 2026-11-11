@@ -632,6 +632,8 @@
 	"import.summary": "{imported} importé(s), {skipped} ignoré(s)",
 	"settings.reading.title": "Affichage de lecture sur deux colonnes",
 	"settings.reading.description": "Affiche la liste des e-mails à côté de l'e-mail ouvert. Désactivez pour lire les e-mails sur une seule colonne.",
+	"settings.reading.autoAdvanceTitle": "Avance automatique",
+	"settings.reading.autoAdvanceDescription": "Affiche l’e-mail suivant au lieu de la liste après avoir archivé, supprimé ou déplacé un e-mail ouvert.",
 	"settings.shortcuts.title": "Raccourcis clavier",
 	"settings.shortcuts.description": "Utilisez des touches rapides pour naviguer, rédiger et gérer les messages sur ce compte.",
 	"settings.shortcuts.failed": "Échec de la mise à jour des paramètres de raccourcis",

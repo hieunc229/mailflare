@@ -636,6 +636,8 @@
 	"import.summary": "Импортировано: {imported}, пропущено: {skipped}",
 	"settings.reading.title": "Двухколоночный режим чтения",
 	"settings.reading.description": "Показывать список писем рядом с открытым письмом. Отключите, чтобы читать письма в одной колонке.",
+	"settings.reading.autoAdvanceTitle": "Автопереход",
+	"settings.reading.autoAdvanceDescription": "Показывать следующее письмо вместо списка после архивации, удаления или перемещения открытого письма.",
 	"settings.shortcuts.title": "Сочетания клавиш",
 	"settings.shortcuts.description": "Используйте быстрые клавиши для навигации, написания и управления сообщениями в этом аккаунте.",
 	"settings.shortcuts.failed": "Не удалось обновить настройки сочетаний клавиш",

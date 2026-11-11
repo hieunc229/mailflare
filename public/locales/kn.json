@@ -628,6 +628,8 @@
 	"import.summary": "{imported} ಆಮದು ಮಾಡಲಾಗಿದೆ, {skipped} ಬಿಟ್ಟುಬಿಡಲಾಗಿದೆ",
 	"settings.reading.title": "ಎರಡು ಕಾಲಂ ಓದುವ ನೋಟ",
 	"settings.reading.description": "ತೆರೆದ ಇಮೇಲ್‌ನ ಪಕ್ಕದಲ್ಲಿ ಇಮೇಲ್ ಪಟ್ಟಿಯನ್ನು ತೋರಿಸಿ. ಇಮೇಲ್‌ಗಳನ್ನು ಒಂದೇ ಕಾಲಂನಲ್ಲಿ ಓದಲು ಇದನ್ನು ಆಫ್ ಮಾಡಿ.",
+	"settings.reading.autoAdvanceTitle": "ಸ್ವಯಂ ಮುಂದುವರಿಕೆ",
+	"settings.reading.autoAdvanceDescription": "ತೆರೆದ ಇಮೇಲ್ ಅನ್ನು ಆರ್ಕೈವ್ ಮಾಡಿದ, ಅಳಿಸಿದ ಅಥವಾ ಸರಿಸಿದ ನಂತರ ಪಟ್ಟಿಯ ಬದಲು ಮುಂದಿನ ಇಮೇಲ್ ತೋರಿಸಿ.",
 	"settings.shortcuts.title": "ಕೀಬೋರ್ಡ್ ಶಾರ್ಟ್‌ಕಟ್‌ಗಳು",
 	"settings.shortcuts.description": "ಈ ಖಾತೆಯಲ್ಲಿ ಸಂದೇಶಗಳನ್ನು ನ್ಯಾವಿಗೇಟ್ ಮಾಡಲು, ಬರೆಯಲು ಮತ್ತು ನಿರ್ವಹಿಸಲು ತ್ವರಿತ ಕೀಗಳನ್ನು ಬಳಸಿ.",
 	"settings.shortcuts.failed": "ಶಾರ್ಟ್‌ಕಟ್ ಸೆಟ್ಟಿಂಗ್‌ಗಳನ್ನು ನವೀಕರಿಸಲು ವಿಫಲವಾಗಿದೆ",

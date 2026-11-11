@@ -644,6 +644,8 @@
 	"import.summary": "تم استيراد {imported}، وتخطّي {skipped}",
 	"settings.reading.title": "عرض القراءة بعمودين",
 	"settings.reading.description": "اعرض قائمة الرسائل بجانب الرسالة المفتوحة. أوقفه لقراءة الرسائل في عمود واحد.",
+	"settings.reading.autoAdvanceTitle": "التقدّم التلقائي",
+	"settings.reading.autoAdvanceDescription": "اعرض الرسالة التالية بدلاً من القائمة بعد أرشفة رسالة مفتوحة أو حذفها أو نقلها.",
 	"settings.shortcuts.title": "اختصارات لوحة المفاتيح",
 	"settings.shortcuts.description": "استخدم المفاتيح السريعة للتنقّل والكتابة وإدارة الرسائل في هذا الحساب.",
 	"settings.shortcuts.failed": "فشل تحديث إعدادات الاختصارات",

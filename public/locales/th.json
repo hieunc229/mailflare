@@ -628,6 +628,8 @@
 	"import.summary": "นำเข้าแล้ว {imported} ข้ามแล้ว {skipped}",
 	"settings.reading.title": "มุมมองการอ่านแบบสองคอลัมน์",
 	"settings.reading.description": "แสดงรายการอีเมลข้างอีเมลที่เปิดอยู่ ปิดตัวเลือกนี้เพื่ออ่านอีเมลในคอลัมน์เดียว",
+	"settings.reading.autoAdvanceTitle": "ไปต่ออัตโนมัติ",
+	"settings.reading.autoAdvanceDescription": "แสดงอีเมลถัดไปแทนรายการหลังจากที่คุณเก็บถาวร ลบ หรือย้ายอีเมลที่เปิดอยู่",
 	"settings.shortcuts.title": "ทางลัดแป้นพิมพ์",
 	"settings.shortcuts.description": "ใช้แป้นลัดเพื่อนำทาง เขียน และจัดการข้อความในบัญชีนี้",
 	"settings.shortcuts.failed": "อัปเดตการตั้งค่าทางลัดไม่สำเร็จ",

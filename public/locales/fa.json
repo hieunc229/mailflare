@@ -628,6 +628,8 @@
 	"import.summary": "{imported} درون‌ریزی شد، {skipped} نادیده گرفته شد",
 	"settings.reading.title": "نمای خواندن دوستونه",
 	"settings.reading.description": "فهرست ایمیل را کنار ایمیل بازشده نمایش دهید. برای خواندن ایمیل‌ها در یک ستون، این را خاموش کنید.",
+	"settings.reading.autoAdvanceTitle": "پیشروی خودکار",
+	"settings.reading.autoAdvanceDescription": "پس از بایگانی، حذف یا جابه‌جایی یک ایمیل باز، به‌جای فهرست ایمیل بعدی را نشان بده.",
 	"settings.shortcuts.title": "میانبرهای صفحه‌کلید",
 	"settings.shortcuts.description": "از کلیدهای میان‌بر برای پیمایش، نوشتن و مدیریت پیام‌ها در این حساب استفاده کنید.",
 	"settings.shortcuts.failed": "به‌روزرسانی تنظیمات میانبر ناموفق بود",

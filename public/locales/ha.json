@@ -628,6 +628,8 @@
 	"import.summary": "An shigo da {imported}, an tsallake {skipped}",
 	"settings.reading.title": "Duban karatu mai ginshiƙai biyu",
 	"settings.reading.description": "Nuna jerin imel kusa da imel ɗin da aka buɗe. Kashe wannan don karanta imel a ginshiƙi ɗaya.",
+	"settings.reading.autoAdvanceTitle": "Ci gaba kai tsaye",
+	"settings.reading.autoAdvanceDescription": "Nuna imel na gaba maimakon jeri bayan ka adana, share ko matsar da imel ɗin da aka buɗe.",
 	"settings.shortcuts.title": "Gajerun hanyoyin madannai",
 	"settings.shortcuts.description": "Yi amfani da maɓallan gaggawa don kewayawa, rubutawa da sarrafa saƙonni a wannan asusu.",
 	"settings.shortcuts.failed": "An kasa sabunta saitunan gajerun hanyoyi",

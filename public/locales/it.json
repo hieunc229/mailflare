@@ -632,6 +632,8 @@
 	"import.summary": "{imported} importati, {skipped} ignorati",
 	"settings.reading.title": "Visualizzazione di lettura a due colonne",
 	"settings.reading.description": "Mostra l'elenco delle email accanto a un'email aperta. Disattiva per leggere le email in una sola colonna.",
+	"settings.reading.autoAdvanceTitle": "Avanzamento automatico",
+	"settings.reading.autoAdvanceDescription": "Mostra l’email successiva invece dell’elenco dopo aver archiviato, eliminato o spostato un’email aperta.",
 	"settings.shortcuts.title": "Scorciatoie da tastiera",
 	"settings.shortcuts.description": "Usa i tasti rapidi per navigare, scrivere e gestire i messaggi in questo account.",
 	"settings.shortcuts.failed": "Impossibile aggiornare le impostazioni delle scorciatoie",

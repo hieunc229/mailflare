@@ -628,6 +628,8 @@
 	"import.summary": "{imported} geïmporteerd, {skipped} overgeslagen",
 	"settings.reading.title": "Leesweergave met twee kolommen",
 	"settings.reading.description": "Toon de e-maillijst naast een geopende e-mail. Schakel dit uit om e-mails in één kolom te lezen.",
+	"settings.reading.autoAdvanceTitle": "Automatisch doorgaan",
+	"settings.reading.autoAdvanceDescription": "Toon de volgende e-mail in plaats van de lijst nadat je een geopende e-mail archiveert, verwijdert of verplaatst.",
 	"settings.shortcuts.title": "Toetsenbordsneltoetsen",
 	"settings.shortcuts.description": "Gebruik sneltoetsen om te navigeren, op te stellen en berichten te beheren in dit account.",
 	"settings.shortcuts.failed": "Instellingen voor sneltoetsen bijwerken mislukt",

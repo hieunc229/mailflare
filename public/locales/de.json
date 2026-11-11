@@ -628,6 +628,8 @@
 	"import.summary": "{imported} importiert, {skipped} übersprungen",
 	"settings.reading.title": "Leseansicht mit zwei Spalten",
 	"settings.reading.description": "Zeigt die E-Mail-Liste neben der geöffneten E-Mail an. Deaktivieren Sie dies, um E-Mails in einer Spalte zu lesen.",
+	"settings.reading.autoAdvanceTitle": "Automatisch weiter",
+	"settings.reading.autoAdvanceDescription": "Zeigt nach dem Archivieren, Löschen oder Verschieben einer geöffneten E-Mail die nächste E-Mail statt der Liste an.",
 	"settings.shortcuts.title": "Tastaturkürzel",
 	"settings.shortcuts.description": "Verwenden Sie Schnelltasten, um in diesem Konto zu navigieren, zu verfassen und Nachrichten zu verwalten.",
 	"settings.shortcuts.failed": "Die Einstellung für Tastaturkürzel konnte nicht aktualisiert werden",

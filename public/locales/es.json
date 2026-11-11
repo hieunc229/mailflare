@@ -632,6 +632,8 @@
 	"import.summary": "{imported} importados, {skipped} omitidos",
 	"settings.reading.title": "Vista de lectura en dos columnas",
 	"settings.reading.description": "Muestra la lista de correos junto al correo abierto. Desactívala para leer los correos en una sola columna.",
+	"settings.reading.autoAdvanceTitle": "Avance automático",
+	"settings.reading.autoAdvanceDescription": "Muestra el siguiente correo en lugar de la lista después de archivar, eliminar o mover un correo abierto.",
 	"settings.shortcuts.title": "Atajos de teclado",
 	"settings.shortcuts.description": "Usa teclas rápidas para navegar, redactar y gestionar mensajes en esta cuenta.",
 	"settings.shortcuts.failed": "No se pudo actualizar la configuración de atajos",

@@ -636,6 +636,8 @@
 	"import.summary": "Імпортовано: {imported}, пропущено: {skipped}",
 	"settings.reading.title": "Двоколонковий режим читання",
 	"settings.reading.description": "Показувати список листів поруч із відкритим листом. Вимкніть, щоб читати листи в одній колонці.",
+	"settings.reading.autoAdvanceTitle": "Автоперехід",
+	"settings.reading.autoAdvanceDescription": "Показувати наступний лист замість списку після архівування, видалення або переміщення відкритого листа.",
 	"settings.shortcuts.title": "Скорочення клавіатури",
 	"settings.shortcuts.description": "Використовуйте швидкі клавіші для навігації, написання й керування повідомленнями в цьому обліковому записі.",
 	"settings.shortcuts.failed": "Не вдалося оновити налаштування скорочень",

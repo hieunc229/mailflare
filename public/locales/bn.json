@@ -626,6 +626,8 @@
 	"import.summary": "{imported}টি ইমপোর্ট হয়েছে, {skipped}টি বাদ গেছে",
 	"settings.reading.title": "দুই কলামের পড়ার ভিউ",
 	"settings.reading.description": "খোলা ইমেইলের পাশে ইমেইল তালিকা দেখান। এক কলামে ইমেইল পড়তে এটি বন্ধ করুন।",
+	"settings.reading.autoAdvanceTitle": "স্বয়ংক্রিয়ভাবে এগোনো",
+	"settings.reading.autoAdvanceDescription": "খোলা ইমেল আর্কাইভ, মুছে ফেলা বা সরানোর পরে তালিকার বদলে পরের ইমেল দেখান।",
 	"settings.shortcuts.title": "কীবোর্ড শর্টকাট",
 	"settings.shortcuts.description": "এই অ্যাকাউন্টে নেভিগেট করতে, লিখতে এবং বার্তা পরিচালনা করতে দ্রুত কী ব্যবহার করুন।",
 	"settings.shortcuts.failed": "শর্টকাট সেটিংস আপডেট করা যায়নি",

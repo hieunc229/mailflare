@@ -619,6 +619,8 @@
 	"import.summary": "{imported} içe aktarıldı, {skipped} atlandı",
 	"settings.reading.title": "İki sütunlu okuma görünümü",
 	"settings.reading.description": "E-posta listesini açık e-postanın yanında gösterin. E-postaları tek sütunda okumak için bunu kapatın.",
+	"settings.reading.autoAdvanceTitle": "Otomatik ilerleme",
+	"settings.reading.autoAdvanceDescription": "Açık bir e-postayı arşivledikten, sildikten veya taşıdıktan sonra liste yerine sonraki e-postayı göster.",
 	"settings.shortcuts.title": "Klavye kısayolları",
 	"settings.shortcuts.description": "Bu hesapta gezinmek, ileti yazmak ve iletileri yönetmek için hızlı tuşları kullanın.",
 	"settings.shortcuts.failed": "Kısayol ayarları güncellenemedi",
