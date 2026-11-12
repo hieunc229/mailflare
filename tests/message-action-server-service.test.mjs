@@ -42,7 +42,14 @@ await build({
 					return { canRead: true, canManage: true };
 				}
 			`);
-			alias(/^@\/lib\/mailboxes\/audit$/, "mock-audit", "export async function createAuditLogs() {}");
+			alias(/^@\/lib\/mailboxes\/audit$/, "mock-audit", `
+				export async function createAuditLogs(_env, inputs) {
+					if (globalThis.__failUndoAudit && inputs.some((input) => input.metadata?.undoOf)) {
+						throw new Error("injected audit failure");
+					}
+					(globalThis.__undoAudits ??= []).push(...inputs);
+				}
+			`);
 			alias(/^@\/lib\/spam\/feedback$/, "mock-spam", `
 				export async function applySpamFeedback(_env, _user, messageId, classification) {
 					const status = classification === "spam" ? "spam" : "received";
@@ -87,6 +94,8 @@ const user = { id: "user-1" };
 
 function reset(message = {}) {
 	sqlite.exec("DELETE FROM messages; DELETE FROM message_action_undo_claims; DELETE FROM folders;");
+	globalThis.__undoAudits = [];
+	globalThis.__failUndoAudit = false;
 	const row = {
 		id: "m1",
 		mailboxId: "mb1",
@@ -171,6 +180,85 @@ test("only actually changed rows are reported as applied", async () => {
 	const applied = await m.applyMessageActionForUser({}, user, { action: "archive", messageIds: ["m1"] });
 	assert.deepEqual(applied.applied, []);
 	assert.equal(applied.undoToken, undefined);
+});
+
+test("a partial transient undo keeps the claim, reports the failed row, and audits restores", async () => {
+	reset();
+	sqlite.prepare("INSERT INTO messages (id, mailbox_id, direction, status, read, starred, folder_id, snoozed_until) VALUES ('m2', 'mb1', 'inbound', 'received', 0, 0, NULL, NULL)").run();
+	const applied = await m.applyMessageActionForUser({}, user, { action: "read", messageIds: ["m1", "m2"] });
+	globalThis.__undoAudits = [];
+	sqlite.exec(`
+		CREATE TRIGGER fail_m2_restore BEFORE UPDATE OF read ON messages
+		WHEN OLD.id = 'm2' AND OLD.read = 1 AND NEW.read = 0
+		BEGIN
+			SELECT RAISE(ABORT, 'injected restore failure');
+		END;
+	`);
+	let undo;
+	try {
+		undo = await m.undoMessageActionForUser({}, user, applied.undoToken);
+	} finally {
+		sqlite.exec("DROP TRIGGER fail_m2_restore");
+	}
+	assert.deepEqual(undo.restored, ["m1"]);
+	assert.deepEqual(undo.skipped, [{ id: "m2", reason: "failed" }]);
+	assert.equal(rowState("m1").read, 0);
+	assert.equal(rowState("m2").read, 1);
+	assert.deepEqual(globalThis.__undoAudits.map((entry) => entry.messageId), ["m1"]);
+	assert.equal(globalThis.__undoAudits[0].metadata.undoOf, "read");
+	// The committed restore makes the token non-retryable.
+	await assert.rejects(
+		m.undoMessageActionForUser({}, user, applied.undoToken),
+		(error) => error instanceof m.MessageActionError && error.status === 410,
+	);
+});
+
+test("a zero-progress transient undo releases the claim so a clean retry works", async () => {
+	reset();
+	sqlite.prepare("INSERT INTO messages (id, mailbox_id, direction, status, read, starred, folder_id, snoozed_until) VALUES ('m2', 'mb1', 'inbound', 'received', 0, 0, NULL, NULL)").run();
+	const applied = await m.applyMessageActionForUser({}, user, { action: "read", messageIds: ["m1", "m2"] });
+	sqlite.exec(`
+		CREATE TRIGGER fail_all_restore BEFORE UPDATE OF read ON messages
+		WHEN OLD.read = 1 AND NEW.read = 0
+		BEGIN
+			SELECT RAISE(ABORT, 'injected restore failure');
+		END;
+	`);
+	try {
+		await assert.rejects(
+			m.undoMessageActionForUser({}, user, applied.undoToken),
+			(error) => error instanceof m.MessageActionError && error.status === 500,
+		);
+	} finally {
+		sqlite.exec("DROP TRIGGER fail_all_restore");
+	}
+	assert.equal(rowState("m1").read, 1);
+	const retry = await m.undoMessageActionForUser({}, user, applied.undoToken);
+	assert.deepEqual(retry.restored.sort(), ["m1", "m2"]);
+	assert.equal(rowState("m1").read, 0);
+	assert.equal(rowState("m2").read, 0);
+});
+
+test("an audit failure after a committed restore does not release the claim", async () => {
+	reset();
+	const applied = await m.applyMessageActionForUser({}, user, { action: "read", messageIds: ["m1"] });
+	globalThis.__undoAudits = [];
+	globalThis.__failUndoAudit = true;
+	let undo;
+	const originalError = console.error;
+	console.error = () => undefined;
+	try {
+		undo = await m.undoMessageActionForUser({}, user, applied.undoToken);
+	} finally {
+		console.error = originalError;
+		globalThis.__failUndoAudit = false;
+	}
+	assert.deepEqual(undo.restored, ["m1"]);
+	assert.equal(rowState("m1").read, 0);
+	await assert.rejects(
+		m.undoMessageActionForUser({}, user, applied.undoToken),
+		(error) => error instanceof m.MessageActionError && error.status === 410,
+	);
 });
 
 test("a CAS race rejects a stale archive snapshot instead of signing it", async () => {

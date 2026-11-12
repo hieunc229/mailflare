@@ -310,13 +310,17 @@ export async function undoMessageActionForUser(
 		throw new MessageActionError("This undo has already been used", 410);
 	}
 
+	// Once any row has been restored, the token must never be released: a retry
+	// could replay that already-used record. Partial outcomes therefore keep the
+	// claim and return the committed receipts. Only zero-progress failures release
+	// it so an otherwise safe retry can succeed.
+	const progress = { restored: 0 };
 	try {
-		return await performUndoMessageAction(env, user, payload);
+		return await performUndoMessageAction(env, user, payload, progress);
 	} catch (error) {
-		// A transient failure must not burn the one-time token: release it so the
-		// same signed retry can be attempted again. Field CAS makes a retry safe
-		// after any rows that were already restored.
-		await releaseMessageActionUndoClaim(env, { nonce: payload.nonce, userId: user.id }).catch(() => undefined);
+		if (progress.restored === 0) {
+			await releaseMessageActionUndoClaim(env, { nonce: payload.nonce, userId: user.id }).catch(() => undefined);
+		}
 		throw error;
 	}
 }
@@ -325,6 +329,7 @@ async function performUndoMessageAction(
 	env: CloudflareEnv,
 	user: SessionUser,
 	payload: NonNullable<Awaited<ReturnType<typeof verifyUndoTokenForEnv>>>,
+	progress: { restored: number },
 ): Promise<UndoMessageActionResponse> {
 	const records = [...new Map(payload.records.map((record) => [record.id, record])).values()];
 	const db = getDb(env);
@@ -362,29 +367,46 @@ async function performUndoMessageAction(
 		}
 		// One row at a time: the MySQL update/returning shim needs an exact
 		// per-row affected count, and every dialect gets a real field CAS.
-		const updated = await db.update(messages)
-			.set(toDatabasePatch(plan.patch))
-			.where(and(eq(messages.id, record.id), ...stateConditions(plan.fields, record.applied)))
-			.returning({ id: messages.id });
-		if (updated.length === 0) {
-			skipped.push({ id: record.id, reason: "stale" });
-			continue;
+		try {
+			const updated = await db.update(messages)
+				.set(toDatabasePatch(plan.patch))
+				.where(and(eq(messages.id, record.id), ...stateConditions(plan.fields, record.applied)))
+				.returning({ id: messages.id });
+			if (updated.length === 0) {
+				skipped.push({ id: record.id, reason: "stale" });
+				continue;
+			}
+			restored.push(record.id);
+			progress.restored += 1;
+		} catch {
+			// A failed row is reported; earlier restores stay committed and are
+			// audited below. Zero-progress failure throws so the caller can retry.
+			skipped.push({ id: record.id, reason: "failed" });
 		}
-		restored.push(record.id);
+	}
+
+	if (restored.length === 0 && skipped.some((item) => item.reason === "failed")) {
+		throw new MessageActionError("Could not restore messages", 500);
 	}
 
 	if (restored.length > 0) {
 		const restoredSet = new Set(restored);
-		await createAuditLogs(env, records
-			.filter((record) => restoredSet.has(record.id))
-			.map((record) => ({
-				actorUserId: user.id,
-				messageId: record.id,
-				action: getChangedStateFields(record.previous, record.applied).every((field) => field === "read" || field === "starred")
-					? "email.read"
-					: "email.delete",
-				metadata: { undoOf: payload.action },
-			})));
+		try {
+			await createAuditLogs(env, records
+				.filter((record) => restoredSet.has(record.id))
+				.map((record) => ({
+					actorUserId: user.id,
+					messageId: record.id,
+					action: getChangedStateFields(record.previous, record.applied).every((field) => field === "read" || field === "starred")
+						? "email.read"
+						: "email.delete",
+					metadata: { undoOf: payload.action },
+				})));
+		} catch (error) {
+			// The restore already committed. Audit failure must not make the claim
+			// look retryable and risk a replay.
+			console.error("Message undo audit failed", error);
+		}
 	}
 
 	return { ok: true, action: payload.action, restored, skipped };
