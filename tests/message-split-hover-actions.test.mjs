@@ -442,6 +442,32 @@ function setCurrentRoute(config, selectedMessageId) {
 	window.history.replaceState({}, "", path);
 }
 
+function jsonResponse(body) {
+	return new Response(JSON.stringify(body), {
+		status: 200,
+		headers: { "Content-Type": "application/json" },
+	});
+}
+
+/**
+ * The action client moved from /api/messages/bulk to /api/messages/actions in
+ * the undo branch. Answer both shapes so this harness stays branch-independent.
+ */
+function actionApiResponse(input, init) {
+	let body = {};
+	try {
+		body = JSON.parse(String(init?.body ?? "{}"));
+	} catch {
+		body = {};
+	}
+	const url = typeof input === "string" ? input : input.url;
+	if (url.includes("/api/messages/actions")) {
+		if (body.op === "undo") return jsonResponse({ ok: true, action: body.action ?? "archive", restored: [], skipped: [] });
+		return jsonResponse({ ok: true, action: body.action ?? "archive", applied: [], skipped: [] });
+	}
+	return jsonResponse({ ok: true });
+}
+
 async function renderFolderPage({ config = inboxFolderConfig, selectedMessageId, messages, desktop = true, mobile = false, grouped = false } = {}) {
 	globalThis.__isDesktop = desktop;
 	globalThis.__isMobile = mobile;
@@ -449,10 +475,11 @@ async function renderFolderPage({ config = inboxFolderConfig, selectedMessageId,
 	globalThis.__testMessages = messages ?? [listMessage("m1"), listMessage("m2")];
 	globalThis.__pushedPaths = [];
 	globalThis.__rowSnoozeCallbacks = {};
-	globalThis.fetch = async () => new Response(JSON.stringify({ ok: true }), {
-		status: 200,
-		headers: { "Content-Type": "application/json" },
-	});
+	globalThis.__deferredAction = null;
+	globalThis.fetch = async (input, init) => {
+		if (globalThis.__deferredAction) await globalThis.__deferredAction.promise;
+		return actionApiResponse(input, init);
+	};
 
 	const container = document.createElement("div");
 	document.body.appendChild(container);
@@ -484,18 +511,10 @@ async function renderFolderPage({ config = inboxFolderConfig, selectedMessageId,
 	};
 }
 
-function deferredResponse() {
+function deferredAction() {
 	let resolve;
 	const promise = new Promise((next) => { resolve = next; });
-	return {
-		promise,
-		resolve() {
-			resolve(new Response(JSON.stringify({ ok: true }), {
-				status: 200,
-				headers: { "Content-Type": "application/json" },
-			}));
-		},
-	};
+	return { promise, resolve };
 }
 
 function rowActions(container, messageId) {
@@ -552,8 +571,8 @@ test("removing the open message from the folder returns to its list", async (t) 
 test("a pending removal for A does not close B after navigating away", async (t) => {
 	const page = await renderFolderPage({ selectedMessageId: "m1" });
 	t.after(page.cleanup);
-	const request = deferredResponse();
-	globalThis.fetch = () => request.promise;
+	const request = deferredAction();
+	globalThis.__deferredAction = request;
 
 	await act(async () => rowActions(page.container, "m1").querySelector('[aria-label="stub-archive"]').click());
 	await page.rerender("m2");
@@ -566,8 +585,8 @@ test("a pending removal for A does not close B after navigating away", async (t)
 test("a pending removal does not navigate after switching folders", async (t) => {
 	const page = await renderFolderPage({ selectedMessageId: "m1" });
 	t.after(page.cleanup);
-	const request = deferredResponse();
-	globalThis.fetch = () => request.promise;
+	const request = deferredAction();
+	globalThis.__deferredAction = request;
 
 	await act(async () => rowActions(page.container, "m1").querySelector('[aria-label="stub-archive"]').click());
 	window.history.replaceState({}, "", "/sent/m2");
@@ -580,8 +599,8 @@ test("a pending removal does not navigate after switching folders", async (t) =>
 test("a pending removal for the current reader still returns to the list", async (t) => {
 	const page = await renderFolderPage({ selectedMessageId: "m1" });
 	t.after(page.cleanup);
-	const request = deferredResponse();
-	globalThis.fetch = () => request.promise;
+	const request = deferredAction();
+	globalThis.__deferredAction = request;
 
 	await act(async () => rowActions(page.container, "m1").querySelector('[aria-label="stub-archive"]').click());
 	request.resolve();
