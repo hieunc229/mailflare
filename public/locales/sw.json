@@ -1817,6 +1817,7 @@
 	"booking.editor.confirmationPlaceholders": "Weka kishika nafasi",
 	"booking.editor.confirmationDefault": "Uthibitisho chaguomsingi",
 	"booking.editor.confirmationCustom": "Uthibitisho maalum",
+	"booking.editor.confirmationUseDefault": "Hariri maandishi chaguomsingi",
 	"booking.loading": "Inapakia miadi",
 	"booking.loadingEllipsis": "Inapakia miadi…",
 	"public.unavailable": "Mkutano huu haupatikani.",

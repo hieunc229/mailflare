@@ -1815,6 +1815,7 @@
 	"booking.editor.confirmationPlaceholders": "ప్లేస్‌హోల్డర్ చొప్పించండి",
 	"booking.editor.confirmationDefault": "డిఫాల్ట్ నిర్ధారణ",
 	"booking.editor.confirmationCustom": "అనుకూల నిర్ధారణ",
+	"booking.editor.confirmationUseDefault": "డిఫాల్ట్ పాఠాన్ని సవరించండి",
 	"booking.loading": "బుకింగ్‌లు లోడ్ అవుతున్నాయి",
 	"booking.loadingEllipsis": "బుకింగ్‌లు లోడ్ అవుతున్నాయి…",
 	"public.unavailable": "ఈ సమావేశం అందుబాటులో లేదు.",

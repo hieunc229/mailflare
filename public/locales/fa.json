@@ -1817,6 +1817,7 @@
 	"booking.editor.confirmationPlaceholders": "درج جای‌نگهدار",
 	"booking.editor.confirmationDefault": "تأیید پیش‌فرض",
 	"booking.editor.confirmationCustom": "تأیید سفارشی",
+	"booking.editor.confirmationUseDefault": "ویرایش متن پیش‌فرض",
 	"booking.loading": "در حال بارگذاری رزروها",
 	"booking.loadingEllipsis": "در حال بارگذاری رزروها…",
 	"public.unavailable": "این جلسه در دسترس نیست.",

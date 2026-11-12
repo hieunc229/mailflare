@@ -1807,6 +1807,7 @@
 	"booking.editor.confirmationPlaceholders": "Sisipkan placeholder",
 	"booking.editor.confirmationDefault": "Konfirmasi bawaan",
 	"booking.editor.confirmationCustom": "Konfirmasi khusus",
+	"booking.editor.confirmationUseDefault": "Edit teks bawaan",
 	"booking.loading": "Memuat pemesanan",
 	"booking.loadingEllipsis": "Memuat pemesanan…",
 	"public.unavailable": "Pertemuan ini tidak tersedia.",

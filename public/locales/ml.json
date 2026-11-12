@@ -1817,6 +1817,7 @@
 	"booking.editor.confirmationPlaceholders": "പ്ലേസ്‌ഹോൾഡർ ചേർക്കുക",
 	"booking.editor.confirmationDefault": "സ്ഥിരസ്ഥിതി സ്ഥിരീകരണം",
 	"booking.editor.confirmationCustom": "ഇഷ്ടാനുസൃത സ്ഥിരീകരണം",
+	"booking.editor.confirmationUseDefault": "സ്ഥിരസ്ഥിതി വാചകം എഡിറ്റ് ചെയ്യുക",
 	"booking.loading": "ബുക്കിംഗുകൾ ലോഡ് ചെയ്യുന്നു",
 	"booking.loadingEllipsis": "ബുക്കിംഗുകൾ ലോഡ് ചെയ്യുന്നു…",
 	"public.unavailable": "ഈ മീറ്റിംഗ് ലഭ്യമല്ല.",

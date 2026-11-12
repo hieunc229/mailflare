@@ -14,71 +14,60 @@ await build({
 	outdir: dir, outExtension: { ".js": ".mjs" }, bundle: true, platform: "node", format: "esm", logLevel: "silent",
 	alias: { "@": join(root, "src") },
 });
-const { buildBookingCalendarFile, buildBookingConfirmation, formatBookingWhen, parseConfirmationTemplateInput, pickConfirmationLanguage, renderBookingTemplate } = await import(pathToFileURL(join(dir, "c.mjs")).href);
+const { buildBookingCalendarFile, buildBookingConfirmation, formatBookingWhen, parseConfirmationTemplateInput, pickGuestLocale, renderBookingTemplate, DEFAULT_CONFIRMATION_SUBJECT, DEFAULT_CONFIRMATION_BODY } = await import(pathToFileURL(join(dir, "c.mjs")).href);
 
 const startsAt = new Date("2026-11-17T13:00:00Z");
 const endsAt = new Date("2026-11-17T13:30:00Z");
+const content = { eventName: "Intro call", hostName: "Paul", guestName: "Ana", location: "", notes: "", startsAt, endsAt, timeZone: "Europe/Berlin" };
 
-test("formats the slot in the event's time zone", () => {
-	assert.equal(formatBookingWhen(startsAt, endsAt, "Europe/Berlin"), "Tuesday, 17 November 2026, 14:00–14:30 (Europe/Berlin)");
+test("formats the slot in the event's time zone, worded for the guest's locale", () => {
+	assert.match(formatBookingWhen(startsAt, endsAt, "Europe/Berlin"), /^Tuesday,? 17 November 2026, 14:00–14:30 \(Europe\/Berlin\)$/);
+	assert.match(formatBookingWhen(startsAt, endsAt, "Europe/Berlin", "de"), /^Dienstag, 17\. November 2026, 14:00–14:30 \(Europe\/Berlin\)$/);
 });
 
 test("falls back to UTC for an unknown time zone", () => {
-	assert.equal(formatBookingWhen(startsAt, endsAt, "Not/AZone"), "Tuesday, 17 November 2026, 13:00–13:30 (UTC)");
-});
-
-test("builds subject and body, leaving out empty location and notes", () => {
-	const base = { eventName: "Intro call", hostName: "Paul", guestName: "Ana", location: "", notes: "", startsAt, endsAt, timeZone: "Europe/Berlin" };
-	const plain = buildBookingConfirmation(base);
-	assert.equal(plain.subject, "Confirmed: Intro call with Paul");
-	assert.match(plain.text, /^Hi Ana,/);
-	assert.match(plain.text, /When: Tuesday, 17 November 2026, 14:00–14:30 \(Europe\/Berlin\)/);
-	assert.doesNotMatch(plain.text, /Where:|Your notes:/);
-	const full = buildBookingConfirmation({ ...base, location: "https://meet.example/abc", notes: "About pricing" });
-	assert.match(full.text, /Where: https:\/\/meet\.example\/abc/);
-	assert.match(full.text, /Your notes:\nAbout pricing/);
-});
-
-test("writes German for German guests", () => {
-	assert.equal(formatBookingWhen(startsAt, endsAt, "Europe/Berlin", "de"), "Dienstag, 17. November 2026, 14:00–14:30 Uhr (Europe/Berlin)");
-	const mail = buildBookingConfirmation({ eventName: "Beratung", hostName: "Paul", guestName: "Ana", location: "Telefon", notes: "", startsAt, endsAt, timeZone: "Europe/Berlin" }, "de");
-	assert.equal(mail.subject, "Bestätigt: Beratung mit Paul");
-	assert.match(mail.text, /^Guten Tag Ana,\n\nIhre Buchung ist bestätigt: Beratung mit Paul\./);
-	assert.match(mail.text, /Wo: Telefon/);
+	assert.match(formatBookingWhen(startsAt, endsAt, "Not/AZone"), /13:00–13:30 \(UTC\)$/);
 });
 
 test("picks the booking page language, then the browser's, then English", () => {
-	assert.equal(pickConfirmationLanguage("de", "en-US,en;q=0.9"), "de");
-	assert.equal(pickConfirmationLanguage("en", "de-DE,de;q=0.9"), "en");
-	assert.equal(pickConfirmationLanguage(null, "fr-FR,de;q=0.8,en;q=0.5"), "de");
-	assert.equal(pickConfirmationLanguage("pt-BR", "ja"), "en");
-	assert.equal(pickConfirmationLanguage(undefined, undefined), "en");
+	assert.equal(pickGuestLocale("de", "en-US,en;q=0.9"), "de");
+	assert.equal(pickGuestLocale(null, "fr-FR,de;q=0.8"), "fr-FR");
+	assert.equal(pickGuestLocale("not a tag!", "*"), "en-GB");
+	assert.equal(pickGuestLocale(undefined, undefined), "en-GB");
 });
 
-test("the calendar file is a plain event to add, not a meeting request", () => {
-	const ics = new TextDecoder().decode(buildBookingCalendarFile({ title: "Beratung mit Paul", description: "Hallo", location: "Telefon", startsAt, endsAt, uid: "bkg_1" }));
-	assert.match(ics, /\r\nMETHOD:PUBLISH\r\n/);
-	assert.match(ics, /\r\nDTSTART:20261117T130000Z\r\nDTEND:20261117T133000Z\r\n/);
-	assert.doesNotMatch(ics, /ORGANIZER|ATTENDEE|RSVP/);
+test("without a template the default English text is sent, dropping empty location and notes", () => {
+	const mail = buildBookingConfirmation(content);
+	assert.equal(mail.subject, "Confirmed: Intro call with Paul");
+	assert.match(mail.text, /^Hi Ana,\n\nyour booking is confirmed: Intro call with Paul\.\n\nWhen: Tuesday,? 17 November 2026, 14:00–14:30 \(Europe\/Berlin\)\n\nThe attached calendar file/);
+	assert.doesNotMatch(mail.text, /Where:|Notes:|\{/);
+	const full = buildBookingConfirmation({ ...content, location: "https://meet.example/abc", notes: "About pricing" });
+	assert.match(full.text, /\nWhere: https:\/\/meet\.example\/abc\nNotes: About pricing\n/);
 });
 
-test("a custom template fills known placeholders and leaves others as written", () => {
-	const values = { guestName: "Ana", eventName: "Beratung", hostName: "Paul", when: "morgen", location: "Telefon", notes: "" };
-	assert.equal(renderBookingTemplate("Hallo {guestName}, {eventName} {when} {unknown} {notes}.", values), "Hallo Ana, Beratung morgen {unknown} .");
+test("the default template only uses placeholders the editor offers", () => {
+	const names = [...`${DEFAULT_CONFIRMATION_SUBJECT}\n${DEFAULT_CONFIRMATION_BODY}`.matchAll(/\{(\w+)\}/g)].map((match) => match[1]);
+	assert.deepEqual([...new Set(names)].sort(), ["eventName", "guestName", "hostName", "location", "notes", "when"]);
+});
+
+test("a template fills known placeholders, leaves others as written and drops lines left empty", () => {
+	const values = { guestName: "Ana", eventName: "Beratung", hostName: "Paul", when: "morgen", location: "", notes: "" };
+	assert.equal(renderBookingTemplate("Hallo {guestName}, {eventName} {when} {unknown}.\nOrt: {location}\nNotiz: {notes} / {location}\nBis bald", values), "Hallo Ana, Beratung morgen {unknown}.\nBis bald");
 });
 
 test("the event's subject and body replace the default, each on its own", () => {
-	const content = { eventName: "Beratung", hostName: "Paul", guestName: "Ana\nBcc: x@evil.test", location: "Telefon", notes: "Preise", startsAt, endsAt, timeZone: "Europe/Berlin" };
-	const custom = buildBookingConfirmation(content, "de", { subject: "Termin am {when} für {guestName}", body: "Hallo {guestName},\nwir sehen uns {when} ({location}).\n{notes}" });
-	assert.equal(custom.subject, "Termin am Dienstag, 17. November 2026, 14:00–14:30 Uhr (Europe/Berlin) für Ana Bcc: x@evil.test");
-	assert.doesNotMatch(custom.subject, /[\r\n]/);
-	assert.equal(custom.text, "Hallo Ana\nBcc: x@evil.test,\nwir sehen uns Dienstag, 17. November 2026, 14:00–14:30 Uhr (Europe/Berlin) (Telefon).\nPreise");
-	const subjectOnly = buildBookingConfirmation(content, "de", { subject: "Ihr Termin", body: "" });
+	const guest = { ...content, eventName: "Beratung", guestName: "Ana\nBcc: x@evil.test", location: "Telefon", notes: "Preise" };
+	const custom = buildBookingConfirmation(guest, "de", { subject: "Termin am {when} für {guestName}", body: "Hallo {guestName},\nwir sehen uns {when} ({location}).\n{notes}" });
+	assert.equal(custom.subject, "Termin am Dienstag, 17. November 2026, 14:00–14:30 (Europe/Berlin) für Ana Bcc: x@evil.test");
+	assert.equal(custom.text, "Hallo Ana\nBcc: x@evil.test,\nwir sehen uns Dienstag, 17. November 2026, 14:00–14:30 (Europe/Berlin) (Telefon).\nPreise");
+	const subjectOnly = buildBookingConfirmation(guest, "de", { subject: "Ihr Termin", body: "" });
 	assert.equal(subjectOnly.subject, "Ihr Termin");
-	assert.match(subjectOnly.text, /^Guten Tag Ana/);
-	const bodyOnly = buildBookingConfirmation(content, "de", { subject: "", body: "Danke!" });
-	assert.equal(bodyOnly.subject, "Bestätigt: Beratung mit Paul");
+	assert.match(subjectOnly.text, /^Hi Ana/);
+	const bodyOnly = buildBookingConfirmation(guest, "de", { subject: "", body: "Danke!" });
+	assert.equal(bodyOnly.subject, "Confirmed: Beratung with Paul");
 	assert.equal(bodyOnly.text, "Danke!");
+	assert.equal(buildBookingConfirmation(guest, "de", { subject: "{notes}", body: "" }).subject, "Preise");
+	assert.equal(buildBookingConfirmation({ ...guest, notes: "" }, "de", { subject: "{notes}", body: "" }).subject, "Confirmed: Beratung with Paul");
 });
 
 test("confirmation fields in a booking event request are optional, trimmed and bounded", () => {
@@ -89,4 +78,11 @@ test("confirmation fields in a booking event request are optional, trimmed and b
 	assert.equal(parseConfirmationTemplateInput({ confirmationSubject: 5 }), null);
 	assert.equal(parseConfirmationTemplateInput({ confirmationSubject: "x".repeat(201) }), null);
 	assert.equal(parseConfirmationTemplateInput({ confirmationBody: "x".repeat(5001) }), null);
+});
+
+test("the calendar file is a plain event to add, not a meeting request", () => {
+	const ics = new TextDecoder().decode(buildBookingCalendarFile({ title: "Beratung (Paul)", description: "Hallo", location: "Telefon", startsAt, endsAt, uid: "bkg_1" }));
+	assert.match(ics, /\r\nMETHOD:PUBLISH\r\n/);
+	assert.match(ics, /\r\nDTSTART:20261117T130000Z\r\nDTEND:20261117T133000Z\r\n/);
+	assert.doesNotMatch(ics, /ORGANIZER|ATTENDEE|RSVP/);
 });

@@ -1817,6 +1817,7 @@
 	"booking.editor.confirmationPlaceholders": "ස්ථාන දරන්නක් ඇතුළු කරන්න",
 	"booking.editor.confirmationDefault": "පෙරනිමි තහවුරු කිරීම",
 	"booking.editor.confirmationCustom": "අභිරුචි තහවුරු කිරීම",
+	"booking.editor.confirmationUseDefault": "පෙරනිමි පෙළ සංස්කරණය කරන්න",
 	"booking.loading": "වෙන් කිරීම් පූරණය වෙමින්",
 	"booking.loadingEllipsis": "වෙන් කිරීම් පූරණය වෙමින්…",
 	"public.unavailable": "මෙම රැස්වීම ලබා ගත නොහැක.",

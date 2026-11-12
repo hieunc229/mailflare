@@ -1817,6 +1817,7 @@
 	"booking.editor.confirmationPlaceholders": "प्लेसहोल्डर डालें",
 	"booking.editor.confirmationDefault": "डिफ़ॉल्ट पुष्टि",
 	"booking.editor.confirmationCustom": "कस्टम पुष्टि",
+	"booking.editor.confirmationUseDefault": "डिफ़ॉल्ट पाठ संपादित करें",
 	"booking.loading": "बुकिंग लोड हो रही हैं",
 	"booking.loadingEllipsis": "बुकिंग लोड हो रही हैं…",
 	"public.unavailable": "यह बैठक उपलब्ध नहीं है।",

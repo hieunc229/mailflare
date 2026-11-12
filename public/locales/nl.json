@@ -1817,6 +1817,7 @@
 	"booking.editor.confirmationPlaceholders": "Tijdelijke aanduiding invoegen",
 	"booking.editor.confirmationDefault": "Standaardbevestiging",
 	"booking.editor.confirmationCustom": "Eigen bevestiging",
+	"booking.editor.confirmationUseDefault": "Standaardtekst bewerken",
 	"booking.loading": "Boekingen laden",
 	"booking.loadingEllipsis": "Boekingen laden…",
 	"public.unavailable": "Deze vergadering is niet beschikbaar.",

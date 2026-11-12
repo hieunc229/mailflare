@@ -1807,6 +1807,7 @@
 	"booking.editor.confirmationPlaceholders": "插入占位符",
 	"booking.editor.confirmationDefault": "默认确认",
 	"booking.editor.confirmationCustom": "自定义确认",
+	"booking.editor.confirmationUseDefault": "编辑默认文本",
 	"booking.loading": "正在加载预约",
 	"booking.loadingEllipsis": "正在加载预约…",
 	"public.unavailable": "此会议不可用。",

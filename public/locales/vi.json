@@ -1807,6 +1807,7 @@
 	"booking.editor.confirmationPlaceholders": "Chèn trình giữ chỗ",
 	"booking.editor.confirmationDefault": "Xác nhận mặc định",
 	"booking.editor.confirmationCustom": "Xác nhận tùy chỉnh",
+	"booking.editor.confirmationUseDefault": "Sửa văn bản mặc định",
 	"booking.loading": "Đang tải các lịch hẹn",
 	"booking.loadingEllipsis": "Đang tải các lịch hẹn…",
 	"public.unavailable": "Cuộc họp này không khả dụng.",

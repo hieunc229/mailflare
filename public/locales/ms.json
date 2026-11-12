@@ -1816,6 +1816,7 @@
 	"booking.editor.confirmationPlaceholders": "Sisipkan pemegang tempat",
 	"booking.editor.confirmationDefault": "Pengesahan lalai",
 	"booking.editor.confirmationCustom": "Pengesahan tersuai",
+	"booking.editor.confirmationUseDefault": "Edit teks lalai",
 	"booking.loading": "Memuatkan tempahan",
 	"booking.loadingEllipsis": "Memuatkan tempahan…",
 	"public.unavailable": "Mesyuarat ini tidak tersedia.",

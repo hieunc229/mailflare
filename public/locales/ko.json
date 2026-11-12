@@ -1816,6 +1816,7 @@
 	"booking.editor.confirmationPlaceholders": "자리표시자 삽입",
 	"booking.editor.confirmationDefault": "기본 확인 메일",
 	"booking.editor.confirmationCustom": "사용자 지정 확인 메일",
+	"booking.editor.confirmationUseDefault": "기본 문구 편집",
 	"booking.loading": "예약 불러오는 중",
 	"booking.loadingEllipsis": "예약 불러오는 중…",
 	"public.unavailable": "이 미팅을 사용할 수 없습니다.",

@@ -1817,6 +1817,7 @@
 	"booking.editor.confirmationPlaceholders": "Platzhalter einfügen",
 	"booking.editor.confirmationDefault": "Standardbestätigung",
 	"booking.editor.confirmationCustom": "Eigene Bestätigung",
+	"booking.editor.confirmationUseDefault": "Standardtext bearbeiten",
 	"booking.loading": "Buchungen werden geladen",
 	"booking.loadingEllipsis": "Buchungen werden geladen…",
 	"public.unavailable": "Diese Besprechung ist nicht verfügbar.",

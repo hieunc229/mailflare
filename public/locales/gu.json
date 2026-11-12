@@ -1817,6 +1817,7 @@
 	"booking.editor.confirmationPlaceholders": "પ્લેસહોલ્ડર ઉમેરો",
 	"booking.editor.confirmationDefault": "ડિફૉલ્ટ પુષ્ટિ",
 	"booking.editor.confirmationCustom": "કસ્ટમ પુષ્ટિ",
+	"booking.editor.confirmationUseDefault": "ડિફૉલ્ટ લખાણ સંપાદિત કરો",
 	"booking.loading": "બુકિંગ લોડ થઈ રહ્યા છે",
 	"booking.loadingEllipsis": "બુકિંગ લોડ થઈ રહ્યા છે…",
 	"public.unavailable": "આ મીટિંગ ઉપલબ્ધ નથી.",

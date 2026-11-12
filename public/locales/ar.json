@@ -1857,6 +1857,7 @@
 	"booking.editor.confirmationPlaceholders": "إدراج عنصر نائب",
 	"booking.editor.confirmationDefault": "التأكيد الافتراضي",
 	"booking.editor.confirmationCustom": "تأكيد مخصص",
+	"booking.editor.confirmationUseDefault": "تعديل النص الافتراضي",
 	"booking.loading": "جارٍ تحميل الحجوزات",
 	"booking.loadingEllipsis": "جارٍ تحميل الحجوزات…",
 	"public.unavailable": "هذا الاجتماع غير متاح.",

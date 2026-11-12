@@ -1815,6 +1815,7 @@
 	"booking.editor.confirmationPlaceholders": "پلیس ہولڈر داخل کریں",
 	"booking.editor.confirmationDefault": "ڈیفالٹ تصدیق",
 	"booking.editor.confirmationCustom": "حسب ضرورت تصدیق",
+	"booking.editor.confirmationUseDefault": "ڈیفالٹ متن میں ترمیم کریں",
 	"booking.loading": "بکنگز لوڈ ہو رہی ہیں",
 	"booking.loadingEllipsis": "بکنگز لوڈ ہو رہی ہیں…",
 	"public.unavailable": "یہ ملاقات دستیاب نہیں ہے۔",

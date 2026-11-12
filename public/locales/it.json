@@ -1827,6 +1827,7 @@
 	"booking.editor.confirmationPlaceholders": "Inserisci un segnaposto",
 	"booking.editor.confirmationDefault": "Conferma predefinita",
 	"booking.editor.confirmationCustom": "Conferma personalizzata",
+	"booking.editor.confirmationUseDefault": "Modifica il testo predefinito",
 	"booking.loading": "Caricamento delle prenotazioni",
 	"booking.loadingEllipsis": "Caricamento delle prenotazioni…",
 	"public.unavailable": "Questo incontro non è disponibile.",

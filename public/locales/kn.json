@@ -1817,6 +1817,7 @@
 	"booking.editor.confirmationPlaceholders": "ಪ್ಲೇಸ್‌ಹೋಲ್ಡರ್ ಸೇರಿಸಿ",
 	"booking.editor.confirmationDefault": "ಡೀಫಾಲ್ಟ್ ದೃಢೀಕರಣ",
 	"booking.editor.confirmationCustom": "ಕಸ್ಟಮ್ ದೃಢೀಕರಣ",
+	"booking.editor.confirmationUseDefault": "ಡೀಫಾಲ್ಟ್ ಪಠ್ಯವನ್ನು ಸಂಪಾದಿಸಿ",
 	"booking.loading": "ಬುಕಿಂಗ್‌ಗಳನ್ನು ಲೋಡ್ ಮಾಡಲಾಗುತ್ತಿದೆ",
 	"booking.loadingEllipsis": "ಬುಕಿಂಗ್‌ಗಳನ್ನು ಲೋಡ್ ಮಾಡಲಾಗುತ್ತಿದೆ…",
 	"public.unavailable": "ಈ ಸಭೆ ಲಭ್ಯವಿಲ್ಲ.",

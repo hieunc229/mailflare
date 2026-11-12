@@ -1816,6 +1816,7 @@
 	"booking.editor.confirmationPlaceholders": "แทรกตัวยึดตำแหน่ง",
 	"booking.editor.confirmationDefault": "การยืนยันเริ่มต้น",
 	"booking.editor.confirmationCustom": "การยืนยันแบบกำหนดเอง",
+	"booking.editor.confirmationUseDefault": "แก้ไขข้อความเริ่มต้น",
 	"booking.loading": "กำลังโหลดการจอง",
 	"booking.loadingEllipsis": "กำลังโหลดการจอง…",
 	"public.unavailable": "การประชุมนี้ไม่พร้อมใช้งาน",

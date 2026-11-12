@@ -1837,6 +1837,7 @@
 	"booking.editor.confirmationPlaceholders": "Вставити заповнювач",
 	"booking.editor.confirmationDefault": "Типове підтвердження",
 	"booking.editor.confirmationCustom": "Власне підтвердження",
+	"booking.editor.confirmationUseDefault": "Змінити типовий текст",
 	"booking.loading": "Завантаження бронювань",
 	"booking.loadingEllipsis": "Завантаження бронювань…",
 	"public.unavailable": "Ця зустріч недоступна.",

@@ -1817,6 +1817,7 @@
 	"booking.editor.confirmationPlaceholders": "Saka mai riƙe wuri",
 	"booking.editor.confirmationDefault": "Tabbatarwa ta asali",
 	"booking.editor.confirmationCustom": "Tabbatarwa ta musamman",
+	"booking.editor.confirmationUseDefault": "Gyara rubutun asali",
 	"booking.loading": "Ana loda ajiyar wuri",
 	"booking.loadingEllipsis": "Ana loda ajiyar wuri…",
 	"public.unavailable": "Wannan taro ba ya samuwa.",

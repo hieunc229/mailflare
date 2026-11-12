@@ -1837,6 +1837,7 @@
 	"booking.editor.confirmationPlaceholders": "Wstaw symbol zastępczy",
 	"booking.editor.confirmationDefault": "Domyślne potwierdzenie",
 	"booking.editor.confirmationCustom": "Własne potwierdzenie",
+	"booking.editor.confirmationUseDefault": "Edytuj domyślny tekst",
 	"booking.loading": "Ładowanie rezerwacji",
 	"booking.loadingEllipsis": "Ładowanie rezerwacji…",
 	"public.unavailable": "To spotkanie jest niedostępne.",

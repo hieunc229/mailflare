@@ -1807,6 +1807,7 @@
 	"booking.editor.confirmationPlaceholders": "プレースホルダーを挿入",
 	"booking.editor.confirmationDefault": "既定の確認メール",
 	"booking.editor.confirmationCustom": "カスタム確認メール",
+	"booking.editor.confirmationUseDefault": "既定の文面を編集",
 	"booking.loading": "予約を読み込み中",
 	"booking.loadingEllipsis": "予約を読み込み中…",
 	"public.unavailable": "この会議は利用できません。",

@@ -2,7 +2,7 @@
 
 import { useRef, useState } from "react";
 import { CalendarDays, ChevronDown, Clock3, Mail, MapPin, MoreHorizontal, Plus, Trash2, UserRound } from "@/components/icons";
-import { BOOKING_TEMPLATE_PLACEHOLDERS, CONFIRMATION_BODY_MAX, CONFIRMATION_SUBJECT_MAX } from "@/lib/booking/confirmation-utils";
+import { BOOKING_TEMPLATE_PLACEHOLDERS, CONFIRMATION_BODY_MAX, CONFIRMATION_SUBJECT_MAX, DEFAULT_CONFIRMATION_BODY, DEFAULT_CONFIRMATION_SUBJECT } from "@/lib/booking/confirmation-utils";
 import clsx from "clsx";
 import { useLanguage } from "@/components/language-provider";
 import { folderColorKeys } from "@/lib/folders/color-keys";
@@ -76,8 +76,9 @@ export function BookingEditor({ form, open, editingId, username, hosts, canManag
 					<button type="button" onClick={() => toggle("confirmation")} aria-expanded={activeSection === "confirmation"} className={headingClass}><span>{t("booking.editor.confirmation")}</span><ChevronDown className={clsx("h-5 w-5 text-neutral-500 transition-transform", activeSection === "confirmation" && "rotate-180")} /></button>
 					{activeSection === "confirmation" ? <div className="mt-4 space-y-4">
 						<p className="text-xs text-neutral-500">{t("booking.editor.confirmationHint")}</p>
-						<label className="block text-sm font-medium text-neutral-700">{t("booking.editor.confirmationSubject")}<Input value={form.confirmationSubject} onChange={(event) => onChange({ ...form, confirmationSubject: event.target.value })} placeholder={t("booking.editor.confirmationDefault")} maxLength={CONFIRMATION_SUBJECT_MAX} className="mt-2" /></label>
-						<label className="block text-sm font-medium text-neutral-700">{t("booking.editor.confirmationBody")}<Textarea ref={confirmationBodyRef} value={form.confirmationBody} onChange={(event) => onChange({ ...form, confirmationBody: event.target.value })} placeholder={t("booking.editor.confirmationDefault")} maxLength={CONFIRMATION_BODY_MAX} rows={8} className="mt-2 resize-y" /></label>
+						<label className="block text-sm font-medium text-neutral-700">{t("booking.editor.confirmationSubject")}<Input value={form.confirmationSubject} onChange={(event) => onChange({ ...form, confirmationSubject: event.target.value })} placeholder={DEFAULT_CONFIRMATION_SUBJECT} maxLength={CONFIRMATION_SUBJECT_MAX} className="mt-2" /></label>
+						<label className="block text-sm font-medium text-neutral-700">{t("booking.editor.confirmationBody")}<Textarea ref={confirmationBodyRef} value={form.confirmationBody} onChange={(event) => onChange({ ...form, confirmationBody: event.target.value })} placeholder={DEFAULT_CONFIRMATION_BODY} maxLength={CONFIRMATION_BODY_MAX} rows={10} className="mt-2 resize-y" /></label>
+						{(!form.confirmationSubject || !form.confirmationBody) && <Button type="button" variant="outline" onClick={() => onChange({ ...form, confirmationSubject: form.confirmationSubject || DEFAULT_CONFIRMATION_SUBJECT, confirmationBody: form.confirmationBody || DEFAULT_CONFIRMATION_BODY })} className="h-8 rounded-full px-3 text-xs">{t("booking.editor.confirmationUseDefault")}</Button>}
 						<div><p className="text-xs font-medium text-neutral-700">{t("booking.editor.confirmationPlaceholders")}</p><div className="mt-2 flex flex-wrap gap-1.5">{BOOKING_TEMPLATE_PLACEHOLDERS.map((name) => <button key={name} type="button" onClick={() => insertPlaceholder(name)} className="rounded-full bg-neutral-100 px-2.5 py-1 font-mono text-xs text-neutral-700 hover:bg-neutral-200">{`{${name}}`}</button>)}</div></div>
 					</div> : <button type="button" onClick={() => toggle("confirmation")} className="mt-2 flex w-full items-center gap-2 text-left text-sm text-neutral-500"><Mail className="h-4 w-4" />{form.confirmationSubject || form.confirmationBody ? t("booking.editor.confirmationCustom") : t("booking.editor.confirmationDefault")}</button>}
 				</section>

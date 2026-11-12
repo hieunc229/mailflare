@@ -4,7 +4,7 @@ import { domains, mailboxes, users } from "@/db/schema";
 import { sendEmail } from "@/lib/email/send";
 import { newId } from "@/lib/ids";
 import { mailboxAddress } from "@/lib/profile/identity-utils";
-import { bookingMeetingTitle, buildBookingCalendarFile, buildBookingConfirmation, type ConfirmationLanguage } from "./confirmation-utils";
+import { buildBookingCalendarFile, buildBookingConfirmation } from "./confirmation-utils";
 import { getConfirmationTemplates } from "./confirmation-templates";
 import type { BookingEventRecord } from "./types";
 
@@ -29,7 +29,7 @@ async function findHostMailbox(env: CloudflareEnv, userId: string): Promise<{ id
  */
 export async function sendBookingConfirmation(
 	env: CloudflareEnv,
-	input: { event: BookingEventRecord; hostName: string; guestName: string; guestEmail: string; guestEmails: string[]; notes: string; startsAt: string; endsAt: string; language?: ConfirmationLanguage; publicOrigin?: string },
+	input: { event: BookingEventRecord; hostName: string; guestName: string; guestEmail: string; guestEmails: string[]; notes: string; startsAt: string; endsAt: string; locale?: string; publicOrigin?: string },
 ): Promise<boolean> {
 	try {
 		const mailbox = await findHostMailbox(env, input.event.userId);
@@ -49,9 +49,10 @@ export async function sendBookingConfirmation(
 			startsAt,
 			endsAt,
 			timeZone: input.event.timeZone,
-		}, input.language, template);
+		}, input.locale, template);
 		const invite = buildBookingCalendarFile({
-			title: bookingMeetingTitle(input.event.name, input.hostName, input.language),
+			// Worded without language so it reads the same whatever text the host chose.
+			title: `${input.event.name} (${input.hostName})`,
 			description: input.event.description || text,
 			location: input.event.location,
 			startsAt,

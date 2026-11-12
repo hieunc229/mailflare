@@ -1817,6 +1817,7 @@
 	"booking.editor.confirmationPlaceholders": "ਪਲੇਸਹੋਲਡਰ ਪਾਓ",
 	"booking.editor.confirmationDefault": "ਡਿਫੌਲਟ ਪੁਸ਼ਟੀ",
 	"booking.editor.confirmationCustom": "ਕਸਟਮ ਪੁਸ਼ਟੀ",
+	"booking.editor.confirmationUseDefault": "ਡਿਫੌਲਟ ਲਿਖਤ ਸੋਧੋ",
 	"booking.loading": "ਬੁਕਿੰਗਾਂ ਲੋਡ ਹੋ ਰਹੀਆਂ ਹਨ",
 	"booking.loadingEllipsis": "ਬੁਕਿੰਗਾਂ ਲੋਡ ਹੋ ਰਹੀਆਂ ਹਨ…",
 	"public.unavailable": "ਇਹ ਮੀਟਿੰਗ ਉਪਲਬਧ ਨਹੀਂ ਹੈ।",

@@ -1827,6 +1827,7 @@
 	"booking.editor.confirmationPlaceholders": "Insérer un espace réservé",
 	"booking.editor.confirmationDefault": "Confirmation par défaut",
 	"booking.editor.confirmationCustom": "Confirmation personnalisée",
+	"booking.editor.confirmationUseDefault": "Modifier le texte par défaut",
 	"booking.loading": "Chargement des réservations",
 	"booking.loadingEllipsis": "Chargement des réservations…",
 	"public.unavailable": "Cette réunion n'est pas disponible.",

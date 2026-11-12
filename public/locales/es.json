@@ -1827,6 +1827,7 @@
 	"booking.editor.confirmationPlaceholders": "Insertar un marcador",
 	"booking.editor.confirmationDefault": "Confirmación predeterminada",
 	"booking.editor.confirmationCustom": "Confirmación personalizada",
+	"booking.editor.confirmationUseDefault": "Editar el texto predeterminado",
 	"booking.loading": "Cargando reservas",
 	"booking.loadingEllipsis": "Cargando reservas…",
 	"public.unavailable": "Esta reunión no está disponible.",

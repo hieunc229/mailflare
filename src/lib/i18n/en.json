@@ -1897,6 +1897,7 @@
 	"booking.editor.confirmationPlaceholders": "Insert a placeholder",
 	"booking.editor.confirmationDefault": "Default confirmation",
 	"booking.editor.confirmationCustom": "Custom confirmation",
+	"booking.editor.confirmationUseDefault": "Edit the default text",
 	"booking.loading": "Loading bookings",
 	"booking.loadingEllipsis": "Loading bookings…",
 	"public.unavailable": "This meeting is unavailable.",
