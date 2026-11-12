@@ -1,30 +1,43 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { X } from "@/components/icons";
 import { useLanguage } from "@/components/language-provider";
 import { HeaderSearch } from "@/components/header-search";
 import { useMailSearch } from "./mail-search-context";
 import { useShortcuts } from "@/components/shortcuts";
 
+const SEARCH_DEBOUNCE_MS = 250;
+
 export function MailSearchInput({ mobileEnd }: { mobileEnd?: boolean }) {
 	const { t } = useLanguage();
-	const { input: query, setQuery } = useMailSearch();
+	const { query, setQuery } = useMailSearch();
+	const [input, setInput] = useState(query);
 	const { openCommandPalette, shortcutsEnabled, shortcutsPreferenceLoading } = useShortcuts();
 	const showShortcutHints = shortcutsEnabled && !shortcutsPreferenceLoading;
 
+	useEffect(() => {
+		const delay = input.trim() ? SEARCH_DEBOUNCE_MS : 0;
+		const timer = window.setTimeout(() => setQuery(input.trim() ? input : ""), delay);
+		return () => window.clearTimeout(timer);
+	}, [input, setQuery]);
+
 	return (
 		<HeaderSearch
-			value={query}
-			onChange={setQuery}
+			value={input}
+			onChange={setInput}
 			label={t("search.mail")}
 			mobileEnd={mobileEnd}
 			placeholder={showShortcutHints ? t("search.mailHint") : t("search.mail")}
 			inputProps={{ "data-mail-search-input": "" }}
-			trailing={query ? (
+			trailing={input ? (
 				<button
 					type="button"
 					onMouseDown={(event) => event.preventDefault()}
-					onClick={() => setQuery("")}
+					onClick={() => {
+						setInput("");
+						setQuery("");
+					}}
 					className="rounded-full p-1 text-neutral-500 hover:bg-blue-100 hover:text-neutral-800"
 					aria-label={t("search.clear")}
 				>

@@ -2,6 +2,7 @@ import { and, eq, gt, inArray } from "drizzle-orm";
 import { getDb } from "@/db";
 import { pushSubscriptions, sessions } from "@/db/schema";
 import type { NewMessageNotification } from "@/lib/realtime/types";
+import { formatSenderLabel } from "@/lib/email/sender-label";
 
 type VapidConfig = {
 	publicKey: string;
@@ -249,21 +250,21 @@ export type PushContent = {
 	url: string;
 };
 
+export function buildNewMessagePushContent(payload: NewMessageNotification): PushContent {
+	return {
+		title: (payload.subject || "New email").slice(0, 180),
+		body: `From ${formatSenderLabel(payload.from, payload.fromName)}`,
+		tag: payload.messageId,
+		url: `/inbox/${payload.messageId}`,
+	};
+}
+
 export async function sendPushNotifications(
 	env: CloudflareEnv,
 	userIds: string[],
 	payload: NewMessageNotification,
 ): Promise<void> {
-	// The display name is whatever the sender typed; always show the real address beside it.
-	// eslint-disable-next-line no-control-regex
-	const name = (payload.fromName ?? "").replace(/[\u0000-\u001f\u202a-\u202e\u2066-\u2069]/g, "").trim();
-	const sender = (name && name.toLowerCase() !== payload.from.toLowerCase() ? `${name.slice(0, 120)} <${payload.from}>` : payload.from).slice(0, 240);
-	await sendPushContent(env, userIds, {
-		title: (payload.subject || "New email").slice(0, 180),
-		body: `From ${sender}`,
-		tag: payload.messageId,
-		url: `/inbox/${payload.messageId}`,
-	});
+	await sendPushContent(env, userIds, buildNewMessagePushContent(payload));
 }
 
 /** Delivers an arbitrary notification (title, body, tag, in-app url) to every live Web Push subscription of the users. */

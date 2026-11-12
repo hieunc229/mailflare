@@ -124,12 +124,12 @@ pre {
 }
 
 @keyframes page-transition-enter {
-	from { opacity: 0; transform: translateY(8px); }
+	from { opacity: 0.6; transform: translateY(4px); }
 	to { opacity: 1; transform: translateY(0); }
 }
 
 .page-transition-enter {
-	animation: page-transition-enter 260ms ease-out both;
+	animation: page-transition-enter 120ms ease-out both;
 }
 
 .route-loading-bar {

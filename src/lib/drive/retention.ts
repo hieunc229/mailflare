@@ -2,6 +2,7 @@ import { and, inArray, isNotNull, lte } from "drizzle-orm";
 import { getDb } from "@/db";
 import { driveItems, messageAttachments } from "@/db/schema";
 import { deleteDriveItems } from "./access";
+import { deleteUnreferencedObjects } from "@/lib/drive/shared-objects";
 
 export const DRIVE_TRASH_RETENTION_DAYS = 30;
 const BATCH_SIZE = 100;
@@ -27,7 +28,8 @@ export async function runDriveTrashRetention(env: CloudflareEnv, now = new Date(
 			.where(and(isNotNull(messageAttachments.trashedAt), lte(messageAttachments.trashedAt, cutoff)))
 			.limit(BATCH_SIZE);
 		if (expiredAttachments.length) {
-			await env.BUCKET.delete(expiredAttachments.map((row) => row.r2Key));
+			// An attachment saved to Drive shares its object with that Drive item.
+			await deleteUnreferencedObjects(env, db, expiredAttachments.map((row) => row.r2Key), { attachmentIds: expiredAttachments.map((row) => row.id) });
 			await db.delete(messageAttachments).where(inArray(messageAttachments.id, expiredAttachments.map((row) => row.id)));
 		}
 
