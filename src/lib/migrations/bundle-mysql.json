@@ -313,6 +313,16 @@
         "CREATE INDEX `conversation_notes_message_idx` ON `conversation_notes` (`message_id`);",
         "CREATE INDEX `conversation_notes_author_idx` ON `conversation_notes` (`author_user_id`);"
       ]
+    },
+    {
+      "name": "0009_calendar_invitations.sql",
+      "statements": [
+        "ALTER TABLE `calendar_events` ADD `response_status` text;",
+        "ALTER TABLE `calendar_events` ADD `invite_message_id` text;",
+        "ALTER TABLE `calendar_events` ADD `attendee_responses` text;",
+        "ALTER TABLE `calendar_events` ADD `invite_sender` text;",
+        "ALTER TABLE `calendar_events` ADD `invite_sequence` bigint;"
+      ]
     }
   ]
 }

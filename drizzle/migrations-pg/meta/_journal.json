@@ -64,6 +64,13 @@
       "when": 1793280379890,
       "tag": "0008_conversation_notes",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1793280380890,
+      "tag": "0009_calendar_invitations",
+      "breakpoints": true
     }
   ]
 }

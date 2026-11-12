@@ -1,3 +1,5 @@
+import { escapeIcsText, formatIcsUtc, ICS_ADDRESS, joinIcsLines } from "./ics";
+
 type CalendarInvitationInput = {
 	title: string;
 	description: string;
@@ -6,17 +8,15 @@ type CalendarInvitationInput = {
 	endsAt: Date;
 	uid: string;
 	method?: "REQUEST" | "CANCEL";
+	organizer?: string;
+	attendees?: string[];
 };
 
-function escapeCalendarText(value: string): string {
-	return value.replace(/\\/g, "\\\\").replace(/;/g, "\\;").replace(/,/g, "\\,").replace(/\r?\n/g, "\\n");
-}
-
-function formatCalendarDate(value: Date): string {
-	return value.toISOString().replace(/[-:]/g, "").replace(/\.\d{3}/, "");
-}
-
 export function createCalendarInvitation(input: CalendarInvitationInput): ArrayBuffer {
-	const lines = ["BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//Mailflare//Calendar//EN", "CALSCALE:GREGORIAN", `METHOD:${input.method ?? "REQUEST"}`, "BEGIN:VEVENT", `UID:${input.uid}@mailflare`, `DTSTAMP:${formatCalendarDate(new Date())}`, `DTSTART:${formatCalendarDate(input.startsAt)}`, `DTEND:${formatCalendarDate(input.endsAt)}`, `SUMMARY:${escapeCalendarText(input.title)}`, `DESCRIPTION:${escapeCalendarText(input.description)}`, `LOCATION:${escapeCalendarText(input.location)}`, "END:VEVENT", "END:VCALENDAR"];
-	return new TextEncoder().encode(lines.join("\r\n")).buffer as ArrayBuffer;
+	const organizer = input.organizer && ICS_ADDRESS.test(input.organizer) ? input.organizer : null;
+	const lines = ["BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//Mailflare//Calendar//EN", "CALSCALE:GREGORIAN", `METHOD:${input.method ?? "REQUEST"}`, "BEGIN:VEVENT", `UID:${input.uid}@mailflare`, `DTSTAMP:${formatIcsUtc(new Date())}`, `DTSTART:${formatIcsUtc(input.startsAt)}`, `DTEND:${formatIcsUtc(input.endsAt)}`, `SUMMARY:${escapeIcsText(input.title)}`, `DESCRIPTION:${escapeIcsText(input.description)}`, `LOCATION:${escapeIcsText(input.location)}`,
+		...(organizer ? [`ORGANIZER:mailto:${organizer}`] : []),
+		...(organizer ? (input.attendees ?? []).filter((address) => ICS_ADDRESS.test(address)).map((address) => `ATTENDEE;ROLE=REQ-PARTICIPANT;PARTSTAT=NEEDS-ACTION;RSVP=TRUE:mailto:${address}`) : []),
+		"END:VEVENT", "END:VCALENDAR"];
+	return new TextEncoder().encode(joinIcsLines(lines)).buffer as ArrayBuffer;
 }
