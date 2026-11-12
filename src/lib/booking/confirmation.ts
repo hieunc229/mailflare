@@ -1,11 +1,10 @@
 import { and, asc, eq } from "drizzle-orm";
 import { getDb } from "@/db";
 import { domains, mailboxes, users } from "@/db/schema";
-import { createCalendarInvitation } from "@/lib/calendar/utils";
 import { sendEmail } from "@/lib/email/send";
 import { newId } from "@/lib/ids";
 import { mailboxAddress } from "@/lib/profile/identity-utils";
-import { bookingMeetingTitle, buildBookingConfirmation, type ConfirmationLanguage } from "./confirmation-utils";
+import { bookingMeetingTitle, buildBookingCalendarFile, buildBookingConfirmation, type ConfirmationLanguage } from "./confirmation-utils";
 import type { BookingEventRecord } from "./types";
 
 /** The event owner's own mailbox: the one at their account address, else their oldest personal one. */
@@ -49,15 +48,13 @@ export async function sendBookingConfirmation(
 			endsAt,
 			timeZone: input.event.timeZone,
 		}, input.language);
-		const invite = createCalendarInvitation({
+		const invite = buildBookingCalendarFile({
 			title: bookingMeetingTitle(input.event.name, input.hostName, input.language),
 			description: input.event.description || text,
 			location: input.event.location,
 			startsAt,
 			endsAt,
 			uid: newId("bkg"),
-			organizer: mailbox.address,
-			attendees: [input.guestEmail, ...input.guestEmails],
 		});
 		await sendEmail(env, {
 			userId: input.event.userId,

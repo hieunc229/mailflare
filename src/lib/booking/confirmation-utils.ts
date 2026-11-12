@@ -1,3 +1,5 @@
+import { createCalendarInvitation } from "@/lib/calendar/utils";
+
 export type BookingConfirmationContent = {
 	eventName: string;
 	hostName: string;
@@ -102,4 +104,13 @@ export function buildBookingConfirmation(content: BookingConfirmationContent, la
 		text.closing,
 	];
 	return { subject: `${text.subject} ${title}`, text: lines.join("\n") };
+}
+
+/**
+ * The calendar file attached to the confirmation. It is a plain PUBLISH event, not a meeting request: the booking is
+ * already confirmed, the guest's answer would not reach the host's events, and Outlook cannot import an attached
+ * REQUEST file.
+ */
+export function buildBookingCalendarFile(input: { title: string; description: string; location: string; startsAt: Date; endsAt: Date; uid: string }): ArrayBuffer {
+	return createCalendarInvitation({ ...input, method: "PUBLISH" });
 }

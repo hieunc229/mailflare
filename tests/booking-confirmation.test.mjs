@@ -14,7 +14,7 @@ await build({
 	outdir: dir, outExtension: { ".js": ".mjs" }, bundle: true, platform: "node", format: "esm", logLevel: "silent",
 	alias: { "@": join(root, "src") },
 });
-const { buildBookingConfirmation, formatBookingWhen, pickConfirmationLanguage } = await import(pathToFileURL(join(dir, "c.mjs")).href);
+const { buildBookingCalendarFile, buildBookingConfirmation, formatBookingWhen, pickConfirmationLanguage } = await import(pathToFileURL(join(dir, "c.mjs")).href);
 
 const startsAt = new Date("2026-11-17T13:00:00Z");
 const endsAt = new Date("2026-11-17T13:30:00Z");
@@ -53,4 +53,11 @@ test("picks the booking page language, then the browser's, then English", () => 
 	assert.equal(pickConfirmationLanguage(null, "fr-FR,de;q=0.8,en;q=0.5"), "de");
 	assert.equal(pickConfirmationLanguage("pt-BR", "ja"), "en");
 	assert.equal(pickConfirmationLanguage(undefined, undefined), "en");
+});
+
+test("the calendar file is a plain event to add, not a meeting request", () => {
+	const ics = new TextDecoder().decode(buildBookingCalendarFile({ title: "Beratung mit Paul", description: "Hallo", location: "Telefon", startsAt, endsAt, uid: "bkg_1" }));
+	assert.match(ics, /\r\nMETHOD:PUBLISH\r\n/);
+	assert.match(ics, /\r\nDTSTART:20261117T130000Z\r\nDTEND:20261117T133000Z\r\n/);
+	assert.doesNotMatch(ics, /ORGANIZER|ATTENDEE|RSVP/);
 });
