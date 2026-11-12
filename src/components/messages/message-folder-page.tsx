@@ -14,7 +14,7 @@ import { useMailSearch } from "@/components/mail-search/mail-search-context";
 import { useSelectedMailbox } from "@/components/mailbox-provider";
 import { usePageLoading } from "@/components/page-loading";
 import { formatScheduledSendTime } from "./scheduled-send-utils";
-import { useIsDesktop, useIsMobile } from "@/components/sidebar-mobile-utils";
+import { useHasHover, useIsDesktop, useIsMobile } from "@/components/sidebar-mobile-utils";
 import { useMessageCounts } from "@/hooks/use-message-counts";
 import { useMessages } from "@/hooks/use-messages";
 import type { BulkMessageAction } from "@/app/api/messages/bulk/types";
@@ -181,7 +181,7 @@ function MessageListRowComponent({
 					? "border-l-blue-600 bg-blue-50"
 					: selected
 						? "border-l-transparent bg-neutral-50"
-						: "border-l-transparent hover:bg-neutral-50"
+						: "border-l-transparent hover:bg-neutral-50 focus-within:bg-neutral-50"
 					} ${draggable ? "cursor-grab active:cursor-grabbing" : ""}`}
 				draggable={draggable}
 				onDragStart={(event) => {
@@ -386,7 +386,8 @@ export function MessageFolderPage({
 	const router = useRouter();
 	const isMobile = useIsMobile();
 	const isDesktop = useIsDesktop();
-	const compactRowActions = compact && isDesktop;
+	const hasHover = useHasHover();
+	const compactRowActions = compact && isDesktop && hasHover;
 	// Row actions can resolve after the reader has moved. Compare against the
 	// message that is open now, not the one that was open when the request began.
 	const selectedMessageIdRef = useRef(selectedMessageId);

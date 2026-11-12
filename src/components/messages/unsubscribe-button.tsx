@@ -6,6 +6,7 @@ import { useCompose } from "@/components/compose/compose-context";
 import { useLanguage } from "@/components/language-provider";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Tooltip } from "@/components/ui/tooltip";
 import { openUnsubscribeUrl } from "@/components/message-actions/utils";
 import { isMessageUnsubscribed, markMessageUnsubscribed, requestUnsubscribe } from "./unsubscribe-button-utils";
 
@@ -49,14 +50,15 @@ export function MessageUnsubscribeButton({ messageId, variant = "header", iconOn
 	if (done) {
 		if (iconOnly) {
 			return (
-				<span
-					role="status"
-					aria-label={t("actions.unsubscribed")}
-					title={t("actions.unsubscribed")}
-					className="flex h-7 w-7 items-center justify-center text-green-700"
-				>
-					<MailCheck className="h-4 w-4" aria-hidden="true" />
-				</span>
+				<Tooltip label={t("actions.unsubscribed")}>
+					<span
+						role="status"
+						aria-label={t("actions.unsubscribed")}
+						className="flex h-7 w-7 items-center justify-center text-green-700"
+					>
+						<MailCheck className="h-4 w-4" aria-hidden="true" />
+					</span>
+				</Tooltip>
 			);
 		}
 		return (
@@ -66,24 +68,26 @@ export function MessageUnsubscribeButton({ messageId, variant = "header", iconOn
 			</span>
 		);
 	}
+	const trigger = (
+		<Button
+			type="button"
+			variant="ghost"
+			size="sm"
+			className={iconOnly ? "h-7 w-7 shrink-0 px-0" : row ? "h-5 border border-neutral-300 px-2 text-xs" : "h-5 px-2 text-xs text-[var(--primary)] hover:text-[var(--primary)]"}
+			disabled={pending}
+			aria-label={iconOnly ? t("actions.unsubscribe") : undefined}
+			onClick={(event) => {
+				event.preventDefault();
+				event.stopPropagation();
+				setConfirmOpen(true);
+			}}
+		>
+			{iconOnly ? <BellOff className="h-4 w-4" /> : t("actions.unsubscribe")}
+		</Button>
+	);
 	return (
 		<>
-			<Button
-				type="button"
-				variant="ghost"
-				size="sm"
-				className={iconOnly ? "h-7 w-7 shrink-0 px-0" : row ? "h-5 border border-neutral-300 px-2 text-xs" : "h-5 px-2 text-xs text-[var(--primary)] hover:text-[var(--primary)]"}
-				disabled={pending}
-				aria-label={iconOnly ? t("actions.unsubscribe") : undefined}
-				title={iconOnly ? t("actions.unsubscribe") : undefined}
-				onClick={(event) => {
-					event.preventDefault();
-					event.stopPropagation();
-					setConfirmOpen(true);
-				}}
-			>
-				{iconOnly ? <BellOff className="h-4 w-4" /> : t("actions.unsubscribe")}
-			</Button>
+			{iconOnly ? <Tooltip label={t("actions.unsubscribe")}>{trigger}</Tooltip> : trigger}
 			<Dialog open={confirmOpen} onOpenChange={setConfirmOpen}>
 				{/* React events bubble through the portal; keep clicks from reaching the list row. */}
 				<DialogContent onClick={(event) => event.stopPropagation()}>

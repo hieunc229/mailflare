@@ -99,6 +99,7 @@ export function usePageLoading() {}
 	["@/components/sidebar-mobile-utils", `
 export function useIsMobile() { return false; }
 export function useIsDesktop() { return globalThis.__testIsDesktop !== false; }
+export function useHasHover() { return true; }
 `],
 	["@/components/messages/use-conversation-view", `
 export function useConversationView() { return [true, () => {}]; }

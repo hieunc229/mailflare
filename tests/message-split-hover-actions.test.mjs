@@ -61,6 +61,7 @@ export const ListFilter = Icon;
 export const Mail = Icon;
 export const MailOpen = Icon;
 export const MailCheck = Icon;
+export const MoreVertical = Icon;
 export const Send = Icon;
 export const ShieldAlert = Icon;
 export const Star = Icon;
@@ -80,6 +81,26 @@ export async function snoozeMessage(messageId, snoozedUntil) {
 export async function unsnoozeMessage(messageId) {
   globalThis.__unsnoozeCalls.push(messageId);
 }
+`;
+
+const actionMenuStub = `
+import React from "react";
+export function MessageActionMenu({ label, trigger, children }) {
+  return React.createElement("div", { "data-testid": "action-menu", "data-label": label },
+    trigger,
+    React.createElement("div", { "data-testid": "action-menu-items" }, children),
+  );
+}
+export function MessageActionMenuItem({ children, onSelect, disabled, destructive }) {
+  return React.createElement("button", {
+    type: "button",
+    onClick: onSelect,
+    disabled,
+    "data-destructive": String(!!destructive),
+  }, children);
+}
+export function MessageActionMenuSeparator() { return null; }
+export function MessageActionMenuLabel({ children }) { return React.createElement("div", null, children); }
 `;
 
 await build({
@@ -105,6 +126,7 @@ await build({
 				if (args.path.startsWith("@/components/ui/")) return { path: "ui", namespace: "test-stub" };
 				if (args.path === "@/components/language-provider") return { path: "language", namespace: "test-stub" };
 				if (args.path === "@/components/icons") return { path: "icons", namespace: "test-stub" };
+				if (args.path === "@/components/message-actions/action-menu") return { path: "action-menu", namespace: "test-stub" };
 				if (args.path === "@/lib/time/utils") return { path: "time", namespace: "test-stub" };
 				if (args.path === "./message-list-row-actions-utils") return { path: "row-actions-utils", namespace: "test-stub" };
 				if (args.path === "./unsubscribe-button") return { path: "unsubscribe", namespace: "test-stub" };
@@ -114,6 +136,7 @@ await build({
 				if (args.path === "ui") return { contents: uiStub, loader: "tsx", resolveDir: root };
 				if (args.path === "language") return { contents: languageStub, loader: "tsx", resolveDir: root };
 				if (args.path === "icons") return { contents: iconStub, loader: "tsx", resolveDir: root };
+				if (args.path === "action-menu") return { contents: actionMenuStub, loader: "tsx", resolveDir: root };
 				if (args.path === "time") return { contents: `export function getUserTimeZone() { return "UTC"; }`, loader: "tsx", resolveDir: root };
 				if (args.path === "row-actions-utils") return { contents: rowActionsUtilsStub, loader: "tsx", resolveDir: root };
 				if (args.path === "unsubscribe") return {
@@ -195,7 +218,14 @@ function button(container, label) {
 	return match;
 }
 
-test("the compact row rail keeps every existing action and its accessible label", async (t) => {
+function menuItem(container, label) {
+	const items = [...container.querySelectorAll('[data-testid="action-menu-items"] button')];
+	const match = items.find((item) => item.textContent.includes(label));
+	assert.ok(match, `expected a ${label} overflow action`);
+	return match;
+}
+
+test("the compact rail keeps a small primary set and reaches the rest from overflow", async (t) => {
 	const actions = [];
 	const { container, rerender, cleanup } = await renderActions({
 		message: message({ hasUnsubscribe: true }),
@@ -208,12 +238,22 @@ test("the compact row rail keeps every existing action and its accessible label"
 	const rail = container.querySelector("div.absolute");
 	assert.ok(rail, "the action rail is absolute inside the row");
 	assert.match(rail.className, /(^|\s)bg-blue-50(\s|$)/, "the active row uses the active-row surface");
+	assert.match(rail.className, /(^|\s)h-8(\s|$)/, "the rail is content-sized instead of spanning the row");
+	assert.match(rail.className, /(^|\s)rounded-full(\s|$)/);
+	assert.doesNotMatch(rail.className, /(^|\s)inset-y-0(\s|$)/, "the rail has no full-height dead click area");
 	assert.equal(container.querySelector('[aria-label="actions.unsubscribe"]')?.dataset.iconOnly, "true", "the unsubscribe action is icon-sized in the compact rail");
 
+	assert.ok(button(container, "common.archive"), "archive stays a direct primary action");
+	assert.ok(button(container, "common.moreActions"), "the overflow trigger is discoverable");
+	assert.equal(container.querySelector('button[aria-label="common.trash"]'), null, "destructive trash is not under the row open area");
+	assert.equal(container.querySelector('button[aria-label="common.markRead"]'), null, "read is in overflow");
+	assert.equal(container.querySelector('button[aria-label="common.snooze"]'), null, "snooze is in overflow");
+	assert.equal(menuItem(container, "common.trash").dataset.destructive, "true");
+
 	await act(async () => button(container, "common.archive").click());
-	await act(async () => button(container, "common.trash").click());
-	await act(async () => button(container, "common.markRead").click());
-	assert.deepEqual(actions, ["archive", "trash", "read"]);
+	await act(async () => menuItem(container, "common.markRead").click());
+	await act(async () => menuItem(container, "common.trash").click());
+	assert.deepEqual(actions, ["archive", "read", "trash"]);
 
 	await rerender({
 		message: message({ read: true }),
@@ -222,7 +262,7 @@ test("the compact row rail keeps every existing action and its accessible label"
 		active: false,
 	});
 	assert.match(container.querySelector("div.absolute").className, /(^|\s)bg-neutral-50(\s|$)/, "a normal row uses the row surface");
-	assert.equal(button(container, "common.markUnread").getAttribute("aria-label"), "common.markUnread");
+	assert.ok(menuItem(container, "common.markUnread"), "the overflow action follows the current read state");
 });
 
 test("snoozing and unsnoozing notify the list only after the API succeeds", async (t) => {
@@ -238,7 +278,7 @@ test("snoozing and unsnoozing notify the list only after the API succeeds", asyn
 	const { container, rerender, cleanup } = await renderActions(props);
 	t.after(cleanup);
 
-	await act(async () => button(container, "common.snooze").click());
+	await act(async () => menuItem(container, "common.snooze").click());
 	const dialog = container.querySelector('[data-testid="snooze-dialog"]');
 	assert.ok(dialog, "the snooze dialog opens from the compact row");
 	await act(async () => {
@@ -254,7 +294,7 @@ test("snoozing and unsnoozing notify the list only after the API succeeds", asyn
 		message: message({ snoozedUntil: "2099-01-01T00:00:00.000Z" }),
 	});
 	await act(async () => {
-		button(container, "common.unsnooze").click();
+		menuItem(container, "common.unsnooze").click();
 		await new Promise((resolve) => setTimeout(resolve, 0));
 	});
 	assert.deepEqual(globalThis.__unsnoozeCalls, ["m1"]);
@@ -298,6 +338,7 @@ export function useSelectedMailbox() {
 	["@/components/sidebar-mobile-utils", `
 export function useIsMobile() { return globalThis.__isMobile === true; }
 export function useIsDesktop() { return globalThis.__isDesktop !== false; }
+export function useHasHover() { return globalThis.__hasHover !== false; }
 `],
 	["@/hooks/use-message-counts", `
 export function useMessageCounts() {
@@ -468,9 +509,10 @@ function actionApiResponse(input, init) {
 	return jsonResponse({ ok: true });
 }
 
-async function renderFolderPage({ config = inboxFolderConfig, selectedMessageId, messages, desktop = true, mobile = false, grouped = false } = {}) {
+async function renderFolderPage({ config = inboxFolderConfig, selectedMessageId, messages, desktop = true, mobile = false, hover = true, grouped = false } = {}) {
 	globalThis.__isDesktop = desktop;
 	globalThis.__isMobile = mobile;
+	globalThis.__hasHover = hover;
 	globalThis.__grouped = grouped;
 	globalThis.__testMessages = messages ?? [listMessage("m1"), listMessage("m2")];
 	globalThis.__pushedPaths = [];
@@ -529,10 +571,19 @@ test("the compact list exposes actions only beside an open desktop reader", asyn
 	assert.equal(activeActions.dataset.compact, "true");
 	assert.equal(activeActions.dataset.active, "true");
 	assert.ok(rowActions(open.container, "m2"), "every eligible row can be acted on from the list");
+	assert.match(
+		rowActions(open.container, "m2").parentElement.className,
+		/focus-within:bg-neutral-50/,
+		"keyboard focus uses the same row surface as the rail",
+	);
 
 	const hidden = await renderFolderPage({ selectedMessageId: "m1", desktop: false });
 	t.after(hidden.cleanup);
 	assert.equal(rowActions(hidden.container, "m1"), null, "the hidden tablet list does not add desktop hover actions");
+
+	const coarse = await renderFolderPage({ selectedMessageId: "m1", hover: false });
+	t.after(coarse.cleanup);
+	assert.equal(rowActions(coarse.container, "m1"), null, "wide touch screens get no invisible hover-only rail");
 
 	const mobile = await renderFolderPage({ selectedMessageId: "m1", desktop: false, mobile: true });
 	t.after(mobile.cleanup);
