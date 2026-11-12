@@ -134,8 +134,13 @@ export function RegisterClient() {
 
     const hostname = String(new FormData(e.currentTarget).get("domain") ?? "").toLowerCase().trim();
     if (skipDns) {
+      const { ok, data } = await submitPrimaryDomain(hostname, true);
       setLoading(false);
-      setSetupDomain(hostname);
+      if (!ok || !data.domain) {
+        setError(typeof data.error === "string" ? data.error : t("setup.domainFailed"));
+        return;
+      }
+      setSetupDomain(data.domain.hostname);
       setSetupEnableSending(true);
       setSetupSkipDns(true);
       setStep(3);
@@ -414,7 +419,7 @@ export function RegisterClient() {
 							{t("setup.checkingMx")}
 						</div>
 					)}
-					{mxRecordsExist === false && (
+					{mxRecordsExist === false && !setupSkipDns && (
 						<div className="flex items-center gap-3 rounded-2xl bg-green-50 px-4 py-3 text-sm text-green-700">
 							<CheckCircle2 className="h-4 w-4" />
 							{t("setup.noMx")}
