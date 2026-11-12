@@ -2,7 +2,8 @@ import { and, eq, inArray } from "drizzle-orm";
 import { getDb } from "@/db";
 import { contacts, routingRules } from "@/db/schema";
 import { getFirstEmailAddressEntry, normalizeEmailAddress } from "@/lib/email/address";
-import type { BlockContactInput, ContactDisplayName, ContactInput, MessageContactNames } from "@/lib/contacts/types";
+import type { BlockContactInput, ContactCard, ContactDisplayName, ContactInput, MessageContactNames } from "@/lib/contacts/types";
+import type { ContactSource } from "@/lib/email/address-types";
 import { getContactId, getContactNameFromAddress, getSenderDisplayName } from "@/lib/contacts/utils";
 import { importGravatarAvatar } from "@/lib/contacts/gravatar";
 
@@ -54,6 +55,77 @@ export async function upsertContactFromAddress(env: CloudflareEnv, input: Contac
 	return created ?? null;
 }
 
+const MAX_AVATAR_LOOKUPS = 20;
+
+export async function upsertContactsFromAddresses(
+	env: CloudflareEnv,
+	userId: string,
+	addresses: string[],
+	source: ContactSource = "outbound",
+): Promise<void> {
+	const entries = new Map<string, { email: string; displayName: string | null }>();
+	for (const address of addresses) {
+		const email = normalizeEmailAddress(address);
+		if (!email) continue;
+		entries.set(email, { email, displayName: getContactNameFromAddress(address) });
+	}
+	if (entries.size === 0) return;
+
+	const db = getDb(env);
+	const emails = [...entries.keys()];
+	const existingRows = await db
+		.select()
+		.from(contacts)
+		.where(and(eq(contacts.userId, userId), inArray(contacts.email, emails)));
+	const existing = new Map(existingRows.map((contact) => [contact.email, contact]));
+	const now = new Date();
+	const insertRows: Array<typeof contacts.$inferInsert> = [];
+	const updateQueries: Array<PromiseLike<unknown>> = [];
+
+	for (const entry of entries.values()) {
+		const current = existing.get(entry.email);
+		if (!current) {
+			insertRows.push({
+				id: getContactId(userId, entry.email),
+				userId,
+				email: entry.email,
+				displayName: entry.displayName,
+				source,
+				lastSeenAt: now,
+			});
+			continue;
+		}
+		const nextDisplayName = getNextDisplayName(current.displayName, current.source, entry.displayName, source);
+		const nextSource = current.source === "manual" || (current.source === "outbound" && source === "inbound")
+			? current.source
+			: source;
+		updateQueries.push(db.update(contacts).set({
+			displayName: nextDisplayName,
+			source: nextSource,
+			lastSeenAt: now,
+		}).where(eq(contacts.id, current.id)));
+	}
+
+	for (let index = 0; index < insertRows.length; index += 10) {
+		await db.insert(contacts).values(insertRows.slice(index, index + 10)).onConflictDoNothing();
+	}
+	for (let index = 0; index < updateQueries.length; index += 10) {
+		await Promise.all(updateQueries.slice(index, index + 10));
+	}
+
+	const newEmails = insertRows.slice(0, MAX_AVATAR_LOOKUPS).map((row) => row.email);
+	for (let index = 0; index < newEmails.length; index += 4) {
+		const batch = newEmails.slice(index, index + 4);
+		const avatars = await Promise.all(batch.map(async (email) => ({
+			email,
+			avatarKey: await importGravatarAvatar(env, userId, email),
+		})));
+		await Promise.all(avatars.flatMap(({ email, avatarKey }) => avatarKey
+			? [db.update(contacts).set({ avatarKey }).where(eq(contacts.id, getContactId(userId, email)))]
+			: []));
+	}
+}
+
 export async function getContactDisplayNameMap(env: CloudflareEnv, userId: string, addresses: string[]) {
 	const emails = Array.from(new Set(addresses.map(normalizeEmailAddress).filter(Boolean)));
 	if (emails.length === 0) return new Map<string, ContactDisplayName>();
@@ -84,6 +156,23 @@ export async function getContactAvatarMap(env: CloudflareEnv, userId: string, ad
 		.where(and(eq(contacts.userId, userId), inArray(contacts.email, emails)));
 
 	return new Map(rows.map((contact) => [contact.email, !!contact.avatarKey]));
+}
+
+export async function getContactCardMap(env: CloudflareEnv, userId: string, addresses: string[]) {
+	const emails = Array.from(new Set(addresses.map(normalizeEmailAddress).filter(Boolean)));
+	if (emails.length === 0) return new Map<string, ContactCard>();
+
+	const db = getDb(env);
+	const rows = await db
+		.select({ email: contacts.email, displayName: contacts.displayName, source: contacts.source, avatarKey: contacts.avatarKey })
+		.from(contacts)
+		.where(and(eq(contacts.userId, userId), inArray(contacts.email, emails)));
+
+	return new Map(rows.map((contact) => [contact.email, {
+		displayName: contact.displayName,
+		source: contact.source,
+		hasAvatar: !!contact.avatarKey,
+	}]));
 }
 
 export async function getMessageContactNames(

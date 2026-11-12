@@ -1,7 +1,7 @@
 import { and, asc, eq, inArray, isNull, ne, notInArray, or } from "drizzle-orm";
 import { getDb } from "@/db";
 import { messageAttachments, messages } from "@/db/schema";
-import { getContactAvatarMap, getContactDisplayNameMap } from "@/lib/contacts/service";
+import { getContactCardMap } from "@/lib/contacts/service";
 import { getSenderDisplayName } from "@/lib/contacts/utils";
 import { getFirstEmailAddressEntry, normalizeEmailAddress } from "@/lib/email/address";
 import { getMailboxAccessLevel } from "@/lib/mailboxes/access";
@@ -49,8 +49,8 @@ export async function getMessageThreadForUser(env: CloudflareEnv, user: SessionU
 		: await db.select().from(messages).where(eq(messages.id, messageId)).limit(1);
 
 	const ids = rows.map((row) => row.id);
-	const attachmentRows = ids.length
-		? await db
+	const attachmentQuery = ids.length
+		? db
 				.select({
 					id: messageAttachments.id,
 					messageId: messageAttachments.messageId,
@@ -62,7 +62,15 @@ export async function getMessageThreadForUser(env: CloudflareEnv, user: SessionU
 				})
 				.from(messageAttachments)
 				.where(and(inArray(messageAttachments.messageId, ids), isNull(messageAttachments.trashedAt)))
-		: [];
+		: null;
+	const [attachmentRows, contactMap] = await Promise.all([
+		attachmentQuery ?? Promise.resolve([]),
+		getContactCardMap(
+			env,
+			message.userId,
+			rows.flatMap((row) => [row.fromAddr, getFirstEmailAddressEntry(row.toAddr)]),
+		),
+	]);
 	const attachmentsByMessage = new Map<string, typeof attachmentRows>();
 	for (const attachment of attachmentRows) {
 		const list = attachmentsByMessage.get(attachment.messageId) ?? [];
@@ -70,26 +78,19 @@ export async function getMessageThreadForUser(env: CloudflareEnv, user: SessionU
 		attachmentsByMessage.set(attachment.messageId, list);
 	}
 
-	const contactMap = await getContactDisplayNameMap(
-		env,
-		message.userId,
-		rows.flatMap((row) => [row.fromAddr, getFirstEmailAddressEntry(row.toAddr)]),
-	);
-	const contactAvatarMap = await getContactAvatarMap(
-		env,
-		message.userId,
-		rows.map((row) => row.fromAddr),
-	);
-
 	return {
 		threadId: message.threadId,
-		messages: rows.map((row) => ({
-			...withoutRawKey(row),
-			fromContactName: getSenderDisplayName(row.fromAddr, contactMap.get(normalizeEmailAddress(row.fromAddr))),
-			fromContactHasAvatar: contactAvatarMap.get(normalizeEmailAddress(row.fromAddr)) ?? false,
-			toContactName:
-				contactMap.get(normalizeEmailAddress(getFirstEmailAddressEntry(row.toAddr)))?.displayName ?? null,
-			attachments: attachmentsByMessage.get(row.id) ?? [],
-		})),
+		messages: rows.map((row) => {
+			const contact = contactMap.get(normalizeEmailAddress(row.fromAddr));
+			return {
+				...withoutRawKey(row),
+				// The reader already fetched the open message; its thread copy does not need the body again.
+				...(row.id === messageId ? { textBody: null, htmlBody: null } : {}),
+				fromContactName: getSenderDisplayName(row.fromAddr, contact),
+				fromContactHasAvatar: contact?.hasAvatar ?? false,
+				toContactName: contactMap.get(normalizeEmailAddress(getFirstEmailAddressEntry(row.toAddr)))?.displayName ?? null,
+				attachments: attachmentsByMessage.get(row.id) ?? [],
+			};
+		}),
 	};
 }

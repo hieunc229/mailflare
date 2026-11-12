@@ -23,6 +23,12 @@ export type ContactDisplayName = {
 	source: ContactSource;
 };
 
+export type ContactCard = {
+	displayName: string | null;
+	source: ContactSource;
+	hasAvatar: boolean;
+};
+
 export type MessageContactNames = {
 	/** Resolved sender label: a manually named contact, otherwise the message's From name. */
 	fromContactName: string | null;

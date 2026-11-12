@@ -222,7 +222,8 @@ export default function DrivePage() {
 
 	const sorted = useMemo(() => sortDriveItems(items, sortKey, ascending), [items, sortKey, ascending]);
 	// Attachments can only be selected when the user may delete them.
-	const selectable = sorted.filter((item) => (item.source ? item.source.canDelete : canEditDrive(item.role)));
+	const selectable = useMemo(() => sorted.filter((item) => (item.source ? item.source.canDelete : canEditDrive(item.role))), [sorted]);
+	const selectableIds = useMemo(() => new Set(selectable.map((item) => item.id)), [selectable]);
 	const selectedItems = selectable.filter((item) => selectedIds.has(item.id));
 	const allSelected = selectable.length > 0 && selectedItems.length === selectable.length;
 	useEffect(() => { if (selectAllRef.current) selectAllRef.current.indeterminate = selectedItems.length > 0 && !allSelected; }, [selectedItems.length, allSelected]);
@@ -309,7 +310,7 @@ export default function DrivePage() {
 								: {};
 							return (
 								<div key={item.id} role="listitem" style={gridStyle} draggable={isDriveDraggable(item)} onDragStart={(event) => onItemDragStart(event, item)} onDragEnd={onItemDragEnd} {...dropTarget} className={clsx("group grid grid-cols-[2rem_minmax(0,1fr)_2.5rem] items-center gap-x-4 rounded-lg px-3 text-sm md:grid-cols-[var(--drive-columns)]", dropFolder === item.id ? "bg-blue-100 ring-2 ring-inset ring-blue-500" : selectedIds.has(item.id) ? "bg-blue-50" : "hover:bg-neutral-50", movingIds.has(item.id) && "opacity-50")}>
-									<Checkbox checked={selectedIds.has(item.id)} onChange={() => toggleItem(item.id)} disabled={!selectable.includes(item)} aria-label={t("drive.selectItem", { name: item.name })} className={clsx("ml-1", !selectable.includes(item) && "invisible")} />
+									<Checkbox checked={selectedIds.has(item.id)} onChange={() => toggleItem(item.id)} disabled={!selectableIds.has(item.id)} aria-label={t("drive.selectItem", { name: item.name })} className={clsx("ml-1", !selectableIds.has(item.id) && "invisible")} />
 									<button type="button" onClick={() => open(item)} aria-disabled={item.trashedAt ? true : undefined} className="flex min-w-0 items-center gap-3 py-3 text-left aria-disabled:cursor-default">
 										<Icon size={16} className={clsx("shrink-0", className)} fill={item.kind === "folder" ? "currentColor" : "none"} />
 										<span className="truncate text-neutral-900">{item.name}</span>

@@ -1,4 +1,4 @@
-import type { ContactDisplayName } from "@/lib/contacts/types";
+import type { ContactSource } from "@/lib/email/address-types";
 import { getEmailDisplayName, normalizeEmailAddress, parseEmailAddressParts } from "@/lib/email/address";
 
 export function getContactId(userId: string, email: string): string {
@@ -22,8 +22,8 @@ export function getDisplayNameForAddress(address: string, contactName?: string |
  * different company name on every message, so the header must beat the
  * contact's last-learned name.
  */
-export function getSenderDisplayName(address: string, contact?: ContactDisplayName | null): string | null {
-	const contactName = contact?.displayName.trim() || null;
+export function getSenderDisplayName(address: string, contact?: { displayName: string | null; source: ContactSource } | null): string | null {
+	const contactName = contact?.displayName?.trim() || null;
 	if (contact?.source === "manual" && contactName) return contactName;
 	return getContactNameFromAddress(address) ?? contactName;
 }
