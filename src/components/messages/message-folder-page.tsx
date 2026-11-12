@@ -27,6 +27,7 @@ import { useMessageNavigation } from "./message-navigation";
 import { rememberOpenedUnreadMessage } from "./message-detail-navigation-utils";
 import { useConversationView } from "./use-conversation-view";
 import { OpenedIndicator } from "./message-open-status";
+import { MessageNotesPopover, NoteBadge } from "./message-notes-popover";
 import type { MessageFolderPageProps, MessageListRowProps, RowMessageAction } from "./types";
 import {
 	formatMessageListTimestamp,
@@ -182,6 +183,7 @@ function MessageListRow({
 						className={`mt-1 block truncate text-sm ${unread ? "font-semibold text-neutral-900" : "text-neutral-700"
 							}`}
 					>
+						<NoteBadge count={message.noteCount} />
 						{message.subject ?? t("list.noSubject")}
 					</span>
 					<span className="mt-0.5 block truncate text-xs leading-5 text-neutral-500">
@@ -245,7 +247,11 @@ function MessageListRow({
 					<span className="ml-2 text-xs text-neutral-500">{message.threadCount}</span>
 				)}
 			</span>
-			<span className="truncate text-neutral-700">
+			<span className="flex min-w-0 items-center text-neutral-700">
+				{/* A fixed slot keeps every subject aligned, with or without notes. */}
+				<span className="w-11 shrink-0">
+					{message.noteCount ? <MessageNotesPopover messageId={message.id} count={message.noteCount} preview={message.notePreview} /> : null}
+				</span>
 				<Link
 					href={href}
 					onClick={config.folder === "drafts" ? undefined : onMessageNavigate}
@@ -255,7 +261,7 @@ function MessageListRow({
 					onBlur={config.folder === "drafts" ? undefined : navigation.cancelPrefetch}
 					onTouchStart={config.folder === "drafts" ? undefined : navigation.prefetchNow}
 					aria-current={active ? "true" : undefined}
-					className="focus-visible:outline-none after:absolute after:inset-0"
+					className="min-w-0 truncate focus-visible:outline-none after:absolute after:inset-0"
 				>
 					<span className={unread ? "font-semibold text-neutral-900" : ""}>
 						{rowMessage.subject ?? t("list.noSubject")}

@@ -57,6 +57,13 @@
       "when": 1793280378890,
       "tag": "0007_message_has_unsubscribe",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1793280379890,
+      "tag": "0008_conversation_notes",
+      "breakpoints": true
     }
   ]
 }

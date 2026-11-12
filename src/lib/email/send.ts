@@ -1,6 +1,6 @@
 import { and, eq, isNotNull } from "drizzle-orm";
 import { getDb } from "@/db";
-import { messages, outboundJobs } from "@/db/schema";
+import { conversationNotes, messages, outboundJobs } from "@/db/schema";
 import { newId } from "@/lib/ids";
 import { buildSnippet } from "@/lib/email/parse";
 import { dispatchWebhooks } from "@/lib/email/webhooks";
@@ -249,14 +249,23 @@ async function deliverEmail(env: CloudflareEnv, delivery: PreparedDelivery): Pro
 
 		// A fresh message starts its own conversation; Cloudflare's Message-ID is what
 		// any reply will name in In-Reply-To, so key the thread by it.
+		const threadId = input.threadId ?? normalizeMessageId(response.messageId) ?? messageId;
 		await db
 			.update(messages)
 			.set({
 				status: "sent",
 				providerMessageId: response.messageId,
-				threadId: input.threadId ?? normalizeMessageId(response.messageId) ?? messageId,
+				threadId,
 			})
 			.where(eq(messages.id, messageId));
+		// Notes taken while the message waited in the queue keyed its conversation by
+		// the message id; move them onto the thread key the send just established.
+		if (threadId !== messageId) {
+			await db
+				.update(conversationNotes)
+				.set({ threadKey: threadId })
+				.where(and(eq(conversationNotes.mailboxId, mailboxId), eq(conversationNotes.threadKey, messageId)));
+		}
 		await db.update(outboundJobs).set({ status: "sent", updatedAt: new Date() }).where(eq(outboundJobs.id, jobId));
 		if (input.followUpDays) {
 			// The message is already out; a reminder that cannot be stored must not fail the send.

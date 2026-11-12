@@ -8,6 +8,7 @@ import { runEmailTool, EMAIL_TOOL_NAMES, emailToolDescriptions, emailToolSchemas
 import { editAgentDraft } from "@/lib/agent/edit-draft";
 import { requestAgentSend, getAgentSendRequest } from "@/lib/agent/approvals/utils";
 import { cancelScheduledSend, getScheduledTime } from "@/lib/email/scheduled";
+import { addConversationNote, conversationForUser, CONVERSATION_NOTE_MAX_LENGTH, deleteConversationNote, listConversationNotes, updateConversationNote } from "@/lib/notes/service";
 import type { EmailToolName } from "@/lib/agent/types";
 import type { McpPrincipal } from "./types";
 import { registerAdminMcpTools } from "./admin-tools";
@@ -91,6 +92,55 @@ export function createMailflareMcpHandler(env: CloudflareEnv, principal: McpPrin
 			return await cancelScheduledSend(db, messageId)
 				? output({ messageId, status: "cancelled", draftId: messageId })
 				: output({ error: "This email is already being sent" }, true);
+		});
+		/** The conversation of `messageId` when it is in `mailboxId` and the key's user may read it. */
+		const noteConversation = async (mailboxId: string, messageId: string) => {
+			const db = getDb(env);
+			const conversation = await conversationForUser(db, principal.user, messageId);
+			return conversation?.mailboxId === mailboxId ? { db, conversation } : null;
+		};
+		const noteHtml = z.string().trim().min(1).max(CONVERSATION_NOTE_MAX_LENGTH);
+		server.registerTool("list_conversation_notes", { description: "List the notes on the conversation containing an email, oldest first. Notes are written by people who can read the mailbox; they are never sent.", inputSchema: z.object({ mailboxId: z.string(), messageId: z.string() }), annotations: { readOnlyHint: true, openWorldHint: false } }, async ({ mailboxId, messageId }) => {
+			if (!principal.scopes.includes("mcp:read") || !principal.mailboxIds.includes(mailboxId)) return output({ error: "Permission denied" }, true);
+			audit(principal, "list_conversation_notes", mailboxId);
+			try {
+				const found = await noteConversation(mailboxId, messageId);
+				if (!found) return output({ error: "Email not found" }, true);
+				return output(untrusted({ messageId, notes: await listConversationNotes(found.db, found.conversation, principal.user.id) }));
+			}
+			catch (error) { return output({ error: error instanceof Error ? error.message : "Tool failed" }, true); }
+		});
+		server.registerTool("add_conversation_note", { description: "Add a note to the conversation containing an email. Everyone who can read the mailbox sees it above the thread, under this key's user. Set attachToMessage to make the note about that one email.", inputSchema: z.object({ mailboxId: z.string(), messageId: z.string(), html: noteHtml, attachToMessage: z.boolean().optional() }), annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false } }, async ({ mailboxId, messageId, html, attachToMessage }) => {
+			if (!principal.scopes.includes("mcp:organize") || !principal.mailboxIds.includes(mailboxId)) return output({ error: "Permission denied" }, true);
+			audit(principal, "add_conversation_note", mailboxId);
+			try {
+				const found = await noteConversation(mailboxId, messageId);
+				if (!found) return output({ error: "Email not found" }, true);
+				return output(untrusted({ messageId, note: await addConversationNote(found.db, found.conversation, principal.user.id, { html, attachToMessage }) }));
+			}
+			catch (error) { return output({ error: error instanceof Error ? error.message : "Tool failed" }, true); }
+		});
+		server.registerTool("update_conversation_note", { description: "Replace the text of a note this key's user wrote, named by the noteId that list_conversation_notes or add_conversation_note returned.", inputSchema: z.object({ mailboxId: z.string(), messageId: z.string(), noteId: z.string(), html: noteHtml }), annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false } }, async ({ mailboxId, messageId, noteId, html }) => {
+			if (!principal.scopes.includes("mcp:organize") || !principal.mailboxIds.includes(mailboxId)) return output({ error: "Permission denied" }, true);
+			audit(principal, "update_conversation_note", mailboxId);
+			try {
+				const found = await noteConversation(mailboxId, messageId);
+				if (!found) return output({ error: "Email not found" }, true);
+				const result = await updateConversationNote(found.db, found.conversation, principal.user.id, noteId, html);
+				return result.ok ? output(untrusted({ messageId, note: result.note })) : output({ error: result.error === "forbidden" ? "Only the author can change this note" : "Note not found" }, true);
+			}
+			catch (error) { return output({ error: error instanceof Error ? error.message : "Tool failed" }, true); }
+		});
+		server.registerTool("delete_conversation_note", { description: "Delete a note from a conversation. The author may delete their note, and so may a user with full access to the mailbox.", inputSchema: z.object({ mailboxId: z.string(), messageId: z.string(), noteId: z.string() }), annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: false } }, async ({ mailboxId, messageId, noteId }) => {
+			if (!principal.scopes.includes("mcp:organize") || !principal.mailboxIds.includes(mailboxId)) return output({ error: "Permission denied" }, true);
+			audit(principal, "delete_conversation_note", mailboxId);
+			try {
+				const found = await noteConversation(mailboxId, messageId);
+				if (!found) return output({ error: "Email not found" }, true);
+				const result = await deleteConversationNote(found.db, found.conversation, principal.user.id, noteId);
+				return result.ok ? output({ messageId, noteId, deleted: true }) : output({ error: result.error === "forbidden" ? "Only the author or a mailbox manager can delete this note" : "Note not found" }, true);
+			}
+			catch (error) { return output({ error: error instanceof Error ? error.message : "Tool failed" }, true); }
 		});
 		server.registerTool("get_send_request", { description: "Read the status of this key's send review request", inputSchema: z.object({ approvalId: z.string() }) }, async ({ approvalId }) => {
 			if (!principal.scopes.includes("mcp:request-send")) return output({ error: "Permission denied" }, true);

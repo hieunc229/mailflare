@@ -14,10 +14,14 @@ const BASE_STYLE = `
 .email-quote-toggle > summary::-webkit-details-marker { display:none; }
 .email-quote-toggle > summary::before { content:'•••'; }
 .email-quote-content { display:flow-root; }
+:host(.mf-dense) p { margin-top:0; }
 `;
 
-export function EmailHtmlRenderer({ html, className, preserveLeadingQuote = false, autoAllowRemote = false, onAllowRemote }: {
-	html: string; className?: string; preserveLeadingQuote?: boolean;
+export function EmailHtmlRenderer({ html, className, dense = false, preserveLeadingQuote = false, autoAllowRemote = false, onAllowRemote }: {
+	html: string; className?: string;
+	/** Tighter block spacing for short internal text such as notes. */
+	dense?: boolean;
+	preserveLeadingQuote?: boolean;
 	/** Load remote content without a click; the reader can still block it. */
 	autoAllowRemote?: boolean;
 	/** Called when the reader chooses to load remote content. */
@@ -50,7 +54,7 @@ export function EmailHtmlRenderer({ html, className, preserveLeadingQuote = fals
 		});
 		setHasRemote(prepared.hasRemote);
 		const base = document.createElement("style");
-		base.textContent = `${BASE_STYLE}\n${prepared.rootTag} { display:block; font:14px/1.5 Arial,sans-serif; color:#202124; background:#fff; color-scheme:light; }\n${prepared.bodyTag} { display:block; }\n:host(.mf-dark) ${prepared.rootTag} { background:transparent; }`;
+		base.textContent = `${BASE_STYLE}\n${prepared.rootTag} { display:block; font:14px/1.5 Arial,sans-serif; color:#202124; background:#fff; color-scheme:light; }\n${prepared.bodyTag} { display:block; }\n:host(.mf-dark) ${prepared.rootTag} { background:transparent; }\n:host(.mf-dense) ${prepared.rootTag} { background:transparent; }`;
 		const content = document.createElement("template");
 		content.innerHTML = collapseQuotedEmailHtml(prepared.html, preserveLeadingQuote, quoteToggleLabel) ?? "";
 		root.replaceChildren(base, content.content);
@@ -83,6 +87,6 @@ export function EmailHtmlRenderer({ html, className, preserveLeadingQuote = fals
 				{allowRemote ? null : t("message.allowRemote")}
 			</button>
 		</div>}
-		<div className="max-w-full overflow-x-auto" ref={host} />
+		<div className={`max-w-full overflow-x-auto${dense ? " mf-dense" : ""}`} ref={host} />
 	</div>;
 }
