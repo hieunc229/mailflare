@@ -14,6 +14,7 @@ import {
 	withD1BookmarkCookie,
 	withD1ReadSession,
 } from "./worker-utils";
+import { runWithD1Session } from "./src/lib/d1-session-context";
 import { sweepOrphanedRawMail } from "./src/lib/email/raw-sweeper";
 import { processImportJob, sweepImportJobs } from "./src/lib/import/jobs";
 import { processWebhookRetry, type WebhookRetryMessage } from "./src/lib/email/webhooks";
@@ -64,7 +65,7 @@ export default {
 			return hub.fetch(hubRequest);
 		}
 
-		const response = await vinextHandler.fetch(request, env, ctx);
+		const response = await runWithD1Session(d1Session?.session, () => vinextHandler.fetch(request, env, ctx));
 		return withD1BookmarkCookie(request, response, d1Session?.session);
 	},
 

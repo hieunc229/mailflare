@@ -12,6 +12,7 @@ after(() => rmSync(outDir, { recursive: true, force: true }));
 await build({
 	entryPoints: {
 		utils: join(root, "worker-utils.ts"),
+		context: join(root, "src/lib/d1-session-context.ts"),
 	},
 	outdir: outDir,
 	outExtension: { ".js": ".mjs" },
@@ -24,7 +25,8 @@ await build({
 	logLevel: "silent",
 });
 
-const { D1_SESSION_COOKIE, d1SessionBookmark, withD1ReadSession, withD1BookmarkCookie } = await import(
+const { runWithD1Session, getD1Session } = await import(pathToFileURL(join(outDir, "context.mjs")).href);
+const { D1_SESSION_COOKIE, shouldUseD1Session, d1SessionBookmark, withD1ReadSession, withD1BookmarkCookie } = await import(
 	pathToFileURL(join(outDir, "utils.mjs")).href
 );
 
@@ -169,4 +171,32 @@ test("the cookie-less first visit stores the bookmark", () => {
 	const session = { getBookmark: () => "first-bm" };
 	const response = withD1BookmarkCookie(req("GET"), new Response("body"), session);
 	assert.match(response.headers.get("set-cookie"), /mf-d1-bm=first-bm/);
+});
+
+test("a mutation without a bookmark starts the session on the primary", () => {
+	const { db } = fakeD1();
+	withD1ReadSession({ DB: db }, new Request("https://mail.example.com/api/send", { method: "POST" }));
+	assert.deepEqual(db.withSessionArgs, ["first-primary"]);
+});
+
+test("sign-in, setup and public write endpoints never use a replica session", () => {
+	for (const path of ["/api/auth/login", "/api/auth/password-reset", "/api/setup/prepare", "/api/inbound/resend", "/api/i/abc.gif"]) {
+		assert.equal(shouldUseD1Session(new Request(`https://mail.example.com${path}`)), false, path);
+		const { db } = fakeD1();
+		assert.equal(withD1ReadSession({ DB: db }, new Request(`https://mail.example.com${path}`)), null);
+		assert.deepEqual(db.withSessionArgs, []);
+	}
+	assert.equal(shouldUseD1Session(new Request("https://mail.example.com/api/messages")), true);
+});
+
+test("the request's session is visible to getEnv() through async context", async () => {
+	const session = { getBookmark: () => "bm" };
+	assert.equal(getD1Session(), undefined);
+	const seen = await runWithD1Session(session, async () => {
+		await Promise.resolve();
+		return getD1Session();
+	});
+	assert.equal(seen, session);
+	assert.equal(getD1Session(), undefined);
+	assert.equal(runWithD1Session(null, () => getD1Session()), undefined);
 });

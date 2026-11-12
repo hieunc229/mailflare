@@ -1,4 +1,5 @@
 import { getDatabaseConfig } from "./src/db/with-database";
+import { withD1Session } from "./src/lib/d1-session-context";
 import type { InboundQueueMessage } from "./src/lib/email/inbound";
 import type { WebhookRetryMessage } from "./src/lib/email/webhooks";
 import type { ImportJobMessage } from "./src/lib/import/jobs-types";
@@ -72,18 +73,34 @@ export interface D1ReadSession {
  * enumerable.
  */
 export function withD1ReadSession(env: CloudflareEnv, request: Request): D1ReadSession | null {
+	if (!shouldUseD1Session(request)) return null;
 	if (getDatabaseConfig(env).driver !== "d1") return null;
 	const database = env.DB;
 	if (!database || typeof database.withSession !== "function") return null;
-	const session = database.withSession(d1SessionBookmark(request) ?? "first-unconstrained");
+	// A mutation without a bookmark starts on the primary; reads may start anywhere.
+	const fallback = isReadRequest(request) ? "first-unconstrained" : "first-primary";
+	const session = database.withSession(d1SessionBookmark(request) ?? fallback);
 	// `DB_PRIMARY` keeps the raw primary binding reachable: authentication reads must not
 	// accept a lagging replica's copy of sessions/users (a session revoked on another
 	// device, or a freshly disabled account, has no bookmark covering it).
-	const proxied = new Proxy(env, {
-		get: (target, property) =>
-			property === "DB" ? session : property === "DB_PRIMARY" ? target.DB : Reflect.get(target, property),
-	});
-	return { env: proxied, session };
+	return { env: withD1Session(env, session), session };
+}
+
+function isReadRequest(request: Request): boolean {
+	return request.method === "GET" || request.method === "HEAD";
+}
+
+/** Paths whose reads must be current: sign-in, single-use tokens, setup and public write endpoints. */
+const PRIMARY_ONLY_PREFIXES = ["/api/auth/", "/api/setup", "/api/seed", "/api/inbound", "/api/i/"];
+
+/**
+ * Replica reads can lag writes the client's bookmark does not cover (other devices, inbound
+ * mail, queue jobs). Anything that consumes a single-use secret or has no signed-in client
+ * stays on the primary.
+ */
+export function shouldUseD1Session(request: Request): boolean {
+	const { pathname } = new URL(request.url);
+	return !PRIMARY_ONLY_PREFIXES.some((prefix) => pathname.startsWith(prefix));
 }
 
 /**
