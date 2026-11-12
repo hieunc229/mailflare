@@ -14,4 +14,5 @@ receiving mail through Cloudflare Email Routing (no port 25, no MX changes).
 Each message is posted to `/api/inbound` on your server with an HMAC
 signature. The server stores it and replies with the routing decision, so
 reject rules and forwarding rules still act at Cloudflare's edge. If the server
-is unreachable the message is rejected with a retry hint.
+is unreachable or answers with an error, the Worker throws, so Email Routing
+returns a temporary failure and the sender's mail server retries later.
