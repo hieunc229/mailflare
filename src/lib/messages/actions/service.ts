@@ -1,4 +1,4 @@
-import { and, eq, inArray, isNull } from "drizzle-orm";
+import { and, eq, inArray, isNull, type SQL } from "drizzle-orm";
 import type { AppDatabase } from "@/db";
 import { getDb } from "@/db";
 import { folders, messages } from "@/db/schema";
@@ -7,6 +7,7 @@ import { createAuditLogs } from "@/lib/mailboxes/audit";
 import { getMailboxAccessLevel } from "@/lib/mailboxes/access";
 import type { MailboxAccessLevel } from "@/lib/mailboxes/types";
 import { applySpamFeedback } from "@/lib/spam/feedback";
+import { claimMessageActionUndoToken, releaseMessageActionUndoClaim } from "./claims";
 import {
 	actionNeedsManage,
 	applySnapshotPatch,
@@ -18,7 +19,7 @@ import {
 	planUndoRecord,
 	type MessageActionTarget,
 } from "./definitions";
-import { signUndoTokenForEnv, verifyUndoTokenForEnv } from "./token";
+import { MAX_UNDO_AGE_MS, signUndoTokenForEnv, verifyUndoTokenForEnv } from "./token";
 import type {
 	MessageActionInput,
 	MessageActionRecord,
@@ -95,6 +96,30 @@ function toDatabasePatch(patch: Partial<MessageStateSnapshot>) {
 	};
 }
 
+function pickStatePatch(
+	fields: Array<keyof MessageStateSnapshot>,
+	state: MessageStateSnapshot,
+): Partial<MessageStateSnapshot> {
+	const patch: Partial<MessageStateSnapshot> = {};
+	for (const field of fields) patch[field] = state[field] as never;
+	return patch;
+}
+
+function stateCondition(field: keyof MessageStateSnapshot, expected: MessageStateSnapshot[keyof MessageStateSnapshot]): SQL {
+	if (field === "status") return eq(messages.status, expected as string);
+	if (field === "read") return eq(messages.read, expected as boolean);
+	if (field === "starred") return eq(messages.starred, expected as boolean);
+	if (field === "folderId") return expected === null ? isNull(messages.folderId) : eq(messages.folderId, expected as string);
+	return expected === null ? isNull(messages.snoozedUntil) : eq(messages.snoozedUntil, new Date(expected as string));
+}
+
+function stateConditions(
+	fields: Array<keyof MessageStateSnapshot>,
+	state: MessageStateSnapshot,
+): SQL[] {
+	return fields.map((field) => stateCondition(field, state[field]));
+}
+
 function validateSnoozeTime(value: string | null | undefined): string {
 	if (typeof value !== "string") throw new MessageActionError("Choose a future snooze time");
 	const date = new Date(value);
@@ -133,8 +158,6 @@ export async function applyMessageActionForUser(
 	const accessByMailbox = await loadAccessMap(db, user, rows);
 	const applied: MessageActionRecord[] = [];
 	const skipped: MessageActionSkipped[] = [];
-	const confirmed = new Set<string>();
-	const updates = new Map<string, { patch: Partial<MessageStateSnapshot>; ids: string[] }>();
 	const seen = new Set<string>();
 
 	for (const row of rows) {
@@ -161,63 +184,76 @@ export async function applyMessageActionForUser(
 		}
 		const previous = snapshotMessageState(row);
 		const next = applySnapshotPatch(previous, result.patch);
+		const changedFields = getChangedStateFields(previous, next);
+		const trainingAction = action === "spam" || (action === "inbox" && row.status === "spam");
+		if (changedFields.length === 0 && !trainingAction) continue;
 
-		try {
-			if (action === "spam") {
-				const changed = await applySpamFeedback(env, user, row.id, "spam", access);
+		if (trainingAction) {
+			try {
+				const classification = action === "spam" ? "spam" : "ham";
+				const changed = await applySpamFeedback(env, user, row.id, classification, access);
 				if (!changed) {
 					skipped.push({ id: row.id, reason: "not_applicable" });
 					continue;
 				}
-				confirmed.add(row.id);
+			} catch {
+				skipped.push({ id: row.id, reason: "failed" });
+				continue;
 			}
-			if (action === "inbox" && row.status === "spam") {
-				await applySpamFeedback(env, user, row.id, "ham", access);
+			// Spam feedback writes status/folder itself and is deliberately kept
+			// outside the undo contract; no token is issued for these actions.
+			// The classifier-training counters are therefore not reversed on undo.
+			if (action === "inbox") {
+				try {
+					const updated = await db.update(messages)
+						.set(toDatabasePatch(pickStatePatch(changedFields, next)))
+						.where(eq(messages.id, row.id))
+						.returning({ id: messages.id });
+					if (updated.length === 0) {
+						skipped.push({ id: row.id, reason: "not_found" });
+						continue;
+					}
+				} catch {
+					skipped.push({ id: row.id, reason: "failed" });
+					continue;
+				}
+			}
+			if (recordHasChanges({ previous, applied: next })) {
+				applied.push({ id: row.id, mailboxId: row.mailboxId, previous, applied: next });
+			}
+			continue;
+		}
+
+		try {
+			// Compare-and-swap on every field this action writes. A concurrent
+			// change makes this row stale rather than signing a previous state the
+			// server never actually replaced.
+			const updated = await db.update(messages)
+				.set(toDatabasePatch(pickStatePatch(changedFields, next)))
+				.where(and(eq(messages.id, row.id), ...stateConditions(changedFields, previous)))
+				.returning({ id: messages.id });
+			if (updated.length === 0) {
+				skipped.push({ id: row.id, reason: "stale" });
+				continue;
 			}
 		} catch {
 			skipped.push({ id: row.id, reason: "failed" });
 			continue;
 		}
-
 		applied.push({ id: row.id, mailboxId: row.mailboxId, previous, applied: next });
-
-		// Spam feedback already wrote status/folder; every other path writes the full
-		// patch so the stored row is exactly the applied state the token promises.
-		if (action !== "spam") {
-			const patch = getChangedStateFields(previous, next).length > 0 ? result.patch : null;
-			if (patch) {
-				const key = JSON.stringify(patch);
-				const group = updates.get(key) ?? { patch, ids: [] };
-				group.ids.push(row.id);
-				updates.set(key, group);
-			} else {
-				confirmed.add(row.id);
-			}
-		}
 	}
 
 	for (const missing of ids.filter((id) => !seen.has(id))) {
 		skipped.push({ id: missing, reason: "not_found" });
 	}
 
-	for (const group of updates.values()) {
-		for (let index = 0; index < group.ids.length; index += MESSAGE_ID_CHUNK) {
-			const chunk = group.ids.slice(index, index + MESSAGE_ID_CHUNK);
-			try {
-				await db.update(messages).set(toDatabasePatch(group.patch)).where(inArray(messages.id, chunk));
-				for (const id of chunk) confirmed.add(id);
-			} catch {
-				for (const id of chunk) skipped.push({ id, reason: "failed" });
-			}
-		}
-	}
-
-	const confirmedApplied = applied.filter((record) => confirmed.has(record.id));
-	if (confirmedApplied.length === 0 && skipped.some((item) => item.reason === "failed")) {
+	if (applied.length === 0 && skipped.some((item) => item.reason === "failed")) {
 		throw new MessageActionError("Could not update messages", 500);
 	}
 
-	const changedRecords = confirmedApplied.filter(recordHasChanges);
+	const changedRecords = applied.filter(recordHasChanges);
+	const hasTrainingRecord = action === "spam"
+		|| (action === "inbox" && applied.some((record) => record.previous.status === "spam"));
 	const auditRecords = action === "spam"
 		? []
 		: action === "inbox"
@@ -232,31 +268,64 @@ export async function applyMessageActionForUser(
 		})));
 	}
 
-	const undoToken = changedRecords.length > 0
+	const undoToken = !hasTrainingRecord && changedRecords.length > 0
 		? await signUndoTokenForEnv(env, {
-			v: 1,
+			v: 2,
 			issuedAt: Date.now(),
 			action,
+			userId: user.id,
+			nonce: crypto.randomUUID(),
 			records: changedRecords,
 		})
 		: undefined;
 
-	return { ok: true, action, applied: confirmedApplied, skipped, undoToken };
+	return { ok: true, action, applied, skipped, undoToken };
 }
 
-/** Restores only the fields the signed action changed, and only while they still hold its result. */
+/**
+ * Restores only the fields the signed action changed, and only while they still
+ * hold its result. The one-time nonce claim blocks replay of a used token. The
+ * remaining accepted limit is a never-used token whose field changed away and
+ * back again (ABA): the value CAS cannot distinguish that, and a monotonic
+ * revision is deliberately deferred to keep this change small.
+ */
 export async function undoMessageActionForUser(
 	env: CloudflareEnv,
 	user: SessionUser,
 	token: string,
 ): Promise<UndoMessageActionResponse> {
 	const payload = await verifyUndoTokenForEnv(env, token);
-	if (!payload || !isReversibleMessageAction(payload.action)) {
+	if (!payload || !isReversibleMessageAction(payload.action) || payload.userId !== user.id) {
 		throw new MessageActionError("This undo has expired", 410);
 	}
 	if (payload.records.length === 0) throw new MessageActionError("Nothing to undo");
 	if (payload.records.length > MAX_ACTION_MESSAGES) throw new MessageActionError("Too many messages to undo");
 
+	const claimed = await claimMessageActionUndoToken(env, {
+		nonce: payload.nonce,
+		userId: user.id,
+		expiresAt: new Date(Date.now() + MAX_UNDO_AGE_MS),
+	});
+	if (claimed === "duplicate") {
+		throw new MessageActionError("This undo has already been used", 410);
+	}
+
+	try {
+		return await performUndoMessageAction(env, user, payload);
+	} catch (error) {
+		// A transient failure must not burn the one-time token: release it so the
+		// same signed retry can be attempted again. Field CAS makes a retry safe
+		// after any rows that were already restored.
+		await releaseMessageActionUndoClaim(env, { nonce: payload.nonce, userId: user.id }).catch(() => undefined);
+		throw error;
+	}
+}
+
+async function performUndoMessageAction(
+	env: CloudflareEnv,
+	user: SessionUser,
+	payload: NonNullable<Awaited<ReturnType<typeof verifyUndoTokenForEnv>>>,
+): Promise<UndoMessageActionResponse> {
 	const records = [...new Map(payload.records.map((record) => [record.id, record])).values()];
 	const db = getDb(env);
 	const ids = records.map((record) => record.id);
@@ -273,12 +342,6 @@ export async function undoMessageActionForUser(
 
 	const restored: string[] = [];
 	const skipped: MessageActionSkipped[] = [];
-	const updates = new Map<string, {
-		patch: Partial<MessageStateSnapshot>;
-		fields: (keyof MessageStateSnapshot)[];
-		applied: MessageStateSnapshot;
-		ids: string[];
-	}>();
 
 	for (const record of records) {
 		const current = byId.get(record.id);
@@ -297,40 +360,17 @@ export async function undoMessageActionForUser(
 			skipped.push({ id: plan.id, reason: plan.reason });
 			continue;
 		}
-		const key = JSON.stringify({ patch: plan.patch, applied: plan.fields.map((field) => record.applied[field]) });
-		const group = updates.get(key) ?? { patch: plan.patch, fields: plan.fields, applied: record.applied, ids: [] };
-		group.ids.push(record.id);
-		updates.set(key, group);
-	}
-
-	for (const group of updates.values()) {
-		for (let index = 0; index < group.ids.length; index += MESSAGE_ID_CHUNK) {
-			const chunk = group.ids.slice(index, index + MESSAGE_ID_CHUNK);
-			const conditions = [inArray(messages.id, chunk)];
-			for (const field of group.fields) {
-				const expected = group.applied[field];
-				if (field === "status") conditions.push(eq(messages.status, expected as string));
-				else if (field === "read") conditions.push(eq(messages.read, expected as boolean));
-				else if (field === "starred") conditions.push(eq(messages.starred, expected as boolean));
-				else if (field === "folderId") conditions.push(expected === null ? isNull(messages.folderId) : eq(messages.folderId, expected as string));
-				else if (field === "snoozedUntil") conditions.push(expected === null ? isNull(messages.snoozedUntil) : eq(messages.snoozedUntil, new Date(expected as string)));
-			}
-			try {
-				// Compare-and-swap on the exact fields the action wrote, so a later
-				// change in another tab or request wins instead of being clobbered.
-				const updated = await db.update(messages)
-					.set(toDatabasePatch(group.patch))
-					.where(and(...conditions))
-					.returning({ id: messages.id });
-				const updatedIds = new Set(updated.map((row) => row.id));
-				for (const id of chunk) {
-					if (updatedIds.has(id)) restored.push(id);
-					else skipped.push({ id, reason: "stale" });
-				}
-			} catch {
-				for (const id of chunk) skipped.push({ id, reason: "failed" });
-			}
+		// One row at a time: the MySQL update/returning shim needs an exact
+		// per-row affected count, and every dialect gets a real field CAS.
+		const updated = await db.update(messages)
+			.set(toDatabasePatch(plan.patch))
+			.where(and(eq(messages.id, record.id), ...stateConditions(plan.fields, record.applied)))
+			.returning({ id: messages.id });
+		if (updated.length === 0) {
+			skipped.push({ id: record.id, reason: "stale" });
+			continue;
 		}
+		restored.push(record.id);
 	}
 
 	if (restored.length > 0) {

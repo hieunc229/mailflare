@@ -69,9 +69,13 @@ export type UndoMessageActionResponse = {
 
 /** Payload carried by the signed undo token; never trusted from the request body directly. */
 export type MessageUndoTokenPayload = {
-	v: 1;
+	v: 2;
 	issuedAt: number;
 	action: ReversibleMessageAction;
+	/** The session user who received the token; another user cannot redeem it. */
+	userId: string;
+	/** Single-use claim key. */
+	nonce: string;
 	records: MessageActionRecord[];
 };
 

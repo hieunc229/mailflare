@@ -1,8 +1,9 @@
 import { getServerSecret } from "@/lib/security/server-secret";
 import type { MessageUndoTokenPayload } from "./types";
 
-const TOKEN_VERSION = 1;
-const MAX_UNDO_AGE_MS = 10 * 60_000;
+// v2 binds the token to the session user and a single-use claim nonce.
+const TOKEN_VERSION = 2;
+export const MAX_UNDO_AGE_MS = 10 * 60_000;
 const CLOCK_SKEW_MS = 60_000;
 
 function bytesToBase64Url(bytes: Uint8Array): string {
@@ -68,6 +69,7 @@ export async function verifyUndoToken(
 		return null;
 	}
 	if (payload?.v !== TOKEN_VERSION || typeof payload.issuedAt !== "number" || !Array.isArray(payload.records)) return null;
+	if (typeof payload.userId !== "string" || !payload.userId || typeof payload.nonce !== "string" || !payload.nonce) return null;
 	if (payload.issuedAt > now + CLOCK_SKEW_MS || payload.issuedAt < now - MAX_UNDO_AGE_MS) return null;
 	return payload;
 }

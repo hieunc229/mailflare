@@ -176,7 +176,14 @@ test("a mixed undo restores eligible messages and reports the rest", () => {
 });
 
 test("signed undo tokens carry the exact server records and reject tampering or expiry", async () => {
-	const payload = { v: 1, issuedAt: Date.now(), action: "archive", records: [record(state(), state({ status: "archived" }))] };
+	const payload = {
+		v: 2,
+		issuedAt: Date.now(),
+		action: "archive",
+		userId: "user-1",
+		nonce: "nonce-1",
+		records: [record(state(), state({ status: "archived" }))],
+	};
 	const token = await m.signUndoToken("test-secret", payload);
 	const verified = await m.verifyUndoToken("test-secret", token);
 	assert.deepEqual(verified.records, payload.records);
