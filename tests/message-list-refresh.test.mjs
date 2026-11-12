@@ -82,6 +82,7 @@ export function usePageLoading() {}
 	["@/components/sidebar-mobile-utils", `
 export function useIsMobile() { return false; }
 export function useIsDesktop() { return true; }
+export function useHasHover() { return true; }
 `],
 	["@/components/messages/use-conversation-view", `
 export function useConversationView() { return [false, () => {}]; }
