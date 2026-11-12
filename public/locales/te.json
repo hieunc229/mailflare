@@ -359,6 +359,10 @@
 	"attachment.loadFailed": "ఈ అటాచ్‌మెంట్‌ను లోడ్ చేయలేకపోయాం",
 	"attachment.unsupported": "ఈ ఫైల్ రకాన్ని బ్రౌజర్‌లో సురక్షితంగా ప్రివ్యూ చేయలేరు.",
 	"attachment.download": "డౌన్‌లోడ్ చేయండి",
+	"attachment.downloadAll": "అన్నీ డౌన్‌లోడ్ చేయండి",
+	"attachment.saveToDrive": "Driveలో సేవ్ చేయండి",
+	"attachment.savedToDrive": "Driveలో సేవ్ చేయబడింది",
+	"attachment.saveToDriveFailed": "Driveలో సేవ్ చేయలేకపోయాం",
 	"auth.logout": "లాగ్ అవుట్ చేయండి",
 	"license.upgrade": "అప్‌గ్రేడ్ చేయండి",
 	"contact.title": "కాంటాక్ట్ వివరాలు",
@@ -2374,5 +2378,6 @@
 	"account.permissions.allowDrive": "Allow Drive",
 	"actions.unsubscribeDeleteAll": "చందా రద్దు & అన్నీ తొలగించు",
 	"actions.unsubscribeDeleteConfirm": "ఈ పంపిణీదారి {count} పాత ఇమెయిల్‌లను ట్రాష్‌కు తరలించాలా?",
-	"actions.unsubscribeTrashDone": "చందా రద్దైంది; {count} ఇమెయిల్‌లు ట్రాష్‌కు వెళ్లాయి"
+	"actions.unsubscribeTrashDone": "చందా రద్దైంది; {count} ఇమెయిల్‌లు ట్రాష్‌కు వెళ్లాయి",
+	"attachment.downloadAllFlagged": "కొన్ని అటాచ్‌మెంట్‌లు ప్రమాదకరంగా గుర్తు పెట్టబడ్డాయి. అయినా ఆర్కైవ్ డౌన్‌లోడ్ చేయాలా?"
 }

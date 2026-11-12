@@ -369,6 +369,10 @@
 	"attachment.loadFailed": "Nie można załadować tego załącznika",
 	"attachment.unsupported": "Tego typu pliku nie można bezpiecznie wyświetlić w podglądzie w przeglądarce.",
 	"attachment.download": "Pobierz",
+	"attachment.downloadAll": "Pobierz wszystkie",
+	"attachment.saveToDrive": "Zapisz na Drive",
+	"attachment.savedToDrive": "Zapisano na Drive",
+	"attachment.saveToDriveFailed": "Nie można zapisać na Drive",
 	"auth.logout": "Wyloguj się",
 	"license.upgrade": "Ulepsz",
 	"contact.title": "Szczegóły kontaktu",
@@ -2404,5 +2408,6 @@
 	"account.permissions.allowDrive": "Allow Drive",
 	"actions.unsubscribeDeleteAll": "Wypisz się i usuń wszystko",
 	"actions.unsubscribeDeleteConfirm": "Przenieść {count} wcześniejszych wiadomości tego nadawcy do Kosza?",
-	"actions.unsubscribeTrashDone": "Wypisano; {count} wiadomości przeniesiono do Kosza"
+	"actions.unsubscribeTrashDone": "Wypisano; {count} wiadomości przeniesiono do Kosza",
+	"attachment.downloadAllFlagged": "Niektóre załączniki są oznaczone jako potencjalnie niebezpieczne. Pobrać archiwum mimo to?"
 }

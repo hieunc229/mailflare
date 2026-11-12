@@ -369,6 +369,10 @@
 	"attachment.loadFailed": "Не вдалося завантажити це вкладення",
 	"attachment.unsupported": "Цей тип файлу неможливо безпечно переглянути в браузері.",
 	"attachment.download": "Завантажити",
+	"attachment.downloadAll": "Завантажити все",
+	"attachment.saveToDrive": "Зберегти на Drive",
+	"attachment.savedToDrive": "Збережено на Drive",
+	"attachment.saveToDriveFailed": "Не вдалося зберегти на Drive",
 	"auth.logout": "Вийти",
 	"license.upgrade": "Оновити тариф",
 	"contact.title": "Відомості про контакт",
@@ -2404,5 +2408,6 @@
 	"account.permissions.allowDrive": "Allow Drive",
 	"actions.unsubscribeDeleteAll": "Відписатися й видалити все",
 	"actions.unsubscribeDeleteConfirm": "Перемістити {count} листів від цього відправника до кошика?",
-	"actions.unsubscribeTrashDone": "Відписано; {count} листів переміщено до кошика"
+	"actions.unsubscribeTrashDone": "Відписано; {count} листів переміщено до кошика",
+	"attachment.downloadAllFlagged": "Деякі вкладення позначено як потенційно небезпечні. Завантажити архів усе одно?"
 }

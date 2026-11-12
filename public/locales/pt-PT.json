@@ -364,6 +364,10 @@
 	"attachment.loadFailed": "Não foi possível carregar este anexo",
 	"attachment.unsupported": "Este tipo de ficheiro não pode ser visualizado com segurança no navegador.",
 	"attachment.download": "Transferir",
+	"attachment.downloadAll": "Transferir tudo",
+	"attachment.saveToDrive": "Guardar no Drive",
+	"attachment.savedToDrive": "Guardado no Drive",
+	"attachment.saveToDriveFailed": "Não foi possível guardar no Drive",
 	"auth.logout": "Terminar sessão",
 	"license.upgrade": "Fazer upgrade",
 	"contact.title": "Detalhes do contacto",
@@ -2389,5 +2393,6 @@
 	"account.permissions.allowDrive": "Allow Drive",
 	"actions.unsubscribeDeleteAll": "Anular subscrição e eliminar tudo",
 	"actions.unsubscribeDeleteConfirm": "Mover {count} e-mails anteriores deste remetente para o Lixo?",
-	"actions.unsubscribeTrashDone": "Subscrição anulada; {count} e-mails movidos para o Lixo"
+	"actions.unsubscribeTrashDone": "Subscrição anulada; {count} e-mails movidos para o Lixo",
+	"attachment.downloadAllFlagged": "Alguns anexos estão marcados como potencialmente perigosos. Transferir o ficheiro mesmo assim?"
 }

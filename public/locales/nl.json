@@ -359,6 +359,10 @@
 	"attachment.loadFailed": "Deze bijlage kan niet worden geladen",
 	"attachment.unsupported": "Dit bestandstype kan niet veilig in de browser worden bekeken.",
 	"attachment.download": "Downloaden",
+	"attachment.downloadAll": "Alles downloaden",
+	"attachment.saveToDrive": "Opslaan in Drive",
+	"attachment.savedToDrive": "Opgeslagen in Drive",
+	"attachment.saveToDriveFailed": "Opslaan in Drive mislukt",
 	"auth.logout": "Uitloggen",
 	"license.upgrade": "Upgraden",
 	"contact.title": "Contactgegevens",
@@ -2374,5 +2378,6 @@
 	"account.permissions.allowDrive": "Allow Drive",
 	"actions.unsubscribeDeleteAll": "Afmelden & alles verwijderen",
 	"actions.unsubscribeDeleteConfirm": "{count} eerdere e-mails van deze afzender naar de prullenbak verplaatsen?",
-	"actions.unsubscribeTrashDone": "Afgemeld en {count} e-mails naar de prullenbak verplaatst"
+	"actions.unsubscribeTrashDone": "Afgemeld en {count} e-mails naar de prullenbak verplaatst",
+	"attachment.downloadAllFlagged": "Sommige bijlagen zijn gemarkeerd als mogelijk gevaarlijk. Het archief toch downloaden?"
 }

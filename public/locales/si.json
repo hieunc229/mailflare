@@ -359,6 +359,10 @@
 	"attachment.loadFailed": "මෙම ඇමුණුම පූරණය කළ නොහැකි විය",
 	"attachment.unsupported": "මෙම ගොනු වර්ගය බ්‍රවුසරයේ ආරක්ෂිතව පෙරදසුන් කළ නොහැක.",
 	"attachment.download": "බාගන්න",
+	"attachment.downloadAll": "සියල්ල බාගන්න",
+	"attachment.saveToDrive": "Drive වෙත සුරකින්න",
+	"attachment.savedToDrive": "Drive වෙත සුරකින ලදී",
+	"attachment.saveToDriveFailed": "Drive වෙත සුරැකීමට නොහැකි විය",
 	"auth.logout": "වරන්න",
 	"license.upgrade": "උත්ශ්‍රේණි කරන්න",
 	"contact.title": "සම්බන්ධතා විස්තර",
@@ -2374,5 +2378,6 @@
 	"account.permissions.allowDrive": "Allow Drive",
 	"actions.unsubscribeDeleteAll": "දායකත්වය අවලංගු කර සියල්ල මකන්න",
 	"actions.unsubscribeDeleteConfirm": "මෙම යවන්නාගේ පැරණි විද්‍යුත් තැපෑල {count} කුණු කූඩයට ගෙනයාමටද?",
-	"actions.unsubscribeTrashDone": "දායකත්වය අවලංගුයි; විද්‍යුත් තැපෑල {count} කුණු කූඩයට ගියේය"
+	"actions.unsubscribeTrashDone": "දායකත්වය අවලංගුයි; විද්‍යුත් තැපෑල {count} කුණු කූඩයට ගියේය",
+	"attachment.downloadAllFlagged": "සමහර ඇමුණුම් අන්තරායන්හි ලෙස සලකුණු කර ඇත. තවදුරටත් සංරක්ෂණාගාරය බාගන්නවාද?"
 }

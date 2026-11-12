@@ -359,6 +359,10 @@
 	"attachment.loadFailed": "Could not load this attachment",
 	"attachment.unsupported": "This file type cannot be previewed safely in the browser.",
 	"attachment.download": "Download",
+	"attachment.downloadAll": "Download all",
+	"attachment.saveToDrive": "Save to Drive",
+	"attachment.savedToDrive": "Saved to Drive",
+	"attachment.saveToDriveFailed": "Could not save to Drive",
 	"attachment.risk.ok": "No known risky file type",
 	"attachment.risk.warning": "This file may not be what it seems.",
 	"attachment.risk.blocked": "This file can run code or hide its real type.",
@@ -2414,5 +2418,6 @@
 	"account.permissions.allowDrive": "Allow Drive",
 	"actions.unsubscribeDeleteAll": "Unsubscribe & delete all",
 	"actions.unsubscribeDeleteConfirm": "Move {count} past emails from this sender to Trash?",
-	"actions.unsubscribeTrashDone": "Unsubscribed and moved {count} emails to Trash"
+	"actions.unsubscribeTrashDone": "Unsubscribed and moved {count} emails to Trash",
+	"attachment.downloadAllFlagged": "Some attachments are flagged as potentially dangerous. Download the archive anyway?"
 }

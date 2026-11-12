@@ -1,8 +1,9 @@
 "use client";
 
+import { authFetch } from "@/lib/auth/client";
 import { useParams } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
-import { Cloud, ExternalLink } from "@/components/icons";
+import { ArrowDownToLine, Cloud, ExternalLink } from "@/components/icons";
 import { useLanguage } from "@/components/language-provider";
 import { formatUserDate } from "@/lib/time/utils";
 import { markMessageRead } from "@/components/mark-read";
@@ -252,6 +253,17 @@ function MessageDetailContent({ messageId }: { messageId: string }) {
   const toEntries = splitEmailAddressList(message.toAddr);
   const ccEntries = splitEmailAddressList(message.ccAddr);
   const bccEntries = splitEmailAddressList(message.bccAddr);
+  const onDownloadAllAttachments = async () => {
+    const url = `/api/messages/${message.id}/attachments.zip`;
+    try {
+      const response = await authFetch(url, { method: "HEAD" });
+      if (response.status === 409 && !window.confirm(t("attachment.downloadAllFlagged"))) return;
+      window.location.assign(response.status === 409 ? `${url}?acknowledge=1` : url);
+    } catch {
+      window.location.assign(url);
+    }
+  };
+
   const messageDate = (withTime: boolean) => scheduledAt
     ? formatScheduledSendTime(scheduledAt, t)
     : formatUserDate(message.createdAt, withTime
@@ -464,9 +476,19 @@ function MessageDetailContent({ messageId }: { messageId: string }) {
           <MessageInviteCard messageId={message.id} hasCalendarAttachment={!!findInviteAttachment(attachments)} />
           {attachments.length > 0 && (
             <section className="mt-8 border-t border-neutral-100 px-4 py-6 sm:px-0 sm:pl-16">
-              <h2 className="mb-3 text-sm font-semibold text-neutral-900">
-                {t("message.attachments", { count: attachments.length })}
-              </h2>
+              <div className="mb-3 flex items-center justify-between gap-3">
+                <h2 className="text-sm font-semibold text-neutral-900">
+                  {t("message.attachments", { count: attachments.length })}
+                </h2>
+                <button
+                  type="button"
+                  className="inline-flex shrink-0 items-center gap-1.5 text-xs font-medium text-blue-600 hover:text-blue-700"
+                  onClick={() => void onDownloadAllAttachments()}
+                >
+                  <ArrowDownToLine className="h-3.5 w-3.5" />
+                  {t("attachment.downloadAll")}
+                </button>
+              </div>
               <div className="grid gap-2 sm:grid-cols-2">
                 {attachments.map((attachment) => (
                   <MessageAttachmentCard

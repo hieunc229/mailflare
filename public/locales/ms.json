@@ -358,6 +358,10 @@
 	"attachment.loadFailed": "Tidak dapat memuatkan lampiran ini",
 	"attachment.unsupported": "Jenis fail ini tidak dapat dipratonton dengan selamat dalam pelayar.",
 	"attachment.download": "Muat turun",
+	"attachment.downloadAll": "Muat turun semua",
+	"attachment.saveToDrive": "Simpan ke Drive",
+	"attachment.savedToDrive": "Disimpan ke Drive",
+	"attachment.saveToDriveFailed": "Tidak dapat menyimpan ke Drive",
 	"auth.logout": "Log keluar",
 	"license.upgrade": "Naik taraf",
 	"contact.title": "Butiran kenalan",
@@ -2370,5 +2374,6 @@
 	"account.permissions.allowDrive": "Allow Drive",
 	"actions.unsubscribeDeleteAll": "Berhenti melanggan & padam semua",
 	"actions.unsubscribeDeleteConfirm": "Alihkan {count} e-mel lama daripada penghantar ini ke Sampah?",
-	"actions.unsubscribeTrashDone": "Berhenti melanggan; {count} e-mel dialihkan ke Sampah"
+	"actions.unsubscribeTrashDone": "Berhenti melanggan; {count} e-mel dialihkan ke Sampah",
+	"attachment.downloadAllFlagged": "Some attachments are flagged as potentially dangerous. Download the archive anyway?"
 }

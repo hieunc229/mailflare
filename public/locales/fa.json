@@ -359,6 +359,10 @@
 	"attachment.loadFailed": "بارگذاری این پیوست ممکن نشد",
 	"attachment.unsupported": "این نوع فایل را نمی‌توان به‌طور امن در مرورگر پیش‌نمایش داد.",
 	"attachment.download": "دانلود",
+	"attachment.downloadAll": "دانلود همه",
+	"attachment.saveToDrive": "ذخیره در Drive",
+	"attachment.savedToDrive": "در Drive ذخیره شد",
+	"attachment.saveToDriveFailed": "ذخیره در Drive ممکن نشد",
 	"auth.logout": "خروج",
 	"license.upgrade": "ارتقا",
 	"contact.title": "جزئیات مخاطب",
@@ -2374,5 +2378,6 @@
 	"account.permissions.allowDrive": "Allow Drive",
 	"actions.unsubscribeDeleteAll": "لغو اشتراک و حذف همه",
 	"actions.unsubscribeDeleteConfirm": "آیا {count} ایمیل قدیمی این فرستنده به سطل زباله منتقل شود؟",
-	"actions.unsubscribeTrashDone": "اشتراک لغو شد؛ {count} ایمیل به سطل زباله منتقل شد"
+	"actions.unsubscribeTrashDone": "اشتراک لغو شد؛ {count} ایمیل به سطل زباله منتقل شد",
+	"attachment.downloadAllFlagged": "برخی پیوست‌ها به‌عنوان بالقوه خطرناک پرچم‌گذاری شده‌اند. با این حال آرشیو دانلود شود؟"
 }

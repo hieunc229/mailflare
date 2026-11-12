@@ -364,6 +364,10 @@
 	"attachment.loadFailed": "No se pudo cargar este archivo adjunto",
 	"attachment.unsupported": "Este tipo de archivo no se puede previsualizar de forma segura en el navegador.",
 	"attachment.download": "Descargar",
+	"attachment.downloadAll": "Descargar todo",
+	"attachment.saveToDrive": "Guardar en Drive",
+	"attachment.savedToDrive": "Guardado en Drive",
+	"attachment.saveToDriveFailed": "No se pudo guardar en Drive",
 	"auth.logout": "Cerrar sesión",
 	"license.upgrade": "Mejorar plan",
 	"contact.title": "Detalles del contacto",
@@ -2389,5 +2393,6 @@
 	"account.permissions.allowDrive": "Allow Drive",
 	"actions.unsubscribeDeleteAll": "Darse de baja y borrar todo",
 	"actions.unsubscribeDeleteConfirm": "¿Mover {count} correos anteriores de este remitente a la Papelera?",
-	"actions.unsubscribeTrashDone": "Dado de baja; {count} correos movidos a la Papelera"
+	"actions.unsubscribeTrashDone": "Dado de baja; {count} correos movidos a la Papelera",
+	"attachment.downloadAllFlagged": "Algunos archivos adjuntos están marcados como potencialmente peligrosos. ¿Descargar el archivo de todos modos?"
 }

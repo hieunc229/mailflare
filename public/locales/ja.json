@@ -354,6 +354,10 @@
 	"attachment.loadFailed": "この添付ファイルを読み込めませんでした",
 	"attachment.unsupported": "このファイル形式は、ブラウザで安全にプレビューできません。",
 	"attachment.download": "ダウンロード",
+	"attachment.downloadAll": "すべてダウンロード",
+	"attachment.saveToDrive": "Driveに保存",
+	"attachment.savedToDrive": "Driveに保存しました",
+	"attachment.saveToDriveFailed": "Driveに保存できませんでした",
 	"auth.logout": "ログアウト",
 	"license.upgrade": "アップグレード",
 	"contact.title": "連絡先の詳細",
@@ -2356,5 +2360,6 @@
 	"account.permissions.allowDrive": "Allow Drive",
 	"actions.unsubscribeDeleteAll": "登録解除してすべて削除",
 	"actions.unsubscribeDeleteConfirm": "この差出人の過去のメール {count} 件をゴミ箱に移動しますか？",
-	"actions.unsubscribeTrashDone": "登録解除し、{count} 件をゴミ箱に移動しました"
+	"actions.unsubscribeTrashDone": "登録解除し、{count} 件をゴミ箱に移動しました",
+	"attachment.downloadAllFlagged": "一部の添付ファイルに危険の可能性のフラグがあります。それでもアーカイブをダウンロードしますか？"
 }

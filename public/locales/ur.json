@@ -359,6 +359,10 @@
 	"attachment.loadFailed": "یہ منسلکہ لوڈ نہیں ہو سکا",
 	"attachment.unsupported": "اس قسم کی فائل کا براؤزر میں محفوظ پیش منظر نہیں دیکھا جا سکتا۔",
 	"attachment.download": "ڈاؤن لوڈ",
+	"attachment.downloadAll": "سب ڈاؤن لوڈ کریں",
+	"attachment.saveToDrive": "Drive میں محفوظ کریں",
+	"attachment.savedToDrive": "Drive میں محفوظ ہو گیا",
+	"attachment.saveToDriveFailed": "Drive میں محفوظ نہیں ہو سکا",
 	"auth.logout": "لاگ آؤٹ",
 	"license.upgrade": "اپ گریڈ کریں",
 	"contact.title": "رابطے کی تفصیلات",
@@ -2374,5 +2378,6 @@
 	"account.permissions.allowDrive": "Allow Drive",
 	"actions.unsubscribeDeleteAll": "سبسکرپشن ختم کریں اور سب حذف کریں",
 	"actions.unsubscribeDeleteConfirm": "اس مرسل کے {count} پرانے ای میلز کو ٹریش میں منتقل کریں؟",
-	"actions.unsubscribeTrashDone": "سبسکرپشن ختم؛ {count} ای میلز ٹریش میں منتقل کر دی گئیں"
+	"actions.unsubscribeTrashDone": "سبسکرپشن ختم؛ {count} ای میلز ٹریش میں منتقل کر دی گئیں",
+	"attachment.downloadAllFlagged": "بعض منسلکات کو ممکنہ طور پر خطرناک قرار دیا گیا ہے۔ پھر بھی آرکائیو ڈاؤن لوڈ کریں؟"
 }

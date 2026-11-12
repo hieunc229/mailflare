@@ -354,6 +354,10 @@
 	"attachment.loadFailed": "Không thể tải tệp đính kèm này",
 	"attachment.unsupported": "Không thể xem trước loại tệp này một cách an toàn trong trình duyệt.",
 	"attachment.download": "Tải xuống",
+	"attachment.downloadAll": "Tải xuống tất cả",
+	"attachment.saveToDrive": "Lưu vào Drive",
+	"attachment.savedToDrive": "Đã lưu vào Drive",
+	"attachment.saveToDriveFailed": "Không thể lưu vào Drive",
 	"auth.logout": "Đăng xuất",
 	"license.upgrade": "Nâng cấp",
 	"contact.title": "Chi tiết liên hệ",
@@ -2356,5 +2360,6 @@
 	"account.permissions.allowDrive": "Allow Drive",
 	"actions.unsubscribeDeleteAll": "Hủy đăng ký & xóa tất cả",
 	"actions.unsubscribeDeleteConfirm": "Chuyển {count} email cũ của người gửi này vào Thùng rác?",
-	"actions.unsubscribeTrashDone": "Đã hủy đăng ký; {count} email đã chuyển vào Thùng rác"
+	"actions.unsubscribeTrashDone": "Đã hủy đăng ký; {count} email đã chuyển vào Thùng rác",
+	"attachment.downloadAllFlagged": "Một số tệp đính kèm bị gắn cờ là có khả năng nguy hiểm. Vẫn tải xuống tệp nén?"
 }

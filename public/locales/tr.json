@@ -350,6 +350,10 @@
 	"attachment.loadFailed": "Bu ek yüklenemedi",
 	"attachment.unsupported": "Bu dosya türü tarayıcıda güvenli şekilde önizlenemez.",
 	"attachment.download": "İndir",
+	"attachment.downloadAll": "Tümünü indir",
+	"attachment.saveToDrive": "Drive'a kaydet",
+	"attachment.savedToDrive": "Drive'a kaydedildi",
+	"attachment.saveToDriveFailed": "Drive'a kaydedilemedi",
 	"auth.logout": "Çıkış yap",
 	"license.upgrade": "Planı yükselt",
 	"contact.title": "Kişi ayrıntıları",
@@ -2374,5 +2378,6 @@
 	"account.permissions.allowDrive": "Allow Drive",
 	"actions.unsubscribeDeleteAll": "Abonelikten çık ve tümünü sil",
 	"actions.unsubscribeDeleteConfirm": "Bu gönderenin {count} eski e-postası Çöp Kutusuna taşınsın mı?",
-	"actions.unsubscribeTrashDone": "Abonelikten çıkıldı; {count} e-posta Çöp Kutusuna taşındı"
+	"actions.unsubscribeTrashDone": "Abonelikten çıkıldı; {count} e-posta Çöp Kutusuna taşındı",
+	"attachment.downloadAllFlagged": "Bazı ekler potansiyel olarak tehlikeli olarak işaretlendi. Yine de arşiv indirilsin mi?"
 }

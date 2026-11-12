@@ -364,6 +364,10 @@
 	"attachment.loadFailed": "Impossible de charger cette pièce jointe",
 	"attachment.unsupported": "Ce type de fichier ne peut pas être prévisualisé en toute sécurité dans le navigateur.",
 	"attachment.download": "Télécharger",
+	"attachment.downloadAll": "Tout télécharger",
+	"attachment.saveToDrive": "Enregistrer dans Drive",
+	"attachment.savedToDrive": "Enregistré dans Drive",
+	"attachment.saveToDriveFailed": "Impossible d'enregistrer dans Drive",
 	"auth.logout": "Se déconnecter",
 	"license.upgrade": "Passer à l'offre supérieure",
 	"contact.title": "Détails du contact",
@@ -2389,5 +2393,6 @@
 	"account.permissions.allowDrive": "Allow Drive",
 	"actions.unsubscribeDeleteAll": "Se désabonner et tout supprimer",
 	"actions.unsubscribeDeleteConfirm": "Déplacer {count} anciens e-mails de cet expéditeur dans la corbeille ?",
-	"actions.unsubscribeTrashDone": "Désabonné, {count} e-mails placés dans la corbeille"
+	"actions.unsubscribeTrashDone": "Désabonné, {count} e-mails placés dans la corbeille",
+	"attachment.downloadAllFlagged": "Certaines pièces jointes sont signalées comme potentiellement dangereuses. Télécharger l'archive quand même ?"
 }
