@@ -31,7 +31,8 @@ export type PendingOverlayEntries = {
 
 type KnownThread = {
 	messageIds: string[];
-	threadUnread: number;
+	/** Absent while the aggregate is unknown and awaiting an authoritative row. */
+	threadUnread?: number;
 };
 
 type PendingLayer = {
@@ -129,6 +130,37 @@ export function getConversationLockKeys(ids: string[]): string[] {
 	return [...keys];
 }
 
+/** Grouped rows containing any of these message ids. */
+export function getThreadRowIdsForMessages(ids: string[]): string[] {
+	const messageIds = new Set(ids);
+	if (messageIds.size === 0) return [];
+	const rowIds: string[] = [];
+	for (const [rowId, row] of knownThreads) {
+		if (row.messageIds.some((id) => messageIds.has(id))) rowIds.push(rowId);
+	}
+	return rowIds;
+}
+
+/** Persists a server-confirmed aggregate even when its list row is not cached. */
+export function rememberThreadUnreadTargets(targets: Iterable<ThreadUnreadTarget> | Map<string, number>): void {
+	const entries = targets instanceof Map ? targets : targets instanceof Array
+		? targets.map((target) => [target.id, target.threadUnread] as const)
+		: [...targets].map((target) => [target.id, target.threadUnread] as const);
+	for (const [rowId, threadUnread] of entries) {
+		const row = knownThreads.get(rowId);
+		if (!row || !Number.isFinite(threadUnread)) continue;
+		row.threadUnread = clampCount(threadUnread, row.messageIds.length);
+	}
+}
+
+/** Keeps conversation membership for locking but drops an untrusted aggregate. */
+export function invalidateThreadUnreadTargets(rowIds: string[]): void {
+	for (const rowId of rowIds) {
+		const row = knownThreads.get(rowId);
+		if (row) row.threadUnread = undefined;
+	}
+}
+
 function pendingFieldsFor(messageId: string): KnownMessageFields {
 	const fields: KnownMessageFields = {};
 	for (const layer of pendingLayers.values()) {
@@ -147,6 +179,10 @@ function pendingThreadUnreadFor(rowId: string): number | undefined {
 		if (target !== undefined) threadUnread = target;
 	}
 	return threadUnread;
+}
+
+export function getPendingThreadTargets(owner: string): Map<string, number> {
+	return new Map(pendingLayers.get(owner)?.threads ?? []);
 }
 
 /** Latest known value including any active pending operation. */
@@ -279,7 +315,9 @@ export function getThreadUnreadTargets(fields: PendingOverlayMessage[]): ThreadU
 	const targets: ThreadUnreadTarget[] = [];
 	for (const [rowId, row] of knownThreads) {
 		if (!row.messageIds.some((id) => reads.has(id))) continue;
-		const currentUnread = clampCount(getKnownThreadUnread(rowId) ?? row.threadUnread, row.messageIds.length);
+		const visibleAggregate = getKnownThreadUnread(rowId);
+		if (visibleAggregate === undefined) continue;
+		const currentUnread = clampCount(visibleAggregate, row.messageIds.length);
 		let directToRead = 0;
 		let directToUnread = 0;
 		let unknownUnread = 0;
@@ -323,7 +361,8 @@ export function captureThreadUnread(ids: string[]): Map<string, number> {
 	const captured = new Map<string, number>();
 	for (const [rowId, row] of knownThreads) {
 		if (!row.messageIds.some((id) => messageIds.has(id))) continue;
-		captured.set(rowId, clampCount(getKnownThreadUnread(rowId) ?? row.threadUnread, row.messageIds.length));
+		const visible = getKnownThreadUnread(rowId);
+		if (visible !== undefined) captured.set(rowId, clampCount(visible, row.messageIds.length));
 	}
 	return captured;
 }

@@ -8,6 +8,11 @@ import {
 	captureThreadUnread,
 	clearPendingOverlay,
 	forgetMessageFields,
+	getPendingThreadTargets,
+	getThreadRowIdsForMessages,
+	getThreadUnreadTargets,
+	invalidateThreadUnreadTargets,
+	rememberThreadUnreadTargets,
 	setPendingOverlay,
 	type KnownMessageFields,
 	type PendingOverlayMessage,
@@ -168,6 +173,50 @@ function forgetUncapturedFields(
 	if (starredIds.length > 0) forgetMessageFields(starredIds, { starred: true });
 }
 
+function commitWholeRollbackTargets(
+	records: MessageActionRecord[],
+	capturedThreads?: Map<string, number>,
+): Map<string, number> {
+	const rowIds = getThreadRowIdsForMessages(records.map((record) => record.id));
+	const captured = capturedThreads ?? new Map<string, number>();
+	rememberThreadUnreadTargets(captured);
+	invalidateThreadUnreadTargets(rowIds.filter((rowId) => !captured.has(rowId)));
+	return captured;
+}
+
+/**
+ * Persists the aggregate the operation actually settles on, even when its list
+ * row is no longer cached. Partial rollbacks start from the pending target and
+ * apply only the skipped members' transitions.
+ */
+function commitSettledTargets(
+	owner: string,
+	records: MessageActionRecord[],
+	restoredRecords: MessageActionRecord[],
+	rollback: MessageActionRecord[],
+	captured: Map<string, KnownMessageFields>,
+	capturedThreads?: Map<string, number>,
+): Map<string, number> {
+	if (restoredRecords.length === 0) {
+		return commitWholeRollbackTargets(records, capturedThreads);
+	}
+	const targets = new Map(getPendingThreadTargets(owner));
+	for (const target of getThreadUnreadTargets(capturedFieldPatches(rollback, captured))) {
+		targets.set(target.id, target.threadUnread);
+	}
+	const unknownReadIds = rollback
+		.filter((record) => (
+			getChangedStateFields(record.previous, record.applied).includes("read")
+			&& captured.get(record.id)?.read === undefined
+		))
+		.map((record) => record.id);
+	const unknownRows = getThreadRowIdsForMessages(unknownReadIds);
+	for (const rowId of unknownRows) targets.delete(rowId);
+	rememberThreadUnreadTargets(targets);
+	invalidateThreadUnreadTargets(unknownRows);
+	return targets;
+}
+
 function restoreCaptured(
 	records: MessageActionRecord[],
 	captured: Map<string, KnownMessageFields>,
@@ -276,29 +325,42 @@ export const defaultMessageActionHooks: MessageActionExecutorHooks = {
 		// The optimistic patches already show the restored state. Records the
 		// server skipped must return to what was on screen before the undo click,
 		// not an older action's historical applied snapshot.
-		clearPendingOverlay(context?.pendingOwner ?? DEFAULT_PENDING_OWNER);
+		const owner = context?.pendingOwner ?? DEFAULT_PENDING_OWNER;
 		const restored = new Set(response.restored);
 		const skipped = new Set(response.skipped.map((item) => item.id));
 		const restoredRecords = records.filter((record) => restored.has(record.id));
 		const skippedRecords = records.filter((record) => skipped.has(record.id));
 		const unaccounted = records.filter((record) => !restored.has(record.id) && !skipped.has(record.id));
-		rememberPreviousDetails(restoredRecords);
 		const rollback = [...skippedRecords, ...unaccounted];
-		restoreCaptured(rollback, captured, context?.capturedThreadUnread);
+		// Commit the settled aggregate before dropping the owner: a later list
+		// resync may clear every cached row, but the next undo must still start
+		// from this server-confirmed value.
+		const settledTargets = commitSettledTargets(owner, records, restoredRecords, rollback, captured, context?.capturedThreadUnread);
+		clearPendingOverlay(owner);
+		rememberPreviousDetails(restoredRecords);
+		// A mixed result keeps the restored members. Only a whole-operation
+		// rollback may snap the conversation aggregate back to its pre-click
+		// target; a partial rollback applies the skipped transitions to the
+		// current optimistic aggregate instead.
+		restoreCaptured(rollback, captured, settledTargets);
 		invalidateCachedMessageDetails(rollback.map((record) => record.id));
 		invalidatePendingResponses(records.map((record) => record.id));
 	},
 	onUndoFailed(records, captured, context, error) {
-		clearPendingOverlay(context?.pendingOwner ?? DEFAULT_PENDING_OWNER);
+		const owner = context?.pendingOwner ?? DEFAULT_PENDING_OWNER;
 		const ids = records.map((record) => record.id);
 		if (isUncertainActionFailure(error)) {
+			clearPendingOverlay(owner);
 			// The timeout may have committed the undo on the server. Do not paint
 			// the historical pre-click value; let the resync fetch decide.
 			forgetUncapturedFields(records, captured);
+			invalidateThreadUnreadTargets(getThreadRowIdsForMessages(ids));
 			invalidateUncertainState(ids);
 			return;
 		}
-		restoreCaptured(records, captured, context?.capturedThreadUnread);
+		const settledTargets = commitWholeRollbackTargets(records, context?.capturedThreadUnread);
+		clearPendingOverlay(owner);
+		restoreCaptured(records, captured, settledTargets);
 		invalidateCachedMessageDetails(ids);
 		invalidatePendingResponses(ids);
 	},

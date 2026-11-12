@@ -9,7 +9,31 @@ const detailCache = new Map<string, { data: CachedMessageDetail; expiresAt: numb
 const detailRequests = new Map<string, Promise<CachedMessageDetail>>();
 /** Per-message invalidation marker for requests that started before an undo settled. */
 const detailRevisions = new Map<string, number>();
+/** Per-message mutation marker for a completed read/star/membership change. */
+const stateRevisions = new Map<string, number>();
 let generation = 0;
+
+function bumpStateRevision(messageId: string): void {
+	stateRevisions.set(messageId, (stateRevisions.get(messageId) ?? 0) + 1);
+}
+
+/** Keep a completed local field change over a detail response that started before it. */
+function preserveNewerState(messageId: string, data: CachedMessageDetail): CachedMessageDetail {
+	if (!data.message) return data;
+	const current = detailCache.get(messageId)?.data.message;
+	if (!current) return data;
+	return {
+		...data,
+		message: {
+			...data.message,
+			read: current.read,
+			starred: current.starred,
+			status: current.status,
+			folderId: current.folderId,
+			snoozedUntil: current.snoozedUntil,
+		},
+	};
+}
 
 function applyPendingDetail(data: CachedMessageDetail): CachedMessageDetail {
 	if (!data.message) return data;
@@ -33,6 +57,7 @@ export function clearMessageDetailCache() {
 	detailCache.clear();
 	detailRequests.clear();
 	detailRevisions.clear();
+	stateRevisions.clear();
 }
 
 export function getCachedMessageDetail(messageId: string): CachedMessageDetail | undefined {
@@ -48,6 +73,7 @@ export function getCachedMessageDetail(messageId: string): CachedMessageDetail |
 }
 
 export function setCachedMessageRead(messageId: string, read: boolean): void {
+	bumpStateRevision(messageId);
 	const cached = getCachedMessageDetail(messageId);
 	if (cached?.message) cacheDetail(messageId, { ...cached, message: { ...cached.message, read } });
 }
@@ -56,6 +82,7 @@ export type CachedMessageStatePatch = Partial<Pick<Message, "read" | "starred" |
 
 /** Field-scoped detail patch for action/undo state; read and star also feed the field store. */
 export function patchCachedMessageState(messageId: string, patch: CachedMessageStatePatch): void {
+	bumpStateRevision(messageId);
 	const cached = getCachedMessageDetail(messageId);
 	if (cached?.message) cacheDetail(messageId, { ...cached, message: { ...cached.message, ...patch } });
 	rememberMessageFields([messageId], {
@@ -114,13 +141,17 @@ export async function fetchCachedMessageDetail(messageId: string, force = false)
 	if (detailRequests.has(messageId)) return detailRequests.get(messageId) ?? {};
 	const requestGeneration = generation;
 	const requestRevision = detailRevisions.get(messageId) ?? 0;
+	const requestStateRevision = stateRevisions.get(messageId) ?? 0;
 	const request = authFetch(`/api/messages/${messageId}`, { cache: "no-store" })
 		.then(async (response) => {
 			const data = await response.json() as CachedMessageDetail;
 			if (requestGeneration !== generation) throw new Error("Message request invalidated");
 			if (requestRevision !== (detailRevisions.get(messageId) ?? 0)) throw new Error("Message request invalidated");
-			if (response.ok && !data.error) cacheDetail(messageId, data);
-			return applyPendingDetail(data);
+			const reconciled = requestStateRevision === (stateRevisions.get(messageId) ?? 0)
+				? data
+				: preserveNewerState(messageId, data);
+			if (response.ok && !reconciled.error) cacheDetail(messageId, reconciled);
+			return applyPendingDetail(reconciled);
 		})
 		.finally(() => { if (detailRequests.get(messageId) === request) detailRequests.delete(messageId); });
 	detailRequests.set(messageId, request);
