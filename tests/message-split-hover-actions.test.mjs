@@ -240,6 +240,7 @@ test("the compact rail keeps a small primary set and reaches the rest from overf
 	assert.match(rail.className, /(^|\s)bg-blue-50(\s|$)/, "the active row uses the active-row surface");
 	assert.match(rail.className, /(^|\s)h-8(\s|$)/, "the rail is content-sized instead of spanning the row");
 	assert.match(rail.className, /(^|\s)rounded-full(\s|$)/);
+	assert.match(rail.className, /has-\[\[data-state=open\]\]:opacity-100/, "the pill stays visible while the overflow menu is open");
 	assert.doesNotMatch(rail.className, /(^|\s)inset-y-0(\s|$)/, "the rail has no full-height dead click area");
 	assert.equal(container.querySelector('[aria-label="actions.unsubscribe"]')?.dataset.iconOnly, "true", "the unsubscribe action is icon-sized in the compact rail");
 

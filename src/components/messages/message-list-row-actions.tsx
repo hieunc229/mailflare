@@ -65,7 +65,7 @@ function MessageListRowActionsComponent({ message, onAction, compact = false, ac
 			{compact ? (
 				<div
 					className={clsx(
-						"pointer-events-none absolute right-2 top-1/2 z-10 flex h-8 -translate-y-1/2 items-center gap-0.5 rounded-full p-0.5 opacity-0 shadow-sm ring-1 ring-black/5 transition-opacity group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100",
+						"pointer-events-none absolute right-2 top-1/2 z-10 flex h-8 -translate-y-1/2 items-center gap-0.5 rounded-full p-0.5 opacity-0 shadow-sm ring-1 ring-black/5 transition-opacity group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100 has-[[data-state=open]]:opacity-100",
 						active ? "bg-blue-50" : "bg-neutral-50",
 					)}
 				>
