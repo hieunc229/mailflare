@@ -146,6 +146,7 @@ export async function fetchMessageCounts(mailboxId?: string | null, force = fals
 		if (mailboxId) params.set("mailboxId", mailboxId);
 		const query = params.toString();
 		const res = await authFetch(`/api/messages/counts${query ? `?${query}` : ""}`);
+		if (!res.ok) throw new Error(`Message counts request failed (${res.status})`);
 		const data = (await res.json()) as { counts?: MessageCounts };
 		const counts = data.counts;
 		if (
@@ -176,7 +177,10 @@ export async function fetchMessageList(params: URLSearchParams, force = false): 
 	if (!force && messageListRequests.has(key)) return messageListRequests.get(key) ?? {};
 	const requestGeneration = messageCacheGeneration;
 	const request = authFetch(`/api/messages?${key}`)
-		.then((res) => res.json())
+		.then((res) => {
+			if (!res.ok) throw new Error(`Message list request failed (${res.status})`);
+			return res.json();
+		})
 		.then((data) => {
 			const response = data as MessageListResponse;
 			if (requestGeneration === messageCacheGeneration) {

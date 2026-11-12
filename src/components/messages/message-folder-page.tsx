@@ -20,6 +20,7 @@ import type { BulkMessageAction } from "@/app/api/messages/bulk/types";
 import type { Message } from "@/hooks/types";
 import { setMessageDragData } from "@/lib/messages/drag-utils";
 import { BulkMessageToolbar } from "./bulk-message-toolbar";
+import { MessageListRefreshButton } from "./message-list-refresh-button";
 import { useMessageListState } from "./message-list-state";
 import { SwipeableRow } from "./swipeable-row";
 import { MessageListRowActions } from "./message-list-row-actions";
@@ -613,6 +614,10 @@ export function MessageFolderPage({
 						<span className="text-xs text-neutral-500 whitespace-nowrap">
 							{t("list.range", { start: pageRange.start, end: pageRange.end, total: pageRange.total })}
 						</span>
+						<MessageListRefreshButton
+							disabled={mailboxesLoading}
+							onError={() => setActionError(t("list.refreshFailed"))}
+						/>
 						<Tooltip label={t("list.previousPage")}>
 							<Button
 								variant="ghost"

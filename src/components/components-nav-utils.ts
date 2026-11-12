@@ -24,5 +24,5 @@ export async function preloadMailboxPage(href: string, mailboxId?: string, optio
 		},
 		customFolderMatch?.[1],
 	);
-	await fetchMessageList(params);
+	await fetchMessageList(params).catch(() => undefined);
 }
