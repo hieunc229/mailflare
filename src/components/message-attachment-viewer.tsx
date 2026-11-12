@@ -81,6 +81,18 @@ export function MessageAttachmentViewer({
 		};
 	}, [attachment, open, previewKind, previewUrl, t]);
 
+	// Ask once per opened attachment whether it is already in Drive, so the button starts disabled.
+	useEffect(() => {
+		if (!open || !attachment || user?.driveEnabled === false) return;
+		const id = attachment.id;
+		let cancelled = false;
+		void authFetch(`/api/messages/${messageId}/attachments/${id}/save-to-drive`)
+			.then(async (response) => (response.ok ? ((await response.json()) as { saved?: boolean }) : null))
+			.then((data) => { if (!cancelled && data?.saved) setSave((current) => (current?.id === id && current.status === "saving" ? current : { id, status: "saved" })); })
+			.catch(() => undefined);
+		return () => { cancelled = true; };
+	}, [attachment, messageId, open, user?.driveEnabled]);
+
 	async function saveToDrive() {
 		if (!attachment || saveState === "saving" || saveState === "saved") return;
 		const id = attachment.id;

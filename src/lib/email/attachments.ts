@@ -11,6 +11,7 @@ import type {
 	AttachmentMetadata,
 	StoredAttachment,
 } from "./attachment-types";
+import { deleteUnreferencedObjects } from "@/lib/drive/shared-objects";
 
 export const MAX_ATTACHMENT_SIZE = 25_000_000;
 export const MAX_TOTAL_ATTACHMENT_SIZE = 25_000_000;
@@ -209,10 +210,11 @@ export async function deleteMessageAttachment(
 export async function deleteMessageAttachmentObjects(env: CloudflareEnv, messageId: string): Promise<void> {
 	const db = getDb(env);
 	const rows = await db
-		.select({ r2Key: messageAttachments.r2Key })
+		.select({ id: messageAttachments.id, r2Key: messageAttachments.r2Key })
 		.from(messageAttachments)
 		.where(eq(messageAttachments.messageId, messageId));
-	await Promise.all(rows.map((row) => env.BUCKET.delete(row.r2Key)));
+	// A Drive item saved from this attachment keeps the object alive.
+	await deleteUnreferencedObjects(env, db, rows.map((row) => row.r2Key), { attachmentIds: rows.map((row) => row.id) });
 }
 
 export async function listMessageAttachments(
