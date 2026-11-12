@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { MailPlus } from "@/components/icons";
+import { Loader2, MailPlus } from "@/components/icons";
 import { usePathname, useRouter } from "next/navigation";
 import { ComposeForm } from "@/components/compose/compose-form";
 import { useCompose } from "@/components/compose/compose-context";
@@ -82,9 +82,10 @@ function ComposeNoticeToast({ notice }: { notice: ComposeNotice }) {
 			aria-atomic="false"
 			className={cn(
 				"fixed right-6 top-6 z-[60] flex max-w-[calc(100vw-3rem)] items-center gap-4 rounded-lg px-4 py-3 text-sm font-medium text-white shadow-lg",
-				notice.tone === "error" ? "bg-red-600" : "bg-green-600",
+				notice.tone === "error" ? "bg-red-600" : notice.tone === "loading" ? "bg-neutral-800" : "bg-green-600",
 			)}
 		>
+			{notice.tone === "loading" && <Loader2 className="h-4 w-4 shrink-0 animate-spin" aria-hidden="true" />}
 			<span className="min-w-0 break-words">
 				{parts ? (
 					<>

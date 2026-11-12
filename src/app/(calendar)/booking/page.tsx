@@ -47,8 +47,8 @@ export default function BookingsPage() {
 			if (!data.canManageHosts) return;
 			const response = await authFetch("/api/accounts");
 			if (!response.ok) { if (active) toast.error(t("booking.hostListFailed")); return; }
-			const accounts = await response.json() as { accounts: (BookingHost & { disabled: boolean })[] };
-			if (active) { setHosts([data.currentUser, ...accounts.accounts.filter((account) => !account.disabled && account.id !== data.currentUser.id).map(({ id, name, email, hasAvatar }) => ({ id, name, email, hasAvatar }))]); setCanManageHosts(true); }
+			const accounts = await response.json() as { accounts: (BookingHost & { disabled: boolean; calendarEnabled?: boolean })[] };
+			if (active) { setHosts([data.currentUser, ...accounts.accounts.filter((account) => !account.disabled && account.calendarEnabled !== false && account.id !== data.currentUser.id).map(({ id, name, email, hasAvatar }) => ({ id, name, email, hasAvatar }))]); setCanManageHosts(true); }
 		})
 			.catch(() => { if (active) toast.error(t("booking.loadFailed")); })
 			.finally(() => { if (active) setLoading(false); });

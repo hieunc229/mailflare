@@ -11,8 +11,8 @@ after(() => rmSync(dir, { recursive: true, force: true }));
 const root = process.cwd();
 const entry = join(dir, "entry.ts");
 writeFileSync(entry, `
-import { MimeLimitError, parseRawMime } from "${root}/src/lib/email/parse";
-import { htmlToReadableText } from "${root}/src/lib/email/reply-content-utils";
+import { MimeLimitError, parseRawMime } from ${JSON.stringify(join(root, "src/lib/email/parse"))};
+import { htmlToReadableText } from ${JSON.stringify(join(root, "src/lib/email/reply-content-utils"))};
 const enc = new TextEncoder();
 const hdr = "From: a@b.example\\r\\nTo: c@d.example\\r\\nSubject: x\\r\\n";
 const b64Part = 'Content-Type: multipart/mixed; boundary="b"\\r\\n\\r\\n--b\\r\\nContent-Type: application/pdf\\r\\nContent-Transfer-Encoding: base64\\r\\nContent-Disposition: attachment; filename=a.pdf\\r\\n\\r\\n';

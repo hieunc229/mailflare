@@ -50,7 +50,7 @@ export async function POST(request: Request) {
 	}
 
 	const isAppPassword = parsed.data.scopes.length === 1 && parsed.data.scopes[0] === "jmap";
-	const { fullKey, prefix, hash } = isAppPassword ? generateAppPassword() : generateApiKey();
+	const { fullKey, prefix, hash, sha256 } = isAppPassword ? await generateAppPassword() : await generateApiKey();
 	const db = getDb(env);
 	const mailboxIds = [...new Set(parsed.data.mailboxIds)];
 	if (!mailboxIds.length && parsed.data.scopes.some((scope) => !scope.startsWith("calendar:"))) return NextResponse.json({ error: "Choose a mailbox for mail permissions" }, { status: 400 });
@@ -62,6 +62,7 @@ export async function POST(request: Request) {
 		name: parsed.data.name,
 		prefix,
 		keyHash: hash,
+		keySha256: sha256,
 		scopes: scopesToJson([...new Set(parsed.data.scopes)]),
 		mailboxScopeEnabled: true,
 	});

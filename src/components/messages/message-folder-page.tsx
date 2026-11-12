@@ -23,10 +23,11 @@ import { useMessageListState } from "./message-list-state";
 import { SwipeableRow } from "./swipeable-row";
 import { MessageListRowActions } from "./message-list-row-actions";
 import { dispatchMessageCountsDelta, toggleMessageStar } from "./message-list-row-actions-utils";
-import { MessageNavigationProgress, useMessageNavigation } from "./message-navigation";
+import { useMessageNavigation } from "./message-navigation";
 import { rememberOpenedUnreadMessage } from "./message-detail-navigation-utils";
 import { useConversationView } from "./use-conversation-view";
 import { OpenedIndicator } from "./message-open-status";
+import { MessageNotesPopover, NoteBadge } from "./message-notes-popover";
 import type { MessageFolderPageProps, MessageListRowProps, RowMessageAction } from "./types";
 import {
 	formatMessageListTimestamp,
@@ -59,10 +60,12 @@ function MessageListRow({
 	config,
 	selected,
 	active = false,
+	opening = false,
 	compact = false,
 	currentAccountName,
 	onSelectedChange,
 	onMessageAction,
+	onOpening,
 	dragMessageIds,
 }: MessageListRowProps) {
 	const { t } = useLanguage();
@@ -112,7 +115,9 @@ function MessageListRow({
 	const swipeable = compact && (config.folder === "inbox" || config.folder === "snoozed") && message.direction === "inbound";
 
 	function onMessageNavigate(event: MouseEvent<HTMLAnchorElement>) {
-		if (!read && !event.metaKey && !event.ctrlKey && !event.shiftKey && !event.altKey) {
+		const plainClick = !event.metaKey && !event.ctrlKey && !event.shiftKey && !event.altKey;
+		if (plainClick) onOpening?.();
+		if (!read && plainClick) {
 			rememberOpenedUnreadMessage(message.id);
 			const previousThreadUnread = threadUnread;
 			setRead(true);
@@ -131,7 +136,7 @@ function MessageListRow({
 		const compactRow = (
 			<div
 				role={swipeable ? undefined : "listitem"}
-				className={`group grid grid-cols-[20px_minmax(0,1fr)] gap-3 border-l-2 px-4 py-3 transition-colors ${active
+				className={`group grid grid-cols-[20px_minmax(0,1fr)] gap-3 border-l-2 px-4 py-3 transition-colors ${active || opening
 					? "border-l-blue-600 bg-blue-50"
 					: selected
 						? "border-l-transparent bg-neutral-50"
@@ -143,14 +148,23 @@ function MessageListRow({
 					setMessageDragData(event.dataTransfer, { messageIds: dragMessageIds });
 				}}
 			>
-				<MessageNavigationProgress progress={navigation.progress} />
 				<Checkbox
 					checked={selected}
 					onChange={(event) => onSelectedChange(message.id, event.target.checked)}
 					className="mt-1 h-4 w-4 rounded border-neutral-300"
 					aria-label={t("list.selectFrom", { sender: party })}
 				/>
-				<Link href={href} onClick={config.folder === "drafts" ? undefined : onMessageNavigate} aria-current={active ? "true" : undefined} className="min-w-0">
+				<Link
+					href={href}
+					onClick={config.folder === "drafts" ? undefined : onMessageNavigate}
+					onPointerEnter={config.folder === "drafts" ? undefined : navigation.prefetch}
+					onPointerLeave={config.folder === "drafts" ? undefined : navigation.cancelPrefetch}
+					onFocus={config.folder === "drafts" ? undefined : navigation.prefetch}
+					onBlur={config.folder === "drafts" ? undefined : navigation.cancelPrefetch}
+					onTouchStart={config.folder === "drafts" ? undefined : navigation.prefetchNow}
+					aria-current={active ? "true" : undefined}
+					className="min-w-0"
+				>
 					<span className="flex items-baseline justify-between gap-3">
 						<span className={clsx(unread && "font-semibold",getMessagePartyClassName(rowMessage, config.folder))}>
 							{unread && <span className="sr-only">{t("list.unread")} </span>}
@@ -169,6 +183,7 @@ function MessageListRow({
 						className={`mt-1 block truncate text-sm ${unread ? "font-semibold text-neutral-900" : "text-neutral-700"
 							}`}
 					>
+						<NoteBadge count={message.noteCount} />
 						{message.subject ?? t("list.noSubject")}
 					</span>
 					<span className="mt-0.5 block truncate text-xs leading-5 text-neutral-500">
@@ -200,7 +215,7 @@ function MessageListRow({
 	}
 
 	const className =
-		`group relative grid min-h-12 w-full grid-cols-[24px_32px_minmax(160px,80px)_1fr_auto] items-center gap-3 px-6 text-left text-sm hover:z-10 hover:bg-[#f2f6fc] hover:shadow-sm has-[a:focus-visible]:ring-2 has-[a:focus-visible]:ring-inset has-[a:focus-visible]:ring-blue-600 ${active || selected ? "bg-blue-50" : ""
+		`group relative grid min-h-12 w-full grid-cols-[24px_32px_minmax(160px,80px)_1fr_auto] items-center gap-3 px-6 text-left text-sm hover:z-10 hover:bg-[#f2f6fc] hover:shadow-sm has-[a:focus-visible]:ring-2 has-[a:focus-visible]:ring-inset has-[a:focus-visible]:ring-blue-600 ${active || selected || opening ? "bg-blue-50" : ""
 		} ${draggable ? "cursor-grab active:cursor-grabbing" : ""}`;
 	const content = (
 		<>
@@ -232,12 +247,21 @@ function MessageListRow({
 					<span className="ml-2 text-xs text-neutral-500">{message.threadCount}</span>
 				)}
 			</span>
-			<span className="truncate text-neutral-700">
+			<span className="flex min-w-0 items-center text-neutral-700">
+				{/* A fixed slot keeps every subject aligned, with or without notes. */}
+				<span className="w-11 shrink-0">
+					{message.noteCount ? <MessageNotesPopover messageId={message.id} count={message.noteCount} preview={message.notePreview} /> : null}
+				</span>
 				<Link
 					href={href}
 					onClick={config.folder === "drafts" ? undefined : onMessageNavigate}
+					onPointerEnter={config.folder === "drafts" ? undefined : navigation.prefetch}
+					onPointerLeave={config.folder === "drafts" ? undefined : navigation.cancelPrefetch}
+					onFocus={config.folder === "drafts" ? undefined : navigation.prefetch}
+					onBlur={config.folder === "drafts" ? undefined : navigation.cancelPrefetch}
+					onTouchStart={config.folder === "drafts" ? undefined : navigation.prefetchNow}
 					aria-current={active ? "true" : undefined}
-					className="focus-visible:outline-none after:absolute after:inset-0"
+					className="min-w-0 truncate focus-visible:outline-none after:absolute after:inset-0"
 				>
 					<span className={unread ? "font-semibold text-neutral-900" : ""}>
 						{rowMessage.subject ?? t("list.noSubject")}
@@ -280,7 +304,6 @@ function MessageListRow({
 				setMessageDragData(event.dataTransfer, { messageIds: dragMessageIds });
 			}}
 		>
-			<MessageNavigationProgress progress={navigation.progress} />
 			<Checkbox
 				checked={selected}
 				onChange={(event) => onSelectedChange(message.id, event.target.checked)}
@@ -318,7 +341,20 @@ export function MessageFolderPage({
 	const [pendingBulkAction, setPendingBulkAction] = useState(false);
 	const [emptyingFolder, setEmptyingFolder] = useState(false);
 	const [actionError, setActionError] = useState<string | null>(null);
+	const [openingMessageId, setOpeningMessageId] = useState<string | null>(null);
+	const openingTimer = useRef<number | null>(null);
 	const [conversationView] = useConversationView();
+	const visibleOpeningMessageId = openingMessageId === selectedMessageId ? null : openingMessageId;
+
+	useEffect(() => () => {
+		if (openingTimer.current) window.clearTimeout(openingTimer.current);
+	}, []);
+
+	function markMessageOpening(messageId: string) {
+		setOpeningMessageId(messageId);
+		if (openingTimer.current) window.clearTimeout(openingTimer.current);
+		openingTimer.current = window.setTimeout(() => setOpeningMessageId(null), 3000);
+	}
 	const grouped = conversationView && config.folder !== "drafts";
 	const offset = listState?.offset ?? internalOffset;
 	const setOffset = listState?.setOffset ?? setInternalOffset;
@@ -608,6 +644,8 @@ export function MessageFolderPage({
 							config={config}
 							selected={selectedIds.includes(message.id)}
 							active={message.id === selectedMessageId}
+							opening={message.id === visibleOpeningMessageId}
+							onOpening={() => markMessageOpening(message.id)}
 							compact={compact || isMobile}
 							currentAccountName={currentAccountName}
 							onSelectedChange={updateSelectedMessage}

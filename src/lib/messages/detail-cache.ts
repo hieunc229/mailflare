@@ -40,11 +40,16 @@ export function setCachedMessageRead(messageId: string, read: boolean): void {
 	if (cached?.message) cacheDetail(messageId, { ...cached, message: { ...cached.message, read } });
 }
 
+/** Merge the row header into the cache; a missing body is fetched separately. */
 export function primeMessageDetail(message: Message): void {
-	if (message.textBody === undefined && message.htmlBody === undefined) return;
+	const cached = getCachedMessageDetail(message.id);
+	const hasBody = message.textBody !== undefined || message.htmlBody !== undefined;
 	cacheDetail(message.id, {
-		message,
-		body: { textBody: message.textBody ?? null, htmlBody: message.htmlBody ?? null },
+		...(cached ?? {}),
+		message: { ...cached?.message, ...message },
+		...(cached?.body || !hasBody ? {} : {
+			body: { textBody: message.textBody ?? null, htmlBody: message.htmlBody ?? null },
+		}),
 	});
 }
 

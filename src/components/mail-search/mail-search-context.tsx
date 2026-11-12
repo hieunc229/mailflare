@@ -6,10 +6,15 @@ import type { MailSearchContextValue } from "./types";
 
 const MailSearchContext = createContext<MailSearchContextValue | null>(null);
 
+const DEFAULT_SEARCH_VALUE: MailSearchContextValue = {
+	query: "",
+	input: "",
+	setQuery: () => undefined,
+};
+
 export function useMailSearch() {
 	const ctx = useContext(MailSearchContext);
-	if (!ctx) throw new Error("useMailSearch must be used within MailSearchProvider");
-	return ctx;
+	return ctx ?? DEFAULT_SEARCH_VALUE;
 }
 
 const SEARCH_DEBOUNCE_MS = 250;

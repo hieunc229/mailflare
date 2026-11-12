@@ -59,6 +59,7 @@ async function eventsInRange(context: CalendarToolContext, from: Date, to: Date)
 }
 
 export async function runCalendarTool(context: CalendarToolContext, name: CalendarToolName, rawInput: unknown): Promise<unknown> {
+	if (!context.user.calendarEnabled) throw new Error("Calendar is disabled for this account");
 	const input = calendarToolSchemas[name].parse(rawInput) as Record<string, unknown>;
 	const db = getDb(context.env);
 	// Editing or deleting events is only proposed by an assistant; the user approves it in the app.

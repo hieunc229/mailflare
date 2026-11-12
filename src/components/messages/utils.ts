@@ -1,5 +1,6 @@
 import type { Message } from "@/hooks/types";
 import { authFetch } from "@/lib/auth/client";
+import { dispatchMessagesChanged } from "@/lib/messages/change-events";
 import { markMessagesReadInCaches } from "@/hooks/utils";
 import { getEmailDisplayName, splitEmailAddressList } from "@/lib/email/address";
 import { formatUserDate, getUserTimeZone, zonedDateFields } from "@/lib/time/utils";
@@ -104,8 +105,12 @@ export async function runBulkMessageAction(messageIds: string[], action: string,
 
 	if (!response.ok) throw new Error(defaultTranslator("error.updateSelected"));
 	await throwIfDeleteSkipped(response, action);
-	if (action === "read" || action === "unread") markMessagesReadInCaches(messageIds, action === "read");
-	if (notify) window.dispatchEvent(new Event("mailflare:messages-changed"));
+	const readChanged = action === "read" || action === "unread";
+	if (readChanged) markMessagesReadInCaches(messageIds, action === "read");
+	if (notify) {
+		if (readChanged) dispatchMessagesChanged({ kind: "read", messageIds, read: action === "read" });
+		else dispatchMessagesChanged();
+	}
 }
 
 /**

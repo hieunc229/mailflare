@@ -60,10 +60,10 @@ export async function createAgentChatStream(context: AgentToolContext, text: str
 		description: emailToolDescriptions[name], inputSchema: emailToolSchemas[name],
 		execute: async (input: unknown) => runEmailTool(context, name, input),
 	}]));
-	const calendarTools = Object.fromEntries(CALENDAR_TOOL_NAMES.map((name) => [name, {
+	const calendarTools = context.user.calendarEnabled ? Object.fromEntries(CALENDAR_TOOL_NAMES.map((name) => [name, {
 		description: calendarToolDescriptions[name], inputSchema: calendarToolSchemas[name],
 		execute: async (input: unknown) => runCalendarTool(context, name, input),
-	}]));
+	}])) : {};
 	const result = streamText({ model: selection.model, system: agentSystemPrompt(settings?.instructions ?? "", timeZone), messages: prompt, tools: { ...tools, ...calendarTools }, stopWhen: stepCountIs(7), maxOutputTokens: 1200, abortSignal: signal, onStepFinish: async ({ usage }) => { await recordAiUsage({ env: context.env, details: selection, usage, source: "chat" }); } });
 	const encoder = new TextEncoder();
 	const id = conversation.id;

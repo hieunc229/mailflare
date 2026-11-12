@@ -74,7 +74,7 @@ function CommandPaletteDialog({
   }, [activeIndex, listboxId]);
 
   return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center pt-24 px-4 bg-neutral-900/40 backdrop-blur-xs animate-in fade-in duration-100">
+    <div className="fixed inset-0 z-50 flex items-start justify-center pt-24 px-4 bg-black/40 dark:bg-black/55 backdrop-blur-xs animate-in fade-in duration-100">
       <div className="fixed inset-0" onClick={onClose} aria-hidden="true" />
       <div
         ref={dialogRef}

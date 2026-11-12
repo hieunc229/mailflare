@@ -4,6 +4,7 @@ import { calendarEvents } from "@/db/schema";
 import { getEnv } from "@/lib/cloudflare";
 import { getCurrentUser } from "@/lib/auth/cookies";
 import { hasValidSessionMutationOrigin } from "@/lib/auth/origin";
+import { calendarAccessError } from "@/lib/calendar/api-auth";
 import { readCalendarConfirmation } from "@/lib/calendar/confirmation";
 import { runCalendarTool } from "@/lib/calendar/tools";
 
@@ -19,6 +20,8 @@ export async function GET(request: Request) {
 	const env = getEnv();
 	const user = await getCurrentUser(env, request);
 	if (!user) return Response.json({ error: "Unauthorized" }, { status: 401 });
+	const denied = calendarAccessError(user);
+	if (denied) return denied;
 	const confirmation = await readCalendarConfirmation(env, new URL(request.url).searchParams.get("token") ?? "", user.id);
 	if (!confirmation) return Response.json({ error: "This request has expired or is not valid" }, { status: 404 });
 	return Response.json(await describe(env, user.id, confirmation.name, confirmation.input));
@@ -29,6 +32,8 @@ export async function POST(request: Request) {
 	const env = getEnv();
 	const user = await getCurrentUser(env, request);
 	if (!user) return Response.json({ error: "Unauthorized" }, { status: 401 });
+	const denied = calendarAccessError(user);
+	if (denied) return denied;
 	if (!hasValidSessionMutationOrigin(request)) return Response.json({ error: "Invalid origin" }, { status: 403 });
 	const { token } = (await request.json().catch(() => ({}))) as { token?: string };
 	const confirmation = await readCalendarConfirmation(env, token ?? "", user.id);

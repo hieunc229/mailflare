@@ -4,6 +4,7 @@ import { messageAttachments } from "@/db/schema";
 import { getEnv } from "@/lib/cloudflare";
 import { requireSessionUser } from "@/lib/api/auth";
 import { getAttachmentForUser } from "@/lib/email/attachments";
+import { driveAccessError } from "@/lib/drive/auth";
 import { streamDriveFile } from "@/lib/drive/content";
 import type { DriveRow } from "@/lib/drive/types";
 import type { DriveItemParams } from "../../../items/[id]/types";
@@ -14,6 +15,8 @@ export async function GET(request: Request, { params }: DriveItemParams) {
 	const env = getEnv();
 	const { user, error } = await requireSessionUser(env, request);
 	if (error) return error;
+	const denied = driveAccessError(user);
+	if (denied) return denied;
 	const [row] = await getDb(env).select({ messageId: messageAttachments.messageId }).from(messageAttachments).where(eq(messageAttachments.id, id)).limit(1);
 	const result = row ? await getAttachmentForUser(env, user, row.messageId, id) : null;
 	if (!result) return new Response("Not found", { status: 404 });
