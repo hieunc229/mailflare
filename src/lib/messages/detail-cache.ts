@@ -42,11 +42,21 @@ export function setCachedMessageRead(messageId: string, read: boolean): void {
 	if (cached?.message) cacheDetail(messageId, { ...cached, message: { ...cached.message, read } });
 }
 
-/** Field-scoped detail patch for star toggles and undo; read still goes through setCachedMessageRead. */
-export function patchCachedMessage(messageId: string, patch: { read?: boolean; starred?: boolean }): void {
+export type CachedMessageStatePatch = Partial<Pick<Message, "read" | "starred" | "status" | "folderId" | "snoozedUntil">>;
+
+/** Field-scoped detail patch for action/undo state; read and star also feed the field store. */
+export function patchCachedMessageState(messageId: string, patch: CachedMessageStatePatch): void {
 	const cached = getCachedMessageDetail(messageId);
 	if (cached?.message) cacheDetail(messageId, { ...cached, message: { ...cached.message, ...patch } });
-	rememberMessageFields([messageId], patch);
+	rememberMessageFields([messageId], {
+		...(patch.read !== undefined ? { read: patch.read } : {}),
+		...(patch.starred !== undefined ? { starred: patch.starred } : {}),
+	});
+}
+
+/** Backwards-compatible read/star helper for callers that only own those fields. */
+export function patchCachedMessage(messageId: string, patch: { read?: boolean; starred?: boolean }): void {
+	patchCachedMessageState(messageId, patch);
 }
 
 /** Drops specific details after a failed or partially skipped undo, so the reader refetches them. */

@@ -409,7 +409,7 @@ test("grouped thread unread counts are patched once, not on both optimistic and 
 	assert.equal(events.length, 2);
 });
 
-test("star undo restores the mounted detail cache and emits a starred patch", () => {
+test("star undo keeps a valid detail cache on success and invalidates it on failure", () => {
 	m.clearKnownMessageFieldsForTests();
 	m.primeMessageDetail({ id: "star-1", read: false, starred: false });
 	const star = record(state({ starred: false }), state({ starred: true }), { id: "star-1" });
@@ -419,8 +419,17 @@ test("star undo restores the mounted detail cache and emits a starred patch", ()
 		const captured = m.captureMessageFields(["star-1"]);
 		m.defaultMessageActionHooks.onUndoOptimistic([star], captured);
 		assert.equal(m.getCachedMessageDetail("star-1").message.starred, false);
+		m.defaultMessageActionHooks.onUndoCompleted([star], {
+			ok: true,
+			action: "star",
+			restored: ["star-1"],
+			skipped: [],
+		}, captured);
+		// A successful undo leaves the valid detail cache for the mounted reader.
+		assert.equal(m.getCachedMessageDetail("star-1").message.starred, false);
 		m.defaultMessageActionHooks.onUndoFailed([star], captured);
-		assert.equal(m.getCachedMessageDetail("star-1").message.starred, true);
+		// A failed undo drops the detail so the reader explicitly fetches server truth.
+		assert.equal(m.getCachedMessageDetail("star-1"), undefined);
 	});
 	assert.ok(events.some((event) => event.kind === "patch" && event.patches?.[0]?.starred === false));
 });

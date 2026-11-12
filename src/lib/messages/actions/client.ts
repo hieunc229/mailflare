@@ -2,7 +2,7 @@
 
 import { authFetch } from "@/lib/auth/client";
 import { dispatchMessagesChanged, type MessageFieldPatch } from "@/lib/messages/change-events";
-import { invalidateCachedMessageDetails } from "@/lib/messages/detail-cache";
+import { invalidateCachedMessageDetails, patchCachedMessageState } from "@/lib/messages/detail-cache";
 import { captureMessageFields, type KnownMessageFields } from "@/lib/messages/field-store";
 import { patchMessagesInCaches } from "@/hooks/utils";
 import {
@@ -95,10 +95,35 @@ function restoreCaptured(
 	dispatchStarGroups(starGroups, true);
 }
 
+function rememberAppliedDetails(records: MessageActionRecord[]) {
+	for (const record of records) {
+		patchCachedMessageState(record.id, {
+			status: record.applied.status,
+			read: record.applied.read,
+			starred: record.applied.starred,
+			folderId: record.applied.folderId,
+			snoozedUntil: record.applied.snoozedUntil,
+		});
+	}
+}
+
+function rememberPreviousDetails(records: MessageActionRecord[]) {
+	for (const record of records) {
+		patchCachedMessageState(record.id, {
+			status: record.previous.status,
+			read: record.previous.read,
+			starred: record.previous.starred,
+			folderId: record.previous.folderId,
+			snoozedUntil: record.previous.snoozedUntil,
+		});
+	}
+}
+
 export const defaultMessageActionHooks: MessageActionExecutorHooks = {
 	onApplied(response: MessageActionResponse, options: MessageActionHookOptions) {
 		const changed = getChangedRecords(response.applied);
 		if (changed.length === 0) return;
+		rememberAppliedDetails(changed);
 		const deferRefresh = !options.notify;
 		for (const [read, ids] of readPatchGroups(changed, "applied")) dispatchRead(ids, read, deferRefresh);
 		dispatchStarGroups(starPatchGroups(changed, "applied"), deferRefresh);
@@ -109,17 +134,18 @@ export const defaultMessageActionHooks: MessageActionExecutorHooks = {
 		dispatchStarGroups(starPatchGroups(records, "previous"), true);
 	},
 	onUndoCompleted(records, response, captured) {
-		// The optimistic patches already show the restored state. Records the
-		// server skipped must return to what was on screen before the undo click,
-		// not an older action's historical applied snapshot.
+		const restored = new Set(response.restored);
+		rememberPreviousDetails(records.filter((record) => restored.has(record.id)));
 		const skipped = new Set(response.skipped.map((item) => item.id));
-		restoreCaptured(records.filter((record) => skipped.has(record.id)), captured);
+		const skippedRecords = records.filter((record) => skipped.has(record.id));
+		restoreCaptured(skippedRecords, captured);
+		invalidateCachedMessageDetails(skippedRecords.map((record) => record.id));
 	},
 	onUndoFailed(records, captured) {
 		restoreCaptured(records, captured);
+		invalidateCachedMessageDetails(records.map((record) => record.id));
 	},
-	onResync(messageIds) {
-		invalidateCachedMessageDetails(messageIds);
+	onResync() {
 		dispatchMessagesChanged();
 	},
 	captureCurrent: captureMessageFields,

@@ -155,20 +155,51 @@ function MessageDetailContent({ messageId }: { messageId: string }) {
     };
   }, [messageId]);
 
-  // A bulk read/unread action can include the message that is already open.
-  // Keep the mounted reader in sync with the cache instead of remounting it.
+  // Read, star and membership changes (including undo) can target the message
+  // that is already open. Keep the mounted reader in sync with the detail cache;
+  // if a failed/skipped undo invalidated it, fetch the server value explicitly.
   useEffect(() => {
-    function syncCachedReadState() {
+    let cancelled = false;
+    function syncCachedState() {
       const cached = getCachedMessageDetailForDisplay(messageId);
-      if (!cached?.message) return;
-      const cachedRead = cached.message.read;
+      if (!cached?.message) {
+        void fetchMessageDetail(messageId, true).then((nextData) => {
+          if (cancelled || !("message" in nextData) || !nextData.message) return;
+          const nextMessage = nextData.message;
+          setData((current) => {
+            if (!current?.message) return nextData;
+            // A read flip from opening this message may still be in flight.
+            const keepRead = current.message.read && !nextMessage.read;
+            return { ...nextData, message: keepRead ? { ...nextMessage, read: true } : nextMessage };
+          });
+        }).catch(() => undefined);
+        return;
+      }
+      const cachedMessage = cached.message;
       setData((current) => {
-        if (!current?.message || current.message.read === cachedRead) return current;
-        return { ...current, message: { ...current.message, read: cachedRead } };
+        if (!current?.message) return current;
+        const next = {
+          read: cachedMessage.read,
+          starred: cachedMessage.starred,
+          status: cachedMessage.status,
+          folderId: cachedMessage.folderId,
+          snoozedUntil: cachedMessage.snoozedUntil,
+        };
+        if (
+          current.message.read === next.read
+          && current.message.starred === next.starred
+          && current.message.status === next.status
+          && current.message.folderId === next.folderId
+          && current.message.snoozedUntil === next.snoozedUntil
+        ) return current;
+        return { ...current, message: { ...current.message, ...next } };
       });
     }
-    window.addEventListener("mailflare:messages-changed", syncCachedReadState);
-    return () => window.removeEventListener("mailflare:messages-changed", syncCachedReadState);
+    window.addEventListener("mailflare:messages-changed", syncCachedState);
+    return () => {
+      cancelled = true;
+      window.removeEventListener("mailflare:messages-changed", syncCachedState);
+    };
   }, [messageId]);
 
   async function retryBody() {
