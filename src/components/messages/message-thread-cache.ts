@@ -1,5 +1,6 @@
 import { AUTH_SESSION_CHANGED_EVENT, authFetch } from "@/lib/auth/client";
-import { getMessagesChangedDetail, isReadOnlyChange } from "@/lib/messages/change-events";
+import { getMessagesChangedDetail } from "@/lib/messages/change-events";
+import { rememberMessageFields, rememberMessageRows } from "@/lib/messages/field-store";
 import type { ThreadMessage, ThreadResponse } from "@/hooks/types";
 
 const CACHE_TTL_MS = 60_000;
@@ -31,6 +32,7 @@ function cacheThread(messageId: string, messages: ThreadMessage[]): void {
 	if (messages.length > MAX_CACHED_MESSAGES || bodyChars(messages) > MAX_CACHED_BODY_CHARS) return;
 	threadCache.delete(messageId);
 	threadCache.set(messageId, { messages, expiresAt: Date.now() + CACHE_TTL_MS });
+	rememberMessageRows(messages);
 	if (threadCache.size > CACHE_LIMIT) {
 		const oldest = threadCache.keys().next().value;
 		if (oldest) threadCache.delete(oldest);
@@ -90,6 +92,7 @@ export function patchMessageThreadFieldsInCaches(
 			messages: cached.messages.map((message) => (ids.has(message.id) ? { ...message, ...patch } : message)),
 		});
 	}
+	rememberMessageFields(messageIds, patch);
 }
 
 export function markMessageThreadReadInCaches(messageIds: string[], read: boolean): void {
@@ -105,13 +108,23 @@ export function clearMessageThreadCache(): void {
 if (typeof window !== "undefined") {
 	window.addEventListener(AUTH_SESSION_CHANGED_EVENT, clearMessageThreadCache);
 	window.addEventListener("mailflare:messages-changed", (event) => {
-		if (!isReadOnlyChange(event)) {
+		const detail = getMessagesChangedDetail(event);
+		if (!detail?.kind) {
 			clearMessageThreadCache();
 			return;
 		}
-		const detail = getMessagesChangedDetail(event);
-		if (detail?.messageIds?.length) {
-			markMessageThreadReadInCaches(detail.messageIds, detail.read !== false);
+		if (detail.kind === "read") {
+			if (detail.messageIds?.length) markMessageThreadReadInCaches(detail.messageIds, detail.read !== false);
+			return;
 		}
+		for (const patch of detail.patches ?? []) {
+			patchMessageThreadFieldsInCaches([patch.id], {
+				...(patch.read !== undefined ? { read: patch.read } : {}),
+				...(patch.starred !== undefined ? { starred: patch.starred } : {}),
+			});
+		}
+		// A settled star patch still needs the server's folder membership; an
+		// optimistic one must keep the patched conversation on screen.
+		if (!detail.deferRefresh) clearMessageThreadCache();
 	});
 }

@@ -69,12 +69,27 @@ export function useMessages(
 				return ids.has(message.id) ? { ...message, read } : message;
 			}));
 		}
+		function patchFieldState(event: Event) {
+			const detail = (event as CustomEvent<{ kind?: string; patches?: Array<{ id: string; read?: boolean; starred?: boolean }> }>).detail;
+			if (detail?.kind !== "patch" || !detail.patches?.length) return;
+			const patches = new Map(detail.patches.map((patch) => [patch.id, patch]));
+			setMessages((current) => current.map((message) => {
+				const patch = patches.get(message.id);
+				if (!patch) return message;
+				const next = { ...message };
+				if (patch.starred !== undefined) next.starred = patch.starred;
+				if (patch.read !== undefined && !message.threadMessageIds) next.read = patch.read;
+				return next;
+			}));
+		}
 		function onMessagesChanged(event: Event) {
-			const readOnly = (event as CustomEvent<{ kind?: string }>).detail?.kind === "read";
+			const detail = (event as CustomEvent<{ kind?: string; deferRefresh?: boolean }>).detail;
+			const readOnly = detail?.kind === "read";
 			// A read patch can overtake a list request that started before it. Bump
-			// the request number so that response can never repaint the old state;
-			// a quiet refetch then reconciles the page with the server.
+			// the request number so that response can never repaint the old state.
 			requestNumber += 1;
+			// Optimistic undo read/star patches stay on screen until the request settles.
+			if (detail?.deferRefresh) return;
 			if (!readOnly) {
 				clearMessageListCache();
 				clearMessageCountsCache();
@@ -88,11 +103,13 @@ export function useMessages(
 		}
 		window.addEventListener("mailflare:messages-changed", onMessagesChanged);
 		window.addEventListener("mailflare:messages-changed", patchReadState);
+		window.addEventListener("mailflare:messages-changed", patchFieldState);
 
 		return () => {
 			cancelled = true;
 			window.removeEventListener("mailflare:messages-changed", onMessagesChanged);
 			window.removeEventListener("mailflare:messages-changed", patchReadState);
+			window.removeEventListener("mailflare:messages-changed", patchFieldState);
 			if (refreshTimer) window.clearTimeout(refreshTimer);
 		};
 	}, [enabled, filters?.group, filters?.limit, filters?.offset, filters?.query, filters?.read, filters?.title, folder, folderId, mailboxId]);

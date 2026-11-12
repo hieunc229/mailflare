@@ -1,4 +1,5 @@
 import { getChangedStateFields, recordHasChanges } from "./definitions";
+import type { KnownMessageFields } from "@/lib/messages/field-store";
 import type {
 	MessageActionInput,
 	MessageActionRecord,
@@ -29,10 +30,12 @@ export type MessageActionExecutorHooks = {
 	onApplyOptimistic?: (input: MessageActionInput, options: MessageActionHookOptions) => void;
 	onApplyFailed?: (input: MessageActionInput, options: MessageActionHookOptions) => void;
 	onApplied?: (response: MessageActionResponse, options: MessageActionHookOptions) => void;
-	onUndoOptimistic?: (records: MessageActionRecord[]) => void;
-	onUndoCompleted?: (records: MessageActionRecord[], response: UndoMessageActionResponse) => void;
-	onUndoFailed?: (records: MessageActionRecord[]) => void;
-	onResync?: () => void;
+	/** Snapshots the tab's current read/star values before an optimistic undo patch. */
+	captureCurrent?: (ids: string[]) => Map<string, KnownMessageFields>;
+	onUndoOptimistic?: (records: MessageActionRecord[], captured: Map<string, KnownMessageFields>) => void;
+	onUndoCompleted?: (records: MessageActionRecord[], response: UndoMessageActionResponse, captured: Map<string, KnownMessageFields>) => void;
+	onUndoFailed?: (records: MessageActionRecord[], captured: Map<string, KnownMessageFields>) => void;
+	onResync?: (messageIds: string[]) => void;
 };
 
 /**
@@ -74,20 +77,22 @@ export class MessageActionExecutor {
 
 	async undo(records: MessageActionRecord[], token: string | undefined): Promise<UndoMessageActionResponse> {
 		if (!token) throw new MessageActionRequestError("This undo has expired", 410);
-		return this.withLocks(records.map((record) => record.id), async () => {
-			this.hooks.onUndoOptimistic?.(records);
+		const ids = records.map((record) => record.id);
+		return this.withLocks(ids, async () => {
+			const captured = this.hooks.captureCurrent?.(ids) ?? new Map<string, KnownMessageFields>();
+			this.hooks.onUndoOptimistic?.(records, captured);
 			try {
 				const response = await this.transport({ op: "undo", token });
 				if (!response || response.ok !== true || !Array.isArray((response as UndoMessageActionResponse).restored)) {
 					throw new MessageActionRequestError("Could not undo that change", 502);
 				}
 				const result = response as UndoMessageActionResponse;
-				this.hooks.onUndoCompleted?.(records, result);
-				if (result.skipped.length > 0) this.hooks.onResync?.();
+				this.hooks.onUndoCompleted?.(records, result, captured);
+				this.hooks.onResync?.(ids);
 				return result;
 			} catch (error) {
-				this.hooks.onUndoFailed?.(records);
-				this.hooks.onResync?.();
+				this.hooks.onUndoFailed?.(records, captured);
+				this.hooks.onResync?.(ids);
 				throw error;
 			}
 		});

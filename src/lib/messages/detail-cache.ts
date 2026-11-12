@@ -1,4 +1,5 @@
 import { AUTH_SESSION_CHANGED_EVENT, authFetch } from "@/lib/auth/client";
+import { rememberMessageFields } from "@/lib/messages/field-store";
 import type { Message } from "@/hooks/types";
 import type { CachedMessageDetail } from "./detail-cache-types";
 
@@ -11,6 +12,7 @@ let generation = 0;
 function cacheDetail(messageId: string, data: CachedMessageDetail) {
 	detailCache.delete(messageId);
 	detailCache.set(messageId, { data, expiresAt: Date.now() + CACHE_TTL_MS });
+	if (data.message) rememberMessageFields([messageId], { read: data.message.read, starred: data.message.starred });
 	if (detailCache.size > CACHE_LIMIT) {
 		const oldest = detailCache.keys().next().value;
 		if (oldest) detailCache.delete(oldest);
@@ -44,6 +46,15 @@ export function setCachedMessageRead(messageId: string, read: boolean): void {
 export function patchCachedMessage(messageId: string, patch: { read?: boolean; starred?: boolean }): void {
 	const cached = getCachedMessageDetail(messageId);
 	if (cached?.message) cacheDetail(messageId, { ...cached, message: { ...cached.message, ...patch } });
+	rememberMessageFields([messageId], patch);
+}
+
+/** Drops specific details after a failed or partially skipped undo, so the reader refetches them. */
+export function invalidateCachedMessageDetails(messageIds: string[]): void {
+	for (const id of messageIds) {
+		detailCache.delete(id);
+		detailRequests.delete(id);
+	}
 }
 
 /** Merge the row header into the cache; a missing body is fetched separately. */

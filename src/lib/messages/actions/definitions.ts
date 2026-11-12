@@ -195,11 +195,13 @@ export function planUndoRecord(
 	const needsManage = fields.some((field) => field === "status" || field === "folderId" || field === "snoozedUntil");
 	if (!access.canRead || (needsManage && !access.canManage)) return { id: record.id, reason: "forbidden" };
 
-	if (!isValidReversibleStatus(record.previous.status)) return { id: record.id, reason: "invalid_target" };
-	if (record.previous.folderId !== null) {
+	if (fields.includes("status") && !isValidReversibleStatus(record.previous.status)) {
+		return { id: record.id, reason: "invalid_target" };
+	}
+	if (fields.includes("folderId") && record.previous.folderId !== null) {
 		if (!folderMailboxId || folderMailboxId !== current.mailboxId) return { id: record.id, reason: "invalid_target" };
 	}
-	if (record.previous.snoozedUntil !== null) {
+	if (fields.includes("snoozedUntil") && record.previous.snoozedUntil !== null) {
 		if (current.direction !== "inbound" || Number.isNaN(new Date(record.previous.snoozedUntil).getTime())) {
 			return { id: record.id, reason: "invalid_target" };
 		}

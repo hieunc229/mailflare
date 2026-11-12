@@ -44,7 +44,8 @@ export function useMessageCounts(mailboxId?: string | null, enabled = true) {
 		}
 
 		void loadCounts();
-		function onMessagesChanged() {
+		function onMessagesChanged(event: Event) {
+			if ((event as CustomEvent<{ deferRefresh?: boolean }>).detail?.deferRefresh) return;
 			clearMessageCountsCache();
 			if (document.visibilityState !== "visible") return;
 			if (refreshTimer) window.clearTimeout(refreshTimer);

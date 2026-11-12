@@ -54,7 +54,22 @@ export function useMessageThread(messageId: string, threadId: string | null | un
 			markMessageThreadReadInCaches(detail.messageIds, read);
 			setMessages((current) => current.map((message) => (ids.has(message.id) ? { ...message, read } : message)));
 		}
-		function scheduleLoad() {
+		function patchFieldState(event: Event) {
+			const detail = (event as CustomEvent<{ kind?: string; patches?: Array<{ id: string; read?: boolean; starred?: boolean }> }>).detail;
+			if (detail?.kind !== "patch" || !detail.patches?.length) return;
+			const patches = new Map(detail.patches.map((patch) => [patch.id, patch]));
+			setMessages((current) => current.map((message) => {
+				const patch = patches.get(message.id);
+				if (!patch) return message;
+				return {
+					...message,
+					...(patch.read !== undefined ? { read: patch.read } : {}),
+					...(patch.starred !== undefined ? { starred: patch.starred } : {}),
+				};
+			}));
+		}
+		function scheduleLoad(event?: Event) {
+			if ((event as CustomEvent<{ deferRefresh?: boolean }> | undefined)?.detail?.deferRefresh) return;
 			if (document.visibilityState !== "visible") return;
 			if (refreshTimer) window.clearTimeout(refreshTimer);
 			refreshTimer = window.setTimeout(() => {
@@ -64,10 +79,12 @@ export function useMessageThread(messageId: string, threadId: string | null | un
 		}
 		window.addEventListener("mailflare:messages-changed", scheduleLoad);
 		window.addEventListener("mailflare:messages-changed", patchReadState);
+		window.addEventListener("mailflare:messages-changed", patchFieldState);
 		return () => {
 			cancelled = true;
 			window.removeEventListener("mailflare:messages-changed", scheduleLoad);
 			window.removeEventListener("mailflare:messages-changed", patchReadState);
+			window.removeEventListener("mailflare:messages-changed", patchFieldState);
 			if (refreshTimer) window.clearTimeout(refreshTimer);
 		};
 	}, [messageId, threadId]);

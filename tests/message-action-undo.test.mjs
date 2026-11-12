@@ -19,6 +19,14 @@ await build({
 				MessageActionExecutor, MessageActionRequestError, getChangedRecords, readPatchGroups, hasMembershipChange,
 			} from "./src/lib/messages/actions/executor.ts";
 			export { signUndoToken, verifyUndoToken } from "./src/lib/messages/actions/token.ts";
+			export { defaultMessageActionHooks } from "./src/lib/messages/actions/client.ts";
+			export {
+				fetchMessageList, peekMessageList, clearMessageListCache, invalidateMessageListRequests,
+			} from "./src/hooks/utils.ts";
+			export { primeMessageDetail, getCachedMessageDetail } from "./src/lib/messages/detail-cache.ts";
+			export {
+				captureMessageFields, rememberMessageFields, clearKnownMessageFieldsForTests,
+			} from "./src/lib/messages/field-store.ts";
 		`,
 		resolveDir: root,
 		sourcefile: "message-action-undo-entry.ts",
@@ -121,6 +129,15 @@ test("undo rejects a foreign folder, a foreign mailbox and malformed snapshots",
 	assert.equal(m.planUndoRecord(record(state({ status: "hacked" }), applied), target(), { canRead: true, canManage: true }, null).reason, "invalid_target");
 });
 
+test("a read undo ignores a folder that was removed after the read action", () => {
+	const recordWithFolder = record(
+		state({ status: "received", folderId: "deleted-folder" }),
+		state({ status: "received", folderId: "deleted-folder", read: true }),
+	);
+	const plan = m.planUndoRecord(recordWithFolder, target({ read: true, folderId: "deleted-folder" }), { canRead: true, canManage: true }, undefined);
+	assert.deepEqual(plan.patch, { read: false });
+});
+
 test("undo is skipped when a later action changed the same field", () => {
 	const previous = state();
 	const applied = state({ status: "archived" });
@@ -177,6 +194,30 @@ function applyResponse(overrides = {}) {
 		undoToken: "token",
 		...overrides,
 	};
+}
+
+async function seedListCache(params, messages) {
+	m.clearMessageListCache();
+	m.clearKnownMessageFieldsForTests();
+	const originalFetch = globalThis.fetch;
+	globalThis.fetch = async () => Response.json({ messages, total: messages.length, limit: 25, offset: 0 });
+	try {
+		await m.fetchMessageList(params, true);
+	} finally {
+		globalThis.fetch = originalFetch;
+	}
+}
+
+function captureEvents(fn) {
+	const events = [];
+	const previousWindow = globalThis.window;
+	globalThis.window = { dispatchEvent: (event) => { events.push(event.detail); } };
+	try {
+		fn();
+	} finally {
+		globalThis.window = previousWindow;
+	}
+	return events;
 }
 
 test("the executor reports a successful apply after the server confirms it", async () => {
@@ -296,6 +337,94 @@ test("membership changes are distinguished from read/star-only patches", () => {
 	assert.equal(m.hasMembershipChange(record(state(), state({ status: "archived" }))), true);
 });
 
+test("explicit read patches the list cache and emits an optimistic deferred event", async () => {
+	const params = new URLSearchParams({ case: "read-patch" });
+	await seedListCache(params, [{ id: "m1", read: true, starred: false }]);
+	const unread = record(state({ read: true }), state({ read: false }));
+	const events = captureEvents(() => {
+		m.defaultMessageActionHooks.onApplied({ ok: true, action: "unread", applied: [unread], skipped: [] }, { notify: false });
+	});
+	assert.equal(m.peekMessageList(params).messages[0].read, false);
+	assert.deepEqual(events.at(-1), { kind: "read", messageIds: ["m1"], read: false, deferRefresh: true });
+	assert.equal(m.captureMessageFields(["m1"]).get("m1").read, false);
+});
+
+test("failed older undo restores the pre-click value, never the historical applied value", async () => {
+	const params = new URLSearchParams({ case: "old-undo" });
+	await seedListCache(params, [{ id: "m1", read: false, starred: false }]);
+	// An older "mark read" snapshot (previous false, applied true) after a newer
+	// "mark unread" has made the tab's current value false again.
+	const olderRead = record(state({ read: false }), state({ read: true }));
+	const captured = m.captureMessageFields(["m1"]);
+	assert.equal(captured.get("m1").read, false);
+	const events = captureEvents(() => {
+		m.defaultMessageActionHooks.onUndoOptimistic([olderRead], captured);
+		m.defaultMessageActionHooks.onUndoFailed([olderRead], captured);
+	});
+	assert.equal(m.peekMessageList(params).messages[0].read, false);
+	assert.equal(events.at(-1).read, false);
+});
+
+test("skipped undo records return to the pre-click state instead of staying optimistic", async () => {
+	const params = new URLSearchParams({ case: "skipped-undo" });
+	await seedListCache(params, [{ id: "m1", read: false, starred: false }]);
+	const unread = record(state({ read: true }), state({ read: false }));
+	const captured = m.captureMessageFields(["m1"]);
+	const events = captureEvents(() => {
+		m.defaultMessageActionHooks.onUndoOptimistic([unread], captured);
+		m.defaultMessageActionHooks.onUndoCompleted([unread], {
+			ok: true,
+			action: "unread",
+			restored: [],
+			skipped: [{ id: "m1", reason: "stale" }],
+		}, captured);
+	});
+	assert.equal(m.peekMessageList(params).messages[0].read, false);
+	assert.equal(events.at(-1).read, false);
+});
+
+test("grouped thread unread counts are patched once, not on both optimistic and completed undo", async () => {
+	const params = new URLSearchParams({ case: "thread-undo" });
+	await seedListCache(params, [{
+		id: "m1",
+		read: false,
+		starred: false,
+		threadMessageIds: ["m1", "m2", "m3"],
+		threadUnread: 1,
+	}]);
+	const markRead = record(state({ read: false }), state({ read: true }));
+	const events = captureEvents(() => {
+		m.defaultMessageActionHooks.onApplied({ ok: true, action: "read", applied: [markRead], skipped: [] }, { notify: true });
+		assert.equal(m.peekMessageList(params).messages[0].threadUnread, 0);
+		m.defaultMessageActionHooks.onUndoOptimistic([markRead], new Map([["m1", { read: true }]]));
+		assert.equal(m.peekMessageList(params).messages[0].threadUnread, 1);
+		m.defaultMessageActionHooks.onUndoCompleted([markRead], {
+			ok: true,
+			action: "read",
+			restored: ["m1"],
+			skipped: [],
+		}, new Map([["m1", { read: true }]]));
+	});
+	assert.equal(m.peekMessageList(params).messages[0].threadUnread, 1);
+	assert.equal(events.length, 2);
+});
+
+test("star undo restores the mounted detail cache and emits a starred patch", () => {
+	m.clearKnownMessageFieldsForTests();
+	m.primeMessageDetail({ id: "star-1", read: false, starred: false });
+	const star = record(state({ starred: false }), state({ starred: true }), { id: "star-1" });
+	const events = captureEvents(() => {
+		m.defaultMessageActionHooks.onApplied({ ok: true, action: "star", applied: [star], skipped: [] }, { notify: true });
+		assert.equal(m.getCachedMessageDetail("star-1").message.starred, true);
+		const captured = m.captureMessageFields(["star-1"]);
+		m.defaultMessageActionHooks.onUndoOptimistic([star], captured);
+		assert.equal(m.getCachedMessageDetail("star-1").message.starred, false);
+		m.defaultMessageActionHooks.onUndoFailed([star], captured);
+		assert.equal(m.getCachedMessageDetail("star-1").message.starred, true);
+	});
+	assert.ok(events.some((event) => event.kind === "patch" && event.patches?.[0]?.starred === false));
+});
+
 test("a stale list response cannot overwrite a read patch made while it was in flight", async () => {
 	const originalFetch = globalThis.fetch;
 	let resolveStale;
@@ -328,9 +457,13 @@ test("every catalog carries the undo keys with identical placeholders", () => {
 	const en = JSON.parse(readFileSync(join(root, "src/lib/i18n/en.json"), "utf8"));
 	const undoKeys = Object.keys(en).filter((key) => key.startsWith("undo."));
 	assert.ok(undoKeys.length >= 17);
+	const placeholders = (text) => [...new Set([...text.matchAll(/\{(\w+)\}/g)].map((match) => match[1]))].sort();
 	for (const file of readdirSync(join(root, "public", "locales")).filter((name) => name.endsWith(".json"))) {
 		const catalog = JSON.parse(readFileSync(join(root, "public", "locales", file), "utf8"));
-		for (const key of undoKeys) assert.equal(catalog[key], en[key], `${file}: ${key}`);
+		for (const key of undoKeys) {
+			assert.ok(typeof catalog[key] === "string" && catalog[key].trim().length > 0, `${file}: ${key} is missing`);
+			assert.deepEqual(placeholders(catalog[key]), placeholders(en[key]), `${file}: ${key} placeholders`);
+		}
 	}
 });
 

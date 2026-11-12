@@ -2,6 +2,7 @@ import { authFetch } from "@/lib/auth/client";
 import { parseSearchQuery } from "@/lib/search/query-utils";
 import { getUserTimeZone } from "@/lib/time/utils";
 import { patchCachedMessage } from "@/lib/messages/detail-cache";
+import { rememberMessageFields, rememberMessageRows } from "@/lib/messages/field-store";
 import { isReadOnlyChange } from "@/lib/messages/change-events";
 import type { MessageFilterOptions, MessageFolder } from "./types";
 import type { MessageCounts, MessageListResponse } from "./types";
@@ -131,6 +132,7 @@ export function patchMessagesInCaches(messageIds: string[], patch: CachedMessage
 		});
 	}
 	for (const id of ids) patchCachedMessage(id, patch);
+	rememberMessageFields(messageIds, patch);
 }
 
 /**
@@ -206,6 +208,7 @@ export async function fetchMessageList(params: URLSearchParams, force = false): 
 			const response = data as MessageListResponse;
 			if (requestGeneration === messageCacheGeneration) {
 				messageListCache.set(key, response);
+				rememberMessageRows(response.messages ?? []);
 			}
 			return response;
 		})
