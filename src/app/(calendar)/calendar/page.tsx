@@ -26,6 +26,7 @@ import { useSelectedMailbox } from "@/components/mailbox-provider";
 import { useSidebar } from "@/components/sidebar-state";
 import { UpcomingSidebar } from "../upcoming-sidebar";
 import { DayEvents } from "./day-events";
+import { MonthGrid } from "./month-grid";
 import type { CalendarEvent, CalendarView, EventDragPreview, EventResizeEdge, EventResizeSession } from "./types";
 import {
   addDays, addMonths, calendarAnchorDay, CALENDAR_END_HOUR, CALENDAR_HOUR_HEIGHT, CALENDAR_START_HOUR,
@@ -46,6 +47,17 @@ export default function CalendarPage() {
   const [currentTime, setCurrentTime] = useState(() => Date.now());
   const [visibleDate, setVisibleDate] = useState(() => new Date());
   const [view, setView] = useState<CalendarView>("week");
+  // Only a choice made in the view switcher is remembered; jumping into a day from the month grid is not.
+  useEffect(() => {
+    try {
+      const saved = window.localStorage.getItem("mailflare.calendar.view");
+      if (saved === "month" || saved === "week" || saved === "day") setView(saved);
+    } catch { /* storage can be blocked; the default view is fine */ }
+  }, []);
+  function chooseView(next: CalendarView) {
+    setView(next);
+    try { window.localStorage.setItem("mailflare.calendar.view", next); } catch { /* not remembered */ }
+  }
   const [monthPickerOpen, setMonthPickerOpen] = useState(false);
   const [pickerMonth, setPickerMonth] = useState(() => new Date());
   const monthPickerRef = useRef<HTMLDivElement | null>(null);
@@ -128,8 +140,9 @@ export default function CalendarPage() {
   useEffect(() => {
     let active = true;
     setLoading(true);
-    const start = new Date(Math.min(today.getTime(), weekStart.getTime(), startOfDay(visibleDate).getTime()));
-    const end = new Date(Math.max(addDays(today, 90).getTime(), addDays(weekStart, 7).getTime(), addDays(visibleDate, 1).getTime()));
+    const monthDates = view === "month" ? monthGridDates(visibleDate) : null;
+    const start = new Date(Math.min(today.getTime(), weekStart.getTime(), startOfDay(visibleDate).getTime(), monthDates?.[0].getTime() ?? Infinity));
+    const end = new Date(Math.max(addDays(today, 90).getTime(), addDays(weekStart, 7).getTime(), addDays(visibleDate, 1).getTime(), monthDates ? addDays(monthDates[41], 1).getTime() : 0));
     void authFetch(`/api/calendar/events?start=${start.toISOString()}&end=${end.toISOString()}`)
       .then((response) => {
         if (!response.ok) throw new Error(t("calendar.loadFailed"));
@@ -139,7 +152,7 @@ export default function CalendarPage() {
       .catch(() => { if (active) toast.error(t("calendar.loadFailed")); })
       .finally(() => { if (active) setLoading(false); });
     return () => { active = false; };
-  }, [today, visibleDate, weekStart, eventsVersion, t]);
+  }, [today, visibleDate, weekStart, view, eventsVersion, t]);
 
   useEffect(() => {
     if (!eventFromUrl) { openedEventFromUrl.current = null; return; }
@@ -444,8 +457,8 @@ export default function CalendarPage() {
           </div>
           </div>
           <div className="flex shrink-0 items-center gap-1.5">
-            <button type="button" aria-label={t(view === "week" ? "calendar.previousView.week" : "calendar.previousView.day")} onClick={() => setVisibleDate(addDays(visibleDate, view === "week" ? -7 : -1))} className="flex h-10 w-10 items-center justify-center rounded-full text-neutral-600 hover:bg-white"><ChevronLeft className="h-6 w-6" /></button>
-            <button type="button" aria-label={t(view === "week" ? "calendar.nextView.week" : "calendar.nextView.day")} onClick={() => setVisibleDate(addDays(visibleDate, view === "week" ? 7 : 1))} className="flex h-10 w-10 items-center justify-center rounded-full text-neutral-600 hover:bg-white"><ChevronRight className="h-6 w-6" /></button>
+            <button type="button" aria-label={t(`calendar.previousView.${view}`)} onClick={() => setVisibleDate(view === "month" ? addMonths(visibleDate, -1) : addDays(visibleDate, view === "week" ? -7 : -1))} className="flex h-10 w-10 items-center justify-center rounded-full text-neutral-600 hover:bg-white"><ChevronLeft className="h-6 w-6" /></button>
+            <button type="button" aria-label={t(`calendar.nextView.${view}`)} onClick={() => setVisibleDate(view === "month" ? addMonths(visibleDate, 1) : addDays(visibleDate, view === "week" ? 7 : 1))} className="flex h-10 w-10 items-center justify-center rounded-full text-neutral-600 hover:bg-white"><ChevronRight className="h-6 w-6" /></button>
             <button type="button" onClick={() => setVisibleDate(new Date())} className="h-10 rounded-full max-md:hidden bg-white px-4 text-sm font-medium text-neutral-700 hover:bg-neutral-50">{t("calendar.today")}</button>
             <DropdownMenu.Root>
               <DropdownMenu.Trigger asChild>
@@ -455,12 +468,13 @@ export default function CalendarPage() {
                 <DropdownMenu.Content align="end" sideOffset={4} className="z-[130] min-w-40 rounded-xl border border-neutral-200 bg-white p-1 text-sm shadow-xl md:hidden">
                   <DropdownMenu.Item onSelect={() => setVisibleDate(new Date())} className="cursor-pointer rounded-lg px-3 py-2 text-neutral-700 outline-none data-[highlighted]:bg-neutral-100">{t("calendar.today")}</DropdownMenu.Item>
                   <DropdownMenu.Separator className="my-1 h-px bg-neutral-100" />
-                  {(["week", "day"] as const).map((option) => <DropdownMenu.Item key={option} onSelect={() => setView(option)} className="flex cursor-pointer items-center justify-between gap-3 rounded-lg px-3 py-2 text-neutral-700 outline-none data-[highlighted]:bg-neutral-100">{option === "week" ? t("calendar.week") : t("calendar.day")}{view === option && <Check className="h-4 w-4 text-blue-600" />}</DropdownMenu.Item>)}
+                  {(["month", "week", "day"] as const).map((option) => <DropdownMenu.Item key={option} onSelect={() => chooseView(option)} className="flex cursor-pointer items-center justify-between gap-3 rounded-lg px-3 py-2 text-neutral-700 outline-none data-[highlighted]:bg-neutral-100">{t(`calendar.${option}`)}{view === option && <Check className="h-4 w-4 text-blue-600" />}</DropdownMenu.Item>)}
                 </DropdownMenu.Content>
               </DropdownMenu.Portal>
             </DropdownMenu.Root>
             <div className="relative max-md:hidden">
-              <select value={view} onChange={(event) => setView(event.target.value as CalendarView)} aria-label={t("calendar.view")} className="h-10 appearance-none rounded-full border-0 bg-white pl-4 pr-10 text-sm font-medium text-neutral-700 hover:bg-neutral-50">
+              <select value={view} onChange={(event) => chooseView(event.target.value as CalendarView)} aria-label={t("calendar.view")} className="h-10 appearance-none rounded-full border-0 bg-white pl-4 pr-10 text-sm font-medium text-neutral-700 hover:bg-neutral-50">
+                <option value="month">{t("calendar.month")}</option>
                 <option value="week">{t("calendar.week")}</option>
                 <option value="day">{t("calendar.day")}</option>
               </select>
@@ -475,6 +489,10 @@ export default function CalendarPage() {
 
       <section aria-busy={loading} className="min-h-0 min-w-0 flex-1 rounded-t-3xl bg-white flex flex-col overflow-hidden">
         <div className="min-h-0 min-w-0 flex-1 overflow-auto overscroll-contain">
+          {view === "month" ? (
+            <MonthGrid month={visibleDate} today={today} events={events} currentTime={currentTime}
+              onSelectDay={(day) => openNewEvent(day)} onOpenDay={(day) => { setVisibleDate(day); setView("day"); }} onEdit={onEditEvent} />
+          ) : (
           <div className={clsx("w-full", view === "week" ? "min-w-190" : "min-w-90")}>
             <div className="sticky top-0 z-30 grid h-14 border-b border-neutral-200 bg-white" style={{ gridTemplateColumns: `64px repeat(${days.length}, minmax(0, 1fr))` }}>
               <div />
@@ -532,8 +550,10 @@ export default function CalendarPage() {
             ))}
           </div>
           </div>
+          )}
         </div>
       </section>
+
 
       {adding && (
         <div className={clsx("dialog-overlay fixed inset-0 z-50 flex items-center justify-center bg-black/35 p-4 dark:bg-black/55", closingEventEditor && "pointer-events-none")} data-state={closingEventEditor ? "closed" : "open"}>
