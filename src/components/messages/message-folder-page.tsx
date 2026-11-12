@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { confirmDestructive, alertDialog } from "@/components/ui/confirm-dialog";
+import { useRouter } from "next/navigation";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { MouseEvent } from "react";
 import { Archive, ChevronLeft, ChevronRight, ListFilter, Mail, MailOpen, Trash2 } from "@/components/icons";
@@ -13,7 +14,7 @@ import { useMailSearch } from "@/components/mail-search/mail-search-context";
 import { useSelectedMailbox } from "@/components/mailbox-provider";
 import { usePageLoading } from "@/components/page-loading";
 import { formatScheduledSendTime } from "./scheduled-send-utils";
-import { useIsMobile } from "@/components/sidebar-mobile-utils";
+import { useIsDesktop, useIsMobile } from "@/components/sidebar-mobile-utils";
 import { useMessageCounts } from "@/hooks/use-message-counts";
 import { useMessages } from "@/hooks/use-messages";
 import type { BulkMessageAction } from "@/app/api/messages/bulk/types";
@@ -87,6 +88,8 @@ function MessageListRowComponent({
 	onSelectedChange,
 	onMessageAction,
 	onOpening,
+	onSnoozeChange,
+	showCompactRowActions = false,
 	dragMessageIds,
 	todayKey,
 }: MessageListRowProps) {
@@ -166,7 +169,7 @@ function MessageListRowComponent({
 		const compactRow = (
 			<div
 				role={swipeable ? undefined : "listitem"}
-				className={`group grid grid-cols-[20px_minmax(0,1fr)] gap-3 border-l-2 px-4 py-3 transition-colors ${active || opening
+				className={`group relative grid grid-cols-[20px_minmax(0,1fr)] gap-3 border-l-2 px-4 py-3 transition-colors ${active || opening
 					? "border-l-blue-600 bg-blue-50"
 					: selected
 						? "border-l-transparent bg-neutral-50"
@@ -220,6 +223,15 @@ function MessageListRowComponent({
 						{preview}
 					</span>
 				</Link>
+				{showCompactRowActions && (config.folder === "inbox" || config.folder === "snoozed") && message.direction === "inbound" && (
+					<MessageListRowActions
+						message={rowMessage}
+						onAction={runRowAction}
+						compact
+						active={active || opening}
+						onSnoozeChange={onSnoozeChange}
+					/>
+				)}
 			</div>
 		);
 		if (!swipeable) return compactRow;
@@ -345,6 +357,7 @@ function MessageListRowComponent({
 				<MessageListRowActions
 					message={rowMessage}
 					onAction={runRowAction}
+					onSnoozeChange={onSnoozeChange}
 				/>
 			)}
 		</div>
@@ -362,7 +375,10 @@ export function MessageFolderPage({
 	const title = config.titleKey ? t(config.titleKey) : config.title;
 	const { selectedMailbox, isLoading: mailboxesLoading } = useSelectedMailbox();
 	const { query } = useMailSearch();
+	const router = useRouter();
 	const isMobile = useIsMobile();
+	const isDesktop = useIsDesktop();
+	const compactRowActions = compact && isDesktop;
 	const listState = useMessageListState();
 	const usesSharedListState = listState !== null;
 	const [internalOffset, setInternalOffset] = useState(0);
@@ -489,11 +505,23 @@ export function MessageFolderPage({
 
 	const handleMessageAction = useCallback((messageId: string, action: RowMessageAction) => {
 		setActionError(null);
-		return runBulkMessageAction(expandSelectedIds([messageId]), action, action !== "read" && action !== "unread").catch((error) => {
+		const affectedIds = expandSelectedIds([messageId]);
+		return runBulkMessageAction(affectedIds, action, action !== "read" && action !== "unread").then(() => {
+			if (!selectedMessageId || (action !== "archive" && action !== "trash")) return;
+			if (affectedIds.includes(selectedMessageId)) router.push(config.hrefPrefix);
+		}).catch((error) => {
 			setActionError(error instanceof PartialDeleteError ? t("actions.error.deleteSkipped") : t("actions.error.update"));
 			throw error;
 		});
-	}, [expandSelectedIds, t]);
+	}, [config.hrefPrefix, expandSelectedIds, router, selectedMessageId, t]);
+
+	const handleSnoozeChange = useCallback((messageId: string, snoozed: boolean) => {
+		if (!selectedMessageId || messageId !== selectedMessageId) return;
+		const removesOpenMessage = snoozed
+			? config.folder === "inbox" && !config.folderId
+			: config.folder === "snoozed";
+		if (removesOpenMessage) router.push(config.hrefPrefix);
+	}, [config.folder, config.folderId, config.hrefPrefix, router, selectedMessageId]);
 
 	function toggleAllVisible(selected: boolean) {
 		const visibleIds = new Set(messages.map((message) => message.id));
@@ -695,6 +723,8 @@ export function MessageFolderPage({
 							currentAccountName={currentAccountName}
 							onSelectedChange={updateSelectedMessage}
 							onMessageAction={handleMessageAction}
+							onSnoozeChange={handleSnoozeChange}
+							showCompactRowActions={compactRowActions}
 							dragMessageIds={selectedIdSet.has(message.id) ? selectedDragIds : undefined}
 							todayKey={todayKey}
 						/>

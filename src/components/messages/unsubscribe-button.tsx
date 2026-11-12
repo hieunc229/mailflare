@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { MailCheck } from "@/components/icons";
+import { BellOff, MailCheck } from "@/components/icons";
 import { useCompose } from "@/components/compose/compose-context";
 import { useLanguage } from "@/components/language-provider";
 import { Button } from "@/components/ui/button";
@@ -14,7 +14,7 @@ import { isMessageUnsubscribed, markMessageUnsubscribed, requestUnsubscribe } fr
  * one-click POST, sent mailto, or a link to open — this only reflects the
  * outcome and keeps an "Unsubscribed" state instead of offering it twice.
  */
-export function MessageUnsubscribeButton({ messageId, variant = "header" }: { messageId: string; variant?: "header" | "row" }) {
+export function MessageUnsubscribeButton({ messageId, variant = "header", iconOnly = false }: { messageId: string; variant?: "header" | "row"; iconOnly?: boolean }) {
 	const { t } = useLanguage();
 	const { showNotice } = useCompose();
 	const [pending, setPending] = useState(false);
@@ -47,6 +47,18 @@ export function MessageUnsubscribeButton({ messageId, variant = "header" }: { me
 
 	const row = variant === "row";
 	if (done) {
+		if (iconOnly) {
+			return (
+				<span
+					role="status"
+					aria-label={t("actions.unsubscribed")}
+					title={t("actions.unsubscribed")}
+					className="flex h-7 w-7 items-center justify-center text-green-700"
+				>
+					<MailCheck className="h-4 w-4" aria-hidden="true" />
+				</span>
+			);
+		}
 		return (
 			<span role="status" className="flex items-center gap-1 px-1 text-xs font-medium text-green-700">
 				<MailCheck className="h-3.5 w-3.5" aria-hidden="true" />
@@ -60,15 +72,17 @@ export function MessageUnsubscribeButton({ messageId, variant = "header" }: { me
 				type="button"
 				variant="ghost"
 				size="sm"
-				className={row ? "h-5 border border-neutral-300 px-2 text-xs" : "h-5 px-2 text-xs text-[var(--primary)] hover:text-[var(--primary)]"}
+				className={iconOnly ? "h-7 w-7 shrink-0 px-0" : row ? "h-5 border border-neutral-300 px-2 text-xs" : "h-5 px-2 text-xs text-[var(--primary)] hover:text-[var(--primary)]"}
 				disabled={pending}
+				aria-label={iconOnly ? t("actions.unsubscribe") : undefined}
+				title={iconOnly ? t("actions.unsubscribe") : undefined}
 				onClick={(event) => {
 					event.preventDefault();
 					event.stopPropagation();
 					setConfirmOpen(true);
 				}}
 			>
-				{t("actions.unsubscribe")}
+				{iconOnly ? <BellOff className="h-4 w-4" /> : t("actions.unsubscribe")}
 			</Button>
 			<Dialog open={confirmOpen} onOpenChange={setConfirmOpen}>
 				{/* React events bubble through the portal; keep clicks from reaching the list row. */}
