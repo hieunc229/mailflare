@@ -20,6 +20,8 @@ export type ConversationNotesProviderProps = {
 
 export type ConversationNotesState = {
 	notes: ConversationNote[];
+	/** The email the notes were looked up from; avatars are served relative to it. */
+	messageId: string;
 	loading: boolean;
 	/** Whether the notes are shown in full, with the box to write one. */
 	open: boolean;
@@ -51,6 +53,4 @@ export type ConversationNotesState = {
 
 export type ConversationNotesProps = {
 	className?: string;
-	/** The layout's responsive left inset, applied inside the full-width open panel. */
-	contentInset?: string;
 };

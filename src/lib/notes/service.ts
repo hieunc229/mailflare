@@ -139,6 +139,7 @@ function selectNotes(db: AppDatabase) {
 			messageId: conversationNotes.messageId,
 			authorUserId: conversationNotes.authorUserId,
 			authorName: users.name,
+			authorAvatarKey: users.avatarKey,
 			createdAt: conversationNotes.createdAt,
 			updatedAt: conversationNotes.updatedAt,
 		})
@@ -154,9 +155,90 @@ function toNote(row: NoteRow, conversation: NoteConversation, userId: string): C
 		html: row.html,
 		messageId: row.messageId,
 		authorName: row.authorName,
+		authorId: row.authorUserId,
+		authorHasAvatar: !!row.authorAvatarKey,
 		createdAt: row.createdAt.toISOString(),
 		updatedAt: row.updatedAt.toISOString(),
 		canEdit: canEditNote(row.authorUserId, userId),
 		canDelete: canDeleteNote(row.authorUserId, userId, conversation.canManage),
 	};
+}
+
+/** Avatar key of `authorId`, only when they wrote a note in this conversation. */
+export async function noteAuthorAvatarKey(db: AppDatabase, conversation: NoteConversation, authorId: string): Promise<string | null> {
+	const [row] = await db
+		.select({ avatarKey: users.avatarKey })
+		.from(conversationNotes)
+		.innerJoin(users, eq(conversationNotes.authorUserId, users.id))
+		.where(and(
+			eq(conversationNotes.mailboxId, conversation.mailboxId),
+			inArray(conversationNotes.threadKey, conversation.threadKeys),
+			eq(conversationNotes.authorUserId, authorId),
+		))
+		.limit(1);
+	return row?.avatarKey ?? null;
+}
+
+/** What a list row shows about the notes of its conversation. */
+export type RowNoteSummary = { count: number; preview: string };
+
+const PREVIEW_NOTES = 3;
+const PREVIEW_CHARS = 140;
+
+function noteText(html: string): string {
+	return html
+		.replace(/<br\s*\/?>/gi, " ")
+		.replace(/<\/(p|div|li|h[1-6])>/gi, " ")
+		.replace(/<[^>]+>/g, "")
+		.replace(/&nbsp;/g, " ")
+		.replace(/&lt;/g, "<")
+		.replace(/&gt;/g, ">")
+		.replace(/&quot;/g, '"')
+		.replace(/&#39;/g, "'")
+		.replace(/&amp;/g, "&")
+		.replace(/\s+/g, " ")
+		.trim();
+}
+
+/**
+ * The note count and a short text of the latest notes for each list row, by
+ * message id. Rows are keyed like the conversation lookup: their thread, or
+ * their own id (notes taken before a send rekeyed the thread live there).
+ * The user must already be allowed to read these mailboxes.
+ */
+export async function summarizeNotesForRows(
+	db: AppDatabase,
+	rows: Array<{ id: string; mailboxId: string | null; threadId: string | null }>,
+): Promise<Map<string, RowNoteSummary>> {
+	const summaries = new Map<string, RowNoteSummary>();
+	const scoped = rows.filter((row): row is { id: string; mailboxId: string; threadId: string | null } => !!row.mailboxId);
+	if (scoped.length === 0) return summaries;
+	const keys = [...new Set(scoped.flatMap((row) => [row.id, ...(row.threadId ? [row.threadId] : [])]))];
+	const found = await db
+		.select({
+			mailboxId: conversationNotes.mailboxId,
+			threadKey: conversationNotes.threadKey,
+			html: conversationNotes.html,
+			authorName: users.name,
+		})
+		.from(conversationNotes)
+		.leftJoin(users, eq(conversationNotes.authorUserId, users.id))
+		.where(and(
+			inArray(conversationNotes.mailboxId, [...new Set(scoped.map((row) => row.mailboxId))]),
+			inArray(conversationNotes.threadKey, keys),
+		))
+		.orderBy(asc(conversationNotes.createdAt), asc(conversationNotes.id));
+	if (found.length === 0) return summaries;
+	for (const row of scoped) {
+		const mine = found.filter((note) => note.mailboxId === row.mailboxId && (note.threadKey === row.id || note.threadKey === row.threadId));
+		if (mine.length === 0) continue;
+		const lines = mine.slice(-PREVIEW_NOTES).map((note) => {
+			const text = noteText(note.html);
+			const clipped = text.length > PREVIEW_CHARS ? `${text.slice(0, PREVIEW_CHARS).trimEnd()}…` : text;
+			return `${note.authorName ?? "?"}: ${clipped}`;
+		});
+		const more = mine.length - lines.length;
+		summaries.set(row.id, { count: mine.length, preview: more > 0 ? `${lines.join("\n")}\n+${more}` : lines.join("\n") });
+	}
+	return summaries;
 }

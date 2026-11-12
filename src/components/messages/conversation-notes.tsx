@@ -1,9 +1,10 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import type { KeyboardEvent, Ref } from "react";
-import { ChevronDown, ChevronUp, Mail, PenLine, Trash2, X } from "@/components/icons";
+import type { KeyboardEvent } from "react";
+import { ChevronDown, Mail, Note, PenLine, Trash2, X } from "@/components/icons";
 import { useLanguage } from "@/components/language-provider";
+import { ProgressiveAvatarImage } from "@/components/progressive-avatar-image";
 import { RichTextEditor } from "@/components/compose/rich-text-editor";
 import { htmlToPlainText } from "@/components/compose/rich-text-utils";
 import { Button } from "@/components/ui/button";
@@ -19,23 +20,23 @@ import type { ConversationNotesProps } from "./conversation-notes-types";
 const NOTE_DATE_FORMAT: Intl.DateTimeFormatOptions = { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" };
 
 /**
- * The notes under the subject. Closed, a conversation with notes shows one
- * line: how many, who wrote the last one and when. Open, the notes take the
- * width of the conversation, above the mail, with a box to add another.
+ * The notes under the subject, in one box. Closed, a conversation with notes
+ * shows one line: how many, who wrote the last one and when. Opening expands
+ * that same box downward to list the notes and a box to add another.
  * A note is not a message: it has no reply, forward or move.
  */
-export function ConversationNotes({ className, contentInset }: ConversationNotesProps) {
+export function ConversationNotes({ className }: ConversationNotesProps) {
 	const { t } = useLanguage();
 	const notes = useConversationNotes();
 	const sectionRef = useRef<HTMLElement>(null);
-	const barRef = useRef<HTMLDivElement>(null);
+	const headerRef = useRef<HTMLButtonElement>(null);
 	const wasOpen = useRef(false);
 	const open = notes?.open ?? false;
 
 	useEffect(() => {
 		if (open && !wasOpen.current) {
 			// Focus follows the control that opened the panel; other callers just reveal it.
-			if (barRef.current?.contains(document.activeElement)) sectionRef.current?.focus();
+			if (document.activeElement === headerRef.current) sectionRef.current?.focus();
 			else sectionRef.current?.scrollIntoView({ block: "nearest" });
 		}
 		wasOpen.current = open;
@@ -43,51 +44,44 @@ export function ConversationNotes({ className, contentInset }: ConversationNotes
 
 	if (!notes || notes.loading) return null;
 	const last = notes.notes.at(-1);
-	const showBar = !open && !!last;
+	const visible = open || !!last;
 	const rowClass = "grid transition-[grid-template-rows] duration-200 ease-out motion-reduce:transition-none";
-	const pad = cn("px-4 sm:pr-6", contentInset);
-	const composerPad = cn("sm:pr-2", contentInset);
 	return (
 		<div className="w-full pb-3">
-			<div
-				ref={barRef}
-				inert={!showBar}
-				className={rowClass}
-				style={{ gridTemplateRows: showBar ? "1fr" : "0fr" }}
-			>
+			<div inert={!visible} className={rowClass} style={{ gridTemplateRows: visible ? "1fr" : "0fr" }}>
 				<div className="min-h-0 overflow-hidden">
-					{last && (
-						<div className={className}>
+					<div className={className}>
+						<section ref={sectionRef} tabIndex={-1} aria-label={t("note.title")} className="overflow-hidden rounded-lg border border-amber-200 bg-amber-50 outline-none">
 							<button
+								ref={headerRef}
 								type="button"
-								onClick={() => notes.setOpen(true)}
+								onClick={() => notes.setOpen(!open)}
 								aria-expanded={open}
-								aria-label={t("note.count", { count: notes.notes.length })}
-								className="flex w-full items-center gap-2 rounded-lg border border-neutral-200 bg-white px-3 py-1.5 text-left text-xs text-neutral-600 transition-colors hover:bg-neutral-50 active:bg-neutral-100"
+								aria-label={open ? t("note.collapse") : t("note.count", { count: notes.notes.length })}
+								className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs text-amber-900/80 transition-colors hover:bg-amber-100/70 active:bg-amber-100"
 							>
-								<PenLine className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
-								<span className="shrink-0 font-medium text-neutral-900">{t("note.count", { count: notes.notes.length })}</span>
-								<span className="min-w-0 truncate">{last.authorName ?? t("note.formerMember")}</span>
-								<time dateTime={last.createdAt} className="ml-auto shrink-0">{formatUserDate(last.createdAt, NOTE_DATE_FORMAT)}</time>
-								<ChevronDown className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+								<Note className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+								<span className="shrink-0 font-medium text-amber-950">
+									{open ? t("note.title") : t("note.count", { count: notes.notes.length })}
+								</span>
+								{open && notes.notes.length > 0 && <span className="shrink-0">{notes.notes.length}</span>}
+								{!open && last && (
+									<>
+										<span className="min-w-0 truncate">{last.authorName ?? t("note.formerMember")}</span>
+										<time dateTime={last.createdAt} className="ml-auto shrink-0">{formatUserDate(last.createdAt, NOTE_DATE_FORMAT)}</time>
+									</>
+								)}
+								<ChevronDown
+									className={cn("h-3.5 w-3.5 shrink-0 transition-transform duration-200 motion-reduce:transition-none", open ? "rotate-180" : "", open && "ml-auto")}
+									aria-hidden="true"
+								/>
 							</button>
-						</div>
-					)}
-				</div>
-			</div>
-			<div
-				inert={!open}
-				className={rowClass}
-				style={{ gridTemplateRows: open ? "1fr" : "0fr" }}
-			>
-				<div className="min-h-0 overflow-hidden">
-					<div
-						className={cn(
-							"transition-[opacity,transform] duration-200 ease-out motion-reduce:transition-opacity",
-							open ? "translate-y-0 opacity-100" : "-translate-y-1 opacity-0 motion-reduce:translate-y-0",
-						)}
-					>
-						<OpenNotes ref={sectionRef} pad={pad} composerPad={composerPad} />
+							<div inert={!open} className={rowClass} style={{ gridTemplateRows: open ? "1fr" : "0fr" }}>
+								<div className="min-h-0 overflow-hidden">
+									<NotesBody />
+								</div>
+							</div>
+						</section>
 					</div>
 				</div>
 			</div>
@@ -95,37 +89,23 @@ export function ConversationNotes({ className, contentInset }: ConversationNotes
 	);
 }
 
-function OpenNotes({ ref, pad, composerPad }: { ref: Ref<HTMLElement>; pad: string; composerPad: string }) {
-	const { t } = useLanguage();
-	const notes = useConversationNotes()!;
-
+/** The notes of the conversation and the box to add one, without the box around them. `bare` drops the top rule for a container that has no header above it. */
+export function NotesBody({ bare = false }: { bare?: boolean }) {
+	const notes = useConversationNotes();
+	if (!notes) return null;
 	return (
-		<section ref={ref} tabIndex={-1} aria-label={t("note.title")} className="border-y border-neutral-100 bg-neutral-50 outline-none">
-			<header className={cn("flex items-center gap-2 border-b border-neutral-100 py-2", pad)}>
-				<h2 className="text-sm font-medium text-neutral-900">{t("note.title")}</h2>
-				{notes.notes.length > 0 && <span className="text-xs text-neutral-500">{notes.notes.length}</span>}
-				<span className="min-w-0 flex-1" />
-				<button
-					type="button"
-					onClick={() => notes.setOpen(false)}
-					aria-expanded
-					aria-label={t("note.collapse")}
-					className="rounded-md p-1 text-neutral-500 transition-colors hover:bg-neutral-100 active:bg-neutral-200"
-				>
-					<ChevronUp className="h-4 w-4" aria-hidden="true" />
-				</button>
-			</header>
+		<div>
 			{notes.notes.length > 0 && (
-				<ul className="divide-y divide-neutral-100">
-					{notes.notes.map((note) => <NoteItem key={note.id} note={note} pad={pad} />)}
+				<ul className={cn("divide-y divide-amber-200/70", !bare && "border-t border-amber-200/70")}>
+					{notes.notes.map((note) => <NoteItem key={note.id} note={note} />)}
 				</ul>
 			)}
-			<NoteComposer pad={composerPad} />
-		</section>
+			<NoteComposer />
+		</div>
 	);
 }
 
-function NoteItem({ note, pad }: { note: ConversationNote; pad: string }) {
+function NoteItem({ note }: { note: ConversationNote }) {
 	const { t } = useLanguage();
 	const notes = useConversationNotes()!;
 	const editing = note.id in notes.editDrafts;
@@ -133,6 +113,25 @@ function NoteItem({ note, pad }: { note: ConversationNote; pad: string }) {
 	const [pending, setPending] = useState(false);
 	const [error, setError] = useState<string | null>(null);
 	const author = note.authorName ?? t("note.formerMember");
+	const editRef = useRef<HTMLDivElement>(null);
+	const canSave = !pending && !!htmlToPlainText(draft).trim();
+
+	// Put the cursor in the editor when edit mode opens, as the new-note box does.
+	useEffect(() => {
+		if (!editing) return;
+		const timer = window.setTimeout(() => {
+			const field = editRef.current?.querySelector<HTMLElement>("[contenteditable='true']");
+			if (!field) return;
+			field.focus();
+			const range = document.createRange();
+			range.selectNodeContents(field);
+			range.collapse(false);
+			const selection = window.getSelection();
+			selection?.removeAllRanges();
+			selection?.addRange(range);
+		}, 0);
+		return () => window.clearTimeout(timer);
+	}, [editing]);
 
 	async function save() {
 		setPending(true);
@@ -159,74 +158,90 @@ function NoteItem({ note, pad }: { note: ConversationNote; pad: string }) {
 	}
 
 	return (
-		<li className={cn("flex gap-3 py-3", pad)}>
-			<span
-				aria-hidden="true"
-				className="flex h-[21px] w-[21px] shrink-0 items-center justify-center rounded-full text-[10px] font-medium"
-				style={getAvatarColorStyle(author)}
-			>
-				{author.trim().charAt(0).toUpperCase()}
-			</span>
+		<li className="group relative flex gap-3 px-3 py-2">
+			<NoteAvatar note={note} author={author} />
 			<div className="min-w-0 flex-1">
 				<div className="flex flex-wrap items-center gap-x-2">
-					<span className="text-sm font-medium text-neutral-900">{author}</span>
+					<span className="text-sm font-medium text-amber-950">{author}</span>
 					<span className="ml-auto flex items-center gap-x-2">
-						<time dateTime={note.createdAt} className="text-xs text-neutral-500">{formatUserDate(note.createdAt, NOTE_DATE_FORMAT)}</time>
-						{note.updatedAt !== note.createdAt && <span className="text-xs text-neutral-400">{t("note.edited")}</span>}
-						{!editing && (note.canEdit || note.canDelete) && (
-							<span className="flex gap-0.5">
-								{note.canEdit && (
-									<Tooltip label={t("note.edit")}>
-										<Button
-											type="button"
-											variant="ghost"
-											size="sm"
-											disabled={pending}
-											aria-label={t("note.edit")}
-											onClick={() => { notes.setEditDraft(note.id, note.html); setError(null); }}
-											className="h-6 w-6 px-0"
-										>
-											<PenLine className="h-3.5 w-3.5" />
-										</Button>
-									</Tooltip>
-								)}
-								{note.canDelete && (
-									<Tooltip label={t("note.delete")}>
-										<Button
-											type="button"
-											variant="ghost"
-											size="sm"
-											disabled={pending}
-											aria-label={t("note.delete")}
-											onClick={() => void remove()}
-											className="h-6 w-6 px-0 hover:bg-red-50 hover:text-red-600 active:bg-red-100"
-										>
-											<Trash2 className="h-3.5 w-3.5" />
-										</Button>
-									</Tooltip>
-								)}
-							</span>
-						)}
+						<time dateTime={note.createdAt} className="text-xs text-amber-900/70">{formatUserDate(note.createdAt, NOTE_DATE_FORMAT)}</time>
+						{note.updatedAt !== note.createdAt && <span className="text-xs text-amber-900/50">{t("note.edited")}</span>}
 					</span>
 				</div>
 				{note.messageId && <NoteEmailChip messageId={note.messageId} />}
 				{editing ? (
-					<div className="mt-2">
-						<RichTextEditor id={`conversation-note-${note.id}`} value={draft} onChange={(html) => notes.setEditDraft(note.id, html)} disabled={pending} />
-						<div className="mt-2 flex items-center justify-end gap-2">
-							<Button type="button" variant="ghost" size="sm" disabled={pending} onClick={() => notes.setEditDraft(note.id, null)}>
-								{t("common.cancel")}
-							</Button>
-							<Button type="button" size="sm" disabled={pending || !htmlToPlainText(draft).trim()} onClick={() => void save()}>
-								{pending ? t("common.saving") : t("note.save")}
-							</Button>
-						</div>
+					<div
+						ref={editRef}
+						onKeyDown={(event) => {
+							if (event.key === "Enter" && (event.metaKey || event.ctrlKey) && canSave) {
+								event.preventDefault();
+								void save();
+							} else if (event.key === "Escape" && !pending) {
+								event.preventDefault();
+								notes.setEditDraft(note.id, null);
+							}
+						}}
+						className="mt-1"
+					>
+						<RichTextEditor
+							id={`conversation-note-${note.id}`}
+							value={draft}
+							onChange={(html) => notes.setEditDraft(note.id, html)}
+							disabled={pending}
+							placeholder={t("note.placeholder")}
+							editableClassName="min-h-9 py-2"
+							toolbarClassName="border-t-0"
+							toolbarEnd={
+								<span className="ml-auto flex items-center gap-2">
+									<Button type="button" variant="ghost" size="sm" disabled={pending} onClick={() => notes.setEditDraft(note.id, null)} className="h-7">
+										{t("common.cancel")}
+									</Button>
+									<Button type="button" size="sm" disabled={!canSave} onClick={() => void save()} className="h-7">
+										{pending ? t("common.saving") : t("note.save")}
+									</Button>
+								</span>
+							}
+						/>
 					</div>
 				) : (
-					<EmailHtmlRenderer html={note.html} dense className="mt-1.5 text-sm text-neutral-800" />
+					<EmailHtmlRenderer html={note.html} dense className="mt-0.5 text-sm text-neutral-900" />
 				)}
 				{error && <p role="alert" className="mt-1 text-xs text-red-600">{error}</p>}
 			</div>
+			{!editing && (note.canEdit || note.canDelete) && (
+				<span className="absolute bottom-2 right-3 flex gap-0.5 rounded-md bg-amber-50/90 transition-opacity [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-focus-within:opacity-100 [@media(hover:hover)]:group-hover:opacity-100">
+					{note.canEdit && (
+						<Tooltip label={t("note.edit")}>
+							<Button
+								type="button"
+								variant="ghost"
+								size="sm"
+								disabled={pending}
+								aria-label={t("note.edit")}
+								onClick={() => { notes.setEditDraft(note.id, note.html); setError(null); }}
+								className="h-6 w-6 px-0"
+							>
+								<PenLine className="h-3.5 w-3.5" />
+							</Button>
+						</Tooltip>
+					)}
+					{note.canDelete && (
+						<Tooltip label={t("note.delete")}>
+							<Button
+								type="button"
+								variant="ghost"
+								size="sm"
+								disabled={pending}
+								aria-label={t("note.delete")}
+								onClick={() => void remove()}
+								className="h-6 w-6 px-0 hover:bg-red-50 hover:text-red-600 active:bg-red-100"
+							>
+								<Trash2 className="h-3.5 w-3.5" />
+							</Button>
+						</Tooltip>
+					)}
+				</span>
+			)}
 		</li>
 	);
 }
@@ -241,11 +256,11 @@ function NoteEmailChip({ messageId, onRemove }: { messageId: string; onRemove?: 
 			? t("note.aboutEmailTo", { name: email.recipient, date: formatUserDate(email.createdAt, NOTE_DATE_FORMAT) })
 			: t("note.aboutEmail", { name: email.sender, date: formatUserDate(email.createdAt, NOTE_DATE_FORMAT) })
 		: t("note.aboutAnEmail");
-	const chipClass = "inline-flex min-w-0 items-center gap-1 rounded-full bg-neutral-100 px-2 py-0.5 text-xs text-neutral-600";
+	const chipClass = "inline-flex min-w-0 items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-xs text-amber-900";
 	return (
 		<span className="mt-1 flex max-w-full items-center gap-1">
 			{email ? (
-				<button type="button" onClick={() => scrollToEmail(messageId)} className={cn(chipClass, "transition-colors hover:bg-neutral-200 active:bg-neutral-300")}>
+				<button type="button" onClick={() => scrollToEmail(messageId)} className={cn(chipClass, "transition-colors hover:bg-amber-200/70 active:bg-amber-200")}>
 					<Mail className="h-3 w-3 shrink-0" aria-hidden="true" />
 					<span className="truncate">{label}</span>
 				</button>
@@ -264,7 +279,7 @@ function NoteEmailChip({ messageId, onRemove }: { messageId: string; onRemove?: 
 	);
 }
 
-function NoteComposer({ pad }: { pad: string }) {
+function NoteComposer() {
 	const { t } = useLanguage();
 	const notes = useConversationNotes()!;
 	const { focusRequest, focusHandled } = notes;
@@ -307,10 +322,10 @@ function NoteComposer({ pad }: { pad: string }) {
 			onKeyDown={onKeyDown}
 			onFocus={() => setFocused(true)}
 			onBlur={(event) => { if (!containerRef.current?.contains(event.relatedTarget as Node | null)) setFocused(false); }}
-			className={cn("border-t border-neutral-100", pad)}
+			className="border-t border-amber-200/70 px-3 p-2"
 		>
 			{notes.attachTo && (
-				<div className="mx-4 mb-2 mt-3">
+				<div className="mb-2 mt-3">
 					<NoteEmailChip messageId={notes.attachTo} onRemove={() => notes.setAttachTo(null)} />
 				</div>
 			)}
@@ -335,6 +350,30 @@ function NoteComposer({ pad }: { pad: string }) {
 				}
 			/>
 		</div>
+	);
+}
+
+/** The author's own profile picture, or their initial when they have none. */
+function NoteAvatar({ note, author }: { note: ConversationNote; author: string }) {
+	const { t } = useLanguage();
+	const messageId = useConversationNotes()!.messageId;
+	const [failed, setFailed] = useState(false);
+	const base = "h-6 w-6 shrink-0 rounded-full";
+	if (note.authorId && note.authorHasAvatar && !failed) {
+		return (
+			<ProgressiveAvatarImage
+				src={`/api/messages/${encodeURIComponent(messageId)}/notes/avatar/${encodeURIComponent(note.authorId)}`}
+				alt={t("account.profilePicture", { name: author })}
+				className={cn(base, "object-cover")}
+				skipPreview
+				onError={() => setFailed(true)}
+			/>
+		);
+	}
+	return (
+		<span aria-hidden="true" className={cn(base, "flex items-center justify-center text-[11px] font-medium")} style={getAvatarColorStyle(author)}>
+			{author.trim().charAt(0).toUpperCase()}
+		</span>
 	);
 }
 

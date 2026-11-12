@@ -109,8 +109,8 @@ export function ConversationNotesProvider({ messageId, emails, children }: Conve
 	const email = useCallback((id: string) => emailById.get(id), [emailById]);
 
 	const value = useMemo<ConversationNotesState>(
-		() => ({ notes, loading, open, setOpen, attachTo, setAttachTo, startNote, focusRequest, focusHandled, draft, setDraft, adding, editDrafts, setEditDraft, email, add, update, remove }),
-		[notes, loading, open, attachTo, startNote, focusRequest, focusHandled, draft, adding, editDrafts, setEditDraft, email, add, update, remove],
+		() => ({ notes, messageId, loading, open, setOpen, attachTo, setAttachTo, startNote, focusRequest, focusHandled, draft, setDraft, adding, editDrafts, setEditDraft, email, add, update, remove }),
+		[notes, messageId, loading, open, attachTo, startNote, focusRequest, focusHandled, draft, adding, editDrafts, setEditDraft, email, add, update, remove],
 	);
 	return <ConversationNotesContext.Provider value={value}>{children}</ConversationNotesContext.Provider>;
 }

@@ -1,7 +1,7 @@
 "use client";
 
 import { createElement, useEffect, useState } from "react";
-import { Ban, FileCode2, Forward, Info, Mail, MailOpen, MoreVertical, PenLine, Reply, ReplyAll, Star } from "@/components/icons";
+import { Ban, FileCode2, Forward, Info, Mail, MailOpen, MoreVertical, Note, Reply, ReplyAll, Star } from "@/components/icons";
 import { useCompose } from "@/components/compose/compose-context";
 import { MessageSourceDialog } from "@/components/messages/message-source-dialog";
 import { MessageActionMenu, MessageActionMenuItem, MessageActionMenuSeparator } from "@/components/message-actions/action-menu";
@@ -158,7 +158,7 @@ export function ThreadMessageActions({
 						aria-label={t("note.count", { count: noteCount })}
 						onClick={() => notes.setOpen(true)}
 					>
-						<PenLine className="h-4 w-4" />
+						<Note className="h-4 w-4" />
 						{noteCount}
 					</Button>
 				</Tooltip>
@@ -222,7 +222,7 @@ export function ThreadMessageActions({
 							{t("message.showOriginal")}
 						</MessageActionMenuItem>
 						{notes && (
-							<MessageActionMenuItem icon={<PenLine className="h-4 w-4" />} onSelect={() => notes.startNote(message.id)}>
+							<MessageActionMenuItem icon={<Note className="h-4 w-4" />} onSelect={() => notes.startNote(message.id)}>
 								{t("note.add")}
 							</MessageActionMenuItem>
 						)}

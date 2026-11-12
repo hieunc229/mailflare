@@ -293,7 +293,6 @@ function MessageDetailContent({ messageId }: { messageId: string }) {
       </h1>
       <ConversationNotes
         className={clsx(!isAnyPanelVisible ? "sm:pl-16" : "sm:pl-10", "px-4 pb-3 sm:pr-6")}
-        contentInset={!isAnyPanelVisible ? "sm:pl-16" : "sm:pl-10"}
       />
       {/* <div className="px-6">
         <div className="mx-auto w-full max-w-[640px]">

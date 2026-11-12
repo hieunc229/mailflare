@@ -3,7 +3,7 @@
 import { createElement, Fragment, useCallback, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import { useRouter } from "next/navigation";
-import { Archive, ArchiveRestore, Ban, BellOff, Clock, FileCode2, Forward, Mail, MailOpen, MoreVertical, PenLine, Reply, ReplyAll, ShieldAlert, ShieldCheck, Trash2 } from "@/components/icons";
+import { Archive, ArchiveRestore, Ban, BellOff, Clock, FileCode2, Forward, Mail, MailOpen, MoreVertical, Note, Reply, ReplyAll, ShieldAlert, ShieldCheck, Trash2 } from "@/components/icons";
 import { useLanguage } from "@/components/language-provider";
 import { useCompose } from "@/components/compose/compose-context";
 import { MessageSourceDialog } from "@/components/messages/message-source-dialog";
@@ -329,7 +329,7 @@ export function MessageActions({
 			label: noteCount > 0 ? t("note.count", { count: noteCount }) : t("note.add"),
 			icon: (
 				<span className="relative inline-flex">
-					<PenLine size={iconSize} />
+					<Note size={iconSize} />
 					{noteCount > 0 && (
 						<span aria-hidden="true" className="absolute -right-2 -top-2 min-w-4 rounded-full bg-blue-600 px-1 text-center text-[10px] font-semibold leading-4 text-white">
 							{noteCount}

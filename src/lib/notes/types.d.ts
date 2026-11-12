@@ -5,6 +5,10 @@ export type ConversationNote = {
 	messageId: string | null;
 	/** Display name of the author; null once that account is gone. */
 	authorName: string | null;
+	/** Id of the author's account; null once that account is gone. */
+	authorId: string | null;
+	/** The author has a profile picture, served by the notes avatar route. */
+	authorHasAvatar: boolean;
 	createdAt: string;
 	updatedAt: string;
 	/** Whether the user who listed the notes may change this note's text. */
