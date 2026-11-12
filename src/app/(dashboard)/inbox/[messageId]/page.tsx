@@ -480,7 +480,7 @@ function MessageDetailContent({ messageId }: { messageId: string }) {
               </div>
             </section>
           )}
-          <MessageInviteCard messageId={message.id} hasCalendarAttachment={!!findInviteAttachment(attachments)} />
+          <MessageInviteCard key={message.id} messageId={message.id} hasCalendarAttachment={!!findInviteAttachment(attachments)} />
           {attachments.length > 0 && (
             <section className="mt-8 border-t border-neutral-100 px-4 py-6 sm:px-0 sm:pl-16">
               <div className="mb-3 flex items-center justify-between gap-3">
