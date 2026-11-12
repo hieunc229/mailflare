@@ -408,3 +408,20 @@ test("refresh is present in the compact split-list toolbar", async (t) => {
 	t.after(cleanup);
 	assert.ok(container.querySelector('button[aria-label="list.refresh"]'), "the compact list has a refresh control");
 });
+
+test("refresh stays in the full-width header with and without a selection", async (t) => {
+	const messages = [message(1), message(2)];
+	installFetchStub({
+		list: [() => jsonResponse({ messages, total: 2, limit: 25, offset: 0 })],
+		counts: [() => jsonResponse(countsBody(2, 2))],
+	});
+	const { container, cleanup } = await renderPage();
+	t.after(cleanup);
+
+	assert.ok(container.querySelector('button[aria-label="list.refresh"]'), "an empty selection has a refresh control");
+
+	const rowCheckbox = container.querySelectorAll('input[type="checkbox"]')[1];
+	await act(async () => rowCheckbox.click());
+	assert.equal(container.querySelectorAll('input[type="checkbox"]:checked').length, 1, "the row is selected");
+	assert.ok(container.querySelector('button[aria-label="list.refresh"]'), "selecting a row keeps the refresh control visible");
+});

@@ -594,6 +594,12 @@ export function MessageFolderPage({
 							aria-label={t("list.selectAll")}
 						/>
 					</Tooltip>
+					{!compact && (
+						<MessageListRefreshButton
+							disabled={mailboxesLoading}
+							onError={() => setActionError(t("list.refreshFailed"))}
+						/>
+					)}
 					{selectedIds.length > 0 && !compact ? (
 						<BulkMessageToolbar
 							selectedCount={selectedIds.length}
@@ -614,10 +620,12 @@ export function MessageFolderPage({
 						<span className="text-xs text-neutral-500 whitespace-nowrap">
 							{t("list.range", { start: pageRange.start, end: pageRange.end, total: pageRange.total })}
 						</span>
-						<MessageListRefreshButton
-							disabled={mailboxesLoading}
-							onError={() => setActionError(t("list.refreshFailed"))}
-						/>
+						{compact && (
+							<MessageListRefreshButton
+								disabled={mailboxesLoading}
+								onError={() => setActionError(t("list.refreshFailed"))}
+							/>
+						)}
 						<Tooltip label={t("list.previousPage")}>
 							<Button
 								variant="ghost"
