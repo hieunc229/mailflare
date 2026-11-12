@@ -331,9 +331,11 @@ export function MessageNotesPopover() { return null; }
 export function NoteBadge() { return null; }
 `],
 	["@/components/messages/bulk-message-toolbar", `export function BulkMessageToolbar() { return null; }`],
+	["@/components/messages/message-list-refresh-button", `export function MessageListRefreshButton() { return null; }`],
 	["@/components/messages/message-list-row-actions", `
 import React from "react";
 export function MessageListRowActions({ message, onAction, onSnoozeChange, compact, active }) {
+  globalThis.__rowSnoozeCallbacks[message.id] = onSnoozeChange;
   return React.createElement("div", {
     "data-testid": "row-actions",
     "data-message-id": message.id,
@@ -361,6 +363,7 @@ export function SwipeableRow({ children }) { return children; }
 const relativeMocks = new Map([
 	["./bulk-message-toolbar", "@/components/messages/bulk-message-toolbar"],
 	["./message-detail-navigation-utils", "@/components/messages/message-detail-navigation-utils"],
+	["./message-list-refresh-button", "@/components/messages/message-list-refresh-button"],
 	["./message-list-row-actions", "@/components/messages/message-list-row-actions"],
 	["./message-navigation", "@/components/messages/message-navigation"],
 	["./message-notes-popover", "@/components/messages/message-notes-popover"],
@@ -434,12 +437,18 @@ function listMessage(id, overrides = {}) {
 	};
 }
 
+function setCurrentRoute(config, selectedMessageId) {
+	const path = selectedMessageId ? `${config.hrefPrefix}/${selectedMessageId}` : config.hrefPrefix;
+	window.history.replaceState({}, "", path);
+}
+
 async function renderFolderPage({ config = inboxFolderConfig, selectedMessageId, messages, desktop = true, mobile = false, grouped = false } = {}) {
 	globalThis.__isDesktop = desktop;
 	globalThis.__isMobile = mobile;
 	globalThis.__grouped = grouped;
 	globalThis.__testMessages = messages ?? [listMessage("m1"), listMessage("m2")];
 	globalThis.__pushedPaths = [];
+	globalThis.__rowSnoozeCallbacks = {};
 	globalThis.fetch = async () => new Response(JSON.stringify({ ok: true }), {
 		status: 200,
 		headers: { "Content-Type": "application/json" },
@@ -448,6 +457,7 @@ async function renderFolderPage({ config = inboxFolderConfig, selectedMessageId,
 	const container = document.createElement("div");
 	document.body.appendChild(container);
 	const reactRoot = createRoot(container);
+	setCurrentRoute(config, selectedMessageId);
 	await act(async () => {
 		reactRoot.render(createElement(MessageFolderPage, {
 			config,
@@ -457,9 +467,33 @@ async function renderFolderPage({ config = inboxFolderConfig, selectedMessageId,
 	});
 	return {
 		container,
+		async rerender(nextSelectedMessageId) {
+			setCurrentRoute(config, nextSelectedMessageId);
+			await act(async () => {
+				reactRoot.render(createElement(MessageFolderPage, {
+					config,
+					compact: true,
+					selectedMessageId: nextSelectedMessageId,
+				}));
+			});
+		},
 		async cleanup() {
 			await act(async () => reactRoot.unmount());
 			container.remove();
+		},
+	};
+}
+
+function deferredResponse() {
+	let resolve;
+	const promise = new Promise((next) => { resolve = next; });
+	return {
+		promise,
+		resolve() {
+			resolve(new Response(JSON.stringify({ ok: true }), {
+				status: 200,
+				headers: { "Content-Type": "application/json" },
+			}));
 		},
 	};
 }
@@ -513,6 +547,77 @@ test("removing the open message from the folder returns to its list", async (t) 
 		await new Promise((resolve) => setTimeout(resolve, 0));
 	});
 	assert.deepEqual(globalThis.__pushedPaths, [], "read and unread leave the reader open");
+});
+
+test("a pending removal for A does not close B after navigating away", async (t) => {
+	const page = await renderFolderPage({ selectedMessageId: "m1" });
+	t.after(page.cleanup);
+	const request = deferredResponse();
+	globalThis.fetch = () => request.promise;
+
+	await act(async () => rowActions(page.container, "m1").querySelector('[aria-label="stub-archive"]').click());
+	await page.rerender("m2");
+	request.resolve();
+	await act(async () => new Promise((resolve) => setTimeout(resolve, 0)));
+
+	assert.deepEqual(globalThis.__pushedPaths, [], "the reader that is open when the request finishes stays open");
+});
+
+test("a pending removal does not navigate after switching folders", async (t) => {
+	const page = await renderFolderPage({ selectedMessageId: "m1" });
+	t.after(page.cleanup);
+	const request = deferredResponse();
+	globalThis.fetch = () => request.promise;
+
+	await act(async () => rowActions(page.container, "m1").querySelector('[aria-label="stub-archive"]').click());
+	window.history.replaceState({}, "", "/sent/m2");
+	request.resolve();
+	await act(async () => new Promise((resolve) => setTimeout(resolve, 0)));
+
+	assert.deepEqual(globalThis.__pushedPaths, [], "an old folder's pending action cannot move the current route");
+});
+
+test("a pending removal for the current reader still returns to the list", async (t) => {
+	const page = await renderFolderPage({ selectedMessageId: "m1" });
+	t.after(page.cleanup);
+	const request = deferredResponse();
+	globalThis.fetch = () => request.promise;
+
+	await act(async () => rowActions(page.container, "m1").querySelector('[aria-label="stub-archive"]').click());
+	request.resolve();
+	await act(async () => new Promise((resolve) => setTimeout(resolve, 0)));
+
+	assert.deepEqual(globalThis.__pushedPaths, ["/inbox"]);
+});
+
+test("delayed snooze callbacks check the reader that is open when they resolve", async (t) => {
+	const inbox = await renderFolderPage({ selectedMessageId: "m1" });
+	t.after(inbox.cleanup);
+	const staleInboxSnooze = globalThis.__rowSnoozeCallbacks.m1;
+	await inbox.rerender("m2");
+	await act(async () => staleInboxSnooze("m1", true));
+	assert.deepEqual(globalThis.__pushedPaths, [], "a snooze for the previous reader leaves the current reader open");
+
+	await inbox.rerender("m1");
+	const currentInboxSnooze = globalThis.__rowSnoozeCallbacks.m1;
+	await act(async () => currentInboxSnooze("m1", true));
+	assert.deepEqual(globalThis.__pushedPaths, ["/inbox"], "a snooze for the current reader still closes it");
+
+	const snoozed = await renderFolderPage({
+		config: snoozedFolderConfig,
+		selectedMessageId: "m1",
+		messages: [listMessage("m1", { snoozedUntil: "2099-01-01T00:00:00.000Z" })],
+	});
+	t.after(snoozed.cleanup);
+	const staleUnsnooze = globalThis.__rowSnoozeCallbacks.m1;
+	await snoozed.rerender("m2");
+	await act(async () => staleUnsnooze("m1", false));
+	assert.deepEqual(globalThis.__pushedPaths, [], "an unsnooze for the previous reader leaves the current reader open");
+
+	await snoozed.rerender("m1");
+	const currentUnsnooze = globalThis.__rowSnoozeCallbacks.m1;
+	await act(async () => currentUnsnooze("m1", false));
+	assert.deepEqual(globalThis.__pushedPaths, ["/snoozed"], "an unsnooze for the current reader still closes it");
 });
 
 test("archiving a conversation row closes the reader when the open message is in its thread", async (t) => {

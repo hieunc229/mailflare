@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { confirmDestructive, alertDialog } from "@/components/ui/confirm-dialog";
 import { useRouter } from "next/navigation";
-import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { MouseEvent } from "react";
 import { Archive, ChevronLeft, ChevronRight, ListFilter, Mail, MailOpen, Trash2 } from "@/components/icons";
 import { useLanguage } from "@/components/language-provider";
@@ -60,6 +60,14 @@ const pageSize = 25;
 
 function getRowMessageIds(message: Message): string[] {
 	return message.threadMessageIds ?? [message.id];
+}
+
+/** Whether the browser is still showing this message in this folder's reader. */
+function isCurrentMessageRoute(hrefPrefix: string, messageId: string): boolean {
+	if (typeof window === "undefined") return false;
+	const pathname = window.location.pathname.replace(/\/+$/, "");
+	const prefix = hrefPrefix.replace(/\/+$/, "");
+	return pathname === `${prefix}/${encodeURIComponent(messageId)}`;
 }
 
 let todayCacheZone = "";
@@ -379,7 +387,14 @@ export function MessageFolderPage({
 	const isMobile = useIsMobile();
 	const isDesktop = useIsDesktop();
 	const compactRowActions = compact && isDesktop;
+	// Row actions can resolve after the reader has moved. Compare against the
+	// message that is open now, not the one that was open when the request began.
+	const selectedMessageIdRef = useRef(selectedMessageId);
 	const listState = useMessageListState();
+
+	useLayoutEffect(() => {
+		selectedMessageIdRef.current = selectedMessageId;
+	}, [selectedMessageId]);
 	const usesSharedListState = listState !== null;
 	const [internalOffset, setInternalOffset] = useState(0);
 	const [internalSelectedMessages, setInternalSelectedMessages] = useState<
@@ -507,21 +522,24 @@ export function MessageFolderPage({
 		setActionError(null);
 		const affectedIds = expandSelectedIds([messageId]);
 		return runBulkMessageAction(affectedIds, action, action !== "read" && action !== "unread").then(() => {
-			if (!selectedMessageId || (action !== "archive" && action !== "trash")) return;
-			if (affectedIds.includes(selectedMessageId)) router.push(config.hrefPrefix);
+			const currentSelectedMessageId = selectedMessageIdRef.current;
+			if (!currentSelectedMessageId || (action !== "archive" && action !== "trash")) return;
+			if (!affectedIds.includes(currentSelectedMessageId)) return;
+			if (isCurrentMessageRoute(config.hrefPrefix, currentSelectedMessageId)) router.push(config.hrefPrefix);
 		}).catch((error) => {
 			setActionError(error instanceof PartialDeleteError ? t("actions.error.deleteSkipped") : t("actions.error.update"));
 			throw error;
 		});
-	}, [config.hrefPrefix, expandSelectedIds, router, selectedMessageId, t]);
+	}, [config.hrefPrefix, expandSelectedIds, router, t]);
 
 	const handleSnoozeChange = useCallback((messageId: string, snoozed: boolean) => {
-		if (!selectedMessageId || messageId !== selectedMessageId) return;
+		const currentSelectedMessageId = selectedMessageIdRef.current;
+		if (!currentSelectedMessageId || messageId !== currentSelectedMessageId) return;
 		const removesOpenMessage = snoozed
 			? config.folder === "inbox" && !config.folderId
 			: config.folder === "snoozed";
-		if (removesOpenMessage) router.push(config.hrefPrefix);
-	}, [config.folder, config.folderId, config.hrefPrefix, router, selectedMessageId]);
+		if (removesOpenMessage && isCurrentMessageRoute(config.hrefPrefix, currentSelectedMessageId)) router.push(config.hrefPrefix);
+	}, [config.folder, config.folderId, config.hrefPrefix, router]);
 
 	function toggleAllVisible(selected: boolean) {
 		const visibleIds = new Set(messages.map((message) => message.id));
