@@ -2,7 +2,7 @@ import { and, asc, eq, inArray, isNull, ne, notInArray, or } from "drizzle-orm";
 import { getDb } from "@/db";
 import { messageAttachments, messages } from "@/db/schema";
 import { getContactCardMap } from "@/lib/contacts/service";
-import { getSenderDisplayName } from "@/lib/contacts/utils";
+import { getPartyDisplayName } from "@/lib/contacts/utils";
 import { getFirstEmailAddressEntry, normalizeEmailAddress } from "@/lib/email/address";
 import { getMailboxAccessLevel } from "@/lib/mailboxes/access";
 import type { SessionUser } from "@/lib/auth/types";
@@ -82,13 +82,14 @@ export async function getMessageThreadForUser(env: CloudflareEnv, user: SessionU
 		threadId: message.threadId,
 		messages: rows.map((row) => {
 			const contact = contactMap.get(normalizeEmailAddress(row.fromAddr));
+			const firstTo = getFirstEmailAddressEntry(row.toAddr);
 			return {
 				...withoutRawKey(row),
 				// The reader already fetched the open message; its thread copy does not need the body again.
 				...(row.id === messageId ? { textBody: null, htmlBody: null } : {}),
-				fromContactName: getSenderDisplayName(row.fromAddr, contact),
+				fromContactName: getPartyDisplayName(row.fromAddr, contact),
 				fromContactHasAvatar: contact?.hasAvatar ?? false,
-				toContactName: contactMap.get(normalizeEmailAddress(getFirstEmailAddressEntry(row.toAddr)))?.displayName ?? null,
+				toContactName: getPartyDisplayName(firstTo, contactMap.get(normalizeEmailAddress(firstTo))),
 				attachments: attachmentsByMessage.get(row.id) ?? [],
 			};
 		}),

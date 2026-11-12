@@ -21,6 +21,7 @@ export type Message = {
 	/** Resolved sender label: a manually named contact, otherwise this message's From name. */
 	fromContactName?: string | null;
 	fromContactHasAvatar?: boolean;
+	/** Resolved recipient label: a manually named contact, otherwise this message's To name. */
 	toContactName?: string | null;
 	subject: string | null;
 	snippet: string | null;
