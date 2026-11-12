@@ -11,6 +11,7 @@ import { removeMailboxDomainRouting } from "@/lib/mailboxes/domain-addresses";
 import { avatarKeyFor } from "@/app/api/profile/avatar/utils";
 import { getAccountPurgeCutoff } from "./deletion-utils";
 import type { DeleteAccountsInput, DeleteAccountsResult } from "./deletion-types";
+import { deleteUnreferencedObjects } from "@/lib/drive/shared-objects";
 
 const CHUNK = 50;
 
@@ -105,9 +106,11 @@ async function purgeAccount(env: CloudflareEnv, account: typeof users.$inferSele
 	if (rootItems.length) await deleteDriveItems(env, rootItems);
 	for (const mailbox of owned) {
 		const raw = await db.select({ key: messages.rawR2Key }).from(messages).where(and(eq(messages.mailboxId, mailbox.id), isNotNull(messages.rawR2Key)));
-		const attachments = await db.select({ key: messageAttachments.r2Key }).from(messageAttachments).innerJoin(messages, eq(messages.id, messageAttachments.messageId)).where(eq(messages.mailboxId, mailbox.id));
-		const keys = [...raw.map((row) => row.key), ...attachments.map((row) => row.key)].filter((key): key is string => !!key);
-		for (const group of chunks(keys, 500)) await env.BUCKET.delete(group);
+		const attachments = await db.select({ id: messageAttachments.id, key: messageAttachments.r2Key }).from(messageAttachments).innerJoin(messages, eq(messages.id, messageAttachments.messageId)).where(eq(messages.mailboxId, mailbox.id));
+		const rawKeys = raw.map((row) => row.key).filter((key): key is string => !!key);
+		for (const group of chunks(rawKeys, 500)) await env.BUCKET.delete(group);
+		// Another user's Drive item may share an attachment object.
+		await deleteUnreferencedObjects(env, db, attachments.map((row) => row.key), { attachmentIds: attachments.map((row) => row.id) });
 	}
 	await env.BUCKET.delete(account.avatarKey ?? avatarKeyFor(account.id));
 	await db.delete(users).where(eq(users.id, account.id));

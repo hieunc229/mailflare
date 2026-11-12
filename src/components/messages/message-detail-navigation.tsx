@@ -35,6 +35,7 @@ export function MessageDetailNavigationProvider({ children, config, currentMessa
 
 	useEffect(() => {
 		const messageId = takeOpenedUnreadMessage();
+		// eslint-disable-next-line react-hooks/set-state-in-effect -- consumes a one-shot sessionStorage handoff, a side effect that cannot run during render.
 		if (messageId) recordUnread(messageId);
 	}, [recordUnread]);
 

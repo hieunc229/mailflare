@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import Link from "next/link";
 import { ArrowRight, ExternalLink, ImagePlus, LockKeyhole, Palette } from "@/components/icons";
 import { useLanguage } from "@/components/language-provider";
@@ -20,10 +20,13 @@ export default function BrandingPage() {
 	const [status, setStatus] = useState<string | null>(null);
 	const [saving, setSaving] = useState(false);
 	const inputRef = useRef<HTMLInputElement>(null);
+	const [syncedAppName, setSyncedAppName] = useState(branding.appName);
 
-	useEffect(() => {
+	// Reset the field whenever the saved name changes.
+	if (syncedAppName !== branding.appName) {
+		setSyncedAppName(branding.appName);
 		setAppName(branding.appName);
-	}, [branding.appName]);
+	}
 
 	if (!branding.canCustomizeBranding) {
 		return (

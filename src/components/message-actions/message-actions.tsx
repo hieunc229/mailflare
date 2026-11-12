@@ -3,11 +3,12 @@
 import { createElement, Fragment, useCallback, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import { useRouter } from "next/navigation";
-import { Archive, ArchiveRestore, Ban, BellOff, Clock, FileCode2, Forward, Mail, MailOpen, MoreVertical, Reply, ReplyAll, ShieldAlert, ShieldCheck, Trash2 } from "@/components/icons";
+import { Archive, ArchiveRestore, Ban, BellOff, Clock, FileCode2, Forward, Mail, MailOpen, MoreVertical, Note, Reply, ReplyAll, ShieldAlert, ShieldCheck, Trash2 } from "@/components/icons";
 import { useLanguage } from "@/components/language-provider";
 import { useCompose } from "@/components/compose/compose-context";
 import { MessageSourceDialog } from "@/components/messages/message-source-dialog";
 import { useMessageListVisibility } from "@/components/messages/message-list-visibility";
+import { useConversationNotes } from "@/components/messages/conversation-notes-context";
 import { MessageSnoozeDialog } from "./message-snooze-dialog";
 import { requestUnsubscribe } from "@/components/messages/unsubscribe-button-utils";
 import { MessageActionMenu, MessageActionMenuItem, MessageActionMenuLabel, MessageActionMenuSeparator } from "./action-menu";
@@ -56,6 +57,7 @@ export function MessageActions({
 	const { openDraftComposer, showNotice } = useCompose();
 	const { backHref: listHref } = useMessageListVisibility();
 	const { shortcutsEnabled } = useShortcuts();
+	const notes = useConversationNotes();
 	const [pendingAction, setPendingAction] = useState<
 		BulkMessageAction | "unsubscribe" | ReplyMode | "forward" | "block" | null
 	>(null);
@@ -111,6 +113,7 @@ export function MessageActions({
 	}, [message, direction, senderAddress]);
 	const canReplyAll = hasAdditionalRecipients(replyable, ownAddresses);
 
+	const sentAt = messageMeta?.createdAt;
 	const handleReply = useCallback(async (mode: ReplyMode) => {
 		setPendingAction(mode);
 		setError(null);
@@ -122,7 +125,7 @@ export function MessageActions({
 				subject,
 				bodyText,
 				bodyHtml,
-				sentAt: messageMeta?.createdAt,
+				sentAt,
 				recipients: getReplyRecipients(replyable, ownAddresses, mode),
 				threading: getReplyThreading(replyable),
 			});
@@ -132,7 +135,7 @@ export function MessageActions({
 		} finally {
 			setPendingAction(null);
 		}
-	}, [mailboxId, senderAddress, ownAddress, subject, bodyText, bodyHtml, messageMeta?.createdAt, replyable, ownAddresses, openDraftComposer, t]);
+	}, [mailboxId, senderAddress, ownAddress, subject, bodyText, bodyHtml, sentAt, replyable, ownAddresses, openDraftComposer, t]);
 
 	const shortcuts = useMemo(
 		() => [
@@ -320,6 +323,25 @@ export function MessageActions({
 		onSelect: () => void runAction(markAction),
 		group: "primary",
 	});
+	if (notes) {
+		const noteCount = notes.notes.length;
+		inlineActions.push({
+			id: "notes",
+			label: noteCount > 0 ? t("note.count", { count: noteCount }) : t("note.add"),
+			icon: (
+				<span className="relative inline-flex">
+					<Note size={iconSize} />
+					{noteCount > 0 && (
+						<span aria-hidden="true" className="absolute -right-2 -top-2 min-w-4 rounded-full bg-blue-600 px-1 text-center text-[10px] font-semibold leading-4 text-white">
+							{noteCount}
+						</span>
+					)}
+				</span>
+			),
+			onSelect: () => (notes.open ? notes.setOpen(false) : notes.startNote()),
+			group: "secondary",
+		});
+	}
 	inlineActions.push({
 		id: "reply",
 		label: t("message.reply"),

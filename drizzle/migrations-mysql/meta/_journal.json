@@ -57,6 +57,20 @@
       "when": 1793280378891,
       "tag": "0007_message_has_unsubscribe",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "5",
+      "when": 1793280379891,
+      "tag": "0008_conversation_notes",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "5",
+      "when": 1793280380891,
+      "tag": "0009_calendar_invitations",
+      "breakpoints": true
     }
   ]
 }

@@ -58,14 +58,18 @@ rmSync(bundleDirectory, { recursive: true, force: true });
 
 const manualDomain = { hostname: "example.com", zoneId: "manual" };
 
+const RR_TYPES = { A: 1, CNAME: 5, MX: 15, TXT: 16, AAAA: 28 };
+
 function answerDns(answers) {
 	const asked = [];
 	globalThis.fetch = async (url) => {
 		const parsed = new URL(url);
 		const name = parsed.searchParams.get("name");
 		asked.push(name);
-		const data = answers[`${name}|${parsed.searchParams.get("type")}`];
-		return Response.json(data === undefined ? { Status: 3 } : { Status: 0, Answer: data.map((value) => ({ name, type: 0, TTL: 60, data: value })) });
+		const type = parsed.searchParams.get("type");
+		const data = answers[`${name}|${type}`];
+		// Real DoH answers carry the numeric RR type; queryDns keeps only the type it asked for.
+		return Response.json(data === undefined ? { Status: 3 } : { Status: 0, Answer: data.map((value) => ({ name, type: RR_TYPES[type], TTL: 60, data: value })) });
 	};
 	return asked;
 }

@@ -41,7 +41,8 @@ export async function getUserFromSession(
 ): Promise<typeof users.$inferSelect | null> {
 	const session = await getSessionFromToken(env, token);
 	if (!session) return null;
-	const db = getDb(env);
+	// Same reason as below: `disabled` must be seen as soon as another admin writes it.
+	const db = getDb({ DB: env.DB_PRIMARY ?? env.DB });
 	const [user] = await db.select().from(users).where(eq(users.id, session.userId)).limit(1);
 	return user ?? null;
 }
@@ -51,7 +52,9 @@ export async function getSessionFromToken(
 	token: string | undefined,
 ): Promise<typeof sessions.$inferSelect | null> {
 	if (!token) return null;
-	const db = getDb(env);
+	// Authentication always reads the primary: a read-replica session could still honor a
+	// session another device just revoked — no bookmark covers other clients' writes.
+	const db = getDb({ DB: env.DB_PRIMARY ?? env.DB });
 	const tokenHash = await hashSessionToken(token);
 	const [session] = await db
 		.select()

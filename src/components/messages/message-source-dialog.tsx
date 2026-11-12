@@ -16,15 +16,23 @@ export function MessageSourceDialog({ messageId, open, onOpenChange }: MessageSo
 	const [copied, setCopied] = useState(false);
 	const [copyError, setCopyError] = useState(false);
 	const summary = useMemo(() => source === null ? null : summarizeMessageSource(source), [source]);
+	// Start each load from a clean slate whenever the dialog opens or the message changes while open.
+	const loadKey = open ? messageId : null;
+	const [prevLoadKey, setPrevLoadKey] = useState<string | null>(null);
+	if (loadKey !== prevLoadKey) {
+		setPrevLoadKey(loadKey);
+		if (loadKey !== null) {
+			setSource(null);
+			setError(null);
+			setCopied(false);
+			setCopyError(false);
+			setLoading(true);
+		}
+	}
 
 	useEffect(() => {
 		if (!open) return;
 		const controller = new AbortController();
-		setSource(null);
-		setError(null);
-		setCopied(false);
-		setCopyError(false);
-		setLoading(true);
 		fetchMessageSource(messageId, controller.signal)
 			.then((value) => {
 				if (!controller.signal.aborted) setSource(value);

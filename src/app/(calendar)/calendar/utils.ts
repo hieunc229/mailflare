@@ -52,6 +52,13 @@ function recurringStart(first: Date, repeat: CalendarRepeat, index: number, time
   return dateFromZonedFields(fields, timeZone);
 }
 
+/** Pending invitations read as outlined, not filled, so they are not mistaken for confirmed events. */
+export const PENDING_EVENT_CLASSES = "border-2 border-dashed border-blue-600 bg-white text-blue-700";
+
+export function isPendingInvite(event: { responseStatus?: string | null; inviteMessageId?: string | null }): boolean {
+  return event.responseStatus === "needs-action" && !!event.inviteMessageId;
+}
+
 export function calendarTimeZone(_event?: CalendarEvent | null): string {
   return getUserTimeZone();
 }

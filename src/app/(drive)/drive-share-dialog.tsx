@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import toast from "react-hot-toast";
 import { Copy, Link2, X } from "@/components/icons";
 import { useLanguage } from "@/components/language-provider";
@@ -21,19 +21,22 @@ export function DriveShareDialog({ item, onClose, onChanged }: { item: DriveItem
 	const [busy, setBusy] = useState(false);
 	const id = item?.id;
 
-	const load = useCallback(async () => {
-		if (!id) return;
-		const response = await authFetch(`/api/drive/items/${id}/shares`);
-		if (!response.ok) return toast.error(t("drive.shareFailed"));
-		const data = await response.json() as { shares: DriveShareDto[]; linkToken: string | null };
-		setShares(data.shares);
-		setLinkToken(data.linkToken);
-	}, [id, t]);
+	// Clear the previous item's sharing state as soon as a different item (or language) is shown.
+	const [loadedFor, setLoadedFor] = useState({ id, t });
+	if (loadedFor.id !== id || loadedFor.t !== t) {
+		setLoadedFor({ id, t });
+		setShares([]); setLinkToken(null); setEmail("");
+	}
 
 	useEffect(() => {
-		setShares([]); setLinkToken(null); setEmail("");
-		void load();
-	}, [load]);
+		if (!id) return;
+		void authFetch(`/api/drive/items/${id}/shares`).then(async (response) => {
+			if (!response.ok) return toast.error(t("drive.shareFailed"));
+			const data = await response.json() as { shares: DriveShareDto[]; linkToken: string | null };
+			setShares(data.shares);
+			setLinkToken(data.linkToken);
+		});
+	}, [id, t]);
 
 	async function request(input: string, init: RequestInit) {
 		setBusy(true);

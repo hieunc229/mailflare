@@ -294,9 +294,9 @@ for (const kind of ["dashboard", "api"]) {
 			INSERT INTO users (id, email, password_hash, name, role, can_manage_mailboxes, can_manage_domains, can_manage_users, created_by_user_id, created_at)
 			VALUES ('manager', 'manager@one.test', 'hash', 'Manager', 'admin', 1, 1, 1, 'admin', 1)
 		`);
-		const managerKey = generateApiKey();
-		f.database.db.prepare("INSERT INTO api_keys (id, user_id, name, prefix, key_hash, scopes, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)")
-			.run("manager-key", "manager", "Manager", managerKey.prefix, managerKey.hash, '["accounts"]', 1);
+		const managerKey = await generateApiKey();
+		f.database.db.prepare("INSERT INTO api_keys (id, user_id, name, prefix, key_hash, key_sha256, scopes, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)")
+			.run("manager-key", "manager", "Manager", managerKey.prefix, managerKey.hash, managerKey.sha256, '["accounts"]', 1);
 		const managerSession = await createSession(f.env, "manager");
 		const token = kind === "dashboard" ? managerSession : managerKey.fullKey;
 		const created = await f.post(kind, { useAllDomains: false }, token);

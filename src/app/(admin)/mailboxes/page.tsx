@@ -4,7 +4,7 @@ import { mobilePrimaryActionClass } from "@/components/page-header-utils";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { Plus } from "@/components/icons";
 import { useLanguage } from "@/components/language-provider";
 import { Button } from "@/components/ui/button";
@@ -55,11 +55,17 @@ export default function MailboxesPage() {
 		},
 	});
 
-	useEffect(() => {
-		if (!createOpen) return;
-		setDisplayName((currentName) => currentName || account.data?.user?.name?.trim() || "");
-		setOwnerUserId((currentId) => currentId || account.data?.user?.id || "");
-	}, [account.data?.user?.id, account.data?.user?.name, createOpen]);
+	// Prefill empty create fields with the signed-in account when the dialog opens or the account loads.
+	const accountUserId = account.data?.user?.id;
+	const accountUserName = account.data?.user?.name;
+	const [prefilledFor, setPrefilledFor] = useState({ accountUserId, accountUserName, createOpen });
+	if (prefilledFor.accountUserId !== accountUserId || prefilledFor.accountUserName !== accountUserName || prefilledFor.createOpen !== createOpen) {
+		setPrefilledFor({ accountUserId, accountUserName, createOpen });
+		if (createOpen) {
+			setDisplayName(displayName || accountUserName?.trim() || "");
+			setOwnerUserId(ownerUserId || accountUserId || "");
+		}
+	}
 
 	const accounts = useQuery({
 		queryKey: ["accounts", "mailbox-owners"],

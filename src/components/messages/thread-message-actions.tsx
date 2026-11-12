@@ -1,7 +1,7 @@
 "use client";
 
-import { createElement, useEffect, useState } from "react";
-import { Ban, FileCode2, Forward, Info, Mail, MailOpen, MoreVertical, Reply, ReplyAll, Star } from "@/components/icons";
+import { createElement, useState } from "react";
+import { Ban, FileCode2, Forward, Info, Mail, MailOpen, MoreVertical, Note, Reply, ReplyAll, Star } from "@/components/icons";
 import { useCompose } from "@/components/compose/compose-context";
 import { MessageSourceDialog } from "@/components/messages/message-source-dialog";
 import { MessageActionMenu, MessageActionMenuItem, MessageActionMenuSeparator } from "@/components/message-actions/action-menu";
@@ -21,6 +21,7 @@ import {
 	runSingleMessageAction,
 } from "@/components/message-actions/utils";
 import { toggleMessageStar } from "./message-list-row-actions-utils";
+import { useConversationNotes } from "./conversation-notes-context";
 import type { ThreadMessageActionsProps } from "./thread-message-actions-types";
 import type { ReplyMode } from "@/components/message-actions/types";
 
@@ -35,6 +36,8 @@ export function ThreadMessageActions({
 }: ThreadMessageActionsProps) {
 	const { t } = useLanguage();
 	const { openDraftComposer } = useCompose();
+	const notes = useConversationNotes();
+	const noteCount = notes?.notes.filter((note) => note.messageId === message.id).length ?? 0;
 	const [starred, setStarred] = useState(message.starred);
 	const [sourceOpen, setSourceOpen] = useState(false);
 	const [pending, setPending] = useState(false);
@@ -45,7 +48,11 @@ export function ThreadMessageActions({
 		? getOwnAddressForMessage(message, ownAddresses)
 		: ownAddress;
 
-	useEffect(() => setStarred(message.starred), [message.starred]);
+	const [prevStarred, setPrevStarred] = useState(message.starred);
+	if (message.starred !== prevStarred) {
+		setPrevStarred(message.starred);
+		setStarred(message.starred);
+	}
 
 	async function onToggleStar() {
 		setPending(true);
@@ -145,6 +152,21 @@ export function ThreadMessageActions({
 					</Button>
 				</Tooltip>
 			)}
+			{notes && noteCount > 0 && (
+				<Tooltip label={t("note.count", { count: noteCount })}>
+					<Button
+						type="button"
+						variant="ghost"
+						size="sm"
+						className="h-8 gap-1 px-2 text-xs text-neutral-600"
+						aria-label={t("note.count", { count: noteCount })}
+						onClick={() => notes.setOpen(true)}
+					>
+						<Note className="h-4 w-4" />
+						{noteCount}
+					</Button>
+				</Tooltip>
+			)}
 			<Tooltip label={starred ? t("message.removeStar") : t("message.star")}>
 				<Button
 					type="button"
@@ -203,6 +225,11 @@ export function ThreadMessageActions({
 						<MessageActionMenuItem icon={<FileCode2 className="h-4 w-4" />} onSelect={() => setSourceOpen(true)}>
 							{t("message.showOriginal")}
 						</MessageActionMenuItem>
+						{notes && (
+							<MessageActionMenuItem icon={<Note className="h-4 w-4" />} onSelect={() => notes.startNote(message.id)}>
+								{t("note.add")}
+							</MessageActionMenuItem>
+						)}
 						<MessageActionMenuSeparator />
 						<MessageActionMenuItem
 							icon={message.read ? <Mail className="h-4 w-4" /> : <MailOpen className="h-4 w-4" />}

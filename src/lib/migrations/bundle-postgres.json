@@ -326,6 +326,28 @@
       "statements": [
         "ALTER TABLE \"messages\" ADD COLUMN \"has_unsubscribe\" boolean DEFAULT false NOT NULL;"
       ]
+    },
+    {
+      "name": "0008_conversation_notes.sql",
+      "statements": [
+        "CREATE TABLE \"conversation_notes\" (\n\t\"id\" text PRIMARY KEY NOT NULL,\n\t\"mailbox_id\" text NOT NULL,\n\t\"thread_key\" text NOT NULL,\n\t\"message_id\" text,\n\t\"html\" text NOT NULL,\n\t\"author_user_id\" text,\n\t\"created_at\" bigint NOT NULL,\n\t\"updated_at\" bigint NOT NULL\n);",
+        "ALTER TABLE \"conversation_notes\" ADD CONSTRAINT \"conversation_notes_mailbox_id_mailboxes_id_fk\" FOREIGN KEY (\"mailbox_id\") REFERENCES \"public\".\"mailboxes\"(\"id\") ON DELETE cascade ON UPDATE no action;",
+        "ALTER TABLE \"conversation_notes\" ADD CONSTRAINT \"conversation_notes_message_id_messages_id_fk\" FOREIGN KEY (\"message_id\") REFERENCES \"public\".\"messages\"(\"id\") ON DELETE set null ON UPDATE no action;",
+        "ALTER TABLE \"conversation_notes\" ADD CONSTRAINT \"conversation_notes_author_user_id_users_id_fk\" FOREIGN KEY (\"author_user_id\") REFERENCES \"public\".\"users\"(\"id\") ON DELETE set null ON UPDATE no action;",
+        "CREATE INDEX \"conversation_notes_mailbox_thread_idx\" ON \"conversation_notes\" USING btree (\"mailbox_id\",\"thread_key\",\"created_at\");",
+        "CREATE INDEX \"conversation_notes_message_idx\" ON \"conversation_notes\" USING btree (\"message_id\");",
+        "CREATE INDEX \"conversation_notes_author_idx\" ON \"conversation_notes\" USING btree (\"author_user_id\");"
+      ]
+    },
+    {
+      "name": "0009_calendar_invitations.sql",
+      "statements": [
+        "ALTER TABLE \"calendar_events\" ADD COLUMN \"response_status\" text;",
+        "ALTER TABLE \"calendar_events\" ADD COLUMN \"invite_message_id\" text;",
+        "ALTER TABLE \"calendar_events\" ADD COLUMN \"attendee_responses\" text;",
+        "ALTER TABLE \"calendar_events\" ADD COLUMN \"invite_sender\" text;",
+        "ALTER TABLE \"calendar_events\" ADD COLUMN \"invite_sequence\" bigint;"
+      ]
     }
   ]
 }
