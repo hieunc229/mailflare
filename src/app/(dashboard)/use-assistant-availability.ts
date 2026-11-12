@@ -10,6 +10,7 @@ let lastCheckedAt = 0;
 
 export function useAssistantAvailability() {
 	const [enabled, setEnabled] = useState<boolean | null>(null);
+	// eslint-disable-next-line react-hooks/set-state-in-effect -- localStorage is client-only; reading it in a lazy initialiser would mismatch the server-rendered markup.
 	useLayoutEffect(() => setEnabled(readInitialAssistantAvailability()), []);
 
 	useEffect(() => {

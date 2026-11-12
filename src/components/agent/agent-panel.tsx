@@ -114,6 +114,7 @@ export function AgentPanel({ open, fullSize, onClose, onToggleFullSize }: AgentP
 		runningRef.current = false;
 		queueGenerationRef.current += 1;
 		queuedMessagesRef.current = [];
+		// eslint-disable-next-line react-hooks/set-state-in-effect -- clears chat state in step with aborting the running stream and loading the new session
 		setQueuedMessages([]);
 		setBusy(false);
 		if (!open || !mailboxId) return;
@@ -241,6 +242,7 @@ export function AgentPanel({ open, fullSize, onClose, onToggleFullSize }: AgentP
 		const generation = queueGenerationRef.current;
 		const userMessageId = crypto.randomUUID();
 		const assistantMessageId = crypto.randomUUID();
+		// eslint-disable-next-line react-hooks/purity -- send() only runs from event handlers; the compiler flags it through the onClick closures built in render-time .map() calls
 		const startedAt = Date.now();
 		let accepted = false;
 		let streamErrored = false;

@@ -94,9 +94,14 @@ function MessageListRowComponent({
 	const [read, setRead] = useState(message.read);
 	const [threadUnread, setThreadUnread] = useState(message.threadUnread);
 	const [starred, setStarred] = useState(message.starred);
-	useEffect(() => setRead(message.read), [message.read]);
-	useEffect(() => setThreadUnread(message.threadUnread), [message.threadUnread]);
-	useEffect(() => setStarred(message.starred), [message.starred]);
+	// Follow server updates to each flag independently, keeping local optimistic values otherwise.
+	const [prevFlags, setPrevFlags] = useState({ read: message.read, threadUnread: message.threadUnread, starred: message.starred });
+	if (message.read !== prevFlags.read || message.threadUnread !== prevFlags.threadUnread || message.starred !== prevFlags.starred) {
+		setPrevFlags({ read: message.read, threadUnread: message.threadUnread, starred: message.starred });
+		if (message.read !== prevFlags.read) setRead(message.read);
+		if (message.threadUnread !== prevFlags.threadUnread) setThreadUnread(message.threadUnread);
+		if (message.starred !== prevFlags.starred) setStarred(message.starred);
+	}
 	const rowMessage = useMemo(
 		() => ({ ...message, read, starred, threadUnread }),
 		[message, read, starred, threadUnread],

@@ -164,7 +164,11 @@ export function ConversationMessageCard({
 	const isAssistantOpen = useAssistantOpen();
 	const isAnyPanelVisible = messageListVisible || isAssistantOpen;
 
-	useEffect(() => setLocallyRead(message.read), [message.read]);
+	const [prevRead, setPrevRead] = useState(message.read);
+	if (message.read !== prevRead) {
+		setPrevRead(message.read);
+		setLocallyRead(message.read);
+	}
 
 	// A note chip can point at this email while the card is collapsed.
 	useEffect(() => {

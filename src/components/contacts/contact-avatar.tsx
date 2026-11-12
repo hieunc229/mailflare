@@ -21,16 +21,28 @@ export function ContactAvatar({
 	className,
 }: ContactAvatarProps) {
 	const [managedAvatar, setManagedAvatar] = useState(hasManagedAvatar);
-	const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
 	const [imageFailed, setImageFailed] = useState(false);
 	const [avatarVersion, setAvatarVersion] = useState(0);
 
-	useEffect(() => {
+	// A different contact starts over from its props.
+	const [prevContact, setPrevContact] = useState({ address, hasManagedAvatar, mailboxId, managedAvatarUrl });
+	if (address !== prevContact.address || hasManagedAvatar !== prevContact.hasManagedAvatar || mailboxId !== prevContact.mailboxId || managedAvatarUrl !== prevContact.managedAvatarUrl) {
+		setPrevContact({ address, hasManagedAvatar, mailboxId, managedAvatarUrl });
 		setManagedAvatar(hasManagedAvatar);
-		setAvatarUrl(null);
 		setImageFailed(false);
 		setAvatarVersion(0);
-	}, [address, hasManagedAvatar, mailboxId, managedAvatarUrl]);
+	}
+	// A new image source gets a fresh chance to load.
+	const [prevSource, setPrevSource] = useState({ managedAvatar, avatarVersion });
+	if (managedAvatar !== prevSource.managedAvatar || avatarVersion !== prevSource.avatarVersion) {
+		setPrevSource({ managedAvatar, avatarVersion });
+		setImageFailed(false);
+	}
+	const avatarUrl = managedAvatarUrl
+		? managedAvatarUrl
+		: managedAvatar && mailboxId
+			? getManagedContactAvatarUrl(mailboxId, address, avatarVersion)
+			: null;
 
 	useEffect(() => {
 		function onAvatarChanged(event: Event) {
@@ -44,19 +56,6 @@ export function ContactAvatar({
 		window.addEventListener(CONTACT_AVATAR_CHANGED_EVENT, onAvatarChanged);
 		return () => window.removeEventListener(CONTACT_AVATAR_CHANGED_EVENT, onAvatarChanged);
 	}, [address]);
-
-	useEffect(() => {
-		setImageFailed(false);
-		if (managedAvatarUrl) {
-			setAvatarUrl(managedAvatarUrl);
-			return;
-		}
-		if (managedAvatar && mailboxId) {
-			setAvatarUrl(getManagedContactAvatarUrl(mailboxId, address, avatarVersion));
-			return;
-		}
-		setAvatarUrl(null);
-	}, [address, avatarVersion, mailboxId, managedAvatar, managedAvatarUrl]);
 
 	return (
 		<span

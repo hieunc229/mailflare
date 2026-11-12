@@ -44,7 +44,9 @@ export function UpcomingSidebar({ events, onSelect, drawer = false, refreshKey }
 		return () => { active = false; };
 	}, [events, today, refreshKey]);
 
-	useEffect(() => { setVisibleCount(UPCOMING_BATCH_SIZE); }, [shownEvents]);
+	// A new set of events starts again from the first batch.
+	const [countedEvents, setCountedEvents] = useState(shownEvents);
+	if (countedEvents !== shownEvents) { setCountedEvents(shownEvents); setVisibleCount(UPCOMING_BATCH_SIZE); }
 
 	useEffect(() => {
 		if (minimal || visibleCount >= total || !scrollRef.current || !sentinelRef.current) return;

@@ -23,12 +23,10 @@ const emptyCounts: MessageCounts = {
 export function useMessageCounts(mailboxId?: string | null, enabled = true) {
 	const [counts, setCounts] = useState<MessageCounts>(emptyCounts);
 	const [isLoading, setIsLoading] = useState(enabled);
+	if (!enabled && isLoading) setIsLoading(false);
 
 	useEffect(() => {
-		if (!enabled) {
-			setIsLoading(false);
-			return;
-		}
+		if (!enabled) return;
 
 		let cancelled = false;
 		let refreshTimer: number | null = null;

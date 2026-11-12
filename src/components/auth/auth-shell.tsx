@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useBranding } from "@/components/branding-provider";
 import { LanguageSelector } from "@/components/language-selector";
 import type { AuthShellProps } from "./types";
@@ -16,11 +16,14 @@ export function AuthShell({
   const branding = useBranding();
   const [iconUrl, setIconUrl] = useState(branding.iconUrl);
   const [iconFailed, setIconFailed] = useState(false);
+  const [brandingIconUrl, setBrandingIconUrl] = useState(branding.iconUrl);
 
-  useEffect(() => {
+  // Start over with the new icon whenever the branding icon changes.
+  if (brandingIconUrl !== branding.iconUrl) {
+    setBrandingIconUrl(branding.iconUrl);
     setIconUrl(branding.iconUrl);
     setIconFailed(false);
-  }, [branding.iconUrl]);
+  }
 
   return (
     <div className="min-h-dvh bg-[#f1f4fa] text-neutral-900 sm:px-6 sm:py-6 lg:flex lg:items-center lg:px-10 lg:py-10">

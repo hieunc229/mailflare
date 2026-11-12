@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { CalendarDays, ChevronDown, Clock3, MapPin, MoreHorizontal, Plus, Trash2, UserRound } from "@/components/icons";
 import clsx from "clsx";
 import { useLanguage } from "@/components/language-provider";
@@ -23,7 +23,12 @@ export function BookingEditor({ form, open, editingId, username, hosts, canManag
 	const [moreOpen, setMoreOpen] = useState(false);
 	const [hostQuery, setHostQuery] = useState("");
 	const [hostError, setHostError] = useState("");
-	useEffect(() => { if (open) { setActiveSection(null); setNameEditing(false); setMoreOpen(false); setHostQuery(""); setHostError(""); } }, [editingId, open]);
+	// Opening the editor, or switching it to another booking, starts from a collapsed, clean panel.
+	const [shownFor, setShownFor] = useState({ editingId, open });
+	if (shownFor.editingId !== editingId || shownFor.open !== open) {
+		setShownFor({ editingId, open });
+		if (open) { setActiveSection(null); setNameEditing(false); setMoreOpen(false); setHostQuery(""); setHostError(""); }
+	}
 	const sectionClass = "border-b border-neutral-200 px-5 py-5";
 	const headingClass = "flex w-full items-center justify-between gap-3 text-left text-base font-semibold text-neutral-900";
 	const fieldClass = "h-10 w-full rounded-xl border border-neutral-200 bg-white px-3 text-sm";

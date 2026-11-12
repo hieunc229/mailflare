@@ -18,11 +18,12 @@ export function SectionNavSheet({ label, title, children, className }: SectionNa
 	const mobile = useIsMobile();
 	const pathname = usePathname();
 	const [open, setOpen] = useState(false);
-	const hidden = mobile && !open;
-
-	useEffect(() => {
+	const [closedFor, setClosedFor] = useState({ pathname, mobile });
+	if (closedFor.pathname !== pathname || closedFor.mobile !== mobile) {
+		setClosedFor({ pathname, mobile });
 		setOpen(false);
-	}, [pathname, mobile]);
+	}
+	const hidden = mobile && !open;
 
 	useEffect(() => {
 		if (!open) return;
