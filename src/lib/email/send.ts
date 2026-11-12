@@ -1,6 +1,6 @@
 import { and, eq, isNotNull } from "drizzle-orm";
 import { getDb } from "@/db";
-import { messages, outboundJobs } from "@/db/schema";
+import { conversationNotes, messages, outboundJobs } from "@/db/schema";
 import { newId } from "@/lib/ids";
 import { buildSnippet } from "@/lib/email/parse";
 import { dispatchWebhooks } from "@/lib/email/webhooks";
@@ -249,14 +249,23 @@ async function deliverEmail(env: CloudflareEnv, delivery: PreparedDelivery): Pro
 
 		// A fresh message starts its own conversation; Cloudflare's Message-ID is what
 		// any reply will name in In-Reply-To, so key the thread by it.
+		const threadId = input.threadId ?? normalizeMessageId(response.messageId) ?? messageId;
 		await db
 			.update(messages)
 			.set({
 				status: "sent",
 				providerMessageId: response.messageId,
-				threadId: input.threadId ?? normalizeMessageId(response.messageId) ?? messageId,
+				threadId,
 			})
 			.where(eq(messages.id, messageId));
+		// Notes taken while the message waited in the queue keyed its conversation by
+		// the message id; move them onto the thread key the send just established.
+		if (threadId !== messageId) {
+			await db
+				.update(conversationNotes)
+				.set({ threadKey: threadId })
+				.where(and(eq(conversationNotes.mailboxId, mailboxId), eq(conversationNotes.threadKey, messageId)));
+		}
 		await db.update(outboundJobs).set({ status: "sent", updatedAt: new Date() }).where(eq(outboundJobs.id, jobId));
 		if (input.followUpDays) {
 			// The message is already out; a reminder that cannot be stored must not fail the send.
@@ -312,9 +321,11 @@ export type OutboundQueueMessage = {
 	scheduledAt: string;
 };
 
-async function enqueueScheduledDelivery(
+/** Wakes the outbound queue when a job is due; runs again at the delay cap for later times. */
+export async function enqueueOutboundJob(
 	env: CloudflareEnv,
-	delivery: PreparedDelivery,
+	jobId: string,
+	messageId: string,
 	scheduledAt: Date,
 ): Promise<void> {
 	const delaySeconds = Math.min(
@@ -324,12 +335,20 @@ async function enqueueScheduledDelivery(
 	await env.OUTBOUND_QUEUE.send(
 		{
 			kind: "email.scheduled",
-			jobId: delivery.jobId,
-			messageId: delivery.messageId,
+			jobId,
+			messageId,
 			scheduledAt: scheduledAt.toISOString(),
 		},
 		{ delaySeconds },
 	);
+}
+
+async function enqueueScheduledDelivery(
+	env: CloudflareEnv,
+	delivery: PreparedDelivery,
+	scheduledAt: Date,
+): Promise<void> {
+	await enqueueOutboundJob(env, delivery.jobId, delivery.messageId, scheduledAt);
 }
 
 function deliveryFromJob(jobId: string, messageId: string, payload: string): PreparedDelivery {
@@ -358,11 +377,17 @@ function deliveryFromJob(jobId: string, messageId: string, payload: string): Pre
 	};
 }
 
-function claimJob(db: ReturnType<typeof getDb>, jobId: string) {
+/** With `dueAt`, the claim also requires the job to still hold that send time, so a
+ * reschedule that lands after the due check cannot be overtaken by the old time. */
+function claimJob(db: ReturnType<typeof getDb>, jobId: string, dueAt?: Date | null) {
 	return db
 		.update(outboundJobs)
 		.set({ status: "sending", updatedAt: new Date() })
-		.where(and(eq(outboundJobs.id, jobId), eq(outboundJobs.status, "queued")))
+		.where(and(
+			eq(outboundJobs.id, jobId),
+			eq(outboundJobs.status, "queued"),
+			...(dueAt ? [eq(outboundJobs.scheduledAt, dueAt)] : []),
+		))
 		.returning({ id: outboundJobs.id });
 }
 
@@ -394,12 +419,14 @@ export async function processOutboundQueue(
 ): Promise<void> {
 	const db = getDb(env);
 	const [job] = await db
-		.select({ status: outboundJobs.status, payload: outboundJobs.payload })
+		.select({ status: outboundJobs.status, payload: outboundJobs.payload, scheduledAt: outboundJobs.scheduledAt })
 		.from(outboundJobs)
 		.where(eq(outboundJobs.id, payload.jobId))
 		.limit(1);
 	if (!job || job.status !== "queued") return;
-	const scheduledAt = new Date(payload.scheduledAt);
+	// The job row is authoritative: rescheduling edits it while queued messages
+	// already in flight still carry the old time.
+	const scheduledAt = job.scheduledAt ?? new Date(payload.scheduledAt);
 	const delivery = deliveryFromJob(payload.jobId, payload.messageId, job.payload);
 	if (scheduledAt.getTime() > Date.now()) {
 		await enqueueScheduledDelivery(env, delivery, scheduledAt);
@@ -407,8 +434,14 @@ export async function processOutboundQueue(
 	}
 	// Claim the job before delivering. Cancelling deletes only a job that is still
 	// "queued", so exactly one of cancel and delivery wins.
-	const claimed = await claimJob(db, payload.jobId);
-	if (!claimed.length) return;
+	const claimed = await claimJob(db, payload.jobId, job.scheduledAt);
+	if (!claimed.length) {
+		// Lost to a cancel or another consumer, or the send time moved after we
+		// read it. In the last case the job is still queued: look again.
+		const [current] = await db.select({ status: outboundJobs.status }).from(outboundJobs).where(eq(outboundJobs.id, payload.jobId)).limit(1);
+		if (current?.status === "queued") await processOutboundQueue(env, payload);
+		return;
+	}
 	delivery.attachments = await loadMessageAttachmentContents(env, payload.messageId);
 	await deliverEmail(env, delivery);
 }

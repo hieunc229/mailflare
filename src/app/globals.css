@@ -228,6 +228,9 @@ button {
    Gmail's dark palette (#202124, #303134, #3c4043, #9aa0a6, #e8eaed…) and accents are inverted
    (50↔950, 100↔900…). The exceptions come right after. The .dark class is set on <html>
    (theme-utils.ts). */
+/* Modal backdrops and other scrims must use `black` (optionally with a `dark:` alpha), never the
+   neutral-900/950 values: those are remapped below to near-white, so a scrim would lighten the page
+   instead of dimming it. */
 .dark {
 	color-scheme: dark;
 	--background: #202124;

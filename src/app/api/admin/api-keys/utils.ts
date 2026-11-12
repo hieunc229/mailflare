@@ -48,7 +48,7 @@ export async function POST(request: Request) {
 	const parsed = createKeySchema.safeParse(await request.json().catch(() => null));
 	if (!parsed.success) return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
 	const db = getDb(access.env);
-	const { fullKey, prefix, hash } = generateApiKey();
+	const { fullKey, prefix, hash, sha256 } = await generateApiKey();
 	const id = newId("key");
 	await db.insert(apiKeys).values({
 		id,
@@ -57,6 +57,7 @@ export async function POST(request: Request) {
 		name: parsed.data.name,
 		prefix,
 		keyHash: hash,
+		keySha256: sha256,
 		scopes: scopesToJson([...new Set(parsed.data.scopes)]),
 	});
 	return NextResponse.json({ key: fullKey });

@@ -37,7 +37,7 @@ await build({
 	plugins: [{
 		name: "authentication-state",
 		setup(builder) {
-			builder.onLoad({ filter: /\/use-message-authentication\.ts$/ }, () => ({
+			builder.onLoad({ filter: /[\\/]use-message-authentication\.ts$/ }, () => ({
 				contents: "export function useMessageAuthentication() { return { authentication: globalThis.testSenderAuthentication }; }",
 				loader: "ts",
 			}));

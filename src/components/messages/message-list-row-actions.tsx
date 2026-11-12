@@ -8,6 +8,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { Input } from "@/components/ui/input";
 import { Tooltip } from "@/components/ui/tooltip";
 import type { MessageListRowActionsProps } from "./types";
+import { MessageUnsubscribeButton } from "./unsubscribe-button";
 import { getSnoozePresets, isMessageSnoozed, snoozeMessage, unsnoozeMessage } from "./message-list-row-actions-utils";
 import { getUserTimeZone } from "@/lib/time/utils";
 
@@ -37,6 +38,7 @@ export function MessageListRowActions({ message, onAction }: MessageListRowActio
 	return (
 		<>
 			<div className="pointer-events-none absolute right-6 top-1/2 z-10 flex -translate-y-1/2 items-center gap-1 pl-3 opacity-0 transition-opacity group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100 bg-[#f2f6fc] dark:bg-[#f2f6fc]">
+				{message.hasUnsubscribe && <MessageUnsubscribeButton key={message.id} messageId={message.id} variant="row" />}
 				<Tooltip label={t("common.archive")}>
 					<Button type="button" variant="ghost" size="sm" onClick={() => void onAction("archive")} aria-label={t("common.archive")}>
 						<Archive className="h-4 w-4" />

@@ -59,9 +59,9 @@ async function bundleI18n(outfile, extraLocale = false) {
 		plugins: [{
 			name: "layout-runtime-stubs",
 			setup(builder) {
-				if (extraLocale) builder.onLoad({ filter: /\/i18n\/locales\.ts$/ }, ({ path }) => ({
+				if (extraLocale) builder.onLoad({ filter: /[\\/]i18n[\\/]locales\.ts$/ }, ({ path }) => ({
 					contents: readFileSync(path, "utf8").replace("export const locales = {", `export const locales = {
-						xx: { label: "Testlandic", dir: "rtl" },`),
+						he: { label: "Testlandic", dir: "rtl" },`),
 					loader: "ts",
 				}));
 				builder.onResolve({ filter: /^(next\/headers|next\/font\/google|@\/components\/providers|@\/lib\/cloudflare|\.\/home-server-utils)$/ }, (args) => ({ path: args.path, namespace: "stub" }));
@@ -124,6 +124,12 @@ test("translation uses the requested catalog and falls back per key", async () =
 	assert.equal(i18n.translate({}, "navigation.inbox"), "Inbox");
 });
 
+test("existing locale-specific plural translations remain available", async () => {
+	const catalog = await i18n.loadMessages("pl");
+	assert.equal(catalog["thread.attachmentCount.few"], "{count} załączniki");
+	assert.equal(i18n.createTranslator("pl", catalog)("thread.attachmentCount", { count: 3 }), "3 załączniki");
+});
+
 test("preference cookie persists for a year, covers every path and is Secure on HTTPS", () => {
 	assert.equal(i18n.serializeLocaleCookie("pt-BR", true), "mailflare-locale=pt-BR; Path=/; Max-Age=31536000; SameSite=Lax; Secure");
 	assert.equal(i18n.serializeLocaleCookie("en", false), "mailflare-locale=en; Path=/; Max-Age=31536000; SameSite=Lax");
@@ -152,21 +158,24 @@ test("root layout passes the same cookie locale to HTML and provider on first re
 
 test("a locale registered once reaches resolution, translation, cookie, selector and SSR", async () => {
 	assert.ok(existsSync(join(root, "src/lib/i18n/locales.ts")), "locales must have one shared registry");
-	globalThis.testCatalogs.xx = { ...en, "navigation.inbox": "Entrada", "navigation.inbox.one": "{count} entrada", "navigation.inbox.other": "{count} entradas", "language.label": "Idioma" };
+	// Use an ICU-supported locale absent from the registry. Unknown codes such as
+	// xx fall back to the host locale, which may not have a "one" plural category.
+	assert.equal(Object.hasOwn(i18n.locales, "he"), false);
+	globalThis.testCatalogs.he = { ...en, "navigation.inbox": "Entrada", "navigation.inbox.one": "{count} entrada", "navigation.inbox.other": "{count} entradas", "language.label": "Idioma" };
 	const extraFile = join(outDir, "with-spanish.mjs");
 	await bundleI18n(extraFile, true);
 	const extended = await import(pathToFileURL(extraFile).href);
-	assert.equal(extended.resolveLocale("xx"), "xx");
-	assert.equal(extended.translate(await extended.loadMessages("xx"), "navigation.inbox"), "Entrada");
-	assert.match(extended.serializeLocaleCookie("xx", true), /^mailflare-locale=xx;/);
-	const selector = await extended.renderLanguage("xx");
-	assert.match(selector, /value="xx" lang="xx" selected="">Testlandic<\/option>/);
+	assert.equal(extended.resolveLocale("he"), "he");
+	assert.equal(extended.translate(await extended.loadMessages("he"), "navigation.inbox"), "Entrada");
+	assert.match(extended.serializeLocaleCookie("he", true), /^mailflare-locale=he;/);
+	const selector = await extended.renderLanguage("he");
+	assert.match(selector, /value="he" lang="he" selected="">Testlandic<\/option>/);
 	assert.match(selector, />Entrada<\/span>/);
-	const layout = await extended.renderLayout("xx");
-	assert.match(layout, /<html lang="xx"/);
+	const layout = await extended.renderLayout("he");
+	assert.match(layout, /<html lang="he"/);
 	assert.match(layout, />Entrada<\/span>/);
-	assert.match(layout, /<html lang="xx" dir="rtl"/);
-	const t = extended.createTranslator("xx", await extended.loadMessages("xx"));
+	assert.match(layout, /<html lang="he" dir="rtl"/);
+	const t = extended.createTranslator("he", await extended.loadMessages("he"));
 	assert.equal(t("navigation.inbox", { count: 1 }), "1 entrada");
 	assert.equal(t("navigation.inbox", { count: 3 }), "3 entradas");
 	assert.equal(t("navigation.inbox"), "Entrada");

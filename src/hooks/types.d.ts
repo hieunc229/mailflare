@@ -30,10 +30,14 @@ export type Message = {
 	read: boolean;
 	starred: boolean;
 	snoozedUntil?: string | null;
+	hasUnsubscribe?: boolean;
 	/** When a scheduled send will go out; set on rows in the Scheduled list. */
 	scheduledAt?: string | null;
 	/** Opens counted by the read-receipt pixel; absent when the message was sent without one. */
 	openCount?: number;
+	/** Notes on the conversation, with the text of the latest ones; absent when it has none. */
+	noteCount?: number;
+	notePreview?: string;
 	threadId: string | null;
 	inReplyTo?: string | null;
 	references?: string | null;

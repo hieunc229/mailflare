@@ -15,6 +15,14 @@ type DohResponse = {
 const DOH_ENDPOINT = "https://cloudflare-dns.com/dns-query";
 const DOH_TIMEOUT_MS = 5000;
 
+const DNS_RECORD_TYPES: Record<DnsQueryType, number> = {
+	A: 1,
+	AAAA: 28,
+	CNAME: 5,
+	MX: 15,
+	TXT: 16,
+};
+
 function decodeTxt(data: string): string {
 	const chunks = data.match(/"([^"]*)"/g);
 	if (!chunks) return data.trim();
@@ -45,9 +53,13 @@ export async function queryDns(name: string, type: DnsQueryType): Promise<string
 		if (json.Status !== 0 && json.Status !== 3) {
 			throw new Error(`DNS query for ${name} ${type} returned status ${json.Status}`);
 		}
-		return (json.Answer ?? []).map((answer) =>
-			type === "TXT" ? decodeTxt(answer.data) : answer.data,
-		);
+		// An A/AAAA lookup answers with a first CNAME record alongside the
+		// requested type, so keep only records that match what was asked for.
+		// Reporting CNAME names where IPs are expected makes callers treat host
+		// names as addresses and reject them.
+		return (json.Answer ?? [])
+			.filter((answer) => answer.type === DNS_RECORD_TYPES[type])
+			.map((answer) => (type === "TXT" ? decodeTxt(answer.data) : answer.data));
 	} finally {
 		clearTimeout(timeout);
 	}

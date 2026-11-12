@@ -1,6 +1,9 @@
 import type { ZonedDay } from "./types";
 
 const fieldFormatters = new Map<string, Intl.DateTimeFormat>();
+const displayFormatters = new Map<string, Intl.DateTimeFormat>();
+const normalizedTimeZones = new Map<string, string>();
+let resolvedUserTimeZone: string | undefined;
 
 function getFieldFormatter(timeZone: string): Intl.DateTimeFormat {
 	let formatter = fieldFormatters.get(timeZone);
@@ -15,12 +18,30 @@ function getFieldFormatter(timeZone: string): Intl.DateTimeFormat {
 	return formatter;
 }
 
-export function normalizeTimeZone(value?: string | null): string {
-	try {
-		return new Intl.DateTimeFormat("en-US", { timeZone: value || "UTC" }).resolvedOptions().timeZone;
-	} catch {
-		return "UTC";
+function getDisplayFormatter(locale: string | undefined, options: Intl.DateTimeFormatOptions, timeZone: string): Intl.DateTimeFormat {
+	const key = `${locale ?? "default"}\u0000${timeZone}\u0000${JSON.stringify(options)}`;
+	let formatter = displayFormatters.get(key);
+	if (!formatter) {
+		formatter = new Intl.DateTimeFormat(locale, { ...options, timeZone });
+		if (displayFormatters.size >= 64) displayFormatters.clear();
+		displayFormatters.set(key, formatter);
 	}
+	return formatter;
+}
+
+export function normalizeTimeZone(value?: string | null): string {
+	const key = value || "UTC";
+	let normalized = normalizedTimeZones.get(key);
+	if (!normalized) {
+		try {
+			normalized = new Intl.DateTimeFormat("en-US", { timeZone: key }).resolvedOptions().timeZone;
+		} catch {
+			normalized = "UTC";
+		}
+		if (normalizedTimeZones.size >= 64) normalizedTimeZones.clear();
+		normalizedTimeZones.set(key, normalized);
+	}
+	return normalized;
 }
 
 export function isValidTimeZone(value: string): boolean {
@@ -33,13 +54,19 @@ export function isValidTimeZone(value: string): boolean {
 }
 
 export function getUserTimeZone(): string {
-	if (typeof window !== "undefined") {
-		try {
-			const saved = JSON.parse(window.localStorage.getItem("mailflare-user-time-zone") ?? "null") as { timeZone?: unknown } | null;
-			if (typeof saved?.timeZone === "string" && isValidTimeZone(saved.timeZone)) return normalizeTimeZone(saved.timeZone);
-		} catch { /* Device time remains available without storage. */ }
-	}
-	return Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
+	if (typeof window === "undefined") return "UTC";
+	if (resolvedUserTimeZone) return resolvedUserTimeZone;
+	let zone = Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
+	try {
+		const saved = JSON.parse(window.localStorage.getItem("mailflare-user-time-zone") ?? "null") as { timeZone?: unknown } | null;
+		if (typeof saved?.timeZone === "string" && isValidTimeZone(saved.timeZone)) zone = normalizeTimeZone(saved.timeZone);
+	} catch { /* Device time remains available without storage. */ }
+	resolvedUserTimeZone = zone;
+	return zone;
+}
+
+export function clearUserTimeZoneCache(): void {
+	resolvedUserTimeZone = undefined;
 }
 
 export function getRequestTimeZone(request: Request, preferredTimeZone?: string | null): string {
@@ -53,7 +80,7 @@ export function getDisplayLocale(): string | undefined {
 }
 
 export function formatUserDate(value: Date | string, options: Intl.DateTimeFormatOptions): string {
-	return new Intl.DateTimeFormat(getDisplayLocale(), { ...options, timeZone: getUserTimeZone() }).format(new Date(value));
+	return getDisplayFormatter(getDisplayLocale(), options, getUserTimeZone()).format(new Date(value));
 }
 
 export function formatUserDateTimeLocal(value: Date): string {

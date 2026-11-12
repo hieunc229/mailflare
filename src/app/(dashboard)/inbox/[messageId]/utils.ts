@@ -9,15 +9,15 @@ import { resolveEmailCidUrls } from "@/lib/email/html";
 import type { Message } from "@/hooks/types";
 import type { MessageAttachment, MessageBodyDisplay, MessageDetailResponse } from "./types";
 
-export async function fetchMessageDetail(messageId: string): Promise<MessageDetailResponse> {
-	return (await fetchCachedMessageDetail(messageId)) as MessageDetailResponse;
+export async function fetchMessageDetail(messageId: string, force = false): Promise<MessageDetailResponse> {
+	return (await fetchCachedMessageDetail(messageId, force)) as MessageDetailResponse;
 }
 
 export function getCachedMessageDetailForDisplay(messageId: string): MessageDetailResponse | undefined {
 	return getCachedMessageDetail(messageId) as MessageDetailResponse | undefined;
 }
 
-export async function fetchMessageMetadata(messageId: string): Promise<Pick<MessageDetailResponse, "attachments" | "unsubscribeUrl">> {
+export async function fetchMessageMetadata(messageId: string): Promise<Pick<MessageDetailResponse, "attachments" | "unsubscribeUrl" | "unsubscribeViaBody">> {
 	return (await authFetch(`/api/messages/${messageId}/metadata`)).json();
 }
 

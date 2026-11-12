@@ -4,7 +4,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { ProgressiveAvatarImageProps } from "./progressive-avatar-image-types";
 import { getAvatarPreviewUrl, rememberAvatarLoaded, wasAvatarLoaded } from "./progressive-avatar-image-utils";
 
-export function ProgressiveAvatarImage({ src, alt, className, onError }: ProgressiveAvatarImageProps) {
+export function ProgressiveAvatarImage({ src, alt, className, onError, skipPreview = false }: ProgressiveAvatarImageProps) {
 	const [previewReadyFor, setPreviewReadyFor] = useState<string | null>(null);
 	const [previewFailedFor, setPreviewFailedFor] = useState<string | null>(null);
 	const [fullReadyFor, setFullReadyFor] = useState<string | null>(null);
@@ -14,7 +14,7 @@ export function ProgressiveAvatarImage({ src, alt, className, onError }: Progres
 	const imageRef = useRef<HTMLImageElement>(null);
 	const onErrorRef = useRef(onError);
 	onErrorRef.current = onError;
-	const showFull = previewFailedFor === src || fullReadyFor === src || cachedFor === src;
+	const showFull = skipPreview || previewFailedFor === src || fullReadyFor === src || cachedFor === src;
 
 	useLayoutEffect(() => {
 		if (wasAvatarLoaded(src)) setCachedFor(src);
@@ -22,13 +22,17 @@ export function ProgressiveAvatarImage({ src, alt, className, onError }: Progres
 
 	useEffect(() => {
 		const image = imageRef.current;
+		if (skipPreview) {
+			if (image?.complete && image.naturalWidth > 0) rememberAvatarLoaded(src);
+			return;
+		}
 		if (!image?.complete) return;
 		if (image.naturalWidth > 0) setPreviewReadyFor(src);
 		else setPreviewFailedFor(src);
-	}, [src]);
+	}, [src, skipPreview]);
 
 	useEffect(() => {
-		if (previewReadyFor !== src) return;
+		if (skipPreview || previewReadyFor !== src) return;
 		let cancelled = false;
 		const image = new Image();
 		image.onload = () => {
@@ -48,7 +52,7 @@ export function ProgressiveAvatarImage({ src, alt, className, onError }: Progres
 			image.onload = null;
 			image.onerror = null;
 		};
-	}, [previewReadyFor, src]);
+	}, [previewReadyFor, src, skipPreview]);
 
 	if (failedFor === src) return null;
 
