@@ -1,0 +1,62 @@
+
+name: Fix Resend Receiving MX
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout main
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+          token: ${{ secrets.MAILFLARE_UPDATE_TOKEN }}
+
+      - name: Apply Resend MX fix
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          def replace(path, old, new):
+              p = Path(path)
+              content = p.read_text()
+              if old not in content:
+                  raise SystemExit(f"Expected code not found in {path}")
+              p.write_text(content.replace(old, new, 1))
+
+          dns = "src/lib/domains/receiving-dns.ts"
+          with open(dns, "a") as f:
+              f.write('\nexport const isResendInboundMx = (content: string) => /^receive-[a-z0-9-]+\\.forge\\.rmta\\.net\\.?$/i.test(content.trim());\n')
+
+          receiving = "src/lib/domains/resend-receiving.ts"
+          replace(receiving,
+              "hasMx, hasMxMatching, isInboundSmtpMx, publishMx, removeMx",
+              "hasMx, hasMxMatching, isResendInboundMx, publishMx, removeMx")
+          replace(receiving, "isInboundSmtpMx", "isResendInboundMx")
+          
+          domain = "src/lib/domains/resend-domain.ts"
+          replace(domain,
+              'import { isInboundSmtpMx } from "@/lib/domains/receiving-dns";',
+              'import { isInboundSmtpMx, isResendInboundMx } from "@/lib/domains/receiving-dns";')
+          replace(domain,
+              '!(record.type === "MX" && isInboundSmtpMx(record.value))',
+              '!(record.type === "MX" && (isInboundSmtpMx(record.value) || isResendInboundMx(record.value)))')
+          PY
+
+      - name: Check changes
+        run: git diff --check
+
+      - name: Commit and push fix branch
+        run: |
+          git config user.name "mailflare-fix"
+          git config user.email "mailflare-fix@users.noreply.github.com"
+          git checkout -b fix/resend-receiving-mx
+          git add src/lib/domains/receiving-dns.ts src/lib/domains/resend-receiving.ts src/lib/domains/resend-domain.ts
+          git commit -m "Fix Resend receiving MX detection"
+          git push origin fix/resend-receiving-mx
