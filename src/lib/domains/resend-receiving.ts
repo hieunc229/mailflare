@@ -2,7 +2,7 @@ import { eq } from "drizzle-orm";
 import { getDb } from "@/db";
 import { appSettings } from "@/db/schema";
 import { isManualZone } from "@/lib/domains/provision";
-import { hasMx, hasMxMatching, isInboundSmtpMx, publishMx, removeMx } from "@/lib/domains/receiving-dns";
+import { hasMx, hasMxMatching, isResendInboundMx, publishMx, removeMx } from "@/lib/domains/receiving-dns";
 import { getResendApiKey, getResendKeyStatus } from "@/lib/email/outbound-provider";
 import {
 	createResendDomain, createResendWebhook, deleteResendDomain, deleteResendWebhook, findResendDomain, getResendDomain,
@@ -26,7 +26,7 @@ async function storeWebhook(env: CloudflareEnv, id: string | null, secret: strin
 }
 
 function inboundMx(records: ResendDomainRecord[] | undefined) {
-	return (records ?? []).find((record) => record.type === "MX" && isInboundSmtpMx(record.value)) ?? null;
+	return (records ?? []).find((record) => record.type === "MX" && isResendInboundMx(record.value)) ?? null;
 }
 
 function isPublicHttps(origin: string): boolean {
