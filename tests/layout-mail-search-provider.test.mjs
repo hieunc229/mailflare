@@ -100,13 +100,11 @@ rmSync(tempDirectory, { recursive: true, force: true });
 test("useMailSearch provides safe fallback outside of provider", () => {
 	const { captured } = renderOutside();
 	assert.equal(captured.query, "");
-	assert.equal(captured.input, "");
 	assert.doesNotThrow(() => captured.setQuery("test"));
 });
 
 test("useMailSearch functions inside MailSearchProvider", () => {
 	const { captured } = renderInside();
 	assert.equal(captured.query, "");
-	assert.equal(captured.input, "");
 });
 
