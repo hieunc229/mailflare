@@ -7,6 +7,7 @@ import {
 	captureMessageFields,
 	captureThreadUnread,
 	clearPendingOverlay,
+	forgetMessageFields,
 	setPendingOverlay,
 	type KnownMessageFields,
 	type PendingOverlayMessage,
@@ -140,15 +141,31 @@ function applyFieldChanges(
 	fields: PendingOverlayMessage[],
 	threadTargets?: Map<string, number>,
 ): ThreadUnreadTarget[] {
-	if (fields.length === 0) return [];
+	if (fields.length === 0 && !threadTargets?.size) return [];
 	const targets = patchMessageFieldsInCaches(
 		fields,
 		threadTargets ? {
 			threadTargets: [...threadTargets].map(([id, threadUnread]) => ({ id, threadUnread })),
 		} : undefined,
 	);
-	dispatchFieldChanges(fields, targets);
+	if (fields.length > 0) dispatchFieldChanges(fields, targets);
 	return targets;
+}
+
+function forgetUncapturedFields(
+	records: MessageActionRecord[],
+	captured: Map<string, KnownMessageFields>,
+) {
+	const readIds: string[] = [];
+	const starredIds: string[] = [];
+	for (const record of records) {
+		const changed = new Set(getChangedStateFields(record.previous, record.applied));
+		const known = captured.get(record.id);
+		if (changed.has("read") && known?.read === undefined) readIds.push(record.id);
+		if (changed.has("starred") && known?.starred === undefined) starredIds.push(record.id);
+	}
+	if (readIds.length > 0) forgetMessageFields(readIds, { read: true });
+	if (starredIds.length > 0) forgetMessageFields(starredIds, { starred: true });
 }
 
 function restoreCaptured(
@@ -156,8 +173,11 @@ function restoreCaptured(
 	captured: Map<string, KnownMessageFields>,
 	capturedThreads?: Map<string, number>,
 ) {
+	forgetUncapturedFields(records, captured);
 	const fields = capturedFieldPatches(records, captured);
-	const hasReadChange = fields.some((field) => field.read !== undefined);
+	const hasReadChange = records.some((record) => (
+		getChangedStateFields(record.previous, record.applied).includes("read")
+	));
 	applyFieldChanges(fields, hasReadChange ? capturedThreads : undefined);
 }
 
@@ -274,6 +294,7 @@ export const defaultMessageActionHooks: MessageActionExecutorHooks = {
 		if (isUncertainActionFailure(error)) {
 			// The timeout may have committed the undo on the server. Do not paint
 			// the historical pre-click value; let the resync fetch decide.
+			forgetUncapturedFields(records, captured);
 			invalidateUncertainState(ids);
 			return;
 		}

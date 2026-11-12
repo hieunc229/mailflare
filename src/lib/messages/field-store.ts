@@ -75,6 +75,17 @@ export function rememberMessageFields(messageIds: string[], patch: KnownMessageF
 	}
 }
 
+/** Drops optimistic member state when a rollback has no trusted snapshot. */
+export function forgetMessageFields(messageIds: string[], fields: KnownMessageFields): void {
+	for (const id of messageIds) {
+		const current = knownFields.get(id);
+		if (!current) continue;
+		if (fields.read) delete current.read;
+		if (fields.starred) delete current.starred;
+		if (current.read === undefined && current.starred === undefined) knownFields.delete(id);
+	}
+}
+
 export function rememberMessageRows(rows: Array<{
 	id: string;
 	read?: boolean;
@@ -83,9 +94,13 @@ export function rememberMessageRows(rows: Array<{
 	threadUnread?: number;
 }>): void {
 	for (const row of rows) {
-		if (row.read !== undefined || row.starred !== undefined) {
+		const grouped = !!row.threadMessageIds?.length;
+		if ((row.read !== undefined && !grouped) || row.starred !== undefined) {
 			rememberMessageFields([row.id], {
-				...(row.read !== undefined ? { read: row.read } : {}),
+				// A grouped row's read flag is a conversation aggregate, not the
+				// anchor message's own state. Seeding it would make an unknown
+				// member look already-unread/read and corrupt later flips.
+				...(row.read !== undefined && !grouped ? { read: row.read } : {}),
 				...(row.starred !== undefined ? { starred: row.starred } : {}),
 			});
 		}
@@ -97,6 +112,21 @@ export function rememberMessageRows(rows: Array<{
 			});
 		}
 	}
+}
+
+/**
+ * Any action touching a member of a known conversation joins the same lock
+ * group. This keeps optimistic grouped aggregates and their rollback
+ * snapshots from overlapping inside one conversation.
+ */
+export function getConversationLockKeys(ids: string[]): string[] {
+	const keys = new Set(ids);
+	for (const [rowId, row] of knownThreads) {
+		if (!keys.has(rowId) && !row.messageIds.some((id) => keys.has(id))) continue;
+		keys.add(rowId);
+		for (const id of row.messageIds) keys.add(id);
+	}
+	return [...keys];
 }
 
 function pendingFieldsFor(messageId: string): KnownMessageFields {

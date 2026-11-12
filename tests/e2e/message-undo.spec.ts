@@ -185,3 +185,46 @@ test("reader star undo is optimistic while held and a later star still works", a
 	await expect(article.getByRole("button", { name: "Remove star", exact: true })).toBeVisible();
 	await expect(page.getByRole("button", { name: "Undo" })).toBeVisible();
 });
+
+/**
+ * Regression: a failed/uncertain undo must not leave the reader showing the
+ * optimistic read=true after the server authoritatively reports unread.
+ */
+test("a failed undo accepts the authoritative unread reader state", async ({ page }) => {
+	await resetDemo(page.request);
+	await login(page);
+	await page.goto("/inbox");
+
+	const firstRow = page.locator('[role="listitem"]').first();
+	await expect(firstRow).toBeVisible();
+	const href = await firstRow.locator('a[href^="/inbox/"]').first().getAttribute("href");
+	expect(href).toBeTruthy();
+	await page.goto(href!);
+	const article = page.locator("article");
+	await expect(article).toBeVisible();
+	await page.waitForTimeout(400);
+
+	// Make the message unread on the server, with its undo toast available.
+	await article.getByRole("button", { name: "More actions" }).click();
+	await page.getByRole("menuitem", { name: "Mark as unread" }).click();
+	await expect(page.getByRole("button", { name: "Undo" })).toBeVisible();
+	await article.getByRole("button", { name: "More actions" }).click();
+	await expect(page.getByRole("menuitem", { name: "Mark as read" })).toBeVisible();
+	await page.keyboard.press("Escape");
+
+	// Abort the undo transport: this is the same uncertain path as a timeout.
+	// The server stays unread and the optimistic reader true must not survive.
+	await page.route("**/api/messages/actions", async (route) => {
+		const body = route.request().postDataJSON();
+		if (body?.op === "undo") {
+			await route.abort("failed");
+			return;
+		}
+		await route.continue();
+	});
+
+	await page.getByRole("button", { name: "Undo" }).click();
+	await page.waitForTimeout(1_000);
+	await article.getByRole("button", { name: "More actions" }).click();
+	await expect(page.getByRole("menuitem", { name: "Mark as read" })).toBeVisible();
+});

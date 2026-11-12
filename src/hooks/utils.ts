@@ -135,11 +135,12 @@ export function patchMessageFieldsInCaches(
 	options: MessageCachePatchOptions = {},
 ): ThreadUnreadTarget[] {
 	const patches = groupFieldPatches(fields);
-	if (patches.size === 0) return [];
-	const computedTargets = getThreadUnreadTargets([...patches].map(([id, patch]) => ({
-		id,
-		...(patch.read !== undefined ? { read: patch.read } : {}),
-	})));
+	const computedTargets = patches.size === 0
+		? []
+		: getThreadUnreadTargets([...patches].map(([id, patch]) => ({
+			id,
+			...(patch.read !== undefined ? { read: patch.read } : {}),
+		})));
 	const forcedTargets = options.threadTargets
 		? new Map([...options.threadTargets].map((target) => [target.id, target.threadUnread]))
 		: null;
@@ -154,6 +155,7 @@ export function patchMessageFieldsInCaches(
 			}
 		}
 	}
+	if (patches.size === 0 && targets.length === 0) return [];
 	const targetsById = new Map(targets.map((target) => [target.id, target.threadUnread]));
 	const ids = new Set(patches.keys());
 	invalidateMessageListRequests();

@@ -37,7 +37,8 @@ await build({
 			import {
 				captureMessageFields, captureThreadUnread, clearKnownMessageFieldsForTests, hasPendingOverlay,
 			} from "@/lib/messages/field-store";
-			export { act };
+			import { primeMessageDetail } from "@/lib/messages/detail-cache";
+			export { act, primeMessageDetail };
 			export { defaultMessageActionHooks } from "@/lib/messages/actions/client";
 			export { captureMessageFields, captureThreadUnread, hasPendingOverlay, clearKnownMessageFieldsForTests };
 			export async function seed(params, messages, counts) {
@@ -171,6 +172,7 @@ test("mounted list and counts consumers keep the optimistic undo through refresh
 	assert.equal(read().threadUnread, "0");
 	assert.equal(read().inboxUnread, "0");
 
+	m.primeMessageDetail({ id: "m1", read: true, starred: false, threadId: null });
 	const undo = record("m1", { read: false }, { read: true });
 	const captured = m.captureMessageFields(["m1"]);
 	const capturedThreads = m.captureThreadUnread(["m1"]);

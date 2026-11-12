@@ -3,7 +3,7 @@ import { confirmDestructive } from "@/components/ui/confirm-dialog";
 
 import { authFetch } from "@/lib/auth/client";
 import { useParams } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { ArrowDownToLine, Cloud, ExternalLink } from "@/components/icons";
 import { useLanguage } from "@/components/language-provider";
 import { formatUserDate } from "@/lib/time/utils";
@@ -102,6 +102,17 @@ function MessageDetailContent({ messageId }: { messageId: string }) {
   const isAnyPanelVisible = messageListVisible || assistantVisible;
   const { scrollRef, scrolled, handleScroll } = useMessageContentScroll(messageId, loading);
   const [unsubBannerDismissed, dismissUnsubBanner] = useMailingListBanner(messageId);
+  // A browser/server response can race the explicit read this reader sends when
+  // opening an unread message. Only that operation may preserve read=true.
+  const openingRead = useRef(false);
+
+  function markMessageReadOnOpen(id: string) {
+    if (openingRead.current) return;
+    openingRead.current = true;
+    void markMessageRead(id).finally(() => {
+      openingRead.current = false;
+    });
+  }
 
   useEffect(() => {
     let cancelled = false;
@@ -111,7 +122,7 @@ function MessageDetailContent({ messageId }: { messageId: string }) {
       if (cachedData?.message) {
         setData(cachedData);
         setLoading(false);
-        if (!cachedData.message.read) void markMessageRead(cachedData.message.id);
+        if (!cachedData.message.read) markMessageReadOnOpen(cachedData.message.id);
         if (cachedData.body) {
           setBodyPending(false);
           if (cachedData.attachments !== undefined) return;
@@ -126,9 +137,9 @@ function MessageDetailContent({ messageId }: { messageId: string }) {
         try {
           const full = await fetchMessageDetail(messageId, true);
           if (!cancelled) {
-            setData((current) => {
-              // A prefetched body may predate the read flip.
-              if (current?.message?.read && full.message) return { ...full, message: { ...full.message, read: true } };
+            setData(() => {
+              // A prefetched body may predate the opening read request.
+              if (openingRead.current && full.message) return { ...full, message: { ...full.message, read: true } };
               return full;
             });
             setBodyPending(false);
@@ -146,7 +157,7 @@ function MessageDetailContent({ messageId }: { messageId: string }) {
       if (!cancelled) {
         setData(nextData);
         setLoading(false);
-        if ("message" in nextData && nextData.message && !nextData.message.read) void markMessageRead(nextData.message.id);
+        if ("message" in nextData && nextData.message && !nextData.message.read) markMessageReadOnOpen(nextData.message.id);
       }
     }
 
@@ -169,8 +180,9 @@ function MessageDetailContent({ messageId }: { messageId: string }) {
           const nextMessage = nextData.message;
           setData((current) => {
             if (!current?.message) return nextData;
-            // A read flip from opening this message may still be in flight.
-            const keepRead = current.message.read && !nextMessage.read;
+            // Only the explicit opening read may still be in flight; a
+            // legitimate unread/timeout result must remain unread.
+            const keepRead = openingRead.current;
             return { ...nextData, message: keepRead ? { ...nextMessage, read: true } : nextMessage };
           });
         }).catch(() => undefined);
@@ -210,8 +222,8 @@ function MessageDetailContent({ messageId }: { messageId: string }) {
     setBodyError(false);
     try {
       const full = await fetchMessageDetail(messageId, true);
-      setData((current) => {
-        if (current?.message?.read && full.message) return { ...full, message: { ...full.message, read: true } };
+      setData(() => {
+        if (openingRead.current && full.message) return { ...full, message: { ...full.message, read: true } };
         return full;
       });
       setBodyPending(false);

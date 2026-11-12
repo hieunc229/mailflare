@@ -35,7 +35,7 @@ globalThis.document = { visibilityState: "visible", hidden: false, addEventListe
 await build({
 	stdin: {
 		contents: `
-			export { defaultMessageActionHooks } from "./src/lib/messages/actions/client.ts";
+			export { defaultMessageActionHooks, MessageActionRequestError } from "./src/lib/messages/actions/client.ts";
 			export { MessageActionExecutor } from "./src/lib/messages/actions/executor.ts";
 			export {
 				fetchMessageList, peekMessageList, clearMessageListCache, invalidateMessageListRequests,
@@ -56,6 +56,7 @@ await build({
 				captureMessageFields, captureThreadUnread, clearKnownMessageFieldsForTests,
 				setPendingOverlay, clearPendingOverlay, hasPendingOverlay, getPendingOverlayOwners,
 				applyPendingToMessages, getKnownThreadUnread, subscribePendingOverlay,
+				getVisibleMessageFields, getConversationLockKeys,
 			} from "./src/lib/messages/field-store.ts";
 		`,
 		resolveDir: root,
@@ -278,6 +279,73 @@ test("a settled undo invalidates every in-flight response without dropping the p
 
 	resolveThread();
 	await assert.rejects(threadRequest, (error) => m.isMessageThreadInvalidated(error));
+});
+
+test("a grouped aggregate read never seeds the anchor member's individual state", async () => {
+	const params = new URLSearchParams({ case: "grouped-anchor" });
+	await seedList(params, [{
+		id: "A",
+		read: false,
+		starred: false,
+		threadMessageIds: ["A", "B"],
+		threadUnread: 1,
+	}]);
+	assert.equal(
+		m.getVisibleMessageFields("A").read,
+		undefined,
+		"the row's aggregate read flag says nothing about the anchor member",
+	);
+	assert.deepEqual(m.getConversationLockKeys(["A"]).sort(), ["A", "B"]);
+});
+
+test("undoes in one conversation serialize so a rejected aggregate is not stacked into the next", async () => {
+	const params = new URLSearchParams({ case: "conversation-lock" });
+	await seedList(params, [{
+		id: "m1",
+		read: true,
+		starred: false,
+		threadMessageIds: ["m1", "m2"],
+		threadUnread: 0,
+	}]);
+	const tokens = [];
+	let rejectFirst;
+	let resolveSecond;
+	const executor = new m.MessageActionExecutor((body) => {
+		tokens.push(body.token);
+		if (tokens.length === 1) {
+			return new Promise((_resolve, reject) => {
+				rejectFirst = () => reject(new m.MessageActionRequestError("stale", 409));
+			});
+		}
+		return new Promise((resolve) => {
+			resolveSecond = () => resolve({ ok: true, action: "read", restored: ["m2"], skipped: [] });
+		});
+	}, {
+		...m.defaultMessageActionHooks,
+		onResync() {},
+	});
+	const firstUndo = record("m1", { read: false }, { read: true });
+	const secondUndo = record("m2", { read: false }, { read: true });
+
+	const first = executor.undo([firstUndo], "token-a");
+	const second = executor.undo([secondUndo], "token-b");
+	await new Promise((resolve) => setImmediate(resolve));
+	assert.deepEqual(tokens, ["token-a"], "the second conversation member waits for the first undo");
+
+	rejectFirst();
+	await assert.rejects(first, /stale/);
+	await new Promise((resolve) => setImmediate(resolve));
+	assert.deepEqual(tokens, ["token-a", "token-b"], "the next undo starts against the rolled-back aggregate");
+	assert.equal(m.getVisibleMessageFields("m1").read, undefined, "the failed undo left no optimistic anchor state");
+	assert.equal(m.peekMessageList(params).messages[0].threadUnread, 1);
+
+	resolveSecond();
+	await second;
+	assert.equal(
+		m.peekMessageList(params).messages[0].threadUnread,
+		1,
+		"the rejected first undo must not leave an extra unread behind",
+	);
 });
 
 test("owner-scoped overlays clear independently and notify subscribers", () => {

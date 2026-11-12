@@ -1,5 +1,5 @@
 import { getChangedStateFields, recordHasChanges } from "./definitions";
-import type { KnownMessageFields } from "@/lib/messages/field-store";
+import { getConversationLockKeys, type KnownMessageFields } from "@/lib/messages/field-store";
 import type {
 	MessageActionInput,
 	MessageActionRecord,
@@ -48,9 +48,10 @@ export type MessageActionExecutorHooks = {
 };
 
 /**
- * Serializes actions per message id while letting unrelated messages proceed
- * in parallel. A second action on the same message (including an undo) waits
- * for the first response, so snapshots and UI patches cannot interleave.
+ * Serializes actions per message id, extended to the whole known conversation.
+ * A second action on any member (including an undo) waits for the first
+ * response, so grouped aggregate snapshots and optimistic targets cannot
+ * overlap. Actions in unrelated conversations still proceed in parallel.
  */
 export class MessageActionExecutor {
 	private readonly tails = new Map<string, Promise<void>>();
@@ -116,7 +117,7 @@ export class MessageActionExecutor {
 	}
 
 	private withLocks<T>(ids: string[], task: () => Promise<T>): Promise<T> {
-		const keys = [...new Set(ids)];
+		const keys = getConversationLockKeys(ids);
 		const previous = keys
 			.map((key) => this.tails.get(key))
 			.filter((tail): tail is Promise<void> => !!tail);
