@@ -2481,5 +2481,22 @@
 	"actions.unsubscribeDeleteAll": "Wypisz się i usuń wszystko",
 	"actions.unsubscribeDeleteConfirm": "Przenieść {count} wcześniejszych wiadomości tego nadawcy do Kosza?",
 	"actions.unsubscribeTrashDone": "Wypisano; {count} wiadomości przeniesiono do Kosza",
-	"attachment.downloadAllFlagged": "Niektóre załączniki są oznaczone jako potencjalnie niebezpieczne. Pobrać archiwum mimo to?"
+	"attachment.downloadAllFlagged": "Niektóre załączniki są oznaczone jako potencjalnie niebezpieczne. Pobrać archiwum mimo to?",
+	"undo.button": "Undo",
+	"undo.dismiss": "Dismiss",
+	"undo.failed": "Could not undo that change",
+	"undo.partial": "{applied} of {total} messages updated",
+	"undo.bulk.one": "{action} · {count} message",
+	"undo.bulk.other": "{action} · {count} messages",
+	"undo.label.archive": "Archived",
+	"undo.label.trash": "Moved to Trash",
+	"undo.label.spam": "Moved to Spam",
+	"undo.label.inbox": "Moved to Inbox",
+	"undo.label.folder": "Moved to folder",
+	"undo.label.read": "Marked as read",
+	"undo.label.unread": "Marked as unread",
+	"undo.label.star": "Starred",
+	"undo.label.unstar": "Unstarred",
+	"undo.label.snooze": "Snoozed",
+	"undo.label.unsnooze": "Unsnoozed"
 }

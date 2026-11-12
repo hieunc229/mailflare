@@ -73,16 +73,27 @@ export function fetchMessageThread(messageId: string): Promise<ThreadMessage[]> 
 	return request;
 }
 
-export function markMessageThreadReadInCaches(messageIds: string[], read: boolean): void {
+export function patchMessageThreadFieldsInCaches(
+	messageIds: string[],
+	patch: { read?: boolean; starred?: boolean },
+): void {
 	if (messageIds.length === 0) return;
 	const ids = new Set(messageIds);
+	// Any request already in flight may predate this patch; dropping it avoids
+	// caching a stale read/star value after the optimistic change.
+	generation += 1;
+	threadRequests.clear();
 	for (const [messageId, cached] of threadCache) {
 		if (!cached.messages.some((message) => ids.has(message.id))) continue;
 		threadCache.set(messageId, {
 			...cached,
-			messages: cached.messages.map((message) => (ids.has(message.id) ? { ...message, read } : message)),
+			messages: cached.messages.map((message) => (ids.has(message.id) ? { ...message, ...patch } : message)),
 		});
 	}
+}
+
+export function markMessageThreadReadInCaches(messageIds: string[], read: boolean): void {
+	patchMessageThreadFieldsInCaches(messageIds, { read });
 }
 
 export function clearMessageThreadCache(): void {

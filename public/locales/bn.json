@@ -2451,5 +2451,22 @@
 	"actions.unsubscribeDeleteAll": "সাবস্ক্রিপশন বাতিল ও সব মুছুন",
 	"actions.unsubscribeDeleteConfirm": "এই প্রেরকের {count}টি পুরনো ইমেইল ট্র্যাশে নেবেন?",
 	"actions.unsubscribeTrashDone": "সাবস্ক্রিপশন বাতিল; {count}টি ইমেইল ট্র্যাশে গেছে",
-	"attachment.downloadAllFlagged": "কিছু সংযুক্তি সম্ভাব্য বিপজ্জনক হিসেবে চিহ্নিত। তবুও আর্কাইভ ডাউনলোড করবেন?"
+	"attachment.downloadAllFlagged": "কিছু সংযুক্তি সম্ভাব্য বিপজ্জনক হিসেবে চিহ্নিত। তবুও আর্কাইভ ডাউনলোড করবেন?",
+	"undo.button": "Undo",
+	"undo.dismiss": "Dismiss",
+	"undo.failed": "Could not undo that change",
+	"undo.partial": "{applied} of {total} messages updated",
+	"undo.bulk.one": "{action} · {count} message",
+	"undo.bulk.other": "{action} · {count} messages",
+	"undo.label.archive": "Archived",
+	"undo.label.trash": "Moved to Trash",
+	"undo.label.spam": "Moved to Spam",
+	"undo.label.inbox": "Moved to Inbox",
+	"undo.label.folder": "Moved to folder",
+	"undo.label.read": "Marked as read",
+	"undo.label.unread": "Marked as unread",
+	"undo.label.star": "Starred",
+	"undo.label.unstar": "Unstarred",
+	"undo.label.snooze": "Snoozed",
+	"undo.label.unsnooze": "Unsnoozed"
 }

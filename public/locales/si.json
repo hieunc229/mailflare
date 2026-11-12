@@ -2451,5 +2451,22 @@
 	"actions.unsubscribeDeleteAll": "දායකත්වය අවලංගු කර සියල්ල මකන්න",
 	"actions.unsubscribeDeleteConfirm": "මෙම යවන්නාගේ පැරණි විද්‍යුත් තැපෑල {count} කුණු කූඩයට ගෙනයාමටද?",
 	"actions.unsubscribeTrashDone": "දායකත්වය අවලංගුයි; විද්‍යුත් තැපෑල {count} කුණු කූඩයට ගියේය",
-	"attachment.downloadAllFlagged": "සමහර ඇමුණුම් අන්තරායන්හි ලෙස සලකුණු කර ඇත. තවදුරටත් සංරක්ෂණාගාරය බාගන්නවාද?"
+	"attachment.downloadAllFlagged": "සමහර ඇමුණුම් අන්තරායන්හි ලෙස සලකුණු කර ඇත. තවදුරටත් සංරක්ෂණාගාරය බාගන්නවාද?",
+	"undo.button": "Undo",
+	"undo.dismiss": "Dismiss",
+	"undo.failed": "Could not undo that change",
+	"undo.partial": "{applied} of {total} messages updated",
+	"undo.bulk.one": "{action} · {count} message",
+	"undo.bulk.other": "{action} · {count} messages",
+	"undo.label.archive": "Archived",
+	"undo.label.trash": "Moved to Trash",
+	"undo.label.spam": "Moved to Spam",
+	"undo.label.inbox": "Moved to Inbox",
+	"undo.label.folder": "Moved to folder",
+	"undo.label.read": "Marked as read",
+	"undo.label.unread": "Marked as unread",
+	"undo.label.star": "Starred",
+	"undo.label.unstar": "Unstarred",
+	"undo.label.snooze": "Snoozed",
+	"undo.label.unsnooze": "Unsnoozed"
 }

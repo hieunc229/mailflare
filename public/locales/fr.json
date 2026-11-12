@@ -2466,5 +2466,22 @@
 	"actions.unsubscribeDeleteAll": "Se désabonner et tout supprimer",
 	"actions.unsubscribeDeleteConfirm": "Déplacer {count} anciens e-mails de cet expéditeur dans la corbeille ?",
 	"actions.unsubscribeTrashDone": "Désabonné, {count} e-mails placés dans la corbeille",
-	"attachment.downloadAllFlagged": "Certaines pièces jointes sont signalées comme potentiellement dangereuses. Télécharger l'archive quand même ?"
+	"attachment.downloadAllFlagged": "Certaines pièces jointes sont signalées comme potentiellement dangereuses. Télécharger l'archive quand même ?",
+	"undo.button": "Undo",
+	"undo.dismiss": "Dismiss",
+	"undo.failed": "Could not undo that change",
+	"undo.partial": "{applied} of {total} messages updated",
+	"undo.bulk.one": "{action} · {count} message",
+	"undo.bulk.other": "{action} · {count} messages",
+	"undo.label.archive": "Archived",
+	"undo.label.trash": "Moved to Trash",
+	"undo.label.spam": "Moved to Spam",
+	"undo.label.inbox": "Moved to Inbox",
+	"undo.label.folder": "Moved to folder",
+	"undo.label.read": "Marked as read",
+	"undo.label.unread": "Marked as unread",
+	"undo.label.star": "Starred",
+	"undo.label.unstar": "Unstarred",
+	"undo.label.snooze": "Snoozed",
+	"undo.label.unsnooze": "Unsnoozed"
 }

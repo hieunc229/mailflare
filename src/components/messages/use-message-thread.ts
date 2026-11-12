@@ -21,7 +21,9 @@ export function useMessageThread(messageId: string, threadId: string | null | un
 		if (!threadId) return;
 		let cancelled = false;
 		let refreshTimer: number | null = null;
+		let loadVersion = 0;
 		async function load() {
+			const version = ++loadVersion;
 			const cached = getCachedMessageThread(messageId);
 			if (cached) {
 				if (!cancelled) {
@@ -33,25 +35,26 @@ export function useMessageThread(messageId: string, threadId: string | null | un
 			setLoading(true);
 			try {
 				const next = await fetchMessageThread(messageId);
-				if (!cancelled) setMessages(next);
+				if (!cancelled && version === loadVersion) setMessages(next);
 			} catch (error) {
 				// A newer load is queued; keep the conversation on screen.
-				if (!cancelled && !isMessageThreadInvalidated(error)) setMessages([]);
+				if (!cancelled && version === loadVersion && !isMessageThreadInvalidated(error)) setMessages([]);
 			} finally {
-				if (!cancelled) setLoading(false);
+				if (!cancelled && version === loadVersion) setLoading(false);
 			}
 		}
 		void load();
 		function patchReadState(event: Event) {
 			const detail = (event as CustomEvent<{ kind?: string; messageIds?: string[]; read?: boolean }>).detail;
 			if (detail?.kind !== "read" || !detail.messageIds?.length) return;
+			// A response started before the read flip must not overwrite it.
+			loadVersion += 1;
 			const ids = new Set(detail.messageIds);
 			const read = detail.read !== false;
 			markMessageThreadReadInCaches(detail.messageIds, read);
 			setMessages((current) => current.map((message) => (ids.has(message.id) ? { ...message, read } : message)));
 		}
-		function scheduleLoad(event?: Event) {
-			if ((event as CustomEvent<{ kind?: string }> | undefined)?.detail?.kind === "read") return;
+		function scheduleLoad() {
 			if (document.visibilityState !== "visible") return;
 			if (refreshTimer) window.clearTimeout(refreshTimer);
 			refreshTimer = window.setTimeout(() => {

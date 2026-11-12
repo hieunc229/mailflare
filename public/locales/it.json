@@ -2466,5 +2466,22 @@
 	"actions.unsubscribeDeleteAll": "Annulla iscrizione ed elimina tutto",
 	"actions.unsubscribeDeleteConfirm": "Spostare {count} email precedenti di questo mittente nel Cestino?",
 	"actions.unsubscribeTrashDone": "Iscrizione annullata; {count} email spostate nel Cestino",
-	"attachment.downloadAllFlagged": "Alcuni allegati sono segnalati come potenzialmente pericolosi. Scaricare comunque l'archivio?"
+	"attachment.downloadAllFlagged": "Alcuni allegati sono segnalati come potenzialmente pericolosi. Scaricare comunque l'archivio?",
+	"undo.button": "Undo",
+	"undo.dismiss": "Dismiss",
+	"undo.failed": "Could not undo that change",
+	"undo.partial": "{applied} of {total} messages updated",
+	"undo.bulk.one": "{action} · {count} message",
+	"undo.bulk.other": "{action} · {count} messages",
+	"undo.label.archive": "Archived",
+	"undo.label.trash": "Moved to Trash",
+	"undo.label.spam": "Moved to Spam",
+	"undo.label.inbox": "Moved to Inbox",
+	"undo.label.folder": "Moved to folder",
+	"undo.label.read": "Marked as read",
+	"undo.label.unread": "Marked as unread",
+	"undo.label.star": "Starred",
+	"undo.label.unstar": "Unstarred",
+	"undo.label.snooze": "Snoozed",
+	"undo.label.unsnooze": "Unsnoozed"
 }

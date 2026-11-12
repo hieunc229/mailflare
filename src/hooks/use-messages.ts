@@ -71,8 +71,10 @@ export function useMessages(
 		}
 		function onMessagesChanged(event: Event) {
 			const readOnly = (event as CustomEvent<{ kind?: string }>).detail?.kind === "read";
-			// Read flips patch in place; "unread only" still needs a server refetch.
-			if (readOnly && filters?.read !== "unread") return;
+			// A read patch can overtake a list request that started before it. Bump
+			// the request number so that response can never repaint the old state;
+			// a quiet refetch then reconciles the page with the server.
+			requestNumber += 1;
 			if (!readOnly) {
 				clearMessageListCache();
 				clearMessageCountsCache();

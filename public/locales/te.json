@@ -2451,5 +2451,22 @@
 	"actions.unsubscribeDeleteAll": "చందా రద్దు & అన్నీ తొలగించు",
 	"actions.unsubscribeDeleteConfirm": "ఈ పంపిణీదారి {count} పాత ఇమెయిల్‌లను ట్రాష్‌కు తరలించాలా?",
 	"actions.unsubscribeTrashDone": "చందా రద్దైంది; {count} ఇమెయిల్‌లు ట్రాష్‌కు వెళ్లాయి",
-	"attachment.downloadAllFlagged": "కొన్ని అటాచ్‌మెంట్‌లు ప్రమాదకరంగా గుర్తు పెట్టబడ్డాయి. అయినా ఆర్కైవ్ డౌన్‌లోడ్ చేయాలా?"
+	"attachment.downloadAllFlagged": "కొన్ని అటాచ్‌మెంట్‌లు ప్రమాదకరంగా గుర్తు పెట్టబడ్డాయి. అయినా ఆర్కైవ్ డౌన్‌లోడ్ చేయాలా?",
+	"undo.button": "Undo",
+	"undo.dismiss": "Dismiss",
+	"undo.failed": "Could not undo that change",
+	"undo.partial": "{applied} of {total} messages updated",
+	"undo.bulk.one": "{action} · {count} message",
+	"undo.bulk.other": "{action} · {count} messages",
+	"undo.label.archive": "Archived",
+	"undo.label.trash": "Moved to Trash",
+	"undo.label.spam": "Moved to Spam",
+	"undo.label.inbox": "Moved to Inbox",
+	"undo.label.folder": "Moved to folder",
+	"undo.label.read": "Marked as read",
+	"undo.label.unread": "Marked as unread",
+	"undo.label.star": "Starred",
+	"undo.label.unstar": "Unstarred",
+	"undo.label.snooze": "Snoozed",
+	"undo.label.unsnooze": "Unsnoozed"
 }

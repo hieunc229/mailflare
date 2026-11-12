@@ -40,6 +40,12 @@ export function setCachedMessageRead(messageId: string, read: boolean): void {
 	if (cached?.message) cacheDetail(messageId, { ...cached, message: { ...cached.message, read } });
 }
 
+/** Field-scoped detail patch for star toggles and undo; read still goes through setCachedMessageRead. */
+export function patchCachedMessage(messageId: string, patch: { read?: boolean; starred?: boolean }): void {
+	const cached = getCachedMessageDetail(messageId);
+	if (cached?.message) cacheDetail(messageId, { ...cached, message: { ...cached.message, ...patch } });
+}
+
 /** Merge the row header into the cache; a missing body is fetched separately. */
 export function primeMessageDetail(message: Message): void {
 	const cached = getCachedMessageDetail(message.id);

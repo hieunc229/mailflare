@@ -1,7 +1,7 @@
 import { authFetch } from "@/lib/auth/client";
 import { parseSearchQuery } from "@/lib/search/query-utils";
 import { getUserTimeZone } from "@/lib/time/utils";
-import { setCachedMessageRead } from "@/lib/messages/detail-cache";
+import { patchCachedMessage } from "@/lib/messages/detail-cache";
 import { isReadOnlyChange } from "@/lib/messages/change-events";
 import type { MessageFilterOptions, MessageFolder } from "./types";
 import type { MessageCounts, MessageListResponse } from "./types";
@@ -90,12 +90,26 @@ export function clearMessageListCache() {
 	messageListRequests.clear();
 }
 
+/** Drops in-flight list requests without throwing away already-patched cached pages. */
+export function invalidateMessageListRequests() {
+	messageCacheGeneration += 1;
+	messageListRequests.clear();
+}
+
+export type CachedMessagePatch = {
+	read?: boolean;
+	starred?: boolean;
+};
+
 /**
- * Mirror a read/unread change into the cached lists and details, so a list
- * remounted later (or a detail reopened) never shows the old state.
+ * Mirror a field-scoped change into every cached list page and detail. Used by
+ * optimistic reads, star toggles and undo, so a remount never repaints the
+ * state the action just replaced.
  */
-export function markMessagesReadInCaches(messageIds: string[], read: boolean) {
+export function patchMessagesInCaches(messageIds: string[], patch: CachedMessagePatch) {
+	if (messageIds.length === 0) return;
 	const ids = new Set(messageIds);
+	invalidateMessageListRequests();
 	for (const [key, response] of messageListCache) {
 		if (!response.messages?.some((message) => ids.has(message.id)
 			|| message.threadMessageIds?.some((id) => ids.has(id)))) continue;
@@ -106,14 +120,25 @@ export function markMessagesReadInCaches(messageIds: string[], read: boolean) {
 					const threadSize = message.threadMessageIds.length;
 					const flipped = message.threadMessageIds.reduce((total, id) => total + (ids.has(id) ? 1 : 0), 0);
 					if (!flipped) return message;
-					const threadUnread = Math.min(threadSize, Math.max(0, (message.threadUnread ?? 0) + (read ? -flipped : flipped)));
-					return { ...message, read: threadUnread === 0, threadUnread };
+					if (patch.read !== undefined) {
+						const threadUnread = Math.min(threadSize, Math.max(0, (message.threadUnread ?? 0) + (patch.read ? -flipped : flipped)));
+						return { ...message, read: threadUnread === 0, threadUnread, ...(patch.starred !== undefined ? { starred: patch.starred } : {}) };
+					}
+					return patch.starred !== undefined ? { ...message, starred: patch.starred } : message;
 				}
-				return ids.has(message.id) ? { ...message, read } : message;
+				return ids.has(message.id) ? { ...message, ...patch } : message;
 			}),
 		});
 	}
-	for (const id of ids) setCachedMessageRead(id, read);
+	for (const id of ids) patchCachedMessage(id, patch);
+}
+
+/**
+ * Mirror a read/unread change into the cached lists and details, so a list
+ * remounted later (or a detail reopened) never shows the old state.
+ */
+export function markMessagesReadInCaches(messageIds: string[], read: boolean) {
+	patchMessagesInCaches(messageIds, { read });
 }
 
 // Caches must drop on every change, including ones made while no list is mounted

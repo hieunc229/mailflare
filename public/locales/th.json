@@ -2447,5 +2447,22 @@
 	"actions.unsubscribeDeleteAll": "ยกเลิกการสมัครรับและลบทั้งหมด",
 	"actions.unsubscribeDeleteConfirm": "ย้ายอีเมลเดิม {count} ฉบับจากผู้ส่งรายนี้ไปถังขยะ?",
 	"actions.unsubscribeTrashDone": "ยกเลิกการสมัครรับแล้ว ย้าย {count} ฉบับไปถังขยะ",
-	"attachment.downloadAllFlagged": "ไฟล์แนบบางไฟล์ถูกตั้งค่าสถานะว่าอาจเป็นอันตราย ดาวน์โหลดไฟล์เก็บถาวรต่อไหม"
+	"attachment.downloadAllFlagged": "ไฟล์แนบบางไฟล์ถูกตั้งค่าสถานะว่าอาจเป็นอันตราย ดาวน์โหลดไฟล์เก็บถาวรต่อไหม",
+	"undo.button": "Undo",
+	"undo.dismiss": "Dismiss",
+	"undo.failed": "Could not undo that change",
+	"undo.partial": "{applied} of {total} messages updated",
+	"undo.bulk.one": "{action} · {count} message",
+	"undo.bulk.other": "{action} · {count} messages",
+	"undo.label.archive": "Archived",
+	"undo.label.trash": "Moved to Trash",
+	"undo.label.spam": "Moved to Spam",
+	"undo.label.inbox": "Moved to Inbox",
+	"undo.label.folder": "Moved to folder",
+	"undo.label.read": "Marked as read",
+	"undo.label.unread": "Marked as unread",
+	"undo.label.star": "Starred",
+	"undo.label.unstar": "Unstarred",
+	"undo.label.snooze": "Snoozed",
+	"undo.label.unsnooze": "Unsnoozed"
 }

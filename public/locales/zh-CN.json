@@ -2433,5 +2433,22 @@
 	"actions.unsubscribeDeleteAll": "退订并全部删除",
 	"actions.unsubscribeDeleteConfirm": "将此发件人的 {count} 封旧邮件移至垃圾箱？",
 	"actions.unsubscribeTrashDone": "已退订，并将 {count} 封邮件移至垃圾箱",
-	"attachment.downloadAllFlagged": "部分附件被标记为可能存在危险。仍要下载该压缩包吗？"
+	"attachment.downloadAllFlagged": "部分附件被标记为可能存在危险。仍要下载该压缩包吗？",
+	"undo.button": "Undo",
+	"undo.dismiss": "Dismiss",
+	"undo.failed": "Could not undo that change",
+	"undo.partial": "{applied} of {total} messages updated",
+	"undo.bulk.one": "{action} · {count} message",
+	"undo.bulk.other": "{action} · {count} messages",
+	"undo.label.archive": "Archived",
+	"undo.label.trash": "Moved to Trash",
+	"undo.label.spam": "Moved to Spam",
+	"undo.label.inbox": "Moved to Inbox",
+	"undo.label.folder": "Moved to folder",
+	"undo.label.read": "Marked as read",
+	"undo.label.unread": "Marked as unread",
+	"undo.label.star": "Starred",
+	"undo.label.unstar": "Unstarred",
+	"undo.label.snooze": "Snoozed",
+	"undo.label.unsnooze": "Unsnoozed"
 }

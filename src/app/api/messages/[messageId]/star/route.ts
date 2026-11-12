@@ -26,7 +26,13 @@ export async function POST(
 	const access = await getMailboxAccessLevel(db, user, message.mailboxId);
 	if (!access?.canRead) return NextResponse.json({ error: "Message not found" }, { status: 404 });
 
-	const starred = !message.starred;
+	const body = (await _request.json().catch(() => null)) as { starred?: unknown } | null;
+	const payload = body && typeof body === "object" ? body : {};
+	if (payload.starred !== undefined && typeof payload.starred !== "boolean") {
+		return NextResponse.json({ error: "Invalid star state" }, { status: 400 });
+	}
+
+	const starred = payload.starred ?? !message.starred;
 	await db.update(messages).set({ starred }).where(eq(messages.id, message.id));
 	return NextResponse.json({ starred });
 }

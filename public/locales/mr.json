@@ -2451,5 +2451,22 @@
 	"actions.unsubscribeDeleteAll": "सदस्यता रद्द करा आणि सर्व हटवा",
 	"actions.unsubscribeDeleteConfirm": "या प्रेषकाचे {count} जुने ईमेल ट्रॅशमध्ये हलवायचे?",
 	"actions.unsubscribeTrashDone": "सदस्यता रद्द; {count} ईमेल ट्रॅशमध्ये गेले",
-	"attachment.downloadAllFlagged": "काही अटॅचमेंट संभावित धोकादायक म्हणून चिन्हांकित आहेत. तरीही संग्रह डाउनलोड करायचा?"
+	"attachment.downloadAllFlagged": "काही अटॅचमेंट संभावित धोकादायक म्हणून चिन्हांकित आहेत. तरीही संग्रह डाउनलोड करायचा?",
+	"undo.button": "Undo",
+	"undo.dismiss": "Dismiss",
+	"undo.failed": "Could not undo that change",
+	"undo.partial": "{applied} of {total} messages updated",
+	"undo.bulk.one": "{action} · {count} message",
+	"undo.bulk.other": "{action} · {count} messages",
+	"undo.label.archive": "Archived",
+	"undo.label.trash": "Moved to Trash",
+	"undo.label.spam": "Moved to Spam",
+	"undo.label.inbox": "Moved to Inbox",
+	"undo.label.folder": "Moved to folder",
+	"undo.label.read": "Marked as read",
+	"undo.label.unread": "Marked as unread",
+	"undo.label.star": "Starred",
+	"undo.label.unstar": "Unstarred",
+	"undo.label.snooze": "Snoozed",
+	"undo.label.unsnooze": "Unsnoozed"
 }
