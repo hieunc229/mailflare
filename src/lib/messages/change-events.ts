@@ -1,3 +1,5 @@
+import type { ThreadUnreadTarget } from "./field-store";
+
 export const MESSAGES_CHANGED_EVENT = "mailflare:messages-changed";
 
 export type MessageFieldPatch = {
@@ -12,8 +14,12 @@ export type MessagesChangedDetail = {
 	read?: boolean;
 	/** Per-message field patches, used when a batch has mixed values. */
 	patches?: MessageFieldPatch[];
-	/** Keep mounted views optimistic until the action request settles. */
-	deferRefresh?: boolean;
+	/**
+	 * Absolute grouped unread targets for rows touched by this event. Consumers
+	 * apply the target instead of incrementing a count they may already have
+	 * changed, so a repeated desired value and a second event are both no-ops.
+	 */
+	threadTargets?: ThreadUnreadTarget[];
 };
 
 export function dispatchMessagesChanged(detail?: MessagesChangedDetail): void {

@@ -36,6 +36,7 @@ import { SenderCheckNotice } from "@/components/messages/sender-check-notice";
 import { useMessageThread } from "@/components/messages/use-message-thread";
 import { useLatestMessagesFirst } from "@/components/messages/use-latest-messages-first";
 import { useMessageListVisibility } from "@/components/messages/message-list-visibility";
+import { subscribePendingOverlay } from "@/lib/messages/field-store";
 import { splitEmailAddressList } from "@/lib/email/address";
 import { findInviteAttachment } from "@/lib/calendar/invite-attachment";
 import { formatRecipientAddressList, type RecipientAddressStyle } from "@/lib/email/recipient-display";
@@ -196,9 +197,11 @@ function MessageDetailContent({ messageId }: { messageId: string }) {
       });
     }
     window.addEventListener("mailflare:messages-changed", syncCachedState);
+    const unsubscribePending = subscribePendingOverlay(syncCachedState);
     return () => {
       cancelled = true;
       window.removeEventListener("mailflare:messages-changed", syncCachedState);
+      unsubscribePending();
     };
   }, [messageId]);
 

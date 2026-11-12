@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import type { ThreadMessage } from "@/hooks/types";
+import { applyPendingToMessages, subscribePendingOverlay } from "@/lib/messages/field-store";
 import {
 	fetchMessageThread,
 	getCachedMessageThread,
@@ -35,7 +36,7 @@ export function useMessageThread(messageId: string, threadId: string | null | un
 			setLoading(true);
 			try {
 				const next = await fetchMessageThread(messageId);
-				if (!cancelled && version === loadVersion) setMessages(next);
+				if (!cancelled && version === loadVersion) setMessages(applyPendingToMessages(next));
 			} catch (error) {
 				// A newer load is queued; keep the conversation on screen.
 				if (!cancelled && version === loadVersion && !isMessageThreadInvalidated(error)) setMessages([]);
@@ -52,13 +53,13 @@ export function useMessageThread(messageId: string, threadId: string | null | un
 			const ids = new Set(detail.messageIds);
 			const read = detail.read !== false;
 			markMessageThreadReadInCaches(detail.messageIds, read);
-			setMessages((current) => current.map((message) => (ids.has(message.id) ? { ...message, read } : message)));
+			setMessages((current) => applyPendingToMessages(current.map((message) => (ids.has(message.id) ? { ...message, read } : message))));
 		}
 		function patchFieldState(event: Event) {
 			const detail = (event as CustomEvent<{ kind?: string; patches?: Array<{ id: string; read?: boolean; starred?: boolean }> }>).detail;
 			if (detail?.kind !== "patch" || !detail.patches?.length) return;
 			const patches = new Map(detail.patches.map((patch) => [patch.id, patch]));
-			setMessages((current) => current.map((message) => {
+			setMessages((current) => applyPendingToMessages(current.map((message) => {
 				const patch = patches.get(message.id);
 				if (!patch) return message;
 				return {
@@ -66,10 +67,9 @@ export function useMessageThread(messageId: string, threadId: string | null | un
 					...(patch.read !== undefined ? { read: patch.read } : {}),
 					...(patch.starred !== undefined ? { starred: patch.starred } : {}),
 				};
-			}));
+			})));
 		}
-		function scheduleLoad(event?: Event) {
-			if ((event as CustomEvent<{ deferRefresh?: boolean }> | undefined)?.detail?.deferRefresh) return;
+		function scheduleLoad() {
 			if (document.visibilityState !== "visible") return;
 			if (refreshTimer) window.clearTimeout(refreshTimer);
 			refreshTimer = window.setTimeout(() => {
@@ -77,6 +77,9 @@ export function useMessageThread(messageId: string, threadId: string | null | un
 				void load();
 			}, 150);
 		}
+		const unsubscribePending = subscribePendingOverlay(() => {
+			setMessages((current) => applyPendingToMessages(current));
+		});
 		window.addEventListener("mailflare:messages-changed", scheduleLoad);
 		window.addEventListener("mailflare:messages-changed", patchReadState);
 		window.addEventListener("mailflare:messages-changed", patchFieldState);
@@ -85,6 +88,7 @@ export function useMessageThread(messageId: string, threadId: string | null | un
 			window.removeEventListener("mailflare:messages-changed", scheduleLoad);
 			window.removeEventListener("mailflare:messages-changed", patchReadState);
 			window.removeEventListener("mailflare:messages-changed", patchFieldState);
+			unsubscribePending();
 			if (refreshTimer) window.clearTimeout(refreshTimer);
 		};
 	}, [messageId, threadId]);

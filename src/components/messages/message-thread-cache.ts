@@ -1,6 +1,10 @@
 import { AUTH_SESSION_CHANGED_EVENT, authFetch } from "@/lib/auth/client";
 import { getMessagesChangedDetail } from "@/lib/messages/change-events";
-import { rememberMessageFields, rememberMessageRows } from "@/lib/messages/field-store";
+import {
+	applyPendingToMessages,
+	rememberMessageFields,
+	rememberMessageRows,
+} from "@/lib/messages/field-store";
 import type { ThreadMessage, ThreadResponse } from "@/hooks/types";
 
 const CACHE_TTL_MS = 60_000;
@@ -30,9 +34,10 @@ function bodyChars(messages: ThreadMessage[]): number {
 
 function cacheThread(messageId: string, messages: ThreadMessage[]): void {
 	if (messages.length > MAX_CACHED_MESSAGES || bodyChars(messages) > MAX_CACHED_BODY_CHARS) return;
+	const pendingMessages = applyPendingToMessages(messages);
 	threadCache.delete(messageId);
-	threadCache.set(messageId, { messages, expiresAt: Date.now() + CACHE_TTL_MS });
-	rememberMessageRows(messages);
+	threadCache.set(messageId, { messages: pendingMessages, expiresAt: Date.now() + CACHE_TTL_MS });
+	rememberMessageRows(pendingMessages);
 	if (threadCache.size > CACHE_LIMIT) {
 		const oldest = threadCache.keys().next().value;
 		if (oldest) threadCache.delete(oldest);
@@ -49,7 +54,7 @@ export function getCachedMessageThread(messageId: string | null | undefined): Th
 	}
 	threadCache.delete(messageId);
 	threadCache.set(messageId, cached);
-	return cached.messages;
+	return applyPendingToMessages(cached.messages);
 }
 
 export function fetchMessageThread(messageId: string): Promise<ThreadMessage[]> {
@@ -66,7 +71,7 @@ export function fetchMessageThread(messageId: string): Promise<ThreadMessage[]> 
 			if (requestGeneration !== generation) throw new MessageThreadInvalidatedError();
 			const messages = data.messages ?? [];
 			cacheThread(messageId, messages);
-			return messages;
+			return applyPendingToMessages(messages);
 		})
 		.finally(() => {
 			if (threadRequests.get(messageId) === request) threadRequests.delete(messageId);
@@ -87,16 +92,23 @@ export function patchMessageThreadFieldsInCaches(
 	threadRequests.clear();
 	for (const [messageId, cached] of threadCache) {
 		if (!cached.messages.some((message) => ids.has(message.id))) continue;
-		threadCache.set(messageId, {
-			...cached,
-			messages: cached.messages.map((message) => (ids.has(message.id) ? { ...message, ...patch } : message)),
-		});
+		const messages = applyPendingToMessages(cached.messages.map((message) => (
+			ids.has(message.id) ? { ...message, ...patch } : message
+		)));
+		threadCache.set(messageId, { ...cached, messages });
+		rememberMessageRows(messages);
 	}
 	rememberMessageFields(messageIds, patch);
 }
 
 export function markMessageThreadReadInCaches(messageIds: string[], read: boolean): void {
 	patchMessageThreadFieldsInCaches(messageIds, { read });
+}
+
+/** Drops in-flight thread requests while keeping an already-patched cache. */
+export function invalidateMessageThreadRequests(): void {
+	generation += 1;
+	threadRequests.clear();
 }
 
 export function clearMessageThreadCache(): void {
@@ -123,8 +135,5 @@ if (typeof window !== "undefined") {
 				...(patch.starred !== undefined ? { starred: patch.starred } : {}),
 			});
 		}
-		// A settled star patch still needs the server's folder membership; an
-		// optimistic one must keep the patched conversation on screen.
-		if (!detail.deferRefresh) clearMessageThreadCache();
 	});
 }

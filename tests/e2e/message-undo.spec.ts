@@ -77,6 +77,14 @@ test("row read undo is optimistic while the undo request is pending", async ({ p
 		// The request is deliberately unresolved. The row must already be read
 		// again, which is the exact state the old implementation lost.
 		await expect(row.getByRole("button", { name: "Mark as unread" })).toHaveCount(1, { timeout: 5_000 });
+
+		// A generic realtime refresh can finish while the undo is held. Its
+		// server response still has the pre-undo value and must be overlaid.
+		await page.evaluate(() => {
+			window.dispatchEvent(new CustomEvent("mailflare:messages-changed", { detail: { realtime: true } }));
+		});
+		await page.waitForTimeout(400);
+		await expect(row.getByRole("button", { name: "Mark as unread" })).toHaveCount(1);
 	} finally {
 		const route = await Promise.race<Route | null>([held, new Promise((resolve) => setTimeout(() => resolve(null), 100))]);
 		if (route) await route.continue().catch(() => undefined);
@@ -85,4 +93,95 @@ test("row read undo is optimistic while the undo request is pending", async ({ p
 	// Once the server confirms, the refetch keeps the same restored value.
 	await expect(row.getByRole("button", { name: "Mark as unread" })).toHaveCount(1);
 	await expect(page.getByRole("button", { name: "Undo" })).toHaveCount(0);
+});
+
+/**
+ * Regression: a settled undo must leave the row action usable, including a
+ * second read on the same message.
+ */
+test("a row read still works after the previous undo settled", async ({ page }) => {
+	await resetDemo(page.request);
+	await login(page);
+	await page.goto("/inbox");
+
+	const initialRow = page.locator('[role="listitem"]').filter({
+		has: page.getByRole("button", { name: "Mark as read" }),
+	}).first();
+	await expect(initialRow).toBeVisible();
+	const href = await initialRow.locator('a[href^="/inbox/"]').first().getAttribute("href");
+	expect(href).toBeTruthy();
+	const row = page.locator('[role="listitem"]').filter({ has: page.locator(`a[href="${href}"]`) }).first();
+
+	await row.hover();
+	await row.getByRole("button", { name: "Mark as read" }).click();
+	await expect(row.getByRole("button", { name: "Mark as unread" })).toHaveCount(1);
+	await expect(page.getByRole("button", { name: "Undo" })).toBeVisible();
+
+	await page.getByRole("button", { name: "Undo" }).click();
+	await expect(row.getByRole("button", { name: "Mark as read" })).toHaveCount(1);
+	await expect(page.getByRole("button", { name: "Undo" })).toHaveCount(0);
+
+	await row.hover();
+	await row.getByRole("button", { name: "Mark as read" }).click();
+	await expect(row.getByRole("button", { name: "Mark as unread" })).toHaveCount(1);
+	await expect(page.getByRole("button", { name: "Undo" })).toBeVisible();
+});
+
+/**
+ * Regression: the reader's star state must follow the optimistic undo, and the
+ * detail cache must stay usable for a later star action.
+ */
+test("reader star undo is optimistic while held and a later star still works", async ({ page }) => {
+	await resetDemo(page.request);
+	await login(page);
+	await page.goto("/inbox");
+
+	const initialRow = page.locator('[role="listitem"]').filter({
+		has: page.getByRole("button", { name: "Mark as unread" }),
+	}).first();
+	await expect(initialRow).toBeVisible();
+	const href = await initialRow.locator('a[href^="/inbox/"]').first().getAttribute("href");
+	expect(href).toBeTruthy();
+	await page.goto(href!);
+	const article = page.locator("article");
+	await expect(article).toBeVisible();
+
+	const starButton = article.getByRole("button", { name: "Star", exact: true });
+	await expect(starButton).toBeVisible();
+	await starButton.click();
+	await expect(article.getByRole("button", { name: "Remove star", exact: true })).toBeVisible();
+
+	let resolveHeld: (route: Route) => void;
+	const held = new Promise<Route>((resolve) => { resolveHeld = resolve; });
+	await page.route("**/api/messages/actions", async (route) => {
+		const body = route.request().postDataJSON();
+		if (body?.op === "undo") {
+			resolveHeld(route);
+			return;
+		}
+		await route.continue();
+	});
+
+	try {
+		await page.getByRole("button", { name: "Undo" }).click();
+		await expect(article.getByRole("button", { name: "Star", exact: true })).toBeVisible({ timeout: 5_000 });
+
+		await page.evaluate(() => {
+			window.dispatchEvent(new CustomEvent("mailflare:messages-changed", { detail: { realtime: true } }));
+		});
+		await page.waitForTimeout(400);
+		await expect(article.getByRole("button", { name: "Star", exact: true })).toBeVisible();
+	} finally {
+		const route = await Promise.race<Route | null>([held, new Promise((resolve) => setTimeout(() => resolve(null), 100))]);
+		if (route) await route.continue().catch(() => undefined);
+	}
+
+	await expect(page.getByRole("button", { name: "Undo" })).toHaveCount(0);
+	await page.unroute("**/api/messages/actions");
+
+	// The successful undo kept the detail cache valid, so the next star action
+	// must reach the server and update the reader again.
+	await article.getByRole("button", { name: "Star", exact: true }).click();
+	await expect(article.getByRole("button", { name: "Remove star", exact: true })).toBeVisible();
+	await expect(page.getByRole("button", { name: "Undo" })).toBeVisible();
 });

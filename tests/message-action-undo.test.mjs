@@ -344,7 +344,7 @@ test("membership changes are distinguished from read/star-only patches", () => {
 	assert.equal(m.hasMembershipChange(record(state(), state({ status: "archived" }))), true);
 });
 
-test("explicit read patches the list cache and emits an optimistic deferred event", async () => {
+test("explicit read patches the list cache and emits an optimistic read event", async () => {
 	const params = new URLSearchParams({ case: "read-patch" });
 	await seedListCache(params, [{ id: "m1", read: true, starred: false }]);
 	const unread = record(state({ read: true }), state({ read: false }));
@@ -352,7 +352,7 @@ test("explicit read patches the list cache and emits an optimistic deferred even
 		m.defaultMessageActionHooks.onApplied({ ok: true, action: "unread", applied: [unread], skipped: [] }, { notify: false });
 	});
 	assert.equal(m.peekMessageList(params).messages[0].read, false);
-	assert.deepEqual(events.at(-1), { kind: "read", messageIds: ["m1"], read: false, deferRefresh: true });
+	assert.deepEqual(events.at(-1), { kind: "read", messageIds: ["m1"], read: false, threadTargets: [] });
 	assert.equal(m.captureMessageFields(["m1"]).get("m1").read, false);
 });
 

@@ -26,15 +26,24 @@ export type MessageActionTransport = (
 
 export type MessageActionHookOptions = { notify: boolean };
 
+export type MessageActionHookContext = {
+	/** Unique owner key for the pending overlay written by this operation. */
+	pendingOwner: string;
+	/** Grouped unread aggregates captured before the optimistic patch. */
+	capturedThreadUnread?: Map<string, number>;
+};
+
 export type MessageActionExecutorHooks = {
-	onApplyOptimistic?: (input: MessageActionInput, options: MessageActionHookOptions) => void;
-	onApplyFailed?: (input: MessageActionInput, options: MessageActionHookOptions) => void;
-	onApplied?: (response: MessageActionResponse, options: MessageActionHookOptions) => void;
+	onApplyOptimistic?: (input: MessageActionInput, options: MessageActionHookOptions, context: MessageActionHookContext) => void;
+	onApplyFailed?: (input: MessageActionInput, options: MessageActionHookOptions, context: MessageActionHookContext, error: unknown) => void;
+	onApplied?: (response: MessageActionResponse, options: MessageActionHookOptions, context: MessageActionHookContext) => void;
 	/** Snapshots the tab's current read/star values before an optimistic undo patch. */
 	captureCurrent?: (ids: string[]) => Map<string, KnownMessageFields>;
-	onUndoOptimistic?: (records: MessageActionRecord[], captured: Map<string, KnownMessageFields>) => void;
-	onUndoCompleted?: (records: MessageActionRecord[], response: UndoMessageActionResponse, captured: Map<string, KnownMessageFields>) => void;
-	onUndoFailed?: (records: MessageActionRecord[], captured: Map<string, KnownMessageFields>) => void;
+	/** Snapshots grouped unread aggregates before an optimistic undo patch. */
+	captureThreadUnread?: (ids: string[]) => Map<string, number>;
+	onUndoOptimistic?: (records: MessageActionRecord[], captured: Map<string, KnownMessageFields>, context: MessageActionHookContext) => void;
+	onUndoCompleted?: (records: MessageActionRecord[], response: UndoMessageActionResponse, captured: Map<string, KnownMessageFields>, context: MessageActionHookContext) => void;
+	onUndoFailed?: (records: MessageActionRecord[], captured: Map<string, KnownMessageFields>, context: MessageActionHookContext, error: unknown) => void;
 	onResync?: (messageIds: string[]) => void;
 };
 
@@ -45,6 +54,7 @@ export type MessageActionExecutorHooks = {
  */
 export class MessageActionExecutor {
 	private readonly tails = new Map<string, Promise<void>>();
+	private nextOperationId = 0;
 
 	constructor(
 		private readonly transport: MessageActionTransport,
@@ -54,20 +64,22 @@ export class MessageActionExecutor {
 	async run(input: MessageActionInput, options: { notify?: boolean } = {}): Promise<MessageActionResponse> {
 		return this.withLocks(input.messageIds, async () => {
 			const hookOptions = { notify: options.notify !== false };
-			this.hooks.onApplyOptimistic?.(input, hookOptions);
+			const context = { pendingOwner: `message-action:apply:${++this.nextOperationId}` };
+			this.hooks.onApplyOptimistic?.(input, hookOptions, context);
 			let response: MessageActionResponse | UndoMessageActionResponse;
 			try {
 				response = await this.transport({ op: "apply", ...input });
 			} catch (error) {
-				this.hooks.onApplyFailed?.(input, hookOptions);
+				this.hooks.onApplyFailed?.(input, hookOptions, context, error);
 				throw error;
 			}
 			if (!response || response.ok !== true || !("applied" in response) || !Array.isArray(response.applied) || !Array.isArray(response.skipped)) {
-				this.hooks.onApplyFailed?.(input, hookOptions);
-				throw new MessageActionRequestError("Unable to update message", 502);
+				const failure = new MessageActionRequestError("Unable to update message", 502);
+				this.hooks.onApplyFailed?.(input, hookOptions, context, failure);
+				throw failure;
 			}
 			const result = response as MessageActionResponse;
-			this.hooks.onApplied?.(result, hookOptions);
+			this.hooks.onApplied?.(result, hookOptions, context);
 			if (result.applied.length === 0 && result.skipped.length > 0) {
 				throw new MessageActionRequestError("No accessible messages", 404, result.skipped.length);
 			}
@@ -80,18 +92,23 @@ export class MessageActionExecutor {
 		const ids = records.map((record) => record.id);
 		return this.withLocks(ids, async () => {
 			const captured = this.hooks.captureCurrent?.(ids) ?? new Map<string, KnownMessageFields>();
-			this.hooks.onUndoOptimistic?.(records, captured);
+			const capturedThreadUnread = this.hooks.captureThreadUnread?.(ids);
+			const context = {
+				pendingOwner: `message-action:undo:${++this.nextOperationId}`,
+				capturedThreadUnread,
+			};
+			this.hooks.onUndoOptimistic?.(records, captured, context);
 			try {
 				const response = await this.transport({ op: "undo", token });
 				if (!response || response.ok !== true || !Array.isArray((response as UndoMessageActionResponse).restored)) {
 					throw new MessageActionRequestError("Could not undo that change", 502);
 				}
 				const result = response as UndoMessageActionResponse;
-				this.hooks.onUndoCompleted?.(records, result, captured);
+				this.hooks.onUndoCompleted?.(records, result, captured, context);
 				this.hooks.onResync?.(ids);
 				return result;
 			} catch (error) {
-				this.hooks.onUndoFailed?.(records, captured);
+				this.hooks.onUndoFailed?.(records, captured, context, error);
 				this.hooks.onResync?.(ids);
 				throw error;
 			}

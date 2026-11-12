@@ -2,8 +2,14 @@ import { authFetch } from "@/lib/auth/client";
 import { parseSearchQuery } from "@/lib/search/query-utils";
 import { getUserTimeZone } from "@/lib/time/utils";
 import { patchCachedMessage } from "@/lib/messages/detail-cache";
-import { rememberMessageFields, rememberMessageRows } from "@/lib/messages/field-store";
-import { isReadOnlyChange } from "@/lib/messages/change-events";
+import {
+	applyPendingToMessageList,
+	applyPendingToMessages,
+	getThreadUnreadTargets,
+	rememberMessageRows,
+	type ThreadUnreadTarget,
+} from "@/lib/messages/field-store";
+import { isReadOnlyChange, type MessageFieldPatch } from "@/lib/messages/change-events";
 import type { MessageFilterOptions, MessageFolder } from "./types";
 import type { MessageCounts, MessageListResponse } from "./types";
 
@@ -102,37 +108,116 @@ export type CachedMessagePatch = {
 	starred?: boolean;
 };
 
+export type MessageCachePatchOptions = {
+	/** Pre-click grouped targets used when rolling back a failed/skipped undo. */
+	threadTargets?: Iterable<ThreadUnreadTarget>;
+};
+
+function groupFieldPatches(fields: MessageFieldPatch[]): Map<string, CachedMessagePatch> {
+	const patches = new Map<string, CachedMessagePatch>();
+	for (const field of fields) {
+		if (field.read === undefined && field.starred === undefined) continue;
+		const current = patches.get(field.id) ?? {};
+		if (field.read !== undefined) current.read = field.read;
+		if (field.starred !== undefined) current.starred = field.starred;
+		patches.set(field.id, current);
+	}
+	return patches;
+}
+
+/**
+ * Mirrors field changes into every cached list page and detail. Grouped rows
+ * receive an absolute unread target computed from actual member transitions,
+ * so applying the same desired value twice cannot move the count twice.
+ */
+export function patchMessageFieldsInCaches(
+	fields: MessageFieldPatch[],
+	options: MessageCachePatchOptions = {},
+): ThreadUnreadTarget[] {
+	const patches = groupFieldPatches(fields);
+	if (patches.size === 0) return [];
+	const computedTargets = getThreadUnreadTargets([...patches].map(([id, patch]) => ({
+		id,
+		...(patch.read !== undefined ? { read: patch.read } : {}),
+	})));
+	const forcedTargets = options.threadTargets
+		? new Map([...options.threadTargets].map((target) => [target.id, target.threadUnread]))
+		: null;
+	const targets = computedTargets.map((target) => ({
+		id: target.id,
+		threadUnread: Math.max(0, Math.trunc(forcedTargets?.get(target.id) ?? target.threadUnread)),
+	}));
+	if (forcedTargets) {
+		for (const [id, threadUnread] of forcedTargets) {
+			if (!targets.some((target) => target.id === id)) {
+				targets.push({ id, threadUnread: Math.max(0, Math.trunc(threadUnread)) });
+			}
+		}
+	}
+	const targetsById = new Map(targets.map((target) => [target.id, target.threadUnread]));
+	const ids = new Set(patches.keys());
+	invalidateMessageListRequests();
+	for (const [key, response] of messageListCache) {
+		if (!response.messages?.some((message) => patches.has(message.id)
+			|| message.threadMessageIds?.some((id) => ids.has(id))
+			|| targetsById.has(message.id))) continue;
+		const messages = response.messages.map((message) => {
+			const direct = patches.get(message.id);
+			if (message.threadMessageIds?.length) {
+				const threadTarget = targetsById.get(message.id);
+				const memberPatch = message.threadMessageIds
+					.map((id) => patches.get(id))
+					.find((patch): patch is CachedMessagePatch => !!patch);
+				const next = { ...message };
+				let changed = false;
+				if (threadTarget !== undefined) {
+					const threadUnread = Math.min(message.threadMessageIds.length, threadTarget);
+					if (next.threadUnread !== threadUnread) {
+						next.threadUnread = threadUnread;
+						changed = true;
+					}
+					const read = threadUnread === 0;
+					if (next.read !== read) {
+						next.read = read;
+						changed = true;
+					}
+				}
+				const starred = direct?.starred ?? memberPatch?.starred;
+				if (starred !== undefined && next.starred !== starred) {
+					next.starred = starred;
+					changed = true;
+				}
+				return changed ? next : message;
+			}
+			if (!direct) return message;
+			const next = { ...message, ...direct };
+			return next.read === message.read && next.starred === message.starred ? message : next;
+		});
+		// Apply any still-active operation before the row reaches a consumer or
+		// the cache; a generic refresh while an undo request is pending must not
+		// see the server's pre-undo value.
+		const pendingMessages = applyPendingToMessages(messages);
+		messageListCache.set(key, { ...response, messages: pendingMessages });
+		rememberMessageRows(pendingMessages);
+	}
+	for (const [id, patch] of patches) patchCachedMessage(id, patch);
+	return targets;
+}
+
 /**
  * Mirror a field-scoped change into every cached list page and detail. Used by
  * optimistic reads, star toggles and undo, so a remount never repaints the
  * state the action just replaced.
  */
-export function patchMessagesInCaches(messageIds: string[], patch: CachedMessagePatch) {
-	if (messageIds.length === 0) return;
-	const ids = new Set(messageIds);
-	invalidateMessageListRequests();
-	for (const [key, response] of messageListCache) {
-		if (!response.messages?.some((message) => ids.has(message.id)
-			|| message.threadMessageIds?.some((id) => ids.has(id)))) continue;
-		messageListCache.set(key, {
-			...response,
-			messages: response.messages.map((message) => {
-				if (message.threadMessageIds) {
-					const threadSize = message.threadMessageIds.length;
-					const flipped = message.threadMessageIds.reduce((total, id) => total + (ids.has(id) ? 1 : 0), 0);
-					if (!flipped) return message;
-					if (patch.read !== undefined) {
-						const threadUnread = Math.min(threadSize, Math.max(0, (message.threadUnread ?? 0) + (patch.read ? -flipped : flipped)));
-						return { ...message, read: threadUnread === 0, threadUnread, ...(patch.starred !== undefined ? { starred: patch.starred } : {}) };
-					}
-					return patch.starred !== undefined ? { ...message, starred: patch.starred } : message;
-				}
-				return ids.has(message.id) ? { ...message, ...patch } : message;
-			}),
-		});
-	}
-	for (const id of ids) patchCachedMessage(id, patch);
-	rememberMessageFields(messageIds, patch);
+export function patchMessagesInCaches(
+	messageIds: string[],
+	patch: CachedMessagePatch,
+	options: MessageCachePatchOptions = {},
+): ThreadUnreadTarget[] {
+	return patchMessageFieldsInCaches(
+		messageIds.map((id) => ({ id, ...patch })),
+		options,
+	);
 }
 
 /**
@@ -194,18 +279,24 @@ export async function fetchMessageCounts(mailboxId?: string | null, force = fals
 }
 
 export function peekMessageList(params: URLSearchParams): MessageListResponse | undefined {
-	return messageListCache.get(params.toString());
+	const response = messageListCache.get(params.toString());
+	return response ? applyPendingToMessageList(response) : undefined;
 }
 
 export async function fetchMessageList(params: URLSearchParams, force = false): Promise<MessageListResponse> {
 	const key = params.toString();
-	if (!force && messageListCache.has(key)) return messageListCache.get(key) ?? {};
+	if (!force && messageListCache.has(key)) {
+		return applyPendingToMessageList(messageListCache.get(key) ?? {});
+	}
 	if (!force && messageListRequests.has(key)) return messageListRequests.get(key) ?? {};
 	const requestGeneration = messageCacheGeneration;
 	const request = authFetch(`/api/messages?${key}`)
 		.then((res) => res.json())
 		.then((data) => {
-			const response = data as MessageListResponse;
+			// Apply the overlay before the response reaches state or cache. Any
+			// generic refresh that started while an undo is pending therefore sees
+			// the optimistic value even if it lands after the optimistic patch.
+			const response = applyPendingToMessageList(data as MessageListResponse);
 			if (requestGeneration === messageCacheGeneration) {
 				messageListCache.set(key, response);
 				rememberMessageRows(response.messages ?? []);
