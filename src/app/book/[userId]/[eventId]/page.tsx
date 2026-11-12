@@ -11,7 +11,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { useBranding } from "@/components/branding-provider";
 import { RouteLoadingBar } from "@/components/route-loading-bar";
-import { getDisplayLocale, getUserTimeZone } from "@/lib/time/utils";
+import { formatUserDate, getUserTimeZone } from "@/lib/time/utils";
 import type { BookingSlot, PublicBookingEvent } from "../types";
 import { bookingTimeZones, calendarDays, formatCalendarDate, localDateForSlot, moveMonth, readBookingPageSelection, submitPublicBooking, writeBookingPageSelection } from "./utils";
 import { BookingDetailSkeleton } from "./booking-detail-skeleton";
@@ -118,7 +118,7 @@ export default function PublicBookingEventPage() {
 						<div className="mt-4 space-y-5 text-sm font-medium text-neutral-600 border-t border-neutral-100 pt-4">
 							<p className="flex items-start gap-3"><Clock3 size={18} className="shrink-0 text-neutral-600" />{t("public.minutes", { count: event.durationMinutes })}</p>
 							{event.location && <p className="flex items-start gap-3"><MapPin size={18} className="shrink-0 text-neutral-600" />{event.location}</p>}
-							{selectedSlot && <><p className="flex items-start gap-3"><CalendarDays size={18} className="shrink-0 text-neutral-600" /><span>{new Intl.DateTimeFormat(getDisplayLocale(), { hour: "numeric", minute: "2-digit", hourCycle: "h23", timeZone }).format(new Date(selectedSlot.startsAt))} – {new Intl.DateTimeFormat(getDisplayLocale(), { hour: "numeric", minute: "2-digit", hourCycle: "h23", timeZone }).format(new Date(selectedSlot.endsAt))}, {new Intl.DateTimeFormat(getDisplayLocale(), { weekday: "long", month: "long", day: "numeric", year: "numeric", timeZone }).format(new Date(selectedSlot.startsAt))}</span></p><p className="flex items-start gap-3"><Globe2 size={18} className="shrink-0 text-neutral-600" />{timeZone.replaceAll("_", " ")}</p></>}
+							{selectedSlot && <><p className="flex items-start gap-3"><CalendarDays size={18} className="shrink-0 text-neutral-600" /><span>{formatUserDate(selectedSlot.startsAt, { hour: "numeric", minute: "2-digit", hourCycle: "h23", timeZone })} – {formatUserDate(selectedSlot.endsAt, { hour: "numeric", minute: "2-digit", hourCycle: "h23", timeZone })}, {formatUserDate(selectedSlot.startsAt, { weekday: "long", month: "long", day: "numeric", year: "numeric", timeZone })}</span></p><p className="flex items-start gap-3"><Globe2 size={18} className="shrink-0 text-neutral-600" />{timeZone.replaceAll("_", " ")}</p></>}
 							{hostName && <p className="flex items-start gap-3"><Users size={18} className="shrink-0 text-neutral-600" /><span>{hostName}</span></p>}
 
 						</div>
@@ -133,7 +133,7 @@ export default function PublicBookingEventPage() {
 							<span className="truncate font-semibold">{branding.appName}</span>
 						</div>
 					</aside>
-					{done ? <section className="flex min-h-0 flex-col items-center justify-center px-8 py-20 text-center"><div className="mb-5 flex h-14 w-14 items-center justify-center rounded-full bg-green-100 text-green-700"><Check className="h-7 w-7" /></div><h2 className="text-2xl font-semibold">{t("public.booked")}</h2><p className="mt-3 text-sm text-neutral-500">{t("public.scheduledFor", { when: selectedSlot ? new Intl.DateTimeFormat(getDisplayLocale(), { dateStyle: "full", timeStyle: "short", timeZone }).format(new Date(selectedSlot.startsAt)) : "" })}</p></section> : selectedSlot ?
+					{done ? <section className="flex min-h-0 flex-col items-center justify-center px-8 py-20 text-center"><div className="mb-5 flex h-14 w-14 items-center justify-center rounded-full bg-green-100 text-green-700"><Check className="h-7 w-7" /></div><h2 className="text-2xl font-semibold">{t("public.booked")}</h2><p className="mt-3 text-sm text-neutral-500">{t("public.scheduledFor", { when: selectedSlot ? formatUserDate(selectedSlot.startsAt, { dateStyle: "full", timeStyle: "short", timeZone }) : "" })}</p></section> : selectedSlot ?
 						<form onSubmit={(formEvent) => { formEvent.preventDefault(); void book(); }} className="page-transition-enter min-h-0 space-y-6 overflow-y-auto p-7 max-sm:p-5 sm:p-10">
 							<h2 className="text-2xl font-medium">{t("public.enterDetails")}</h2>
 							<label className="block text-sm font-medium text-neutral-700">{t("public.name")} <span aria-hidden="true">*</span><Input required value={name} onChange={(input) => setName(input.target.value)} maxLength={120} autoComplete="name" className="mt-2" /></label>
@@ -159,7 +159,7 @@ export default function PublicBookingEventPage() {
 								</div>
 								{slots.length === 0 && <p className="mt-6 text-sm text-neutral-500">{t("public.noTimes60")}</p>}
 							</section>
-							{selectedDate && <section key={selectedDate} className="page-transition-enter flex min-h-0 flex-col p-7 max-sm:p-5 sm:p-9 lg:overflow-hidden"><h3 className="mb-6 shrink-0 text-lg font-semibold">{formatCalendarDate(selectedDate, { weekday: "long", month: "short", day: "numeric" })}</h3><div className="min-h-0 max-h-[50dvh] flex-1 space-y-3 overflow-y-auto pr-1 lg:max-h-none">{(slotsByDate.get(selectedDate) ?? []).length === 0 ? <p className="text-sm text-neutral-500">{t("public.noTimesDate")}</p> : (slotsByDate.get(selectedDate) ?? []).map((slot) => <button type="button" key={slot.startsAt} onClick={() => { setSelectedSlot(slot); setError(""); writeBookingPageSelection(selectedDate, slot.startsAt, timeZone); }} className="w-full rounded-md border border-neutral-300 bg-white px-4 py-3 text-center text-sm font-medium text-blue-700 hover:border-blue-500 hover:bg-blue-50">{new Intl.DateTimeFormat(getDisplayLocale(), { hour: "numeric", minute: "2-digit", hour12: true, timeZone }).format(new Date(slot.startsAt))}</button>)}</div></section>}
+							{selectedDate && <section key={selectedDate} className="page-transition-enter flex min-h-0 flex-col p-7 max-sm:p-5 sm:p-9 lg:overflow-hidden"><h3 className="mb-6 shrink-0 text-lg font-semibold">{formatCalendarDate(selectedDate, { weekday: "long", month: "short", day: "numeric" })}</h3><div className="min-h-0 max-h-[50dvh] flex-1 space-y-3 overflow-y-auto pr-1 lg:max-h-none">{(slotsByDate.get(selectedDate) ?? []).length === 0 ? <p className="text-sm text-neutral-500">{t("public.noTimesDate")}</p> : (slotsByDate.get(selectedDate) ?? []).map((slot) => <button type="button" key={slot.startsAt} onClick={() => { setSelectedSlot(slot); setError(""); writeBookingPageSelection(selectedDate, slot.startsAt, timeZone); }} className="w-full rounded-md border border-neutral-300 bg-white px-4 py-3 text-center text-sm font-medium text-blue-700 hover:border-blue-500 hover:bg-blue-50">{formatUserDate(slot.startsAt, { hour: "numeric", minute: "2-digit", hour12: true, timeZone })}</button>)}</div></section>}
 						</>}
 				</div>}
 		</div>

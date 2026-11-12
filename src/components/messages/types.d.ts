@@ -29,8 +29,9 @@ export type MessageListRowProps = {
 	currentAccountName?: string;
 	onSelectedChange: (messageId: string, selected: boolean) => void;
 	onMessageAction: (messageId: string, action: RowMessageAction) => Promise<void>;
-	onOpening?: () => void;
-	dragMessageIds: string[];
+	onOpening?: (messageId: string) => void;
+	dragMessageIds?: string[];
+	todayKey: string;
 };
 
 export type RowMessageAction = "archive" | "trash" | "read" | "unread";

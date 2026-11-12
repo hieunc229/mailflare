@@ -97,6 +97,7 @@ import {
 	PaperclipIcon as HugePaperclipIcon,
 	PauseCircleIcon as HugePauseCircleIcon,
 	PauseIcon as HugePauseIcon,
+	Note01Icon as HugeNote01Icon,
 	PenLineIcon as HugePenLineIcon,
 	PencilIcon as HugePencilIcon,
 	PlayIcon as HugePlayIcon,
@@ -260,6 +261,7 @@ export const Palette = createIcon(HugePaletteIcon, "Palette");
 export const Paperclip = createIcon(HugePaperclipIcon, "Paperclip");
 export const Pause = createIcon(HugePauseIcon, "Pause");
 export const PauseCircle = createIcon(HugePauseCircleIcon, "PauseCircle");
+export const Note = createIcon(HugeNote01Icon, "Note");
 export const PenLine = createIcon(HugePenLineIcon, "PenLine");
 export const Pencil = createIcon(HugePencilIcon, "Pencil");
 export const Play = createIcon(HugePlayIcon, "Play");

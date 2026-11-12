@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { formatUserDate } from "@/lib/time/utils";
 import { ChevronsUpDown, Paperclip } from "@/components/icons";
 import { ContactAvatar } from "@/components/contacts/contact-avatar";
@@ -47,6 +47,29 @@ export function ConversationThread({
 }: ConversationThreadProps) {
 	const { t } = useLanguage();
 	const slice = partitionThread(messages, currentMessageId, position, latestMessagesFirst);
+	const revealTarget = useRef<string | null>(null);
+
+	// A note chip can point at an email hidden inside the collapsed middle.
+	useEffect(() => {
+		function reveal(event: Event) {
+			const id = (event as CustomEvent<string>).detail;
+			if (expandedAll) return;
+			const hidden = partitionThread(messages, currentMessageId, position, latestMessagesFirst).slice(1, -1);
+			if (!hidden.some((message) => message.id === id)) return;
+			revealTarget.current = id;
+			onExpandedAllChange(true);
+		}
+		window.addEventListener("mailflare:reveal-message", reveal);
+		return () => window.removeEventListener("mailflare:reveal-message", reveal);
+	}, [expandedAll, messages, currentMessageId, position, latestMessagesFirst, onExpandedAllChange]);
+
+	useEffect(() => {
+		if (!expandedAll || revealTarget.current === null) return;
+		const id = revealTarget.current;
+		revealTarget.current = null;
+		document.querySelector(`[data-message-id="${CSS.escape(id)}"]`)?.scrollIntoView({ behavior: "smooth", block: "start" });
+	}, [expandedAll]);
+
 	if (slice.length === 0) return null;
 	const firstMessage = slice[0];
 	const lastMessage = slice.at(-1)!;
@@ -143,6 +166,15 @@ export function ConversationMessageCard({
 
 	useEffect(() => setLocallyRead(message.read), [message.read]);
 
+	// A note chip can point at this email while the card is collapsed.
+	useEffect(() => {
+		function reveal(event: Event) {
+			if ((event as CustomEvent<string>).detail === message.id) setLocallyExpanded(true);
+		}
+		window.addEventListener("mailflare:reveal-message", reveal);
+		return () => window.removeEventListener("mailflare:reveal-message", reveal);
+	}, [message.id]);
+
 	const body = useMemo(() => {
 		if (!expanded) return null;
 		const display = getMessageBodyDisplay(message.textBody, message.htmlBody, message.snippet);
@@ -155,7 +187,7 @@ export function ConversationMessageCard({
 
 
 	return (
-		<article className={cn("bg-white transition-colors px-3 sm:px-6", !expanded && "hover:bg-neutral-50", !isAnyPanelVisible && "sm:pl-12")}>
+		<article data-message-id={message.id} className={cn("bg-white transition-colors px-3 sm:px-6", !expanded && "hover:bg-neutral-50", !isAnyPanelVisible && "sm:pl-12")}>
 			<div className="w-full">
 				<div className="flex w-full flex-wrap items-start gap-x-3 py-3 sm:pl-4">
 					<button
