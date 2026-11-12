@@ -14,7 +14,7 @@ await build({
 	outdir: dir, outExtension: { ".js": ".mjs" }, bundle: true, platform: "node", format: "esm", logLevel: "silent",
 	alias: { "@": join(root, "src") },
 });
-const { buildBookingConfirmation, formatBookingWhen } = await import(pathToFileURL(join(dir, "c.mjs")).href);
+const { buildBookingConfirmation, formatBookingWhen, pickConfirmationLanguage } = await import(pathToFileURL(join(dir, "c.mjs")).href);
 
 const startsAt = new Date("2026-11-17T13:00:00Z");
 const endsAt = new Date("2026-11-17T13:30:00Z");
@@ -37,4 +37,20 @@ test("builds subject and body, leaving out empty location and notes", () => {
 	const full = buildBookingConfirmation({ ...base, location: "https://meet.example/abc", notes: "About pricing" });
 	assert.match(full.text, /Where: https:\/\/meet\.example\/abc/);
 	assert.match(full.text, /Your notes:\nAbout pricing/);
+});
+
+test("writes German for German guests", () => {
+	assert.equal(formatBookingWhen(startsAt, endsAt, "Europe/Berlin", "de"), "Dienstag, 17. November 2026, 14:00–14:30 Uhr (Europe/Berlin)");
+	const mail = buildBookingConfirmation({ eventName: "Beratung", hostName: "Paul", guestName: "Ana", location: "Telefon", notes: "", startsAt, endsAt, timeZone: "Europe/Berlin" }, "de");
+	assert.equal(mail.subject, "Bestätigt: Beratung mit Paul");
+	assert.match(mail.text, /^Guten Tag Ana,\n\nIhre Buchung ist bestätigt: Beratung mit Paul\./);
+	assert.match(mail.text, /Wo: Telefon/);
+});
+
+test("picks the booking page language, then the browser's, then English", () => {
+	assert.equal(pickConfirmationLanguage("de", "en-US,en;q=0.9"), "de");
+	assert.equal(pickConfirmationLanguage("en", "de-DE,de;q=0.9"), "en");
+	assert.equal(pickConfirmationLanguage(null, "fr-FR,de;q=0.8,en;q=0.5"), "de");
+	assert.equal(pickConfirmationLanguage("pt-BR", "ja"), "en");
+	assert.equal(pickConfirmationLanguage(undefined, undefined), "en");
 });

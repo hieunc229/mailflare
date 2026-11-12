@@ -5,7 +5,7 @@ import { createCalendarInvitation } from "@/lib/calendar/utils";
 import { sendEmail } from "@/lib/email/send";
 import { newId } from "@/lib/ids";
 import { mailboxAddress } from "@/lib/profile/identity-utils";
-import { buildBookingConfirmation } from "./confirmation-utils";
+import { bookingMeetingTitle, buildBookingConfirmation, type ConfirmationLanguage } from "./confirmation-utils";
 import type { BookingEventRecord } from "./types";
 
 /** The event owner's own mailbox: the one at their account address, else their oldest personal one. */
@@ -29,7 +29,7 @@ async function findHostMailbox(env: CloudflareEnv, userId: string): Promise<{ id
  */
 export async function sendBookingConfirmation(
 	env: CloudflareEnv,
-	input: { event: BookingEventRecord; hostName: string; guestName: string; guestEmail: string; guestEmails: string[]; notes: string; startsAt: string; endsAt: string; publicOrigin?: string },
+	input: { event: BookingEventRecord; hostName: string; guestName: string; guestEmail: string; guestEmails: string[]; notes: string; startsAt: string; endsAt: string; language?: ConfirmationLanguage; publicOrigin?: string },
 ): Promise<boolean> {
 	try {
 		const mailbox = await findHostMailbox(env, input.event.userId);
@@ -48,9 +48,9 @@ export async function sendBookingConfirmation(
 			startsAt,
 			endsAt,
 			timeZone: input.event.timeZone,
-		});
+		}, input.language);
 		const invite = createCalendarInvitation({
-			title: `${input.event.name} with ${input.hostName}`,
+			title: bookingMeetingTitle(input.event.name, input.hostName, input.language),
 			description: input.event.description || text,
 			location: input.event.location,
 			startsAt,
