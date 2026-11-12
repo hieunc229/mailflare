@@ -171,7 +171,12 @@ function startVisibleTimer(id: number) {
 }
 
 function promoteQueued() {
-	if (queued.length === 0 || entries.length >= UNDO_TOAST_LIMITS.visible) return;
+	if (entries.length >= UNDO_TOAST_LIMITS.visible) return;
+	pruneExpiredQueued(Date.now());
+	if (queued.length === 0) {
+		scheduleQueueExpiry();
+		return;
+	}
 	const promoted = { ...queued[0] };
 	delete promoted.queuedAt;
 	queued = queued.slice(1);
@@ -257,21 +262,26 @@ export function getUndoAnnouncements(): UndoToastAnnouncement[] {
 	return announcements;
 }
 
-function oldestTerminalReceipt(): UndoToastEntry | undefined {
+function terminalReceiptCandidates(): UndoToastEntry[] {
 	return entries
 		.filter((entry) => entry.status === "failed" || entry.status === "partial")
-		.sort((a, b) => a.id - b.id)[0];
+		.filter((entry) => !(entry.status === "failed" && entry.failure?.retryable))
+		.filter((entry) => !isToastFocused(entry.id))
+		.sort((a, b) => a.id - b.id);
+}
+
+function oldestTerminalReceipt(): UndoToastEntry | undefined {
+	return terminalReceiptCandidates()[0];
 }
 
 function oldestRedundantTerminalReceipt(): UndoToastEntry | undefined {
-	const terminals = entries
-		.filter((entry) => entry.status === "failed" || entry.status === "partial")
-		.sort((a, b) => a.id - b.id);
+	const terminals = terminalReceiptCandidates();
 	return terminals.length > 1 ? terminals[0] : undefined;
 }
 
 /** A receipt turning terminal must not leave an older actionable undo stuck in the queue. */
 function ensureQueuedVisible() {
+	pruneExpiredQueued(Date.now());
 	if (queued.length === 0 || entries.length < UNDO_TOAST_LIMITS.visible) return;
 	const terminal = oldestRedundantTerminalReceipt();
 	if (terminal) removeEntry(terminal.id);

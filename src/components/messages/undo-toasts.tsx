@@ -64,6 +64,7 @@ const BLOCKING_OVERLAY_SELECTOR = [
 	".dialog-overlay",
 	'[data-mobile-menu][aria-expanded="true"]',
 ].join(", ");
+const COMPOSE_SELECTOR = "[data-compose-surface]";
 const INTERACTION_SELECTOR = `${BLOCKING_OVERLAY_SELECTOR}, #main-content[inert], #main-content[aria-hidden="true"]`;
 
 /** A modal or mobile sidebar owns focus and must not be bypassed by toast cleanup. */
@@ -78,6 +79,11 @@ function hasInteractionHold() {
 	return !!document.querySelector(INTERACTION_SELECTOR);
 }
 
+function hasComposeSurface() {
+	if (typeof document === "undefined") return false;
+	return !!document.querySelector(COMPOSE_SELECTOR);
+}
+
 function subscribeInteractionState(onChange: () => void) {
 	if (typeof document === "undefined") return () => undefined;
 	const observer = new MutationObserver(onChange);
@@ -85,13 +91,19 @@ function subscribeInteractionState(onChange: () => void) {
 		childList: true,
 		subtree: true,
 		attributes: true,
-		attributeFilter: ["role", "aria-modal", "class", "open", "aria-expanded", "aria-hidden", "inert"],
+		attributeFilter: ["role", "aria-modal", "class", "open", "aria-expanded", "aria-hidden", "inert", "data-compose-surface"],
 	});
 	return () => observer.disconnect();
 }
 
-function useInteractionHeld() {
-	return useSyncExternalStore(subscribeInteractionState, hasInteractionHold, () => false);
+function getToastHoldState() {
+	const interaction = hasInteractionHold() ? 1 : 0;
+	const composing = hasComposeSurface() ? 2 : 0;
+	return interaction | composing;
+}
+
+function useToastHolds() {
+	return useSyncExternalStore(subscribeInteractionState, getToastHoldState, () => 0);
 }
 
 function failureFromError(error: unknown): UndoToastFailure {
@@ -174,19 +186,29 @@ function restoreFocusAfterAction(entryId: number) {
 	if (typeof window === "undefined") return;
 	window.setTimeout(() => {
 		const active = document.activeElement;
-		if (active && active !== document.body && (active as HTMLElement).isConnected) return;
-		if (hasBlockingOverlay()) return;
+		const activeInRegion = active instanceof HTMLElement && !!active.closest("[data-undo-region]");
+		if (active && active !== document.body && (active as HTMLElement).isConnected) {
+			if (!activeInRegion) resumeUndoToasts("region");
+			return;
+		}
+		if (hasBlockingOverlay()) {
+			resumeUndoToasts("region");
+			return;
+		}
 		const toast = document.querySelector<HTMLElement>(`[data-undo-toast-id="${entryId}"]`);
 		if (toast && isAvailableSurface(toast)) {
 			const dismiss = toast.querySelector<HTMLElement>("[data-undo-dismiss]");
 			if (dismiss && !dismiss.hasAttribute("disabled") && !dismiss.hasAttribute("aria-disabled")) {
 				dismiss.focus({ preventScroll: true });
+				if (!document.activeElement?.closest("[data-undo-region]")) resumeUndoToasts("region");
 				return;
 			}
 			if (!toast.hasAttribute("tabindex")) toast.tabIndex = -1;
 			toast.focus({ preventScroll: true });
+			if (!document.activeElement?.closest("[data-undo-region]")) resumeUndoToasts("region");
 			return;
 		}
+		resumeUndoToasts("region");
 		focusVisibleAppSurface();
 	}, 0);
 }
@@ -196,7 +218,9 @@ export function UndoToasts() {
 	const { t } = useLanguage();
 	const toasts = useSyncExternalStore(subscribeUndoToasts, getUndoToasts, () => EMPTY_TOASTS);
 	const announcements = useSyncExternalStore(subscribeUndoToasts, getUndoAnnouncements, () => EMPTY_ANNOUNCEMENTS);
-	const interactionHeld = useInteractionHeld();
+	const holdState = useToastHolds();
+	const interactionHeld = (holdState & 1) !== 0;
+	const pauseHeld = holdState !== 0;
 	const [polite, setPolite] = useState<{ text: string; sequence: number } | null>(null);
 	const [assertive, setAssertive] = useState<{ text: string; sequence: number } | null>(null);
 	// A late mount must not replay announcements that were already made. New
@@ -204,14 +228,14 @@ export function UndoToasts() {
 	const seenAnnouncement = useRef(announcements.at(-1)?.sequence ?? 0);
 
 	useEffect(() => {
-		if (interactionHeld) {
+		if (pauseHeld) {
 			pauseUndoToasts("interaction");
 			resumeUndoToasts("region");
 		} else {
 			resumeUndoToasts("interaction");
 		}
 		return () => resumeUndoToasts("interaction");
-	}, [interactionHeld]);
+	}, [pauseHeld]);
 
 	useEffect(() => {
 		if (toasts.length === 0) resumeUndoToasts("region");
@@ -293,6 +317,7 @@ export function UndoToasts() {
 					role="region"
 					aria-label={t("undo.region")}
 					tabIndex={0}
+					data-undo-region
 					inert={interactionHeld}
 					aria-hidden={interactionHeld || undefined}
 					onFocusCapture={() => pauseUndoToasts("region")}

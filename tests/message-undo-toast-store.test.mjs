@@ -241,6 +241,51 @@ test("terminal receipts yield a visible slot when a new action needs one", () =>
 	assert.equal(store.getUndoAnnouncements().at(-1).kind, "applied");
 });
 
+test("pressure never retires a retryable failure acknowledgement", () => {
+	const ids = [1, 2, 3, 4].map((id) => add(id));
+	for (const id of ids) {
+		store.beginUndoToast(id);
+		store.failUndoToast(id, { kind: "server", retryable: true });
+	}
+
+	const fresh = add(5);
+	assert.deepEqual(store.getUndoToasts().map((entry) => entry.id), ids);
+	assert.deepEqual(store.getQueuedUndoToasts().map((entry) => entry.id), [fresh]);
+});
+
+test("pressure never retires a focused receipt, and retires it after focus leaves", () => {
+	const ids = [1, 2, 3, 4].map((id) => add(id));
+	store.beginUndoToast(ids[0]);
+	store.failUndoToast(ids[0], { kind: "stale", retryable: false });
+	const holder = document.createElement("div");
+	holder.dataset.undoToastId = String(ids[0]);
+	const button = document.createElement("button");
+	holder.appendChild(button);
+	document.body.appendChild(holder);
+	button.focus();
+
+	const fresh = add(5);
+	assert.deepEqual(store.getUndoToasts().map((entry) => entry.id), ids);
+	assert.deepEqual(store.getQueuedUndoToasts().map((entry) => entry.id), [fresh]);
+	assert.equal(document.activeElement, button);
+
+	button.blur();
+	const next = add(6);
+	assert.equal(store.getUndoToasts()[0].id, ids[1]);
+	assert.deepEqual(store.getUndoToasts().map((entry) => entry.id), ids.slice(1).concat(fresh));
+	assert.deepEqual(store.getQueuedUndoToasts().map((entry) => entry.id), [next]);
+});
+
+test("promotion prunes a queued notice whose expiry timer was throttled", () => {
+	const ids = [1, 2, 3, 4].map((id) => add(id));
+	const queuedId = add(5);
+	now += store.QUEUE_MAX_AGE_MS + 1;
+	store.dismissUndoToast(ids[0]);
+	assert.deepEqual(store.getQueuedUndoToasts(), []);
+	assert.equal(store.getUndoToasts().some((entry) => entry.id === queuedId), false);
+	assert.deepEqual(store.getUndoToasts().map((entry) => entry.id), ids.slice(1));
+});
+
 test("a terminal receipt turning while an undo is queued promotes the active undo and keeps one ack", () => {
 	const ids = [1, 2, 3, 4].map((id) => add(id));
 	const queuedId = add(5);

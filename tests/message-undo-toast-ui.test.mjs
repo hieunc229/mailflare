@@ -397,6 +397,69 @@ test("focus falls back to a visible app surface when main is inert", async (t) =
 	assistant.remove();
 });
 
+test("removing a focused toast resumes the remaining region countdown", async (t) => {
+	const app = await mount(t);
+	const clock = installWindowClock();
+	t.after(() => clock.restore());
+
+	const first = await act(async () => show({ token: "first" }));
+	const second = await act(async () => show({ token: "second" }));
+	await ui.flush();
+	const close = toast(app.container, first).querySelector('button[aria-label="Dismiss"]');
+	close.focus();
+	assert.equal(document.activeElement, close);
+	await act(async () => { close.click(); });
+	await ui.flush();
+	await act(async () => { clock.advance(0); });
+	await ui.flush();
+	assert.equal(toast(app.container, first), null);
+	assert.equal(document.activeElement, document.getElementById("main-content"));
+	await act(async () => { clock.advance(19_999); });
+	assert.ok(toast(app.container, second), "the remaining toast still has its countdown");
+	await act(async () => { clock.advance(1); });
+	assert.equal(toast(app.container, second), null);
+
+	globalThis.undoHandler = async () => ({ ok: true, action: "archive", restored: ["m1"], skipped: [] });
+	const third = await act(async () => show({ token: "third" }));
+	const fourth = await act(async () => show({ token: "fourth" }));
+	await ui.flush();
+	const undo = buttonByText(toast(app.container, third), "Undo");
+	undo.focus();
+	await act(async () => { undo.click(); });
+	await ui.flush();
+	await act(async () => { clock.advance(0); });
+	assert.equal(toast(app.container, third), null);
+	assert.equal(document.activeElement, document.getElementById("main-content"));
+	await act(async () => { clock.advance(19_999); });
+	assert.ok(toast(app.container, fourth));
+	await act(async () => { clock.advance(1); });
+	assert.equal(toast(app.container, fourth), null);
+});
+
+test("a compose surface holds countdowns without blocking the toast", async (t) => {
+	const app = await mount(t);
+	const clock = installWindowClock();
+	t.after(() => clock.restore());
+	const id = await act(async () => show());
+	await ui.flush();
+
+	const compose = document.createElement("form");
+	compose.dataset.composeSurface = "";
+	document.body.appendChild(compose);
+	await ui.flush();
+	const region = app.container.querySelector('[role="region"]');
+	assert.equal(region.hasAttribute("inert"), false, "the non-modal composer pauses timers but leaves the toast available");
+	await act(async () => { clock.advance(60_000); });
+	assert.ok(toast(app.container, id));
+
+	compose.remove();
+	await ui.flush();
+	await act(async () => { clock.advance(19_999); });
+	assert.ok(toast(app.container, id));
+	await act(async () => { clock.advance(1); });
+	assert.equal(toast(app.container, id), null);
+});
+
 test("focusing the notification region pauses every countdown", async (t) => {
 	const app = await mount(t);
 	const clock = installWindowClock();
