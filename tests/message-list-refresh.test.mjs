@@ -28,6 +28,39 @@ export default function Link({ href, children, ...props }) {
   return React.createElement("a", { href, ...props }, children);
 }
 `],
+	["next/navigation", `
+const router = {
+  push() {},
+  replace() {},
+  refresh() {},
+  back() {},
+  forward() {},
+  prefetch() {},
+};
+export function useRouter() {
+  return router;
+}
+export function usePathname() {
+  return globalThis.__testPathname ?? "/inbox";
+}
+export function useParams() {
+  return {};
+}
+export function useSearchParams() {
+  return new URLSearchParams();
+}
+export function useSelectedLayoutSegment() {
+  return null;
+}
+export function useSelectedLayoutSegments() {
+  return [];
+}
+export function redirect() {}
+export function permanentRedirect() {}
+export function notFound() {
+  throw new Error("notFound");
+}
+`],
 	["@/components/language-provider", `
 export function useLanguage() {
   return { t(key, vars) { return vars && vars.total !== undefined ? key + ":" + vars.total : key; } };
