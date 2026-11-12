@@ -58,6 +58,8 @@ import clsx from "clsx";
 import { useAssistantOpen } from "@/components/agent/assistant-open-state";
 import { useMessageContentScroll } from "./use-message-content-scroll";
 import { useSendViewStatus } from "@/components/messages/use-send-view-status";
+import { MailingListBanner } from "@/components/messages/mailing-list-banner";
+import { useMailingListBanner } from "@/components/messages/use-mailing-list-banner";
 
 const EMPTY_ATTACHMENTS: MessageAttachment[] = [];
 
@@ -97,6 +99,7 @@ function MessageDetailContent({ messageId }: { messageId: string }) {
   const assistantVisible = useAssistantOpen();
   const isAnyPanelVisible = messageListVisible || assistantVisible;
   const { scrollRef, scrolled, handleScroll } = useMessageContentScroll(messageId, loading);
+  const [unsubBannerDismissed, dismissUnsubBanner] = useMailingListBanner(messageId);
 
   useEffect(() => {
     let cancelled = false;
@@ -202,6 +205,7 @@ function MessageDetailContent({ messageId }: { messageId: string }) {
       : [`${messageMailbox.localPart}@${messageMailbox.hostname}`]
     : [];
   const ownAddress = message ? getOwnAddressForMessage(message, ownAddresses) : "";
+  const canUnsubscribe = message?.direction === "inbound" && message.status !== "spam" && !!message.hasUnsubscribe;
   const bodyDisplay = useMemo(
     () => getMessageBodyDisplay(body?.textBody, body?.htmlBody, message?.snippet, ownAddress),
     [body?.textBody, body?.htmlBody, message?.snippet, ownAddress],
@@ -333,6 +337,9 @@ function MessageDetailContent({ messageId }: { messageId: string }) {
       />
       <article data-message-id={message.id} className={clsx("py-4 sm:px-6", !isAnyPanelVisible && "sm:pl-12")}>
         <div className="w-full">
+          {canUnsubscribe && !unsubBannerDismissed && (
+            <MailingListBanner messageId={message.id} onDismiss={dismissUnsubBanner} />
+          )}
           <div className="flex flex-wrap items-start justify-between gap-x-3 gap-y-1 px-4 pb-5 sm:px-0 sm:pl-4">
             <div className="flex min-w-0 items-start gap-3">
               <ContactAvatar
@@ -359,7 +366,7 @@ function MessageDetailContent({ messageId }: { messageId: string }) {
                     )}
                   </b>{" "}
                   <span className="hidden sm:block text-neutral-500 text-xs flex-1 overflow-hidden text-ellipsis min-w-0">&lt;{fromAddress}&gt;</span>
-                  {message.direction === "inbound" && message.status !== "spam" && message.hasUnsubscribe && (
+                  {canUnsubscribe && unsubBannerDismissed && (
                     <MessageUnsubscribeButton key={message.id} messageId={message.id} />
                   )}
                 </p>
