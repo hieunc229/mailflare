@@ -14,7 +14,7 @@ await build({
 	outdir: dir, outExtension: { ".js": ".mjs" }, bundle: true, platform: "node", format: "esm", logLevel: "silent",
 	alias: { "@": join(root, "src") },
 });
-const { buildBookingCalendarFile, buildBookingConfirmation, formatBookingWhen, pickConfirmationLanguage } = await import(pathToFileURL(join(dir, "c.mjs")).href);
+const { buildBookingCalendarFile, buildBookingConfirmation, formatBookingWhen, parseConfirmationTemplateInput, pickConfirmationLanguage, renderBookingTemplate } = await import(pathToFileURL(join(dir, "c.mjs")).href);
 
 const startsAt = new Date("2026-11-17T13:00:00Z");
 const endsAt = new Date("2026-11-17T13:30:00Z");
@@ -60,4 +60,33 @@ test("the calendar file is a plain event to add, not a meeting request", () => {
 	assert.match(ics, /\r\nMETHOD:PUBLISH\r\n/);
 	assert.match(ics, /\r\nDTSTART:20261117T130000Z\r\nDTEND:20261117T133000Z\r\n/);
 	assert.doesNotMatch(ics, /ORGANIZER|ATTENDEE|RSVP/);
+});
+
+test("a custom template fills known placeholders and leaves others as written", () => {
+	const values = { guestName: "Ana", eventName: "Beratung", hostName: "Paul", when: "morgen", location: "Telefon", notes: "" };
+	assert.equal(renderBookingTemplate("Hallo {guestName}, {eventName} {when} {unknown} {notes}.", values), "Hallo Ana, Beratung morgen {unknown} .");
+});
+
+test("the event's subject and body replace the default, each on its own", () => {
+	const content = { eventName: "Beratung", hostName: "Paul", guestName: "Ana\nBcc: x@evil.test", location: "Telefon", notes: "Preise", startsAt, endsAt, timeZone: "Europe/Berlin" };
+	const custom = buildBookingConfirmation(content, "de", { subject: "Termin am {when} für {guestName}", body: "Hallo {guestName},\nwir sehen uns {when} ({location}).\n{notes}" });
+	assert.equal(custom.subject, "Termin am Dienstag, 17. November 2026, 14:00–14:30 Uhr (Europe/Berlin) für Ana Bcc: x@evil.test");
+	assert.doesNotMatch(custom.subject, /[\r\n]/);
+	assert.equal(custom.text, "Hallo Ana\nBcc: x@evil.test,\nwir sehen uns Dienstag, 17. November 2026, 14:00–14:30 Uhr (Europe/Berlin) (Telefon).\nPreise");
+	const subjectOnly = buildBookingConfirmation(content, "de", { subject: "Ihr Termin", body: "" });
+	assert.equal(subjectOnly.subject, "Ihr Termin");
+	assert.match(subjectOnly.text, /^Guten Tag Ana/);
+	const bodyOnly = buildBookingConfirmation(content, "de", { subject: "", body: "Danke!" });
+	assert.equal(bodyOnly.subject, "Bestätigt: Beratung mit Paul");
+	assert.equal(bodyOnly.text, "Danke!");
+});
+
+test("confirmation fields in a booking event request are optional, trimmed and bounded", () => {
+	assert.equal(parseConfirmationTemplateInput({ name: "x" }), undefined);
+	assert.equal(parseConfirmationTemplateInput(null), undefined);
+	assert.deepEqual(parseConfirmationTemplateInput({ confirmationSubject: " Hi\r\nthere ", confirmationBody: " a\r\nb " }), { subject: "Hi there", body: "a\nb" });
+	assert.deepEqual(parseConfirmationTemplateInput({ confirmationBody: "only body" }), { subject: "", body: "only body" });
+	assert.equal(parseConfirmationTemplateInput({ confirmationSubject: 5 }), null);
+	assert.equal(parseConfirmationTemplateInput({ confirmationSubject: "x".repeat(201) }), null);
+	assert.equal(parseConfirmationTemplateInput({ confirmationBody: "x".repeat(5001) }), null);
 });

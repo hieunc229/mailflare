@@ -5,6 +5,7 @@ import { sendEmail } from "@/lib/email/send";
 import { newId } from "@/lib/ids";
 import { mailboxAddress } from "@/lib/profile/identity-utils";
 import { bookingMeetingTitle, buildBookingCalendarFile, buildBookingConfirmation, type ConfirmationLanguage } from "./confirmation-utils";
+import { getConfirmationTemplates } from "./confirmation-templates";
 import type { BookingEventRecord } from "./types";
 
 /** The event owner's own mailbox: the one at their account address, else their oldest personal one. */
@@ -38,6 +39,7 @@ export async function sendBookingConfirmation(
 		}
 		const startsAt = new Date(input.startsAt);
 		const endsAt = new Date(input.endsAt);
+		const template = (await getConfirmationTemplates(getDb(env), [input.event.id])).get(input.event.id);
 		const { subject, text } = buildBookingConfirmation({
 			eventName: input.event.name,
 			hostName: input.hostName,
@@ -47,7 +49,7 @@ export async function sendBookingConfirmation(
 			startsAt,
 			endsAt,
 			timeZone: input.event.timeZone,
-		}, input.language);
+		}, input.language, template);
 		const invite = buildBookingCalendarFile({
 			title: bookingMeetingTitle(input.event.name, input.hostName, input.language),
 			description: input.event.description || text,

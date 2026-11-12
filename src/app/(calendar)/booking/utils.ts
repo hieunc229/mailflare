@@ -12,13 +12,13 @@ import { parseBookingHostIds } from "@/lib/booking/hosts";
 export const WEEKDAYS = [0, 1, 2, 3, 4, 5, 6] as const;
 
 export function emptyBookingForm(timeZone: string, currentUserId: string): BookingForm {
-	return { name: "", slug: "", description: "", color: DEFAULT_FOLDER_COLOR, hostIds: [currentUserId], durationMinutes: 30, location: "", weekdays: [1, 2, 3, 4, 5], startTime: "09:00", endTime: "17:00", timeRanges: [{ startTime: "09:00", endTime: "17:00" }], timeZone, enabled: true };
+	return { name: "", slug: "", description: "", color: DEFAULT_FOLDER_COLOR, hostIds: [currentUserId], durationMinutes: 30, location: "", weekdays: [1, 2, 3, 4, 5], startTime: "09:00", endTime: "17:00", timeRanges: [{ startTime: "09:00", endTime: "17:00" }], timeZone, enabled: true, confirmationSubject: "", confirmationBody: "" };
 }
 
 export function formFromEvent(event: BookingEvent): BookingForm {
 	let weekdays: number[] = [];
 	try { weekdays = JSON.parse(event.weekdays) as number[]; } catch { /* An invalid saved schedule remains editable. */ }
-	return { name: event.name, slug: event.slug, description: event.description ?? "", color: normalizeCalendarColor(event.color), hostIds: parseBookingHostIds(event.hostIds, event.userId), durationMinutes: event.durationMinutes, location: event.location, weekdays, startTime: event.startTime, endTime: event.endTime, timeRanges: parseBookingTimeRanges(event.timeRanges, { startTime: event.startTime, endTime: event.endTime }), timeZone: event.timeZone, enabled: event.enabled };
+	return { name: event.name, slug: event.slug, description: event.description ?? "", color: normalizeCalendarColor(event.color), hostIds: parseBookingHostIds(event.hostIds, event.userId), durationMinutes: event.durationMinutes, location: event.location, weekdays, startTime: event.startTime, endTime: event.endTime, timeRanges: parseBookingTimeRanges(event.timeRanges, { startTime: event.startTime, endTime: event.endTime }), timeZone: event.timeZone, enabled: event.enabled, confirmationSubject: event.confirmationSubject ?? "", confirmationBody: event.confirmationBody ?? "" };
 }
 
 export function bookingFormWithName(form: BookingForm, name: string): BookingForm {

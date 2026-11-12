@@ -89,21 +89,57 @@ export function bookingMeetingTitle(eventName: string, hostName: string, languag
 	return `${eventName} ${TEXT[language].with} ${hostName}`;
 }
 
-export function buildBookingConfirmation(content: BookingConfirmationContent, language: ConfirmationLanguage = "en"): { subject: string; text: string } {
+/** The names a custom confirmation can use as {placeholder}. */
+export const BOOKING_TEMPLATE_PLACEHOLDERS = ["guestName", "eventName", "hostName", "when", "location", "notes"] as const;
+export type BookingTemplatePlaceholder = (typeof BOOKING_TEMPLATE_PLACEHOLDERS)[number];
+export type BookingConfirmationTemplate = { subject: string; body: string };
+
+export const CONFIRMATION_SUBJECT_MAX = 200;
+export const CONFIRMATION_BODY_MAX = 5000;
+
+/** Replaces known {placeholders}; anything else in braces is left as written. */
+export function renderBookingTemplate(template: string, values: Record<BookingTemplatePlaceholder, string>): string {
+	return template.replace(/\{(\w+)\}/g, (match, name: string) => (Object.hasOwn(values, name) ? values[name as BookingTemplatePlaceholder] : match));
+}
+
+/**
+ * Reads the confirmation fields of a booking event request: undefined when the request leaves them out (keep what
+ * is saved), null when they are invalid.
+ */
+export function parseConfirmationTemplateInput(value: unknown): BookingConfirmationTemplate | null | undefined {
+	if (!value || typeof value !== "object") return undefined;
+	const input = value as Record<string, unknown>;
+	if (input.confirmationSubject === undefined && input.confirmationBody === undefined) return undefined;
+	const subject = input.confirmationSubject ?? "";
+	const body = input.confirmationBody ?? "";
+	if (typeof subject !== "string" || typeof body !== "string") return null;
+	const cleanSubject = subject.replace(/[\r\n]+/g, " ").trim();
+	const cleanBody = body.replace(/\r\n?/g, "\n").trim();
+	if (cleanSubject.length > CONFIRMATION_SUBJECT_MAX || cleanBody.length > CONFIRMATION_BODY_MAX) return null;
+	return { subject: cleanSubject, body: cleanBody };
+}
+
+/** The guest confirmation: the event's own subject and body where set, the built-in text otherwise. */
+export function buildBookingConfirmation(content: BookingConfirmationContent, language: ConfirmationLanguage = "en", template?: BookingConfirmationTemplate | null): { subject: string; text: string } {
 	const text = TEXT[language];
 	const title = bookingMeetingTitle(content.eventName, content.hostName, language);
+	const when = formatBookingWhen(content.startsAt, content.endsAt, content.timeZone, language);
+	const values = { guestName: content.guestName, eventName: content.eventName, hostName: content.hostName, when, location: content.location, notes: content.notes };
+	// A guest's name goes into the subject, so keep it on one header line whatever they typed.
+	const subject = (template?.subject ? renderBookingTemplate(template.subject, values) : `${text.subject} ${title}`).replace(/[\r\n]+/g, " ").trim();
+	if (template?.body) return { subject, text: renderBookingTemplate(template.body, values) };
 	const lines = [
 		text.greeting.replace("{name}", content.guestName),
 		"",
 		`${text.confirmed} ${title}.`,
 		"",
-		`${text.when} ${formatBookingWhen(content.startsAt, content.endsAt, content.timeZone, language)}`,
+		`${text.when} ${when}`,
 		...(content.location ? [`${text.where} ${content.location}`] : []),
 		...(content.notes ? ["", text.notes, content.notes] : []),
 		"",
 		text.closing,
 	];
-	return { subject: `${text.subject} ${title}`, text: lines.join("\n") };
+	return { subject, text: lines.join("\n") };
 }
 
 /**
