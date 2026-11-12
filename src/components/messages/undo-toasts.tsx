@@ -15,9 +15,12 @@ import {
 	failUndoToast,
 	getUndoAnnouncements,
 	getUndoToasts,
+	hideUndoToast,
 	partialUndoToast,
 	pauseUndoToast,
+	pauseUndoToasts,
 	resumeUndoToast,
+	resumeUndoToasts,
 	subscribeUndoToasts,
 } from "@/lib/messages/actions/undo-store";
 import type {
@@ -54,28 +57,41 @@ const FAILURE_LABELS: Record<UndoToastFailureKind, TranslationKey> = {
 
 const EMPTY_TOASTS: UndoToastEntry[] = [];
 const EMPTY_ANNOUNCEMENTS: UndoToastAnnouncement[] = [];
-const MODAL_SELECTOR = '[role="dialog"][aria-modal="true"], [aria-modal="true"], dialog[open], .dialog-overlay';
+const BLOCKING_OVERLAY_SELECTOR = [
+	'[role="dialog"][aria-modal="true"]',
+	'[aria-modal="true"]',
+	"dialog[open]",
+	".dialog-overlay",
+	'[data-mobile-menu][aria-expanded="true"]',
+].join(", ");
+const INTERACTION_SELECTOR = `${BLOCKING_OVERLAY_SELECTOR}, #main-content[inert], #main-content[aria-hidden="true"]`;
 
-/** Modal layers sit at z-50 and trap focus; the passive undo stack must not compete with them. */
-function hasOpenModal() {
+/** A modal or mobile sidebar owns focus and must not be bypassed by toast cleanup. */
+function hasBlockingOverlay() {
 	if (typeof document === "undefined") return false;
-	return !!document.querySelector(MODAL_SELECTOR);
+	return !!document.querySelector(BLOCKING_OVERLAY_SELECTOR);
 }
 
-function subscribeModalState(onChange: () => void) {
+/** A modal, mobile sidebar, assistant full-size view or hidden main surface owns interaction. */
+function hasInteractionHold() {
+	if (typeof document === "undefined") return false;
+	return !!document.querySelector(INTERACTION_SELECTOR);
+}
+
+function subscribeInteractionState(onChange: () => void) {
 	if (typeof document === "undefined") return () => undefined;
 	const observer = new MutationObserver(onChange);
 	observer.observe(document.documentElement, {
 		childList: true,
 		subtree: true,
 		attributes: true,
-		attributeFilter: ["role", "aria-modal", "class", "open"],
+		attributeFilter: ["role", "aria-modal", "class", "open", "aria-expanded", "aria-hidden", "inert"],
 	});
 	return () => observer.disconnect();
 }
 
-function useModalOpen() {
-	return useSyncExternalStore(subscribeModalState, hasOpenModal, () => false);
+function useInteractionHeld() {
+	return useSyncExternalStore(subscribeInteractionState, hasInteractionHold, () => false);
 }
 
 function failureFromError(error: unknown): UndoToastFailure {
@@ -131,16 +147,47 @@ function announcementText(t: Translator, announcement: UndoToastAnnouncement) {
 	return appliedText(t, announcement.action, announcement.count, announcement.skipped);
 }
 
+function isAvailableSurface(element: HTMLElement) {
+	if (!element.isConnected || element.closest("[inert], [hidden], [aria-hidden=\"true\"]")) return false;
+	const style = window.getComputedStyle(element);
+	return style.display !== "none" && style.visibility !== "hidden";
+}
+
+function focusVisibleAppSurface() {
+	const selectors = ["#main-content", "#email-assistant-panel", "[data-mobile-menu]", "main", '[role="main"]'];
+	for (const selector of selectors) {
+		const element = document.querySelector<HTMLElement>(selector);
+		if (!element || !isAvailableSurface(element)) continue;
+		if (!element.hasAttribute("tabindex") && !["BUTTON", "A", "INPUT", "TEXTAREA", "SELECT"].includes(element.tagName)) {
+			element.tabIndex = -1;
+		}
+		element.focus({ preventScroll: true });
+		return;
+	}
+}
+
 /**
- * After a toast button removes its own toast, keyboard focus would fall back to
- * the document. Return it to the stable main landmark instead of losing it.
+ * After a toast action changes focus ownership, keep keyboard focus in the
+ * remaining receipt; only fall back to a visible app surface when it disappears.
  */
-function restoreFocusAfterRemoval() {
+function restoreFocusAfterAction(entryId: number) {
 	if (typeof window === "undefined") return;
 	window.setTimeout(() => {
 		const active = document.activeElement;
 		if (active && active !== document.body && (active as HTMLElement).isConnected) return;
-		document.getElementById("main-content")?.focus({ preventScroll: true });
+		if (hasBlockingOverlay()) return;
+		const toast = document.querySelector<HTMLElement>(`[data-undo-toast-id="${entryId}"]`);
+		if (toast && isAvailableSurface(toast)) {
+			const dismiss = toast.querySelector<HTMLElement>("[data-undo-dismiss]");
+			if (dismiss && !dismiss.hasAttribute("disabled") && !dismiss.hasAttribute("aria-disabled")) {
+				dismiss.focus({ preventScroll: true });
+				return;
+			}
+			if (!toast.hasAttribute("tabindex")) toast.tabIndex = -1;
+			toast.focus({ preventScroll: true });
+			return;
+		}
+		focusVisibleAppSurface();
 	}, 0);
 }
 
@@ -149,12 +196,28 @@ export function UndoToasts() {
 	const { t } = useLanguage();
 	const toasts = useSyncExternalStore(subscribeUndoToasts, getUndoToasts, () => EMPTY_TOASTS);
 	const announcements = useSyncExternalStore(subscribeUndoToasts, getUndoAnnouncements, () => EMPTY_ANNOUNCEMENTS);
-	const modalOpen = useModalOpen();
+	const interactionHeld = useInteractionHeld();
 	const [polite, setPolite] = useState<{ text: string; sequence: number } | null>(null);
 	const [assertive, setAssertive] = useState<{ text: string; sequence: number } | null>(null);
 	// A late mount must not replay announcements that were already made. New
 	// announcements always carry a higher sequence and are announced normally.
 	const seenAnnouncement = useRef(announcements.at(-1)?.sequence ?? 0);
+
+	useEffect(() => {
+		if (interactionHeld) {
+			pauseUndoToasts("interaction");
+			resumeUndoToasts("region");
+		} else {
+			resumeUndoToasts("interaction");
+		}
+		return () => resumeUndoToasts("interaction");
+	}, [interactionHeld]);
+
+	useEffect(() => {
+		if (toasts.length === 0) resumeUndoToasts("region");
+	}, [toasts.length]);
+
+	useEffect(() => () => resumeUndoToasts("region"), []);
 
 	useEffect(() => {
 		const latest = announcements.at(-1)?.sequence ?? 0;
@@ -187,29 +250,34 @@ export function UndoToasts() {
 			if (restored === 0) {
 				const failure = failureFromSkipped(result.skipped);
 				failUndoToast(current.id, failure);
-				if (!failure.retryable) restoreFocusAfterRemoval();
+				if (!failure.retryable) restoreFocusAfterAction(current.id);
 			} else if (restored < total || result.skipped.length > 0) {
 				partialUndoToast(current.id, {
 					restored,
 					skipped: undoSkipCount,
 					skippedReasons: result.skipped.map((item) => item.reason),
 				});
-				restoreFocusAfterRemoval();
+				restoreFocusAfterAction(current.id);
 			} else {
 				completeUndoToast(current.id);
-				restoreFocusAfterRemoval();
+				restoreFocusAfterAction(current.id);
 			}
 		} catch (error) {
 			const failure = failureFromError(error);
 			failUndoToast(current.id, failure);
 			// Retryable failures keep the same primary button, so focus stays put.
-			if (!failure.retryable) restoreFocusAfterRemoval();
+			if (!failure.retryable) restoreFocusAfterAction(current.id);
 		}
 	}
 
 	function dismiss(entry: UndoToastEntry) {
 		dismissUndoToast(entry.id);
-		restoreFocusAfterRemoval();
+		restoreFocusAfterAction(entry.id);
+	}
+
+	function hide(entry: UndoToastEntry) {
+		hideUndoToast(entry.id);
+		restoreFocusAfterAction(entry.id);
 	}
 
 	return (
@@ -225,10 +293,17 @@ export function UndoToasts() {
 					role="region"
 					aria-label={t("undo.region")}
 					tabIndex={0}
-					inert={modalOpen}
-					aria-hidden={modalOpen || undefined}
+					inert={interactionHeld}
+					aria-hidden={interactionHeld || undefined}
+					onFocusCapture={() => pauseUndoToasts("region")}
+					onBlurCapture={(event) => {
+						const next = event.relatedTarget;
+						if (!next || !event.currentTarget.contains(next as Node)) {
+							resumeUndoToasts("region");
+						}
+					}}
 					className={cn(
-						"pointer-events-none fixed z-40 flex max-h-[calc(100dvh-6rem)] w-[calc(100vw-1.5rem)] flex-col gap-2 overflow-y-auto overscroll-contain rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600/60",
+						"pointer-events-none fixed z-30 flex max-h-[calc(100dvh-6rem)] w-[calc(100vw-1.5rem)] flex-col gap-2 overflow-y-auto overscroll-contain rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600/60",
 						"inset-x-3 bottom-[max(5rem,calc(env(safe-area-inset-bottom,0px)+4.5rem))]",
 						"md:bottom-4 md:w-[min(24rem,calc(100vw-var(--sidebar-width,260px)-2rem))] md:[inset-inline-end:auto] md:[inset-inline-start:calc(var(--sidebar-width,260px)+1rem)]",
 					)}
@@ -256,20 +331,13 @@ export function UndoToasts() {
 								aria-labelledby={messageId}
 								aria-busy={undoing || undefined}
 								data-undo-toast-id={entry.id}
-								onFocusCapture={() => pauseUndoToast(entry.id, "focus")}
-								onBlurCapture={(event) => {
-									const next = event.relatedTarget;
-									if (!next || !(event.currentTarget as HTMLElement).contains(next as Node)) {
-										resumeUndoToast(entry.id, "focus");
-									}
-								}}
 								onPointerEnter={() => pauseUndoToast(entry.id, "hover")}
 								onPointerLeave={() => resumeUndoToast(entry.id, "hover")}
 								className={cn(
 									"flex items-start gap-3 rounded-xl px-3 py-2.5 text-sm font-medium text-white shadow-lg ring-1 ring-black/10 backdrop-blur-sm",
 									"pointer-events-auto focus-within:ring-2 focus-within:ring-white/80",
 									failed ? "bg-red-700" : partial ? "bg-amber-800" : "bg-neutral-900/95",
-									modalOpen && "pointer-events-none",
+									interactionHeld && "pointer-events-none",
 								)}
 							>
 								<div id={messageId} className="min-w-0 flex-1 py-0.5">
@@ -301,16 +369,29 @@ export function UndoToasts() {
 										{undoing ? t("undo.undoing") : retryable ? t("undo.retry") : t("undo.button")}
 									</button>
 								)}
-								<button
-									type="button"
-									onClick={() => dismiss(entry)}
-									disabled={undoing}
-									aria-label={t("undo.dismiss")}
-									aria-describedby={messageId}
-									className="-m-1 inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-base leading-none text-white/75 hover:bg-white/15 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-2 focus-visible:ring-offset-neutral-900 disabled:cursor-wait disabled:opacity-50"
-								>
-									<span aria-hidden="true">×</span>
-								</button>
+								{undoing ? (
+									<button
+										type="button"
+										onClick={() => hide(entry)}
+										aria-label={t("undo.hidePending")}
+										title={t("undo.hidePending")}
+										aria-describedby={messageId}
+										className="-m-1 inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-base leading-none text-white/75 hover:bg-white/15 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-2 focus-visible:ring-offset-neutral-900"
+									>
+										<span aria-hidden="true">×</span>
+									</button>
+								) : (
+									<button
+										type="button"
+										onClick={() => dismiss(entry)}
+										data-undo-dismiss
+										aria-label={t("undo.dismiss")}
+										aria-describedby={messageId}
+										className="-m-1 inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-base leading-none text-white/75 hover:bg-white/15 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-2 focus-visible:ring-offset-neutral-900"
+									>
+										<span aria-hidden="true">×</span>
+									</button>
+								)}
 							</div>
 						);
 					})}

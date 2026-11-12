@@ -32,6 +32,8 @@ export type UndoToastEntry = {
 	status: UndoToastStatus;
 	/** Optional human-readable folder name or snooze time supplied by the caller. */
 	context?: string;
+	/** Set only while this entry waits for a visible slot; bounds stale queue lifetime. */
+	queuedAt?: number;
 	failure?: UndoToastFailure;
 	/** Set when Undo restored only some of the action's messages. */
 	restored?: number;
@@ -64,6 +66,9 @@ export const UNDO_TOAST_LIMITS = Object.freeze({
 /** Long enough to reach the notification with a keyboard, and it pauses while hovered, focused or hidden. */
 export const UNDO_WINDOW_MS = 20_000;
 
+/** Queued entries must be promoted before their signed token can expire (server maximum: 10 minutes). */
+export const QUEUE_MAX_AGE_MS = 8 * 60_000;
+
 const MAX_ANNOUNCEMENTS = 20;
 
 let entries: UndoToastEntry[] = [];
@@ -73,10 +78,12 @@ let nextId = 0;
 let nextAnnouncementId = 0;
 let pageHidden = false;
 let lifecycleBound = false;
+let queueExpiryTimer: number | null = null;
 const listeners = new Set<() => void>();
 const timers = new Map<number, { handle: number; deadline: number }>();
 const remaining = new Map<number, number>();
 const pauseReasons = new Map<number, Set<string>>();
+const globalPauseReasons = new Set<string>();
 
 function emit() {
 	for (const listener of listeners) listener();
@@ -98,8 +105,19 @@ function announce(announcement: Omit<UndoToastAnnouncement, "sequence">) {
 	];
 }
 
+function announceApplied(entry: UndoToastEntry) {
+	announce({
+		kind: "applied",
+		action: entry.action,
+		count: entry.records.length,
+		skipped: entry.skipped,
+	});
+}
+
 function timerIsHeld(id: number): boolean {
-	return pageHidden || (pauseReasons.get(id)?.size ?? 0) > 0;
+	return pageHidden
+		|| globalPauseReasons.size > 0
+		|| (pauseReasons.get(id)?.size ?? 0) > 0;
 }
 
 function clearTimer(id: number) {
@@ -154,10 +172,39 @@ function startVisibleTimer(id: number) {
 
 function promoteQueued() {
 	if (queued.length === 0 || entries.length >= UNDO_TOAST_LIMITS.visible) return;
-	const promoted = queued[0];
+	const promoted = { ...queued[0] };
+	delete promoted.queuedAt;
 	queued = queued.slice(1);
 	entries = [...entries, promoted];
 	startVisibleTimer(promoted.id);
+	announceApplied(promoted);
+	scheduleQueueExpiry();
+}
+
+function clearQueueExpiry() {
+	if (queueExpiryTimer !== null && typeof window !== "undefined") {
+		window.clearTimeout(queueExpiryTimer);
+	}
+	queueExpiryTimer = null;
+}
+
+function pruneExpiredQueued(now: number): boolean {
+	const next = queued.filter((entry) => now - (entry.queuedAt ?? now) < QUEUE_MAX_AGE_MS);
+	if (next.length === queued.length) return false;
+	queued = next;
+	return true;
+}
+
+function scheduleQueueExpiry() {
+	clearQueueExpiry();
+	if (typeof window === "undefined" || queued.length === 0) return;
+	const nextAt = Math.min(...queued.map((entry) => (entry.queuedAt ?? Date.now()) + QUEUE_MAX_AGE_MS));
+	const delay = Math.max(0, nextAt - Date.now());
+	queueExpiryTimer = window.setTimeout(() => {
+		queueExpiryTimer = null;
+		if (pruneExpiredQueued(Date.now())) emit();
+		scheduleQueueExpiry();
+	}, delay);
 }
 
 function removeEntry(id: number) {
@@ -166,16 +213,19 @@ function removeEntry(id: number) {
 	entries = entries.filter((entry) => entry.id !== id);
 	queued = queued.filter((entry) => entry.id !== id);
 	promoteQueued();
+	scheduleQueueExpiry();
 }
 
 function updatePageHidden(hidden: boolean) {
 	if (pageHidden === hidden) return;
 	pageHidden = hidden;
+	if (!hidden && pruneExpiredQueued(Date.now())) emit();
 	for (const entry of entries) {
 		if (entry.status !== "idle") continue;
 		if (hidden) pauseTimer(entry.id);
 		else if (!timerIsHeld(entry.id)) scheduleTimer(entry.id, remaining.get(entry.id) ?? UNDO_WINDOW_MS);
 	}
+	if (!hidden) scheduleQueueExpiry();
 }
 
 function bindLifecycle() {
@@ -207,6 +257,26 @@ export function getUndoAnnouncements(): UndoToastAnnouncement[] {
 	return announcements;
 }
 
+function oldestTerminalReceipt(): UndoToastEntry | undefined {
+	return entries
+		.filter((entry) => entry.status === "failed" || entry.status === "partial")
+		.sort((a, b) => a.id - b.id)[0];
+}
+
+function oldestRedundantTerminalReceipt(): UndoToastEntry | undefined {
+	const terminals = entries
+		.filter((entry) => entry.status === "failed" || entry.status === "partial")
+		.sort((a, b) => a.id - b.id);
+	return terminals.length > 1 ? terminals[0] : undefined;
+}
+
+/** A receipt turning terminal must not leave an older actionable undo stuck in the queue. */
+function ensureQueuedVisible() {
+	if (queued.length === 0 || entries.length < UNDO_TOAST_LIMITS.visible) return;
+	const terminal = oldestRedundantTerminalReceipt();
+	if (terminal) removeEntry(terminal.id);
+}
+
 /** Adds an independent toast; compose's single send notice is never touched. */
 export function showUndoToast(input: {
 	action: ReversibleMessageAction;
@@ -228,21 +298,24 @@ export function showUndoToast(input: {
 		status: "idle",
 		...(input.context ? { context: input.context } : {}),
 	};
+	if (entries.length >= UNDO_TOAST_LIMITS.visible) {
+		// Terminal receipts are acknowledgements, not live undo affordances. Under
+		// pressure the oldest one yields so a new action (or the queued action
+		// behind it) is actually reachable.
+		const terminal = oldestTerminalReceipt();
+		if (terminal) removeEntry(terminal.id);
+	}
 	if (entries.length < UNDO_TOAST_LIMITS.visible) {
 		entries = [...entries, entry];
 		startVisibleTimer(id);
+		announceApplied(entry);
 	} else {
 		// Keep the newest notices. The oldest queued entry is still an action the
 		// user just made, so this only happens after a long burst of read/star
 		// chatter; the visible stack itself is never silently replaced.
-		queued = [...queued, entry].slice(-UNDO_TOAST_LIMITS.queued);
+		queued = [...queued, { ...entry, queuedAt: Date.now() }].slice(-UNDO_TOAST_LIMITS.queued);
+		scheduleQueueExpiry();
 	}
-	announce({
-		kind: "applied",
-		action: entry.action,
-		count: entry.records.length,
-		skipped: entry.skipped,
-	});
 	emit();
 	return id;
 }
@@ -280,6 +353,7 @@ export function failUndoToast(
 		undoSkippedReasons: undefined,
 	}));
 	announce({ kind: "undo-failed", action: entry.action, count: entry.records.length, failure });
+	ensureQueuedVisible();
 	emit();
 }
 
@@ -306,6 +380,7 @@ export function partialUndoToast(
 		count: entry.records.length,
 		restored: result.restored,
 	});
+	ensureQueuedVisible();
 	emit();
 }
 
@@ -313,12 +388,19 @@ export function partialUndoToast(
 export function completeUndoToast(id: number) {
 	const entry = entryById(id);
 	if (!entry) return;
-	removeEntry(id);
 	announce({ kind: "undo-success", action: entry.action, count: entry.records.length });
+	removeEntry(id);
 	emit();
 }
 
 export function dismissUndoToast(id: number) {
+	if (!entryById(id)) return;
+	removeEntry(id);
+	emit();
+}
+
+/** Hides a pending notice without pretending the in-flight Undo was cancelled. */
+export function hideUndoToast(id: number) {
 	if (!entryById(id)) return;
 	removeEntry(id);
 	emit();
@@ -345,9 +427,28 @@ export function resumeUndoToast(id: number, reason = "hold") {
 	scheduleTimer(id, remaining.get(id) ?? UNDO_WINDOW_MS);
 }
 
+/** Holds every idle countdown while a modal, overlay, region focus or hidden app surface owns interaction. */
+export function pauseUndoToasts(reason = "hold") {
+	const wasHeld = globalPauseReasons.size > 0;
+	globalPauseReasons.add(reason);
+	if (wasHeld) return;
+	for (const entry of entries) {
+		if (entry.status === "idle") pauseTimer(entry.id);
+	}
+}
+
+export function resumeUndoToasts(reason = "hold") {
+	if (!globalPauseReasons.delete(reason) || globalPauseReasons.size > 0) return;
+	for (const entry of entries) {
+		if (entry.status !== "idle" || timerIsHeld(entry.id)) continue;
+		scheduleTimer(entry.id, remaining.get(entry.id) ?? UNDO_WINDOW_MS);
+	}
+}
+
 /** Clears every queue and timer on an account/session change. */
 export function resetUndoToasts() {
 	for (const id of [...timers.keys()]) clearTimer(id);
+	clearQueueExpiry();
 	entries = [];
 	queued = [];
 	announcements = [];
@@ -362,4 +463,5 @@ export function resetUndoToastsForTests() {
 	nextId = 0;
 	nextAnnouncementId = 0;
 	pageHidden = false;
+	globalPauseReasons.clear();
 }

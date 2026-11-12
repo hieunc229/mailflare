@@ -145,6 +145,42 @@ function buttonByText(container, text) {
 	return [...container.querySelectorAll("button")].find((button) => button.textContent.trim() === text);
 }
 
+function installWindowClock() {
+	const originalSetTimeout = window.setTimeout;
+	const originalClearTimeout = window.clearTimeout;
+	const originalNow = Date.now;
+	let now = 1_000;
+	let nextId = 0;
+	let timers = [];
+	window.setTimeout = (callback, delay = 0) => {
+		const id = ++nextId;
+		timers.push({ id, at: now + Number(delay), callback });
+		return id;
+	};
+	window.clearTimeout = (id) => {
+		timers = timers.filter((timer) => timer.id !== id);
+	};
+	Date.now = () => now;
+	return {
+		advance(ms) {
+			now += ms;
+			for (;;) {
+				const due = timers
+					.filter((timer) => timer.at <= now)
+					.sort((a, b) => a.at - b.at || a.id - b.id)[0];
+				if (!due) return;
+				timers = timers.filter((timer) => timer !== due);
+				due.callback();
+			}
+		},
+		restore() {
+			window.setTimeout = originalSetTimeout;
+			window.clearTimeout = originalClearTimeout;
+			Date.now = originalNow;
+		},
+	};
+}
+
 test("live regions stay mounted while empty and applied actions announce politely", async (t) => {
 	const app = await mount(t);
 	const status = app.container.querySelector('[role="status"]');
@@ -178,7 +214,7 @@ test("the stack anchors in the content column, clears the mobile compose button 
 	assert.equal(region.tabIndex, 0);
 	assert.equal(region.getAttribute("aria-label"), "Message action notifications");
 	const classes = region.className;
-	assert.match(classes, /z-40/);
+	assert.match(classes, /z-30/);
 	assert.match(classes, /--sidebar-width/);
 	assert.match(classes, /bottom-\[max\(5rem/);
 	assert.match(classes, /env\(safe-area-inset-bottom/);
@@ -189,7 +225,7 @@ test("the stack anchors in the content column, clears the mobile compose button 
 	assert.match(close.className, /focus-visible:ring-2/);
 });
 
-test("undo pending shows a spinner and busy label, and locks dismissal", async (t) => {
+test("undo pending shows a spinner and busy label with a hide action", async (t) => {
 	const app = await mount(t);
 	let finish;
 	globalThis.undoHandler = () => new Promise((resolve) => { finish = resolve; });
@@ -204,8 +240,9 @@ test("undo pending shows a spinner and busy label, and locks dismissal", async (
 	assert.equal(card.getAttribute("aria-busy"), "true");
 	assert.match(card.textContent, /Undoing…/);
 	assert.equal(buttonByText(card, "Undoing…").getAttribute("aria-disabled"), "true");
-	const close = card.querySelector('button[aria-label="Dismiss"]');
-	assert.equal(close.disabled, true, "dismiss cannot pretend to cancel a request already in flight");
+	const hide = card.querySelector('button[aria-label="Hide notification (undo continues)"]');
+	assert.ok(hide, "a pending notice can be hidden without pretending to cancel it");
+	assert.equal(hide.disabled, false);
 	assert.ok(card.querySelector(".animate-spin"));
 
 	await act(async () => { finish({ ok: true, action: "archive", restored: ["m1"], skipped: [] }); });
@@ -213,6 +250,27 @@ test("undo pending shows a spinner and busy label, and locks dismissal", async (
 	assert.equal(toast(app.container, id), null);
 	assert.match(app.container.querySelector('[role="status"]').textContent, /Undo complete: Archived/);
 	assert.equal(document.activeElement, document.getElementById("main-content"));
+});
+
+test("hiding a pending notice removes it while Undo continues", async (t) => {
+	const app = await mount(t);
+	let finish;
+	globalThis.undoHandler = () => new Promise((resolve) => { finish = resolve; });
+	const id = await act(async () => show());
+	await ui.flush();
+
+	await act(async () => { buttonByText(toast(app.container, id), "Undo").click(); });
+	await ui.flush();
+	const hide = toast(app.container, id).querySelector('button[aria-label="Hide notification (undo continues)"]');
+	hide.focus();
+	await act(async () => { hide.click(); });
+	await ui.flush();
+	assert.equal(toast(app.container, id), null);
+	assert.equal(document.activeElement, document.getElementById("main-content"));
+
+	await act(async () => { finish({ ok: true, action: "archive", restored: ["m1"], skipped: [] }); });
+	await ui.flush();
+	assert.equal(toast(app.container, id), null);
 });
 
 test("a transient server failure persists and Retry starts the same undo again", async (t) => {
@@ -255,6 +313,7 @@ test("expired undos persist without Retry and announce the actual reason", async
 	assert.ok(card);
 	assert.match(card.textContent, /This undo has expired\./);
 	assert.equal(buttonByText(card, "Try again"), undefined);
+	assert.equal(document.activeElement, card.querySelector("[data-undo-dismiss]"));
 	assert.match(app.container.querySelector('[role="alert"]').textContent, /This undo has expired/);
 });
 
@@ -296,6 +355,7 @@ test("a partial restore shows its own notice and announcement, not full success"
 	assert.ok(card, "a partial restore stays visible");
 	assert.match(card.textContent, /1 of 2 messages restored\. The rest could not be undone\./);
 	assert.equal(buttonByText(card, "Try again"), undefined, "retrying the whole token is not offered after a partial restore");
+	assert.equal(document.activeElement, card.querySelector("[data-undo-dismiss]"), "focus stays on the receipt");
 	assert.match(app.container.querySelector('[role="alert"]').textContent, /1 of 2 messages restored/);
 	assert.doesNotMatch(app.container.querySelector('[role="status"]').textContent, /Undo complete/);
 });
@@ -313,6 +373,112 @@ test("dismissing removes a toast and returns focus to main content", async (t) =
 	await ui.flush();
 	assert.equal(toast(app.container, id), null);
 	assert.equal(document.activeElement, document.getElementById("main-content"));
+});
+
+test("focus falls back to a visible app surface when main is inert", async (t) => {
+	const app = await mount(t);
+	const assistant = document.createElement("section");
+	assistant.id = "email-assistant-panel";
+	document.body.appendChild(assistant);
+	const id = await act(async () => show());
+	await ui.flush();
+	const close = toast(app.container, id).querySelector('button[aria-label="Dismiss"]');
+	close.focus();
+
+	await act(async () => {
+		close.click();
+		const main = document.getElementById("main-content");
+		main.setAttribute("inert", "");
+		main.setAttribute("aria-hidden", "true");
+	});
+	await ui.flush();
+	assert.equal(toast(app.container, id), null);
+	assert.equal(document.activeElement, assistant);
+	assistant.remove();
+});
+
+test("focusing the notification region pauses every countdown", async (t) => {
+	const app = await mount(t);
+	const clock = installWindowClock();
+	t.after(() => clock.restore());
+	const id = await act(async () => show());
+	await ui.flush();
+	const region = app.container.querySelector('[role="region"]');
+	region.focus();
+	assert.equal(document.activeElement, region);
+
+	await act(async () => { clock.advance(60_000); });
+	assert.ok(toast(app.container, id), "a focused region holds all undo countdowns");
+
+	const outside = document.createElement("button");
+	document.body.appendChild(outside);
+	outside.focus();
+	await act(async () => { clock.advance(19_999); });
+	assert.ok(toast(app.container, id));
+	await act(async () => { clock.advance(1); });
+	assert.equal(toast(app.container, id), null);
+	outside.remove();
+});
+
+test("a modal, mobile sidebar or hidden main surface holds idle countdowns", async (t) => {
+	const app = await mount(t);
+	const clock = installWindowClock();
+	t.after(() => clock.restore());
+	const id = await act(async () => show());
+	await ui.flush();
+	const region = app.container.querySelector('[role="region"]');
+	assert.equal(region.hasAttribute("inert"), false);
+
+	const overlay = document.createElement("div");
+	overlay.className = "dialog-overlay";
+	document.body.appendChild(overlay);
+	await ui.flush();
+	assert.equal(region.hasAttribute("inert"), true);
+	await act(async () => { clock.advance(60_000); });
+	assert.ok(toast(app.container, id), "a modal holds the countdown");
+
+	const mobileMenu = document.createElement("button");
+	mobileMenu.dataset.mobileMenu = "";
+	mobileMenu.setAttribute("aria-expanded", "true");
+	document.body.appendChild(mobileMenu);
+	overlay.remove();
+	await ui.flush();
+	assert.equal(region.hasAttribute("inert"), true, "the mobile sidebar still owns interaction");
+	await act(async () => { clock.advance(60_000); });
+	assert.ok(toast(app.container, id));
+
+	mobileMenu.setAttribute("aria-expanded", "false");
+	await ui.flush();
+	assert.equal(region.hasAttribute("inert"), false);
+	await act(async () => { clock.advance(19_999); });
+	assert.ok(toast(app.container, id));
+	await act(async () => { clock.advance(1); });
+	assert.equal(toast(app.container, id), null);
+	mobileMenu.remove();
+});
+
+test("an inert or hidden main surface also holds idle countdowns", async (t) => {
+	const app = await mount(t);
+	const clock = installWindowClock();
+	t.after(() => clock.restore());
+	const id = await act(async () => show());
+	await ui.flush();
+	const main = document.getElementById("main-content");
+	main.setAttribute("inert", "");
+	main.setAttribute("aria-hidden", "true");
+	await ui.flush();
+	const region = app.container.querySelector('[role="region"]');
+	assert.equal(region.hasAttribute("inert"), true);
+	await act(async () => { clock.advance(60_000); });
+	assert.ok(toast(app.container, id));
+
+	main.removeAttribute("inert");
+	main.removeAttribute("aria-hidden");
+	await ui.flush();
+	await act(async () => { clock.advance(19_999); });
+	assert.ok(toast(app.container, id));
+	await act(async () => { clock.advance(1); });
+	assert.equal(toast(app.container, id), null);
 });
 
 test("the passive stack becomes inert and hidden from assistive tech while a modal is open", async (t) => {

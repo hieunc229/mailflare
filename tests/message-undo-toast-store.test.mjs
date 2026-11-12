@@ -143,6 +143,21 @@ test("a hidden tab pauses every idle countdown until it becomes visible", () => 
 	assert.equal(store.getUndoToasts().length, 0);
 });
 
+test("a global interaction hold pauses every idle countdown until interaction ends", () => {
+	const first = add(1);
+	const second = add(2);
+	advance(3_000);
+	store.pauseUndoToasts("modal");
+	advance(90_000);
+	assert.deepEqual(store.getUndoToasts().map((entry) => entry.id), [first, second]);
+
+	store.resumeUndoToasts("modal");
+	advance(16_999);
+	assert.equal(store.getUndoToasts().length, 2);
+	advance(1);
+	assert.equal(store.getUndoToasts().length, 0);
+});
+
 test("expiry never removes a toast that owns keyboard focus", () => {
 	const id = add(1);
 	const holder = document.createElement("div");
@@ -168,6 +183,7 @@ test("visible toasts stay capped while active entries queue, and queued timers s
 	assert.deepEqual(store.getUndoToasts().map((entry) => entry.id), ids.slice(0, 4));
 	assert.deepEqual(store.getQueuedUndoToasts().map((entry) => entry.id), ids.slice(4));
 	assert.deepEqual(store.getQueuedUndoToasts().map((entry) => entry.action), ["read", "star", "read"]);
+	assert.equal(store.getUndoAnnouncements().length, 4, "queued notices are not announced before they are visible");
 
 	advance(store.UNDO_WINDOW_MS);
 	assert.deepEqual(store.getUndoToasts().map((entry) => entry.id), ids.slice(4));
@@ -177,6 +193,66 @@ test("visible toasts stay capped while active entries queue, and queued timers s
 	assert.equal(store.getUndoToasts().length, 3);
 	advance(1);
 	assert.equal(store.getUndoToasts().length, 0);
+});
+
+test("a queued notice is announced only when it takes a visible slot", () => {
+	const ids = [1, 2, 3, 4, 5].map((id) => add(id));
+	assert.equal(store.getUndoAnnouncements().length, 4);
+
+	store.dismissUndoToast(ids[0]);
+	assert.deepEqual(store.getUndoToasts().map((entry) => entry.id), ids.slice(1));
+	const announcement = store.getUndoAnnouncements().at(-1);
+	assert.equal(announcement.kind, "applied");
+	assert.equal(announcement.action, "read");
+});
+
+test("queued notices expire before their signed token can age out", () => {
+	for (const id of [1, 2, 3, 4]) add(id);
+	const queuedId = add(5);
+	assert.equal(store.getQueuedUndoToasts().length, 1);
+	assert.ok(store.QUEUE_MAX_AGE_MS <= 10 * 60_000);
+	assert.equal(store.getUndoAnnouncements().length, 4);
+
+	store.pauseUndoToasts("test-hold");
+	advance(store.QUEUE_MAX_AGE_MS - 1);
+	assert.deepEqual(store.getQueuedUndoToasts().map((entry) => entry.id), [queuedId]);
+	advance(1);
+	assert.equal(store.getQueuedUndoToasts().length, 0, "a stale queued token is not kept forever");
+	assert.equal(store.getUndoToasts().length, 4);
+	assert.equal(store.getUndoAnnouncements().length, 4, "an entry that never became visible is not announced");
+	store.resumeUndoToasts("test-hold");
+});
+
+test("terminal receipts yield a visible slot when a new action needs one", () => {
+	const ids = [1, 2, 3, 4].map((id) => add(id));
+	for (const id of ids) {
+		store.beginUndoToast(id);
+		store.failUndoToast(id, { kind: "stale", retryable: false });
+	}
+	assert.equal(store.getUndoToasts().filter((entry) => entry.status === "failed").length, 4);
+
+	const fresh = add(5);
+	assert.deepEqual(
+		store.getUndoToasts().map((entry) => entry.id),
+		[ids[1], ids[2], ids[3], fresh],
+		"the oldest failure acknowledgement is retired, the newest receipt remains",
+	);
+	assert.equal(store.getUndoToasts().filter((entry) => entry.status === "failed").length, 3);
+	assert.equal(store.getUndoAnnouncements().at(-1).kind, "applied");
+});
+
+test("a terminal receipt turning while an undo is queued promotes the active undo and keeps one ack", () => {
+	const ids = [1, 2, 3, 4].map((id) => add(id));
+	const queuedId = add(5);
+	store.beginUndoToast(ids[0]);
+	store.failUndoToast(ids[0], { kind: "stale", retryable: false });
+	assert.deepEqual(store.getUndoToasts().map((entry) => entry.id), ids);
+	assert.equal(store.getQueuedUndoToasts()[0].id, queuedId, "the first failure receipt is acknowledged");
+
+	store.beginUndoToast(ids[1]);
+	store.failUndoToast(ids[1], { kind: "stale", retryable: false });
+	assert.deepEqual(store.getUndoToasts().map((entry) => entry.id), [ids[1], ids[2], ids[3], queuedId]);
+	assert.equal(store.getQueuedUndoToasts().length, 0);
 });
 
 test("the overflow queue is bounded but never replaces the visible stack", () => {

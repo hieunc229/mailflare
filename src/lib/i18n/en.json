@@ -2462,6 +2462,7 @@
 	"undo.region": "Message action notifications",
 	"undo.undoing": "Undoing…",
 	"undo.retry": "Try again",
+	"undo.hidePending": "Hide notification (undo continues)",
 	"undo.failed": "Could not undo that change",
 	"undo.failed.expired": "This undo has expired.",
 	"undo.failed.unavailable": "That message is no longer available to undo.",
