@@ -13,7 +13,8 @@ export function isTypingInInput(target: EventTarget | null): boolean {
   if (!target || !(target instanceof HTMLElement)) return false;
   const tagName = target.tagName.toUpperCase();
   const isInputOrTextarea =
-    tagName === "INPUT" || tagName === "TEXTAREA" || tagName === "SELECT";
+    tagName === "INPUT" || tagName === "TEXTAREA" || tagName === "SELECT" ||
+    target.closest('[role="combobox"]') !== null;
   const isContentEditable =
     target.isContentEditable ||
     target.getAttribute("contenteditable") === "true";
