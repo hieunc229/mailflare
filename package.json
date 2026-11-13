@@ -1,6 +1,6 @@
 {
   "name": "mailflare",
-  "version": "0.5.4",
+  "version": "0.5.5",
   "private": true,
   "scripts": {
     "dev": "npm run db:bundle && vp dev --port 3000",
