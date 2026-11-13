@@ -1,4 +1,4 @@
-import { and, inArray, notInArray } from "drizzle-orm";
+import { inArray } from "drizzle-orm";
 import type { AppDatabase } from "@/db";
 import { driveItems, messageAttachments } from "@/db/schema";
 
@@ -22,17 +22,21 @@ export async function findReferencedKeys(
 ): Promise<Set<string>> {
 	const referenced = new Set<string>();
 	const unique = [...new Set(keys)];
+	const excludedItems = new Set(exclude.driveItemIds);
+	const excludedAttachments = new Set(exclude.attachmentIds);
 	for (let index = 0; index < unique.length; index += KEY_CHUNK) {
 		const chunk = unique.slice(index, index + KEY_CHUNK);
+		// Excluded ids are dropped in memory: binding them too would pass D1's 100-parameter limit.
 		const itemRows = await db
-			.select({ key: driveItems.r2Key })
+			.select({ id: driveItems.id, key: driveItems.r2Key })
 			.from(driveItems)
-			.where(and(inArray(driveItems.r2Key, chunk), ...(exclude.driveItemIds?.length ? [notInArray(driveItems.id, exclude.driveItemIds)] : [])));
+			.where(inArray(driveItems.r2Key, chunk));
 		const attachmentRows = await db
-			.select({ key: messageAttachments.r2Key })
+			.select({ id: messageAttachments.id, key: messageAttachments.r2Key })
 			.from(messageAttachments)
-			.where(and(inArray(messageAttachments.r2Key, chunk), ...(exclude.attachmentIds?.length ? [notInArray(messageAttachments.id, exclude.attachmentIds)] : [])));
-		for (const row of [...itemRows, ...attachmentRows]) if (row.key) referenced.add(row.key);
+			.where(inArray(messageAttachments.r2Key, chunk));
+		for (const row of itemRows) if (row.key && !excludedItems.has(row.id)) referenced.add(row.key);
+		for (const row of attachmentRows) if (row.key && !excludedAttachments.has(row.id)) referenced.add(row.key);
 	}
 	return referenced;
 }
