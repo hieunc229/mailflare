@@ -1,4 +1,5 @@
 "use client";
+import { confirmDestructive } from "@/components/ui/confirm-dialog";
 
 import { useEffect, useRef, useState } from "react";
 import type { KeyboardEvent } from "react";
@@ -149,7 +150,7 @@ function NoteItem({ note }: { note: ConversationNote }) {
 	}
 
 	async function remove() {
-		if (!window.confirm(t("note.deleteConfirm"))) return;
+		if (!await confirmDestructive(t("note.deleteConfirm"))) return;
 		setPending(true);
 		setError(null);
 		try {

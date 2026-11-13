@@ -1,4 +1,5 @@
 "use client";
+import { confirmDestructive } from "@/components/ui/confirm-dialog";
 
 import { authFetch } from "@/lib/auth/client";
 import { useParams } from "next/navigation";
@@ -261,7 +262,7 @@ function MessageDetailContent({ messageId }: { messageId: string }) {
     const url = `/api/messages/${message.id}/attachments.zip`;
     try {
       const response = await authFetch(url, { method: "HEAD" });
-      if (response.status === 409 && !window.confirm(t("attachment.downloadAllFlagged"))) return;
+      if (response.status === 409 && !await confirmDestructive(t("attachment.downloadAllFlagged"))) return;
       window.location.assign(response.status === 409 ? `${url}?acknowledge=1` : url);
     } catch {
       window.location.assign(url);

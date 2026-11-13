@@ -24,6 +24,7 @@ import DomainItemCard from "./DomainItemCard";
 import { SectionRowSkeleton } from "@/components/page-skeletons";
 import { checkDomain } from "./utils";
 import { confirmMxReplacement, createDomain, isMxConflictError } from "./api";
+import { Select } from "@/components/ui/select";
 
 export default function DomainsPage() {
   const { t } = useLanguage();
@@ -170,7 +171,7 @@ export default function DomainsPage() {
       };
       let { res, json } = await put(false);
       // Cloudflare sending refuses while another service's MX records exist.
-      if (confirmMxReplacement(res, json)) ({ res, json } = await put(true));
+      if (await confirmMxReplacement(res, json)) ({ res, json } = await put(true));
       if (!res.ok) throw new Error(json.error ?? t("domains.sendingChangeFailed"));
       if (json.warning) setSendingMessage(json.warning);
       await loadDns(id);
@@ -238,7 +239,7 @@ export default function DomainsPage() {
         };
       };
       let { res, json } = await post(false);
-      if (confirmMxReplacement(res, json)) ({ res, json } = await post(true));
+      if (await confirmMxReplacement(res, json)) ({ res, json } = await post(true));
       if (!res.ok) throw new Error(json.error ?? t("domains.dnsSetupFailed"));
       if (json.domain && json.dns) {
         const updatedView = { domain: json.domain, dns: json.dns };
@@ -342,17 +343,18 @@ export default function DomainsPage() {
                         : t("domains.providerHintLater")}
                   </p>
                 </div>
-                <select
+                <Select
                   id="receiving-provider"
                   value={receivingProvider}
                   onChange={(e) => setReceivingProvider(e.target.value as ReceivingProvider)}
-                  className="h-9 shrink-0 rounded-md border border-neutral-200 bg-white px-3 text-sm"
+                  containerClassName="h-9 shrink-0 rounded-md bg-white px-0"
+                  className="px-3 text-sm"
                 >
                   <option value="cloudflare">{t("domains.cloudflareRouting")}</option>
                   <option value="resend">Resend</option>
                   <option value="ses">Amazon SES</option>
                   <option value="none">{t("domains.notSelected")}</option>
-                </select>
+                </Select>
               </div>
               <div className="flex items-center justify-between gap-4 rounded-xl bg-neutral-50 px-4 py-3">
                 <div>
@@ -368,17 +370,18 @@ export default function DomainsPage() {
                   </p>
                 </div>
                 {domainChecking && <LoaderCircle className="h-4 w-4 shrink-0 animate-spin text-neutral-500" />}
-                <select
+                <Select
                   id="sending-provider"
                   value={sendingProvider}
                   onChange={(e) => setSendingProvider(e.target.value as SendingProvider)}
-                  className="h-9 shrink-0 rounded-md border border-neutral-200 bg-white px-3 text-sm"
+                  containerClassName="h-9 shrink-0 rounded-md bg-white px-0"
+                  className="px-3 text-sm"
                 >
                   <option value="cloudflare">{t("domains.cloudflareSending")}</option>
                   <option value="resend">Resend</option>
                   <option value="ses">Amazon SES</option>
                   <option value="none">{t("domains.notSelected")}</option>
-                </select>
+                </Select>
               </div>
                 </>
               )}

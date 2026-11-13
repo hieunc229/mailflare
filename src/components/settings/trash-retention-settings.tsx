@@ -5,6 +5,7 @@ import { useLanguage } from "@/components/language-provider";
 import { authFetch } from "@/lib/auth/client";
 import { TRASH_RETENTION_OPTIONS, describeTrashRetention } from "@/lib/email/trash-retention-utils";
 import type { TrashRetentionSettingsResponse } from "@/app/api/settings/trash-retention/types";
+import { Select } from "@/components/ui/select";
 
 export function TrashRetentionSettings() {
 	const { t } = useLanguage();
@@ -59,18 +60,18 @@ export function TrashRetentionSettings() {
 						{t("settings.trash.description")}
 					</span>
 				</span>
-				<select
+				<Select
 					value={days ?? ""}
 					disabled={loading}
 					onChange={(event) => void updateDays(event.target.value ? Number(event.target.value) : null)}
-					className="rounded-lg border border-neutral-200 bg-white px-3 py-1.5 text-sm text-neutral-800 disabled:opacity-60"
+					className="py-1.5 text-sm text-neutral-800"
 					aria-label={t("settings.trash.title")}
 				>
 					<option value="">{describeTrashRetention(null, t)}</option>
 					{options.map((value) => (
 						<option key={value} value={value}>{describeTrashRetention(value, t)}</option>
 					))}
-				</select>
+				</Select>
 			</label>
 			{error && <p role="alert" className="mt-2 px-4 text-sm text-red-600">{error}</p>}
 		</div>

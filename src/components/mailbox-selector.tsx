@@ -1,4 +1,5 @@
 "use client";
+import { alertDialog, confirmDestructive } from "@/components/ui/confirm-dialog";
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
@@ -259,10 +260,10 @@ export function MailboxSelector({ initialUser }: MailboxSelectorProps = {}) {
 	}
 
 	async function signOutAccount(account: BrowserAccount) {
-		if (!window.confirm(t("account.signOutAccountConfirm", { name: account.name, email: account.email }))) return;
+		if (!await confirmDestructive(t("account.signOutAccountConfirm", { name: account.name, email: account.email }))) return;
 		const error = await signOutBrowserAccount(account.userId);
 		if (error) {
-			window.alert(error);
+			void alertDialog(error);
 			return;
 		}
 		setBrowserAccounts((accounts) => accounts.filter((item) => item.userId !== account.userId));

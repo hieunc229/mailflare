@@ -20,6 +20,7 @@ import {
 	getAttachmentFileUrl,
 	getAttachmentPreviewKind,
 } from "./message-attachment-viewer-utils";
+import { Checkbox } from "@/components/ui/checkbox";
 
 export function MessageAttachmentViewer({
 	attachment,
@@ -177,7 +178,7 @@ export function MessageAttachmentViewer({
 							{risk.reasons.map((reason) => <li key={reason}>{reason}</li>)}
 						</ul>
 						<label className="mt-2 flex items-center gap-2">
-							<input type="checkbox" checked={acknowledged} onChange={(event) => setAcknowledged(event.target.checked)} />
+							<Checkbox checked={acknowledged} onChange={(event) => setAcknowledged(event.target.checked)} />
 							{t("attachment.risk.acknowledge")}
 						</label>
 					</div>

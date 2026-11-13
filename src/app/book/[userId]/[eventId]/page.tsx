@@ -15,6 +15,7 @@ import { formatUserDate, getUserTimeZone } from "@/lib/time/utils";
 import type { BookingSlot, PublicBookingEvent } from "../types";
 import { bookingTimeZones, calendarDays, formatCalendarDate, localDateForSlot, moveMonth, readBookingPageSelection, submitPublicBooking, writeBookingPageSelection } from "./utils";
 import { BookingDetailSkeleton } from "./booking-detail-skeleton";
+import { Select } from "@/components/ui/select";
 
 export default function PublicBookingEventPage() {
 	const { t } = useLanguage();
@@ -155,7 +156,7 @@ export default function PublicBookingEventPage() {
 								<div className="flex min-w-0 items-center gap-2 w-full pl-3 pr-2 max-sm:px-5 text-sm text-neutral-600 focus-within:border-blue-600 max-w-[440px] my-4 mx-auto">
 									<Globe2 aria-hidden="true" className="h-4 w-4 shrink-0" />
 									<label htmlFor="booking-time-zone" className="shrink-0 whitespace-nowrap">{t("public.timeZone")}</label>
-									<select id="booking-time-zone" value={timeZone} onChange={(input) => { const nextToday = localDateForSlot({ startsAt: new Date().toISOString(), endsAt: "", localDate: "", time: "" }, input.target.value); setTimeZone(input.target.value); setSelectedDate(nextToday); setMonth(nextToday.slice(0, 7)); writeBookingPageSelection(nextToday, null, input.target.value); }} className="ml-auto h-9 min-w-0 max-w-full flex-1 truncate border-0 bg-transparent px-1 text-sm text-neutral-700 shadow-none outline-none text-right">{timeZones.map((zone) => <option key={zone} value={zone}>{zone.replaceAll("_", " ")}</option>)}</select>
+									<Select id="booking-time-zone" containerClassName="contents" value={timeZone} onChange={(input) => { const nextToday = localDateForSlot({ startsAt: new Date().toISOString(), endsAt: "", localDate: "", time: "" }, input.target.value); setTimeZone(input.target.value); setSelectedDate(nextToday); setMonth(nextToday.slice(0, 7)); writeBookingPageSelection(nextToday, null, input.target.value); }} className="ml-auto h-9 flex-1 px-1 text-right text-sm text-neutral-700">{timeZones.map((zone) => <option key={zone} value={zone}>{zone.replaceAll("_", " ")}</option>)}</Select>
 								</div>
 								{slots.length === 0 && <p className="mt-6 text-sm text-neutral-500">{t("public.noTimes60")}</p>}
 							</section>
