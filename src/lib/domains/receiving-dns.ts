@@ -59,10 +59,12 @@ export async function publishMx(
 	if (others.length > 0 && !options.replace) {
 		throw new MxConflictError(others.map((record) => ({ content: record.content ?? "", priority: record.priority ?? 0 })));
 	}
-	for (const record of others) if (record.id) await deleteDnsRecord(env, domain.zoneId, record.id);
+	// Create the new record first: if it is rejected nothing has been deleted, so the
+	// domain keeps receiving mail where it did.
 	if (!existing.some((record) => same(record.content ?? "", content))) {
 		await createDnsRecord(env, domain.zoneId, { type: "MX", name: domain.hostname, content, priority: options.priority ?? 10, ttl: 3600 });
 	}
+	for (const record of others) if (record.id) await deleteDnsRecord(env, domain.zoneId, record.id);
 	return others;
 }
 

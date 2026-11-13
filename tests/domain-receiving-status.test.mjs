@@ -22,7 +22,7 @@ const mocks = {
 	"@/lib/domains/provision": "export const isManualZone=(z)=>z==='manual';export const shouldBindEmailCatchAllToWorker=()=>false;",
 	"@/lib/domains/sending-subdomain": "export async function ensureSendingSubdomain(){return {subdomain:globalThis.__subdomain};}",
 	"@/lib/domains/cloudflare-cleanup": "export async function deleteEmailRoutingRulesForDomain(){}",
-	"@/lib/domains/mx-records": "export async function removeMxRecords(){}",
+	"@/lib/domains/mx-records": "export async function removeMxRecords(){}export async function restoreMxRecords(){}export async function restoreMxRecordsAfterFailure(){}",
 	"@/lib/domains/adopt-zone": "export async function adoptCloudflareZone(env,d){return d;}",
 	"@/lib/domains/receiving-dns": "export async function listDomainMx(){return [];}export class MxConflictError extends Error{}",
 	"@/lib/domains/resend-receiving": "export async function setupResendReceiving(){}export async function removeResendReceiving(){}export async function hasResendReceivingConfig(){return false;}",
