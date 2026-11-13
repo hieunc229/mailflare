@@ -11,6 +11,7 @@ import {
 	deleteSendingSubdomain,
 	listSendingSubdomains,
 	type CfDnsRecord,
+	type EmailRoutingRuleCache,
 } from "@/lib/cloudflare-api";
 import { deleteEmailRoutingRulesForDomain } from "@/lib/domains/cloudflare-cleanup";
 import { isManualZone, provisionDomainOnCloudflare } from "@/lib/domains/provision";
@@ -116,8 +117,9 @@ export async function addDomainForUser(
 			.from(mailboxes)
 			.innerJoin(domains, eq(mailboxes.domainId, domains.id))
 			.where(and(eq(domains.userId, userId), eq(mailboxes.useAllDomains, true)));
+		const ruleCache: EmailRoutingRuleCache = new Map();
 		const routingResults = await Promise.allSettled(
-			aliasMailboxes.map((mailbox) => ensureMailboxDomainRouting(env, db, mailbox)),
+			aliasMailboxes.map((mailbox) => ensureMailboxDomainRouting(env, db, mailbox, undefined, ruleCache)),
 		);
 		for (const result of routingResults) {
 			if (result.status === "rejected") console.warn("ensureMailboxDomainRouting", result.reason);

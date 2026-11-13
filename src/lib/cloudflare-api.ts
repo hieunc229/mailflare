@@ -251,16 +251,32 @@ function isWorkerRouteForAddress(
 	return Boolean(routesAddress && sendsToWorker);
 }
 
+/** One rules listing per zone, shared by the calls of a single operation. */
+export type EmailRoutingRuleCache = Map<string, Promise<CfEmailRoutingRule[]>>;
+
+function listEmailRoutingRulesCached(env: CloudflareEnv, zoneId: string, cache?: EmailRoutingRuleCache) {
+	if (!cache) return listEmailRoutingRules(env, zoneId);
+	let listing = cache.get(zoneId);
+	if (!listing) {
+		listing = listEmailRoutingRules(env, zoneId);
+		cache.set(zoneId, listing);
+		// A failed listing must not stay cached for the next address.
+		listing.catch(() => cache.delete(zoneId));
+	}
+	return listing;
+}
+
 export async function ensureEmailRoutingRuleToWorker(
 	env: CloudflareEnv,
 	zoneId: string,
 	address: string,
 	changes?: CfEmailRoutingRuleChange[],
+	ruleCache?: EmailRoutingRuleCache,
 ) {
 	if (zoneId === "manual") return;
 	const normalized = address.toLowerCase();
 	const workerName = getEmailWorkerName();
-	const rules = await listEmailRoutingRules(env, zoneId);
+	const rules = await listEmailRoutingRulesCached(env, zoneId, ruleCache);
 	const existing = rules.find((rule) => isWorkerRouteForAddress(rule, normalized, workerName));
 
 	if (existing?.enabled) return existing;

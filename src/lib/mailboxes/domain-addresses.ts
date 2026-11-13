@@ -1,7 +1,7 @@
 import { and, eq, inArray } from "drizzle-orm";
 import type { AppDatabase } from "@/db";
 import { domains, mailboxAliases, mailboxes } from "@/db/schema";
-import { deleteEmailRoutingRuleForAddress, ensureEmailRoutingRuleToWorker } from "@/lib/cloudflare-api";
+import { deleteEmailRoutingRuleForAddress, ensureEmailRoutingRuleToWorker, type EmailRoutingRuleCache } from "@/lib/cloudflare-api";
 import { normalizeRecipientLocalPart } from "@/lib/email/recipient-address";
 import type { MailboxDomainAddressInput } from "./domain-addresses-types";
 import type { CfEmailRoutingRuleChange } from "@/lib/cloudflare-api.types";
@@ -82,6 +82,7 @@ export async function ensureMailboxDomainRouting(
 	db: AppDatabase,
 	mailbox: MailboxDomainAddressInput,
 	changes?: CfEmailRoutingRuleChange[],
+	ruleCache: EmailRoutingRuleCache = new Map(),
 ): Promise<void> {
 	const addresses = await getMailboxDomainAddresses(db, mailbox);
 	if (addresses.length === 0) return;
@@ -103,7 +104,7 @@ export async function ensureMailboxDomainRouting(
 			const hostname = address.slice(address.lastIndexOf("@") + 1);
 			const domain = domainsByHostname.get(hostname);
 			// Worker routes only matter when Cloudflare is what receives this domain's mail.
-			if (domain && domain.receivingProvider === "cloudflare") await ensureEmailRoutingRuleToWorker(env, domain.zoneId, address, changes);
+			if (domain && domain.receivingProvider === "cloudflare") await ensureEmailRoutingRuleToWorker(env, domain.zoneId, address, changes, ruleCache);
 		}),
 	);
 	const failure = results.find((result) => result.status === "rejected");

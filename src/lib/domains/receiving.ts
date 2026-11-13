@@ -1,7 +1,7 @@
 import { and, eq, ne, or } from "drizzle-orm";
 import { getDb } from "@/db";
 import { domains, mailboxes } from "@/db/schema";
-import { disableEmailRouting } from "@/lib/cloudflare-api";
+import { disableEmailRouting, type EmailRoutingRuleCache } from "@/lib/cloudflare-api";
 import { deleteDnsRecord } from "@/lib/cloudflare-dns";
 import { deleteEmailRoutingRulesForDomain } from "@/lib/domains/cloudflare-cleanup";
 import { removeMxRecords, restoreMxRecordsAfterFailure } from "@/lib/domains/mx-records";
@@ -50,7 +50,8 @@ export async function setupCloudflareReceiving(env: CloudflareEnv, skippedDomain
 		.from(mailboxes)
 		.innerJoin(domains, eq(mailboxes.domainId, domains.id))
 		.where(and(eq(domains.userId, domain.userId), or(eq(mailboxes.domainId, domain.id), eq(mailboxes.useAllDomains, true))));
-	await Promise.allSettled(mailboxRows.map((mailbox) => ensureMailboxDomainRouting(env, db, { ...mailbox, useAllDomains: true })));
+	const ruleCache: EmailRoutingRuleCache = new Map();
+	await Promise.allSettled(mailboxRows.map((mailbox) => ensureMailboxDomainRouting(env, db, { ...mailbox, useAllDomains: true }, undefined, ruleCache)));
 }
 
 export async function removeCloudflareReceiving(env: CloudflareEnv, domain: DomainRow): Promise<void> {
