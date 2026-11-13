@@ -19,7 +19,6 @@ import {
   ShieldAlert,
   Star,
   Trash2,
-  UsersRound,
 } from "@/components/icons";
 import { useSelectedMailbox } from "@/components/mailbox-provider";
 import { Button } from "@/components/ui/button";
@@ -65,7 +64,6 @@ const links = [
   { href: "/snoozed", labelKey: "navigation.snoozed", icon: Clock, preloadMessages: true },
   { href: "/sent", labelKey: "navigation.sent", icon: Send, preloadMessages: true },
   { href: "/scheduled", labelKey: "navigation.scheduled", icon: CalendarClock, preloadMessages: true },
-  { href: "/contacts", labelKey: "navigation.contacts", icon: UsersRound },
   { href: "/drafts", labelKey: "navigation.drafts", icon: FileText, preloadMessages: true },
   {
     href: "/archived",

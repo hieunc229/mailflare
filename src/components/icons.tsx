@@ -87,9 +87,9 @@ import {
 	MailPlusIcon as HugeMailPlusIcon,
 	MapPinIcon as HugeMapPinIcon,
 	ExpandIcon as HugeMaximize02Icon,
-	Menu10Icon as HugeMenuIcon,
 	CollapseIcon as HugeMinimize02Icon,
 	MinusIcon as HugeMinusIcon,
+	More01Icon as HugeMore01Icon,
 	MoreHorizontalIcon as HugeMoreHorizontalIcon,
 	MoreVerticalIcon as HugeMoreVerticalIcon,
 	MusicIcon as HugeMusicIcon,
@@ -152,6 +152,25 @@ export type IconProps = Omit<SVGProps<SVGSVGElement>, "ref"> & {
 
 export type LucideIcon = ComponentType<IconProps>;
 export type IconNode = LucideIcon;
+
+export const HamburgerMenuIcon = forwardRef<SVGSVGElement, IconProps>(
+	({ size = 24, strokeWidth: _strokeWidth, absoluteStrokeWidth: _abs, ...props }, ref) => (
+		<svg
+			ref={ref}
+			width={size}
+			height={size}
+			viewBox="0 0 12 12"
+			fill="currentColor"
+			aria-hidden="true"
+			{...props}
+		>
+			<rect height="1" width="11" x="0.5" y="2.5" />
+			<rect height="1" width="11" x="0.5" y="5.5" />
+			<rect height="1" width="11" x="0.5" y="8.5" />
+		</svg>
+	),
+);
+HamburgerMenuIcon.displayName = "HamburgerMenuIcon";
 
 function createIcon(icon: IconSvgElement, displayName: string): LucideIcon {
 	const Icon = forwardRef<SVGSVGElement, IconProps>((props, ref) => (
@@ -250,9 +269,10 @@ export const MailOpen = createIcon(HugeMailOpenIcon, "MailOpen");
 export const MailPlus = createIcon(HugeMailPlusIcon, "MailPlus");
 export const MapPin = createIcon(HugeMapPinIcon, "MapPin");
 export const Maximize2 = createIcon(HugeMaximize02Icon, "Maximize2");
-export const Menu = createIcon(HugeMenuIcon, "Menu");
+export const Menu: LucideIcon = HamburgerMenuIcon;
 export const Minimize2 = createIcon(HugeMinimize02Icon, "Minimize2");
 export const Minus = createIcon(HugeMinusIcon, "Minus");
+export const More01 = createIcon(HugeMore01Icon, "More01");
 export const MoreHorizontal = createIcon(HugeMoreHorizontalIcon, "MoreHorizontal");
 export const MoreVertical = createIcon(HugeMoreVerticalIcon, "MoreVertical");
 export const Music = createIcon(HugeMusicIcon, "Music");

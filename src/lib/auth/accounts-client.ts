@@ -33,3 +33,15 @@ export async function switchBrowserAccount(userId: string): Promise<string | nul
 	setClientSessionToken(data.token);
 	return null;
 }
+
+/** Returns an error message, or null once the account was removed from this browser. */
+export async function signOutBrowserAccount(userId: string): Promise<string | null> {
+	const res = await authFetch("/api/auth/accounts", {
+		method: "DELETE",
+		redirectOnUnauthorized: false,
+		headers: { "Content-Type": "application/json" },
+		body: JSON.stringify({ userId }),
+	});
+	if (res.ok) return null;
+	return ((await res.json().catch(() => ({}))) as { error?: string }).error ?? "Could not remove account";
+}
