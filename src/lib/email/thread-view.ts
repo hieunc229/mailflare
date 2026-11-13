@@ -4,6 +4,7 @@ import { messageAttachments, messages } from "@/db/schema";
 import { getContactCardMap } from "@/lib/contacts/service";
 import { getPartyDisplayName } from "@/lib/contacts/utils";
 import { getFirstEmailAddressEntry, normalizeEmailAddress } from "@/lib/email/address";
+import { isOthersDraft } from "@/lib/email/draft-access";
 import { getMailboxAccessLevel } from "@/lib/mailboxes/access";
 import type { SessionUser } from "@/lib/auth/types";
 
@@ -23,11 +24,11 @@ function withoutRawKey<T extends { rawR2Key: string | null }>(row: T): Omit<T, "
 export async function getMessageThreadForUser(env: CloudflareEnv, user: SessionUser, messageId: string) {
 	const db = getDb(env);
 	const [message] = await db
-		.select({ mailboxId: messages.mailboxId, userId: messages.userId, threadId: messages.threadId })
+		.select({ mailboxId: messages.mailboxId, userId: messages.userId, threadId: messages.threadId, status: messages.status })
 		.from(messages)
 		.where(eq(messages.id, messageId))
 		.limit(1);
-	if (!message?.mailboxId) return null;
+	if (!message?.mailboxId || isOthersDraft(message, user.id)) return null;
 	const access = await getMailboxAccessLevel(db, user, message.mailboxId);
 	if (!access?.canRead) return null;
 

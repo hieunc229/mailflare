@@ -1,6 +1,7 @@
 import { and, asc, count, desc, eq, inArray, sql } from "drizzle-orm";
 import { emailChangesSince, threadChangesSince } from "./changes";
 import { folders, messages } from "@/db/schema";
+import { DRAFT_FILTER_PARAMS, draftsVisibleTo } from "@/lib/email/draft-access";
 import { newId } from "@/lib/ids";
 import { buildSnippet, parseRawMime } from "@/lib/email/parse";
 import { getAuthorizedSenderAddress } from "@/lib/email/sender";
@@ -73,17 +74,19 @@ async function insertDraft(ctx: JmapContext, row: DraftRow): Promise<string> {
 
 async function scope(ctx: JmapContext) {
 	const ids = Array.from(await listAccessibleMailboxIdSet(ctx));
-	return { ids, condition: ids.length ? inArray(messages.mailboxId, ids) : ctx.auth.mailboxIds ? sql`1 = 0` : eq(messages.userId, ctx.auth.userId) };
+	const mailboxScope = ids.length ? inArray(messages.mailboxId, ids) : ctx.auth.mailboxIds ? sql`1 = 0` : eq(messages.userId, ctx.auth.userId);
+	// Other users' drafts in a shared mailbox are private, as over REST.
+	return { ids, condition: and(mailboxScope, draftsVisibleTo(ctx.auth.userId))! };
 }
 
 export async function loadMessages(ctx: JmapContext, ids: string[]): Promise<MessageRow[]> {
 	if (ids.length === 0) return [];
 	const { ids: accessible, condition } = await scope(ctx);
 	// D1 caps bound parameters per query at 100, and the scope predicate
-	// already binds the accessible mailbox ids, so the remainder is the id
-	// batch size. Callers key rows by id, so dedupe first: an id split over
-	// two batches would otherwise return its row twice.
-	const batch = Math.max(1, 100 - accessible.length);
+	// already binds the accessible mailbox ids and the draft filter, so the
+	// remainder is the id batch size. Callers key rows by id, so dedupe first:
+	// an id split over two batches would otherwise return its row twice.
+	const batch = Math.max(1, 100 - accessible.length - DRAFT_FILTER_PARAMS);
 	const unique = [...new Set(ids)];
 	const rows: MessageRow[] = [];
 	for (let offset = 0; offset < unique.length; offset += batch) {
@@ -482,7 +485,7 @@ export const threadGet: JmapMethodHandler = async (ctx, args) => {
 	const threadKey = sql<string>`coalesce(${messages.threadId}, ${messages.id})`;
 	// Same D1 bound-parameter budget as loadMessages; dedupe so a repeated
 	// thread id cannot list its messages twice within one group.
-	const batch = Math.max(1, 100 - accessible.length);
+	const batch = Math.max(1, 100 - accessible.length - DRAFT_FILTER_PARAMS);
 	const unique = [...new Set(ids)];
 	const rows: { id: string; thread: string }[] = [];
 	for (let offset = 0; offset < unique.length; offset += batch) {

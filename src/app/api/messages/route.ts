@@ -19,6 +19,7 @@ import { getOpenCounts } from "@/lib/tracking/open-tracking";
 import { summarizeNotesForRows } from "@/lib/notes/service";
 import { isMissingTableError } from "@/lib/database-errors";
 import { parseLimit, parseOffset } from "@/lib/api/query-params";
+import { draftsVisibleTo } from "@/lib/email/draft-access";
 
 export async function GET(request: Request) {
 	const env = getEnv();
@@ -64,6 +65,8 @@ export async function GET(request: Request) {
 	} else {
 		conditions.push(eq(messages.userId, user.id));
 	}
+	// Another user's unsent drafts are never listed, even in a shared mailbox.
+	conditions.push(draftsVisibleTo(user.id));
 	if (direction === "inbound" || direction === "outbound") {
 		conditions.push(eq(messages.direction, direction));
 	}
