@@ -270,7 +270,10 @@ export const emailSet: JmapMethodHandler = async (ctx, args) => {
 	const oldState = await getEmailState(ctx);
 	if (args.ifInState && args.ifInState !== oldState) return { type: "stateMismatch" };
 	const accessible = await listAccessibleMailboxIdSet(ctx);
-	const writable = new Set((await listJmapMailboxes(ctx)).filter((row) => row.permission !== "read_only").map((row) => row.id));
+	const mailboxRows = await listJmapMailboxes(ctx);
+	const writable = new Set(mailboxRows.filter((row) => row.permission !== "read_only").map((row) => row.id));
+	// Moving or deleting mail needs full_access, as in the REST routes (canManage); delegates keep flags and drafts.
+	const manageable = new Set(mailboxRows.filter((row) => row.permission === "full_access").map((row) => row.id));
 	const created: Record<string, unknown> = {};
 	const notCreated: Record<string, unknown> = {};
 	const updated: Record<string, null> = {};
@@ -307,6 +310,10 @@ export const emailSet: JmapMethodHandler = async (ctx, args) => {
 			notUpdated[id] = move.error;
 			continue;
 		}
+		if (move && !manageable.has(row.mailboxId)) {
+			notUpdated[id] = { type: "forbidden", description: "Moving mail needs full access to the mailbox" };
+			continue;
+		}
 		if (move && typeof move.folderId === "string") {
 			// A folder id in a mailboxIds patch is client input: it must be a folder of the message's own mailbox.
 			const [folder] = await ctx.db.select({ id: folders.id }).from(folders).where(and(eq(folders.id, move.folderId), eq(folders.mailboxId, row.mailboxId))).limit(1);
@@ -338,7 +345,9 @@ export const emailSet: JmapMethodHandler = async (ctx, args) => {
 			notDestroyed[id] = { type: "notFound" };
 			continue;
 		}
-		if (!writable.has(row.mailboxId)) {
+		// Delegates may delete their own drafts; anything else needs full_access.
+		const ownDraft = row.status === "draft" && row.userId === ctx.auth.userId;
+		if (!writable.has(row.mailboxId) || !(manageable.has(row.mailboxId) || ownDraft)) {
 			notDestroyed[id] = { type: "forbidden" };
 			continue;
 		}
