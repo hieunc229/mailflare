@@ -11,7 +11,8 @@ const COLUMNS = [
 
 /**
  * Inserts one calendar event per host, but only when none of the hosts is busy, in a single statement so two
- * guests cannot take the same slot. Returns whether every host was booked.
+ * guests cannot take the same slot. Unanswered invitations (response_status needs-action) do not block, matching
+ * availableBookingSlots, so every offered slot can be booked. Returns whether every host was booked.
  */
 export async function createBookedCalendarEvents(env: CloudflareEnv, event: BookingEventRecord, guestName: string, guestEmail: string, startsAt: string, endsAt: string, guestEmails: string[] = [], notes = ""): Promise<boolean> {
 	const hostIds = event.hostIds;
@@ -27,6 +28,7 @@ export async function createBookedCalendarEvents(env: CloudflareEnv, event: Book
 			${JSON.stringify([guestEmail, ...guestEmails])}, ${event.color}, 'none', '[]', '[]', ${event.timeZone}, ${startSeconds}, ${endSeconds}, ${nowSeconds}, ${nowSeconds}
 		from (${requested}) requested_hosts
 		where (select count(*) from ${calendarEvents} busy where busy.${sql.identifier("user_id")} in (${hostList}) and busy.${sql.identifier("repeat")} = 'none'
+			and (busy.${sql.identifier("response_status")} is null or busy.${sql.identifier("response_status")} <> 'needs-action')
 			and busy.${sql.identifier("starts_at")} < ${endSeconds} and busy.${sql.identifier("ends_at")} > ${startSeconds}) = 0`);
 	return (result as unknown as { meta: { changes: number } }).meta.changes === hostIds.length;
 }
