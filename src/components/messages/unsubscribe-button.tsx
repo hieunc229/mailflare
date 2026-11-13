@@ -7,7 +7,7 @@ import { useLanguage } from "@/components/language-provider";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { openUnsubscribeUrl } from "@/components/message-actions/utils";
-import { requestUnsubscribe } from "./unsubscribe-button-utils";
+import { isMessageUnsubscribed, markMessageUnsubscribed, requestUnsubscribe } from "./unsubscribe-button-utils";
 
 /**
  * The header-level unsubscribe action. The route decides the real mechanism —
@@ -18,7 +18,7 @@ export function MessageUnsubscribeButton({ messageId, variant = "header" }: { me
 	const { t } = useLanguage();
 	const { showNotice } = useCompose();
 	const [pending, setPending] = useState(false);
-	const [done, setDone] = useState(false);
+	const [done, setDone] = useState(() => isMessageUnsubscribed(messageId));
 	const [confirmOpen, setConfirmOpen] = useState(false);
 
 	// The confirm dialog closes at once; progress and the outcome are toasts.
@@ -28,6 +28,7 @@ export function MessageUnsubscribeButton({ messageId, variant = "header" }: { me
 		showNotice(t("actions.unsubscribing"), { tone: "loading" });
 		try {
 			const result = await requestUnsubscribe(messageId);
+			markMessageUnsubscribed(messageId);
 			setDone(true);
 			if (result.method === "link") {
 				openUnsubscribeUrl(result.url);

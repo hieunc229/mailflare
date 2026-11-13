@@ -161,17 +161,20 @@ export function ComposeForm({
 		}),
 		[mailboxes],
 	);
+	// Keep the sender on an address the mailbox can send as. A loaded draft's
+	// sender wins whenever it or the mailbox's addresses change.
+	const [prevSenderSync, setPrevSenderSync] = useState({ loadedDraftFrom, senderAddresses });
+	let nextFrom = selectedFrom;
+	if (loadedDraftFrom !== prevSenderSync.loadedDraftFrom || senderAddresses !== prevSenderSync.senderAddresses) {
+		setPrevSenderSync({ loadedDraftFrom, senderAddresses });
+		if (loadedDraftFrom && senderAddresses.includes(loadedDraftFrom)) nextFrom = loadedDraftFrom;
+	}
+	if (!senderAddresses.length) nextFrom = "";
+	else if (!senderAddresses.includes(nextFrom)) nextFrom = senderAddresses[0];
+	if (nextFrom !== selectedFrom) setSelectedFrom(nextFrom);
 	const fromAddr = selectedMailbox && selectedFrom
 		? formatEmailAddress(selectedFrom, selectedMailbox.displayName)
 		: "";
-
-	useEffect(() => {
-		if (!senderAddresses.length) {
-			setSelectedFrom("");
-			return;
-		}
-		if (!senderAddresses.includes(selectedFrom)) setSelectedFrom(senderAddresses[0]);
-	}, [selectedFrom, senderAddresses]);
 
 	useEffect(() => {
 		if (!toast) return;
@@ -183,6 +186,7 @@ export function ComposeForm({
 		if (!draftIdToLoad) return;
 
 		let cancelled = false;
+		// eslint-disable-next-line react-hooks/set-state-in-effect -- flags the fetch below as in flight; the signature and autosave effects rely on it flipping after the first commit.
 		setLoadingDraft(true);
 		fetchDraft(draftIdToLoad)
 			.then((draft) => {
@@ -237,11 +241,6 @@ export function ComposeForm({
 		const draftMailbox = mailboxes.find((mailbox) => mailbox.id === loadedDraftMailboxId);
 		if (draftMailbox) setSelectedMailbox(draftMailbox);
 	}, [loadedDraftMailboxId, mailboxes, selectedMailbox?.id, setSelectedMailbox]);
-
-	useEffect(() => {
-		if (!loadedDraftFrom || !senderAddresses.includes(loadedDraftFrom)) return;
-		setSelectedFrom(loadedDraftFrom);
-	}, [loadedDraftFrom, senderAddresses]);
 
 	useEffect(() => {
 		if (loadingDraft) return;

@@ -66,6 +66,7 @@ const KEY_LENGTH = 191;
 const LONG_KEYS: Record<string, number> = {
 	provider_message_id: 512,
 	thread_id: 512,
+	thread_key: 512,
 	raw_r2_key: 512,
 	r2_key: 512,
 	endpoint: 512,

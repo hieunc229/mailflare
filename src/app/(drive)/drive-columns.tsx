@@ -15,14 +15,13 @@ const clamp = (value: number) => Math.min(MAX_WIDTH, Math.max(MIN_WIDTH, Math.ro
 
 /** Widths of the resizable columns; the name column takes whatever is left. Remembered per browser. */
 export function useDriveColumns() {
-	const [widths, setWidths] = useState(DEFAULT_WIDTHS);
-
-	useEffect(() => {
+	const [widths, setWidths] = useState(() => {
 		try {
 			const saved = JSON.parse(localStorage.getItem(STORAGE_KEY) ?? "null") as Partial<Record<DriveColumn, number>> | null;
-			if (saved) setWidths((current) => ({ owner: clamp(saved.owner ?? current.owner), updatedAt: clamp(saved.updatedAt ?? current.updatedAt), size: clamp(saved.size ?? current.size) }));
+			if (saved) return { owner: clamp(saved.owner ?? DEFAULT_WIDTHS.owner), updatedAt: clamp(saved.updatedAt ?? DEFAULT_WIDTHS.updatedAt), size: clamp(saved.size ?? DEFAULT_WIDTHS.size) };
 		} catch { /* storage unavailable: keep defaults */ }
-	}, []);
+		return DEFAULT_WIDTHS;
+	});
 
 	const resize = useCallback((column: DriveColumn, width: number, persist = false) => {
 		setWidths((current) => {

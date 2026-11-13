@@ -1,11 +1,10 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useEffectEvent } from "react";
 import type { RefObject } from "react";
 
 export function useDismissible(open: boolean, onClose: () => void, container: RefObject<HTMLElement | null>) {
-	const close = useRef(onClose);
-	close.current = onClose;
+	const close = useEffectEvent(onClose);
 
 	useEffect(() => {
 		if (!open) return;
@@ -13,14 +12,14 @@ export function useDismissible(open: boolean, onClose: () => void, container: Re
 		function onKeyDown(event: KeyboardEvent) {
 			if (event.key !== "Escape") return;
 			event.stopPropagation();
-			close.current();
+			close();
 			container.current?.querySelector<HTMLElement>("[aria-expanded]")?.focus();
 		}
 		function onPointerDown(event: PointerEvent) {
-			if (!container.current?.contains(event.target as Node)) close.current();
+			if (!container.current?.contains(event.target as Node)) close();
 		}
 		function onFocusIn(event: FocusEvent) {
-			if (!container.current?.contains(event.target as Node)) close.current();
+			if (!container.current?.contains(event.target as Node)) close();
 		}
 
 		document.addEventListener("keydown", onKeyDown);

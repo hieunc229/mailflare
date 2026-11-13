@@ -1,10 +1,10 @@
 import { and, eq, isNotNull } from "drizzle-orm";
 import { getDb } from "@/db";
-import { messages, outboundJobs } from "@/db/schema";
+import { conversationNotes, messages, outboundJobs } from "@/db/schema";
 import { newId } from "@/lib/ids";
 import { buildSnippet } from "@/lib/email/parse";
 import { dispatchWebhooks } from "@/lib/email/webhooks";
-import { upsertContactFromAddress } from "@/lib/contacts/service";
+import { upsertContactsFromAddresses } from "@/lib/contacts/service";
 import { getAuthorizedSenderAddress } from "@/lib/email/sender";
 import { getEmailAddressList, joinEmailAddressList, splitEmailAddressList } from "@/lib/email/address";
 import { formatMessageIdHeader, normalizeMessageId, parseMessageIdList } from "@/lib/email/threading";
@@ -102,9 +102,7 @@ export async function sendEmail(
 	if (to.length + cc.length + bcc.length > MAX_RECIPIENTS) {
 		throw new Error(`A message can have at most ${MAX_RECIPIENTS} recipients`);
 	}
-	for (const address of [...to, ...cc, ...bcc]) {
-		await upsertContactFromAddress(env, { userId: input.userId, address, source: "outbound" });
-	}
+	await upsertContactsFromAddresses(env, input.userId, [...to, ...cc, ...bcc], "outbound");
 
 	const inReplyTo = normalizeMessageId(input.inReplyTo);
 	const references = Array.isArray(input.references)
@@ -249,14 +247,23 @@ async function deliverEmail(env: CloudflareEnv, delivery: PreparedDelivery): Pro
 
 		// A fresh message starts its own conversation; Cloudflare's Message-ID is what
 		// any reply will name in In-Reply-To, so key the thread by it.
+		const threadId = input.threadId ?? normalizeMessageId(response.messageId) ?? messageId;
 		await db
 			.update(messages)
 			.set({
 				status: "sent",
 				providerMessageId: response.messageId,
-				threadId: input.threadId ?? normalizeMessageId(response.messageId) ?? messageId,
+				threadId,
 			})
 			.where(eq(messages.id, messageId));
+		// Notes taken while the message waited in the queue keyed its conversation by
+		// the message id; move them onto the thread key the send just established.
+		if (threadId !== messageId) {
+			await db
+				.update(conversationNotes)
+				.set({ threadKey: threadId })
+				.where(and(eq(conversationNotes.mailboxId, mailboxId), eq(conversationNotes.threadKey, messageId)));
+		}
 		await db.update(outboundJobs).set({ status: "sent", updatedAt: new Date() }).where(eq(outboundJobs.id, jobId));
 		if (input.followUpDays) {
 			// The message is already out; a reminder that cannot be stored must not fail the send.

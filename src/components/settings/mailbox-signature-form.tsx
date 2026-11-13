@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useLanguage } from "@/components/language-provider";
 import { useSelectedMailbox } from "@/components/mailbox-provider";
 import { isHtmlSignature } from "@/components/compose/rich-text-utils";
@@ -13,17 +13,19 @@ import { updateMailboxSignature } from "./utils";
 export function MailboxSignatureForm() {
 	const { t } = useLanguage();
 	const { selectedMailbox, setSelectedMailbox, isLoading } = useSelectedMailbox();
-	const [signature, setSignature] = useState("");
-	const [savedSignature, setSavedSignature] = useState("");
+	const [signature, setSignature] = useState(selectedMailbox?.signature ?? "");
+	const [savedSignature, setSavedSignature] = useState(selectedMailbox?.signature ?? "");
 	const [status, setStatus] = useState<string | null>(null);
 	const [saving, setSaving] = useState(false);
+	const [syncedMailbox, setSyncedMailbox] = useState({ id: selectedMailbox?.id, signature: selectedMailbox?.signature });
 
-	useEffect(() => {
+	if (syncedMailbox.id !== selectedMailbox?.id || syncedMailbox.signature !== selectedMailbox?.signature) {
 		const nextSignature = selectedMailbox?.signature ?? "";
+		setSyncedMailbox({ id: selectedMailbox?.id, signature: selectedMailbox?.signature });
 		setSignature(nextSignature);
 		setSavedSignature(nextSignature);
 		setStatus(null);
-	}, [selectedMailbox?.id, selectedMailbox?.signature]);
+	}
 
 	async function onSubmit(event: React.FormEvent<HTMLFormElement>) {
 		event.preventDefault();

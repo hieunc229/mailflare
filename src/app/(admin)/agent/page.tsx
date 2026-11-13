@@ -29,10 +29,8 @@ export default function AdminAgentPage() {
 	const [cloudflareAvailable, setCloudflareAvailable] = useState(false);
 	const [hasSavedKey, setHasSavedKey] = useState(false);
 	const [savedEndpoint, setSavedEndpoint] = useState("");
-	const [models, setModels] = useState<AgentModelOption[]>([]);
-	const [modelSource, setModelSource] = useState<"catalog" | "suggested" | null>(null);
+	const [modelResult, setModelResult] = useState<{ key: string; models: AgentModelOption[]; source: "catalog" | "suggested" | null; error: string | null } | null>(null);
 	const [modelsLoading, setModelsLoading] = useState(false);
-	const [modelError, setModelError] = useState<string | null>(null);
 	const [status, setStatus] = useState<string | null>(null);
 	const [saving, setSaving] = useState(false);
 
@@ -52,29 +50,31 @@ export default function AdminAgentPage() {
 
 	const canUseSavedKey = hasSavedKey && savedEndpoint === `${form.preset}|${form.baseUrl}`;
 	const selectedModelIds = parseAgentModelIds(form.model);
+	const missingEndpoint = form.provider === "compatible" && (!form.baseUrl || (!form.apiKey.trim() && !canUseSavedKey));
+	// Results belong to the endpoint they were loaded for; changing it hides them until the next load.
+	const modelsKey = `${form.provider}|${form.preset}|${form.baseUrl}|${form.apiKey}|${canUseSavedKey}`;
+	const currentModels = loaded && !missingEndpoint && modelResult?.key === modelsKey ? modelResult : null;
+	const models = currentModels?.models ?? [];
+	const modelSource = currentModels?.source ?? null;
+	const modelError = loaded && missingEndpoint
+		? form.preset === "custom" && !form.baseUrl ? t("agentAdmin.enterUrl") : t("agentAdmin.enterKey")
+		: currentModels?.error ?? null;
 	useEffect(() => {
-		if (!loaded) return;
-		setModels([]);
-		setModelSource(null);
-		setModelError(null);
-		if (form.provider === "compatible" && (!form.baseUrl || (!form.apiKey.trim() && !canUseSavedKey))) {
-			setModelError(form.preset === "custom" && !form.baseUrl ? t("agentAdmin.enterUrl") : t("agentAdmin.enterKey"));
-			return;
-		}
+		if (!loaded || missingEndpoint) return;
 		const controller = new AbortController();
 		const timer = window.setTimeout(() => {
+			setModelResult(null);
 			setModelsLoading(true);
 			void loadAgentModels(form, controller.signal).then((data) => {
-				setModels(data.models);
-				setModelSource(data.source);
+				setModelResult({ key: modelsKey, models: data.models, source: data.source, error: null });
 				const published = Object.fromEntries(data.models.flatMap((item) => item.rates ? [[item.id, item.rates]] : []));
 				if (Object.keys(published).length) setForm((current) => ({ ...current, rates: { ...current.rates, ...published } }));
 			}).catch((error) => {
-				if (!controller.signal.aborted) setModelError(error instanceof Error ? error.message : t("agentAdmin.modelsFailed"));
+				if (!controller.signal.aborted) setModelResult({ key: modelsKey, models: [], source: null, error: error instanceof Error ? error.message : t("agentAdmin.modelsFailed") });
 			}).finally(() => { if (!controller.signal.aborted) setModelsLoading(false); });
 		}, form.provider === "cloudflare" ? 0 : 500);
 		return () => { window.clearTimeout(timer); controller.abort(); };
-	}, [loaded, form.provider, form.preset, form.baseUrl, form.apiKey, canUseSavedKey, t]);
+	}, [loaded, missingEndpoint, modelsKey, form.provider, form.preset, form.baseUrl, form.apiKey, canUseSavedKey, t]);
 
 	async function submit(event: React.FormEvent<HTMLFormElement>) {
 		event.preventDefault();

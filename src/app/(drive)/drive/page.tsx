@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import type { DragEvent } from "react";
 import { createPortal } from "react-dom";
 import { HeaderSearch } from "@/components/header-search";
@@ -38,6 +38,10 @@ import { canDropDrive, driveDropHandlers, endDriveDrag, isDriveDraggable, startD
 
 const menuItemClass = "flex cursor-pointer items-center gap-3 rounded-lg px-3 py-2 text-sm text-neutral-700 outline-none data-[highlighted]:bg-neutral-100";
 const dateFormat = new Intl.DateTimeFormat(undefined, { year: "numeric", month: "short", day: "numeric" });
+// The header slot is a node in the layout; it never changes once mounted, so there is nothing to subscribe to.
+const subscribeToHeaderSlot = () => () => {};
+const getHeaderSlot = () => document.getElementById("drive-header-slot");
+const getServerHeaderSlot = () => null;
 
 export default function DrivePage() {
 	const { t } = useLanguage();
@@ -57,7 +61,7 @@ export default function DrivePage() {
 	const [ascending, setAscending] = useState(true);
 	const [dragging, setDragging] = useState(false);
 	const [search, setSearch] = useState(query);
-	const [headerTarget, setHeaderTarget] = useState<HTMLElement | null>(null);
+	const headerTarget = useSyncExternalStore(subscribeToHeaderSlot, getHeaderSlot, getServerHeaderSlot);
 	const [preview, setPreview] = useState<DriveItemDto | null>(null);
 	const [sharing, setSharing] = useState<DriveItemDto | null>(null);
 	const [naming, setNaming] = useState<{ mode: "create" | "rename"; item?: DriveItemDto; value: string } | null>(null);
@@ -82,14 +86,13 @@ export default function DrivePage() {
 	const requestRef = useRef(requestKey);
 	useEffect(() => { requestRef.current = requestKey; }, [requestKey]);
 
-	const load = useCallback(async () => {
+	const load = useCallback(() => {
 		const key = requestKey;
 		const search = new URLSearchParams({ view });
 		if (folder) search.set("parent", folder);
 		if (query) search.set("q", query);
 		if (typesParam) search.set("types", typesParam);
-		try {
-			const response = await authFetch(`/api/drive/items?${search}`);
+		return authFetch(`/api/drive/items?${search}`).then(async (response) => {
 			if (!response.ok) throw new Error();
 			const data = await response.json() as DriveListing;
 			saveDriveListing(key, data);
@@ -97,24 +100,31 @@ export default function DrivePage() {
 			setListing({ key, data }); setFailedKey(null);
 			window.dispatchEvent(new CustomEvent(DRIVE_STORAGE_EVENT, { detail: { used: data.storageUsed, limit: data.storageLimit } }));
 			window.dispatchEvent(new Event(DRIVE_FOLDERS_EVENT));
-		} catch {
+		}).catch(() => {
 			if (key === requestRef.current) setFailedKey(key);
-		}
+		});
 	}, [view, folder, query, typesParam, requestKey]);
 	// Reload after a change; other cached listings may be stale now, so they are dropped.
 	const refresh = useCallback(() => { clearDriveListings(); return load(); }, [load]);
 
 	useEffect(() => { void load(); }, [load]);
-	useEffect(() => { setSearch(query); }, [query]);
+	// The search box follows the URL whenever the query in it changes.
+	const [syncedQuery, setSyncedQuery] = useState(query);
+	if (syncedQuery !== query) { setSyncedQuery(query); setSearch(query); }
 	useEffect(() => {
 		const onRefresh = () => void refresh();
 		window.addEventListener(DRIVE_REFRESH_EVENT, onRefresh);
 		return () => window.removeEventListener(DRIVE_REFRESH_EVENT, onRefresh);
 	}, [refresh]);
-	useEffect(() => { setSelectedIds(new Set()); }, [requestKey]);
-	// Keep only selected items that are still listed (after a move, trash, upload or reload).
-	useEffect(() => { setSelectedIds((current) => { const present = new Set(items.map((item) => item.id)); const next = new Set([...current].filter((id) => present.has(id))); return next.size === current.size ? current : next; }); }, [items]);
-	useEffect(() => { setHeaderTarget(document.getElementById("drive-header-slot")); }, []);
+	// A new listing starts with nothing selected; otherwise keep only selected items that are still listed (after a move, trash, upload or reload).
+	const [selectionFor, setSelectionFor] = useState({ requestKey, items });
+	if (selectionFor.requestKey !== requestKey) {
+		setSelectionFor({ requestKey, items });
+		setSelectedIds(new Set());
+	} else if (selectionFor.items !== items) {
+		setSelectionFor({ requestKey, items });
+		setSelectedIds((current) => { const present = new Set(items.map((item) => item.id)); const next = new Set([...current].filter((id) => present.has(id))); return next.size === current.size ? current : next; });
+	}
 
 	const patchUpload = useCallback((id: string, patch: Partial<DriveUploadEntry>) => setUploads((list) => list.map((entry) => (entry.id === id ? { ...entry, ...patch } : entry))), []);
 
@@ -222,7 +232,8 @@ export default function DrivePage() {
 
 	const sorted = useMemo(() => sortDriveItems(items, sortKey, ascending), [items, sortKey, ascending]);
 	// Attachments can only be selected when the user may delete them.
-	const selectable = sorted.filter((item) => (item.source ? item.source.canDelete : canEditDrive(item.role)));
+	const selectable = useMemo(() => sorted.filter((item) => (item.source ? item.source.canDelete : canEditDrive(item.role))), [sorted]);
+	const selectableIds = useMemo(() => new Set(selectable.map((item) => item.id)), [selectable]);
 	const selectedItems = selectable.filter((item) => selectedIds.has(item.id));
 	const allSelected = selectable.length > 0 && selectedItems.length === selectable.length;
 	useEffect(() => { if (selectAllRef.current) selectAllRef.current.indeterminate = selectedItems.length > 0 && !allSelected; }, [selectedItems.length, allSelected]);
@@ -309,7 +320,7 @@ export default function DrivePage() {
 								: {};
 							return (
 								<div key={item.id} role="listitem" style={gridStyle} draggable={isDriveDraggable(item)} onDragStart={(event) => onItemDragStart(event, item)} onDragEnd={onItemDragEnd} {...dropTarget} className={clsx("group grid grid-cols-[2rem_minmax(0,1fr)_2.5rem] items-center gap-x-4 rounded-lg px-3 text-sm md:grid-cols-[var(--drive-columns)]", dropFolder === item.id ? "bg-blue-100 ring-2 ring-inset ring-blue-500" : selectedIds.has(item.id) ? "bg-blue-50" : "hover:bg-neutral-50", movingIds.has(item.id) && "opacity-50")}>
-									<Checkbox checked={selectedIds.has(item.id)} onChange={() => toggleItem(item.id)} disabled={!selectable.includes(item)} aria-label={t("drive.selectItem", { name: item.name })} className={clsx("ml-1", !selectable.includes(item) && "invisible")} />
+									<Checkbox checked={selectedIds.has(item.id)} onChange={() => toggleItem(item.id)} disabled={!selectableIds.has(item.id)} aria-label={t("drive.selectItem", { name: item.name })} className={clsx("ml-1", !selectableIds.has(item.id) && "invisible")} />
 									<button type="button" onClick={() => open(item)} aria-disabled={item.trashedAt ? true : undefined} className="flex min-w-0 items-center gap-3 py-3 text-left aria-disabled:cursor-default">
 										<Icon size={16} className={clsx("shrink-0", className)} fill={item.kind === "folder" ? "currentColor" : "none"} />
 										<span className="truncate text-neutral-900">{item.name}</span>

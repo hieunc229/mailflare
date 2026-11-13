@@ -43,6 +43,9 @@ export function RichTextEditor({
 	disabled,
 	placeholder,
 	className,
+	editableClassName,
+	toolbarVisible = true,
+	toolbarClassName,
 	toolbarStart,
 	toolbarEnd,
 	footerContent,
@@ -54,13 +57,16 @@ export function RichTextEditor({
 	const [linkUrl, setLinkUrl] = useState("");
 	const [showQuoted, setShowQuoted] = useState(false);
 	const savedRange = useRef<Range | null>(null);
+	const lastEmitted = useRef<string | null>(null);
 
 	// Keep the DOM in step with the value without resetting the caret on every keystroke.
 	useEffect(() => {
 		const element = editorRef.current;
 		if (!element) return;
+		if (lastEmitted.current !== null && value === lastEmitted.current) return;
 		const safeValue = sanitizeEditorHtml(value);
 		if (element.innerHTML !== safeValue) element.innerHTML = safeValue;
+		lastEmitted.current = null;
 	}, [value]);
 
 	useEffect(() => {
@@ -83,7 +89,9 @@ export function RichTextEditor({
 
 	function emit() {
 		// Export validated original resource addresses, never the blocked preview placeholders.
-		onChange(sanitizeEmailHtml(editorRef.current?.innerHTML ?? "", { forOutgoing: true }) ?? "");
+		const output = sanitizeEmailHtml(editorRef.current?.innerHTML ?? "", { forOutgoing: true }) ?? "";
+		lastEmitted.current = output;
+		onChange(output);
 	}
 
 	function run(command: string, commandValue?: string) {
@@ -188,7 +196,7 @@ export function RichTextEditor({
 
 	return (
 		<div className={cn("flex min-h-0 flex-1 flex-col", className)}>
-			<div className="sticky top-0 z-10 flex shrink-0 items-center gap-0.5 overflow-x-auto bg-white px-2 py-1 md:hidden">{formatButtons}</div>
+			<div className={cn("sticky top-0 z-10 flex shrink-0 items-center gap-0.5 overflow-x-auto bg-white px-2 py-1 md:hidden", !toolbarVisible && "hidden")}>{formatButtons}</div>
 			<div className="relative flex min-h-0 flex-1 flex-col overflow-y-auto">
 				<div
 					ref={editorRef}
@@ -207,6 +215,7 @@ export function RichTextEditor({
 						"email-body max-w-none px-4 py-3 text-sm text-neutral-900 outline-none",
 						"min-h-32 grow shrink-0 empty:before:pointer-events-none empty:before:text-neutral-400 empty:before:content-[attr(data-placeholder)]",
 						disabled && "cursor-not-allowed opacity-60",
+						editableClassName,
 					)}
 				/>
 				{quotedHtml && (
@@ -228,11 +237,19 @@ export function RichTextEditor({
 				)}
 			</div>
 			{footerContent}
-			<div className="relative flex items-center gap-0.5 max-md:gap-2 border-t border-neutral-100 px-4 py-3 max-md:border-t-0">
-				{toolbarStart}
-				<div className="contents max-md:hidden">{formatButtons}</div>
-				{toolbarEnd}
-				{linkOpen && (
+			<div
+				inert={!toolbarVisible}
+				className="relative grid transition-[grid-template-rows] duration-200 ease-out motion-reduce:transition-none"
+				style={{ gridTemplateRows: toolbarVisible ? "1fr" : "0fr" }}
+			>
+				<div className="min-h-0 overflow-hidden">
+					<div className={cn("relative flex items-center gap-0.5 max-md:gap-2 border-t border-neutral-100 px-4 py-3 max-md:border-t-0", toolbarClassName)}>
+						{toolbarStart}
+						<div className="contents max-md:hidden">{formatButtons}</div>
+						{toolbarEnd}
+					</div>
+				</div>
+				{linkOpen && toolbarVisible && (
 					<div
 						className="absolute bottom-full left-2 z-10 mb-1 flex items-center gap-2 rounded-lg border border-neutral-200 bg-white p-2 shadow-lg"
 					>

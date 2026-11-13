@@ -29,20 +29,27 @@ export default function AccountMailboxesPage() {
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
 
-  async function load() {
-    const [nextAccount, nextMailboxes, nextDomains] = await Promise.all([
+  function fetchAll() {
+    return Promise.all([
       fetchManagedAccount(id),
       fetchManagedMailboxes(id),
       fetchManagedDomains(),
     ]);
+  }
+
+  function applyLoaded([nextAccount, nextMailboxes, nextDomains]: Awaited<ReturnType<typeof fetchAll>>) {
     setAccount(nextAccount);
     setMailboxes(nextMailboxes);
     setDomains(nextDomains);
     setDomainId((current) => current || nextDomains[0]?.id || "");
   }
 
+  async function load() {
+    applyLoaded(await fetchAll());
+  }
+
   useEffect(() => {
-    void load().catch((error) =>
+    void fetchAll().then(applyLoaded).catch((error) =>
       setMessage(
         error instanceof Error ? error.message : t("account.mailboxes.loadFailed"),
       ),

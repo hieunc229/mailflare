@@ -1,5 +1,6 @@
 import type { NewMessageEvent } from "./message-realtime-types";
 import { hasActivePushSubscription } from "@/lib/push/client";
+import { formatSenderLabel } from "@/lib/email/sender-label";
 
 export const REALTIME_FALLBACK_INTERVAL_MS = 60_000;
 export const REALTIME_HEARTBEAT_INTERVAL_MS = 25_000;
@@ -65,7 +66,8 @@ export async function showBrowserNewMessageNotification(event: NewMessageEvent):
 
 	try {
 		const notification = new Notification(event.subject || "New email", {
-			body: `From ${event.fromName ?? event.from}`,
+			// Same label as Web Push: the name beside the real address.
+			body: `From ${formatSenderLabel(event.from, event.fromName)}`,
 			icon: "/icon-96.png",
 			tag: event.messageId,
 		});

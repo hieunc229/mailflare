@@ -23,8 +23,21 @@ export type ContactDisplayName = {
 	source: ContactSource;
 };
 
+/** A stored contact as sender/recipient resolution sees it; the learned name may be absent. */
+export type ContactNameSource = {
+	displayName: string | null;
+	source: ContactSource;
+};
+
+export type ContactCard = {
+	displayName: string | null;
+	source: ContactSource;
+	hasAvatar: boolean;
+};
+
 export type MessageContactNames = {
 	/** Resolved sender label: a manually named contact, otherwise the message's From name. */
 	fromContactName: string | null;
+	/** Resolved recipient label: a manually named contact, otherwise the message's To name. */
 	toContactName: string | null;
 };
