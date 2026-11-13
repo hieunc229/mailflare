@@ -36,12 +36,12 @@ test("parses a Mailflare invite", () => {
 });
 
 test("converts a TZID start to UTC across daylight saving", () => {
-	const text = ics("BEGIN:VCALENDAR", "BEGIN:VEVENT", "UID:x", "DTSTART;TZID=America/Vancouver:20261102T090000", "DURATION:PT30M", "ORGANIZER;CN=Organizer:mailto:organizer@example.com", "SUMMARY:Sync", "END:VEVENT", "END:VCALENDAR");
+	const text = ics("BEGIN:VCALENDAR", "BEGIN:VEVENT", "UID:x", "DTSTART;TZID=America/Los_Angeles:20261102T090000", "DURATION:PT30M", "ORGANIZER;CN=Organizer:mailto:organizer@example.com", "SUMMARY:Sync", "END:VEVENT", "END:VCALENDAR");
 	const invite = parseInvite(text);
 	assert.equal(invite.startsAt.toISOString(), "2026-11-02T17:00:00.000Z");
 	assert.equal(invite.endsAt.toISOString(), "2026-11-02T17:30:00.000Z");
 	assert.equal(invite.organizer, "organizer@example.com");
-	assert.equal(invite.timeZone, "America/Vancouver");
+	assert.equal(invite.timeZone, "America/Los_Angeles");
 });
 
 test("reads an Outlook invitation with a Windows zone name and a VTIMEZONE block", () => {
@@ -67,27 +67,27 @@ test("every Windows zone in the table is known to Intl", () => {
 });
 
 test("floating times and unknown zones are read in the recipient's zone, not UTC", () => {
-	const floating = parseInvite(event("DTSTART:20261110T100000", "DTEND:20261110T110000"), { timeZone: "America/Vancouver" });
+	const floating = parseInvite(event("DTSTART:20261110T100000", "DTEND:20261110T110000"), { timeZone: "America/Los_Angeles" });
 	assert.equal(floating.startsAt.toISOString(), "2026-11-10T18:00:00.000Z");
 	assert.equal(floating.timeZone, null);
-	const unknown = parseInvite(event("DTSTART;TZID=Somewhere Odd:20261110T100000", "DTEND;TZID=Somewhere Odd:20261110T110000"), { timeZone: "America/Vancouver" });
+	const unknown = parseInvite(event("DTSTART;TZID=Somewhere Odd:20261110T100000", "DTEND;TZID=Somewhere Odd:20261110T110000"), { timeZone: "America/Los_Angeles" });
 	assert.equal(unknown.startsAt.toISOString(), "2026-11-10T18:00:00.000Z");
 	assert.equal(unknown.endsAt.toISOString(), "2026-11-10T19:00:00.000Z");
 	assert.equal(parseInvite(event("DTSTART:20261110T100000")).startsAt.toISOString(), "2026-11-10T10:00:00.000Z");
 });
 
 test("an all-day event covers the whole local day", () => {
-	const withEnd = parseInvite(event("DTSTART;VALUE=DATE:20261105", "DTEND;VALUE=DATE:20261106"), { timeZone: "America/Vancouver" });
+	const withEnd = parseInvite(event("DTSTART;VALUE=DATE:20261105", "DTEND;VALUE=DATE:20261106"), { timeZone: "America/Los_Angeles" });
 	assert.equal(withEnd.allDay, true);
 	assert.equal(withEnd.startsAt.toISOString(), "2026-11-05T08:00:00.000Z");
 	assert.equal(withEnd.endsAt.toISOString(), "2026-11-06T08:00:00.000Z");
-	const noEnd = parseInvite(event("DTSTART;VALUE=DATE:20261105"), { timeZone: "America/Vancouver" });
+	const noEnd = parseInvite(event("DTSTART;VALUE=DATE:20261105"), { timeZone: "America/Los_Angeles" });
 	assert.equal(noEnd.endsAt.toISOString(), "2026-11-06T08:00:00.000Z");
 	// The day daylight saving ends is 25 hours long; the end is still the next local midnight.
-	const dstDay = parseInvite(event("DTSTART;VALUE=DATE:20261101"), { timeZone: "America/Vancouver" });
+	const dstDay = parseInvite(event("DTSTART;VALUE=DATE:20261101"), { timeZone: "America/Los_Angeles" });
 	assert.equal(dstDay.startsAt.toISOString(), "2026-11-01T07:00:00.000Z");
 	assert.equal(dstDay.endsAt.toISOString(), "2026-11-02T08:00:00.000Z");
-	const multi = parseInvite(event("DTSTART;VALUE=DATE:20261105", "DTEND;VALUE=DATE:20261108"), { timeZone: "America/Vancouver" });
+	const multi = parseInvite(event("DTSTART;VALUE=DATE:20261105", "DTEND;VALUE=DATE:20261108"), { timeZone: "America/Los_Angeles" });
 	assert.equal(multi.endsAt.toISOString(), "2026-11-08T08:00:00.000Z");
 });
 
@@ -98,7 +98,7 @@ test("reads RECURRENCE-ID with the same zone rules", () => {
 	assert.equal(invite.recurrenceId.toISOString(), "2026-11-17T18:00:00.000Z");
 	const utc = parseInvite(event("DTSTART:20261117T180000Z", "RECURRENCE-ID:20261117T180000Z"));
 	assert.equal(utc.recurrenceId.toISOString(), "2026-11-17T18:00:00.000Z");
-	const floating = parseInvite(event("DTSTART:20261117T100000", "RECURRENCE-ID:20261117T100000"), { timeZone: "America/Vancouver" });
+	const floating = parseInvite(event("DTSTART:20261117T100000", "RECURRENCE-ID:20261117T100000"), { timeZone: "America/Los_Angeles" });
 	assert.equal(floating.recurrenceId.toISOString(), "2026-11-17T18:00:00.000Z");
 });
 
@@ -200,7 +200,7 @@ test("maps simple recurrence rules and drops unsupported ones", () => {
 });
 
 test("COUNT becomes an end that still includes the last occurrence", () => {
-	const zone = "America/Vancouver";
+	const zone = "America/Los_Angeles";
 	// Tuesday 2026-11-03 10:00 PST.
 	const start = new Date("2026-11-03T18:00:00.000Z");
 	const until = (rule, at = start) => inviteRepeat(rule, at, zone).repeatUntil?.toISOString();
@@ -222,7 +222,7 @@ test("COUNT becomes an end that still includes the last occurrence", () => {
 
 test("UNTIL includes an occurrence that starts exactly then", () => {
 	assert.equal(inviteRepeat("FREQ=WEEKLY;UNTIL=20261124T180000Z").repeatUntil.toISOString(), "2026-11-24T18:00:01.000Z");
-	assert.equal(inviteRepeat("FREQ=DAILY;UNTIL=20261124", undefined, "America/Vancouver").repeatUntil.toISOString(), "2026-11-25T08:00:00.000Z");
+	assert.equal(inviteRepeat("FREQ=DAILY;UNTIL=20261124", undefined, "America/Los_Angeles").repeatUntil.toISOString(), "2026-11-25T08:00:00.000Z");
 });
 
 test("reply carries the attendee status, sequence and occurrence, folded with a trailing CRLF", () => {
@@ -264,10 +264,10 @@ test("sender-controlled size is bounded: EXDATE list and RRULE COUNT", () => {
 	assert.ok(invite.excludedDates.length <= 1000);
 	assert.ok(JSON.parse(mergeExcludedOccurrences("[]", invite.excludedDates)).length <= 1000);
 	// A COUNT reaching past about 200 years becomes a single event, never an endless series.
-	const huge = inviteRepeat("FREQ=WEEKLY;BYDAY=MO,WE,FR;COUNT=1000000", new Date("2026-11-02T17:00:00Z"), "America/Vancouver");
+	const huge = inviteRepeat("FREQ=WEEKLY;BYDAY=MO,WE,FR;COUNT=1000000", new Date("2026-11-02T17:00:00Z"), "America/Los_Angeles");
 	assert.equal(huge.repeat, "none");
 	assert.equal(huge.repeatUntil, null);
-	const ok = inviteRepeat("FREQ=WEEKLY;BYDAY=MO,WE,FR;COUNT=1000", new Date("2026-11-02T17:00:00Z"), "America/Vancouver");
+	const ok = inviteRepeat("FREQ=WEEKLY;BYDAY=MO,WE,FR;COUNT=1000", new Date("2026-11-02T17:00:00Z"), "America/Los_Angeles");
 	assert.ok(ok.repeatUntil instanceof Date);
 	assert.ok(Date.now() - started < 5000, "bounded work");
 });
@@ -299,7 +299,7 @@ test("impossible dates are rejected instead of rolling over", () => {
 
 test("EXDATE values are capped before they are parsed", () => {
 	const values = Array.from({ length: 15_000 }, (_, i) => `2027${String(1 + (i % 12)).padStart(2, "0")}${String(1 + (i % 28)).padStart(2, "0")}T100000`).join(",");
-	const text = event("DTSTART;TZID=America/Vancouver:20261105T100000", "RRULE:FREQ=DAILY", `EXDATE;TZID=America/Vancouver:${values}`, `EXDATE;TZID=Pacific Standard Time:${values}`);
+	const text = event("DTSTART;TZID=America/Los_Angeles:20261105T100000", "RRULE:FREQ=DAILY", `EXDATE;TZID=America/Los_Angeles:${values}`, `EXDATE;TZID=Pacific Standard Time:${values}`);
 	parseInvite(text);
 	const started = performance.now();
 	const invite = parseInvite(text);
@@ -309,7 +309,7 @@ test("EXDATE values are capped before they are parsed", () => {
 });
 
 test("COUNT of any size gives a finite end or a single event, quickly", () => {
-	const zone = "America/Vancouver";
+	const zone = "America/Los_Angeles";
 	const start = new Date("2026-11-03T18:00:00.000Z");
 	const daily1001 = inviteRepeat("FREQ=DAILY;COUNT=1001", start, zone);
 	assert.equal(daily1001.repeat, "daily");
@@ -338,12 +338,12 @@ test("FREQ=DAILY with BYDAY is the weekdays repeat", () => {
 	assert.equal(repeat.repeat, "weekdays");
 	assert.deepEqual(repeat.repeatDays, [1, 2, 3, 4, 5]);
 	// Mon 2026-11-02 start, 5 weekday occurrences: the last is Fri 2026-11-06.
-	const counted = inviteRepeat("FREQ=DAILY;BYDAY=MO,TU,WE,TH,FR;COUNT=6", new Date("2026-11-02T18:00:00.000Z"), "America/Vancouver");
+	const counted = inviteRepeat("FREQ=DAILY;BYDAY=MO,TU,WE,TH,FR;COUNT=6", new Date("2026-11-02T18:00:00.000Z"), "America/Los_Angeles");
 	assert.equal(counted.repeatUntil.toISOString(), "2026-11-09T18:00:01.000Z");
 });
 
 test("one recipient zone: the account's, else the latest event's, else unknown", () => {
-	assert.equal(chooseRecipientZone("America/Vancouver", "Europe/Paris"), "America/Vancouver");
+	assert.equal(chooseRecipientZone("America/Los_Angeles", "Europe/Paris"), "America/Los_Angeles");
 	assert.equal(chooseRecipientZone(null, "Europe/Paris"), "Europe/Paris");
 	assert.equal(chooseRecipientZone("Not/AZone", "Europe/Paris"), "Europe/Paris");
 	assert.equal(chooseRecipientZone("", null), null);
@@ -370,12 +370,12 @@ test("one recipient zone: the account's, else the latest event's, else unknown",
 });
 
 test("an all-day reply writes DTSTART and RECURRENCE-ID as dates in the recipient's zone", () => {
-	const invite = parseInvite(event("DTSTART;VALUE=DATE:20261105", "RECURRENCE-ID;VALUE=DATE:20261105", "SEQUENCE:1"), { timeZone: "America/Vancouver" });
+	const invite = parseInvite(event("DTSTART;VALUE=DATE:20261105", "RECURRENCE-ID;VALUE=DATE:20261105", "SEQUENCE:1"), { timeZone: "America/Los_Angeles" });
 	assert.equal(invite.recurrenceId.toISOString(), "2026-11-05T08:00:00.000Z");
 	const reply = buildReplyIcs(invite, "guest@example.com", "declined");
 	assert.match(reply, /\r\nDTSTART;VALUE=DATE:20261105\r\n/);
 	assert.match(reply, /\r\nRECURRENCE-ID;VALUE=DATE:20261105\r\n/);
-	const back = parseInvite(reply, { timeZone: "America/Vancouver" });
+	const back = parseInvite(reply, { timeZone: "America/Los_Angeles" });
 	assert.equal(back.recurrenceId.toISOString(), invite.recurrenceId.toISOString());
 	// Timed occurrences keep UTC date-times.
 	assert.match(buildReplyIcs(parseInvite(event("DTSTART:20261117T180000Z", "RECURRENCE-ID:20261117T180000Z")), "guest@example.com", "accepted"), /\r\nRECURRENCE-ID:20261117T180000Z\r\n/);
