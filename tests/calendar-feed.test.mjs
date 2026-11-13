@@ -22,10 +22,10 @@ test("one-off event is UTC with escaped text", () => {
 });
 
 test("weekday series uses BYDAY, zone and EXDATE", () => {
-	const ics = buildCalendarFeed([{ ...base, repeat: "weekdays", repeatDays: "[1,3,5]", timeZone: "America/Vancouver", excludedOccurrences: `[${Date.parse("2026-11-04T17:00:00Z")}]` }], { name: "M" });
-	assert.match(ics, /DTSTART;TZID=America\/Vancouver:20261102T090000\r\n/);
+	const ics = buildCalendarFeed([{ ...base, repeat: "weekdays", repeatDays: "[1,3,5]", timeZone: "America/Los_Angeles", excludedOccurrences: `[${Date.parse("2026-11-04T17:00:00Z")}]` }], { name: "M" });
+	assert.match(ics, /DTSTART;TZID=America\/Los_Angeles:20261102T090000\r\n/);
 	assert.match(ics, /RRULE:FREQ=WEEKLY;BYDAY=MO,WE,FR\r\n/);
-	assert.match(ics, /EXDATE;TZID=America\/Vancouver:20261104T090000\r\n/);
+	assert.match(ics, /EXDATE;TZID=America\/Los_Angeles:20261104T090000\r\n/);
 });
 
 test("event text cannot start a new property line", () => {
