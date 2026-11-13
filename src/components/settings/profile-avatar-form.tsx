@@ -36,13 +36,18 @@ export function ProfileAvatarForm({
 	const [status, setStatus] = useState<string | null>(null);
 	const [busy, setBusy] = useState(false);
 	const inputRef = useRef<HTMLInputElement>(null);
+	const [syncedProps, setSyncedProps] = useState({ initialHasAvatar, mailboxId });
 
-	useEffect(() => {
+	if (syncedProps.initialHasAvatar !== initialHasAvatar || syncedProps.mailboxId !== mailboxId) {
+		setSyncedProps({ initialHasAvatar, mailboxId });
 		if (mailboxId) {
 			setHasAvatar(initialHasAvatar);
 			setAvatarUrl(`/api/mailboxes/${mailboxId}/avatar`);
-			return;
 		}
+	}
+
+	useEffect(() => {
+		if (mailboxId) return;
 
 		authFetch("/api/auth/me", { redirectOnUnauthorized: false })
 			.then((response) => (response.ok ? response.json() : null))

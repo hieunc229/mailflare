@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useLanguage } from "@/components/language-provider";
 import { useSelectedMailbox } from "@/components/mailbox-provider";
 import { Button } from "@/components/ui/button";
@@ -19,8 +19,8 @@ export function ProfileForm({
 }: ProfileFormProps) {
   const { t } = useLanguage();
   const { selectedMailbox, setSelectedMailbox, isLoading } = useSelectedMailbox();
-  const [name, setName] = useState("");
-  const [savedName, setSavedName] = useState("");
+  const [name, setName] = useState(selectedMailbox?.displayName ?? "");
+  const [savedName, setSavedName] = useState(selectedMailbox?.displayName ?? "");
   const [resetEmail, setResetEmail] = useState(initialResetEmail);
   const [savedResetEmail, setSavedResetEmail] = useState(initialResetEmail);
   const [profileStatus, setProfileStatus] = useState<string | null>(null);
@@ -28,12 +28,15 @@ export function ProfileForm({
   const [savingProfile, setSavingProfile] = useState(false);
   const [savingRecovery, setSavingRecovery] = useState(false);
 
-  useEffect(() => {
+  const [syncedMailbox, setSyncedMailbox] = useState({ id: selectedMailbox?.id, displayName: selectedMailbox?.displayName });
+
+  if (syncedMailbox.id !== selectedMailbox?.id || syncedMailbox.displayName !== selectedMailbox?.displayName) {
     const nextName = selectedMailbox?.displayName ?? "";
+    setSyncedMailbox({ id: selectedMailbox?.id, displayName: selectedMailbox?.displayName });
     setName(nextName);
     setSavedName(nextName);
     setProfileStatus(null);
-  }, [selectedMailbox?.id, selectedMailbox?.displayName]);
+  }
 
   // Name and avatar belong to the selected inbox. Only the primary inbox is the
   // account itself, so the recovery email applies to it alone.

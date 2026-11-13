@@ -1,6 +1,7 @@
 import type { BulkMessageAction } from "@/app/api/messages/bulk/types";
 import { authFetch } from "@/lib/auth/client";
 import { throwIfDeleteSkipped } from "@/lib/messages/permanent-delete-utils";
+import { dispatchMessagesChanged } from "@/lib/messages/change-events";
 import { markMessagesReadInCaches } from "@/hooks/utils";
 import { getEmailAddress, normalizeEmailAddress, splitEmailAddressList } from "@/lib/email/address";
 import { getLatestEmailContent } from "@/lib/email/reply-content-utils";
@@ -53,8 +54,10 @@ export async function runSingleMessageAction(
   }
 
   await throwIfDeleteSkipped(response, action);
-  if (action === "read" || action === "unread") markMessagesReadInCaches([messageId], action === "read");
-  window.dispatchEvent(new Event("mailflare:messages-changed"));
+  const readChanged = action === "read" || action === "unread";
+  if (readChanged) markMessagesReadInCaches([messageId], action === "read");
+  if (readChanged) dispatchMessagesChanged({ kind: "read", messageIds: [messageId], read: action === "read" });
+  else dispatchMessagesChanged();
 }
 
 export function openUnsubscribeUrl(url: string) {

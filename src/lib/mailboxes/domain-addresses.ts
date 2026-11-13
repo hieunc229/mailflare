@@ -1,4 +1,4 @@
-import { and, eq } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import type { AppDatabase } from "@/db";
 import { domains, mailboxAliases, mailboxes } from "@/db/schema";
 import { deleteEmailRoutingRuleForAddress, ensureEmailRoutingRuleToWorker } from "@/lib/cloudflare-api";
@@ -39,16 +39,21 @@ export async function getMailboxDomainAddresses(
 		.select({ id: domains.id, hostname: domains.hostname })
 		.from(domains)
 		.where(and(eq(domains.userId, primaryDomain.userId), eq(domains.status, "active")));
+	// Only domains this mailbox can actually be assigned on need the collision
+	// check; scanning every tenant's mailboxes made this O(all mailboxes).
+	const candidateDomainIds = [...new Set([mailbox.domainId, ...availableDomains.map((domain) => domain.id)])];
 	const assignedMailboxes = await db
 		.select({ id: mailboxes.id, domainId: mailboxes.domainId, localPart: mailboxes.localPart })
-		.from(mailboxes);
+		.from(mailboxes)
+		.where(inArray(mailboxes.domainId, candidateDomainIds));
 	const assignedAliases = await db
 		.select({
 			mailboxId: mailboxAliases.mailboxId,
 			domainId: mailboxAliases.domainId,
 			localPart: mailboxAliases.localPart,
 		})
-		.from(mailboxAliases);
+		.from(mailboxAliases)
+		.where(inArray(mailboxAliases.domainId, candidateDomainIds));
 	const normalizedLocalPart = normalizeRecipientLocalPart(mailbox.localPart);
 	const assignedDomainIds = new Set(
 		[

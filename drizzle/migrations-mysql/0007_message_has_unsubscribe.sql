@@ -1,0 +1,1 @@
+ALTER TABLE `messages` ADD `has_unsubscribe` boolean NOT NULL DEFAULT false;

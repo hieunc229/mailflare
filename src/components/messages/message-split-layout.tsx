@@ -82,6 +82,7 @@ export function MessageSplitLayout({
 	}, [folderKey]);
 
 	useLayoutEffect(() => {
+		// eslint-disable-next-line react-hooks/set-state-in-effect -- localStorage is client-only; restoring it in a lazy initialiser would mismatch the server-rendered markup.
 		setListWidth(readInitialColumnWidth("message-list", 360, 250, 1200));
 		setManualListVisible(readInitialMessageListVisible());
 		const frame = requestAnimationFrame(() => setWidthReady(true));
@@ -91,6 +92,7 @@ export function MessageSplitLayout({
 	useEffect(() => {
 		if (!userId) return;
 		const savedWidth = readColumnWidth(userId, "message-list", readInitialColumnWidth("message-list", 360, 250, 1200), 250, 1200);
+		// eslint-disable-next-line react-hooks/set-state-in-effect -- the per-user width lives in localStorage and is only known once the user id resolves.
 		setListWidth(savedWidth);
 		saveColumnWidth(userId, "message-list", savedWidth);
 	}, [userId]);
@@ -144,7 +146,7 @@ export function MessageSplitLayout({
 				</aside>
 				)}
 				<MessageListVisibilityContext.Provider value={{ visible: listVisible, toggle: () => { const visible = !manualListVisible; setManualListVisible(visible); saveMessageListVisible(visible); }, singleColumn: !twoColumnReading, backHref: config.hrefPrefix, backLabel: config.titleKey ? t(config.titleKey) : config.title }}>
-				<MessageDetailNavigationProvider config={config}>
+				<MessageDetailNavigationProvider config={config} currentMessageId={selectedMessageId}>
 				<section className="min-h-0 min-w-0 overflow-hidden bg-white flex flex-col h-full">
 					{showBulkBar && (
 						<BulkMessageActionBar

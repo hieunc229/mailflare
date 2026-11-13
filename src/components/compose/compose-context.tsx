@@ -15,7 +15,8 @@ export type ComposeNoticePoll = {
 export type ComposeNoticeOptions = {
 	actions?: ComposeNoticeAction[];
 	parts?: SendNoticeParts;
-	tone?: "success" | "error";
+	/** `loading` shows a spinner and stays until the next notice replaces it. */
+	tone?: "success" | "error" | "loading";
 	durationMs?: number;
 	countdown?: { endAt: number };
 	/** Called once when the countdown reaches zero; the callback decides what replaces the toast. */
@@ -42,7 +43,7 @@ export type ComposeNotice = {
 	message: string;
 	parts?: SendNoticeParts;
 	actions: ComposeNoticeAction[];
-	tone: "success" | "error";
+	tone: "success" | "error" | "loading";
 	durationMs: number;
 	countdown?: { endAt: number };
 	onCountdownEnd?: () => void;
@@ -109,7 +110,7 @@ export function ComposeProvider({ children }: { children: ReactNode }) {
 						parts: options?.parts,
 						actions: options?.actions ?? [],
 						tone: options?.tone ?? "success",
-						durationMs: options?.durationMs ?? 3200,
+						durationMs: options?.durationMs ?? (options?.tone === "loading" ? 120_000 : 3200),
 						countdown: options?.countdown,
 						onCountdownEnd: options?.onCountdownEnd,
 						poll: options?.poll,

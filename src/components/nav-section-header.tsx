@@ -1,18 +1,24 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState, useSyncExternalStore } from "react";
 import type { ReactNode } from "react";
 import { ChevronRight } from "@/components/icons";
 import { cn } from "@/lib/utils";
 import { readStorage, writeStorage } from "./reorderable-list-utils";
 
+const subscribeNothing = () => () => {};
+const hydratedOnClient = () => true;
+const hydratedOnServer = () => false;
+
 /** Open/closed state of a menu section, remembered in localStorage. Starts open. */
 export function useSectionOpen(storageKey: string): [boolean, () => void] {
-	const [open, setOpen] = useState(true);
-	useEffect(() => { setOpen(readStorage(storageKey, true)); }, [storageKey]);
+	// Storage is read after hydration so the server and first client render agree.
+	const hydrated = useSyncExternalStore(subscribeNothing, hydratedOnClient, hydratedOnServer);
+	const [toggled, setToggled] = useState<{ key: string; open: boolean } | null>(null);
+	const open = toggled?.key === storageKey ? toggled.open : hydrated ? readStorage(storageKey, true) : true;
 	function toggle() {
 		writeStorage(storageKey, !open);
-		setOpen(!open);
+		setToggled({ key: storageKey, open: !open });
 	}
 	return [open, toggle];
 }

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { ArrowDownToLine, FileWarning } from "@/components/icons";
+import { ArrowDownToLine, Check, FileWarning, HardDrive } from "@/components/icons";
 import { Button } from "@/components/ui/button";
 import {
 	Dialog,
@@ -11,6 +11,7 @@ import {
 	DialogTitle,
 } from "@/components/ui/dialog";
 import { useLanguage } from "@/components/language-provider";
+import { useCurrentUser } from "@/hooks/use-current-user";
 import { authFetch } from "@/lib/auth/client";
 import { Skeleton } from "@/components/ui/skeleton";
 import type { AttachmentRisk } from "@/lib/email/attachment-risk";
@@ -27,8 +28,11 @@ export function MessageAttachmentViewer({
 	open,
 }: MessageAttachmentViewerProps) {
 	const { t } = useLanguage();
+	const user = useCurrentUser();
 	const [textContent, setTextContent] = useState("");
 	const [textError, setTextError] = useState("");
+	// Keyed by attachment id, so opening another file resets it without an effect.
+	const [save, setSave] = useState<{ id: string; status: "saving" | "saved" | "error" } | null>(null);
 
 	const previewKind = attachment ? getAttachmentPreviewKind(attachment) : "unsupported";
 	const previewUrl = attachment
@@ -40,10 +44,23 @@ export function MessageAttachmentViewer({
 	const downloadUrl = attachment
 		? getAttachmentFileUrl(messageId, attachment.id, flagged ? "acknowledged-download" : "download")
 		: "";
+	const saveState = save && save.id === attachment?.id ? save.status : "idle";
+
+	// Reset per-attachment state while rendering, before the effects below refetch it.
+	const [prevView, setPrevView] = useState({ attachment, messageId, open, t });
+	if (attachment !== prevView.attachment || messageId !== prevView.messageId || open !== prevView.open || t !== prevView.t) {
+		setPrevView({ attachment, messageId, open, t });
+		if (attachment !== prevView.attachment || messageId !== prevView.messageId || open !== prevView.open) {
+			setRisk(null);
+			setAcknowledged(false);
+		}
+		if (open && attachment && previewKind === "text") {
+			setTextContent("");
+			setTextError("");
+		}
+	}
 
 	useEffect(() => {
-		setRisk(null);
-		setAcknowledged(false);
 		if (!open || !attachment) return;
 		let cancelled = false;
 		void authFetch(getAttachmentFileUrl(messageId, attachment.id, "risk"))
@@ -56,8 +73,6 @@ export function MessageAttachmentViewer({
 	useEffect(() => {
 		if (!open || !attachment || previewKind !== "text") return;
 		let cancelled = false;
-		setTextContent("");
-		setTextError("");
 
 		authFetch(previewUrl)
 			.then(async (response) => {
@@ -75,6 +90,31 @@ export function MessageAttachmentViewer({
 			cancelled = true;
 		};
 	}, [attachment, open, previewKind, previewUrl, t]);
+
+	// Ask once per opened attachment whether it is already in Drive, so the button starts disabled.
+	useEffect(() => {
+		if (!open || !attachment || user?.driveEnabled === false) return;
+		const id = attachment.id;
+		let cancelled = false;
+		void authFetch(`/api/messages/${messageId}/attachments/${id}/save-to-drive`)
+			.then(async (response) => (response.ok ? ((await response.json()) as { saved?: boolean }) : null))
+			.then((data) => { if (!cancelled && data?.saved) setSave((current) => (current?.id === id && current.status === "saving" ? current : { id, status: "saved" })); })
+			.catch(() => undefined);
+		return () => { cancelled = true; };
+	}, [attachment, messageId, open, user?.driveEnabled]);
+
+	async function saveToDrive() {
+		if (!attachment || saveState === "saving" || saveState === "saved") return;
+		const id = attachment.id;
+		setSave({ id, status: "saving" });
+		try {
+			const response = await authFetch(`/api/messages/${messageId}/attachments/${id}/save-to-drive`, { method: "POST" });
+			if (!response.ok) throw new Error("Save to Drive failed");
+			setSave({ id, status: "saved" });
+		} catch {
+			setSave({ id, status: "error" });
+		}
+	}
 
 	if (!attachment) return null;
 
@@ -145,6 +185,17 @@ export function MessageAttachmentViewer({
 
 				<div className="flex shrink-0 items-center justify-end gap-3">
 					{risk && !flagged && <span className="text-xs text-neutral-500">{t("attachment.risk.ok")}</span>}
+					{saveState === "error" && <span className="text-xs text-red-600">{t("attachment.saveToDriveFailed")}</span>}
+					{user?.driveEnabled !== false && (
+						<Button
+							variant="outline"
+							onClick={() => void saveToDrive()}
+							disabled={saveState === "saving" || saveState === "saved"}
+						>
+							{saveState === "saved" ? <Check className="h-4 w-4" /> : <HardDrive className="h-4 w-4" />}
+							{saveState === "saved" ? t("attachment.savedToDrive") : saveState === "saving" ? t("common.saving") : t("attachment.saveToDrive")}
+						</Button>
+					)}
 					{flagged && !acknowledged ? (
 						<Button disabled>
 							<ArrowDownToLine className="h-4 w-4" />

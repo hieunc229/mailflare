@@ -12,6 +12,7 @@ export function useDashboardState() {
 
 	useLayoutEffect(() => {
 		const saved = readInitialAssistantPanelState();
+		// eslint-disable-next-line react-hooks/set-state-in-effect -- localStorage is client-only; restoring it in a lazy initialiser would mismatch the server-rendered markup.
 		setAssistantOpen(saved.open);
 		setAssistantFullSize(saved.fullSize);
 		setPanelRestored(true);

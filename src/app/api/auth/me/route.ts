@@ -12,17 +12,15 @@ export async function GET(request: Request) {
 		return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 	}
 
-	let hasMailboxes = false;
-	let isSetup = true;
-	const entitlements = await getLicenseEntitlements(env);
-	try {
-		[hasMailboxes, isSetup] = await Promise.all([
+	const [entitlements, setup] = await Promise.all([
+		getLicenseEntitlements(env),
+		// Authentication remains valid when optional mailbox/setup metadata is unavailable.
+		Promise.all([
 			userHasMailboxes(env, user.id),
 			hasPrimaryDomain(env),
-		]);
-	} catch {
-		// Authentication remains valid when optional mailbox/setup metadata is unavailable.
-	}
+		]).catch((): [boolean, boolean] => [false, true]),
+	]);
+	const [hasMailboxes, isSetup] = setup;
 	return NextResponse.json({
 		user: {
 			id: user.id,

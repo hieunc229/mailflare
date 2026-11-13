@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Camera, LoaderCircle, User } from "@/components/icons";
 import { useLanguage } from "@/components/language-provider";
@@ -27,11 +27,14 @@ export default function MailboxAvatarForm({
 	const [status, setStatus] = useState<string | null>(null);
 	const [busy, setBusy] = useState(false);
 	const inputRef = useRef<HTMLInputElement>(null);
+	const [syncedProps, setSyncedProps] = useState({ initialHasAvatar, mailboxId });
 
-	useEffect(() => {
+	// Reset the avatar whenever the parent passes a different mailbox or avatar state.
+	if (syncedProps.initialHasAvatar !== initialHasAvatar || syncedProps.mailboxId !== mailboxId) {
+		setSyncedProps({ initialHasAvatar, mailboxId });
 		setHasAvatar(initialHasAvatar);
 		setAvatarUrl(`/api/mailboxes/${mailboxId}/avatar`);
-	}, [initialHasAvatar, mailboxId]);
+	}
 
 	async function onPick(event: React.ChangeEvent<HTMLInputElement>) {
 		const picked = event.target.files?.[0] ?? null;

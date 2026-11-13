@@ -11,6 +11,15 @@ const LICENSE_SETTINGS_ID = "default";
 
 async function getOrCreateLicenseSettings(env: CloudflareEnv) {
 	const db = getDb(env);
+	// Read first: the common path is a licensed or already-initialized install,
+	// and an upsert on every request is a write on the read path.
+	const [existing] = await db
+		.select()
+		.from(licenseSettings)
+		.where(eq(licenseSettings.id, LICENSE_SETTINGS_ID))
+		.limit(1);
+	if (existing) return existing;
+
 	await db
 		.insert(licenseSettings)
 		.values({ id: LICENSE_SETTINGS_ID, instanceId: crypto.randomUUID() })

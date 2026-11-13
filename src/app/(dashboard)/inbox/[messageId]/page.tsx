@@ -1,8 +1,9 @@
 "use client";
 
+import { authFetch } from "@/lib/auth/client";
 import { useParams } from "next/navigation";
-import { useEffect, useState } from "react";
-import { Cloud, ExternalLink } from "@/components/icons";
+import { useEffect, useMemo, useState } from "react";
+import { ArrowDownToLine, Cloud, ExternalLink } from "@/components/icons";
 import { useLanguage } from "@/components/language-provider";
 import { formatUserDate } from "@/lib/time/utils";
 import { markMessageRead } from "@/components/mark-read";
@@ -12,22 +13,31 @@ import { ContactAvatar } from "@/components/contacts/contact-avatar";
 import { MessageActions } from "@/components/message-actions/message-actions";
 import { MessageAttachmentViewer } from "@/components/message-attachment-viewer";
 import { MessageAttachmentCard } from "@/components/message-attachment-card";
+import { MessageInviteCard } from "@/components/message-invite-card";
 import { MessageDetailSkeleton } from "@/components/page-skeletons";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Button } from "@/components/ui/button";
 import { usePageLoading } from "@/components/page-loading";
 import { PreviousMessage } from "@/components/previous-message";
 import { ConversationThread } from "@/components/messages/conversation-thread";
+import { getConversationSender } from "@/components/messages/conversation-thread-utils";
+import { ConversationNotes } from "@/components/messages/conversation-notes";
+import { ConversationNotesProvider } from "@/components/messages/conversation-notes-context";
 import { MessageDetailNavigation } from "@/components/messages/message-detail-navigation";
 import { MessageReadingHeaderButton } from "@/components/messages/message-reading-header-button";
 import { ScheduledSendBanner } from "@/components/messages/scheduled-send-banner";
 import { formatScheduledSendTime } from "@/components/messages/scheduled-send-utils";
 import { QuotedEmailToggle } from "@/components/messages/quoted-email-toggle";
 import { ThreadMessageActions } from "@/components/messages/thread-message-actions";
+import { MessageUnsubscribeButton } from "@/components/messages/unsubscribe-button";
 import { MessageDetailsPanel } from "@/components/messages/message-details-panel";
 import { SenderCheckNotice } from "@/components/messages/sender-check-notice";
 import { useMessageThread } from "@/components/messages/use-message-thread";
 import { useLatestMessagesFirst } from "@/components/messages/use-latest-messages-first";
 import { useMessageListVisibility } from "@/components/messages/message-list-visibility";
 import { splitEmailAddressList } from "@/lib/email/address";
+import { findInviteAttachment } from "@/lib/calendar/invite-attachment";
+import { formatRecipientAddressList, type RecipientAddressStyle } from "@/lib/email/recipient-display";
 import { RecipientList } from "@/components/messages/recipient-list";
 import { useShowFullRecipientAddresses } from "@/components/messages/use-show-full-recipient-addresses";
 import type { MessageAttachment, MessageDetailResponse } from "./types";
@@ -48,15 +58,31 @@ import clsx from "clsx";
 import { useAssistantOpen } from "@/components/agent/assistant-open-state";
 import { useMessageContentScroll } from "./use-message-content-scroll";
 import { useSendViewStatus } from "@/components/messages/use-send-view-status";
+import { MailingListBanner } from "@/components/messages/mailing-list-banner";
+import { useMailingListBanner } from "@/components/messages/use-mailing-list-banner";
+
+const EMPTY_ATTACHMENTS: MessageAttachment[] = [];
 
 export default function MessageDetailPage() {
-  const { t } = useLanguage();
   const params = useParams<{ messageId: string }>();
+  return <MessageDetailContent key={params.messageId} messageId={params.messageId} />;
+}
+
+function MessageDetailContent({ messageId }: { messageId: string }) {
+  const { t } = useLanguage();
   const { selectedMailbox, mailboxes } = useSelectedMailbox();
-  const messageId = params.messageId;
-  useSendViewStatus(messageId);
-  const [data, setData] = useState<MessageDetailResponse | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [data, setData] = useState<MessageDetailResponse | null>(
+    () => getCachedMessageDetailForDisplay(messageId) ?? null,
+  );
+  useSendViewStatus(messageId, data?.scheduledAt);
+  const [loading, setLoading] = useState(
+    () => !getCachedMessageDetailForDisplay(messageId)?.message,
+  );
+  const [bodyPending, setBodyPending] = useState(() => {
+    const cached = getCachedMessageDetailForDisplay(messageId);
+    return !!cached?.message && !cached.body;
+  });
+  const [bodyError, setBodyError] = useState(false);
   const [previewAttachment, setPreviewAttachment] =
     useState<MessageAttachment | null>(null);
   const [threadExpanded, setThreadExpanded] = useState(false);
@@ -68,27 +94,48 @@ export default function MessageDetailPage() {
     data?.message?.status === "spam",
   );
   const { visible: messageListVisible } = useMessageListVisibility();
-  usePageLoading(loading);
+  usePageLoading(loading, true);
   const thread = useMessageThread(messageId, data?.message?.threadId);
   const assistantVisible = useAssistantOpen();
   const isAnyPanelVisible = messageListVisible || assistantVisible;
   const { scrollRef, scrolled, handleScroll } = useMessageContentScroll(messageId, loading);
+  const [unsubBannerDismissed, dismissUnsubBanner] = useMailingListBanner(messageId);
 
   useEffect(() => {
     let cancelled = false;
 
     async function loadMessage() {
       const cachedData = getCachedMessageDetailForDisplay(messageId);
-      if (cachedData?.message && cachedData.body) {
+      if (cachedData?.message) {
         setData(cachedData);
         setLoading(false);
         if (!cachedData.message.read) void markMessageRead(cachedData.message.id);
-        if (cachedData.attachments !== undefined) return;
+        if (cachedData.body) {
+          setBodyPending(false);
+          if (cachedData.attachments !== undefined) return;
+          try {
+            const metadata = await fetchMessageMetadata(messageId);
+            if (!cancelled) setData((current) => current ? { ...current, ...metadata } : current);
+          } catch { /* Metadata is optional. */ }
+          return;
+        }
+        setBodyPending(true);
+        setBodyError(false);
         try {
-          const metadata = await fetchMessageMetadata(messageId);
-          if (!cancelled) setData((current) => current ? { ...current, ...metadata } : current);
+          const full = await fetchMessageDetail(messageId, true);
+          if (!cancelled) {
+            setData((current) => {
+              // A prefetched body may predate the read flip.
+              if (current?.message?.read && full.message) return { ...full, message: { ...full.message, read: true } };
+              return full;
+            });
+            setBodyPending(false);
+          }
         } catch {
-          // The message body remains usable if supplemental metadata is unavailable.
+          if (!cancelled) {
+            setBodyPending(false);
+            setBodyError(true);
+          }
         }
         return;
       }
@@ -107,11 +154,6 @@ export default function MessageDetailPage() {
     };
   }, [messageId]);
 
-  useEffect(() => {
-    setThreadExpanded(false);
-    setDetailsOpen(false);
-  }, [messageId]);
-
   // A bulk read/unread action can include the message that is already open.
   // Keep the mounted reader in sync with the cache instead of remounting it.
   useEffect(() => {
@@ -128,11 +170,77 @@ export default function MessageDetailPage() {
     return () => window.removeEventListener("mailflare:messages-changed", syncCachedReadState);
   }, [messageId]);
 
+  async function retryBody() {
+    setBodyPending(true);
+    setBodyError(false);
+    try {
+      const full = await fetchMessageDetail(messageId, true);
+      setData((current) => {
+        if (current?.message?.read && full.message) return { ...full, message: { ...full.message, read: true } };
+        return full;
+      });
+      setBodyPending(false);
+    } catch {
+      setBodyPending(false);
+      setBodyError(true);
+    }
+  }
+
+  const message = data?.message;
+  const body = data?.body;
+  const attachments = data?.attachments ?? EMPTY_ATTACHMENTS;
+  const scheduledAt = data?.scheduledAt;
+  const messageMailbox =
+    mailboxes.find((mailbox) => mailbox.id === message?.mailboxId) ?? selectedMailbox;
+  const currentAccountName =
+    messageMailbox?.displayName ?? messageMailbox?.localPart;
+  const headerParties = message
+    ? getMessageHeaderParties(message, currentAccountName)
+    : null;
+  const fromName = headerParties?.fromName ?? "";
+  const fromAddress = headerParties?.fromAddress ?? "";
+  const ownAddresses = messageMailbox
+    ? messageMailbox.senderAddresses?.length
+      ? messageMailbox.senderAddresses
+      : [`${messageMailbox.localPart}@${messageMailbox.hostname}`]
+    : [];
+  const ownAddress = message ? getOwnAddressForMessage(message, ownAddresses) : "";
+  const canUnsubscribe = message?.direction === "inbound" && message.status !== "spam" && !!message.hasUnsubscribe;
+  const bodyDisplay = useMemo(
+    () => getMessageBodyDisplay(body?.textBody, body?.htmlBody, message?.snippet, ownAddress),
+    [body?.textBody, body?.htmlBody, message?.snippet, ownAddress],
+  );
+  const htmlBody = useMemo(
+    () => resolveInlineAttachmentUrls(bodyDisplay.htmlBody, message?.id ?? "", attachments),
+    [attachments, bodyDisplay.htmlBody, message?.id],
+  );
+  const quotedHtml = useMemo(
+    () => resolveInlineAttachmentUrls(bodyDisplay.quotedHtml, message?.id ?? "", attachments),
+    [attachments, bodyDisplay.quotedHtml, message?.id],
+  );
+  const cloudAttachmentResult = useMemo(
+    () => extractCloudAttachments(bodyDisplay.latestContent),
+    [bodyDisplay.latestContent],
+  );
+  const noteEmails = useMemo(() => {
+    const style: RecipientAddressStyle = showFullRecipientAddresses ? "full" : "address";
+    const emails = thread.messages.map((item) => ({
+      id: item.id,
+      sender: getConversationSender(item, currentAccountName),
+      recipient: item.direction === "outbound" ? noteRecipient(item, style) : undefined,
+      createdAt: item.createdAt,
+    }));
+    if (message && !emails.some((item) => item.id === message.id)) {
+      emails.push({ id: message.id, sender: fromName, recipient: message.direction === "outbound" ? noteRecipient(message, style) : undefined, createdAt: message.createdAt });
+    }
+    return emails;
+  }, [thread.messages, message, fromName, currentAccountName, showFullRecipientAddresses]);
+
   if (loading) {
     return <MessageDetailSkeleton />;
   }
 
-  if (!data?.message) {
+  if (!message) {
     return (
       <p className="px-6 py-4 text-sm text-neutral-500">
         {data?.error ?? t("message.notFound")}
@@ -140,51 +248,32 @@ export default function MessageDetailPage() {
     );
   }
 
-  const { message, body, attachments = [], scheduledAt } = data;
   const currentThreadMessage = {
     ...message,
     textBody: body?.textBody ?? null,
     htmlBody: body?.htmlBody ?? null,
     attachments,
   };
-  const messageMailbox =
-    mailboxes.find((mailbox) => mailbox.id === message.mailboxId) ?? selectedMailbox;
-  const currentAccountName =
-    messageMailbox?.displayName ?? messageMailbox?.localPart;
-  const { fromName, fromAddress } = getMessageHeaderParties(
-    message,
-    currentAccountName,
-  );
-  const ownAddresses = messageMailbox
-    ? messageMailbox.senderAddresses?.length
-      ? messageMailbox.senderAddresses
-      : [`${messageMailbox.localPart}@${messageMailbox.hostname}`]
-    : [];
-  const ownAddress = getOwnAddressForMessage(message, ownAddresses);
   const toEntries = splitEmailAddressList(message.toAddr);
   const ccEntries = splitEmailAddressList(message.ccAddr);
   const bccEntries = splitEmailAddressList(message.bccAddr);
-  const bodyDisplay = getMessageBodyDisplay(
-    body?.textBody,
-    body?.htmlBody,
-    message.snippet,
-    ownAddress,
-  );
-  const htmlBody = (
-    resolveInlineAttachmentUrls(bodyDisplay.htmlBody, message.id, attachments)
-  );
-  const quotedHtml = (
-    resolveInlineAttachmentUrls(bodyDisplay.quotedHtml, message.id, attachments)
-  );
-  const cloudAttachmentResult = extractCloudAttachments(
-    bodyDisplay.latestContent,
-  );
+  const onDownloadAllAttachments = async () => {
+    const url = `/api/messages/${message.id}/attachments.zip`;
+    try {
+      const response = await authFetch(url, { method: "HEAD" });
+      if (response.status === 409 && !window.confirm(t("attachment.downloadAllFlagged"))) return;
+      window.location.assign(response.status === 409 ? `${url}?acknowledge=1` : url);
+    } catch {
+      window.location.assign(url);
+    }
+  };
+
   const messageDate = (withTime: boolean) => scheduledAt
     ? formatScheduledSendTime(scheduledAt, t)
     : formatUserDate(message.createdAt, withTime
       ? { month: "short", day: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" }
       : { month: "short", day: "2-digit", year: "numeric" });
-  return (<>
+  return (<ConversationNotesProvider key={message.threadId ?? message.id} messageId={message.id} emails={noteEmails}>
 
     <div className={clsx("flex py-2 h-12 items-center px-2 border-b sticky top-0 bg-white z-40 gap-3", scrolled ? "border-neutral-200" : "border-transparent")}>
       <MessageReadingHeaderButton assistantVisible={assistantVisible} />
@@ -204,7 +293,7 @@ export default function MessageDetailPage() {
         direction={message.direction}
         status={message.status}
         read={message.read}
-        unsubscribeUrl={data.unsubscribeUrl}
+        unsubscribeUrl={data.unsubscribeUrl ?? data.unsubscribeViaBody}
         subject={message.subject}
         bodyText={body?.textBody}
         ownAddress={ownAddress}
@@ -220,6 +309,9 @@ export default function MessageDetailPage() {
       <h1 className={clsx(!isAnyPanelVisible ? "sm:pl-16" : "sm:pl-10", "px-4 pb-2 pt-2 text-2xl text-neutral-900 sm:pr-6")} title={message.subject ?? t("list.noSubject")}>
         {message.subject ?? t("list.noSubject")}
       </h1>
+      <ConversationNotes
+        className={clsx(!isAnyPanelVisible ? "sm:pl-16" : "sm:pl-10", "px-4 pb-3 sm:pr-6")}
+      />
       {/* <div className="px-6">
         <div className="mx-auto w-full max-w-[640px]">
           <SpamScoreDetails
@@ -243,8 +335,11 @@ export default function MessageDetailPage() {
         expandedAll={threadExpanded}
         onExpandedAllChange={setThreadExpanded}
       />
-      <article className={clsx("py-4 sm:px-6", !isAnyPanelVisible && "sm:pl-12")}>
+      <article data-message-id={message.id} className={clsx("py-4 sm:px-6", !isAnyPanelVisible && "sm:pl-12")}>
         <div className="w-full">
+          {canUnsubscribe && !unsubBannerDismissed && (
+            <MailingListBanner messageId={message.id} onDismiss={dismissUnsubBanner} />
+          )}
           <div className="flex flex-wrap items-start justify-between gap-x-3 gap-y-1 px-4 pb-5 sm:px-0 sm:pl-4">
             <div className="flex min-w-0 items-start gap-3">
               <ContactAvatar
@@ -271,6 +366,9 @@ export default function MessageDetailPage() {
                     )}
                   </b>{" "}
                   <span className="hidden sm:block text-neutral-500 text-xs flex-1 overflow-hidden text-ellipsis min-w-0">&lt;{fromAddress}&gt;</span>
+                  {canUnsubscribe && unsubBannerDismissed && (
+                    <MessageUnsubscribeButton key={message.id} messageId={message.id} />
+                  )}
                 </p>
                 <p className="text-xs text-neutral-500">
                   {t("source.to").toLowerCase()}{" "}
@@ -323,7 +421,21 @@ export default function MessageDetailPage() {
           )}
           {scheduledAt && <div className="px-4 sm:px-0 sm:pl-10"><ScheduledSendBanner messageId={message.id} scheduledAt={scheduledAt} onRescheduled={(next) => setData((current) => current ? { ...current, scheduledAt: next } : current)} /></div>}
           <div className="prose max-w-none px-4 text-neutral-900 sm:px-0 sm:pl-16">
-            {htmlBody ? (
+            {bodyError ? (
+              <div role="alert" className="not-prose rounded-lg border border-neutral-200 bg-neutral-50 p-4">
+                <p className="text-sm text-neutral-700">{t("source.loadFailed")}</p>
+                <Button type="button" variant="outline" size="sm" className="mt-3" onClick={() => void retryBody()}>
+                  {t("webhooks.retry")}
+                </Button>
+              </div>
+            ) : bodyPending ? (
+              <div aria-busy="true" aria-label={t("common.loading")} className="space-y-3">
+                <Skeleton className="h-4 w-full" />
+                <Skeleton className="h-4 w-11/12" />
+                <Skeleton className="h-4 w-4/5" />
+                <Skeleton className="h-4 w-5/6" />
+              </div>
+            ) : htmlBody ? (
               <EmailHtmlRenderer key={message.id} className="mx-auto" html={htmlBody} autoAllowRemote={remote.autoAllow} onAllowRemote={remote.allowSender} />
             ) : (
               <pre className="whitespace-pre-wrap text-sm text mx-auto">
@@ -368,11 +480,22 @@ export default function MessageDetailPage() {
               </div>
             </section>
           )}
+          <MessageInviteCard messageId={message.id} hasCalendarAttachment={!!findInviteAttachment(attachments)} />
           {attachments.length > 0 && (
             <section className="mt-8 border-t border-neutral-100 px-4 py-6 sm:px-0 sm:pl-16">
-              <h2 className="mb-3 text-sm font-semibold text-neutral-900">
-                {t("message.attachments", { count: attachments.length })}
-              </h2>
+              <div className="mb-3 flex items-center justify-between gap-3">
+                <h2 className="text-sm font-semibold text-neutral-900">
+                  {t("message.attachments", { count: attachments.length })}
+                </h2>
+                <button
+                  type="button"
+                  className="inline-flex shrink-0 items-center gap-1.5 text-xs font-medium text-blue-600 hover:text-blue-700"
+                  onClick={() => void onDownloadAllAttachments()}
+                >
+                  <ArrowDownToLine className="h-3.5 w-3.5" />
+                  {t("attachment.downloadAll")}
+                </button>
+              </div>
               <div className="grid gap-2 sm:grid-cols-2">
                 {attachments.map((attachment) => (
                   <MessageAttachmentCard
@@ -409,6 +532,15 @@ export default function MessageDetailPage() {
         }}
       />
     </div>
-  </>
+  </ConversationNotesProvider>
   );
+}
+
+/** The To and Cc names of an email, for naming an outbound email on a note chip. */
+function noteRecipient(message: { toAddr: string; ccAddr?: string | null }, style: RecipientAddressStyle): string | undefined {
+  const recipients = [message.toAddr, message.ccAddr]
+    .map((list) => formatRecipientAddressList(list, style))
+    .filter(Boolean)
+    .join(", ");
+  return recipients || undefined;
 }

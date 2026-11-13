@@ -5,6 +5,7 @@ import type { MessageFolderConfig } from "./types";
 export type MessageDetailNavigationProviderProps = {
 	children: ReactNode;
 	config: MessageFolderConfig;
+	currentMessageId?: string;
 };
 
 export type MessageDetailNavigationProps = {
@@ -15,6 +16,8 @@ export type MessageDetailNavigationProps = {
 export type MessageDetailNavigationSnapshot = {
 	key: string;
 	entries: MessageNavigationEntry[];
+	hasNewer?: boolean;
+	hasOlder?: boolean;
 };
 
 export type OpenedUnreadMessages = {

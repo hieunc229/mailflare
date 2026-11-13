@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useLanguage } from "@/components/language-provider";
 import { useSelectedMailbox } from "@/components/mailbox-provider";
 import { Button } from "@/components/ui/button";
@@ -12,36 +12,38 @@ import type { MailboxAutoReplySettings } from "./types";
 import { updateMailboxAutoReply } from "./utils";
 import { Switch } from "../ui/switch";
 
-const defaultSettings: MailboxAutoReplySettings = {
-  enabled: false,
-  subject: "Out of office",
-  body: "",
-};
-
 export function MailboxAutoReplyForm() {
   const { t } = useLanguage();
   const { selectedMailbox, setSelectedMailbox, isLoading } =
     useSelectedMailbox();
-  const [settings, setSettings] = useState(defaultSettings);
-  const [savedSettings, setSavedSettings] = useState(defaultSettings);
+  const mailboxSettings: MailboxAutoReplySettings = {
+    enabled: selectedMailbox?.autoReplyEnabled ?? false,
+    subject: selectedMailbox?.autoReplySubject ?? "Out of office",
+    body: selectedMailbox?.autoReplyBody ?? "",
+  };
+  const mailboxKey = {
+    id: selectedMailbox?.id,
+    enabled: selectedMailbox?.autoReplyEnabled,
+    subject: selectedMailbox?.autoReplySubject,
+    body: selectedMailbox?.autoReplyBody,
+  };
+  const [settings, setSettings] = useState(mailboxSettings);
+  const [savedSettings, setSavedSettings] = useState(mailboxSettings);
   const [status, setStatus] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [syncedMailbox, setSyncedMailbox] = useState(mailboxKey);
 
-  useEffect(() => {
-    const nextSettings = {
-      enabled: selectedMailbox?.autoReplyEnabled ?? false,
-      subject: selectedMailbox?.autoReplySubject ?? "Out of office",
-      body: selectedMailbox?.autoReplyBody ?? "",
-    };
-    setSettings(nextSettings);
-    setSavedSettings(nextSettings);
+  if (
+    syncedMailbox.id !== mailboxKey.id ||
+    syncedMailbox.enabled !== mailboxKey.enabled ||
+    syncedMailbox.subject !== mailboxKey.subject ||
+    syncedMailbox.body !== mailboxKey.body
+  ) {
+    setSyncedMailbox(mailboxKey);
+    setSettings(mailboxSettings);
+    setSavedSettings(mailboxSettings);
     setStatus(null);
-  }, [
-    selectedMailbox?.id,
-    selectedMailbox?.autoReplyEnabled,
-    selectedMailbox?.autoReplySubject,
-    selectedMailbox?.autoReplyBody,
-  ]);
+  }
 
   async function onSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();

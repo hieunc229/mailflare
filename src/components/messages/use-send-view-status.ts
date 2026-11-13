@@ -7,7 +7,7 @@ import { clearMessageDetailCache } from "@/lib/messages/detail-cache";
 import { resolveSendViewRoute } from "./send-view-utils";
 
 /** Keep a scheduled reader on the delivered message, or close it after Undo. */
-export function useSendViewStatus(messageId: string) {
+export function useSendViewStatus(messageId: string, scheduledAt?: string | null) {
 	const pathname = usePathname();
 	const router = useRouter();
 	useEffect(() => {
@@ -33,7 +33,7 @@ export function useSendViewStatus(messageId: string) {
 				window.dispatchEvent(new Event("mailflare:messages-changed"));
 				router.replace(destination);
 			} catch {
-				// Transient failures are retried by the timer or the next change event.
+				// Transient failures wait for the next change event or fallback check.
 			} finally {
 				checking = false;
 				if (checkAgain && !disposed) { checkAgain = false; void check(); }
@@ -41,12 +41,31 @@ export function useSendViewStatus(messageId: string) {
 		}
 		const onChange = () => void check();
 		void check();
-		const timer = scheduled ? window.setInterval(onChange, 1000) : undefined;
+
+		let deadlineTimer: number | undefined;
+		let fallbackTimer: number | undefined;
+		if (scheduled && scheduledAt) {
+			const deadline = new Date(scheduledAt).getTime();
+			if (Number.isFinite(deadline)) {
+				const startFallback = () => {
+					void check();
+					fallbackTimer = window.setInterval(onChange, 10_000);
+				};
+				const delay = deadline - Date.now();
+				if (delay <= 0) startFallback();
+				else deadlineTimer = window.setTimeout(startFallback, delay);
+			}
+		} else if (scheduled) {
+			// The detail response may not have supplied the job's time yet.
+			fallbackTimer = window.setInterval(onChange, 15_000);
+		}
+
 		window.addEventListener("mailflare:messages-changed", onChange);
 		return () => {
 			disposed = true;
-			if (timer !== undefined) window.clearInterval(timer);
+			if (deadlineTimer !== undefined) window.clearTimeout(deadlineTimer);
+			if (fallbackTimer !== undefined) window.clearInterval(fallbackTimer);
 			window.removeEventListener("mailflare:messages-changed", onChange);
 		};
-	}, [messageId, pathname, router]);
+	}, [messageId, pathname, router, scheduledAt]);
 }

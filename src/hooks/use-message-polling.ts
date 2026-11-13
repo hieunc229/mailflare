@@ -32,12 +32,14 @@ export function useMessagePolling(): MessageRealtimeState {
 		let reconnectAttempt = 0;
 		let revision: string | null = null;
 		let connected = false;
+		let hadConnection = false;
+		let lastForegroundRefreshAt = 0;
 		let leader = false;
 		let sessionToken = getClientSessionToken();
 		let stopped = false;
 
-		function dispatchMessagesChanged() {
-			window.dispatchEvent(new CustomEvent("mailflare:messages-changed", { detail: { realtime: true } }));
+		function dispatchMessagesChanged(detail?: Record<string, unknown>) {
+			window.dispatchEvent(new CustomEvent("mailflare:messages-changed", { detail: { ...detail, realtime: true } }));
 		}
 
 		function clearConnectionTimers() {
@@ -113,8 +115,10 @@ export function useMessagePolling(): MessageRealtimeState {
 			socket.onopen = () => {
 				reconnectAttempt = 0;
 				revision = null;
+				const reconnected = hadConnection;
+				hadConnection = true;
 				setConnected(true);
-				dispatchMessagesChanged();
+				if (reconnected) dispatchMessagesChanged();
 				sendHeartbeat();
 				heartbeatTimer = window.setInterval(sendHeartbeat, REALTIME_HEARTBEAT_INTERVAL_MS);
 			};
@@ -163,6 +167,7 @@ export function useMessagePolling(): MessageRealtimeState {
 			leader = false;
 			reconnectAttempt = 0;
 			revision = null;
+			hadConnection = false;
 			setNotification(null);
 			requestLeadership();
 		}
@@ -172,22 +177,38 @@ export function useMessagePolling(): MessageRealtimeState {
 			if (message?.type === "status_request" && leader) {
 				channel?.postMessage({ type: "status", connected } satisfies RealtimeChannelMessage);
 			} else if (message?.type === "status" && !leader) {
+				const wasConnected = connected;
 				setConnected(message.connected);
-				if (message.connected) dispatchMessagesChanged();
+				if (message.connected && !wasConnected) dispatchMessagesChanged();
 			} else if (message?.type === "notification" && !leader) {
 				handleNotification(message.payload, false);
 			} else if (message?.type === "refresh") {
-				dispatchMessagesChanged();
+				dispatchMessagesChanged(message.detail);
 			}
 		}
 
 		function onLocalMessagesChanged(event: Event) {
-			if ((event as CustomEvent<{ realtime?: boolean }>).detail?.realtime) return;
-			channel?.postMessage({ type: "refresh" } satisfies RealtimeChannelMessage);
+			const detail = (event as CustomEvent<Record<string, unknown> | undefined>).detail;
+			if (detail?.realtime) return;
+			channel?.postMessage({ type: "refresh", detail } satisfies RealtimeChannelMessage);
+		}
+
+		function refreshOnForeground(force: boolean) {
+			if (document.visibilityState !== "visible") return;
+			const now = Date.now();
+			if (connected && !force) return;
+			if (now - lastForegroundRefreshAt < 1_000) return;
+			lastForegroundRefreshAt = now;
+			dispatchMessagesChanged();
 		}
 
 		function onVisibilityChange() {
-			if (document.visibilityState === "visible") dispatchMessagesChanged();
+			if (document.visibilityState !== "visible") return;
+			refreshOnForeground(true);
+		}
+
+		function onFocus() {
+			refreshOnForeground(false);
 		}
 
 		function onStorageChange() {
@@ -203,7 +224,7 @@ export function useMessagePolling(): MessageRealtimeState {
 		window.addEventListener("storage", onStorageChange);
 		window.addEventListener("mailflare:messages-changed", onLocalMessagesChanged);
 		document.addEventListener("visibilitychange", onVisibilityChange);
-		window.addEventListener("focus", onVisibilityChange);
+		window.addEventListener("focus", onFocus);
 		startFallbackRefresh();
 		requestLeadership();
 
@@ -213,7 +234,7 @@ export function useMessagePolling(): MessageRealtimeState {
 			window.removeEventListener("storage", onStorageChange);
 			window.removeEventListener("mailflare:messages-changed", onLocalMessagesChanged);
 			document.removeEventListener("visibilitychange", onVisibilityChange);
-			window.removeEventListener("focus", onVisibilityChange);
+			window.removeEventListener("focus", onFocus);
 			if (leader) channel?.postMessage({ type: "status", connected: false } satisfies RealtimeChannelMessage);
 			lockAbort?.abort();
 			releaseLeader?.();
