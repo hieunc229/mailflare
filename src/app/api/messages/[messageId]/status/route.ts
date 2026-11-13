@@ -4,6 +4,7 @@ import { getCurrentUser } from "@/lib/auth/cookies";
 import { updateMessageStatusForUser } from "@/lib/user";
 import type { MessageStatusPayload } from "./types";
 import { isAllowedMessageStatus } from "./utils";
+import { readJsonObject } from "@/lib/http/request";
 
 export async function POST(
 	request: Request,
@@ -16,7 +17,8 @@ export async function POST(
 		return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 	}
 
-	const payload = (await request.json()) as MessageStatusPayload;
+	const payload = await readJsonObject<MessageStatusPayload>(request);
+	if (!payload) return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
 	if (!isAllowedMessageStatus(payload.status)) {
 		return NextResponse.json({ error: "Invalid message status" }, { status: 400 });
 	}

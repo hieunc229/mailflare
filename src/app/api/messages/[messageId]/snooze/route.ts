@@ -7,6 +7,7 @@ import { getEnv } from "@/lib/cloudflare";
 import { getMailboxAccessLevel } from "@/lib/mailboxes/access";
 import type { SnoozeMessagePayload } from "./types";
 import { getSnoozedUntil } from "./utils";
+import { readJsonObject } from "@/lib/http/request";
 
 export async function POST(
 	request: Request,
@@ -17,7 +18,8 @@ export async function POST(
 	const user = await getCurrentUser(env, request);
 	if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-	const payload = (await request.json()) as SnoozeMessagePayload;
+	const payload = await readJsonObject<SnoozeMessagePayload>(request);
+	if (!payload) return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
 	const snoozedUntil = getSnoozedUntil(payload.snoozedUntil);
 	if (!snoozedUntil) {
 		return NextResponse.json({ error: "Choose a future snooze time" }, { status: 400 });

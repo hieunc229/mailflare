@@ -5,11 +5,13 @@ import { getEnv } from "@/lib/cloudflare";
 import { blockContact } from "@/lib/contacts/service";
 import { getMailboxAccessLevel } from "@/lib/mailboxes/access";
 import type { BlockContactRequest } from "./types";
+import { readJsonObject } from "@/lib/http/request";
 
 export async function POST(request: Request) {
 	const env = getEnv();
 	const user = await requireUser(env, request);
-	const body = (await request.json()) as BlockContactRequest;
+	const body = await readJsonObject<BlockContactRequest>(request);
+	if (!body) return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
 	if (!body.mailboxId || !body.address?.trim()) {
 		return NextResponse.json({ error: "Mailbox and contact are required" }, { status: 400 });
 	}
