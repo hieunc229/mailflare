@@ -62,6 +62,7 @@ export function ComposeForm({
 	const { showNotice, openDraftComposer, isCurrentNotice } = useCompose();
 	const { selectedMailbox, setSelectedMailbox, mailboxes } = useSelectedMailbox();
 	const [draftId, setDraftId] = useState<string | null>(null);
+	const [saveFailed, setSaveFailed] = useState(false);
 	const [agentRevision, setAgentRevision] = useState<number | null>(null);
 	const [agentReview, setAgentReview] = useState<{ approvalId: string; snapshot: ReviewSnapshot } | null>(null);
 	// Recipients handed in by the caller (Contacts "Send email", etc.) seed a fresh composer.
@@ -292,7 +293,8 @@ export function ComposeForm({
 					body: JSON.stringify(payload),
 				});
 				const data = (await res.json()) as { draft?: { id: string } };
-				if (!res.ok || !data.draft?.id) return;
+				if (!res.ok || !data.draft?.id) { setSaveFailed(true); return; }
+				setSaveFailed(false);
 				if (generation !== draftGeneration.current) {
 					if (!existingId) void authFetch(`/api/drafts/${data.draft.id}`, { method: "DELETE" });
 					return;
@@ -313,7 +315,7 @@ export function ComposeForm({
 				for (const attachment of pending) uploadedFiles.current.add(attachment.file);
 				setStoredAttachments((current) => [...current, ...(result.attachments ?? [])]);
 				setAttachments((current) => current.filter((attachment) => !uploadedFiles.current.has(attachment.file)));
-			}).catch(() => {});
+			}).catch(() => { setSaveFailed(true); });
 			saveQueue.current = run;
 			return run;
 		};
@@ -819,7 +821,7 @@ export function ComposeForm({
 								? t("compose.title.reply")
 								: /^fwd?:/i.test(subject)
 									? t("compose.title.forward")
-									: draftId
+									: draftId && !saveFailed
 										? t("compose.title.saved")
 										: t("compose.title.new")}
 					</span>
