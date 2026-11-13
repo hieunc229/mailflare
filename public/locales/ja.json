@@ -2433,5 +2433,10 @@
 	"actions.unsubscribeDeleteAll": "登録解除してすべて削除",
 	"actions.unsubscribeDeleteConfirm": "この差出人の過去のメール {count} 件をゴミ箱に移動しますか？",
 	"actions.unsubscribeTrashDone": "登録解除し、{count} 件をゴミ箱に移動しました",
-	"attachment.downloadAllFlagged": "一部の添付ファイルに危険の可能性のフラグがあります。それでもアーカイブをダウンロードしますか？"
+	"attachment.downloadAllFlagged": "一部の添付ファイルに危険の可能性のフラグがあります。それでもアーカイブをダウンロードしますか？",
+	"account.apps": "アプリ",
+	"account.openApps": "アプリメニューを開く",
+	"account.signOutAccountConfirm": "{name} ({email}) をサインアウトしますか？このアカウントを使うには、もう一度サインインする必要があります。",
+	"invite.acceptedLabel": "承諾済み",
+	"invite.declinedLabel": "辞退済み"
 }

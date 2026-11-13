@@ -2451,5 +2451,10 @@
 	"actions.unsubscribeDeleteAll": "చందా రద్దు & అన్నీ తొలగించు",
 	"actions.unsubscribeDeleteConfirm": "ఈ పంపిణీదారి {count} పాత ఇమెయిల్‌లను ట్రాష్‌కు తరలించాలా?",
 	"actions.unsubscribeTrashDone": "చందా రద్దైంది; {count} ఇమెయిల్‌లు ట్రాష్‌కు వెళ్లాయి",
-	"attachment.downloadAllFlagged": "కొన్ని అటాచ్‌మెంట్‌లు ప్రమాదకరంగా గుర్తు పెట్టబడ్డాయి. అయినా ఆర్కైవ్ డౌన్‌లోడ్ చేయాలా?"
+	"attachment.downloadAllFlagged": "కొన్ని అటాచ్‌మెంట్‌లు ప్రమాదకరంగా గుర్తు పెట్టబడ్డాయి. అయినా ఆర్కైవ్ డౌన్‌లోడ్ చేయాలా?",
+	"account.apps": "యాప్‌లు",
+	"account.openApps": "యాప్‌ల మెనూ తెరవండి",
+	"account.signOutAccountConfirm": "{name} ({email}) సైన్ అవుట్ చేయాలా? ఈ ఖాతాను ఉపయోగించడానికి మీరు మళ్లీ సైన్ ఇన్ చేయాలి.",
+	"invite.acceptedLabel": "అంగీకరించబడింది",
+	"invite.declinedLabel": "తిరస్కరించబడింది"
 }

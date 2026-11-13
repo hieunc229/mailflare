@@ -2466,5 +2466,10 @@
 	"actions.unsubscribeDeleteAll": "Darse de baja y borrar todo",
 	"actions.unsubscribeDeleteConfirm": "¿Mover {count} correos anteriores de este remitente a la Papelera?",
 	"actions.unsubscribeTrashDone": "Dado de baja; {count} correos movidos a la Papelera",
-	"attachment.downloadAllFlagged": "Algunos archivos adjuntos están marcados como potencialmente peligrosos. ¿Descargar el archivo de todos modos?"
+	"attachment.downloadAllFlagged": "Algunos archivos adjuntos están marcados como potencialmente peligrosos. ¿Descargar el archivo de todos modos?",
+	"account.apps": "Aplicaciones",
+	"account.openApps": "Abrir el menú de aplicaciones",
+	"account.signOutAccountConfirm": "¿Cerrar la sesión de {name} ({email})? Tendrás que volver a iniciar sesión para usar esta cuenta.",
+	"invite.acceptedLabel": "Aceptada",
+	"invite.declinedLabel": "Rechazada"
 }

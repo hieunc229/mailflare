@@ -2451,5 +2451,10 @@
 	"actions.unsubscribeDeleteAll": "സബ്‌സ്‌ക്രിപ്‌ഷൻ റദ്ദാക്കി എല്ലാം നീക്കുക",
 	"actions.unsubscribeDeleteConfirm": "ഈ അയച്ചയാളുടെ {count} പഴയ ഇമെയിലുകൾ ട്രാഷിലേക്ക് മാറ്റണോ?",
 	"actions.unsubscribeTrashDone": "സബ്‌സ്‌ക്രിപ്‌ഷൻ റദ്ദായി; {count} ഇമെയിലുകൾ ട്രാഷിലേക്ക് മാറ്റി",
-	"attachment.downloadAllFlagged": "ചില അറ്റാച്ച്‌മെന്റുകൾ അപകടകരമെന്ന് അടയാളപ്പെടുത്തിയിരിക്കുന്നു. എങ്കിലും ആർക്കൈവ് ഡൗൺലോഡ് ചെയ്യണോ?"
+	"attachment.downloadAllFlagged": "ചില അറ്റാച്ച്‌മെന്റുകൾ അപകടകരമെന്ന് അടയാളപ്പെടുത്തിയിരിക്കുന്നു. എങ്കിലും ആർക്കൈവ് ഡൗൺലോഡ് ചെയ്യണോ?",
+	"account.apps": "ആപ്പുകൾ",
+	"account.openApps": "ആപ്പ് മെനു തുറക്കുക",
+	"account.signOutAccountConfirm": "{name} ({email}) സൈൻ ഔട്ട് ചെയ്യണോ? ഈ അക്കൗണ്ട് ഉപയോഗിക്കാൻ നിങ്ങൾ വീണ്ടും സൈൻ ഇൻ ചെയ്യണം.",
+	"invite.acceptedLabel": "സ്വീകരിച്ചു",
+	"invite.declinedLabel": "നിരസിച്ചു"
 }
