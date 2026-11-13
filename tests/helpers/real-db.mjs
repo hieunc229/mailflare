@@ -32,6 +32,7 @@ export async function loadApp(name, exportLines) {
 		packages: "external",
 		alias: {
 			"next/headers": "next/headers.js",
+			"next/server": "next/server.js",
 			"cloudflare:workers": "./server/runtime/cloudflare-workers.ts",
 		},
 		logLevel: "silent",
