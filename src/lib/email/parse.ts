@@ -66,6 +66,6 @@ export async function parseRawMime(raw: ArrayBuffer): Promise<ParsedEmail> {
 }
 
 export function buildSnippet(text: string | null, html: string | null, max = 200): string {
-	const source = getLatestEmailContent(text?.trim() || htmlToReadableText(html));
+	const source = getLatestEmailContent(text?.trim() || htmlToReadableText(html, true));
 	return source.replace(/\s+/g, " ").trim().slice(0, max);
 }
