@@ -1,29 +1,53 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useIsFetching } from "@tanstack/react-query";
-import { useBranding } from "@/components/branding-provider";
 import { useLanguage } from "@/components/language-provider";
 import { PageLoadingContext } from "@/components/page-loading";
 import { RouteLoadingBar } from "@/components/route-loading-bar";
+import { RouteSkeleton } from "@/components/route-skeleton";
 import type { LoadingTransitionProps } from "./loading-transition-types";
 
 const MINIMUM_LOADING_TIME = 600;
 const COMPLETION_TIME = 220;
 const MAXIMUM_DATA_WAIT = 10_000;
+const SPLASH_ICON = "/icon-192.png";
 let hasShownInitialLoadingTransition = false;
+
+// The splash is for entering the app: the home page, sign-in, a typed URL, a bookmark or another site. A full page load
+// whose referrer is another page of this app (a "View on calendar" link in an email) is not an entry.
+const ENTRY_PATHS = ["/", "/login", "/setup"];
+
+function arrivedFromInsideApp(): boolean {
+	try {
+		if (!document.referrer) return false;
+		const referrer = new URL(document.referrer);
+		return referrer.origin === window.location.origin && !ENTRY_PATHS.includes(referrer.pathname);
+	} catch { return false; }
+}
+
+function splashAlreadySeen(): boolean {
+	return hasShownInitialLoadingTransition || arrivedFromInsideApp();
+}
+
+// Runs while the server HTML is parsed, before first paint and before hydration, so an in-app full page load never
+// flashes the splash.
+const SPLASH_GUARD_SCRIPT = `try{var r=document.referrer;if(r){var u=new URL(r);if(u.origin===location.origin&&${JSON.stringify(ENTRY_PATHS)}.indexOf(u.pathname)<0)document.documentElement.setAttribute("data-splash-seen","")}}catch(e){}`;
+const SPLASH_GUARD_STYLE = "html[data-splash-seen] .splash-overlay{display:none!important}";
+
+function rememberSplashSeen() {
+	hasShownInitialLoadingTransition = true;
+}
 
 export function LoadingTransition({ children, ready }: LoadingTransitionProps) {
 	const { t } = useLanguage();
-	const branding = useBranding();
-	const [showInitialLoader] = useState(() => !hasShownInitialLoadingTransition);
+	// Always true on the server and first render so hydration matches; corrected before paint below.
+	const [showInitialLoader, setShowInitialLoader] = useState(true);
 	const [startedAt] = useState(() => Date.now());
 	const [progress, setProgress] = useState(8);
 	const [loaderVisible, setLoaderVisible] = useState(showInitialLoader);
 	const [contentVisible, setContentVisible] = useState(!showInitialLoader);
 	const [initialLoadComplete, setInitialLoadComplete] = useState(!showInitialLoader);
-	const [iconUrl, setIconUrl] = useState(branding.iconUrl);
-	const [iconSource, setIconSource] = useState(branding.iconUrl);
 	const [pageMounted, setPageMounted] = useState(false);
 	const [pendingLoads, setPendingLoads] = useState(0);
 	const [dataWaitExpired, setDataWaitExpired] = useState(false);
@@ -41,10 +65,14 @@ export function LoadingTransition({ children, ready }: LoadingTransitionProps) {
 		setVisibleLoads(visibleIds.current.size);
 	}, []);
 	const loadingContext = useMemo(() => ({ reportLoading }), [reportLoading]);
-	if (iconSource !== branding.iconUrl) {
-		setIconSource(branding.iconUrl);
-		setIconUrl(branding.iconUrl);
-	}
+	useLayoutEffect(() => {
+		if (!splashAlreadySeen()) return;
+		// eslint-disable-next-line react-hooks/set-state-in-effect -- sessionStorage is only readable on the client, and this must apply before first paint
+		setShowInitialLoader(false);
+		setLoaderVisible(false);
+		setContentVisible(true);
+		setInitialLoadComplete(true);
+	}, []);
 	const canComplete = ready && pageMounted && (dataWaitExpired || (pendingLoads === 0 && fetchingQueries === 0));
 
 	useEffect(() => {
@@ -75,7 +103,7 @@ export function LoadingTransition({ children, ready }: LoadingTransitionProps) {
 		const completeTimer = window.setTimeout(() => setProgress(100), remaining);
 		const revealTimer = window.setTimeout(() => {
 			if (showInitialLoader) {
-				hasShownInitialLoadingTransition = true;
+				rememberSplashSeen();
 				setLoaderVisible(false);
 				setContentVisible(true);
 			}
@@ -92,7 +120,10 @@ export function LoadingTransition({ children, ready }: LoadingTransitionProps) {
 	return (
 		<PageLoadingContext.Provider value={loadingContext}>
 			<div className="relative min-h-dvh bg-[#f6f8fc]">
+				<style dangerouslySetInnerHTML={{ __html: SPLASH_GUARD_STYLE }} />
+				<script dangerouslySetInnerHTML={{ __html: SPLASH_GUARD_SCRIPT }} suppressHydrationWarning />
 				{showTopLoadingBar && <RouteLoadingBar />}
+				{!ready && !showInitialLoader && <div aria-hidden="true"><RouteSkeleton /></div>}
 				{ready && (
 					<div
 						className={`min-h-dvh transition-opacity duration-300 ${contentVisible ? "opacity-100" : "opacity-0"}`}
@@ -102,15 +133,14 @@ export function LoadingTransition({ children, ready }: LoadingTransitionProps) {
 				)}
 				<div
 					role="status"
-					className={`fixed inset-0 z-[100] flex items-center justify-center bg-[#f6f8fc] transition-opacity duration-300 ${
+					className={`splash-overlay fixed inset-0 z-[100] flex items-center justify-center bg-[#f6f8fc] transition-opacity duration-300 ${
 						loaderVisible ? "opacity-100" : "pointer-events-none opacity-0"
 					}`}
 				>
 					<span className="sr-only">{loaderVisible ? t("nav.loading") : ""}</span>
 					<div aria-hidden="true" className="flex w-64 flex-col items-center gap-6">
 						<img
-							src={iconUrl}
-							onError={() => setIconUrl("/icon-192.png")}
+							src={SPLASH_ICON}
 							alt=""
 							className="h-20 w-20 rounded-2xl object-contain"
 						/>
