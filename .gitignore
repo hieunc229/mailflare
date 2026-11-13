@@ -65,3 +65,4 @@ mailflare-landing
 .agents
 skills-lock.json
 /dist/
+/tests/.tmp-*
