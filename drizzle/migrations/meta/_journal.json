@@ -526,6 +526,34 @@
       "when": 1793280378889,
       "tag": "0083_add_message_has_unsubscribe",
       "breakpoints": true
+    },
+    {
+      "idx": 76,
+      "version": "6",
+      "when": 1793280379889,
+      "tag": "0084_add_conversation_notes",
+      "breakpoints": true
+    },
+    {
+      "idx": 77,
+      "version": "6",
+      "when": 1793280380889,
+      "tag": "0085_calendar_invitations",
+      "breakpoints": true
+    },
+    {
+      "idx": 78,
+      "version": "6",
+      "when": 1793280381889,
+      "tag": "0086_booking_confirmation_templates",
+      "breakpoints": true
+    },
+    {
+      "idx": 79,
+      "version": "6",
+      "when": 1793280382889,
+      "tag": "0087_message_invite_response",
+      "breakpoints": true
     }
   ]
 }

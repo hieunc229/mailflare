@@ -28,7 +28,9 @@ export type ComposeNoticeOptions = {
 type ComposeContextValue = {
 	open: boolean;
 	draftId: string | null;
-	openComposer: () => void;
+	/** Recipients the next fresh composer starts with, e.g. "Email contact" from the Contacts page. */
+	initialTo: string[] | null;
+	openComposer: (options?: { to?: string[] }) => void;
 	openDraftComposer: (draftId: string) => void;
 	closeComposer: () => void;
 	notice: ComposeNotice | null;
@@ -61,6 +63,7 @@ export function useCompose() {
 export function ComposeProvider({ children }: { children: ReactNode }) {
 	const [open, setOpen] = useState(false);
 	const [draftId, setDraftId] = useState<string | null>(null);
+	const [initialTo, setInitialTo] = useState<string[] | null>(null);
 	const opener = useRef<HTMLElement | null>(null);
 
 	function rememberOpener() {
@@ -84,19 +87,23 @@ export function ComposeProvider({ children }: { children: ReactNode }) {
 			value={{
 				open,
 				draftId,
-				openComposer: () => {
+				initialTo,
+				openComposer: (options) => {
 					rememberOpener();
 					setDraftId(null);
+					setInitialTo(options?.to?.length ? options.to : null);
 					setOpen(true);
 				},
 				openDraftComposer: (nextDraftId) => {
 					if (!open) rememberOpener();
 					setDraftId(nextDraftId);
+					setInitialTo(null);
 					setOpen(true);
 				},
 				closeComposer: () => {
 					setOpen(false);
 					setDraftId(null);
+					setInitialTo(null);
 					const previous = opener.current;
 					opener.current = null;
 					if (previous) requestAnimationFrame(() => { if (previous.isConnected) previous.focus(); });

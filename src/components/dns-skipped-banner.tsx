@@ -10,26 +10,35 @@ import { Button } from "@/components/ui/button";
 
 type SkippedDomain = { id: string; hostname: string; dnsSkipped?: boolean };
 
+async function fetchSkippedDomains(): Promise<SkippedDomain[] | null> {
+	try {
+		const res = await authFetch("/api/domains", { redirectOnUnauthorized: false });
+		if (!res.ok) return null;
+		const data = (await res.json()) as { domains?: SkippedDomain[] };
+		return (data.domains ?? []).filter((domain) => domain.dnsSkipped);
+	} catch {
+		// The banner is advisory; a failed read just hides it.
+		return null;
+	}
+}
+
 export function DnsSkippedBanner() {
 	const { t } = useLanguage();
 	const user = useCurrentUser();
 	const [domains, setDomains] = useState<SkippedDomain[]>([]);
 	const [busy, setBusy] = useState(false);
 
-	const load = useCallback(async () => {
-		try {
-			const res = await authFetch("/api/domains", { redirectOnUnauthorized: false });
-			if (!res.ok) return;
-			const data = (await res.json()) as { domains?: SkippedDomain[] };
-			setDomains((data.domains ?? []).filter((domain) => domain.dnsSkipped));
-		} catch {
-			// The banner is advisory; a failed read just hides it.
-		}
+	const applyDomains = useCallback((next: SkippedDomain[] | null) => {
+		if (next) setDomains(next);
 	}, []);
 
+	const load = useCallback(async () => {
+		applyDomains(await fetchSkippedDomains());
+	}, [applyDomains]);
+
 	useEffect(() => {
-		void load();
-	}, [load]);
+		void fetchSkippedDomains().then(applyDomains);
+	}, [applyDomains]);
 
 	if (domains.length === 0) return null;
 	const canManage = !!user && (user.isPrimaryAdmin || (user.role === "admin" && user.canManageDomains));

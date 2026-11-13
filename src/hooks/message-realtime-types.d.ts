@@ -16,4 +16,4 @@ export type RealtimeChannelMessage =
 	| { type: "status"; connected: boolean }
 	| { type: "status_request" }
 	| { type: "notification"; payload: string }
-	| { type: "refresh" };
+	| { type: "refresh"; detail?: Record<string, unknown> };

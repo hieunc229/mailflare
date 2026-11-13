@@ -39,7 +39,7 @@ import {
 	splitQuotedHtml,
 	textToHtml,
 } from "./rich-text-utils";
-import { headerToRecipients, isValidRecipient, recipientsToHeader } from "./recipient-utils";
+import { headerToRecipients, isValidRecipient, mergeRecipients, recipientsToHeader } from "./recipient-utils";
 import type { ComposeAttachment, ComposeStoredAttachment, ComposeThreading } from "./types";
 import type { ComposeAttachmentPolicy } from "./attachment-policy-types";
 
@@ -48,10 +48,13 @@ type Toast = { type: "success" | "error"; message: string } | null;
 export function ComposeForm({
 	mode = "page",
 	draftIdToLoad,
+	initialTo,
 	onClose,
 }: {
 	mode?: "page" | "popup";
 	draftIdToLoad?: string | null;
+	/** Recipients a fresh composer starts with, e.g. from the Contacts page. */
+	initialTo?: string[] | null;
 	onClose?: () => void;
 }) {
 	const { t } = useLanguage();
@@ -61,7 +64,8 @@ export function ComposeForm({
 	const [draftId, setDraftId] = useState<string | null>(null);
 	const [agentRevision, setAgentRevision] = useState<number | null>(null);
 	const [agentReview, setAgentReview] = useState<{ approvalId: string; snapshot: ReviewSnapshot } | null>(null);
-	const [to, setTo] = useState<string[]>([]);
+	// Recipients handed in by the caller (Contacts "Send email", etc.) seed a fresh composer.
+	const [to, setTo] = useState<string[]>(() => (draftIdToLoad ? [] : mergeRecipients([], initialTo ?? [])));
 	const [cc, setCc] = useState<string[]>([]);
 	const [bcc, setBcc] = useState<string[]>([]);
 	const [showCc, setShowCc] = useState(false);
@@ -161,17 +165,20 @@ export function ComposeForm({
 		}),
 		[mailboxes],
 	);
+	// Keep the sender on an address the mailbox can send as. A loaded draft's
+	// sender wins whenever it or the mailbox's addresses change.
+	const [prevSenderSync, setPrevSenderSync] = useState({ loadedDraftFrom, senderAddresses });
+	let nextFrom = selectedFrom;
+	if (loadedDraftFrom !== prevSenderSync.loadedDraftFrom || senderAddresses !== prevSenderSync.senderAddresses) {
+		setPrevSenderSync({ loadedDraftFrom, senderAddresses });
+		if (loadedDraftFrom && senderAddresses.includes(loadedDraftFrom)) nextFrom = loadedDraftFrom;
+	}
+	if (!senderAddresses.length) nextFrom = "";
+	else if (!senderAddresses.includes(nextFrom)) nextFrom = senderAddresses[0];
+	if (nextFrom !== selectedFrom) setSelectedFrom(nextFrom);
 	const fromAddr = selectedMailbox && selectedFrom
 		? formatEmailAddress(selectedFrom, selectedMailbox.displayName)
 		: "";
-
-	useEffect(() => {
-		if (!senderAddresses.length) {
-			setSelectedFrom("");
-			return;
-		}
-		if (!senderAddresses.includes(selectedFrom)) setSelectedFrom(senderAddresses[0]);
-	}, [selectedFrom, senderAddresses]);
 
 	useEffect(() => {
 		if (!toast) return;
@@ -183,6 +190,7 @@ export function ComposeForm({
 		if (!draftIdToLoad) return;
 
 		let cancelled = false;
+		// eslint-disable-next-line react-hooks/set-state-in-effect -- flags the fetch below as in flight; the signature and autosave effects rely on it flipping after the first commit.
 		setLoadingDraft(true);
 		fetchDraft(draftIdToLoad)
 			.then((draft) => {
@@ -237,11 +245,6 @@ export function ComposeForm({
 		const draftMailbox = mailboxes.find((mailbox) => mailbox.id === loadedDraftMailboxId);
 		if (draftMailbox) setSelectedMailbox(draftMailbox);
 	}, [loadedDraftMailboxId, mailboxes, selectedMailbox?.id, setSelectedMailbox]);
-
-	useEffect(() => {
-		if (!loadedDraftFrom || !senderAddresses.includes(loadedDraftFrom)) return;
-		setSelectedFrom(loadedDraftFrom);
-	}, [loadedDraftFrom, senderAddresses]);
 
 	useEffect(() => {
 		if (loadingDraft) return;
@@ -856,6 +859,7 @@ export function ComposeForm({
 					value={to}
 					onChange={setTo}
 					placeholder={t("compose.toPlaceholder")}
+					mailboxId={selectedMailbox?.id}
 					required
 					autoFocus={!draftIdToLoad}
 					disabled={loadingDraft}
@@ -881,6 +885,7 @@ export function ComposeForm({
 						value={cc}
 						onChange={setCc}
 						placeholder={t("compose.ccPlaceholder")}
+						mailboxId={selectedMailbox?.id}
 						disabled={loadingDraft}
 						autoFocus={!loadingDraft && cc.length === 0}
 					/>
@@ -892,6 +897,7 @@ export function ComposeForm({
 						value={bcc}
 						onChange={setBcc}
 						placeholder={t("compose.bccPlaceholder")}
+						mailboxId={selectedMailbox?.id}
 						disabled={loadingDraft}
 						autoFocus={!loadingDraft && bcc.length === 0}
 					/>

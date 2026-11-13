@@ -4,6 +4,7 @@ import { getDb } from "@/db";
 import { messageAttachments, messages } from "@/db/schema";
 import { authorizeDrive } from "@/lib/drive/auth";
 import { getMailboxAccessLevel, hasMailboxPermission } from "@/lib/mailboxes/access";
+import { deleteUnreferencedObjects } from "@/lib/drive/shared-objects";
 
 const MAX_BULK = 200;
 
@@ -60,6 +61,6 @@ export async function POST(request: Request) {
 		if (body.action === "delete") await db.delete(messageAttachments).where(inArray(messageAttachments.id, slice));
 		else await db.update(messageAttachments).set({ trashedAt: body.action === "trash" ? new Date() : null }).where(inArray(messageAttachments.id, slice));
 	}
-	if (body.action === "delete" && targets.length) await env.BUCKET.delete(targets.map((row) => row.r2Key));
+	if (body.action === "delete" && targets.length) await deleteUnreferencedObjects(env, db, targets.map((row) => row.r2Key), { attachmentIds: targetIds });
 	return NextResponse.json({ count: targets.length, denied });
 }

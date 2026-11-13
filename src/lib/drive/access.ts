@@ -3,6 +3,7 @@ import { getDb } from "@/db";
 import { driveItems, driveShares, driveUploadParts, users } from "@/db/schema";
 import { DRIVE_MAX_DEPTH, driveObjectKey } from "./utils";
 import type { DriveItemDto, DriveRole, DriveRow } from "./types";
+import { deleteUnreferencedObjects } from "@/lib/drive/shared-objects";
 
 type Db = ReturnType<typeof getDb>;
 
@@ -103,8 +104,9 @@ export async function deleteDriveItems(env: CloudflareEnv, roots: DriveRow[]): P
 	const descendants = await collectDriveDescendants(db, roots.filter((row) => row.kind === "folder").map((row) => row.id));
 	const all = [...roots, ...descendants];
 	const keys = all.filter((row) => row.kind === "file").map((row) => row.r2Key ?? driveObjectKey(row.ownerId, row.id));
-	for (let index = 0; index < keys.length; index += 500) await env.BUCKET.delete(keys.slice(index, index + 500));
 	const ids = all.map((row) => row.id);
+	// A file saved from an email shares that attachment's object, which must outlive the Drive item.
+	await deleteUnreferencedObjects(env, db, keys, { driveItemIds: ids });
 	for (let index = 0; index < ids.length; index += 50) {
 		const slice = ids.slice(index, index + 50);
 		await db.delete(driveShares).where(inArray(driveShares.itemId, slice));

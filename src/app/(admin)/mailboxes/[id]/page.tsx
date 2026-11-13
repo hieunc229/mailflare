@@ -4,7 +4,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { confirmDestructive } from "@/components/ui/confirm-dialog";
 import { AtSign, Save, Trash2, UserPlus } from "@/components/icons";
 import { useParams, usePathname, useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useLanguage } from "@/components/language-provider";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -52,13 +52,16 @@ export default function MailboxSettingsPage() {
     enabled: !!mailboxId,
   });
 
-  useEffect(() => {
+  // Copy each newly loaded mailbox into the form fields.
+  const [syncedMailbox, setSyncedMailbox] = useState<typeof mailbox.data>(undefined);
+  if (mailbox.data !== syncedMailbox) {
+    setSyncedMailbox(mailbox.data);
     if (mailbox.data) {
       setDisplayName(mailbox.data.displayName ?? "");
       setUseAllDomains(mailbox.data.useAllDomains);
-      setAliasDomainId((current) => current || mailbox.data.domainId);
+      setAliasDomainId(aliasDomainId || mailbox.data.domainId);
     }
-  }, [mailbox.data]);
+  }
 
   const updateName = useMutation({
     mutationFn: () => updateMailboxSettings(mailboxId, { displayName, useAllDomains }),

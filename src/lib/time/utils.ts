@@ -80,7 +80,8 @@ export function getDisplayLocale(): string | undefined {
 }
 
 export function formatUserDate(value: Date | string, options: Intl.DateTimeFormatOptions): string {
-	return getDisplayFormatter(getDisplayLocale(), options, getUserTimeZone()).format(new Date(value));
+	const zone = typeof options.timeZone === "string" ? options.timeZone : getUserTimeZone();
+	return getDisplayFormatter(getDisplayLocale(), options, zone).format(new Date(value));
 }
 
 export function formatUserDateTimeLocal(value: Date): string {

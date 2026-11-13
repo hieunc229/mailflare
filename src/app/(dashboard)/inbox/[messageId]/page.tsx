@@ -1,8 +1,10 @@
 "use client";
+import { confirmDestructive } from "@/components/ui/confirm-dialog";
 
+import { authFetch } from "@/lib/auth/client";
 import { useParams } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
-import { Cloud, ExternalLink } from "@/components/icons";
+import { ArrowDownToLine, Cloud, ExternalLink } from "@/components/icons";
 import { useLanguage } from "@/components/language-provider";
 import { formatUserDate } from "@/lib/time/utils";
 import { markMessageRead } from "@/components/mark-read";
@@ -12,12 +14,16 @@ import { ContactAvatar } from "@/components/contacts/contact-avatar";
 import { MessageActions } from "@/components/message-actions/message-actions";
 import { MessageAttachmentViewer } from "@/components/message-attachment-viewer";
 import { MessageAttachmentCard } from "@/components/message-attachment-card";
+import { MessageInviteCard } from "@/components/message-invite-card";
 import { MessageDetailSkeleton } from "@/components/page-skeletons";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 import { usePageLoading } from "@/components/page-loading";
 import { PreviousMessage } from "@/components/previous-message";
 import { ConversationThread } from "@/components/messages/conversation-thread";
+import { getConversationSender } from "@/components/messages/conversation-thread-utils";
+import { ConversationNotes } from "@/components/messages/conversation-notes";
+import { ConversationNotesProvider } from "@/components/messages/conversation-notes-context";
 import { MessageDetailNavigation } from "@/components/messages/message-detail-navigation";
 import { MessageReadingHeaderButton } from "@/components/messages/message-reading-header-button";
 import { ScheduledSendBanner } from "@/components/messages/scheduled-send-banner";
@@ -31,6 +37,8 @@ import { useMessageThread } from "@/components/messages/use-message-thread";
 import { useLatestMessagesFirst } from "@/components/messages/use-latest-messages-first";
 import { useMessageListVisibility } from "@/components/messages/message-list-visibility";
 import { splitEmailAddressList } from "@/lib/email/address";
+import { findInviteAttachment } from "@/lib/calendar/invite-attachment";
+import { formatRecipientAddressList, type RecipientAddressStyle } from "@/lib/email/recipient-display";
 import { RecipientList } from "@/components/messages/recipient-list";
 import { useShowFullRecipientAddresses } from "@/components/messages/use-show-full-recipient-addresses";
 import type { MessageAttachment, MessageDetailResponse } from "./types";
@@ -51,6 +59,8 @@ import clsx from "clsx";
 import { useAssistantOpen } from "@/components/agent/assistant-open-state";
 import { useMessageContentScroll } from "./use-message-content-scroll";
 import { useSendViewStatus } from "@/components/messages/use-send-view-status";
+import { MailingListBanner } from "@/components/messages/mailing-list-banner";
+import { useMailingListBanner } from "@/components/messages/use-mailing-list-banner";
 
 const EMPTY_ATTACHMENTS: MessageAttachment[] = [];
 
@@ -62,10 +72,10 @@ export default function MessageDetailPage() {
 function MessageDetailContent({ messageId }: { messageId: string }) {
   const { t } = useLanguage();
   const { selectedMailbox, mailboxes } = useSelectedMailbox();
-  useSendViewStatus(messageId);
   const [data, setData] = useState<MessageDetailResponse | null>(
     () => getCachedMessageDetailForDisplay(messageId) ?? null,
   );
+  useSendViewStatus(messageId, data?.scheduledAt);
   const [loading, setLoading] = useState(
     () => !getCachedMessageDetailForDisplay(messageId)?.message,
   );
@@ -90,6 +100,7 @@ function MessageDetailContent({ messageId }: { messageId: string }) {
   const assistantVisible = useAssistantOpen();
   const isAnyPanelVisible = messageListVisible || assistantVisible;
   const { scrollRef, scrolled, handleScroll } = useMessageContentScroll(messageId, loading);
+  const [unsubBannerDismissed, dismissUnsubBanner] = useMailingListBanner(messageId);
 
   useEffect(() => {
     let cancelled = false;
@@ -195,6 +206,7 @@ function MessageDetailContent({ messageId }: { messageId: string }) {
       : [`${messageMailbox.localPart}@${messageMailbox.hostname}`]
     : [];
   const ownAddress = message ? getOwnAddressForMessage(message, ownAddresses) : "";
+  const canUnsubscribe = message?.direction === "inbound" && message.status !== "spam" && !!message.hasUnsubscribe;
   const bodyDisplay = useMemo(
     () => getMessageBodyDisplay(body?.textBody, body?.htmlBody, message?.snippet, ownAddress),
     [body?.textBody, body?.htmlBody, message?.snippet, ownAddress],
@@ -211,6 +223,19 @@ function MessageDetailContent({ messageId }: { messageId: string }) {
     () => extractCloudAttachments(bodyDisplay.latestContent),
     [bodyDisplay.latestContent],
   );
+  const noteEmails = useMemo(() => {
+    const style: RecipientAddressStyle = showFullRecipientAddresses ? "full" : "address";
+    const emails = thread.messages.map((item) => ({
+      id: item.id,
+      sender: getConversationSender(item, currentAccountName),
+      recipient: item.direction === "outbound" ? noteRecipient(item, style) : undefined,
+      createdAt: item.createdAt,
+    }));
+    if (message && !emails.some((item) => item.id === message.id)) {
+      emails.push({ id: message.id, sender: fromName, recipient: message.direction === "outbound" ? noteRecipient(message, style) : undefined, createdAt: message.createdAt });
+    }
+    return emails;
+  }, [thread.messages, message, fromName, currentAccountName, showFullRecipientAddresses]);
 
   if (loading) {
     return <MessageDetailSkeleton />;
@@ -233,12 +258,23 @@ function MessageDetailContent({ messageId }: { messageId: string }) {
   const toEntries = splitEmailAddressList(message.toAddr);
   const ccEntries = splitEmailAddressList(message.ccAddr);
   const bccEntries = splitEmailAddressList(message.bccAddr);
+  const onDownloadAllAttachments = async () => {
+    const url = `/api/messages/${message.id}/attachments.zip`;
+    try {
+      const response = await authFetch(url, { method: "HEAD" });
+      if (response.status === 409 && !await confirmDestructive(t("attachment.downloadAllFlagged"))) return;
+      window.location.assign(response.status === 409 ? `${url}?acknowledge=1` : url);
+    } catch {
+      window.location.assign(url);
+    }
+  };
+
   const messageDate = (withTime: boolean) => scheduledAt
     ? formatScheduledSendTime(scheduledAt, t)
     : formatUserDate(message.createdAt, withTime
       ? { month: "short", day: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" }
       : { month: "short", day: "2-digit", year: "numeric" });
-  return (<>
+  return (<ConversationNotesProvider key={message.threadId ?? message.id} messageId={message.id} emails={noteEmails}>
 
     <div className={clsx("flex py-2 h-12 items-center px-2 border-b sticky top-0 bg-white z-40 gap-3", scrolled ? "border-neutral-200" : "border-transparent")}>
       <MessageReadingHeaderButton assistantVisible={assistantVisible} />
@@ -271,9 +307,13 @@ function MessageDetailContent({ messageId }: { messageId: string }) {
     </div>
 
     <div ref={scrollRef} onScroll={handleScroll} className="h-full overflow-y-auto overscroll-contain scrollbar-gutter-stable flex-1 min-h-0">
-      <h1 className={clsx(!isAnyPanelVisible ? "sm:pl-16" : "sm:pl-10", "px-4 pb-2 pt-2 text-2xl text-neutral-900 sm:pr-6")} title={message.subject ?? t("list.noSubject")}>
+      <h1 className={clsx("sm:pl-[78px] px-4 pb-2 pt-2 text-2xl text-neutral-900 sm:pr-6")} title={message.subject ?? t("list.noSubject")}>
         {message.subject ?? t("list.noSubject")}
       </h1>
+      <MessageInviteCard key={message.id} messageId={message.id} hasCalendarAttachment={!!findInviteAttachment(attachments)} className={clsx("sm:ml-[78px] mx-4 mb-3 sm:mr-6")} />
+      <ConversationNotes
+        className={clsx("sm:pl-[78px] px-4 sm:pr-6")}
+      />
       {/* <div className="px-6">
         <div className="mx-auto w-full max-w-[640px]">
           <SpamScoreDetails
@@ -297,9 +337,12 @@ function MessageDetailContent({ messageId }: { messageId: string }) {
         expandedAll={threadExpanded}
         onExpandedAllChange={setThreadExpanded}
       />
-      <article className={clsx("py-4 sm:px-6", !isAnyPanelVisible && "sm:pl-12")}>
+      <article data-message-id={message.id} className={"pb-4 sm:pl-0 sm:pr-6"}>
         <div className="w-full">
-          <div className="flex flex-wrap items-start justify-between gap-x-3 gap-y-1 px-4 pb-5 sm:px-0 sm:pl-4">
+          {canUnsubscribe && !unsubBannerDismissed && (
+            <MailingListBanner messageId={message.id} onDismiss={dismissUnsubBanner} />
+          )}
+          <div className="flex flex-wrap items-start justify-between gap-x-3 gap-y-1 px-4 pb-2 sm:px-0 sm:pl-[78px]">
             <div className="flex min-w-0 items-start gap-3">
               <ContactAvatar
                 mailboxId={message.mailboxId}
@@ -309,7 +352,7 @@ function MessageDetailContent({ messageId }: { messageId: string }) {
                 managedAvatarUrl={message.direction === "outbound" && message.mailboxId
                   ? `/api/mailboxes/${message.mailboxId}/avatar`
                   : undefined}
-                className="mt-2"
+                className="mt-2 sm:-ml-12"
               />
               <div className="flex-1 min-w-0">
                 <p className="text-sm text-neutral-900 mt-1.25 flex flex-row items-center gap-1 w-full  overflow-hidden">
@@ -325,7 +368,7 @@ function MessageDetailContent({ messageId }: { messageId: string }) {
                     )}
                   </b>{" "}
                   <span className="hidden sm:block text-neutral-500 text-xs flex-1 overflow-hidden text-ellipsis min-w-0">&lt;{fromAddress}&gt;</span>
-                  {message.direction === "inbound" && message.status !== "spam" && message.hasUnsubscribe && (
+                  {canUnsubscribe && unsubBannerDismissed && (
                     <MessageUnsubscribeButton key={message.id} messageId={message.id} />
                   )}
                 </p>
@@ -365,21 +408,22 @@ function MessageDetailContent({ messageId }: { messageId: string }) {
               />
             </div>
           </div>
-          <div className="mb-4 px-4 sm:px-0 sm:pl-4 sm:pr-4">
-            <SenderCheckNotice
-              message={message}
-              detailsOpen={detailsOpen}
-              onViewDetails={() => setDetailsOpen((open) => !open)}
-              announce
-            />
-          </div>
+
+          <SenderCheckNotice
+            message={message}
+            detailsOpen={detailsOpen}
+            onViewDetails={() => setDetailsOpen((open) => !open)}
+            announce
+            className="mb-4 px-4 sm:px-0 sm:pl-[78px] sm:pr-4"
+          />
+
           {detailsOpen && (
-            <div className="mb-4 px-4 sm:px-0 sm:pl-4 sm:pr-4">
+            <div className="mb-4 px-4 sm:px-0 sm:pl-[78px] sm:pr-4">
               <MessageDetailsPanel message={message} onClose={() => setDetailsOpen(false)} />
             </div>
           )}
-          {scheduledAt && <div className="px-4 sm:px-0 sm:pl-10"><ScheduledSendBanner messageId={message.id} scheduledAt={scheduledAt} onRescheduled={(next) => setData((current) => current ? { ...current, scheduledAt: next } : current)} /></div>}
-          <div className="prose max-w-none px-4 text-neutral-900 sm:px-0 sm:pl-16">
+          {scheduledAt && <div className="px-4 sm:px-0 sm:pl-[78px]"><ScheduledSendBanner messageId={message.id} scheduledAt={scheduledAt} onRescheduled={(next) => setData((current) => current ? { ...current, scheduledAt: next } : current)} /></div>}
+          <div className="prose max-w-none px-4 text-neutral-900 sm:px-0 sm:pl-[78px]">
             {bodyError ? (
               <div role="alert" className="not-prose rounded-lg border border-neutral-200 bg-neutral-50 p-4">
                 <p className="text-sm text-neutral-700">{t("source.loadFailed")}</p>
@@ -410,7 +454,7 @@ function MessageDetailContent({ messageId }: { messageId: string }) {
             ))}
           </div>
           {cloudAttachmentResult.attachments.length > 0 && (
-            <section className="mt-8 border-t border-neutral-100 px-4 py-6 sm:px-0 sm:pl-16">
+            <section className="mt-8 border-t border-neutral-100 px-4 py-6 sm:px-0 sm:pl-[78px]">
               <h2 className="mb-3 text-sm font-semibold text-neutral-900">
                 {t("message.cloudFiles", { count: cloudAttachmentResult.attachments.length })}
               </h2>
@@ -440,10 +484,20 @@ function MessageDetailContent({ messageId }: { messageId: string }) {
             </section>
           )}
           {attachments.length > 0 && (
-            <section className="mt-8 border-t border-neutral-100 px-4 py-6 sm:px-0 sm:pl-16">
-              <h2 className="mb-3 text-sm font-semibold text-neutral-900">
-                {t("message.attachments", { count: attachments.length })}
-              </h2>
+            <section className="mt-8 border-t border-neutral-100 px-4 py-6 sm:px-0 sm:pl-[78px]">
+              <div className="mb-3 flex items-center justify-between gap-3">
+                <h2 className="text-sm font-semibold text-neutral-900">
+                  {t("message.attachments", { count: attachments.length })}
+                </h2>
+                <button
+                  type="button"
+                  className="inline-flex shrink-0 items-center gap-1.5 text-xs font-medium text-blue-600 hover:text-blue-700"
+                  onClick={() => void onDownloadAllAttachments()}
+                >
+                  <ArrowDownToLine className="h-3.5 w-3.5" />
+                  {t("attachment.downloadAll")}
+                </button>
+              </div>
               <div className="grid gap-2 sm:grid-cols-2">
                 {attachments.map((attachment) => (
                   <MessageAttachmentCard
@@ -480,6 +534,15 @@ function MessageDetailContent({ messageId }: { messageId: string }) {
         }}
       />
     </div>
-  </>
+  </ConversationNotesProvider>
   );
+}
+
+/** The To and Cc names of an email, for naming an outbound email on a note chip. */
+function noteRecipient(message: { toAddr: string; ccAddr?: string | null }, style: RecipientAddressStyle): string | undefined {
+  const recipients = [message.toAddr, message.ccAddr]
+    .map((list) => formatRecipientAddressList(list, style))
+    .filter(Boolean)
+    .join(", ");
+  return recipients || undefined;
 }

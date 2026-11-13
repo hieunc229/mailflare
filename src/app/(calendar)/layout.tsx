@@ -16,11 +16,11 @@ import { MailSearchProvider } from "@/components/mail-search/mail-search-context
 import { MailboxProvider } from "@/components/mailbox-provider";
 import { MailboxSelector } from "@/components/mailbox-selector";
 import { SidebarAside, MobileMenuButton } from "@/components/sidebar-aside";
-import { SidebarHeader } from "@/components/sidebar-header";
 import { SidebarProvider } from "@/components/sidebar-state";
 import { ShortcutsProvider } from "@/components/shortcuts";
 import { Button } from "@/components/ui/button";
 import clsx from "clsx";
+import { CalendarLogoBlock } from "./calendar-logo-block";
 import { CalendarMobileUpcoming } from "./calendar-mobile-upcoming";
 import { useDashboardState } from "../(dashboard)/dashboard-state";
 import { useAssistantAvailability } from "../(dashboard)/use-assistant-availability";
@@ -56,7 +56,7 @@ export default function CalendarLayout({ children }: { children: React.ReactNode
                 <div className="flex min-h-0 min-w-0 flex-col">
                   <header className="flex h-16 w-full shrink-0 items-center gap-3 pr-4 text-sm max-md:h-auto max-md:flex-wrap max-md:gap-x-2 max-md:gap-y-2 max-md:pb-2 max-md:pr-2 max-md:pt-1">
                     <MobileMenuButton className="ml-1" />
-                    <div className="hidden shrink-0 px-3 md:block [&>div]:mb-0" style={{ width: "calc(var(--sidebar-width) + 1.5rem)" }}><SidebarHeader href="/inbox" /></div>
+                    <CalendarLogoBlock />
                     <div className="min-w-0 flex-1 basis-0 md:hidden"><div className="relative w-fit max-w-full"><Select aria-label={t("calendar.sectionLabel")} value={pathname === "/booking" ? "/booking" : "/calendar"} onChange={(event) => router.push(event.target.value)} containerClassName="contents" className="h-8 w-auto max-w-full rounded-full bg-white pl-3 pr-2 text-sm font-medium text-neutral-700"><option value="/booking">{t("calendar.bookings")}</option><option value="/calendar">{t("calendar.calendar")}</option></Select></div></div>
                     <div className="flex min-w-0 flex-1 items-center gap-3 md:overflow-x-auto max-md:contents">
                       <nav aria-label={t("calendar.sections")} className="flex shrink-0 max-md:hidden items-center rounded-full bg-white p-1">

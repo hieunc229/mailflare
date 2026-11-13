@@ -16,6 +16,9 @@ export type BookingEvent = {
 	timeRanges: string;
 	timeZone: string;
 	enabled: boolean;
+	/** The event's own guest confirmation; empty uses the built-in text. */
+	confirmationSubject?: string;
+	confirmationBody?: string;
 	isTemplate?: true;
 };
 
@@ -33,6 +36,8 @@ export type BookingForm = {
 	timeRanges: BookingTimeRange[];
 	timeZone: string;
 	enabled: boolean;
+	confirmationSubject: string;
+	confirmationBody: string;
 };
 
 export type BookingHost = { id: string; name: string; email: string; hasAvatar?: boolean };
@@ -41,4 +46,4 @@ export type BookingHostAvatarProps = { host: BookingHost; currentUserId: string;
 
 export type BookingHostMatch = { host: BookingHost | null; error: string };
 
-export type BookingEditorSection = "event" | "duration" | "location" | "availability" | "host" | null;
+export type BookingEditorSection = "event" | "duration" | "location" | "availability" | "host" | "confirmation" | null;

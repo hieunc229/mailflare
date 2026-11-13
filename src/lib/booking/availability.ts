@@ -1,4 +1,4 @@
-import { and, inArray, lt, or, gt, ne } from "drizzle-orm";
+import { and, inArray, isNull, lt, or, gt, ne } from "drizzle-orm";
 import { getDb } from "@/db";
 import { calendarEvents } from "@/db/schema";
 import { dateFromZonedFields, zonedDateFields } from "@/lib/time/utils";
@@ -35,7 +35,7 @@ export async function availableBookingSlots(env: CloudflareEnv, event: BookingEv
 	const today = zonedDateFields(now, event.timeZone);
 	today.setUTCHours(0, 0, 0, 0);
 	const end = new Date(now.getTime() + (days + 2) * 86_400_000);
-	const existing = await getDb(env).select().from(calendarEvents).where(and(inArray(calendarEvents.userId, event.hostIds), lt(calendarEvents.startsAt, end), or(gt(calendarEvents.endsAt, now), ne(calendarEvents.repeat, "none"))));
+	const existing = await getDb(env).select().from(calendarEvents).where(and(inArray(calendarEvents.userId, event.hostIds), lt(calendarEvents.startsAt, end), or(gt(calendarEvents.endsAt, now), ne(calendarEvents.repeat, "none")), or(isNull(calendarEvents.responseStatus), ne(calendarEvents.responseStatus, "needs-action"))));
 	const slots: { startsAt: string; endsAt: string; localDate: string; time: string }[] = [];
 	for (let offset = 0; offset < days; offset++) {
 		const day = new Date(today);

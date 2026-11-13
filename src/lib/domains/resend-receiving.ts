@@ -11,6 +11,7 @@ import {
 import type { ReceivingStep } from "@/lib/aws/ses-receiving-types";
 import type { DomainRow } from "@/lib/domains/types";
 import type { ResendReceivingView } from "@/lib/domains/resend-receiving-types";
+import type { ResendDomainRecord } from "@/lib/email/resend-api-types";
 
 export const resendWebhookUrl = (origin: string) => `${origin.replace(/\/$/, "")}/api/inbound/resend`;
 
@@ -24,7 +25,7 @@ async function storeWebhook(env: CloudflareEnv, id: string | null, secret: strin
 	await getDb(env).insert(appSettings).values({ id: "default", ...values }).onConflictDoUpdate({ target: appSettings.id, set: values });
 }
 
-function inboundMx(records: { type: string; value: string; priority?: number }[] | undefined) {
+function inboundMx(records: ResendDomainRecord[] | undefined) {
 	return (records ?? []).find((record) => record.type === "MX" && isInboundSmtpMx(record.value)) ?? null;
 }
 

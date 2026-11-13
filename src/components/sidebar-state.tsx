@@ -22,22 +22,19 @@ export function SidebarProvider({ children, expandedWidth = 260, mobileOverlay =
 	const [mobileOpen, setMobileOpen] = useState(false);
 	// Overlay layouts have no minified rail on phones: the menu is either fully shown over the page or hidden.
 	const overlay = mobileOverlay && mobile;
-
-	useEffect(() => {
-		setMobileOpen(false);
-	}, [pathname, mobile]);
+	const [syncedRoute, setSyncedRoute] = useState({ pathname, mobile });
 
 	// Collapse on first load and after every navigation on phones, so the overlay never sticks open.
-	useEffect(() => {
+	if (syncedRoute.pathname !== pathname || syncedRoute.mobile !== mobile) {
+		setSyncedRoute({ pathname, mobile });
+		setMobileOpen(false);
 		if (mobile) setMinimal(true);
-	}, [pathname, mobile]);
-
-	useEffect(() => {
-		if (!mobile) setMinimal(readInitialSidebarMinimal());
-	}, [mobile]);
+		else if (syncedRoute.mobile) setMinimal(readInitialSidebarMinimal());
+	}
 
 	useLayoutEffect(() => {
-		setMinimal(readInitialSidebarMinimal());
+		// eslint-disable-next-line react-hooks/set-state-in-effect -- localStorage is only readable after hydration, and the saved layout must apply before first paint
+		setMinimal(isMobileViewport() || readInitialSidebarMinimal());
 		setWidth(readInitialColumnWidth("sidebar", expandedWidth, 200, 480));
 		const frame = requestAnimationFrame(() => setWidthReady(true));
 		return () => cancelAnimationFrame(frame);

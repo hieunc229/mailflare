@@ -6,7 +6,7 @@ import { getCurrentUser } from "@/lib/auth/cookies";
 import { getDb } from "@/db";
 import { messages, outboundJobs } from "@/db/schema";
 import { getContactDisplayNameMap } from "@/lib/contacts/service";
-import { getSenderDisplayName } from "@/lib/contacts/utils";
+import { getPartyDisplayName } from "@/lib/contacts/utils";
 import { getFirstEmailAddressEntry, normalizeEmailAddress } from "@/lib/email/address";
 import { getMailboxAccessLevel, hasMailboxPermission, listAccessibleMailboxes } from "@/lib/mailboxes/access";
 import { tracksAccountIdentity } from "@/lib/profile/identity-utils";
@@ -16,6 +16,8 @@ import { scheduledMessageCondition } from "@/lib/email/scheduled";
 import { getMessageListColumns, loadConversationPage } from "./utils";
 import type { ListMessage } from "./types";
 import { getOpenCounts } from "@/lib/tracking/open-tracking";
+import { summarizeNotesForRows } from "@/lib/notes/service";
+import { isMissingTableError } from "@/lib/database-errors";
 
 export async function GET(request: Request) {
 	const env = getEnv();
@@ -162,7 +164,7 @@ export async function GET(request: Request) {
 			? inArray(messages.mailboxId, accessibleMailboxIds)
 			: eq(messages.userId, user.id);
 	// These enrichments depend only on the selected page, not on each other.
-	const [countRows, jobs, openCounts, contactMaps] = await Promise.all([
+	const [countRows, jobs, openCounts, noteSummaries, contactMaps] = await Promise.all([
 		threadIds.length > 0
 			? db
 				.select({
@@ -181,6 +183,11 @@ export async function GET(request: Request) {
 				.where(and(inArray(outboundJobs.messageId, rows.map((row) => row.id)), eq(outboundJobs.status, "queued"), isNotNull(outboundJobs.scheduledAt)))
 			: [],
 		getOpenCounts(env, rows.filter((row) => row.direction === "outbound").map((row) => row.id)),
+		// Optional: a database without the notes migration has no notes to show.
+		summarizeNotesForRows(db, rows).catch((error) => {
+			if (isMissingTableError(error)) return new Map<string, { count: number; preview: string }>();
+			throw error;
+		}),
 		Promise.all(
 			Array.from(new Set(rows.map((message) => message.userId))).map(async (userId) => [
 				userId,
@@ -219,16 +226,17 @@ export async function GET(request: Request) {
 		const folderUnread = scopedThreadCounts.get(message.threadId ?? message.id)?.unread;
 		const contactMap = contactMapsByUserId.get(message.userId);
 		const accountName = message.mailboxId ? mailboxNameMap.get(message.mailboxId) : null;
+		const firstTo = getFirstEmailAddressEntry(message.toAddr);
 		return {
 			...message,
 			snippet: message.snippet,
 			...(scheduledAtByMessageId.has(message.id) ? { scheduledAt: scheduledAtByMessageId.get(message.id) } : {}),
 			...(openCounts.has(message.id) ? { openCount: openCounts.get(message.id) } : {}),
+			...(noteSummaries.has(message.id) ? { noteCount: noteSummaries.get(message.id)!.count, notePreview: noteSummaries.get(message.id)!.preview } : {}),
 			fromContactName:
 				(message.direction === "outbound" ? accountName : null) ??
-				getSenderDisplayName(message.fromAddr, contactMap?.get(normalizeEmailAddress(message.fromAddr))),
-			toContactName:
-				contactMap?.get(normalizeEmailAddress(getFirstEmailAddressEntry(message.toAddr)))?.displayName ?? null,
+				getPartyDisplayName(message.fromAddr, contactMap?.get(normalizeEmailAddress(message.fromAddr))),
+			toContactName: getPartyDisplayName(firstTo, contactMap?.get(normalizeEmailAddress(firstTo))),
 			threadCount: threadStats?.total || 1,
 			threadUnread: (groupByThread ? folderUnread : threadStats?.unread) || 0,
 			...(groupByThread

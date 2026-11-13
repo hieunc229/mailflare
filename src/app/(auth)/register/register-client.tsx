@@ -56,23 +56,29 @@ export function RegisterClient() {
 
   const accountDomain = setupDomain ?? primaryDomain;
 
-  useEffect(() => {
-    if (step !== 3 || !accountDomain) return;
-    if (setupSkipDns) {
+  // Reset the MX check state whenever a new check starts (or DNS is skipped).
+  const [mxCheckFor, setMxCheckFor] = useState({ step, accountDomain, mxCheckRevision, setupSkipDns, t });
+  if (
+    mxCheckFor.step !== step ||
+    mxCheckFor.accountDomain !== accountDomain ||
+    mxCheckFor.mxCheckRevision !== mxCheckRevision ||
+    mxCheckFor.setupSkipDns !== setupSkipDns ||
+    mxCheckFor.t !== t
+  ) {
+    setMxCheckFor({ step, accountDomain, mxCheckRevision, setupSkipDns, t });
+    if (step === 3 && accountDomain) {
       // DNS is skipped, so there is nothing on the zone to check.
-      setMxChecking(false);
-      setMxRecordsExist(false);
+      setMxChecking(!setupSkipDns);
+      setMxRecordsExist(setupSkipDns ? false : null);
       setReplaceMxRecords(false);
       setError(null);
-      return;
     }
+  }
+
+  useEffect(() => {
+    if (step !== 3 || !accountDomain || setupSkipDns) return;
 
     let active = true;
-    setMxChecking(true);
-    setMxRecordsExist(null);
-    setReplaceMxRecords(false);
-    setError(null);
-
     void checkExistingMx(accountDomain)
       .then(({ ok, data }) => {
         if (!active) return;
@@ -128,8 +134,13 @@ export function RegisterClient() {
 
     const hostname = String(new FormData(e.currentTarget).get("domain") ?? "").toLowerCase().trim();
     if (skipDns) {
+      const { ok, data } = await submitPrimaryDomain(hostname, true);
       setLoading(false);
-      setSetupDomain(hostname);
+      if (!ok || !data.domain) {
+        setError(typeof data.error === "string" ? data.error : t("setup.domainFailed"));
+        return;
+      }
+      setSetupDomain(data.domain.hostname);
       setSetupEnableSending(true);
       setSetupSkipDns(true);
       setStep(3);
@@ -408,7 +419,7 @@ export function RegisterClient() {
 							{t("setup.checkingMx")}
 						</div>
 					)}
-					{mxRecordsExist === false && (
+					{mxRecordsExist === false && !setupSkipDns && (
 						<div className="flex items-center gap-3 rounded-2xl bg-green-50 px-4 py-3 text-sm text-green-700">
 							<CheckCircle2 className="h-4 w-4" />
 							{t("setup.noMx")}

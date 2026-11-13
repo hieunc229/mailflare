@@ -3,13 +3,10 @@ import { getEnv } from "@/lib/cloudflare";
 import { authenticateAdminApiKey } from "@/lib/api/admin-auth";
 import { addDomainSchema } from "@/lib/validators";
 import { addDomainForUser, listUserDomains } from "@/lib/domains/service";
+import { domainListOwnerIds } from "@/lib/domains/utils";
 import { getDomainDnsView, summariseDomainDns } from "@/lib/domains/dns-view";
 import { getDomainProvisioningError } from "@/lib/domains/errors";
 import type { DnsStatusSummary } from "@/lib/dns-status";
-
-function ownerId(user: { id: string; canManageMailboxes: boolean; createdByUserId: string | null }) {
-	return user.canManageMailboxes && user.createdByUserId ? user.createdByUserId : user.id;
-}
 
 export async function GET(request: Request) {
 	const env = getEnv();
@@ -18,7 +15,7 @@ export async function GET(request: Request) {
 		return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 	}
 
-	const domains = await listUserDomains(env, ownerId(auth.user));
+	const domains = await listUserDomains(env, domainListOwnerIds(auth.user));
 	const results = await Promise.allSettled(
 		domains.map((domain) => summariseDomainDns(env, domain)),
 	);

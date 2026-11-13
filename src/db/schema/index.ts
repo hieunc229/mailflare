@@ -336,6 +336,8 @@ export const messages = sqliteTable(
 		references: text("references_header"),
 		/** Whether the message offers a way to unsubscribe (List-Unsubscribe header or a body link), so lists can show the action without reading the raw MIME. */
 		hasUnsubscribe: bool("has_unsubscribe").notNull().default(false),
+		/** The user's answer to the calendar invitation this message carries: accepted, tentative or declined; null until answered. */
+		inviteResponse: text("invite_response"),
 		spamScore: integer("spam_score"),
 		spamVerdict: text("spam_verdict", { enum: ["inbox", "suspicious", "spam"] }),
 		spamSignals: text("spam_signals"),
@@ -586,6 +588,31 @@ export const followUps = sqliteTable(
 	],
 );
 
+/**
+ * Notes on a conversation, shared with everyone who can read the mailbox.
+ * `threadKey` is the conversation key the message list uses: the thread id, or
+ * the lone message's id when the conversation was never threaded. `messageId`
+ * is set when the note is about one email of the conversation.
+ */
+export const conversationNotes = sqliteTable(
+	"conversation_notes",
+	{
+		id: text("id").primaryKey(),
+		mailboxId: text("mailbox_id").notNull().references(() => mailboxes.id, { onDelete: "cascade" }),
+		threadKey: text("thread_key").notNull(),
+		messageId: text("message_id").references(() => messages.id, { onDelete: "set null" }),
+		html: text("html").notNull(),
+		authorUserId: text("author_user_id").references((): AnySQLiteColumn => users.id, { onDelete: "set null" }),
+		createdAt: timestamp("created_at").notNull().$defaultFn(() => new Date()),
+		updatedAt: timestamp("updated_at").notNull().$defaultFn(() => new Date()),
+	},
+	(t) => [
+		index("conversation_notes_mailbox_thread_idx").on(t.mailboxId, t.threadKey, t.createdAt),
+		index("conversation_notes_message_idx").on(t.messageId),
+		index("conversation_notes_author_idx").on(t.authorUserId),
+	],
+);
+
 export const emailTemplates = sqliteTable(
 	"email_templates",
 	{
@@ -623,6 +650,16 @@ export const calendarEvents = sqliteTable(
 		reminderMinutes: integer("reminder_minutes"),
 		/** Start of the latest occurrence a reminder was sent for; dedupes the five-minute cron. */
 		lastRemindedStart: timestamp("last_reminded_start"),
+		/** null for events the user made; "needs-action", "tentative" or "accepted" for events created from an emailed invitation. */
+		responseStatus: text("response_status"),
+		/** Message that carried the invitation, so the calendar can answer it. */
+		inviteMessageId: text("invite_message_id"),
+		/** Lower-case address of the sender whose invitation created the event; only that sender's mail may change it. */
+		inviteSender: text("invite_sender"),
+		/** SEQUENCE of the invitation revision the event reflects, so an older revision arriving late is ignored. */
+		inviteSequence: integer("invite_sequence"),
+		/** JSON map of guest address to accepted, tentative or declined, filled from their replies to an invitation this user sent. */
+		attendeeResponses: text("attendee_responses"),
 		createdAt: timestamp("created_at").notNull().$defaultFn(() => new Date()),
 		updatedAt: timestamp("updated_at").notNull().$defaultFn(() => new Date()),
 	},
@@ -655,6 +692,17 @@ export const bookingEvents = sqliteTable(
 	},
 	(t) => [index("booking_events_user_idx").on(t.userId), uniqueIndex("booking_events_user_slug_idx").on(t.userId, t.slug)],
 );
+
+/**
+ * A booking event's own guest confirmation. Kept out of `booking_events` because the public booking page selects
+ * the whole row, which would fail before the migration; an empty subject or body falls back to the built-in text.
+ */
+export const bookingConfirmationTemplates = sqliteTable("booking_confirmation_templates", {
+	eventId: text("event_id").primaryKey().references(() => bookingEvents.id, { onDelete: "cascade" }),
+	subject: text("subject").notNull().default(""),
+	body: text("body").notNull().default(""),
+	updatedAt: timestamp("updated_at").notNull().$defaultFn(() => new Date()),
+});
 
 export const routingRules = sqliteTable(
 	"routing_rules",
@@ -1031,7 +1079,7 @@ export const appSettings = sqliteTable("app_settings", {
 	iconKey: text("icon_key"),
 	agentEnabled: bool("agent_enabled").notNull().default(true),
 	agentProvider: text("agent_provider", { enum: ["cloudflare", "compatible"] }),
-	agentPreset: text("agent_preset", { enum: ["openai", "openrouter", "groq", "custom"] }),
+	agentPreset: text("agent_preset", { enum: ["openai", "anthropic", "openrouter", "groq", "custom"] }),
 	agentBaseUrl: text("agent_base_url"),
 	agentApiKey: text("agent_api_key"),
 	agentModel: text("agent_model"),

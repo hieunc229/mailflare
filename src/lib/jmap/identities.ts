@@ -146,7 +146,7 @@ export const emailSubmissionGet: JmapMethodHandler = async (ctx, args) => ({
 	accountId: ctx.accountId,
 	state: await getEmailState(ctx),
 	list: [],
-	notFound: ((args.ids ?? []) as string[]) ?? [],
+	notFound: (args.ids ?? []) as string[],
 });
 export const emailSubmissionQuery: JmapMethodHandler = async (ctx) => ({ accountId: ctx.accountId, queryState: await getEmailState(ctx), canCalculateChanges: false, position: 0, ids: [], total: 0 });
 export const emailSubmissionChanges: JmapMethodHandler = async () => ({ type: "cannotCalculateChanges" });

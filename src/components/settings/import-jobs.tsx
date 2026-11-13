@@ -27,9 +27,8 @@ export function ImportJobs({ refreshKey }: { refreshKey: number }) {
 	const [resumeError, setResumeError] = useState<string | null>(null);
 	const previous = useRef<Map<string, ImportJobSummary["status"]>>(new Map());
 
-	const load = useCallback(async () => {
-		try {
-			const next = await fetchImportJobs();
+	const load = useCallback(() => fetchImportJobs()
+		.then((next) => {
 			const finishedNow = next.some((job) => {
 				const before = previous.current.get(job.id);
 				return !!before && (before === "queued" || before === "running") && !isImportJobActive(job);
@@ -37,12 +36,13 @@ export function ImportJobs({ refreshKey }: { refreshKey: number }) {
 			previous.current = new Map(next.map((job) => [job.id, job.status]));
 			setJobs(next);
 			if (finishedNow) window.dispatchEvent(new Event("mailflare:messages-changed"));
-		} catch {
+		})
+		.catch(() => {
 			// Keep the last list; the next poll retries.
-		} finally {
+		})
+		.finally(() => {
 			setLoaded(true);
-		}
-	}, []);
+		}), []);
 
 	const hasActive = jobs.some(isImportJobActive);
 

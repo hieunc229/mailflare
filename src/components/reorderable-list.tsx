@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import type { PointerEvent as ReactPointerEvent } from "react";
 import { createPortal } from "react-dom";
 import { cn } from "@/lib/utils";
@@ -8,21 +8,25 @@ import { moveItem, readStorage, resolveLayout, writeStorage } from "./reorderabl
 import type { ReorderableDrag, ReorderableDropTarget, ReorderableLayout, ReorderableListProps } from "./reorderable-list-types";
 
 const HOLD_MS = 350;
+const subscribeNothing = () => () => {};
+const hydratedOnClient = () => true;
+const hydratedOnServer = () => false;
 const CANCEL_DISTANCE = 6;
 
 // Press and hold an item, then drag it. A ghost follows the pointer and a blue line marks where
 // it will land; nothing moves until you let go. Lists can hand items to each other through the
 // `before` row between them.
 export function ReorderableList({ lists, storageKey, enabled = true }: ReorderableListProps) {
-	const [stored, setStored] = useState<ReorderableLayout>({});
+	// Storage is read after hydration so the server and first client render agree.
+	const hydrated = useSyncExternalStore(subscribeNothing, hydratedOnClient, hydratedOnServer);
+	const [saved, setSaved] = useState<{ key: string; layout: ReorderableLayout } | null>(null);
+	const stored = saved?.key === storageKey ? saved.layout : hydrated ? readStorage<ReorderableLayout>(storageKey, {}) : {};
 	const [drag, setDrag] = useState<ReorderableDrag | null>(null);
 	const [target, setTarget] = useState<ReorderableDropTarget | null>(null);
 	const containerRef = useRef<HTMLDivElement | null>(null);
 	const hold = useRef<{ timer: number; x: number; y: number } | null>(null);
 	const suppressClick = useRef(false);
 	const latest = useRef({ layout: {} as ReorderableLayout, target: null as ReorderableDropTarget | null });
-
-	useEffect(() => { setStored(readStorage<ReorderableLayout>(storageKey, {})); }, [storageKey]);
 
 	const layout = resolveLayout(Object.fromEntries(lists.map((list) => [list.id, list.items.map((item) => item.id)])), stored);
 	const nodes = new Map(lists.flatMap((list) => list.items.map((item) => [item.id, item.node] as const)));
@@ -67,7 +71,7 @@ export function ReorderableList({ lists, storageKey, enabled = true }: Reorderab
 			const drop = latest.current.target;
 			if (commit && drop) {
 				const next = moveItem(latest.current.layout, dragId, drop.listId, drop.beforeId);
-				setStored(next);
+				setSaved({ key: storageKey, layout: next });
 				writeStorage(storageKey, next);
 			}
 			setDrag(null);

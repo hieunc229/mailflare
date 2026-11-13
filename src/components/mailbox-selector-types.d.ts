@@ -31,3 +31,7 @@ export type MailboxAccountRowProps = {
 	avatarUrl?: string;
 	onSelect: () => void;
 };
+
+export type AppsMenuProps = {
+	user: MailboxSelectorUser | null;
+};

@@ -1,24 +1,25 @@
 "use client";
 
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useEffectEvent, useRef, useState, useSyncExternalStore } from "react";
 import type { ProgressiveAvatarImageProps } from "./progressive-avatar-image-types";
 import { getAvatarPreviewUrl, rememberAvatarLoaded, wasAvatarLoaded } from "./progressive-avatar-image-utils";
+
+const subscribeNothing = () => () => {};
+const hydratedOnClient = () => true;
+const hydratedOnServer = () => false;
 
 export function ProgressiveAvatarImage({ src, alt, className, onError, skipPreview = false }: ProgressiveAvatarImageProps) {
 	const [previewReadyFor, setPreviewReadyFor] = useState<string | null>(null);
 	const [previewFailedFor, setPreviewFailedFor] = useState<string | null>(null);
 	const [fullReadyFor, setFullReadyFor] = useState<string | null>(null);
-	// Set after mount so server and first client render agree; the effect below then skips the preview.
-	const [cachedFor, setCachedFor] = useState<string | null>(null);
+	// Checked once per src after hydration so server and first client render agree; the effect below then skips the preview.
+	const hydrated = useSyncExternalStore(subscribeNothing, hydratedOnClient, hydratedOnServer);
+	const [cachedFor, setCachedFor] = useState<{ src: string; cached: boolean } | null>(null);
+	if (hydrated && cachedFor?.src !== src) setCachedFor({ src, cached: wasAvatarLoaded(src) });
 	const [failedFor, setFailedFor] = useState<string | null>(null);
 	const imageRef = useRef<HTMLImageElement>(null);
-	const onErrorRef = useRef(onError);
-	onErrorRef.current = onError;
-	const showFull = skipPreview || previewFailedFor === src || fullReadyFor === src || cachedFor === src;
-
-	useLayoutEffect(() => {
-		if (wasAvatarLoaded(src)) setCachedFor(src);
-	}, [src]);
+	const reportError = useEffectEvent(() => onError?.());
+	const showFull = skipPreview || previewFailedFor === src || fullReadyFor === src || (cachedFor?.src === src && cachedFor.cached);
 
 	useEffect(() => {
 		const image = imageRef.current;
@@ -43,7 +44,7 @@ export function ProgressiveAvatarImage({ src, alt, className, onError, skipPrevi
 		image.onerror = () => {
 			if (!cancelled) {
 				setFailedFor(src);
-				onErrorRef.current?.();
+				reportError();
 			}
 		};
 		image.src = src;
@@ -71,7 +72,7 @@ export function ProgressiveAvatarImage({ src, alt, className, onError, skipPrevi
 			onError={() => {
 				if (showFull) {
 					setFailedFor(src);
-					onErrorRef.current?.();
+					onError?.();
 				} else {
 					setPreviewFailedFor(src);
 				}

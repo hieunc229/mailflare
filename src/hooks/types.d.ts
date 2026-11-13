@@ -21,6 +21,7 @@ export type Message = {
 	/** Resolved sender label: a manually named contact, otherwise this message's From name. */
 	fromContactName?: string | null;
 	fromContactHasAvatar?: boolean;
+	/** Resolved recipient label: a manually named contact, otherwise this message's To name. */
 	toContactName?: string | null;
 	subject: string | null;
 	snippet: string | null;
@@ -35,6 +36,9 @@ export type Message = {
 	scheduledAt?: string | null;
 	/** Opens counted by the read-receipt pixel; absent when the message was sent without one. */
 	openCount?: number;
+	/** Notes on the conversation, with the text of the latest ones; absent when it has none. */
+	noteCount?: number;
+	notePreview?: string;
 	threadId: string | null;
 	inReplyTo?: string | null;
 	references?: string | null;

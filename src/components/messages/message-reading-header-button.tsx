@@ -31,7 +31,7 @@ export function MessageReadingHeaderButton({ assistantVisible }: MessageReadingH
 				aria-label={label ?? t("message.nav.listUnavailable")}
 				aria-pressed={singleColumn ? undefined : visible}
 			>
-				{singleColumn ? <ArrowLeft size={18} /> : <Columns2 size={18} />}
+				{singleColumn ? <ArrowLeft size={16} /> : <Columns2 size={16} />}
 			</button>
 		</Tooltip>
 	);

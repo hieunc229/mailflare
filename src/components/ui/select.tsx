@@ -113,7 +113,7 @@ export const Select = React.forwardRef<HTMLButtonElement, SelectProps>(
           <SelectPrimitive.Portal>
             <SelectPrimitive.Content
               position="popper"
-              align="start"
+              align="end"
               sideOffset={4}
               collisionPadding={8}
               className="z-[300] max-h-(--radix-select-content-available-height) min-w-(--radix-select-trigger-width) overflow-hidden rounded-lg border border-neutral-200 bg-white text-sm text-neutral-900 shadow-lg"

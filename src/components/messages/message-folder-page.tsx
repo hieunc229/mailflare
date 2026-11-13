@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { confirmDestructive, alertDialog } from "@/components/ui/confirm-dialog";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { MouseEvent } from "react";
 import { Archive, ChevronLeft, ChevronRight, ListFilter, Mail, MailOpen, Trash2 } from "@/components/icons";
 import { useLanguage } from "@/components/language-provider";
@@ -28,6 +28,7 @@ import { useMessageNavigation } from "./message-navigation";
 import { rememberOpenedUnreadMessage } from "./message-detail-navigation-utils";
 import { useConversationView } from "./use-conversation-view";
 import { OpenedIndicator } from "./message-open-status";
+import { MessageNotesPopover, NoteBadge } from "./message-notes-popover";
 import type { MessageFolderPageProps, MessageListRowProps, RowMessageAction } from "./types";
 import {
 	formatMessageListTimestamp,
@@ -52,10 +53,30 @@ import {
 } from "@/lib/messages/permanent-delete-utils";
 import clsx from "clsx";
 import { DueFollowUps } from "@/components/follow-ups/due-follow-ups";
+import { getUserTimeZone, zonedDateFields } from "@/lib/time/utils";
 
 const pageSize = 25;
 
-function MessageListRow({
+function getRowMessageIds(message: Message): string[] {
+	return message.threadMessageIds ?? [message.id];
+}
+
+let todayCacheZone = "";
+let todayCacheValue = "";
+let todayCacheExpiresAt = 0;
+
+function getTodayKey(): string {
+	const zone = getUserTimeZone();
+	const now = Date.now();
+	if (todayCacheZone !== zone || now >= todayCacheExpiresAt) {
+		todayCacheZone = zone;
+		todayCacheExpiresAt = now + 60_000;
+		todayCacheValue = zonedDateFields(new Date(now), zone).toISOString().slice(0, 10);
+	}
+	return todayCacheValue;
+}
+
+function MessageListRowComponent({
 	message,
 	config,
 	selected,
@@ -67,16 +88,25 @@ function MessageListRow({
 	onMessageAction,
 	onOpening,
 	dragMessageIds,
+	todayKey,
 }: MessageListRowProps) {
 	const { t } = useLanguage();
 	const Icon = config.icon;
 	const [read, setRead] = useState(message.read);
 	const [threadUnread, setThreadUnread] = useState(message.threadUnread);
 	const [starred, setStarred] = useState(message.starred);
-	useEffect(() => setRead(message.read), [message.read]);
-	useEffect(() => setThreadUnread(message.threadUnread), [message.threadUnread]);
-	useEffect(() => setStarred(message.starred), [message.starred]);
-	const rowMessage = { ...message, read, starred, threadUnread };
+	// Follow server updates to each flag independently, keeping local optimistic values otherwise.
+	const [prevFlags, setPrevFlags] = useState({ read: message.read, threadUnread: message.threadUnread, starred: message.starred });
+	if (message.read !== prevFlags.read || message.threadUnread !== prevFlags.threadUnread || message.starred !== prevFlags.starred) {
+		setPrevFlags({ read: message.read, threadUnread: message.threadUnread, starred: message.starred });
+		if (message.read !== prevFlags.read) setRead(message.read);
+		if (message.threadUnread !== prevFlags.threadUnread) setThreadUnread(message.threadUnread);
+		if (message.starred !== prevFlags.starred) setStarred(message.starred);
+	}
+	const rowMessage = useMemo(
+		() => ({ ...message, read, starred, threadUnread }),
+		[message, read, starred, threadUnread],
+	);
 	const unread = isMessageListRowUnread(rowMessage);
 	const draggable = config.folder === "inbox" && message.direction === "inbound";
 	const party = getMessageParty(rowMessage, config.folder, currentAccountName, t);
@@ -86,7 +116,7 @@ function MessageListRow({
 
 	const affectsInboxCount = config.folder === "inbox" && !config.folderId;
 
-	async function runRowAction(action: RowMessageAction) {
+	const runRowAction = useCallback(async (action: RowMessageAction) => {
 		const previousRead = read;
 		const previousThreadUnread = threadUnread;
 		const unreadDelta = !affectsInboxCount || (action !== "read" && action !== "unread")
@@ -110,13 +140,13 @@ function MessageListRow({
 			}
 			throw error;
 		}
-	}
+	}, [affectsInboxCount, message.id, message.threadMessageIds, onMessageAction, read, rowMessage, threadUnread]);
 
 	const swipeable = compact && (config.folder === "inbox" || config.folder === "snoozed") && message.direction === "inbound";
 
 	function onMessageNavigate(event: MouseEvent<HTMLAnchorElement>) {
 		const plainClick = !event.metaKey && !event.ctrlKey && !event.shiftKey && !event.altKey;
-		if (plainClick) onOpening?.();
+		if (plainClick) onOpening?.(message.id);
 		if (!read && plainClick) {
 			rememberOpenedUnreadMessage(message.id);
 			const previousThreadUnread = threadUnread;
@@ -145,7 +175,7 @@ function MessageListRow({
 				draggable={draggable}
 				onDragStart={(event) => {
 					if (!draggable) return;
-					setMessageDragData(event.dataTransfer, { messageIds: dragMessageIds });
+					setMessageDragData(event.dataTransfer, { messageIds: dragMessageIds ?? message.threadMessageIds ?? [message.id] });
 				}}
 			>
 				<Checkbox
@@ -173,10 +203,11 @@ function MessageListRow({
 							{(message.threadCount ?? 1) > 1 && (
 								<span className="ml-2 text-xs font-normal text-neutral-500">{message.threadCount}</span>
 							)}
+							<NoteBadge count={message.noteCount} className="ml-2" />
 						</span>
 						<span className={clsx(unread ?"font-medium":"text-neutral-500","shrink-0 text-[11px]")}>
 							<OpenedIndicator count={message.openCount} />
-							{message.scheduledAt ? formatScheduledSendTime(message.scheduledAt, t) : formatMessageListTimestamp(message.createdAt)}
+							{message.scheduledAt ? formatScheduledSendTime(message.scheduledAt, t) : formatMessageListTimestamp(message.createdAt, todayKey)}
 						</span>
 					</span>
 					<span
@@ -246,7 +277,11 @@ function MessageListRow({
 					<span className="ml-2 text-xs text-neutral-500">{message.threadCount}</span>
 				)}
 			</span>
-			<span className="truncate text-neutral-700">
+			<span className="flex min-w-0 items-center text-neutral-700">
+				{/* A fixed slot keeps every subject aligned, with or without notes. */}
+				<span className="w-11 shrink-0">
+					{message.noteCount ? <MessageNotesPopover messageId={message.id} count={message.noteCount} preview={message.notePreview} /> : null}
+				</span>
 				<Link
 					href={href}
 					onClick={config.folder === "drafts" ? undefined : onMessageNavigate}
@@ -256,7 +291,7 @@ function MessageListRow({
 					onBlur={config.folder === "drafts" ? undefined : navigation.cancelPrefetch}
 					onTouchStart={config.folder === "drafts" ? undefined : navigation.prefetchNow}
 					aria-current={active ? "true" : undefined}
-					className="focus-visible:outline-none after:absolute after:inset-0"
+					className="min-w-0 truncate focus-visible:outline-none after:absolute after:inset-0"
 				>
 					<span className={unread ? "font-semibold text-neutral-900" : ""}>
 						{rowMessage.subject ?? t("list.noSubject")}
@@ -270,7 +305,7 @@ function MessageListRow({
 					}`}
 			>
 				<OpenedIndicator count={message.openCount} />
-				{message.scheduledAt ? formatScheduledSendTime(message.scheduledAt, t) : formatMessageListTimestamp(message.createdAt)}
+				{message.scheduledAt ? formatScheduledSendTime(message.scheduledAt, t) : formatMessageListTimestamp(message.createdAt, todayKey)}
 			</time>
 		</>
 	);
@@ -296,7 +331,7 @@ function MessageListRow({
 			draggable={draggable}
 			onDragStart={(event) => {
 				if (!draggable) return;
-				setMessageDragData(event.dataTransfer, { messageIds: dragMessageIds });
+				setMessageDragData(event.dataTransfer, { messageIds: dragMessageIds ?? message.threadMessageIds ?? [message.id] });
 			}}
 		>
 			<Checkbox
@@ -315,6 +350,8 @@ function MessageListRow({
 		</div>
 	);
 }
+
+const MessageListRow = memo(MessageListRowComponent);
 
 export function MessageFolderPage({
 	config,
@@ -340,16 +377,17 @@ export function MessageFolderPage({
 	const openingTimer = useRef<number | null>(null);
 	const [conversationView] = useConversationView();
 	const visibleOpeningMessageId = openingMessageId === selectedMessageId ? null : openingMessageId;
+	const todayKey = getTodayKey();
 
 	useEffect(() => () => {
 		if (openingTimer.current) window.clearTimeout(openingTimer.current);
 	}, []);
 
-	function markMessageOpening(messageId: string) {
+	const markMessageOpening = useCallback((messageId: string) => {
 		setOpeningMessageId(messageId);
 		if (openingTimer.current) window.clearTimeout(openingTimer.current);
 		openingTimer.current = window.setTimeout(() => setOpeningMessageId(null), 3000);
-	}
+	}, []);
 	const grouped = conversationView && config.folder !== "drafts";
 	const offset = listState?.offset ?? internalOffset;
 	const setOffset = listState?.setOffset ?? setInternalOffset;
@@ -380,13 +418,17 @@ export function MessageFolderPage({
 		() => selectedMessages.map((message) => message.id),
 		[selectedMessages],
 	);
+	const selectedIdSet = useMemo(() => new Set(selectedIds), [selectedIds]);
 	const hasUnreadSelection = selectedMessages.some((message) => !message.read);
-	const allVisibleSelected = messages.length > 0 && messages.every((message) => selectedIds.includes(message.id));
+	const allVisibleSelected = messages.length > 0 && messages.every((message) => selectedIdSet.has(message.id));
 	// In conversation view a row stands for every message of its thread in this
 	// folder, so actions and drags carry all of them.
-	const rowMessageIds = (message: Message) => message.threadMessageIds ?? [message.id];
-	const expandSelectedIds = (ids: string[]) =>
-		ids.flatMap((id) => rowMessageIds(messages.find((message) => message.id === id) ?? { id } as Message));
+	const expandSelectedIds = useCallback(
+		(ids: string[]) =>
+			ids.flatMap((id) => getRowMessageIds(messages.find((message) => message.id === id) ?? { id } as Message)),
+		[messages],
+	);
+	const selectedDragIds = useMemo(() => expandSelectedIds(selectedIds), [expandSelectedIds, selectedIds]);
 
 	// A split-layout list keeps this state in MessageSplitLayout, which resets
 	// it when the list view changes. Standalone lists (drafts) own it here.
@@ -434,7 +476,7 @@ export function MessageFolderPage({
 		setOffset(total > 0 ? Math.floor((total - 1) / limit) * limit : 0);
 	}, [isLoading, offset, messages.length, total, limit, setOffset]);
 
-	function updateSelectedMessage(messageId: string, selected: boolean) {
+	const updateSelectedMessage = useCallback((messageId: string, selected: boolean) => {
 		const message = messages.find((item) => item.id === messageId);
 		if (!message) return;
 
@@ -443,7 +485,15 @@ export function MessageFolderPage({
 			if (current.some((item) => item.id === messageId)) return current;
 			return [...current, { id: message.id, read: message.read && !(message.threadUnread ?? 0) }];
 		});
-	}
+	}, [messages, setSelectedMessages]);
+
+	const handleMessageAction = useCallback((messageId: string, action: RowMessageAction) => {
+		setActionError(null);
+		return runBulkMessageAction(expandSelectedIds([messageId]), action, action !== "read" && action !== "unread").catch((error) => {
+			setActionError(error instanceof PartialDeleteError ? t("actions.error.deleteSkipped") : t("actions.error.update"));
+			throw error;
+		});
+	}, [expandSelectedIds, t]);
 
 	function toggleAllVisible(selected: boolean) {
 		const visibleIds = new Set(messages.map((message) => message.id));
@@ -504,11 +554,11 @@ export function MessageFolderPage({
 		const inboxUnreadDelta = readValue === null || config.folder !== "inbox" || config.folderId
 			? 0
 			: messages
-				.filter((message) => selectedIds.includes(message.id))
+				.filter((message) => selectedIdSet.has(message.id))
 				.reduce((total, message) => total + getUnreadFlipCount(message, readValue), 0) * (readValue ? -1 : 1);
 		if (readValue !== null) {
 			updateMessages((current) => current.map((message) =>
-				selectedIds.includes(message.id)
+				selectedIdSet.has(message.id)
 					? { ...message, read: readValue, ...(message.threadMessageIds ? { threadUnread: readValue ? 0 : message.threadMessageIds.length } : {}) }
 					: message,
 			));
@@ -637,21 +687,16 @@ export function MessageFolderPage({
 							key={message.id}
 							message={message}
 							config={config}
-							selected={selectedIds.includes(message.id)}
+							selected={selectedIdSet.has(message.id)}
 							active={message.id === selectedMessageId}
 							opening={message.id === visibleOpeningMessageId}
-							onOpening={() => markMessageOpening(message.id)}
+							onOpening={markMessageOpening}
 							compact={compact || isMobile}
 							currentAccountName={currentAccountName}
 							onSelectedChange={updateSelectedMessage}
-							onMessageAction={(messageId, action) => {
-								setActionError(null);
-								return runBulkMessageAction(expandSelectedIds([messageId]), action, action !== "read" && action !== "unread").catch((error) => {
-									setActionError(error instanceof PartialDeleteError ? t("actions.error.deleteSkipped") : t("actions.error.update"));
-									throw error;
-								});
-							}}
-							dragMessageIds={expandSelectedIds(selectedIds.includes(message.id) ? selectedIds : [message.id])}
+							onMessageAction={handleMessageAction}
+							dragMessageIds={selectedIdSet.has(message.id) ? selectedDragIds : undefined}
+							todayKey={todayKey}
 						/>
 					))}
 				</div>

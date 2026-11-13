@@ -75,6 +75,8 @@ export const primaryDomainRegisterSchema = z.object({
 
 export const setupDomainSchema = z.object({
 	hostname: z.string().min(3),
+	/** Record the domain without looking it up on Cloudflare. The operator sets DNS by hand. */
+	skipDns: z.boolean().optional(),
 });
 
 export const addDomainSchema = z.object({

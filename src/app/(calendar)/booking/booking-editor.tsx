@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { CalendarDays, ChevronDown, Clock3, MapPin, MoreHorizontal, Plus, Trash2, UserRound } from "@/components/icons";
+import { useRef, useState } from "react";
+import { CalendarDays, ChevronDown, Clock3, Mail, MapPin, MoreHorizontal, Plus, Trash2, UserRound } from "@/components/icons";
+import { BOOKING_TEMPLATE_PLACEHOLDERS, CONFIRMATION_BODY_MAX, CONFIRMATION_SUBJECT_MAX, DEFAULT_CONFIRMATION_BODY, DEFAULT_CONFIRMATION_SUBJECT } from "@/lib/booking/confirmation-utils";
 import clsx from "clsx";
 import { useLanguage } from "@/components/language-provider";
 import { folderColorKeys } from "@/lib/folders/color-keys";
@@ -24,11 +25,26 @@ export function BookingEditor({ form, open, editingId, username, hosts, canManag
 	const [moreOpen, setMoreOpen] = useState(false);
 	const [hostQuery, setHostQuery] = useState("");
 	const [hostError, setHostError] = useState("");
-	useEffect(() => { if (open) { setActiveSection(null); setNameEditing(false); setMoreOpen(false); setHostQuery(""); setHostError(""); } }, [editingId, open]);
+	// Opening the editor, or switching it to another booking, starts from a collapsed, clean panel.
+	const [shownFor, setShownFor] = useState({ editingId, open });
+	if (shownFor.editingId !== editingId || shownFor.open !== open) {
+		setShownFor({ editingId, open });
+		if (open) { setActiveSection(null); setNameEditing(false); setMoreOpen(false); setHostQuery(""); setHostError(""); }
+	}
 	const sectionClass = "border-b border-neutral-200 px-5 py-5";
 	const headingClass = "flex w-full items-center justify-between gap-3 text-left text-base font-semibold text-neutral-900";
 	const fieldClass = "h-10 w-full rounded-xl border border-neutral-200 bg-white px-3 text-sm";
 	const toggle = (section: BookingEditorSection) => setActiveSection((current) => current === section ? null : section);
+	const confirmationBodyRef = useRef<HTMLTextAreaElement>(null);
+	// Placeholder chips go where the cursor is in the message, or at its end.
+	function insertPlaceholder(name: string) {
+		const field = confirmationBodyRef.current;
+		const token = `{${name}}`;
+		const start = field?.selectionStart ?? form.confirmationBody.length;
+		const end = field?.selectionEnd ?? start;
+		onChange({ ...form, confirmationBody: form.confirmationBody.slice(0, start) + token + form.confirmationBody.slice(end) });
+		requestAnimationFrame(() => { field?.focus(); field?.setSelectionRange(start + token.length, start + token.length); });
+	}
 
 	return <aside aria-label={t("booking.editor.details")} aria-hidden={!open} inert={!open} onTransitionEnd={(event) => { if (event.target === event.currentTarget && event.propertyName === "width" && !open) onClosed(); }} className={clsx("relative z-10 h-full shrink-0 overflow-hidden transition-[width] duration-300 ease-in-out motion-reduce:transition-none", open ? "w-full sm:w-[392px]" : "w-0")}>
 		<div className={clsx("flex h-full w-[min(392px,100vw)] flex-col overflow-hidden rounded-t-2xl bg-white shadow-2xl shadow-neutral-100 transition-transform duration-300 ease-in-out motion-reduce:transition-none", open ? "translate-x-0" : "translate-x-full")}>
@@ -56,6 +72,16 @@ export function BookingEditor({ form, open, editingId, username, hosts, canManag
 						<div className="space-y-2">{form.hostIds.map((id) => { const host = hosts.find((item) => item.id === id); const isCurrentUser = id === currentUserId; return <div key={id} className="flex items-center gap-3 rounded-xl bg-neutral-50 px-3 py-2">{host ? <BookingHostAvatar host={host} currentUserId={currentUserId} /> : <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-neutral-200 text-neutral-500"><UserRound className="h-4 w-4" /></span>}<span className="min-w-0 flex-1"><span className="block truncate text-sm font-medium text-neutral-900">{host?.name || t("booking.editor.unavailableUser")}{isCurrentUser ? t("booking.editor.you") : ""}</span><span className="block truncate text-xs text-neutral-500">{host?.email}</span></span>{!isCurrentUser && <button type="button" onClick={() => onChange({ ...form, hostIds: form.hostIds.filter((hostId) => hostId !== id) })} className="text-xs font-medium text-neutral-500 hover:text-red-600">{t("resend.remove")}</button>}</div>; })}</div>
 						{canManageHosts && <form onSubmit={(event) => { event.preventDefault(); const match = matchBookingHost(hosts, hostQuery, t); if (!match.host) { setHostError(match.error); return; } if (form.hostIds.includes(match.host.id)) { setHostError(t("booking.editor.alreadyHost")); return; } if (form.hostIds.length >= 20) { setHostError(t("booking.editor.maxHosts")); return; } onChange({ ...form, hostIds: [...form.hostIds, match.host.id] }); setHostQuery(""); setHostError(""); }}><label htmlFor="booking-host-input" className="block text-sm font-medium text-neutral-700">{t("booking.editor.addHost")}</label><div className="mt-2 flex gap-2"><Input id="booking-host-input" value={hostQuery} onChange={(event) => { setHostQuery(event.target.value); setHostError(""); }} placeholder={t("booking.editor.nameOrEmail")} autoComplete="off" aria-invalid={!!hostError} aria-describedby={hostError ? "booking-host-error" : undefined} className="min-w-0 flex-1" /><Button type="submit" variant="outline" className="shrink-0 rounded-full">{t("booking.editor.add")}</Button></div>{hostError && <p id="booking-host-error" role="alert" className="mt-2 text-xs text-red-600">{hostError}</p>}</form>}
 					</div> : <button type="button" onClick={() => toggle("host")} className="mt-2 flex w-full items-center gap-2 text-left text-sm text-neutral-500"><span className="flex shrink-0 -space-x-1">{form.hostIds.slice(0, 3).map((id) => { const host = hosts.find((item) => item.id === id); return host ? <BookingHostAvatar key={id} host={host} currentUserId={currentUserId} size="small" /> : <span key={id} className="flex h-5 w-5 items-center justify-center rounded-full bg-neutral-200"><UserRound className="h-3 w-3" /></span>; })}</span><span className="truncate">{form.hostIds.map((id) => hosts.find((host) => host.id === id)?.name ?? t("booking.editor.userFallback")).join(", ")}</span></button>}
+				</section>
+				<section className={sectionClass}>
+					<button type="button" onClick={() => toggle("confirmation")} aria-expanded={activeSection === "confirmation"} className={headingClass}><span>{t("booking.editor.confirmation")}</span><ChevronDown className={clsx("h-5 w-5 text-neutral-500 transition-transform", activeSection === "confirmation" && "rotate-180")} /></button>
+					{activeSection === "confirmation" ? <div className="mt-4 space-y-4">
+						<p className="text-xs text-neutral-500">{t("booking.editor.confirmationHint")}</p>
+						<label className="block text-sm font-medium text-neutral-700">{t("booking.editor.confirmationSubject")}<Input value={form.confirmationSubject} onChange={(event) => onChange({ ...form, confirmationSubject: event.target.value })} placeholder={DEFAULT_CONFIRMATION_SUBJECT} maxLength={CONFIRMATION_SUBJECT_MAX} className="mt-2" /></label>
+						<label className="block text-sm font-medium text-neutral-700">{t("booking.editor.confirmationBody")}<Textarea ref={confirmationBodyRef} value={form.confirmationBody} onChange={(event) => onChange({ ...form, confirmationBody: event.target.value })} placeholder={DEFAULT_CONFIRMATION_BODY} maxLength={CONFIRMATION_BODY_MAX} rows={10} className="mt-2 resize-y" /></label>
+						{(!form.confirmationSubject || !form.confirmationBody) && <Button type="button" variant="outline" onClick={() => onChange({ ...form, confirmationSubject: form.confirmationSubject || DEFAULT_CONFIRMATION_SUBJECT, confirmationBody: form.confirmationBody || DEFAULT_CONFIRMATION_BODY })} className="h-8 rounded-full px-3 text-xs">{t("booking.editor.confirmationUseDefault")}</Button>}
+						<div><p className="text-xs font-medium text-neutral-700">{t("booking.editor.confirmationPlaceholders")}</p><div className="mt-2 flex flex-wrap gap-1.5">{BOOKING_TEMPLATE_PLACEHOLDERS.map((name) => <button key={name} type="button" onClick={() => insertPlaceholder(name)} className="rounded-full bg-neutral-100 px-2.5 py-1 font-mono text-xs text-neutral-700 hover:bg-neutral-200">{`{${name}}`}</button>)}</div></div>
+					</div> : <button type="button" onClick={() => toggle("confirmation")} className="mt-2 flex w-full items-center gap-2 text-left text-sm text-neutral-500"><Mail className="h-4 w-4" />{form.confirmationSubject || form.confirmationBody ? t("booking.editor.confirmationCustom") : t("booking.editor.confirmationDefault")}</button>}
 				</section>
 			</div>
 			<div className="relative flex shrink-0 items-center justify-end gap-2 bg-white px-4 py-3">{editingId && <div className="relative"><Button type="button" variant="outline" onClick={() => setMoreOpen((value) => !value)} className="h-9 rounded-full px-3"><MoreHorizontal className="h-4 w-4" />{t("booking.editor.more")}</Button>{moreOpen && <div className="absolute bottom-full right-0 z-20 mb-2 w-40 rounded-xl border border-neutral-200 bg-white p-1 shadow-lg"><button type="button" onClick={() => { setMoreOpen(false); onToggleEnabled(); }} className="block w-full rounded-lg px-3 py-2 text-left text-sm hover:bg-neutral-100">{form.enabled ? t("booking.turnOff") : t("booking.turnOn")}</button><button type="button" onClick={() => { setMoreOpen(false); onDelete(); }} className="block w-full rounded-lg px-3 py-2 text-left text-sm text-red-600 hover:bg-red-50">{t("common.delete")}</button></div>}</div>}<Button type="button" variant="ghost" disabled={saving} onClick={onClose} className="h-9 rounded-full px-4">{t("common.cancel")}</Button><Button type="button" disabled={saving} onClick={onSave} className="h-9 rounded-full px-4">{saving ? t("common.saving") : editingId ? t("settings.mailbox.saveChanges") : t("booking.editor.create")}</Button></div>

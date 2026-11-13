@@ -11,6 +11,8 @@ import { calendarAccessError } from "@/lib/calendar/api-auth";
 import type { BookingEventRouteContext } from "./types";
 import { validBookingHostIds } from "@/lib/booking/hosts";
 import { getLicenseEntitlements } from "@/lib/licenses/service";
+import { ConfirmationTemplatesUnavailableError, saveConfirmationTemplate, withConfirmationTemplates } from "@/lib/booking/confirmation-templates";
+import { parseConfirmationTemplateInput } from "@/lib/booking/confirmation-utils";
 
 export async function PATCH(request: Request, { params }: BookingEventRouteContext) {
 	const env = getEnv();
@@ -19,8 +21,11 @@ export async function PATCH(request: Request, { params }: BookingEventRouteConte
 	const denied = calendarAccessError(user);
 	if (denied) return denied;
 	if (!hasValidSessionMutationOrigin(request)) return NextResponse.json({ error: "Invalid origin" }, { status: 403 });
-	const input = parseBookingEventInput(await request.json().catch(() => null));
+	const body = await request.json().catch(() => null);
+	const input = parseBookingEventInput(body);
 	if (!input) return NextResponse.json({ error: "Enter valid booking details and availability." }, { status: 400 });
+	const confirmation = parseConfirmationTemplateInput(body);
+	if (confirmation === null) return NextResponse.json({ error: "Check the confirmation email's subject and message." }, { status: 400 });
 	const { eventId } = await params;
 	const db = getDb(env);
 	const canManageHosts = user.role === "admin" && (await getLicenseEntitlements(env)).canShareMailboxes;
@@ -30,9 +35,13 @@ export async function PATCH(request: Request, { params }: BookingEventRouteConte
 	if (taken && taken.id !== eventId) return NextResponse.json({ error: "This event link is already in use." }, { status: 409 });
 	try {
 		const [event] = await db.update(bookingEvents).set({ ...input, hostIds: JSON.stringify(hostIds), weekdays: JSON.stringify(input.weekdays), timeRanges: JSON.stringify(input.timeRanges), updatedAt: new Date() }).where(and(eq(bookingEvents.id, eventId), eq(bookingEvents.userId, user.id))).returning();
-		return event ? NextResponse.json({ event }) : NextResponse.json({ error: "Booking event not found" }, { status: 404 });
+		if (!event) return NextResponse.json({ error: "Booking event not found" }, { status: 404 });
+		if (confirmation) await saveConfirmationTemplate(db, event.id, confirmation);
+		const [saved] = await withConfirmationTemplates(db, [event]);
+		return NextResponse.json({ event: saved });
 	} catch (error) {
 		if (isUniqueConstraintError(error)) return NextResponse.json({ error: "This event link is already in use." }, { status: 409 });
+		if (error instanceof ConfirmationTemplatesUnavailableError) return NextResponse.json({ error: error.message }, { status: 409 });
 		throw error;
 	}
 }

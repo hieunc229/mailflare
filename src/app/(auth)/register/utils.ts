@@ -22,11 +22,11 @@ export async function getSetupStatus(): Promise<SetupStatus> {
 	return data;
 }
 
-export async function submitPrimaryDomain(hostname: string): Promise<{ ok: boolean; data: DomainSetupResult }> {
+export async function submitPrimaryDomain(hostname: string, skipDns = false): Promise<{ ok: boolean; data: DomainSetupResult }> {
 	const res = await fetch("/api/setup/domain", {
 		method: "POST",
 		headers: { "Content-Type": "application/json" },
-		body: JSON.stringify({ hostname }),
+		body: JSON.stringify(skipDns ? { hostname, skipDns: true } : { hostname }),
 	});
 
 	return {
