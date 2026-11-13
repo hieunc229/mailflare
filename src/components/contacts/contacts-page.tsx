@@ -56,7 +56,7 @@ export function ContactsPage() {
 	const items = contacts.data ?? [];
 
 	return (
-		<div className="min-h-full px-6 py-10 max-md:bg-white lg:px-12 md:bg-[#f6f8fc]">
+		<div className="px-6 py-10 lg:px-12">
 		<div className="w-full max-w-3xl space-y-6">
 			<div className="flex items-center justify-between gap-4">
 				<h1 className="text-2xl font-medium md:text-3xl">{t("contacts.title")}</h1>
