@@ -8,11 +8,14 @@ import { useCompose } from "@/components/compose/compose-context";
 import { useSelectedMailbox } from "@/components/mailbox-provider";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { SkeletonRows } from "@/components/ui/skeleton";
+import { List } from "@/components/ui/list";
+import { SectionRowSkeleton } from "@/components/page-skeletons";
+import { mobilePrimaryActionClass } from "@/components/page-header-utils";
 import { formatEmailAddress } from "@/lib/email/address";
 import { ContactDeleteDialog } from "./contact-delete-dialog";
 import { ContactEditDialog } from "./contact-edit-dialog";
 import { ContactRow } from "./contact-row";
+import { CONTACT_COLUMNS } from "./contacts-page-utils";
 import type { ContactListItem } from "./contacts-page-types";
 import { fetchContacts } from "./contacts-page-utils";
 
@@ -53,19 +56,17 @@ export function ContactsPage() {
 	const items = contacts.data ?? [];
 
 	return (
-		<div className="mx-auto w-full max-w-3xl px-6 py-8">
-			<header className="flex items-start justify-between gap-4">
-				<div>
-					<h1 className="text-2xl font-normal text-neutral-900">{t("contacts.title")}</h1>
-					<p className="mt-1 text-sm text-neutral-500">{t("contacts.description")}</p>
-				</div>
-				<Button type="button" onClick={openCreate} disabled={!mailboxId}>
+		<div className="min-h-full px-6 py-10 max-md:bg-white lg:px-12 md:bg-[#f6f8fc]">
+		<div className="w-full max-w-3xl space-y-6">
+			<div className="flex items-center justify-between gap-4">
+				<h1 className="text-2xl font-medium md:text-3xl">{t("contacts.title")}</h1>
+				<Button type="button" className={mobilePrimaryActionClass} onClick={openCreate} disabled={!mailboxId}>
 					<Plus className="h-4 w-4" />
 					{t("contacts.add")}
 				</Button>
-			</header>
+			</div>
 
-			<div className="relative mt-6">
+			<div className="relative">
 				<Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-neutral-400" />
 				<Input
 					type="search"
@@ -73,19 +74,19 @@ export function ContactsPage() {
 					onChange={(event) => setInput(event.target.value)}
 					placeholder={t("contacts.search")}
 					aria-label={t("contacts.search")}
-					className="pl-9"
+					className="bg-white pl-9"
 				/>
 			</div>
 
-			<div className="mt-4 rounded-2xl border border-neutral-200 bg-white p-2">
-				{contacts.isLoading && <SkeletonRows count={5} compact />}
+			<section className="space-y-3">
+				{contacts.isLoading && <SectionRowSkeleton />}
 				{contacts.isError && (
-					<p role="alert" className="px-4 py-8 text-center text-sm text-red-600">
+					<p role="alert" className="rounded-2xl bg-white px-5 py-4 text-sm text-red-600">
 						{t("contacts.loadFailed")}
 					</p>
 				)}
 				{!contacts.isLoading && !contacts.isError && items.length === 0 && (
-					<div className="flex flex-col items-center gap-2 px-4 py-12 text-center">
+					<div className="flex flex-col items-center gap-2 rounded-2xl bg-white px-5 py-12 text-center">
 						<UsersRound className="h-8 w-8 text-neutral-300" />
 						<p className="text-sm font-medium text-neutral-700">
 							{query ? t("contacts.emptySearch") : t("contacts.empty")}
@@ -93,22 +94,31 @@ export function ContactsPage() {
 						{!query && <p className="text-xs text-neutral-500">{t("contacts.emptyHint")}</p>}
 					</div>
 				)}
-				<div className="divide-y divide-neutral-100">
-					{items.map((contact) => (
-						<ContactRow
-							key={contact.id}
-							mailboxId={mailboxId}
-							contact={contact}
-							onEmail={(item) => openComposer({ to: [formatEmailAddress(item.email, item.displayName)] })}
-							onEdit={(item) => {
-								setEditing(item);
-								setEditOpen(true);
-							}}
-							onDelete={setDeleting}
-						/>
-					))}
-				</div>
-			</div>
+				{items.length > 0 && (
+					<List>
+						<div className={`${CONTACT_COLUMNS} bg-white px-5 py-3 text-xs font-medium uppercase text-neutral-500`}>
+							<span className="w-10" />
+							<span>{t("common.name")}</span>
+							<span className="hidden md:block">{t("contact.lastSeen")}</span>
+							<span className="w-[7.5rem]" />
+						</div>
+						{items.map((contact) => (
+							<ContactRow
+								key={contact.id}
+								mailboxId={mailboxId}
+								contact={contact}
+								onEmail={(item) => openComposer({ to: [formatEmailAddress(item.email, item.displayName)] })}
+								onEdit={(item) => {
+									setEditing(item);
+									setEditOpen(true);
+								}}
+								onDelete={setDeleting}
+							/>
+						))}
+					</List>
+				)}
+			</section>
+		</div>
 
 			<ContactEditDialog
 				mailboxId={mailboxId}

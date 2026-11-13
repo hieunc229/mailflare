@@ -53,3 +53,7 @@ export async function deleteContact(mailboxId: string, address: string): Promise
 		throw new Error(data.error ?? "Unable to delete contact");
 	}
 }
+
+/** Shared by the header and rows so the columns line up. */
+export const CONTACT_COLUMNS =
+	"grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-x-4 md:grid-cols-[auto_minmax(0,2fr)_minmax(0,1fr)_auto]";
