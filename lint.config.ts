@@ -153,6 +153,7 @@ const lintConfig = {
     ".vinext/**",
     ".wrangler/**",
     "node_modules/**",
+    "tests/.tmp-*/**",
     "drizzle/**",
     "dist/**",
     "data/**",

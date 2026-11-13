@@ -2451,5 +2451,10 @@
 	"actions.unsubscribeDeleteAll": "Ondoa usajili & futa zote",
 	"actions.unsubscribeDeleteConfirm": "Uhamishe barua pepe {count} za zamu za mtumaji huyu kwenda Taka?",
 	"actions.unsubscribeTrashDone": "Usajili umeondolewa; barua pepe {count} zimehamishiwa Taka",
-	"attachment.downloadAllFlagged": "Baadhi ya viambatisho vimepigwa bendera kuwa hatari. Bila shaka upakue kumbukumbu?"
+	"attachment.downloadAllFlagged": "Baadhi ya viambatisho vimepigwa bendera kuwa hatari. Bila shaka upakue kumbukumbu?",
+	"account.apps": "Programu",
+	"account.openApps": "Fungua menyu ya programu",
+	"account.signOutAccountConfirm": "Ondoka kwenye {name} ({email})? Utahitaji kuingia tena ili utumie akaunti hii.",
+	"invite.acceptedLabel": "Imekubaliwa",
+	"invite.declinedLabel": "Imekataliwa"
 }

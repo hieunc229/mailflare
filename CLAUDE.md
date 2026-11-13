@@ -8,7 +8,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ```bash
 npm run dev                    # Vite + vinext in local workerd
-npm run lint                   # eslint (next/core-web-vitals + next/typescript)
+npm run lint                   # vp lint (Oxlint, lint.config.ts)
 npm run build                  # vinext build, including the complete Worker
 
 npm run db:generate            # drizzle-kit generate (SQLite) from src/db/schema/index.ts
@@ -19,8 +19,7 @@ npm run db:migrate:local       # wrangler d1 migrations apply DB --local
 npm run db:migrate:remote      # --remote (needs a concrete database_id in wrangler.jsonc)
 npm run db:seed                # POST /api/seed against localhost:3000
 
-npm run deploy                 # vinext build + wrangler deploy
-npm run deploy                 # build and deploy; migrate later from Admin settings
+npm run deploy                 # vinext build + wrangler deploy; migrate later from Admin settings
 npm run preview                # build and preview the vinext Worker locally
 npm run cf-typegen             # regenerate cloudflare-env.d.ts from wrangler.jsonc
 ```
@@ -41,7 +40,7 @@ Next.js App Router APIs running on Cloudflare Workers via vinext. Drizzle ORM ov
 
 - **`fetch`** — intercepts `/api/realtime` for the WebSocket upgrade (authenticates the session cookie, then routes to `env.REALTIME.getByName(user.id)`), delegating everything else to vinext.
 - **`email`** — the Cloudflare Email Routing handler. Resolves domain routing rules first (`resolveIncomingMail` in `src/lib/email/incoming.ts`) because `message.setReject()` and `message.forward()` only exist here, then applies optional account-level forwarding (loop-guarded by the `MAILFLARE_FORWARDED_HEADER`), writes raw MIME to R2, and enqueues to `INBOUND_QUEUE`. It never parses mail inline.
-- **`queue`** — a single consumer for both queues; `isInboundQueueMessage` and `isWebhookRetryMessage` in `worker-utils.ts` discriminate inbound mail, webhook retries, and outbound payloads. Failures `retry({ delaySeconds: 10 })`.
+- **`queue`** — a single consumer for all three queues (inbound, outbound, agent); `isInboundQueueMessage` and `isWebhookRetryMessage` in `worker-utils.ts` discriminate inbound mail, webhook retries, and outbound payloads. Failures `retry({ delaySeconds: 10 })`.
 
 It also re-exports `RealtimeHub`, which must remain exported from the Worker entrypoint.
 

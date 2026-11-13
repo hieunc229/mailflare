@@ -2451,5 +2451,10 @@
 	"actions.unsubscribeDeleteAll": "சந்தாவை நிறுத்தி அனைத்தையும் நீக்கு",
 	"actions.unsubscribeDeleteConfirm": "இந்த அனுப்புநரின் {count} பழைய மின்னஞ்சல்களை குப்பைக்கு நகர்த்தவா?",
 	"actions.unsubscribeTrashDone": "சந்தா நிறுத்தப்பட்டது; {count} மின்னஞ்சல்கள் குப்பைக்கு நகர்ந்தன",
-	"attachment.downloadAllFlagged": "சில இணைப்புகள் ஆபத்தானதாகக் குறிக்கப்பட்டுள்ளன. இருந்தும் காப்பகத்தைப் பதிவிறக்கவா?"
+	"attachment.downloadAllFlagged": "சில இணைப்புகள் ஆபத்தானதாகக் குறிக்கப்பட்டுள்ளன. இருந்தும் காப்பகத்தைப் பதிவிறக்கவா?",
+	"account.apps": "ஆப்ஸ்",
+	"account.openApps": "ஆப்ஸ் மெனுவைத் திற",
+	"account.signOutAccountConfirm": "{name} ({email}) கணக்கிலிருந்து வெளியேறவா? இந்தக் கணக்கைப் பயன்படுத்த மீண்டும் உள்நுழைய வேண்டும்.",
+	"invite.acceptedLabel": "ஏற்கப்பட்டது",
+	"invite.declinedLabel": "நிராகரிக்கப்பட்டது"
 }
