@@ -120,7 +120,7 @@ function ComposeNoticeToast({ notice }: { notice: ComposeNotice }) {
 
 /** `showButton` adds the phone Compose button; only the dashboard pages (mail) pass it. */
 export function FloatingComposer({ showButton = false }: { showButton?: boolean }) {
-	const { open, draftId, openComposer, closeComposer, notice } = useCompose();
+	const { open, draftId, initialTo, openComposer, closeComposer, notice } = useCompose();
 	const pathname = usePathname();
 	const router = useRouter();
 	const { t } = useLanguage();
@@ -130,7 +130,7 @@ export function FloatingComposer({ showButton = false }: { showButton?: boolean 
 			{showButton && !open && !mobileOpen && (
 				<button
 					type="button"
-					onClick={openComposer}
+					onClick={() => openComposer()}
 					aria-label={t("navigation.compose")}
 					className="fixed right-[max(1rem,env(safe-area-inset-right))] bottom-[max(1rem,env(safe-area-inset-bottom))] z-30 flex h-12 items-center gap-3 rounded-2xl bg-blue-100 px-5 text-base font-medium text-blue-950 shadow-sm transition-colors hover:bg-blue-200 active:bg-blue-200 md:hidden"
 				>
@@ -139,7 +139,7 @@ export function FloatingComposer({ showButton = false }: { showButton?: boolean 
 				</button>
 			)}
 			{notice && <ComposeNoticeToast key={notice.id} notice={notice} />}
-			{open && <ComposeForm key={draftId ?? "new"} mode="popup" draftIdToLoad={draftId} onClose={() => {
+			{open && <ComposeForm key={draftId ?? "new"} mode="popup" draftIdToLoad={draftId} initialTo={initialTo} onClose={() => {
 				closeComposer();
 				if (/^\/drafts\/[^/]+\/?$/.test(pathname)) router.replace("/drafts");
 			}} />}

@@ -22,6 +22,7 @@ import { SidebarAside, MobileMenuButton } from "@/components/sidebar-aside";
 import { SidebarResizeBoundary } from "@/components/sidebar-resize-boundary";
 import { ShortcutsProvider } from "@/components/shortcuts";
 import clsx from "clsx";
+import { usePathname } from "next/navigation";
 import { useDashboardState } from "./dashboard-state";
 import { useAssistantAvailability } from "./use-assistant-availability";
 import { RouteTitle } from "@/components/route-title";
@@ -33,6 +34,9 @@ export default function DashboardLayout({
   children: React.ReactNode;
 }) {
   const { t } = useLanguage();
+  const pathname = usePathname();
+  // Contacts is a list page like Mailboxes: gray page, white rows, no white panel.
+  const listPage = pathname === "/contacts" || pathname.startsWith("/contacts/");
   const { assistantOpen, setAssistantOpen, assistantFullSize, setAssistantFullSize } = useDashboardState();
   const assistantEnabled = useAssistantAvailability();
   const assistantVisible = assistantEnabled === true && assistantOpen;
@@ -79,7 +83,7 @@ export default function DashboardLayout({
                     <DnsSkippedBanner />
                     <div className="flex min-h-0 min-w-0 flex-1 overflow-hidden">
                       <AssistantOpenContext.Provider value={assistantVisible}>
-                        <main id="main-content" tabIndex={-1} className="focus:outline-none min-h-0 min-w-0 flex-1 overflow-y-auto rounded-t-3xl bg-white overscroll-contain scrollbar-gutter-stable" aria-hidden={assistantVisible && assistantFullSize} inert={assistantVisible && assistantFullSize}>
+                        <main id="main-content" tabIndex={-1} className={clsx("focus:outline-none page-flush min-h-0 min-w-0 flex-1 overflow-y-auto overscroll-contain scrollbar-gutter-stable", listPage ? "rounded-tl-3xl max-md:rounded-t-3xl max-md:bg-white max-md:pb-24" : "rounded-t-3xl bg-white")} aria-hidden={assistantVisible && assistantFullSize} inert={assistantVisible && assistantFullSize}>
                           {children}
                         </main>
                       </AssistantOpenContext.Provider>

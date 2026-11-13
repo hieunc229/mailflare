@@ -2,9 +2,10 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { CalendarDays, Check, HardDrive, ChevronDown, Inbox, LogOut, Settings, ShieldCheck, UserPlus, UserRound, UsersRound } from "@/components/icons";
+import { Check, ChevronDown, LogOut, Settings, ShieldCheck, UserPlus, UserRound, UsersRound } from "@/components/icons";
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { useDismissible } from "@/components/use-dismissible";
+import { AppsMenu } from "@/components/apps-menu";
 import { useLanguage } from "@/components/language-provider";
 import { useSelectedMailbox } from "@/components/mailbox-provider";
 import { ProgressiveAvatarImage } from "@/components/progressive-avatar-image";
@@ -13,7 +14,7 @@ import { useMessageCounts } from "@/hooks/use-message-counts";
 import { clearCurrentUserCache, fetchCurrentUser } from "@/hooks/use-current-user";
 import { getAvatarColorStyle } from "@/lib/avatar-colors";
 import { logoutClientSession } from "@/lib/auth/logout";
-import { fetchBrowserAccounts, switchBrowserAccount, type BrowserAccount } from "@/lib/auth/accounts-client";
+import { fetchBrowserAccounts, switchBrowserAccount, signOutBrowserAccount, type BrowserAccount } from "@/lib/auth/accounts-client";
 import {
 	PROFILE_AVATAR_CHANGED_EVENT,
 	getProfileAvatarUrl,
@@ -109,7 +110,7 @@ function MailboxAccountRow({ mailbox, unread, avatarUrl, onSelect }: MailboxAcco
 		<button
 			type="button"
 			onClick={onSelect}
-			className="flex w-full items-center gap-3 rounded-2xl px-4 py-3 text-left transition-colors hover:bg-white"
+			className="flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-blue-50 active:bg-blue-50"
 		>
 			<AccountAvatar
 				name={name}
@@ -257,6 +258,16 @@ export function MailboxSelector({ initialUser }: MailboxSelectorProps = {}) {
 		router.refresh();
 	}
 
+	async function signOutAccount(account: BrowserAccount) {
+		if (!window.confirm(t("account.signOutAccountConfirm", { name: account.name, email: account.email }))) return;
+		const error = await signOutBrowserAccount(account.userId);
+		if (error) {
+			window.alert(error);
+			return;
+		}
+		setBrowserAccounts((accounts) => accounts.filter((item) => item.userId !== account.userId));
+	}
+
 	async function switchAccount(userId: string) {
 		const error = await switchBrowserAccount(userId);
 		setOpen(false);
@@ -282,6 +293,8 @@ export function MailboxSelector({ initialUser }: MailboxSelectorProps = {}) {
 	);
 
 	return (
+		<div className="flex items-center gap-1">
+		<AppsMenu user={user} />
 		<div ref={ref} className="relative">
 			{hydrated ? (
 				<button
@@ -305,8 +318,12 @@ export function MailboxSelector({ initialUser }: MailboxSelectorProps = {}) {
 
 			{open && (
 				<div className="absolute right-0 top-14 w-[360px] overflow-hidden rounded-[28px] border border-neutral-200 bg-[#eef3fb] p-3 shadow-2xl shadow-neutral-900/20 max-h-[82vh] overflow-y-auto z-90">
-					<div className="rounded-[22px] bg-white px-5 py-5">
-						<div className="flex items-center gap-4">
+					<div className="rounded-[22px] bg-white px-2 py-2">
+						<Link
+							href="/inbox"
+							onClick={() => setOpen(false)}
+							className="flex items-center gap-4 rounded-2xl px-3 py-3 transition-colors hover:bg-blue-50 active:bg-blue-50"
+						>
 							<AccountAvatar
 								name={selectedName}
 								colorSeed={selectedEmail || selectedName}
@@ -334,42 +351,6 @@ export function MailboxSelector({ initialUser }: MailboxSelectorProps = {}) {
 								</p>
 							</div>
 							<Check className="h-5 w-5 shrink-0 text-blue-600" />
-						</div>
-						<Link
-							href="/inbox"
-							onClick={() => setOpen(false)}
-							className="mt-4 flex items-center gap-3 rounded-xl px-3 py-2 text-sm font-medium text-neutral-700 hover:bg-[#f2f6fc]"
-						>
-							<Inbox size={18} className="text-neutral-600" />
-							{t("navigation.inbox")}
-						</Link>
-						{user?.calendarEnabled !== false && (
-							<Link
-								href="/calendar"
-								onClick={() => setOpen(false)}
-								className="mt-1 flex items-center gap-3 rounded-xl px-3 py-2 text-sm font-medium text-neutral-700 hover:bg-[#f2f6fc]"
-							>
-								<CalendarDays size={18} className="text-neutral-600" />
-								{t("account.calendar")}
-							</Link>
-						)}
-						{user?.driveEnabled !== false && (
-							<Link
-								href="/drive"
-								onClick={() => setOpen(false)}
-								className="mt-1 flex items-center gap-3 rounded-xl px-3 py-2 text-sm font-medium text-neutral-700 hover:bg-[#f2f6fc]"
-							>
-								<HardDrive size={18} className="text-neutral-600" />
-								{t("account.drive")}
-							</Link>
-						)}
-						<Link
-							href="/settings/account"
-							onClick={() => setOpen(false)}
-							className="mt-1 flex items-center gap-3 rounded-xl px-3 py-2 text-sm font-medium text-neutral-700 hover:bg-[#f2f6fc]"
-						>
-							<Settings size={18} className="text-neutral-600" />
-							{t("account.settings")}
 						</Link>
 						{otherMailboxes.length > 0 && (
 							<div className="mt-3 border-t border-neutral-100 pt-2">
@@ -402,34 +383,66 @@ export function MailboxSelector({ initialUser }: MailboxSelectorProps = {}) {
 						)}
 					</div>
 
-					{otherAccounts.length > 0 && (
-						<div className="mt-2 rounded-[22px] bg-white/55 p-1">
-							<p className="px-4 pb-1 pt-3 text-xs font-semibold uppercase tracking-wide text-neutral-500">
+					<div className={`mt-2 rounded-[22px] ${otherAccounts.length > 0 ? "bg-white/55 p-1" : ""}`}>
+						{otherAccounts.length > 0 && (
+							<p className="px-4 pb-1 pt-2 text-xs font-semibold uppercase tracking-wide text-neutral-500">
 								{t("account.otherAccounts")}
 							</p>
+						)}
+						<div className="divide-y divide-neutral-100 overflow-hidden rounded-[18px] bg-white">
 							{otherAccounts.map((account) => (
-								<button
+								<div
 									key={account.userId}
-									type="button"
-									onClick={() => void switchAccount(account.userId)}
-									className="flex w-full items-center gap-3 rounded-2xl px-4 py-3 text-left transition-colors hover:bg-white"
+									className="group flex items-center transition-colors hover:bg-blue-50 focus-within:bg-blue-50"
 								>
-									<AccountAvatar
-										name={account.name}
-										colorSeed={account.email}
-										hasAvatar={account.hasAvatar}
-										avatarUrl={`/api/auth/accounts/${account.userId}/avatar`}
-									/>
-									<div className="min-w-0 flex-1">
-										<p className="truncate text-sm font-semibold text-neutral-900">{account.name}</p>
-										<p className="truncate text-xs text-neutral-500">{account.email}</p>
-									</div>
-								</button>
+									<button
+										type="button"
+										onClick={() => void switchAccount(account.userId)}
+										className="flex min-w-0 flex-1 items-center gap-3 px-4 py-3 text-left"
+									>
+										<AccountAvatar
+											name={account.name}
+											colorSeed={account.email}
+											hasAvatar={account.hasAvatar}
+											avatarUrl={`/api/auth/accounts/${account.userId}/avatar`}
+										/>
+										<div className="min-w-0 flex-1">
+											<p className="truncate text-sm font-semibold text-neutral-900">{account.name}</p>
+											<p className="truncate text-xs text-neutral-500">{account.email}</p>
+										</div>
+									</button>
+									<Tooltip label={t("account.signOut")}>
+										<button
+											type="button"
+											onClick={() => void signOutAccount(account)}
+											className="mr-3 flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-neutral-500 opacity-0 transition-opacity hover:bg-white hover:text-neutral-900 focus-visible:opacity-100 group-hover:opacity-100"
+											aria-label={t("account.signOut")}
+										>
+											<LogOut size={16} />
+										</button>
+									</Tooltip>
+								</div>
 							))}
+							<Link
+								href="/login?add=1"
+								onClick={() => setOpen(false)}
+								className="flex items-center gap-3 px-4 py-3 text-sm font-medium text-neutral-800 transition-colors hover:bg-blue-50 active:bg-blue-50"
+							>
+								<UserPlus size={18} className="text-neutral-600" />
+								{t("account.addAnother")}
+							</Link>
 						</div>
-					)}
+					</div>
 
 					<div className="mt-2 overflow-hidden rounded-[22px] bg-white">
+						<Link
+							href="/settings/account"
+							onClick={() => setOpen(false)}
+							className="flex items-center gap-3 px-5 py-4 text-sm font-medium text-neutral-800 hover:bg-[#f2f6fc]"
+						>
+							<Settings size={18} className="text-neutral-600" />
+							{t("account.settings")}
+						</Link>
 						{user?.role === "admin" && (
 							<Link
 								href="/admin"
@@ -441,14 +454,6 @@ export function MailboxSelector({ initialUser }: MailboxSelectorProps = {}) {
 								{adminActive && <Check className="ml-auto h-4 w-4 text-blue-600" />}
 							</Link>
 						)}
-						<Link
-							href="/login?add=1"
-							onClick={() => setOpen(false)}
-							className="flex items-center gap-3 px-5 py-4 text-sm font-medium text-neutral-800 hover:bg-[#f2f6fc]"
-						>
-							<UserPlus size={18} className="text-neutral-600" />
-							{t("account.addAnother")}
-						</Link>
 						<button
 							type="button"
 							onClick={logout}
@@ -460,6 +465,7 @@ export function MailboxSelector({ initialUser }: MailboxSelectorProps = {}) {
 					</div>
 				</div>
 			)}
+		</div>
 		</div>
 	);
 }
