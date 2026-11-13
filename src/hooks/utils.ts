@@ -176,7 +176,12 @@ export async function fetchMessageList(params: URLSearchParams, force = false): 
 	if (!force && messageListRequests.has(key)) return messageListRequests.get(key) ?? {};
 	const requestGeneration = messageCacheGeneration;
 	const request = authFetch(`/api/messages?${key}`)
-		.then((res) => res.json())
+		.then(async (res) => {
+			const data = await res.json();
+			// An error body is not a message list; do not cache it or paint it as an empty folder.
+			if (!res.ok) throw new Error((data as { error?: string }).error ?? "Could not load messages");
+			return data;
+		})
 		.then((data) => {
 			const response = data as MessageListResponse;
 			if (requestGeneration === messageCacheGeneration) {
