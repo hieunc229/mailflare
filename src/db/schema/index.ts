@@ -691,6 +691,17 @@ export const bookingEvents = sqliteTable(
 	(t) => [index("booking_events_user_idx").on(t.userId), uniqueIndex("booking_events_user_slug_idx").on(t.userId, t.slug)],
 );
 
+/**
+ * A booking event's own guest confirmation. Kept out of `booking_events` because the public booking page selects
+ * the whole row, which would fail before the migration; an empty subject or body falls back to the built-in text.
+ */
+export const bookingConfirmationTemplates = sqliteTable("booking_confirmation_templates", {
+	eventId: text("event_id").primaryKey().references(() => bookingEvents.id, { onDelete: "cascade" }),
+	subject: text("subject").notNull().default(""),
+	body: text("body").notNull().default(""),
+	updatedAt: timestamp("updated_at").notNull().$defaultFn(() => new Date()),
+});
+
 export const routingRules = sqliteTable(
 	"routing_rules",
 	{

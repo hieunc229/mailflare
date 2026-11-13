@@ -540,6 +540,13 @@
       "when": 1793280380889,
       "tag": "0085_calendar_invitations",
       "breakpoints": true
+    },
+    {
+      "idx": 78,
+      "version": "6",
+      "when": 1793280381889,
+      "tag": "0086_booking_confirmation_templates",
+      "breakpoints": true
     }
   ]
 }
