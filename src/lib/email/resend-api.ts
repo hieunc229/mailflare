@@ -28,18 +28,46 @@ export function resendSetsMessageId(env: object): boolean {
 	return (env as ResendEnv).RESEND_CUSTOM_MESSAGE_ID?.trim().toLowerCase() !== "false";
 }
 
-/**
- * The Message-ID the provider gave a sent email, when its `GET /emails/{id}`
- * reports one (Resend does not; some compatible services do). Null otherwise.
- */
-export async function fetchSentMessageId(client: ResendClient, emailId: string): Promise<string | null> {
+// Until a send leaves the provider's queue its message_id can be a placeholder
+// (one compatible service answers <id@unsent.…> while `last_event` is "queued").
+const UNSENT_EVENTS = new Set(["queued", "scheduled"]);
+const MESSAGE_ID_SHAPE = /^<[^<>\s]+@[^<>\s]+>$/;
+
+export type SentMessageIdPolling = { attempts: number; delayMs: number; sleep: (ms: number) => Promise<void> };
+
+const defaultPolling: SentMessageIdPolling = {
+	attempts: 6,
+	delayMs: 1000,
+	sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
+};
+
+async function readSentEmail(client: ResendClient, emailId: string): Promise<{ messageId: string | null; unsent: boolean } | null> {
 	const response = await fetch(`${client.baseUrl}/emails/${encodeURIComponent(emailId)}`, {
 		headers: { Authorization: `Bearer ${client.apiKey}` },
 	}).catch(() => null);
 	if (!response?.ok) return null;
-	const body = (await response.json().catch(() => null)) as { message_id?: unknown } | null;
+	const body = (await response.json().catch(() => null)) as { message_id?: unknown; last_event?: unknown } | null;
 	const value = typeof body?.message_id === "string" ? body.message_id.trim() : "";
-	return /^<[^<>\s]+@[^<>\s]+>$/.test(value) ? value : null;
+	return { messageId: MESSAGE_ID_SHAPE.test(value) ? value : null, unsent: UNSENT_EVENTS.has(String(body?.last_event)) };
+}
+
+/**
+ * The Message-ID the provider gave a sent email, read from `GET /emails/{id}`
+ * once the email has left the queue. Resend reports none; some compatible
+ * services do. Polls briefly (the ID arrives within seconds), else null.
+ */
+export async function fetchSentMessageId(
+	client: ResendClient,
+	emailId: string,
+	polling: SentMessageIdPolling = defaultPolling,
+): Promise<string | null> {
+	for (let attempt = 1; attempt <= polling.attempts; attempt += 1) {
+		const email = await readSentEmail(client, emailId);
+		if (!email) return null;
+		if (!email.unsent) return email.messageId;
+		if (attempt < polling.attempts) await polling.sleep(polling.delayMs);
+	}
+	return null;
 }
 
 export class ResendRestrictedKeyError extends Error {

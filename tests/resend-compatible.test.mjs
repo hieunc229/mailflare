@@ -35,20 +35,34 @@ await build({
 	}],
 });
 const { sendThroughProvider } = await import(pathToFileURL(join(outDir, "outbound-provider.mjs")).href);
+await build({
+	entryPoints: [join(root, "src/lib/email/resend-api.ts")],
+	outfile: join(outDir, "resend-api.mjs"),
+	bundle: true,
+	platform: "node",
+	format: "esm",
+	target: "node22",
+	logLevel: "silent",
+	alias: { "@": join(root, "src") },
+});
+const resendApi = await import(pathToFileURL(join(outDir, "resend-api.mjs")).href);
 
 const originalFetch = globalThis.fetch;
 afterEach(() => { globalThis.fetch = originalFetch; });
 
-function mockProvider(sentMessageId) {
+// `reads` are the successive GET /emails/{id} bodies; the last one repeats.
+function mockProvider(...reads) {
 	const calls = [];
+	let read = 0;
 	globalThis.fetch = async (input, init = {}) => {
 		const url = new URL(typeof input === "string" ? input : input.url);
 		calls.push({ url, method: init.method ?? "GET", body: init.body ? JSON.parse(init.body) : null });
 		if (init.method === "POST") return Response.json({ id: "email_1" });
-		return Response.json(sentMessageId === undefined ? { id: "email_1" } : { id: "email_1", message_id: sentMessageId });
+		return Response.json({ id: "email_1", ...(reads[Math.min(read++, reads.length - 1)] ?? {}) });
 	};
 	return calls;
 }
+const sent = (messageId) => ({ message_id: messageId, last_event: "sent" });
 
 const message = { from: "Me <me@example.com>", to: ["you@example.net"], subject: "Hi", text: "t", html: "<p>t</p>", headers: { "In-Reply-To": "<x@example.net>" } };
 const send = (env = {}) => sendThroughProvider(env, { provider: "resend", apiKey: "re_test" }, message);
@@ -70,7 +84,7 @@ test("RESEND_BASE_URL sends to a Resend-compatible API", async () => {
 });
 
 test("RESEND_CUSTOM_MESSAGE_ID=false omits the header and threads on the provider's Message-ID", async () => {
-	const calls = mockProvider("<0103abc@email.amazonses.com>");
+	const calls = mockProvider(sent("<0103abc@email.amazonses.com>"));
 	const { messageId } = await send({ RESEND_BASE_URL: "https://api.compatible.example", RESEND_CUSTOM_MESSAGE_ID: "false" });
 	assert.equal(calls[0].body.headers["Message-ID"], undefined);
 	assert.equal(calls[0].body.headers["In-Reply-To"], "<x@example.net>");
@@ -82,6 +96,17 @@ test("without a provider Message-ID the minted one is kept", async () => {
 	const env = { RESEND_CUSTOM_MESSAGE_ID: "false" };
 	mockProvider();
 	assert.match((await send(env)).messageId, /^<[^@]+@example\.com>$/);
-	mockProvider("not-a-message-id");
+	mockProvider(sent("not-a-message-id"));
 	assert.match((await send(env)).messageId, /^<[^@]+@example\.com>$/);
+});
+
+test("a queued send's placeholder Message-ID is not used; the ID after it leaves the queue is", async () => {
+	const { fetchSentMessageId } = resendApi;
+	const client = { apiKey: "re_test", baseUrl: "https://api.compatible.example" };
+	const noWait = { attempts: 3, delayMs: 0, sleep: async () => {} };
+	mockProvider({ message_id: "<email_1@unsent.example>", last_event: "queued" }, sent("<0103real@email.amazonses.com>"));
+	assert.equal(await fetchSentMessageId(client, "email_1", noWait), "<0103real@email.amazonses.com>");
+	const calls = mockProvider({ message_id: "<email_1@unsent.example>", last_event: "queued" });
+	assert.equal(await fetchSentMessageId(client, "email_1", noWait), null);
+	assert.equal(calls.length, 3);
 });
