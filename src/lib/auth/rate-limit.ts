@@ -22,6 +22,17 @@ export async function allowDeviceLoginAttempt(env: CloudflareEnv, request: Reque
 	}
 }
 
+/** Public booking submissions send mail from the host's address, so they get a per-client budget of their own. */
+export async function allowBookingAttempt(env: CloudflareEnv, request: Request): Promise<boolean> {
+	if (!env.LOGIN_RATE_LIMIT) return true;
+	try {
+		return (await env.LOGIN_RATE_LIMIT.limit({ key: `booking:${clientRateLimitKey(request)}` })).success;
+	} catch (error) {
+		console.warn("Booking rate limiter unavailable", error);
+		return true;
+	}
+}
+
 export async function allowLoginAttempt(env: CloudflareEnv, request: Request): Promise<boolean> {
 	if (!env.LOGIN_RATE_LIMIT) return true;
 	try {

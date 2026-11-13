@@ -19,7 +19,11 @@ export type BookingConfirmationTemplate = { subject: string; body: string };
 export const CONFIRMATION_SUBJECT_MAX = 200;
 export const CONFIRMATION_BODY_MAX = 5000;
 
-/** The built-in confirmation, used for whichever of subject and body an event leaves empty. */
+/**
+ * The built-in confirmation, used for whichever of subject and body an event leaves empty. It deliberately leaves out
+ * {notes}: the booking page is public, so the booker's free text must not appear in mail sent from the host's address
+ * unless the host chose to put it there in a custom template.
+ */
 export const DEFAULT_CONFIRMATION_SUBJECT = "Confirmed: {eventName} with {hostName}";
 export const DEFAULT_CONFIRMATION_BODY = [
 	"Hi {guestName},",
@@ -28,7 +32,6 @@ export const DEFAULT_CONFIRMATION_BODY = [
 	"",
 	"When: {when}",
 	"Where: {location}",
-	"Notes: {notes}",
 	"",
 	"The attached calendar file adds the meeting to your calendar. Reply to this email if you need to change or cancel it.",
 ].join("\n");
@@ -98,8 +101,9 @@ export function parseConfirmationTemplateInput(value: unknown): BookingConfirmat
 
 /** The guest confirmation: the event's own subject and body where set, the default template otherwise. */
 export function buildBookingConfirmation(content: BookingConfirmationContent, locale = FALLBACK_LOCALE, template?: BookingConfirmationTemplate | null): { subject: string; text: string } {
+	// The booker is anonymous: keep their name on one line so it cannot add lines to the message or subject.
 	const values = {
-		guestName: content.guestName,
+		guestName: content.guestName.replace(/\s+/g, " ").trim(),
 		eventName: content.eventName,
 		hostName: content.hostName,
 		when: formatBookingWhen(content.startsAt, content.endsAt, content.timeZone, locale),

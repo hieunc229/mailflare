@@ -23,13 +23,14 @@ async function findHostMailbox(env: CloudflareEnv, userId: string): Promise<{ id
 }
 
 /**
- * Emails the guest (and the guests they added) a confirmation with an invite.ics, from the event owner's mailbox,
- * so replies reach the host and a Sent copy is kept. Delivery goes through the outbound queue a few seconds later,
+ * Emails the booker a confirmation with an invite.ics, from the event owner's mailbox, so replies reach the host and
+ * a Sent copy is kept. Guests the booker added are not mailed: the public page does not verify addresses, so mailing
+ * them would let anyone send mail from the host's address to third parties. Delivery goes through the outbound queue a few seconds later,
  * keeping the public booking request light. Never throws: the booking already stands.
  */
 export async function sendBookingConfirmation(
 	env: CloudflareEnv,
-	input: { event: BookingEventRecord; hostName: string; guestName: string; guestEmail: string; guestEmails: string[]; notes: string; startsAt: string; endsAt: string; locale?: string; publicOrigin?: string },
+	input: { event: BookingEventRecord; hostName: string; guestName: string; guestEmail: string; notes: string; startsAt: string; endsAt: string; locale?: string; publicOrigin?: string },
 ): Promise<boolean> {
 	try {
 		const mailbox = await findHostMailbox(env, input.event.userId);
@@ -64,7 +65,6 @@ export async function sendBookingConfirmation(
 			mailboxId: mailbox.id,
 			from: mailbox.address,
 			to: input.guestEmail,
-			cc: input.guestEmails.length ? input.guestEmails : undefined,
 			subject,
 			text,
 			attachments: [{ filename: "invite.ics", type: "text/calendar; charset=utf-8", content: invite }],

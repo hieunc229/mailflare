@@ -36,18 +36,19 @@ test("picks the booking page language, then the browser's, then English", () => 
 	assert.equal(pickGuestLocale(undefined, undefined), "en-GB");
 });
 
-test("without a template the default English text is sent, dropping empty location and notes", () => {
+test("without a template the default English text is sent, dropping an empty location", () => {
 	const mail = buildBookingConfirmation(content);
 	assert.equal(mail.subject, "Confirmed: Intro call with Paul");
 	assert.match(mail.text, /^Hi Ana,\n\nyour booking is confirmed: Intro call with Paul\.\n\nWhen: Tuesday,? 17 November 2026, 14:00–14:30 \(Europe\/Berlin\)\n\nThe attached calendar file/);
 	assert.doesNotMatch(mail.text, /Where:|Notes:|\{/);
 	const full = buildBookingConfirmation({ ...content, location: "https://meet.example/abc", notes: "About pricing" });
-	assert.match(full.text, /\nWhere: https:\/\/meet\.example\/abc\nNotes: About pricing\n/);
+	assert.match(full.text, /\nWhere: https:\/\/meet\.example\/abc\n/);
+	assert.doesNotMatch(full.text, /About pricing|Notes:/);
 });
 
 test("the default template only uses placeholders the editor offers", () => {
 	const names = [...`${DEFAULT_CONFIRMATION_SUBJECT}\n${DEFAULT_CONFIRMATION_BODY}`.matchAll(/\{(\w+)\}/g)].map((match) => match[1]);
-	assert.deepEqual([...new Set(names)].sort(), ["eventName", "guestName", "hostName", "location", "notes", "when"]);
+	assert.deepEqual([...new Set(names)].sort(), ["eventName", "guestName", "hostName", "location", "when"]);
 });
 
 test("a template fills known placeholders, leaves others as written and drops lines left empty", () => {
@@ -59,7 +60,7 @@ test("the event's subject and body replace the default, each on its own", () => 
 	const guest = { ...content, eventName: "Beratung", guestName: "Ana\nBcc: x@evil.test", location: "Telefon", notes: "Preise" };
 	const custom = buildBookingConfirmation(guest, "de", { subject: "Termin am {when} für {guestName}", body: "Hallo {guestName},\nwir sehen uns {when} ({location}).\n{notes}" });
 	assert.equal(custom.subject, "Termin am Dienstag, 17. November 2026, 14:00–14:30 (Europe/Berlin) für Ana Bcc: x@evil.test");
-	assert.equal(custom.text, "Hallo Ana\nBcc: x@evil.test,\nwir sehen uns Dienstag, 17. November 2026, 14:00–14:30 (Europe/Berlin) (Telefon).\nPreise");
+	assert.equal(custom.text, "Hallo Ana Bcc: x@evil.test,\nwir sehen uns Dienstag, 17. November 2026, 14:00–14:30 (Europe/Berlin) (Telefon).\nPreise");
 	const subjectOnly = buildBookingConfirmation(guest, "de", { subject: "Ihr Termin", body: "" });
 	assert.equal(subjectOnly.subject, "Ihr Termin");
 	assert.match(subjectOnly.text, /^Hi Ana/);
