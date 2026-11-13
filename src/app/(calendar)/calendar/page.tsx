@@ -5,9 +5,8 @@ import { useRouter, useSearchParams } from "next/navigation";
 import type { DragEvent, PointerEvent as ReactPointerEvent } from "react";
 import { createPortal } from "react-dom";
 import toast, { Toaster } from "react-hot-toast";
-import { AlignLeft, CalendarPlus2, Check, ChevronDown, ChevronLeft, ChevronRight, Clock3, MapPin, MoreVertical, Palette, Bell, Plus, Repeat2, Trash2, UsersRound, X } from "@/components/icons";
+import { AlignLeft, CalendarPlus2, Check, ChevronDown, ChevronLeft, ChevronRight, Clock3, MapPin, Palette, Bell, Plus, Repeat2, Trash2, UsersRound, X } from "@/components/icons";
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
-import { mobilePrimaryActionClass } from "@/components/page-header-utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -431,7 +430,7 @@ export default function CalendarPage() {
               setMonthPickerPos({ top: rect.bottom + 12, left: Math.max(12, Math.min(rect.left, window.innerWidth - 460)) });
               setPickerMonth(startOfMonth(visibleDate));
               setMonthPickerOpen((open) => !open);
-            }} className="flex items-center gap-2 whitespace-nowrap text-lg font-semibold text-neutral-900 max-md:text-base max-md:font-medium" aria-haspopup="dialog" aria-expanded={monthPickerOpen}>
+            }} className="flex items-center gap-2 whitespace-nowrap text-sm font-medium text-neutral-700" aria-haspopup="dialog" aria-expanded={monthPickerOpen}>
               {formatUserDate(visibleDate, { month: "long", year: "numeric" })}
               <ChevronDown className="h-5 w-5 text-neutral-500" />
             </button>
@@ -443,10 +442,10 @@ export default function CalendarPage() {
                   </h2>
                   <div className="flex items-center gap-2">
                     <button type="button" aria-label={t("calendar.previousMonth")} onClick={() => setPickerMonth(addMonths(pickerMonth, -1))} className="flex h-9 w-9 items-center justify-center rounded-full text-neutral-600 hover:bg-neutral-200/70">
-                      <ChevronLeft className="h-6 w-6" />
+                      <ChevronLeft className="h-5 w-5" />
                     </button>
                     <button type="button" aria-label={t("calendar.nextMonth")} onClick={() => setPickerMonth(addMonths(pickerMonth, 1))} className="flex h-9 w-9 items-center justify-center rounded-full text-neutral-600 hover:bg-neutral-200/70">
-                      <ChevronRight className="h-6 w-6" />
+                      <ChevronRight className="h-5 w-5" />
                     </button>
                   </div>
                 </div>
@@ -474,32 +473,26 @@ export default function CalendarPage() {
           </div>
           </div>
           <div className="flex shrink-0 items-center gap-1.5">
-            <button type="button" aria-label={t(`calendar.previousView.${view}`)} onClick={() => setVisibleDate(view === "month" ? addMonths(visibleDate, -1) : addDays(visibleDate, view === "week" ? -7 : -1))} className="flex h-10 w-10 items-center justify-center rounded-full text-neutral-600 hover:bg-white"><ChevronLeft className="h-6 w-6" /></button>
-            <button type="button" aria-label={t(`calendar.nextView.${view}`)} onClick={() => setVisibleDate(view === "month" ? addMonths(visibleDate, 1) : addDays(visibleDate, view === "week" ? 7 : 1))} className="flex h-10 w-10 items-center justify-center rounded-full text-neutral-600 hover:bg-white"><ChevronRight className="h-6 w-6" /></button>
+            <button type="button" aria-label={t(`calendar.previousView.${view}`)} onClick={() => setVisibleDate(view === "month" ? addMonths(visibleDate, -1) : addDays(visibleDate, view === "week" ? -7 : -1))} className="flex h-10 w-10 items-center justify-center rounded-full bg-white text-neutral-600 hover:bg-neutral-50"><ChevronLeft className="h-5 w-5" /></button>
+            <button type="button" aria-label={t(`calendar.nextView.${view}`)} onClick={() => setVisibleDate(view === "month" ? addMonths(visibleDate, 1) : addDays(visibleDate, view === "week" ? 7 : 1))} className="flex h-10 w-10 items-center justify-center rounded-full bg-white text-neutral-600 hover:bg-neutral-50"><ChevronRight className="h-5 w-5" /></button>
             <button type="button" onClick={() => setVisibleDate(new Date())} className="h-10 rounded-full max-md:hidden bg-white px-4 text-sm font-medium text-neutral-700 hover:bg-neutral-50">{t("calendar.today")}</button>
-            <button type="button" onClick={() => setSubscribeOpen(true)} className="h-10 rounded-full max-md:hidden bg-white px-4 text-sm font-medium text-neutral-700 hover:bg-neutral-50">{t("calendar.subscribe")}</button>
-            <DropdownMenu.Root>
-              <DropdownMenu.Trigger asChild>
-                <button type="button" aria-label={t("calendar.options")} className="flex h-10 w-10 items-center justify-center rounded-full text-neutral-600 hover:bg-white md:hidden"><MoreVertical className="h-5 w-5" /></button>
-              </DropdownMenu.Trigger>
-              <DropdownMenu.Portal>
-                <DropdownMenu.Content align="end" sideOffset={4} className="z-[130] min-w-40 rounded-xl border border-neutral-200 bg-white p-1 text-sm shadow-xl md:hidden">
-                  <DropdownMenu.Item onSelect={() => setVisibleDate(new Date())} className="cursor-pointer rounded-lg px-3 py-2 text-neutral-700 outline-none data-[highlighted]:bg-neutral-100">{t("calendar.today")}</DropdownMenu.Item>
-                  <DropdownMenu.Item onSelect={() => setSubscribeOpen(true)} className="cursor-pointer rounded-lg px-3 py-2 text-neutral-700 outline-none data-[highlighted]:bg-neutral-100">{t("calendar.subscribe")}</DropdownMenu.Item>
-                  <DropdownMenu.Separator className="my-1 h-px bg-neutral-100" />
-                  {(["month", "week", "day"] as const).map((option) => <DropdownMenu.Item key={option} onSelect={() => chooseView(option)} className="flex cursor-pointer items-center justify-between gap-3 rounded-lg px-3 py-2 text-neutral-700 outline-none data-[highlighted]:bg-neutral-100">{t(`calendar.${option}`)}{view === option && <Check className="h-4 w-4 text-blue-600" />}</DropdownMenu.Item>)}
-                </DropdownMenu.Content>
-              </DropdownMenu.Portal>
-            </DropdownMenu.Root>
-            <div className="relative max-md:hidden">
-              <select value={view} onChange={(event) => chooseView(event.target.value as CalendarView)} aria-label={t("calendar.view")} className="h-10 appearance-none rounded-full border-0 bg-white pl-4 pr-10 text-sm font-medium text-neutral-700 hover:bg-neutral-50">
-                <option value="month">{t("calendar.month")}</option>
-                <option value="week">{t("calendar.week")}</option>
-                <option value="day">{t("calendar.day")}</option>
-              </select>
-              <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-5 w-5 -translate-y-1/2 text-neutral-600" />
+            <div className="ml-1 flex items-center max-md:ml-0">
+              <Button disabled={pendingAction !== null} onClick={() => openNewEvent()} className={clsx("h-10 rounded-l-full rounded-r-none bg-blue-600 pl-4 pr-3 text-white hover:bg-blue-500")}><Plus className="h-5 w-5" />{t("calendar.newEvent")}</Button>
+              <DropdownMenu.Root>
+                <DropdownMenu.Trigger asChild>
+                  <button type="button" aria-label={t("calendar.options")} className="flex h-10 w-9 items-center justify-center rounded-l-none rounded-r-full border-l border-white/40 bg-blue-600 text-white hover:bg-blue-500"><ChevronDown className="h-5 w-5" /></button>
+                </DropdownMenu.Trigger>
+                <DropdownMenu.Portal>
+                  <DropdownMenu.Content align="end" sideOffset={4} className="z-[130] min-w-48 rounded-xl border border-neutral-200 bg-white p-1 text-sm shadow-xl">
+                    <DropdownMenu.Item onSelect={() => setVisibleDate(new Date())} className="cursor-pointer rounded-lg px-3 py-2 text-neutral-700 outline-none data-[highlighted]:bg-neutral-100 md:hidden">{t("calendar.today")}</DropdownMenu.Item>
+                    <DropdownMenu.Item onSelect={() => setSubscribeOpen(true)} className="cursor-pointer rounded-lg px-3 py-2 text-neutral-700 outline-none data-[highlighted]:bg-neutral-100">{t("calendar.subscribe")}</DropdownMenu.Item>
+                    <DropdownMenu.Separator className="my-1 h-px bg-neutral-100" />
+                    <DropdownMenu.Label className="px-3 pb-1 pt-2 text-xs font-medium text-neutral-500">{t("calendar.view")}</DropdownMenu.Label>
+                    {(["month", "week", "day"] as const).map((option) => <DropdownMenu.Item key={option} onSelect={() => chooseView(option)} className="flex cursor-pointer items-center gap-2 rounded-lg px-3 py-2 text-neutral-700 outline-none data-[highlighted]:bg-neutral-100"><span className="flex h-4 w-4 shrink-0 items-center justify-center">{view === option && <Check className="h-4 w-4 text-blue-600" />}</span>{t(`calendar.${option}`)}</DropdownMenu.Item>)}
+                  </DropdownMenu.Content>
+                </DropdownMenu.Portal>
+              </DropdownMenu.Root>
             </div>
-            <Button disabled={pendingAction !== null} onClick={() => openNewEvent()} className={clsx("ml-1 max-md:ml-0 h-10 rounded-full bg-blue-600 px-4 text-white hover:bg-blue-500", mobilePrimaryActionClass)}><Plus className="h-5 w-5" />{t("calendar.newEvent")}</Button>
           </div>
         </div>,
         headerTarget,
@@ -576,8 +569,8 @@ export default function CalendarPage() {
       <CalendarSubscribeDialog open={subscribeOpen} onOpenChange={setSubscribeOpen} />
       <InviteResponseDialog event={pendingInvite} onClose={() => setPendingInvite(null)} onAnswered={() => setEventsVersion((version) => version + 1)} />
 
-      {adding && (
-        <div className={clsx("dialog-overlay fixed inset-0 z-50 flex items-center justify-center bg-black/35 p-4 dark:bg-black/55", closingEventEditor && "pointer-events-none")} data-state={closingEventEditor ? "closed" : "open"}>
+      {adding && createPortal(
+        <div className={clsx("dialog-overlay fixed inset-0 z-[120] flex items-center justify-center bg-black/35 p-4 dark:bg-black/55", closingEventEditor && "pointer-events-none")} data-state={closingEventEditor ? "closed" : "open"}>
           <DialogFrame label={editing ? t("calendar.editEvent") : t("calendar.createEvent")} onClose={() => { if (pendingAction !== "save") setClosingEventEditor(true); }} className="dialog-content max-h-[calc(100dvh-2rem)] w-full max-w-xl overflow-y-auto rounded-2xl bg-white p-5 shadow-2xl sm:p-6" data-state={closingEventEditor ? "closed" : "open"}
             onAnimationEnd={(event) => {
               if (!closingEventEditor || event.target !== event.currentTarget) return;
@@ -690,7 +683,8 @@ export default function CalendarPage() {
               </div>
             </div>
           </DialogFrame>
-        </div>
+        </div>,
+        document.body,
       )}
     </div>
   );
