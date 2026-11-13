@@ -223,3 +223,21 @@ test("chat receives pagination correction guidance and can retry with a null cur
 	assert.equal(JSON.parse(requests[1].messages.find((message) => message.tool_calls?.length).tool_calls[0].function.arguments).cursor, "0");
 	assert.equal(JSON.parse(requests[2].messages.filter((message) => message.tool_calls?.length).at(-1).tool_calls[0].function.arguments).cursor, null);
 });
+
+test("email pagination does not skip messages that share a created_at second", async (t) => {
+	const context = await paginationContext(t);
+	context.env.DB.db.exec(`
+		INSERT INTO messages (id, user_id, mailbox_id, direction, from_addr, to_addr, subject, text_body, status, created_at) VALUES
+			('tie-a', 'user-1', 'mailbox-1', 'inbound', 'sender@example.net', 'owner@example.com', 'A', 'a', 'received', 10),
+			('tie-b', 'user-1', 'mailbox-1', 'inbound', 'sender@example.net', 'owner@example.com', 'B', 'b', 'received', 10),
+			('tie-c', 'user-1', 'mailbox-1', 'inbound', 'sender@example.net', 'owner@example.com', 'C', 'c', 'received', 10);
+	`);
+	const ids = [];
+	let cursor = null;
+	do {
+		const page = await runEmailTool(context, "list_emails", { folder: "inbox", limit: 1, cursor });
+		ids.push(...page.emails.map((email) => email.id));
+		cursor = page.nextCursor;
+	} while (cursor);
+	assert.deepEqual(ids, ["tie-c", "tie-b", "tie-a", "email-3", "email-2", "email-1"]);
+});
