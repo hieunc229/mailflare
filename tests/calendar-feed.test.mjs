@@ -42,3 +42,8 @@ test("long lines fold at 75 octets", () => {
 	for (const line of folded.split("\r\n")) assert.ok(new TextEncoder().encode(line).length <= 75);
 	assert.equal(folded.replace(/\r\n /g, ""), `DESCRIPTION:${"é".repeat(100)}`);
 });
+
+test("UNTIL stops before the exclusive repeatUntil so a deleted occurrence is not shown", () => {
+	const ics = buildCalendarFeed([{ ...base, repeat: "weekly", timeZone: "UTC", repeatUntil: new Date("2026-11-09T17:00:00Z") }], { name: "M" });
+	assert.match(ics, /RRULE:FREQ=WEEKLY;UNTIL=20261109T165959Z\r\n/);
+});
