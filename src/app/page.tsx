@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { heroMessages, sidebarItems } from "./utils";
 import { Inbox, Mail, Search, ShieldCheck } from "@/components/icons";
 import { getServerTranslator } from "@/lib/i18n/server";
@@ -28,6 +29,9 @@ export default async function HomePage() {
     // A session lookup failure must not take down the public landing page.
     getCurrentUser(getEnv()).catch(() => null),
   ]);
+  // Signed-in users skip the landing page; the inbox restores their last-used mailbox.
+  if (sessionUser && !sessionUser.disabled) redirect("/inbox");
+
   // Render the signed-in account from the server response so the header does not
   // wait for hydration and an /api/auth/me round trip before showing it.
   const initialUser = sessionUser
