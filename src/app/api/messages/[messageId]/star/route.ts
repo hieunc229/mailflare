@@ -25,6 +25,8 @@ export async function POST(
 
 	const access = await getMailboxAccessLevel(db, user, message.mailboxId);
 	if (!access?.canRead) return NextResponse.json({ error: "Message not found" }, { status: 404 });
+	// The flag is stored on the shared message, so it needs the same floor as JMAP: any permission above read-only.
+	if (!access.canSendOnBehalf) return NextResponse.json({ error: "You cannot change messages in this mailbox" }, { status: 403 });
 
 	const starred = !message.starred;
 	await db.update(messages).set({ starred }).where(eq(messages.id, message.id));
