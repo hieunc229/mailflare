@@ -1,4 +1,4 @@
-import { eq, and, ne } from "drizzle-orm";
+import { eq, and, ne, inArray } from "drizzle-orm";
 import { getDb } from "@/db";
 import { domains, mailboxes } from "@/db/schema";
 import { ensureMailboxDomainRouting } from "@/lib/mailboxes/domain-addresses";
@@ -31,9 +31,10 @@ export type DomainDnsView = {
 	sendingSubdomain?: { name: string; tag: string };
 };
 
-export async function listUserDomains(env: CloudflareEnv, userId: string) {
+export async function listUserDomains(env: CloudflareEnv, userIds: string | string[]) {
 	const db = getDb(env);
-	return db.select().from(domains).where(eq(domains.userId, userId));
+	const ids = Array.isArray(userIds) ? userIds : [userIds];
+	return db.select().from(domains).where(ids.length === 1 ? eq(domains.userId, ids[0]) : inArray(domains.userId, ids));
 }
 
 export async function addDomainForUser(
