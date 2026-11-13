@@ -1774,6 +1774,8 @@
 	"invite.accept": "Accept",
 	"invite.maybe": "Maybe",
 	"invite.decline": "Decline",
+	"invite.acceptedLabel": "Accepted",
+	"invite.declinedLabel": "Declined",
 	"invite.removeFromCalendar": "Remove from calendar",
 	"invite.viewOnCalendar": "View on calendar",
 	"invite.added": "Calendar updated",

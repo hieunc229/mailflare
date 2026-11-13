@@ -330,6 +330,12 @@
         "CREATE TABLE `booking_confirmation_templates` (\n\t`event_id` varchar(191) NOT NULL,\n\t`subject` longtext NOT NULL DEFAULT (''),\n\t`body` longtext NOT NULL DEFAULT (''),\n\t`updated_at` bigint NOT NULL,\n\tCONSTRAINT `booking_confirmation_templates_event_id` PRIMARY KEY(`event_id`)\n);",
         "ALTER TABLE `booking_confirmation_templates` ADD CONSTRAINT `booking_confirmation_templates_event_id_booking_events_id_fk` FOREIGN KEY (`event_id`) REFERENCES `booking_events`(`id`) ON DELETE cascade ON UPDATE no action;"
       ]
+    },
+    {
+      "name": "0011_message_invite_response.sql",
+      "statements": [
+        "ALTER TABLE `messages` ADD `invite_response` text;"
+      ]
     }
   ]
 }

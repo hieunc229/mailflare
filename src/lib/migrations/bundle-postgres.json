@@ -355,6 +355,12 @@
         "CREATE TABLE \"booking_confirmation_templates\" (\n\t\"event_id\" text PRIMARY KEY NOT NULL,\n\t\"subject\" text DEFAULT '' NOT NULL,\n\t\"body\" text DEFAULT '' NOT NULL,\n\t\"updated_at\" bigint NOT NULL\n);",
         "ALTER TABLE \"booking_confirmation_templates\" ADD CONSTRAINT \"booking_confirmation_templates_event_id_booking_events_id_fk\" FOREIGN KEY (\"event_id\") REFERENCES \"public\".\"booking_events\"(\"id\") ON DELETE cascade ON UPDATE no action;"
       ]
+    },
+    {
+      "name": "0011_message_invite_response.sql",
+      "statements": [
+        "ALTER TABLE \"messages\" ADD COLUMN \"invite_response\" text;"
+      ]
     }
   ]
 }

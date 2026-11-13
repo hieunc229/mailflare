@@ -49,8 +49,12 @@ export async function GET(request: Request, { params }: InviteRouteParams) {
 	if (unreadable) return NextResponse.json({ invite: null, ...UNREADABLE }, { status: 422 });
 	if (!invite) return NextResponse.json({ invite: null });
 	const id = await inviteEventId(user.id, invite.uid);
-	const [existing] = await getDb(env).select({ id: calendarEvents.id }).from(calendarEvents).where(and(eq(calendarEvents.id, id), eq(calendarEvents.userId, user.id))).limit(1);
-	return NextResponse.json({ invite, eventId: existing?.id ?? null, canRespond: invite.method === "REQUEST" || invite.method === "PUBLISH" });
+	const [existing] = await getDb(env).select({ id: calendarEvents.id, responseStatus: calendarEvents.responseStatus }).from(calendarEvents).where(and(eq(calendarEvents.id, id), eq(calendarEvents.userId, user.id))).limit(1);
+	// The answer is kept on the message so it survives a decline, which removes the event from the calendar.
+	const [stored] = await getDb(env).select({ inviteResponse: messages.inviteResponse }).from(messages).where(eq(messages.id, messageId)).limit(1);
+	const saved = stored?.inviteResponse ?? existing?.responseStatus ?? null;
+	const response = saved === "accepted" || saved === "tentative" || saved === "declined" ? saved : null;
+	return NextResponse.json({ invite, eventId: existing?.id ?? null, response, canRespond: invite.method === "REQUEST" || invite.method === "PUBLISH" });
 }
 
 export async function POST(request: Request, { params }: InviteRouteParams) {
@@ -100,6 +104,8 @@ export async function POST(request: Request, { params }: InviteRouteParams) {
 		await db.insert(calendarEvents).values({ id, userId: user.id, mailboxId: message.mailboxId, color: response === "tentative" ? "#7c3aed" : "#2563eb", ...values }).onConflictDoUpdate({ target: calendarEvents.id, set: values });
 		eventId = id;
 	}
+
+	await db.update(messages).set({ inviteResponse: response }).where(eq(messages.id, messageId));
 
 	let replySent = false;
 	// ORGANIZER is written by the sender, so it is trusted only when it is on the sender's own domain

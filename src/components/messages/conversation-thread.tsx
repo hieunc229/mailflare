@@ -82,7 +82,7 @@ export function ConversationThread({
 			aria-label={position === "before" ? t("thread.earlier") : t("thread.later")}
 			className={cn(position === (latestMessagesFirst ? "before" : "after") ? "pb-6" : "")}
 		>
-			<ol className={cn(!collapsed && "divide-y divide-neutral-200/50", latestMessagesFirst ? "border-t" : "border-b", "border-neutral-200")}>
+			<ol className={cn(!collapsed && "divide-y divide-neutral-200/50", latestMessagesFirst ? "border-b" : "border-t", "border-neutral-200/50")}>
 				<li className={"border-t-0"}>
 					<ConversationMessageCard
 						message={firstMessage}

@@ -336,6 +336,8 @@ export const messages = sqliteTable(
 		references: text("references_header"),
 		/** Whether the message offers a way to unsubscribe (List-Unsubscribe header or a body link), so lists can show the action without reading the raw MIME. */
 		hasUnsubscribe: bool("has_unsubscribe").notNull().default(false),
+		/** The user's answer to the calendar invitation this message carries: accepted, tentative or declined; null until answered. */
+		inviteResponse: text("invite_response"),
 		spamScore: integer("spam_score"),
 		spamVerdict: text("spam_verdict", { enum: ["inbox", "suspicious", "spam"] }),
 		spamSignals: text("spam_signals"),

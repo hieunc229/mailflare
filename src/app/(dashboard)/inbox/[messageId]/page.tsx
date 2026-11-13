@@ -309,6 +309,7 @@ function MessageDetailContent({ messageId }: { messageId: string }) {
       <h1 className={clsx(!isAnyPanelVisible ? "sm:pl-16" : "sm:pl-10", "px-4 pb-2 pt-2 text-2xl text-neutral-900 sm:pr-6")} title={message.subject ?? t("list.noSubject")}>
         {message.subject ?? t("list.noSubject")}
       </h1>
+      <MessageInviteCard key={message.id} messageId={message.id} hasCalendarAttachment={!!findInviteAttachment(attachments)} className={clsx(!isAnyPanelVisible ? "sm:ml-16" : "sm:ml-10", "mx-4 mb-3 sm:mr-6")} />
       <ConversationNotes
         className={clsx(!isAnyPanelVisible ? "sm:pl-16" : "sm:pl-10", "px-4 pb-3 sm:pr-6")}
       />
@@ -480,7 +481,6 @@ function MessageDetailContent({ messageId }: { messageId: string }) {
               </div>
             </section>
           )}
-          <MessageInviteCard key={message.id} messageId={message.id} hasCalendarAttachment={!!findInviteAttachment(attachments)} />
           {attachments.length > 0 && (
             <section className="mt-8 border-t border-neutral-100 px-4 py-6 sm:px-0 sm:pl-16">
               <div className="mb-3 flex items-center justify-between gap-3">

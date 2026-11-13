@@ -46,6 +46,9 @@ export function ConversationNotes({ className }: ConversationNotesProps) {
 	const last = notes.notes.at(-1);
 	const visible = open || !!last;
 	const rowClass = "grid transition-[grid-template-rows] duration-200 ease-out motion-reduce:transition-none";
+
+	if (!visible) return null;
+
 	return (
 		<div className="w-full pb-3">
 			<div inert={!visible} className={rowClass} style={{ gridTemplateRows: visible ? "1fr" : "0fr" }}>

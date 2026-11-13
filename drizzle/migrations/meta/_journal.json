@@ -547,6 +547,13 @@
       "when": 1793280381889,
       "tag": "0086_booking_confirmation_templates",
       "breakpoints": true
+    },
+    {
+      "idx": 79,
+      "version": "6",
+      "when": 1793280382889,
+      "tag": "0087_message_invite_response",
+      "breakpoints": true
     }
   ]
 }
