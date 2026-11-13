@@ -1,7 +1,7 @@
 import { and, asc, desc, eq, exists, gt, gte, inArray, isNotNull, isNull, lt, ne, not, or, sql } from "drizzle-orm";
 import type { SQL } from "drizzle-orm";
 import { messageAttachments, messages } from "@/db/schema";
-import { concatText, insensitiveLike as like, matchEverything, matchNothing } from "@/db/sql";
+import { concatText, containsLike, escapeLike, insensitiveLike as like, matchEverything, matchNothing } from "@/db/sql";
 import { KEYWORD_DRAFT, KEYWORD_FLAGGED, KEYWORD_SEEN } from "./constants";
 import { invalidArguments, unsupportedFilter } from "./errors";
 import { normalizeMessageId } from "@/lib/email/threading";
@@ -33,14 +33,6 @@ function keywordCondition(keyword: string, present: boolean): SQL {
 	}
 }
 
-function likeEscape(value: string): string {
-	return value.replace(/[%_\\]/g, (char) => `\\${char}`);
-}
-
-function likePattern(value: string): string {
-	return `%${likeEscape(value)}%`;
-}
-
 /**
  * RFC 8621 §4.4.1 `header`: `[name]` means the header is present, `[name, value]`
  * that its value equals that string. Only the headers Mailflare keeps as columns
@@ -63,7 +55,7 @@ function headerCondition(header: string[]): SQL {
 		case "references":
 			if (header.length === 1) return isNotNull(messages.references);
 			// The column is the space-joined chain, so pad both sides to match whole ids only.
-			return value ? like(concatText(' ', sql`coalesce(${messages.references}, '')`, ' '), `% ${likeEscape(value)} %`) : matchNothing;
+			return value ? like(concatText(' ', sql`coalesce(${messages.references}, '')`, ' '), `% ${escapeLike(value)} %`) : matchNothing;
 		default:
 			throw unsupportedFilter(`Cannot filter on the ${header[0]} header`);
 	}
@@ -89,14 +81,14 @@ function conditionToSql(condition: FilterCondition, accessible: Set<string>): SQ
 	if (condition.someInThreadHaveKeyword) parts.push(keywordCondition(condition.someInThreadHaveKeyword, true));
 	if (condition.allInThreadHaveKeyword) parts.push(keywordCondition(condition.allInThreadHaveKeyword, true));
 	if (condition.noneInThreadHaveKeyword) parts.push(keywordCondition(condition.noneInThreadHaveKeyword, false));
-	if (condition.from) parts.push(like(messages.fromAddr, likePattern(condition.from)));
-	if (condition.to) parts.push(like(messages.toAddr, likePattern(condition.to)));
-	if (condition.cc) parts.push(like(messages.ccAddr, likePattern(condition.cc)));
-	if (condition.bcc) parts.push(like(messages.bccAddr, likePattern(condition.bcc)));
-	if (condition.subject) parts.push(like(messages.subject, likePattern(condition.subject)));
-	if (condition.body) parts.push(or(like(messages.textBody, likePattern(condition.body)), like(messages.htmlBody, likePattern(condition.body)))!);
+	if (condition.from) parts.push(containsLike(messages.fromAddr, condition.from));
+	if (condition.to) parts.push(containsLike(messages.toAddr, condition.to));
+	if (condition.cc) parts.push(containsLike(messages.ccAddr, condition.cc));
+	if (condition.bcc) parts.push(containsLike(messages.bccAddr, condition.bcc));
+	if (condition.subject) parts.push(containsLike(messages.subject, condition.subject));
+	if (condition.body) parts.push(or(containsLike(messages.textBody, condition.body), containsLike(messages.htmlBody, condition.body))!);
 	if (condition.text) {
-		const pattern = likePattern(condition.text);
+		const pattern = `%${escapeLike(condition.text)}%`;
 		parts.push(
 			or(
 				like(messages.subject, pattern),
