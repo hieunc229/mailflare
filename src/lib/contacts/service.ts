@@ -220,6 +220,7 @@ export async function blockContact(env: CloudflareEnv, input: BlockContactInput)
 		}
 	}
 
+	const blockRuleId = `block:${input.mailboxId}:${email}`;
 	const [existingRule] = await db
 		.select()
 		.from(routingRules)
@@ -234,18 +235,17 @@ export async function blockContact(env: CloudflareEnv, input: BlockContactInput)
 		)
 		.limit(1);
 	if (!existingRule) {
-		await db.insert(routingRules).values({
-			id: `block:${input.mailboxId}:${email}`,
-			userId: input.userId,
-			domainId: input.domainId,
-			pattern: email,
-			matchField: "email",
-			matchOperator: "exact",
+		const match = {
+			matchField: "email" as const,
+			matchOperator: "exact" as const,
 			matchValue: email,
-			mailboxId: input.mailboxId,
-			action: "trash",
-			priority: 100,
-		});
+			action: "trash" as const,
+		};
+		// The generated rule may have been edited or disabled since; restore what makes it block, and leave who owns it alone.
+		await db
+			.insert(routingRules)
+			.values({ id: blockRuleId, userId: input.userId, domainId: input.domainId, pattern: email, mailboxId: input.mailboxId, priority: 100, ...match })
+			.onConflictDoUpdate({ target: routingRules.id, set: { ...match, enabled: true } });
 	}
 
 	return { email, blocked: true };
