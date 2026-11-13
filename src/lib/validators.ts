@@ -320,7 +320,8 @@ export const folderSchema = z.object({
 });
 
 export const updateProfileSchema = z.object({
-	name: z.string().trim().min(1).max(100),
+	// Optional so a recovery-email-only save leaves the name alone instead of writing back a stale one.
+	name: z.string().trim().min(1).max(100).optional(),
 	resetEmail: z.preprocess(
 		(value) => (typeof value === "string" ? value.trim() : value),
 		z.string().email().or(z.literal("")).transform((value) => value || null),
