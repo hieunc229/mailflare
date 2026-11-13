@@ -1,6 +1,16 @@
+import { getEnv } from "@/lib/cloudflare";
 import type { ResendDomain, ResendReceivedEmail, ResendWebhook } from "@/lib/email/resend-api-types";
 
-const RESEND_API = "https://api.resend.com";
+const RESEND_DEFAULT_BASE_URL = "https://api.resend.com";
+
+/**
+ * RESEND_BASE_URL points the Resend provider at a Resend-compatible API
+ * (for example MillionSend) instead of api.resend.com.
+ */
+export function getResendBaseUrl(): string {
+	const fromEnv = (getEnv() as { RESEND_BASE_URL?: string }).RESEND_BASE_URL?.trim();
+	return (fromEnv || RESEND_DEFAULT_BASE_URL).replace(/\/+$/, "");
+}
 
 export class ResendRestrictedKeyError extends Error {
 	constructor() {
@@ -9,7 +19,7 @@ export class ResendRestrictedKeyError extends Error {
 }
 
 async function resendRequest<T>(apiKey: string, path: string, init?: RequestInit): Promise<T> {
-	const response = await fetch(`${RESEND_API}${path}`, {
+	const response = await fetch(`${getResendBaseUrl()}${path}`, {
 		...init,
 		headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json", ...init?.headers },
 	});
@@ -78,7 +88,7 @@ export async function verifyResendDomain(apiKey: string, id: string): Promise<vo
  * domains endpoint with `restricted_api_key`, which still means the key works.
  */
 export async function checkResendKey(apiKey: string): Promise<{ valid: boolean; canManageDomains: boolean }> {
-	const response = await fetch(`${RESEND_API}/domains`, { headers: { Authorization: `Bearer ${apiKey}` } });
+	const response = await fetch(`${getResendBaseUrl()}/domains`, { headers: { Authorization: `Bearer ${apiKey}` } });
 	if (response.ok) return { valid: true, canManageDomains: true };
 	const body = (await response.json().catch(() => null)) as { name?: string } | null;
 	if (response.status === 401 && body?.name === "restricted_api_key") return { valid: true, canManageDomains: false };

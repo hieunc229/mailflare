@@ -4,9 +4,8 @@ import { appSettings, domains } from "@/db/schema";
 import { requireAwsConfig } from "@/lib/aws/config";
 import { sendSesEmail } from "@/lib/aws/ses";
 import { getEmailAddress } from "@/lib/email/address";
+import { getResendBaseUrl } from "@/lib/email/resend-api";
 import type { OutboundProviderConfig, OutboundProviderMessage, ResendKeyStatus } from "@/lib/email/outbound-provider-types";
-
-const RESEND_ENDPOINT = "https://api.resend.com/emails";
 
 /**
  * Each domain picks its own sender: Cloudflare Email Sending, Resend, or none
@@ -70,7 +69,7 @@ async function sendWithResend(
 	idempotencyKey?: string,
 ): Promise<{ messageId: string }> {
 	const messageId = message.headers?.["Message-ID"] ?? mintMessageId(message.from);
-	const response = await fetch(RESEND_ENDPOINT, {
+	const response = await fetch(`${getResendBaseUrl()}/emails`, {
 		method: "POST",
 		headers: {
 			Authorization: `Bearer ${apiKey}`,
