@@ -14,6 +14,7 @@ import { hasPasswordHash } from "@/lib/auth/password";
 import { consumeStepUpGrant } from "@/lib/auth/webauthn/grants";
 import { createAuditLog } from "@/lib/mailboxes/audit";
 import { authError } from "@/lib/http/auth-error";
+import { hasValidSessionMutationOrigin } from "@/lib/auth/origin";
 
 export async function GET(request: Request, { params }: AccountRouteParams) {
 	const access = await requireTeamAdmin(request);
@@ -51,6 +52,7 @@ export async function GET(request: Request, { params }: AccountRouteParams) {
 export async function PATCH(request: Request, { params }: AccountRouteParams) {
 	const access = await requireTeamAdmin(request);
 	if (access.error) return access.error;
+	if (!hasValidSessionMutationOrigin(request)) return NextResponse.json({ error: "Invalid origin" }, { status: 403 });
 	const { id } = await params;
 	const db = getDb(access.env);
 	const account = await selectAccountById(db, id);

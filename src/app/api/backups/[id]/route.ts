@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { authorizeBackupAdmin } from "../admin";
 import { deleteBackup } from "@/lib/backups/service";
+import { hasValidSessionMutationOrigin } from "@/lib/auth/origin";
 
 export async function DELETE(
 	request: Request,
@@ -9,6 +10,7 @@ export async function DELETE(
 	const auth = await authorizeBackupAdmin(request);
 	if (auth.error) return auth.error;
 	const { env } = auth;
+	if (!hasValidSessionMutationOrigin(request)) return NextResponse.json({ error: "Invalid origin" }, { status: 403 });
 	try {
 		const { id } = await params;
 		const deleted = await deleteBackup(env, id);

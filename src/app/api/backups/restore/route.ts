@@ -3,12 +3,14 @@ import { assertPrimaryAdmin } from "@/lib/auth/admin";
 import { requireUser } from "@/lib/auth/cookies";
 import { restoreDatabaseRecords } from "@/lib/backups/export";
 import { getEnv } from "@/lib/cloudflare";
+import { hasValidSessionMutationOrigin } from "@/lib/auth/origin";
 
 export async function POST(request: Request) {
 	const env = getEnv();
 	try {
 		const user = await requireUser(env, request);
 		assertPrimaryAdmin(user);
+		if (!hasValidSessionMutationOrigin(request)) return NextResponse.json({ error: "Invalid origin" }, { status: 403 });
 		const form = await request.formData();
 		const file = form.get("backup");
 		if (!(file instanceof File)) return NextResponse.json({ error: "Choose a backup file" }, { status: 400 });
