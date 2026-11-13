@@ -3,6 +3,7 @@ import { isPublicHttpsUrl, PUBLIC_HTTPS_URL_MESSAGE } from "@/lib/security/publi
 import { getEmailAddress, splitEmailAddressList } from "@/lib/email/address";
 import { DEFAULT_FOLDER_COLOR, FOLDER_COLOR_VALUES } from "@/lib/folders/colors";
 import { MAX_FOLLOW_UP_DAYS } from "@/lib/follow-ups/follow-up-utils";
+import { isValidBase64 } from "@/lib/email/base64";
 
 /**
  * Recipients arrive either as one comma-separated header string (the composer)
@@ -40,7 +41,7 @@ export const sendEmailSchema = z.object({
 			z.object({
 					filename: z.string().min(1).max(255),
 					type: z.string().min(1).max(255).default("application/octet-stream"),
-					contentBase64: z.string().min(1).max(14 * 1024 * 1024),
+					contentBase64: z.string().min(1).max(14 * 1024 * 1024).refine(isValidBase64, "contentBase64 must be standard base64"),
 			}),
 		)
 		.max(10)
