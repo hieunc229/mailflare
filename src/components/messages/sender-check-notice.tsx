@@ -44,6 +44,8 @@ export function SenderCheckNotice({
 	const { authentication } = useMessageAuthentication(message.id, message.direction);
 	const warning = getSenderWarning(message, authentication);
 
+	if (!warning) return null;
+
 	return (
 		<div role={announce ? "status" : undefined} className={warning ? className : undefined}>
 			{warning && (

@@ -194,11 +194,11 @@ function PopoverBody({ fallback, onEmpty }: { fallback?: string; onEmpty: () => 
 }
 
 /** Static note icon and count for rows that cannot hover, such as the stacked mobile row. */
-export function NoteBadge({ count }: { count?: number }) {
+export function NoteBadge({ count, className = "mr-1.5" }: { count?: number; className?: string }) {
 	const { t } = useLanguage();
 	if (!count) return null;
 	return (
-		<span className="mr-1.5 inline-flex items-center gap-0.5 align-middle text-xs font-normal text-amber-700" role="img" aria-label={t("note.count", { count })}>
+		<span className={`${className} inline-flex items-center gap-0.5 align-middle text-xs font-normal text-amber-700`} role="img" aria-label={t("note.count", { count })}>
 			<Note className="h-3 w-3" aria-hidden="true" />
 			{count}
 		</span>

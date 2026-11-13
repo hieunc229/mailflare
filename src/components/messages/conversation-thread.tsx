@@ -82,7 +82,7 @@ export function ConversationThread({
 			aria-label={position === "before" ? t("thread.earlier") : t("thread.later")}
 			className={cn(position === (latestMessagesFirst ? "before" : "after") ? "pb-6" : "")}
 		>
-			<ol className={cn(!collapsed && "divide-y divide-neutral-200/50", latestMessagesFirst ? "border-b" : "border-t", "border-neutral-200/50")}>
+			<ol className={cn(!collapsed && "divide-y divide-neutral-200/50", latestMessagesFirst ? "border-y" : "border-t", "border-neutral-200/50")}>
 				<li className={"border-t-0"}>
 					<ConversationMessageCard
 						message={firstMessage}
@@ -191,9 +191,9 @@ export function ConversationMessageCard({
 
 
 	return (
-		<article data-message-id={message.id} className={cn("bg-white transition-colors px-3 sm:px-6", !expanded && "hover:bg-neutral-50", !isAnyPanelVisible && "sm:pl-12")}>
+		<article data-message-id={message.id} className={cn("bg-white transition-colors px-3 sm:pl-0 sm:pr-6", !expanded && "hover:bg-neutral-50")}>
 			<div className="w-full">
-				<div className="flex w-full flex-wrap items-start gap-x-3 py-3 sm:pl-4">
+				<div className="flex w-full flex-wrap items-start gap-x-3 py-3 sm:pl-[78px]">
 					<button
 						type="button"
 						onClick={() => {
@@ -212,7 +212,7 @@ export function ConversationMessageCard({
 							name={sender}
 							hasManagedAvatar={message.fromContactHasAvatar}
 							managedAvatarUrl={outbound && mailboxId ? `/api/mailboxes/${mailboxId}/avatar` : undefined}
-							className={expanded ? "mt-1" : ""}
+							className={cn("sm:-ml-12", expanded && "mt-1")}
 						/>
 						<span className="min-w-0 flex-1">
 							<div className="flex flex-col">
@@ -251,16 +251,16 @@ export function ConversationMessageCard({
 						message={message}
 						detailsOpen={detailsOpen}
 						onViewDetails={() => setDetailsOpen((open) => !open)}
-						className="mb-3 sm:ml-16"
+						className="mb-3 sm:ml-[78px]"
 					/>
 				)}
 				{detailsOpen && (
-					<div className="mb-3 sm:pl-16">
+					<div className="mb-3 sm:pl-[78px]">
 						<MessageDetailsPanel message={message} onClose={() => setDetailsOpen(false)} />
 					</div>
 				)}
 				{expanded && body && (
-					<div className="pb-4 pt-2 sm:pl-16">
+					<div className="pb-4 pt-2 sm:pl-[78px]">
 						{outbound && <MessageOpenStatus messageId={message.id} />}
 						{outbound && message.status !== "draft" && <MessageFollowUpStatus messageId={message.id} />}
 						{body.html ? (

@@ -306,12 +306,12 @@ function MessageDetailContent({ messageId }: { messageId: string }) {
     </div>
 
     <div ref={scrollRef} onScroll={handleScroll} className="h-full overflow-y-auto overscroll-contain scrollbar-gutter-stable flex-1 min-h-0">
-      <h1 className={clsx(!isAnyPanelVisible ? "sm:pl-16" : "sm:pl-10", "px-4 pb-2 pt-2 text-2xl text-neutral-900 sm:pr-6")} title={message.subject ?? t("list.noSubject")}>
+      <h1 className={clsx("sm:pl-[78px] px-4 pb-2 pt-2 text-2xl text-neutral-900 sm:pr-6")} title={message.subject ?? t("list.noSubject")}>
         {message.subject ?? t("list.noSubject")}
       </h1>
-      <MessageInviteCard key={message.id} messageId={message.id} hasCalendarAttachment={!!findInviteAttachment(attachments)} className={clsx(!isAnyPanelVisible ? "sm:ml-16" : "sm:ml-10", "mx-4 mb-3 sm:mr-6")} />
+      <MessageInviteCard key={message.id} messageId={message.id} hasCalendarAttachment={!!findInviteAttachment(attachments)} className={clsx("sm:ml-[78px] mx-4 mb-3 sm:mr-6")} />
       <ConversationNotes
-        className={clsx(!isAnyPanelVisible ? "sm:pl-16" : "sm:pl-10", "px-4 pb-3 sm:pr-6")}
+        className={clsx("sm:pl-[78px] px-4 sm:pr-6")}
       />
       {/* <div className="px-6">
         <div className="mx-auto w-full max-w-[640px]">
@@ -336,12 +336,12 @@ function MessageDetailContent({ messageId }: { messageId: string }) {
         expandedAll={threadExpanded}
         onExpandedAllChange={setThreadExpanded}
       />
-      <article data-message-id={message.id} className={clsx("py-4 sm:px-6", !isAnyPanelVisible && "sm:pl-12")}>
+      <article data-message-id={message.id} className={"pb-4 sm:pl-0 sm:pr-6"}>
         <div className="w-full">
           {canUnsubscribe && !unsubBannerDismissed && (
             <MailingListBanner messageId={message.id} onDismiss={dismissUnsubBanner} />
           )}
-          <div className="flex flex-wrap items-start justify-between gap-x-3 gap-y-1 px-4 pb-5 sm:px-0 sm:pl-4">
+          <div className="flex flex-wrap items-start justify-between gap-x-3 gap-y-1 px-4 pb-2 sm:px-0 sm:pl-[78px]">
             <div className="flex min-w-0 items-start gap-3">
               <ContactAvatar
                 mailboxId={message.mailboxId}
@@ -351,7 +351,7 @@ function MessageDetailContent({ messageId }: { messageId: string }) {
                 managedAvatarUrl={message.direction === "outbound" && message.mailboxId
                   ? `/api/mailboxes/${message.mailboxId}/avatar`
                   : undefined}
-                className="mt-2"
+                className="mt-2 sm:-ml-12"
               />
               <div className="flex-1 min-w-0">
                 <p className="text-sm text-neutral-900 mt-1.25 flex flex-row items-center gap-1 w-full  overflow-hidden">
@@ -407,21 +407,22 @@ function MessageDetailContent({ messageId }: { messageId: string }) {
               />
             </div>
           </div>
-          <div className="mb-4 px-4 sm:px-0 sm:pl-4 sm:pr-4">
-            <SenderCheckNotice
-              message={message}
-              detailsOpen={detailsOpen}
-              onViewDetails={() => setDetailsOpen((open) => !open)}
-              announce
-            />
-          </div>
+
+          <SenderCheckNotice
+            message={message}
+            detailsOpen={detailsOpen}
+            onViewDetails={() => setDetailsOpen((open) => !open)}
+            announce
+            className="mb-4 px-4 sm:px-0 sm:pl-[78px] sm:pr-4"
+          />
+
           {detailsOpen && (
-            <div className="mb-4 px-4 sm:px-0 sm:pl-4 sm:pr-4">
+            <div className="mb-4 px-4 sm:px-0 sm:pl-[78px] sm:pr-4">
               <MessageDetailsPanel message={message} onClose={() => setDetailsOpen(false)} />
             </div>
           )}
-          {scheduledAt && <div className="px-4 sm:px-0 sm:pl-10"><ScheduledSendBanner messageId={message.id} scheduledAt={scheduledAt} onRescheduled={(next) => setData((current) => current ? { ...current, scheduledAt: next } : current)} /></div>}
-          <div className="prose max-w-none px-4 text-neutral-900 sm:px-0 sm:pl-16">
+          {scheduledAt && <div className="px-4 sm:px-0 sm:pl-[78px]"><ScheduledSendBanner messageId={message.id} scheduledAt={scheduledAt} onRescheduled={(next) => setData((current) => current ? { ...current, scheduledAt: next } : current)} /></div>}
+          <div className="prose max-w-none px-4 text-neutral-900 sm:px-0 sm:pl-[78px]">
             {bodyError ? (
               <div role="alert" className="not-prose rounded-lg border border-neutral-200 bg-neutral-50 p-4">
                 <p className="text-sm text-neutral-700">{t("source.loadFailed")}</p>
@@ -452,7 +453,7 @@ function MessageDetailContent({ messageId }: { messageId: string }) {
             ))}
           </div>
           {cloudAttachmentResult.attachments.length > 0 && (
-            <section className="mt-8 border-t border-neutral-100 px-4 py-6 sm:px-0 sm:pl-16">
+            <section className="mt-8 border-t border-neutral-100 px-4 py-6 sm:px-0 sm:pl-[78px]">
               <h2 className="mb-3 text-sm font-semibold text-neutral-900">
                 {t("message.cloudFiles", { count: cloudAttachmentResult.attachments.length })}
               </h2>
@@ -482,7 +483,7 @@ function MessageDetailContent({ messageId }: { messageId: string }) {
             </section>
           )}
           {attachments.length > 0 && (
-            <section className="mt-8 border-t border-neutral-100 px-4 py-6 sm:px-0 sm:pl-16">
+            <section className="mt-8 border-t border-neutral-100 px-4 py-6 sm:px-0 sm:pl-[78px]">
               <div className="mb-3 flex items-center justify-between gap-3">
                 <h2 className="text-sm font-semibold text-neutral-900">
                   {t("message.attachments", { count: attachments.length })}

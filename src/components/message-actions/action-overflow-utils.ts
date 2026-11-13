@@ -1,7 +1,7 @@
 /** Geometry of the inline message action row. Icon buttons are 32px and the row uses gap-2. */
 export const INLINE_ACTION_WIDTH = 32;
 export const INLINE_ACTION_GAP = 8;
-export const INLINE_ACTION_DIVIDER_WIDTH = 1;
+export const INLINE_ACTION_DIVIDER_WIDTH = 17; // 1px rule + mx-2 on each side
 export const INLINE_ACTION_TRIGGER_WIDTH = 32;
 
 export type VisibleActionCountInput = {

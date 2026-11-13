@@ -202,6 +202,7 @@ function MessageListRowComponent({
 							{(message.threadCount ?? 1) > 1 && (
 								<span className="ml-2 text-xs font-normal text-neutral-500">{message.threadCount}</span>
 							)}
+							<NoteBadge count={message.noteCount} className="ml-2" />
 						</span>
 						<span className={clsx(unread ?"font-medium":"text-neutral-500","shrink-0 text-[11px]")}>
 							<OpenedIndicator count={message.openCount} />
@@ -212,7 +213,6 @@ function MessageListRowComponent({
 						className={`mt-1 block truncate text-sm ${unread ? "font-semibold text-neutral-900" : "text-neutral-700"
 							}`}
 					>
-						<NoteBadge count={message.noteCount} />
 						{message.subject ?? t("list.noSubject")}
 					</span>
 					<span className="mt-0.5 block truncate text-xs leading-5 text-neutral-500">
