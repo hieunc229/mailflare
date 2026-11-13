@@ -12,6 +12,7 @@ import { getPersonalIdentityForAddress, syncPersonalIdentity } from "@/lib/profi
 import { parseAddress } from "@/lib/utils";
 import type { ContactRequestInput } from "./types";
 import { getContactByEmail, listContacts, parseContactsLimit, saveManualContact, toContactDetails } from "./utils";
+import { readJsonObject } from "@/lib/http/request";
 
 export async function GET(request: Request) {
 	const env = getEnv();
@@ -70,7 +71,8 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
 	const env = getEnv();
 	const user = await requireUser(env, request);
-	const body = (await request.json()) as ContactRequestInput;
+	const body = await readJsonObject<ContactRequestInput>(request);
+	if (!body) return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
 	const email = normalizeEmailAddress(body.address ?? "");
 	const displayName = body.displayName?.trim() || null;
 	if (!body.mailboxId || !parseAddress(email) || (displayName && displayName.length > 100)) {
@@ -111,7 +113,8 @@ export async function POST(request: Request) {
 export async function PATCH(request: Request) {
 	const env = getEnv();
 	const user = await requireUser(env, request);
-	const body = (await request.json()) as ContactRequestInput;
+	const body = await readJsonObject<ContactRequestInput>(request);
+	if (!body) return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
 	const email = normalizeEmailAddress(body.address ?? "");
 	const displayName = body.displayName?.trim() ?? "";
 	if (!body.mailboxId || !email || !displayName || displayName.length > 100) {

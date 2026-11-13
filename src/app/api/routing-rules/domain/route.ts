@@ -14,6 +14,7 @@ import {
 	toRuleColumns,
 } from "@/lib/domains/routing-rules";
 import { hasValidSessionMutationOrigin } from "@/lib/auth/origin";
+import { readJsonObject } from "@/lib/http/request";
 
 export async function GET(request: Request) {
 	const env = getEnv();
@@ -49,7 +50,7 @@ export async function POST(request: Request) {
 	if (auth.error) return auth.error;
 	const user = auth.user;
 	if (!hasValidSessionMutationOrigin(request)) return NextResponse.json({ error: "Invalid origin" }, { status: 403 });
-	const parsed = domainRoutingRuleSchema.safeParse(await request.json());
+	const parsed = domainRoutingRuleSchema.safeParse(await readJsonObject(request));
 	if (!parsed.success) {
 		return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
 	}
