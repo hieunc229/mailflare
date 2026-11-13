@@ -22,6 +22,15 @@ export type CfResponse<T> = {
 	errors: CfApiError[];
 	messages?: CfApiError[];
 	result: T;
+	result_info?: CfResultInfo;
+};
+
+export type CfResultInfo = {
+	page?: number;
+	per_page?: number;
+	total_pages?: number;
+	count?: number;
+	total_count?: number;
 };
 
 export type CfAuth =
