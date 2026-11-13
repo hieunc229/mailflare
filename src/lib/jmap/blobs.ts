@@ -6,7 +6,7 @@ import { decodeBlobId, uploadBlobId } from "./ids";
 import { listAccessibleMailboxIdSet } from "./access";
 import type { JmapContext } from "./types";
 
-const UPLOAD_PREFIX = "jmap-uploads";
+export const UPLOAD_PREFIX = "jmap-uploads";
 
 /** Uploads are namespaced by user, so only the account that stored one can read it. */
 function uploadKey(ctx: JmapContext, uploadId: string): string {
