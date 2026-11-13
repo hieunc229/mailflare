@@ -1,4 +1,4 @@
-import { and, eq, isNull, ne, sql } from "drizzle-orm";
+import { eq, inArray, sql } from "drizzle-orm";
 import { NextResponse } from "next/server";
 import { getDb } from "@/db";
 import { domains, mailboxes, messages } from "@/db/schema";
@@ -9,11 +9,12 @@ import { getOutboundProviderConfig, sendThroughProvider } from "@/lib/email/outb
 import { extractUnsubscribeLinkFromBody, getUnsubscribeUrlFromRawR2Key, parseMailtoUnsubscribe } from "@/lib/email/unsubscribe";
 import { createAuditLog } from "@/lib/mailboxes/audit";
 import { getMailboxAccessLevel } from "@/lib/mailboxes/access";
-import { escapeLike, insensitiveLike } from "@/db/sql";
 import type { MailtoUnsubscribeTarget, UnsubscribePayload, UnsubscribeRouteParams } from "./types";
-import { allowUnsubscribeRequest, postOneClickUnsubscribe } from "./utils";
+import { allowUnsubscribeRequest, postOneClickUnsubscribe, senderTrashCondition } from "./utils";
 
 const TRASH_SWEEP_LIMIT = 5_000;
+/** Ids per UPDATE, under D1's 100 bound parameters per statement. */
+const TRASH_UPDATE_BATCH = 90;
 
 /**
  * Sends the mailto: unsubscribe straight through the outbound provider so it
@@ -38,17 +39,6 @@ async function sendUnsubscribeEmail(env: CloudflareEnv, mailboxId: string, targe
 	} catch {
 		return false;
 	}
-}
-
-/** Past messages from the same sender that a sweep would move to Trash. Starred mail and mail filed by the user stay put. */
-function senderTrashCondition(mailboxId: string, senderAddress: string) {
-	return and(
-		eq(messages.mailboxId, mailboxId),
-		insensitiveLike(messages.fromAddr, `%${escapeLike(senderAddress)}%`),
-		eq(messages.starred, false),
-		isNull(messages.folderId),
-		ne(messages.status, "trash"),
-	);
 }
 
 /**
@@ -114,8 +104,12 @@ export async function POST(request: Request, { params }: UnsubscribeRouteParams)
 			action: "email.unsubscribe_and_trash",
 			metadata: { sender: senderAddress, count },
 		});
-		await db.update(messages).set({ status: "trash" }).where(where);
-		trashedCount = count;
+		// Move at most the previewed number of messages, not every match.
+		const ids = (await db.select({ id: messages.id }).from(messages).where(where).orderBy(messages.id).limit(TRASH_SWEEP_LIMIT)).map((row) => row.id);
+		for (let index = 0; index < ids.length; index += TRASH_UPDATE_BATCH) {
+			await db.update(messages).set({ status: "trash" }).where(inArray(messages.id, ids.slice(index, index + TRASH_UPDATE_BATCH)));
+		}
+		trashedCount = ids.length;
 	}
 
 	const candidate = await getUnsubscribeUrlFromRawR2Key(env, message.rawR2Key);
