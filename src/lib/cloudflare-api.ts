@@ -16,6 +16,8 @@ import { CloudflareApiError } from "@/lib/cloudflare-api-error";
 import { getZoneLookupCandidates } from "@/lib/domains/utils";
 export type { CfDnsRecord } from "@/lib/cloudflare-api.types";
 
+const CF_REQUEST_TIMEOUT_MS = 30_000;
+
 export async function cfRequest<T>(
 	env: CloudflareEnv,
 	path: string,
@@ -23,6 +25,7 @@ export async function cfRequest<T>(
 ): Promise<T> {
 	const auth = getCloudflareAuth(env);
 	const res = await fetch(`https://api.cloudflare.com/client/v4${path}`, {
+		signal: AbortSignal.timeout(CF_REQUEST_TIMEOUT_MS),
 		...init,
 		headers: {
 			...getCloudflareAuthHeaders(auth),
@@ -30,7 +33,16 @@ export async function cfRequest<T>(
 			...(init?.headers ?? {}),
 		},
 	});
-	const json = (await res.json()) as CfResponse<T>;
+	// Cloudflare answers incidents with an HTML page; report it as an API error, not a parse error.
+	const json = (await res.json().catch(() => null)) as CfResponse<T> | null;
+	if (!json) {
+		throw new CloudflareApiError(
+			`Cloudflare API ${path} returned ${res.status} ${res.statusText} without a JSON body`.trim(),
+			res.status,
+			path,
+			[],
+		);
+	}
 
 	if (!json.success) {
 		throw new CloudflareApiError(
