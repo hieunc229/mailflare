@@ -1708,6 +1708,7 @@
 	"calendar.invalidTimes": "Digite horários de evento válidos.",
 	"calendar.noFuture": "Não restam ocorrências futuras para atualizar.",
 	"calendar.saveFailed": "Não foi possível salvar o evento. Tente novamente.",
+	"calendar.inviteFailed": "O evento foi salvo, mas alguns convites não puderam ser enviados.",
 	"calendar.deleteFuture": "Excluir as ocorrências futuras a partir de agora?",
 	"calendar.deleteEvent": "Excluir este evento?",
 	"calendar.deleteFailed": "Não foi possível excluir o evento. Tente novamente.",

@@ -1708,6 +1708,7 @@
 	"calendar.invalidTimes": "Saisissez des horaires d'événement valides.",
 	"calendar.noFuture": "Il ne reste aucune occurrence future à mettre à jour.",
 	"calendar.saveFailed": "Impossible d'enregistrer l'événement. Veuillez réessayer.",
+	"calendar.inviteFailed": "L'événement a été enregistré, mais certaines invitations n'ont pas pu être envoyées.",
 	"calendar.deleteFuture": "Supprimer les occurrences futures à partir de maintenant ?",
 	"calendar.deleteEvent": "Supprimer cet événement ?",
 	"calendar.deleteFailed": "Impossible de supprimer l'événement. Veuillez réessayer.",

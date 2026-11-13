@@ -1698,6 +1698,7 @@
 	"calendar.invalidTimes": "Geben Sie gültige Terminzeiten ein.",
 	"calendar.noFuture": "Es sind keine künftigen Termine mehr zu aktualisieren.",
 	"calendar.saveFailed": "Der Termin konnte nicht gespeichert werden. Bitte versuchen Sie es erneut.",
+	"calendar.inviteFailed": "Der Termin wurde gespeichert, aber einige Einladungen konnten nicht gesendet werden.",
 	"calendar.deleteFuture": "Künftige Termine ab jetzt löschen?",
 	"calendar.deleteEvent": "Diesen Termin löschen?",
 	"calendar.deleteFailed": "Der Termin konnte nicht gelöscht werden. Bitte versuchen Sie es erneut.",

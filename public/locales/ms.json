@@ -1697,6 +1697,7 @@
 	"calendar.invalidTimes": "Masukkan masa acara yang sah.",
 	"calendar.noFuture": "Tiada kejadian akan datang yang tinggal untuk dikemas kini.",
 	"calendar.saveFailed": "Tidak dapat menyimpan acara. Sila cuba lagi.",
+	"calendar.inviteFailed": "Acara telah disimpan, tetapi beberapa jemputan tidak dapat dihantar.",
 	"calendar.deleteFuture": "Padam kejadian akan datang bermula sekarang?",
 	"calendar.deleteEvent": "Padam acara ini?",
 	"calendar.deleteFailed": "Tidak dapat memadam acara. Sila cuba lagi.",

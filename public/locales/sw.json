@@ -1698,6 +1698,7 @@
 	"calendar.invalidTimes": "Weka muda halali wa tukio.",
 	"calendar.noFuture": "Hakuna matukio ya baadaye yaliyosalia kusasishwa.",
 	"calendar.saveFailed": "Imeshindwa kuhifadhi tukio. Tafadhali jaribu tena.",
+	"calendar.inviteFailed": "Tukio limehifadhiwa, lakini baadhi ya mialiko haikuweza kutumwa.",
 	"calendar.deleteFuture": "Futa matukio ya baadaye kuanzia sasa?",
 	"calendar.deleteEvent": "Futa tukio hili?",
 	"calendar.deleteFailed": "Imeshindwa kufuta tukio. Tafadhali jaribu tena.",

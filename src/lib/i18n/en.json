@@ -1738,6 +1738,7 @@
 	"calendar.invalidTimes": "Enter valid event times.",
 	"calendar.noFuture": "No future occurrences remain to update.",
 	"calendar.saveFailed": "Could not save the event. Please try again.",
+	"calendar.inviteFailed": "The event was saved, but some invitations could not be sent.",
 	"calendar.deleteFuture": "Delete future occurrences from now?",
 	"calendar.deleteEvent": "Delete this event?",
 	"calendar.deleteFailed": "Could not delete the event. Please try again.",

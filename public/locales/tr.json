@@ -1645,6 +1645,7 @@
 	"calendar.invalidTimes": "Geçerli etkinlik zamanları girin.",
 	"calendar.noFuture": "Güncellenecek gelecekteki tekrar kalmadı.",
 	"calendar.saveFailed": "Etkinlik kaydedilemedi. Lütfen tekrar deneyin.",
+	"calendar.inviteFailed": "Etkinlik kaydedildi, ancak bazı davetiyeler gönderilemedi.",
 	"calendar.deleteFuture": "Şu andan itibaren gelecekteki tekrarlar silinsin mi?",
 	"calendar.deleteEvent": "Bu etkinlik silinsin mi?",
 	"calendar.deleteFailed": "Etkinlik silinemedi. Lütfen tekrar deneyin.",

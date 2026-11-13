@@ -233,6 +233,8 @@ export default function CalendarPage() {
         }),
       });
       if (response.ok) {
+        const result = (await response.json().catch(() => ({}))) as { inviteErrors?: string[] };
+        if (result.inviteErrors?.length) toast.error(t("calendar.inviteFailed"));
         setEventsVersion((version) => version + 1);
         setClosingEventEditor(true);
       } else {

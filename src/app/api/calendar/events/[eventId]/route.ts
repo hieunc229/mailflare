@@ -5,6 +5,7 @@ import { calendarEvents } from "@/db/schema";
 import { getEnv } from "@/lib/cloudflare";
 import { createCalendarInvitation } from "@/lib/calendar/utils";
 import { sendEmail } from "@/lib/email/send";
+import { sendToAttendees } from "@/lib/calendar/invite-delivery";
 import type { CalendarEventInput } from "../types";
 import type { CalendarEventRouteParams } from "./types";
 import { normalizeCalendarColor } from "@/lib/calendar/colors";
@@ -36,6 +37,7 @@ export async function PATCH(request: Request, { params }: CalendarEventRoutePara
 	if (existing.repeat !== "none" && effectiveFrom && existing.repeatUntil && effectiveFrom >= existing.repeatUntil) return NextResponse.json({ error: "No future occurrences remain" }, { status: 404 });
 	const attendees = (input.attendees ?? []).map((email) => email.trim()).filter((email) => /^\S+@\S+\.\S+$/.test(email));
 	if (attendees.length && existing.mailboxId && input.from && !calendarKeyCanSendInvitations(key, existing.mailboxId)) return NextResponse.json({ error: "Sending invitations requires mail send permission for this mailbox" }, { status: 403 });
+	let inviteErrors: string[] = [];
 	if (input.moveOccurrenceToPast) {
 		if (!occurrence || existing.repeat === "none" || startsAt >= new Date()) return NextResponse.json({ error: "Choose a past time for this occurrence" }, { status: 400 });
 		const excluded = parseExcludedOccurrences(existing.excludedOccurrences);
@@ -44,8 +46,8 @@ export async function PATCH(request: Request, { params }: CalendarEventRoutePara
 		const moved = { ...existing, id: newId("evt"), title: input.title.trim(), description: input.description?.trim() ?? "", location: input.location?.trim() ?? "", attendees: JSON.stringify(attendees), color: normalizeCalendarColor(input.color ?? existing.color), repeat: "none" as const, repeatDays: "[]", repeatAnchorDay: null, repeatUntil: null, excludedOccurrences: "[]", startsAt, endsAt, createdAt: now, updatedAt: now };
 		await db.insert(calendarEvents).values(moved);
 		await db.update(calendarEvents).set({ excludedOccurrences: JSON.stringify([...excluded, occurrence.startsAt.getTime()]), updatedAt: now }).where(eq(calendarEvents.id, existing.id));
-		if (attendees.length && existing.mailboxId && input.from) { const file = createCalendarInvitation({ ...moved, uid: moved.id, organizer: input.from, attendees }); await Promise.all(attendees.map((to) => sendEmail(env, { userId: user.id, mailboxId: existing.mailboxId!, from: input.from!, to, subject: `Updated invitation: ${moved.title}`, text: moved.description || `This event has been updated: ${moved.title}.`, attachments: [{ filename: "invite.ics", type: "text/calendar; charset=utf-8", content: file }] }))); }
-		return NextResponse.json({ ok: true });
+		if (attendees.length && existing.mailboxId && input.from) { const file = createCalendarInvitation({ ...moved, uid: moved.id, organizer: input.from, attendees }); inviteErrors = await sendToAttendees(attendees, (to) => sendEmail(env, { userId: user.id, mailboxId: existing.mailboxId!, from: input.from!, to, subject: `Updated invitation: ${moved.title}`, text: moved.description || `This event has been updated: ${moved.title}.`, attachments: [{ filename: "invite.ics", type: "text/calendar; charset=utf-8", content: file }] })); }
+		return NextResponse.json(inviteErrors.length ? { ok: true, inviteErrors } : { ok: true });
 	}
 	const repeat = normalizeCalendarRepeat(input.repeat ?? existing.repeat);
 	const repeatDays = repeat === "weekdays" ? normalizeCalendarRepeatDays(input.repeatDays ?? (existing.repeat === "weekdays" ? parseCalendarRepeatDays(existing.repeatDays) : DEFAULT_REPEAT_DAYS)) : [];
@@ -60,8 +62,8 @@ export async function PATCH(request: Request, { params }: CalendarEventRoutePara
 	} else {
 		await db.update(calendarEvents).set({ title: event.title, description: event.description, location: event.location, attendees: event.attendees, color: event.color, repeat: event.repeat, repeatDays: event.repeatDays, repeatAnchorDay: event.repeatAnchorDay, repeatUntil: event.repeatUntil, reminderMinutes: event.reminderMinutes, lastRemindedStart: null, timeZone, startsAt, endsAt, updatedAt: new Date() }).where(eq(calendarEvents.id, existing.id));
 	}
-	if (attendees.length && existing.mailboxId && input.from) { const file = createCalendarInvitation({ ...event, uid: existing.id, organizer: input.from, attendees }); await Promise.all(attendees.map((to) => sendEmail(env, { userId: user.id, mailboxId: existing.mailboxId!, from: input.from!, to, subject: `Updated invitation: ${event.title}`, text: event.description || `This event has been updated: ${event.title}.`, attachments: [{ filename: "invite.ics", type: "text/calendar; charset=utf-8", content: file }] }))); }
-	return NextResponse.json({ ok: true });
+	if (attendees.length && existing.mailboxId && input.from) { const file = createCalendarInvitation({ ...event, uid: existing.id, organizer: input.from, attendees }); inviteErrors = await sendToAttendees(attendees, (to) => sendEmail(env, { userId: user.id, mailboxId: existing.mailboxId!, from: input.from!, to, subject: `Updated invitation: ${event.title}`, text: event.description || `This event has been updated: ${event.title}.`, attachments: [{ filename: "invite.ics", type: "text/calendar; charset=utf-8", content: file }] })); }
+	return NextResponse.json(inviteErrors.length ? { ok: true, inviteErrors } : { ok: true });
 }
 
 export async function DELETE(request: Request, { params }: CalendarEventRouteParams) {

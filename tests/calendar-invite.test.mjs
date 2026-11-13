@@ -10,13 +10,14 @@ const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 const dir = mkdtempSync(join(tmpdir(), "mailflare-calendar-invite-"));
 after(() => rmSync(dir, { recursive: true, force: true }));
 await build({
-	entryPoints: { i: join(root, "src/lib/calendar/invite.ts"), r: join(root, "src/lib/calendar/invite-rules.ts"), u: join(root, "src/lib/calendar/utils.ts") },
+	entryPoints: { i: join(root, "src/lib/calendar/invite.ts"), r: join(root, "src/lib/calendar/invite-rules.ts"), u: join(root, "src/lib/calendar/utils.ts"), d: join(root, "src/lib/calendar/invite-delivery.ts") },
 	outdir: dir, outExtension: { ".js": ".mjs" }, bundle: true, platform: "node", format: "esm", logLevel: "silent",
 	alias: { "@": join(root, "src") },
 });
 const { parseInvite, inviteRepeat, buildReplyIcs, parseIcsDuration, WINDOWS_TIME_ZONES } = await import(pathToFileURL(join(dir, "i.mjs")).href);
 const { planInboundInvite, planInviteAnswer, inviteSenderMatches, addExcludedOccurrence, mergeExcludedOccurrences, normalizeInviteSender, chooseRecipientZone, inboundNeedsRecipientZone } = await import(pathToFileURL(join(dir, "r.mjs")).href);
 const { createCalendarInvitation } = await import(pathToFileURL(join(dir, "u.mjs")).href);
+const { sendToAttendees } = await import(pathToFileURL(join(dir, "d.mjs")).href);
 
 const ics = (...lines) => lines.join("\r\n");
 const event = (...lines) => ics("BEGIN:VCALENDAR", "VERSION:2.0", "METHOD:REQUEST", "BEGIN:VEVENT", "UID:x", ...lines, "END:VEVENT", "END:VCALENDAR");
@@ -389,4 +390,15 @@ test("an all-day reply writes DTSTART and RECURRENCE-ID as dates in the recipien
 	assert.equal(back.recurrenceId.toISOString(), invite.recurrenceId.toISOString());
 	// Timed occurrences keep UTC date-times.
 	assert.match(buildReplyIcs(parseInvite(event("DTSTART:20261117T180000Z", "RECURRENCE-ID:20261117T180000Z")), "guest@example.com", "accepted"), /\r\nRECURRENCE-ID:20261117T180000Z\r\n/);
+});
+
+test("a failing invitation is reported per attendee instead of rejecting", async () => {
+	const sent = [];
+	const failed = await sendToAttendees(["a@example.com", "b@example.com", "c@example.com"], async (to) => {
+		if (to === "b@example.com") throw new Error("sender not authorized");
+		sent.push(to);
+	});
+	assert.deepEqual(failed, ["b@example.com"]);
+	assert.deepEqual(sent, ["a@example.com", "c@example.com"]);
+	assert.deepEqual(await sendToAttendees([], async () => { throw new Error("unused"); }), []);
 });

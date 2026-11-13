@@ -1698,6 +1698,7 @@
 	"calendar.invalidTimes": "માન્ય ઇવેન્ટ સમય દાખલ કરો.",
 	"calendar.noFuture": "અપડેટ કરવા માટે કોઈ ભાવિ પુનરાવર્તન બાકી નથી.",
 	"calendar.saveFailed": "ઇવેન્ટ સાચવી શકાઈ નથી. કૃપા કરીને ફરી પ્રયાસ કરો.",
+	"calendar.inviteFailed": "ઇવેન્ટ સાચવાઈ ગઈ છે, પરંતુ કેટલાક આમંત્રણો મોકલી શકાયા નથી.",
 	"calendar.deleteFuture": "હવેથી ભાવિ પુનરાવર્તન કાઢી નાખીએ?",
 	"calendar.deleteEvent": "આ ઇવેન્ટ કાઢી નાખીએ?",
 	"calendar.deleteFailed": "ઇવેન્ટ કાઢી શકાઈ નથી. કૃપા કરીને ફરી પ્રયાસ કરો.",

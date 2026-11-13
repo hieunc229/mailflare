@@ -1688,6 +1688,7 @@
 	"calendar.invalidTimes": "有効な予定の時刻を入力してください。",
 	"calendar.noFuture": "更新できる今後の繰り返しがありません。",
 	"calendar.saveFailed": "予定を保存できませんでした。もう一度お試しください。",
+	"calendar.inviteFailed": "予定は保存されましたが、一部の招待を送信できませんでした。",
 	"calendar.deleteFuture": "今後の繰り返しの予定を削除しますか？",
 	"calendar.deleteEvent": "この予定を削除しますか？",
 	"calendar.deleteFailed": "予定を削除できませんでした。もう一度お試しください。",

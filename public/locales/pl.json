@@ -1718,6 +1718,7 @@
 	"calendar.invalidTimes": "Wpisz prawidłowe godziny wydarzenia.",
 	"calendar.noFuture": "Nie pozostały żadne przyszłe wystąpienia do zaktualizowania.",
 	"calendar.saveFailed": "Nie można zapisać wydarzenia. Spróbuj ponownie.",
+	"calendar.inviteFailed": "Wydarzenie zostało zapisane, ale nie udało się wysłać niektórych zaproszeń.",
 	"calendar.deleteFuture": "Usunąć przyszłe wystąpienia od teraz?",
 	"calendar.deleteEvent": "Usunąć to wydarzenie?",
 	"calendar.deleteFailed": "Nie można usunąć wydarzenia. Spróbuj ponownie.",

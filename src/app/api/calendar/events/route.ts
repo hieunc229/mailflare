@@ -5,6 +5,7 @@ import { calendarEvents } from "@/db/schema";
 import { getEnv } from "@/lib/cloudflare";
 import { newId } from "@/lib/ids";
 import { sendEmail } from "@/lib/email/send";
+import { sendToAttendees } from "@/lib/calendar/invite-delivery";
 import { createCalendarInvitation } from "@/lib/calendar/utils";
 import { normalizeCalendarColor } from "@/lib/calendar/colors";
 import { normalizeReminderMinutes } from "@/lib/calendar/reminder-utils";
@@ -42,9 +43,10 @@ export async function POST(request: Request) {
 	const event = { id: newId("evt"), userId: user.id, mailboxId: input.mailboxId ?? null, title: input.title.trim(), description: input.description?.trim() ?? "", location: input.location?.trim() ?? "", attendees: JSON.stringify(attendees), color: normalizeCalendarColor(input.color), repeat, repeatDays: JSON.stringify(repeatDays), repeatAnchorDay: repeat === "monthly" && Number.isInteger(input.repeatAnchorDay) && input.repeatAnchorDay! >= 1 && input.repeatAnchorDay! <= 31 ? input.repeatAnchorDay : null, reminderMinutes: normalizeReminderMinutes(input.reminderMinutes), startsAt, endsAt };
 	const savedEvent = { ...event, timeZone: input.timeZone ? normalizeTimeZone(input.timeZone) : getRequestTimeZone(request, user.timeZone) };
 	await getDb(env).insert(calendarEvents).values(savedEvent);
+	let inviteErrors: string[] = [];
 	if (attendees.length && input.mailboxId) {
 		const calendarFile = createCalendarInvitation({ ...event, uid: event.id, organizer: input.from || undefined, attendees });
-		await Promise.all(attendees.map((to) => sendEmail(env, { userId: user.id, mailboxId: input.mailboxId!, from: input.from ?? "", to, subject: `Invitation: ${event.title}`, text: event.description || `You are invited to ${event.title}.`, attachments: [{ filename: "invite.ics", type: "text/calendar; charset=utf-8", content: calendarFile }] })));
+		inviteErrors = await sendToAttendees(attendees, (to) => sendEmail(env, { userId: user.id, mailboxId: input.mailboxId!, from: input.from ?? "", to, subject: `Invitation: ${event.title}`, text: event.description || `You are invited to ${event.title}.`, attachments: [{ filename: "invite.ics", type: "text/calendar; charset=utf-8", content: calendarFile }] }));
 	}
-	return NextResponse.json({ event: savedEvent });
+	return NextResponse.json(inviteErrors.length ? { event: savedEvent, inviteErrors } : { event: savedEvent });
 }
