@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { ArrowRight, ExternalLink, ImagePlus, LockKeyhole, Palette } from "@/components/icons";
 import { useLanguage } from "@/components/language-provider";
@@ -24,16 +24,17 @@ export default function BrandingPage() {
 	const [saving, setSaving] = useState(false);
 	const inputRef = useRef<HTMLInputElement>(null);
 	const [syncedAppName, setSyncedAppName] = useState(branding.appName);
+	const [syncedAccentColor, setSyncedAccentColor] = useState(branding.accentColor);
 
-	// Reset the field whenever the saved name changes.
+	// Reset the fields whenever the saved values change.
 	if (syncedAppName !== branding.appName) {
 		setSyncedAppName(branding.appName);
 		setAppName(branding.appName);
 	}
-
-	useEffect(() => {
+	if (syncedAccentColor !== branding.accentColor) {
+		setSyncedAccentColor(branding.accentColor);
 		setAccentColor(branding.accentColor);
-	}, [branding.accentColor]);
+	}
 
 	// Preview the selected accent on the page; leaving the page restores the saved one.
 	useEffect(() => {

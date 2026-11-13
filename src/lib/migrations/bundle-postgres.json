@@ -277,12 +277,6 @@
       ]
     },
     {
-      "name": "0004_add_accent_color.sql",
-      "statements": [
-        "ALTER TABLE \"app_settings\" ADD COLUMN \"accent_color\" text;"
-      ]
-    },
-    {
       "name": "0004_passkeys_and_step_up_grants.sql",
       "statements": [
         "ALTER TABLE \"users\" ADD COLUMN \"require_second_factor\" boolean DEFAULT false NOT NULL;",
@@ -353,6 +347,12 @@
         "ALTER TABLE \"calendar_events\" ADD COLUMN \"attendee_responses\" text;",
         "ALTER TABLE \"calendar_events\" ADD COLUMN \"invite_sender\" text;",
         "ALTER TABLE \"calendar_events\" ADD COLUMN \"invite_sequence\" bigint;"
+      ]
+    },
+    {
+      "name": "0010_add_accent_color.sql",
+      "statements": [
+        "ALTER TABLE \"app_settings\" ADD COLUMN \"accent_color\" text;"
       ]
     }
   ]

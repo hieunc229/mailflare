@@ -502,10 +502,6 @@
     {
       "idx": 72,
       "version": "6",
-<<<<<<< HEAD
-      "when": 1793495154501,
-      "tag": "0080_add_accent_color",
-=======
       "when": 1793280375889,
       "tag": "0080_passkeys_and_step_up_grants",
       "breakpoints": true
@@ -522,7 +518,6 @@
       "version": "6",
       "when": 1793280377889,
       "tag": "0082_add_api_key_sha256",
->>>>>>> upstream/main
       "breakpoints": true
     },
     {
@@ -544,6 +539,13 @@
       "version": "6",
       "when": 1793280380889,
       "tag": "0085_calendar_invitations",
+      "breakpoints": true
+    },
+    {
+      "idx": 78,
+      "version": "6",
+      "when": 1793280381889,
+      "tag": "0086_add_accent_color",
       "breakpoints": true
     }
   ]
