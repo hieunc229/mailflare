@@ -1,9 +1,10 @@
 "use client";
 
-import { Ban, MailPlus, Pencil, Trash2 } from "@/components/icons";
+import { Ban, Edit04, MailSend01, Trash2 } from "@/components/icons";
 import { useLanguage } from "@/components/language-provider";
 import { Button } from "@/components/ui/button";
 import { ListRow } from "@/components/ui/list";
+import { Tooltip } from "@/components/ui/tooltip";
 import { formatUserDate } from "@/lib/time/utils";
 import { ContactAvatar } from "./contact-avatar";
 import type { ContactRowProps } from "./contacts-page-types";
@@ -39,37 +40,40 @@ export function ContactRow({ mailboxId, contact, onEmail, onEdit, onDelete }: Co
 					: "—"}
 			</span>
 			<div className="flex shrink-0 items-center gap-1 max-sm:opacity-100 sm:opacity-0 sm:transition-opacity sm:group-hover:opacity-100 sm:group-focus-within:opacity-100">
-				<Button
-					type="button"
-					variant="ghost"
-					size="sm"
-					onClick={() => onEmail(contact)}
-					aria-label={t("contacts.sendEmail", { name: label })}
-					title={t("contacts.sendEmail", { name: label })}
-				>
-					<MailPlus className="h-4 w-4" />
-				</Button>
-				<Button
-					type="button"
-					variant="ghost"
-					size="sm"
-					onClick={() => onEdit(contact)}
-					aria-label={t("contacts.edit")}
-					title={t("contacts.edit")}
-				>
-					<Pencil className="h-4 w-4" />
-				</Button>
-				<Button
-					type="button"
-					variant="ghost"
-					size="sm"
-					onClick={() => onDelete(contact)}
-					aria-label={t("contacts.delete")}
-					title={t("contacts.delete")}
-					className="hover:text-red-600"
-				>
-					<Trash2 className="h-4 w-4" />
-				</Button>
+				<Tooltip label={t("contacts.sendEmail", { name: label })}>
+					<Button
+						type="button"
+						variant="ghost"
+						size="sm"
+						onClick={() => onEmail(contact)}
+						aria-label={t("contacts.sendEmail", { name: label })}
+					>
+						<MailSend01 className="h-4 w-4" />
+					</Button>
+				</Tooltip>
+				<Tooltip label={t("contacts.edit")}>
+					<Button
+						type="button"
+						variant="ghost"
+						size="sm"
+						onClick={() => onEdit(contact)}
+						aria-label={t("contacts.edit")}
+					>
+						<Edit04 className="h-4 w-4" />
+					</Button>
+				</Tooltip>
+				<Tooltip label={t("contacts.delete")}>
+					<Button
+						type="button"
+						variant="ghost"
+						size="sm"
+						onClick={() => onDelete(contact)}
+						aria-label={t("contacts.delete")}
+						className="hover:text-red-600"
+					>
+						<Trash2 className="h-4 w-4" />
+					</Button>
+				</Tooltip>
 			</div>
 		</ListRow>
 	);

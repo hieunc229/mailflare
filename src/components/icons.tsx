@@ -85,6 +85,7 @@ import {
 	MailIcon as HugeMailIcon,
 	MailOpenIcon as HugeMailOpenIcon,
 	MailPlusIcon as HugeMailPlusIcon,
+	MailSend01Icon as HugeMailSend01Icon,
 	MapPinIcon as HugeMapPinIcon,
 	ExpandIcon as HugeMaximize02Icon,
 	CollapseIcon as HugeMinimize02Icon,
@@ -98,6 +99,7 @@ import {
 	PauseCircleIcon as HugePauseCircleIcon,
 	PauseIcon as HugePauseIcon,
 	PenLineIcon as HugePenLineIcon,
+	Edit04Icon as HugeEdit04Icon,
 	PencilIcon as HugePencilIcon,
 	PlayIcon as HugePlayIcon,
 	PlusIcon as HugePlusIcon,
@@ -266,6 +268,7 @@ export const LogOut = createIcon(HugeLogOutIcon, "LogOut");
 export const Mail = createIcon(HugeMailIcon, "Mail");
 export const MailCheck = createIcon(HugeMailCheckIcon, "MailCheck");
 export const MailOpen = createIcon(HugeMailOpenIcon, "MailOpen");
+export const MailSend01 = createIcon(HugeMailSend01Icon, "MailSend01");
 export const MailPlus = createIcon(HugeMailPlusIcon, "MailPlus");
 export const MapPin = createIcon(HugeMapPinIcon, "MapPin");
 export const Maximize2 = createIcon(HugeMaximize02Icon, "Maximize2");
@@ -281,6 +284,7 @@ export const Paperclip = createIcon(HugePaperclipIcon, "Paperclip");
 export const Pause = createIcon(HugePauseIcon, "Pause");
 export const PauseCircle = createIcon(HugePauseCircleIcon, "PauseCircle");
 export const PenLine = createIcon(HugePenLineIcon, "PenLine");
+export const Edit04 = createIcon(HugeEdit04Icon, "Edit04");
 export const Pencil = createIcon(HugePencilIcon, "Pencil");
 export const Play = createIcon(HugePlayIcon, "Play");
 export const Plus = createIcon(HugePlusIcon, "Plus");
