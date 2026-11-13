@@ -75,7 +75,8 @@ export async function addDomainForUser(
 		...options,
 		enableSending: requestedSending === "cloudflare",
 		enableRouting: receivingProvider === "cloudflare" ? (options?.enableRouting ?? true) : false,
-		replaceMxRecords: receivingProvider === "cloudflare" ? options?.replaceMxRecords : false,
+		// Routing is skipped for other receivers, so this only reaches the sending step then.
+		replaceMxRecords: options?.replaceMxRecords,
 	});
 	let insertedDomainId: string | null = null;
 	let domain: typeof domains.$inferSelect;
