@@ -31,3 +31,20 @@ export function splitMboxMessages(content: string): string[] {
 
 	return messages.filter((message) => message.trim().length > 0);
 }
+
+/**
+ * Split an mbox given as raw bytes. Separators and quoting are ASCII, so the bytes are split as a
+ * Latin-1 string (one char per byte, lossless) and turned back into the same bytes, which keeps 8-bit bodies intact.
+ */
+export function splitMboxBytes(buffer: ArrayBuffer): ArrayBuffer[] {
+	const bytes = new Uint8Array(buffer);
+	let content = "";
+	for (let index = 0; index < bytes.length; index += 0x2000) {
+		content += String.fromCharCode(...bytes.subarray(index, index + 0x2000));
+	}
+	return splitMboxMessages(content).map((message) => {
+		const out = new Uint8Array(message.length);
+		for (let index = 0; index < message.length; index += 1) out[index] = message.charCodeAt(index);
+		return out.buffer as ArrayBuffer;
+	});
+}
