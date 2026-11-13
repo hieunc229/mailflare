@@ -52,7 +52,7 @@ export default async function RootLayout({ children }: Readonly<{ children: Reac
 	const messages = locale === DEFAULT_LOCALE ? undefined : await loadServerMessages(locale);
 	const branding = await getHomeBranding();
 	return (
-		<html lang={locale} dir={getDirection(locale)} data-remote-image-proxy="enabled" suppressHydrationWarning>
+		<html lang={locale} dir={getDirection(locale)} data-remote-image-proxy="enabled" data-accent={branding.accentColor} suppressHydrationWarning>
 			<head>
 				<script dangerouslySetInnerHTML={{ __html: sidebarBootstrapScript }} />
 				<script dangerouslySetInnerHTML={{ __html: themeBootstrapScript }} />

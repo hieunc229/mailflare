@@ -33,6 +33,10 @@
     {
       "idx": 4,
       "version": "7",
+<<<<<<< HEAD
+      "when": 1793495154501,
+      "tag": "0004_add_accent_color",
+=======
       "when": 1793280375889,
       "tag": "0004_passkeys_and_step_up_grants",
       "breakpoints": true
@@ -49,6 +53,7 @@
       "version": "7",
       "when": 1793280377889,
       "tag": "0006_add_api_key_sha256",
+>>>>>>> upstream/main
       "breakpoints": true
     },
     {
