@@ -13,6 +13,7 @@ import type { BulkMessagePayload } from "./types";
 import {
 	getReadValueForBulkAction,
 	getStatusForBulkAction,
+	canMoveToFolder,
 	isAllowedBulkMessageAction,
 	isPermanentlyDeletableStatus,
 } from "./utils";
@@ -39,6 +40,7 @@ function selectMessageChunk(db: AppDatabase, chunk: string[]) {
 	return db.select({
 		id: messages.id,
 		mailboxId: messages.mailboxId,
+		direction: messages.direction,
 		rawR2Key: messages.rawR2Key,
 		status: messages.status,
 	})
@@ -67,6 +69,7 @@ export async function POST(request: Request) {
 	const read = getReadValueForBulkAction(payload.action);
 	const db = getDb(env);
 	let folderId: string | null | undefined;
+	let folderMailboxId: string | null = null;
 
 	if (payload.action === "folder") {
 		if (!payload.folderId) {
@@ -85,6 +88,7 @@ export async function POST(request: Request) {
 			return NextResponse.json({ error: "Folder not found" }, { status: 404 });
 		}
 		folderId = folder.id;
+		folderMailboxId = folder.mailboxId;
 	} else if (payload.action === "spam" || payload.action === "trash" || payload.action === "inbox" || payload.action === "archive") {
 		folderId = null;
 	}
@@ -112,6 +116,7 @@ export async function POST(request: Request) {
 		const access = accessByMailbox.get(message.mailboxId);
 		const canUpdate = payload.action === "read" || payload.action === "unread" ? access?.canRead : access?.canManage;
 		if (!canUpdate) continue;
+		if (folderMailboxId && !canMoveToFolder(message, folderMailboxId)) continue;
 		allowedMessageIds.push(message.id);
 	}
 

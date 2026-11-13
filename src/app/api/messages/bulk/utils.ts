@@ -41,3 +41,8 @@ export function isPermanentlyDeletableStatus(status: string | null | undefined):
 export function isPermanentDeleteFolder(folder: unknown): folder is PermanentDeleteFolder {
 	return folder === "trash" || folder === "spam";
 }
+
+/** Moving into a folder only applies to received mail already in that folder's mailbox, never sent mail, drafts or another mailbox's mail. */
+export function canMoveToFolder(message: { mailboxId: string | null; direction: string | null }, folderMailboxId: string): boolean {
+	return message.mailboxId === folderMailboxId && message.direction === "inbound";
+}
