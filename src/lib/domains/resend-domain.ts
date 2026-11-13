@@ -1,7 +1,7 @@
 import { createDnsRecord, deleteDnsRecord, listDnsRecords } from "@/lib/cloudflare-dns";
 import { isManualZone } from "@/lib/domains/provision";
-import { getResendKeyStatus, getResendApiKey } from "@/lib/email/outbound-provider";
-import { createResendDomain, deleteResendDomain, findResendDomain, getResendDomain, updateResendCapabilities, verifyResendDomain } from "@/lib/email/resend-api";
+import { getResendKeyStatus, getResendClient } from "@/lib/email/outbound-provider";
+import { createResendDomain, deleteResendDomain, findResendDomain, getResendDomain, resendClient, updateResendCapabilities, verifyResendDomain, type ResendClient } from "@/lib/email/resend-api";
 import { isInboundSmtpMx } from "@/lib/domains/receiving-dns";
 import type { ResendDomain, ResendDomainRecord } from "@/lib/email/resend-api-types";
 import type { DomainRow } from "@/lib/domains/types";
@@ -27,13 +27,13 @@ function toView(domain: ResendDomain | null, zoneManaged: boolean, missingDns: n
 	};
 }
 
-async function requireResendKey(env: CloudflareEnv, _domain?: DomainRow): Promise<string> {
-	return getResendApiKey(env);
+async function requireResendKey(env: CloudflareEnv, _domain?: DomainRow): Promise<ResendClient> {
+	return getResendClient(env);
 }
 
 export async function getResendDomainView(env: CloudflareEnv, domain: DomainRow): Promise<ResendDomainView> {
-	const apiKey = await requireResendKey(env, domain);
-	return viewFor(env, domain, await findResendDomain(apiKey, domain.hostname));
+	const client = await requireResendKey(env, domain);
+	return viewFor(env, domain, await findResendDomain(client, domain.hostname));
 }
 
 async function viewFor(env: CloudflareEnv, domain: DomainRow, resend: ResendDomain | null): Promise<ResendDomainView> {
@@ -49,8 +49,9 @@ const stripQuotes = (value: string) => value.replace(/^"|"$/g, "").trim().toLowe
 export async function getResendDomainStatus(env: CloudflareEnv, domain: DomainRow): Promise<string | null> {
 	const { apiKey } = await getResendKeyStatus(env);
 	if (!apiKey) return null;
+	const client = resendClient(env, apiKey);
 	try {
-		const resend = await findResendDomain(apiKey, domain.hostname);
+		const resend = await findResendDomain(client, domain.hostname);
 		// A domain added only for receiving has no sending setup.
 		return !resend || resend.capabilities?.sending === "disabled" ? "not_registered" : resend.status;
 	}
@@ -72,16 +73,16 @@ async function deleteRecordsFromZone(env: CloudflareEnv, domain: DomainRow, reco
  * when the domain still receives through Resend only sending is switched off.
  */
 export async function removeResendConfig(env: CloudflareEnv, domain: DomainRow): Promise<void> {
-	const apiKey = await getResendApiKey(env);
-	const resend = await findResendDomain(apiKey, domain.hostname);
+	const client = await getResendClient(env);
+	const resend = await findResendDomain(client, domain.hostname);
 	if (!resend) return;
 	if (domain.receivingProvider === "resend") {
 		await deleteRecordsFromZone(env, domain, sendingRecords(resend.records));
-		await updateResendCapabilities(apiKey, resend.id, { sending: false });
+		await updateResendCapabilities(client, resend.id, { sending: false });
 		return;
 	}
 	await deleteRecordsFromZone(env, domain, resend.records ?? []);
-	await deleteResendDomain(apiKey, resend.id);
+	await deleteResendDomain(client, resend.id);
 }
 
 /** Resend lists names relative to the domain; Cloudflare needs them absolute. */
@@ -125,26 +126,26 @@ async function publishRecords(env: CloudflareEnv, domain: DomainRow, records: Re
  * Cloudflare zone (when Mailflare manages it) and asks Resend to verify.
  */
 export async function setupResendDomain(env: CloudflareEnv, domain: DomainRow): Promise<ResendDomainView> {
-	const apiKey = await requireResendKey(env, domain);
+	const client = await requireResendKey(env, domain);
 	const managed = !isManualZone(domain.zoneId);
-	let resend = await findResendDomain(apiKey, domain.hostname);
+	let resend = await findResendDomain(client, domain.hostname);
 	if (!resend) {
-		const created = await createResendDomain(apiKey, domain.hostname, { sending: true, receiving: domain.receivingProvider === "resend" });
-		resend = await getResendDomain(apiKey, created.id);
+		const created = await createResendDomain(client, domain.hostname, { sending: true, receiving: domain.receivingProvider === "resend" });
+		resend = await getResendDomain(client, created.id);
 	} else if (resend.capabilities?.sending === "disabled") {
 		// The domain was added for receiving only; sending needs its own DKIM and SPF.
-		await updateResendCapabilities(apiKey, resend.id, { sending: true });
-		resend = await getResendDomain(apiKey, resend.id);
+		await updateResendCapabilities(client, resend.id, { sending: true });
+		resend = await getResendDomain(client, resend.id);
 	}
 	if (managed) await publishRecords(env, domain, sendingRecords(resend.records));
-	await verifyResendDomain(apiKey, resend.id);
-	return viewFor(env, domain, await getResendDomain(apiKey, resend.id));
+	await verifyResendDomain(client, resend.id);
+	return viewFor(env, domain, await getResendDomain(client, resend.id));
 }
 
 export async function verifyResendDomainView(env: CloudflareEnv, domain: DomainRow): Promise<ResendDomainView> {
-	const apiKey = await requireResendKey(env, domain);
-	const resend = await findResendDomain(apiKey, domain.hostname);
+	const client = await requireResendKey(env, domain);
+	const resend = await findResendDomain(client, domain.hostname);
 	if (!resend) return viewFor(env, domain, null);
-	await verifyResendDomain(apiKey, resend.id);
-	return viewFor(env, domain, await getResendDomain(apiKey, resend.id));
+	await verifyResendDomain(client, resend.id);
+	return viewFor(env, domain, await getResendDomain(client, resend.id));
 }
