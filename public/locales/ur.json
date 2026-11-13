@@ -15,6 +15,7 @@
 	"navigation.folders": "فولڈرز",
 	"navigation.noFolders": "ابھی کوئی فولڈر نہیں",
 	"navigation.createFolder": "فولڈر بنائیں",
+	"navigation.createFolderFailed": "فولڈر نہیں بنایا جا سکا",
 	"navigation.folderDescription": "منتخب میل باکس میں فولڈر شامل کریں۔",
 	"navigation.folderName": "فولڈر کا نام",
 	"navigation.folderExample": "رسیدیں",

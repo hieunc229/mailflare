@@ -15,6 +15,7 @@
 	"navigation.folders": "Mappen",
 	"navigation.noFolders": "Nog geen mappen",
 	"navigation.createFolder": "Map maken",
+	"navigation.createFolderFailed": "Map kon niet worden gemaakt",
 	"navigation.folderDescription": "Voeg een map toe aan de geselecteerde mailbox.",
 	"navigation.folderName": "Mapnaam",
 	"navigation.folderExample": "Bonnetjes",

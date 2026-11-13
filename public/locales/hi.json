@@ -15,6 +15,7 @@
 	"navigation.folders": "फ़ोल्डर",
 	"navigation.noFolders": "अभी कोई फ़ोल्डर नहीं",
 	"navigation.createFolder": "फ़ोल्डर बनाएँ",
+	"navigation.createFolderFailed": "फ़ोल्डर नहीं बनाया जा सका",
 	"navigation.folderDescription": "चुने गए मेलबॉक्स में फ़ोल्डर जोड़ें।",
 	"navigation.folderName": "फ़ोल्डर का नाम",
 	"navigation.folderExample": "रसीदें",

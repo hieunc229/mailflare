@@ -15,6 +15,7 @@
 	"navigation.folders": "Foldery",
 	"navigation.noFolders": "Brak folderów",
 	"navigation.createFolder": "Utwórz folder",
+	"navigation.createFolderFailed": "Nie udało się utworzyć folderu",
 	"navigation.folderDescription": "Dodaj folder do wybranej skrzynki pocztowej.",
 	"navigation.folderName": "Nazwa folderu",
 	"navigation.folderExample": "Rachunki",

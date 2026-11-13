@@ -86,12 +86,14 @@ export function DomainRouting({ domain }: DomainRoutingProps = {}) {
 
 	const remove = useMutation({
 		mutationFn: (id: string) => deleteDomainRule(id),
+		onMutate: () => toggle.reset(),
 		onSuccess: () => qc.invalidateQueries({ queryKey: rulesQueryKey }),
 	});
 
 	const toggle = useMutation({
 		mutationFn: (rule: DomainRule) =>
 			updateDomainRule(rule.id, { ...ruleToInput(rule), enabled: !rule.enabled }),
+		onMutate: () => remove.reset(),
 		onSuccess: () => qc.invalidateQueries({ queryKey: rulesQueryKey }),
 	});
 
@@ -144,6 +146,9 @@ export function DomainRouting({ domain }: DomainRoutingProps = {}) {
 				</Card>
 			) : (
 				<div className="space-y-1 overflow-hidden rounded-3xl">
+					{(remove.error ?? toggle.error) && (
+						<p role="alert" className="bg-white px-6 py-3 text-sm text-red-600">{(remove.error ?? toggle.error)?.message}</p>
+					)}
 					<RuleSection
 						className="rounded-b-lg rounded-t-3xl"
 						title={t("routing.blockRules")}

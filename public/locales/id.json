@@ -15,6 +15,7 @@
 	"navigation.folders": "Folder",
 	"navigation.noFolders": "Belum ada folder",
 	"navigation.createFolder": "Buat folder",
+	"navigation.createFolderFailed": "Tidak dapat membuat folder",
 	"navigation.folderDescription": "Tambahkan folder ke kotak surat yang dipilih.",
 	"navigation.folderName": "Nama folder",
 	"navigation.folderExample": "Kuitansi",

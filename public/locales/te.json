@@ -15,6 +15,7 @@
 	"navigation.folders": "ఫోల్డర్లు",
 	"navigation.noFolders": "ఇంకా ఫోల్డర్లు లేవు",
 	"navigation.createFolder": "ఫోల్డర్‌ను సృష్టించండి",
+	"navigation.createFolderFailed": "ఫోల్డర్‌ను సృష్టించలేకపోయాం",
 	"navigation.folderDescription": "ఎంచుకున్న మెయిల్‌బాక్స్‌కు ఫోల్డర్‌ను జోడించండి.",
 	"navigation.folderName": "ఫోల్డర్ పేరు",
 	"navigation.folderExample": "రసీదులు",

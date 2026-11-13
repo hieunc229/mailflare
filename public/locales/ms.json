@@ -15,6 +15,7 @@
 	"navigation.folders": "Folder",
 	"navigation.noFolders": "Belum ada folder",
 	"navigation.createFolder": "Cipta folder",
+	"navigation.createFolderFailed": "Tidak dapat mencipta folder",
 	"navigation.folderDescription": "Tambah folder pada peti mel yang dipilih.",
 	"navigation.folderName": "Nama folder",
 	"navigation.folderExample": "Resit",

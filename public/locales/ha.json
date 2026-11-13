@@ -15,6 +15,7 @@
 	"navigation.folders": "Fayiloli",
 	"navigation.noFolders": "Babu manyan fayiloli tukuna",
 	"navigation.createFolder": "Ƙirƙiri babban fayil",
+	"navigation.createFolderFailed": "An kasa ƙirƙirar babban fayil",
 	"navigation.folderDescription": "Ƙara babban fayil a akwatin saƙon da aka zaɓa.",
 	"navigation.folderName": "Sunan babban fayil",
 	"navigation.folderExample": "Rasidai",

@@ -15,6 +15,7 @@
 	"navigation.folders": "โฟลเดอร์",
 	"navigation.noFolders": "ยังไม่มีโฟลเดอร์",
 	"navigation.createFolder": "สร้างโฟลเดอร์",
+	"navigation.createFolderFailed": "สร้างโฟลเดอร์ไม่สำเร็จ",
 	"navigation.folderDescription": "เพิ่มโฟลเดอร์ในกล่องจดหมายที่เลือก",
 	"navigation.folderName": "ชื่อโฟลเดอร์",
 	"navigation.folderExample": "ใบเสร็จ",

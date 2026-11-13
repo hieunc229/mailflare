@@ -15,6 +15,7 @@
 	"navigation.folders": "Thư mục",
 	"navigation.noFolders": "Chưa có thư mục nào",
 	"navigation.createFolder": "Tạo thư mục",
+	"navigation.createFolderFailed": "Không thể tạo thư mục",
 	"navigation.folderDescription": "Thêm thư mục vào hộp thư đã chọn.",
 	"navigation.folderName": "Tên thư mục",
 	"navigation.folderExample": "Biên lai",

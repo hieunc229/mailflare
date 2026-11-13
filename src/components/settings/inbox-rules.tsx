@@ -162,6 +162,9 @@ export function InboxRules() {
         {(rules.data?.rules ?? []).length === 0 && (
           <p className="text-sm text-neutral-500">{t("rules.none")}</p>
         )}
+        {remove.isError && (
+          <p role="alert" className="mb-2 text-sm text-red-600">{remove.error.message}</p>
+        )}
         <div className="space-y-1">
           {(rules.data?.rules ?? []).map((rule) => (
             <div

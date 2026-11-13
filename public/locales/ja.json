@@ -15,6 +15,7 @@
 	"navigation.folders": "フォルダ",
 	"navigation.noFolders": "フォルダはまだありません",
 	"navigation.createFolder": "フォルダを作成",
+	"navigation.createFolderFailed": "フォルダを作成できませんでした",
 	"navigation.folderDescription": "選択したメールボックスにフォルダを追加します。",
 	"navigation.folderName": "フォルダ名",
 	"navigation.folderExample": "領収書",

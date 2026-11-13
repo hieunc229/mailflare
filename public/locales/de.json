@@ -15,6 +15,7 @@
 	"navigation.folders": "Ordner",
 	"navigation.noFolders": "Noch keine Ordner",
 	"navigation.createFolder": "Ordner erstellen",
+	"navigation.createFolderFailed": "Ordner konnte nicht erstellt werden",
 	"navigation.folderDescription": "Fügen Sie dem ausgewählten Postfach einen Ordner hinzu.",
 	"navigation.folderName": "Ordnername",
 	"navigation.folderExample": "Belege",

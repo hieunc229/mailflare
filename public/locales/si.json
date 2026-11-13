@@ -15,6 +15,7 @@
 	"navigation.folders": "ෆෝල්ඩර",
 	"navigation.noFolders": "තවමත් ෆෝල්ඩර නැත",
 	"navigation.createFolder": "ෆෝල්ඩරයක් සාදන්න",
+	"navigation.createFolderFailed": "ෆෝල්ඩරය සෑදිය නොහැකි විය",
 	"navigation.folderDescription": "තෝරාගත් තැපැල් පෙට්ටියට ෆෝල්ඩරයක් එක් කරන්න.",
 	"navigation.folderName": "ෆෝල්ඩරයේ නම",
 	"navigation.folderExample": "රිසිට්පත්",

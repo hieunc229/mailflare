@@ -15,6 +15,7 @@
 	"navigation.folders": "Папки",
 	"navigation.noFolders": "Папок пока нет",
 	"navigation.createFolder": "Создать папку",
+	"navigation.createFolderFailed": "Не удалось создать папку",
 	"navigation.folderDescription": "Добавьте папку в выбранный почтовый ящик.",
 	"navigation.folderName": "Название папки",
 	"navigation.folderExample": "Чеки",

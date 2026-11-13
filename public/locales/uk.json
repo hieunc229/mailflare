@@ -15,6 +15,7 @@
 	"navigation.folders": "Папки",
 	"navigation.noFolders": "Папок ще немає",
 	"navigation.createFolder": "Створити папку",
+	"navigation.createFolderFailed": "Не вдалося створити папку",
 	"navigation.folderDescription": "Додайте папку до вибраної поштової скриньки.",
 	"navigation.folderName": "Назва папки",
 	"navigation.folderExample": "Квитанції",

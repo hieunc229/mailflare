@@ -15,6 +15,7 @@
 	"navigation.folders": "المجلدات",
 	"navigation.noFolders": "لا توجد مجلدات بعد",
 	"navigation.createFolder": "إنشاء مجلد",
+	"navigation.createFolderFailed": "تعذّر إنشاء المجلد",
 	"navigation.folderDescription": "أضف مجلدًا إلى صندوق البريد المحدد.",
 	"navigation.folderName": "اسم المجلد",
 	"navigation.folderExample": "الإيصالات",

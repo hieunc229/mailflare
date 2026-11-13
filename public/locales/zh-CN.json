@@ -15,6 +15,7 @@
 	"navigation.folders": "文件夹",
 	"navigation.noFolders": "暂无文件夹",
 	"navigation.createFolder": "新建文件夹",
+	"navigation.createFolderFailed": "无法创建文件夹",
 	"navigation.folderDescription": "为所选邮箱添加一个文件夹。",
 	"navigation.folderName": "文件夹名称",
 	"navigation.folderExample": "收据",

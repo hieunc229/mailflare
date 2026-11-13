@@ -15,6 +15,7 @@
 	"navigation.folders": "ফোল্ডার",
 	"navigation.noFolders": "এখনও কোনো ফোল্ডার নেই",
 	"navigation.createFolder": "ফোল্ডার তৈরি করুন",
+	"navigation.createFolderFailed": "ফোল্ডার তৈরি করা যায়নি",
 	"navigation.folderDescription": "নির্বাচিত মেইলবক্সে একটি ফোল্ডার যোগ করুন।",
 	"navigation.folderName": "ফোল্ডারের নাম",
 	"navigation.folderExample": "রসিদ",

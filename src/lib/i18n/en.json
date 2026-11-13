@@ -15,6 +15,7 @@
 	"navigation.folders": "Folders",
 	"navigation.noFolders": "No folders yet",
 	"navigation.createFolder": "Create folder",
+	"navigation.createFolderFailed": "Could not create folder",
 	"navigation.folderDescription": "Add a folder to the selected mailbox.",
 	"navigation.folderName": "Folder name",
 	"navigation.folderExample": "Receipts",

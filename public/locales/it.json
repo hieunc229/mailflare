@@ -15,6 +15,7 @@
 	"navigation.folders": "Cartelle",
 	"navigation.noFolders": "Ancora nessuna cartella",
 	"navigation.createFolder": "Crea cartella",
+	"navigation.createFolderFailed": "Impossibile creare la cartella",
 	"navigation.folderDescription": "Aggiungi una cartella alla casella selezionata.",
 	"navigation.folderName": "Nome della cartella",
 	"navigation.folderExample": "Ricevute",

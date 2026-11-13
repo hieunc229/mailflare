@@ -15,6 +15,7 @@
 	"navigation.folders": "ಫೋಲ್ಡರ್‌ಗಳು",
 	"navigation.noFolders": "ಇನ್ನೂ ಯಾವುದೇ ಫೋಲ್ಡರ್‌ಗಳಿಲ್ಲ",
 	"navigation.createFolder": "ಫೋಲ್ಡರ್ ರಚಿಸಿ",
+	"navigation.createFolderFailed": "ಫೋಲ್ಡರ್ ರಚಿಸಲು ಸಾಧ್ಯವಾಗಲಿಲ್ಲ",
 	"navigation.folderDescription": "ಆಯ್ಕೆ ಮಾಡಿದ ಮೇಲ್‌ಬಾಕ್ಸ್‌ಗೆ ಫೋಲ್ಡರ್ ಸೇರಿಸಿ.",
 	"navigation.folderName": "ಫೋಲ್ಡರ್ ಹೆಸರು",
 	"navigation.folderExample": "ರಸೀದಿಗಳು",

@@ -15,6 +15,7 @@
 	"navigation.folders": "폴더",
 	"navigation.noFolders": "아직 폴더가 없습니다",
 	"navigation.createFolder": "폴더 만들기",
+	"navigation.createFolderFailed": "폴더를 만들 수 없습니다",
 	"navigation.folderDescription": "선택한 메일함에 폴더를 추가합니다.",
 	"navigation.folderName": "폴더 이름",
 	"navigation.folderExample": "영수증",

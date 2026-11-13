@@ -15,6 +15,7 @@
 	"navigation.folders": "پوشه‌ها",
 	"navigation.noFolders": "هنوز پوشه‌ای وجود ندارد",
 	"navigation.createFolder": "ایجاد پوشه",
+	"navigation.createFolderFailed": "ایجاد پوشه ناموفق بود",
 	"navigation.folderDescription": "یک پوشه به صندوق پستی انتخاب‌شده اضافه کنید.",
 	"navigation.folderName": "نام پوشه",
 	"navigation.folderExample": "رسیدها",

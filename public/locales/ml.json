@@ -15,6 +15,7 @@
 	"navigation.folders": "ഫോൾഡറുകൾ",
 	"navigation.noFolders": "ഇതുവരെ ഫോൾഡറുകളില്ല",
 	"navigation.createFolder": "ഫോൾഡർ സൃഷ്ടിക്കുക",
+	"navigation.createFolderFailed": "ഫോൾഡർ സൃഷ്ടിക്കാനായില്ല",
 	"navigation.folderDescription": "തിരഞ്ഞെടുത്ത മെയിൽബോക്സിലേക്ക് ഒരു ഫോൾഡർ ചേർക്കുക.",
 	"navigation.folderName": "ഫോൾഡറിന്റെ പേര്",
 	"navigation.folderExample": "രസീതുകൾ",

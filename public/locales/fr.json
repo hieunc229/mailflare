@@ -15,6 +15,7 @@
 	"navigation.folders": "Dossiers",
 	"navigation.noFolders": "Aucun dossier pour le moment",
 	"navigation.createFolder": "Créer un dossier",
+	"navigation.createFolderFailed": "Impossible de créer le dossier",
 	"navigation.folderDescription": "Ajoutez un dossier à la boîte mail sélectionnée.",
 	"navigation.folderName": "Nom du dossier",
 	"navigation.folderExample": "Reçus",

@@ -14,6 +14,7 @@
 	"navigation.folders": "Klasörler",
 	"navigation.noFolders": "Henüz klasör yok",
 	"navigation.createFolder": "Klasör oluştur",
+	"navigation.createFolderFailed": "Klasör oluşturulamadı",
 	"navigation.folderDescription": "Seçili posta kutusuna bir klasör ekleyin.",
 	"navigation.folderName": "Klasör adı",
 	"navigation.folderExample": "Makbuzlar",

@@ -15,6 +15,7 @@
 	"navigation.folders": "ਫੋਲਡਰ",
 	"navigation.noFolders": "ਅਜੇ ਕੋਈ ਫੋਲਡਰ ਨਹੀਂ",
 	"navigation.createFolder": "ਫੋਲਡਰ ਬਣਾਓ",
+	"navigation.createFolderFailed": "ਫੋਲਡਰ ਬਣਾਇਆ ਨਹੀਂ ਜਾ ਸਕਿਆ",
 	"navigation.folderDescription": "ਚੁਣੇ ਹੋਏ ਮੇਲਬਾਕਸ ਵਿੱਚ ਇੱਕ ਫੋਲਡਰ ਜੋੜੋ।",
 	"navigation.folderName": "ਫੋਲਡਰ ਦਾ ਨਾਮ",
 	"navigation.folderExample": "ਰਸੀਦਾਂ",

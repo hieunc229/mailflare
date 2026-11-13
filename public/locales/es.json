@@ -15,6 +15,7 @@
 	"navigation.folders": "Carpetas",
 	"navigation.noFolders": "Aún no hay carpetas",
 	"navigation.createFolder": "Crear carpeta",
+	"navigation.createFolderFailed": "No se pudo crear la carpeta",
 	"navigation.folderDescription": "Añade una carpeta al buzón seleccionado.",
 	"navigation.folderName": "Nombre de la carpeta",
 	"navigation.folderExample": "Recibos",

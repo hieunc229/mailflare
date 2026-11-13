@@ -15,6 +15,7 @@
 	"navigation.folders": "Folda",
 	"navigation.noFolders": "Bado hakuna folda",
 	"navigation.createFolder": "Unda folda",
+	"navigation.createFolderFailed": "Imeshindwa kuunda folda",
 	"navigation.folderDescription": "Ongeza folda kwenye kisanduku cha barua kilichochaguliwa.",
 	"navigation.folderName": "Jina la folda",
 	"navigation.folderExample": "Risiti",

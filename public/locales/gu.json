@@ -15,6 +15,7 @@
 	"navigation.folders": "ફોલ્ડર",
 	"navigation.noFolders": "હજી કોઈ ફોલ્ડર નથી",
 	"navigation.createFolder": "ફોલ્ડર બનાવો",
+	"navigation.createFolderFailed": "ફોલ્ડર બનાવી શકાયું નથી",
 	"navigation.folderDescription": "પસંદ કરેલા મેલબૉક્સમાં ફોલ્ડર ઉમેરો.",
 	"navigation.folderName": "ફોલ્ડરનું નામ",
 	"navigation.folderExample": "રસીદો",
