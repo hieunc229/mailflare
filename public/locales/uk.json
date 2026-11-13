@@ -1498,6 +1498,7 @@
 	"webhooks.rotateConfirm": "Змінити цей секрет підпису? Попередній секрет негайно припинить підписувати нові доставки.",
 	"webhooks.rotate": "Змінити секрет",
 	"webhooks.deleteLabel": "Видалити {url}",
+	"webhooks.deleteConfirm": "Видалити цей вебхук та історію його доставок? Цю дію не можна скасувати.",
 	"webhooks.addDescription": "Невдалі доставки автоматично повторюються з експоненційною затримкою.",
 	"webhooks.endpointUrl": "URL кінцевої точки",
 	"webhooks.descriptionLabel": "Опис",

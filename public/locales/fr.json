@@ -1488,6 +1488,7 @@
 	"webhooks.rotateConfirm": "Renouveler ce secret de signature ? L'ancien secret cessera immédiatement de signer les nouvelles distributions.",
 	"webhooks.rotate": "Renouveler le secret",
 	"webhooks.deleteLabel": "Supprimer {url}",
+	"webhooks.deleteConfirm": "Supprimer ce webhook et son historique de livraisons ? Cette action est irréversible.",
 	"webhooks.addDescription": "Les distributions échouées sont réessayées automatiquement avec un délai exponentiel.",
 	"webhooks.endpointUrl": "URL de l'endpoint",
 	"webhooks.descriptionLabel": "Description",

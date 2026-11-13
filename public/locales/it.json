@@ -1488,6 +1488,7 @@
 	"webhooks.rotateConfirm": "Ruotare questo segreto di firma? Il segreto precedente smetterà subito di firmare le nuove consegne.",
 	"webhooks.rotate": "Ruota segreto",
 	"webhooks.deleteLabel": "Elimina {url}",
+	"webhooks.deleteConfirm": "Eliminare questo webhook e la sua cronologia di consegne? L'operazione non può essere annullata.",
 	"webhooks.addDescription": "Le consegne non riuscite vengono ritentate automaticamente con backoff esponenziale.",
 	"webhooks.endpointUrl": "URL dell'endpoint",
 	"webhooks.descriptionLabel": "Descrizione",

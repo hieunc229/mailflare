@@ -1478,6 +1478,7 @@
 	"webhooks.rotateConfirm": "આ હસ્તાક્ષર ગુપ્ત ફેરવીએ? અગાઉનું ગુપ્ત નવી ડિલિવરી પર તરત હસ્તાક્ષર કરવાનું બંધ કરશે.",
 	"webhooks.rotate": "ગુપ્ત ફેરવો",
 	"webhooks.deleteLabel": "{url} કાઢી નાખો",
+	"webhooks.deleteConfirm": "આ વેબહુક અને તેનો ડિલિવરી ઇતિહાસ કાઢી નાખવો? આ પાછું લઈ શકાતું નથી.",
 	"webhooks.addDescription": "નિષ્ફળ ડિલિવરી ઘાતાંકીય બૅકઑફ સાથે આપમેળે ફરી પ્રયાસ કરે છે.",
 	"webhooks.endpointUrl": "એન્ડપૉઇન્ટ URL",
 	"webhooks.descriptionLabel": "વર્ણન",

@@ -1431,6 +1431,7 @@
 	"webhooks.rotateConfirm": "Bu imza gizli anahtarı yenilensin mi? Önceki gizli anahtar yeni teslimatları hemen imzalamayı bırakır.",
 	"webhooks.rotate": "Gizli anahtarı yenile",
 	"webhooks.deleteLabel": "{url} adresini sil",
+	"webhooks.deleteConfirm": "Bu webhook ve teslimat geçmişi silinsin mi? Bu işlem geri alınamaz.",
 	"webhooks.addDescription": "Başarısız teslimatlar, giderek artan bekleme süreleriyle otomatik olarak yeniden denenir.",
 	"webhooks.endpointUrl": "Uç nokta URL'si",
 	"webhooks.descriptionLabel": "Açıklama",

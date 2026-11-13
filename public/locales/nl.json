@@ -1478,6 +1478,7 @@
 	"webhooks.rotateConfirm": "Dit ondertekeningsgeheim roteren? Het vorige geheim ondertekent nieuwe bezorgingen direct niet meer.",
 	"webhooks.rotate": "Geheim roteren",
 	"webhooks.deleteLabel": "{url} verwijderen",
+	"webhooks.deleteConfirm": "Deze webhook en de bijbehorende bezorggeschiedenis verwijderen? Dit kan niet ongedaan worden gemaakt.",
 	"webhooks.addDescription": "Mislukte bezorgingen worden automatisch opnieuw geprobeerd met exponentiële uitstel.",
 	"webhooks.endpointUrl": "Eindpunt-URL",
 	"webhooks.descriptionLabel": "Beschrijving",

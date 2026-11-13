@@ -1477,6 +1477,7 @@
 	"webhooks.rotateConfirm": "Putar rahsia penandatanganan ini? Rahsia sebelumnya akan berhenti menandatangani penghantaran baharu serta-merta.",
 	"webhooks.rotate": "Putar rahsia",
 	"webhooks.deleteLabel": "Padam {url}",
+	"webhooks.deleteConfirm": "Padam webhook ini dan sejarah penghantarannya? Tindakan ini tidak boleh dibuat asal.",
 	"webhooks.addDescription": "Penghantaran yang gagal dicuba semula secara automatik dengan backoff eksponen.",
 	"webhooks.endpointUrl": "URL titik akhir",
 	"webhooks.descriptionLabel": "Penerangan",

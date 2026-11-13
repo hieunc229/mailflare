@@ -1468,6 +1468,7 @@
 	"webhooks.rotateConfirm": "Xoay vòng khóa bí mật ký này? Khóa bí mật trước đó sẽ ngừng ký các lượt chuyển phát mới ngay lập tức.",
 	"webhooks.rotate": "Xoay vòng khóa bí mật",
 	"webhooks.deleteLabel": "Xóa {url}",
+	"webhooks.deleteConfirm": "Xóa webhook này và lịch sử gửi của nó? Không thể hoàn tác thao tác này.",
 	"webhooks.addDescription": "Các lượt chuyển phát thất bại được tự động thử lại với độ trễ tăng theo cấp số nhân.",
 	"webhooks.endpointUrl": "URL điểm cuối",
 	"webhooks.descriptionLabel": "Mô tả",

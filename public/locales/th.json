@@ -1477,6 +1477,7 @@
 	"webhooks.rotateConfirm": "หมุนเวียนซีเคร็ตลงลายเซ็นนี้หรือไม่ ซีเคร็ตเดิมจะหยุดลงลายเซ็นการส่งใหม่ทันที",
 	"webhooks.rotate": "หมุนเวียนซีเคร็ต",
 	"webhooks.deleteLabel": "ลบ {url}",
+	"webhooks.deleteConfirm": "ลบเว็บฮุคนี้และประวัติการส่งหรือไม่ การดำเนินการนี้ไม่สามารถย้อนกลับได้",
 	"webhooks.addDescription": "การส่งที่ไม่สำเร็จจะลองใหม่อัตโนมัติด้วยการหน่วงแบบทวีคูณ",
 	"webhooks.endpointUrl": "URL ปลายทาง",
 	"webhooks.descriptionLabel": "คำอธิบาย",

@@ -1478,6 +1478,7 @@
 	"webhooks.rotateConfirm": "මෙම අත්සන් කිරීමේ රහස මාරු කරන්නද? පෙර රහස නව බෙදාහැරීම් අත්සන් කිරීම වහාම නවත්වනු ඇත.",
 	"webhooks.rotate": "රහස මාරු කරන්න",
 	"webhooks.deleteLabel": "{url} මකන්න",
+	"webhooks.deleteConfirm": "මෙම වෙබ්හුක් එක සහ එහි බෙදාහැරීමේ ඉතිහාසය මකා දමන්නද? මෙය ආපසු හැරවිය නොහැක.",
 	"webhooks.addDescription": "අසාර්ථක බෙදාහැරීම් ඝාතීය ලෙස වැඩිවන ප්‍රමාදයන් සමඟ ස්වයංක්‍රීයව නැවත උත්සාහ කෙරේ.",
 	"webhooks.endpointUrl": "අන්ත ලක්ෂ්‍ය URL",
 	"webhooks.descriptionLabel": "විස්තරය",

@@ -1518,6 +1518,7 @@
 	"webhooks.rotateConfirm": "تدوير سر التوقيع هذا؟ سيتوقف السر السابق عن توقيع عمليات التسليم الجديدة فورًا.",
 	"webhooks.rotate": "تدوير السر",
 	"webhooks.deleteLabel": "حذف {url}",
+	"webhooks.deleteConfirm": "حذف هذا الـ webhook وسجل التسليم الخاص به؟ لا يمكن التراجع عن ذلك.",
 	"webhooks.addDescription": "تُعاد محاولة عمليات التسليم الفاشلة تلقائيًا مع تأخير متصاعد.",
 	"webhooks.endpointUrl": "عنوان URL لنقطة النهاية",
 	"webhooks.descriptionLabel": "الوصف",

@@ -1478,6 +1478,7 @@
 	"webhooks.rotateConfirm": "Juya wannan sirrin sa hannu? Sirri na da zai daina sa hannu kan sabbin isarwa nan take.",
 	"webhooks.rotate": "Juya sirri",
 	"webhooks.deleteLabel": "Share {url}",
+	"webhooks.deleteConfirm": "Share wannan webhook da tarihin isar da shi? Ba za a iya mayar da wannan ba.",
 	"webhooks.addDescription": "Isarwar da ta gaza ana sake gwada ta kai-tsaye da jinkiri mai ninkawa.",
 	"webhooks.endpointUrl": "URL na wurin ƙarshe",
 	"webhooks.descriptionLabel": "Bayani",

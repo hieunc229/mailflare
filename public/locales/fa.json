@@ -1478,6 +1478,7 @@
 	"webhooks.rotateConfirm": "این راز امضا چرخانده شود؟ راز قبلی بلافاصله از امضای تحویل‌های جدید باز می‌ماند.",
 	"webhooks.rotate": "چرخاندن راز",
 	"webhooks.deleteLabel": "حذف {url}",
+	"webhooks.deleteConfirm": "این وب‌هوک و تاریخچهٔ تحویل آن حذف شود؟ این کار قابل بازگشت نیست.",
 	"webhooks.addDescription": "تحویل‌های ناموفق با عقب‌نشینی نمایی به‌طور خودکار دوباره تلاش می‌شوند.",
 	"webhooks.endpointUrl": "نشانی نقطه پایانی",
 	"webhooks.descriptionLabel": "توضیحات",

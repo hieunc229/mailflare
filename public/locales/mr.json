@@ -1476,6 +1476,7 @@
 	"webhooks.rotateConfirm": "हे स्वाक्षरी सिक्रेट फिरवायचे? आधीचे सिक्रेट नवीन वितरणांवर लगेच स्वाक्षरी करणे थांबवेल.",
 	"webhooks.rotate": "सिक्रेट फिरवा",
 	"webhooks.deleteLabel": "{url} हटवा",
+	"webhooks.deleteConfirm": "हा वेबहुक आणि त्याचा डिलिव्हरी इतिहास हटवायचा? हे पूर्ववत करता येणार नाही.",
 	"webhooks.addDescription": "अयशस्वी वितरणे घातांकीय बॅकऑफसह आपोआप पुन्हा प्रयत्न केली जातात.",
 	"webhooks.endpointUrl": "एंडपॉइंट URL",
 	"webhooks.descriptionLabel": "वर्णन",

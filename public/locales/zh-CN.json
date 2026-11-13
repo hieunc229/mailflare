@@ -1468,6 +1468,7 @@
 	"webhooks.rotateConfirm": "轮换此签名密钥？旧密钥将立即停止为新的投递签名。",
 	"webhooks.rotate": "轮换密钥",
 	"webhooks.deleteLabel": "删除 {url}",
+	"webhooks.deleteConfirm": "删除此 Webhook 及其投递记录？此操作无法撤销。",
 	"webhooks.addDescription": "失败的投递会以指数退避方式自动重试。",
 	"webhooks.endpointUrl": "端点 URL",
 	"webhooks.descriptionLabel": "描述",

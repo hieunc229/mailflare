@@ -1518,6 +1518,7 @@
 	"webhooks.rotateConfirm": "Rotate this signing secret? The previous secret will stop signing new deliveries immediately.",
 	"webhooks.rotate": "Rotate secret",
 	"webhooks.deleteLabel": "Delete {url}",
+	"webhooks.deleteConfirm": "Delete this webhook and its delivery history? This cannot be undone.",
 	"webhooks.addDescription": "Failed deliveries retry automatically with exponential backoff.",
 	"webhooks.endpointUrl": "Endpoint URL",
 	"webhooks.descriptionLabel": "Description",

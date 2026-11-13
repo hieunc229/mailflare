@@ -1477,6 +1477,7 @@
 	"webhooks.rotateConfirm": "이 서명 비밀을 교체하시겠습니까? 이전 비밀은 새 전달에 대한 서명을 즉시 중단합니다.",
 	"webhooks.rotate": "비밀 교체",
 	"webhooks.deleteLabel": "{url} 삭제",
+	"webhooks.deleteConfirm": "이 웹훅과 전달 기록을 삭제할까요? 이 작업은 되돌릴 수 없습니다.",
 	"webhooks.addDescription": "실패한 전달은 지수 백오프로 자동 재시도됩니다.",
 	"webhooks.endpointUrl": "엔드포인트 URL",
 	"webhooks.descriptionLabel": "설명",

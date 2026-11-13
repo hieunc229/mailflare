@@ -1,7 +1,7 @@
 "use client";
 
 import { mobilePrimaryActionClass } from "@/components/page-header-utils";
-import { confirmDialog } from "@/components/ui/confirm-dialog";
+import { confirmDestructive, confirmDialog } from "@/components/ui/confirm-dialog";
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Activity, Plus, RefreshCw, Send, Trash2 } from "@/components/icons";
@@ -63,7 +63,11 @@ export default function WebhooksPage() {
 
 	const toggle = useMutation({
 		mutationFn: (hook: Webhook) => updateWebhook(hook.id, { enabled: !hook.enabled }),
-		onSuccess: invalidate,
+		onSuccess: () => {
+			setError(null);
+			invalidate();
+		},
+		onError: (cause: Error) => setError(cause.message),
 	});
 	const rotate = useMutation({
 		mutationFn: (id: string) => updateWebhook(id, { rotateSecret: true }),
@@ -74,7 +78,14 @@ export default function WebhooksPage() {
 		onError: (cause: Error) => setError(cause.message),
 	});
 
-	const remove = useMutation({ mutationFn: deleteWebhook, onSuccess: invalidate });
+	const remove = useMutation({
+		mutationFn: deleteWebhook,
+		onSuccess: () => {
+			setError(null);
+			invalidate();
+		},
+		onError: (cause: Error) => setError(cause.message),
+	});
 
 	const runTest = useMutation({
 		mutationFn: testWebhook,
@@ -227,7 +238,10 @@ export default function WebhooksPage() {
 									<Button
 										variant="ghost"
 										size="sm"
-										onClick={() => remove.mutate(hook.id)}
+										onClick={async () => {
+											if (await confirmDestructive(t("webhooks.deleteConfirm"))) remove.mutate(hook.id);
+										}}
+										disabled={remove.isPending}
 										aria-label={t("webhooks.deleteLabel", { url: hook.url })}
 									>
 										<Trash2 className="h-4 w-4" /> {t("common.delete")}

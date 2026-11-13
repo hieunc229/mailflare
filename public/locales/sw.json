@@ -1478,6 +1478,7 @@
 	"webhooks.rotateConfirm": "Zungusha siri hii ya kutia sahihi? Siri ya awali itaacha kutia sahihi uwasilishaji mpya mara moja.",
 	"webhooks.rotate": "Zungusha siri",
 	"webhooks.deleteLabel": "Futa {url}",
+	"webhooks.deleteConfirm": "Futa webhook hii na historia yake ya uwasilishaji? Kitendo hiki hakiwezi kutenduliwa.",
 	"webhooks.addDescription": "Uwasilishaji ulioshindwa hujaribiwa tena kiotomatiki kwa ucheleweshaji unaoongezeka.",
 	"webhooks.endpointUrl": "URL ya kituo",
 	"webhooks.descriptionLabel": "Maelezo",

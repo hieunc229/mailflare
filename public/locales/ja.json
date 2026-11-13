@@ -1468,6 +1468,7 @@
 	"webhooks.rotateConfirm": "この署名シークレットをローテーションしますか？以前のシークレットは、新しい配信への署名にすぐに使われなくなります。",
 	"webhooks.rotate": "シークレットをローテーション",
 	"webhooks.deleteLabel": "{url}を削除",
+	"webhooks.deleteConfirm": "このWebhookと配信履歴を削除しますか？この操作は元に戻せません。",
 	"webhooks.addDescription": "配信に失敗した場合は、指数バックオフで自動的に再試行されます。",
 	"webhooks.endpointUrl": "エンドポイント URL",
 	"webhooks.descriptionLabel": "説明",

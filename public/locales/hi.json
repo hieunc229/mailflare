@@ -1478,6 +1478,7 @@
 	"webhooks.rotateConfirm": "यह हस्ताक्षर सीक्रेट घुमाएँ? पिछला सीक्रेट नई डिलीवरी पर तुरंत हस्ताक्षर करना बंद कर देगा।",
 	"webhooks.rotate": "सीक्रेट घुमाएँ",
 	"webhooks.deleteLabel": "{url} हटाएँ",
+	"webhooks.deleteConfirm": "इस वेबहुक और उसके डिलीवरी इतिहास को हटाएँ? इसे पूर्ववत नहीं किया जा सकता।",
 	"webhooks.addDescription": "विफल डिलीवरी एक्सपोनेंशियल बैकऑफ़ के साथ अपने-आप पुनः प्रयास की जाती हैं।",
 	"webhooks.endpointUrl": "एंडपॉइंट URL",
 	"webhooks.descriptionLabel": "विवरण",

@@ -1488,6 +1488,7 @@
 	"webhooks.rotateConfirm": "¿Rotar este secreto de firma? El secreto anterior dejará de firmar las nuevas entregas de inmediato.",
 	"webhooks.rotate": "Rotar secreto",
 	"webhooks.deleteLabel": "Eliminar {url}",
+	"webhooks.deleteConfirm": "¿Eliminar este webhook y su historial de entregas? Esta acción no se puede deshacer.",
 	"webhooks.addDescription": "Las entregas fallidas se reintentan automáticamente con espera exponencial.",
 	"webhooks.endpointUrl": "URL del endpoint",
 	"webhooks.descriptionLabel": "Descripción",

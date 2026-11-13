@@ -1476,6 +1476,7 @@
 	"webhooks.rotateConfirm": "এই স্বাক্ষরের সিক্রেট ঘোরাবেন? আগের সিক্রেট নতুন ডেলিভারিতে স্বাক্ষর করা সঙ্গে সঙ্গে বন্ধ করবে।",
 	"webhooks.rotate": "সিক্রেট ঘোরান",
 	"webhooks.deleteLabel": "{url} মুছুন",
+	"webhooks.deleteConfirm": "এই ওয়েবহুক এবং এর ডেলিভারি ইতিহাস মুছবেন? এটি পূর্বাবস্থায় ফেরানো যাবে না।",
 	"webhooks.addDescription": "ব্যর্থ ডেলিভারি এক্সপোনেনশিয়াল ব্যাকঅফসহ স্বয়ংক্রিয়ভাবে পুনরায় চেষ্টা করা হয়।",
 	"webhooks.endpointUrl": "এন্ডপয়েন্ট URL",
 	"webhooks.descriptionLabel": "বিবরণ",

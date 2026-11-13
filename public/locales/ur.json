@@ -1476,6 +1476,7 @@
 	"webhooks.rotateConfirm": "یہ دستخطی راز بدلیں؟ پچھلا راز نئی ترسیلات پر دستخط کرنا فوراً بند کر دے گا۔",
 	"webhooks.rotate": "راز بدلیں",
 	"webhooks.deleteLabel": "{url} حذف کریں",
+	"webhooks.deleteConfirm": "اس ویب ہک اور اس کی ڈیلیوری ہسٹری کو حذف کریں؟ اسے واپس نہیں کیا جا سکتا۔",
 	"webhooks.addDescription": "ناکام ترسیلات کو تیزی سے بڑھتے وقفے کے ساتھ خودکار طور پر دوبارہ آزمایا جاتا ہے۔",
 	"webhooks.endpointUrl": "اینڈ پوائنٹ URL",
 	"webhooks.descriptionLabel": "تفصیل",

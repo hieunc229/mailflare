@@ -1478,6 +1478,7 @@
 	"webhooks.rotateConfirm": "ഈ ഒപ്പിടൽ രഹസ്യം മാറ്റണോ? മുൻ രഹസ്യം പുതിയ ഡെലിവറികളിൽ ഉടൻ ഒപ്പിടുന്നത് നിർത്തും.",
 	"webhooks.rotate": "രഹസ്യം മാറ്റുക",
 	"webhooks.deleteLabel": "{url} ഇല്ലാതാക്കുക",
+	"webhooks.deleteConfirm": "ഈ വെബ്ഹുക്കും അതിന്റെ ഡെലിവറി ചരിത്രവും ഇല്ലാതാക്കണോ? ഇത് തിരികെ മാറ്റാൻ കഴിയില്ല.",
 	"webhooks.addDescription": "പരാജയപ്പെട്ട ഡെലിവറികൾ എക്സ്പോണൻഷ്യൽ ബാക്ക്ഓഫ് ഉപയോഗിച്ച് സ്വയമേവ വീണ്ടും ശ്രമിക്കുന്നു.",
 	"webhooks.endpointUrl": "എൻഡ്‌പോയിന്റ് URL",
 	"webhooks.descriptionLabel": "വിവരണം",

@@ -1468,6 +1468,7 @@
 	"webhooks.rotateConfirm": "Putar rahasia penandatanganan ini? Rahasia sebelumnya akan langsung berhenti menandatangani pengiriman baru.",
 	"webhooks.rotate": "Putar rahasia",
 	"webhooks.deleteLabel": "Hapus {url}",
+	"webhooks.deleteConfirm": "Hapus webhook ini beserta riwayat pengirimannya? Tindakan ini tidak dapat dibatalkan.",
 	"webhooks.addDescription": "Pengiriman yang gagal dicoba ulang otomatis dengan backoff eksponensial.",
 	"webhooks.endpointUrl": "URL endpoint",
 	"webhooks.descriptionLabel": "Deskripsi",

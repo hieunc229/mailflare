@@ -1478,6 +1478,7 @@
 	"webhooks.rotateConfirm": "ਇਹ ਦਸਤਖ਼ਤ ਗੁਪਤ ਘੁੰਮਾਉਣਾ ਹੈ? ਪਿਛਲਾ ਗੁਪਤ ਨਵੀਆਂ ਡਿਲੀਵਰੀਆਂ 'ਤੇ ਤੁਰੰਤ ਦਸਤਖ਼ਤ ਕਰਨਾ ਬੰਦ ਕਰ ਦੇਵੇਗਾ।",
 	"webhooks.rotate": "ਗੁਪਤ ਘੁੰਮਾਓ",
 	"webhooks.deleteLabel": "{url} ਮਿਟਾਓ",
+	"webhooks.deleteConfirm": "ਕੀ ਇਹ ਵੈੱਬਹੁੱਕ ਅਤੇ ਇਸਦਾ ਡਿਲਿਵਰੀ ਇਤਿਹਾਸ ਮਿਟਾਉਣਾ ਹੈ? ਇਹ ਵਾਪਸ ਨਹੀਂ ਕੀਤਾ ਜਾ ਸਕਦਾ।",
 	"webhooks.addDescription": "ਅਸਫਲ ਡਿਲੀਵਰੀਆਂ ਘਾਤਕ ਬੈਕਆਫ਼ ਨਾਲ ਆਪਣੇ-ਆਪ ਦੁਬਾਰਾ ਕੋਸ਼ਿਸ਼ ਕੀਤੀਆਂ ਜਾਂਦੀਆਂ ਹਨ।",
 	"webhooks.endpointUrl": "ਐਂਡਪੁਆਇੰਟ URL",
 	"webhooks.descriptionLabel": "ਵੇਰਵਾ",

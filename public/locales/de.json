@@ -1478,6 +1478,7 @@
 	"webhooks.rotateConfirm": "Dieses Signiergeheimnis rotieren? Das vorherige Geheimnis signiert neue Zustellungen sofort nicht mehr.",
 	"webhooks.rotate": "Geheimnis rotieren",
 	"webhooks.deleteLabel": "{url} löschen",
+	"webhooks.deleteConfirm": "Diesen Webhook und seinen Zustellverlauf löschen? Das kann nicht rückgängig gemacht werden.",
 	"webhooks.addDescription": "Fehlgeschlagene Zustellungen werden automatisch mit exponentiellem Backoff wiederholt.",
 	"webhooks.endpointUrl": "Endpoint-URL",
 	"webhooks.descriptionLabel": "Beschreibung",

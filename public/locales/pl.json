@@ -1498,6 +1498,7 @@
 	"webhooks.rotateConfirm": "Zrotować ten sekret podpisu? Poprzedni sekret natychmiast przestanie podpisywać nowe dostarczenia.",
 	"webhooks.rotate": "Zrotuj sekret",
 	"webhooks.deleteLabel": "Usuń {url}",
+	"webhooks.deleteConfirm": "Usunąć ten webhook i historię jego dostarczeń? Tej operacji nie można cofnąć.",
 	"webhooks.addDescription": "Nieudane dostarczenia są ponawiane automatycznie z wykładniczym wycofywaniem.",
 	"webhooks.endpointUrl": "URL punktu końcowego",
 	"webhooks.descriptionLabel": "Opis",
