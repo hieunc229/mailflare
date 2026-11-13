@@ -9,7 +9,7 @@ const root = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
 // Bundle app modules (a list of `export ... from "./src/..."` lines) with the runtime SQLite
 // driver and migrate helper, and import the result. The returned `newDatabase` applies the real
 // migrations to an in-memory database, so tests exercise actual queries on the real schema.
-export async function loadApp(name, exportLines) {
+export async function loadApp(name, exportLines, { mocks = {} } = {}) {
 	const directory = mkdtempSync(join(root, "node_modules", `${name}-test-`));
 	after(() => rmSync(directory, { recursive: true, force: true }));
 	await build({
@@ -36,6 +36,13 @@ export async function loadApp(name, exportLines) {
 			"cloudflare:workers": "./server/runtime/cloudflare-workers.ts",
 		},
 		logLevel: "silent",
+		plugins: [{
+			name: `${name}-mocks`,
+			setup(builder) {
+				builder.onResolve({ filter: /.*/ }, ({ path }) => (path in mocks ? { path, namespace: "mock" } : undefined));
+				builder.onLoad({ filter: /.*/, namespace: "mock" }, ({ path }) => ({ contents: mocks[path], loader: "js" }));
+			},
+		}],
 	});
 	const app = await import(pathToFileURL(join(directory, "entry.mjs")).href);
 	async function newDatabase(t, seedSql = "") {
