@@ -4,6 +4,7 @@ One file per version, newest first. Dates are the day `package.json` was bumped 
 
 | Version | Date | Highlights |
 | --- | --- | --- |
+| [0.5.5](0.5.5.md) | 2026-11-14 | Contacts, calendar invites and subscriptions, conversation notes, speed-ups |
 | [0.5.4](0.5.4.md) | 2026-10-30 | Inbound/rendering/webhook/AI security hardening, sender details |
 | [0.5.3](0.5.3.md) | 2026-10-28 | PostgreSQL/MySQL/libSQL, background imports, read receipts, follow-ups, mobile push |
 | [0.5.2](0.5.2.md) | 2026-10-11 | Accessibility and usability fixes |
