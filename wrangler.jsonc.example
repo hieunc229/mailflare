@@ -81,6 +81,8 @@
 			{
 				"queue": "mailflare-inbound",
 				"max_batch_size": 5,
+				// New mail should reach the inbox at once; do not wait up to 5 s for a batch to fill.
+				"max_batch_timeout": 1,
 				"max_retries": 3,
 			},
 			{
