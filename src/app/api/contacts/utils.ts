@@ -1,6 +1,7 @@
 import { and, asc, eq, or, sql } from "drizzle-orm";
+import { addressListIncludes } from "@/lib/email/address";
 import type { getDb } from "@/db";
-import { contacts } from "@/db/schema";
+import { contacts, messages } from "@/db/schema";
 import { escapeLike, insensitiveLike } from "@/db/sql";
 import { getContactId } from "@/lib/contacts/utils";
 
@@ -46,6 +47,34 @@ export async function listContacts(db: Db, input: { userId: string; query: strin
 			asc(contacts.email),
 		)
 		.limit(input.limit);
+}
+
+/**
+ * Contacts belong to the user who owns the mailbox, so a shared mailbox's contact list is its creator's whole
+ * address book. Anyone who is not that owner may only see contacts whose address appears on mail in this mailbox.
+ * Returns the subset of `emails` that does (exact address match).
+ */
+export async function addressesSeenInMailbox(db: Db, mailboxId: string, emails: string[]): Promise<Set<string>> {
+	const seen = new Set<string>();
+	const unique = [...new Set(emails)];
+	// D1 allows 100 bound parameters per statement: 3 per address plus the mailbox id.
+	for (let offset = 0; offset < unique.length; offset += 25) {
+		const chunk = unique.slice(offset, offset + 25);
+		const conditions = chunk.flatMap((email) => {
+			const pattern = `%${email.replace(/%/g, "")}%`;
+			return [eq(messages.fromAddr, email), insensitiveLike(messages.toAddr, pattern), insensitiveLike(messages.ccAddr, pattern)];
+		});
+		// The LIKE only narrows candidates; the verdict below is an exact address comparison.
+		const rows = await db
+			.select({ fromAddr: messages.fromAddr, toAddr: messages.toAddr, ccAddr: messages.ccAddr })
+			.from(messages)
+			.where(and(eq(messages.mailboxId, mailboxId), or(...conditions)!))
+			.limit(500);
+		for (const email of chunk) {
+			if (rows.some((row) => [row.fromAddr, row.toAddr, row.ccAddr].some((value) => addressListIncludes(value, email)))) seen.add(email);
+		}
+	}
+	return seen;
 }
 
 export function toContactDetails(contact: Awaited<ReturnType<typeof getContactByEmail>>) {
