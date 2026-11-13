@@ -19,7 +19,10 @@ container): the SQLite database, raw messages, attachments and backups.
 
 Behind a reverse proxy, set `APP_URL=https://mail.example.com` so links in
 password-reset mail and the JMAP session point at the public address, and
-forward WebSocket upgrades for `/api/realtime`. Passkeys also bind to this
+forward WebSocket upgrades for `/api/realtime`. Also set `TRUST_PROXY=1`:
+without it every request appears to come from the proxy's address, so login
+rate limits are shared by all users. Leave it unset when the container is
+exposed directly. Passkeys also bind to this
 origin, so they need `APP_URL` (or a direct HTTPS connection) to work.
 
 ### PWA and push notifications
@@ -97,6 +100,7 @@ and the DNS page shows what to set by hand.
 | `DATABASE_URL` | unset | Use PostgreSQL, MySQL or libSQL instead of the SQLite file in `DATA_DIR`; see [Databases](databases.md). Migrations are applied on start. |
 | `DATABASE_DRIVER` | inferred | Only to override the driver inferred from `DATABASE_URL` |
 | `APP_URL` | request origin | Public URL behind a proxy |
+| `TRUST_PROXY` | unset | `1`, `true` or `yes` trusts the last `X-Forwarded-For` hop as the client IP (for rate limits). Set it only behind a reverse proxy; leave unset when exposed directly |
 | `SMTP_INBOUND_PORT` | `25` | Inbound SMTP; `0` disables |
 | `MAIL_HOSTNAME` | `mail.<domain>` | Host the MX record points at; SMTP banner |
 | `SMTP_MAX_SIZE` | 36 MiB | Largest raw inbound message; allows for encoding overhead on up to 25 MB of attachments. Oversized mail receives an SMTP rejection, which the sender's mail provider can report as a delivery failure. |
@@ -129,9 +133,12 @@ and the DNS page shows what to set by hand.
 - **Updates.** Pull the new image and recreate the container; migrations run
   at start. The in-app update button is disabled on self-hosted installs.
 - **Logs.** `docker compose logs -f mailflare`.
-- **Queues.** Jobs are held in memory. Inbound mail is written to the volume
-  before it is queued, so a restart never loses a message; at worst one
-  stays unparsed until it is re-imported.
+- **Queues.** Jobs are held in memory and are not re-queued after a restart.
+  Inbound mail is written to the volume before it is queued, but a message
+  whose job is lost stays unparsed, and the nightly clean-up removes raw
+  inbound files that no message references after 24 hours. Scheduled and
+  undo-send mail that has not been sent when the container restarts is not
+  sent automatically.
 
 ## Email assistant and MCP
 
