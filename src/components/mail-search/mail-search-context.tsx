@@ -8,7 +8,6 @@ const MailSearchContext = createContext<MailSearchContextValue | null>(null);
 
 const DEFAULT_SEARCH_VALUE: MailSearchContextValue = {
 	query: "",
-	input: "",
 	setQuery: () => undefined,
 };
 

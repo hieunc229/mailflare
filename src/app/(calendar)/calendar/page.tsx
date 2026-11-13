@@ -52,15 +52,15 @@ export default function CalendarPage() {
   const [eventsVersion, setEventsVersion] = useState(0);
   const [currentTime, setCurrentTime] = useState(() => Date.now());
   const [visibleDate, setVisibleDate] = useState(() => new Date());
-  const [view, setView] = useState<CalendarView>("week");
-  const [pendingInvite, setPendingInvite] = useState<CalendarEvent | null>(null);
   // Only a choice made in the view switcher is remembered; jumping into a day from the month grid is not.
-  useEffect(() => {
+  const [view, setView] = useState<CalendarView>(() => {
     try {
       const saved = window.localStorage.getItem("mailflare.calendar.view");
-      if (saved === "month" || saved === "week" || saved === "day") setView(saved);
+      if (saved === "month" || saved === "week" || saved === "day") return saved;
     } catch { /* storage can be blocked; the default view is fine */ }
-  }, []);
+    return "week";
+  });
+  const [pendingInvite, setPendingInvite] = useState<CalendarEvent | null>(null);
   function chooseView(next: CalendarView) {
     setView(next);
     try { window.localStorage.setItem("mailflare.calendar.view", next); } catch { /* not remembered */ }

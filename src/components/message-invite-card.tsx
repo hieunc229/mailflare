@@ -29,10 +29,8 @@ export function MessageInviteCard({ messageId, hasCalendarAttachment }: { messag
 	const [answered, setAnswered] = useState<InviteResponse | null>(null);
 	const [pending, setPending] = useState<InviteResponse | null>(null);
 
+	// The caller keys this card by message, so state starts fresh for each message without resetting it here.
 	useEffect(() => {
-		setInvite(null);
-		setEventId(null);
-		setAnswered(null);
 		if (!hasCalendarAttachment) return;
 		let active = true;
 		void authFetch(`/api/messages/${messageId}/invite`)
