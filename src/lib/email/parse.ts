@@ -64,7 +64,16 @@ export async function parseRawMime(raw: ArrayBuffer): Promise<ParsedEmail> {
 	};
 }
 
+// The snippet only needs the head of the body; bounding the input bounds the work.
+const SNIPPET_SOURCE_CHARS = 20_000;
+
 export function buildSnippet(text: string | null, html: string | null, max = 200): string {
-	const source = getLatestEmailContent(text?.trim() || htmlToReadableText(html));
+	const raw = (text?.trim() || htmlToReadableText(html)).slice(0, SNIPPET_SOURCE_CHARS);
+	let source: string;
+	try {
+		source = getLatestEmailContent(raw);
+	} catch {
+		source = raw;
+	}
 	return source.replace(/\s+/g, " ").trim().slice(0, max);
 }
