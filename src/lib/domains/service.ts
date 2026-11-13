@@ -19,6 +19,7 @@ import { rollbackDomainProvisioning } from "@/lib/domains/rollback";
 import type { DomainProvisioningChanges } from "@/lib/domains/types";
 import { findSendingSubdomain } from "@/lib/domains/sending-status";
 import { preflightDomain } from "@/lib/domains/preflight";
+import { normalizeHostname } from "@/lib/domains/utils";
 import { hasCloudflareCredentials } from "@/lib/runtime";
 
 export type DomainDnsView = {
@@ -48,7 +49,7 @@ export async function addDomainForUser(
 	changes: DomainProvisioningChanges;
 }> {
 	const db = getDb(env);
-	const normalizedHostname = hostname.toLowerCase().trim();
+	const normalizedHostname = normalizeHostname(hostname);
 	const [claimedHostname] = await db.select({ userId: domains.userId }).from(domains).where(eq(domains.hostname, normalizedHostname)).limit(1);
 	if (claimedHostname && claimedHostname.userId !== userId) {
 		throw new Error("Domain is already registered");

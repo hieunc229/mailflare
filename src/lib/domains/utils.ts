@@ -1,3 +1,26 @@
+/**
+ * Canonical form of a domain name: trimmed, lowercase, no trailing dot, and
+ * punycode for internationalised names (Cloudflare zone names are punycode).
+ * Input the URL parser cannot read is returned trimmed and lowercased so a
+ * validity check can reject it.
+ */
+export function normalizeHostname(hostname: string): string {
+	const trimmed = hostname.trim().toLowerCase().replace(/\.+$/, "");
+	if (!trimmed || /[\s/@:?#\\]/.test(trimmed)) return trimmed;
+	try {
+		return new URL(`http://${trimmed}`).hostname.replace(/\.+$/, "");
+	} catch {
+		return trimmed;
+	}
+}
+
+const HOSTNAME_PATTERN = /^(?=.{1,253}$)([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$/;
+
+/** A domain name, not an IP address: top-level domains are never all digits, which also catches forms the URL parser turns into IPv4 ("0x7f.1"). */
+export function isValidHostname(hostname: string): boolean {
+	return HOSTNAME_PATTERN.test(hostname) && !/^\d+$/.test(hostname.slice(hostname.lastIndexOf(".") + 1));
+}
+
 export function getZoneLookupCandidates(hostname: string): string[] {
 	const labels = hostname.split(".").filter(Boolean);
 	const candidates: string[] = [];
