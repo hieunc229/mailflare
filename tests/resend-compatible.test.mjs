@@ -110,3 +110,12 @@ test("a queued send's placeholder Message-ID is not used; the ID after it leaves
 	assert.equal(await fetchSentMessageId(client, "email_1", noWait), null);
 	assert.equal(calls.length, 3);
 });
+
+test("RESEND_OMIT_HEADERS leaves the listed headers out, matching names case-insensitively", async () => {
+	const calls = mockProvider();
+	const autoMessage = { ...message, headers: { ...message.headers, "Auto-Submitted": "auto-generated", "X-Auto-Response-Suppress": "All" } };
+	await sendThroughProvider({ RESEND_OMIT_HEADERS: " auto-submitted , " }, { provider: "resend", apiKey: "re_test" }, autoMessage);
+	assert.equal(calls[0].body.headers["Auto-Submitted"], undefined);
+	assert.equal(calls[0].body.headers["X-Auto-Response-Suppress"], "All");
+	assert.equal(calls[0].body.headers["In-Reply-To"], "<x@example.net>");
+});

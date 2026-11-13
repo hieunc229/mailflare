@@ -2,7 +2,7 @@ import type { ResendDomain, ResendReceivedEmail, ResendWebhook } from "@/lib/ema
 
 const RESEND_DEFAULT_BASE_URL = "https://api.resend.com";
 
-type ResendEnv = { RESEND_BASE_URL?: string; RESEND_CUSTOM_MESSAGE_ID?: string };
+type ResendEnv = { RESEND_BASE_URL?: string; RESEND_CUSTOM_MESSAGE_ID?: string; RESEND_OMIT_HEADERS?: string };
 
 /** Where Resend calls go and the key they carry. */
 export type ResendClient = { apiKey: string; baseUrl: string };
@@ -26,6 +26,15 @@ export function resendClient(env: object, apiKey: string): ResendClient {
  */
 export function resendSetsMessageId(env: object): boolean {
 	return (env as ResendEnv).RESEND_CUSTOM_MESSAGE_ID?.trim().toLowerCase() !== "false";
+}
+
+/**
+ * Lower-cased names from RESEND_OMIT_HEADERS (comma-separated): headers a
+ * Resend-compatible service refuses, such as Auto-Submitted, left out of sends.
+ */
+export function resendOmittedHeaders(env: object): Set<string> {
+	const names = (env as ResendEnv).RESEND_OMIT_HEADERS?.split(",") ?? [];
+	return new Set(names.map((name) => name.trim().toLowerCase()).filter(Boolean));
 }
 
 // Until a send leaves the provider's queue its message_id can be a placeholder

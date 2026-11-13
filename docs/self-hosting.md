@@ -109,6 +109,7 @@ and the DNS page shows what to set by hand.
 | `RESEND_API_KEY` | unset | Resend key, used when none is saved in the app |
 | `RESEND_BASE_URL` | `https://api.resend.com` | Base URL of the Resend API; set it to use a Resend-compatible service |
 | `RESEND_CUSTOM_MESSAGE_ID` | `true` | Set to `false` for a Resend-compatible service that refuses a custom `Message-ID` header |
+| `RESEND_OMIT_HEADERS` | empty | Comma-separated headers left out of Resend sends, for a compatible service that refuses them (e.g. `Auto-Submitted`) |
 | `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_REGION` | unset | Amazon SES credentials, used when none are saved in the app |
 | `INBOUND_WEBHOOK_SECRET` | unset | Enables `/api/inbound` for the relay Worker |
 | `INBOUND_REQUIRE_SIGNED_HEADERS` | unset | Set to `1` once the relay Worker is updated: refuses relays that do not sign the header map with a timestamp (older relays stay accepted without it, and their requests can be replayed) |

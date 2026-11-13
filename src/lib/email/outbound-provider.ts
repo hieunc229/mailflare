@@ -4,7 +4,7 @@ import { appSettings, domains } from "@/db/schema";
 import { requireAwsConfig } from "@/lib/aws/config";
 import { sendSesEmail } from "@/lib/aws/ses";
 import { getEmailAddress } from "@/lib/email/address";
-import { fetchSentMessageId, resendClient, resendSetsMessageId, type ResendClient } from "@/lib/email/resend-api";
+import { fetchSentMessageId, resendClient, resendOmittedHeaders, resendSetsMessageId, type ResendClient } from "@/lib/email/resend-api";
 import type { OutboundProviderConfig, OutboundProviderMessage, ResendKeyStatus } from "@/lib/email/outbound-provider-types";
 
 /**
@@ -63,10 +63,11 @@ function mintMessageId(from: string): string {
 	return `<${crypto.randomUUID()}@${domain}>`;
 }
 
-function resendPayload(message: OutboundProviderMessage, messageIdHeader: string | null) {
-	// Drop any caller-supplied Message-ID so only the one decided here is sent.
-	const headers = { ...message.headers };
-	delete headers["Message-ID"];
+function resendPayload(message: OutboundProviderMessage, messageIdHeader: string | null, omitted: Set<string>) {
+	// Drop any caller-supplied Message-ID so only the one decided here is sent,
+	// and any header the configured service refuses.
+	const headers = Object.fromEntries(Object.entries(message.headers ?? {})
+		.filter(([name]) => name !== "Message-ID" && !omitted.has(name.toLowerCase())));
 	return {
 		from: message.from,
 		to: message.to,
@@ -100,7 +101,7 @@ async function sendWithResend(
 			"Content-Type": "application/json",
 			...(idempotencyKey ? { "Idempotency-Key": idempotencyKey } : {}),
 		},
-		body: JSON.stringify(resendPayload(message, setsMessageId ? mintedId : null)),
+		body: JSON.stringify(resendPayload(message, setsMessageId ? mintedId : null, resendOmittedHeaders(env))),
 	});
 	const body = (await response.json().catch(() => null)) as { id?: string; message?: string } | null;
 	if (!response.ok) throw new Error(`Resend: ${body?.message ?? `request failed (${response.status})`}`);
