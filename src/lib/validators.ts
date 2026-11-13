@@ -149,6 +149,7 @@ export const stepUpActionSchema = z.enum([
 	"second_factor.toggle",
 	"admin.password_reset",
 	"admin.recovery_link",
+	"profile.recovery_email",
 ]);
 
 export const passkeyRegistrationSchema = passkeyCeremonySchema.extend({
@@ -327,7 +328,15 @@ export const folderSchema = z.object({
 	color: z.enum(FOLDER_COLOR_VALUES).default(DEFAULT_FOLDER_COLOR),
 });
 
+/** Proof of identity for changing where password-reset or forwarded mail goes. */
+const recoveryProofFields = {
+	password: z.string().min(1).max(1024).optional(),
+	stepUpToken: z.string().min(8).max(200).optional(),
+	code: z.string().trim().min(6).max(32).optional(),
+};
+
 export const updateProfileSchema = z.object({
+	...recoveryProofFields,
 	// Optional so a recovery-email-only save leaves the name alone instead of writing back a stale one.
 	name: z.string().trim().min(1).max(100).optional(),
 	resetEmail: z.preprocess(
@@ -341,6 +350,7 @@ export const updateProfileSchema = z.object({
 });
 
 export const updateForwardingEmailSchema = z.object({
+	...recoveryProofFields,
 	forwardingEmail: z.preprocess(
 		(value) => (typeof value === "string" ? value.trim() : value),
 		z.string().email().or(z.literal("")).transform((value) => value || null),

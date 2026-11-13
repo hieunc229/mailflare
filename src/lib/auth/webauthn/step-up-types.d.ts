@@ -12,7 +12,8 @@ export type StepUpAction =
 	| "mfa.codes"
 	| "second_factor.toggle"
 	| "admin.password_reset"
-	| "admin.recovery_link";
+	| "admin.recovery_link"
+	| "profile.recovery_email";
 
 export type StepUpGrantInput = {
 	token: string;
