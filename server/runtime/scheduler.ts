@@ -3,6 +3,7 @@ import { runAgentMaintenance } from "@/lib/agent/maintenance";
 import { runTrashRetention } from "@/lib/email/trash-retention";
 import { runDriveTrashRetention } from "@/lib/drive/retention";
 import { runAccountRetention } from "@/lib/accounts/deletion";
+import { purgeExpiredAuthRows } from "@/lib/auth/purge";
 import { runJmapChangeRetention } from "@/lib/jmap/changes";
 import { runFollowUpReminders } from "@/lib/follow-ups/service";
 import { runCalendarReminders } from "@/lib/calendar/reminders";
@@ -25,6 +26,7 @@ export function startScheduler(env: CloudflareEnv) {
 		runScheduledDatabaseBackup(env, now).catch((error) => console.error("Scheduled backup failed", error));
 		runDriveTrashRetention(env, now).catch((error) => console.error("Drive trash retention failed", error));
 		runAccountRetention(env, now).catch((error) => console.error("Account retention failed", error));
+		purgeExpiredAuthRows(env, now).catch((error) => console.error("Expired auth row purge failed", error));
 		runJmapChangeRetention(env, now).catch((error) => console.error("JMAP change retention failed", error));
 		sweepOrphanedRawMail(env, now).catch((error) => console.error("Raw mail sweep failed", error));
 	}, 60_000);
