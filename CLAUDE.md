@@ -81,7 +81,7 @@ Both queries filter on `scope`, so any new rule must set it explicitly. `forward
 
 Domain and mailbox management call the Cloudflare API at runtime (`src/lib/cloudflare-api.ts`, `src/lib/domains/`). Adding a domain enables Email Routing DNS and sending subdomains on the zone; creating a mailbox creates a Cloudflare Email Routing rule targeting `CF_EMAIL_WORKER_NAME`; removing a domain cleans those up (`src/lib/domains/cloudflare-cleanup.ts`).
 
-Consequence: `CF_EMAIL_WORKER_NAME`, the deployed Worker `name`, and `services[].service` for `WORKER_SELF_REFERENCE` in `wrangler.jsonc` must all agree. Cloudflare service bindings need a literal name and cannot reference the top-level `name`.
+Consequence: `CF_EMAIL_WORKER_NAME` (default `mailflare`), the deployed Worker `name`, and `services[].service` for `WORKER_SELF_REFERENCE` in `wrangler.jsonc` must all agree. Cloudflare service bindings need a literal name and cannot reference the top-level `name`. Setting `CF_EMAIL_WORKER_NAME` to a value other than `mailflare` on an install whose Email Routing rules already target `mailflare` means those rules are no longer recognised: recreate them (re-save the mailboxes and catch-all) or point them at the new Worker in the Cloudflare dashboard.
 
 Auth is `CF_TOKEN` (preferred) or the legacy `CF_EMAIL` + `CF_API_KEY` pair.
 

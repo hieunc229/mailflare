@@ -64,6 +64,8 @@ interface CloudflareEnv {
 	S3_ACCESS_KEY_ID?: string;
 	S3_SECRET_ACCESS_KEY?: string;
 	CF_TOKEN?: string;
+	/** Deployed Worker name Email Routing rules target; defaults to "mailflare". */
+	CF_EMAIL_WORKER_NAME?: string;
 	CF_API_KEY?: string;
 	CF_EMAIL?: string;
 	TURNSTILE_SECRET_KEY?: string;
