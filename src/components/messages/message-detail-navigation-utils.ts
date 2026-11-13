@@ -21,6 +21,17 @@ export function takeOpenedUnreadMessage(): string | null {
 	}
 }
 
+/**
+ * The message auto-advance opens once `currentId` leaves the list: the one below it in the list
+ * (older), else the one above. List order, not the arrows' unread-first order, so it lands on the
+ * neighbour you see.
+ */
+export function getAutoAdvanceId(entries: MessageNavigationEntry[], currentId: string): string | null {
+	const index = entries.findIndex((entry) => entry.id === currentId);
+	if (index < 0) return null;
+	return entries[index + 1]?.id ?? entries[index - 1]?.id ?? null;
+}
+
 export function getMessageDetailNavigationState(entries: MessageNavigationEntry[], currentId: string): MessageDetailNavigationState {
 	const unread = entries.filter((entry) => entry.unread);
 	const ordered = [...unread, ...entries.filter((entry) => !entry.unread)];
