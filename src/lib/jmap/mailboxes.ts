@@ -252,10 +252,16 @@ export const mailboxSet: JmapMethodHandler = async (ctx, args) => {
 			notDestroyed[id] = { type: "forbidden" };
 			continue;
 		}
+		// The folder id comes from the client: it must belong to the mailbox the permission was checked on.
+		const [folder] = await ctx.db.select({ id: folders.id }).from(folders).where(and(eq(folders.id, ref.folderId), eq(folders.mailboxId, mailbox.id))).limit(1);
+		if (!folder) {
+			notDestroyed[id] = { type: "notFound" };
+			continue;
+		}
 		if (args.onDestroyRemoveEmails) {
-			await ctx.db.update(messages).set({ status: "trash", folderId: null }).where(eq(messages.folderId, ref.folderId));
+			await ctx.db.update(messages).set({ status: "trash", folderId: null }).where(and(eq(messages.folderId, ref.folderId), eq(messages.mailboxId, mailbox.id)));
 		} else {
-			const [inUse] = await ctx.db.select({ n: count() }).from(messages).where(and(eq(messages.folderId, ref.folderId), isNull(messages.snoozedUntil)));
+			const [inUse] = await ctx.db.select({ n: count() }).from(messages).where(and(eq(messages.folderId, ref.folderId), eq(messages.mailboxId, mailbox.id), isNull(messages.snoozedUntil)));
 			if ((inUse?.n ?? 0) > 0) {
 				notDestroyed[id] = { type: "mailboxHasEmail" };
 				continue;

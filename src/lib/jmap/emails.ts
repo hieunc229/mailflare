@@ -1,6 +1,6 @@
 import { and, asc, count, desc, eq, inArray, sql } from "drizzle-orm";
 import { emailChangesSince, threadChangesSince } from "./changes";
-import { messages } from "@/db/schema";
+import { folders, messages } from "@/db/schema";
 import { newId } from "@/lib/ids";
 import { buildSnippet, parseRawMime } from "@/lib/email/parse";
 import { getAuthorizedSenderAddress } from "@/lib/email/sender";
@@ -306,6 +306,14 @@ export const emailSet: JmapMethodHandler = async (ctx, args) => {
 		if (move && "error" in move) {
 			notUpdated[id] = move.error;
 			continue;
+		}
+		if (move && typeof move.folderId === "string") {
+			// A folder id in a mailboxIds patch is client input: it must be a folder of the message's own mailbox.
+			const [folder] = await ctx.db.select({ id: folders.id }).from(folders).where(and(eq(folders.id, move.folderId), eq(folders.mailboxId, row.mailboxId))).limit(1);
+			if (!folder) {
+				notUpdated[id] = { type: "invalidProperties", properties: ["mailboxIds"], description: "Unknown folder" };
+				continue;
+			}
 		}
 		const flags = keywordsFromPatch(patch);
 		const set: Partial<MessageRow> = {};
