@@ -406,7 +406,7 @@ export function ComposeForm({
 					html: fullHtml,
 					mailboxId: selectedMailbox?.id,
 					threading: threading ?? undefined,
-					draftId,
+					draftId: currentDraftId,
 					scheduledAt,
 					undoSend: true,
 					trackOpens,
