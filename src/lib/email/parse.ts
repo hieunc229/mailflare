@@ -1,6 +1,6 @@
 import PostalMime from "postal-mime";
 import { formatPostalAddress, formatPostalAddressList } from "@/lib/email/address";
-import { normalizeMessageId, parseMessageIdList } from "@/lib/email/threading";
+import { parseMessageIdList } from "@/lib/email/threading";
 import { MIME_LIMITS, mimePreflightReason } from "@/lib/email/mime-preflight";
 import { normalizeAttachmentContent } from "@/lib/email/attachments";
 import { getLatestEmailContent, htmlToReadableText } from "@/lib/email/reply-content-utils";
@@ -51,7 +51,8 @@ export async function parseRawMime(raw: ArrayBuffer): Promise<ParsedEmail> {
 		ccAddr: formatPostalAddressList(email.cc, null),
 		bccAddr: formatPostalAddressList(email.bcc, null),
 		replyTo: formatPostalAddressList(email.replyTo, null),
-		inReplyTo: normalizeMessageId(email.inReplyTo),
+		// The header may list several ids; keep the last one (the closest parent).
+		inReplyTo: parseMessageIdList(email.inReplyTo).at(-1) ?? null,
 		references: parseMessageIdList(email.references),
 		date: date && !Number.isNaN(date.getTime()) ? date : null,
 		attachments: email.attachments.map((attachment, index) => ({
