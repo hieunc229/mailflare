@@ -231,7 +231,7 @@ export const domainSchema = z.object({
 export const mailboxSchema = z.object({
 	domainId: z.string().min(1),
 	ownerUserId: z.string().min(1).optional(),
-	localPart: z.string().min(1).max(64),
+	localPart: z.string().min(1).max(64).regex(/^[a-zA-Z0-9._%+-]+$/),
 	displayName: z.string().optional(),
 	type: z.enum(["personal", "shared"]).optional(),
 });
