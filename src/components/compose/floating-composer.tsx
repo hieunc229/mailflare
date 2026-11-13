@@ -78,7 +78,7 @@ function ComposeNoticeToast({ notice }: { notice: ComposeNotice }) {
 
 	return (
 		<div
-			role="status"
+			role={notice.tone === "error" ? "alert" : "status"}
 			aria-atomic="false"
 			className={cn(
 				"fixed z-[60] flex max-w-[calc(100vw-3rem)] items-center gap-4 rounded-lg px-4 py-3 text-sm font-medium text-white shadow-lg",
