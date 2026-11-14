@@ -30,15 +30,25 @@ export type MessageListRowProps = {
 	onSelectedChange: (messageId: string, selected: boolean) => void;
 	onMessageAction: (messageId: string, action: RowMessageAction) => Promise<void>;
 	onOpening?: (messageId: string) => void;
+	onSnoozeChange?: (messageId: string, snoozed: boolean) => void;
+	showCompactRowActions?: boolean;
 	dragMessageIds?: string[];
 	todayKey: string;
 };
 
-export type RowMessageAction = "archive" | "trash" | "read" | "unread";
+export type RowMessageAction = "archive" | "trash" | "read" | "unread" | "inbox" | "delete";
 
 export type MessageListRowActionsProps = {
 	message: Message;
+	/** Folder being listed; archived, spam and trash use a different primary action. */
+	folder: MessageFolder;
+	folderId?: string;
 	onAction: (action: RowMessageAction) => Promise<void>;
+	/** Tighter rail for the split-view message list. */
+	compact?: boolean;
+	/** The row holds the open message, so its rail uses the active-row surface. */
+	active?: boolean;
+	onSnoozeChange?: (messageId: string, snoozed: boolean) => void;
 };
 
 export type MessageFolderPageProps = {

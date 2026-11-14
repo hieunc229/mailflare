@@ -2,7 +2,8 @@
 
 import Link from "next/link";
 import { confirmDestructive, alertDialog } from "@/components/ui/confirm-dialog";
-import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
+import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { MouseEvent } from "react";
 import { Archive, ChevronLeft, ChevronRight, ListFilter, Mail, MailOpen, Trash2 } from "@/components/icons";
 import { useLanguage } from "@/components/language-provider";
@@ -13,7 +14,7 @@ import { useMailSearch } from "@/components/mail-search/mail-search-context";
 import { useSelectedMailbox } from "@/components/mailbox-provider";
 import { usePageLoading } from "@/components/page-loading";
 import { formatScheduledSendTime } from "./scheduled-send-utils";
-import { useIsMobile } from "@/components/sidebar-mobile-utils";
+import { useHasHover, useIsDesktop, useIsMobile } from "@/components/sidebar-mobile-utils";
 import { useMessageCounts } from "@/hooks/use-message-counts";
 import { useMessages } from "@/hooks/use-messages";
 import type { BulkMessageAction } from "@/app/api/messages/bulk/types";
@@ -29,7 +30,7 @@ import { rememberOpenedUnreadMessage } from "./message-detail-navigation-utils";
 import { useConversationView } from "./use-conversation-view";
 import { OpenedIndicator } from "./message-open-status";
 import { MessageNotesPopover, NoteBadge } from "./message-notes-popover";
-import type { MessageFolderPageProps, MessageListRowProps, RowMessageAction } from "./types";
+import type { MessageFolderConfig, MessageFolderPageProps, MessageListRowProps, RowMessageAction } from "./types";
 import {
 	formatMessageListTimestamp,
 	getPageRange,
@@ -57,8 +58,30 @@ import { getUserTimeZone, zonedDateFields } from "@/lib/time/utils";
 
 const pageSize = 25;
 
+function supportsRowActions(folder: MessageFolderConfig["folder"]): boolean {
+	return folder === "inbox" || folder === "snoozed" || folder === "archived" || folder === "spam" || folder === "trash";
+}
+
+/** Whether the action takes the row out of the folder that is on screen. */
+function removesMessageFromFolder(config: MessageFolderConfig, action: RowMessageAction): boolean {
+	if (action === "archive" || action === "trash") return true;
+	if (action === "inbox") {
+		return config.folder === "archived" || config.folder === "spam" || config.folder === "trash" || !!config.folderId;
+	}
+	if (action === "delete") return config.folder === "trash" || config.folder === "spam";
+	return false;
+}
+
 function getRowMessageIds(message: Message): string[] {
 	return message.threadMessageIds ?? [message.id];
+}
+
+/** Whether the browser is still showing this message in this folder's reader. */
+function isCurrentMessageRoute(hrefPrefix: string, messageId: string): boolean {
+	if (typeof window === "undefined") return false;
+	const pathname = window.location.pathname.replace(/\/+$/, "");
+	const prefix = hrefPrefix.replace(/\/+$/, "");
+	return pathname === `${prefix}/${encodeURIComponent(messageId)}`;
 }
 
 let todayCacheZone = "";
@@ -87,6 +110,8 @@ function MessageListRowComponent({
 	onSelectedChange,
 	onMessageAction,
 	onOpening,
+	onSnoozeChange,
+	showCompactRowActions = false,
 	dragMessageIds,
 	todayKey,
 }: MessageListRowProps) {
@@ -166,11 +191,11 @@ function MessageListRowComponent({
 		const compactRow = (
 			<div
 				role={swipeable ? undefined : "listitem"}
-				className={`group grid grid-cols-[20px_minmax(0,1fr)] gap-3 border-l-2 px-4 py-3 transition-colors ${active || opening
+				className={`group relative grid grid-cols-[20px_minmax(0,1fr)] gap-3 border-l-2 px-4 py-3 transition-colors ${active || opening
 					? "border-l-blue-600 bg-blue-50"
 					: selected
 						? "border-l-transparent bg-neutral-50"
-						: "border-l-transparent hover:bg-neutral-50"
+						: "border-l-transparent hover:bg-neutral-50 focus-within:bg-neutral-50"
 					} ${draggable ? "cursor-grab active:cursor-grabbing" : ""}`}
 				draggable={draggable}
 				onDragStart={(event) => {
@@ -220,6 +245,17 @@ function MessageListRowComponent({
 						{preview}
 					</span>
 				</Link>
+				{showCompactRowActions && supportsRowActions(config.folder) && message.direction === "inbound" && (
+					<MessageListRowActions
+						message={rowMessage}
+						folder={config.folder}
+						folderId={config.folderId}
+						onAction={runRowAction}
+						compact
+						active={active || opening}
+						onSnoozeChange={onSnoozeChange}
+					/>
+				)}
 			</div>
 		);
 		if (!swipeable) return compactRow;
@@ -341,10 +377,13 @@ function MessageListRowComponent({
 				aria-label={t("list.selectFrom", { sender: party })}
 			/>
 			{content}
-			{(config.folder === "inbox" || config.folder === "snoozed") && message.direction === "inbound" && (
+			{supportsRowActions(config.folder) && message.direction === "inbound" && (
 				<MessageListRowActions
 					message={rowMessage}
+					folder={config.folder}
+					folderId={config.folderId}
 					onAction={runRowAction}
+					onSnoozeChange={onSnoozeChange}
 				/>
 			)}
 		</div>
@@ -362,8 +401,19 @@ export function MessageFolderPage({
 	const title = config.titleKey ? t(config.titleKey) : config.title;
 	const { selectedMailbox, isLoading: mailboxesLoading } = useSelectedMailbox();
 	const { query } = useMailSearch();
+	const router = useRouter();
 	const isMobile = useIsMobile();
+	const isDesktop = useIsDesktop();
+	const hasHover = useHasHover();
+	const compactRowActions = compact && isDesktop && hasHover;
+	// Row actions can resolve after the reader has moved. Compare against the
+	// message that is open now, not the one that was open when the request began.
+	const selectedMessageIdRef = useRef(selectedMessageId);
 	const listState = useMessageListState();
+
+	useLayoutEffect(() => {
+		selectedMessageIdRef.current = selectedMessageId;
+	}, [selectedMessageId]);
 	const usesSharedListState = listState !== null;
 	const [internalOffset, setInternalOffset] = useState(0);
 	const [internalSelectedMessages, setInternalSelectedMessages] = useState<
@@ -489,11 +539,26 @@ export function MessageFolderPage({
 
 	const handleMessageAction = useCallback((messageId: string, action: RowMessageAction) => {
 		setActionError(null);
-		return runBulkMessageAction(expandSelectedIds([messageId]), action, action !== "read" && action !== "unread").catch((error) => {
+		const affectedIds = expandSelectedIds([messageId]);
+		return runBulkMessageAction(affectedIds, action, action !== "read" && action !== "unread").then(() => {
+			const currentSelectedMessageId = selectedMessageIdRef.current;
+			if (!currentSelectedMessageId || !removesMessageFromFolder(config, action)) return;
+			if (!affectedIds.includes(currentSelectedMessageId)) return;
+			if (isCurrentMessageRoute(config.hrefPrefix, currentSelectedMessageId)) router.push(config.hrefPrefix);
+		}).catch((error) => {
 			setActionError(error instanceof PartialDeleteError ? t("actions.error.deleteSkipped") : t("actions.error.update"));
 			throw error;
 		});
-	}, [expandSelectedIds, t]);
+	}, [config, expandSelectedIds, router, t]);
+
+	const handleSnoozeChange = useCallback((messageId: string, snoozed: boolean) => {
+		const currentSelectedMessageId = selectedMessageIdRef.current;
+		if (!currentSelectedMessageId || messageId !== currentSelectedMessageId) return;
+		const removesOpenMessage = snoozed
+			? config.folder === "inbox" && !config.folderId
+			: config.folder === "snoozed";
+		if (removesOpenMessage && isCurrentMessageRoute(config.hrefPrefix, currentSelectedMessageId)) router.push(config.hrefPrefix);
+	}, [config.folder, config.folderId, config.hrefPrefix, router]);
 
 	function toggleAllVisible(selected: boolean) {
 		const visibleIds = new Set(messages.map((message) => message.id));
@@ -695,6 +760,8 @@ export function MessageFolderPage({
 							currentAccountName={currentAccountName}
 							onSelectedChange={updateSelectedMessage}
 							onMessageAction={handleMessageAction}
+							onSnoozeChange={handleSnoozeChange}
+							showCompactRowActions={compactRowActions}
 							dragMessageIds={selectedIdSet.has(message.id) ? selectedDragIds : undefined}
 							todayKey={todayKey}
 						/>
