@@ -580,6 +580,13 @@ export function MessageFolderPage({
 		}
 	}
 
+	const refreshButton = (
+		<MessageListRefreshButton
+			disabled={mailboxesLoading}
+			onError={() => setActionError(t("list.refreshFailed"))}
+		/>
+	);
+
 	return (
 		<div className="flex h-full min-h-0 flex-col">
 			<div className={`flex h-14 shrink-0 items-center justify-between border-b border-neutral-200 ${compact ? "px-4" : "px-4.5 md:px-6"}`}>
@@ -594,12 +601,7 @@ export function MessageFolderPage({
 							aria-label={t("list.selectAll")}
 						/>
 					</Tooltip>
-					{!compact && (
-						<MessageListRefreshButton
-							disabled={mailboxesLoading}
-							onError={() => setActionError(t("list.refreshFailed"))}
-						/>
-					)}
+					{!compact && refreshButton}
 					{selectedIds.length > 0 && !compact ? (
 						<BulkMessageToolbar
 							selectedCount={selectedIds.length}
@@ -620,12 +622,7 @@ export function MessageFolderPage({
 						<span className="text-xs text-neutral-500 whitespace-nowrap">
 							{t("list.range", { start: pageRange.start, end: pageRange.end, total: pageRange.total })}
 						</span>
-						{compact && (
-							<MessageListRefreshButton
-								disabled={mailboxesLoading}
-								onError={() => setActionError(t("list.refreshFailed"))}
-							/>
-						)}
+						{compact && refreshButton}
 						<Tooltip label={t("list.previousPage")}>
 							<Button
 								variant="ghost"

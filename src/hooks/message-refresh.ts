@@ -4,11 +4,6 @@ type MessageRefreshTask = () => Promise<unknown>;
 
 const messageRefreshTasks = new Set<MessageRefreshTask>();
 
-/**
- * Registers a mounted list or counts view for explicit refresh. Every mounted
- * view keeps its own task so it can update its own state; tasks that read the
- * same query share one request through the existing fetcher caches.
- */
 export function registerMessageRefresh(task: MessageRefreshTask): () => void {
 	messageRefreshTasks.add(task);
 	return () => {
@@ -16,11 +11,7 @@ export function registerMessageRefresh(task: MessageRefreshTask): () => void {
 	};
 }
 
-/**
- * Revalidates every mounted mail list and counts view from the API. The caches
- * are invalidated once up front, while each hook's request sequence ignores any
- * response that was already in flight before this refresh started.
- */
+/** Revalidate every mounted list and counts view after invalidating their caches. */
 export async function refreshMessageViews(): Promise<void> {
 	clearMessageListCache();
 	clearMessageCountsCache();
