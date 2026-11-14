@@ -9,7 +9,10 @@ import { Tooltip } from "@/components/ui/tooltip";
 import { useSelectedMailbox } from "@/components/mailbox-provider";
 import { authFetch } from "@/lib/auth/client";
 import { fetchCachedMessageDetail, getCachedMessageDetail } from "@/lib/messages/detail-cache";
+import { fetchInviteCard, getCachedInviteCard } from "@/lib/calendar/invite-cache";
+import { findInviteAttachment } from "@/lib/calendar/invite-attachment";
 import { FULL_ROUTE_PREFETCH } from "@/lib/navigation/prefetch";
+import type { CachedMessageDetail } from "@/lib/messages/detail-cache-types";
 import type { MessageNavigationResponse } from "@/app/api/messages/navigation/types";
 import type { MessageDetailNavigationContextValue, MessageDetailNavigationProps, MessageDetailNavigationProviderProps, MessageDetailNavigationSnapshot, OpenedUnreadMessages } from "./message-detail-navigation-types";
 import { getAutoAdvanceId, getMessageDetailNavigationState, takeOpenedUnreadMessage } from "./message-detail-navigation-utils";
@@ -17,6 +20,13 @@ import { useAutoAdvanceEnabled } from "./use-auto-advance";
 import { useConversationView } from "./use-conversation-view";
 
 const NavigationContext = createContext<MessageDetailNavigationContextValue | null>(null);
+
+/** Seed the invite cache once the detail is known, or right away when the attachment state is still unknown. */
+function warmMessageInvite(messageId: string, detail?: CachedMessageDetail) {
+	if (getCachedInviteCard(messageId) !== undefined) return;
+	if (detail?.attachments && !findInviteAttachment(detail.attachments)) return;
+	void fetchInviteCard(messageId).catch(() => {});
+}
 
 export function MessageDetailNavigationProvider({ children, config, currentMessageId }: MessageDetailNavigationProviderProps) {
 	const { selectedMailbox, isLoading: mailboxesLoading } = useSelectedMailbox();
@@ -128,8 +138,15 @@ export function MessageDetailNavigation({ messageId, unread }: MessageDetailNavi
 	useEffect(() => {
 		if (!previousId && !nextId) return;
 		const warm = (id: string | null) => {
-			if (!id || getCachedMessageDetail(id)?.body) return;
-			void fetchCachedMessageDetail(id, true).catch(() => {});
+			if (!id) return;
+			const cached = getCachedMessageDetail(id);
+			if (cached?.body) {
+				warmMessageInvite(id, cached);
+				return;
+			}
+			void fetchCachedMessageDetail(id, true)
+				.then((detail) => warmMessageInvite(id, detail))
+				.catch(() => {});
 		};
 		const run = () => {
 			warm(previousId);
@@ -146,10 +163,18 @@ export function MessageDetailNavigation({ messageId, unread }: MessageDetailNavi
 	if (!context) return null;
 	const hrefPrefix = context.hrefPrefix;
 
-	function prefetchMessage(id: string | null) {
+	function prefetchMessage(id: string | null, immediateInvite = false) {
 		if (!id) return;
 		router.prefetch(`${hrefPrefix}/${id}`, FULL_ROUTE_PREFETCH);
-		if (!getCachedMessageDetail(id)?.body) void fetchCachedMessageDetail(id, true).catch(() => {});
+		const cached = getCachedMessageDetail(id);
+		if (immediateInvite) warmMessageInvite(id, cached);
+		if (cached?.body) {
+			warmMessageInvite(id, cached);
+			return;
+		}
+		void fetchCachedMessageDetail(id, true)
+			.then((detail) => warmMessageInvite(id, detail))
+			.catch(() => {});
 	}
 
 	return (
@@ -168,9 +193,9 @@ export function MessageDetailNavigation({ messageId, unread }: MessageDetailNavi
 					disabled={!previousId}
 					onPointerEnter={() => prefetchMessage(previousId)}
 					onFocus={() => prefetchMessage(previousId)}
-					onTouchStart={() => prefetchMessage(previousId)}
+					onTouchStart={() => prefetchMessage(previousId, true)}
 					onClick={() => {
-						prefetchMessage(previousId);
+						prefetchMessage(previousId, true);
 						if (previousId) router.push(`${hrefPrefix}/${previousId}`);
 					}}
 				>
@@ -186,9 +211,9 @@ export function MessageDetailNavigation({ messageId, unread }: MessageDetailNavi
 					disabled={!nextId}
 					onPointerEnter={() => prefetchMessage(nextId)}
 					onFocus={() => prefetchMessage(nextId)}
-					onTouchStart={() => prefetchMessage(nextId)}
+					onTouchStart={() => prefetchMessage(nextId, true)}
 					onClick={() => {
-						prefetchMessage(nextId);
+						prefetchMessage(nextId, true);
 						if (nextId) router.push(`${hrefPrefix}/${nextId}`);
 					}}
 				>

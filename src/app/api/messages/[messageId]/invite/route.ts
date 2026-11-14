@@ -18,14 +18,18 @@ import type { InviteRouteParams } from "./types";
 type CurrentUser = NonNullable<Awaited<ReturnType<typeof getCurrentUser>>>;
 
 /** `unreadable` means a calendar file exists but could not be read; the routes answer that with a 422, never a 500. */
-async function loadInvite(env: CloudflareEnv, user: CurrentUser, messageId: string, timeZone: string): Promise<{ invite: ParsedInvite | null; unreadable: boolean }> {
+async function loadInvite(env: CloudflareEnv, user: CurrentUser, messageId: string, timeZone: string | (() => Promise<string>)): Promise<{ invite: ParsedInvite | null; unreadable: boolean }> {
 	const attachments = await listMessageAttachments(env, messageId);
 	const candidate = findInviteAttachment(attachments);
 	if (!candidate || candidate.size > MAX_INVITE_BYTES) return { invite: null, unreadable: false };
-	const result = await getAttachmentForUser(env, user, messageId, candidate.id);
+	// Only an actual invitation needs the recipient's zone; a quick prefetch for a normal message stops above.
+	const [result, zone] = await Promise.all([
+		getAttachmentForUser(env, user, messageId, candidate.id),
+		typeof timeZone === "function" ? timeZone() : Promise.resolve(timeZone),
+	]);
 	if (!result) return { invite: null, unreadable: false };
 	try {
-		const invite = parseInvite(await result.object.text(), { timeZone });
+		const invite = parseInvite(await result.object.text(), { timeZone: zone });
 		return { invite, unreadable: !invite };
 	} catch (error) {
 		console.error(`Invitation in ${messageId} could not be read`, error);
@@ -45,13 +49,14 @@ export async function GET(request: Request, { params }: InviteRouteParams) {
 	const user = await getCurrentUser(env, request);
 	if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 	const { messageId } = await params;
-	const { invite, unreadable } = await loadInvite(env, user, messageId, await inviteZone(getDb(env), request, user));
+	const db = getDb(env);
+	const { invite, unreadable } = await loadInvite(env, user, messageId, () => inviteZone(db, request, user));
 	if (unreadable) return NextResponse.json({ invite: null, ...UNREADABLE }, { status: 422 });
 	if (!invite) return NextResponse.json({ invite: null });
 	const id = await inviteEventId(user.id, invite.uid);
-	const [existing] = await getDb(env).select({ id: calendarEvents.id, responseStatus: calendarEvents.responseStatus }).from(calendarEvents).where(and(eq(calendarEvents.id, id), eq(calendarEvents.userId, user.id))).limit(1);
+	const [existing] = await db.select({ id: calendarEvents.id, responseStatus: calendarEvents.responseStatus }).from(calendarEvents).where(and(eq(calendarEvents.id, id), eq(calendarEvents.userId, user.id))).limit(1);
 	// The answer is kept on the message so it survives a decline, which removes the event from the calendar.
-	const [stored] = await getDb(env).select({ inviteResponse: messages.inviteResponse }).from(messages).where(eq(messages.id, messageId)).limit(1);
+	const [stored] = await db.select({ inviteResponse: messages.inviteResponse }).from(messages).where(eq(messages.id, messageId)).limit(1);
 	const saved = stored?.inviteResponse ?? existing?.responseStatus ?? null;
 	const response = saved === "accepted" || saved === "tentative" || saved === "declined" ? saved : null;
 	return NextResponse.json({ invite, eventId: existing?.id ?? null, response, canRespond: invite.method === "REQUEST" || invite.method === "PUBLISH" });
