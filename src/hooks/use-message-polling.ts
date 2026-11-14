@@ -189,7 +189,8 @@ export function useMessagePolling(): MessageRealtimeState {
 
 		function onLocalMessagesChanged(event: Event) {
 			const detail = (event as CustomEvent<Record<string, unknown> | undefined>).detail;
-			if (detail?.realtime) return;
+			// Optimistic facts belong to this tab until the server commits them.
+			if (detail?.realtime || detail?.localOnly) return;
 			channel?.postMessage({ type: "refresh", detail } satisfies RealtimeChannelMessage);
 		}
 

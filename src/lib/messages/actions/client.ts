@@ -257,13 +257,23 @@ function invalidateUncertainState(messageIds: string[]) {
 }
 
 export const defaultMessageActionHooks: MessageActionExecutorHooks = {
-	onApplied(response: MessageActionResponse, options: MessageActionHookOptions, context?: MessageActionHookContext) {
+	onApplied(response: MessageActionResponse, _options: MessageActionHookOptions, context?: MessageActionHookContext) {
 		clearPendingOverlay(context?.pendingOwner ?? DEFAULT_PENDING_OWNER);
 		const changed = getChangedRecords(response.applied);
 		if (changed.length === 0) return;
 		applyFieldChanges(changedFieldPatches(changed, "applied"));
 		rememberDetailState(changed, "applied");
-		if (options.notify && changed.some(hasMembershipChange)) dispatchMessagesChanged();
+		const membership = changed.filter(hasMembershipChange);
+		if (membership.length > 0) {
+			// The server confirmed the move. Notify every mounted list even when
+			// the toast is suppressed, so the row does not wait for a refetch.
+			dispatchMessagesChanged({
+				kind: "removed",
+				action: response.action,
+				messageIds: membership.map((record) => record.id),
+				states: membership.map((record) => ({ id: record.id, ...record.applied })),
+			});
+		}
 	},
 	onApplyFailed(input, _options, context, error) {
 		clearPendingOverlay(context?.pendingOwner ?? DEFAULT_PENDING_OWNER);
