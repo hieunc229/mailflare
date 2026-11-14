@@ -81,6 +81,7 @@ export default {
 			const alreadyForwarded = await isForwardedMarkerValid(env, message.headers.get(MAILFLARE_FORWARDED_HEADER));
 			const decision = await resolveIncomingMail(env, message.from, message.to, {
 				subject: message.headers.get("subject"),
+				from: message.headers.get("from"),
 				alreadyForwarded,
 			});
 
