@@ -141,9 +141,9 @@ test("undo plans restore only changed fields and ignore removed folders for read
 
 test("every dialect carries the undo-claim table and bundle", async () => {
 	const files = {
-		sqlite: join(root, "drizzle/migrations/0086_message_action_undo_claims.sql"),
-		postgres: join(root, "drizzle/migrations-pg/0010_message_action_undo_claims.sql"),
-		mysql: join(root, "drizzle/migrations-mysql/0010_message_action_undo_claims.sql"),
+		sqlite: join(root, "drizzle/migrations/0088_message_action_undo_claims.sql"),
+		postgres: join(root, "drizzle/migrations-pg/0012_message_action_undo_claims.sql"),
+		mysql: join(root, "drizzle/migrations-mysql/0012_message_action_undo_claims.sql"),
 	};
 	for (const [dialect, file] of Object.entries(files)) {
 		const sql = readFileSync(file, "utf8");

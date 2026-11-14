@@ -803,7 +803,19 @@
       ]
     },
     {
-      "name": "0086_message_action_undo_claims.sql",
+      "name": "0086_booking_confirmation_templates.sql",
+      "statements": [
+        "CREATE TABLE `booking_confirmation_templates` (\n\t`event_id` text PRIMARY KEY NOT NULL,\n\t`subject` text DEFAULT '' NOT NULL,\n\t`body` text DEFAULT '' NOT NULL,\n\t`updated_at` integer NOT NULL,\n\tFOREIGN KEY (`event_id`) REFERENCES `booking_events`(`id`) ON UPDATE no action ON DELETE cascade\n);"
+      ]
+    },
+    {
+      "name": "0087_message_invite_response.sql",
+      "statements": [
+        "ALTER TABLE `messages` ADD `invite_response` text;"
+      ]
+    },
+    {
+      "name": "0088_message_action_undo_claims.sql",
       "statements": [
         "CREATE TABLE `message_action_undo_claims` (\n\t`nonce` text PRIMARY KEY NOT NULL,\n\t`user_id` text NOT NULL,\n\t`expires_at` integer NOT NULL\n);",
         "CREATE INDEX `message_action_undo_claims_expires_idx` ON `message_action_undo_claims` (`expires_at`);"
