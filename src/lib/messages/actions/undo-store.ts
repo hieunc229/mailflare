@@ -148,8 +148,7 @@ function scheduleTimer(id: number, delay: number) {
 	const handle = window.setTimeout(() => {
 		timers.delete(id);
 		remaining.delete(id);
-		// A focused toast must never vanish from under the user. If focus arrived
-		// between the deadline and this callback, hold it until focus leaves.
+		// Focus may arrive between the deadline and this callback.
 		if (isToastFocused(id)) {
 			remaining.set(id, 0);
 			pauseUndoToast(id, "focus");
@@ -309,9 +308,7 @@ export function showUndoToast(input: {
 		...(input.context ? { context: input.context } : {}),
 	};
 	if (entries.length >= UNDO_TOAST_LIMITS.visible) {
-		// Terminal receipts are acknowledgements, not live undo affordances. Under
-		// pressure the oldest one yields so a new action (or the queued action
-		// behind it) is actually reachable.
+		// A terminal receipt yields before a new or queued action does.
 		const terminal = oldestTerminalReceipt();
 		if (terminal) removeEntry(terminal.id);
 	}
@@ -320,9 +317,7 @@ export function showUndoToast(input: {
 		startVisibleTimer(id);
 		announceApplied(entry);
 	} else {
-		// Keep the newest notices. The oldest queued entry is still an action the
-		// user just made, so this only happens after a long burst of read/star
-		// chatter; the visible stack itself is never silently replaced.
+		// Keep the newest queued notices; the visible stack is never replaced.
 		queued = [...queued, { ...entry, queuedAt: Date.now() }].slice(-UNDO_TOAST_LIMITS.queued);
 		scheduleQueueExpiry();
 	}
@@ -409,12 +404,8 @@ export function dismissUndoToast(id: number) {
 	emit();
 }
 
-/** Hides a pending notice without pretending the in-flight Undo was cancelled. */
-export function hideUndoToast(id: number) {
-	if (!entryById(id)) return;
-	removeEntry(id);
-	emit();
-}
+/** Hides a pending notice without cancelling the in-flight undo. */
+export const hideUndoToast = dismissUndoToast;
 
 export function pauseUndoToast(id: number, reason = "hold") {
 	const entry = entryById(id);

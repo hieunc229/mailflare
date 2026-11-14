@@ -91,7 +91,6 @@ export function patchCachedMessageState(messageId: string, patch: CachedMessageS
 	});
 }
 
-/** Backwards-compatible read/star helper for callers that only own those fields. */
 export function patchCachedMessage(messageId: string, patch: { read?: boolean; starred?: boolean }): void {
 	patchCachedMessageState(messageId, patch);
 }

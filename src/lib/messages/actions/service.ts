@@ -1,6 +1,7 @@
-import { and, eq, inArray, isNull, type SQL } from "drizzle-orm";
+import { and, eq, inArray, isNull, or, sql, type SQL } from "drizzle-orm";
 import type { AppDatabase } from "@/db";
 import { getDb } from "@/db";
+import { schemaDialect } from "@/db/dialect";
 import { folders, messages } from "@/db/schema";
 import type { SessionUser } from "@/lib/auth/types";
 import { createAuditLogs } from "@/lib/mailboxes/audit";
@@ -10,7 +11,6 @@ import { applySpamFeedback } from "@/lib/spam/feedback";
 import { claimMessageActionUndoToken, releaseMessageActionUndoClaim } from "./claims";
 import {
 	actionNeedsManage,
-	applySnapshotPatch,
 	getChangedStateFields,
 	getMessageActionPatch,
 	isReversibleMessageAction,
@@ -25,6 +25,7 @@ import type {
 	MessageActionRecord,
 	MessageActionResponse,
 	MessageActionSkipped,
+	MessageStateField,
 	MessageStateSnapshot,
 	UndoMessageActionResponse,
 } from "./types";
@@ -32,6 +33,7 @@ import type {
 const MAX_ACTION_MESSAGES = 5000;
 const MESSAGE_ID_CHUNK = 90;
 const MESSAGE_QUERY_CONCURRENCY = 5;
+const D1_BOUND_PARAMETER_BUDGET = 90;
 
 export class MessageActionError extends Error {
 	constructor(
@@ -44,6 +46,14 @@ export class MessageActionError extends Error {
 }
 
 type LoadedTarget = MessageActionTarget & { mailboxId: string | null };
+
+type PlannedUpdate = {
+	id: string;
+	/** Every field the operation writes; used for both the CAS and the update. */
+	fields: MessageStateField[];
+	condition: MessageStateSnapshot;
+	values: Partial<MessageStateSnapshot>;
+};
 
 function selectTargetChunk(db: AppDatabase, chunk: string[]) {
 	return db.select({
@@ -98,7 +108,7 @@ function toDatabasePatch(patch: Partial<MessageStateSnapshot>) {
 
 function pickStatePatch(
 	fields: Array<keyof MessageStateSnapshot>,
-	state: MessageStateSnapshot,
+	state: Partial<MessageStateSnapshot>,
 ): Partial<MessageStateSnapshot> {
 	const patch: Partial<MessageStateSnapshot> = {};
 	for (const field of fields) patch[field] = state[field] as never;
@@ -125,6 +135,117 @@ function validateSnoozeTime(value: string | null | undefined): string {
 	const date = new Date(value);
 	if (Number.isNaN(date.getTime()) || date <= new Date()) throw new MessageActionError("Choose a future snooze time");
 	return date.toISOString();
+}
+
+async function updatePlannedRow(
+	db: AppDatabase,
+	plan: PlannedUpdate,
+): Promise<"applied" | "stale" | "failed"> {
+	try {
+		const updated = await db.update(messages)
+			.set(toDatabasePatch(pickStatePatch(plan.fields, plan.values)))
+			.where(and(eq(messages.id, plan.id), ...stateConditions(plan.fields, plan.condition)))
+			.returning({ id: messages.id });
+		return updated.length > 0 ? "applied" : "stale";
+	} catch {
+		return "failed";
+	}
+}
+
+function planRowCondition(plan: PlannedUpdate): SQL {
+	return and(eq(messages.id, plan.id), ...stateConditions(plan.fields, plan.condition))!;
+}
+
+/** Raw-CASE parameter values: timestamps are epoch seconds, SQLite booleans are integers. */
+function toCaseValue(field: MessageStateField, value: MessageStateSnapshot[MessageStateField]): unknown {
+	if (field === "snoozedUntil") {
+		return value === null ? null : Math.floor(new Date(value as string).getTime() / 1000);
+	}
+	if ((field === "read" || field === "starred") && schemaDialect() === "sqlite") return value ? 1 : 0;
+	return value;
+}
+
+function countVaryingFields(plans: PlannedUpdate[]): number {
+	return plans[0].fields.filter((field) => plans.some((plan) => plan.values[field] !== plans[0].values[field])).length;
+}
+
+/** Fields with one target use a plain SET; per-row targets use a CASE expression. */
+function buildUpdateSet(plans: PlannedUpdate[]) {
+	const fields = plans[0].fields;
+	const uniform: Partial<MessageStateSnapshot> = {};
+	const cases: Record<string, SQL> = {};
+	for (const field of fields) {
+		const first = plans[0].values[field];
+		if (plans.every((plan) => plan.values[field] === first)) {
+			uniform[field] = first as never;
+			continue;
+		}
+		const branches = plans.map((plan) => sql`when ${plan.id} then ${toCaseValue(field, plan.values[field] as never)}`);
+		cases[field] = sql`case ${messages.id} ${sql.join(branches, sql` `)} else ${messages[field]} end`;
+	}
+	return { ...toDatabasePatch(uniform), ...cases };
+}
+
+/** Keeps every statement under D1's bound-parameter limit. */
+function updateChunkSize(parametersPerRow: number): number {
+	return Math.max(1, Math.floor(D1_BOUND_PARAMETER_BUDGET / parametersPerRow));
+}
+
+/**
+ * Runs bounded CAS updates. SQLite/Postgres group rows by written fields and
+ * OR their per-row conditions, so D1's query cap does not turn a large or
+ * heterogeneous selection into one query per message. MySQL always writes per
+ * row because its RETURNING shim can over-report a concurrently changed batch.
+ * Any batch miss falls back to per-row CAS to report the exact stale rows.
+ */
+async function runPlannedUpdates(
+	db: AppDatabase,
+	plans: PlannedUpdate[],
+): Promise<{ applied: Set<string>; skipped: MessageActionSkipped[] }> {
+	const applied = new Set<string>();
+	const skipped: MessageActionSkipped[] = [];
+	if (schemaDialect() === "mysql") {
+		for (const plan of plans) {
+			const outcome = await updatePlannedRow(db, plan);
+			if (outcome === "applied") applied.add(plan.id);
+			else skipped.push({ id: plan.id, reason: outcome });
+		}
+		return { applied, skipped };
+	}
+
+	const groups = new Map<string, PlannedUpdate[]>();
+	for (const plan of plans) {
+		const key = plan.fields.join("|");
+		const group = groups.get(key);
+		if (group) group.push(plan);
+		else groups.set(key, [plan]);
+	}
+
+	for (const group of groups.values()) {
+		// One id plus one condition value per field, plus two parameters per CASE branch.
+		const parametersPerRow = 1 + group[0].fields.length + countVaryingFields(group) * 2;
+		const chunkSize = updateChunkSize(parametersPerRow);
+		for (let index = 0; index < group.length; index += chunkSize) {
+			const chunk = group.slice(index, index + chunkSize);
+			let updatedIds = new Set<string>();
+			try {
+				const updated = await db.update(messages)
+					.set(buildUpdateSet(chunk))
+					.where(or(...chunk.map(planRowCondition)))
+					.returning({ id: messages.id });
+				updatedIds = new Set(updated.map((row) => row.id));
+			} catch {
+				updatedIds = new Set();
+			}
+
+			for (const plan of chunk) {
+				const outcome = updatedIds.has(plan.id) ? "applied" : await updatePlannedRow(db, plan);
+				if (outcome === "applied") applied.add(plan.id);
+				else skipped.push({ id: plan.id, reason: outcome });
+			}
+		}
+	}
+	return { applied, skipped };
 }
 
 async function loadActionFolder(
@@ -158,6 +279,7 @@ export async function applyMessageActionForUser(
 	const accessByMailbox = await loadAccessMap(db, user, rows);
 	const applied: MessageActionRecord[] = [];
 	const skipped: MessageActionSkipped[] = [];
+	const plans: Array<{ plan: PlannedUpdate; record: MessageActionRecord }> = [];
 	const seen = new Set<string>();
 
 	for (const row of rows) {
@@ -183,7 +305,8 @@ export async function applyMessageActionForUser(
 			continue;
 		}
 		const previous = snapshotMessageState(row);
-		const next = applySnapshotPatch(previous, result.patch);
+		const next = { ...previous, ...result.patch };
+		const fields = Object.keys(result.patch) as MessageStateField[];
 		const changedFields = getChangedStateFields(previous, next);
 		const trainingAction = action === "spam" || (action === "inbox" && row.status === "spam");
 		if (changedFields.length === 0 && !trainingAction) continue;
@@ -200,22 +323,23 @@ export async function applyMessageActionForUser(
 				skipped.push({ id: row.id, reason: "failed" });
 				continue;
 			}
-			// Spam feedback writes status/folder itself and is deliberately kept
-			// outside the undo contract; no token is issued for these actions.
-			// The classifier-training counters are therefore not reversed on undo.
+			// Spam feedback writes status/folder itself and is not undoable.
 			if (action === "inbox") {
-				try {
-					const updated = await db.update(messages)
-						.set(toDatabasePatch(pickStatePatch(changedFields, next)))
-						.where(eq(messages.id, row.id))
-						.returning({ id: messages.id });
-					if (updated.length === 0) {
-						skipped.push({ id: row.id, reason: "not_found" });
+				const remaining = fields.filter((field) => field !== "status" && field !== "folderId");
+				if (remaining.length > 0) {
+					try {
+						const updated = await db.update(messages)
+							.set(toDatabasePatch(pickStatePatch(remaining, next)))
+							.where(eq(messages.id, row.id))
+							.returning({ id: messages.id });
+						if (updated.length === 0) {
+							skipped.push({ id: row.id, reason: "not_found" });
+							continue;
+						}
+					} catch {
+						skipped.push({ id: row.id, reason: "failed" });
 						continue;
 					}
-				} catch {
-					skipped.push({ id: row.id, reason: "failed" });
-					continue;
 				}
 			}
 			if (recordHasChanges({ previous, applied: next })) {
@@ -224,25 +348,17 @@ export async function applyMessageActionForUser(
 			continue;
 		}
 
-		try {
-			// Compare-and-swap on every field this action writes. A concurrent
-			// change makes this row stale rather than signing a previous state the
-			// server never actually replaced.
-			const updated = await db.update(messages)
-				.set(toDatabasePatch(pickStatePatch(changedFields, next)))
-				.where(and(eq(messages.id, row.id), ...stateConditions(changedFields, previous)))
-				.returning({ id: messages.id });
-			if (updated.length === 0) {
-				skipped.push({ id: row.id, reason: "stale" });
-				continue;
-			}
-		} catch {
-			skipped.push({ id: row.id, reason: "failed" });
-			continue;
-		}
-		applied.push({ id: row.id, mailboxId: row.mailboxId, previous, applied: next });
+		plans.push({
+			plan: { id: row.id, fields, condition: previous, values: next },
+			record: { id: row.id, mailboxId: row.mailboxId, previous, applied: next },
+		});
 	}
 
+	const updates = await runPlannedUpdates(db, plans.map((entry) => entry.plan));
+	for (const entry of plans) {
+		if (updates.applied.has(entry.plan.id)) applied.push(entry.record);
+	}
+	skipped.push(...updates.skipped);
 	for (const missing of ids.filter((id) => !seen.has(id))) {
 		skipped.push({ id: missing, reason: "not_found" });
 	}
@@ -283,11 +399,8 @@ export async function applyMessageActionForUser(
 }
 
 /**
- * Restores only the fields the signed action changed, and only while they still
- * hold its result. The one-time nonce claim blocks replay of a used token. The
- * remaining accepted limit is a never-used token whose field changed away and
- * back again (ABA): the value CAS cannot distinguish that, and a monotonic
- * revision is deliberately deferred to keep this change small.
+ * Restores the signed action after claiming its nonce, which blocks replay of a
+ * used token. A never-used ABA change still passes the value CAS by design.
  */
 export async function undoMessageActionForUser(
 	env: CloudflareEnv,
@@ -310,10 +423,7 @@ export async function undoMessageActionForUser(
 		throw new MessageActionError("This undo has already been used", 410);
 	}
 
-	// Once any row has been restored, the token must never be released: a retry
-	// could replay that already-used record. Partial outcomes therefore keep the
-	// claim and return the committed receipts. Only zero-progress failures release
-	// it so an otherwise safe retry can succeed.
+	// A committed restore keeps the claim; only a zero-progress failure releases it.
 	const progress = { restored: 0 };
 	try {
 		return await performUndoMessageAction(env, user, payload, progress);
@@ -345,8 +455,8 @@ async function performUndoMessageAction(
 		for (const folder of folderRows) folderMailboxes.set(folder.id, folder.mailboxId);
 	}
 
-	const restored: string[] = [];
 	const skipped: MessageActionSkipped[] = [];
+	const plans: Array<{ plan: PlannedUpdate; record: MessageActionRecord }> = [];
 
 	for (const record of records) {
 		const current = byId.get(record.id);
@@ -365,25 +475,18 @@ async function performUndoMessageAction(
 			skipped.push({ id: plan.id, reason: plan.reason });
 			continue;
 		}
-		// One row at a time: the MySQL update/returning shim needs an exact
-		// per-row affected count, and every dialect gets a real field CAS.
-		try {
-			const updated = await db.update(messages)
-				.set(toDatabasePatch(plan.patch))
-				.where(and(eq(messages.id, record.id), ...stateConditions(plan.fields, record.applied)))
-				.returning({ id: messages.id });
-			if (updated.length === 0) {
-				skipped.push({ id: record.id, reason: "stale" });
-				continue;
-			}
-			restored.push(record.id);
-			progress.restored += 1;
-		} catch {
-			// A failed row is reported; earlier restores stay committed and are
-			// audited below. Zero-progress failure throws so the caller can retry.
-			skipped.push({ id: record.id, reason: "failed" });
-		}
+		plans.push({
+			plan: { id: record.id, fields: plan.fields, condition: record.applied, values: plan.patch },
+			record,
+		});
 	}
+
+	const updates = await runPlannedUpdates(db, plans.map((entry) => entry.plan));
+	skipped.push(...updates.skipped);
+	const restored = plans
+		.filter((entry) => updates.applied.has(entry.plan.id))
+		.map((entry) => entry.record.id);
+	progress.restored += restored.length;
 
 	if (restored.length === 0 && skipped.some((item) => item.reason === "failed")) {
 		throw new MessageActionError("Could not restore messages", 500);
@@ -403,8 +506,7 @@ async function performUndoMessageAction(
 					metadata: { undoOf: payload.action },
 				})));
 		} catch (error) {
-			// The restore already committed. Audit failure must not make the claim
-			// look retryable and risk a replay.
+			// The restore committed; a failed audit must not make the claim retryable.
 			console.error("Message undo audit failed", error);
 		}
 	}

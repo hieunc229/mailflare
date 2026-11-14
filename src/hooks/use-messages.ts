@@ -17,9 +17,8 @@ function clampThreadUnread(value: number, size: number): number {
 }
 
 /**
- * Grouped rows use an absolute aggregate. If the event carries a target (or
- * the shared store already knows one), apply it; otherwise fall back to only
- * the members that can still change, so a repeated read/unread is a no-op.
+ * Grouped rows use an absolute aggregate. Prefer the event target or the shared
+ * store; otherwise change only members that can still flip.
  */
 function patchThreadRow(
 	message: Message,
@@ -148,9 +147,7 @@ export function useMessages(
 		function onMessagesChanged(event: Event) {
 			const detail = (event as CustomEvent<{ kind?: string }>).detail;
 			const readOnly = detail?.kind === "read";
-			// A read patch can overtake a list request that started before it. Bump
-			// the request number so that response can never repaint the old state;
-			// a pending overlay is applied before fetchMessageList caches it.
+			// A read patch can overtake a list request that started before it.
 			requestNumber += 1;
 			if (!readOnly) {
 				clearMessageListCache();

@@ -116,6 +116,28 @@ function rowState(id = "m1") {
 	return sqlite.prepare("SELECT status, read, starred, folder_id, snoozed_until FROM messages WHERE id = ?").get(id);
 }
 
+function withDbProbe({ beforeUpdate } = {}) {
+	const base = globalThis.__messageDb;
+	let updates = 0;
+	globalThis.__messageDb = new Proxy(base, {
+		get(target, property) {
+			if (property === "update") {
+				return (table) => {
+					updates += 1;
+					if (updates === 1 && beforeUpdate) beforeUpdate();
+					return target.update(table);
+				};
+			}
+			const value = Reflect.get(target, property, target);
+			return typeof value === "function" ? value.bind(target) : value;
+		},
+	});
+	return {
+		updates: () => updates,
+		restore: () => { globalThis.__messageDb = base; },
+	};
+}
+
 test("apply signs the server CAS result and undo restores it exactly once", async () => {
 	reset();
 	const applied = await m.applyMessageActionForUser({}, user, { action: "archive", messageIds: ["m1"] });
@@ -259,6 +281,95 @@ test("an audit failure after a committed restore does not release the claim", as
 		m.undoMessageActionForUser({}, user, applied.undoToken),
 		(error) => error instanceof m.MessageActionError && error.status === 410,
 	);
+});
+
+test("a bulk apply batches CAS updates instead of one query per message", async () => {
+	reset();
+	const insert = sqlite.prepare("INSERT INTO messages (id, mailbox_id, direction, status, read, starred, folder_id, snoozed_until) VALUES (?, 'mb1', 'inbound', 'received', 0, 0, NULL, NULL)");
+	const ids = ["m1"];
+	for (let index = 2; index <= 120; index += 1) {
+		ids.push(`m${index}`);
+		insert.run(`m${index}`);
+	}
+	const probe = withDbProbe();
+	try {
+		const applied = await m.applyMessageActionForUser({}, user, { action: "archive", messageIds: ids });
+		assert.equal(applied.applied.length, 120);
+		assert.ok(probe.updates() <= 5, `expected a bounded number of updates, got ${probe.updates()}`);
+	} finally {
+		probe.restore();
+	}
+	assert.equal(sqlite.prepare("SELECT COUNT(*) AS count FROM messages WHERE status = 'archived'").get().count, 120);
+});
+
+test("a bulk undo also batches its CAS restores", async () => {
+	reset();
+	const insert = sqlite.prepare("INSERT INTO messages (id, mailbox_id, direction, status, read, starred, folder_id, snoozed_until) VALUES (?, 'mb1', 'inbound', 'received', 0, 0, NULL, NULL)");
+	const ids = ["m1"];
+	for (let index = 2; index <= 120; index += 1) {
+		ids.push(`m${index}`);
+		insert.run(`m${index}`);
+	}
+	const applied = await m.applyMessageActionForUser({}, user, { action: "read", messageIds: ids });
+	assert.ok(applied.undoToken);
+	const probe = withDbProbe();
+	try {
+		const undo = await m.undoMessageActionForUser({}, user, applied.undoToken);
+		assert.equal(undo.restored.length, 120);
+		assert.ok(probe.updates() <= 5, `expected a bounded number of updates, got ${probe.updates()}`);
+	} finally {
+		probe.restore();
+	}
+	assert.equal(sqlite.prepare("SELECT COUNT(*) AS count FROM messages WHERE read = 0").get().count, 120);
+});
+
+test("heterogeneous previous values still batch apply and undo", async () => {
+	reset();
+	const insert = sqlite.prepare("INSERT INTO messages (id, mailbox_id, direction, status, read, starred, folder_id, snoozed_until) VALUES (?, 'mb1', 'inbound', 'received', 0, 0, NULL, ?)");
+	const ids = ["m1"];
+	const snoozedUntil = new Map([["m1", 1800000000]]);
+	sqlite.prepare("UPDATE messages SET snoozed_until = 1800000000 WHERE id = 'm1'").run();
+	for (let index = 2; index <= 100; index += 1) {
+		ids.push(`m${index}`);
+		snoozedUntil.set(`m${index}`, 1800000000 + index);
+		insert.run(`m${index}`, 1800000000 + index);
+	}
+	const applyProbe = withDbProbe();
+	let applied;
+	try {
+		applied = await m.applyMessageActionForUser({}, user, { action: "inbox", messageIds: ids });
+		assert.equal(applied.applied.length, 100);
+		assert.ok(applyProbe.updates() <= 8, `expected a bounded apply, got ${applyProbe.updates()}`);
+	} finally {
+		applyProbe.restore();
+	}
+	const undoProbe = withDbProbe();
+	try {
+		const undo = await m.undoMessageActionForUser({}, user, applied.undoToken);
+		assert.equal(undo.restored.length, 100);
+		assert.ok(undoProbe.updates() <= 10, `expected a bounded undo, got ${undoProbe.updates()}`);
+	} finally {
+		undoProbe.restore();
+	}
+	for (const [id, seconds] of snoozedUntil) assert.equal(rowState(id).snoozed_until, seconds, id);
+});
+
+test("apply CAS checks every field the action writes, not only changed ones", async () => {
+	reset();
+	// A concurrent folder move between the read and the CAS leaves folder_id set;
+	// the archive must not report folderId null as applied.
+	const probe = withDbProbe({
+		beforeUpdate: () => sqlite.prepare("UPDATE messages SET folder_id = 'f-race' WHERE id = 'm1'").run(),
+	});
+	let applied;
+	try {
+		applied = await m.applyMessageActionForUser({}, user, { action: "archive", messageIds: ["m1"] });
+	} finally {
+		probe.restore();
+	}
+	assert.deepEqual(applied.applied, []);
+	assert.deepEqual(applied.skipped, [{ id: "m1", reason: "stale" }]);
+	assert.deepEqual(rowState(), { status: "received", read: 0, starred: 0, folder_id: "f-race", snoozed_until: null });
 });
 
 test("a CAS race rejects a stale archive snapshot instead of signing it", async () => {

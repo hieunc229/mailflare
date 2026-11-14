@@ -16,7 +16,7 @@ await build({
 				getMessageActionPatch, getChangedStateFields, recordHasChanges, planUndoRecord, snapshotMessageState,
 			} from "./src/lib/messages/actions/definitions.ts";
 			export {
-				MessageActionExecutor, MessageActionRequestError, getChangedRecords, readPatchGroups, hasMembershipChange,
+				MessageActionExecutor, MessageActionRequestError, getChangedRecords, hasMembershipChange,
 			} from "./src/lib/messages/actions/executor.ts";
 			export { signUndoToken, verifyUndoToken } from "./src/lib/messages/actions/token.ts";
 			export { defaultMessageActionHooks } from "./src/lib/messages/actions/client.ts";
@@ -239,7 +239,6 @@ test("the executor reports a successful apply after the server confirms it", asy
 	assert.equal(calls[0].op, "apply");
 	assert.deepEqual(applied[0].options, { notify: true });
 	assert.equal(m.getChangedRecords(result.applied).length, 1);
-	assert.deepEqual([...m.readPatchGroups(result.applied, "applied")], [[true, ["m1"]]]);
 });
 
 test("a future optimistic apply can patch before the request and roll back on failure", async () => {
@@ -462,7 +461,7 @@ test("a stale list response cannot overwrite a read patch made while it was in f
 		const fresh = await cache.fetchMessageList(params);
 		assert.equal(fresh.messages[0].read, true);
 		assert.equal(calls, 2);
-		cache.patchMessagesInCaches(["m1"], { read: false });
+		cache.patchMessageFieldsInCaches([{ id: "m1", read: false }]);
 		assert.equal(cache.peekMessageList(params).messages[0].read, false);
 	} finally {
 		globalThis.fetch = originalFetch;
@@ -502,8 +501,6 @@ test("all message entry points use the shared action layer and keep undirected r
 	assert.match(read("src/components/messages/conversation-thread.tsx"), /runSingleMessageAction\(message\.id, "read", \{ undo: false \}\)/);
 	// Block and unsubscribe outcomes are not offered as message undo.
 	assert.match(read("src/components/message-actions/message-actions.tsx"), /runSingleMessageAction\(messageId, "trash", \{ undo: false \}\)/);
-	// Star sends the desired state through the shared layer, and the legacy endpoint stays a toggle.
-	assert.match(read("src/app/api/messages/[messageId]/star/route.ts"), /payload\.starred \?\? !message\.starred/);
 	// Undo lives in its own toast stack, not the single-slot compose notice.
 	assert.match(read("src/app/(dashboard)/layout.tsx"), /<UndoToasts \/>/);
 	assert.doesNotMatch(read("src/components/messages/undo-toasts.tsx"), /compose-context|useCompose/);

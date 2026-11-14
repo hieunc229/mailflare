@@ -195,9 +195,7 @@ export function patchMessageFieldsInCaches(
 			const next = { ...message, ...direct };
 			return next.read === message.read && next.starred === message.starred ? message : next;
 		});
-		// Apply any still-active operation before the row reaches a consumer or
-		// the cache; a generic refresh while an undo request is pending must not
-		// see the server's pre-undo value.
+		// A refresh during a pending undo must not see the server's pre-undo value.
 		const pendingMessages = applyPendingToMessages(messages);
 		messageListCache.set(key, { ...response, messages: pendingMessages });
 		rememberMessageRows(pendingMessages);
@@ -206,28 +204,8 @@ export function patchMessageFieldsInCaches(
 	return targets;
 }
 
-/**
- * Mirror a field-scoped change into every cached list page and detail. Used by
- * optimistic reads, star toggles and undo, so a remount never repaints the
- * state the action just replaced.
- */
-export function patchMessagesInCaches(
-	messageIds: string[],
-	patch: CachedMessagePatch,
-	options: MessageCachePatchOptions = {},
-): ThreadUnreadTarget[] {
-	return patchMessageFieldsInCaches(
-		messageIds.map((id) => ({ id, ...patch })),
-		options,
-	);
-}
-
-/**
- * Mirror a read/unread change into the cached lists and details, so a list
- * remounted later (or a detail reopened) never shows the old state.
- */
 export function markMessagesReadInCaches(messageIds: string[], read: boolean) {
-	patchMessagesInCaches(messageIds, { read });
+	patchMessageFieldsInCaches(messageIds.map((id) => ({ id, read })));
 }
 
 // Caches must drop on every change, including ones made while no list is mounted
@@ -295,9 +273,8 @@ export async function fetchMessageList(params: URLSearchParams, force = false): 
 	const request = authFetch(`/api/messages?${key}`)
 		.then((res) => res.json())
 		.then((data) => {
-			// Apply the overlay before the response reaches state or cache. Any
-			// generic refresh that started while an undo is pending therefore sees
-			// the optimistic value even if it lands after the optimistic patch.
+			// Overlay before the response reaches state or cache, so a refresh that
+			// started while an undo is pending cannot repaint the server value.
 			const response = applyPendingToMessageList(data as MessageListResponse);
 			if (requestGeneration === messageCacheGeneration) {
 				messageListCache.set(key, response);

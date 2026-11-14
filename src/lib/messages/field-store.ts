@@ -1,13 +1,7 @@
 /**
- * The latest read/star values this tab has seen for message ids. Action
- * responses, list/thread/detail fetches and cache patches all feed it, so an
- * undo can snapshot what was on screen before its optimistic patch instead of
- * assuming an older action's historical "applied" state is still current.
- *
- * A pending overlay sits on top of that state for operations whose server
- * request is still in flight. Every list/thread/detail ingress applies it
- * before reading or writing a cache, so a generic refetch cannot repaint the
- * server's pre-undo value while the undo is unresolved.
+ * The latest read/star values this tab has seen per message, so undo snapshots
+ * the screen rather than an older action's "applied" state. A pending overlay
+ * sits on top while its request is in flight and every cache ingress applies it.
  */
 export type KnownMessageFields = {
 	read?: boolean;
@@ -36,7 +30,6 @@ type KnownThread = {
 };
 
 type PendingLayer = {
-	sequence: number;
 	messages: Map<string, KnownMessageFields>;
 	threads: Map<string, number>;
 };
@@ -53,7 +46,6 @@ const knownFields = new Map<string, KnownMessageFields>();
 const knownThreads = new Map<string, KnownThread>();
 const pendingLayers = new Map<string, PendingLayer>();
 const pendingListeners = new Set<() => void>();
-let pendingSequence = 0;
 
 function clampCount(value: number, size: number): number {
 	if (!Number.isFinite(value)) return 0;
@@ -87,20 +79,12 @@ export function forgetMessageFields(messageIds: string[], fields: KnownMessageFi
 	}
 }
 
-export function rememberMessageRows(rows: Array<{
-	id: string;
-	read?: boolean;
-	starred?: boolean;
-	threadMessageIds?: string[];
-	threadUnread?: number;
-}>): void {
+export function rememberMessageRows(rows: PendingRow[]): void {
 	for (const row of rows) {
 		const grouped = !!row.threadMessageIds?.length;
 		if ((row.read !== undefined && !grouped) || row.starred !== undefined) {
 			rememberMessageFields([row.id], {
-				// A grouped row's read flag is a conversation aggregate, not the
-				// anchor message's own state. Seeding it would make an unknown
-				// member look already-unread/read and corrupt later flips.
+				// A grouped row's read flag is an aggregate, not the anchor's own state.
 				...(row.read !== undefined && !grouped ? { read: row.read } : {}),
 				...(row.starred !== undefined ? { starred: row.starred } : {}),
 			});
@@ -115,11 +99,7 @@ export function rememberMessageRows(rows: Array<{
 	}
 }
 
-/**
- * Any action touching a member of a known conversation joins the same lock
- * group. This keeps optimistic grouped aggregates and their rollback
- * snapshots from overlapping inside one conversation.
- */
+/** Any action touching a member of a known conversation joins one lock group. */
 export function getConversationLockKeys(ids: string[]): string[] {
 	const keys = new Set(ids);
 	for (const [rowId, row] of knownThreads) {
@@ -142,11 +122,8 @@ export function getThreadRowIdsForMessages(ids: string[]): string[] {
 }
 
 /** Persists a server-confirmed aggregate even when its list row is not cached. */
-export function rememberThreadUnreadTargets(targets: Iterable<ThreadUnreadTarget> | Map<string, number>): void {
-	const entries = targets instanceof Map ? targets : targets instanceof Array
-		? targets.map((target) => [target.id, target.threadUnread] as const)
-		: [...targets].map((target) => [target.id, target.threadUnread] as const);
-	for (const [rowId, threadUnread] of entries) {
+export function rememberThreadUnreadTargets(targets: Map<string, number>): void {
+	for (const [rowId, threadUnread] of targets) {
 		const row = knownThreads.get(rowId);
 		if (!row || !Number.isFinite(threadUnread)) continue;
 		row.threadUnread = clampCount(threadUnread, row.messageIds.length);
@@ -270,14 +247,8 @@ export function setPendingOverlay(owner: string, entries: PendingOverlayEntries)
 		clearPendingOverlay(owner);
 		return;
 	}
-	const existing = pendingLayers.get(owner);
-	pendingLayers.set(owner, {
-		// Updating the same owner keeps its original place: a newer operation
-		// still owns the field it wrote more recently.
-		sequence: existing?.sequence ?? ++pendingSequence,
-		messages,
-		threads,
-	});
+	// An existing owner keeps its map position, so a newer operation stays last.
+	pendingLayers.set(owner, { messages, threads });
 	notifyPendingListeners();
 }
 
@@ -300,11 +271,7 @@ export function subscribePendingOverlay(listener: () => void): () => void {
 	return () => pendingListeners.delete(listener);
 }
 
-/**
- * Absolute unread targets for every known grouped row touched by these field
- * patches. Counts only real member transitions: a repeated desired value is a
- * no-op, and unknown members are bounded by the row's current aggregate.
- */
+/** Absolute unread targets: only real member transitions, bounded by the aggregate. */
 export function getThreadUnreadTargets(fields: PendingOverlayMessage[]): ThreadUnreadTarget[] {
 	const reads = new Map<string, boolean>();
 	for (const field of fields) {
@@ -348,11 +315,6 @@ export function getThreadUnreadTargets(fields: PendingOverlayMessage[]): ThreadU
 		targets.push({ id: rowId, threadUnread: target });
 	}
 	return targets;
-}
-
-/** Convenience wrapper for one desired read value applied to a set of ids. */
-export function getThreadReadTargets(messageIds: string[], read: boolean): ThreadUnreadTarget[] {
-	return getThreadUnreadTargets([...new Set(messageIds)].map((id) => ({ id, read })));
 }
 
 /** Pre-click grouped unread aggregates for rollback after a failed undo. */

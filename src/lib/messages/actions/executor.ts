@@ -5,7 +5,6 @@ import type {
 	MessageActionRecord,
 	MessageActionResponse,
 	MessageActionTransportBody,
-	MessageStateSnapshot,
 	UndoMessageActionResponse,
 } from "./types";
 
@@ -146,38 +145,7 @@ export function getChangedRecords(records: MessageActionRecord[]): MessageAction
 	return records.filter(recordHasChanges);
 }
 
-export function readPatchGroups(records: MessageActionRecord[], direction: "previous" | "applied") {
-	const groups = new Map<boolean, string[]>();
-	for (const record of records) {
-		if (record.previous.read === record.applied.read) continue;
-		const read = record[direction].read;
-		const ids = groups.get(read) ?? [];
-		ids.push(record.id);
-		groups.set(read, ids);
-	}
-	return groups;
-}
-
-export function starPatchGroups(records: MessageActionRecord[], direction: "previous" | "applied") {
-	const groups = new Map<boolean, string[]>();
-	for (const record of records) {
-		if (record.previous.starred === record.applied.starred) continue;
-		const starred = record[direction].starred;
-		const ids = groups.get(starred) ?? [];
-		ids.push(record.id);
-		groups.set(starred, ids);
-	}
-	return groups;
-}
-
 export function hasMembershipChange(record: MessageActionRecord): boolean {
 	return getChangedStateFields(record.previous, record.applied)
 		.some((field) => field === "status" || field === "folderId" || field === "snoozedUntil");
-}
-
-export function restoreSnapshots(
-	records: MessageActionRecord[],
-	state: (record: MessageActionRecord) => MessageStateSnapshot,
-) {
-	return records.map((record) => ({ ...record, applied: state(record) }));
 }

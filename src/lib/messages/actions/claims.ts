@@ -9,12 +9,9 @@ export async function pruneExpiredMessageActionUndoClaims(env: CloudflareEnv, no
 }
 
 /**
- * Atomically consumes a token nonce. The primary key is the claim: exactly one
- * insert wins, including across concurrent requests and workers.
- *
- * The claim is written before the restore writes. A crash in that window leaves
- * the token consumed without restoring anything; the accepted small-blast
- * tradeoff is that the UI reports an expired undo rather than risking a replay.
+ * Atomically consumes a token nonce: exactly one insert wins. The claim is
+ * written before the restore, so a crash in between reports an expired undo
+ * rather than risking a replay.
  */
 export async function claimMessageActionUndoToken(
 	env: CloudflareEnv,

@@ -82,10 +82,7 @@ async function sendMessageAction(
 	}
 }
 
-/**
- * Read/star fields changed by an action, in the requested direction. Membership
- * fields stay server-first and are refreshed through the generic event.
- */
+/** Read/star fields changed by an action in the requested direction; membership stays server-first. */
 function changedFieldPatches(
 	records: MessageActionRecord[],
 	direction: "previous" | "applied",
@@ -101,7 +98,7 @@ function changedFieldPatches(
 	return fields;
 }
 
-/** The pre-click values to restore when the server rejects or skips the undo. */
+/** Pre-click values to restore when the server rejects or skips the undo. */
 function capturedFieldPatches(
 	records: MessageActionRecord[],
 	captured: Map<string, KnownMessageFields>,
@@ -138,9 +135,8 @@ function dispatchFieldChanges(fields: MessageFieldPatch[], threadTargets: Thread
 }
 
 /**
- * Patches caches then notifies mounted consumers. Grouped rows receive the
- * absolute target computed while patching, so optimistic and completed paths
- * cannot apply the same transition twice.
+ * Patches caches then notifies consumers. Grouped rows get the absolute target
+ * computed while patching, so a transition cannot apply twice.
  */
 function applyFieldChanges(
 	fields: PendingOverlayMessage[],
@@ -185,9 +181,8 @@ function commitWholeRollbackTargets(
 }
 
 /**
- * Persists the aggregate the operation actually settles on, even when its list
- * row is no longer cached. Partial rollbacks start from the pending target and
- * apply only the skipped members' transitions.
+ * Persists the settled aggregate even when its list row is no longer cached.
+ * Partial rollbacks extend the pending target with only the skipped transitions.
  */
 function commitSettledTargets(
 	owner: string,
@@ -230,57 +225,22 @@ function restoreCaptured(
 	applyFieldChanges(fields, hasReadChange ? capturedThreads : undefined);
 }
 
-function detailPatchFor(
-	record: MessageActionRecord,
-	direction: "previous" | "applied",
-): CachedMessageStatePatch {
-	const patch: CachedMessageStatePatch = {};
-	for (const field of getChangedStateFields(record.previous, record.applied)) {
-		switch (field) {
-			case "status":
-				patch.status = record[direction].status;
-				break;
-			case "read":
-				patch.read = record[direction].read;
-				break;
-			case "starred":
-				patch.starred = record[direction].starred;
-				break;
-			case "folderId":
-				patch.folderId = record[direction].folderId;
-				break;
-			case "snoozedUntil":
-				patch.snoozedUntil = record[direction].snoozedUntil;
-				break;
-		}
+function rememberDetailState(records: MessageActionRecord[], direction: "previous" | "applied") {
+	for (const record of records) {
+		const patch = Object.fromEntries(getChangedStateFields(record.previous, record.applied)
+			.map((field) => [field, record[direction][field]])) as CachedMessageStatePatch;
+		patchCachedMessageState(record.id, patch);
 	}
-	return patch;
 }
 
-function rememberAppliedDetails(records: MessageActionRecord[]) {
-	for (const record of records) patchCachedMessageState(record.id, detailPatchFor(record, "applied"));
-}
-
-function rememberPreviousDetails(records: MessageActionRecord[]) {
-	for (const record of records) patchCachedMessageState(record.id, detailPatchFor(record, "previous"));
-}
-
-/**
- * A settled undo must not let a response that started while the optimistic
- * target was active land afterwards. Invalidate requests without dropping a
- * valid patched cache; the generic resync then performs one authoritative fetch.
- */
+/** Request invalidation without dropping a patched cache; one resync fetch follows. */
 function invalidatePendingResponses(messageIds: string[]) {
 	invalidateMessageListRequests();
 	invalidateMessageThreadRequests();
 	invalidateMessageDetailRequests(messageIds);
 }
 
-/**
- * A timeout or dropped connection may have reached the server after the client
- * stopped waiting. The undo claim makes replay safe, but the local state cannot
- * know which side committed, so an authoritative refetch replaces any guess.
- */
+/** A timeout or dropped connection may still have committed server-side. */
 function isUncertainActionFailure(error: unknown): boolean {
 	if (error === undefined) return false;
 	if (error instanceof MessageActionRequestError) {
@@ -302,7 +262,7 @@ export const defaultMessageActionHooks: MessageActionExecutorHooks = {
 		const changed = getChangedRecords(response.applied);
 		if (changed.length === 0) return;
 		applyFieldChanges(changedFieldPatches(changed, "applied"));
-		rememberAppliedDetails(changed);
+		rememberDetailState(changed, "applied");
 		if (options.notify && changed.some(hasMembershipChange)) dispatchMessagesChanged();
 	},
 	onApplyFailed(input, _options, context, error) {
@@ -315,16 +275,13 @@ export const defaultMessageActionHooks: MessageActionExecutorHooks = {
 		const owner = context?.pendingOwner ?? DEFAULT_PENDING_OWNER;
 		const fields = changedFieldPatches(records, "previous");
 		if (fields.length === 0) return;
-		// Patch the underlying caches first, then lay the same absolute values
-		// over every future ingress while the undo request is unresolved.
+		// Patch caches, then overlay the same values on every ingress while pending.
 		const targets = patchMessageFieldsInCaches(fields);
 		setPendingOverlay(owner, { messages: fields, threads: targets });
 		dispatchFieldChanges(fields, targets);
 	},
 	onUndoCompleted(records, response, captured, context) {
-		// The optimistic patches already show the restored state. Records the
-		// server skipped must return to what was on screen before the undo click,
-		// not an older action's historical applied snapshot.
+		// Skipped records return to the pre-click screen, not an older applied snapshot.
 		const owner = context?.pendingOwner ?? DEFAULT_PENDING_OWNER;
 		const restored = new Set(response.restored);
 		const skipped = new Set(response.skipped.map((item) => item.id));
@@ -332,16 +289,12 @@ export const defaultMessageActionHooks: MessageActionExecutorHooks = {
 		const skippedRecords = records.filter((record) => skipped.has(record.id));
 		const unaccounted = records.filter((record) => !restored.has(record.id) && !skipped.has(record.id));
 		const rollback = [...skippedRecords, ...unaccounted];
-		// Commit the settled aggregate before dropping the owner: a later list
-		// resync may clear every cached row, but the next undo must still start
-		// from this server-confirmed value.
+		// Commit the settled aggregate before dropping the owner, since a later
+		// resync may clear every cached row before the next undo starts.
 		const settledTargets = commitSettledTargets(owner, records, restoredRecords, rollback, captured, context?.capturedThreadUnread);
 		clearPendingOverlay(owner);
-		rememberPreviousDetails(restoredRecords);
-		// A mixed result keeps the restored members. Only a whole-operation
-		// rollback may snap the conversation aggregate back to its pre-click
-		// target; a partial rollback applies the skipped transitions to the
-		// current optimistic aggregate instead.
+		rememberDetailState(restoredRecords, "previous");
+		// A mixed result keeps restored members; only skipped transitions roll back.
 		restoreCaptured(rollback, captured, settledTargets);
 		invalidateCachedMessageDetails(rollback.map((record) => record.id));
 		invalidatePendingResponses(records.map((record) => record.id));
@@ -351,8 +304,7 @@ export const defaultMessageActionHooks: MessageActionExecutorHooks = {
 		const ids = records.map((record) => record.id);
 		if (isUncertainActionFailure(error)) {
 			clearPendingOverlay(owner);
-			// The timeout may have committed the undo on the server. Do not paint
-			// the historical pre-click value; let the resync fetch decide.
+			// The undo may have committed; let the resync fetch decide.
 			forgetUncapturedFields(records, captured);
 			invalidateThreadUnreadTargets(getThreadRowIdsForMessages(ids));
 			invalidateUncertainState(ids);

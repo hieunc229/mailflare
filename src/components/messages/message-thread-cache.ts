@@ -86,8 +86,7 @@ export function patchMessageThreadFieldsInCaches(
 ): void {
 	if (messageIds.length === 0) return;
 	const ids = new Set(messageIds);
-	// Any request already in flight may predate this patch; dropping it avoids
-	// caching a stale read/star value after the optimistic change.
+	// An in-flight request may predate this patch; drop it rather than cache stale fields.
 	generation += 1;
 	threadRequests.clear();
 	for (const [messageId, cached] of threadCache) {

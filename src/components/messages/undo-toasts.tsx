@@ -118,7 +118,6 @@ function failureFromError(error: unknown): UndoToastFailure {
 		}
 		return { kind: "server", retryable: false };
 	}
-	// fetch rejects on a dropped connection; a later Retry can succeed.
 	return { kind: "network", retryable: true };
 }
 
@@ -178,10 +177,7 @@ function focusVisibleAppSurface() {
 	}
 }
 
-/**
- * After a toast action changes focus ownership, keep keyboard focus in the
- * remaining receipt; only fall back to a visible app surface when it disappears.
- */
+/** Keep keyboard focus in the remaining receipt, or fall back to the app surface. */
 function restoreFocusAfterAction(entryId: number) {
 	if (typeof window === "undefined") return;
 	window.setTimeout(() => {
@@ -223,8 +219,7 @@ export function UndoToasts() {
 	const pauseHeld = holdState !== 0;
 	const [polite, setPolite] = useState<{ text: string; sequence: number } | null>(null);
 	const [assertive, setAssertive] = useState<{ text: string; sequence: number } | null>(null);
-	// A late mount must not replay announcements that were already made. New
-	// announcements always carry a higher sequence and are announced normally.
+	// A late mount must not replay announcements already made.
 	const seenAnnouncement = useRef(announcements.at(-1)?.sequence ?? 0);
 
 	useEffect(() => {
@@ -289,7 +284,6 @@ export function UndoToasts() {
 		} catch (error) {
 			const failure = failureFromError(error);
 			failUndoToast(current.id, failure);
-			// Retryable failures keep the same primary button, so focus stays put.
 			if (!failure.retryable) restoreFocusAfterAction(current.id);
 		}
 	}

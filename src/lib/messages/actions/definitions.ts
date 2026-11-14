@@ -1,13 +1,11 @@
 import type {
 	MessageActionSkipReason,
-	MessageActionSkipped,
 	MessageStateField,
 	MessageStateSnapshot,
 	ReversibleMessageAction,
 } from "./types";
 
-/** Statuses a message may have before or after a reversible action. */
-export const REVERSIBLE_MESSAGE_STATUSES = ["received", "sent", "draft", "queued", "failed", "trash", "spam", "archived"] as const;
+const REVERSIBLE_MESSAGE_STATUSES = new Set(["received", "sent", "draft", "queued", "failed", "trash", "spam", "archived"]);
 
 const reversibleActions = new Set<ReversibleMessageAction>([
 	"archive",
@@ -30,10 +28,6 @@ export function isReversibleMessageAction(value: unknown): value is ReversibleMe
 /** Status and folder changes need manage access; read and star need read access, as before. */
 export function actionNeedsManage(action: ReversibleMessageAction): boolean {
 	return action !== "read" && action !== "unread" && action !== "star" && action !== "unstar";
-}
-
-export function isStatusAction(action: ReversibleMessageAction): boolean {
-	return action === "archive" || action === "trash" || action === "spam" || action === "inbox" || action === "folder";
 }
 
 /** Types the server reads for an action target; no bodies or internal keys. */
@@ -66,13 +60,6 @@ export function snapshotMessageState(message: MessageActionTarget): MessageState
 	};
 }
 
-export function applySnapshotPatch(
-	state: MessageStateSnapshot,
-	patch: Partial<MessageStateSnapshot>,
-): MessageStateSnapshot {
-	return { ...state, ...patch };
-}
-
 export function getChangedStateFields(previous: MessageStateSnapshot, applied: MessageStateSnapshot): MessageStateField[] {
 	const fields: MessageStateField[] = [];
 	if (previous.status !== applied.status) fields.push("status");
@@ -91,11 +78,7 @@ export type MessageActionPatchResult =
 	| { patch: Partial<MessageStateSnapshot>; reason?: never }
 	| { patch?: never; reason: MessageActionSkipReason };
 
-/**
- * The fields an action writes for one message. It deliberately models only
- * reversible fields: mailbox, ownership, bodies and attachments are never
- * touched by the shared executor.
- */
+/** The reversible fields an action writes for one message; never ownership, bodies or attachments. */
 export function getMessageActionPatch(
 	action: ReversibleMessageAction,
 	input: { folderId?: string | null; snoozedUntil?: string | null },
@@ -144,7 +127,7 @@ function parseFutureDate(value: string | null | undefined): string | null {
 }
 
 export function isValidReversibleStatus(status: unknown): status is string {
-	return typeof status === "string" && (REVERSIBLE_MESSAGE_STATUSES as readonly string[]).includes(status);
+	return typeof status === "string" && REVERSIBLE_MESSAGE_STATUSES.has(status);
 }
 
 function isStateSnapshot(value: unknown): value is MessageStateSnapshot {
@@ -172,10 +155,8 @@ export type UndoRecordPlan =
 	| { id: string; reason: MessageActionSkipReason };
 
 /**
- * Validates one signed snapshot against the message as it is now. Restores
- * only fields the action changed and only when the current value is still the
- * one the action wrote, so a later action is never clobbered. Folder ownership
- * and access are checked server-side before any write.
+ * Restores only the fields the action changed, and only while they still hold
+ * its result, so a later action is never clobbered.
  */
 export function planUndoRecord(
 	record: { id: string; mailboxId: string | null; previous: MessageStateSnapshot; applied: MessageStateSnapshot },
@@ -215,10 +196,4 @@ export function planUndoRecord(
 		patch[field] = record.previous[field] as never;
 	}
 	return { id: record.id, patch, fields };
-}
-
-export function summarizeActionSkips(skipped: MessageActionSkipped[]) {
-	const byReason = new Map<MessageActionSkipReason, number>();
-	for (const item of skipped) byReason.set(item.reason, (byReason.get(item.reason) ?? 0) + 1);
-	return byReason;
 }

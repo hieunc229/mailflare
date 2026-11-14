@@ -39,7 +39,7 @@ await build({
 			export { MessageActionExecutor } from "./src/lib/messages/actions/executor.ts";
 			export {
 				fetchMessageList, peekMessageList, clearMessageListCache, invalidateMessageListRequests,
-				patchMessagesInCaches, patchMessageFieldsInCaches, markMessagesReadInCaches,
+				patchMessageFieldsInCaches, markMessagesReadInCaches,
 			} from "./src/hooks/utils.ts";
 			export {
 				fetchMessageCounts, clearMessageCountsCache,
@@ -204,13 +204,14 @@ test("grouped patching counts actual member transitions, not desired ids", async
 		threadMessageIds: ["m1", "m2", "m3"],
 		threadUnread: 1,
 	}]);
-	m.patchMessagesInCaches(["m1", "m2", "m3"], { read: true });
+	const patchReads = (read) => m.patchMessageFieldsInCaches(["m1", "m2", "m3"].map((id) => ({ id, read })));
+	patchReads(true);
 	assert.equal(m.peekMessageList(params).messages[0].threadUnread, 0);
-	m.patchMessagesInCaches(["m1", "m2", "m3"], { read: true });
+	patchReads(true);
 	assert.equal(m.peekMessageList(params).messages[0].threadUnread, 0);
-	m.patchMessagesInCaches(["m1", "m2", "m3"], { read: false });
+	patchReads(false);
 	assert.equal(m.peekMessageList(params).messages[0].threadUnread, 3);
-	m.patchMessagesInCaches(["m1", "m2", "m3"], { read: false });
+	patchReads(false);
 	assert.equal(m.peekMessageList(params).messages[0].threadUnread, 3);
 });
 
