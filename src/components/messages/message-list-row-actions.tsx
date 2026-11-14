@@ -1,11 +1,13 @@
 "use client";
 
 import { memo, useState } from "react";
+import type { ReactNode } from "react";
 import clsx from "clsx";
-import { Archive, Clock, Mail, MailOpen, MoreVertical, Trash2 } from "@/components/icons";
+import { Archive, ArchiveRestore, Clock, Mail, MailOpen, MoreVertical, ShieldCheck, Trash2, Undo2 } from "@/components/icons";
 import { MessageActionMenu, MessageActionMenuItem, MessageActionMenuSeparator } from "@/components/message-actions/action-menu";
 import { useLanguage } from "@/components/language-provider";
 import { Button } from "@/components/ui/button";
+import { confirmDestructive } from "@/components/ui/confirm-dialog";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Tooltip } from "@/components/ui/tooltip";
@@ -15,7 +17,14 @@ import type { SnoozePreset } from "./message-list-row-actions-utils";
 import { getSnoozePresets, isMessageSnoozed, snoozeMessage, unsnoozeMessage } from "./message-list-row-actions-utils";
 import { getUserTimeZone } from "@/lib/time/utils";
 
-function MessageListRowActionsComponent({ message, onAction, compact = false, active = false, onSnoozeChange }: MessageListRowActionsProps) {
+type PrimaryAction = {
+	label: string;
+	icon: ReactNode;
+	onClick: () => void;
+	disabled?: boolean;
+};
+
+function MessageListRowActionsComponent({ message, folder = "inbox", folderId, onAction, compact = false, active = false, onSnoozeChange }: MessageListRowActionsProps) {
 	const { t } = useLanguage();
 	const [snoozeOpen, setSnoozeOpen] = useState(false);
 	const [snoozedUntil, setSnoozedUntil] = useState("");
@@ -25,6 +34,13 @@ function MessageListRowActionsComponent({ message, onAction, compact = false, ac
 	const snoozed = isMessageSnoozed(message.snoozedUntil);
 	const readAction = message.read ? "unread" : "read";
 	const compactButtonClassName = "h-7 w-7 shrink-0 px-0";
+	// The row leaves these folders through a state change, so offering the same
+	// move as a secondary action would be a no-op or a misleading duplicate.
+	const canMarkRead = folder !== "spam" && folder !== "trash";
+	const canSnooze = folder === "inbox" && !folderId;
+	const canArchive = folder === "snoozed";
+	const canTrash = folder !== "spam" && folder !== "trash";
+	const canDeleteForever = folder === "spam" || folder === "trash";
 
 	function openSnooze() {
 		const presets = getSnoozePresets();
@@ -60,6 +76,48 @@ function MessageListRowActionsComponent({ message, onAction, compact = false, ac
 		}
 	}
 
+	async function handleDeleteForever() {
+		// A row only deletes the thread members in this folder, not every message
+		// the conversation contains elsewhere.
+		const count = message.threadMessageIds?.length ?? 1;
+		if (!await confirmDestructive(t("delete.confirm", { count }))) return;
+		await onAction("delete").catch(() => undefined);
+	}
+
+	let primaryAction: PrimaryAction;
+	if (folder === "snoozed") {
+		primaryAction = {
+			label: t("common.unsnooze"),
+			icon: <Clock className="h-4 w-4" />,
+			onClick: () => void handleUnsnooze(),
+			disabled: snoozing,
+		};
+	} else if (folder === "archived") {
+		primaryAction = {
+			label: t("common.unarchive"),
+			icon: <ArchiveRestore className="h-4 w-4" />,
+			onClick: () => void onAction("inbox"),
+		};
+	} else if (folder === "spam") {
+		primaryAction = {
+			label: t("common.notSpam"),
+			icon: <ShieldCheck className="h-4 w-4" />,
+			onClick: () => void onAction("inbox"),
+		};
+	} else if (folder === "trash") {
+		primaryAction = {
+			label: t("common.restore"),
+			icon: <Undo2 className="h-4 w-4" />,
+			onClick: () => void onAction("inbox"),
+		};
+	} else {
+		primaryAction = {
+			label: t("common.archive"),
+			icon: <Archive className="h-4 w-4" />,
+			onClick: () => void onAction("archive"),
+		};
+	}
+
 	return (
 		<>
 			{compact ? (
@@ -72,9 +130,17 @@ function MessageListRowActionsComponent({ message, onAction, compact = false, ac
 					{message.hasUnsubscribe && (
 						<MessageUnsubscribeButton key={message.id} messageId={message.id} variant="row" iconOnly />
 					)}
-					<Tooltip label={t("common.archive")}>
-						<Button type="button" variant="ghost" size="sm" className={compactButtonClassName} onClick={() => void onAction("archive")} aria-label={t("common.archive")}>
-							<Archive className="h-4 w-4" />
+					<Tooltip label={primaryAction.label}>
+						<Button
+							type="button"
+							variant="ghost"
+							size="sm"
+							className={compactButtonClassName}
+							disabled={primaryAction.disabled}
+							onClick={primaryAction.onClick}
+							aria-label={primaryAction.label}
+						>
+							{primaryAction.icon}
 						</Button>
 					</Tooltip>
 					<MessageActionMenu
@@ -85,26 +151,42 @@ function MessageListRowActionsComponent({ message, onAction, compact = false, ac
 							</Button>
 						}
 					>
-						<MessageActionMenuItem icon={readAction === "read" ? <MailOpen className="h-4 w-4" /> : <Mail className="h-4 w-4" />} onSelect={() => void onAction(readAction)}>
-							{readAction === "read" ? t("common.markRead") : t("common.markUnread")}
-						</MessageActionMenuItem>
-						<MessageActionMenuItem
-							icon={<Clock className="h-4 w-4" />}
-							disabled={snoozing}
-							onSelect={() => {
-								if (snoozed) {
-									void handleUnsnooze();
-									return;
-								}
-								openSnooze();
-							}}
-						>
-							{snoozed ? t("common.unsnooze") : t("common.snooze")}
-						</MessageActionMenuItem>
-						<MessageActionMenuSeparator />
-						<MessageActionMenuItem icon={<Trash2 className="h-4 w-4" />} destructive onSelect={() => void onAction("trash")}>
-							{t("common.trash")}
-						</MessageActionMenuItem>
+						{canMarkRead && (
+							<MessageActionMenuItem icon={readAction === "read" ? <MailOpen className="h-4 w-4" /> : <Mail className="h-4 w-4" />} onSelect={() => void onAction(readAction)}>
+								{readAction === "read" ? t("common.markRead") : t("common.markUnread")}
+							</MessageActionMenuItem>
+						)}
+						{canSnooze && (
+							<MessageActionMenuItem
+								icon={<Clock className="h-4 w-4" />}
+								disabled={snoozing}
+								onSelect={() => {
+									if (snoozed) {
+										void handleUnsnooze();
+										return;
+									}
+									openSnooze();
+								}}
+							>
+								{snoozed ? t("common.unsnooze") : t("common.snooze")}
+							</MessageActionMenuItem>
+						)}
+						{canArchive && (
+							<MessageActionMenuItem icon={<Archive className="h-4 w-4" />} onSelect={() => void onAction("archive")}>
+								{t("common.archive")}
+							</MessageActionMenuItem>
+						)}
+						{(canMarkRead || canSnooze || canArchive) && (canTrash || canDeleteForever) && <MessageActionMenuSeparator />}
+						{canTrash && (
+							<MessageActionMenuItem icon={<Trash2 className="h-4 w-4" />} destructive onSelect={() => void onAction("trash")}>
+								{t("common.trash")}
+							</MessageActionMenuItem>
+						)}
+						{canDeleteForever && (
+							<MessageActionMenuItem icon={<Trash2 className="h-4 w-4" />} destructive onSelect={() => void handleDeleteForever()}>
+								{t("common.deleteForever")}
+							</MessageActionMenuItem>
+						)}
 					</MessageActionMenu>
 				</div>
 			) : (
@@ -112,32 +194,59 @@ function MessageListRowActionsComponent({ message, onAction, compact = false, ac
 					{message.hasUnsubscribe && (
 						<MessageUnsubscribeButton key={message.id} messageId={message.id} variant="row" />
 					)}
-					<Tooltip label={t("common.archive")}>
-						<Button type="button" variant="ghost" size="sm" onClick={() => void onAction("archive")} aria-label={t("common.archive")}>
-							<Archive className="h-4 w-4" />
+					<Tooltip label={primaryAction.label}>
+						<Button
+							type="button"
+							variant="ghost"
+							size="sm"
+							disabled={primaryAction.disabled}
+							onClick={primaryAction.onClick}
+							aria-label={primaryAction.label}
+						>
+							{primaryAction.icon}
 						</Button>
 					</Tooltip>
-					<Tooltip label={t("common.trash")}>
-						<Button type="button" variant="ghost" size="sm" onClick={() => void onAction("trash")} aria-label={t("common.trash")}>
-							<Trash2 className="h-4 w-4" />
-						</Button>
-					</Tooltip>
-					<Tooltip label={readAction === "read" ? t("common.markRead") : t("common.markUnread")}>
-						<Button type="button" variant="ghost" size="sm" onClick={() => void onAction(readAction)} aria-label={readAction === "read" ? t("common.markRead") : t("common.markUnread")}>
-							{readAction === "read" ? <MailOpen className="h-4 w-4" /> : <Mail className="h-4 w-4" />}
-						</Button>
-					</Tooltip>
-					<Tooltip label={snoozed ? t("common.unsnooze") : t("common.snooze")}>
-						<Button type="button" variant="ghost" size="sm" disabled={snoozing} onClick={() => {
-							if (snoozed) {
-								void handleUnsnooze();
-								return;
-							}
-							openSnooze();
-						}} aria-label={snoozed ? t("common.unsnooze") : t("common.snooze")}>
-							<Clock className="h-4 w-4" />
-						</Button>
-					</Tooltip>
+					{canArchive && (
+						<Tooltip label={t("common.archive")}>
+							<Button type="button" variant="ghost" size="sm" onClick={() => void onAction("archive")} aria-label={t("common.archive")}>
+								<Archive className="h-4 w-4" />
+							</Button>
+						</Tooltip>
+					)}
+					{canTrash && (
+						<Tooltip label={t("common.trash")}>
+							<Button type="button" variant="ghost" size="sm" onClick={() => void onAction("trash")} aria-label={t("common.trash")}>
+								<Trash2 className="h-4 w-4" />
+							</Button>
+						</Tooltip>
+					)}
+					{canDeleteForever && (
+						<Tooltip label={t("common.deleteForever")}>
+							<Button type="button" variant="ghost" size="sm" className="text-red-600 hover:text-red-700" onClick={() => void handleDeleteForever()} aria-label={t("common.deleteForever")}>
+								<Trash2 className="h-4 w-4" />
+							</Button>
+						</Tooltip>
+					)}
+					{canMarkRead && (
+						<Tooltip label={readAction === "read" ? t("common.markRead") : t("common.markUnread")}>
+							<Button type="button" variant="ghost" size="sm" onClick={() => void onAction(readAction)} aria-label={readAction === "read" ? t("common.markRead") : t("common.markUnread")}>
+								{readAction === "read" ? <MailOpen className="h-4 w-4" /> : <Mail className="h-4 w-4" />}
+							</Button>
+						</Tooltip>
+					)}
+					{canSnooze && (
+						<Tooltip label={snoozed ? t("common.unsnooze") : t("common.snooze")}>
+							<Button type="button" variant="ghost" size="sm" disabled={snoozing} onClick={() => {
+								if (snoozed) {
+									void handleUnsnooze();
+									return;
+								}
+								openSnooze();
+							}} aria-label={snoozed ? t("common.unsnooze") : t("common.snooze")}>
+								<Clock className="h-4 w-4" />
+							</Button>
+						</Tooltip>
+					)}
 				</div>
 			)}
 

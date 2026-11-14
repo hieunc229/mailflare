@@ -25,7 +25,7 @@ globalThis.sessionStorage = dom.window.sessionStorage;
 
 const languageStub = `
 export function useLanguage() {
-  return { t(key) { return key; } };
+  return { t(key, vars) { globalThis.__translationVars?.push([key, vars]); return key; } };
 }
 `;
 
@@ -44,7 +44,10 @@ export function DialogDescription({ children }) { return React.createElement("di
 export function DialogTitle({ children }) { return React.createElement("h2", null, children); }
 export function Input(props) { return React.createElement("input", props); }
 export function Checkbox({ className, ...props }) { return React.createElement("input", { type: "checkbox", className, ...props }); }
-export async function confirmDestructive() { return false; }
+export async function confirmDestructive(message) {
+  globalThis.__confirmations?.push(message);
+  return globalThis.__confirmDestructive === true;
+}
 export async function alertDialog() {}
 `;
 
@@ -52,6 +55,7 @@ const iconStub = `
 import React from "react";
 function Icon(props) { return React.createElement("span", { "aria-hidden": "true", ...props }); }
 export const Archive = Icon;
+export const ArchiveRestore = Icon;
 export const CalendarClock = Icon;
 export const ChevronLeft = Icon;
 export const ChevronRight = Icon;
@@ -64,8 +68,10 @@ export const MailCheck = Icon;
 export const MoreVertical = Icon;
 export const Send = Icon;
 export const ShieldAlert = Icon;
+export const ShieldCheck = Icon;
 export const Star = Icon;
 export const Trash2 = Icon;
+export const Undo2 = Icon;
 `;
 
 const rowActionsUtilsStub = `
@@ -266,6 +272,124 @@ test("the compact rail keeps a small primary set and reaches the rest from overf
 	assert.ok(menuItem(container, "common.markUnread"), "the overflow action follows the current read state");
 });
 
+test("folder views make the action that leaves the folder primary", async (t) => {
+	const actions = [];
+	const props = {
+		message: message(),
+		onAction: async (action) => { actions.push(action); },
+		compact: true,
+	};
+	const { container, rerender, cleanup } = await renderActions({ ...props, folder: "archived" });
+	t.after(cleanup);
+
+	assert.ok(button(container, "common.unarchive"), "archived mail offers unarchive as the primary action");
+	assert.equal(container.querySelector('button[aria-label="common.trash"]'), null, "trash stays in the compact overflow");
+	assert.equal(container.querySelector('button[aria-label="common.snooze"]'), null, "archived mail cannot be snoozed");
+	assert.ok(menuItem(container, "common.markRead"));
+	assert.equal([...container.querySelectorAll('[data-testid="action-menu-items"] button')].some((item) => item.textContent.includes("common.snooze")), false);
+	await act(async () => button(container, "common.unarchive").click());
+
+	await rerender({ ...props, folder: "spam" });
+	assert.ok(button(container, "common.notSpam"), "spam offers not spam as the primary action");
+	assert.ok(menuItem(container, "common.deleteForever"), "spam can delete forever from the overflow");
+	assert.equal(container.querySelector('button[aria-label="common.markRead"]'), null, "read is not relevant in spam");
+	assert.equal([...container.querySelectorAll('[data-testid="action-menu-items"] button')].some((item) => item.textContent.includes("common.trash")), false);
+	await act(async () => button(container, "common.notSpam").click());
+
+	await rerender({ ...props, folder: "trash" });
+	assert.ok(button(container, "common.restore"), "trash offers restore as the primary action");
+	assert.ok(menuItem(container, "common.deleteForever"), "trash can delete forever from the overflow");
+	assert.equal(container.querySelector('button[aria-label="common.markRead"]'), null, "read is not relevant in trash");
+	await act(async () => button(container, "common.restore").click());
+
+	await rerender({ ...props, folder: "inbox", folderId: "folder-1" });
+	assert.ok(button(container, "common.archive"), "custom folders archive the message out of the folder");
+	assert.equal([...container.querySelectorAll('[data-testid="action-menu-items"] button')].some((item) => item.textContent.includes("common.snooze")), false, "custom folders do not offer snooze");
+	await act(async () => button(container, "common.archive").click());
+
+	assert.deepEqual(actions, ["inbox", "inbox", "inbox", "archive"]);
+});
+
+test("the snoozed folder offers unsnooze as its primary action", async (t) => {
+	globalThis.__unsnoozeCalls = [];
+	const changes = [];
+	const { container, cleanup } = await renderActions({
+		message: message({ snoozedUntil: "2099-01-01T00:00:00.000Z" }),
+		folder: "snoozed",
+		onAction: async () => {},
+		compact: true,
+		onSnoozeChange: (messageId, snoozed) => changes.push([messageId, snoozed]),
+	});
+	t.after(cleanup);
+
+	assert.ok(button(container, "common.unsnooze"), "snoozed mail offers unsnooze as the primary action");
+	assert.equal(container.querySelector('button[aria-label="common.archive"]'), null, "archive stays in the compact overflow");
+	await act(async () => {
+		button(container, "common.unsnooze").click();
+		await new Promise((resolve) => setTimeout(resolve, 0));
+	});
+	assert.deepEqual(globalThis.__unsnoozeCalls, ["m1"]);
+	assert.deepEqual(changes, [["m1", false]], "the list is told the row may leave");
+});
+
+test("the expanded rail follows the same folder actions", async (t) => {
+	const actions = [];
+	const { container, rerender, cleanup } = await renderActions({
+		message: message(),
+		folder: "archived",
+		onAction: async (action) => { actions.push(action); },
+	});
+	t.after(cleanup);
+
+	assert.ok(button(container, "common.unarchive"), "the expanded rail offers unarchive");
+	assert.ok(button(container, "common.trash"), "archived mail can still be trashed");
+	assert.ok(button(container, "common.markRead"), "archived mail can still be marked read");
+	assert.equal(container.querySelector('button[aria-label="common.snooze"]'), null, "no snooze for archived mail");
+	await act(async () => button(container, "common.unarchive").click());
+
+	await rerender({
+		message: message(),
+		folder: "trash",
+		onAction: async (action) => { actions.push(action); },
+	});
+	assert.ok(button(container, "common.restore"), "the expanded rail offers restore");
+	assert.ok(button(container, "common.deleteForever"), "the expanded rail offers delete forever");
+	assert.equal(container.querySelector('button[aria-label="common.trash"]'), null, "trash is not offered twice");
+	assert.equal(container.querySelector('button[aria-label="common.markRead"]'), null, "no read action in trash");
+
+	assert.deepEqual(actions, ["inbox"]);
+});
+
+test("delete forever confirms only the thread members in this folder", async (t) => {
+	globalThis.__confirmations = [];
+	globalThis.__translationVars = [];
+	globalThis.__confirmDestructive = true;
+	const actions = [];
+	const { container, cleanup } = await renderActions({
+		message: message({ status: "trash", threadCount: 4, threadMessageIds: ["m1", "m2"] }),
+		folder: "trash",
+		onAction: async (action) => { actions.push(action); },
+		compact: true,
+	});
+	t.after(() => {
+		globalThis.__confirmDestructive = false;
+		cleanup();
+	});
+
+	await act(async () => {
+		menuItem(container, "common.deleteForever").click();
+		await new Promise((resolve) => setTimeout(resolve, 0));
+	});
+
+	assert.deepEqual(globalThis.__confirmations, ["delete.confirm"]);
+	assert.deepEqual(
+		globalThis.__translationVars.find(([key]) => key === "delete.confirm")?.[1],
+		{ count: 2 },
+		"the confirmation describes the two in-folder rows, not the four-message thread",
+	);
+	assert.deepEqual(actions, ["delete"]);
+});
+
 test("snoozing and unsnoozing notify the list only after the API succeeds", async (t) => {
 	globalThis.__snoozeCalls = [];
 	globalThis.__unsnoozeCalls = [];
@@ -386,6 +510,8 @@ export function MessageListRowActions({ message, onAction, onSnoozeChange, compa
   },
     React.createElement("button", { "aria-label": "stub-archive", onClick: () => { void onAction("archive"); } }),
     React.createElement("button", { "aria-label": "stub-read", onClick: () => { void onAction("read"); } }),
+    React.createElement("button", { "aria-label": "stub-inbox", onClick: () => { void onAction("inbox"); } }),
+    React.createElement("button", { "aria-label": "stub-delete", onClick: () => { void onAction("delete"); } }),
     React.createElement("button", { "aria-label": "stub-snooze", onClick: () => onSnoozeChange?.(message.id, true) }),
     React.createElement("button", { "aria-label": "stub-unsnooze", onClick: () => onSnoozeChange?.(message.id, false) }),
   );
@@ -419,8 +545,8 @@ await build({
 		contents: `
 			import React from "react";
 			import { MessageFolderPage } from "./src/components/messages/message-folder-page.tsx";
-			import { inboxFolderConfig, snoozedFolderConfig, starredFolderConfig } from "./src/components/messages/message-folder-configs.ts";
-			export { MessageFolderPage, inboxFolderConfig, snoozedFolderConfig, starredFolderConfig };
+			import { inboxFolderConfig, snoozedFolderConfig, starredFolderConfig, archivedFolderConfig, spamFolderConfig, trashFolderConfig, sentFolderConfig } from "./src/components/messages/message-folder-configs.ts";
+			export { MessageFolderPage, inboxFolderConfig, snoozedFolderConfig, starredFolderConfig, archivedFolderConfig, spamFolderConfig, trashFolderConfig, sentFolderConfig };
 		`,
 		resolveDir: root,
 		sourcefile: "message-folder-hover-actions-entry.tsx",
@@ -453,7 +579,7 @@ await build({
 	logLevel: "silent",
 });
 
-const { MessageFolderPage, inboxFolderConfig, snoozedFolderConfig, starredFolderConfig } = await import(pathToFileURL(join(temp, "folder-page.mjs")).href);
+const { MessageFolderPage, inboxFolderConfig, snoozedFolderConfig, starredFolderConfig, archivedFolderConfig, spamFolderConfig, trashFolderConfig, sentFolderConfig } = await import(pathToFileURL(join(temp, "folder-page.mjs")).href);
 
 function listMessage(id, overrides = {}) {
 	return {
@@ -592,7 +718,30 @@ test("the compact list exposes actions only beside an open desktop reader", asyn
 
 	const starred = await renderFolderPage({ config: starredFolderConfig, selectedMessageId: "m1" });
 	t.after(starred.cleanup);
-	assert.equal(rowActions(starred.container, "m1"), null, "folder eligibility stays unchanged");
+	assert.equal(rowActions(starred.container, "m1"), null, "mixed views keep no ambiguous folder action");
+
+	for (const config of [archivedFolderConfig, spamFolderConfig, trashFolderConfig]) {
+		const folder = await renderFolderPage({
+			config,
+			selectedMessageId: "m1",
+			messages: [listMessage("m1", { status: config.folder })],
+		});
+		t.after(folder.cleanup);
+		assert.ok(rowActions(folder.container, "m1"), `${config.folder} rows get the action that leaves the folder`);
+	}
+
+	const customConfig = { ...inboxFolderConfig, folderId: "folder-1", hrefPrefix: "/folders/folder-1", title: "Projects" };
+	const custom = await renderFolderPage({ config: customConfig, selectedMessageId: "m1" });
+	t.after(custom.cleanup);
+	assert.ok(rowActions(custom.container, "m1"), "custom folders get the action that leaves the folder");
+
+	const sent = await renderFolderPage({
+		config: sentFolderConfig,
+		selectedMessageId: "m1",
+		messages: [listMessage("m1", { direction: "outbound", status: "sent" })],
+	});
+	t.after(sent.cleanup);
+	assert.equal(rowActions(sent.container, "m1"), null, "sent keeps no folder action");
 
 	const outbound = await renderFolderPage({
 		selectedMessageId: "m1",
@@ -600,6 +749,65 @@ test("the compact list exposes actions only beside an open desktop reader", asyn
 	});
 	t.after(outbound.cleanup);
 	assert.equal(rowActions(outbound.container, "m1"), null, "direction eligibility stays unchanged");
+});
+
+test("restoring or unarchiving the open message returns to its list", async (t) => {
+	const archived = await renderFolderPage({
+		config: archivedFolderConfig,
+		selectedMessageId: "m1",
+		messages: [listMessage("m1", { status: "archived" })],
+	});
+	t.after(archived.cleanup);
+	await act(async () => {
+		archived.container.querySelector('[data-message-id="m1"] [aria-label="stub-inbox"]').click();
+		await new Promise((resolve) => setTimeout(resolve, 0));
+	});
+	assert.deepEqual(globalThis.__pushedPaths, ["/archived"]);
+
+	const spam = await renderFolderPage({
+		config: spamFolderConfig,
+		selectedMessageId: "m1",
+		messages: [listMessage("m1", { status: "spam" })],
+	});
+	t.after(spam.cleanup);
+	await act(async () => {
+		spam.container.querySelector('[data-message-id="m1"] [aria-label="stub-inbox"]').click();
+		await new Promise((resolve) => setTimeout(resolve, 0));
+	});
+	assert.deepEqual(globalThis.__pushedPaths, ["/spam"]);
+
+	const trash = await renderFolderPage({
+		config: trashFolderConfig,
+		selectedMessageId: "m1",
+		messages: [listMessage("m1", { status: "trash" })],
+	});
+	t.after(trash.cleanup);
+	await act(async () => {
+		trash.container.querySelector('[data-message-id="m1"] [aria-label="stub-inbox"]').click();
+		await new Promise((resolve) => setTimeout(resolve, 0));
+	});
+	assert.deepEqual(globalThis.__pushedPaths, ["/trash"]);
+
+	const deleted = await renderFolderPage({
+		config: trashFolderConfig,
+		selectedMessageId: "m1",
+		messages: [listMessage("m1", { status: "trash" })],
+	});
+	t.after(deleted.cleanup);
+	await act(async () => {
+		deleted.container.querySelector('[data-message-id="m1"] [aria-label="stub-delete"]').click();
+		await new Promise((resolve) => setTimeout(resolve, 0));
+	});
+	assert.deepEqual(globalThis.__pushedPaths, ["/trash"], "deleting forever also closes the open message");
+
+	const customConfig = { ...inboxFolderConfig, folderId: "folder-1", hrefPrefix: "/folders/folder-1", title: "Projects" };
+	const custom = await renderFolderPage({ config: customConfig, selectedMessageId: "m1" });
+	t.after(custom.cleanup);
+	await act(async () => {
+		custom.container.querySelector('[data-message-id="m1"] [aria-label="stub-inbox"]').click();
+		await new Promise((resolve) => setTimeout(resolve, 0));
+	});
+	assert.deepEqual(globalThis.__pushedPaths, ["/folders/folder-1"]);
 });
 
 test("removing the open message from the folder returns to its list", async (t) => {

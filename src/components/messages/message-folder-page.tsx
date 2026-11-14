@@ -30,7 +30,7 @@ import { rememberOpenedUnreadMessage } from "./message-detail-navigation-utils";
 import { useConversationView } from "./use-conversation-view";
 import { OpenedIndicator } from "./message-open-status";
 import { MessageNotesPopover, NoteBadge } from "./message-notes-popover";
-import type { MessageFolderPageProps, MessageListRowProps, RowMessageAction } from "./types";
+import type { MessageFolderConfig, MessageFolderPageProps, MessageListRowProps, RowMessageAction } from "./types";
 import {
 	formatMessageListTimestamp,
 	getPageRange,
@@ -57,6 +57,20 @@ import { DueFollowUps } from "@/components/follow-ups/due-follow-ups";
 import { getUserTimeZone, zonedDateFields } from "@/lib/time/utils";
 
 const pageSize = 25;
+
+function supportsRowActions(folder: MessageFolderConfig["folder"]): boolean {
+	return folder === "inbox" || folder === "snoozed" || folder === "archived" || folder === "spam" || folder === "trash";
+}
+
+/** Whether the action takes the row out of the folder that is on screen. */
+function removesMessageFromFolder(config: MessageFolderConfig, action: RowMessageAction): boolean {
+	if (action === "archive" || action === "trash") return true;
+	if (action === "inbox") {
+		return config.folder === "archived" || config.folder === "spam" || config.folder === "trash" || !!config.folderId;
+	}
+	if (action === "delete") return config.folder === "trash" || config.folder === "spam";
+	return false;
+}
 
 function getRowMessageIds(message: Message): string[] {
 	return message.threadMessageIds ?? [message.id];
@@ -231,9 +245,11 @@ function MessageListRowComponent({
 						{preview}
 					</span>
 				</Link>
-				{showCompactRowActions && (config.folder === "inbox" || config.folder === "snoozed") && message.direction === "inbound" && (
+				{showCompactRowActions && supportsRowActions(config.folder) && message.direction === "inbound" && (
 					<MessageListRowActions
 						message={rowMessage}
+						folder={config.folder}
+						folderId={config.folderId}
 						onAction={runRowAction}
 						compact
 						active={active || opening}
@@ -361,9 +377,11 @@ function MessageListRowComponent({
 				aria-label={t("list.selectFrom", { sender: party })}
 			/>
 			{content}
-			{(config.folder === "inbox" || config.folder === "snoozed") && message.direction === "inbound" && (
+			{supportsRowActions(config.folder) && message.direction === "inbound" && (
 				<MessageListRowActions
 					message={rowMessage}
+					folder={config.folder}
+					folderId={config.folderId}
 					onAction={runRowAction}
 					onSnoozeChange={onSnoozeChange}
 				/>
@@ -524,14 +542,14 @@ export function MessageFolderPage({
 		const affectedIds = expandSelectedIds([messageId]);
 		return runBulkMessageAction(affectedIds, action, action !== "read" && action !== "unread").then(() => {
 			const currentSelectedMessageId = selectedMessageIdRef.current;
-			if (!currentSelectedMessageId || (action !== "archive" && action !== "trash")) return;
+			if (!currentSelectedMessageId || !removesMessageFromFolder(config, action)) return;
 			if (!affectedIds.includes(currentSelectedMessageId)) return;
 			if (isCurrentMessageRoute(config.hrefPrefix, currentSelectedMessageId)) router.push(config.hrefPrefix);
 		}).catch((error) => {
 			setActionError(error instanceof PartialDeleteError ? t("actions.error.deleteSkipped") : t("actions.error.update"));
 			throw error;
 		});
-	}, [config.hrefPrefix, expandSelectedIds, router, t]);
+	}, [config, expandSelectedIds, router, t]);
 
 	const handleSnoozeChange = useCallback((messageId: string, snoozed: boolean) => {
 		const currentSelectedMessageId = selectedMessageIdRef.current;
