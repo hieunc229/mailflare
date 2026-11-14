@@ -1,8 +1,7 @@
-"use client";
-
-import { MessageFolderPage } from "@/components/messages/message-folder-page";
-import { starredFolderConfig } from "@/components/messages/message-folder-configs";
-
+/**
+ * The folder list is rendered by MessageSplitLayout, the shared parent of the
+ * folder and message routes, so opening a message never unmounts it.
+ */
 export default function StarredPage() {
-	return <MessageFolderPage config={starredFolderConfig} />;
+	return null;
 }
