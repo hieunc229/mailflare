@@ -197,3 +197,29 @@ test("agent review does not get invalidated by autosave, and cancellation resume
   assert.equal(requests.filter(x => x.url === "/api/drafts/draft-1" && x.method === "PATCH").length, 2,
     "a subsequent user edit saves normally after cancelling review");
 });
+
+test("Escape already handled by a menu or dialog does not leave the composer's expanded mode", async t => {
+  globalThis.__reviewTestFetch = async url => {
+    if (url === "/api/attachment-policy") return response({ maxMb: 25, cloudThresholdBytes: 3000000 });
+    throw new Error("Unexpected route: " + url);
+  };
+  const container = document.createElement("div");
+  document.body.appendChild(container);
+  const reactRoot = createRoot(container);
+  t.after(async () => { await act(async () => reactRoot.unmount()); container.remove(); });
+  await act(async () => { reactRoot.render(createElement(ComposeForm, { mode: "popup" })); });
+  const form = () => container.querySelector("form");
+  await act(async () => { container.querySelector('button[aria-label="compose.openModal"]').click(); });
+  assert.equal(form().getAttribute("role"), "dialog", "composer is expanded");
+
+  const press = (handled) => {
+    const input = container.querySelector('input[id], textarea') || form();
+    const event = new window.KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true });
+    if (handled) event.preventDefault();
+    return act(async () => { input.dispatchEvent(event); });
+  };
+  await press(true);
+  assert.equal(form().getAttribute("role"), "dialog", "Escape handled by a Radix layer keeps the composer expanded");
+  await press(false);
+  assert.notEqual(form().getAttribute("role"), "dialog", "a bare Escape still leaves expanded mode");
+});
