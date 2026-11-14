@@ -5,7 +5,8 @@ import type { MessagesChangedDetail } from "@/lib/messages/change-events";
 import { applyPendingToMessages, getKnownThreadUnread, subscribePendingOverlay } from "@/lib/messages/field-store";
 import type { ThreadUnreadTarget } from "@/lib/messages/field-store";
 import { registerMessageRefresh } from "./message-refresh";
-import { messageMatchesFolder, type MessageMembershipFields } from "@/lib/messages/list-membership";
+import { getRestoredRowsForList, rememberRemovedRow, updateRemovedRows, type RestoredRow } from "@/lib/messages/membership-store";
+import { getListMembershipKey, messageMatchesFolder, type MessageMembershipFields } from "@/lib/messages/list-membership";
 import {
 	clearMessageCountsCache,
 	clearMessageListCache,
@@ -59,7 +60,13 @@ type MessageListState = {
 type MessageListAction =
 	| { type: "loaded"; messages: Message[]; total: number; limit: number; offset: number }
 	| { type: "update"; updater: (messages: Message[]) => Message[] }
-	| { type: "removed"; ids: Set<string> };
+	| { type: "removed"; ids: Set<string> }
+	| { type: "restored"; rows: RestoredRow[] };
+
+function identityOf(message: Pick<Message, "id" | "threadId" | "threadMessageIds">): string {
+	// Ungrouped lists can show several messages from one thread as separate rows.
+	return message.threadMessageIds?.length && message.threadId ? `thread:${message.threadId}` : `id:${message.id}`;
+}
 
 /**
  * Drop removed ids from a row. A conversation row stays while it still has
@@ -82,6 +89,30 @@ function messageListReducer(state: MessageListState, action: MessageListAction):
 	}
 	if (action.type === "update") {
 		return { ...state, messages: action.updater(state.messages) };
+	}
+	if (action.type === "restored") {
+		const messages = [...state.messages];
+		let added = 0;
+		for (const entry of action.rows) {
+			const identity = identityOf(entry.row);
+			const existing = messages.findIndex((message) => identityOf(message) === identity);
+			if (existing >= 0) {
+				const current = messages[existing];
+				if (!current.threadMessageIds?.length || !entry.row.threadMessageIds?.length) continue;
+				const missing = entry.row.threadMessageIds.filter((id) => !current.threadMessageIds?.includes(id));
+				if (missing.length === 0) continue;
+				messages[existing] = {
+					...current,
+					threadMessageIds: [...current.threadMessageIds, ...missing],
+					threadCount: (current.threadCount ?? current.threadMessageIds.length) + missing.length,
+				};
+				continue;
+			}
+			messages.splice(Math.min(Math.max(0, entry.index), messages.length), 0, entry.row);
+			added += 1;
+		}
+		if (added === 0 && messages.every((message, index) => message === state.messages[index])) return state;
+		return { ...state, messages, total: state.total + added };
 	}
 	const messages = state.messages.flatMap((message) => {
 		const next = withoutRemovedIds(message, action.ids);
@@ -192,6 +223,7 @@ export function useMessages(
 		let cancelled = false;
 		let refreshTimer: number | null = null;
 		let requestNumber = 0;
+		const listKey = getListMembershipKey(getMessageQueryParams(folder, mailboxId, filters, folderId));
 		async function loadMessages(force = false, showLoading = false) {
 			const currentRequest = ++requestNumber;
 			if (showLoading) setIsLoading(true);
@@ -286,10 +318,37 @@ export function useMessages(
 			const detail = (event as CustomEvent<MessagesChangedDetail>).detail;
 			if (detail?.kind !== "removed" || !detail.messageIds?.length) return;
 			const ids = getRemovedMessageIds(detail, listRef.current.messages, folder, folderId, Date.now());
-			if (ids.size === 0) return;
+			if (ids.size === 0) {
+				// The optimistic prune already removed the row; the committed state
+				// still has to update its tombstone for an exact rollback.
+				if (detail.states?.length) updateRemovedRows(detail.states);
+				return;
+			}
+			if (!detail.realtime && detail.action !== "delete") {
+				const now = Date.now();
+				listRef.current.messages.forEach((message, index) => {
+					const members = message.threadMessageIds?.length ? message.threadMessageIds : [message.id];
+					const removedMembers = members.filter((id) => ids.has(id));
+					if (removedMembers.length > 0) {
+						rememberRemovedRow(listKey, message, removedMembers, index, listRef.current.offset, now);
+					}
+				});
+			}
+			if (detail.states?.length) updateRemovedRows(detail.states);
 			// A response that started before this mutation may still contain the row.
 			requestNumber += 1;
 			dispatch({ type: "removed", ids });
+		}
+		function patchRestoredState(event: Event) {
+			const detail = (event as CustomEvent<MessagesChangedDetail>).detail;
+			if (detail?.kind !== "restored") return;
+			const wanted = new Set(detail.messageIds ?? []);
+			const rows = getRestoredRowsForList(listKey, Date.now(), listRef.current.offset).filter((entry) => (
+				entry.eligible.some((id) => wanted.has(id))
+			));
+			if (rows.length === 0) return;
+			requestNumber += 1;
+			dispatch({ type: "restored", rows });
 		}
 		function onMessagesChanged(event: Event) {
 			const detail = (event as CustomEvent<{ kind?: string }>).detail;
@@ -314,6 +373,7 @@ export function useMessages(
 		window.addEventListener("mailflare:messages-changed", patchReadState);
 		window.addEventListener("mailflare:messages-changed", patchFieldState);
 		window.addEventListener("mailflare:messages-changed", patchRemovedState);
+		window.addEventListener("mailflare:messages-changed", patchRestoredState);
 
 		return () => {
 			cancelled = true;
@@ -322,6 +382,7 @@ export function useMessages(
 			window.removeEventListener("mailflare:messages-changed", patchReadState);
 			window.removeEventListener("mailflare:messages-changed", patchFieldState);
 			window.removeEventListener("mailflare:messages-changed", patchRemovedState);
+			window.removeEventListener("mailflare:messages-changed", patchRestoredState);
 			unsubscribePending();
 			if (refreshTimer) window.clearTimeout(refreshTimer);
 		};

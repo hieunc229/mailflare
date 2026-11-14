@@ -1,7 +1,7 @@
 "use client";
 
 import { authFetch } from "@/lib/auth/client";
-import { dispatchMessagesChanged, type MessageFieldPatch } from "@/lib/messages/change-events";
+import { dispatchMessagesChanged, type MessageFieldPatch, type MessageMembershipState } from "@/lib/messages/change-events";
 import { invalidateCachedMessageDetails, invalidateMessageDetailRequests, patchCachedMessageState, type CachedMessageStatePatch } from "@/lib/messages/detail-cache";
 import {
 	captureMessageFields,
@@ -18,9 +18,23 @@ import {
 	type PendingOverlayMessage,
 	type ThreadUnreadTarget,
 } from "@/lib/messages/field-store";
+import {
+	captureVisibleMembership,
+	clearMembershipOverlay,
+	clearRestoredRows,
+	forgetRemovedRows,
+	getKnownMembershipRow,
+	hasRemovedRow,
+	isGroupedMember,
+	markRemovedRowsRestored,
+	setMembershipOverlay,
+	updateRemovedRows,
+	type MembershipPatch,
+} from "@/lib/messages/membership-store";
+import type { MessageMembershipFields } from "@/lib/messages/list-membership";
 import { clearMessageListCache, invalidateMessageListRequests, patchMessageFieldsInCaches } from "@/hooks/utils";
 import { clearMessageThreadCache, invalidateMessageThreadRequests } from "@/components/messages/message-thread-cache";
-import { getChangedStateFields } from "./definitions";
+import { getChangedStateFields, getMessageActionPatch } from "./definitions";
 import {
 	MessageActionExecutor,
 	MessageActionRequestError,
@@ -38,6 +52,8 @@ import type {
 	MessageActionRequestOptions,
 	MessageActionResponse,
 	MessageActionTransportBody,
+	MessageStateSnapshot,
+	ReversibleMessageAction,
 	UndoMessageActionResponse,
 } from "./types";
 import type { UndoToastEntry } from "./undo-store";
@@ -113,6 +129,151 @@ function capturedFieldPatches(
 		if (entry.read !== undefined || entry.starred !== undefined) fields.push(entry);
 	}
 	return fields;
+}
+
+const MEMBERSHIP_ACTIONS = new Set<ReversibleMessageAction>([
+	"archive",
+	"trash",
+	"spam",
+	"inbox",
+	"folder",
+	"snooze",
+	"unsnooze",
+]);
+
+/** The server decides these from each message's direction, not the row alone. */
+const DIRECTION_DEPENDENT_ACTIONS = new Set<ReversibleMessageAction>(["spam", "snooze"]);
+
+function isMembershipAction(action: ReversibleMessageAction): boolean {
+	return MEMBERSHIP_ACTIONS.has(action);
+}
+
+function membershipPatchOf(patch: Partial<MessageStateSnapshot>): MembershipPatch {
+	const result: MembershipPatch = {};
+	if (patch.status !== undefined) result.status = patch.status;
+	if (patch.folderId !== undefined) result.folderId = patch.folderId;
+	if (patch.snoozedUntil !== undefined) result.snoozedUntil = patch.snoozedUntil;
+	return result;
+}
+
+function membershipStateOf(id: string, state: MessageStateSnapshot): MessageMembershipState {
+	return {
+		id,
+		status: state.status,
+		folderId: state.folderId,
+		snoozedUntil: state.snoozedUntil,
+		starred: state.starred,
+	};
+}
+
+/** Whether undoing this record would move a message between lists. */
+function recordChangesMembership(record: MessageActionRecord): boolean {
+	const changed = getChangedStateFields(record.previous, record.applied);
+	return changed.includes("status") || changed.includes("folderId") || changed.includes("snoozedUntil");
+}
+
+/** Only the membership fields this action actually changed. */
+function changedMembershipPatches(
+	records: MessageActionRecord[],
+	direction: "previous" | "applied",
+): Array<{ id: string } & MembershipPatch> {
+	const entries: Array<{ id: string } & MembershipPatch> = [];
+	for (const record of records) {
+		const changed = new Set(getChangedStateFields(record.previous, record.applied));
+		const entry: { id: string } & MembershipPatch = { id: record.id };
+		let any = false;
+		if (changed.has("status")) {
+			entry.status = record[direction].status;
+			any = true;
+		}
+		if (changed.has("folderId")) {
+			entry.folderId = record[direction].folderId;
+			any = true;
+		}
+		if (changed.has("snoozedUntil")) {
+			entry.snoozedUntil = record[direction].snoozedUntil;
+			any = true;
+		}
+		if (any) entries.push(entry);
+	}
+	return entries;
+}
+
+/**
+ * Targets for the pre-request overlay. Uniform actions are safe for every
+ * member; direction-dependent ones are skipped for grouped members, whose
+ * representative direction says nothing about its peers.
+ */
+function optimisticMembershipPatches(input: MessageActionInput): Array<{ id: string } & MembershipPatch> {
+	if (!isMembershipAction(input.action)) return [];
+	const entries: Array<{ id: string } & MembershipPatch> = [];
+	for (const id of input.messageIds) {
+		if (DIRECTION_DEPENDENT_ACTIONS.has(input.action) && isGroupedMember(id)) continue;
+		const row = getKnownMembershipRow(id);
+		if (!row) continue;
+		const result = getMessageActionPatch(
+			input.action,
+			input,
+			{ ...row, folderId: row.folderId ?? null, snoozedUntil: row.snoozedUntil ?? null },
+		);
+		if (!("patch" in result) || !result.patch) continue;
+		const patch = membershipPatchOf(result.patch);
+		if (Object.keys(patch).length > 0) entries.push({ id, ...patch });
+	}
+	return entries;
+}
+
+/**
+ * Rollback uses what was on screen before the undo, never the historical
+ * applied snapshot; a later action may already have changed the message.
+ */
+function capturedMembershipStates(
+	records: MessageActionRecord[],
+	captured: Map<string, MessageMembershipFields> | undefined,
+): MessageMembershipState[] {
+	if (!captured?.size) return [];
+	const states: MessageMembershipState[] = [];
+	for (const record of records) {
+		const current = captured.get(record.id);
+		if (!current) continue;
+		const changed = new Set(getChangedStateFields(record.previous, record.applied));
+		if (!changed.has("status") && !changed.has("folderId") && !changed.has("snoozedUntil")) continue;
+		states.push({ id: record.id, ...current });
+	}
+	return states;
+}
+
+function removeMembership(
+	states: MessageMembershipState[],
+	action?: ReversibleMessageAction,
+	localOnly = false,
+): void {
+	if (states.length === 0) return;
+	dispatchMessagesChanged({
+		kind: "removed",
+		...(action ? { action } : {}),
+		messageIds: states.map((state) => state.id),
+		states,
+		...(localOnly ? { localOnly: true } : {}),
+	});
+}
+
+/**
+ * Re-adds tombstoned rows. Ingress reads the restored intent until it is
+ * forgotten, so a remount or repeated peek cannot consume it once.
+ */
+function restoreMembership(
+	ids: string[],
+	options: { localOnly?: boolean; forget?: boolean } = {},
+): void {
+	if (!ids.some(hasRemovedRow)) return;
+	markRemovedRowsRestored(ids);
+	dispatchMessagesChanged({
+		kind: "restored",
+		messageIds: ids,
+		...(options.localOnly !== false ? { localOnly: true } : {}),
+	});
+	if (options.forget !== false) forgetRemovedRows(ids);
 }
 
 function dispatchFieldChanges(fields: MessageFieldPatch[], threadTargets: ThreadUnreadTarget[]): void {
@@ -257,26 +418,46 @@ function invalidateUncertainState(messageIds: string[]) {
 }
 
 export const defaultMessageActionHooks: MessageActionExecutorHooks = {
+	onApplyOptimistic(input, _options, context) {
+		if (!isMembershipAction(input.action)) return;
+		const owner = context?.pendingOwner ?? DEFAULT_PENDING_OWNER;
+		// A newer membership action supersedes an older undo for the same rows.
+		forgetRemovedRows(input.messageIds);
+		const patches = optimisticMembershipPatches(input);
+		if (patches.length > 0) setMembershipOverlay(owner, patches);
+		dispatchMessagesChanged({
+			kind: "removed",
+			action: input.action,
+			messageIds: input.messageIds,
+			folderId: input.folderId ?? null,
+			snoozedUntil: input.snoozedUntil ?? null,
+			localOnly: true,
+		});
+	},
 	onApplied(response: MessageActionResponse, _options: MessageActionHookOptions, context?: MessageActionHookContext) {
-		clearPendingOverlay(context?.pendingOwner ?? DEFAULT_PENDING_OWNER);
+		const owner = context?.pendingOwner ?? DEFAULT_PENDING_OWNER;
+		clearPendingOverlay(owner);
 		const changed = getChangedRecords(response.applied);
-		if (changed.length === 0) return;
-		applyFieldChanges(changedFieldPatches(changed, "applied"));
-		rememberDetailState(changed, "applied");
+		if (changed.length > 0) {
+			applyFieldChanges(changedFieldPatches(changed, "applied"));
+			rememberDetailState(changed, "applied");
+		}
 		const membership = changed.filter(hasMembershipChange);
-		if (membership.length > 0) {
-			// The server confirmed the move. Notify every mounted list even when
-			// the toast is suppressed, so the row does not wait for a refetch.
-			dispatchMessagesChanged({
-				kind: "removed",
-				action: response.action,
-				messageIds: membership.map((record) => record.id),
-				states: membership.map((record) => ({ id: record.id, ...record.applied })),
-			});
+		const states = membership.map((record) => membershipStateOf(record.id, record.applied));
+		// Commit before clearing the overlay so an unpruned row cannot flash.
+		removeMembership(states, response.action);
+		updateRemovedRows(states);
+		clearMembershipOverlay(owner);
+		// A read/star skip must not resurrect an unrelated move tombstone.
+		if (isMembershipAction(response.action)) {
+			restoreMembership(response.skipped.map((item) => item.id));
 		}
 	},
 	onApplyFailed(input, _options, context, error) {
-		clearPendingOverlay(context?.pendingOwner ?? DEFAULT_PENDING_OWNER);
+		const owner = context?.pendingOwner ?? DEFAULT_PENDING_OWNER;
+		clearPendingOverlay(owner);
+		clearMembershipOverlay(owner);
+		if (isMembershipAction(input.action)) restoreMembership(input.messageIds);
 		if (!isUncertainActionFailure(error)) return;
 		invalidateUncertainState(input.messageIds);
 		dispatchMessagesChanged();
@@ -284,11 +465,18 @@ export const defaultMessageActionHooks: MessageActionExecutorHooks = {
 	onUndoOptimistic(records, _captured, context) {
 		const owner = context?.pendingOwner ?? DEFAULT_PENDING_OWNER;
 		const fields = changedFieldPatches(records, "previous");
-		if (fields.length === 0) return;
-		// Patch caches, then overlay the same values on every ingress while pending.
-		const targets = patchMessageFieldsInCaches(fields);
-		setPendingOverlay(owner, { messages: fields, threads: targets });
-		dispatchFieldChanges(fields, targets);
+		if (fields.length > 0) {
+			// Patch caches, then overlay the same values on every ingress while pending.
+			const targets = patchMessageFieldsInCaches(fields);
+			setPendingOverlay(owner, { messages: fields, threads: targets });
+			dispatchFieldChanges(fields, targets);
+		}
+		const membership = changedMembershipPatches(records, "previous");
+		if (membership.length > 0) {
+			setMembershipOverlay(owner, membership);
+			rememberDetailState(records, "previous");
+			restoreMembership(membership.map((entry) => entry.id), { forget: false });
+		}
 	},
 	onUndoCompleted(records, response, captured, context) {
 		// Skipped records return to the pre-click screen, not an older applied snapshot.
@@ -299,19 +487,35 @@ export const defaultMessageActionHooks: MessageActionExecutorHooks = {
 		const skippedRecords = records.filter((record) => skipped.has(record.id));
 		const unaccounted = records.filter((record) => !restored.has(record.id) && !skipped.has(record.id));
 		const rollback = [...skippedRecords, ...unaccounted];
+		const membershipRecords = records.filter(recordChangesMembership);
+		const membershipRestored = restoredRecords.filter(recordChangesMembership).map((record) => record.id);
 		// Commit the settled aggregate before dropping the owner, since a later
 		// resync may clear every cached row before the next undo starts.
 		const settledTargets = commitSettledTargets(owner, records, restoredRecords, rollback, captured, context?.capturedThreadUnread);
 		clearPendingOverlay(owner);
+		clearMembershipOverlay(owner);
+		clearRestoredRows(membershipRecords.map((record) => record.id));
+		if (membershipRestored.length > 0) forgetRemovedRows(membershipRestored);
 		rememberDetailState(restoredRecords, "previous");
 		// A mixed result keeps restored members; only skipped transitions roll back.
 		restoreCaptured(rollback, captured, settledTargets);
+		const rollbackStates = capturedMembershipStates(rollback, context?.capturedMembership);
+		removeMembership(rollbackStates, response.action, true);
+		updateRemovedRows(rollbackStates);
 		invalidateCachedMessageDetails(rollback.map((record) => record.id));
 		invalidatePendingResponses(records.map((record) => record.id));
 	},
 	onUndoFailed(records, captured, context, error) {
 		const owner = context?.pendingOwner ?? DEFAULT_PENDING_OWNER;
 		const ids = records.map((record) => record.id);
+		const membershipRecords = records.filter(recordChangesMembership);
+		const rollbackStates = capturedMembershipStates(records, context?.capturedMembership);
+		clearMembershipOverlay(owner);
+		clearRestoredRows(membershipRecords.map((record) => record.id));
+		// Keep the tombstones. A retry after navigating away from the source list
+		// must still be able to restore the row instantly when the list returns.
+		removeMembership(rollbackStates, undefined, true);
+		updateRemovedRows(rollbackStates);
 		if (isUncertainActionFailure(error)) {
 			clearPendingOverlay(owner);
 			// The undo may have committed; let the resync fetch decide.
@@ -331,6 +535,7 @@ export const defaultMessageActionHooks: MessageActionExecutorHooks = {
 	},
 	captureCurrent: captureMessageFields,
 	captureThreadUnread,
+	captureMembership: captureVisibleMembership,
 };
 
 export const messageActionExecutor = new MessageActionExecutor(sendMessageAction as MessageActionTransport, defaultMessageActionHooks);

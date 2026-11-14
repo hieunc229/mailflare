@@ -66,3 +66,14 @@ export function getListMembershipContext(
 	if (status === "archived" || status === "trash" || status === "spam") return { folder: status };
 	return null;
 }
+
+/**
+ * Tombstones survive pagination: a row moved from page 2 should return to the
+ * same list even if backfill changed the offset before the undo completes.
+ */
+export function getListMembershipKey(params: URLSearchParams | string): string {
+	const search = new URLSearchParams(typeof params === "string" ? params : params.toString());
+	search.delete("offset");
+	search.delete("limit");
+	return search.toString();
+}

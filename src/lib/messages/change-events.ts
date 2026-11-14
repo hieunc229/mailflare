@@ -1,5 +1,6 @@
 import type { ThreadUnreadTarget } from "./field-store";
-import type { MessageStateSnapshot, ReversibleMessageAction } from "./actions/types";
+import type { MessageMembershipFields } from "./list-membership";
+import type { ReversibleMessageAction } from "./actions/types";
 
 export const MESSAGES_CHANGED_EVENT = "mailflare:messages-changed";
 
@@ -9,8 +10,8 @@ export type MessageFieldPatch = {
 	starred?: boolean;
 };
 
-/** Authoritative state after the server applied a membership change. */
-export type MessageMembershipState = MessageStateSnapshot & {
+/** Authoritative membership state after the server applied a change. */
+export type MessageMembershipState = MessageMembershipFields & {
 	id: string;
 };
 
@@ -37,6 +38,8 @@ export type MessagesChangedDetail = {
 	states?: MessageMembershipState[];
 	/** Optimistic facts stay in this tab; other tabs wait for the committed event. */
 	localOnly?: boolean;
+	/** Set by the realtime channel on events that did not originate in this tab. */
+	realtime?: boolean;
 };
 
 export function dispatchMessagesChanged(detail?: MessagesChangedDetail): void {
