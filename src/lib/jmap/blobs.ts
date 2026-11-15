@@ -8,6 +8,8 @@ import { listAccessibleMailboxIdSet } from "./access";
 import type { JmapContext } from "./types";
 
 const UPLOAD_PREFIX = "jmap-uploads";
+/** Ids `storeUpload` hands out (`newId("upl")`). Anything else, such as `../` segments, could reach keys outside the user's prefix. */
+const UPLOAD_ID = /^upl_[\w-]+$/;
 
 /** Uploads are namespaced by user, so only the account that stored one can read it. */
 function uploadKey(ctx: JmapContext, uploadId: string): string {
@@ -26,6 +28,7 @@ export async function storeUpload(ctx: JmapContext, body: ArrayBuffer, type: str
 }
 
 export async function readUpload(ctx: JmapContext, uploadId: string) {
+	if (!UPLOAD_ID.test(uploadId)) return null;
 	const object = await ctx.env.BUCKET.get(uploadKey(ctx, uploadId));
 	if (!object) return null;
 	return { content: await object.arrayBuffer(), type: object.httpMetadata?.contentType ?? "application/octet-stream", name: object.customMetadata?.name ?? null };
@@ -33,6 +36,7 @@ export async function readUpload(ctx: JmapContext, uploadId: string) {
 
 /** Drop an upload once a message owns its bytes. */
 export async function deleteUpload(ctx: JmapContext, uploadId: string): Promise<void> {
+	if (!UPLOAD_ID.test(uploadId)) return;
 	await ctx.env.BUCKET.delete(uploadKey(ctx, uploadId));
 }
 
