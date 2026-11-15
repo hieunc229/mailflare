@@ -49,6 +49,11 @@ export function isPermanentImapError(message: string): boolean {
 	return /login|auth|credential|not allowed|unreadable|no longer exists/i.test(message);
 }
 
+/** The server refused or dropped the connection, as opposed to failing on the messages themselves. */
+export function isImapConnectionError(message: string): boolean {
+	return /stream was cancelled|connection closed unexpectedly|did not send an OK greeting|connection (?:reset|refused)|timed? ?out/i.test(message);
+}
+
 /** A folder the server says does not exist or cannot be selected, such as Gmail's `[Gmail]` parent. */
 export function isMissingImapFolderError(message: string): boolean {
 	return /NONEXISTENT|unknown mailbox|mailbox (?:does not|doesn't) exist|nonexistent namespace|NOSELECT/i.test(message);

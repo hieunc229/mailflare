@@ -4,7 +4,7 @@ import { importJobs, mailboxes } from "@/db/schema";
 import { newId } from "@/lib/ids";
 import { getImportMessageUserId, parseImportDestination } from "./destination";
 import { fetchImapMessages } from "./imap";
-import { getImapChunkSize, growImapChunkSize, isMissingImapFolderError, isPermanentImapError } from "./imap-utils";
+import { getImapChunkSize, growImapChunkSize, isImapConnectionError, isMissingImapFolderError, isPermanentImapError } from "./imap-utils";
 import { deleteStagedImport, importBatchKey, stageImportMessages, unpackImportMessages } from "./staging";
 import { importMessagesToMailbox } from "./service";
 import type {
@@ -24,6 +24,7 @@ const MAX_STORED_ERRORS = 20;
 const IMAP_CHUNK_SIZE = 50;
 /** Consecutive failed IMAP chunks, each retried smaller, before the job gives up. */
 const MAX_IMAP_FAILURES = 4;
+const MAX_IMAP_CONNECTION_FAILURES = 10;
 const STALE_AFTER_MS = 30 * 60 * 1000;
 const KEEP_FINISHED_MS = 7 * 24 * 60 * 60 * 1000;
 
@@ -46,8 +47,8 @@ function parseJson<T>(value: string, fallback: T): T {
 	}
 }
 
-async function enqueue(env: CloudflareEnv, message: ImportJobMessage): Promise<void> {
-	await env.OUTBOUND_QUEUE.send(message);
+async function enqueue(env: CloudflareEnv, message: ImportJobMessage, delaySeconds?: number): Promise<void> {
+	await env.OUTBOUND_QUEUE.send(message, delaySeconds ? { delaySeconds } : undefined);
 }
 
 export function toImportJobSummary(row: JobRow): ImportJobSummary {
@@ -295,16 +296,20 @@ async function retryImapChunkSmaller(
 	if (isPermanentImapError(reason)) return false;
 	const cursor = parseJson<ImapImportCursor>(job.cursor, { source: 0, done: 0, counted: false });
 	const failures = (cursor.failures ?? 0) + 1;
-	if (failures >= MAX_IMAP_FAILURES) return false;
+	// A refused or dropped connection says nothing about the batch: hosts such as cPanel throttle repeated
+	// logins, so back off and keep the size rather than shrinking it and hammering the server again at once.
+	const refused = isImapConnectionError(reason);
+	if (failures >= (refused ? MAX_IMAP_CONNECTION_FAILURES : MAX_IMAP_FAILURES)) return false;
 	const spec = parseJson<ImapImportSpec | null>(job.spec, null);
 	const base = spec ? imapBaseChunkSize(spec, cursor) : IMAP_CHUNK_SIZE;
-	const next: ImapImportCursor = { ...cursor, failures, size: Math.max(1, Math.floor(getImapChunkSize(base, cursor.size) / 2)) };
+	const size = refused ? cursor.size : Math.max(1, Math.floor(getImapChunkSize(base, cursor.size) / 2));
+	const next: ImapImportCursor = { ...cursor, failures, size };
 	const recorded = await getDb(env)
 		.update(importJobs)
 		.set({ cursor: JSON.stringify(next), updatedAt: new Date() })
 		.where(and(eq(importJobs.id, job.id), inArray(importJobs.status, [...ACTIVE])))
 		.returning({ id: importJobs.id });
-	if (recorded.length) await enqueue(env, message);
+	if (recorded.length) await enqueue(env, message, refused ? Math.min(60 * failures, 600) : undefined);
 	return true;
 }
 
