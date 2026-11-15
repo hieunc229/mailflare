@@ -172,6 +172,11 @@ export async function DELETE(request: Request) {
 		return NextResponse.json({ error: "Mailbox not found" }, { status: 404 });
 	}
 
+	// The owner's own address carries their account avatar; only they may remove it, as PATCH requires.
+	const account = await getPersonalIdentityForAddress(db, access.mailbox.userId, email);
+	if (account && account.userId !== user.id) {
+		return NextResponse.json({ error: "Only the account owner can change this contact" }, { status: 403 });
+	}
 	const existing = await getContactByEmail(db, access.mailbox.userId, email);
 	if (existing?.avatarKey) {
 		await deleteAvatarImages(env.BUCKET, existing.avatarKey);
