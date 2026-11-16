@@ -2511,5 +2511,10 @@
 	"actions.unsubscribeDeleteAll": "إلغاء الاشتراك وحذف الكل",
 	"actions.unsubscribeDeleteConfirm": "نقل {count} من الرسائل القديمة لهذا المرسل إلى سلة المهملات؟",
 	"actions.unsubscribeTrashDone": "تم إلغاء الاشتراك ونُقل {count} رسالة إلى سلة المهملات",
-	"attachment.downloadAllFlagged": "بعض المرفقات معلَّمة بأنها قد تكون خطيرة. هل تريد تنزيل الأرشيف على أي حال؟"
+	"attachment.downloadAllFlagged": "بعض المرفقات معلَّمة بأنها قد تكون خطيرة. هل تريد تنزيل الأرشيف على أي حال؟",
+	"account.apps": "التطبيقات",
+	"account.openApps": "فتح قائمة التطبيقات",
+	"account.signOutAccountConfirm": "تسجيل خروج {name} ({email})؟ ستحتاج إلى تسجيل الدخول مرة أخرى لاستخدام هذا الحساب.",
+	"invite.acceptedLabel": "تم القبول",
+	"invite.declinedLabel": "تم الرفض"
 }

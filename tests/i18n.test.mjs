@@ -140,9 +140,13 @@ test("provider server rendering uses initial locale and labels the native langua
 	const pt = await i18n.renderLanguage("pt-BR");
 	assert.match(pt, /<span>Entrada<\/span>/);
 	assert.match(pt, /<label for="[^"]+"[^>]*>Idioma<\/label>/);
-	assert.match(pt, /<select id="[^"]+"/);
-	assert.match(pt, /value="pt-BR" lang="pt-BR" selected=""/);
-	assert.match(await i18n.renderLanguage("en"), /value="en" lang="en" selected=""/);
+	// The selector is a Radix Select: SSR renders a combobox button carrying the label's id, and options only when open.
+	assert.match(pt, /<button[^>]*role="combobox"[^>]*id="[^"]+"/);
+	const labelFor = pt.match(/<label for="([^"]+)"/)?.[1];
+	assert.ok(labelFor && pt.includes(`id="${labelFor}"`), "label must target the combobox");
+	// Options are built from these two registry exports in language-selector.tsx.
+	for (const code of Object.keys(i18n.locales)) assert.ok(i18n.supportedLocales.includes(code), `${code} is listed in the selector`);
+	assert.equal(i18n.locales["pt-BR"].label, "Português (Brasil)");
 });
 
 test("root layout passes the same cookie locale to HTML and provider on first render", async () => {
@@ -169,7 +173,8 @@ test("a locale registered once reaches resolution, translation, cookie, selector
 	assert.equal(extended.translate(await extended.loadMessages("he"), "navigation.inbox"), "Entrada");
 	assert.match(extended.serializeLocaleCookie("he", true), /^mailflare-locale=he;/);
 	const selector = await extended.renderLanguage("he");
-	assert.match(selector, /value="he" lang="he" selected="">Testlandic<\/option>/);
+	assert.ok(extended.supportedLocales.includes("he"));
+	assert.equal(extended.locales.he.label, "Testlandic");
 	assert.match(selector, />Entrada<\/span>/);
 	const layout = await extended.renderLayout("he");
 	assert.match(layout, /<html lang="he"/);

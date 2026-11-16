@@ -2451,5 +2451,10 @@
 	"actions.unsubscribeDeleteAll": "දායකත්වය අවලංගු කර සියල්ල මකන්න",
 	"actions.unsubscribeDeleteConfirm": "මෙම යවන්නාගේ පැරණි විද්‍යුත් තැපෑල {count} කුණු කූඩයට ගෙනයාමටද?",
 	"actions.unsubscribeTrashDone": "දායකත්වය අවලංගුයි; විද්‍යුත් තැපෑල {count} කුණු කූඩයට ගියේය",
-	"attachment.downloadAllFlagged": "සමහර ඇමුණුම් අන්තරායන්හි ලෙස සලකුණු කර ඇත. තවදුරටත් සංරක්ෂණාගාරය බාගන්නවාද?"
+	"attachment.downloadAllFlagged": "සමහර ඇමුණුම් අන්තරායන්හි ලෙස සලකුණු කර ඇත. තවදුරටත් සංරක්ෂණාගාරය බාගන්නවාද?",
+	"account.apps": "යෙදුම්",
+	"account.openApps": "යෙදුම් මෙනුව විවෘත කරන්න",
+	"account.signOutAccountConfirm": "{name} ({email}) ඉවත් කරන්නද? මෙම ගිණුම භාවිත කිරීමට ඔබට නැවත පිවිසීමට සිදුවේ.",
+	"invite.acceptedLabel": "පිළිගත්තා",
+	"invite.declinedLabel": "ප්‍රතික්ෂේප කළා"
 }

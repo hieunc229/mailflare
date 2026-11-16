@@ -92,8 +92,6 @@ async function githubRequest<T>(
     },
   });
 
-  console.log(`[gg]`, `${GITHUB_API_URL}${path}`);
-
   if (response.statusText === "Forbidden") {
     return {
       response,

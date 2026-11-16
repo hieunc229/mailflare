@@ -2447,5 +2447,10 @@
 	"actions.unsubscribeDeleteAll": "ยกเลิกการสมัครรับและลบทั้งหมด",
 	"actions.unsubscribeDeleteConfirm": "ย้ายอีเมลเดิม {count} ฉบับจากผู้ส่งรายนี้ไปถังขยะ?",
 	"actions.unsubscribeTrashDone": "ยกเลิกการสมัครรับแล้ว ย้าย {count} ฉบับไปถังขยะ",
-	"attachment.downloadAllFlagged": "ไฟล์แนบบางไฟล์ถูกตั้งค่าสถานะว่าอาจเป็นอันตราย ดาวน์โหลดไฟล์เก็บถาวรต่อไหม"
+	"attachment.downloadAllFlagged": "ไฟล์แนบบางไฟล์ถูกตั้งค่าสถานะว่าอาจเป็นอันตราย ดาวน์โหลดไฟล์เก็บถาวรต่อไหม",
+	"account.apps": "แอป",
+	"account.openApps": "เปิดเมนูแอป",
+	"account.signOutAccountConfirm": "ออกจากระบบ {name} ({email}) หรือไม่ คุณต้องลงชื่อเข้าใช้อีกครั้งเพื่อใช้บัญชีนี้",
+	"invite.acceptedLabel": "ตอบรับแล้ว",
+	"invite.declinedLabel": "ปฏิเสธแล้ว"
 }

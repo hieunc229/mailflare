@@ -2433,5 +2433,10 @@
 	"actions.unsubscribeDeleteAll": "Berhenti berlangganan & hapus semua",
 	"actions.unsubscribeDeleteConfirm": "Pindahkan {count} email lama dari pengirim ini ke Sampah?",
 	"actions.unsubscribeTrashDone": "Berhenti berlangganan; {count} email dipindahkan ke Sampah",
-	"attachment.downloadAllFlagged": "Beberapa lampiran ditandai berpotensi berbahaya. Tetap unduh arsip?"
+	"attachment.downloadAllFlagged": "Beberapa lampiran ditandai berpotensi berbahaya. Tetap unduh arsip?",
+	"account.apps": "Aplikasi",
+	"account.openApps": "Buka menu aplikasi",
+	"account.signOutAccountConfirm": "Keluar dari {name} ({email})? Anda harus masuk lagi untuk menggunakan akun ini.",
+	"invite.acceptedLabel": "Diterima",
+	"invite.declinedLabel": "Ditolak"
 }

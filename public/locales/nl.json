@@ -2451,5 +2451,10 @@
 	"actions.unsubscribeDeleteAll": "Afmelden & alles verwijderen",
 	"actions.unsubscribeDeleteConfirm": "{count} eerdere e-mails van deze afzender naar de prullenbak verplaatsen?",
 	"actions.unsubscribeTrashDone": "Afgemeld en {count} e-mails naar de prullenbak verplaatst",
-	"attachment.downloadAllFlagged": "Sommige bijlagen zijn gemarkeerd als mogelijk gevaarlijk. Het archief toch downloaden?"
+	"attachment.downloadAllFlagged": "Sommige bijlagen zijn gemarkeerd als mogelijk gevaarlijk. Het archief toch downloaden?",
+	"account.apps": "Apps",
+	"account.openApps": "App-menu openen",
+	"account.signOutAccountConfirm": "{name} ({email}) afmelden? Je moet opnieuw inloggen om dit account te gebruiken.",
+	"invite.acceptedLabel": "Geaccepteerd",
+	"invite.declinedLabel": "Afgewezen"
 }

@@ -2451,5 +2451,10 @@
 	"actions.unsubscribeDeleteAll": "ਸਬਸਕ੍ਰਿਪਸ਼ਨ ਰੱਦ ਕਰੋ ਅਤੇ ਸਭ ਮਿਟਾਓ",
 	"actions.unsubscribeDeleteConfirm": "ਇਸ ਭੇਜਣ ਵਾਲੇ ਦੇ {count} ਪੁਰਾਣੇ ਈਮੇਲ ਟ੍ਰੈਸ਼ ਵਿੱਚ ਭੇਜੀਏ?",
 	"actions.unsubscribeTrashDone": "ਸਬਸਕ੍ਰਿਪਸ਼ਨ ਰੱਦ; {count} ਈਮੇਲ ਟ੍ਰੈਸ਼ ਵਿੱਚ ਭੇਜੇ ਗਏ",
-	"attachment.downloadAllFlagged": "ਕੁਝ ਅਟੈਚਮੈਂਟ ਸੰਭਾਵੀ ਖ਼ਤਰਨਾਕ ਵਜੋਂ ਨਿਸ਼ਾਨਾਬੱਧ ਹਨ। ਫਿਰ ਵੀ ਆਰਕਾਈਵ ਡਾਊਨਲੋਡ ਕਰੀਏ?"
+	"attachment.downloadAllFlagged": "ਕੁਝ ਅਟੈਚਮੈਂਟ ਸੰਭਾਵੀ ਖ਼ਤਰਨਾਕ ਵਜੋਂ ਨਿਸ਼ਾਨਾਬੱਧ ਹਨ। ਫਿਰ ਵੀ ਆਰਕਾਈਵ ਡਾਊਨਲੋਡ ਕਰੀਏ?",
+	"account.apps": "ਐਪਸ",
+	"account.openApps": "ਐਪਸ ਮੀਨੂ ਖੋਲ੍ਹੋ",
+	"account.signOutAccountConfirm": "{name} ({email}) ਨੂੰ ਸਾਈਨ ਆਉਟ ਕਰਨਾ ਹੈ? ਇਸ ਖਾਤੇ ਦੀ ਵਰਤੋਂ ਕਰਨ ਲਈ ਤੁਹਾਨੂੰ ਦੁਬਾਰਾ ਸਾਈਨ ਇਨ ਕਰਨਾ ਪਵੇਗਾ।",
+	"invite.acceptedLabel": "ਸਵੀਕਾਰ ਕੀਤਾ",
+	"invite.declinedLabel": "ਰੱਦ ਕੀਤਾ"
 }

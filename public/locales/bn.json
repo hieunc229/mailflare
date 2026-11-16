@@ -2451,5 +2451,10 @@
 	"actions.unsubscribeDeleteAll": "সাবস্ক্রিপশন বাতিল ও সব মুছুন",
 	"actions.unsubscribeDeleteConfirm": "এই প্রেরকের {count}টি পুরনো ইমেইল ট্র্যাশে নেবেন?",
 	"actions.unsubscribeTrashDone": "সাবস্ক্রিপশন বাতিল; {count}টি ইমেইল ট্র্যাশে গেছে",
-	"attachment.downloadAllFlagged": "কিছু সংযুক্তি সম্ভাব্য বিপজ্জনক হিসেবে চিহ্নিত। তবুও আর্কাইভ ডাউনলোড করবেন?"
+	"attachment.downloadAllFlagged": "কিছু সংযুক্তি সম্ভাব্য বিপজ্জনক হিসেবে চিহ্নিত। তবুও আর্কাইভ ডাউনলোড করবেন?",
+	"account.apps": "অ্যাপ",
+	"account.openApps": "অ্যাপ মেনু খুলুন",
+	"account.signOutAccountConfirm": "{name} ({email}) সাইন আউট করবেন? এই অ্যাকাউন্ট ব্যবহার করতে আপনাকে আবার সাইন ইন করতে হবে।",
+	"invite.acceptedLabel": "গৃহীত",
+	"invite.declinedLabel": "প্রত্যাখ্যাত"
 }

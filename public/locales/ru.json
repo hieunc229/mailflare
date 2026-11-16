@@ -2481,5 +2481,10 @@
 	"actions.unsubscribeDeleteAll": "Отписаться и удалить всё",
 	"actions.unsubscribeDeleteConfirm": "Переместить {count} писем от этого отправителя в корзину?",
 	"actions.unsubscribeTrashDone": "Отписано; {count} писем перемещено в корзину",
-	"attachment.downloadAllFlagged": "Некоторые вложения помечены как потенциально опасные. Всё равно скачать архив?"
+	"attachment.downloadAllFlagged": "Некоторые вложения помечены как потенциально опасные. Всё равно скачать архив?",
+	"account.apps": "Приложения",
+	"account.openApps": "Открыть меню приложений",
+	"account.signOutAccountConfirm": "Выйти из аккаунта {name} ({email})? Чтобы пользоваться им, потребуется снова войти.",
+	"invite.acceptedLabel": "Принято",
+	"invite.declinedLabel": "Отклонено"
 }

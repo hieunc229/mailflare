@@ -2466,5 +2466,10 @@
 	"actions.unsubscribeDeleteAll": "Annulla iscrizione ed elimina tutto",
 	"actions.unsubscribeDeleteConfirm": "Spostare {count} email precedenti di questo mittente nel Cestino?",
 	"actions.unsubscribeTrashDone": "Iscrizione annullata; {count} email spostate nel Cestino",
-	"attachment.downloadAllFlagged": "Alcuni allegati sono segnalati come potenzialmente pericolosi. Scaricare comunque l'archivio?"
+	"attachment.downloadAllFlagged": "Alcuni allegati sono segnalati come potenzialmente pericolosi. Scaricare comunque l'archivio?",
+	"account.apps": "App",
+	"account.openApps": "Apri il menu delle app",
+	"account.signOutAccountConfirm": "Disconnettere {name} ({email})? Dovrai accedere di nuovo per usare questo account.",
+	"invite.acceptedLabel": "Accettato",
+	"invite.declinedLabel": "Rifiutato"
 }

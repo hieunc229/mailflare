@@ -2451,5 +2451,10 @@
 	"actions.unsubscribeDeleteAll": "ಚಂದಾದಾರಿಕೆ ರದ್ದು ಮತ್ತು ಎಲ್ಲಾ ಅಳಿಸಿ",
 	"actions.unsubscribeDeleteConfirm": "ಈ ಕಳುಹಿಸುವವರ {count} ಹಳೆಯ ಇಮెයిల್‌ಗಳನ್ನು ಟ್ರ್ಯಾಶ್‌ಗೆ ಸರಿಸಬೇಕೆ?",
 	"actions.unsubscribeTrashDone": "ಚಂದಾದಾರಿಕೆ ರದ್ದಾಯಿತು; {count} ಇಮೆಯಿಲ್‌ಗಳು ಟ್ರ್ಯಾಶ್‌ಗೆ ಹೋದವು",
-	"attachment.downloadAllFlagged": "ಕೆಲವು ಲಗತ್ತುಗಳು ಸಂಭಾವ್ಯ ಅಪಾಯಕಾರಿ ಎಂದು ಗುರುತಿಸಲಾಗಿವೆ. ಹೇಗೂ ಆರ್ಕೈವ್ ಡೌನ್‌ಲೋಡ್ ಮಾಡಬೇಕೆ?"
+	"attachment.downloadAllFlagged": "ಕೆಲವು ಲಗತ್ತುಗಳು ಸಂಭಾವ್ಯ ಅಪಾಯಕಾರಿ ಎಂದು ಗುರುತಿಸಲಾಗಿವೆ. ಹೇಗೂ ಆರ್ಕೈವ್ ಡೌನ್‌ಲೋಡ್ ಮಾಡಬೇಕೆ?",
+	"account.apps": "ಆ್ಯಪ್‌ಗಳು",
+	"account.openApps": "ಆ್ಯಪ್‌ಗಳ ಮೆನು ತೆರೆಯಿರಿ",
+	"account.signOutAccountConfirm": "{name} ({email}) ಸೈನ್ ಔಟ್ ಮಾಡಬೇಕೇ? ಈ ಖಾತೆಯನ್ನು ಬಳಸಲು ನೀವು ಮತ್ತೆ ಸೈನ್ ಇನ್ ಮಾಡಬೇಕಾಗುತ್ತದೆ.",
+	"invite.acceptedLabel": "ಸ್ವೀಕರಿಸಲಾಗಿದೆ",
+	"invite.declinedLabel": "ತಿರಸ್ಕರಿಸಲಾಗಿದೆ"
 }

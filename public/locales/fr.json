@@ -2466,5 +2466,10 @@
 	"actions.unsubscribeDeleteAll": "Se désabonner et tout supprimer",
 	"actions.unsubscribeDeleteConfirm": "Déplacer {count} anciens e-mails de cet expéditeur dans la corbeille ?",
 	"actions.unsubscribeTrashDone": "Désabonné, {count} e-mails placés dans la corbeille",
-	"attachment.downloadAllFlagged": "Certaines pièces jointes sont signalées comme potentiellement dangereuses. Télécharger l'archive quand même ?"
+	"attachment.downloadAllFlagged": "Certaines pièces jointes sont signalées comme potentiellement dangereuses. Télécharger l'archive quand même ?",
+	"account.apps": "Applications",
+	"account.openApps": "Ouvrir le menu des applications",
+	"account.signOutAccountConfirm": "Déconnecter {name} ({email}) ? Vous devrez vous reconnecter pour utiliser ce compte.",
+	"invite.acceptedLabel": "Acceptée",
+	"invite.declinedLabel": "Refusée"
 }

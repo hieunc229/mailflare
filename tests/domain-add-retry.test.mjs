@@ -62,7 +62,7 @@ function createMockFetch(responses) {
 	return { fetchMock, calls };
 }
 
-test("confirmMxReplacement returns true for 409 MX_RECORDS_CONFLICT when confirmed", () => {
+test("confirmMxReplacement returns true for 409 MX_RECORDS_CONFLICT when confirmed", async () => {
 	let prompt = null;
 	globalThis.window = {
 		confirm(message) {
@@ -75,7 +75,7 @@ test("confirmMxReplacement returns true for 409 MX_RECORDS_CONFLICT when confirm
 		code: "MX_RECORDS_CONFLICT",
 		error: "Existing MX records currently deliver mail to another provider. Continue to delete them and replace them with Cloudflare Email Routing.",
 	};
-	const result = confirmMxReplacement(res, data);
+	const result = await confirmMxReplacement(res, data);
 	assert.equal(result, true);
 	assert.equal(
 		prompt,

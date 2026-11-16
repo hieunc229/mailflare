@@ -2433,5 +2433,10 @@
 	"actions.unsubscribeDeleteAll": "Hủy đăng ký & xóa tất cả",
 	"actions.unsubscribeDeleteConfirm": "Chuyển {count} email cũ của người gửi này vào Thùng rác?",
 	"actions.unsubscribeTrashDone": "Đã hủy đăng ký; {count} email đã chuyển vào Thùng rác",
-	"attachment.downloadAllFlagged": "Một số tệp đính kèm bị gắn cờ là có khả năng nguy hiểm. Vẫn tải xuống tệp nén?"
+	"attachment.downloadAllFlagged": "Một số tệp đính kèm bị gắn cờ là có khả năng nguy hiểm. Vẫn tải xuống tệp nén?",
+	"account.apps": "Ứng dụng",
+	"account.openApps": "Mở menu ứng dụng",
+	"account.signOutAccountConfirm": "Đăng xuất {name} ({email})? Bạn sẽ cần đăng nhập lại để dùng tài khoản này.",
+	"invite.acceptedLabel": "Đã chấp nhận",
+	"invite.declinedLabel": "Đã từ chối"
 }

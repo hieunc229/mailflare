@@ -2466,5 +2466,10 @@
 	"actions.unsubscribeDeleteAll": "Cancelar inscrição e apagar tudo",
 	"actions.unsubscribeDeleteConfirm": "Mover {count} e-mails antigos deste remetente para a Lixeira?",
 	"actions.unsubscribeTrashDone": "Inscrição cancelada; {count} e-mails movidos para a Lixeira",
-	"attachment.downloadAllFlagged": "Alguns anexos estão marcados como potencialmente perigosos. Baixar o arquivo mesmo assim?"
+	"attachment.downloadAllFlagged": "Alguns anexos estão marcados como potencialmente perigosos. Baixar o arquivo mesmo assim?",
+	"account.apps": "Apps",
+	"account.openApps": "Abrir menu de apps",
+	"account.signOutAccountConfirm": "Sair de {name} ({email})? Você precisará entrar novamente para usar esta conta.",
+	"invite.acceptedLabel": "Aceito",
+	"invite.declinedLabel": "Recusado"
 }

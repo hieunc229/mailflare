@@ -2481,5 +2481,10 @@
 	"actions.unsubscribeDeleteAll": "Відписатися й видалити все",
 	"actions.unsubscribeDeleteConfirm": "Перемістити {count} листів від цього відправника до кошика?",
 	"actions.unsubscribeTrashDone": "Відписано; {count} листів переміщено до кошика",
-	"attachment.downloadAllFlagged": "Деякі вкладення позначено як потенційно небезпечні. Завантажити архів усе одно?"
+	"attachment.downloadAllFlagged": "Деякі вкладення позначено як потенційно небезпечні. Завантажити архів усе одно?",
+	"account.apps": "Застосунки",
+	"account.openApps": "Відкрити меню застосунків",
+	"account.signOutAccountConfirm": "Вийти з облікового запису {name} ({email})? Щоб користуватися ним, потрібно буде ввійти знову.",
+	"invite.acceptedLabel": "Прийнято",
+	"invite.declinedLabel": "Відхилено"
 }

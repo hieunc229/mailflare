@@ -2451,5 +2451,10 @@
 	"actions.unsubscribeDeleteAll": "सदस्यता रद्द करें और सब हटाएँ",
 	"actions.unsubscribeDeleteConfirm": "इस प्रेषक के {count} पुराने ईमेल ट्रैश में ले जाएँ?",
 	"actions.unsubscribeTrashDone": "सदस्यता रद्द; {count} ईमेल ट्रैश में ले जाए गए",
-	"attachment.downloadAllFlagged": "कुछ अटैचमेंट संभावित रूप से खतरनाक चिह्नित हैं। फिर भी संग्रह डाउनलोड करें?"
+	"attachment.downloadAllFlagged": "कुछ अटैचमेंट संभावित रूप से खतरनाक चिह्नित हैं। फिर भी संग्रह डाउनलोड करें?",
+	"account.apps": "ऐप्स",
+	"account.openApps": "ऐप्स मेनू खोलें",
+	"account.signOutAccountConfirm": "{name} ({email}) को साइन आउट करें? इस खाते का उपयोग करने के लिए आपको फिर से साइन इन करना होगा।",
+	"invite.acceptedLabel": "स्वीकृत",
+	"invite.declinedLabel": "अस्वीकृत"
 }

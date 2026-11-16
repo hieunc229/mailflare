@@ -2451,5 +2451,10 @@
 	"actions.unsubscribeDeleteAll": "Abbestellen & alle löschen",
 	"actions.unsubscribeDeleteConfirm": "{count} ältere E-Mails dieses Absenders in den Papierkorb verschieben?",
 	"actions.unsubscribeTrashDone": "Abbestellt und {count} E-Mails in den Papierkorb verschoben",
-	"attachment.downloadAllFlagged": "Einige Anhänge sind als potenziell gefährlich markiert. Archiv trotzdem herunterladen?"
+	"attachment.downloadAllFlagged": "Einige Anhänge sind als potenziell gefährlich markiert. Archiv trotzdem herunterladen?",
+	"account.apps": "Apps",
+	"account.openApps": "App-Menü öffnen",
+	"account.signOutAccountConfirm": "{name} ({email}) abmelden? Sie müssen sich erneut anmelden, um dieses Konto zu verwenden.",
+	"invite.acceptedLabel": "Angenommen",
+	"invite.declinedLabel": "Abgelehnt"
 }

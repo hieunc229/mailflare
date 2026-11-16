@@ -2447,5 +2447,10 @@
 	"actions.unsubscribeDeleteAll": "Berhenti melanggan & padam semua",
 	"actions.unsubscribeDeleteConfirm": "Alihkan {count} e-mel lama daripada penghantar ini ke Sampah?",
 	"actions.unsubscribeTrashDone": "Berhenti melanggan; {count} e-mel dialihkan ke Sampah",
-	"attachment.downloadAllFlagged": "Some attachments are flagged as potentially dangerous. Download the archive anyway?"
+	"attachment.downloadAllFlagged": "Some attachments are flagged as potentially dangerous. Download the archive anyway?",
+	"account.apps": "Apl",
+	"account.openApps": "Buka menu apl",
+	"account.signOutAccountConfirm": "Log keluar {name} ({email})? Anda perlu log masuk semula untuk menggunakan akaun ini.",
+	"invite.acceptedLabel": "Diterima",
+	"invite.declinedLabel": "Ditolak"
 }

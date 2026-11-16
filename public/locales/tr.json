@@ -2451,5 +2451,10 @@
 	"actions.unsubscribeDeleteAll": "Abonelikten çık ve tümünü sil",
 	"actions.unsubscribeDeleteConfirm": "Bu gönderenin {count} eski e-postası Çöp Kutusuna taşınsın mı?",
 	"actions.unsubscribeTrashDone": "Abonelikten çıkıldı; {count} e-posta Çöp Kutusuna taşındı",
-	"attachment.downloadAllFlagged": "Bazı ekler potansiyel olarak tehlikeli olarak işaretlendi. Yine de arşiv indirilsin mi?"
+	"attachment.downloadAllFlagged": "Bazı ekler potansiyel olarak tehlikeli olarak işaretlendi. Yine de arşiv indirilsin mi?",
+	"account.apps": "Uygulamalar",
+	"account.openApps": "Uygulamalar menüsünü aç",
+	"account.signOutAccountConfirm": "{name} ({email}) oturumu kapatılsın mı? Bu hesabı kullanmak için yeniden oturum açmanız gerekir.",
+	"invite.acceptedLabel": "Kabul edildi",
+	"invite.declinedLabel": "Reddedildi"
 }
