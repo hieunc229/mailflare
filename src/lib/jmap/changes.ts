@@ -24,16 +24,19 @@ async function floorSeq(ctx: JmapContext): Promise<number> {
 	return row?.seq ?? 0;
 }
 
-/** Newest sequence per mailbox, one indexed MAX per mailbox. D1 allows at most 5 terms in a compound SELECT. */
+/**
+ * Newest sequence per mailbox, one indexed MAX per mailbox. D1 allows at most 5 terms in a
+ * compound SELECT, so the chunks run concurrently: one after another costs a round trip each.
+ */
 async function latestSeq(ctx: JmapContext, mailboxIds: string[]): Promise<number> {
-	let latest = 0;
-	for (let offset = 0; offset < mailboxIds.length; offset += 5) {
-		const chunk = mailboxIds.slice(offset, offset + 5);
-		const parts = chunk.map((id) => sql`SELECT (SELECT max(seq) FROM jmap_changes WHERE mailbox_id = ${id}) AS seq`);
-		const rows = await ctx.db.all<{ seq: number | null }>(sql.join(parts, sql` UNION ALL `));
-		for (const row of rows) latest = Math.max(latest, row.seq ?? 0);
-	}
-	return latest;
+	const chunks: string[][] = [];
+	for (let offset = 0; offset < mailboxIds.length; offset += 5) chunks.push(mailboxIds.slice(offset, offset + 5));
+	const results = await Promise.all(
+		chunks.map((chunk) =>
+			ctx.db.all<{ seq: number | null }>(sql.join(chunk.map((id) => sql`SELECT (SELECT max(seq) FROM jmap_changes WHERE mailbox_id = ${id}) AS seq`), sql` UNION ALL `)),
+		),
+	);
+	return Math.max(0, ...results.flat().map((row) => row.seq ?? 0));
 }
 
 export type ChangeScope = {
