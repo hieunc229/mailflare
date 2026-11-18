@@ -257,6 +257,16 @@ test("outgoing invitations fold long lines and end with CRLF", () => {
 	assert.equal(parsed.organizer, "me@example.com");
 });
 
+test("an escaped backslash followed by n stays a backslash, not a line break", () => {
+	const invite = parseInvite(event("DTSTART:20261104T170000Z", "SUMMARY:Notes in C:\\\\new", "DESCRIPTION:Share \\\\\\\\fs01\\\\new-hires\\nFloor 2", "LOCATION:Room \\\\N4"));
+	assert.equal(invite.title, "Notes in C:\\new");
+	assert.equal(invite.description, "Share \\\\fs01\\new-hires\nFloor 2");
+	assert.equal(invite.location, "Room \\N4");
+	const description = "Agenda in C:\\new\\notes.txt\nBring a laptop";
+	const sent = new TextDecoder().decode(createCalendarInvitation({ title: "T", description, location: "", startsAt: new Date("2026-11-04T17:00:00Z"), endsAt: new Date("2026-11-04T18:00:00Z"), uid: "evt_1" }));
+	assert.equal(parseInvite(sent).description, description);
+});
+
 test("sender-controlled size is bounded: EXDATE list and RRULE COUNT", () => {
 	const dates = Array.from({ length: 5000 }, (_, i) => `2027${String(1 + (i % 12)).padStart(2, "0")}${String(1 + (i % 28)).padStart(2, "0")}T100000Z`).join(",");
 	const started = Date.now();
