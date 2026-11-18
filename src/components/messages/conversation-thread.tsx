@@ -201,7 +201,7 @@ export function ConversationMessageCard({
 							setLocallyExpanded(shouldExpand);
 							if (!shouldExpand || locallyRead) return;
 							setLocallyRead(true);
-							void runSingleMessageAction(message.id, "read").catch(() => setLocallyRead(false));
+							void runSingleMessageAction(message.id, "read", { undo: false }).catch(() => setLocallyRead(false));
 						}}
 						aria-expanded={expanded}
 						className="flex min-w-0 flex-1 basis-40 items-center gap-3 text-left cursor-pointer"

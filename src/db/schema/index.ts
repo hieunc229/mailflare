@@ -275,6 +275,21 @@ export const jmapChangeFloor = sqliteTable("jmap_change_floor", {
 	seq: integer("seq").notNull().default(0),
 });
 
+/**
+ * Short-lived, single-use undo tokens. The nonce is consumed by the first
+ * authenticated undo request and only pruned after it expires; it is internal
+ * security state and deliberately excluded from backups.
+ */
+export const messageActionUndoClaims = sqliteTable(
+	"message_action_undo_claims",
+	{
+		nonce: text("nonce").primaryKey(),
+		userId: text("user_id").notNull(),
+		expiresAt: timestamp("expires_at").notNull(),
+	},
+	(table) => [index("message_action_undo_claims_expires_idx").on(table.expiresAt)],
+);
+
 export const apiKeys = sqliteTable("api_keys", {
 	id: text("id").primaryKey(),
 	/** `device` keys come from a mobile sign-in (`/api/auth/device`) and are listed under Devices. */

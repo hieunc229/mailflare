@@ -3,7 +3,7 @@ import { confirmDestructive } from "@/components/ui/confirm-dialog";
 
 import { authFetch } from "@/lib/auth/client";
 import { useParams } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { ArrowDownToLine, Cloud, ExternalLink } from "@/components/icons";
 import { useLanguage } from "@/components/language-provider";
 import { formatUserDate } from "@/lib/time/utils";
@@ -36,6 +36,7 @@ import { SenderCheckNotice } from "@/components/messages/sender-check-notice";
 import { useMessageThread } from "@/components/messages/use-message-thread";
 import { useLatestMessagesFirst } from "@/components/messages/use-latest-messages-first";
 import { useMessageListVisibility } from "@/components/messages/message-list-visibility";
+import { subscribePendingOverlay } from "@/lib/messages/field-store";
 import { splitEmailAddressList } from "@/lib/email/address";
 import { findInviteAttachment } from "@/lib/calendar/invite-attachment";
 import { formatRecipientAddressList, type RecipientAddressStyle } from "@/lib/email/recipient-display";
@@ -101,6 +102,17 @@ function MessageDetailContent({ messageId }: { messageId: string }) {
   const isAnyPanelVisible = messageListVisible || assistantVisible;
   const { scrollRef, scrolled, handleScroll } = useMessageContentScroll(messageId, loading);
   const [unsubBannerDismissed, dismissUnsubBanner] = useMailingListBanner(messageId);
+  // A browser/server response can race the explicit read this reader sends when
+  // opening an unread message. Only that operation may preserve read=true.
+  const openingRead = useRef(false);
+
+  function markMessageReadOnOpen(id: string) {
+    if (openingRead.current) return;
+    openingRead.current = true;
+    void markMessageRead(id).finally(() => {
+      openingRead.current = false;
+    });
+  }
 
   useEffect(() => {
     let cancelled = false;
@@ -110,7 +122,7 @@ function MessageDetailContent({ messageId }: { messageId: string }) {
       if (cachedData?.message) {
         setData(cachedData);
         setLoading(false);
-        if (!cachedData.message.read) void markMessageRead(cachedData.message.id);
+        if (!cachedData.message.read) markMessageReadOnOpen(cachedData.message.id);
         if (cachedData.body) {
           setBodyPending(false);
           if (cachedData.attachments !== undefined) return;
@@ -125,9 +137,9 @@ function MessageDetailContent({ messageId }: { messageId: string }) {
         try {
           const full = await fetchMessageDetail(messageId, true);
           if (!cancelled) {
-            setData((current) => {
-              // A prefetched body may predate the read flip.
-              if (current?.message?.read && full.message) return { ...full, message: { ...full.message, read: true } };
+            setData(() => {
+              // A prefetched body may predate the opening read request.
+              if (openingRead.current && full.message) return { ...full, message: { ...full.message, read: true } };
               return full;
             });
             setBodyPending(false);
@@ -145,7 +157,7 @@ function MessageDetailContent({ messageId }: { messageId: string }) {
       if (!cancelled) {
         setData(nextData);
         setLoading(false);
-        if ("message" in nextData && nextData.message && !nextData.message.read) void markMessageRead(nextData.message.id);
+        if ("message" in nextData && nextData.message && !nextData.message.read) markMessageReadOnOpen(nextData.message.id);
       }
     }
 
@@ -155,20 +167,54 @@ function MessageDetailContent({ messageId }: { messageId: string }) {
     };
   }, [messageId]);
 
-  // A bulk read/unread action can include the message that is already open.
-  // Keep the mounted reader in sync with the cache instead of remounting it.
+  // Read, star and membership changes (including undo) can target the message
+  // that is already open. Keep the mounted reader in sync with the detail cache;
+  // if a failed/skipped undo invalidated it, fetch the server value explicitly.
   useEffect(() => {
-    function syncCachedReadState() {
+    let cancelled = false;
+    function syncCachedState() {
       const cached = getCachedMessageDetailForDisplay(messageId);
-      if (!cached?.message) return;
-      const cachedRead = cached.message.read;
+      if (!cached?.message) {
+        void fetchMessageDetail(messageId, true).then((nextData) => {
+          if (cancelled || !("message" in nextData) || !nextData.message) return;
+          const nextMessage = nextData.message;
+          setData((current) => {
+            if (!current?.message) return nextData;
+            // Only the explicit opening read may still be in flight; a
+            // legitimate unread/timeout result must remain unread.
+            const keepRead = openingRead.current;
+            return { ...nextData, message: keepRead ? { ...nextMessage, read: true } : nextMessage };
+          });
+        }).catch(() => undefined);
+        return;
+      }
+      const cachedMessage = cached.message;
       setData((current) => {
-        if (!current?.message || current.message.read === cachedRead) return current;
-        return { ...current, message: { ...current.message, read: cachedRead } };
+        if (!current?.message) return current;
+        const next = {
+          read: cachedMessage.read,
+          starred: cachedMessage.starred,
+          status: cachedMessage.status,
+          folderId: cachedMessage.folderId,
+          snoozedUntil: cachedMessage.snoozedUntil,
+        };
+        if (
+          current.message.read === next.read
+          && current.message.starred === next.starred
+          && current.message.status === next.status
+          && current.message.folderId === next.folderId
+          && current.message.snoozedUntil === next.snoozedUntil
+        ) return current;
+        return { ...current, message: { ...current.message, ...next } };
       });
     }
-    window.addEventListener("mailflare:messages-changed", syncCachedReadState);
-    return () => window.removeEventListener("mailflare:messages-changed", syncCachedReadState);
+    window.addEventListener("mailflare:messages-changed", syncCachedState);
+    const unsubscribePending = subscribePendingOverlay(syncCachedState);
+    return () => {
+      cancelled = true;
+      window.removeEventListener("mailflare:messages-changed", syncCachedState);
+      unsubscribePending();
+    };
   }, [messageId]);
 
   async function retryBody() {
@@ -176,8 +222,8 @@ function MessageDetailContent({ messageId }: { messageId: string }) {
     setBodyError(false);
     try {
       const full = await fetchMessageDetail(messageId, true);
-      setData((current) => {
-        if (current?.message?.read && full.message) return { ...full, message: { ...full.message, read: true } };
+      setData(() => {
+        if (openingRead.current && full.message) return { ...full, message: { ...full.message, read: true } };
         return full;
       });
       setBodyPending(false);

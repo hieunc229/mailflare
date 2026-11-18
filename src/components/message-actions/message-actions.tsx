@@ -70,11 +70,11 @@ export function MessageActions({
 	const [sourceOpen, setSourceOpen] = useState(false);
 	const [snoozeOpen, setSnoozeOpen] = useState(false);
 
-	const runAction = useCallback(async (action: BulkMessageAction) => {
+	const runAction = useCallback(async (action: BulkMessageAction, options: { undo?: boolean } = {}) => {
 		setPendingAction(action);
 		setError(null);
 		try {
-			await runSingleMessageAction(messageId, action);
+			await runSingleMessageAction(messageId, action, options);
 			const redirect = getMessageActionRedirect(action, listHref);
 			if (redirect) router.push(autoAdvance() ?? redirect);
 			router.refresh();
@@ -224,7 +224,7 @@ export function MessageActions({
 
 		try {
 			await createTrashSenderRule({ mailboxId, senderAddress });
-			await runAction("trash");
+			await runAction("trash", { undo: false });
 		} catch {
 			setError(t("actions.error.trashRule"));
 			setPendingAction(null);
@@ -260,7 +260,7 @@ export function MessageActions({
 		setPendingAction("block");
 		try {
 			await blockMessageContact({ mailboxId, senderAddress });
-			await runSingleMessageAction(messageId, "trash");
+			await runSingleMessageAction(messageId, "trash", { undo: false });
 			router.push(autoAdvance() ?? listHref);
 			router.refresh();
 		} catch (blockError) {
