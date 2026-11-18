@@ -102,6 +102,12 @@ test("uniqueZipNames cleans and deduplicates", () => {
 	assert.deepEqual(zip.uniqueZipNames(["no-extension", "no-extension"]), ["no-extension", "no-extension (2)"]);
 });
 
+test("uniqueZipNames keeps entries inside the extraction folder", () => {
+	assert.deepEqual(zip.uniqueZipNames(["../../.bashrc", "a/../b.txt", "./c.txt", "/abs/d.txt", "dir//e.txt", "x/ .. /f.txt", "..", "docs/report.pdf"]), [
+		".bashrc", "a/b.txt", "c.txt", "abs/d.txt", "dir/e.txt", "x/f.txt", "file", "docs/report.pdf",
+	]);
+});
+
 test("createZipStream produces a parseable archive whose entries verify", async () => {
 	const encoder = new TextEncoder();
 	const bodies = {

@@ -7,6 +7,7 @@ import { loadOwnedWebhook } from "./utils";
 import type { WebhookRouteParams } from "./types";
 import { newId } from "@/lib/ids";
 import { hasValidSessionMutationOrigin } from "@/lib/auth/origin";
+import { readJsonObject } from "@/lib/http/request";
 
 export async function GET(request: Request, { params }: WebhookRouteParams) {
 	const { id } = await params;
@@ -33,7 +34,7 @@ export async function PATCH(request: Request, { params }: WebhookRouteParams) {
 	if (loaded.error) return loaded.error;
 	if (!hasValidSessionMutationOrigin(request)) return NextResponse.json({ error: "Invalid origin" }, { status: 403 });
 
-	const parsed = webhookUpdateSchema.safeParse(await request.json());
+	const parsed = webhookUpdateSchema.safeParse(await readJsonObject(request));
 	if (!parsed.success) {
 		return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
 	}

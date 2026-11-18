@@ -58,7 +58,7 @@ export function ThreadMessageActions({
 		setPending(true);
 		setError(null);
 		try {
-			setStarred((await toggleMessageStar(message.id)).starred);
+			setStarred((await toggleMessageStar(message.id, !starred)).starred);
 		} catch (nextError) {
 			setError(nextError instanceof Error ? nextError.message : t("message.error.star"));
 		} finally {
@@ -126,7 +126,7 @@ export function ThreadMessageActions({
 		setError(null);
 		try {
 			await blockMessageContact({ mailboxId, senderAddress: message.fromAddr });
-			await runSingleMessageAction(message.id, "trash");
+			await runSingleMessageAction(message.id, "trash", { undo: false });
 		} catch (nextError) {
 			setError(nextError instanceof Error ? nextError.message : t("message.error.block"));
 		} finally {

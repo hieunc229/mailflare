@@ -54,6 +54,10 @@ export const INTERNAL_TABLES = [
 	"webauthn_challenges",
 	"passkey_enrollment_grants",
 	"auth_step_ups",
+	// Single-use undo-token consumption records. Restoring a stale claim would
+	// let an already-used undo token be replayed, and the table is rewritten by
+	// the installation that owns the tokens.
+	"message_action_undo_claims",
 ];
 
 /**

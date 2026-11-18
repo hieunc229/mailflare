@@ -85,6 +85,13 @@
       "when": 1793280382891,
       "tag": "0011_message_invite_response",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "5",
+      "when": 1794516478573,
+      "tag": "0012_message_action_undo_claims",
+      "breakpoints": true
     }
   ]
 }
