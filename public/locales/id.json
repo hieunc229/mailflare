@@ -2488,5 +2488,9 @@
 	"account.openApps": "Buka menu aplikasi",
 	"account.signOutAccountConfirm": "Keluar dari {name} ({email})? Anda harus masuk lagi untuk menggunakan akun ini.",
 	"invite.acceptedLabel": "Diterima",
-	"invite.declinedLabel": "Ditolak"
+	"invite.declinedLabel": "Ditolak",
+	"invite.notifyByEmail": "Notify organizer by email",
+	"invite.notifyHint": "When on, the organizer is emailed your answer. When off, only your calendar is updated.",
+	"invite.addNote": "Add a note",
+	"invite.notePlaceholder": "Write a note for the organizer…"
 }

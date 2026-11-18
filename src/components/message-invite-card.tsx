@@ -20,6 +20,21 @@ export function MessageInviteCard({ messageId, hasCalendarAttachment, className 
 	const [answered, setAnswered] = useState<InviteResponse | null>(initial?.response ?? null);
 	const [loading, setLoading] = useState(initial === undefined);
 	const [pending, setPending] = useState<InviteResponse | null>(null);
+	// Whether the answer emails the organizer; remembered per browser, default on.
+	const [notify, setNotify] = useState(() => {
+		try {
+			if (typeof window === "undefined") return true;
+			const stored = window.localStorage.getItem("invite-notify-default");
+			return stored === null ? true : stored !== "false";
+		} catch { return true; }
+	});
+	const [noteOpen, setNoteOpen] = useState(false);
+	const [note, setNote] = useState("");
+
+	function setNotifyAndPersist(value: boolean) {
+		setNotify(value);
+		try { window.localStorage.setItem("invite-notify-default", String(value)); } catch { /* private mode */ }
+	}
 
 	// The caller keys this card by message, so state starts fresh for each message without resetting it here.
 	useEffect(() => {
@@ -70,12 +85,14 @@ export function MessageInviteCard({ messageId, hasCalendarAttachment, className 
 	async function respond(response: InviteResponse) {
 		setPending(response);
 		try {
-			const result = await authFetch(`/api/messages/${messageId}/invite`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ response }) });
+			const result = await authFetch(`/api/messages/${messageId}/invite`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ response, sendReply: notify, note }) });
 			const data = await result.json().catch(() => ({})) as { error?: string; eventId?: string | null; replySent?: boolean };
 			if (!result.ok) throw new Error(data.error ?? t("invite.failed"));
 			const nextEventId = data.eventId ?? null;
 			setAnswered(response);
 			setEventId(nextEventId);
+			setNote("");
+			setNoteOpen(false);
 			cacheAnsweredInvite(messageId, {
 				invite: currentInvite,
 				eventId: nextEventId,
@@ -129,6 +146,21 @@ export function MessageInviteCard({ messageId, hasCalendarAttachment, className 
 						)}
 						{eventId && answered !== "declined" && <a href={`/calendar?event=${eventId}`} className="ml-auto text-xs font-medium text-blue-700 hover:underline">{t("invite.viewOnCalendar")}</a>}
 					</div>
+					{!cancelled && (
+						<div className="mt-2 space-y-2">
+							<label className="flex cursor-pointer items-center gap-2 text-xs text-neutral-700">
+								<input type="checkbox" checked={notify} disabled={pending !== null} onChange={(event) => setNotifyAndPersist(event.target.checked)} className="h-3.5 w-3.5 rounded accent-blue-600" />
+								{t("invite.notifyByEmail")}
+							</label>
+							<p className="text-[11px] text-neutral-500">{t("invite.notifyHint")}</p>
+							<div>
+								<button type="button" onClick={() => setNoteOpen((open) => !open)} aria-expanded={noteOpen} className="text-xs font-medium text-blue-700 hover:underline">{t("invite.addNote")}</button>
+								{noteOpen && (
+									<textarea value={note} onChange={(event) => setNote(event.target.value)} maxLength={500} rows={2} placeholder={t("invite.notePlaceholder")} className="mt-1 w-full rounded-lg border border-neutral-200 bg-white p-2 text-xs text-neutral-900 placeholder:text-neutral-400 focus:border-blue-500 focus:outline-none" />
+								)}
+							</div>
+						</div>
+					)}
 				</div>
 			</div>
 		</section>

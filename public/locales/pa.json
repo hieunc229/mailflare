@@ -2506,5 +2506,9 @@
 	"account.openApps": "ਐਪਸ ਮੀਨੂ ਖੋਲ੍ਹੋ",
 	"account.signOutAccountConfirm": "{name} ({email}) ਨੂੰ ਸਾਈਨ ਆਉਟ ਕਰਨਾ ਹੈ? ਇਸ ਖਾਤੇ ਦੀ ਵਰਤੋਂ ਕਰਨ ਲਈ ਤੁਹਾਨੂੰ ਦੁਬਾਰਾ ਸਾਈਨ ਇਨ ਕਰਨਾ ਪਵੇਗਾ।",
 	"invite.acceptedLabel": "ਸਵੀਕਾਰ ਕੀਤਾ",
-	"invite.declinedLabel": "ਰੱਦ ਕੀਤਾ"
+	"invite.declinedLabel": "ਰੱਦ ਕੀਤਾ",
+	"invite.notifyByEmail": "Notify organizer by email",
+	"invite.notifyHint": "When on, the organizer is emailed your answer. When off, only your calendar is updated.",
+	"invite.addNote": "Add a note",
+	"invite.notePlaceholder": "Write a note for the organizer…"
 }

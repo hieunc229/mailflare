@@ -2521,5 +2521,9 @@
 	"account.openApps": "Abrir menu de apps",
 	"account.signOutAccountConfirm": "Sair de {name} ({email})? Você precisará entrar novamente para usar esta conta.",
 	"invite.acceptedLabel": "Aceito",
-	"invite.declinedLabel": "Recusado"
+	"invite.declinedLabel": "Recusado",
+	"invite.notifyByEmail": "Notify organizer by email",
+	"invite.notifyHint": "When on, the organizer is emailed your answer. When off, only your calendar is updated.",
+	"invite.addNote": "Add a note",
+	"invite.notePlaceholder": "Write a note for the organizer…"
 }

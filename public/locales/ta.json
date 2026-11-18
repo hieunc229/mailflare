@@ -2506,5 +2506,9 @@
 	"account.openApps": "ஆப்ஸ் மெனுவைத் திற",
 	"account.signOutAccountConfirm": "{name} ({email}) கணக்கிலிருந்து வெளியேறவா? இந்தக் கணக்கைப் பயன்படுத்த மீண்டும் உள்நுழைய வேண்டும்.",
 	"invite.acceptedLabel": "ஏற்கப்பட்டது",
-	"invite.declinedLabel": "நிராகரிக்கப்பட்டது"
+	"invite.declinedLabel": "நிராகரிக்கப்பட்டது",
+	"invite.notifyByEmail": "Notify organizer by email",
+	"invite.notifyHint": "When on, the organizer is emailed your answer. When off, only your calendar is updated.",
+	"invite.addNote": "Add a note",
+	"invite.notePlaceholder": "Write a note for the organizer…"
 }

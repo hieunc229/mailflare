@@ -2488,5 +2488,9 @@
 	"account.openApps": "アプリメニューを開く",
 	"account.signOutAccountConfirm": "{name} ({email}) をサインアウトしますか？このアカウントを使うには、もう一度サインインする必要があります。",
 	"invite.acceptedLabel": "承諾済み",
-	"invite.declinedLabel": "辞退済み"
+	"invite.declinedLabel": "辞退済み",
+	"invite.notifyByEmail": "Notify organizer by email",
+	"invite.notifyHint": "When on, the organizer is emailed your answer. When off, only your calendar is updated.",
+	"invite.addNote": "Add a note",
+	"invite.notePlaceholder": "Write a note for the organizer…"
 }

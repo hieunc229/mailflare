@@ -2506,5 +2506,9 @@
 	"account.openApps": "باز کردن منوی برنامه‌ها",
 	"account.signOutAccountConfirm": "از {name} ({email}) خارج می‌شوید؟ برای استفاده از این حساب باید دوباره وارد شوید.",
 	"invite.acceptedLabel": "پذیرفته‌شده",
-	"invite.declinedLabel": "ردشده"
+	"invite.declinedLabel": "ردشده",
+	"invite.notifyByEmail": "Notify organizer by email",
+	"invite.notifyHint": "When on, the organizer is emailed your answer. When off, only your calendar is updated.",
+	"invite.addNote": "Add a note",
+	"invite.notePlaceholder": "Write a note for the organizer…"
 }

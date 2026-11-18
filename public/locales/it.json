@@ -2521,5 +2521,9 @@
 	"account.openApps": "Apri il menu delle app",
 	"account.signOutAccountConfirm": "Disconnettere {name} ({email})? Dovrai accedere di nuovo per usare questo account.",
 	"invite.acceptedLabel": "Accettato",
-	"invite.declinedLabel": "Rifiutato"
+	"invite.declinedLabel": "Rifiutato",
+	"invite.notifyByEmail": "Notify organizer by email",
+	"invite.notifyHint": "When on, the organizer is emailed your answer. When off, only your calendar is updated.",
+	"invite.addNote": "Add a note",
+	"invite.notePlaceholder": "Write a note for the organizer…"
 }

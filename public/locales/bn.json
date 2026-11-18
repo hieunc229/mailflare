@@ -2506,5 +2506,9 @@
 	"account.openApps": "অ্যাপ মেনু খুলুন",
 	"account.signOutAccountConfirm": "{name} ({email}) সাইন আউট করবেন? এই অ্যাকাউন্ট ব্যবহার করতে আপনাকে আবার সাইন ইন করতে হবে।",
 	"invite.acceptedLabel": "গৃহীত",
-	"invite.declinedLabel": "প্রত্যাখ্যাত"
+	"invite.declinedLabel": "প্রত্যাখ্যাত",
+	"invite.notifyByEmail": "Notify organizer by email",
+	"invite.notifyHint": "When on, the organizer is emailed your answer. When off, only your calendar is updated.",
+	"invite.addNote": "Add a note",
+	"invite.notePlaceholder": "Write a note for the organizer…"
 }

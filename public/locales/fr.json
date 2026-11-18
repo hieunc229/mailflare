@@ -2521,5 +2521,9 @@
 	"account.openApps": "Ouvrir le menu des applications",
 	"account.signOutAccountConfirm": "Déconnecter {name} ({email}) ? Vous devrez vous reconnecter pour utiliser ce compte.",
 	"invite.acceptedLabel": "Acceptée",
-	"invite.declinedLabel": "Refusée"
+	"invite.declinedLabel": "Refusée",
+	"invite.notifyByEmail": "Notify organizer by email",
+	"invite.notifyHint": "When on, the organizer is emailed your answer. When off, only your calendar is updated.",
+	"invite.addNote": "Add a note",
+	"invite.notePlaceholder": "Write a note for the organizer…"
 }

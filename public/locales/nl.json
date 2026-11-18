@@ -2506,5 +2506,9 @@
 	"account.openApps": "App-menu openen",
 	"account.signOutAccountConfirm": "{name} ({email}) afmelden? Je moet opnieuw inloggen om dit account te gebruiken.",
 	"invite.acceptedLabel": "Geaccepteerd",
-	"invite.declinedLabel": "Afgewezen"
+	"invite.declinedLabel": "Afgewezen",
+	"invite.notifyByEmail": "Notify organizer by email",
+	"invite.notifyHint": "When on, the organizer is emailed your answer. When off, only your calendar is updated.",
+	"invite.addNote": "Add a note",
+	"invite.notePlaceholder": "Write a note for the organizer…"
 }

@@ -2566,5 +2566,9 @@
 	"account.openApps": "فتح قائمة التطبيقات",
 	"account.signOutAccountConfirm": "تسجيل خروج {name} ({email})؟ ستحتاج إلى تسجيل الدخول مرة أخرى لاستخدام هذا الحساب.",
 	"invite.acceptedLabel": "تم القبول",
-	"invite.declinedLabel": "تم الرفض"
+	"invite.declinedLabel": "تم الرفض",
+	"invite.notifyByEmail": "Notify organizer by email",
+	"invite.notifyHint": "When on, the organizer is emailed your answer. When off, only your calendar is updated.",
+	"invite.addNote": "Add a note",
+	"invite.notePlaceholder": "Write a note for the organizer…"
 }

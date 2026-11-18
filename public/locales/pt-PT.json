@@ -2521,5 +2521,9 @@
 	"account.openApps": "Abrir o menu de aplicações",
 	"account.signOutAccountConfirm": "Terminar a sessão de {name} ({email})? Terá de iniciar sessão novamente para utilizar esta conta.",
 	"invite.acceptedLabel": "Aceite",
-	"invite.declinedLabel": "Recusado"
+	"invite.declinedLabel": "Recusado",
+	"invite.notifyByEmail": "Notify organizer by email",
+	"invite.notifyHint": "When on, the organizer is emailed your answer. When off, only your calendar is updated.",
+	"invite.addNote": "Add a note",
+	"invite.notePlaceholder": "Write a note for the organizer…"
 }

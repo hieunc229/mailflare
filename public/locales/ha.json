@@ -2506,5 +2506,9 @@
 	"account.openApps": "Buɗe menu na manhajoji",
 	"account.signOutAccountConfirm": "Fita daga {name} ({email})? Za ku sake shiga domin amfani da wannan asusun.",
 	"invite.acceptedLabel": "An karɓa",
-	"invite.declinedLabel": "An ƙi"
+	"invite.declinedLabel": "An ƙi",
+	"invite.notifyByEmail": "Notify organizer by email",
+	"invite.notifyHint": "When on, the organizer is emailed your answer. When off, only your calendar is updated.",
+	"invite.addNote": "Add a note",
+	"invite.notePlaceholder": "Write a note for the organizer…"
 }

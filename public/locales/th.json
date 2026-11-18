@@ -2502,5 +2502,9 @@
 	"account.openApps": "เปิดเมนูแอป",
 	"account.signOutAccountConfirm": "ออกจากระบบ {name} ({email}) หรือไม่ คุณต้องลงชื่อเข้าใช้อีกครั้งเพื่อใช้บัญชีนี้",
 	"invite.acceptedLabel": "ตอบรับแล้ว",
-	"invite.declinedLabel": "ปฏิเสธแล้ว"
+	"invite.declinedLabel": "ปฏิเสธแล้ว",
+	"invite.notifyByEmail": "Notify organizer by email",
+	"invite.notifyHint": "When on, the organizer is emailed your answer. When off, only your calendar is updated.",
+	"invite.addNote": "Add a note",
+	"invite.notePlaceholder": "Write a note for the organizer…"
 }

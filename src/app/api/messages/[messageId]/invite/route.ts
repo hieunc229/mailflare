@@ -4,7 +4,7 @@ import { getDb } from "@/db";
 import { calendarEvents, messages } from "@/db/schema";
 import { getCurrentUser } from "@/lib/auth/cookies";
 import { getEnv } from "@/lib/cloudflare";
-import { buildReplyIcs, parseInvite, type InviteResponse, type ParsedInvite } from "@/lib/calendar/invite";
+import { buildReplyIcs, buildReplyText, parseInvite, type InviteResponse, type ParsedInvite } from "@/lib/calendar/invite";
 import { findInviteAttachment, MAX_INVITE_BYTES } from "@/lib/calendar/invite-attachment";
 import { addExcludedOccurrence, normalizeInviteSender, planInviteAnswer } from "@/lib/calendar/invite-rules";
 import { inviteEventId, inviteEventValues, recipientInviteTimeZone, sameInviteSender, upsertEventOverride } from "@/lib/calendar/invite-store";
@@ -68,9 +68,10 @@ export async function POST(request: Request, { params }: InviteRouteParams) {
 	if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 	if (!hasValidSessionMutationOrigin(request)) return NextResponse.json({ error: "Invalid origin" }, { status: 403 });
 	const { messageId } = await params;
-	const body = await request.json().catch(() => ({})) as { response?: InviteResponse; sendReply?: boolean };
+	const body = await request.json().catch(() => ({})) as { response?: InviteResponse; sendReply?: boolean; note?: string };
 	const response = body.response;
 	if (response !== "accepted" && response !== "tentative" && response !== "declined") return NextResponse.json({ error: "Choose accept, maybe or decline" }, { status: 400 });
+	if (body.note !== undefined && typeof body.note !== "string") return NextResponse.json({ error: "Note must be a string" }, { status: 400 });
 	const db = getDb(env);
 	// Stored on the event below, so the next inbound update of an all-day or floating invitation finds the same zone.
 	const userZone = await inviteZone(db, request, user);
@@ -139,7 +140,7 @@ export async function POST(request: Request, { params }: InviteRouteParams) {
 			try {
 				await sendEmail(env, {
 					userId: user.id, mailboxId: message.mailboxId, from, to: [replyTo],
-					subject, text: `${from} ${verb.toLowerCase()}: ${invite.title}`,
+					subject, text: buildReplyText(from, verb.toLowerCase(), invite.title, body.note),
 					inReplyTo: message.providerMessageId, threadId: message.threadId,
 					attachments: [{ filename: "reply.ics", type: "text/calendar; method=REPLY; charset=utf-8", content: new TextEncoder().encode(buildReplyIcs(invite, from, response)).buffer as ArrayBuffer }],
 				});

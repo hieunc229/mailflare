@@ -2506,5 +2506,9 @@
 	"account.openApps": "એપ્સ મેનુ ખોલો",
 	"account.signOutAccountConfirm": "{name} ({email}) સાઇન આઉટ કરવું છે? આ એકાઉન્ટનો ઉપયોગ કરવા માટે તમારે ફરીથી સાઇન ઇન કરવું પડશે.",
 	"invite.acceptedLabel": "સ્વીકાર્યું",
-	"invite.declinedLabel": "નકારાયું"
+	"invite.declinedLabel": "નકારાયું",
+	"invite.notifyByEmail": "Notify organizer by email",
+	"invite.notifyHint": "When on, the organizer is emailed your answer. When off, only your calendar is updated.",
+	"invite.addNote": "Add a note",
+	"invite.notePlaceholder": "Write a note for the organizer…"
 }

@@ -2488,5 +2488,9 @@
 	"account.openApps": "Mở menu ứng dụng",
 	"account.signOutAccountConfirm": "Đăng xuất {name} ({email})? Bạn sẽ cần đăng nhập lại để dùng tài khoản này.",
 	"invite.acceptedLabel": "Đã chấp nhận",
-	"invite.declinedLabel": "Đã từ chối"
+	"invite.declinedLabel": "Đã từ chối",
+	"invite.notifyByEmail": "Notify organizer by email",
+	"invite.notifyHint": "When on, the organizer is emailed your answer. When off, only your calendar is updated.",
+	"invite.addNote": "Add a note",
+	"invite.notePlaceholder": "Write a note for the organizer…"
 }

@@ -2506,5 +2506,9 @@
 	"account.openApps": "App-Menü öffnen",
 	"account.signOutAccountConfirm": "{name} ({email}) abmelden? Sie müssen sich erneut anmelden, um dieses Konto zu verwenden.",
 	"invite.acceptedLabel": "Angenommen",
-	"invite.declinedLabel": "Abgelehnt"
+	"invite.declinedLabel": "Abgelehnt",
+	"invite.notifyByEmail": "Notify organizer by email",
+	"invite.notifyHint": "When on, the organizer is emailed your answer. When off, only your calendar is updated.",
+	"invite.addNote": "Add a note",
+	"invite.notePlaceholder": "Write a note for the organizer…"
 }

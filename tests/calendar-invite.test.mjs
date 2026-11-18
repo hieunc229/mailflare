@@ -14,7 +14,7 @@ await build({
 	outdir: dir, outExtension: { ".js": ".mjs" }, bundle: true, platform: "node", format: "esm", logLevel: "silent",
 	alias: { "@": join(root, "src") },
 });
-const { parseInvite, inviteRepeat, buildReplyIcs, parseIcsDuration, WINDOWS_TIME_ZONES, inviteAttendeeAddresses, parseAlarmTrigger } = await import(pathToFileURL(join(dir, "i.mjs")).href);
+const { parseInvite, inviteRepeat, buildReplyIcs, buildReplyText, parseIcsDuration, WINDOWS_TIME_ZONES, inviteAttendeeAddresses, parseAlarmTrigger } = await import(pathToFileURL(join(dir, "i.mjs")).href);
 const { expandToolEvents } = await import(pathToFileURL(join(dir, "t.mjs")).href);
 const { planInboundInvite, planInviteAnswer, inviteSenderMatches, addExcludedOccurrence, mergeExcludedOccurrences, normalizeInviteSender, chooseRecipientZone, inboundNeedsRecipientZone } = await import(pathToFileURL(join(dir, "r.mjs")).href);
 const { createCalendarInvitation } = await import(pathToFileURL(join(dir, "u.mjs")).href);
@@ -260,6 +260,21 @@ test("a reply built by Mailflare parses back to the answering guest and status",
 	assert.equal(parsed.method, "REPLY");
 	assert.equal(parsed.uid, "evt_abc@mailflare");
 	assert.deepEqual(parsed.attendees, [{ email: "guest@example.com", status: "ACCEPTED" }]);
+});
+
+test("reply text appends a guest note, or nothing when it is blank", () => {
+	assert.equal(buildReplyText("guest@example.com", "accepted", "Planning"), "guest@example.com accepted: Planning");
+	assert.equal(buildReplyText("guest@example.com", "tentatively accepted", "Planning", "Looking forward to it!  "), "guest@example.com tentatively accepted: Planning\n\nLooking forward to it!");
+	assert.equal(buildReplyText("guest@example.com", "declined", "Planning", "line one\nline two\tend"), "guest@example.com declined: Planning\n\nline one\nline two\tend");
+	for (const blank of ["", "   ", "\n\t  ", null, undefined]) assert.equal(buildReplyText("guest@example.com", "declined", "Planning", blank), "guest@example.com declined: Planning");
+});
+
+test("reply text truncates an over-long note and strips control characters", () => {
+	const long = buildReplyText("guest@example.com", "accepted", "Planning", `${"  x".repeat(600)}  `);
+	const note = long.split("\n\n")[1];
+	assert.equal(note.length, 1000);
+	assert.ok(long.startsWith("guest@example.com accepted: Planning\n\nx"));
+	assert.equal(buildReplyText("guest@example.com", "accepted", "Planning", "hi\x00\x01\x07there\x7fbye"), "guest@example.com accepted: Planning\n\nhitherebye");
 });
 
 test("outgoing invitations fold long lines and end with CRLF", () => {

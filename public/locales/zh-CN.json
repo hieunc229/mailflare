@@ -2488,5 +2488,9 @@
 	"account.openApps": "打开应用菜单",
 	"account.signOutAccountConfirm": "要退出 {name} ({email}) 吗？您需要重新登录才能使用此账号。",
 	"invite.acceptedLabel": "已接受",
-	"invite.declinedLabel": "已拒绝"
+	"invite.declinedLabel": "已拒绝",
+	"invite.notifyByEmail": "Notify organizer by email",
+	"invite.notifyHint": "When on, the organizer is emailed your answer. When off, only your calendar is updated.",
+	"invite.addNote": "Add a note",
+	"invite.notePlaceholder": "Write a note for the organizer…"
 }

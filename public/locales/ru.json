@@ -2536,5 +2536,9 @@
 	"account.openApps": "Открыть меню приложений",
 	"account.signOutAccountConfirm": "Выйти из аккаунта {name} ({email})? Чтобы пользоваться им, потребуется снова войти.",
 	"invite.acceptedLabel": "Принято",
-	"invite.declinedLabel": "Отклонено"
+	"invite.declinedLabel": "Отклонено",
+	"invite.notifyByEmail": "Notify organizer by email",
+	"invite.notifyHint": "When on, the organizer is emailed your answer. When off, only your calendar is updated.",
+	"invite.addNote": "Add a note",
+	"invite.notePlaceholder": "Write a note for the organizer…"
 }

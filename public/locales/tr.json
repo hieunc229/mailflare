@@ -2506,5 +2506,9 @@
 	"account.openApps": "Uygulamalar menüsünü aç",
 	"account.signOutAccountConfirm": "{name} ({email}) oturumu kapatılsın mı? Bu hesabı kullanmak için yeniden oturum açmanız gerekir.",
 	"invite.acceptedLabel": "Kabul edildi",
-	"invite.declinedLabel": "Reddedildi"
+	"invite.declinedLabel": "Reddedildi",
+	"invite.notifyByEmail": "Notify organizer by email",
+	"invite.notifyHint": "When on, the organizer is emailed your answer. When off, only your calendar is updated.",
+	"invite.addNote": "Add a note",
+	"invite.notePlaceholder": "Write a note for the organizer…"
 }

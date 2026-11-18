@@ -2506,5 +2506,9 @@
 	"account.openApps": "ಆ್ಯಪ್‌ಗಳ ಮೆನು ತೆರೆಯಿರಿ",
 	"account.signOutAccountConfirm": "{name} ({email}) ಸೈನ್ ಔಟ್ ಮಾಡಬೇಕೇ? ಈ ಖಾತೆಯನ್ನು ಬಳಸಲು ನೀವು ಮತ್ತೆ ಸೈನ್ ಇನ್ ಮಾಡಬೇಕಾಗುತ್ತದೆ.",
 	"invite.acceptedLabel": "ಸ್ವೀಕರಿಸಲಾಗಿದೆ",
-	"invite.declinedLabel": "ತಿರಸ್ಕರಿಸಲಾಗಿದೆ"
+	"invite.declinedLabel": "ತಿರಸ್ಕರಿಸಲಾಗಿದೆ",
+	"invite.notifyByEmail": "Notify organizer by email",
+	"invite.notifyHint": "When on, the organizer is emailed your answer. When off, only your calendar is updated.",
+	"invite.addNote": "Add a note",
+	"invite.notePlaceholder": "Write a note for the organizer…"
 }

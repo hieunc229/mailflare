@@ -583,6 +583,21 @@ export function inviteRepeat(rrule: string | null, startsAt?: Date, timeZone?: s
 
 export type InviteResponse = "accepted" | "tentative" | "declined";
 
+/** Longest guest note kept in an invitation reply email. */
+const MAX_REPLY_NOTE = 1000;
+
+/**
+ * Plain-text body of the email sent for an invitation answer: `${from} ${verb}: ${title}`,
+ * plus the guest's note when it carries text. Control characters other than line breaks and
+ * tabs are stripped and the note is trimmed to at most 1000 characters, so an empty or
+ * whitespace-only note adds nothing. The ICS reply (buildReplyIcs) never carries the note.
+ */
+export function buildReplyText(from: string, verb: string, title: string, note?: string | null): string {
+	const base = `${from} ${verb}: ${title}`;
+	const cleaned = (note ?? "").replace(/[\u0000-\u0008\u000B\u000C\u000D\u000E-\u001F\u007F]/g, "").trim().slice(0, MAX_REPLY_NOTE);
+	return cleaned ? `${base}\n\n${cleaned}` : base;
+}
+
 export function buildReplyIcs(invite: ParsedInvite, attendee: string, response: InviteResponse): string {
 	const status = { accepted: "ACCEPTED", tentative: "TENTATIVE", declined: "DECLINED" }[response];
 	// All-day values were read as midnights in the recipient's zone; write them back as the DATE the sender used.

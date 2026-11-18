@@ -2536,5 +2536,9 @@
 	"account.openApps": "Відкрити меню застосунків",
 	"account.signOutAccountConfirm": "Вийти з облікового запису {name} ({email})? Щоб користуватися ним, потрібно буде ввійти знову.",
 	"invite.acceptedLabel": "Прийнято",
-	"invite.declinedLabel": "Відхилено"
+	"invite.declinedLabel": "Відхилено",
+	"invite.notifyByEmail": "Notify organizer by email",
+	"invite.notifyHint": "When on, the organizer is emailed your answer. When off, only your calendar is updated.",
+	"invite.addNote": "Add a note",
+	"invite.notePlaceholder": "Write a note for the organizer…"
 }

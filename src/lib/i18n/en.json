@@ -2506,5 +2506,9 @@
 	"undo.label.star": "Starred",
 	"undo.label.unstar": "Unstarred",
 	"undo.label.snooze": "Snoozed",
-	"undo.label.unsnooze": "Unsnoozed"
+	"undo.label.unsnooze": "Unsnoozed",
+	"invite.notifyByEmail": "Notify organizer by email",
+	"invite.notifyHint": "When on, the organizer is emailed your answer. When off, only your calendar is updated.",
+	"invite.addNote": "Add a note",
+	"invite.notePlaceholder": "Write a note for the organizer…"
 }

@@ -2506,5 +2506,9 @@
 	"account.openApps": "యాప్‌ల మెనూ తెరవండి",
 	"account.signOutAccountConfirm": "{name} ({email}) సైన్ అవుట్ చేయాలా? ఈ ఖాతాను ఉపయోగించడానికి మీరు మళ్లీ సైన్ ఇన్ చేయాలి.",
 	"invite.acceptedLabel": "అంగీకరించబడింది",
-	"invite.declinedLabel": "తిరస్కరించబడింది"
+	"invite.declinedLabel": "తిరస్కరించబడింది",
+	"invite.notifyByEmail": "Notify organizer by email",
+	"invite.notifyHint": "When on, the organizer is emailed your answer. When off, only your calendar is updated.",
+	"invite.addNote": "Add a note",
+	"invite.notePlaceholder": "Write a note for the organizer…"
 }
