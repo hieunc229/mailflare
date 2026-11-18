@@ -135,8 +135,10 @@ export async function threadChangesSince(ctx: JmapContext, args: Record<string, 
 	const ids = result.scope.mailboxes.map((m) => m.id);
 	const threadKey = sql<string>`coalesce(${messages.threadId}, ${messages.id})`;
 	const alive = new Set<string>();
-	for (let offset = 0; offset < threads.length; offset += 100) {
-		const chunk = threads.slice(offset, offset + 100);
+	// D1 allows 100 bound parameters per statement: the mailbox ids share them with the thread ids.
+	const threadChunk = Math.max(1, 100 - ids.length);
+	for (let offset = 0; offset < threads.length; offset += threadChunk) {
+		const chunk = threads.slice(offset, offset + threadChunk);
 		const rows = await ctx.db
 			.selectDistinct({ thread: threadKey })
 			.from(messages)

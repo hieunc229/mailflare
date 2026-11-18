@@ -1,4 +1,4 @@
-import { ilike, like, sql, type AnyColumn, type SQL } from "drizzle-orm";
+import { sql, type AnyColumn, type SQL } from "drizzle-orm";
 import { schemaDialect } from "./dialect";
 
 /**
@@ -7,9 +7,19 @@ import { schemaDialect } from "./dialect";
  */
 const dialect = schemaDialect();
 
-/** `LIKE` that ignores case on every dialect: SQLite and MySQL already do, PostgreSQL needs ILIKE. */
+/**
+ * `LIKE` that ignores case on every dialect: SQLite and MySQL already do, PostgreSQL needs ILIKE.
+ * Always has `ESCAPE '!'` so a pattern built with `escapeLike` means the same on all three (SQLite has no
+ * default escape character; PostgreSQL and MySQL default to a backslash).
+ */
 export function insensitiveLike(column: AnyColumn | SQL, pattern: string): SQL {
-	return dialect === "postgres" ? ilike(column as AnyColumn, pattern) : like(column as AnyColumn, pattern);
+	const operator = dialect === "postgres" ? sql.raw("ilike") : sql.raw("like");
+	return sql`${column} ${operator} ${pattern} escape ${sql.raw(`'${LIKE_ESCAPE}'`)}`;
+}
+
+/** Case-insensitive "contains `term`" match, with `%`, `_` and `!` in the term taken literally. */
+export function containsLike(column: AnyColumn | SQL, term: string): SQL {
+	return insensitiveLike(column, `%${escapeLike(term)}%`);
 }
 
 /** The value an `ON CONFLICT DO UPDATE` / `ON DUPLICATE KEY UPDATE` would have inserted. */

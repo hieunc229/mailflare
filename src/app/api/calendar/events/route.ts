@@ -12,6 +12,7 @@ import { DEFAULT_REPEAT_DAYS, normalizeCalendarRepeat, normalizeCalendarRepeatDa
 import type { CalendarEventInput } from "./types";
 import { getRequestTimeZone, normalizeTimeZone } from "@/lib/time/utils";
 import { authorizeCalendarRequest, calendarKeyCanSendInvitations } from "@/lib/calendar/api-auth";
+import { readJsonObject } from "@/lib/http/request";
 
 export async function GET(request: Request) {
 	const env = getEnv();
@@ -28,7 +29,8 @@ export async function POST(request: Request) {
 	const env = getEnv();
 	const { user, key, error } = await authorizeCalendarRequest(env, request, "calendar:write");
 	if (error) return error;
-	const input = await request.json() as CalendarEventInput;
+	const input = await readJsonObject<CalendarEventInput>(request);
+	if (!input) return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
 	const startsAt = new Date(input.startsAt);
 	const endsAt = new Date(input.endsAt);
 	if (!input.title?.trim() || Number.isNaN(startsAt.getTime()) || Number.isNaN(endsAt.getTime()) || endsAt <= startsAt) return NextResponse.json({ error: "Enter a title and valid event times" }, { status: 400 });

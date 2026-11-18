@@ -16,6 +16,7 @@ import {
 	isAllowedBulkMessageAction,
 	isPermanentlyDeletableStatus,
 } from "./utils";
+import { readJsonObject } from "@/lib/http/request";
 
 const MAX_BULK_MESSAGES = 5000;
 const MESSAGE_ID_CHUNK = 90;
@@ -52,8 +53,9 @@ export async function POST(request: Request) {
 		return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 	}
 
-	const payload = (await request.json()) as BulkMessagePayload;
-	const messageIds = [...new Set(payload.messageIds?.filter(Boolean) ?? [])];
+	const payload = await readJsonObject<BulkMessagePayload>(request);
+	if (!payload) return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
+	const messageIds = [...new Set(Array.isArray(payload.messageIds) ? payload.messageIds.filter(Boolean) : [])];
 	if (messageIds.length === 0 || !isAllowedBulkMessageAction(payload.action)) {
 		return NextResponse.json({ error: "Invalid bulk message action" }, { status: 400 });
 	}
