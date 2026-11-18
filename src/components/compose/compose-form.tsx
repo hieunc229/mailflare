@@ -260,7 +260,9 @@ export function ComposeForm({
 	useEffect(() => {
 		pendingSave.current = null;
 		const bodyContent = htmlToPlainText(html).trim();
-		const signatureOnly = bodyContent === (selectedMailbox?.signature?.trim() ?? "");
+		// Compare text with text: an HTML signature is stored as markup.
+		const signatureContent = htmlToPlainText(applyMailboxSignatureHtml("", "", selectedMailbox?.signature)).trim();
+		const signatureOnly = bodyContent === signatureContent;
 		const hasContent =
 			to.length > 0 || cc.length > 0 || bcc.length > 0 || subject.trim() || quotedHtml || attachments.length > 0 || (bodyContent && !signatureOnly);
 		if (!fromAddr || !hasContent || loadingDraft || reviewInProgressRef.current) return;
