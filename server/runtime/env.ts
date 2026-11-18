@@ -79,6 +79,12 @@ export function createNodeRuntime(): NodeRuntime {
 		MAILFLARE_RUNTIME: "node",
 		APP_URL: optional("APP_URL")?.replace(/\/$/, ""),
 		INBOUND_WEBHOOK_SECRET: optional("INBOUND_WEBHOOK_SECRET"),
+		// Resend provider settings (src/lib/email/outbound-provider.ts, resend-api.ts): the key fallback and a
+		// Resend-compatible API, read from env on Workers and passed through here for the Node runtime.
+		RESEND_API_KEY: optional("RESEND_API_KEY"),
+		RESEND_BASE_URL: optional("RESEND_BASE_URL"),
+		RESEND_CUSTOM_MESSAGE_ID: optional("RESEND_CUSTOM_MESSAGE_ID"),
+		RESEND_OMIT_HEADERS: optional("RESEND_OMIT_HEADERS"),
 		VAPID_PUBLIC_KEY: optional("VAPID_PUBLIC_KEY"),
 		VAPID_PRIVATE_KEY: optional("VAPID_PRIVATE_KEY"),
 		VAPID_SUBJECT: optional("VAPID_SUBJECT"),
