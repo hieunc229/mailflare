@@ -31,12 +31,21 @@ export function DriveShareDialog({ item, onClose, onChanged }: { item: DriveItem
 
 	useEffect(() => {
 		if (!id) return;
+		// A slow response for an earlier item must not fill in the item shown now.
+		let active = true;
 		void authFetch(`/api/drive/items/${id}/shares`).then(async (response) => {
-			if (!response.ok) return toast.error(t("drive.shareFailed"));
+			if (!response.ok) {
+				if (active) toast.error(t("drive.shareFailed"));
+				return;
+			}
 			const data = await response.json() as { shares: DriveShareDto[]; linkToken: string | null };
+			if (!active) return;
 			setShares(data.shares);
 			setLinkToken(data.linkToken);
+		}).catch(() => {
+			if (active) toast.error(t("drive.shareFailed"));
 		});
+		return () => { active = false; };
 	}, [id, t]);
 
 	async function request(input: string, init: RequestInit) {

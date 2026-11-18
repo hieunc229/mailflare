@@ -65,3 +65,14 @@ test("a write after cached reads still reports the state it moved to", async (t)
 	assert.equal(response.sessionState, set.newState);
 	assert.ok(last.list.some((mailbox) => mailbox.name === "Projects"), "the read after the write sees the new folder");
 });
+
+test("the state counts changes in every mailbox, past the first chunk of five", async (t) => {
+	const ctx = await createContext(t);
+	for (let i = 2; i <= 12; i++) {
+		ctx.env.DB.db.prepare(`INSERT INTO mailboxes (id, user_id, domain_id, local_part, created_at) VALUES ('mb${i}', 'u1', 'd1', 'box${i}', 0)`).run();
+	}
+	ctx.env.DB.db.prepare("INSERT INTO jmap_changes (seq, mailbox_id, object_type, object_id, change) VALUES (41, 'mb12', 'email', 'm1', 'created')").run();
+	const response = await processRequest(ctx, { using: [], methodCalls: [["Mailbox/get", {}, "a"]] });
+	const [[, result]] = response.methodResponses;
+	assert.match(result.state, /^c1:41:/, JSON.stringify(result));
+});

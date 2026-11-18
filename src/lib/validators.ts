@@ -4,6 +4,7 @@ import { isValidHostname, normalizeHostname } from "@/lib/domains/utils";
 import { getEmailAddress, splitEmailAddressList } from "@/lib/email/address";
 import { DEFAULT_FOLDER_COLOR, FOLDER_COLOR_VALUES } from "@/lib/folders/colors";
 import { MAX_FOLLOW_UP_DAYS } from "@/lib/follow-ups/follow-up-utils";
+import { isValidBase64 } from "@/lib/email/base64";
 
 /**
  * Recipients arrive either as one comma-separated header string (the composer)
@@ -41,7 +42,7 @@ export const sendEmailSchema = z.object({
 			z.object({
 					filename: z.string().min(1).max(255),
 					type: z.string().min(1).max(255).default("application/octet-stream"),
-					contentBase64: z.string().min(1).max(14 * 1024 * 1024),
+					contentBase64: z.string().min(1).max(14 * 1024 * 1024).refine(isValidBase64, "contentBase64 must be standard base64"),
 			}),
 		)
 		.max(10)
@@ -327,7 +328,8 @@ export const folderSchema = z.object({
 });
 
 export const updateProfileSchema = z.object({
-	name: z.string().trim().min(1).max(100),
+	// Optional so a recovery-email-only save leaves the name alone instead of writing back a stale one.
+	name: z.string().trim().min(1).max(100).optional(),
 	resetEmail: z.preprocess(
 		(value) => (typeof value === "string" ? value.trim() : value),
 		z.string().email().or(z.literal("")).transform((value) => value || null),

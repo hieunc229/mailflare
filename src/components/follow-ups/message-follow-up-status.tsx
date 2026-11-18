@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { BellRing, Check } from "@/components/icons";
 import { useLanguage } from "@/components/language-provider";
 import type { MessageFollowUp } from "@/lib/follow-ups/types";
@@ -17,8 +17,14 @@ export function MessageFollowUpStatus({ messageId }: { messageId: string }) {
 	const [followUp, setFollowUp] = useState<MessageFollowUp | null | undefined>(undefined);
 	const [failed, setFailed] = useState(false);
 
+	const latestRequest = useRef(0);
+
 	const load = useCallback(() => {
-		void fetchMessageFollowUp(messageId).then(setFollowUp).catch(() => setFollowUp(null));
+		// Only the newest request may set state, so a slow response for another message is dropped.
+		const request = ++latestRequest.current;
+		void fetchMessageFollowUp(messageId)
+			.then((next) => { if (request === latestRequest.current) setFollowUp(next); })
+			.catch(() => { if (request === latestRequest.current) setFollowUp(null); });
 	}, [messageId]);
 
 	useEffect(() => {

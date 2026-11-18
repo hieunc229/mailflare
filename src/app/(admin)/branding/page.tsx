@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { ArrowRight, ExternalLink, ImagePlus, LockKeyhole, Palette } from "@/components/icons";
 import { useLanguage } from "@/components/language-provider";
@@ -20,6 +20,7 @@ export default function BrandingPage() {
 	const [status, setStatus] = useState<string | null>(null);
 	const [saving, setSaving] = useState(false);
 	const inputRef = useRef<HTMLInputElement>(null);
+	const previewRef = useRef<string | null>(null);
 	const [syncedAppName, setSyncedAppName] = useState(branding.appName);
 
 	// Reset the field whenever the saved name changes.
@@ -27,6 +28,11 @@ export default function BrandingPage() {
 		setSyncedAppName(branding.appName);
 		setAppName(branding.appName);
 	}
+
+	// Free the preview's object URL when leaving the page.
+	useEffect(() => () => {
+		if (previewRef.current) URL.revokeObjectURL(previewRef.current);
+	}, []);
 
 	if (!branding.canCustomizeBranding) {
 		return (
@@ -52,8 +58,13 @@ export default function BrandingPage() {
 
 	function pickIcon(file: File | null) {
 		setIcon(file);
-		if (preview) URL.revokeObjectURL(preview);
-		setPreview(file ? URL.createObjectURL(file) : null);
+		setPreviewUrl(file ? URL.createObjectURL(file) : null);
+	}
+
+	function setPreviewUrl(url: string | null) {
+		if (previewRef.current) URL.revokeObjectURL(previewRef.current);
+		previewRef.current = url;
+		setPreview(url);
 	}
 
 	async function submit(event: React.FormEvent<HTMLFormElement>) {
@@ -64,6 +75,9 @@ export default function BrandingPage() {
 			await saveBranding(appName.trim(), icon);
 			await branding.refreshBranding();
 			setIcon(null);
+			// Drop the preview and the file input's value so the same file can be chosen again.
+			setPreviewUrl(null);
+			if (inputRef.current) inputRef.current.value = "";
 			setStatus(t("branding.updated"));
 		} catch (error) {
 			setStatus(error instanceof Error ? error.message : t("branding.saveFailed"));

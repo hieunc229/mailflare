@@ -361,6 +361,13 @@
       "statements": [
         "ALTER TABLE \"messages\" ADD COLUMN \"invite_response\" text;"
       ]
+    },
+    {
+      "name": "0012_message_action_undo_claims.sql",
+      "statements": [
+        "CREATE TABLE \"message_action_undo_claims\" (\n\t\"nonce\" text PRIMARY KEY NOT NULL,\n\t\"user_id\" text NOT NULL,\n\t\"expires_at\" bigint NOT NULL\n);",
+        "CREATE INDEX \"message_action_undo_claims_expires_idx\" ON \"message_action_undo_claims\" USING btree (\"expires_at\");"
+      ]
     }
   ]
 }

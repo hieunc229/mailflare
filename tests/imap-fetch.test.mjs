@@ -50,7 +50,7 @@ const { fetchImapMessages, parseFetchFlags } = await import(pathToFileURL(join(o
 
 const CHUNK = 16 * 1024;
 
-function startServer(messages) {
+function startServer(messages, { deferFetchOks = false } = {}) {
 	const commands = [];
 	globalThis.__imapConnect = () => {
 		let controller;
@@ -69,6 +69,7 @@ function startServer(messages) {
 		const writable = new WritableStream({
 			write(chunk) {
 				// Pipelined commands arrive in one write, so answer each line in order.
+				const deferred = [];
 				for (const line of Buffer.from(chunk).toString().split("\r\n").filter(Boolean)) {
 					commands.push(line);
 					const [tag, ...rest] = line.split(" ");
@@ -88,8 +89,11 @@ function startServer(messages) {
 								: Buffer.concat([Buffer.from(`${head}FLAGS (${flags}) BODY[] {${body.length}}\r\n`), body, Buffer.from(")\r\n")]),
 						);
 					}
-					send(`${tag} OK done\r\n`);
+					if (deferFetchOks && fetch) deferred.push(`${tag} OK done\r\n`);
+					else send(`${tag} OK done\r\n`);
 				}
+				// Dovecot-style: every pipelined FETCH's data first, then all the tagged completions.
+				for (const ok of deferred) send(ok);
 			},
 		});
 		return { readable, writable };
@@ -151,4 +155,16 @@ test("large messages arrive intact and a batch stops at the byte budget", async 
 	const second = await fetchImapMessages({ ...baseInput, offset: first.nextOffset });
 	assert.deepEqual(second.messages.map((item) => item.filename), ["INBOX-1.eml"]);
 	assert.equal(second.nextOffset, null);
+});
+
+test("pipelined fetch replies are matched by UID when the server answers out of step", async () => {
+	const bodies = { 1: message(300, 65), 2: message(300, 66), 3: message(300, 67) };
+	startServer(Object.fromEntries(Object.entries(bodies).map(([uid, body]) => [uid, { body, flags: uid === "2" ? "\\Seen" : "" }])), { deferFetchOks: true });
+	const result = await fetchImapMessages(baseInput);
+	assert.deepEqual(result.messages.map((item) => [item.filename, item.read]), [["INBOX-1.eml", false], ["INBOX-2.eml", true], ["INBOX-3.eml", false]]);
+	for (const item of result.messages) {
+		const uid = item.filename.match(/-(\d+)\.eml$/)[1];
+		assert.ok(Buffer.from(item.raw).equals(bodies[uid]), `message ${uid} was given another message's body`);
+	}
+	assert.equal(result.nextOffset, null);
 });

@@ -15,6 +15,7 @@ export async function intakeIncomingMail(env: CloudflareEnv, input: IntakeInput,
 	const marker = { [MAILFLARE_FORWARDED_HEADER]: await forwardedMarker(env) };
 	const decision = await resolveIncomingMail(env, input.from, input.to, {
 		subject: input.headers.subject,
+		from: input.headers.from,
 		alreadyForwarded,
 	});
 

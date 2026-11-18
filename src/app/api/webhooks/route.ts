@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { count, desc, eq, max } from "drizzle-orm";
+import { count, desc, eq, inArray, max } from "drizzle-orm";
 import { getEnv } from "@/lib/cloudflare";
 import { getDb } from "@/db";
 import { webhookDeliveries, webhooks } from "@/db/schema";
@@ -35,6 +35,7 @@ export async function GET(request: Request) {
 			lastAttemptAt: max(webhookDeliveries.lastAttemptAt),
 		})
 		.from(webhookDeliveries)
+		.where(inArray(webhookDeliveries.webhookId, db.select({ id: webhooks.id }).from(webhooks).where(eq(webhooks.userId, user.id))))
 		.groupBy(webhookDeliveries.webhookId, webhookDeliveries.status);
 
 	return NextResponse.json({

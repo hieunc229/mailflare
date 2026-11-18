@@ -63,6 +63,8 @@ function ContactEditForm({
 	const editing = contact !== null;
 	const [email, setEmail] = useState(contact?.email ?? "");
 	const [displayName, setDisplayName] = useState(contact?.displayName ?? "");
+	// `contact` is the snapshot taken when the dialog opened, so the photo flag is tracked here.
+	const [hasAvatar, setHasAvatar] = useState(contact?.hasAvatar ?? false);
 	const [saving, setSaving] = useState(false);
 	const [error, setError] = useState<string | null>(null);
 
@@ -97,8 +99,11 @@ function ContactEditForm({
 					mailboxId={mailboxId}
 					address={contact.email}
 					name={displayName}
-					hasAvatar={contact.hasAvatar}
-					onAvatarChange={(hasAvatar) => onSaved({ ...contact, hasAvatar })}
+					hasAvatar={hasAvatar}
+					onAvatarChange={(next) => {
+						setHasAvatar(next);
+						onSaved({ ...contact, hasAvatar: next });
+					}}
 				/>
 			)}
 			<div className="space-y-2">

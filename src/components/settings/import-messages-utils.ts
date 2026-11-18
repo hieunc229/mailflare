@@ -23,8 +23,11 @@ export async function importMessageFiles(
 			if (event.lengthComputable) onProgress?.(Math.round((event.loaded / event.total) * 100));
 		};
 		request.onerror = () => reject(new Error("Import upload failed"));
+		request.onabort = () => reject(new Error("Import upload cancelled"));
+		request.ontimeout = () => reject(new Error("Import upload timed out"));
 		request.onload = () => {
-			const data = JSON.parse(request.responseText || "{}") as ImportMessagesResult;
+			// A proxy can answer with an HTML error page; fall through to the status check.
+			const data = parseImportResponse(request.responseText);
 			if (request.status < 200 || request.status >= 300) {
 				reject(new Error(data.error ?? "Import failed"));
 				return;
@@ -33,4 +36,13 @@ export async function importMessageFiles(
 		};
 		request.send(form);
 	});
+}
+
+function parseImportResponse(text: string): ImportMessagesResult {
+	try {
+		const data: unknown = JSON.parse(text || "{}");
+		return data && typeof data === "object" ? (data as ImportMessagesResult) : {};
+	} catch {
+		return {};
+	}
 }

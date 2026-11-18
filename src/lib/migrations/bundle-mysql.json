@@ -336,6 +336,13 @@
       "statements": [
         "ALTER TABLE `messages` ADD `invite_response` text;"
       ]
+    },
+    {
+      "name": "0012_message_action_undo_claims.sql",
+      "statements": [
+        "CREATE TABLE `message_action_undo_claims` (\n\t`nonce` varchar(191) NOT NULL,\n\t`user_id` longtext NOT NULL,\n\t`expires_at` bigint NOT NULL,\n\tCONSTRAINT `message_action_undo_claims_nonce` PRIMARY KEY(`nonce`)\n);",
+        "CREATE INDEX `message_action_undo_claims_expires_idx` ON `message_action_undo_claims` (`expires_at`);"
+      ]
     }
   ]
 }

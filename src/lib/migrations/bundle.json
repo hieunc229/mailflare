@@ -1,0 +1,825 @@
+{
+  "migrations": [
+    {
+      "name": "0000_flowery_smasher.sql",
+      "statements": [
+        "CREATE TABLE `api_keys` (\n\t`id` text PRIMARY KEY NOT NULL,\n\t`user_id` text NOT NULL,\n\t`name` text NOT NULL,\n\t`prefix` text NOT NULL,\n\t`key_hash` text NOT NULL,\n\t`scopes` text NOT NULL,\n\t`created_at` integer NOT NULL,\n\t`last_used_at` integer,\n\tFOREIGN KEY (`user_id`) REFERENCES `users`(`id`) ON UPDATE no action ON DELETE cascade\n);",
+        "CREATE TABLE `domains` (\n\t`id` text PRIMARY KEY NOT NULL,\n\t`user_id` text NOT NULL,\n\t`hostname` text NOT NULL,\n\t`zone_id` text NOT NULL,\n\t`status` text DEFAULT 'pending' NOT NULL,\n\t`routing_status` text,\n\t`sending_subdomain_tag` text,\n\t`sending_enabled` integer DEFAULT false NOT NULL,\n\t`routing_enabled` integer DEFAULT false NOT NULL,\n\t`created_at` integer NOT NULL,\n\tFOREIGN KEY (`user_id`) REFERENCES `users`(`id`) ON UPDATE no action ON DELETE cascade\n);",
+        "CREATE UNIQUE INDEX `domains_hostname_idx` ON `domains` (`hostname`);",
+        "CREATE INDEX `domains_user_idx` ON `domains` (`user_id`);",
+        "CREATE TABLE `mailboxes` (\n\t`id` text PRIMARY KEY NOT NULL,\n\t`user_id` text NOT NULL,\n\t`domain_id` text NOT NULL,\n\t`local_part` text NOT NULL,\n\t`display_name` text,\n\t`created_at` integer NOT NULL,\n\tFOREIGN KEY (`user_id`) REFERENCES `users`(`id`) ON UPDATE no action ON DELETE cascade,\n\tFOREIGN KEY (`domain_id`) REFERENCES `domains`(`id`) ON UPDATE no action ON DELETE cascade\n);",
+        "CREATE UNIQUE INDEX `mailboxes_address_idx` ON `mailboxes` (`domain_id`,`local_part`);",
+        "CREATE TABLE `message_bodies` (\n\t`id` text PRIMARY KEY NOT NULL,\n\t`message_id` text NOT NULL,\n\t`text_body` text,\n\t`html_body` text,\n\t`raw_r2_key` text,\n\tFOREIGN KEY (`message_id`) REFERENCES `messages`(`id`) ON UPDATE no action ON DELETE cascade\n);",
+        "CREATE UNIQUE INDEX `message_bodies_message_id_unique` ON `message_bodies` (`message_id`);",
+        "CREATE TABLE `messages` (\n\t`id` text PRIMARY KEY NOT NULL,\n\t`user_id` text NOT NULL,\n\t`mailbox_id` text,\n\t`direction` text NOT NULL,\n\t`provider_message_id` text,\n\t`from_addr` text NOT NULL,\n\t`to_addr` text NOT NULL,\n\t`subject` text,\n\t`snippet` text,\n\t`status` text DEFAULT 'received' NOT NULL,\n\t`thread_id` text,\n\t`created_at` integer NOT NULL,\n\tFOREIGN KEY (`user_id`) REFERENCES `users`(`id`) ON UPDATE no action ON DELETE cascade,\n\tFOREIGN KEY (`mailbox_id`) REFERENCES `mailboxes`(`id`) ON UPDATE no action ON DELETE set null\n);",
+        "CREATE INDEX `messages_user_created_idx` ON `messages` (`user_id`,`created_at`);",
+        "CREATE INDEX `messages_mailbox_idx` ON `messages` (`mailbox_id`);",
+        "CREATE TABLE `outbound_jobs` (\n\t`id` text PRIMARY KEY NOT NULL,\n\t`user_id` text NOT NULL,\n\t`message_id` text,\n\t`status` text DEFAULT 'queued' NOT NULL,\n\t`payload` text NOT NULL,\n\t`error` text,\n\t`created_at` integer NOT NULL,\n\t`updated_at` integer NOT NULL,\n\tFOREIGN KEY (`user_id`) REFERENCES `users`(`id`) ON UPDATE no action ON DELETE cascade,\n\tFOREIGN KEY (`message_id`) REFERENCES `messages`(`id`) ON UPDATE no action ON DELETE set null\n);",
+        "CREATE TABLE `routing_rules` (\n\t`id` text PRIMARY KEY NOT NULL,\n\t`user_id` text NOT NULL,\n\t`domain_id` text NOT NULL,\n\t`pattern` text NOT NULL,\n\t`mailbox_id` text,\n\t`action` text DEFAULT 'store' NOT NULL,\n\t`forward_to` text,\n\t`priority` integer DEFAULT 0 NOT NULL,\n\t`created_at` integer NOT NULL,\n\tFOREIGN KEY (`user_id`) REFERENCES `users`(`id`) ON UPDATE no action ON DELETE cascade,\n\tFOREIGN KEY (`domain_id`) REFERENCES `domains`(`id`) ON UPDATE no action ON DELETE cascade,\n\tFOREIGN KEY (`mailbox_id`) REFERENCES `mailboxes`(`id`) ON UPDATE no action ON DELETE set null\n);",
+        "CREATE TABLE `sessions` (\n\t`id` text PRIMARY KEY NOT NULL,\n\t`user_id` text NOT NULL,\n\t`token_hash` text NOT NULL,\n\t`expires_at` integer NOT NULL,\n\t`created_at` integer NOT NULL,\n\tFOREIGN KEY (`user_id`) REFERENCES `users`(`id`) ON UPDATE no action ON DELETE cascade\n);",
+        "CREATE UNIQUE INDEX `sessions_token_hash_unique` ON `sessions` (`token_hash`);",
+        "CREATE TABLE `users` (\n\t`id` text PRIMARY KEY NOT NULL,\n\t`email` text NOT NULL,\n\t`password_hash` text NOT NULL,\n\t`name` text NOT NULL,\n\t`created_at` integer NOT NULL\n);",
+        "CREATE UNIQUE INDEX `users_email_unique` ON `users` (`email`);",
+        "CREATE TABLE `webhook_deliveries` (\n\t`id` text PRIMARY KEY NOT NULL,\n\t`webhook_id` text NOT NULL,\n\t`event_type` text NOT NULL,\n\t`payload` text NOT NULL,\n\t`status` text DEFAULT 'pending' NOT NULL,\n\t`attempts` integer DEFAULT 0 NOT NULL,\n\t`created_at` integer NOT NULL,\n\tFOREIGN KEY (`webhook_id`) REFERENCES `webhooks`(`id`) ON UPDATE no action ON DELETE cascade\n);",
+        "CREATE TABLE `webhooks` (\n\t`id` text PRIMARY KEY NOT NULL,\n\t`user_id` text NOT NULL,\n\t`url` text NOT NULL,\n\t`secret` text NOT NULL,\n\t`events` text NOT NULL,\n\t`enabled` integer DEFAULT true NOT NULL,\n\t`created_at` integer NOT NULL,\n\tFOREIGN KEY (`user_id`) REFERENCES `users`(`id`) ON UPDATE no action ON DELETE cascade\n);"
+      ]
+    },
+    {
+      "name": "0001_add_reset_email.sql",
+      "statements": [
+        "ALTER TABLE `users` ADD `reset_email` text;"
+      ]
+    },
+    {
+      "name": "0002_add_message_read.sql",
+      "statements": [
+        "ALTER TABLE `messages` ADD `read` integer DEFAULT false NOT NULL;"
+      ]
+    },
+    {
+      "name": "0003_add_contacts.sql",
+      "statements": [
+        "CREATE TABLE `contacts` (\n\t`id` text PRIMARY KEY NOT NULL,\n\t`user_id` text NOT NULL,\n\t`email` text NOT NULL,\n\t`display_name` text,\n\t`source` text DEFAULT 'inbound' NOT NULL,\n\t`last_seen_at` integer,\n\t`created_at` integer NOT NULL,\n\tFOREIGN KEY (`user_id`) REFERENCES `users`(`id`) ON UPDATE no action ON DELETE cascade\n);",
+        "CREATE UNIQUE INDEX `contacts_user_email_idx` ON `contacts` (`user_id`,`email`);",
+        "CREATE INDEX `contacts_user_idx` ON `contacts` (`user_id`);"
+      ]
+    },
+    {
+      "name": "0004_add_accounts.sql",
+      "statements": [
+        "ALTER TABLE `users` ADD `role` text DEFAULT 'user' NOT NULL;",
+        "ALTER TABLE `users` ADD `created_by_user_id` text REFERENCES `users`(`id`) ON DELETE set null;",
+        "UPDATE `users`\nSET `role` = 'admin'\nWHERE `id` = (\n\tSELECT `id`\n\tFROM `users`\n\tORDER BY `created_at` ASC\n\tLIMIT 1\n);",
+        "CREATE INDEX `users_created_by_idx` ON `users` (`created_by_user_id`);"
+      ]
+    },
+    {
+      "name": "0005_add_folders.sql",
+      "statements": [
+        "CREATE TABLE `folders` (\n\t`id` text PRIMARY KEY NOT NULL,\n\t`user_id` text NOT NULL,\n\t`mailbox_id` text NOT NULL,\n\t`name` text NOT NULL,\n\t`created_at` integer NOT NULL,\n\tFOREIGN KEY (`user_id`) REFERENCES `users`(`id`) ON UPDATE no action ON DELETE cascade,\n\tFOREIGN KEY (`mailbox_id`) REFERENCES `mailboxes`(`id`) ON UPDATE no action ON DELETE cascade\n);",
+        "CREATE UNIQUE INDEX `folders_mailbox_name_idx` ON `folders` (`mailbox_id`,`name`);",
+        "CREATE INDEX `folders_user_idx` ON `folders` (`user_id`);",
+        "CREATE INDEX `folders_mailbox_idx` ON `folders` (`mailbox_id`);",
+        "ALTER TABLE `messages` ADD `folder_id` text REFERENCES `folders`(`id`) ON DELETE set null;",
+        "CREATE INDEX `messages_folder_idx` ON `messages` (`folder_id`);",
+        "ALTER TABLE `routing_rules` ADD `folder_id` text REFERENCES `folders`(`id`) ON DELETE set null;"
+      ]
+    },
+    {
+      "name": "0006_add_rule_conditions.sql",
+      "statements": [
+        "ALTER TABLE `routing_rules` ADD `match_field` text DEFAULT 'email' NOT NULL;",
+        "ALTER TABLE `routing_rules` ADD `match_operator` text DEFAULT 'contains' NOT NULL;",
+        "ALTER TABLE `routing_rules` ADD `match_value` text DEFAULT '' NOT NULL;",
+        "UPDATE `routing_rules`\nSET `match_value` = `pattern`\nWHERE `match_value` = '';"
+      ]
+    },
+    {
+      "name": "0007_add_shared_mailboxes.sql",
+      "statements": [
+        "ALTER TABLE `users` ADD `disabled` integer DEFAULT false NOT NULL;",
+        "ALTER TABLE `mailboxes` ADD `type` text DEFAULT 'personal' NOT NULL;",
+        "ALTER TABLE `mailboxes` ADD `disabled` integer DEFAULT false NOT NULL;",
+        "CREATE TABLE `mailbox_access` (\n\t`id` text PRIMARY KEY NOT NULL,\n\t`mailbox_id` text NOT NULL,\n\t`user_id` text NOT NULL,\n\t`permission` text DEFAULT 'read_only' NOT NULL,\n\t`created_by_user_id` text,\n\t`created_at` integer NOT NULL,\n\tFOREIGN KEY (`mailbox_id`) REFERENCES `mailboxes`(`id`) ON UPDATE no action ON DELETE cascade,\n\tFOREIGN KEY (`user_id`) REFERENCES `users`(`id`) ON UPDATE no action ON DELETE cascade,\n\tFOREIGN KEY (`created_by_user_id`) REFERENCES `users`(`id`) ON UPDATE no action ON DELETE set null\n);",
+        "CREATE UNIQUE INDEX `mailbox_access_mailbox_user_idx` ON `mailbox_access` (`mailbox_id`,`user_id`);",
+        "CREATE INDEX `mailbox_access_user_idx` ON `mailbox_access` (`user_id`);",
+        "CREATE INDEX `mailbox_access_mailbox_idx` ON `mailbox_access` (`mailbox_id`);",
+        "CREATE TABLE `audit_logs` (\n\t`id` text PRIMARY KEY NOT NULL,\n\t`actor_user_id` text,\n\t`target_user_id` text,\n\t`mailbox_id` text,\n\t`message_id` text,\n\t`action` text NOT NULL,\n\t`metadata` text,\n\t`created_at` integer NOT NULL,\n\tFOREIGN KEY (`actor_user_id`) REFERENCES `users`(`id`) ON UPDATE no action ON DELETE set null,\n\tFOREIGN KEY (`target_user_id`) REFERENCES `users`(`id`) ON UPDATE no action ON DELETE set null,\n\tFOREIGN KEY (`mailbox_id`) REFERENCES `mailboxes`(`id`) ON UPDATE no action ON DELETE set null,\n\tFOREIGN KEY (`message_id`) REFERENCES `messages`(`id`) ON UPDATE no action ON DELETE set null\n);",
+        "CREATE INDEX `audit_logs_actor_idx` ON `audit_logs` (`actor_user_id`);",
+        "CREATE INDEX `audit_logs_mailbox_idx` ON `audit_logs` (`mailbox_id`);",
+        "CREATE INDEX `audit_logs_created_idx` ON `audit_logs` (`created_at`);"
+      ]
+    },
+    {
+      "name": "0008_add_message_attachments.sql",
+      "statements": [
+        "CREATE TABLE `message_attachments` (\n\t`id` text PRIMARY KEY NOT NULL,\n\t`message_id` text NOT NULL,\n\t`filename` text NOT NULL,\n\t`content_type` text NOT NULL,\n\t`size` integer NOT NULL,\n\t`disposition` text DEFAULT 'attachment' NOT NULL,\n\t`content_id` text,\n\t`r2_key` text NOT NULL,\n\t`created_at` integer NOT NULL,\n\tFOREIGN KEY (`message_id`) REFERENCES `messages`(`id`) ON UPDATE no action ON DELETE cascade\n);",
+        "CREATE UNIQUE INDEX `message_attachments_r2_key_unique` ON `message_attachments` (`r2_key`);",
+        "CREATE INDEX `message_attachments_message_idx` ON `message_attachments` (`message_id`);"
+      ]
+    },
+    {
+      "name": "0009_add_backups.sql",
+      "statements": [
+        "CREATE TABLE `backup_settings` (\n\t`id` text PRIMARY KEY NOT NULL,\n\t`enabled` integer DEFAULT false NOT NULL,\n\t`schedule_type` text DEFAULT 'daily' NOT NULL,\n\t`schedule_value` integer,\n\t`retention_enabled` integer DEFAULT false NOT NULL,\n\t`retention_days` integer DEFAULT 30 NOT NULL,\n\t`updated_at` integer NOT NULL\n);",
+        "INSERT INTO `backup_settings` (`id`, `enabled`, `schedule_type`, `retention_enabled`, `retention_days`, `updated_at`)\nVALUES ('default', false, 'daily', false, 30, unixepoch());",
+        "CREATE TABLE `backups` (\n\t`id` text PRIMARY KEY NOT NULL,\n\t`status` text DEFAULT 'queued' NOT NULL,\n\t`trigger` text NOT NULL,\n\t`r2_key` text,\n\t`filename` text,\n\t`size` integer,\n\t`error` text,\n\t`created_by_user_id` text,\n\t`created_at` integer NOT NULL,\n\t`started_at` integer,\n\t`completed_at` integer,\n\tFOREIGN KEY (`created_by_user_id`) REFERENCES `users`(`id`) ON UPDATE no action ON DELETE set null\n);",
+        "CREATE INDEX `backups_created_idx` ON `backups` (`created_at`);",
+        "CREATE INDEX `backups_status_idx` ON `backups` (`status`);"
+      ]
+    },
+    {
+      "name": "0010_hard_squirrel_girl.sql",
+      "statements": [
+        "ALTER TABLE `users` ADD `avatar_key` text;"
+      ]
+    },
+    {
+      "name": "0011_add_folder_colors.sql",
+      "statements": [
+        "ALTER TABLE `folders` ADD `color` text DEFAULT '#2563eb' NOT NULL;",
+        "ALTER TABLE `contacts` ADD `blocked` integer DEFAULT false NOT NULL;",
+        "ALTER TABLE `mailboxes` ADD `avatar_key` text;"
+      ]
+    },
+    {
+      "name": "0012_add_app_settings.sql",
+      "statements": [
+        "CREATE TABLE `app_settings` (\n\t`id` text PRIMARY KEY NOT NULL,\n\t`app_name` text DEFAULT 'Mailflare' NOT NULL,\n\t`icon_key` text,\n\t`updated_at` integer NOT NULL\n);",
+        "INSERT INTO `app_settings` (`id`, `app_name`, `updated_at`)\nVALUES ('default', 'Mailflare', unixepoch());"
+      ]
+    },
+    {
+      "name": "0013_add_license_settings.sql",
+      "statements": [
+        "CREATE TABLE `license_settings` (\n\t`id` text PRIMARY KEY NOT NULL,\n\t`instance_id` text NOT NULL,\n\t`instance_url` text,\n\t`license_key_hash` text,\n\t`plan` text DEFAULT 'community' NOT NULL,\n\t`state` text DEFAULT 'inactive' NOT NULL,\n\t`features` text DEFAULT '[]' NOT NULL,\n\t`activated_at` integer,\n\t`validated_at` integer,\n\t`updated_at` integer NOT NULL\n);",
+        "CREATE UNIQUE INDEX `license_settings_instance_id_unique` ON `license_settings` (`instance_id`);"
+      ]
+    },
+    {
+      "name": "0014_add_account_permissions.sql",
+      "statements": [
+        "ALTER TABLE `users` ADD `can_manage_mailboxes` integer DEFAULT false NOT NULL;"
+      ]
+    },
+    {
+      "name": "0015_add_forwarding_email.sql",
+      "statements": [
+        "ALTER TABLE `users` ADD `forwarding_email` text;"
+      ]
+    },
+    {
+      "name": "0016_add_message_snooze.sql",
+      "statements": [
+        "ALTER TABLE `messages` ADD `snoozed_until` integer;"
+      ]
+    },
+    {
+      "name": "0017_add_message_star.sql",
+      "statements": [
+        "ALTER TABLE `messages` ADD `starred` integer DEFAULT false NOT NULL;"
+      ]
+    },
+    {
+      "name": "0018_add_mailbox_domain_aliases.sql",
+      "statements": [
+        "ALTER TABLE `mailboxes` ADD `use_all_domains` integer DEFAULT true NOT NULL;"
+      ]
+    },
+    {
+      "name": "0019_merge_message_bodies.sql",
+      "statements": [
+        "ALTER TABLE `messages` ADD `text_body` text;",
+        "ALTER TABLE `messages` ADD `html_body` text;",
+        "ALTER TABLE `messages` ADD `raw_r2_key` text;",
+        "UPDATE `messages`\nSET\n  `text_body` = (SELECT `text_body` FROM `message_bodies` WHERE `message_bodies`.`message_id` = `messages`.`id`),\n  `html_body` = (SELECT `html_body` FROM `message_bodies` WHERE `message_bodies`.`message_id` = `messages`.`id`),\n  `raw_r2_key` = (SELECT `raw_r2_key` FROM `message_bodies` WHERE `message_bodies`.`message_id` = `messages`.`id`);",
+        "DROP TABLE `message_bodies`;"
+      ]
+    },
+    {
+      "name": "0020_add_calendar_templates_schedule.sql",
+      "statements": [
+        "ALTER TABLE `outbound_jobs` ADD `scheduled_at` integer;",
+        "CREATE TABLE `email_templates` (\n\t`id` text PRIMARY KEY NOT NULL,\n\t`user_id` text NOT NULL REFERENCES `users`(`id`) ON DELETE cascade,\n\t`name` text NOT NULL,\n\t`subject` text DEFAULT '' NOT NULL,\n\t`text_body` text DEFAULT '' NOT NULL,\n\t`created_at` integer NOT NULL,\n\t`updated_at` integer NOT NULL\n);",
+        "CREATE INDEX `email_templates_user_idx` ON `email_templates` (`user_id`);",
+        "CREATE TABLE `calendar_events` (\n\t`id` text PRIMARY KEY NOT NULL,\n\t`user_id` text NOT NULL REFERENCES `users`(`id`) ON DELETE cascade,\n\t`mailbox_id` text REFERENCES `mailboxes`(`id`) ON DELETE set null,\n\t`title` text NOT NULL,\n\t`description` text DEFAULT '' NOT NULL,\n\t`location` text DEFAULT '' NOT NULL,\n\t`attendees` text DEFAULT '[]' NOT NULL,\n\t`starts_at` integer NOT NULL,\n\t`ends_at` integer NOT NULL,\n\t`created_at` integer NOT NULL,\n\t`updated_at` integer NOT NULL\n);",
+        "CREATE INDEX `calendar_events_user_starts_idx` ON `calendar_events` (`user_id`, `starts_at`);"
+      ]
+    },
+    {
+      "name": "0021_add_api_keys_prefix_index.sql",
+      "statements": [
+        "CREATE INDEX IF NOT EXISTS idx_api_keys_prefix ON api_keys(prefix);"
+      ]
+    },
+    {
+      "name": "0021_add_mailbox_signature.sql",
+      "statements": [
+        "ALTER TABLE `mailboxes` ADD `signature` text;"
+      ]
+    },
+    {
+      "name": "0022_add_mailbox_auto_reply.sql",
+      "statements": [
+        "ALTER TABLE `mailboxes` ADD `auto_reply_enabled` integer DEFAULT false NOT NULL;",
+        "ALTER TABLE `mailboxes` ADD `auto_reply_subject` text DEFAULT 'Out of office' NOT NULL;",
+        "ALTER TABLE `mailboxes` ADD `auto_reply_body` text DEFAULT '' NOT NULL;",
+        "CREATE TABLE `auto_reply_deliveries` (\n\t`id` text PRIMARY KEY NOT NULL,\n\t`mailbox_id` text NOT NULL REFERENCES `mailboxes`(`id`) ON DELETE cascade,\n\t`recipient` text NOT NULL,\n\t`sent_at` integer NOT NULL\n);",
+        "CREATE UNIQUE INDEX `auto_reply_deliveries_mailbox_recipient_idx` ON `auto_reply_deliveries` (`mailbox_id`, `recipient`);",
+        "CREATE INDEX `auto_reply_deliveries_sent_idx` ON `auto_reply_deliveries` (`sent_at`);"
+      ]
+    },
+    {
+      "name": "0023_add_mailbox_aliases.sql",
+      "statements": [
+        "CREATE TABLE `mailbox_aliases` (\n\t`id` text PRIMARY KEY NOT NULL,\n\t`mailbox_id` text NOT NULL REFERENCES `mailboxes`(`id`) ON DELETE cascade,\n\t`domain_id` text NOT NULL REFERENCES `domains`(`id`) ON DELETE cascade,\n\t`local_part` text NOT NULL,\n\t`created_at` integer NOT NULL\n);",
+        "CREATE UNIQUE INDEX `mailbox_aliases_address_idx` ON `mailbox_aliases` (`domain_id`, `local_part`);",
+        "CREATE INDEX `mailbox_aliases_mailbox_idx` ON `mailbox_aliases` (`mailbox_id`);"
+      ]
+    },
+    {
+      "name": "0024_add_advanced_routing_and_webhook_retries.sql",
+      "statements": [
+        "ALTER TABLE `routing_rules` ADD `scope` text DEFAULT 'mailbox' NOT NULL;",
+        "ALTER TABLE `routing_rules` ADD `name` text;",
+        "ALTER TABLE `routing_rules` ADD `enabled` integer DEFAULT true NOT NULL;",
+        "ALTER TABLE `routing_rules` ADD `keep_copy` integer DEFAULT false NOT NULL;",
+        "ALTER TABLE `routing_rules` ADD `reject_reason` text;",
+        "ALTER TABLE `routing_rules` ADD `last_matched_at` integer;",
+        "ALTER TABLE `routing_rules` ADD `match_count` integer DEFAULT 0 NOT NULL;",
+        "CREATE INDEX `routing_rules_domain_scope_idx` ON `routing_rules` (`domain_id`,`scope`,`enabled`);",
+        "CREATE INDEX `routing_rules_mailbox_idx` ON `routing_rules` (`mailbox_id`);",
+        "CREATE INDEX `routing_rules_priority_idx` ON `routing_rules` (`priority`);",
+        "ALTER TABLE `webhooks` ADD `description` text;",
+        "ALTER TABLE `webhooks` ADD `max_attempts` integer DEFAULT 5 NOT NULL;",
+        "ALTER TABLE `webhook_deliveries` ADD `response_status` integer;",
+        "ALTER TABLE `webhook_deliveries` ADD `error` text;",
+        "ALTER TABLE `webhook_deliveries` ADD `duration_ms` integer;",
+        "ALTER TABLE `webhook_deliveries` ADD `last_attempt_at` integer;",
+        "ALTER TABLE `webhook_deliveries` ADD `next_retry_at` integer;",
+        "CREATE INDEX `webhook_deliveries_webhook_idx` ON `webhook_deliveries` (`webhook_id`,`created_at`);",
+        "CREATE INDEX `webhook_deliveries_status_idx` ON `webhook_deliveries` (`status`);"
+      ]
+    },
+    {
+      "name": "0025_add_threading_and_cc_bcc.sql",
+      "statements": [
+        "ALTER TABLE `messages` ADD `cc_addr` text;",
+        "ALTER TABLE `messages` ADD `bcc_addr` text;",
+        "ALTER TABLE `messages` ADD `in_reply_to` text;",
+        "ALTER TABLE `messages` ADD `references_header` text;",
+        "CREATE INDEX `messages_thread_idx` ON `messages` (`mailbox_id`,`thread_id`);",
+        "CREATE INDEX `messages_provider_message_idx` ON `messages` (`mailbox_id`,`provider_message_id`);"
+      ]
+    },
+    {
+      "name": "0026_add_contact_avatars.sql",
+      "statements": [
+        "ALTER TABLE `contacts` ADD `avatar_key` text;"
+      ]
+    },
+    {
+      "name": "0027_add_domain_sending_intent.sql",
+      "statements": [
+        "ALTER TABLE `domains` ADD `sending_requested` integer DEFAULT false NOT NULL;",
+        "UPDATE `domains`\nSET `sending_requested` = true\nWHERE `sending_enabled` = true OR `sending_subdomain_tag` IS NOT NULL;"
+      ]
+    },
+    {
+      "name": "0028_add_keyboard_shortcuts_setting.sql",
+      "statements": [
+        "ALTER TABLE `users` ADD `keyboard_shortcuts_enabled` integer DEFAULT true NOT NULL;"
+      ]
+    },
+    {
+      "name": "0029_add_spam_protection.sql",
+      "statements": [
+        "ALTER TABLE `users` ADD `spam_protection_enabled` integer DEFAULT true NOT NULL;",
+        "ALTER TABLE `messages` ADD `spam_score` integer;",
+        "ALTER TABLE `messages` ADD `spam_verdict` text;",
+        "ALTER TABLE `messages` ADD `spam_signals` text;",
+        "ALTER TABLE `messages` ADD `spam_analyzed_at` integer;",
+        "ALTER TABLE `messages` ADD `spam_analysis_error` text;",
+        "CREATE INDEX `messages_raw_r2_key_idx` ON `messages` (`raw_r2_key`);",
+        "CREATE TABLE `spam_token_stats` (\n\t`mailbox_id` text NOT NULL REFERENCES `mailboxes`(`id`) ON DELETE cascade,\n\t`token` text NOT NULL,\n\t`spam_count` integer DEFAULT 0 NOT NULL,\n\t`ham_count` integer DEFAULT 0 NOT NULL,\n\t`updated_at` integer NOT NULL\n);",
+        "CREATE UNIQUE INDEX `spam_token_stats_mailbox_token_idx` ON `spam_token_stats` (`mailbox_id`, `token`);",
+        "CREATE INDEX `spam_token_stats_mailbox_idx` ON `spam_token_stats` (`mailbox_id`);",
+        "CREATE TABLE `spam_reputation` (\n\t`mailbox_id` text NOT NULL REFERENCES `mailboxes`(`id`) ON DELETE cascade,\n\t`type` text NOT NULL,\n\t`key` text NOT NULL,\n\t`messages_seen` integer DEFAULT 0 NOT NULL,\n\t`spam_count` integer DEFAULT 0 NOT NULL,\n\t`ham_count` integer DEFAULT 0 NOT NULL,\n\t`first_seen_at` integer NOT NULL,\n\t`last_seen_at` integer NOT NULL\n);",
+        "CREATE UNIQUE INDEX `spam_reputation_mailbox_type_key_idx` ON `spam_reputation` (`mailbox_id`, `type`, `key`);",
+        "CREATE INDEX `spam_reputation_mailbox_idx` ON `spam_reputation` (`mailbox_id`);",
+        "CREATE TABLE `spam_feedback` (\n\t`message_id` text PRIMARY KEY NOT NULL REFERENCES `messages`(`id`) ON DELETE cascade,\n\t`mailbox_id` text NOT NULL REFERENCES `mailboxes`(`id`) ON DELETE cascade,\n\t`actor_user_id` text REFERENCES `users`(`id`) ON DELETE set null,\n\t`classification` text NOT NULL,\n\t`training_tokens` text NOT NULL,\n\t`reputation_keys` text NOT NULL,\n\t`tokenizer_version` integer DEFAULT 1 NOT NULL,\n\t`created_at` integer NOT NULL,\n\t`updated_at` integer NOT NULL\n);",
+        "CREATE INDEX `spam_feedback_mailbox_idx` ON `spam_feedback` (`mailbox_id`);"
+      ]
+    },
+    {
+      "name": "0030_add_message_search_index.sql",
+      "statements": [
+        "CREATE VIRTUAL TABLE `messages_fts` USING fts5(\n\t`subject`,\n\t`from_addr`,\n\t`to_addr`,\n\t`cc_addr`,\n\t`text_body`,\n\t`html_body`,\n\tcontent='messages',\n\tcontent_rowid='rowid',\n\ttokenize='unicode61 remove_diacritics 2'\n);",
+        "CREATE TRIGGER `messages_fts_ai` AFTER INSERT ON `messages` BEGIN\n\tINSERT INTO `messages_fts`(`rowid`, `subject`, `from_addr`, `to_addr`, `cc_addr`, `text_body`, `html_body`)\n\tVALUES (new.`rowid`, new.`subject`, new.`from_addr`, new.`to_addr`, new.`cc_addr`, new.`text_body`, new.`html_body`);\nEND;",
+        "CREATE TRIGGER `messages_fts_ad` AFTER DELETE ON `messages` BEGIN\n\tINSERT INTO `messages_fts`(`messages_fts`, `rowid`, `subject`, `from_addr`, `to_addr`, `cc_addr`, `text_body`, `html_body`)\n\tVALUES ('delete', old.`rowid`, old.`subject`, old.`from_addr`, old.`to_addr`, old.`cc_addr`, old.`text_body`, old.`html_body`);\nEND;",
+        "CREATE TRIGGER `messages_fts_au` AFTER UPDATE OF `subject`, `from_addr`, `to_addr`, `cc_addr`, `text_body`, `html_body` ON `messages` BEGIN\n\tINSERT INTO `messages_fts`(`messages_fts`, `rowid`, `subject`, `from_addr`, `to_addr`, `cc_addr`, `text_body`, `html_body`)\n\tVALUES ('delete', old.`rowid`, old.`subject`, old.`from_addr`, old.`to_addr`, old.`cc_addr`, old.`text_body`, old.`html_body`);\n\tINSERT INTO `messages_fts`(`rowid`, `subject`, `from_addr`, `to_addr`, `cc_addr`, `text_body`, `html_body`)\n\tVALUES (new.`rowid`, new.`subject`, new.`from_addr`, new.`to_addr`, new.`cc_addr`, new.`text_body`, new.`html_body`);\nEND;",
+        "INSERT INTO `messages_fts`(`messages_fts`) VALUES ('rebuild');"
+      ]
+    },
+    {
+      "name": "0031_add_password_reset_and_mfa.sql",
+      "statements": [
+        "ALTER TABLE `users` ADD `totp_secret` text;",
+        "ALTER TABLE `users` ADD `totp_enabled` integer DEFAULT false NOT NULL;",
+        "ALTER TABLE `users` ADD `totp_confirmed_at` integer;",
+        "CREATE TABLE `password_reset_tokens` (\n\t`id` text PRIMARY KEY NOT NULL,\n\t`user_id` text NOT NULL REFERENCES `users`(`id`) ON DELETE cascade,\n\t`token_hash` text NOT NULL UNIQUE,\n\t`expires_at` integer NOT NULL,\n\t`used_at` integer,\n\t`created_at` integer NOT NULL\n);",
+        "CREATE INDEX `password_reset_tokens_user_idx` ON `password_reset_tokens` (`user_id`);",
+        "CREATE TABLE `mfa_recovery_codes` (\n\t`id` text PRIMARY KEY NOT NULL,\n\t`user_id` text NOT NULL REFERENCES `users`(`id`) ON DELETE cascade,\n\t`code_hash` text NOT NULL UNIQUE,\n\t`used_at` integer,\n\t`created_at` integer NOT NULL\n);",
+        "CREATE INDEX `mfa_recovery_codes_user_idx` ON `mfa_recovery_codes` (`user_id`);",
+        "CREATE TABLE `login_challenges` (\n\t`id` text PRIMARY KEY NOT NULL,\n\t`user_id` text NOT NULL REFERENCES `users`(`id`) ON DELETE cascade,\n\t`token_hash` text NOT NULL UNIQUE,\n\t`expires_at` integer NOT NULL,\n\t`created_at` integer NOT NULL\n);"
+      ]
+    },
+    {
+      "name": "0032_add_agentic_mail.sql",
+      "statements": [
+        "CREATE TABLE `mailbox_agent_settings` (`mailbox_id` text PRIMARY KEY NOT NULL REFERENCES `mailboxes`(`id`) ON DELETE cascade, `enabled` integer NOT NULL DEFAULT 1, `auto_draft_enabled` integer NOT NULL DEFAULT 0, `reviewer_user_id` text REFERENCES `users`(`id`) ON DELETE set null, `instructions` text NOT NULL DEFAULT '', `daily_limit` integer NOT NULL DEFAULT 25, `updated_at` integer NOT NULL);",
+        "CREATE TABLE `agent_conversations` (`id` text PRIMARY KEY NOT NULL, `user_id` text NOT NULL REFERENCES `users`(`id`) ON DELETE cascade, `mailbox_id` text NOT NULL REFERENCES `mailboxes`(`id`) ON DELETE cascade, `title` text NOT NULL DEFAULT 'New conversation', `created_at` integer NOT NULL, `updated_at` integer NOT NULL);",
+        "CREATE INDEX `agent_conversations_owner_idx` ON `agent_conversations` (`user_id`, `mailbox_id`, `updated_at`);",
+        "CREATE TABLE `agent_chat_messages` (`id` text PRIMARY KEY NOT NULL, `conversation_id` text NOT NULL REFERENCES `agent_conversations`(`id`) ON DELETE cascade, `role` text NOT NULL, `content` text NOT NULL, `tool_name` text, `created_at` integer NOT NULL);",
+        "CREATE INDEX `agent_chat_messages_conversation_idx` ON `agent_chat_messages` (`conversation_id`, `created_at`);",
+        "CREATE TABLE `agent_jobs` (`id` text PRIMARY KEY NOT NULL, `mailbox_id` text NOT NULL REFERENCES `mailboxes`(`id`) ON DELETE cascade, `source_message_id` text NOT NULL REFERENCES `messages`(`id`) ON DELETE cascade, `reviewer_user_id` text NOT NULL REFERENCES `users`(`id`) ON DELETE cascade, `status` text NOT NULL DEFAULT 'pending', `attempts` integer NOT NULL DEFAULT 0, `next_attempt_at` integer NOT NULL, `lease_until` integer, `draft_id` text REFERENCES `messages`(`id`) ON DELETE set null, `reason` text, `created_at` integer NOT NULL);",
+        "CREATE UNIQUE INDEX `agent_jobs_source_idx` ON `agent_jobs` (`mailbox_id`, `source_message_id`);",
+        "CREATE INDEX `agent_jobs_due_idx` ON `agent_jobs` (`status`, `next_attempt_at`);",
+        "CREATE TABLE `agent_draft_metadata` (`draft_id` text PRIMARY KEY NOT NULL REFERENCES `messages`(`id`) ON DELETE cascade, `mailbox_id` text NOT NULL REFERENCES `mailboxes`(`id`) ON DELETE cascade, `origin` text NOT NULL, `source_message_id` text REFERENCES `messages`(`id`) ON DELETE set null, `revision` integer NOT NULL DEFAULT 1, `human_edited_at` integer, `created_at` integer NOT NULL);",
+        "CREATE TABLE `agent_send_approvals` (`id` text PRIMARY KEY NOT NULL, `draft_id` text NOT NULL REFERENCES `messages`(`id`) ON DELETE cascade, `mailbox_id` text NOT NULL REFERENCES `mailboxes`(`id`) ON DELETE cascade, `user_id` text NOT NULL REFERENCES `users`(`id`) ON DELETE cascade, `request_key_id` text REFERENCES `api_keys`(`id`) ON DELETE set null, `revision` integer NOT NULL, `payload_hash` text NOT NULL, `status` text NOT NULL DEFAULT 'pending', `claimed_at` integer, `message_id` text, `expires_at` integer NOT NULL, `created_at` integer NOT NULL);",
+        "CREATE INDEX `agent_send_approvals_user_idx` ON `agent_send_approvals` (`user_id`, `status`);",
+        "CREATE UNIQUE INDEX `agent_send_approvals_delivery_idx` ON `agent_send_approvals` (`draft_id`) WHERE `status` IN ('claimed', 'sent', 'unknown');",
+        "CREATE TABLE `mcp_key_mailboxes` (`key_id` text NOT NULL REFERENCES `api_keys`(`id`) ON DELETE cascade, `mailbox_id` text NOT NULL REFERENCES `mailboxes`(`id`) ON DELETE cascade);",
+        "CREATE UNIQUE INDEX `mcp_key_mailbox_idx` ON `mcp_key_mailboxes` (`key_id`, `mailbox_id`);",
+        "ALTER TABLE `api_keys` ADD `kind` text NOT NULL DEFAULT 'legacy';"
+      ]
+    },
+    {
+      "name": "0033_add_agent_provider_settings.sql",
+      "statements": [
+        "ALTER TABLE `app_settings` ADD `agent_provider` text;",
+        "ALTER TABLE `app_settings` ADD `agent_preset` text;",
+        "ALTER TABLE `app_settings` ADD `agent_base_url` text;",
+        "ALTER TABLE `app_settings` ADD `agent_api_key` text;",
+        "ALTER TABLE `app_settings` ADD `agent_model` text;"
+      ]
+    },
+    {
+      "name": "0034_add_agent_enabled.sql",
+      "statements": [
+        "ALTER TABLE `app_settings` ADD `agent_enabled` integer DEFAULT 1 NOT NULL;"
+      ]
+    },
+    {
+      "name": "0035_add_mailbox_agent_model.sql",
+      "statements": [
+        "ALTER TABLE `mailbox_agent_settings` ADD `model_id` text;"
+      ]
+    },
+    {
+      "name": "0036_add_agent_ai_usage.sql",
+      "statements": [
+        "ALTER TABLE `app_settings` ADD `agent_model_rates` text;",
+        "CREATE TABLE `agent_ai_usage` (\n\t`id` text PRIMARY KEY NOT NULL,\n\t`created_at` integer NOT NULL,\n\t`provider` text NOT NULL,\n\t`model` text NOT NULL,\n\t`source` text NOT NULL,\n\t`input_tokens` integer,\n\t`output_tokens` integer,\n\t`cost_usd_micros` integer\n);",
+        "CREATE INDEX `agent_ai_usage_created_idx` ON `agent_ai_usage` (`created_at`);"
+      ]
+    },
+    {
+      "name": "0037_generalize_ai_usage.sql",
+      "statements": [
+        "ALTER TABLE `agent_ai_usage` RENAME TO `ai_usage`;",
+        "DROP INDEX `agent_ai_usage_created_idx`;",
+        "CREATE INDEX `ai_usage_created_idx` ON `ai_usage` (`created_at`);"
+      ]
+    },
+    {
+      "name": "0038_scope_standard_api_keys.sql",
+      "statements": [
+        "ALTER TABLE api_keys ADD COLUMN mailbox_scope_enabled integer NOT NULL DEFAULT 0;"
+      ]
+    },
+    {
+      "name": "0039_add_backup_table_groups.sql",
+      "statements": [
+        "ALTER TABLE backup_settings ADD COLUMN excluded_table_groups text NOT NULL DEFAULT '[]';"
+      ]
+    },
+    {
+      "name": "0040_add_agent_draft_schedule.sql",
+      "statements": [
+        "ALTER TABLE `agent_draft_metadata` ADD `scheduled_at` integer;"
+      ]
+    },
+    {
+      "name": "0041_add_calendar_event_color.sql",
+      "statements": [
+        "ALTER TABLE `calendar_events` ADD `color` text NOT NULL DEFAULT 'blue';"
+      ]
+    },
+    {
+      "name": "0042_add_jmap_mailbox_revisions.sql",
+      "statements": [
+        "CREATE TABLE `jmap_mailbox_revisions` (\n\t`mailbox_id` text PRIMARY KEY NOT NULL,\n\t`revision` integer NOT NULL DEFAULT 0\n);",
+        "CREATE INDEX `mailboxes_user_idx` ON `mailboxes` (`user_id`);",
+        "CREATE TRIGGER `jmap_messages_ai` AFTER INSERT ON `messages`\nWHEN NEW.mailbox_id IS NOT NULL BEGIN\n\tINSERT INTO jmap_mailbox_revisions (mailbox_id, revision) VALUES (NEW.mailbox_id, 1)\n\tON CONFLICT(mailbox_id) DO UPDATE SET revision = revision + 1;\nEND;",
+        "CREATE TRIGGER `jmap_messages_au` AFTER UPDATE ON `messages`\nWHEN NEW.mailbox_id IS NOT NULL BEGIN\n\tINSERT INTO jmap_mailbox_revisions (mailbox_id, revision) VALUES (NEW.mailbox_id, 1)\n\tON CONFLICT(mailbox_id) DO UPDATE SET revision = revision + 1;\nEND;",
+        "CREATE TRIGGER `jmap_messages_au_old` AFTER UPDATE OF mailbox_id ON `messages`\nWHEN OLD.mailbox_id IS NOT NULL AND OLD.mailbox_id IS NOT NEW.mailbox_id BEGIN\n\tINSERT INTO jmap_mailbox_revisions (mailbox_id, revision) VALUES (OLD.mailbox_id, 1)\n\tON CONFLICT(mailbox_id) DO UPDATE SET revision = revision + 1;\nEND;",
+        "CREATE TRIGGER `jmap_messages_ad` AFTER DELETE ON `messages`\nWHEN OLD.mailbox_id IS NOT NULL BEGIN\n\tINSERT INTO jmap_mailbox_revisions (mailbox_id, revision) VALUES (OLD.mailbox_id, 1)\n\tON CONFLICT(mailbox_id) DO UPDATE SET revision = revision + 1;\nEND;",
+        "CREATE TRIGGER `jmap_folders_ai` AFTER INSERT ON `folders` BEGIN\n\tINSERT INTO jmap_mailbox_revisions (mailbox_id, revision) VALUES (NEW.mailbox_id, 1)\n\tON CONFLICT(mailbox_id) DO UPDATE SET revision = revision + 1;\nEND;",
+        "CREATE TRIGGER `jmap_folders_au` AFTER UPDATE ON `folders` BEGIN\n\tINSERT INTO jmap_mailbox_revisions (mailbox_id, revision) VALUES (NEW.mailbox_id, 1)\n\tON CONFLICT(mailbox_id) DO UPDATE SET revision = revision + 1;\nEND;",
+        "CREATE TRIGGER `jmap_folders_au_old` AFTER UPDATE OF mailbox_id ON `folders`\nWHEN OLD.mailbox_id IS NOT NEW.mailbox_id BEGIN\n\tINSERT INTO jmap_mailbox_revisions (mailbox_id, revision) VALUES (OLD.mailbox_id, 1)\n\tON CONFLICT(mailbox_id) DO UPDATE SET revision = revision + 1;\nEND;",
+        "CREATE TRIGGER `jmap_folders_ad` AFTER DELETE ON `folders` BEGIN\n\tINSERT INTO jmap_mailbox_revisions (mailbox_id, revision) VALUES (OLD.mailbox_id, 1)\n\tON CONFLICT(mailbox_id) DO UPDATE SET revision = revision + 1;\nEND;",
+        "CREATE TRIGGER `jmap_mailboxes_au` AFTER UPDATE ON `mailboxes` BEGIN\n\tINSERT INTO jmap_mailbox_revisions (mailbox_id, revision) VALUES (NEW.id, 1)\n\tON CONFLICT(mailbox_id) DO UPDATE SET revision = revision + 1;\nEND;",
+        "CREATE TRIGGER `jmap_mailbox_aliases_ai` AFTER INSERT ON `mailbox_aliases` BEGIN\n\tINSERT INTO jmap_mailbox_revisions (mailbox_id, revision) VALUES (NEW.mailbox_id, 1)\n\tON CONFLICT(mailbox_id) DO UPDATE SET revision = revision + 1;\nEND;",
+        "CREATE TRIGGER `jmap_mailbox_aliases_au` AFTER UPDATE ON `mailbox_aliases` BEGIN\n\tINSERT INTO jmap_mailbox_revisions (mailbox_id, revision) VALUES (NEW.mailbox_id, 1)\n\tON CONFLICT(mailbox_id) DO UPDATE SET revision = revision + 1;\nEND;",
+        "CREATE TRIGGER `jmap_mailbox_aliases_au_old` AFTER UPDATE OF mailbox_id ON `mailbox_aliases`\nWHEN OLD.mailbox_id IS NOT NEW.mailbox_id BEGIN\n\tINSERT INTO jmap_mailbox_revisions (mailbox_id, revision) VALUES (OLD.mailbox_id, 1)\n\tON CONFLICT(mailbox_id) DO UPDATE SET revision = revision + 1;\nEND;",
+        "CREATE TRIGGER `jmap_mailbox_aliases_ad` AFTER DELETE ON `mailbox_aliases` BEGIN\n\tINSERT INTO jmap_mailbox_revisions (mailbox_id, revision) VALUES (OLD.mailbox_id, 1)\n\tON CONFLICT(mailbox_id) DO UPDATE SET revision = revision + 1;\nEND;"
+      ]
+    },
+    {
+      "name": "0043_cloud_attachment_links.sql",
+      "statements": [
+        "ALTER TABLE app_settings ADD COLUMN outbound_attachment_max_mb integer NOT NULL DEFAULT 25;",
+        "CREATE TABLE shared_attachment_links (\n\tid text PRIMARY KEY NOT NULL,\n\tattachment_id text NOT NULL UNIQUE REFERENCES message_attachments(id) ON DELETE CASCADE,\n\texpires_at integer NOT NULL,\n\tcreated_at integer NOT NULL\n);"
+      ]
+    },
+    {
+      "name": "0044_add_calendar_repeat.sql",
+      "statements": [
+        "ALTER TABLE `calendar_events` ADD `repeat` text NOT NULL DEFAULT 'none';",
+        "ALTER TABLE `calendar_events` ADD `repeat_until` integer;"
+      ]
+    },
+    {
+      "name": "0045_add_calendar_repeat_days.sql",
+      "statements": [
+        "ALTER TABLE `calendar_events` ADD `repeat_days` text NOT NULL DEFAULT '[]';",
+        "ALTER TABLE `calendar_events` ADD `repeat_anchor_day` integer;"
+      ]
+    },
+    {
+      "name": "0046_add_calendar_excluded_occurrences.sql",
+      "statements": [
+        "ALTER TABLE `calendar_events` ADD `excluded_occurrences` text NOT NULL DEFAULT '[]';"
+      ]
+    },
+    {
+      "name": "0047_add_calendar_time_zone.sql",
+      "statements": [
+        "ALTER TABLE `calendar_events` ADD `time_zone` text;"
+      ]
+    },
+    {
+      "name": "0047_add_message_list_indexes.sql",
+      "statements": [
+        "CREATE INDEX IF NOT EXISTS `messages_inbox_page_idx` ON `messages` (`mailbox_id`, `status`, `folder_id`, `created_at` DESC, `id` DESC);",
+        "CREATE INDEX IF NOT EXISTS `messages_thread_key_idx` ON `messages` (`mailbox_id`, `status`, `folder_id`, coalesce(`thread_id`, `id`), `created_at`);",
+        "CREATE INDEX IF NOT EXISTS `messages_mailbox_thread_key_idx` ON `messages` (`mailbox_id`, coalesce(`thread_id`, `id`));"
+      ]
+    },
+    {
+      "name": "0048_add_user_time_zone.sql",
+      "statements": [
+        "ALTER TABLE `users` ADD `time_zone` text;"
+      ]
+    },
+    {
+      "name": "0049_add_booking_events.sql",
+      "statements": [
+        "CREATE TABLE `booking_events` (\n\t`id` text PRIMARY KEY NOT NULL,\n\t`user_id` text NOT NULL REFERENCES `users`(`id`) ON DELETE cascade,\n\t`name` text NOT NULL,\n\t`slug` text NOT NULL DEFAULT '',\n\t`description` text NOT NULL DEFAULT '',\n\t`color` text NOT NULL DEFAULT '#2563eb',\n\t`host_ids` text NOT NULL DEFAULT '[]',\n\t`duration_minutes` integer NOT NULL,\n\t`location` text NOT NULL DEFAULT '',\n\t`weekdays` text NOT NULL DEFAULT '[1,2,3,4,5]',\n\t`start_time` text NOT NULL DEFAULT '09:00',\n\t`end_time` text NOT NULL DEFAULT '17:00',\n\t`time_ranges` text NOT NULL DEFAULT '[{\"startTime\":\"09:00\",\"endTime\":\"17:00\"}]',\n\t`time_zone` text NOT NULL DEFAULT 'UTC',\n\t`enabled` integer NOT NULL DEFAULT 1,\n\t`created_at` integer NOT NULL,\n\t`updated_at` integer NOT NULL\n);",
+        "CREATE INDEX `booking_events_user_idx` ON `booking_events` (`user_id`);",
+        "CREATE UNIQUE INDEX `booking_events_user_slug_idx` ON `booking_events` (`user_id`, `slug`);",
+        "ALTER TABLE `users` ADD COLUMN `booking_username` text;",
+        "CREATE UNIQUE INDEX `users_booking_username_idx` ON `users` (`booking_username`);"
+      ]
+    },
+    {
+      "name": "0050_add_primary_admin.sql",
+      "statements": [
+        "ALTER TABLE `users` ADD `is_primary_admin` integer DEFAULT false NOT NULL;",
+        "ALTER TABLE `users` ADD `can_manage_domains` integer DEFAULT false NOT NULL;",
+        "ALTER TABLE `users` ADD `can_manage_users` integer DEFAULT false NOT NULL;",
+        "UPDATE `users` SET `is_primary_admin` = 1\nWHERE `id` = (\n  SELECT `id` FROM `users` WHERE `role` = 'admin'\n  ORDER BY `disabled` ASC, `created_at` ASC LIMIT 1\n);",
+        "UPDATE `users` SET `is_primary_admin` = 1\nWHERE `role` = 'admin'\n  AND `id` = (\n    SELECT `id` FROM `users` WHERE `role` = 'admin'\n    ORDER BY `disabled` ASC, `created_at` ASC LIMIT 1\n  )\n  AND NOT EXISTS (SELECT 1 FROM `users` WHERE `is_primary_admin` = 1);"
+      ]
+    },
+    {
+      "name": "0050_add_show_full_recipient_addresses.sql",
+      "statements": [
+        "ALTER TABLE `users` ADD `show_full_recipient_addresses` integer DEFAULT false NOT NULL;"
+      ]
+    },
+    {
+      "name": "0051_add_outbound_provider.sql",
+      "statements": [
+        "ALTER TABLE `domains` ADD `sending_provider` text DEFAULT 'none' NOT NULL;",
+        "UPDATE `domains` SET `sending_provider` = 'cloudflare' WHERE `sending_requested` = 1 OR `sending_enabled` = 1 OR `sending_subdomain_tag` IS NOT NULL;",
+        "ALTER TABLE `app_settings` ADD `resend_api_key` text;"
+      ]
+    },
+    {
+      "name": "0052_add_receiving_provider.sql",
+      "statements": [
+        "ALTER TABLE `domains` ADD `receiving_provider` text DEFAULT 'cloudflare' NOT NULL;",
+        "ALTER TABLE `app_settings` ADD `aws_config` text;",
+        "ALTER TABLE `app_settings` ADD `ses_receiving` text;",
+        "ALTER TABLE `app_settings` ADD `resend_webhook_id` text;",
+        "ALTER TABLE `app_settings` ADD `resend_webhook_secret` text;"
+      ]
+    },
+    {
+      "name": "0053_add_trash_retention.sql",
+      "statements": [
+        "ALTER TABLE `users` ADD `trash_retention_days` integer;",
+        "ALTER TABLE `messages` ADD `trashed_at` integer;",
+        "CREATE INDEX `messages_trashed_at_idx` ON `messages` (`trashed_at`);",
+        "UPDATE `messages` SET `trashed_at` = CAST(strftime('%s', 'now') AS integer) WHERE `status` IN ('trash', 'spam');",
+        "CREATE TRIGGER `messages_trashed_at_ai` AFTER INSERT ON `messages` WHEN new.`status` IN ('trash', 'spam') BEGIN\n\tUPDATE `messages` SET `trashed_at` = CAST(strftime('%s', 'now') AS integer) WHERE `rowid` = new.`rowid`;\nEND;",
+        "CREATE TRIGGER `messages_trashed_at_au` AFTER UPDATE OF `status` ON `messages` WHEN (new.`status` IN ('trash', 'spam')) <> (old.`status` IN ('trash', 'spam')) BEGIN\n\tUPDATE `messages` SET `trashed_at` = CASE WHEN new.`status` IN ('trash', 'spam') THEN CAST(strftime('%s', 'now') AS integer) ELSE NULL END WHERE `rowid` = new.`rowid`;\nEND;"
+      ]
+    },
+    {
+      "name": "0054_add_push_subscriptions.sql",
+      "statements": [
+        "CREATE TABLE `push_subscriptions` (\n\t`id` text PRIMARY KEY NOT NULL,\n\t`user_id` text NOT NULL,\n\t`session_id` text NOT NULL,\n\t`endpoint` text NOT NULL,\n\t`p256dh` text NOT NULL,\n\t`auth` text NOT NULL,\n\t`created_at` integer NOT NULL,\n\t`updated_at` integer NOT NULL,\n\tFOREIGN KEY (`user_id`) REFERENCES `users`(`id`) ON UPDATE no action ON DELETE cascade,\n\tFOREIGN KEY (`session_id`) REFERENCES `sessions`(`id`) ON UPDATE no action ON DELETE cascade\n);",
+        "CREATE UNIQUE INDEX `push_subscriptions_endpoint_idx` ON `push_subscriptions` (`endpoint`);",
+        "CREATE INDEX `push_subscriptions_user_idx` ON `push_subscriptions` (`user_id`);",
+        "CREATE INDEX `push_subscriptions_session_idx` ON `push_subscriptions` (`session_id`);"
+      ]
+    },
+    {
+      "name": "0055_add_drive.sql",
+      "statements": [
+        "CREATE TABLE `drive_items` (\n\t`id` text PRIMARY KEY NOT NULL,\n\t`owner_id` text NOT NULL,\n\t`parent_id` text,\n\t`kind` text NOT NULL,\n\t`name` text NOT NULL,\n\t`r2_key` text,\n\t`size` integer DEFAULT 0 NOT NULL,\n\t`content_type` text DEFAULT 'application/octet-stream' NOT NULL,\n\t`link_token` text,\n\t`trashed_at` integer,\n\t`created_at` integer NOT NULL,\n\t`updated_at` integer NOT NULL,\n\tFOREIGN KEY (`owner_id`) REFERENCES `users`(`id`) ON UPDATE no action ON DELETE cascade\n);",
+        "CREATE INDEX `drive_items_owner_parent_idx` ON `drive_items` (`owner_id`,`parent_id`);",
+        "CREATE UNIQUE INDEX `drive_items_link_token_idx` ON `drive_items` (`link_token`);",
+        "CREATE TABLE `drive_shares` (\n\t`id` text PRIMARY KEY NOT NULL,\n\t`item_id` text NOT NULL,\n\t`user_id` text NOT NULL,\n\t`role` text DEFAULT 'view' NOT NULL,\n\t`created_at` integer NOT NULL,\n\tFOREIGN KEY (`item_id`) REFERENCES `drive_items`(`id`) ON UPDATE no action ON DELETE cascade,\n\tFOREIGN KEY (`user_id`) REFERENCES `users`(`id`) ON UPDATE no action ON DELETE cascade\n);",
+        "CREATE UNIQUE INDEX `drive_shares_item_user_idx` ON `drive_shares` (`item_id`,`user_id`);",
+        "CREATE INDEX `drive_shares_user_idx` ON `drive_shares` (`user_id`);"
+      ]
+    },
+    {
+      "name": "0056_add_drive_upload_id.sql",
+      "statements": [
+        "ALTER TABLE `drive_items` ADD `upload_id` text;"
+      ]
+    },
+    {
+      "name": "0057_add_drive_resumable_uploads.sql",
+      "statements": [
+        "ALTER TABLE `drive_items` ADD `upload_part_size` integer;",
+        "ALTER TABLE `drive_items` ADD `upload_fingerprint` text;",
+        "CREATE TABLE `drive_upload_parts` (\n\t`item_id` text NOT NULL,\n\t`part_number` integer NOT NULL,\n\t`etag` text NOT NULL,\n\tFOREIGN KEY (`item_id`) REFERENCES `drive_items`(`id`) ON UPDATE no action ON DELETE cascade\n);",
+        "CREATE UNIQUE INDEX `drive_upload_parts_idx` ON `drive_upload_parts` (`item_id`,`part_number`);"
+      ]
+    },
+    {
+      "name": "0058_add_drive_storage_limit.sql",
+      "statements": [
+        "ALTER TABLE `app_settings` ADD `drive_storage_limit_bytes` integer;"
+      ]
+    },
+    {
+      "name": "0059_add_attachment_trash.sql",
+      "statements": [
+        "ALTER TABLE `message_attachments` ADD `trashed_at` integer;"
+      ]
+    },
+    {
+      "name": "0060_add_license_seat_limit.sql",
+      "statements": [
+        "ALTER TABLE `license_settings` ADD `seat_limit` integer DEFAULT 1;"
+      ]
+    },
+    {
+      "name": "0061_add_message_reply_to.sql",
+      "statements": [
+        "ALTER TABLE `messages` ADD `reply_to` text;"
+      ]
+    },
+    {
+      "name": "0062_add_remote_content_settings.sql",
+      "statements": [
+        "ALTER TABLE `users` ADD `remote_content_mode` text DEFAULT 'allow' NOT NULL;",
+        "ALTER TABLE `contacts` ADD `remote_content_allowed` integer DEFAULT false NOT NULL;"
+      ]
+    },
+    {
+      "name": "0063_add_account_deletion.sql",
+      "statements": [
+        "ALTER TABLE `users` ADD `last_sign_in_at` integer;",
+        "ALTER TABLE `users` ADD `deleted_at` integer;"
+      ]
+    },
+    {
+      "name": "0064_add_jmap_changes_and_devices.sql",
+      "statements": [
+        "CREATE TABLE `jmap_changes` (\n\t`seq` integer PRIMARY KEY AUTOINCREMENT NOT NULL,\n\t`mailbox_id` text NOT NULL,\n\t`object_type` text NOT NULL,\n\t`object_id` text NOT NULL,\n\t`thread_id` text,\n\t`change` text NOT NULL,\n\t`created_at` integer DEFAULT (unixepoch()) NOT NULL\n);",
+        "CREATE INDEX `jmap_changes_mailbox_seq_idx` ON `jmap_changes` (`mailbox_id`,`seq`);",
+        "CREATE TABLE `jmap_change_floor` (\n\t`id` integer PRIMARY KEY NOT NULL,\n\t`seq` integer DEFAULT 0 NOT NULL\n);",
+        "INSERT INTO `jmap_change_floor` (`id`, `seq`) VALUES (1, 0);",
+        "CREATE TRIGGER `jmap_changes_messages_ai` AFTER INSERT ON `messages`\nWHEN NEW.mailbox_id IS NOT NULL BEGIN\n\tINSERT INTO jmap_changes (mailbox_id, object_type, object_id, thread_id, change)\n\tVALUES (NEW.mailbox_id, 'email', NEW.id, coalesce(NEW.thread_id, NEW.id), 'created');\nEND;",
+        "CREATE TRIGGER `jmap_changes_messages_au` AFTER UPDATE ON `messages`\nWHEN NEW.mailbox_id IS NOT NULL AND OLD.mailbox_id IS NEW.mailbox_id BEGIN\n\tINSERT INTO jmap_changes (mailbox_id, object_type, object_id, thread_id, change)\n\tVALUES (NEW.mailbox_id, 'email', NEW.id, coalesce(NEW.thread_id, NEW.id), 'updated');\nEND;",
+        "CREATE TRIGGER `jmap_changes_messages_au_moved` AFTER UPDATE OF mailbox_id ON `messages`\nWHEN OLD.mailbox_id IS NOT NEW.mailbox_id BEGIN\n\tINSERT INTO jmap_changes (mailbox_id, object_type, object_id, thread_id, change)\n\tSELECT OLD.mailbox_id, 'email', OLD.id, coalesce(OLD.thread_id, OLD.id), 'destroyed' WHERE OLD.mailbox_id IS NOT NULL;\n\tINSERT INTO jmap_changes (mailbox_id, object_type, object_id, thread_id, change)\n\tSELECT NEW.mailbox_id, 'email', NEW.id, coalesce(NEW.thread_id, NEW.id), 'created' WHERE NEW.mailbox_id IS NOT NULL;\nEND;",
+        "CREATE TRIGGER `jmap_changes_messages_ad` AFTER DELETE ON `messages`\nWHEN OLD.mailbox_id IS NOT NULL BEGIN\n\tINSERT INTO jmap_changes (mailbox_id, object_type, object_id, thread_id, change)\n\tVALUES (OLD.mailbox_id, 'email', OLD.id, coalesce(OLD.thread_id, OLD.id), 'destroyed');\nEND;",
+        "CREATE TRIGGER `jmap_changes_folders_ai` AFTER INSERT ON `folders` BEGIN\n\tINSERT INTO jmap_changes (mailbox_id, object_type, object_id, change) VALUES (NEW.mailbox_id, 'mailbox', NEW.id, 'created');\nEND;",
+        "CREATE TRIGGER `jmap_changes_folders_au` AFTER UPDATE ON `folders` BEGIN\n\tINSERT INTO jmap_changes (mailbox_id, object_type, object_id, change)\n\tSELECT OLD.mailbox_id, 'mailbox', OLD.id, 'destroyed' WHERE OLD.mailbox_id IS NOT NEW.mailbox_id;\n\tINSERT INTO jmap_changes (mailbox_id, object_type, object_id, change)\n\tVALUES (NEW.mailbox_id, 'mailbox', NEW.id, CASE WHEN OLD.mailbox_id IS NEW.mailbox_id THEN 'updated' ELSE 'created' END);\nEND;",
+        "CREATE TRIGGER `jmap_changes_folders_ad` AFTER DELETE ON `folders` BEGIN\n\tINSERT INTO jmap_changes (mailbox_id, object_type, object_id, change) VALUES (OLD.mailbox_id, 'mailbox', OLD.id, 'destroyed');\nEND;",
+        "CREATE TRIGGER `jmap_changes_mailboxes_au` AFTER UPDATE ON `mailboxes` BEGIN\n\tINSERT INTO jmap_changes (mailbox_id, object_type, object_id, change) VALUES (NEW.id, 'mailbox', NEW.id, 'updated');\nEND;",
+        "CREATE TABLE `push_devices` (\n\t`id` text PRIMARY KEY NOT NULL,\n\t`user_id` text NOT NULL,\n\t`api_key_id` text NOT NULL,\n\t`platform` text NOT NULL,\n\t`token` text NOT NULL,\n\t`environment` text DEFAULT 'production' NOT NULL,\n\t`topic` text NOT NULL,\n\t`public_key` text,\n\t`previews` integer DEFAULT true NOT NULL,\n\t`created_at` integer NOT NULL,\n\t`updated_at` integer NOT NULL,\n\tFOREIGN KEY (`user_id`) REFERENCES `users`(`id`) ON UPDATE no action ON DELETE cascade,\n\tFOREIGN KEY (`api_key_id`) REFERENCES `api_keys`(`id`) ON UPDATE no action ON DELETE cascade\n);",
+        "CREATE UNIQUE INDEX `push_devices_platform_token_idx` ON `push_devices` (`platform`,`token`);",
+        "CREATE INDEX `push_devices_user_idx` ON `push_devices` (`user_id`);"
+      ]
+    },
+    {
+      "name": "0065_push_devices_per_user.sql",
+      "statements": [
+        "DROP INDEX `push_devices_platform_token_idx`;",
+        "CREATE UNIQUE INDEX `push_devices_platform_token_user_idx` ON `push_devices` (`platform`,`token`,`user_id`);",
+        "ALTER TABLE `push_devices` ADD `client_ref` text;"
+      ]
+    },
+    {
+      "name": "0066_add_domain_dns_skipped.sql",
+      "statements": [
+        "ALTER TABLE `domains` ADD `dns_skipped` integer DEFAULT false NOT NULL;"
+      ]
+    },
+    {
+      "name": "0068_add_message_tracking.sql",
+      "statements": [
+        "CREATE TABLE `message_tracking` (\n\t`token` text PRIMARY KEY NOT NULL,\n\t`message_id` text NOT NULL,\n\t`open_count` integer DEFAULT 0 NOT NULL,\n\t`first_opened_at` integer,\n\t`last_opened_at` integer,\n\t`created_at` integer NOT NULL,\n\tFOREIGN KEY (`message_id`) REFERENCES `messages`(`id`) ON UPDATE no action ON DELETE cascade\n);",
+        "CREATE UNIQUE INDEX `message_tracking_message_idx` ON `message_tracking` (`message_id`);",
+        "CREATE TABLE `message_opens` (\n\t`id` text PRIMARY KEY NOT NULL,\n\t`token` text NOT NULL,\n\t`opened_at` integer NOT NULL,\n\t`client` text,\n\t`device` text,\n\t`country` text,\n\t`city` text,\n\t`automated` integer DEFAULT false NOT NULL,\n\tFOREIGN KEY (`token`) REFERENCES `message_tracking`(`token`) ON UPDATE no action ON DELETE cascade\n);",
+        "CREATE INDEX `message_opens_token_idx` ON `message_opens` (`token`,`opened_at`);"
+      ]
+    },
+    {
+      "name": "0069_add_domain_tracking_hosts.sql",
+      "statements": [
+        "CREATE TABLE `domain_tracking_hosts` (\n\t`domain_id` text PRIMARY KEY NOT NULL,\n\t`hostname` text NOT NULL,\n\t`created_at` integer NOT NULL,\n\tFOREIGN KEY (`domain_id`) REFERENCES `domains`(`id`) ON UPDATE no action ON DELETE cascade\n);",
+        "CREATE UNIQUE INDEX `domain_tracking_hosts_hostname_idx` ON `domain_tracking_hosts` (`hostname`);"
+      ]
+    },
+    {
+      "name": "0070_add_spam_intelligence_settings.sql",
+      "statements": [
+        "ALTER TABLE `app_settings` ADD `spamhaus_dqs_key` text;",
+        "ALTER TABLE `app_settings` ADD `abusech_auth_key` text;",
+        "ALTER TABLE `app_settings` ADD `spam_domain_age_check` integer DEFAULT true NOT NULL;",
+        "ALTER TABLE `app_settings` ADD `spam_brands` text;"
+      ]
+    },
+    {
+      "name": "0071_add_follow_ups.sql",
+      "statements": [
+        "CREATE TABLE `follow_ups` (\n\t`id` text PRIMARY KEY NOT NULL,\n\t`message_id` text NOT NULL,\n\t`user_id` text NOT NULL,\n\t`due_at` integer NOT NULL,\n\t`status` text DEFAULT 'pending' NOT NULL,\n\t`created_at` integer NOT NULL,\n\tFOREIGN KEY (`message_id`) REFERENCES `messages`(`id`) ON UPDATE no action ON DELETE cascade,\n\tFOREIGN KEY (`user_id`) REFERENCES `users`(`id`) ON UPDATE no action ON DELETE cascade\n);",
+        "CREATE UNIQUE INDEX `follow_ups_message_idx` ON `follow_ups` (`message_id`);",
+        "CREATE INDEX `follow_ups_status_due_idx` ON `follow_ups` (`status`,`due_at`);",
+        "CREATE INDEX `follow_ups_user_status_idx` ON `follow_ups` (`user_id`,`status`);"
+      ]
+    },
+    {
+      "name": "0072_add_user_compose_preferences.sql",
+      "statements": [
+        "CREATE TABLE `user_compose_preferences` (\n\t`user_id` text PRIMARY KEY NOT NULL,\n\t`track_opens_default` integer DEFAULT false NOT NULL,\n\t`updated_at` integer NOT NULL,\n\tFOREIGN KEY (`user_id`) REFERENCES `users`(`id`) ON UPDATE no action ON DELETE cascade\n);"
+      ]
+    },
+    {
+      "name": "0073_add_undo_send_seconds.sql",
+      "statements": [
+        "ALTER TABLE `user_compose_preferences` ADD `undo_send_seconds` integer DEFAULT 15 NOT NULL;"
+      ]
+    },
+    {
+      "name": "0074_add_counts_conversation_indexes.sql",
+      "statements": [
+        "CREATE INDEX IF NOT EXISTS `messages_counts_cover_idx` ON `messages` (`mailbox_id`, `folder_id`, `direction`, `status`, `read`, `starred`, `snoozed_until`);",
+        "CREATE INDEX IF NOT EXISTS `messages_conv_cover_idx` ON `messages` (`mailbox_id`, `status`, coalesce(`thread_id`, `id`), `created_at`, `id`, `snoozed_until`);"
+      ]
+    },
+    {
+      "name": "0075_index_fk_columns.sql",
+      "statements": [
+        "CREATE INDEX IF NOT EXISTS `users_created_by_idx` ON `users` (`created_by_user_id`);",
+        "CREATE INDEX IF NOT EXISTS `mailbox_access_created_by_idx` ON `mailbox_access` (`created_by_user_id`);",
+        "CREATE INDEX IF NOT EXISTS `api_keys_user_idx` ON `api_keys` (`user_id`);",
+        "CREATE INDEX IF NOT EXISTS `spam_feedback_actor_user_idx` ON `spam_feedback` (`actor_user_id`);",
+        "CREATE INDEX IF NOT EXISTS `outbound_jobs_user_idx` ON `outbound_jobs` (`user_id`);",
+        "CREATE INDEX IF NOT EXISTS `outbound_jobs_message_idx` ON `outbound_jobs` (`message_id`);",
+        "CREATE INDEX IF NOT EXISTS `calendar_events_mailbox_idx` ON `calendar_events` (`mailbox_id`);",
+        "CREATE INDEX IF NOT EXISTS `routing_rules_user_idx` ON `routing_rules` (`user_id`);",
+        "CREATE INDEX IF NOT EXISTS `routing_rules_folder_idx` ON `routing_rules` (`folder_id`);",
+        "CREATE INDEX IF NOT EXISTS `webhooks_user_idx` ON `webhooks` (`user_id`);",
+        "CREATE INDEX IF NOT EXISTS `sessions_user_idx` ON `sessions` (`user_id`);",
+        "CREATE INDEX IF NOT EXISTS `push_devices_api_key_idx` ON `push_devices` (`api_key_id`);",
+        "CREATE INDEX IF NOT EXISTS `login_challenges_user_idx` ON `login_challenges` (`user_id`);",
+        "CREATE INDEX IF NOT EXISTS `audit_logs_message_id_idx` ON `audit_logs` (`message_id`);",
+        "CREATE INDEX IF NOT EXISTS `audit_logs_target_user_idx` ON `audit_logs` (`target_user_id`);",
+        "CREATE INDEX IF NOT EXISTS `backups_created_by_idx` ON `backups` (`created_by_user_id`);",
+        "CREATE INDEX IF NOT EXISTS `mailbox_agent_settings_reviewer_idx` ON `mailbox_agent_settings` (`reviewer_user_id`);",
+        "CREATE INDEX IF NOT EXISTS `agent_conversations_mailbox_idx` ON `agent_conversations` (`mailbox_id`);",
+        "CREATE INDEX IF NOT EXISTS `agent_jobs_source_message_idx` ON `agent_jobs` (`source_message_id`);",
+        "CREATE INDEX IF NOT EXISTS `agent_jobs_draft_idx` ON `agent_jobs` (`draft_id`);",
+        "CREATE INDEX IF NOT EXISTS `agent_jobs_reviewer_idx` ON `agent_jobs` (`reviewer_user_id`);",
+        "CREATE INDEX IF NOT EXISTS `agent_draft_meta_source_msg_idx` ON `agent_draft_metadata` (`source_message_id`);",
+        "CREATE INDEX IF NOT EXISTS `agent_draft_metadata_mailbox_idx` ON `agent_draft_metadata` (`mailbox_id`);",
+        "CREATE INDEX IF NOT EXISTS `agent_send_approvals_request_key_idx` ON `agent_send_approvals` (`request_key_id`);",
+        "CREATE INDEX IF NOT EXISTS `agent_send_approvals_mailbox_idx` ON `agent_send_approvals` (`mailbox_id`);",
+        "CREATE INDEX IF NOT EXISTS `agent_send_approvals_draft_idx` ON `agent_send_approvals` (`draft_id`);",
+        "CREATE INDEX IF NOT EXISTS `mcp_key_mailboxes_mailbox_idx` ON `mcp_key_mailboxes` (`mailbox_id`);"
+      ]
+    },
+    {
+      "name": "0076_add_navigation_cover_index.sql",
+      "statements": [
+        "CREATE INDEX IF NOT EXISTS `messages_nav_cover_idx` ON `messages` (`mailbox_id`, `status`, `folder_id`, `created_at` DESC, `id` DESC, `direction`, `read`, `thread_id`, `snoozed_until`);"
+      ]
+    },
+    {
+      "name": "0077_add_import_jobs.sql",
+      "statements": [
+        "CREATE TABLE `import_jobs` (\n\t`id` text PRIMARY KEY NOT NULL,\n\t`user_id` text NOT NULL,\n\t`mailbox_id` text NOT NULL,\n\t`kind` text NOT NULL,\n\t`label` text NOT NULL,\n\t`status` text DEFAULT 'queued' NOT NULL,\n\t`total` integer DEFAULT 0 NOT NULL,\n\t`processed` integer DEFAULT 0 NOT NULL,\n\t`imported` integer DEFAULT 0 NOT NULL,\n\t`skipped` integer DEFAULT 0 NOT NULL,\n\t`spec` text NOT NULL,\n\t`cursor` text DEFAULT '{}' NOT NULL,\n\t`errors` text DEFAULT '[]' NOT NULL,\n\t`error_count` integer DEFAULT 0 NOT NULL,\n\t`error` text,\n\t`created_at` integer NOT NULL,\n\t`started_at` integer,\n\t`updated_at` integer NOT NULL,\n\t`finished_at` integer,\n\tFOREIGN KEY (`user_id`) REFERENCES `users`(`id`) ON UPDATE no action ON DELETE cascade,\n\tFOREIGN KEY (`mailbox_id`) REFERENCES `mailboxes`(`id`) ON UPDATE no action ON DELETE cascade\n);",
+        "CREATE INDEX `import_jobs_user_idx` ON `import_jobs` (`user_id`,`created_at`);",
+        "CREATE INDEX `import_jobs_status_idx` ON `import_jobs` (`status`,`updated_at`);"
+      ]
+    },
+    {
+      "name": "0078_add_calendar_reminders.sql",
+      "statements": [
+        "ALTER TABLE `calendar_events` ADD `reminder_minutes` integer;",
+        "ALTER TABLE `calendar_events` ADD `last_reminded_start` integer;"
+      ]
+    },
+    {
+      "name": "0079_remote_content_ask.sql",
+      "statements": [
+        "UPDATE `users` SET `remote_content_mode` = 'ask' WHERE `remote_content_mode` = 'allow';"
+      ]
+    },
+    {
+      "name": "0080_passkeys_and_step_up_grants.sql",
+      "statements": [
+        "ALTER TABLE `users` ADD `require_second_factor` integer DEFAULT false NOT NULL;",
+        "ALTER TABLE `users` ADD `passkey_count` integer DEFAULT 0 NOT NULL;",
+        "ALTER TABLE `users` ADD `security_version` integer DEFAULT 0 NOT NULL;",
+        "UPDATE `users` SET `require_second_factor` = `totp_enabled`;",
+        "CREATE TABLE `passkey_credentials` (\n\t`id` text PRIMARY KEY NOT NULL,\n\t`user_id` text NOT NULL,\n\t`credential_id` text NOT NULL,\n\t`credential_hash` text NOT NULL,\n\t`public_key` text NOT NULL,\n\t`counter` integer DEFAULT 0 NOT NULL,\n\t`transports` text,\n\t`device_type` text NOT NULL,\n\t`backed_up` integer DEFAULT false NOT NULL,\n\t`aaguid` text,\n\t`name` text NOT NULL,\n\t`last_used_at` integer,\n\t`created_at` integer NOT NULL,\n\tFOREIGN KEY (`user_id`) REFERENCES `users`(`id`) ON UPDATE no action ON DELETE cascade\n);",
+        "CREATE UNIQUE INDEX `passkey_credentials_credential_hash_unique` ON `passkey_credentials` (`credential_hash`);",
+        "CREATE INDEX `passkey_credentials_user_idx` ON `passkey_credentials` (`user_id`);",
+        "CREATE TABLE `webauthn_challenges` (\n\t`id` text PRIMARY KEY NOT NULL,\n\t`ceremony_hash` text NOT NULL,\n\t`challenge` text NOT NULL,\n\t`purpose` text NOT NULL,\n\t`user_id` text,\n\t`binding_hash` text NOT NULL,\n\t`expires_at` integer NOT NULL,\n\t`used_at` integer,\n\t`created_at` integer NOT NULL,\n\tFOREIGN KEY (`user_id`) REFERENCES `users`(`id`) ON UPDATE no action ON DELETE cascade\n);",
+        "CREATE UNIQUE INDEX `webauthn_challenges_ceremony_hash_unique` ON `webauthn_challenges` (`ceremony_hash`);",
+        "CREATE INDEX `webauthn_challenges_user_idx` ON `webauthn_challenges` (`user_id`);",
+        "CREATE INDEX `webauthn_challenges_expires_idx` ON `webauthn_challenges` (`expires_at`);",
+        "CREATE TABLE `passkey_enrollment_grants` (\n\t`id` text PRIMARY KEY NOT NULL,\n\t`user_id` text NOT NULL,\n\t`token_hash` text NOT NULL,\n\t`kind` text NOT NULL,\n\t`created_by_user_id` text,\n\t`expires_at` integer NOT NULL,\n\t`used_at` integer,\n\t`created_at` integer NOT NULL,\n\tFOREIGN KEY (`user_id`) REFERENCES `users`(`id`) ON UPDATE no action ON DELETE cascade,\n\tFOREIGN KEY (`created_by_user_id`) REFERENCES `users`(`id`) ON UPDATE no action ON DELETE set null\n);",
+        "CREATE UNIQUE INDEX `passkey_enrollment_grants_token_hash_unique` ON `passkey_enrollment_grants` (`token_hash`);",
+        "CREATE INDEX `passkey_enrollment_grants_user_idx` ON `passkey_enrollment_grants` (`user_id`);",
+        "CREATE TABLE `auth_step_ups` (\n\t`id` text PRIMARY KEY NOT NULL,\n\t`user_id` text NOT NULL,\n\t`session_hash` text NOT NULL,\n\t`token_hash` text NOT NULL,\n\t`purpose` text NOT NULL,\n\t`target_user_id` text,\n\t`security_version` integer DEFAULT 0 NOT NULL,\n\t`actor_security_version` integer DEFAULT 0 NOT NULL,\n\t`expires_at` integer NOT NULL,\n\t`used_at` integer,\n\t`created_at` integer NOT NULL,\n\tFOREIGN KEY (`user_id`) REFERENCES `users`(`id`) ON UPDATE no action ON DELETE cascade\n);",
+        "CREATE UNIQUE INDEX `auth_step_ups_token_hash_unique` ON `auth_step_ups` (`token_hash`);",
+        "CREATE INDEX `auth_step_ups_user_idx` ON `auth_step_ups` (`user_id`);",
+        "CREATE TRIGGER `passkey_credentials_count_insert` AFTER INSERT ON `passkey_credentials`\nBEGIN\n\tUPDATE `users` SET `passkey_count` = `passkey_count` + 1 WHERE `id` = NEW.`user_id`;\nEND;",
+        "CREATE TRIGGER `passkey_credentials_count_delete` AFTER DELETE ON `passkey_credentials`\nBEGIN\n\tUPDATE `users` SET `passkey_count` = `passkey_count` - 1 WHERE `id` = OLD.`user_id`;\n\tUPDATE `users` SET `require_second_factor` = 0\n\tWHERE `id` = OLD.`user_id`\n\t\tAND `passkey_count` = 0\n\t\tAND `totp_enabled` = 0\n\t\tAND `deleted_at` IS NULL;\n\tSELECT RAISE(ABORT, 'last-auth-method')\n\tWHERE (SELECT `passkey_count` FROM `users` WHERE `id` = OLD.`user_id`) = 0\n\t\tAND (SELECT `deleted_at` FROM `users` WHERE `id` = OLD.`user_id`) IS NULL\n\t\tAND (SELECT `password_hash` FROM `users` WHERE `id` = OLD.`user_id`) = '!passkey-only';\nEND;",
+        "CREATE TRIGGER `users_last_password_update` BEFORE UPDATE OF `password_hash` ON `users`\nWHEN NEW.`password_hash` = '!passkey-only' AND NEW.`passkey_count` = 0\nBEGIN\n\tSELECT RAISE(ABORT, 'last-auth-method');\nEND;",
+        "CREATE TRIGGER `users_require_second_factor_update` BEFORE UPDATE OF `require_second_factor` ON `users`\nWHEN NEW.`require_second_factor` = 1 AND NEW.`passkey_count` = 0 AND NEW.`totp_enabled` = 0 AND NEW.`deleted_at` IS NULL\nBEGIN\n\tSELECT RAISE(ABORT, 'second-factor-unavailable');\nEND;"
+      ]
+    },
+    {
+      "name": "0081_add_feature_access.sql",
+      "statements": [
+        "ALTER TABLE `users` ADD `calendar_enabled` integer DEFAULT true NOT NULL;",
+        "ALTER TABLE `users` ADD `drive_enabled` integer DEFAULT true NOT NULL;"
+      ]
+    },
+    {
+      "name": "0082_add_api_key_sha256.sql",
+      "statements": [
+        "ALTER TABLE `api_keys` ADD `key_sha256` text;",
+        "CREATE UNIQUE INDEX `api_keys_key_sha256_idx` ON `api_keys` (`key_sha256`);"
+      ]
+    },
+    {
+      "name": "0083_add_message_has_unsubscribe.sql",
+      "statements": [
+        "ALTER TABLE `messages` ADD `has_unsubscribe` integer DEFAULT false NOT NULL;"
+      ]
+    },
+    {
+      "name": "0084_add_conversation_notes.sql",
+      "statements": [
+        "CREATE TABLE `conversation_notes` (\n\t`id` text PRIMARY KEY NOT NULL,\n\t`mailbox_id` text NOT NULL,\n\t`thread_key` text NOT NULL,\n\t`message_id` text,\n\t`html` text NOT NULL,\n\t`author_user_id` text,\n\t`created_at` integer NOT NULL,\n\t`updated_at` integer NOT NULL,\n\tFOREIGN KEY (`mailbox_id`) REFERENCES `mailboxes`(`id`) ON UPDATE no action ON DELETE cascade,\n\tFOREIGN KEY (`message_id`) REFERENCES `messages`(`id`) ON UPDATE no action ON DELETE set null,\n\tFOREIGN KEY (`author_user_id`) REFERENCES `users`(`id`) ON UPDATE no action ON DELETE set null\n);",
+        "CREATE INDEX `conversation_notes_mailbox_thread_idx` ON `conversation_notes` (`mailbox_id`,`thread_key`,`created_at`);",
+        "CREATE INDEX `conversation_notes_message_idx` ON `conversation_notes` (`message_id`);",
+        "CREATE INDEX `conversation_notes_author_idx` ON `conversation_notes` (`author_user_id`);"
+      ]
+    },
+    {
+      "name": "0085_calendar_invitations.sql",
+      "statements": [
+        "ALTER TABLE `calendar_events` ADD `response_status` text;",
+        "ALTER TABLE `calendar_events` ADD `invite_message_id` text;",
+        "ALTER TABLE `calendar_events` ADD `attendee_responses` text;",
+        "ALTER TABLE `calendar_events` ADD `invite_sender` text;",
+        "ALTER TABLE `calendar_events` ADD `invite_sequence` integer;"
+      ]
+    },
+    {
+      "name": "0086_booking_confirmation_templates.sql",
+      "statements": [
+        "CREATE TABLE `booking_confirmation_templates` (\n\t`event_id` text PRIMARY KEY NOT NULL,\n\t`subject` text DEFAULT '' NOT NULL,\n\t`body` text DEFAULT '' NOT NULL,\n\t`updated_at` integer NOT NULL,\n\tFOREIGN KEY (`event_id`) REFERENCES `booking_events`(`id`) ON UPDATE no action ON DELETE cascade\n);"
+      ]
+    },
+    {
+      "name": "0087_message_invite_response.sql",
+      "statements": [
+        "ALTER TABLE `messages` ADD `invite_response` text;"
+      ]
+    },
+    {
+      "name": "0088_message_action_undo_claims.sql",
+      "statements": [
+        "CREATE TABLE `message_action_undo_claims` (\n\t`nonce` text PRIMARY KEY NOT NULL,\n\t`user_id` text NOT NULL,\n\t`expires_at` integer NOT NULL\n);",
+        "CREATE INDEX `message_action_undo_claims_expires_idx` ON `message_action_undo_claims` (`expires_at`);"
+      ]
+    }
+  ]
+}

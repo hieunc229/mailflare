@@ -1,4 +1,5 @@
 import { createElement, forwardRef, type ComponentType, type SVGProps } from "react";
+import { cn } from "@/lib/utils";
 import { HugeiconsIcon, type IconSvgElement } from "@hugeicons/react";
 import {
 	ActivityIcon as HugeActivityIcon,
@@ -244,9 +245,10 @@ export const FileWarning = createIcon(HugeFileExclamationPointIcon, "FileWarning
 export const Folder = createIcon(HugeFolderIcon, "Folder");
 export const FolderInput = createIcon(HugeFolderInputIcon, "FolderInput");
 export const FolderPlus = createIcon(HugeFolderPlusIcon, "FolderPlus");
-export const Forward = function (props) {
-	return createElement(createIcon(HugeReplyIcon, "Forward"), {...props, className: `${props.className} scale-x-[-1]`});
-}
+// Created once: building the icon component inside render gives React a new type every time and remounts the SVG.
+const ForwardBase = createIcon(HugeReplyIcon, "Forward");
+export const Forward: LucideIcon = (props) =>
+	createElement(ForwardBase, { ...props, className: cn(props.className, "scale-x-[-1]") });
 export const Globe2 = createIcon(HugeGlobeIcon, "Globe2");
 export const HardDrive = createIcon(HugeHardDriveIcon, "HardDrive");
 export const HelpCircle = createIcon(HugeHelpCircleIcon, "HelpCircle");

@@ -27,3 +27,9 @@ export async function readFormDataBody(request: Request, maxBytes: number): Prom
 		body,
 	}).formData();
 }
+
+/** Parses a JSON object body. `null` when the body is empty, malformed or not an object, so handlers can answer 400. */
+export async function readJsonObject<T = Record<string, unknown>>(request: Request): Promise<T | null> {
+	const body: unknown = await request.json().catch(() => null);
+	return body && typeof body === "object" && !Array.isArray(body) ? (body as T) : null;
+}

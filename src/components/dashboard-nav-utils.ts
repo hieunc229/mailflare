@@ -1,20 +1,12 @@
-import type { BulkMessageAction } from "@/app/api/messages/bulk/types";
 import type { MessageCounts, MessageFolder } from "@/hooks/types";
-import { authFetch } from "@/lib/auth/client";
+import { performMessageAction } from "@/lib/messages/actions/client";
 
 export function getFolderNavCount(folder: MessageFolder, counts: MessageCounts["folders"]): number | undefined {
 	return counts[folder].unread;
 }
 
-async function moveMessages(payload: { messageIds: string[]; action: BulkMessageAction; folderId?: string }) {
-	const response = await authFetch("/api/messages/bulk", {
-		method: "POST",
-		headers: { "Content-Type": "application/json" },
-		body: JSON.stringify(payload),
-	});
-
-	if (!response.ok) throw new Error("Unable to move messages");
-	window.dispatchEvent(new Event("mailflare:messages-changed"));
+async function moveMessages(payload: { messageIds: string[]; action: "archive" | "spam" | "trash" | "folder"; folderId?: string }) {
+	await performMessageAction(payload);
 }
 
 export function moveMessagesToSystemFolder(messageIds: string[], action: "archive" | "spam" | "trash") {

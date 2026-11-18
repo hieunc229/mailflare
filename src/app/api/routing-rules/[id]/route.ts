@@ -8,12 +8,13 @@ import { getMailboxAccessLevel } from "@/lib/mailboxes/access";
 import { routingRuleSchema } from "@/lib/validators";
 import { resolveRuleTarget } from "../utils";
 import type { RoutingRuleRouteParams } from "./types";
+import { readJsonObject } from "@/lib/http/request";
 
 export async function PATCH(request: Request, { params }: RoutingRuleRouteParams) {
 	const { id } = await params;
 	const env = getEnv();
 	const user = await requireUser(env, request);
-	const parsed = routingRuleSchema.safeParse(await request.json());
+	const parsed = routingRuleSchema.safeParse(await readJsonObject(request));
 	if (!parsed.success) {
 		return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
 	}

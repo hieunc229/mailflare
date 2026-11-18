@@ -2,18 +2,16 @@ import { eq } from "drizzle-orm";
 import { NextResponse } from "next/server";
 import { getDb } from "@/db";
 import { backups } from "@/db/schema";
-import { assertPrimaryAdmin } from "@/lib/auth/admin";
-import { requireUser } from "@/lib/auth/cookies";
-import { getEnv } from "@/lib/cloudflare";
+import { authorizeBackupAdmin } from "../../admin";
 
 export async function GET(
 	request: Request,
 	{ params }: { params: Promise<{ id: string }> },
 ) {
-	const env = getEnv();
+	const auth = await authorizeBackupAdmin(request);
+	if (auth.error) return auth.error;
+	const { env } = auth;
 	try {
-		const user = await requireUser(env, request);
-		assertPrimaryAdmin(user);
 		const { id } = await params;
 		const [backup] = await getDb(env).select().from(backups).where(eq(backups.id, id)).limit(1);
 		if (!backup?.r2Key) return NextResponse.json({ error: "Backup file not found" }, { status: 404 });
@@ -27,6 +25,6 @@ export async function GET(
 			},
 		});
 	} catch {
-		return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+		return NextResponse.json({ error: "Could not read the backup" }, { status: 500 });
 	}
 }
