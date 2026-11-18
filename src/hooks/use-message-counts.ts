@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import type { MessageCounts, MessageCountsDelta } from "./types";
+import { registerMessageRefresh } from "./message-refresh";
 import { clearMessageCountsCache, fetchMessageCounts } from "./utils";
 
 const REFRESH_DEBOUNCE_MS = 150;
@@ -32,18 +33,19 @@ export function useMessageCounts(mailboxId?: string | null, enabled = true) {
 		let refreshTimer: number | null = null;
 		let requestNumber = 0;
 
-		async function loadCounts() {
+		async function loadCounts(force = false, showLoading = true) {
 			const currentRequest = ++requestNumber;
-			setIsLoading(true);
+			if (showLoading) setIsLoading(true);
 			try {
-				const nextCounts = await fetchMessageCounts(mailboxId);
+				const nextCounts = await fetchMessageCounts(mailboxId, force);
 				if (!cancelled && currentRequest === requestNumber) setCounts(nextCounts ?? emptyCounts);
 			} finally {
 				if (!cancelled && currentRequest === requestNumber) setIsLoading(false);
 			}
 		}
 
-		void loadCounts();
+		void loadCounts().catch(() => undefined);
+		const unregisterRefresh = registerMessageRefresh(() => loadCounts(false, false));
 		function onMessagesChanged() {
 			clearMessageCountsCache();
 			if (document.visibilityState !== "visible") return;
@@ -51,7 +53,7 @@ export function useMessageCounts(mailboxId?: string | null, enabled = true) {
 			refreshTimer = window.setTimeout(() => {
 				refreshTimer = null;
 				// The cache was cleared above, so hooks refreshing for the same change share one request.
-				void loadCounts();
+				void loadCounts().catch(() => undefined);
 			}, REFRESH_DEBOUNCE_MS);
 		}
 		function onMessageCountsDelta(event: Event) {
@@ -74,6 +76,7 @@ export function useMessageCounts(mailboxId?: string | null, enabled = true) {
 
 		return () => {
 			cancelled = true;
+			unregisterRefresh();
 			window.removeEventListener("mailflare:messages-changed", onMessagesChanged);
 			window.removeEventListener("mailflare:message-counts-changed", onMessagesChanged);
 			window.removeEventListener("mailflare:message-counts-delta", onMessageCountsDelta);
