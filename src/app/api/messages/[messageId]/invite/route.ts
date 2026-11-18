@@ -7,7 +7,7 @@ import { getEnv } from "@/lib/cloudflare";
 import { buildReplyIcs, parseInvite, type InviteResponse, type ParsedInvite } from "@/lib/calendar/invite";
 import { findInviteAttachment, MAX_INVITE_BYTES } from "@/lib/calendar/invite-attachment";
 import { addExcludedOccurrence, normalizeInviteSender, planInviteAnswer } from "@/lib/calendar/invite-rules";
-import { inviteEventId, inviteEventValues, recipientInviteTimeZone, sameInviteSender } from "@/lib/calendar/invite-store";
+import { inviteEventId, inviteEventValues, recipientInviteTimeZone, sameInviteSender, upsertEventOverride } from "@/lib/calendar/invite-store";
 import { hasValidSessionMutationOrigin } from "@/lib/auth/origin";
 import { getEmailAddress, splitEmailAddressList } from "@/lib/email/address";
 import { getAttachmentForUser, listMessageAttachments } from "@/lib/email/attachments";
@@ -100,13 +100,22 @@ export async function POST(request: Request, { params }: InviteRouteParams) {
 		// The calendar already holds a newer revision of this invitation; record the answer without reverting it.
 		await db.update(calendarEvents).set({ responseStatus: response, inviteSender: existing.inviteSender || sender, timeZone: existing.timeZone ?? userZone, updatedAt: new Date() }).where(where);
 		eventId = existing.id;
+	} else if (plan.action === "upsert-override" && existing) {
+		// Answering one occurrence of a series edits only that occurrence; the series row keeps its times and
+		// revision. Never touches tombstones: those live only in the automatic inbound path.
+		await upsertEventOverride(db, existing.id, { occurrenceMs: plan.occurrence.getTime(), startsAt: invite.startsAt, endsAt: invite.endsAt });
+		await db.update(calendarEvents).set({ inviteSender: existing.inviteSender || sender, timeZone: existing.timeZone ?? userZone, updatedAt: new Date() }).where(where);
+		eventId = existing.id;
 	} else {
 		const values = {
 			...inviteEventValues(invite, invite.timeZone ?? userZone, existing?.excludedOccurrences),
 			responseStatus: response, inviteMessageId: messageId, inviteSender: sender,
 		};
 		// The colour is chosen only when the row is created, so one the user changed is kept.
-		await db.insert(calendarEvents).values({ id, userId: user.id, mailboxId: message.mailboxId, color: response === "tentative" ? "#7c3aed" : "#2563eb", ...values }).onConflictDoUpdate({ target: calendarEvents.id, set: values });
+		// The reminder is written once on insert, and on update only when the row has none.
+		const insertValues = invite.alarmMinutes != null ? { ...values, reminderMinutes: invite.alarmMinutes } : values;
+		const updateValues = existing?.reminderMinutes == null ? insertValues : values;
+		await db.insert(calendarEvents).values({ id, userId: user.id, mailboxId: message.mailboxId, color: response === "tentative" ? "#7c3aed" : "#2563eb", ...insertValues }).onConflictDoUpdate({ target: calendarEvents.id, set: updateValues });
 		eventId = id;
 	}
 

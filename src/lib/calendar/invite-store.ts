@@ -1,8 +1,11 @@
 import { and, desc, eq, isNotNull, isNull } from "drizzle-orm";
 import { getDb } from "@/db";
-import { calendarEvents, users } from "@/db/schema";
+import { calendarEventOverrides, calendarEvents, calendarInviteTombstones, calendarOccurrenceResponses, users } from "@/db/schema";
+import { newId } from "@/lib/ids";
 import type { AttachmentContent } from "@/lib/email/attachment-types";
-import { inviteRepeat, parseInvite, type ParsedInvite } from "./invite";
+import { inviteAttendeeAddresses, inviteRepeat, parseInvite, type ParsedInvite } from "./invite";
+import { ICS_ADDRESS } from "./ics";
+import { getEmailAddress } from "@/lib/email/address";
 import { findInviteAttachment, MAX_INVITE_BYTES } from "./invite-attachment";
 import { addExcludedOccurrence, chooseRecipientZone, inboundNeedsRecipientZone, inviteSenderMatches, mergeExcludedOccurrences, normalizeInviteSender, planInboundInvite } from "./invite-rules";
 
@@ -14,6 +17,56 @@ export async function inviteEventId(userId: string, uid: string): Promise<string
 	return `inv_${[...new Uint8Array(digest)].slice(0, 12).map((byte) => byte.toString(16).padStart(2, "0")).join("")}`;
 }
 
+/** Latest RSVP per guest per occurrence: the same hash scheme as inviteEventId over event, occurrence and guest. */
+export async function occurrenceResponseId(eventId: string, occurrenceMs: number, guest: string): Promise<string> {
+	const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(`${eventId}\n${occurrenceMs}\n${guest}`));
+	return `ocr_${[...new Uint8Array(digest)].slice(0, 12).map((byte) => byte.toString(16).padStart(2, "0")).join("")}`;
+}
+
+export type EventOverrideInput = { occurrenceMs: number; startsAt: Date; endsAt: Date };
+
+/** Overrides of one series, by (eventId, occurrenceMs): a moved occurrence, or an RDATE extra one. */
+export async function listEventOverrides(db: ReturnType<typeof getDb>, eventId: string) {
+	return db.select().from(calendarEventOverrides).where(eq(calendarEventOverrides.eventId, eventId));
+}
+
+/** Insert an override, or refresh the times of the one already stored for that occurrence. */
+export async function upsertEventOverride(db: ReturnType<typeof getDb>, eventId: string, override: EventOverrideInput): Promise<void> {
+	const where = and(eq(calendarEventOverrides.eventId, eventId), eq(calendarEventOverrides.occurrenceMs, override.occurrenceMs));
+	const [existing] = await db.select({ id: calendarEventOverrides.id }).from(calendarEventOverrides).where(where).limit(1);
+	if (existing) {
+		await db.update(calendarEventOverrides).set({ startsAt: override.startsAt, endsAt: override.endsAt, updatedAt: new Date() }).where(where);
+		return;
+	}
+	await db.insert(calendarEventOverrides).values({ id: newId("ovr"), eventId, occurrenceMs: override.occurrenceMs, startsAt: override.startsAt, endsAt: override.endsAt, createdAt: new Date(), updatedAt: new Date() });
+}
+
+/** Drop the override stored for one occurrence, if any. */
+export async function deleteEventOverride(db: ReturnType<typeof getDb>, eventId: string, occurrenceMs: number): Promise<void> {
+	await db.delete(calendarEventOverrides).where(and(eq(calendarEventOverrides.eventId, eventId), eq(calendarEventOverrides.occurrenceMs, occurrenceMs)));
+}
+
+/** Latest RSVPs on one event the user sent, for the invitation card. */
+export async function listOccurrenceResponses(db: ReturnType<typeof getDb>, eventId: string) {
+	return db.select().from(calendarOccurrenceResponses).where(eq(calendarOccurrenceResponses.eventId, eventId));
+}
+
+/**
+ * Extra RDATE instants become overrides, so they survive like exclusions do: only missing ones are added, stored
+ * overrides are never removed even when a later revision drops the RDATE.
+ */
+async function mergeRdateOverrides(db: ReturnType<typeof getDb>, eventId: string, invite: ParsedInvite): Promise<void> {
+	if (!invite.rdateDates.length) return;
+	const duration = invite.endsAt.getTime() - invite.startsAt.getTime();
+	const known = new Set((await listEventOverrides(db, eventId)).map((override) => override.occurrenceMs));
+	for (const date of invite.rdateDates) {
+		const ms = date.getTime();
+		if (known.has(ms)) continue;
+		known.add(ms);
+		await upsertEventOverride(db, eventId, { occurrenceMs: ms, startsAt: date, endsAt: new Date(ms + duration) });
+	}
+}
+
 /**
  * Calendar columns written from an invitation. `timeZone` is the zone the event's clock time belongs to (the invitation's
  * own zone, else the recipient's); `existingExcluded` keeps occurrences already excluded when the series is refreshed.
@@ -22,8 +75,10 @@ export function inviteEventValues(invite: ParsedInvite, timeZone: string | null,
 	const repeat = inviteRepeat(invite.rrule, invite.startsAt, timeZone);
 	return {
 		title: invite.title, description: invite.description, location: invite.location,
-		attendees: "[]",
+		// Flat address list only (organizer plus attendees); guest statuses stay on the message card.
+		attendees: JSON.stringify(inviteAttendeeAddresses(invite)),
 		repeat: repeat.repeat, repeatDays: JSON.stringify(repeat.repeatDays), repeatAnchorDay: repeat.repeatAnchorDay, repeatUntil: repeat.repeatUntil,
+		repeatInterval: repeat.repeatInterval, repeatWeekday: repeat.repeatWeekday, repeatWeek: repeat.repeatWeek,
 		excludedOccurrences: mergeExcludedOccurrences(existingExcluded, invite.excludedDates), timeZone,
 		inviteSequence: invite.sequence,
 		startsAt: invite.startsAt, endsAt: invite.endsAt, updatedAt: new Date(),
@@ -68,7 +123,11 @@ export async function registerInboundInvite(env: CloudflareEnv, input: { userId:
 		const db = getDb(env);
 		const recipientZone = await recipientInviteTimeZone(db, input.userId);
 		const invite = parseInvite(new TextDecoder().decode(attachment.content), { timeZone: recipientZone ?? "UTC" });
-		if (!invite || (invite.method !== "REQUEST" && invite.method !== "CANCEL" && invite.method !== "REPLY")) return;
+		if (!invite) return;
+		// A file without METHOD defaults to PUBLISH; treat that as a REQUEST so plain provider invites auto-add.
+		// The stored method keeps PUBLISH, so the card and the message GET/POST behavior are unchanged.
+		const effectiveMethod = invite.method === "PUBLISH" && invite.methodAbsent ? "REQUEST" : invite.method;
+		if (effectiveMethod !== "REQUEST" && effectiveMethod !== "CANCEL" && effectiveMethod !== "REPLY") return;
 		// All-day or floating times read without knowing the recipient's zone would land at the wrong time (and a refresh
 		// would look like a move), so such an invitation waits for the user to answer it from the message instead.
 		if (!recipientZone && inboundNeedsRecipientZone(invite)) return;
@@ -83,19 +142,44 @@ export async function registerInboundInvite(env: CloudflareEnv, input: { userId:
 			const [own] = await db.select({ id: calendarEvents.id }).from(calendarEvents).where(and(eq(calendarEvents.id, ownId), eq(calendarEvents.userId, input.userId))).limit(1);
 			if (own) return;
 		}
+		// A METHOD-less file is easy to spoof, so it auto-adds only when the ORGANIZER proves the sender:
+		// a valid calendar address on the sender's own address or domain.
+		if (invite.methodAbsent && invite.method === "PUBLISH") {
+			const organizerAddress = getEmailAddress(invite.organizer ?? "").trim().toLowerCase();
+			const senderAddress = getEmailAddress(input.senderAddress).trim().toLowerCase();
+			const domainOf = (address: string) => address.slice(address.indexOf("@") + 1);
+			if (!organizerAddress || !ICS_ADDRESS.test(organizerAddress) || !senderAddress || (organizerAddress !== senderAddress && domainOf(organizerAddress) !== domainOf(senderAddress))) return;
+		}
 		const id = await inviteEventId(input.userId, invite.uid);
 		const where = and(eq(calendarEvents.id, id), eq(calendarEvents.userId, input.userId));
 		const [existing] = await db.select().from(calendarEvents).where(where).limit(1);
 		// Anyone who learns an invitation UID could otherwise cancel or rewrite the event, so a later message
 		// is applied only when it comes from the sender of the message that created the event.
 		if (existing && !sameInviteSender(existing, input.senderAddress)) return;
-		const plan = planInboundInvite(invite, existing);
+		// A remembered cancellation wins over a late or re-sent revision: only a newer revision from the same
+		// sender clears it and proceeds. Anything else is ignored, and an ignored plan never clears it.
+		const plan = planInboundInvite({ method: effectiveMethod, recurrenceId: invite.recurrenceId, sequence: invite.sequence }, existing);
 		const sender = normalizeInviteSender(input.senderAddress);
+		const [tombstone] = await db.select().from(calendarInviteTombstones).where(eq(calendarInviteTombstones.id, id)).limit(1);
+		if (tombstone) {
+			if (invite.sequence <= tombstone.inviteSequence) return;
+			if (sender !== normalizeInviteSender(tombstone.inviteSender)) return;
+			if (plan.action === "ignore") {
+				// Still a remembered cancellation, just a newer one: keep it and record the newer sequence/sender.
+				await db.update(calendarInviteTombstones).set({ inviteSequence: invite.sequence, inviteSender: sender, cancelledAt: new Date() }).where(eq(calendarInviteTombstones.id, id));
+				return;
+			}
+			// Only the paths that actually write clear the tombstone; delete/exclude keep it via their own handling below.
+			if (plan.action === "insert" || plan.action === "update" || plan.action === "upsert-override") await db.delete(calendarInviteTombstones).where(eq(calendarInviteTombstones.id, id));
+		}
 		if (plan.action === "ignore") return;
 		if (plan.action === "delete") {
-			// Nothing remembers the cancellation: a REQUEST for the same UID arriving later (late delivery, or a
-			// re-invitation) creates the event again.
+			// The cancellation is remembered, so a late REQUEST for the same UID arriving later (or a
+			// re-invitation with an older SEQUENCE) does not recreate the event.
 			await db.delete(calendarEvents).where(where);
+			const [remembered] = await db.select({ id: calendarInviteTombstones.id }).from(calendarInviteTombstones).where(eq(calendarInviteTombstones.id, id)).limit(1);
+			if (remembered) await db.update(calendarInviteTombstones).set({ inviteSequence: invite.sequence, inviteSender: sender, cancelledAt: new Date() }).where(eq(calendarInviteTombstones.id, id));
+			else await db.insert(calendarInviteTombstones).values({ id, userId: input.userId, inviteSequence: invite.sequence, inviteSender: sender, cancelledAt: new Date() });
 			return;
 		}
 		if (plan.action === "exclude") {
@@ -103,16 +187,28 @@ export async function registerInboundInvite(env: CloudflareEnv, input: { userId:
 			await db.update(calendarEvents).set({ excludedOccurrences: addExcludedOccurrence(existing.excludedOccurrences, plan.occurrence), inviteSender: existing.inviteSender || sender, updatedAt: new Date() }).where(where);
 			return;
 		}
+		if (plan.action === "upsert-override") {
+			if (!existing) return;
+			await upsertEventOverride(db, id, { occurrenceMs: plan.occurrence.getTime(), startsAt: invite.startsAt, endsAt: invite.endsAt });
+			await db.update(calendarEvents).set({ inviteSequence: invite.sequence, inviteMessageId: input.messageId, inviteSender: existing.inviteSender || sender, updatedAt: new Date() }).where(where);
+			return;
+		}
 		const values = { ...inviteEventValues(invite, invite.timeZone ?? userZone, existing?.excludedOccurrences), inviteSender: sender };
 		if (plan.action === "insert" || !existing) {
-			await db.insert(calendarEvents).values({ id, userId: input.userId, mailboxId: input.mailboxId, color: "#2563eb", responseStatus: "needs-action", inviteMessageId: input.messageId, ...values });
+			// The reminder is written once on insert; the event editor stays the only later overwriter.
+			await db.insert(calendarEvents).values({ id, userId: input.userId, mailboxId: input.mailboxId, color: "#2563eb", responseStatus: "needs-action", inviteMessageId: input.messageId, ...values, ...(invite.alarmMinutes != null ? { reminderMinutes: invite.alarmMinutes } : {}) });
+			await mergeRdateOverrides(db, id, invite);
 			return;
 		}
 		const moved = existing.startsAt.getTime() !== invite.startsAt.getTime() || existing.endsAt.getTime() !== invite.endsAt.getTime();
 		await db.update(calendarEvents).set({
 			...values, inviteMessageId: input.messageId,
 			responseStatus: moved ? "needs-action" : existing.responseStatus,
+			// Fill in a reminder only when the row has none; never overwrite the user's own setting.
+			...(existing?.reminderMinutes == null && invite.alarmMinutes != null ? { reminderMinutes: invite.alarmMinutes } : {}),
 		}).where(where);
+		// A refreshed series keeps its per-occurrence edits; new RDATEs join them, dropped ones stay.
+		await mergeRdateOverrides(db, id, invite);
 	} catch (error) {
 		console.error(`Invitation registration failed for ${input.messageId}`, error);
 	}
@@ -123,10 +219,10 @@ const REPLY_STATUS: Record<string, string> = { ACCEPTED: "accepted", TENTATIVE: 
 /**
  * A guest's answer to an invitation this user sent. It is recorded only when the sender is a guest on that
  * event, so a stranger who learns the UID cannot mark someone else as accepted. An answer about a single
- * occurrence (RECURRENCE-ID) is not one about the event as a whole, so it is ignored.
+ * occurrence (RECURRENCE-ID) is stored per occurrence; anything about the event as a whole updates the guest map.
  */
 async function applyInviteReply(env: CloudflareEnv, userId: string, senderAddress: string, invite: ParsedInvite): Promise<void> {
-	if (!invite.uid.endsWith("@mailflare") || invite.recurrenceId) return;
+	if (!invite.uid.endsWith("@mailflare")) return;
 	const db = getDb(env);
 	const eventId = invite.uid.slice(0, -"@mailflare".length);
 	const [event] = await db.select().from(calendarEvents).where(and(eq(calendarEvents.id, eventId), eq(calendarEvents.userId, userId))).limit(1);
@@ -137,6 +233,14 @@ async function applyInviteReply(env: CloudflareEnv, userId: string, senderAddres
 	const answer = invite.attendees.find((attendee) => attendee.email === sender && guests.includes(attendee.email));
 	const status = answer && REPLY_STATUS[answer.status];
 	if (!answer || !status) return;
+	if (invite.recurrenceId) {
+		const occurrenceMs = invite.recurrenceId.getTime();
+		const rid = await occurrenceResponseId(eventId, occurrenceMs, answer.email);
+		const [stored] = await db.select({ id: calendarOccurrenceResponses.id }).from(calendarOccurrenceResponses).where(eq(calendarOccurrenceResponses.id, rid)).limit(1);
+		if (stored) await db.update(calendarOccurrenceResponses).set({ status, updatedAt: new Date() }).where(eq(calendarOccurrenceResponses.id, rid));
+		else await db.insert(calendarOccurrenceResponses).values({ id: rid, eventId, occurrenceMs, guest: answer.email, status, updatedAt: new Date() });
+		return;
+	}
 	let responses: Record<string, string> = {};
 	try { responses = JSON.parse(event.attendeeResponses || "{}") as Record<string, string>; } catch { /* start fresh */ }
 	responses[answer.email] = status;

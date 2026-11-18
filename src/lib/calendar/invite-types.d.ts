@@ -12,6 +12,8 @@ export type InviteView = {
 	allDay: boolean;
 	organizer: string | null;
 	method: string;
+	/** Set when this invitation is about one occurrence of a recurring series. */
+	recurrenceId?: string | null;
 	attendees?: { email: string; status: string }[];
 };
 

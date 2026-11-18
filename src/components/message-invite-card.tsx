@@ -98,8 +98,17 @@ export function MessageInviteCard({ messageId, hasCalendarAttachment, className 
 					<p className="text-[11px] font-medium uppercase text-neutral-500">{cancelled ? t("invite.cancelled") : t("invite.heading")}</p>
 					<h2 className="mt-0.5 break-words text-sm font-semibold text-neutral-900">{currentInvite.title}</h2>
 					<p className="mt-1 text-xs text-neutral-700">{when}</p>
+					{currentInvite.recurrenceId && (
+						<p className="mt-1 text-xs text-neutral-600">{t("invite.singleInstance", { date: formatUserDate(new Date(currentInvite.recurrenceId), { dateStyle: "full" }) })}</p>
+					)}
 					{currentInvite.location && <p className="mt-0.5 break-words text-xs text-neutral-600">{currentInvite.location}</p>}
 					{currentInvite.organizer && <p className="mt-0.5 text-xs text-neutral-600">{t("invite.organizer", { organizer: currentInvite.organizer })}</p>}
+					{currentInvite.attendees && currentInvite.attendees.length > 0 && (
+						<p className="mt-0.5 break-words text-xs text-neutral-600">
+							{currentInvite.attendees.slice(0, 5).map((attendee) => { const status = attendee.status || "NEEDS-ACTION"; return `${attendee.email} (${status.charAt(0)}${status.slice(1).toLowerCase()})`; }).join(", ")}
+							{currentInvite.attendees.length > 5 ? ` +${currentInvite.attendees.length - 5} more` : ""}
+						</p>
+					)}
 					<div className="mt-3 flex flex-wrap items-center gap-2">
 						{cancelled ? (
 							<Button size="sm" disabled={pending !== null || !eventId} onClick={() => void respond("declined")} variant="outline" className="rounded-full border-0 bg-white text-neutral-700 hover:bg-neutral-50">{t("invite.removeFromCalendar")}</Button>
