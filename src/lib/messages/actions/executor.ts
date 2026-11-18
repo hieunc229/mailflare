@@ -1,5 +1,6 @@
 import { getChangedStateFields, recordHasChanges } from "./definitions";
 import { getConversationLockKeys, type KnownMessageFields } from "@/lib/messages/field-store";
+import type { MessageMembershipFields } from "@/lib/messages/list-membership";
 import type {
 	MessageActionInput,
 	MessageActionRecord,
@@ -30,6 +31,8 @@ export type MessageActionHookContext = {
 	pendingOwner: string;
 	/** Grouped unread aggregates captured before the optimistic patch. */
 	capturedThreadUnread?: Map<string, number>;
+	/** Membership on screen before an optimistic undo. */
+	capturedMembership?: Map<string, MessageMembershipFields>;
 };
 
 export type MessageActionExecutorHooks = {
@@ -40,6 +43,8 @@ export type MessageActionExecutorHooks = {
 	captureCurrent?: (ids: string[]) => Map<string, KnownMessageFields>;
 	/** Snapshots grouped unread aggregates before an optimistic undo patch. */
 	captureThreadUnread?: (ids: string[]) => Map<string, number>;
+	/** Snapshots the visible membership before an optimistic undo patch. */
+	captureMembership?: (ids: string[]) => Map<string, MessageMembershipFields>;
 	onUndoOptimistic?: (records: MessageActionRecord[], captured: Map<string, KnownMessageFields>, context: MessageActionHookContext) => void;
 	onUndoCompleted?: (records: MessageActionRecord[], response: UndoMessageActionResponse, captured: Map<string, KnownMessageFields>, context: MessageActionHookContext) => void;
 	onUndoFailed?: (records: MessageActionRecord[], captured: Map<string, KnownMessageFields>, context: MessageActionHookContext, error: unknown) => void;
@@ -93,9 +98,11 @@ export class MessageActionExecutor {
 		return this.withLocks(ids, async () => {
 			const captured = this.hooks.captureCurrent?.(ids) ?? new Map<string, KnownMessageFields>();
 			const capturedThreadUnread = this.hooks.captureThreadUnread?.(ids);
+			const capturedMembership = this.hooks.captureMembership?.(ids);
 			const context = {
 				pendingOwner: `message-action:undo:${++this.nextOperationId}`,
 				capturedThreadUnread,
+				capturedMembership,
 			};
 			this.hooks.onUndoOptimistic?.(records, captured, context);
 			try {

@@ -5,6 +5,7 @@ import {
 	rememberMessageFields,
 	rememberMessageRows,
 } from "@/lib/messages/field-store";
+import { rememberMembershipRows } from "@/lib/messages/membership-store";
 import type { ThreadMessage, ThreadResponse } from "@/hooks/types";
 
 const CACHE_TTL_MS = 60_000;
@@ -38,6 +39,7 @@ function cacheThread(messageId: string, messages: ThreadMessage[]): void {
 	threadCache.delete(messageId);
 	threadCache.set(messageId, { messages: pendingMessages, expiresAt: Date.now() + CACHE_TTL_MS });
 	rememberMessageRows(pendingMessages);
+	rememberMembershipRows(pendingMessages);
 	if (threadCache.size > CACHE_LIMIT) {
 		const oldest = threadCache.keys().next().value;
 		if (oldest) threadCache.delete(oldest);
@@ -96,6 +98,7 @@ export function patchMessageThreadFieldsInCaches(
 		)));
 		threadCache.set(messageId, { ...cached, messages });
 		rememberMessageRows(messages);
+		rememberMembershipRows(messages);
 	}
 	rememberMessageFields(messageIds, patch);
 }

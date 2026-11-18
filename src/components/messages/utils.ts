@@ -119,7 +119,7 @@ export async function runBulkMessageAction(
 	});
 	if (!response.ok) throw new Error(defaultTranslator("error.updateSelected"));
 	await throwIfDeleteSkipped(response, action);
-	dispatchMessagesChanged();
+	dispatchMessagesChanged({ kind: "removed", action: "delete", messageIds });
 }
 
 /**

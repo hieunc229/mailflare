@@ -1,4 +1,6 @@
 import type { ThreadUnreadTarget } from "./field-store";
+import type { MessageMembershipFields } from "./list-membership";
+import type { ReversibleMessageAction } from "./actions/types";
 
 export const MESSAGES_CHANGED_EVENT = "mailflare:messages-changed";
 
@@ -8,8 +10,13 @@ export type MessageFieldPatch = {
 	starred?: boolean;
 };
 
+/** Authoritative membership state after the server applied a change. */
+export type MessageMembershipState = MessageMembershipFields & {
+	id: string;
+};
+
 export type MessagesChangedDetail = {
-	kind?: "read" | "patch";
+	kind?: "read" | "patch" | "removed" | "restored";
 	messageIds?: string[];
 	read?: boolean;
 	/** Per-message field patches, used when a batch has mixed values. */
@@ -20,6 +27,19 @@ export type MessagesChangedDetail = {
 	 * changed, so a repeated desired value and a second event are both no-ops.
 	 */
 	threadTargets?: ThreadUnreadTarget[];
+	/**
+	 * The membership mutation. Optimistic events carry the action and input so a
+	 * mounted row can derive its own target; committed events carry `states`.
+	 */
+	action?: ReversibleMessageAction | "delete";
+	folderId?: string | null;
+	snoozedUntil?: string | null;
+	/** Applied state per message, only after the server confirmed the change. */
+	states?: MessageMembershipState[];
+	/** Optimistic facts stay in this tab; other tabs wait for the committed event. */
+	localOnly?: boolean;
+	/** Set by the realtime channel on events that did not originate in this tab. */
+	realtime?: boolean;
 };
 
 export function dispatchMessagesChanged(detail?: MessagesChangedDetail): void {
