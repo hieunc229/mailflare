@@ -211,7 +211,9 @@ export function useMessages(
 	});
 	const [isLoading, setIsLoading] = useState(enabled && !initialPage);
 	const listRef = useRef(list);
-	listRef.current = list;
+	useEffect(() => {
+		listRef.current = list;
+	}, [list]);
 	const updateMessages = useCallback((updater: Message[] | ((current: Message[]) => Message[])) => {
 		dispatch({ type: "update", updater: typeof updater === "function" ? updater : () => updater });
 	}, []);
@@ -239,8 +241,6 @@ export function useMessages(
 						offset: data.offset ?? filters?.offset ?? 0,
 					});
 				}
-			} catch {
-				// Keep the list already on screen when a refresh fails.
 			} finally {
 				if (!cancelled && currentRequest === requestNumber) setIsLoading(false);
 			}

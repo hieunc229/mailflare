@@ -174,9 +174,9 @@ let serverList = { messages: [], total: 0, limit: 25, offset: 0 };
 globalThis.__testAuthFetch = (url) => {
 	const target = String(url);
 	if (!target.startsWith("/api/messages?")) {
-		return Promise.resolve({ json: async () => ({}) });
+		return Promise.resolve({ ok: true, status: 200, json: async () => ({}) });
 	}
-	return Promise.resolve({ json: async () => serverList });
+	return Promise.resolve({ ok: true, status: 200, json: async () => serverList });
 };
 
 const params = new URLSearchParams({

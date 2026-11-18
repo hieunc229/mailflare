@@ -172,7 +172,7 @@ async function resolveNext(data) {
 	const resolve = pending.shift();
 	assert.ok(resolve, "expected a pending message request");
 	await act(async () => {
-		resolve({ json: async () => data });
+		resolve({ ok: true, status: 200, json: async () => data });
 		await Promise.resolve();
 	});
 }
@@ -211,7 +211,7 @@ test("an in-flight refresh cannot put a removed row back", async (t) => {
 	assert.deepEqual(ids(view.container), ["m1"]);
 
 	await act(async () => {
-		pending.shift()({ json: async () => initial });
+		pending.shift()({ ok: true, status: 200, json: async () => initial });
 		await Promise.resolve();
 	});
 	assert.deepEqual(ids(view.container), ["m1"], "the stale response was ignored");
