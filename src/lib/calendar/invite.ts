@@ -613,3 +613,36 @@ export function buildReplyIcs(invite: ParsedInvite, attendee: string, response: 
 		`ATTENDEE;PARTSTAT=${status}:mailto:${ICS_ADDRESS.test(attendee) ? attendee : "unknown@invalid"}`, "END:VEVENT", "END:VCALENDAR"];
 	return joinIcsLines(lines);
 }
+
+/** Proposed range of a COUNTER answer, or null when either datetime is invalid or the end is not after the start. */
+export function parseCounterProposal(startsAt: unknown, endsAt: unknown): { startsAt: Date; endsAt: Date } | null {
+	const start = typeof startsAt === "string" ? new Date(startsAt) : null;
+	const end = typeof endsAt === "string" ? new Date(endsAt) : null;
+	if (!start || !Number.isFinite(start.getTime()) || !end || !Number.isFinite(end.getTime())) return null;
+	if (end <= start) return null;
+	return { startsAt: start, endsAt: end };
+}
+
+/**
+ * COUNTER proposal for an invitation: the same event with the guest's proposed
+ * times. The message rides in DESCRIPTION so it round-trips through parseInvite;
+ * the ICS reply (buildReplyIcs) never carries a note.
+ */
+export function buildCounterIcs(invite: ParsedInvite, attendee: string, proposal: { startsAt: Date; endsAt: Date }, opts?: { message?: string }): string {
+	const message = (opts?.message ?? "").replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g, "").trim().slice(0, MAX_REPLY_NOTE);
+	// All-day values were read as midnights in the recipient's zone; write them back as the DATE the sender used.
+	const dateValue = (name: string, value: Date) => invite.allDay
+		? `${name};VALUE=DATE:${zonedDateFields(value, normalizeTimeZone(invite.recipientZone)).toISOString().slice(0, 10).replace(/-/g, "")}`
+		: `${name}:${formatIcsUtc(value)}`;
+	const lines = ["BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//Mailflare//Calendar//EN", "METHOD:COUNTER", "BEGIN:VEVENT", `UID:${stripControls(invite.uid)}`, `DTSTAMP:${formatIcsUtc(new Date())}`,
+		dateValue("DTSTART", proposal.startsAt),
+		dateValue("DTEND", proposal.endsAt),
+		...(invite.recurrenceId ? [dateValue("RECURRENCE-ID", invite.recurrenceId)] : []),
+		`SEQUENCE:${invite.sequence}`,
+		`SUMMARY:${escapeIcsText(invite.title)}`,
+		...(invite.organizer && ICS_ADDRESS.test(invite.organizer) ? [`ORGANIZER:mailto:${invite.organizer}`] : []),
+		`ATTENDEE;PARTSTAT=NEEDS-ACTION:mailto:${ICS_ADDRESS.test(attendee) ? attendee : "unknown@invalid"}`,
+		...(message ? [`DESCRIPTION:${escapeIcsText(message)}`] : []),
+		"END:VEVENT", "END:VCALENDAR"];
+	return joinIcsLines(lines);
+}

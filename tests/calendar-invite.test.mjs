@@ -14,7 +14,7 @@ await build({
 	outdir: dir, outExtension: { ".js": ".mjs" }, bundle: true, platform: "node", format: "esm", logLevel: "silent",
 	alias: { "@": join(root, "src") },
 });
-const { parseInvite, inviteRepeat, buildReplyIcs, buildReplyText, parseIcsDuration, WINDOWS_TIME_ZONES, inviteAttendeeAddresses, parseAlarmTrigger } = await import(pathToFileURL(join(dir, "i.mjs")).href);
+const { parseInvite, inviteRepeat, buildReplyIcs, buildReplyText, buildCounterIcs, parseCounterProposal, parseIcsDuration, WINDOWS_TIME_ZONES, inviteAttendeeAddresses, parseAlarmTrigger } = await import(pathToFileURL(join(dir, "i.mjs")).href);
 const { expandToolEvents } = await import(pathToFileURL(join(dir, "t.mjs")).href);
 const { planInboundInvite, planInviteAnswer, inviteSenderMatches, addExcludedOccurrence, mergeExcludedOccurrences, normalizeInviteSender, chooseRecipientZone, inboundNeedsRecipientZone } = await import(pathToFileURL(join(dir, "r.mjs")).href);
 const { createCalendarInvitation } = await import(pathToFileURL(join(dir, "u.mjs")).href);
@@ -662,4 +662,54 @@ test("split announcement truncates the original UID and invites the fork UID", (
 	assert.match(fork, /\r\nSEQUENCE:0\r\n/);
 	assert.match(fork, /RRULE:FREQ=WEEKLY\r\n/);
 	assert.doesNotMatch(fork, /evt_orig/);
+});
+
+test("a counter proposal carries the proposed times and round-trips", () => {
+	const invite = parseInvite(mailflare);
+	const proposal = buildCounterIcs(invite, "guest@example.com", { startsAt: new Date("2026-11-05T10:00:00.000Z"), endsAt: new Date("2026-11-05T11:00:00.000Z") }, { message: "How about this?" });
+	assert.match(proposal, /METHOD:COUNTER/);
+	assert.match(proposal, /DTSTART:20261105T100000Z/);
+	assert.match(proposal, /DTEND:20261105T110000Z/);
+	assert.match(proposal, /ATTENDEE;PARTSTAT=NEEDS-ACTION:mailto:guest@example.com/);
+	assert.ok(proposal.endsWith("END:VCALENDAR\r\n"));
+	for (const line of proposal.split("\r\n")) assert.ok(new TextEncoder().encode(line).length <= 75, line);
+	const back = parseInvite(proposal);
+	assert.equal(back.method, "COUNTER");
+	assert.equal(back.uid, "evt_abc@mailflare");
+	assert.equal(back.startsAt.toISOString(), "2026-11-05T10:00:00.000Z");
+	assert.equal(back.endsAt.toISOString(), "2026-11-05T11:00:00.000Z");
+	assert.equal(back.description, "How about this?");
+	// Without a message there is no DESCRIPTION line, and a lone occurrence keeps its id.
+	const bare = buildCounterIcs(parseInvite(event("DTSTART:20261104T170000Z", "RECURRENCE-ID:20261104T170000Z", "SEQUENCE:2")), "guest@example.com", { startsAt: new Date("2026-11-06T10:00:00.000Z"), endsAt: new Date("2026-11-06T11:00:00.000Z") });
+	assert.doesNotMatch(bare, /DESCRIPTION/);
+	assert.match(bare, /\r\nRECURRENCE-ID:20261104T170000Z\r\n/);
+	assert.match(bare, /\r\nSEQUENCE:2\r\n/);
+	assert.equal(parseInvite(bare).recurrenceId.toISOString(), "2026-11-04T17:00:00.000Z");
+});
+
+test("an all-day counter keeps DATE types for the proposal and RECURRENCE-ID", () => {
+	const invite = parseInvite(event("DTSTART;VALUE=DATE:20261105", "DTEND;VALUE=DATE:20261106", "RECURRENCE-ID;VALUE=DATE:20261105", "SEQUENCE:1", "RRULE:FREQ=DAILY"), { timeZone: "America/Los_Angeles" });
+	assert.equal(invite.allDay, true);
+	const counter = buildCounterIcs(invite, "guest@example.com", { startsAt: new Date("2026-11-06T08:00:00.000Z"), endsAt: new Date("2026-11-07T08:00:00.000Z") }, { message: "How about Friday?" });
+	assert.match(counter, /\r\nDTSTART;VALUE=DATE:20261106\r\n/);
+	assert.match(counter, /\r\nDTEND;VALUE=DATE:20261107\r\n/);
+	assert.match(counter, /\r\nRECURRENCE-ID;VALUE=DATE:20261105\r\n/);
+	const back = parseInvite(counter, { timeZone: "America/Los_Angeles" });
+	assert.equal(back.allDay, true);
+	assert.equal(back.recurrenceId.toISOString(), invite.recurrenceId.toISOString());
+});
+
+test("counter proposals need a valid range on a REQUEST invitation", () => {
+	assert.deepEqual(parseCounterProposal("2026-11-05T10:00:00.000Z", "2026-11-05T11:00:00.000Z"), { startsAt: new Date("2026-11-05T10:00:00.000Z"), endsAt: new Date("2026-11-05T11:00:00.000Z") });
+	// The end must be after the start.
+	assert.equal(parseCounterProposal("2026-11-05T11:00:00.000Z", "2026-11-05T10:00:00.000Z"), null);
+	assert.equal(parseCounterProposal("2026-11-05T10:00:00.000Z", "2026-11-05T10:00:00.000Z"), null);
+	// Both ends must be readable ISO datetimes.
+	assert.equal(parseCounterProposal("not a date", "2026-11-05T10:00:00.000Z"), null);
+	assert.equal(parseCounterProposal("2026-11-05T10:00:00.000Z", undefined), null);
+	assert.equal(parseCounterProposal(null, null), null);
+	// The route only counters REQUEST invitations; anything else is rejected there.
+	assert.equal(parseInvite(mailflare).method, "REQUEST");
+	const reply = parseInvite(buildReplyIcs(parseInvite(mailflare), "guest@example.com", "accepted"));
+	assert.notEqual(reply.method, "REQUEST");
 });

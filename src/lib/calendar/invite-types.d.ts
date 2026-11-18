@@ -23,4 +23,6 @@ export type InviteCardData = {
 	eventId: string | null;
 	response: InviteResponse | null;
 	canRespond?: boolean;
+	/** When the answer last changed, from the calendar row; absent for unanswered or declined answers. */
+	answeredAt?: string | null;
 };
