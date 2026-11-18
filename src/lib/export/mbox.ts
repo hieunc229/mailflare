@@ -7,8 +7,9 @@ function escapeHeader(value: string | null): string {
 }
 
 function escapeMboxBody(value: string): string {
+	// mboxrd: quote ">*From " lines so a reader can strip exactly one ">" back off.
 	// The body follows a blank line, so its first line would start a new message too.
-	return value.replace(/(^|\n)From /g, "$1>From ");
+	return value.replace(/(^|\n)(>*From )/g, "$1>$2");
 }
 
 function getMboxFromLine(date: Date): string {

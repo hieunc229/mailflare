@@ -59,3 +59,9 @@ test("From at the start of a later body line is still escaped", async (t) => {
 	assert.match(mbox, /\n>From here on/);
 	assert.equal(splitMboxMessages(mbox).length, 1);
 });
+
+test("a body line that already starts with >From survives export and import unchanged", async (t) => {
+	const body = "Hi,\n>From the archive: quoted line\n>>From deeper\nBye";
+	const [message] = splitMboxMessages(await exportBodies(t, [body]));
+	assert.match(message.replace(/\r\n/g, "\n"), /\n\nHi,\n>From the archive: quoted line\n>>From deeper\nBye$/);
+});
