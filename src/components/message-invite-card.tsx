@@ -277,7 +277,7 @@ export function MessageInviteCard({ messageId, hasCalendarAttachment, className 
 	function openNoteDialog() {
 		setMenuOpen(false);
 		setDialogChoice(answered ?? "accepted");
-		setDialogNotify(readNotifyDefault());
+		setDialogNotify(true);
 		setDialogNote("");
 		setNoteOpen(true);
 	}
@@ -471,7 +471,7 @@ export function MessageInviteCard({ messageId, hasCalendarAttachment, className 
 							);
 						})}
 					</div>
-					<div className="space-y-2">
+					<div className="mt-2 space-y-2">
 						<label className="flex cursor-pointer items-center gap-2 text-xs text-neutral-700">
 							<input type="checkbox" checked={dialogNotify} onChange={(event) => setDialogNotifyAndPersist(event.target.checked)} className="h-3.5 w-3.5 rounded accent-blue-600" />
 							{t("invite.notifyByEmail")}
