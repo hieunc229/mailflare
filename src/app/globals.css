@@ -493,7 +493,7 @@ button {
 .dark .bg-orange-600 { background-color: oklch(64.6% 0.222 41.116); }
 /* Fixed-hex backgrounds (page, panels) and their hover: variants (inbox rows, mailbox selector) */
 .dark .bg-\[\#f6f8fc\], .dark .bg-\[\#f7f9fc\] { background-color: #202124; }
-.dark .bg-\[\#f2f6fc\], .dark .bg-\[\#f1f4fa\], .dark .bg-\[\#f0f3f9\] { background-color: #303134; }
+.dark .bg-\[\#f2f6fc\], .dark .bg-\[\#f1f4fa\], .dark .bg-\[\#f0f3f9\], .dark .bg-\[\#f0f4f8\] { background-color: #303134; }
 .dark .bg-\[\#eef3fb\], .dark .bg-\[\#eaf1fb\], .dark .bg-\[\#e6ecf6\] { background-color: #383a3e; }
 .dark .hover\:bg-\[\#f2f6fc\]:hover,
 .dark .bg-\[\#f2f6fc\] { background-color: #35363a; }
