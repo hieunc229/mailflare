@@ -653,10 +653,15 @@ export const calendarEvents = sqliteTable(
 		location: text("location").notNull().default(""),
 		attendees: text("attendees").notNull().default("[]"),
 		color: text("color").notNull().default("blue"),
-		repeat: text("repeat", { enum: ["none", "daily", "weekly", "monthly", "weekdays"] }).notNull().default("none"),
+		repeat: text("repeat", { enum: ["none", "daily", "weekly", "monthly", "weekdays", "yearly"] }).notNull().default("none"),
 		repeatDays: text("repeat_days").notNull().default("[]"),
 		repeatAnchorDay: integer("repeat_anchor_day"),
 		repeatUntil: timestamp("repeat_until"),
+		/** Step between recurrences: every N days/weeks/months/years. */
+		repeatInterval: integer("repeat_interval").notNull().default(1),
+		/** Weekday (0-6) and week-of-month (1-5, -1 = last) for nth-weekday monthly repeats. */
+		repeatWeekday: integer("repeat_weekday"),
+		repeatWeek: integer("repeat_week"),
 		excludedOccurrences: text("excluded_occurrences").notNull().default("[]"),
 		timeZone: text("time_zone"),
 		startsAt: timestamp("starts_at").notNull(),
@@ -673,6 +678,8 @@ export const calendarEvents = sqliteTable(
 		inviteSender: text("invite_sender"),
 		/** SEQUENCE of the invitation revision the event reflects, so an older revision arriving late is ignored. */
 		inviteSequence: integer("invite_sequence"),
+		/** Outgoing iTIP revision counter; every sent invitation or update bumps SEQUENCE so guests ignore stale mail. */
+		eventSequence: integer("event_sequence").notNull().default(0),
 		/** JSON map of guest address to accepted, tentative or declined, filled from their replies to an invitation this user sent. */
 		attendeeResponses: text("attendee_responses"),
 		createdAt: timestamp("created_at").notNull().$defaultFn(() => new Date()),
@@ -681,6 +688,82 @@ export const calendarEvents = sqliteTable(
 	(t) => [
 		index("calendar_events_user_starts_idx").on(t.userId, t.startsAt),
 		index("calendar_events_mailbox_idx").on(t.mailboxId),
+	],
+);
+
+/**
+ * Per-occurrence edits of a recurring series (RECURRENCE-ID): null fields
+ * inherit the series value. Fully deleted occurrences stay in
+ * `excludedOccurrences` on the series instead.
+ */
+export const calendarEventOverrides = sqliteTable(
+	"calendar_event_overrides",
+	{
+		id: text("id").primaryKey(),
+		eventId: text("event_id")
+			.notNull()
+			.references(() => calendarEvents.id, { onDelete: "cascade" }),
+		/** Start of the overridden occurrence, epoch ms. */
+		occurrenceMs: integer("occurrence_ms").notNull(),
+		startsAt: timestamp("starts_at").notNull(),
+		endsAt: timestamp("ends_at").notNull(),
+		title: text("title"),
+		description: text("description"),
+		location: text("location"),
+		createdAt: timestamp("created_at")
+			.notNull()
+			.$defaultFn(() => new Date()),
+		updatedAt: timestamp("updated_at")
+			.notNull()
+			.$defaultFn(() => new Date()),
+	},
+	(t) => [
+		uniqueIndex("calendar_event_overrides_event_occurrence_idx").on(t.eventId, t.occurrenceMs),
+		index("calendar_event_overrides_event_idx").on(t.eventId),
+	],
+);
+
+/**
+ * Cancellation memory for invitations this user sent: the SEQUENCE of the last
+ * CANCEL per UID, so a late RSVP arriving after cancellation is ignored. The
+ * id is a caller-provided hash of userId and UID.
+ */
+export const calendarInviteTombstones = sqliteTable(
+	"calendar_invite_tombstones",
+	{
+		id: text("id").primaryKey(),
+		userId: text("user_id")
+			.notNull()
+			.references(() => users.id, { onDelete: "cascade" }),
+		inviteSequence: integer("invite_sequence").notNull().default(0),
+		inviteSender: text("invite_sender").notNull().default(""),
+		cancelledAt: timestamp("cancelled_at").notNull(),
+	},
+	(t) => [index("calendar_invite_tombstones_user_idx").on(t.userId)],
+);
+
+/**
+ * Latest RSVP per guest per occurrence of an invitation this user sent. The id
+ * is a caller-provided hash of eventId, occurrenceMs and guest.
+ */
+export const calendarOccurrenceResponses = sqliteTable(
+	"calendar_occurrence_responses",
+	{
+		id: text("id").primaryKey(),
+		eventId: text("event_id")
+			.notNull()
+			.references(() => calendarEvents.id, { onDelete: "cascade" }),
+		/** Start of the occurrence the guest answered, epoch ms. */
+		occurrenceMs: integer("occurrence_ms").notNull(),
+		guest: text("guest").notNull(),
+		status: text("status").notNull(),
+		updatedAt: timestamp("updated_at")
+			.notNull()
+			.$defaultFn(() => new Date()),
+	},
+	(t) => [
+		uniqueIndex("calendar_occurrence_responses_event_occurrence_guest_idx").on(t.eventId, t.occurrenceMs, t.guest),
+		index("calendar_occurrence_responses_event_idx").on(t.eventId),
 	],
 );
 
@@ -1344,6 +1427,9 @@ export const schema = {
 	outboundJobs,
 	emailTemplates,
 	calendarEvents,
+	calendarEventOverrides,
+	calendarInviteTombstones,
+	calendarOccurrenceResponses,
 	bookingEvents,
 	routingRules,
 	webhooks,

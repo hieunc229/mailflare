@@ -368,6 +368,26 @@
         "CREATE TABLE \"message_action_undo_claims\" (\n\t\"nonce\" text PRIMARY KEY NOT NULL,\n\t\"user_id\" text NOT NULL,\n\t\"expires_at\" bigint NOT NULL\n);",
         "CREATE INDEX \"message_action_undo_claims_expires_idx\" ON \"message_action_undo_claims\" USING btree (\"expires_at\");"
       ]
+    },
+    {
+      "name": "0013_calendar_invite_complete.sql",
+      "statements": [
+        "CREATE TABLE \"calendar_event_overrides\" (\n\t\"id\" text PRIMARY KEY NOT NULL,\n\t\"event_id\" text NOT NULL,\n\t\"occurrence_ms\" bigint NOT NULL,\n\t\"starts_at\" bigint NOT NULL,\n\t\"ends_at\" bigint NOT NULL,\n\t\"title\" text,\n\t\"description\" text,\n\t\"location\" text,\n\t\"created_at\" bigint NOT NULL,\n\t\"updated_at\" bigint NOT NULL\n);",
+        "CREATE TABLE \"calendar_invite_tombstones\" (\n\t\"id\" text PRIMARY KEY NOT NULL,\n\t\"user_id\" text NOT NULL,\n\t\"invite_sequence\" bigint DEFAULT 0 NOT NULL,\n\t\"invite_sender\" text DEFAULT '' NOT NULL,\n\t\"cancelled_at\" bigint NOT NULL\n);",
+        "CREATE TABLE \"calendar_occurrence_responses\" (\n\t\"id\" text PRIMARY KEY NOT NULL,\n\t\"event_id\" text NOT NULL,\n\t\"occurrence_ms\" bigint NOT NULL,\n\t\"guest\" text NOT NULL,\n\t\"status\" text NOT NULL,\n\t\"updated_at\" bigint NOT NULL\n);",
+        "ALTER TABLE \"calendar_events\" ADD COLUMN \"repeat_interval\" bigint DEFAULT 1 NOT NULL;",
+        "ALTER TABLE \"calendar_events\" ADD COLUMN \"repeat_weekday\" bigint;",
+        "ALTER TABLE \"calendar_events\" ADD COLUMN \"repeat_week\" bigint;",
+        "ALTER TABLE \"calendar_events\" ADD COLUMN \"event_sequence\" bigint DEFAULT 0 NOT NULL;",
+        "ALTER TABLE \"calendar_event_overrides\" ADD CONSTRAINT \"calendar_event_overrides_event_id_calendar_events_id_fk\" FOREIGN KEY (\"event_id\") REFERENCES \"public\".\"calendar_events\"(\"id\") ON DELETE cascade ON UPDATE no action;",
+        "ALTER TABLE \"calendar_invite_tombstones\" ADD CONSTRAINT \"calendar_invite_tombstones_user_id_users_id_fk\" FOREIGN KEY (\"user_id\") REFERENCES \"public\".\"users\"(\"id\") ON DELETE cascade ON UPDATE no action;",
+        "ALTER TABLE \"calendar_occurrence_responses\" ADD CONSTRAINT \"calendar_occurrence_responses_event_id_calendar_events_id_fk\" FOREIGN KEY (\"event_id\") REFERENCES \"public\".\"calendar_events\"(\"id\") ON DELETE cascade ON UPDATE no action;",
+        "CREATE UNIQUE INDEX \"calendar_event_overrides_event_occurrence_idx\" ON \"calendar_event_overrides\" USING btree (\"event_id\",\"occurrence_ms\");",
+        "CREATE INDEX \"calendar_event_overrides_event_idx\" ON \"calendar_event_overrides\" USING btree (\"event_id\");",
+        "CREATE INDEX \"calendar_invite_tombstones_user_idx\" ON \"calendar_invite_tombstones\" USING btree (\"user_id\");",
+        "CREATE UNIQUE INDEX \"calendar_occurrence_responses_event_occurrence_guest_idx\" ON \"calendar_occurrence_responses\" USING btree (\"event_id\",\"occurrence_ms\",\"guest\");",
+        "CREATE INDEX \"calendar_occurrence_responses_event_idx\" ON \"calendar_occurrence_responses\" USING btree (\"event_id\");"
+      ]
     }
   ]
 }
