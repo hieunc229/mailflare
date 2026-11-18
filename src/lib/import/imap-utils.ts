@@ -49,6 +49,19 @@ export function isPermanentImapError(message: string): boolean {
 	return /login|auth|credential|not allowed|unreadable|no longer exists/i.test(message);
 }
 
+/** The server refused or dropped the connection, as opposed to failing on the messages themselves. */
+export function isImapConnectionError(message: string): boolean {
+	return /stream was cancelled|connection closed unexpectedly|did not send an OK greeting|connection (?:reset|refused)|timed? ?out/i.test(message);
+}
+
+/** Connection failures tolerated at the same batch size before it shrinks too: a throttled host needs time, a batch that is too heavy needs to be smaller. */
+export const IMAP_CONNECTION_KEEP_SIZE_FAILURES = 3;
+
+/** Whether a connection failure should retry at the same batch size, given how many failed in a row. */
+export function keepsImapChunkSize(failures: number): boolean {
+	return failures <= IMAP_CONNECTION_KEEP_SIZE_FAILURES;
+}
+
 /** A folder the server says does not exist or cannot be selected, such as Gmail's `[Gmail]` parent. */
 export function isMissingImapFolderError(message: string): boolean {
 	return /NONEXISTENT|unknown mailbox|mailbox (?:does not|doesn't) exist|nonexistent namespace|NOSELECT/i.test(message);
