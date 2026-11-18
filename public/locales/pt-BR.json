@@ -216,6 +216,9 @@
 	"list.range": "{start} - {end} de {total}",
 	"list.previousPage": "Página anterior",
 	"list.nextPage": "Próxima página",
+	"list.refresh": "Atualizar",
+	"list.refreshing": "Atualizando…",
+	"list.refreshFailed": "Não foi possível atualizar a lista de mensagens. Tente novamente.",
 	"list.showingUnread": "Mostrando e-mails não lidos",
 	"list.showUnreadOnly": "Mostrar somente e-mails não lidos",
 	"list.emptying": "Esvaziando…",
@@ -2494,5 +2497,10 @@
 	"undo.label.star": "Favoritado",
 	"undo.label.unstar": "Removido dos favoritos",
 	"undo.label.snooze": "Adiado",
-	"undo.label.unsnooze": "Adiamento cancelado"
+	"undo.label.unsnooze": "Adiamento cancelado",
+	"account.apps": "Apps",
+	"account.openApps": "Abrir menu de apps",
+	"account.signOutAccountConfirm": "Sair de {name} ({email})? Você precisará entrar novamente para usar esta conta.",
+	"invite.acceptedLabel": "Aceito",
+	"invite.declinedLabel": "Recusado"
 }

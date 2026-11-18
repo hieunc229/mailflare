@@ -212,6 +212,9 @@
 	"list.range": "{start} - {end} von {total}",
 	"list.previousPage": "Vorherige Seite",
 	"list.nextPage": "Nächste Seite",
+	"list.refresh": "Aktualisieren",
+	"list.refreshing": "Wird aktualisiert…",
+	"list.refreshFailed": "Die Nachrichtenliste konnte nicht aktualisiert werden. Bitte versuchen Sie es erneut.",
 	"list.showingUnread": "Ungelesene E-Mails werden angezeigt",
 	"list.showUnreadOnly": "Nur ungelesene E-Mails anzeigen",
 	"list.emptying": "Wird geleert…",
@@ -2479,5 +2482,10 @@
 	"undo.label.star": "Markiert",
 	"undo.label.unstar": "Markierung entfernt",
 	"undo.label.snooze": "Zurückgestellt",
-	"undo.label.unsnooze": "Zurückstellung aufgehoben"
+	"undo.label.unsnooze": "Zurückstellung aufgehoben",
+	"account.apps": "Apps",
+	"account.openApps": "App-Menü öffnen",
+	"account.signOutAccountConfirm": "{name} ({email}) abmelden? Sie müssen sich erneut anmelden, um dieses Konto zu verwenden.",
+	"invite.acceptedLabel": "Angenommen",
+	"invite.declinedLabel": "Abgelehnt"
 }

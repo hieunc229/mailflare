@@ -210,6 +210,9 @@
 	"list.range": "{start}-{end} / {total}",
 	"list.previousPage": "Önceki sayfa",
 	"list.nextPage": "Sonraki sayfa",
+	"list.refresh": "Yenile",
+	"list.refreshing": "Yenileniyor…",
+	"list.refreshFailed": "İleti listesi yenilenemedi. Lütfen tekrar deneyin.",
 	"list.showingUnread": "Okunmamış e-postalar gösteriliyor",
 	"list.showUnreadOnly": "Yalnızca okunmamış e-postaları göster",
 	"list.emptying": "Boşaltılıyor…",
@@ -2479,5 +2482,10 @@
 	"undo.label.star": "Yıldızlandı",
 	"undo.label.unstar": "Yıldız kaldırıldı",
 	"undo.label.snooze": "Ertelendi",
-	"undo.label.unsnooze": "Erteleme kaldırıldı"
+	"undo.label.unsnooze": "Erteleme kaldırıldı",
+	"account.apps": "Uygulamalar",
+	"account.openApps": "Uygulamalar menüsünü aç",
+	"account.signOutAccountConfirm": "{name} ({email}) oturumu kapatılsın mı? Bu hesabı kullanmak için yeniden oturum açmanız gerekir.",
+	"invite.acceptedLabel": "Kabul edildi",
+	"invite.declinedLabel": "Reddedildi"
 }

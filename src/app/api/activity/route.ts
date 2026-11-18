@@ -5,6 +5,7 @@ import { auditLogs, users } from "@/db/schema";
 import { assertPrimaryAdmin } from "@/lib/auth/admin";
 import { requireUser } from "@/lib/auth/cookies";
 import { getEnv } from "@/lib/cloudflare";
+import { parseLimit } from "@/lib/api/query-params";
 
 export async function GET(request: Request) {
 	const env = getEnv();
@@ -16,7 +17,7 @@ export async function GET(request: Request) {
 	}
 
 	const url = new URL(request.url);
-	const limit = Math.min(Number(url.searchParams.get("limit") ?? 100), 200);
+	const limit = parseLimit(url.searchParams.get("limit"), 100, 200);
 	const rows = await getDb(env)
 		.select({
 			id: auditLogs.id,

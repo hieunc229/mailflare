@@ -4,9 +4,8 @@ import { appSettings, domains } from "@/db/schema";
 import { requireAwsConfig } from "@/lib/aws/config";
 import { sendSesEmail } from "@/lib/aws/ses";
 import { getEmailAddress } from "@/lib/email/address";
+import { fetchSentMessageId, resendClient, resendOmittedHeaders, resendSetsMessageId, type ResendClient } from "@/lib/email/resend-api";
 import type { OutboundProviderConfig, OutboundProviderMessage, ResendKeyStatus } from "@/lib/email/outbound-provider-types";
-
-const RESEND_ENDPOINT = "https://api.resend.com/emails";
 
 /**
  * Each domain picks its own sender: Cloudflare Email Sending, Resend, or none
@@ -29,10 +28,10 @@ export async function getResendKeyStatus(env: CloudflareEnv): Promise<ResendKeyS
 	};
 }
 
-export async function getResendApiKey(env: CloudflareEnv): Promise<string> {
+export async function getResendClient(env: CloudflareEnv): Promise<ResendClient> {
 	const { apiKey } = await getResendKeyStatus(env);
 	if (!apiKey) throw new Error("Resend is selected but no API key is configured");
-	return apiKey;
+	return resendClient(env, apiKey);
 }
 
 /** The provider for the domain a message is sent from. */
@@ -44,7 +43,7 @@ export async function getOutboundProviderConfig(env: CloudflareEnv, fromAddress:
 	if (!domain || domain.provider === "none") {
 		throw new Error(`Sending is not set up for ${hostname ?? "this domain"}. Choose a sending provider on the Domains page.`);
 	}
-	if (domain.provider === "resend") return { provider: "resend", apiKey: await getResendApiKey(env) };
+	if (domain.provider === "resend") return { provider: "resend", apiKey: (await getResendClient(env)).apiKey };
 	if (domain.provider === "ses") return { provider: "ses", config: await requireAwsConfig(env) };
 	return { provider: "cloudflare" };
 }
@@ -64,41 +63,52 @@ function mintMessageId(from: string): string {
 	return `<${crypto.randomUUID()}@${domain}>`;
 }
 
+function resendPayload(message: OutboundProviderMessage, messageIdHeader: string | null, omitted: Set<string>) {
+	// Drop any caller-supplied Message-ID so only the one decided here is sent,
+	// and any header the configured service refuses.
+	const headers = Object.fromEntries(Object.entries(message.headers ?? {})
+		.filter(([name]) => name !== "Message-ID" && !omitted.has(name.toLowerCase())));
+	return {
+		from: message.from,
+		to: message.to,
+		...(message.cc?.length ? { cc: message.cc } : {}),
+		...(message.bcc?.length ? { bcc: message.bcc } : {}),
+		subject: message.subject,
+		html: message.html,
+		text: message.text,
+		headers: messageIdHeader ? { ...headers, "Message-ID": messageIdHeader } : headers,
+		attachments: message.attachments?.map((attachment) => ({
+			filename: attachment.filename,
+			content: toBase64(attachment.content),
+			content_type: attachment.type,
+			...(attachment.disposition === "inline" && attachment.contentId ? { content_id: attachment.contentId } : {}),
+		})),
+	};
+}
+
 async function sendWithResend(
-	apiKey: string,
+	env: CloudflareEnv,
+	client: ResendClient,
 	message: OutboundProviderMessage,
 	idempotencyKey?: string,
 ): Promise<{ messageId: string }> {
-	const messageId = message.headers?.["Message-ID"] ?? mintMessageId(message.from);
-	const response = await fetch(RESEND_ENDPOINT, {
+	const mintedId = message.headers?.["Message-ID"] ?? mintMessageId(message.from);
+	const setsMessageId = resendSetsMessageId(env);
+	const response = await fetch(`${client.baseUrl}/emails`, {
 		method: "POST",
 		headers: {
-			Authorization: `Bearer ${apiKey}`,
+			Authorization: `Bearer ${client.apiKey}`,
 			"Content-Type": "application/json",
 			...(idempotencyKey ? { "Idempotency-Key": idempotencyKey } : {}),
 		},
-		body: JSON.stringify({
-			from: message.from,
-			to: message.to,
-			...(message.cc?.length ? { cc: message.cc } : {}),
-			...(message.bcc?.length ? { bcc: message.bcc } : {}),
-			subject: message.subject,
-			html: message.html,
-			text: message.text,
-			headers: { ...message.headers, "Message-ID": messageId },
-			attachments: message.attachments?.map((attachment) => ({
-				filename: attachment.filename,
-				content: toBase64(attachment.content),
-				content_type: attachment.type,
-				...(attachment.disposition === "inline" && attachment.contentId ? { content_id: attachment.contentId } : {}),
-			})),
-		}),
+		body: JSON.stringify(resendPayload(message, setsMessageId ? mintedId : null, resendOmittedHeaders(env))),
 	});
-	if (!response.ok) {
-		const body = (await response.json().catch(() => null)) as { message?: string } | null;
-		throw new Error(`Resend: ${body?.message ?? `request failed (${response.status})`}`);
-	}
-	return { messageId };
+	const body = (await response.json().catch(() => null)) as { id?: string; message?: string } | null;
+	if (!response.ok) throw new Error(`Resend: ${body?.message ?? `request failed (${response.status})`}`);
+	if (setsMessageId || !body?.id) return { messageId: mintedId };
+	// Without our own header, thread replies against the ID the provider assigned.
+	// It can be missing while the send is still queued; the minted ID is the fallback.
+	return { messageId: (await fetchSentMessageId(client, body.id)) ?? mintedId };
 }
 
 export async function sendThroughProvider(
@@ -107,7 +117,7 @@ export async function sendThroughProvider(
 	message: OutboundProviderMessage,
 	idempotencyKey?: string,
 ): Promise<{ messageId: string }> {
-	if (config.provider === "resend") return sendWithResend(config.apiKey, message, idempotencyKey);
+	if (config.provider === "resend") return sendWithResend(env, resendClient(env, config.apiKey), message, idempotencyKey);
 	if (config.provider === "ses") return sendSesEmail(config.config, message);
 	const response = await env.EMAIL.send({
 		from: message.from,

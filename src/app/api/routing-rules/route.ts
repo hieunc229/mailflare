@@ -8,6 +8,7 @@ import { newId } from "@/lib/ids";
 import { getMailboxAccessLevel } from "@/lib/mailboxes/access";
 import { routingRuleSchema } from "@/lib/validators";
 import { resolveRuleTarget } from "./utils";
+import { readJsonObject } from "@/lib/http/request";
 
 export async function GET(request: Request) {
 	const env = getEnv();
@@ -34,7 +35,7 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
 	const env = getEnv();
 	const user = await requireUser(env, request);
-	const parsed = routingRuleSchema.safeParse(await request.json());
+	const parsed = routingRuleSchema.safeParse(await readJsonObject(request));
 	if (!parsed.success) {
 		return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
 	}

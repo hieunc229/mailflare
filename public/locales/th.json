@@ -211,6 +211,9 @@
 	"list.range": "{start} - {end} จาก {total}",
 	"list.previousPage": "หน้าก่อนหน้า",
 	"list.nextPage": "หน้าถัดไป",
+	"list.refresh": "รีเฟรช",
+	"list.refreshing": "กำลังรีเฟรช…",
+	"list.refreshFailed": "ไม่สามารถรีเฟรชรายการข้อความได้ โปรดลองอีกครั้ง",
 	"list.showingUnread": "กำลังแสดงอีเมลที่ยังไม่ได้อ่าน",
 	"list.showUnreadOnly": "แสดงเฉพาะอีเมลที่ยังไม่ได้อ่าน",
 	"list.emptying": "กำลังล้าง…",
@@ -2475,5 +2478,10 @@
 	"undo.label.star": "ติดดาวแล้ว",
 	"undo.label.unstar": "เอาดาวออกแล้ว",
 	"undo.label.snooze": "เลื่อนออกไปแล้ว",
-	"undo.label.unsnooze": "ยกเลิกการเลื่อนออกไปแล้ว"
+	"undo.label.unsnooze": "ยกเลิกการเลื่อนออกไปแล้ว",
+	"account.apps": "แอป",
+	"account.openApps": "เปิดเมนูแอป",
+	"account.signOutAccountConfirm": "ออกจากระบบ {name} ({email}) หรือไม่ คุณต้องลงชื่อเข้าใช้อีกครั้งเพื่อใช้บัญชีนี้",
+	"invite.acceptedLabel": "ตอบรับแล้ว",
+	"invite.declinedLabel": "ปฏิเสธแล้ว"
 }

@@ -212,6 +212,9 @@
 	"list.range": "{total}න් {start} - {end}",
 	"list.previousPage": "පෙර පිටුව",
 	"list.nextPage": "ඊළඟ පිටුව",
+	"list.refresh": "නැවුම් කරන්න",
+	"list.refreshing": "නැවුම් වෙමින්…",
+	"list.refreshFailed": "පණිවිඩ ලැයිස්තුව නැවුම් කළ නොහැකි විය. නැවත උත්සාහ කරන්න.",
 	"list.showingUnread": "නොකියවූ ඊමේල් පෙන්වමින්",
 	"list.showUnreadOnly": "නොකියවූ ඊමේල් පමණක් පෙන්වන්න",
 	"list.emptying": "හිස් කරමින්…",
@@ -2479,5 +2482,10 @@
 	"undo.label.star": "තරු ලකුණු කරන ලදී",
 	"undo.label.unstar": "තරු ලකුණ ඉවත් කරන ලදී",
 	"undo.label.snooze": "කල් තැබූ",
-	"undo.label.unsnooze": "කල් තැබීම අවලංගු කරන ලදී"
+	"undo.label.unsnooze": "කල් තැබීම අවලංගු කරන ලදී",
+	"account.apps": "යෙදුම්",
+	"account.openApps": "යෙදුම් මෙනුව විවෘත කරන්න",
+	"account.signOutAccountConfirm": "{name} ({email}) ඉවත් කරන්නද? මෙම ගිණුම භාවිත කිරීමට ඔබට නැවත පිවිසීමට සිදුවේ.",
+	"invite.acceptedLabel": "පිළිගත්තා",
+	"invite.declinedLabel": "ප්‍රතික්ෂේප කළා"
 }

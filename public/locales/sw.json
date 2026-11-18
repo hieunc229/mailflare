@@ -212,6 +212,9 @@
 	"list.range": "{start} - {end} kati ya {total}",
 	"list.previousPage": "Ukurasa uliopita",
 	"list.nextPage": "Ukurasa unaofuata",
+	"list.refresh": "Sasisha",
+	"list.refreshing": "Inasasisha…",
+	"list.refreshFailed": "Imeshindwa kusasisha orodha ya ujumbe. Tafadhali jaribu tena.",
 	"list.showingUnread": "Inaonyesha barua pepe ambazo hazijasomwa",
 	"list.showUnreadOnly": "Onyesha barua pepe ambazo hazijasomwa tu",
 	"list.emptying": "Inafuta…",
@@ -2479,5 +2482,10 @@
 	"undo.label.star": "Imetiwa nyota",
 	"undo.label.unstar": "Nyota imeondolewa",
 	"undo.label.snooze": "Imeahirishwa",
-	"undo.label.unsnooze": "Uahirishaji umeghairiwa"
+	"undo.label.unsnooze": "Uahirishaji umeghairiwa",
+	"account.apps": "Programu",
+	"account.openApps": "Fungua menyu ya programu",
+	"account.signOutAccountConfirm": "Ondoka kwenye {name} ({email})? Utahitaji kuingia tena ili utumie akaunti hii.",
+	"invite.acceptedLabel": "Imekubaliwa",
+	"invite.declinedLabel": "Imekataliwa"
 }

@@ -208,6 +208,9 @@
 	"list.range": "{total} 件中 {start}～{end} 件",
 	"list.previousPage": "前のページ",
 	"list.nextPage": "次のページ",
+	"list.refresh": "更新",
+	"list.refreshing": "更新中…",
+	"list.refreshFailed": "メール一覧を更新できませんでした。もう一度お試しください。",
 	"list.showingUnread": "未読メールを表示中",
 	"list.showUnreadOnly": "未読メールのみ表示",
 	"list.emptying": "空にしています…",
@@ -2461,5 +2464,10 @@
 	"undo.label.star": "スターを付けました",
 	"undo.label.unstar": "スターを外しました",
 	"undo.label.snooze": "スヌーズしました",
-	"undo.label.unsnooze": "スヌーズを解除しました"
+	"undo.label.unsnooze": "スヌーズを解除しました",
+	"account.apps": "アプリ",
+	"account.openApps": "アプリメニューを開く",
+	"account.signOutAccountConfirm": "{name} ({email}) をサインアウトしますか？このアカウントを使うには、もう一度サインインする必要があります。",
+	"invite.acceptedLabel": "承諾済み",
+	"invite.declinedLabel": "辞退済み"
 }

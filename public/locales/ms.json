@@ -211,6 +211,9 @@
 	"list.range": "{start} - {end} daripada {total}",
 	"list.previousPage": "Halaman sebelumnya",
 	"list.nextPage": "Halaman seterusnya",
+	"list.refresh": "Muat semula",
+	"list.refreshing": "Memuat semula…",
+	"list.refreshFailed": "Tidak dapat memuat semula senarai mesej. Sila cuba lagi.",
 	"list.showingUnread": "Menunjukkan e-mel belum dibaca",
 	"list.showUnreadOnly": "Tunjuk e-mel belum dibaca sahaja",
 	"list.emptying": "Mengosongkan…",
@@ -2475,5 +2478,10 @@
 	"undo.label.star": "Ditanda bintang",
 	"undo.label.unstar": "Bintang dibuang",
 	"undo.label.snooze": "Ditangguhkan",
-	"undo.label.unsnooze": "Penangguhan dibatalkan"
+	"undo.label.unsnooze": "Penangguhan dibatalkan",
+	"account.apps": "Apl",
+	"account.openApps": "Buka menu apl",
+	"account.signOutAccountConfirm": "Log keluar {name} ({email})? Anda perlu log masuk semula untuk menggunakan akaun ini.",
+	"invite.acceptedLabel": "Diterima",
+	"invite.declinedLabel": "Ditolak"
 }

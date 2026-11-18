@@ -212,6 +212,9 @@
 	"list.range": "{total} ൽ {start} - {end}",
 	"list.previousPage": "മുൻ പേജ്",
 	"list.nextPage": "അടുത്ത പേജ്",
+	"list.refresh": "പുതുക്കുക",
+	"list.refreshing": "പുതുക്കുന്നു…",
+	"list.refreshFailed": "സന്ദേശ ലിസ്റ്റ് പുതുക്കാനായില്ല. വീണ്ടും ശ്രമിക്കുക.",
 	"list.showingUnread": "വായിക്കാത്ത ഇമെയിലുകൾ കാണിക്കുന്നു",
 	"list.showUnreadOnly": "വായിക്കാത്ത ഇമെയിലുകൾ മാത്രം കാണിക്കുക",
 	"list.emptying": "ശൂന്യമാക്കുന്നു…",
@@ -2479,5 +2482,10 @@
 	"undo.label.star": "സ്റ്റാർ ചെയ്തു",
 	"undo.label.unstar": "സ്റ്റാർ നീക്കി",
 	"undo.label.snooze": "സ്നൂസ് ചെയ്തു",
-	"undo.label.unsnooze": "സ്നൂസ് ഒഴിവാക്കി"
+	"undo.label.unsnooze": "സ്നൂസ് ഒഴിവാക്കി",
+	"account.apps": "ആപ്പുകൾ",
+	"account.openApps": "ആപ്പ് മെനു തുറക്കുക",
+	"account.signOutAccountConfirm": "{name} ({email}) സൈൻ ഔട്ട് ചെയ്യണോ? ഈ അക്കൗണ്ട് ഉപയോഗിക്കാൻ നിങ്ങൾ വീണ്ടും സൈൻ ഇൻ ചെയ്യണം.",
+	"invite.acceptedLabel": "സ്വീകരിച്ചു",
+	"invite.declinedLabel": "നിരസിച്ചു"
 }

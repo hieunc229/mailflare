@@ -228,6 +228,9 @@
 	"list.range": "{start} - {end} من {total}",
 	"list.previousPage": "الصفحة السابقة",
 	"list.nextPage": "الصفحة التالية",
+	"list.refresh": "تحديث",
+	"list.refreshing": "جارٍ التحديث…",
+	"list.refreshFailed": "تعذّر تحديث قائمة الرسائل. يُرجى المحاولة مرة أخرى.",
 	"list.showingUnread": "عرض الرسائل غير المقروءة",
 	"list.showUnreadOnly": "عرض الرسائل غير المقروءة فقط",
 	"list.emptying": "جارٍ التفريغ…",
@@ -2539,5 +2542,10 @@
 	"undo.label.star": "تم التمييز",
 	"undo.label.unstar": "أُزيل التمييز",
 	"undo.label.snooze": "تم التأجيل",
-	"undo.label.unsnooze": "أُلغي التأجيل"
+	"undo.label.unsnooze": "أُلغي التأجيل",
+	"account.apps": "التطبيقات",
+	"account.openApps": "فتح قائمة التطبيقات",
+	"account.signOutAccountConfirm": "تسجيل خروج {name} ({email})؟ ستحتاج إلى تسجيل الدخول مرة أخرى لاستخدام هذا الحساب.",
+	"invite.acceptedLabel": "تم القبول",
+	"invite.declinedLabel": "تم الرفض"
 }

@@ -220,6 +220,9 @@
 	"list.range": "{start} – {end} из {total}",
 	"list.previousPage": "Предыдущая страница",
 	"list.nextPage": "Следующая страница",
+	"list.refresh": "Обновить",
+	"list.refreshing": "Обновление…",
+	"list.refreshFailed": "Не удалось обновить список сообщений. Попробуйте ещё раз.",
 	"list.showingUnread": "Показаны непрочитанные письма",
 	"list.showUnreadOnly": "Показывать только непрочитанные письма",
 	"list.emptying": "Очистка…",
@@ -2509,5 +2512,10 @@
 	"undo.label.star": "Добавлено в избранное",
 	"undo.label.unstar": "Удалено из избранного",
 	"undo.label.snooze": "Отложено",
-	"undo.label.unsnooze": "Отложенность снята"
+	"undo.label.unsnooze": "Отложенность снята",
+	"account.apps": "Приложения",
+	"account.openApps": "Открыть меню приложений",
+	"account.signOutAccountConfirm": "Выйти из аккаунта {name} ({email})? Чтобы пользоваться им, потребуется снова войти.",
+	"invite.acceptedLabel": "Принято",
+	"invite.declinedLabel": "Отклонено"
 }

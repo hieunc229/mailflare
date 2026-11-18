@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import type { Message, MessageFilterOptions, MessageFolder } from "./types";
 import { applyPendingToMessages, getKnownThreadUnread, subscribePendingOverlay } from "@/lib/messages/field-store";
 import type { ThreadUnreadTarget } from "@/lib/messages/field-store";
+import { registerMessageRefresh } from "./message-refresh";
 import {
 	clearMessageCountsCache,
 	clearMessageListCache,
@@ -83,7 +84,8 @@ export function useMessages(
 			}
 		}
 
-		void loadMessages(false, !peekMessageList(getMessageQueryParams(folder, mailboxId, filters, folderId)));
+		void loadMessages(false, !peekMessageList(getMessageQueryParams(folder, mailboxId, filters, folderId))).catch(() => undefined);
+		const unregisterRefresh = registerMessageRefresh(() => loadMessages());
 		function patchReadState(event: Event) {
 			const detail = (event as CustomEvent<{
 				kind?: string;
@@ -157,7 +159,7 @@ export function useMessages(
 			if (refreshTimer) window.clearTimeout(refreshTimer);
 			refreshTimer = window.setTimeout(() => {
 				refreshTimer = null;
-				void loadMessages(true);
+				void loadMessages(true).catch(() => undefined);
 			}, REFRESH_DEBOUNCE_MS);
 		}
 		const unsubscribePending = subscribePendingOverlay(() => {
@@ -169,6 +171,7 @@ export function useMessages(
 
 		return () => {
 			cancelled = true;
+			unregisterRefresh();
 			window.removeEventListener("mailflare:messages-changed", onMessagesChanged);
 			window.removeEventListener("mailflare:messages-changed", patchReadState);
 			window.removeEventListener("mailflare:messages-changed", patchFieldState);

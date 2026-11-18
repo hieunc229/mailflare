@@ -208,6 +208,9 @@
 	"list.range": "{start} - {end} trên {total}",
 	"list.previousPage": "Trang trước",
 	"list.nextPage": "Trang sau",
+	"list.refresh": "Làm mới",
+	"list.refreshing": "Đang làm mới…",
+	"list.refreshFailed": "Không thể làm mới danh sách thư. Vui lòng thử lại.",
 	"list.showingUnread": "Đang hiển thị email chưa đọc",
 	"list.showUnreadOnly": "Chỉ hiển thị email chưa đọc",
 	"list.emptying": "Đang dọn sạch…",
@@ -2461,5 +2464,10 @@
 	"undo.label.star": "Đã gắn dấu sao",
 	"undo.label.unstar": "Đã bỏ dấu sao",
 	"undo.label.snooze": "Đã tạm hoãn",
-	"undo.label.unsnooze": "Đã hủy tạm hoãn"
+	"undo.label.unsnooze": "Đã hủy tạm hoãn",
+	"account.apps": "Ứng dụng",
+	"account.openApps": "Mở menu ứng dụng",
+	"account.signOutAccountConfirm": "Đăng xuất {name} ({email})? Bạn sẽ cần đăng nhập lại để dùng tài khoản này.",
+	"invite.acceptedLabel": "Đã chấp nhận",
+	"invite.declinedLabel": "Đã từ chối"
 }

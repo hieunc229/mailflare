@@ -212,6 +212,9 @@
 	"list.range": "{start} - {end} از {total}",
 	"list.previousPage": "صفحه قبل",
 	"list.nextPage": "صفحه بعد",
+	"list.refresh": "بازخوانی",
+	"list.refreshing": "در حال بازخوانی…",
+	"list.refreshFailed": "فهرست پیام‌ها بازخوانی نشد. لطفاً دوباره تلاش کنید.",
 	"list.showingUnread": "نمایش ایمیل‌های خوانده‌نشده",
 	"list.showUnreadOnly": "فقط نمایش ایمیل‌های خوانده‌نشده",
 	"list.emptying": "در حال خالی کردن…",
@@ -2479,5 +2482,10 @@
 	"undo.label.star": "ستاره‌دار شد",
 	"undo.label.unstar": "ستاره برداشته شد",
 	"undo.label.snooze": "به تعویق افتاد",
-	"undo.label.unsnooze": "تعویق لغو شد"
+	"undo.label.unsnooze": "تعویق لغو شد",
+	"account.apps": "برنامه‌ها",
+	"account.openApps": "باز کردن منوی برنامه‌ها",
+	"account.signOutAccountConfirm": "از {name} ({email}) خارج می‌شوید؟ برای استفاده از این حساب باید دوباره وارد شوید.",
+	"invite.acceptedLabel": "پذیرفته‌شده",
+	"invite.declinedLabel": "ردشده"
 }

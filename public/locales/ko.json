@@ -211,6 +211,9 @@
 	"list.range": "{total}개 중 {start} - {end}",
 	"list.previousPage": "이전 페이지",
 	"list.nextPage": "다음 페이지",
+	"list.refresh": "새로고침",
+	"list.refreshing": "새로고침 중…",
+	"list.refreshFailed": "메시지 목록을 새로고침할 수 없습니다. 다시 시도해 주세요.",
 	"list.showingUnread": "읽지 않은 이메일 표시 중",
 	"list.showUnreadOnly": "읽지 않은 이메일만 표시",
 	"list.emptying": "비우는 중…",
@@ -2475,5 +2478,10 @@
 	"undo.label.star": "별표 표시됨",
 	"undo.label.unstar": "별표 해제됨",
 	"undo.label.snooze": "일시 보류됨",
-	"undo.label.unsnooze": "일시 보류 해제됨"
+	"undo.label.unsnooze": "일시 보류 해제됨",
+	"account.apps": "앱",
+	"account.openApps": "앱 메뉴 열기",
+	"account.signOutAccountConfirm": "{name} ({email}) 계정에서 로그아웃할까요? 이 계정을 사용하려면 다시 로그인해야 합니다.",
+	"invite.acceptedLabel": "수락함",
+	"invite.declinedLabel": "거절함"
 }

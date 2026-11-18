@@ -212,6 +212,9 @@
 	"list.range": "{total} ರಲ್ಲಿ {start} - {end}",
 	"list.previousPage": "ಹಿಂದಿನ ಪುಟ",
 	"list.nextPage": "ಮುಂದಿನ ಪುಟ",
+	"list.refresh": "ರಿಫ್ರೆಶ್ ಮಾಡಿ",
+	"list.refreshing": "ರಿಫ್ರೆಶ್ ಆಗುತ್ತಿದೆ…",
+	"list.refreshFailed": "ಸಂದೇಶಗಳ ಪಟ್ಟಿಯನ್ನು ರಿಫ್ರೆಶ್ ಮಾಡಲು ಸಾಧ್ಯವಾಗಲಿಲ್ಲ. ದಯವಿಟ್ಟು ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಿ.",
 	"list.showingUnread": "ಓದದ ಇಮೇಲ್‌ಗಳನ್ನು ತೋರಿಸಲಾಗುತ್ತಿದೆ",
 	"list.showUnreadOnly": "ಓದದ ಇಮೇಲ್‌ಗಳನ್ನು ಮಾತ್ರ ತೋರಿಸಿ",
 	"list.emptying": "ಖಾಲಿ ಮಾಡಲಾಗುತ್ತಿದೆ…",
@@ -2479,5 +2482,10 @@
 	"undo.label.star": "ಸ್ಟಾರ್ ಮಾಡಲಾಗಿದೆ",
 	"undo.label.unstar": "ಸ್ಟಾರ್ ತೆಗೆದುಹಾಕಲಾಗಿದೆ",
 	"undo.label.snooze": "ಸ್ನೂಜ್ ಮಾಡಲಾಗಿದೆ",
-	"undo.label.unsnooze": "ಸ್ನೂಜ್ ರದ್ದುಗೊಳಿಸಲಾಗಿದೆ"
+	"undo.label.unsnooze": "ಸ್ನೂಜ್ ರದ್ದುಗೊಳಿಸಲಾಗಿದೆ",
+	"account.apps": "ಆ್ಯಪ್‌ಗಳು",
+	"account.openApps": "ಆ್ಯಪ್‌ಗಳ ಮೆನು ತೆರೆಯಿರಿ",
+	"account.signOutAccountConfirm": "{name} ({email}) ಸೈನ್ ಔಟ್ ಮಾಡಬೇಕೇ? ಈ ಖಾತೆಯನ್ನು ಬಳಸಲು ನೀವು ಮತ್ತೆ ಸೈನ್ ಇನ್ ಮಾಡಬೇಕಾಗುತ್ತದೆ.",
+	"invite.acceptedLabel": "ಸ್ವೀಕರಿಸಲಾಗಿದೆ",
+	"invite.declinedLabel": "ತಿರಸ್ಕರಿಸಲಾಗಿದೆ"
 }

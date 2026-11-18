@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import type { MessageCounts, MessageCountsDelta } from "./types";
 import { hasPendingOverlay, subscribePendingOverlay } from "@/lib/messages/field-store";
+import { registerMessageRefresh } from "./message-refresh";
 import { clearMessageCountsCache, fetchMessageCounts } from "./utils";
 
 const REFRESH_DEBOUNCE_MS = 150;
@@ -33,11 +34,11 @@ export function useMessageCounts(mailboxId?: string | null, enabled = true) {
 		let refreshTimer: number | null = null;
 		let requestNumber = 0;
 
-		async function loadCounts() {
+		async function loadCounts(force = false, showLoading = true) {
 			const currentRequest = ++requestNumber;
-			setIsLoading(true);
+			if (showLoading) setIsLoading(true);
 			try {
-				const nextCounts = await fetchMessageCounts(mailboxId);
+				const nextCounts = await fetchMessageCounts(mailboxId, force);
 				if (!cancelled && currentRequest === requestNumber && !hasPendingOverlay()) {
 					setCounts(nextCounts ?? emptyCounts);
 				}
@@ -52,7 +53,7 @@ export function useMessageCounts(mailboxId?: string | null, enabled = true) {
 			refreshTimer = window.setTimeout(() => {
 				refreshTimer = null;
 				// The cache was cleared above, so hooks refreshing for the same change share one request.
-				void loadCounts();
+				void loadCounts().catch(() => undefined);
 			}, REFRESH_DEBOUNCE_MS);
 		}
 
@@ -61,8 +62,9 @@ export function useMessageCounts(mailboxId?: string | null, enabled = true) {
 		if (hasPendingOverlay()) {
 			clearMessageCountsCache();
 		} else {
-			void loadCounts();
+			void loadCounts().catch(() => undefined);
 		}
+		const unregisterRefresh = registerMessageRefresh(() => loadCounts(false, false));
 		function onMessagesChanged() {
 			if (hasPendingOverlay()) return;
 			clearMessageCountsCache();
@@ -101,6 +103,7 @@ export function useMessageCounts(mailboxId?: string | null, enabled = true) {
 
 		return () => {
 			cancelled = true;
+			unregisterRefresh();
 			window.removeEventListener("mailflare:messages-changed", onMessagesChanged);
 			window.removeEventListener("mailflare:message-counts-changed", onMessagesChanged);
 			window.removeEventListener("mailflare:message-counts-delta", onMessageCountsDelta);

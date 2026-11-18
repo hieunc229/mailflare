@@ -8,7 +8,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ```bash
 npm run dev                    # Vite + vinext in local workerd
-npm run lint                   # eslint (next/core-web-vitals + next/typescript)
+npm run lint                   # vp lint (Oxlint, lint.config.ts)
 npm run build                  # vinext build, including the complete Worker
 
 npm run db:generate            # drizzle-kit generate (SQLite) from src/db/schema/index.ts
@@ -19,8 +19,7 @@ npm run db:migrate:local       # wrangler d1 migrations apply DB --local
 npm run db:migrate:remote      # --remote (needs a concrete database_id in wrangler.jsonc)
 npm run db:seed                # POST /api/seed against localhost:3000
 
-npm run deploy                 # vinext build + wrangler deploy
-npm run deploy                 # build and deploy; migrate later from Admin settings
+npm run deploy                 # vinext build + wrangler deploy; migrate later from Admin settings
 npm run preview                # build and preview the vinext Worker locally
 npm run cf-typegen             # regenerate cloudflare-env.d.ts from wrangler.jsonc
 ```
@@ -41,7 +40,7 @@ Next.js App Router APIs running on Cloudflare Workers via vinext. Drizzle ORM ov
 
 - **`fetch`** — intercepts `/api/realtime` for the WebSocket upgrade (authenticates the session cookie, then routes to `env.REALTIME.getByName(user.id)`), delegating everything else to vinext.
 - **`email`** — the Cloudflare Email Routing handler. Resolves domain routing rules first (`resolveIncomingMail` in `src/lib/email/incoming.ts`) because `message.setReject()` and `message.forward()` only exist here, then applies optional account-level forwarding (loop-guarded by the `MAILFLARE_FORWARDED_HEADER`), writes raw MIME to R2, and enqueues to `INBOUND_QUEUE`. It never parses mail inline.
-- **`queue`** — a single consumer for both queues; `isInboundQueueMessage` and `isWebhookRetryMessage` in `worker-utils.ts` discriminate inbound mail, webhook retries, and outbound payloads. Failures `retry({ delaySeconds: 10 })`.
+- **`queue`** — a single consumer for all three queues (inbound, outbound, agent); `isInboundQueueMessage` and `isWebhookRetryMessage` in `worker-utils.ts` discriminate inbound mail, webhook retries, and outbound payloads. Failures `retry({ delaySeconds: 10 })`.
 
 It also re-exports `RealtimeHub`, which must remain exported from the Worker entrypoint.
 
@@ -94,7 +93,7 @@ Auth is `CF_TOKEN` (preferred) or the legacy `CF_EMAIL` + `CF_API_KEY` pair.
 - **One schema, three dialects.** `src/db/schema/index.ts` is written against a kit (`schema/kits.ts`): `table`, `text`, `integer`, `bool`, `timestamp`, `autoId`, `index`, `uniqueIndex`, `desc`, `nowSeconds`. `schemaDialect()` picks the real builders when the module is first imported (from `process.env`, which Workers populate from vars; `MAILFLARE_DB_DIALECT` forces it for tooling), so only one dialect's tables exist per process. The exported tables are *typed* as SQLite whichever dialect is active; that is deliberate, because the app only uses query-builder calls all three share. Representation is kept identical across dialects so raw SQL stays portable: timestamps are seconds in a `bigint`, integers are `bigint`, booleans are native. MySQL needs VARCHAR for anything indexed, so `text()` there returns a recorder resolved in `table()` once the index callback shows which columns are keys; wide indexes are trimmed to InnoDB's 3072 bytes, expression key parts and `uniqueIndex().where()` degrade (see docs).
 - **Drivers are executors.** `src/db/drivers/*` turn `(sql, params)` into rows, lazily importing the package (`pg`, `postgres`, `@neondatabase/serverless`, `@electric-sql/pglite` (Node only), `mysql2`, `@planetscale/database`, `@libsql/client`, better-sqlite3, bun:sqlite). `external.ts` feeds an executor to drizzle's `pg-proxy` / `mysql-proxy` / `sqlite-proxy` and to `CompatDatabase` (`d1-compat.ts`), the D1-shaped `prepare().bind().run/first/all`, `batch`, which keeps the ~25 raw `env.DB.prepare` call sites working (`?` becomes `$n` for PostgreSQL). Workers cannot reuse sockets across requests, so TCP drivers connect per query unless `shared` (Node).
 - **`compat.ts` keeps the SQLite-shaped API.** It adds `db.run/all/get/values/batch` to PostgreSQL/MySQL instances, and on MySQL shims `insert().onConflictDoNothing/DoUpdate().returning()`, `update().returning()`, `delete().returning()` (ON DUPLICATE KEY UPDATE plus a select by primary key; claims rely on the affected-row count, so mysql2 keeps `FOUND_ROWS` semantics).
-- **Dialect-specific SQL lives in `src/db/sql.ts`** (`insensitiveLike`, `excluded`, `greatest`, `charIndex`, `concatText`, `matchNothing`, `escapeLike`) and `src/db/introspect.ts` (`listTableNames`, `listColumnNames`, `quoteIdentifier`). New raw SQL must work on all three: no bare `0`/`1` as a boolean (`WHERE 1 = 0`), no `x = 0` on boolean columns (`NOT x` / `case when x`), no `||` for strings on MySQL, quote reserved words (`key`, `read`, `repeat`, `change`) via `sql.identifier` or drizzle columns, no `ON CONFLICT ... DO UPDATE SET col = col + 1` in raw SQL (use `onConflictDoUpdate` with `sql\`${table.col} + 1\``). Error text matching goes through `src/lib/database-errors.ts`, which knows all three vocabularies.
+- **Dialect-specific SQL lives in `src/db/sql.ts`** (`insensitiveLike`, `containsLike`, `excluded`, `greatest`, `charIndex`, `concatText`, `matchNothing`, `escapeLike`) and `src/db/introspect.ts` (`listTableNames`, `listColumnNames`, `quoteIdentifier`). New raw SQL must work on all three: no bare `0`/`1` as a boolean (`WHERE 1 = 0`), no `x = 0` on boolean columns (`NOT x` / `case when x`), no `||` for strings on MySQL, quote reserved words (`key`, `read`, `repeat`, `change`) via `sql.identifier` or drizzle columns, no `ON CONFLICT ... DO UPDATE SET col = col + 1` in raw SQL (use `onConflictDoUpdate` with `sql\`${table.col} + 1\``). Error text matching goes through `src/lib/database-errors.ts`, which knows all three vocabularies.
 - **Search.** SQLite keeps the FTS5 index below; PostgreSQL and MySQL have no index and `buildSearchConditions` falls back to case-insensitive substring `LIKE` predicates (pg_trgm GIN indexes are added to PostgreSQL when the extension is allowed).
 
 ### Schema and migrations
