@@ -141,7 +141,8 @@ function unfold(text: string): string[] {
 }
 
 function unescapeText(value: string): string {
-	return value.replace(/\\n/gi, "\n").replace(/\\([,;\\])/g, "$1");
+	// One pass, so an escaped backslash followed by "n" (`C:\\new`) is not read as a line break.
+	return value.replace(/\\([nN,;\\])/g, (_, char: string) => (char === "n" || char === "N" ? "\n" : char));
 }
 
 type Property = { name: string; params: Record<string, string>; value: string };

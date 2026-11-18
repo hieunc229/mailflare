@@ -5,7 +5,7 @@
  * chunk per `pull`, so memory stays bounded regardless of archive size.
  */
 export type ZipEntrySource = {
-	/** Name inside the archive. Slashes keep working as folder separators; backslashes are replaced. */
+	/** Name inside the archive. Slashes keep working as folder separators; backslashes are replaced and `.`/`..` segments dropped. */
 	name: string;
 	/** When the stored file was last modified; defaults to now. */
 	modified?: Date;
@@ -55,8 +55,9 @@ function toDosDateTime(date: Date): { dosTime: number; dosDate: number } {
 
 function zipEntryName(name: string): string {
 	// eslint-disable-next-line no-control-regex
-	const cleaned = name.replace(/[\u0000-\u001f]/g, "").replace(/\\/g, "_").replace(/^\/+/, "").trim();
-	return cleaned || "file";
+	const cleaned = name.replace(/[\u0000-\u001f]/g, "").replace(/\\/g, "_");
+	const segments = cleaned.split("/").filter((segment) => !/^[.\s]*$/.test(segment));
+	return segments.join("/").trim() || "file";
 }
 
 /** Duplicate names make archives ambiguous; later copies get a ` (n)` suffix before the extension. */

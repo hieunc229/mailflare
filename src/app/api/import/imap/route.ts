@@ -34,11 +34,16 @@ export async function POST(request: Request) {
 		new Set(input.destinations.flatMap((destination) => (destination.type === "folder" ? [destination.folderId] : []))),
 	);
 	if (folderIds.length > 0) {
-		const found = await db
-			.select({ id: folders.id })
-			.from(folders)
-			.where(and(inArray(folders.id, folderIds), eq(folders.mailboxId, access.mailbox.id)));
-		if (found.length !== folderIds.length) {
+		// D1 caps bound parameters at 100 per query, and an IMAP account can map to more folders than that.
+		let found = 0;
+		for (let i = 0; i < folderIds.length; i += 90) {
+			const rows = await db
+				.select({ id: folders.id })
+				.from(folders)
+				.where(and(inArray(folders.id, folderIds.slice(i, i + 90)), eq(folders.mailboxId, access.mailbox.id)));
+			found += rows.length;
+		}
+		if (found !== folderIds.length) {
 			return NextResponse.json({ error: "Folder not found" }, { status: 404 });
 		}
 	}

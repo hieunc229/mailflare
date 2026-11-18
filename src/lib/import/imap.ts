@@ -98,33 +98,37 @@ class ImapConnection {
 		const tags = uids.map(() => this.nextTag());
 		// BODY.PEEK[] leaves the source's \Seen flag untouched, unlike RFC822.
 		await this.write(uids.map((uid, index) => `${tags[index]} UID FETCH ${uid} (FLAGS BODY.PEEK[])\r\n`).join(""));
-		const fetched: { uid: string; raw: ArrayBuffer; flags: string[] }[] = [];
-		for (const [index, uid] of uids.entries()) {
-			fetched.push({ uid, ...(await this.readFetchReply(tags[index])) });
-		}
-		return fetched;
-	}
-
-	private async readFetchReply(tag: string): Promise<{ raw: ArrayBuffer; flags: string[] }> {
-		let raw: ArrayBuffer | null = null;
-		let flags: string[] = [];
-
-		while (true) {
+		// Untagged FETCH data is matched to its message by UID, not by position: servers such as
+		// Dovecot may send every pipelined reply's data before (or interleaved with) the tagged OKs.
+		const raws = new Map<string, ArrayBuffer>();
+		const flagsByUid = new Map<string, string[]>();
+		const pending = new Set(tags);
+		let current: { uid?: string; raw?: ArrayBuffer; flags?: string[] } | null = null;
+		const settle = () => {
+			if (!current?.uid) return;
+			if (current.raw) raws.set(current.uid, current.raw);
+			if (current.flags) flagsByUid.set(current.uid, current.flags);
+		};
+		while (pending.size > 0) {
 			const line = await this.readLine();
-			flags = parseFetchFlags(line) ?? flags;
-			const literalLength = getLiteralLength(line);
-			if (literalLength !== null) {
-				raw = await this.readBytes(literalLength);
+			const tag = tags.find((candidate) => pending.has(candidate) && isTaggedCompletion(line, candidate));
+			if (tag) {
+				if (!line.toUpperCase().includes(" OK")) throw new Error(`IMAP fetch failed: ${line}`);
+				pending.delete(tag);
 				continue;
 			}
-			if (isTaggedCompletion(line, tag)) {
-				if (!line.toUpperCase().includes(" OK")) {
-					throw new Error(`IMAP fetch failed: ${line}`);
-				}
-				if (!raw) throw new Error("IMAP fetch returned no message");
-				return { raw, flags };
-			}
+			if (/^\* \d+ FETCH\b/i.test(line)) current = {};
+			if (!current) continue;
+			current.uid = line.match(/\bUID (\d+)/i)?.[1] ?? current.uid;
+			current.flags = parseFetchFlags(line) ?? current.flags;
+			const literalLength = getLiteralLength(line);
+			if (literalLength !== null) current.raw = await this.readBytes(literalLength);
+			settle();
 		}
+		return uids.flatMap((uid) => {
+			const raw = raws.get(uid);
+			return raw ? [{ uid, raw, flags: flagsByUid.get(uid) ?? [] }] : [];
+		});
 	}
 
 	private nextTag(): string {
@@ -218,7 +222,10 @@ export async function fetchImapMessages(input: ImapImportInput): Promise<ImapFet
 		const messages: ImportMessageInput[] = [];
 		const newestFirst = [...batch.uids].reverse();
 		const sizes = await imap.fetchSizes(newestFirst);
+		// Counts every UID asked for, so one the server has no body for is passed over instead of re-requested forever.
+		let attempted = 0;
 		for (const group of planImapFetchGroups(newestFirst, sizes)) {
+			attempted += group.length;
 			for (const { uid, raw, flags } of await imap.fetchMessages(group)) {
 				messages.push({
 					filename: `${input.folder}-${uid}.eml`,
@@ -229,11 +236,11 @@ export async function fetchImapMessages(input: ImapImportInput): Promise<ImapFet
 			}
 		}
 		await imap.command("LOGOUT").catch(() => undefined);
-		const complete = messages.length === batch.uids.length;
+		const complete = attempted === batch.uids.length;
 		return {
 			messages: messages.reverse(),
 			total: batch.total,
-			nextOffset: complete ? batch.nextOffset : Math.min(input.offset, batch.total) + messages.length,
+			nextOffset: complete ? batch.nextOffset : Math.min(input.offset, batch.total) + attempted,
 		};
 	} finally {
 		await imap.close();

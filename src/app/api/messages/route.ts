@@ -18,6 +18,7 @@ import type { ListMessage } from "./types";
 import { getOpenCounts } from "@/lib/tracking/open-tracking";
 import { summarizeNotesForRows } from "@/lib/notes/service";
 import { isMissingTableError } from "@/lib/database-errors";
+import { parseLimit, parseOffset } from "@/lib/api/query-params";
 
 export async function GET(request: Request) {
 	const env = getEnv();
@@ -37,8 +38,8 @@ export async function GET(request: Request) {
 	const starred = url.searchParams.get("starred");
 	const snoozed = url.searchParams.get("snoozed");
 	const scheduled = url.searchParams.get("scheduled");
-	const limit = Math.min(Number(url.searchParams.get("limit") ?? 50), 100);
-	const offset = Math.max(Number(url.searchParams.get("offset") ?? 0), 0);
+	const limit = parseLimit(url.searchParams.get("limit"), 50, 100);
+	const offset = parseOffset(url.searchParams.get("offset"));
 	// Conversation view: one row per thread, represented by its newest message
 	// that matches the filter. Drafts are never grouped.
 	const groupByThread = url.searchParams.get("group") === "thread" && status !== "draft";

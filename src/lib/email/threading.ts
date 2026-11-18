@@ -1,7 +1,7 @@
 import { and, asc, eq, inArray, or } from "drizzle-orm";
 import type { getDb } from "@/db";
 import { messages } from "@/db/schema";
-import { insensitiveLike } from "@/db/sql";
+import { escapeLike, insensitiveLike } from "@/db/sql";
 import { newId } from "@/lib/ids";
 import type { ResolveThreadInput } from "@/lib/email/threading-types";
 import { normalizeMessageId, selectThreadLookupIds } from "@/lib/email/thread-lookup";
@@ -78,8 +78,7 @@ export async function resolveThreadId(db: Db, input: ResolveThreadInput): Promis
 }
 
 async function isThreadParticipant(db: Db, mailboxId: string, threadId: string, address: string): Promise<boolean> {
-	// "_" in an address only widens the match to a one-character wildcard; "%" is dropped.
-	const pattern = `%${address.trim().toLowerCase().replace(/%/g, "")}%`;
+	const pattern = `%${escapeLike(address.trim().toLowerCase())}%`;
 	const [match] = await db
 		.select({ id: messages.id })
 		.from(messages)

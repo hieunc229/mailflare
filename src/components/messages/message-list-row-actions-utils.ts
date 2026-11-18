@@ -1,5 +1,6 @@
 import type { TranslationKey } from "@/lib/i18n/types";
 import { authFetch } from "@/lib/auth/client";
+import { performMessageAction } from "@/lib/messages/actions/client";
 import type { MessageCountsDelta } from "@/hooks/types";
 import { dateFromZonedFields, formatUserDateTimeLocal, getUserTimeZone, parseUserDateTimeLocal, zonedDateFields } from "@/lib/time/utils";
 
@@ -31,13 +32,7 @@ export function getSnoozePresets(now = new Date()): SnoozePreset[] {
 export async function snoozeMessage(messageId: string, snoozedUntil: string) {
 	const parsed = parseUserDateTimeLocal(snoozedUntil);
 	if (!parsed) throw new Error("Choose a valid snooze time");
-	const response = await authFetch(`/api/messages/${messageId}/snooze`, {
-		method: "POST",
-		headers: { "Content-Type": "application/json" },
-		body: JSON.stringify({ snoozedUntil: parsed.toISOString() }),
-	});
-	if (!response.ok) throw new Error("Unable to snooze message");
-	window.dispatchEvent(new Event("mailflare:messages-changed"));
+	await performMessageAction({ action: "snooze", messageIds: [messageId], snoozedUntil: parsed.toISOString() });
 }
 
 export function isMessageSnoozed(snoozedUntil?: string | null): boolean {
@@ -45,17 +40,28 @@ export function isMessageSnoozed(snoozedUntil?: string | null): boolean {
 }
 
 export async function unsnoozeMessage(messageId: string) {
-	const response = await authFetch(`/api/messages/${messageId}/snooze`, { method: "DELETE" });
-	if (!response.ok) throw new Error("Unable to unsnooze message");
-	window.dispatchEvent(new Event("mailflare:messages-changed"));
+	await performMessageAction({ action: "unsnooze", messageIds: [messageId] });
 }
 
-export async function toggleMessageStar(messageId: string) {
-	const response = await authFetch(`/api/messages/${messageId}/star`, { method: "POST" });
-	if (!response.ok) throw new Error("Unable to update message star");
-	const result = (await response.json()) as { starred: boolean };
-	window.dispatchEvent(new Event("mailflare:message-counts-changed"));
-	return result;
+/**
+ * Star through the desired-state action so rapid clicks and undo cannot turn
+ * into a non-idempotent toggle. The legacy toggle endpoint is kept for callers
+ * that do not know the current state.
+ */
+export async function toggleMessageStar(messageId: string, starred?: boolean) {
+	if (starred === undefined) {
+		const response = await authFetch(`/api/messages/${messageId}/star`, { method: "POST" });
+		if (!response.ok) throw new Error("Unable to update message star");
+		const result = (await response.json()) as { starred: boolean };
+		window.dispatchEvent(new Event("mailflare:message-counts-changed"));
+		return result;
+	}
+	const response = await performMessageAction({
+		action: starred ? "star" : "unstar",
+		messageIds: [messageId],
+	});
+	const record = response.applied.find((item) => item.id === messageId);
+	return { starred: record?.applied.starred ?? starred };
 }
 
 export function dispatchMessageCountsDelta(detail: MessageCountsDelta) {

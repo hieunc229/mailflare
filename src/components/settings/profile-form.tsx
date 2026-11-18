@@ -14,7 +14,6 @@ import type { ProfileFormProps, ProfileFormResponse } from "./types";
 import { getMailboxAddress, updateCurrentMailboxName } from "./utils";
 
 export function ProfileForm({
-  accountName,
   initialResetEmail,
 }: ProfileFormProps) {
   const { t } = useLanguage();
@@ -42,12 +41,12 @@ export function ProfileForm({
   // account itself, so the recovery email applies to it alone.
   const isPrimary = !!selectedMailbox?.isPrimary && selectedMailbox.type === "personal";
 
-  async function saveProfile(nextName: string, nextResetEmail: string) {
+  async function saveProfile(nextResetEmail: string) {
     try {
       const res = await authFetch("/api/settings/profile", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: nextName, resetEmail: nextResetEmail }),
+        body: JSON.stringify({ resetEmail: nextResetEmail }),
       });
       const data = (await res.json()) as ProfileFormResponse;
 
@@ -96,7 +95,7 @@ export function ProfileForm({
     setSavingRecovery(true);
     setRecoveryStatus(null);
     try {
-      await saveProfile(accountName, resetEmail);
+      await saveProfile(resetEmail);
       setRecoveryStatus(t("common.saved"));
     } catch (error) {
       setRecoveryStatus(

@@ -43,43 +43,46 @@ export function OnboardingClient() {
 		setLoading(true);
 		setError(null);
 
-		const normalized = hostname.toLowerCase().trim();
-		let checkedDomain = domainCheck;
-		let sendingRequested = enableSending;
-		if (skipDns) {
-			checkedDomain = { hostname: normalized, zone: { id: "manual", name: normalized } };
-		} else if (checkedDomain?.hostname !== normalized) {
-			const result = await checkDomain(normalized);
-			if (!result.ok || !result.domain) {
-				setLoading(false);
-				setError(result.error ?? t("onboarding.domainCheckFailed"));
+		try {
+			const normalized = hostname.toLowerCase().trim();
+			let checkedDomain = domainCheck;
+			let sendingRequested = enableSending;
+			if (skipDns) {
+				checkedDomain = { hostname: normalized, zone: { id: "manual", name: normalized } };
+			} else if (checkedDomain?.hostname !== normalized) {
+				const result = await checkDomain(normalized);
+				if (!result.ok || !result.domain) {
+					setError(result.error ?? t("onboarding.domainCheckFailed"));
+					return;
+				}
+				checkedDomain = result.domain;
+				sendingRequested = false;
+				setDomainCheck(result.domain);
+				setEnableSending(sendingRequested);
+			}
+			if (!checkedDomain) {
+				setError(t("onboarding.domainCheckFailed"));
 				return;
 			}
-			checkedDomain = result.domain;
-			sendingRequested = false;
-			setDomainCheck(result.domain);
-			setEnableSending(sendingRequested);
-		}
-		if (!checkedDomain) {
-			setLoading(false);
-			setError(t("onboarding.domainCheckFailed"));
-			return;
-		}
 
-		const { ok, data } = await createDomain(checkedDomain.hostname, skipDns ? true : sendingRequested, replaceMxRecords, skipDns);
-		setLoading(false);
-		if (!ok || !data.domain) {
-			if (data.code === "MX_RECORDS_CONFLICT") {
-				setMxConflict(true);
-				setError(null);
+			const { ok, data } = await createDomain(checkedDomain.hostname, skipDns ? true : sendingRequested, replaceMxRecords, skipDns);
+			if (!ok || !data.domain) {
+				if (data.code === "MX_RECORDS_CONFLICT") {
+					setMxConflict(true);
+					setError(null);
+					return;
+				}
+				setError(data.error ?? t("onboarding.addDomainFailed"));
 				return;
 			}
-			setError(data.error ?? t("onboarding.addDomainFailed"));
-			return;
+			setMxConflict(false);
+			setDomainId(data.domain.id);
+			setStep(2);
+		} catch {
+			setError(t("auth.serverUnreachable"));
+		} finally {
+			setLoading(false);
 		}
-		setMxConflict(false);
-		setDomainId(data.domain.id);
-		setStep(2);
 	}
 
 	async function inspectDomain() {
@@ -89,30 +92,42 @@ export function OnboardingClient() {
 		setDomainChecking(true);
 		setError(null);
 		setMxConflict(false);
-		const result = await checkDomain(normalized);
-		setDomainChecking(false);
-		if (!result.ok || !result.domain) {
+		try {
+			const result = await checkDomain(normalized);
+			if (!result.ok || !result.domain) {
+				setDomainCheck(null);
+				setEnableSending(false);
+				setError(result.error ?? t("onboarding.domainCheckFailed"));
+				return;
+			}
+
+			setDomainCheck(result.domain);
+			setEnableSending(false);
+		} catch {
 			setDomainCheck(null);
 			setEnableSending(false);
-			setError(result.error ?? t("onboarding.domainCheckFailed"));
-			return;
+			setError(t("auth.serverUnreachable"));
+		} finally {
+			setDomainChecking(false);
 		}
-
-		setDomainCheck(result.domain);
-		setEnableSending(false);
 	}
 
 	async function addMailbox() {
 		setLoading(true);
 		setError(null);
 
-		const { ok, data } = await createMailbox(domainId, localPart);
-		setLoading(false);
-		if (!ok) {
-			setError(data.error ?? t("onboarding.createMailboxFailed"));
-			return;
+		try {
+			const { ok, data } = await createMailbox(domainId, localPart);
+			if (!ok) {
+				setError(data.error ?? t("onboarding.createMailboxFailed"));
+				return;
+			}
+			router.push("/inbox");
+		} catch {
+			setError(t("auth.serverUnreachable"));
+		} finally {
+			setLoading(false);
 		}
-		router.push("/inbox");
 	}
 
 	return (

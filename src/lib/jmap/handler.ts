@@ -16,11 +16,14 @@ const JSON_HEADERS = { "Content-Type": "application/json; charset=utf-8", "Cache
  */
 export async function handleJmapRequest(request: Request, env: CloudflareEnv): Promise<Response | null> {
 	const url = new URL(request.url);
-	const path = url.pathname;
+	let path = url.pathname;
 
 	if (request.method === "OPTIONS") return new Response(null, { status: 204, headers: corsHeaders() });
 	if (path === "/.well-known/jmap") {
-		return Response.redirect(`${url.origin}/jmap/session`, 301);
+		// Answer in place when credentials are present: iOS (CFNetwork) drops the Authorization header when
+		// following a redirect, so a 301 to /jmap/session reaches us unauthenticated and the client sees 401.
+		if (!request.headers.get("Authorization")) return Response.redirect(`${url.origin}/jmap/session`, 301);
+		path = "/jmap/session";
 	}
 	if (!path.startsWith("/jmap/")) return null;
 

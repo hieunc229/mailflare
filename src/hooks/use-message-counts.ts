@@ -1,5 +1,7 @@
 import { useEffect, useState } from "react";
 import type { MessageCounts, MessageCountsDelta } from "./types";
+import { hasPendingOverlay, subscribePendingOverlay } from "@/lib/messages/field-store";
+import { registerMessageRefresh } from "./message-refresh";
 import { clearMessageCountsCache, fetchMessageCounts } from "./utils";
 
 const REFRESH_DEBOUNCE_MS = 150;
@@ -32,27 +34,41 @@ export function useMessageCounts(mailboxId?: string | null, enabled = true) {
 		let refreshTimer: number | null = null;
 		let requestNumber = 0;
 
-		async function loadCounts() {
+		async function loadCounts(force = false, showLoading = true) {
 			const currentRequest = ++requestNumber;
-			setIsLoading(true);
+			if (showLoading) setIsLoading(true);
 			try {
-				const nextCounts = await fetchMessageCounts(mailboxId);
-				if (!cancelled && currentRequest === requestNumber) setCounts(nextCounts ?? emptyCounts);
+				const nextCounts = await fetchMessageCounts(mailboxId, force);
+				if (!cancelled && currentRequest === requestNumber && !hasPendingOverlay()) {
+					setCounts(nextCounts ?? emptyCounts);
+				}
 			} finally {
 				if (!cancelled && currentRequest === requestNumber) setIsLoading(false);
 			}
 		}
 
-		void loadCounts();
-		function onMessagesChanged() {
-			clearMessageCountsCache();
+		function scheduleCountsLoad() {
 			if (document.visibilityState !== "visible") return;
 			if (refreshTimer) window.clearTimeout(refreshTimer);
 			refreshTimer = window.setTimeout(() => {
 				refreshTimer = null;
 				// The cache was cleared above, so hooks refreshing for the same change share one request.
-				void loadCounts();
+				void loadCounts().catch(() => undefined);
 			}, REFRESH_DEBOUNCE_MS);
+		}
+
+		// A pending undo has not settled on the server yet. Keep the optimistic
+		// one-shot delta on screen and fetch authoritative counts only afterwards.
+		if (hasPendingOverlay()) {
+			clearMessageCountsCache();
+		} else {
+			void loadCounts().catch(() => undefined);
+		}
+		const unregisterRefresh = registerMessageRefresh(() => loadCounts(false, false));
+		function onMessagesChanged() {
+			if (hasPendingOverlay()) return;
+			clearMessageCountsCache();
+			scheduleCountsLoad();
 		}
 		function onMessageCountsDelta(event: Event) {
 			const detail = (event as CustomEvent<MessageCountsDelta>).detail;
@@ -68,15 +84,30 @@ export function useMessageCounts(mailboxId?: string | null, enabled = true) {
 				},
 			}));
 		}
+		const unsubscribePending = subscribePendingOverlay(() => {
+			// Invalidate a load that started before the overlay changed so its
+			// server value cannot land on top of the optimistic state.
+			requestNumber += 1;
+			clearMessageCountsCache();
+			if (hasPendingOverlay()) {
+				if (refreshTimer) window.clearTimeout(refreshTimer);
+				refreshTimer = null;
+				setIsLoading(false);
+				return;
+			}
+			scheduleCountsLoad();
+		});
 		window.addEventListener("mailflare:messages-changed", onMessagesChanged);
 		window.addEventListener("mailflare:message-counts-changed", onMessagesChanged);
 		window.addEventListener("mailflare:message-counts-delta", onMessageCountsDelta);
 
 		return () => {
 			cancelled = true;
+			unregisterRefresh();
 			window.removeEventListener("mailflare:messages-changed", onMessagesChanged);
 			window.removeEventListener("mailflare:message-counts-changed", onMessagesChanged);
 			window.removeEventListener("mailflare:message-counts-delta", onMessageCountsDelta);
+			unsubscribePending();
 			if (refreshTimer) window.clearTimeout(refreshTimer);
 		};
 	}, [enabled, mailboxId]);

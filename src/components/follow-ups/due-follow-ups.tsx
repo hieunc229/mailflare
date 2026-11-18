@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { BellRing, Check } from "@/components/icons";
 import { useLanguage } from "@/components/language-provider";
 import { Tooltip } from "@/components/ui/tooltip";
@@ -19,8 +19,14 @@ export function DueFollowUps({ mailboxId }: { mailboxId?: string | null }) {
 	const [items, setItems] = useState<DueFollowUp[]>([]);
 	const [failed, setFailed] = useState(false);
 
+	const latestRequest = useRef(0);
+
 	const load = useCallback(() => {
-		void fetchDueFollowUps(mailboxId).then(setItems).catch(() => undefined);
+		// Only the newest request may set state, so a slow response for a previous mailbox is dropped.
+		const request = ++latestRequest.current;
+		void fetchDueFollowUps(mailboxId)
+			.then((next) => { if (request === latestRequest.current) setItems(next); })
+			.catch(() => undefined);
 	}, [mailboxId]);
 
 	useEffect(() => {

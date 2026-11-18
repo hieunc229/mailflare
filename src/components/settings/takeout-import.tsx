@@ -71,6 +71,9 @@ export function TakeoutImport() {
 		};
 	}, [running]);
 
+	// Leaving the page must stop the upload loop; progress is saved, so the import can be resumed later.
+	useEffect(() => () => controllerRef.current?.abort(), []);
+
 	function destinationLabel(key: string): string {
 		const [type, ...rest] = key.split(":");
 		const value = rest.join(":");

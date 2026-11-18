@@ -7,7 +7,8 @@ function escapeHeader(value: string | null): string {
 }
 
 function escapeMboxBody(value: string): string {
-	return value.replace(/\nFrom /g, "\n>From ");
+	// The body follows a blank line, so its first line would start a new message too.
+	return value.replace(/(^|\n)From /g, "$1>From ");
 }
 
 function getMboxFromLine(date: Date): string {
