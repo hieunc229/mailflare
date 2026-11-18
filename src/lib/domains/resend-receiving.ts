@@ -2,7 +2,7 @@ import { eq } from "drizzle-orm";
 import { getDb } from "@/db";
 import { appSettings } from "@/db/schema";
 import { isManualZone } from "@/lib/domains/provision";
-import { hasMx, hasMxMatching, isInboundSmtpMx, publishMx, removeMx } from "@/lib/domains/receiving-dns";
+import { hasMx, hasMxMatching, isResendInboundMx, publishMx, removeMx } from "@/lib/domains/receiving-dns";
 import { getResendClient, getResendKeyStatus } from "@/lib/email/outbound-provider";
 import {
 	createResendDomain, createResendWebhook, deleteResendDomain, deleteResendWebhook, findResendDomain, getResendDomain,
@@ -26,7 +26,7 @@ async function storeWebhook(env: CloudflareEnv, id: string | null, secret: strin
 }
 
 function inboundMx(records: ResendDomainRecord[] | undefined) {
-	return (records ?? []).find((record) => record.type === "MX" && isInboundSmtpMx(record.value)) ?? null;
+	return (records ?? []).find((record) => record.type === "MX" && (record.record === "Receiving" || isResendInboundMx(record.value))) ?? null;
 }
 
 function isPublicHttps(origin: string): boolean {
@@ -88,12 +88,12 @@ export async function getResendReceivingView(env: CloudflareEnv, domain: DomainR
 		steps.push({ key: "domain", label: "Receiving enabled for this domain", ok: enabled, detail: !resend ? "Domain is not in Resend yet" : undefined });
 		const mx = inboundMx(resend?.records);
 		// A record Resend itself verified needs no second opinion. When Resend
-		// names no inbound MX, any published inbound-smtp target proves the record.
+		// names no inbound MX, any published Resend inbound target proves the record.
 		const mxOk = mx?.status === "verified"
 			? true
 			: mx
 				? await hasMx(env, domain, mx.value)
-				: await hasMxMatching(env, domain, isInboundSmtpMx);
+				: await hasMxMatching(env, domain, isResendInboundMx);
 		steps.push({ key: "mx", label: "MX record points to Resend", ok: mxOk === true, detail: mxOk === null ? "Could not check DNS from here" : mx?.value ?? undefined });
 		steps.push({ key: "verified", label: "Domain verified", ok: resend?.status === "verified", detail: resend ? resend.status.replace(/_/g, " ") : undefined });
 		const hooks = await listResendWebhooks(client);
@@ -117,7 +117,7 @@ export async function hasResendReceivingConfig(env: CloudflareEnv, domain: Domai
 export async function removeResendReceiving(env: CloudflareEnv, domain: DomainRow): Promise<void> {
 	const client = await getResendClient(env);
 	const resend = await findResendDomain(client, domain.hostname);
-	await removeMx(env, domain, isInboundSmtpMx);
+	await removeMx(env, domain, isResendInboundMx);
 	if (!resend) return;
 	if (domain.sendingProvider === "resend") await updateResendCapabilities(client, resend.id, { receiving: false });
 	else await deleteResendDomain(client, resend.id);
