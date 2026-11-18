@@ -4,7 +4,7 @@ import { importJobs, mailboxes } from "@/db/schema";
 import { newId } from "@/lib/ids";
 import { getImportMessageUserId, parseImportDestination } from "./destination";
 import { fetchImapMessages } from "./imap";
-import { getImapChunkSize, growImapChunkSize, isImapConnectionError, isMissingImapFolderError, isPermanentImapError } from "./imap-utils";
+import { getImapChunkSize, growImapChunkSize, isImapConnectionError, isMissingImapFolderError, isPermanentImapError, keepsImapChunkSize } from "./imap-utils";
 import { deleteStagedImport, importBatchKey, stageImportMessages, unpackImportMessages } from "./staging";
 import { importMessagesToMailbox } from "./service";
 import type {
@@ -302,7 +302,9 @@ async function retryImapChunkSmaller(
 	if (failures >= (refused ? MAX_IMAP_CONNECTION_FAILURES : MAX_IMAP_FAILURES)) return false;
 	const spec = parseJson<ImapImportSpec | null>(job.spec, null);
 	const base = spec ? imapBaseChunkSize(spec, cursor) : IMAP_CHUNK_SIZE;
-	const size = refused ? cursor.size : Math.max(1, Math.floor(getImapChunkSize(base, cursor.size) / 2));
+	// The first few connection failures keep the size (a throttled host just needs time); later ones also
+	// shrink it, since a batch that is too heavy can drop the connection too. The delay keeps growing either way.
+	const size = refused && keepsImapChunkSize(failures) ? cursor.size : Math.max(1, Math.floor(getImapChunkSize(base, cursor.size) / 2));
 	const next: ImapImportCursor = { ...cursor, failures, size };
 	const recorded = await getDb(env)
 		.update(importJobs)
