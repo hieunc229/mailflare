@@ -14,7 +14,7 @@ await build({
 	outdir: dir, outExtension: { ".js": ".mjs" }, bundle: true, platform: "node", format: "esm", logLevel: "silent",
 	alias: { "@": join(root, "src") },
 });
-const { parseInvite, inviteRepeat, buildReplyIcs, parseIcsDuration, WINDOWS_TIME_ZONES } = await import(pathToFileURL(join(dir, "i.mjs")).href);
+const { parseInvite, inviteRepeat, buildReplyIcs, parseIcsDuration, WINDOWS_TIME_ZONES, inviteAttendeeAddresses, parseAlarmTrigger } = await import(pathToFileURL(join(dir, "i.mjs")).href);
 const { planInboundInvite, planInviteAnswer, inviteSenderMatches, addExcludedOccurrence, mergeExcludedOccurrences, normalizeInviteSender, chooseRecipientZone, inboundNeedsRecipientZone } = await import(pathToFileURL(join(dir, "r.mjs")).href);
 const { createCalendarInvitation } = await import(pathToFileURL(join(dir, "u.mjs")).href);
 
@@ -389,4 +389,58 @@ test("an all-day reply writes DTSTART and RECURRENCE-ID as dates in the recipien
 	assert.equal(back.recurrenceId.toISOString(), invite.recurrenceId.toISOString());
 	// Timed occurrences keep UTC date-times.
 	assert.match(buildReplyIcs(parseInvite(event("DTSTART:20261117T180000Z", "RECURRENCE-ID:20261117T180000Z")), "guest@example.com", "accepted"), /\r\nRECURRENCE-ID:20261117T180000Z\r\n/);
+});
+
+test("a missing METHOD defaults to PUBLISH but flags its absence", () => {
+	const absent = parseInvite(ics("BEGIN:VCALENDAR", "VERSION:2.0", "BEGIN:VEVENT", "UID:x", "DTSTART:20261104T170000Z", "END:VEVENT", "END:VCALENDAR"));
+	assert.equal(absent.method, "PUBLISH");
+	assert.equal(absent.methodAbsent, true);
+	const explicit = parseInvite(ics("BEGIN:VCALENDAR", "METHOD:PUBLISH", "BEGIN:VEVENT", "UID:x", "DTSTART:20261104T170000Z", "END:VEVENT", "END:VCALENDAR"));
+	assert.equal(explicit.method, "PUBLISH");
+	assert.equal(explicit.methodAbsent, false);
+	assert.equal(parseInvite(event("DTSTART:20261104T170000Z")).methodAbsent, false);
+});
+
+test("a VALARM TRIGGER becomes reminder minutes only for a plain countdown", () => {
+	const withTrigger = (trigger, params = "") => parseInvite(ics("BEGIN:VCALENDAR", "BEGIN:VEVENT", "UID:x", "DTSTART:20261104T170000Z",
+		"BEGIN:VALARM", "ACTION:DISPLAY", "DESCRIPTION:Reminder", `TRIGGER${params}:${trigger}`, "END:VALARM", "END:VEVENT", "END:VCALENDAR"));
+	assert.equal(withTrigger("-PT15M").alarmMinutes, 15);
+	assert.equal(withTrigger("-PT1H").alarmMinutes, 60);
+	assert.equal(withTrigger("-P1D").alarmMinutes, 1440);
+	assert.equal(withTrigger("-PT0M").alarmMinutes, 0);
+	assert.equal(withTrigger("-PT15M", ";RELATED=START").alarmMinutes, 15);
+	assert.equal(withTrigger("-pt15m", ";related=start").alarmMinutes, 15);
+	assert.equal(withTrigger("PT15M").alarmMinutes, null);
+	assert.equal(withTrigger("-PT15M", ";RELATED=END").alarmMinutes, null);
+	assert.equal(withTrigger("-PT15M", ";VALUE=DATE-TIME").alarmMinutes, null);
+	// 30 days is past the one-week reminder range.
+	assert.equal(withTrigger("-P30D").alarmMinutes, null);
+	// Past the DURATION cap entirely.
+	assert.equal(withTrigger("-P400D").alarmMinutes, null);
+	// No VALARM means no reminder.
+	assert.equal(parseInvite(event("DTSTART:20261104T170000Z")).alarmMinutes, null);
+	// Direct helper checks for the same grammar.
+	assert.equal(parseAlarmTrigger(null), null);
+});
+
+test("outgoing invitations carry SEQUENCE 0 for creates and 1 for updates, with a VALARM only when reminded", () => {
+	const base = { title: "T", description: "", location: "", startsAt: new Date("2026-11-04T17:00:00Z"), endsAt: new Date("2026-11-04T18:00:00Z"), uid: "evt_1" };
+	const created = new TextDecoder().decode(createCalendarInvitation({ ...base }));
+	assert.match(created, /\r\nSEQUENCE:0\r\n/);
+	assert.doesNotMatch(created, /BEGIN:VALARM/);
+	const updated = new TextDecoder().decode(createCalendarInvitation({ ...base, sequence: 1 }));
+	assert.match(updated, /\r\nSEQUENCE:1\r\n/);
+	const reminded = new TextDecoder().decode(createCalendarInvitation({ ...base, reminderMinutes: 15 }));
+	assert.match(reminded, /\r\nBEGIN:VALARM\r\n/);
+	assert.match(reminded, /\r\nTRIGGER:-PT15M\r\n/);
+	assert.equal(parseInvite(reminded).alarmMinutes, 15);
+	const atTime = new TextDecoder().decode(createCalendarInvitation({ ...base, sequence: 1, reminderMinutes: 0 }));
+	assert.match(atTime, /\r\nTRIGGER:-PT0M\r\n/);
+});
+
+test("invitation addresses are stored as a flat validated list", () => {
+	assert.deepEqual(inviteAttendeeAddresses({ organizer: "Org@Example.com", attendees: [{ email: "guest@example.com", status: "NEEDS-ACTION" }] }), ["org@example.com", "guest@example.com"]);
+	// Duplicates collapse case-insensitively, junk is dropped.
+	assert.deepEqual(inviteAttendeeAddresses({ organizer: null, attendees: [{ email: "GUEST@example.com", status: "ACCEPTED" }, { email: "guest@example.com", status: "TENTATIVE" }, { email: "not an address", status: "NEEDS-ACTION" }] }), ["guest@example.com"]);
+	assert.deepEqual(inviteAttendeeAddresses({ organizer: null, attendees: [] }), []);
 });

@@ -106,7 +106,10 @@ export async function POST(request: Request, { params }: InviteRouteParams) {
 			responseStatus: response, inviteMessageId: messageId, inviteSender: sender,
 		};
 		// The colour is chosen only when the row is created, so one the user changed is kept.
-		await db.insert(calendarEvents).values({ id, userId: user.id, mailboxId: message.mailboxId, color: response === "tentative" ? "#7c3aed" : "#2563eb", ...values }).onConflictDoUpdate({ target: calendarEvents.id, set: values });
+		// The reminder is written once on insert, and on update only when the row has none.
+		const insertValues = invite.alarmMinutes != null ? { ...values, reminderMinutes: invite.alarmMinutes } : values;
+		const updateValues = existing?.reminderMinutes == null ? insertValues : values;
+		await db.insert(calendarEvents).values({ id, userId: user.id, mailboxId: message.mailboxId, color: response === "tentative" ? "#7c3aed" : "#2563eb", ...insertValues }).onConflictDoUpdate({ target: calendarEvents.id, set: updateValues });
 		eventId = id;
 	}
 

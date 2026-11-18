@@ -2,7 +2,9 @@ import { and, desc, eq, isNotNull, isNull } from "drizzle-orm";
 import { getDb } from "@/db";
 import { calendarEvents, users } from "@/db/schema";
 import type { AttachmentContent } from "@/lib/email/attachment-types";
-import { inviteRepeat, parseInvite, type ParsedInvite } from "./invite";
+import { inviteAttendeeAddresses, inviteRepeat, parseInvite, type ParsedInvite } from "./invite";
+import { ICS_ADDRESS } from "./ics";
+import { getEmailAddress } from "@/lib/email/address";
 import { findInviteAttachment, MAX_INVITE_BYTES } from "./invite-attachment";
 import { addExcludedOccurrence, chooseRecipientZone, inboundNeedsRecipientZone, inviteSenderMatches, mergeExcludedOccurrences, normalizeInviteSender, planInboundInvite } from "./invite-rules";
 
@@ -22,7 +24,8 @@ export function inviteEventValues(invite: ParsedInvite, timeZone: string | null,
 	const repeat = inviteRepeat(invite.rrule, invite.startsAt, timeZone);
 	return {
 		title: invite.title, description: invite.description, location: invite.location,
-		attendees: "[]",
+		// Flat address list only (organizer plus attendees); guest statuses stay on the message card.
+		attendees: JSON.stringify(inviteAttendeeAddresses(invite)),
 		repeat: repeat.repeat, repeatDays: JSON.stringify(repeat.repeatDays), repeatAnchorDay: repeat.repeatAnchorDay, repeatUntil: repeat.repeatUntil,
 		excludedOccurrences: mergeExcludedOccurrences(existingExcluded, invite.excludedDates), timeZone,
 		inviteSequence: invite.sequence,
@@ -68,7 +71,11 @@ export async function registerInboundInvite(env: CloudflareEnv, input: { userId:
 		const db = getDb(env);
 		const recipientZone = await recipientInviteTimeZone(db, input.userId);
 		const invite = parseInvite(new TextDecoder().decode(attachment.content), { timeZone: recipientZone ?? "UTC" });
-		if (!invite || (invite.method !== "REQUEST" && invite.method !== "CANCEL" && invite.method !== "REPLY")) return;
+		if (!invite) return;
+		// A file without METHOD defaults to PUBLISH; treat that as a REQUEST so plain provider invites auto-add.
+		// The stored method keeps PUBLISH, so the card and the message GET/POST behavior are unchanged.
+		const effectiveMethod = invite.method === "PUBLISH" && invite.methodAbsent ? "REQUEST" : invite.method;
+		if (effectiveMethod !== "REQUEST" && effectiveMethod !== "CANCEL" && effectiveMethod !== "REPLY") return;
 		// All-day or floating times read without knowing the recipient's zone would land at the wrong time (and a refresh
 		// would look like a move), so such an invitation waits for the user to answer it from the message instead.
 		if (!recipientZone && inboundNeedsRecipientZone(invite)) return;
@@ -83,13 +90,21 @@ export async function registerInboundInvite(env: CloudflareEnv, input: { userId:
 			const [own] = await db.select({ id: calendarEvents.id }).from(calendarEvents).where(and(eq(calendarEvents.id, ownId), eq(calendarEvents.userId, input.userId))).limit(1);
 			if (own) return;
 		}
+		// A METHOD-less file is easy to spoof, so it auto-adds only when the ORGANIZER proves the sender:
+		// a valid calendar address on the sender's own address or domain.
+		if (invite.methodAbsent && invite.method === "PUBLISH") {
+			const organizerAddress = getEmailAddress(invite.organizer ?? "").trim().toLowerCase();
+			const senderAddress = getEmailAddress(input.senderAddress).trim().toLowerCase();
+			const domainOf = (address: string) => address.slice(address.indexOf("@") + 1);
+			if (!organizerAddress || !ICS_ADDRESS.test(organizerAddress) || !senderAddress || (organizerAddress !== senderAddress && domainOf(organizerAddress) !== domainOf(senderAddress))) return;
+		}
 		const id = await inviteEventId(input.userId, invite.uid);
 		const where = and(eq(calendarEvents.id, id), eq(calendarEvents.userId, input.userId));
 		const [existing] = await db.select().from(calendarEvents).where(where).limit(1);
 		// Anyone who learns an invitation UID could otherwise cancel or rewrite the event, so a later message
 		// is applied only when it comes from the sender of the message that created the event.
 		if (existing && !sameInviteSender(existing, input.senderAddress)) return;
-		const plan = planInboundInvite(invite, existing);
+		const plan = planInboundInvite({ method: effectiveMethod, recurrenceId: invite.recurrenceId, sequence: invite.sequence }, existing);
 		const sender = normalizeInviteSender(input.senderAddress);
 		if (plan.action === "ignore") return;
 		if (plan.action === "delete") {
@@ -105,13 +120,16 @@ export async function registerInboundInvite(env: CloudflareEnv, input: { userId:
 		}
 		const values = { ...inviteEventValues(invite, invite.timeZone ?? userZone, existing?.excludedOccurrences), inviteSender: sender };
 		if (plan.action === "insert" || !existing) {
-			await db.insert(calendarEvents).values({ id, userId: input.userId, mailboxId: input.mailboxId, color: "#2563eb", responseStatus: "needs-action", inviteMessageId: input.messageId, ...values });
+			// The reminder is written once on insert; the event editor stays the only later overwriter.
+			await db.insert(calendarEvents).values({ id, userId: input.userId, mailboxId: input.mailboxId, color: "#2563eb", responseStatus: "needs-action", inviteMessageId: input.messageId, ...values, ...(invite.alarmMinutes != null ? { reminderMinutes: invite.alarmMinutes } : {}) });
 			return;
 		}
 		const moved = existing.startsAt.getTime() !== invite.startsAt.getTime() || existing.endsAt.getTime() !== invite.endsAt.getTime();
 		await db.update(calendarEvents).set({
 			...values, inviteMessageId: input.messageId,
 			responseStatus: moved ? "needs-action" : existing.responseStatus,
+			// Fill in a reminder only when the row has none; never overwrite the user's own setting.
+			...(existing?.reminderMinutes == null && invite.alarmMinutes != null ? { reminderMinutes: invite.alarmMinutes } : {}),
 		}).where(where);
 	} catch (error) {
 		console.error(`Invitation registration failed for ${input.messageId}`, error);

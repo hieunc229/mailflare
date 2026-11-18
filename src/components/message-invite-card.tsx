@@ -100,6 +100,12 @@ export function MessageInviteCard({ messageId, hasCalendarAttachment, className 
 					<p className="mt-1 text-xs text-neutral-700">{when}</p>
 					{currentInvite.location && <p className="mt-0.5 break-words text-xs text-neutral-600">{currentInvite.location}</p>}
 					{currentInvite.organizer && <p className="mt-0.5 text-xs text-neutral-600">{t("invite.organizer", { organizer: currentInvite.organizer })}</p>}
+					{currentInvite.attendees && currentInvite.attendees.length > 0 && (
+						<p className="mt-0.5 break-words text-xs text-neutral-600">
+							{currentInvite.attendees.slice(0, 5).map((attendee) => `${attendee.email} (${attendee.status.charAt(0)}${attendee.status.slice(1).toLowerCase()})`).join(", ")}
+							{currentInvite.attendees.length > 5 ? ` +${currentInvite.attendees.length - 5} more` : ""}
+						</p>
+					)}
 					<div className="mt-3 flex flex-wrap items-center gap-2">
 						{cancelled ? (
 							<Button size="sm" disabled={pending !== null || !eventId} onClick={() => void respond("declined")} variant="outline" className="rounded-full border-0 bg-white text-neutral-700 hover:bg-neutral-50">{t("invite.removeFromCalendar")}</Button>

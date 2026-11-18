@@ -1,9 +1,12 @@
 import { dateFromZonedFields, normalizeTimeZone, zonedDateFields } from "../time/utils";
 import { escapeIcsText, formatIcsUtc, ICS_ADDRESS, joinIcsLines } from "./ics";
+import { normalizeReminderMinutes } from "./reminder-utils";
 
 export type ParsedInvite = {
 	uid: string;
 	method: string;
+	/** True when the file carried no top-level METHOD (method then defaults to "PUBLISH"). */
+	methodAbsent: boolean;
 	title: string;
 	description: string;
 	location: string;
@@ -24,6 +27,8 @@ export type ParsedInvite = {
 	recipientZone: string;
 	/** True when any time in the event was read in `recipientZone` rather than from the file itself. */
 	usedFallbackZone: boolean;
+	/** VALARM reminder of the invitation in minutes before the start, null when none or unreadable. */
+	alarmMinutes: number | null;
 	/** ATTENDEE lines with their PARTSTAT; a REPLY carries the answering guest here. */
 	attendees: { email: string; status: string }[];
 };
@@ -251,32 +256,87 @@ export function parseIcsDuration(value: string | undefined): { days: number; ms:
 }
 
 /** The properties of each VEVENT, ignoring those of components nested in it (VALARM and the like). */
-function readEvents(lines: string[]): { method: string; events: Property[][] } {
+function readEvents(lines: string[]): { method: string; methodAbsent: boolean; events: Property[][]; alarmTriggers: (Property | null)[] } {
 	let method = "PUBLISH";
+	let methodAbsent = true;
 	const events: Property[][] = [];
+	// First TRIGGER seen inside a VALARM of each VEVENT, parallel to `events`; never added to the event props.
+	const alarmTriggers: (Property | null)[] = [];
 	let current: Property[] | null = null;
+	let currentTrigger: Property | null = null;
 	let nested = 0;
+	// Depth inside VEVENT at which the current VALARM opened, null when not inside one.
+	let alarmDepth: number | null = null;
 	for (const line of lines) {
 		const property = parseProperty(line);
 		if (!property) continue;
 		if (property.name === "BEGIN") {
 			const component = property.value.trim().toUpperCase();
-			if (current) nested++;
-			else if (component === "VEVENT") { current = []; nested = 0; }
+			if (current) {
+				nested++;
+				if (component === "VALARM" && alarmDepth === null) alarmDepth = nested;
+			} else if (component === "VEVENT") { current = []; currentTrigger = null; nested = 0; alarmDepth = null; }
 			continue;
 		}
 		if (property.name === "END") {
 			if (!current) continue;
-			if (nested > 0) { nested--; continue; }
+			if (nested > 0) {
+				if (alarmDepth !== null && property.value.trim().toUpperCase() === "VALARM" && nested === alarmDepth) alarmDepth = null;
+				nested--;
+				continue;
+			}
 			events.push(current);
+			alarmTriggers.push(currentTrigger);
 			current = null;
+			currentTrigger = null;
+			alarmDepth = null;
 			continue;
 		}
 		if (current) {
 			if (nested === 0) current.push(property);
-		} else if (property.name === "METHOD") method = property.value.trim().toUpperCase();
+			else if (alarmDepth !== null && !currentTrigger && property.name === "TRIGGER") currentTrigger = property;
+		} else if (property.name === "METHOD") { method = property.value.trim().toUpperCase(); methodAbsent = false; }
 	}
-	return { method, events };
+	return { method, methodAbsent, events, alarmTriggers };
+}
+
+/**
+ * Reminder minutes of a VALARM TRIGGER, or null when it is not a plain countdown. Only a leading-`-` duration
+ * before the start counts (RELATED=START or no params); a VALUE=DATE-TIME or RELATED=END is an absolute time or
+ * runs after the start, so it is ignored. The magnitude reuses the DURATION grammar (at most 366 days) and is
+ * then clamped to the reminder range; -PT0M is a valid at-the-time reminder.
+ */
+export function parseAlarmTrigger(property: Property | null | undefined): number | null {
+	if (!property) return null;
+	const related = property.params.RELATED?.trim().toUpperCase();
+	if (related && related !== "START") return null;
+	const valueType = property.params.VALUE?.trim().toUpperCase();
+	if (valueType && valueType !== "DURATION") return null;
+	const raw = property.value.trim();
+	if (!raw.startsWith("-")) return null;
+	const magnitude = raw.slice(1).trim();
+	const parsed = parseIcsDuration(magnitude);
+	if (parsed) {
+		const minutes = (parsed.days * DAY_MS + parsed.ms) / 60_000;
+		return Number.isInteger(minutes) ? normalizeReminderMinutes(minutes) : null;
+	}
+	// parseIcsDuration treats zero as absent; -PT0M still means "at the time".
+	if (/^P(?:0W)?(?:0D)?(?:T(?:0H)?(?:0M)?(?:0S)?)?$/i.test(magnitude) && !magnitude.toUpperCase().endsWith("T")) return 0;
+	return null;
+}
+
+/** Flat organizer-plus-attendees address list for the attendees column: deduped, lower-cased, at most 100. */
+export function inviteAttendeeAddresses(invite: Pick<ParsedInvite, "organizer" | "attendees">): string[] {
+	const seen = new Set<string>();
+	const list: string[] = [];
+	for (const raw of [invite.organizer, ...invite.attendees.map((attendee) => attendee.email)]) {
+		const address = raw?.trim().toLowerCase() ?? "";
+		if (!address || address.length > 254 || seen.has(address) || !ICS_ADDRESS.test(address)) continue;
+		seen.add(address);
+		list.push(address);
+		if (list.length >= 100) break;
+	}
+	return list;
 }
 
 /**
@@ -293,10 +353,11 @@ export function parseInvite(text: string, options: ParseInviteOptions = {}): Par
 
 function readInvite(text: string, options: ParseInviteOptions): ParsedInvite | null {
 	const localZone = normalizeTimeZone(options.timeZone);
-	const { method, events } = readEvents(unfold(text));
+	const { method, methodAbsent, events, alarmTriggers } = readEvents(unfold(text));
 	if (!events.length) return null;
 	// A file can carry the series and its changed occurrences; the series (no RECURRENCE-ID) describes the invitation.
-	const event = events.find((properties) => !properties.some((property) => property.name === "RECURRENCE-ID")) ?? events[0];
+	const eventIndex = events.findIndex((properties) => !properties.some((property) => property.name === "RECURRENCE-ID"));
+	const event = events[eventIndex >= 0 ? eventIndex : 0];
 	const find = (name: string) => event.find((property) => property.name === name);
 	const uid = find("UID")?.value.trim();
 	const startProperty = find("DTSTART");
@@ -328,7 +389,7 @@ function readInvite(text: string, options: ParseInviteOptions): ParsedInvite | n
 	const usedFallbackZone = start.fallback || !!end?.fallback || !!recurrence?.fallback || exdates.some((date) => date.fallback);
 	const organizer = find("ORGANIZER")?.value.trim().replace(/^mailto:/i, "") || null;
 	return {
-		uid, method, startsAt, endsAt,
+		uid, method, methodAbsent, startsAt, endsAt,
 		recipientZone: localZone,
 		usedFallbackZone,
 		title: unescapeText(find("SUMMARY")?.value ?? "").trim() || "(no title)",
@@ -340,6 +401,7 @@ function readInvite(text: string, options: ParseInviteOptions): ParsedInvite | n
 		timeZone: start.timeZone,
 		recurrenceId: recurrence?.date ?? null,
 		sequence: Number.isSafeInteger(sequence) && sequence >= 0 ? sequence : 0,
+		alarmMinutes: parseAlarmTrigger(alarmTriggers[eventIndex >= 0 ? eventIndex : 0]),
 		excludedDates: exdates.map((date) => date.date),
 		attendees: event.filter((property) => property.name === "ATTENDEE").map((property) => ({ email: property.value.trim().replace(/^mailto:/i, "").toLowerCase(), status: (property.params.PARTSTAT ?? "NEEDS-ACTION").toUpperCase() })),
 	};
