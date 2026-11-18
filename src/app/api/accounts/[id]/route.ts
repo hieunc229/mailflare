@@ -37,7 +37,7 @@ export async function GET(request: Request, { params }: AccountRouteParams) {
 			canManageUsers: account.canManageUsers,
 			calendarEnabled: account.calendarEnabled,
 			driveEnabled: account.driveEnabled,
-			forwardingEmail: account.forwardingEmail,
+			...(canManageUsers(actor) ? { forwardingEmail: account.forwardingEmail } : {}),
 			canForwardEmail: (await getLicenseEntitlements(access.env)).canForwardEmail,
 			hasAvatar: !!account.avatarKey,
 			passwordSet: hasPasswordHash(account.passwordHash),

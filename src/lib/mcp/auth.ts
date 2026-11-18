@@ -15,7 +15,8 @@ export async function authenticateMcpRequest(env: CloudflareEnv, request: Reques
 	if (!authorization.startsWith("Bearer ")) return null;
 	const key = authorization.slice(7).trim();
 	if (!key.startsWith("ep_") || key.length > 256) return null;
-	const db = getDb(env);
+	// Authentication reads the primary: a lagging read replica could still honour a key that was just revoked.
+	const db = getDb({ DB: env.DB_PRIMARY ?? env.DB });
 	const candidate = await findApiKeyForSecret(db, key, { kind: "mcp" });
 	if (candidate) {
 		const allScopes = parseScopes(candidate.scopes);

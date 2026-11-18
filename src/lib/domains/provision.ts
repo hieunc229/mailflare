@@ -7,7 +7,7 @@ import {
 	ensureEmailRoutingCatchAllToWorker,
 	getEmailRoutingCatchAll,
 } from "@/lib/domains/catch-all-routing";
-import { isZoneApex } from "@/lib/domains/utils";
+import { isZoneApex, normalizeHostname } from "@/lib/domains/utils";
 import { hasCloudflareCredentials, isNodeRuntime } from "@/lib/runtime";
 import type { DomainProvisioningChanges, DomainProvisioningResult } from "@/lib/domains/types";
 import { removeMxRecords } from "@/lib/domains/mx-records";
@@ -37,7 +37,7 @@ export async function provisionDomainOnCloudflare(
 	hostname: string,
 	options?: { enableRouting?: boolean; enableSending?: boolean; replaceMxRecords?: boolean; skipDns?: boolean },
 ): Promise<DomainProvisioningResult> {
-	const normalized = hostname.toLowerCase().trim();
+	const normalized = normalizeHostname(hostname);
 	if (options?.skipDns || !hasCloudflareCredentials(env)) {
 		// Nothing to provision: the operator points MX at this server themselves,
 		// or chose to skip DNS for now.

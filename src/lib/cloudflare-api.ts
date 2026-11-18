@@ -3,6 +3,7 @@ import type {
 	CfEmailRoutingRule,
 	CfEmailRoutingRuleChange,
 	CfResponse,
+	CfResultInfo,
 	CfSendingSubdomain,
 } from "@/lib/cloudflare-api.types";
 import {
@@ -16,13 +17,16 @@ import { CloudflareApiError } from "@/lib/cloudflare-api-error";
 import { getZoneLookupCandidates } from "@/lib/domains/utils";
 export type { CfDnsRecord } from "@/lib/cloudflare-api.types";
 
-export async function cfRequest<T>(
+const CF_REQUEST_TIMEOUT_MS = 30_000;
+
+async function cfRequestWithInfo<T>(
 	env: CloudflareEnv,
 	path: string,
 	init?: RequestInit,
-): Promise<T> {
+): Promise<{ result: T; resultInfo?: CfResultInfo }> {
 	const auth = getCloudflareAuth(env);
 	const res = await fetch(`https://api.cloudflare.com/client/v4${path}`, {
+		signal: AbortSignal.timeout(CF_REQUEST_TIMEOUT_MS),
 		...init,
 		headers: {
 			...getCloudflareAuthHeaders(auth),
@@ -30,7 +34,16 @@ export async function cfRequest<T>(
 			...(init?.headers ?? {}),
 		},
 	});
-	const json = (await res.json()) as CfResponse<T>;
+	// Cloudflare answers incidents with an HTML page; report it as an API error, not a parse error.
+	const json = (await res.json().catch(() => null)) as CfResponse<T> | null;
+	if (!json) {
+		throw new CloudflareApiError(
+			`Cloudflare API ${path} returned ${res.status} ${res.statusText} without a JSON body`.trim(),
+			res.status,
+			path,
+			[],
+		);
+	}
 
 	if (!json.success) {
 		throw new CloudflareApiError(
@@ -40,7 +53,15 @@ export async function cfRequest<T>(
 			json.errors ?? [],
 		);
 	}
-	return json.result;
+	return { result: json.result, resultInfo: json.result_info };
+}
+
+export async function cfRequest<T>(
+	env: CloudflareEnv,
+	path: string,
+	init?: RequestInit,
+): Promise<T> {
+	return (await cfRequestWithInfo<T>(env, path, init)).result;
 }
 
 export async function getZone(
@@ -161,11 +182,26 @@ export async function getEmailRoutingSettings(
 	);
 }
 
+const RULES_PER_PAGE = 50;
+const MAX_RULE_PAGES = 100;
+
+/**
+ * Every routing rule in the zone; the API returns them one page at a time.
+ * Throws when the page cap is hit: callers decide whether a rule exists from
+ * this list, and a partial list would make them create duplicates.
+ */
 export async function listEmailRoutingRules(env: CloudflareEnv, zoneId: string) {
-	return cfRequest<CfEmailRoutingRule[]>(
-		env,
-		`/zones/${zoneId}/email/routing/rules`,
-	);
+	const rules: CfEmailRoutingRule[] = [];
+	for (let page = 1; page <= MAX_RULE_PAGES; page += 1) {
+		const { result, resultInfo } = await cfRequestWithInfo<CfEmailRoutingRule[]>(
+			env,
+			`/zones/${zoneId}/email/routing/rules?page=${page}&per_page=${RULES_PER_PAGE}`,
+		);
+		rules.push(...result);
+		const lastPage = resultInfo?.total_pages !== undefined ? page >= resultInfo.total_pages : result.length < RULES_PER_PAGE;
+		if (lastPage || result.length === 0) return rules;
+	}
+	throw new Error(`Email routing rules for zone ${zoneId} span more than ${MAX_RULE_PAGES} pages`);
 }
 
 export async function deleteEmailRoutingRule(
@@ -215,16 +251,32 @@ function isWorkerRouteForAddress(
 	return Boolean(routesAddress && sendsToWorker);
 }
 
+/** One rules listing per zone, shared by the calls of a single operation. */
+export type EmailRoutingRuleCache = Map<string, Promise<CfEmailRoutingRule[]>>;
+
+function listEmailRoutingRulesCached(env: CloudflareEnv, zoneId: string, cache?: EmailRoutingRuleCache) {
+	if (!cache) return listEmailRoutingRules(env, zoneId);
+	let listing = cache.get(zoneId);
+	if (!listing) {
+		listing = listEmailRoutingRules(env, zoneId);
+		cache.set(zoneId, listing);
+		// A failed listing must not stay cached for the next address.
+		listing.catch(() => cache.delete(zoneId));
+	}
+	return listing;
+}
+
 export async function ensureEmailRoutingRuleToWorker(
 	env: CloudflareEnv,
 	zoneId: string,
 	address: string,
 	changes?: CfEmailRoutingRuleChange[],
+	ruleCache?: EmailRoutingRuleCache,
 ) {
 	if (zoneId === "manual") return;
 	const normalized = address.toLowerCase();
 	const workerName = getEmailWorkerName();
-	const rules = await listEmailRoutingRules(env, zoneId);
+	const rules = await listEmailRoutingRulesCached(env, zoneId, ruleCache);
 	const existing = rules.find((rule) => isWorkerRouteForAddress(rule, normalized, workerName));
 
 	if (existing?.enabled) return existing;

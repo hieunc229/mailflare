@@ -17,7 +17,8 @@ const ADMIN_SCOPES = new Set<string>(ADMIN_API_KEY_SCOPES);
 export async function authenticateApiKeyValue(env: CloudflareEnv, key: string): Promise<ApiAuthResult | null> {
 	const trimmed = key.trim();
 	if (!trimmed) return null;
-	const db = getDb(env);
+	// Authentication reads the primary: a lagging read replica could still honour a key that was just revoked.
+	const db = getDb({ DB: env.DB_PRIMARY ?? env.DB });
 	const candidate = await findApiKeyForSecret(db, trimmed);
 	if (!candidate) return null;
 	const [user] = await db.select().from(users).where(eq(users.id, candidate.userId)).limit(1);

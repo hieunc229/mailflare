@@ -11,6 +11,7 @@ import {
 	deleteSendingSubdomain,
 	listSendingSubdomains,
 	type CfDnsRecord,
+	type EmailRoutingRuleCache,
 } from "@/lib/cloudflare-api";
 import { deleteEmailRoutingRulesForDomain } from "@/lib/domains/cloudflare-cleanup";
 import { isManualZone, provisionDomainOnCloudflare } from "@/lib/domains/provision";
@@ -19,6 +20,7 @@ import { rollbackDomainProvisioning } from "@/lib/domains/rollback";
 import type { DomainProvisioningChanges } from "@/lib/domains/types";
 import { findSendingSubdomain } from "@/lib/domains/sending-status";
 import { preflightDomain } from "@/lib/domains/preflight";
+import { normalizeHostname } from "@/lib/domains/utils";
 import { hasCloudflareCredentials } from "@/lib/runtime";
 
 export type DomainDnsView = {
@@ -48,7 +50,7 @@ export async function addDomainForUser(
 	changes: DomainProvisioningChanges;
 }> {
 	const db = getDb(env);
-	const normalizedHostname = hostname.toLowerCase().trim();
+	const normalizedHostname = normalizeHostname(hostname);
 	const [claimedHostname] = await db.select({ userId: domains.userId }).from(domains).where(eq(domains.hostname, normalizedHostname)).limit(1);
 	if (claimedHostname && claimedHostname.userId !== userId) {
 		throw new Error("Domain is already registered");
@@ -74,7 +76,8 @@ export async function addDomainForUser(
 		...options,
 		enableSending: requestedSending === "cloudflare",
 		enableRouting: receivingProvider === "cloudflare" ? (options?.enableRouting ?? true) : false,
-		replaceMxRecords: receivingProvider === "cloudflare" ? options?.replaceMxRecords : false,
+		// Routing is skipped for other receivers, so this only reaches the sending step then.
+		replaceMxRecords: options?.replaceMxRecords,
 	});
 	let insertedDomainId: string | null = null;
 	let domain: typeof domains.$inferSelect;
@@ -114,8 +117,9 @@ export async function addDomainForUser(
 			.from(mailboxes)
 			.innerJoin(domains, eq(mailboxes.domainId, domains.id))
 			.where(and(eq(domains.userId, userId), eq(mailboxes.useAllDomains, true)));
+		const ruleCache: EmailRoutingRuleCache = new Map();
 		const routingResults = await Promise.allSettled(
-			aliasMailboxes.map((mailbox) => ensureMailboxDomainRouting(env, db, mailbox)),
+			aliasMailboxes.map((mailbox) => ensureMailboxDomainRouting(env, db, mailbox, undefined, ruleCache)),
 		);
 		for (const result of routingResults) {
 			if (result.status === "rejected") console.warn("ensureMailboxDomainRouting", result.reason);

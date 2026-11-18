@@ -294,7 +294,7 @@ function MessageListRowComponent({
 						size="sm"
 						className="relative z-10"
 						onClick={() => {
-							void toggleMessageStar(message.id, !starred).then((result) => setStarred(result.starred));
+							void toggleMessageStar(message.id, !starred).then((result) => setStarred(result.starred)).catch(() => alertDialog(t("message.error.star")));
 						}}
 						aria-label={t("message.star")}
 						aria-pressed={starred}

@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { isPublicHttpsUrl, PUBLIC_HTTPS_URL_MESSAGE } from "@/lib/security/public-url";
+import { isValidHostname, normalizeHostname } from "@/lib/domains/utils";
 import { getEmailAddress, splitEmailAddressList } from "@/lib/email/address";
 import { DEFAULT_FOLDER_COLOR, FOLDER_COLOR_VALUES } from "@/lib/folders/colors";
 import { MAX_FOLLOW_UP_DAYS } from "@/lib/follow-ups/follow-up-utils";
@@ -54,9 +55,15 @@ export const registerSchema = z.object({
 	name: z.string().min(1),
 });
 
+const hostnameField = z
+	.string()
+	.min(3)
+	.transform(normalizeHostname)
+	.refine(isValidHostname, { message: "Enter a valid domain name such as example.com" });
+
 export const firstRunRegisterSchema = z
 	.object({
-		domain: z.string().min(3),
+		domain: hostnameField,
 		enableSending: z.boolean().optional(),
 		replaceMxRecords: z.boolean().optional(),
 		skipDns: z.boolean().optional(),
@@ -75,13 +82,13 @@ export const primaryDomainRegisterSchema = z.object({
 });
 
 export const setupDomainSchema = z.object({
-	hostname: z.string().min(3),
+	hostname: hostnameField,
 	/** Record the domain without looking it up on Cloudflare. The operator sets DNS by hand. */
 	skipDns: z.boolean().optional(),
 });
 
 export const addDomainSchema = z.object({
-	hostname: z.string().min(3),
+	hostname: hostnameField,
 	enableRouting: z.boolean().optional(),
 	enableSending: z.boolean().optional(),
 	replaceMxRecords: z.boolean().optional(),
@@ -94,7 +101,7 @@ export const addDomainSchema = z.object({
 });
 
 export const loginSchema = z.object({
-	email: z.string().email(),
+	email: z.string().trim().toLowerCase().email(),
 	password: z.string().min(1),
 });
 
@@ -109,7 +116,7 @@ export const passwordResetConfirmSchema = z.object({
 
 /** `/api/auth/device`: either email + password, or a challenge + code after MFA. */
 export const deviceLoginSchema = z.union([
-	z.object({ email: z.string().trim().email(), password: z.string().min(1), deviceName: z.string().trim().min(1).max(100) }),
+	z.object({ email: z.string().trim().toLowerCase().email(), password: z.string().min(1), deviceName: z.string().trim().min(1).max(100) }),
 	z.object({ challengeToken: z.string().min(8).max(200), code: z.string().trim().min(6).max(32), deviceName: z.string().trim().min(1).max(100) }),
 ]);
 
@@ -219,13 +226,13 @@ export const mfaDisableSchema = z
 	.refine((value) => value.password || value.stepUpToken, { message: "Verify your identity first" });
 
 export const domainSchema = z.object({
-	hostname: z.string().min(3),
+	hostname: hostnameField,
 });
 
 export const mailboxSchema = z.object({
 	domainId: z.string().min(1),
 	ownerUserId: z.string().min(1).optional(),
-	localPart: z.string().min(1).max(64),
+	localPart: z.string().min(1).max(64).regex(/^[a-zA-Z0-9._%+-]+$/),
 	displayName: z.string().optional(),
 	type: z.enum(["personal", "shared"]).optional(),
 });
