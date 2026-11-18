@@ -79,6 +79,8 @@ export function useMessages(
 					setLimit(data.limit ?? filters?.limit ?? 25);
 					setOffset(data.offset ?? filters?.offset ?? 0);
 				}
+			} catch {
+				// Keep the list already on screen when a refresh fails.
 			} finally {
 				if (!cancelled && currentRequest === requestNumber) setIsLoading(false);
 			}

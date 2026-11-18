@@ -59,7 +59,6 @@ export function AccountSettings() {
 				</div>
 				<div className="space-y-1 overflow-hidden rounded-3xl">
 					<ProfileForm
-						accountName={user.name}
 						initialResetEmail={user.resetEmail ?? ""}
 					/>
 
