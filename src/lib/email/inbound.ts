@@ -65,14 +65,8 @@ export async function processInboundMessage(
 		return;
 	}
 
-	// A forward decision only reaches the queue when the rule keeps a copy; without a
-	// destination mailbox there is nothing to store.
-	if (decision.action === "forward" && !decision.keepCopy) {
-		console.info(`Forward ${payload.to} -> ${decision.forwardTo}`);
-		await dropRaw();
-		return;
-	}
-
+	// A forward decision reaches the queue when the rule keeps a copy or the forward
+	// failed; either way it is stored if there is a mailbox to store it in.
 	if (!decision.mailbox) {
 		await dropRaw();
 		return;
