@@ -132,19 +132,20 @@ export function MailboxAutoReplyForm() {
               disabled={!canManage || saving}
             />
           </div>
-          <div className="flex items-center gap-3">
-            <Button type="submit" disabled={!canManage || saving || !changed}>
-              {saving ? t("common.saving") : t("settings.autoReply.save")}
-            </Button>
-            {!canManage && (
-              <p className="text-sm text-neutral-500">
-                {t("settings.autoReply.needFullAccess")}
-              </p>
-            )}
-            {status && <p role="status" className="text-sm text-neutral-500">{status}</p>}
-          </div>
         </>
       )}
+      {/* Outside the block above, so switching auto-reply off can be saved too. */}
+      <div className="flex items-center gap-3">
+        <Button type="submit" disabled={!canManage || saving || !changed}>
+          {saving ? t("common.saving") : t("settings.autoReply.save")}
+        </Button>
+        {!canManage && (
+          <p className="text-sm text-neutral-500">
+            {t("settings.autoReply.needFullAccess")}
+          </p>
+        )}
+        {status && <p role="status" className="text-sm text-neutral-500">{status}</p>}
+      </div>
     </form>
   );
 }
