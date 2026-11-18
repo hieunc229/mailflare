@@ -93,12 +93,16 @@ export function htmlToReadableText(html: string | null | undefined): string {
 		.replace(/<br\s*\/?>/gi, "\n")
 		.replace(/<\/(p|div|li|tr|blockquote|h[1-6])>/gi, "\n")
 		.replace(/<[^<>]*>/g, " ")
-		.replace(/&nbsp;/g, " ")
-		.replace(/&amp;/g, "&")
-		.replace(/&lt;/g, "<")
-		.replace(/&gt;/g, ">")
-		.replace(/&quot;/g, "\"")
-		.replace(/&#39;/g, "'");
+		.replace(/&(?:#(\d{1,7})|#x([0-9a-f]{1,6})|(nbsp|amp|lt|gt|quot|apos));/gi, decodeEntity);
+}
+
+const NAMED_ENTITIES: Record<string, string> = { nbsp: " ", amp: "&", lt: "<", gt: ">", quot: "\"", apos: "'" };
+
+/** Decodes each reference once, so `&amp;lt;` stays the text `&lt;`; invalid code points are left as written. */
+function decodeEntity(match: string, decimal: string | undefined, hex: string | undefined, name: string | undefined): string {
+	if (name) return NAMED_ENTITIES[name] ?? match;
+	const code = decimal ? Number(decimal) : Number.parseInt(hex ?? "", 16);
+	return code > 0 && code <= 0x10ffff && (code < 0xd800 || code > 0xdfff) ? String.fromCodePoint(code) : match;
 }
 
 function splitOriginalMessage(
