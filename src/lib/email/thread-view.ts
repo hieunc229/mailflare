@@ -49,20 +49,7 @@ export async function getMessageThreadForUser(env: CloudflareEnv, user: SessionU
 		: await db.select().from(messages).where(eq(messages.id, messageId)).limit(1);
 
 	const ids = rows.map((row) => row.id);
-	const attachmentQuery = ids.length
-		? db
-				.select({
-					id: messageAttachments.id,
-					messageId: messageAttachments.messageId,
-					filename: messageAttachments.filename,
-					type: messageAttachments.contentType,
-					size: messageAttachments.size,
-					disposition: messageAttachments.disposition,
-					contentId: messageAttachments.contentId,
-				})
-				.from(messageAttachments)
-				.where(and(inArray(messageAttachments.messageId, ids), isNull(messageAttachments.trashedAt)))
-		: null;
+	const attachmentQuery = ids.length ? listThreadAttachments(db, ids) : null;
 	const [attachmentRows, contactMap] = await Promise.all([
 		attachmentQuery ?? Promise.resolve([]),
 		getContactCardMap(
@@ -94,4 +81,26 @@ export async function getMessageThreadForUser(env: CloudflareEnv, user: SessionU
 			};
 		}),
 	};
+}
+
+// D1 caps bound parameters per statement at 100 and a thread can hold up to 200 messages.
+const ATTACHMENT_ID_CHUNK = 90;
+
+/** Attachments for the given messages, queried in chunks that fit D1's parameter limit. */
+async function listThreadAttachments(db: ReturnType<typeof getDb>, ids: string[]) {
+	const chunks: string[][] = [];
+	for (let offset = 0; offset < ids.length; offset += ATTACHMENT_ID_CHUNK) chunks.push(ids.slice(offset, offset + ATTACHMENT_ID_CHUNK));
+	const results = await Promise.all(chunks.map((chunk) => db
+		.select({
+			id: messageAttachments.id,
+			messageId: messageAttachments.messageId,
+			filename: messageAttachments.filename,
+			type: messageAttachments.contentType,
+			size: messageAttachments.size,
+			disposition: messageAttachments.disposition,
+			contentId: messageAttachments.contentId,
+		})
+		.from(messageAttachments)
+		.where(and(inArray(messageAttachments.messageId, chunk), isNull(messageAttachments.trashedAt)))));
+	return results.flat();
 }
