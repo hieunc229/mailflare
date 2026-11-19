@@ -14,7 +14,7 @@ import { buildSearchConditions } from "@/lib/search/conditions";
 import { getRequestTimeZone } from "@/lib/time/utils";
 import { scheduledMessageCondition } from "@/lib/email/scheduled";
 import { selectInBatches } from "@/lib/db-params";
-import { getMessageListColumns, loadConversationPage } from "./utils";
+import { conversationKey, getMessageListColumns, loadConversationPage } from "./utils";
 import type { ListMessage } from "./types";
 import { getOpenCounts } from "@/lib/tracking/open-tracking";
 import { summarizeNotesForRows } from "@/lib/notes/service";
@@ -133,17 +133,18 @@ export async function GET(request: Request) {
 		const keys = rows.map((row) => row.threadId ?? row.id);
 		if (keys.length > 0) {
 			const members = await selectInBatches(keys, (batch) => db
-				.select({ id: messages.id, key: threadKey, read: messages.read })
+				.select({ id: messages.id, mailboxId: messages.mailboxId, key: threadKey, read: messages.read })
 				.from(messages)
 				.where(and(where, inArray(threadKey, batch))));
 			for (const member of members) {
-				const list = threadMessageIds.get(member.key) ?? [];
+				const key = conversationKey(member.mailboxId, member.key);
+				const list = threadMessageIds.get(key) ?? [];
 				list.push(member.id);
-				threadMessageIds.set(member.key, list);
-				const counts = scopedThreadCounts.get(member.key) ?? { total: 0, unread: 0 };
+				threadMessageIds.set(key, list);
+				const counts = scopedThreadCounts.get(key) ?? { total: 0, unread: 0 };
 				counts.total += 1;
 				if (!member.read) counts.unread += 1;
-				scopedThreadCounts.set(member.key, counts);
+				scopedThreadCounts.set(key, counts);
 			}
 		}
 	} else {
@@ -173,13 +174,14 @@ export async function GET(request: Request) {
 		threadIds.length > 0
 			? selectInBatches(threadIds, (batch) => db
 				.select({
+					mailboxId: messages.mailboxId,
 					threadId: messages.threadId,
 					total: count(),
 					unread: sum(sql`case when ${messages.read} then 0 else 1 end`),
 				})
 				.from(messages)
 				.where(and(scope, inArray(messages.threadId, batch), isNotNull(messages.threadId), notInArray(messages.status, ["draft", "trash"]), draftsVisibleTo(user.id)))
-				.groupBy(messages.threadId))
+				.groupBy(messages.mailboxId, messages.threadId))
 			: [],
 		scheduled === "true" && rows.length > 0
 			? selectInBatches(rows.map((row) => row.id), (batch) => db
@@ -208,7 +210,7 @@ export async function GET(request: Request) {
 	]);
 	const threadCounts = new Map<string, { total: number; unread: number }>();
 	for (const row of countRows) {
-		if (row.threadId) threadCounts.set(row.threadId, { total: row.total, unread: Number(row.unread ?? 0) });
+		if (row.threadId) threadCounts.set(conversationKey(row.mailboxId, row.threadId), { total: row.total, unread: Number(row.unread ?? 0) });
 	}
 	const scheduledAtByMessageId = new Map<string, string>();
 	for (const job of jobs) {
@@ -227,8 +229,9 @@ export async function GET(request: Request) {
 	// reading pane loads them from /api/messages/[id]/thread, so they are
 	// neither selected nor sent here.
 	const enrichedRows = rows.map(({ rawR2Key: _rawR2Key, ...message }) => {
-		const threadStats = message.threadId ? threadCounts.get(message.threadId) : undefined;
-		const folderUnread = scopedThreadCounts.get(message.threadId ?? message.id)?.unread;
+		const key = conversationKey(message.mailboxId, message.threadId ?? message.id);
+		const threadStats = message.threadId ? threadCounts.get(key) : undefined;
+		const folderUnread = scopedThreadCounts.get(key)?.unread;
 		const contactMap = contactMapsByUserId.get(message.userId);
 		const accountName = message.mailboxId ? mailboxNameMap.get(message.mailboxId) : null;
 		const firstTo = getFirstEmailAddressEntry(message.toAddr);
@@ -245,7 +248,7 @@ export async function GET(request: Request) {
 			threadCount: threadStats?.total || 1,
 			threadUnread: (groupByThread ? folderUnread : threadStats?.unread) || 0,
 			...(groupByThread
-				? { threadMessageIds: threadMessageIds.get(message.threadId ?? message.id) ?? [message.id] }
+				? { threadMessageIds: threadMessageIds.get(key) ?? [message.id] }
 				: {}),
 		};
 	});

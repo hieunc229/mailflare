@@ -4,6 +4,7 @@ import { dirname, join } from "node:path";
 import test, { after } from "node:test";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { build } from "esbuild";
+import { sql } from "drizzle-orm";
 import { at, createConversationFixture } from "./conversation-page-utils.mjs";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
@@ -87,4 +88,46 @@ test("an offset past the end returns no heads and retains the real total", async
 
 	assert.equal(fixture.queryCount(), 2);
 	assert.deepEqual(page, { ids: [], total: 1 });
+});
+
+// All inboxes lists every mailbox, so the filter names no mailbox.
+const everyMailbox = sql`status = ${"received"}`;
+
+test("one thread delivered to two mailboxes is one conversation per mailbox", async (t) => {
+	const fixture = createConversationFixture(SqliteDatabase, [
+		at(100, "mine-copy", "shared-thread", "mine"),
+		at(200, "theirs-copy", "shared-thread", "theirs"),
+		at(300, "mine-reply", "shared-thread", "mine"),
+	], everyMailbox);
+	t.after(() => fixture.database.db.close());
+	const page = await loadConversationPage({ db: fixture.db, where: fixture.where, offset: 0, limit: 25 });
+
+	assert.deepEqual(page, { ids: ["mine-reply", "theirs-copy"], total: 2 });
+});
+
+test("the windowed plan also keeps each mailbox's copy of a thread apart", async (t) => {
+	const filler = Array.from({ length: 10000 }, (_, index) => at(1000 + index, `m${String(index).padStart(5, "0")}`));
+	const fixture = createConversationFixture(SqliteDatabase, [
+		...filler,
+		at(1, "mine-copy", "shared-thread", "mine"),
+		at(2, "theirs-copy", "shared-thread", "theirs"),
+	], everyMailbox);
+	t.after(() => fixture.database.db.close());
+	// offset + limit is past the scan cap, so this takes the windowed plan.
+	const page = await loadConversationPage({ db: fixture.db, where: fixture.where, offset: 10000, limit: 25 });
+
+	assert.equal(fixture.queryCount(), 2);
+	assert.deepEqual(page, { ids: ["theirs-copy", "mine-copy"], total: 10002 });
+});
+
+test("rows without a mailbox still group by thread among themselves", async (t) => {
+	const fixture = createConversationFixture(SqliteDatabase, [
+		at(100, "orphan-a", "orphan-thread", null),
+		at(200, "orphan-b", "orphan-thread", null),
+		at(300, "orphan-c", "other-thread", null),
+	], everyMailbox);
+	t.after(() => fixture.database.db.close());
+	const page = await loadConversationPage({ db: fixture.db, where: fixture.where, offset: 0, limit: 25 });
+
+	assert.deepEqual(page, { ids: ["orphan-c", "orphan-b"], total: 2 });
 });

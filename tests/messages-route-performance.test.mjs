@@ -280,3 +280,32 @@ test("empty pages preserve total and skip unnecessary thread and scheduled reads
 	assert.ok(!f.started.includes("jobs"));
 	assert.ok(!f.started.some((label) => label.startsWith("contacts:")));
 });
+
+test("all-mailbox lists keep each mailbox's copy of a shared thread apart", async (t) => {
+	const f = await fixture(t);
+	f.message("mine-first", { time: 1 });
+	f.message("shared-copy", { mailbox: "shared", user: "other", time: 2 });
+	f.message("mine-reply", { time: 3, read: true });
+
+	const grouped = await (await GET(request("status=received&group=thread"))).json();
+	assert.equal(grouped.total, 2);
+	assert.deepEqual(grouped.messages.map((row) => row.id), ["mine-reply", "shared-copy"]);
+	const [mine, shared] = grouped.messages;
+	assert.deepEqual(mine.threadMessageIds.sort(), ["mine-first", "mine-reply"]);
+	assert.equal(mine.threadCount, 2);
+	assert.equal(mine.threadUnread, 1);
+	assert.deepEqual(shared.threadMessageIds, ["shared-copy"]);
+	assert.equal(shared.threadCount, 1);
+	assert.equal(shared.threadUnread, 1);
+
+	const flat = await (await GET(request("status=received"))).json();
+	assert.deepEqual(flat.messages.map((row) => [row.id, row.threadCount, row.threadUnread]), [
+		["mine-reply", 2, 1],
+		["shared-copy", 1, 1],
+		["mine-first", 2, 1],
+	]);
+
+	const single = await (await GET(request("mailboxId=mine&status=received&group=thread"))).json();
+	assert.equal(single.total, 1);
+	assert.equal(single.messages[0].threadCount, 2);
+});
