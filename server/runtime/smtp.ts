@@ -3,6 +3,7 @@ import { SMTPServer } from "smtp-server";
 import type { SMTPServerSession } from "smtp-server";
 import { intakeIncomingMail } from "@/lib/email/intake";
 import { inboundAttachmentLimitReasonFromRaw } from "@/lib/email/inbound-attachments";
+import { recordRuleMatch, resolveInboundAddress } from "@/lib/email/routing";
 import { isPublicIpv4 } from "@/lib/spam/domain-utils";
 import { getDb } from "@/db";
 import { domains } from "@/db/schema";
@@ -21,8 +22,8 @@ const UNTRUSTED_HEADERS = ["authentication-results", "received-spf", "arc-authen
 /**
  * Receive mail directly on port 25 (or wherever SMTP_INBOUND_PORT points).
  * One inbound connection per message; each envelope recipient is handed to
- * the same intake the Cloudflare handler uses. Rejected mail gets a 550
- * during DATA, so the sender sees the routing rule's reason.
+ * the same intake the Cloudflare handler uses. A recipient a reject rule
+ * blocks gets a 550 at RCPT TO, so the sender sees the routing rule's reason.
  */
 export function startSmtpListener(
 	env: CloudflareEnv,
@@ -61,10 +62,9 @@ export function startSmtpListener(
 				callback(Object.assign(new Error("Too many recipients"), { responseCode: 452 }));
 				return;
 			}
-			// Refuse unknown domains before DATA so nothing is buffered for mail we would drop anyway.
-			const hostname = address.address.slice(address.address.lastIndexOf("@") + 1).toLowerCase();
-			getDb(env).select({ id: domains.id }).from(domains).where(eq(domains.hostname, hostname)).limit(1).then(
-				([domain]) => callback(domain ? undefined : Object.assign(new Error("Relay access denied"), { responseCode: 550 })),
+			const from = session.envelope.mailFrom ? session.envelope.mailFrom.address : "";
+			recipientRejectReason(env, from, address.address).then(
+				(reason) => callback(reason ? Object.assign(new Error(reason), { responseCode: 550 }) : undefined),
 				(error) => {
 					console.error("SMTP recipient lookup failed", error);
 					callback(Object.assign(new Error("Temporary failure, try again later"), { responseCode: 451 }));
@@ -149,6 +149,23 @@ export function startSmtpListener(
 		console.log(`SMTP inbound listening on ${options.host ?? "0.0.0.0"}:${options.port}`);
 	});
 	return server;
+}
+
+/**
+ * Why a recipient is refused at RCPT TO, or null to accept it. Unknown domains are refused so
+ * nothing is buffered for mail we would drop anyway. Reject rules only look at the envelope, so
+ * they are applied here too: DATA has one reply for every recipient, and a 550 there would tell
+ * the sender that recipients we already stored never got the message.
+ */
+async function recipientRejectReason(env: CloudflareEnv, from: string, to: string): Promise<string | null> {
+	const db = getDb(env);
+	const hostname = to.slice(to.lastIndexOf("@") + 1).toLowerCase();
+	const [domain] = await db.select({ id: domains.id }).from(domains).where(eq(domains.hostname, hostname)).limit(1);
+	if (!domain) return "Relay access denied";
+	const decision = await resolveInboundAddress(db, to, from);
+	if (decision?.action !== "reject") return null;
+	if (decision.ruleId) await recordRuleMatch(db, decision.ruleId).catch(() => undefined);
+	return decision.rejectReason ?? "Message rejected by routing rule";
 }
 
 /** Header map in the shape the Worker handler provides: lower-cased names, folded lines joined. */
