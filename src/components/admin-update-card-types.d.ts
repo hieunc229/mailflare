@@ -4,6 +4,9 @@ export interface UpdateConfigurationItem {
 }
 
 export interface UpdateStatusResponse {
+	autoUpdate?: boolean;
+	channel?: "release" | "commit";
+	commitsBehind?: number;
 	available?: boolean;
 	configuration?: UpdateConfigurationItem[];
 	configured?: boolean;

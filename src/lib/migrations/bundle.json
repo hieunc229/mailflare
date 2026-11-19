@@ -820,6 +820,14 @@
         "CREATE TABLE `message_action_undo_claims` (\n\t`nonce` text PRIMARY KEY NOT NULL,\n\t`user_id` text NOT NULL,\n\t`expires_at` integer NOT NULL\n);",
         "CREATE INDEX `message_action_undo_claims_expires_idx` ON `message_action_undo_claims` (`expires_at`);"
       ]
+    },
+    {
+      "name": "0089_auto_update.sql",
+      "statements": [
+        "ALTER TABLE `app_settings` ADD `auto_update` integer DEFAULT 0 NOT NULL;",
+        "ALTER TABLE `app_settings` ADD `auto_update_dispatched_version` text;",
+        "ALTER TABLE `app_settings` ADD `auto_update_channel` text NOT NULL DEFAULT 'release';"
+      ]
     }
   ]
 }

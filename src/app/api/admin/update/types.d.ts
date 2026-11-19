@@ -30,7 +30,19 @@ export interface UpdateDispatchConfig {
 	token: string;
 }
 
+export type UpdateChannel = "release" | "commit";
+
+export interface GitHubCompareResponse {
+	behind_by?: number;
+	base_commit?: { sha?: string };
+	message?: string;
+}
+
 export interface UpdateStatus {
+	channel?: UpdateChannel;
+	commitsBehind?: number;
+	targetCommit?: string;
+	autoUpdate?: boolean;
 	available?: boolean;
 	configuration: UpdateConfigurationItem[];
 	configured: boolean;

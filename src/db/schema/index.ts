@@ -1105,6 +1105,12 @@ export const appSettings = sqliteTable("app_settings", {
 	spamDomainAgeCheck: bool("spam_domain_age_check").notNull().default(true),
 	/** JSON: brands the administrator added for display-name impersonation checks (see src/lib/spam/settings.ts). */
 	spamBrands: text("spam_brands"),
+	/** Run the update workflow and apply pending migrations automatically (cron). Off by default. */
+	autoUpdate: bool("auto_update").notNull().default(false),
+	/** Release version the cron last dispatched, so it does not dispatch the same one every five minutes. */
+	/** "release": update on a new package.json version; "commit": update on any new upstream commit. */
+	autoUpdateChannel: text("auto_update_channel", { enum: ["release", "commit"] }).notNull().default("release"),
+	autoUpdateDispatchedVersion: text("auto_update_dispatched_version"),
 	updatedAt: timestamp("updated_at")
 		.notNull()
 		.$defaultFn(() => new Date()),

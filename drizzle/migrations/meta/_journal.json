@@ -561,6 +561,13 @@
       "when": 1794516478571,
       "tag": "0088_message_action_undo_claims",
       "breakpoints": true
+    },
+    {
+      "idx": 81,
+      "version": "6",
+      "when": 1794516479571,
+      "tag": "0089_auto_update",
+      "breakpoints": true
     }
   ]
 }

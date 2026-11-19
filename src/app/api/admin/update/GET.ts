@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { getAutoUpdateSettings } from "@/lib/update/auto-update";
 import { authorizeAdminRequest, getUpdateStatus } from "./utils";
 
 export async function GET(request: Request) {
@@ -6,7 +7,9 @@ export async function GET(request: Request) {
 	if ("error" in authorization) return authorization.error;
 
 	try {
-		return NextResponse.json(await getUpdateStatus(authorization.env));
+		const settings = await getAutoUpdateSettings(authorization.env);
+		const status = await getUpdateStatus(authorization.env, settings.channel);
+		return NextResponse.json({ ...status, autoUpdate: settings.enabled, channel: settings.channel });
 	} catch (error) {
 		const message = error instanceof Error ? error.message : "Could not check for updates";
 		const status = message.includes("must be configured") ? 503 : 502;
