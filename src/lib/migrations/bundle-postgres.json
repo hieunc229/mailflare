@@ -423,6 +423,23 @@
       "statements": [
         "ALTER TABLE \"users\" ADD COLUMN \"spam_strictness\" text DEFAULT 'strict' NOT NULL;"
       ]
+    },
+    {
+      "name": "0018_promotions.sql",
+      "statements": [
+        "CREATE TABLE \"mailbox_promotion_settings\" (\n\t\"mailbox_id\" text PRIMARY KEY NOT NULL,\n\t\"mode\" text DEFAULT 'off' NOT NULL,\n\t\"backfill_status\" text DEFAULT 'idle' NOT NULL,\n\t\"backfill_cursor\" text,\n\t\"backfill_scanned\" bigint DEFAULT 0 NOT NULL,\n\t\"updated_at\" bigint NOT NULL\n);",
+        "CREATE TABLE \"mailbox_sender_preferences\" (\n\t\"id\" text PRIMARY KEY NOT NULL,\n\t\"mailbox_id\" text NOT NULL,\n\t\"sender_address\" text NOT NULL,\n\t\"category_override\" text,\n\t\"unsubscribed_at\" bigint,\n\t\"updated_by_user_id\" text,\n\t\"updated_at\" bigint NOT NULL\n);",
+        "ALTER TABLE \"messages\" ADD COLUMN \"category\" text;",
+        "ALTER TABLE \"messages\" ADD COLUMN \"sender_address\" text;",
+        "ALTER TABLE \"mailbox_promotion_settings\" ADD CONSTRAINT \"mailbox_promotion_settings_mailbox_id_mailboxes_id_fk\" FOREIGN KEY (\"mailbox_id\") REFERENCES \"public\".\"mailboxes\"(\"id\") ON DELETE cascade ON UPDATE no action;",
+        "ALTER TABLE \"mailbox_sender_preferences\" ADD CONSTRAINT \"mailbox_sender_preferences_mailbox_id_mailboxes_id_fk\" FOREIGN KEY (\"mailbox_id\") REFERENCES \"public\".\"mailboxes\"(\"id\") ON DELETE cascade ON UPDATE no action;",
+        "ALTER TABLE \"mailbox_sender_preferences\" ADD CONSTRAINT \"mailbox_sender_preferences_updated_by_user_id_users_id_fk\" FOREIGN KEY (\"updated_by_user_id\") REFERENCES \"public\".\"users\"(\"id\") ON DELETE set null ON UPDATE no action;",
+        "CREATE INDEX \"mailbox_promotion_settings_backfill_idx\" ON \"mailbox_promotion_settings\" USING btree (\"backfill_status\");",
+        "CREATE UNIQUE INDEX \"mailbox_sender_preferences_mailbox_sender_idx\" ON \"mailbox_sender_preferences\" USING btree (\"mailbox_id\",\"sender_address\");",
+        "CREATE INDEX \"mailbox_sender_preferences_updated_by_idx\" ON \"mailbox_sender_preferences\" USING btree (\"updated_by_user_id\");",
+        "CREATE INDEX \"messages_category_page_idx\" ON \"messages\" USING btree (\"mailbox_id\",\"category\",\"status\",\"folder_id\",\"created_at\" desc,\"id\" desc);",
+        "CREATE INDEX \"messages_category_count_idx\" ON \"messages\" USING btree (\"mailbox_id\",\"category\",\"folder_id\",\"direction\",\"status\",\"read\",\"snoozed_until\");"
+      ]
     }
   ]
 }
