@@ -61,7 +61,7 @@ export async function addressesSeenInMailbox(db: Db, mailboxId: string, emails: 
 	for (let offset = 0; offset < unique.length; offset += 25) {
 		const chunk = unique.slice(offset, offset + 25);
 		const conditions = chunk.flatMap((email) => {
-			const pattern = `%${email.replace(/%/g, "")}%`;
+			const pattern = `%${escapeLike(email)}%`;
 			return [eq(messages.fromAddr, email), insensitiveLike(messages.toAddr, pattern), insensitiveLike(messages.ccAddr, pattern)];
 		});
 		// The LIKE only narrows candidates; the verdict below is an exact address comparison.
