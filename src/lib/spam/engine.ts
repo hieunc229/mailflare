@@ -7,6 +7,8 @@ import { analyzeAuthentication } from "./analyzers/authentication";
 import { analyzeImpersonation } from "./analyzers/impersonation";
 import { extractSenderIp } from "./domain-utils";
 import { getReputationKeys } from "./analyzers/reputation";
+import { findHeader } from "./analyzers/utils";
+import { analyzeSolicitation } from "./analyzers/solicitation";
 import { analyzeStructure } from "./analyzers/structure";
 import { analyzeUrls } from "./analyzers/urls";
 import { classifyTokens } from "./classifier";
@@ -97,6 +99,11 @@ export async function analyzeSpam(db: AppDatabase, input: SpamAnalysisInput): Pr
 			}
 		}
 	}
+	const seenBefore = reputationRecords.some(({ identity, record }) => identity.type !== "fingerprint" && (record?.messagesSeen ?? 0) > 0);
+	signals.push(...analyzeSolicitation(input.message, prepared, {
+		firstContact: !contact && !seenBefore,
+		hasUnsubscribe: !!findHeader(input.headers, "list-unsubscribe"),
+	}));
 	const strongestReputation = reputationSignals.sort((a, b) => Math.abs(b.score) - Math.abs(a.score))[0];
 	if (strongestReputation) signals.push(strongestReputation);
 
