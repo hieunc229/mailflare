@@ -32,7 +32,7 @@ export function MessageDetailNavigationProvider({ children, config, currentMessa
 	const { selectedMailbox, isLoading: mailboxesLoading } = useSelectedMailbox();
 	const [conversationView] = useConversationView();
 	const grouped = conversationView && config.folder !== "drafts";
-	const mailboxId = selectedMailbox?.id;
+	const mailboxId = config.allMailboxes ? undefined : selectedMailbox?.id;
 	const key = `${config.folder}:${config.folderId ?? ""}:${mailboxId ?? "all"}:${grouped}`;
 	const [snapshot, setSnapshot] = useState<MessageDetailNavigationSnapshot>({ key: "", entries: [] });
 	const [openedUnread, setOpenedUnread] = useState<OpenedUnreadMessages>({ key: "", ids: new Set() });
