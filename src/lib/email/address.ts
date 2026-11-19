@@ -18,7 +18,8 @@ export function parseEmailAddressParts(value: string): EmailAddressParts {
 	const trimmed = value.trim();
 	// A quoted display name may contain backslash-escaped quotes and
 	// backslashes, as written by formatEmailAddress (`"Maya \"MJ\" Chen"`).
-	const headerMatch = trimmed.match(/^(?:"((?:[^"\\]|\\.)*)"|([^<"]+))\s*<([^>]+)>$/);
+	// The name is optional: `<bob@example.com>` is a valid address on its own.
+	const headerMatch = trimmed.match(/^(?:"((?:[^"\\]|\\.)*)"|([^<"]+))?\s*<([^>]+)>$/);
 
 	if (headerMatch) {
 		const quotedName = headerMatch[1]?.replace(/\\(.)/g, "$1");
