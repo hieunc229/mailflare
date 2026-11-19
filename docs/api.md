@@ -204,7 +204,7 @@ The account id is the user id. Each Mailflare mailbox appears as a top-level JMA
 
 ## Password reset, passkeys and two-factor authentication
 
-`POST /api/auth/password-reset/request` with `{ email }` always answers `200 { ok: true }`; when the account exists, has a password and has a recovery email, a single-use link valid for 30 minutes is mailed there. A passkey-only account never regains a password through email. `POST /api/auth/password-reset/confirm` with `{ token, password }` sets the password and signs the account out everywhere.
+`POST /api/auth/password-reset/request` with `{ email }` always answers `200 { ok: true }`; when the account exists, is enabled and has a recovery email, a single-use link valid for 30 minutes is mailed there. A passkey-only account can use it to set its first password. `POST /api/auth/password-reset/confirm` with `{ token, password }` sets the password and signs the account out everywhere.
 
 Passkeys are discoverable WebAuthn credentials. `POST /api/auth/passkey/options` starts a passwordless sign-in and `POST /api/auth/passkey/verify` completes it. Adding a passkey requires a step-up grant and is available under `/api/settings/passkeys/*`. `POST /api/settings/passkeys/check/options` starts a check of an enrolled passkey for the signed-in account, and `POST /api/settings/passkeys/check/verify` returns `{ ok: true, passkeyId }` for the credential the browser presented; a check records last use but grants no security change.
 
