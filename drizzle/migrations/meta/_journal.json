@@ -568,6 +568,13 @@
       "when": 1794516479571,
       "tag": "0089_auto_update",
       "breakpoints": true
+    },
+    {
+      "idx": 82,
+      "version": "6",
+      "when": 1794516479580,
+      "tag": "0091_promotions",
+      "breakpoints": true
     }
   ]
 }

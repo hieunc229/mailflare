@@ -360,6 +360,10 @@ export const messages = sqliteTable(
 		spamAnalysisError: text("spam_analysis_error"),
 		/** When the message last entered Trash or Spam; maintained by triggers (migration 0053). */
 		trashedAt: timestamp("trashed_at"),
+		/** Set at intake from bulk-mail headers. Null is a normal message or one not classified (older mail). */
+		category: text("category", { enum: ["promotions"] }),
+		/** Lower-cased bare From address, grouped on by Subscriptions. Null when longer than 191 characters (MySQL index limit), never truncated. */
+		senderAddress: text("sender_address"),
 		createdAt: timestamp("created_at")
 			.notNull()
 			.$defaultFn(() => new Date()),
@@ -372,6 +376,16 @@ export const messages = sqliteTable(
 		index("messages_provider_message_idx").on(t.mailboxId, t.providerMessageId),
 		index("messages_raw_r2_key_idx").on(t.rawR2Key),
 		index("messages_trashed_at_idx").on(t.trashedAt),
+		index("messages_category_page_idx").on(
+			t.mailboxId,
+			t.category,
+			t.status,
+			t.folderId,
+			desc(t.createdAt),
+			desc(t.id),
+		),
+		// Covers the Promotions count (equality columns first, then the grouped and filtered `read` and `snoozed_until`).
+		index("messages_category_count_idx").on(t.mailboxId, t.category, t.folderId, t.direction, t.status, t.read, t.snoozedUntil),
 		index("messages_inbox_page_idx").on(
 			t.mailboxId,
 			t.status,
@@ -625,6 +639,38 @@ export const conversationNotes = sqliteTable(
 		index("conversation_notes_mailbox_thread_idx").on(t.mailboxId, t.threadKey, t.createdAt),
 		index("conversation_notes_message_idx").on(t.messageId),
 		index("conversation_notes_author_idx").on(t.authorUserId),
+	],
+);
+
+/** Per-mailbox Promotions mode. A missing row means `off`; mail delivery never depends on this table. */
+export const mailboxPromotionSettings = sqliteTable(
+	"mailbox_promotion_settings",
+	{
+		mailboxId: text("mailbox_id").primaryKey().references(() => mailboxes.id, { onDelete: "cascade" }),
+		mode: text("mode", { enum: ["off", "show", "separate"] }).notNull().default("off"),
+		backfillStatus: text("backfill_status", { enum: ["idle", "pending", "running", "done"] }).notNull().default("idle"),
+		backfillCursor: text("backfill_cursor"),
+		backfillScanned: integer("backfill_scanned").notNull().default(0),
+		updatedAt: timestamp("updated_at").notNull().$defaultFn(() => new Date()),
+	},
+	(t) => [index("mailbox_promotion_settings_backfill_idx").on(t.backfillStatus)],
+);
+
+/** Per-sender override ("always Inbox" / "always Promotions") and unsubscribe record, keyed on the exact sender address. */
+export const mailboxSenderPreferences = sqliteTable(
+	"mailbox_sender_preferences",
+	{
+		id: text("id").primaryKey(),
+		mailboxId: text("mailbox_id").notNull().references(() => mailboxes.id, { onDelete: "cascade" }),
+		senderAddress: text("sender_address").notNull(),
+		categoryOverride: text("category_override", { enum: ["inbox", "promotions"] }),
+		unsubscribedAt: timestamp("unsubscribed_at"),
+		updatedByUserId: text("updated_by_user_id").references((): AnySQLiteColumn => users.id, { onDelete: "set null" }),
+		updatedAt: timestamp("updated_at").notNull().$defaultFn(() => new Date()),
+	},
+	(t) => [
+		uniqueIndex("mailbox_sender_preferences_mailbox_sender_idx").on(t.mailboxId, t.senderAddress),
+		index("mailbox_sender_preferences_updated_by_idx").on(t.updatedByUserId),
 	],
 );
 
