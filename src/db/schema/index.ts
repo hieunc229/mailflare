@@ -292,8 +292,11 @@ export const messageActionUndoClaims = sqliteTable(
 
 export const apiKeys = sqliteTable("api_keys", {
 	id: text("id").primaryKey(),
-	/** `device` keys come from a mobile sign-in (`/api/auth/device`) and are listed under Devices. */
-	kind: text("kind", { enum: ["legacy", "mcp", "device"] }).notNull().default("legacy"),
+	/**
+	 * `device` keys come from a mobile sign-in (`/api/auth/device`) and are listed under Devices.
+	 * `app` keys are per-protocol app passwords (`/api/app-passwords`).
+	 */
+	kind: text("kind", { enum: ["legacy", "mcp", "device", "app"] }).notNull().default("legacy"),
 	userId: text("user_id")
 		.notNull()
 		.references(() => users.id, { onDelete: "cascade" }),
@@ -316,6 +319,9 @@ export const apiKeys = sqliteTable("api_keys", {
 		.notNull()
 		.$defaultFn(() => new Date()),
 	lastUsedAt: timestamp("last_used_at"),
+	/** Protocol (`jmap`, `caldav`, `carddav`, `imap`, `submission`) and client IP of the last use, written with `lastUsedAt`. */
+	lastUsedProtocol: text("last_used_protocol"),
+	lastUsedIp: text("last_used_ip"),
 }, (t) => [index("api_keys_user_idx").on(t.userId), uniqueIndex("api_keys_key_sha256_idx").on(t.keySha256)]);
 
 export const messages = sqliteTable(
