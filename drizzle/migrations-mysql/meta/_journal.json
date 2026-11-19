@@ -141,6 +141,13 @@
       "when": 1795027661151,
       "tag": "0019_promotion_sender_backfill",
       "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "5",
+      "when": 1795027662151,
+      "tag": "0020_app_password_usage",
+      "breakpoints": true
     }
   ]
 }

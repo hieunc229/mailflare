@@ -418,6 +418,13 @@
         "ALTER TABLE `mailbox_promotion_settings` ADD `backfill_day_rows` int DEFAULT 0 NOT NULL;",
         "CREATE INDEX `messages_sender_idx` ON `messages` (`mailbox_id`,`sender_address`,`created_at`);"
       ]
+    },
+    {
+      "name": "0020_app_password_usage.sql",
+      "statements": [
+        "ALTER TABLE `api_keys` ADD `last_used_protocol` text;",
+        "ALTER TABLE `api_keys` ADD `last_used_ip` text;"
+      ]
     }
   ]
 }
