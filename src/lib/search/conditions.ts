@@ -1,4 +1,4 @@
-import { and, eq, exists, gte, lt, not, or, sql } from "drizzle-orm";
+import { and, eq, exists, gte, isNull, lt, ne, not, or, sql } from "drizzle-orm";
 import type { AnyColumn, SQL } from "drizzle-orm";
 import { messageAttachments, messages } from "@/db/schema";
 import { schemaDialect } from "@/db/dialect";
@@ -64,6 +64,8 @@ export function buildSearchConditions(raw: string, timeZone = "UTC"): SQL[] {
 	if (parsed.read === "read") conditions.push(eq(messages.read, true));
 	if (parsed.read === "unread") conditions.push(eq(messages.read, false));
 	if (parsed.starred) conditions.push(eq(messages.starred, true));
+	if (parsed.category === "promotions") conditions.push(eq(messages.category, "promotions"));
+	if (parsed.category === "primary") conditions.push(or(isNull(messages.category), ne(messages.category, "promotions"))!);
 	if (parsed.after) conditions.push(gte(messages.createdAt, parsed.after));
 	if (parsed.before) conditions.push(lt(messages.createdAt, parsed.before));
 

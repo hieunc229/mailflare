@@ -9,3 +9,18 @@ The Spam Filter switch is under **Settings → Inbox → Spam protection** and i
 Use **Report spam** to train a message as spam. Use **Not spam** from the Spam folder to train it as legitimate and return it to Inbox. Learning is scoped to the message's mailbox, only explicit user feedback trains the classifier, and changing a decision reverses the previous training first.
 
 Mailflare accepts mail before this analysis. Forward-only routing occurs before stored-message filtering and is outside the filter's v1 scope.
+
+## Rules for newsletters and promotional mail
+
+Routing rules can match on **Newsletter or promotional mail** instead of text. One rule is enough to move all such mail to a folder, Spam or Trash, or to forward it with a kept copy. Pick it in the rule's field list under **Settings → Inbox** (mailbox rules) or **Domain routing**; there is no value to enter.
+
+The condition is usually newsletters and marketing mail, but some notifications (for example GitHub or ticketing tools) carry the same headers and match too. Because a match can be wrong, these rules are limited to actions that keep the message: a folder, Spam, Trash, or a forward that keeps a copy. Reject and forwarding without a copy are refused, in the interface and by the API.
+
+Detection reads headers only, so it works the same for mail received through Cloudflare, SMTP, Resend and SES. A message counts when it has any of:
+
+- `List-Unsubscribe` (RFC 2369)
+- `List-Id` (RFC 2919)
+- `Precedence: bulk`, `list` or `junk`
+- `X-Campaign` or `X-Campaign-ID`
+
+`Feedback-ID` alone does not count, because SES, Postmark and Google also add it to transactional mail such as one-time codes. Provider trace headers and `Auto-Submitted` auto-replies do not count either. The check is independent of spam scoring: a newsletter is not spam, and spam is not necessarily a newsletter. A sender that omits all of these headers is not detected.
