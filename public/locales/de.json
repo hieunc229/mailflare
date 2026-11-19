@@ -131,6 +131,8 @@
 	"message.error.forward": "Die Weiterleitung konnte nicht gestartet werden",
 	"message.error.update": "Die Nachricht konnte nicht aktualisiert werden",
 	"message.error.block": "Der Kontakt konnte nicht blockiert werden",
+	"message.error.blockDomainOwn": "Diese Domain oder eine darin enthaltene Domain wird auf dieser Installation gehostet und kann nicht blockiert werden.",
+	"message.error.blockDomainShared": "Viele Menschen nutzen diesen E-Mail-Anbieter, daher würde das Blockieren der gesamten Domain alle von ihnen blockieren. Verwenden Sie stattdessen „Kontakt blockieren“.",
 	"message.nav.newer": "Neuere E-Mail",
 	"message.nav.older": "Ältere E-Mail",
 	"message.nav.unreadPosition": "{position} von {total} ungelesen",

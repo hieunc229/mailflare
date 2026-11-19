@@ -131,6 +131,8 @@
 	"message.error.forward": "ફૉરવર્ડ શરૂ કરી શકાયું નથી",
 	"message.error.update": "સંદેશો અપડેટ કરી શકાયો નથી",
 	"message.error.block": "સંપર્ક બ્લૉક કરી શકાયો નથી",
+	"message.error.blockDomainOwn": "આ ડોમેન, અથવા તેની અંદરનું કોઈ ડોમેન, આ ઇન્સ્ટોલેશન પર હોસ્ટ થયેલું છે, તેથી તેને બ્લોક કરી શકાતું નથી.",
+	"message.error.blockDomainShared": "ઘણા લોકો આ મેઇલ પ્રદાતાનો ઉપયોગ કરે છે, તેથી આખું ડોમેન બ્લોક કરવાથી તે બધા બ્લોક થઈ જશે. તેના બદલે “સંપર્ક બ્લૉક કરો” નો ઉપયોગ કરો.",
 	"message.nav.newer": "નવો ઇમેઇલ",
 	"message.nav.older": "જૂનો ઇમેઇલ",
 	"message.nav.unreadPosition": "{total} ન વાંચેલામાંથી {position}",

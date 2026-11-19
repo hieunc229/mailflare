@@ -135,6 +135,8 @@
 	"message.error.forward": "Não foi possível iniciar o encaminhamento",
 	"message.error.update": "Não foi possível atualizar a mensagem",
 	"message.error.block": "Não foi possível bloquear o contacto",
+	"message.error.blockDomainOwn": "Este domínio, ou um domínio dentro dele, está alojado nesta instalação e não pode ser bloqueado.",
+	"message.error.blockDomainShared": "Muitas pessoas usam este fornecedor de correio, pelo que bloquear o domínio inteiro bloquearia todas elas. Utilize antes “Bloquear contacto”.",
 	"message.nav.newer": "Email mais recente",
 	"message.nav.older": "Email mais antigo",
 	"message.nav.unreadPosition": "{position} de {total} não lidas",

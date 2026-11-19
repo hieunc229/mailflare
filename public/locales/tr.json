@@ -130,6 +130,8 @@
 	"message.error.forward": "İletme başlatılamadı",
 	"message.error.update": "İleti güncellenemedi",
 	"message.error.block": "Kişi engellenemedi",
+	"message.error.blockDomainOwn": "Bu alan adı veya içindeki bir alan adı bu kurulumda barındırılıyor, bu nedenle engellenemez.",
+	"message.error.blockDomainShared": "Birçok kişi bu e-posta sağlayıcısını kullanıyor; tüm alan adını engellemek hepsini engeller. Bunun yerine “Kişiyi engelle” seçeneğini kullanın.",
 	"message.nav.newer": "Daha yeni e-posta",
 	"message.nav.older": "Daha eski e-posta",
 	"message.nav.unreadPosition": "{position} / {total} okunmamış",

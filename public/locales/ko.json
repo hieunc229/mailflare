@@ -130,6 +130,8 @@
 	"message.error.forward": "전달을 시작할 수 없습니다",
 	"message.error.update": "메시지를 업데이트할 수 없습니다",
 	"message.error.block": "연락처를 차단할 수 없습니다",
+	"message.error.blockDomainOwn": "이 도메인 또는 그 안의 도메인이 이 설치에서 호스팅되고 있어 차단할 수 없습니다.",
+	"message.error.blockDomainShared": "많은 사람이 이 메일 제공업체를 사용하므로 도메인 전체를 차단하면 모두 차단됩니다. 대신 “연락처 차단”를 사용하세요.",
 	"message.nav.newer": "최신 이메일",
 	"message.nav.older": "이전 이메일",
 	"message.nav.unreadPosition": "읽지 않음 {total}개 중 {position}번째",

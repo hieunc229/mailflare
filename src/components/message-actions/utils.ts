@@ -6,6 +6,7 @@ import { dispatchMessagesChanged } from "@/lib/messages/change-events";
 import { performMessageAction } from "@/lib/messages/actions/client";
 import { isReversibleMessageAction } from "@/lib/messages/actions/definitions";
 import { getEmailAddress, normalizeEmailAddress, splitEmailAddressList } from "@/lib/email/address";
+import { isSharedMailDomain } from "@/lib/spam/domain-utils";
 import { getLatestEmailContent } from "@/lib/email/reply-content-utils";
 import { formatUserDate } from "@/lib/time/utils";
 import { sanitizeEmailHtml } from "@/app/(dashboard)/inbox/[messageId]/email-html-sanitizer";
@@ -113,8 +114,29 @@ export async function blockMessageContact({
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ mailboxId, address: senderAddress, scope }),
   });
-  const data = (await response.json()) as { error?: string };
-  if (!response.ok) throw new Error(data.error ?? "Unable to block contact");
+  const data = (await response.json()) as { error?: string; code?: string };
+  if (!response.ok) throw new BlockContactError(data.error ?? "Unable to block contact", data.code);
+}
+
+/** A failed block request; `code` is an API value such as OWN_DOMAIN that the UI maps to a translated message. */
+export class BlockContactError extends Error {
+  constructor(message: string, readonly code?: string) {
+    super(message);
+  }
+}
+
+/** The translation key for a failed block request, falling back to the generic message. */
+export function getBlockErrorKey(error: unknown): "message.error.blockDomainOwn" | "message.error.blockDomainShared" | "message.error.block" {
+  const code = error instanceof BlockContactError ? error.code : undefined;
+  if (code === "OWN_DOMAIN") return "message.error.blockDomainOwn";
+  if (code === "SHARED_PROVIDER") return "message.error.blockDomainShared";
+  return "message.error.block";
+}
+
+/** False for addresses whose whole domain must not be blocked (no domain, or a shared mailbox provider). */
+export function canBlockSenderDomain(senderAddress: string): boolean {
+  const domain = getSenderDomain(senderAddress);
+  return !!domain && domain.includes(".") && !isSharedMailDomain(domain);
 }
 
 export function getSenderDomain(senderAddress: string): string {

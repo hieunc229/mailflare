@@ -135,6 +135,8 @@
 	"message.error.forward": "Impossible de démarrer le transfert",
 	"message.error.update": "Impossible de mettre à jour le message",
 	"message.error.block": "Impossible de bloquer le contact",
+	"message.error.blockDomainOwn": "Ce domaine, ou un domaine qu'il contient, est hébergé sur cette installation et ne peut donc pas être bloqué.",
+	"message.error.blockDomainShared": "Beaucoup de personnes utilisent ce fournisseur de messagerie : bloquer tout le domaine les bloquerait toutes. Utilisez plutôt « Bloquer le contact ».",
 	"message.nav.newer": "E-mail plus récent",
 	"message.nav.older": "E-mail plus ancien",
 	"message.nav.unreadPosition": "{position} sur {total} non lus",

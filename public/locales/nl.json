@@ -131,6 +131,8 @@
 	"message.error.forward": "Doorsturen kon niet worden gestart",
 	"message.error.update": "Bericht kan niet worden bijgewerkt",
 	"message.error.block": "Contact kan niet worden geblokkeerd",
+	"message.error.blockDomainOwn": "Dit domein, of een domein erbinnen, wordt op deze installatie gehost en kan niet worden geblokkeerd.",
+	"message.error.blockDomainShared": "Veel mensen gebruiken deze e-mailprovider, dus het blokkeren van het hele domein zou ze allemaal blokkeren. Gebruik in plaats daarvan “Contact blokkeren”.",
 	"message.nav.newer": "Nieuwere e-mail",
 	"message.nav.older": "Oudere e-mail",
 	"message.nav.unreadPosition": "{position} van {total} ongelezen",

@@ -135,6 +135,8 @@
 	"message.error.forward": "No se pudo iniciar el reenvío",
 	"message.error.update": "No se pudo actualizar el mensaje",
 	"message.error.block": "No se pudo bloquear el contacto",
+	"message.error.blockDomainOwn": "Este dominio, o un dominio dentro de él, está alojado en esta instalación, por lo que no se puede bloquear.",
+	"message.error.blockDomainShared": "Mucha gente usa este proveedor de correo, así que bloquear todo el dominio los bloquearía a todos. Usa «Bloquear contacto» en su lugar.",
 	"message.nav.newer": "Correo más reciente",
 	"message.nav.older": "Correo más antiguo",
 	"message.nav.unreadPosition": "{position} de {total} sin leer",

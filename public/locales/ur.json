@@ -131,6 +131,8 @@
 	"message.error.forward": "آگے بھیجنا شروع نہیں ہو سکا",
 	"message.error.update": "پیغام اپ ڈیٹ نہیں ہو سکا",
 	"message.error.block": "رابطہ بلاک نہیں ہو سکا",
+	"message.error.blockDomainOwn": "یہ ڈومین، یا اس کے اندر کوئی ڈومین، اس انسٹالیشن پر ہوسٹ کیا گیا ہے، اس لیے اسے بلاک نہیں کیا جا سکتا۔",
+	"message.error.blockDomainShared": "بہت سے لوگ اس میل فراہم کنندہ کو استعمال کرتے ہیں، اس لیے پورا ڈومین بلاک کرنے سے وہ سب بلاک ہو جائیں گے۔ اس کی بجائے “رابطہ بلاک کریں” استعمال کریں۔",
 	"message.nav.newer": "نئی ای میل",
 	"message.nav.older": "پرانی ای میل",
 	"message.nav.unreadPosition": "{total} نہ پڑھے ہوؤں میں سے {position}",

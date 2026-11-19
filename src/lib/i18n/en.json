@@ -131,6 +131,8 @@
 	"message.error.forward": "Could not start forward",
 	"message.error.update": "Could not update message",
 	"message.error.block": "Could not block contact",
+	"message.error.blockDomainOwn": "This domain, or a domain inside it, is hosted on this installation, so it cannot be blocked.",
+	"message.error.blockDomainShared": "Many people use this mail provider, so blocking the whole domain would block all of them. Use “Block contact” instead.",
 	"message.nav.newer": "Newer email",
 	"message.nav.older": "Older email",
 	"message.nav.unreadPosition": "{position} of {total} unread",

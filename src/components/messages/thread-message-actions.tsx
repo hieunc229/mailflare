@@ -17,6 +17,8 @@ import {
 	createReplyDraft,
 	getMoveMessageActions,
 	getReplyRecipients,
+	canBlockSenderDomain,
+	getBlockErrorKey,
 	getSenderDomain,
 	getReplyThreading,
 	hasAdditionalRecipients,
@@ -146,7 +148,7 @@ export function ThreadMessageActions({
 			await blockMessageContact({ mailboxId, senderAddress: message.fromAddr, scope: "domain" });
 			await runSingleMessageAction(message.id, "trash", { undo: false });
 		} catch (nextError) {
-			setError(nextError instanceof Error ? nextError.message : t("message.error.block"));
+			setError(t(getBlockErrorKey(nextError)));
 		} finally {
 			setPending(false);
 		}
@@ -270,9 +272,11 @@ export function ThreadMessageActions({
 								<MessageActionMenuItem icon={<Ban className="h-4 w-4" />} onSelect={() => void onBlock()}>
 									{t("message.blockContact")}
 								</MessageActionMenuItem>
-								<MessageActionMenuItem icon={<Ban className="h-4 w-4" />} onSelect={() => void onBlockDomain()}>
-									{t("message.blockDomain")}
-								</MessageActionMenuItem>
+								{canBlockSenderDomain(message.fromAddr) && (
+									<MessageActionMenuItem icon={<Ban className="h-4 w-4" />} onSelect={() => void onBlockDomain()}>
+										{t("message.blockDomain")}
+									</MessageActionMenuItem>
+								)}
 							</>
 						)}
 					</MessageActionMenu>

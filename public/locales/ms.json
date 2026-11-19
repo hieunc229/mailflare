@@ -130,6 +130,8 @@
 	"message.error.forward": "Tidak dapat memulakan pemajuan",
 	"message.error.update": "Tidak dapat mengemas kini mesej",
 	"message.error.block": "Tidak dapat menyekat kenalan",
+	"message.error.blockDomainOwn": "Domain ini, atau domain di dalamnya, dihoskan pada pemasangan ini jadi tidak boleh disekat.",
+	"message.error.blockDomainShared": "Ramai orang menggunakan penyedia e-mel ini, jadi menyekat seluruh domain akan menyekat mereka semua. Gunakan “Sekat kenalan” sebagai gantinya.",
 	"message.nav.newer": "E-mel lebih baharu",
 	"message.nav.older": "E-mel lebih lama",
 	"message.nav.unreadPosition": "{position} daripada {total} belum dibaca",

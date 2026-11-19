@@ -147,6 +147,8 @@
 	"message.error.forward": "تعذّر بدء إعادة التوجيه",
 	"message.error.update": "تعذّر تحديث الرسالة",
 	"message.error.block": "تعذّر حظر جهة الاتصال",
+	"message.error.blockDomainOwn": "هذا النطاق، أو نطاق داخله، مُستضاف على هذا التثبيت، لذلك لا يمكن حظره.",
+	"message.error.blockDomainShared": "يستخدم كثير من الأشخاص مزوّد البريد هذا، لذا فإن حظر النطاق بالكامل سيحظرهم جميعًا. استخدم «حظر جهة الاتصال» بدلًا من ذلك.",
 	"message.nav.newer": "رسالة أحدث",
 	"message.nav.older": "رسالة أقدم",
 	"message.nav.unreadPosition": "{position} من {total} غير مقروءة",

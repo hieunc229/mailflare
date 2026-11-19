@@ -131,6 +131,8 @@
 	"message.error.forward": "ফরোয়ার্ড শুরু করা যায়নি",
 	"message.error.update": "বার্তা আপডেট করা যায়নি",
 	"message.error.block": "যোগাযোগ ব্লক করা যায়নি",
+	"message.error.blockDomainOwn": "এই ডোমেন, বা এর ভেতরের কোনো ডোমেন, এই ইনস্টলেশনে হোস্ট করা আছে, তাই এটি ব্লক করা যাবে না।",
+	"message.error.blockDomainShared": "অনেক মানুষ এই মেইল প্রদানকারী ব্যবহার করেন, তাই পুরো ডোমেন ব্লক করলে সবাই ব্লক হয়ে যাবে। এর বদলে “যোগাযোগ ব্লক করুন” ব্যবহার করুন।",
 	"message.nav.newer": "নতুন ইমেইল",
 	"message.nav.older": "পুরোনো ইমেইল",
 	"message.nav.unreadPosition": "{total}টি অপঠিতের মধ্যে {position}",

@@ -5,6 +5,7 @@ import { contacts, domains, routingRules } from "@/db/schema";
 import { getFirstEmailAddressEntry, normalizeEmailAddress } from "@/lib/email/address";
 import type { BlockContactInput, ContactCard, ContactDisplayName, ContactInput, MessageContactNames } from "@/lib/contacts/types";
 import type { ContactSource } from "@/lib/email/address-types";
+import { isMultiPartSuffix, isSharedMailDomain, registrableDomain } from "@/lib/spam/domain-utils";
 import { getContactId, getContactNameFromAddress, getPartyDisplayName } from "@/lib/contacts/utils";
 import { importGravatarAvatar } from "@/lib/contacts/gravatar";
 
@@ -257,22 +258,55 @@ export async function blockContact(env: CloudflareEnv, input: BlockContactInput)
 	return { email, blocked: true };
 }
 
+export type BlockDomainErrorCode = "INVALID_DOMAIN" | "OWN_DOMAIN" | "SHARED_PROVIDER";
+
+/** A refused domain block; `code` is what the API returns and the UI translates. */
+export class BlockDomainError extends Error {
+	constructor(readonly code: BlockDomainErrorCode) {
+		super(code);
+	}
+}
+
+/** The ASCII (punycode) form of a host name, or null when it is not a plain dotted name. */
+function toAsciiHost(host: string): string | null {
+	if (!host || /[\s/?#@:\\%]/.test(host)) return null;
+	try {
+		const ascii = new URL(`http://${host}`).hostname;
+		return /^[a-z0-9-]+(\.[a-z0-9-]+)+$/.test(ascii) ? ascii : null;
+	} catch {
+		return null;
+	}
+}
+
 /**
- * Trashes everything from a sender's domain and its subdomains with a mailbox routing rule, the same kind
- * of rule `blockContact` adds for one address. Domains hosted on this installation cannot be blocked.
+ * Trashes everything from a sender's registrable domain and its subdomains with a mailbox routing rule, the
+ * same kind of rule `blockContact` adds for one address. Refused for domains hosted on this installation (or
+ * containing one) and for shared mailbox providers, where one address says nothing about the rest.
  */
 export async function blockSenderDomain(env: CloudflareEnv, input: BlockContactInput) {
 	const address = normalizeEmailAddress(input.address);
-	const domain = address.includes("@") ? address.slice(address.lastIndexOf("@") + 1) : "";
-	if (!/^[a-z0-9-]+(\.[a-z0-9-]+)+$/.test(domain)) throw new Error("A valid sender address is required");
+	const sender = address.includes("@") ? address.slice(address.lastIndexOf("@") + 1) : "";
+	const host = toAsciiHost(sender);
+	if (!host) throw new BlockDomainError("INVALID_DOMAIN");
+	const domain = registrableDomain(host);
+	if (isMultiPartSuffix(domain)) throw new BlockDomainError("INVALID_DOMAIN");
+	if (isSharedMailDomain(domain)) throw new BlockDomainError("SHARED_PROVIDER");
 
 	const db = getDb(env);
 	const hosted = await db.select({ hostname: domains.hostname }).from(domains);
-	if (hosted.some(({ hostname }) => domain === hostname.toLowerCase() || domain.endsWith(`.${hostname.toLowerCase()}`))) {
-		throw new Error("Cannot block your own domain");
+	if (hosted.some(({ hostname }) => {
+		const name = hostname.toLowerCase();
+		return name === domain || name.endsWith(`.${domain}`);
+	})) {
+		throw new BlockDomainError("OWN_DOMAIN");
 	}
 
-	const matchValue = `@(?:[a-z0-9-]+\\.)*${domain.replace(/\./g, "\\.")}$`;
+	// Mail can arrive with the unicode spelling, so the rule matches that as well as the punycode form.
+	const spellings = new Set([domain]);
+	const rawHost = sender.replace(/\.$/, "");
+	if (rawHost !== host && registrableDomain(rawHost)) spellings.add(registrableDomain(rawHost));
+	const escape = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+	const matchValue = `@(?:[^@\\s.]+\\.)*(?:${[...spellings].map(escape).join("|")})$`;
 	const [existingRule] = await db
 		.select({ id: routingRules.id })
 		.from(routingRules)

@@ -139,6 +139,8 @@
 	"message.error.forward": "Nie można rozpocząć przekazywania",
 	"message.error.update": "Nie można zaktualizować wiadomości",
 	"message.error.block": "Nie można zablokować kontaktu",
+	"message.error.blockDomainOwn": "Ta domena lub domena w jej obrębie jest hostowana w tej instalacji, więc nie można jej zablokować.",
+	"message.error.blockDomainShared": "Wielu ludzi korzysta z tego dostawcy poczty, więc zablokowanie całej domeny zablokowałoby ich wszystkich. Użyj zamiast tego opcji „Zablokuj kontakt”.",
 	"message.nav.newer": "Nowszy e-mail",
 	"message.nav.older": "Starszy e-mail",
 	"message.nav.unreadPosition": "{position} z {total} nieprzeczytanych",

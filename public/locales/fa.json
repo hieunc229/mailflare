@@ -131,6 +131,8 @@
 	"message.error.forward": "شروع ارسال مجدد ممکن نشد",
 	"message.error.update": "به‌روزرسانی پیام ممکن نشد",
 	"message.error.block": "مسدود کردن مخاطب ممکن نشد",
+	"message.error.blockDomainOwn": "این دامنه، یا دامنه‌ای داخل آن، روی این نصب میزبانی می‌شود، بنابراین نمی‌توان آن را مسدود کرد.",
+	"message.error.blockDomainShared": "افراد زیادی از این ارائه‌دهنده ایمیل استفاده می‌کنند، پس مسدود کردن کل دامنه همه آن‌ها را مسدود می‌کند. به جای آن از «مسدود کردن مخاطب» استفاده کنید.",
 	"message.nav.newer": "ایمیل جدیدتر",
 	"message.nav.older": "ایمیل قدیمی‌تر",
 	"message.nav.unreadPosition": "{position} از {total} خوانده‌نشده",

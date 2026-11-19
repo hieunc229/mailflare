@@ -130,6 +130,8 @@
 	"message.error.forward": "ไม่สามารถเริ่มการส่งต่อได้",
 	"message.error.update": "ไม่สามารถอัปเดตข้อความได้",
 	"message.error.block": "ไม่สามารถบล็อกผู้ติดต่อได้",
+	"message.error.blockDomainOwn": "โดเมนนี้ หรือโดเมนภายใต้โดเมนนี้ ถูกโฮสต์อยู่ในการติดตั้งนี้ จึงไม่สามารถบล็อกได้",
+	"message.error.blockDomainShared": "มีผู้ใช้ผู้ให้บริการอีเมลนี้จำนวนมาก การบล็อกทั้งโดเมนจะบล็อกทุกคนเหล่านั้น โปรดใช้ “บล็อกผู้ติดต่อ” แทน",
 	"message.nav.newer": "อีเมลที่ใหม่กว่า",
 	"message.nav.older": "อีเมลที่เก่ากว่า",
 	"message.nav.unreadPosition": "{position} จาก {total} ที่ยังไม่ได้อ่าน",

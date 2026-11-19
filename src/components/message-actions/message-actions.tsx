@@ -25,6 +25,8 @@ import { getPermanentDeleteConfirmText, PartialDeleteError, supportsPermanentDel
 import {
 	confirmTrashWithoutUnsubscribe,
 	blockMessageContact,
+	canBlockSenderDomain,
+	getBlockErrorKey,
 	getSenderDomain,
 	createForwardDraft,
 	createReplyDraft,
@@ -287,7 +289,7 @@ export function MessageActions({
 			router.push(autoAdvance() ?? listHref);
 			router.refresh();
 		} catch (blockError) {
-			setError(blockError instanceof Error ? blockError.message : t("message.error.block"));
+			setError(t(getBlockErrorKey(blockError)));
 		} finally {
 			setPendingAction(null);
 		}
@@ -508,9 +510,11 @@ export function MessageActions({
 							<MessageActionMenuItem icon={<Ban size={iconSize} />} onSelect={() => void onBlockContact()}>
 								{t("message.blockContact")}
 							</MessageActionMenuItem>
-							<MessageActionMenuItem icon={<Ban size={iconSize} />} onSelect={() => void onBlockDomain()}>
-								{t("message.blockDomain")}
-							</MessageActionMenuItem>
+							{canBlockSenderDomain(senderAddress) && (
+								<MessageActionMenuItem icon={<Ban size={iconSize} />} onSelect={() => void onBlockDomain()}>
+									{t("message.blockDomain")}
+								</MessageActionMenuItem>
+							)}
 							<MessageActionMenuSeparator />
 						</>
 					)}

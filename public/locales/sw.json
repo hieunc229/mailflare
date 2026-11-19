@@ -131,6 +131,8 @@
 	"message.error.forward": "Imeshindwa kuanza kusambaza",
 	"message.error.update": "Imeshindwa kusasisha ujumbe",
 	"message.error.block": "Imeshindwa kumzuia mwasiliani",
+	"message.error.blockDomainOwn": "Kikoa hiki, au kikoa kilicho ndani yake, kimewekwa kwenye usakinishaji huu, kwa hivyo hakiwezi kuzuiwa.",
+	"message.error.blockDomainShared": "Watu wengi hutumia mtoa huduma huyu wa barua pepe, kwa hivyo kuzuia kikoa chote kutawazuia wote. Tumia “Zuia mwasiliani” badala yake.",
 	"message.nav.newer": "Barua pepe mpya zaidi",
 	"message.nav.older": "Barua pepe ya zamani zaidi",
 	"message.nav.unreadPosition": "{position} kati ya {total} hazijasomwa",

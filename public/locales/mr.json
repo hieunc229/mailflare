@@ -131,6 +131,8 @@
 	"message.error.forward": "अग्रेषण सुरू करता आले नाही",
 	"message.error.update": "संदेश अद्यतनित करता आला नाही",
 	"message.error.block": "संपर्क ब्लॉक करता आला नाही",
+	"message.error.blockDomainOwn": "हे डोमेन किंवा त्यातील एखादे डोमेन या इन्स्टॉलेशनवर होस्ट केलेले आहे, त्यामुळे ते ब्लॉक करता येत नाही.",
+	"message.error.blockDomainShared": "अनेक लोक हा मेल प्रदाता वापरतात, त्यामुळे संपूर्ण डोमेन ब्लॉक केल्यास ते सर्व ब्लॉक होतील. त्याऐवजी “संपर्क ब्लॉक करा” वापरा.",
 	"message.nav.newer": "नवीन ईमेल",
 	"message.nav.older": "जुना ईमेल",
 	"message.nav.unreadPosition": "{total} न वाचलेल्यांपैकी {position}",

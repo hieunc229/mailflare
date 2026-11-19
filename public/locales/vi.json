@@ -127,6 +127,8 @@
 	"message.error.forward": "Không thể bắt đầu chuyển tiếp",
 	"message.error.update": "Không thể cập nhật thư",
 	"message.error.block": "Không thể chặn liên hệ",
+	"message.error.blockDomainOwn": "Tên miền này, hoặc một tên miền bên trong nó, được lưu trữ trên bản cài đặt này nên không thể chặn.",
+	"message.error.blockDomainShared": "Nhiều người dùng nhà cung cấp email này, nên chặn toàn bộ tên miền sẽ chặn tất cả họ. Hãy dùng “Chặn liên hệ” thay thế.",
 	"message.nav.newer": "Email mới hơn",
 	"message.nav.older": "Email cũ hơn",
 	"message.nav.unreadPosition": "{position} trên {total} thư chưa đọc",

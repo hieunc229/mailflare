@@ -127,6 +127,8 @@
 	"message.error.forward": "Tidak dapat memulai penerusan",
 	"message.error.update": "Tidak dapat memperbarui pesan",
 	"message.error.block": "Tidak dapat memblokir kontak",
+	"message.error.blockDomainOwn": "Domain ini, atau domain di dalamnya, dihosting di instalasi ini sehingga tidak dapat diblokir.",
+	"message.error.blockDomainShared": "Banyak orang memakai penyedia email ini, jadi memblokir seluruh domain akan memblokir mereka semua. Gunakan “Blokir kontak” sebagai gantinya.",
 	"message.nav.newer": "Email lebih baru",
 	"message.nav.older": "Email lebih lama",
 	"message.nav.unreadPosition": "{position} dari {total} belum dibaca",

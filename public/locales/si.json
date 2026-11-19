@@ -131,6 +131,8 @@
 	"message.error.forward": "යොමු කිරීම ආරම්භ කළ නොහැකි විය",
 	"message.error.update": "පණිවිඩය යාවත්කාලීන කළ නොහැකි විය",
 	"message.error.block": "සම්බන්ධතාව අවහිර කළ නොහැකි විය",
+	"message.error.blockDomainOwn": "මෙම වසම, හෝ එය තුළ ඇති වසමක්, මෙම ස්ථාපනයේ සත්කාරක කර ඇත, එබැවින් එය අවහිර කළ නොහැක.",
+	"message.error.blockDomainShared": "බොහෝ දෙනෙක් මෙම තැපැල් සපයන්නා භාවිතා කරයි, එබැවින් මුළු වසමම අවහිර කිරීමෙන් ඒ සියල්ලන්ම අවහිර වේ. ඒ වෙනුවට “සම්බන්ධතාව අවහිර කරන්න” භාවිතා කරන්න.",
 	"message.nav.newer": "වඩා නව ඊමේල්",
 	"message.nav.older": "වඩා පැරණි ඊමේල්",
 	"message.nav.unreadPosition": "නොකියවූ {total}න් {position}",

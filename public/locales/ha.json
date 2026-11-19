@@ -131,6 +131,8 @@
 	"message.error.forward": "Ba a iya fara turawa ba",
 	"message.error.update": "Ba a iya sabunta saƙon ba",
 	"message.error.block": "Ba a iya toshe abokin hulɗa ba",
+	"message.error.blockDomainOwn": "Wannan yankin, ko wani yanki a cikinsa, yana kan wannan shigarwa, saboda haka ba za a iya toshe shi ba.",
+	"message.error.blockDomainShared": "Mutane da yawa suna amfani da wannan mai samar da imel, saboda haka toshe dukan yankin zai toshe su duka. A yi amfani da “Toshe abokin hulɗa” maimakon haka.",
 	"message.nav.newer": "Imel sabo",
 	"message.nav.older": "Imel tsoho",
 	"message.nav.unreadPosition": "{position} cikin {total} da ba a karanta ba",

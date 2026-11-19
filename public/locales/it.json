@@ -135,6 +135,8 @@
 	"message.error.forward": "Impossibile avviare l'inoltro",
 	"message.error.update": "Impossibile aggiornare il messaggio",
 	"message.error.block": "Impossibile bloccare il contatto",
+	"message.error.blockDomainOwn": "Questo dominio, o un dominio al suo interno, è ospitato su questa installazione e non può essere bloccato.",
+	"message.error.blockDomainShared": "Molte persone usano questo provider di posta, quindi bloccare l'intero dominio le bloccherebbe tutte. Usa invece «Blocca contatto».",
 	"message.nav.newer": "Email più recente",
 	"message.nav.older": "Email meno recente",
 	"message.nav.unreadPosition": "{position} di {total} da leggere",

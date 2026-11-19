@@ -12,7 +12,7 @@ The Spam Filter switch is under **Settings → Inbox → Spam protection** and i
 
 **Strictness** sits next to the switch: Relaxed moves mail to Spam at a score of 85, Normal (the default) at 70 and Strict at 55. It is stored per user, applies to future messages in all your mailboxes, and does not change the suspicious band (40 and up) or authentication-policy filing, such as a failed DMARC, which stays in Spam at every level.
 
-Use **Report spam** to train a message as spam. Use **Not spam** from the Spam folder to train it as legitimate and return it to Inbox. **Block contact** trashes future mail from one address with a mailbox rule. **Block sender domain**, in the same menu, adds a rule that trashes mail from the sender's domain and all its subdomains; it cannot be used on a domain hosted on the installation, and the rule can be removed under the mailbox's routing rules.
+Use **Report spam** to train a message as spam. Use **Not spam** from the Spam folder to train it as legitimate and return it to Inbox. **Block contact** trashes future mail from one address with a mailbox rule. **Block sender domain**, in the same menu, adds a rule that trashes mail from the sender's registrable domain (`mail.example.com` blocks `example.com`) and all its subdomains. It is refused for a domain hosted on the installation or containing one, and for shared mail providers such as Gmail, Outlook, Yahoo or iCloud, where it would block everyone on the service (the menu item is hidden for those; use **Block contact**). The rule can be removed under the mailbox's routing rules.
 
 Learning is scoped to the message's mailbox, only explicit user feedback trains the classifier, and changing a decision reverses the previous training first.
 

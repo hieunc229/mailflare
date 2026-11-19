@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { getDb } from "@/db";
 import { requireUser } from "@/lib/auth/cookies";
 import { getEnv } from "@/lib/cloudflare";
-import { blockContact, blockSenderDomain } from "@/lib/contacts/service";
+import { BlockDomainError, blockContact, blockSenderDomain } from "@/lib/contacts/service";
 import { getMailboxAccessLevel } from "@/lib/mailboxes/access";
 import type { BlockContactRequest } from "./types";
 import { readJsonObject } from "@/lib/http/request";
@@ -31,7 +31,8 @@ export async function POST(request: Request) {
 		try {
 			return NextResponse.json({ domain: await blockSenderDomain(env, target) });
 		} catch (error) {
-			return NextResponse.json({ error: error instanceof Error ? error.message : "Could not block domain" }, { status: 400 });
+			if (error instanceof BlockDomainError) return NextResponse.json({ error: "Could not block domain", code: error.code }, { status: 400 });
+			throw error;
 		}
 	}
 	const contact = await blockContact(env, target);

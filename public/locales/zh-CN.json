@@ -127,6 +127,8 @@
 	"message.error.forward": "无法开始转发",
 	"message.error.update": "无法更新邮件",
 	"message.error.block": "无法屏蔽联系人",
+	"message.error.blockDomainOwn": "此域名或其下的某个域名托管在本安装上，因此无法屏蔽。",
+	"message.error.blockDomainShared": "很多人使用这家邮件服务商，屏蔽整个域名会把他们全部屏蔽。请改用“屏蔽联系人”。",
 	"message.nav.newer": "较新的邮件",
 	"message.nav.older": "较早的邮件",
 	"message.nav.unreadPosition": "第 {position} 封，共 {total} 封未读",

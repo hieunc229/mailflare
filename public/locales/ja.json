@@ -127,6 +127,8 @@
 	"message.error.forward": "転送を開始できませんでした",
 	"message.error.update": "メールを更新できませんでした",
 	"message.error.block": "連絡先をブロックできませんでした",
+	"message.error.blockDomainOwn": "このドメイン、またはその配下のドメインはこのインストールでホストされているため、ブロックできません。",
+	"message.error.blockDomainShared": "多くの人がこのメールプロバイダーを使っているため、ドメイン全体をブロックするとその全員がブロックされます。代わりに「連絡先をブロック」を使用してください。",
 	"message.nav.newer": "新しいメール",
 	"message.nav.older": "古いメール",
 	"message.nav.unreadPosition": "未読 {total} 件中 {position} 件目",

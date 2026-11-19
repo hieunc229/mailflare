@@ -131,6 +131,8 @@
 	"message.error.forward": "ਅੱਗੇ ਭੇਜਣਾ ਸ਼ੁਰੂ ਨਹੀਂ ਕੀਤਾ ਜਾ ਸਕਿਆ",
 	"message.error.update": "ਸੁਨੇਹਾ ਅੱਪਡੇਟ ਨਹੀਂ ਕੀਤਾ ਜਾ ਸਕਿਆ",
 	"message.error.block": "ਸੰਪਰਕ ਬਲੌਕ ਨਹੀਂ ਕੀਤਾ ਜਾ ਸਕਿਆ",
+	"message.error.blockDomainOwn": "ਇਹ ਡੋਮੇਨ, ਜਾਂ ਇਸ ਦੇ ਅੰਦਰ ਦਾ ਕੋਈ ਡੋਮੇਨ, ਇਸ ਇੰਸਟਾਲੇਸ਼ਨ 'ਤੇ ਹੋਸਟ ਕੀਤਾ ਹੋਇਆ ਹੈ, ਇਸ ਲਈ ਇਸ ਨੂੰ ਬਲੌਕ ਨਹੀਂ ਕੀਤਾ ਜਾ ਸਕਦਾ।",
+	"message.error.blockDomainShared": "ਬਹੁਤ ਸਾਰੇ ਲੋਕ ਇਸ ਮੇਲ ਪ੍ਰਦਾਤਾ ਦੀ ਵਰਤੋਂ ਕਰਦੇ ਹਨ, ਇਸ ਲਈ ਪੂਰੇ ਡੋਮੇਨ ਨੂੰ ਬਲੌਕ ਕਰਨ ਨਾਲ ਉਹ ਸਾਰੇ ਬਲੌਕ ਹੋ ਜਾਣਗੇ। ਇਸ ਦੀ ਬਜਾਏ “ਸੰਪਰਕ ਬਲੌਕ ਕਰੋ” ਵਰਤੋ।",
 	"message.nav.newer": "ਨਵੀਂ ਈਮੇਲ",
 	"message.nav.older": "ਪੁਰਾਣੀ ਈਮੇਲ",
 	"message.nav.unreadPosition": "{total} ਨਾ ਪੜ੍ਹੀਆਂ ਵਿੱਚੋਂ {position}",
