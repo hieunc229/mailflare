@@ -5,7 +5,7 @@
  */
 import { and, eq, sql } from "drizzle-orm";
 import { createDb } from "@/db";
-import { users, domains, mailboxes, messages, folders, jmapChanges, appSettings, webhooks, spamTokenStats, spamReputation } from "@/db/schema";
+import { users, domains, mailboxes, messages, folders, jmapChanges, appSettings, webhooks, spamTokenStats, spamReputation, emailSuppressions } from "@/db/schema";
 import { getDatabaseConfig } from "@/db/with-database";
 import { openExternalDatabase } from "@/db/external";
 import { applyPendingMigrations, getMigrationStatus } from "@/lib/migrations/service";
@@ -15,6 +15,7 @@ import { exportDatabaseRecords, restoreDatabaseRecords } from "@/lib/backups/exp
 import { getSearchIndexStatus } from "@/lib/search/index-admin";
 import { recordReputationObservation } from "@/lib/spam/repository";
 import { isUniqueConstraintError } from "@/lib/database-errors";
+import { recordSuppression } from "@/lib/deliverability/suppression";
 
 const [url, driver] = process.argv.slice(2);
 if (!url) throw new Error("usage: db-smoke <DATABASE_URL> [driver]");
@@ -108,6 +109,22 @@ await recordReputationObservation(env, `mbx_${stamp}`, [{ type: "domain", key: "
 await recordReputationObservation(env, `mbx_${stamp}`, [{ type: "domain", key: "example.com" }] as never);
 const reputation = await db.select().from(spamReputation).where(and(eq(spamReputation.mailboxId, `mbx_${stamp}`), eq(spamReputation.key, "example.com")));
 check("spam reputation upsert", reputation[0]?.messagesSeen === 2);
+
+const suppressed = { domainId: `dom_${stamp}`, email: "a@x.org" };
+await recordSuppression(env, { ...suppressed, reason: "manual", source: "admin", detail: "note" });
+await recordSuppression(env, { ...suppressed, reason: "hard_bounce", source: "ses", detail: "550" });
+await recordSuppression(env, { ...suppressed, reason: "complaint", source: "resend" });
+await recordSuppression(env, { ...suppressed, reason: "hard_bounce", source: "ses", detail: "again" });
+const [suppression] = await db.select().from(emailSuppressions).where(eq(emailSuppressions.domainId, suppressed.domainId));
+check("suppression upsert keeps the strongest reason and counts events", suppression?.reason === "complaint" && suppression.source === "resend" && suppression.eventCount === 4);
+
+const returned = { domainId: `dom_${stamp}`, email: "dsn@x.org", reason: "hard_bounce" as const, source: "dsn" as const, confirmed: false };
+const confirmedOf = async () => (await db.select().from(emailSuppressions).where(and(eq(emailSuppressions.domainId, returned.domainId), eq(emailSuppressions.email, returned.email))))[0]?.confirmed;
+await recordSuppression(env, { ...returned, evidenceRef: "m1" });
+await recordSuppression(env, { ...returned, evidenceRef: "m1" });
+const sameMessage = await confirmedOf();
+await recordSuppression(env, { ...returned, evidenceRef: "m2" });
+check("a DSN is confirmed only by a second, different original message", sameMessage === false && await confirmedOf() === true);
 
 try {
 	await db.insert(users).values({ id: `usr2_${stamp}`, email: `a${stamp}@example.com`, passwordHash: "x", name: "B" });
