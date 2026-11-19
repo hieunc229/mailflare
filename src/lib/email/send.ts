@@ -19,6 +19,7 @@ import { setFollowUp } from "@/lib/follow-ups/service";
 import { buildTrackingPixelUrl, injectTrackingPixel, resolveTrackingOrigin } from "@/lib/tracking/open-tracking-utils";
 import { getComposePreferences } from "@/lib/compose/preferences";
 import { getMailboxDomainAddresses } from "@/lib/mailboxes/domain-addresses";
+import { assertNoSuppressedRecipients, dropSuppressedRecipients } from "@/lib/deliverability/suppression";
 
 export type SendEmailInput = {
 	userId: string;
@@ -103,6 +104,8 @@ export async function sendEmail(
 	if (to.length + cc.length + bcc.length > MAX_RECIPIENTS) {
 		throw new Error(`A message can have at most ${MAX_RECIPIENTS} recipients`);
 	}
+	// Before anything is stored: a refused send leaves no draft, contact or job behind.
+	await assertNoSuppressedRecipients(env, sender.fromAddr, [...to, ...cc, ...bcc]);
 	await upsertContactsFromAddresses(env, input.userId, [...to, ...cc, ...bcc], "outbound");
 
 	const inReplyTo = normalizeMessageId(input.inReplyTo);
@@ -203,9 +206,9 @@ export async function sendEmail(
 }
 
 async function deliverEmail(env: CloudflareEnv, delivery: PreparedDelivery): Promise<void> {
-	const { input, messageId, jobId, from, mailboxId, to, cc, bcc, headers, attachments } = delivery;
+	const { input, messageId, jobId, from, mailboxId, headers, attachments } = delivery;
 	const db = getDb(env);
-	const toAddr = joinEmailAddressList(to);
+	let { to, cc, bcc } = delivery;
 	let accepted = false;
 	try {
 		// The sender address was validated at queue time; recheck that the mailbox
@@ -226,6 +229,20 @@ async function deliverEmail(env: CloudflareEnv, delivery: PreparedDelivery): Pro
 		if (!mailbox || mailbox.disabled || !(await getMailboxDomainAddresses(db, mailbox)).includes(fromAddress)) {
 			throw new Error("The sender address is no longer available for this mailbox");
 		}
+		// Queued sends can outlive the check in sendEmail: an address may have bounced since.
+		const kept = await dropSuppressedRecipients(env, from, { to, cc, bcc });
+		if (kept.dropped.length) {
+			({ to, cc, bcc } = kept);
+			await createAuditLog(env, {
+				actorUserId: input.userId,
+				mailboxId,
+				messageId,
+				action: "email.suppressed_recipients_dropped",
+				metadata: { dropped: kept.dropped.join(", ") },
+			});
+			if (to.length === 0) throw new Error("All recipients are on the suppression list");
+		}
+		const toAddr = joinEmailAddressList(to);
 		const provider = await getOutboundProviderConfig(env, from);
 		// Cloudflare's 5 MiB cap forces big files into download links; Resend takes
 		// the attachments directly (the admin's outgoing limit still applies).
