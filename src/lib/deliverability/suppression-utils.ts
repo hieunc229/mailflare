@@ -1,4 +1,4 @@
-import { normalizeEmailAddress } from "@/lib/email/address";
+import { getEmailAddress, normalizeEmailAddress, splitEmailAddressList } from "@/lib/email/address";
 
 export type SuppressionMode = "off" | "record" | "enforce";
 export type SuppressionReason = "hard_bounce" | "complaint" | "manual";
@@ -24,6 +24,22 @@ export class SuppressedRecipientError extends Error {
 /** Body of the 422 that /api/send and /api/v1/send answer with. */
 export function suppressedRecipientBody(error: SuppressedRecipientError) {
 	return { error: error.message, code: error.code, addresses: error.addresses };
+}
+
+/**
+ * JMAP EmailSubmission/set `notCreated` entry (RFC 8621 section 7.5). `recipientHeaders` are the
+ * client's To/Cc/Bcc values: the addresses are echoed the way the client wrote them, not lower-cased.
+ */
+export function suppressedSubmissionError(error: SuppressedRecipientError, recipientHeaders: (string | null | undefined)[] = []) {
+	const written = new Map<string, string>();
+	for (const header of recipientHeaders) {
+		for (const recipient of splitEmailAddressList(header)) {
+			const address = getEmailAddress(recipient).trim();
+			if (!written.has(address.toLowerCase())) written.set(address.toLowerCase(), address);
+		}
+	}
+	const invalidRecipients = error.addresses.map((address) => written.get(address) ?? address);
+	return { type: "invalidRecipients", description: new SuppressedRecipientError(invalidRecipients).message, invalidRecipients };
 }
 
 const looksLikeAddress = (value: string) => /^[^\s@<>]+@[^\s@<>]+$/.test(value);
