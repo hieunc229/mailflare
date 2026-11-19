@@ -151,6 +151,7 @@ export const stepUpActionSchema = z.enum([
 	"admin.recovery_link",
 	"admin.forwarding_email",
 	"profile.recovery_email",
+	"routing.forward",
 ]);
 
 export const passkeyRegistrationSchema = passkeyCeremonySchema.extend({
@@ -388,6 +389,7 @@ export const changePasswordSchema = z.object({
 });
 
 export const routingRuleSchema = z.object({
+	...recoveryProofFields,
 	domainId: z.string().optional(),
 	pattern: z.string().trim().min(1).max(200).optional(),
 	matchField: z.enum(["email", "content", "title"]).default("email"),
@@ -404,6 +406,7 @@ export const routingRuleSchema = z.object({
 
 export const domainRoutingRuleSchema = z
 	.object({
+		...recoveryProofFields,
 		domainId: z.string().min(1),
 		name: z.string().trim().max(120).optional(),
 		enabled: z.boolean().default(true),

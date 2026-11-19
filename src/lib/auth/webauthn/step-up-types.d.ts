@@ -14,7 +14,8 @@ export type StepUpAction =
 	| "admin.password_reset"
 	| "admin.recovery_link"
 	| "admin.forwarding_email"
-	| "profile.recovery_email";
+	| "profile.recovery_email"
+	| "routing.forward";
 
 export type StepUpGrantInput = {
 	token: string;
