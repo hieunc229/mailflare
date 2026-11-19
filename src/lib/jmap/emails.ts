@@ -1,4 +1,4 @@
-import { and, asc, count, desc, eq, inArray, sql } from "drizzle-orm";
+import { and, asc, count, countDistinct, desc, eq, inArray, sql } from "drizzle-orm";
 import { emailChangesSince, threadChangesSince } from "./changes";
 import { messages } from "@/db/schema";
 import { newId } from "@/lib/ids";
@@ -117,36 +117,57 @@ export const emailGet: JmapMethodHandler = async (ctx, args) => {
 	return { accountId: ctx.accountId, state: await getEmailState(ctx), list, notFound: ids.filter((id) => !found.has(id)) };
 };
 
+/** How many ordered ids Email/query loads when it has to resolve an anchor or collapse threads. */
+const MATERIALISED_QUERY_LIMIT = 10_000;
+
 export const emailQuery: JmapMethodHandler = async (ctx, args) => {
 	const { ids: accessibleIds, condition } = await scope(ctx);
 	const filter = filterToSql(args.filter as Filter | null | undefined, new Set(accessibleIds));
 	const where = filter ? and(condition, filter) : condition;
-	const order = sortToSql(args.sort as Comparator[] | null | undefined);
+	// The id breaks ties, so OFFSET pages are stable on databases (PostgreSQL)
+	// that return equal rows in any order.
+	const order = [...sortToSql(args.sort as Comparator[] | null | undefined), asc(messages.id)];
 	const collapse = !!args.collapseThreads;
 	const limit = Math.min(Math.max(Number(args.limit ?? LIMITS.maxQueryLimit), 0), LIMITS.maxQueryLimit);
 	let position = Number(args.position ?? 0);
 
-	// Anchors are resolved by materialising the ordered id list up to a bound;
-	// mailboxes here are small enough that this stays cheap.
 	const threadKey = sql<string>`coalesce(${messages.threadId}, ${messages.id})`;
-	const allRows = await ctx.db
-		.select({ id: messages.id, thread: threadKey })
-		.from(messages)
-		.where(where)
-		.orderBy(...order)
-		.limit(10_000);
-	let ordered = allRows.map((row) => row.id);
-	if (collapse) {
-		const seen = new Set<string>();
-		ordered = allRows.filter((row) => (seen.has(row.thread) ? false : (seen.add(row.thread), true))).map((row) => row.id);
+	const countTotal = async () => {
+		const [row] = await ctx.db.select({ n: collapse ? countDistinct(threadKey) : count() }).from(messages).where(where);
+		return Number(row?.n ?? 0);
+	};
+
+	let page: string[];
+	let total: number | undefined;
+	if (!args.anchor && !collapse) {
+		// Plain paging is done in SQL, so neither the page nor the total is bounded.
+		if (args.calculateTotal || position < 0) total = await countTotal();
+		if (position < 0) position = Math.max(total! + position, 0);
+		const rows = await ctx.db.select({ id: messages.id }).from(messages).where(where).orderBy(...order).limit(limit).offset(position);
+		page = rows.map((row) => row.id);
+	} else {
+		// Anchors and collapsed threads are resolved by materialising the ordered
+		// id list up to a bound; positions past it are not reachable this way.
+		const allRows = await ctx.db
+			.select({ id: messages.id, thread: threadKey })
+			.from(messages)
+			.where(where)
+			.orderBy(...order)
+			.limit(MATERIALISED_QUERY_LIMIT);
+		let ordered = allRows.map((row) => row.id);
+		if (collapse) {
+			const seen = new Set<string>();
+			ordered = allRows.filter((row) => (seen.has(row.thread) ? false : (seen.add(row.thread), true))).map((row) => row.id);
+		}
+		if (args.anchor) {
+			const index = ordered.indexOf(String(args.anchor));
+			if (index < 0) return { type: "anchorNotFound" };
+			// An offset that reaches before the first result clamps to 0 (RFC 8620 §5.5).
+			position = Math.max(index + Number(args.anchorOffset ?? 0), 0);
+		} else if (position < 0) position = Math.max(ordered.length + position, 0);
+		page = ordered.slice(position, position + limit);
+		if (args.calculateTotal) total = allRows.length < MATERIALISED_QUERY_LIMIT ? ordered.length : await countTotal();
 	}
-	if (args.anchor) {
-		const index = ordered.indexOf(String(args.anchor));
-		if (index < 0) return { type: "anchorNotFound" };
-		// An offset that reaches before the first result clamps to 0 (RFC 8620 §5.5).
-		position = Math.max(index + Number(args.anchorOffset ?? 0), 0);
-	} else if (position < 0) position = Math.max(ordered.length + position, 0);
-	const page = ordered.slice(position, position + limit);
 
 	return {
 		accountId: ctx.accountId,
@@ -154,7 +175,7 @@ export const emailQuery: JmapMethodHandler = async (ctx, args) => {
 		canCalculateChanges: false,
 		position,
 		ids: page,
-		...(args.calculateTotal ? { total: ordered.length } : {}),
+		...(total !== undefined ? { total } : {}),
 	};
 };
 
