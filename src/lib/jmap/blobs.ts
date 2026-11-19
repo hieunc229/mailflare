@@ -1,5 +1,6 @@
 import { and, eq, isNull } from "drizzle-orm";
 import { messageAttachments, messages } from "@/db/schema";
+import { isOthersDraft } from "@/lib/email/draft-access";
 import { newId } from "@/lib/ids";
 import { LIMITS } from "./constants";
 import { decodeBlobId, uploadBlobId } from "./ids";
@@ -64,17 +65,17 @@ export async function readBlob(ctx: JmapContext, blobId: string): Promise<{ body
 	}
 	if (decoded.kind === "att") {
 		const [row] = await ctx.db
-			.select({ r2Key: messageAttachments.r2Key, filename: messageAttachments.filename, type: messageAttachments.contentType, size: messageAttachments.size, mailboxId: messages.mailboxId })
+			.select({ r2Key: messageAttachments.r2Key, filename: messageAttachments.filename, type: messageAttachments.contentType, size: messageAttachments.size, mailboxId: messages.mailboxId, status: messages.status, userId: messages.userId })
 			.from(messageAttachments)
 			.innerJoin(messages, eq(messageAttachments.messageId, messages.id))
 			.where(and(eq(messageAttachments.id, decoded.id), isNull(messageAttachments.trashedAt)))
 			.limit(1);
-		if (!row || !row.mailboxId || !accessible.has(row.mailboxId)) return null;
+		if (!row || !row.mailboxId || !accessible.has(row.mailboxId) || isOthersDraft(row, ctx.auth.userId)) return null;
 		const object = await ctx.env.BUCKET.get(row.r2Key);
 		return object ? { body: object.body, type: row.type, name: row.filename, size: row.size } : null;
 	}
 	const [row] = await ctx.db.select().from(messages).where(and(eq(messages.id, decoded.id))).limit(1);
-	if (!row || !row.mailboxId || !accessible.has(row.mailboxId)) return null;
+	if (!row || !row.mailboxId || !accessible.has(row.mailboxId) || isOthersDraft(row, ctx.auth.userId)) return null;
 	if (row.rawR2Key) {
 		const object = await ctx.env.BUCKET.get(row.rawR2Key);
 		if (object) return { body: object.body, type: "message/rfc822", name: `${row.id}.eml`, size: object.size };

@@ -264,7 +264,9 @@ export const jmapChanges = sqliteTable(
 		objectType: text("object_type", { enum: ["email", "mailbox"] }).notNull(),
 		objectId: text("object_id").notNull(),
 		threadId: text("thread_id"),
-		change: text("change", { enum: ["created", "updated", "destroyed"] }).notNull(),
+		// "hidden" marks a message that stopped being visible to everyone but its author (a scheduled send
+		// cancelled back to a draft): readers who could see it are told it was destroyed, the author is not.
+		change: text("change", { enum: ["created", "updated", "destroyed", "hidden"] }).notNull(),
 		createdAt: integer("created_at").notNull().default(nowSeconds),
 	},
 	(table) => [index("jmap_changes_mailbox_seq_idx").on(table.mailboxId, table.seq)],

@@ -1,6 +1,7 @@
 import { and, count, eq, inArray, isNull, sql } from "drizzle-orm";
 import { mailboxChangesSince } from "./changes";
 import { folders, messages } from "@/db/schema";
+import { draftsVisibleTo } from "@/lib/email/draft-access";
 import { newId } from "@/lib/ids";
 import { JmapError } from "./errors";
 import { decodeMailboxRef, encodeMailboxRef, roleToStatus, SYSTEM_ROLES } from "./ids";
@@ -36,7 +37,7 @@ async function loadCounts(ctx: JmapContext, mailboxIds: string[]): Promise<Map<s
 			unread: sql<number>`sum(case when not ${messages.read} and ${messages.direction} = 'inbound' then 1 else 0 end)`,
 		})
 		.from(messages)
-		.where(inArray(messages.mailboxId, mailboxIds))
+		.where(and(inArray(messages.mailboxId, mailboxIds), draftsVisibleTo(ctx.auth.userId)))
 		.groupBy(messages.mailboxId, messages.status, messages.folderId);
 
 	const add = (key: string, row: { total: number; unread: number }) => {

@@ -1,7 +1,8 @@
-import { and, asc, eq, gt, inArray, sql } from "drizzle-orm";
+import { and, asc, eq, gt, inArray, not, sql } from "drizzle-orm";
 import { getDb, type AppDatabase } from "@/db";
 import { jmapChangeFloor, jmapChanges, messages } from "@/db/schema";
 import { greatest } from "@/db/sql";
+import { DRAFT_FILTER_PARAMS, draftsVisibleTo } from "@/lib/email/draft-access";
 import { listFoldersByMailbox, listJmapMailboxes } from "./access";
 import { encodeMailboxRef, SYSTEM_ROLES } from "./ids";
 import type { AccessibleMailbox, JmapContext } from "./types";
@@ -77,13 +78,13 @@ async function rowsSince(
 	sinceState: unknown,
 	objectType: "email" | "mailbox" | null,
 	limit: number,
-): Promise<{ scope: ChangeScope; rows: ChangeRow[]; hasMore: boolean } | null> {
+): Promise<{ scope: ChangeScope; rows: ChangeRow[]; hasMore: boolean; lastSeq: number } | null> {
 	const since = parseState(sinceState);
 	const scope = await currentChangeScope(ctx);
 	if (!since || since.fingerprint !== scope.fingerprint || since.seq > scope.seq) return null;
 	if (since.seq < (await floorSeq(ctx))) return null;
 	const ids = scope.mailboxes.map((m) => m.id);
-	if (ids.length === 0) return { scope, rows: [], hasMore: false };
+	if (ids.length === 0) return { scope, rows: [], hasMore: false, lastSeq: scope.seq };
 	const conditions = [inArray(jmapChanges.mailboxId, ids), gt(jmapChanges.seq, since.seq)];
 	if (objectType) conditions.push(eq(jmapChanges.objectType, objectType));
 	const rows = await ctx.db
@@ -100,7 +101,40 @@ async function rowsSince(
 		.orderBy(asc(jmapChanges.seq))
 		.limit(limit + 1);
 	const hasMore = rows.length > limit;
-	return { scope, rows: hasMore ? rows.slice(0, limit) : rows, hasMore };
+	const page = hasMore ? rows.slice(0, limit) : rows;
+	// Paging continues from the last logged change, whether or not this account may see it.
+	const lastSeq = page.length ? page[page.length - 1].seq : scope.seq;
+	return { scope, rows: await withoutOthersDrafts(ctx, page), hasMore, lastSeq };
+}
+
+/**
+ * Other users' drafts in a shared mailbox are private, so their ids stay out of the email feeds and
+ * their activity does not mark the mailbox as changed. Two cases need care:
+ *  - a message that was visible and became a draft (a scheduled send cancelled back to Drafts) is
+ *    logged with a "hidden" marker: readers who can no longer see it are told it was destroyed,
+ *    its author just sees an update;
+ *  - a draft that has since been deleted can no longer be told apart; its (random) id is still
+ *    reported as destroyed.
+ */
+async function withoutOthersDrafts(ctx: JmapContext, rows: ChangeRow[]): Promise<ChangeRow[]> {
+	const ids = [...new Set(rows.filter((row) => row.objectType === "email").map((row) => row.objectId))];
+	if (ids.length === 0) return rows;
+	const hidden = new Set<string>();
+	// D1 allows 100 bound parameters per statement; the predicate binds two more.
+	for (let offset = 0; offset < ids.length; offset += 90) {
+		const found = await ctx.db
+			.select({ id: messages.id })
+			.from(messages)
+			.where(and(inArray(messages.id, ids.slice(offset, offset + 90)), eq(messages.status, "draft"), not(draftsVisibleTo(ctx.auth.userId))));
+		for (const row of found) hidden.add(row.id);
+	}
+	const result: ChangeRow[] = [];
+	for (const row of rows) {
+		if (row.objectType !== "email") result.push(row);
+		else if (row.change === "hidden") result.push({ ...row, change: hidden.has(row.objectId) ? "destroyed" : "updated" });
+		else if (!hidden.has(row.objectId)) result.push(row);
+	}
+	return result;
 }
 
 function maxChangesOf(args: Record<string, unknown>): number {
@@ -117,7 +151,7 @@ export async function emailChangesSince(ctx: JmapContext, args: Record<string, u
 	const result = await rowsSince(ctx, args.sinceState, "email", limit);
 	if (!result) return cannot();
 	const { created, updated, destroyed } = coalesceChanges(result.rows.map((row) => ({ id: row.objectId, change: row.change })));
-	const newState = result.hasMore ? formatState(result.rows[result.rows.length - 1].seq, result.scope.fingerprint) : result.scope.state;
+	const newState = result.hasMore ? formatState(result.lastSeq, result.scope.fingerprint) : result.scope.state;
 	return { accountId: ctx.accountId, oldState: args.sinceState, newState, hasMoreChanges: result.hasMore, created, updated, destroyed };
 }
 
@@ -138,14 +172,14 @@ export async function threadChangesSince(ctx: JmapContext, args: Record<string, 
 	const ids = result.scope.mailboxes.map((m) => m.id);
 	const threadKey = sql<string>`coalesce(${messages.threadId}, ${messages.id})`;
 	const alive = new Set<string>();
-	// D1 allows 100 bound parameters per statement: the mailbox ids share them with the thread ids.
-	const threadChunk = Math.max(1, 100 - ids.length);
+	// D1 allows 100 bound parameters per statement: the mailbox ids and the draft filter share them with the thread ids.
+	const threadChunk = Math.max(1, 100 - ids.length - DRAFT_FILTER_PARAMS);
 	for (let offset = 0; offset < threads.length; offset += threadChunk) {
 		const chunk = threads.slice(offset, offset + threadChunk);
 		const rows = await ctx.db
 			.selectDistinct({ thread: threadKey })
 			.from(messages)
-			.where(and(inArray(threadKey, chunk), inArray(messages.mailboxId, ids)));
+			.where(and(inArray(threadKey, chunk), inArray(messages.mailboxId, ids), draftsVisibleTo(ctx.auth.userId)));
 		for (const row of rows) alive.add(row.thread);
 	}
 	const created: string[] = [];
@@ -156,7 +190,7 @@ export async function threadChangesSince(ctx: JmapContext, args: Record<string, 
 		else if (first === "created" && result.rows.every((row) => (row.threadId ?? row.objectId) !== thread || row.change === "created")) created.push(thread);
 		else updated.push(thread);
 	}
-	const newState = result.hasMore ? formatState(result.rows[result.rows.length - 1].seq, result.scope.fingerprint) : result.scope.state;
+	const newState = result.hasMore ? formatState(result.lastSeq, result.scope.fingerprint) : result.scope.state;
 	return { accountId: ctx.accountId, oldState: args.sinceState, newState, hasMoreChanges: result.hasMore, created, updated, destroyed };
 }
 
@@ -193,7 +227,7 @@ export async function mailboxChangesSince(ctx: JmapContext, args: Record<string,
 			}
 		}
 	}
-	const newState = result.hasMore ? formatState(result.rows[result.rows.length - 1].seq, result.scope.fingerprint) : result.scope.state;
+	const newState = result.hasMore ? formatState(result.lastSeq, result.scope.fingerprint) : result.scope.state;
 	return { accountId: ctx.accountId, oldState: args.sinceState, newState, hasMoreChanges: result.hasMore, updatedProperties: null, created, updated, destroyed };
 }
 
