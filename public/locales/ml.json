@@ -1,6 +1,7 @@
 {
 	"navigation.compose": "എഴുതുക",
 	"navigation.inbox": "ഇൻബോക്സ്",
+	"navigation.allInboxes": "എല്ലാ ഇൻബോക്സുകളും",
 	"navigation.starred": "നക്ഷത്രം",
 	"navigation.snoozed": "മാറ്റിവച്ചവ",
 	"navigation.sent": "അയച്ചവ",

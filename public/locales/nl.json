@@ -1,6 +1,7 @@
 {
 	"navigation.compose": "Opstellen",
 	"navigation.inbox": "Postvak IN",
+	"navigation.allInboxes": "Alle inboxen",
 	"navigation.starred": "Met ster",
 	"navigation.snoozed": "Uitgesteld",
 	"navigation.sent": "Verzonden",

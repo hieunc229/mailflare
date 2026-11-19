@@ -1,6 +1,7 @@
 {
 	"navigation.compose": "लिखें",
 	"navigation.inbox": "इनबॉक्स",
+	"navigation.allInboxes": "सभी इनबॉक्स",
 	"navigation.starred": "स्टार लगे",
 	"navigation.snoozed": "स्नूज़",
 	"navigation.sent": "भेजे गए",

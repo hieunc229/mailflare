@@ -1,6 +1,7 @@
 {
 	"navigation.compose": "Napisz",
 	"navigation.inbox": "Odebrane",
+	"navigation.allInboxes": "Wszystkie skrzynki odbiorcze",
 	"navigation.starred": "Z gwiazdką",
 	"navigation.snoozed": "Odłożone",
 	"navigation.sent": "Wysłane",

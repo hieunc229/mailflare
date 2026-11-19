@@ -1,6 +1,7 @@
 {
 	"navigation.compose": "Compose",
 	"navigation.inbox": "Inbox",
+	"navigation.allInboxes": "All inboxes",
 	"navigation.starred": "Starred",
 	"navigation.snoozed": "Snoozed",
 	"navigation.sent": "Sent",

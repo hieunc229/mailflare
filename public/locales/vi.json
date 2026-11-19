@@ -1,6 +1,7 @@
 {
 	"navigation.compose": "Soạn thư",
 	"navigation.inbox": "Hộp thư đến",
+	"navigation.allInboxes": "Tất cả hộp thư đến",
 	"navigation.starred": "Gắn sao",
 	"navigation.snoozed": "Tạm hoãn",
 	"navigation.sent": "Đã gửi",

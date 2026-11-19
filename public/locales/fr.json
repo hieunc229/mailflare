@@ -1,6 +1,7 @@
 {
 	"navigation.compose": "Écrire",
 	"navigation.inbox": "Réception",
+	"navigation.allInboxes": "Toutes les boîtes de réception",
 	"navigation.starred": "Suivis",
 	"navigation.snoozed": "Reportés",
 	"navigation.sent": "Envoyés",

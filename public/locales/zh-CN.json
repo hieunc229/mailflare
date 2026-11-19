@@ -1,6 +1,7 @@
 {
 	"navigation.compose": "写邮件",
 	"navigation.inbox": "收件箱",
+	"navigation.allInboxes": "所有收件箱",
 	"navigation.starred": "已加星标",
 	"navigation.snoozed": "已推迟",
 	"navigation.sent": "已发送",

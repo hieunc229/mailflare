@@ -1,6 +1,7 @@
 {
 	"navigation.compose": "Rubuta",
 	"navigation.inbox": "Saƙonni",
+	"navigation.allInboxes": "Duk akwatunan saƙo",
 	"navigation.starred": "Masu tauraro",
 	"navigation.snoozed": "Jinkirtattu",
 	"navigation.sent": "Aika",

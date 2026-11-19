@@ -1,6 +1,7 @@
 {
 	"navigation.compose": "Verfassen",
 	"navigation.inbox": "Posteingang",
+	"navigation.allInboxes": "Alle Posteingänge",
 	"navigation.starred": "Markiert",
 	"navigation.snoozed": "Zurückgestellt",
 	"navigation.sent": "Gesendet",

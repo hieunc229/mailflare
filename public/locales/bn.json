@@ -1,6 +1,7 @@
 {
 	"navigation.compose": "লিখুন",
 	"navigation.inbox": "ইনবক্স",
+	"navigation.allInboxes": "সব ইনবক্স",
 	"navigation.starred": "তারকা চিহ্নিত",
 	"navigation.snoozed": "স্নুজ",
 	"navigation.sent": "পাঠানো",

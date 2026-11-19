@@ -1,6 +1,7 @@
 {
 	"navigation.compose": "เขียนอีเมล",
 	"navigation.inbox": "กล่องจดหมาย",
+	"navigation.allInboxes": "กล่องจดหมายทั้งหมด",
 	"navigation.starred": "ติดดาว",
 	"navigation.snoozed": "เลื่อนเวลา",
 	"navigation.sent": "ส่งแล้ว",
