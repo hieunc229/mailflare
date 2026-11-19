@@ -71,3 +71,30 @@ export function isBulkMail(headers: MailHeaders | undefined | null): BulkMailRes
 	if (bulk && getMailHeader(headers, "feedback-id")) reasons.push("feedback-id");
 	return { bulk, reasons };
 }
+
+export type BulkMailVerdict = {
+	/** Exactly `isBulkMail(headers).bulk`. */
+	bulk: boolean;
+	/**
+	 * `list`: a discussion list (`List-Post`, or `Precedence: list` with `List-Id`).
+	 * `marketing`: bulk but not a discussion list.
+	 * `null`: not bulk.
+	 */
+	kind: "marketing" | "list" | null;
+	/** `isBulkMail` signal names (header only, no value). */
+	signals: string[];
+};
+
+/**
+ * Classifies one message for the Promotions view from its headers alone. Strong signals are exactly
+ * `isBulkMail`'s, so routing rules and Promotions never disagree about what is bulk. ESP trace headers
+ * (`X-SES-Outgoing`, `X-SG-EID`, ...) and a footer unsubscribe link are deliberately not signals:
+ * receipts and password resets carry both.
+ */
+export function detectBulkMail(headers: MailHeaders | undefined | null): BulkMailVerdict {
+	const { bulk, reasons } = isBulkMail(headers);
+	const signals = reasons.map((reason) => reason.split(":")[0]);
+	const discussionList = !!getMailHeader(headers, "list-post") || (!!getMailHeader(headers, "list-id") && getMailHeader(headers, "precedence").toLowerCase() === "list");
+	const kind = !bulk ? null : discussionList ? "list" : "marketing";
+	return { bulk, kind, signals };
+}
