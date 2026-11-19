@@ -1,4 +1,4 @@
-import { count, desc, eq, getTableColumns, sql } from "drizzle-orm";
+import { countDistinct, desc, eq, getTableColumns, sql, sum } from "drizzle-orm";
 import { messages } from "@/db/schema";
 import type { ConversationPage, ConversationPageInput, MessageListColumns } from "./types";
 
@@ -17,18 +17,20 @@ export function conversationKey(mailboxId: string | null, threadKey: string): st
 	return `${mailboxId ?? ""}\u0000${threadKey}`;
 }
 
-/** Counted from distinct (mailbox, thread) pairs: `count(distinct …)` takes one expression on SQLite. */
+/**
+ * Distinct threads per mailbox, summed. A `select distinct mailbox_id, thread` subquery counts the same
+ * pairs, but across several mailboxes SQLite then reads it through a non-covering index; a one-expression
+ * `count(distinct …)` per mailbox stays on the covering index.
+ */
 async function countConversations({ db, where }: Pick<ConversationPageInput, "db" | "where">): Promise<number> {
-	const keys = db
-		.selectDistinct({
-			mailboxId: messages.mailboxId,
-			threadKey: sql<string>`coalesce(${messages.threadId}, ${messages.id})`.as("thread_key"),
-		})
+	const perMailbox = db
+		.select({ conversations: countDistinct(sql`coalesce(${messages.threadId}, ${messages.id})`).as("conversations") })
 		.from(messages)
 		.where(where)
-		.as("conversation_keys");
-	const [totals] = await db.select({ total: count() }).from(keys);
-	return totals?.total ?? 0;
+		.groupBy(messages.mailboxId)
+		.as("mailbox_conversations");
+	const [totals] = await db.select({ total: sum(perMailbox.conversations) }).from(perMailbox);
+	return Number(totals?.total ?? 0);
 }
 
 /** Select one newest matching message per thread before applying pagination. */
