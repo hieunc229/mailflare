@@ -40,7 +40,7 @@ Next.js App Router APIs running on Cloudflare Workers via vinext. Drizzle ORM ov
 
 - **`fetch`** — intercepts `/api/realtime` for the WebSocket upgrade (authenticates the session cookie, then routes to `env.REALTIME.getByName(user.id)`), delegating everything else to vinext.
 - **`email`** — the Cloudflare Email Routing handler. Resolves domain routing rules first (`resolveIncomingMail` in `src/lib/email/incoming.ts`) because `message.setReject()` and `message.forward()` only exist here, then applies optional account-level forwarding (loop-guarded by the `MAILFLARE_FORWARDED_HEADER`), writes raw MIME to R2, and enqueues to `INBOUND_QUEUE`. It never parses mail inline.
-- **`queue`** — a single consumer for all three queues (inbound, outbound, agent); `isInboundQueueMessage` and `isWebhookRetryMessage` in `worker-utils.ts` discriminate inbound mail, webhook retries, and outbound payloads. Failures `retry({ delaySeconds: 10 })`.
+- **`queue`** — a single consumer for all three queues (inbound, outbound, agent); `isInboundQueueMessage` and `isWebhookRetryMessage` in `worker-utils.ts` discriminate inbound mail, webhook retries, and outbound payloads. Failures `retry({ delaySeconds: 10 })` until the queue's `max_retries` (inbound 12; retries are idempotent because inbound skips an already-stored `rawR2Key`); inbound mail that fails on a missing column or table (migration not applied yet) retries every 300 s instead (`settleFailedInboundMessage`, inbound `max_retries` 12, about an hour), see `docs/deployment.md`.
 
 It also re-exports `RealtimeHub`, which must remain exported from the Worker entrypoint.
 
