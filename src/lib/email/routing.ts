@@ -3,6 +3,8 @@ import type { AppDatabase } from "@/db";
 import { domains, folders, mailboxAliases, mailboxes, routingRules } from "@/db/schema";
 import { getEmailAddress } from "@/lib/email/address";
 import { getMailboxDomainAddresses } from "@/lib/mailboxes/domain-addresses";
+import { isBulkMail, type MailHeaders } from "@/lib/email/bulk-mail";
+import { MAIL_TYPE_BULK } from "@/lib/email/mail-type-rule";
 import { normalizeRecipientLocalPart, parseRecipientAddress } from "@/lib/email/recipient-address";
 
 export type ResolvedMailbox = {
@@ -38,9 +40,13 @@ export type RuleMatchInput = {
 	fromAddress?: string | null;
 	subject?: string | null;
 	content?: string | null;
+	/** Message headers, for rules on the `mail_type` field. Without them such a rule never matches. */
+	headers?: MailHeaders | null;
 };
 
 export type ResolveInboundOptions = {
+	/** Message headers, so domain and mailbox-forward rules can match `mail_type`. */
+	headers?: MailHeaders | null;
 	/**
 	 * Apply the mailbox owner's own forwarding rules. Only the receiving handlers set this:
 	 * they can still forward the live message, and they know the subject.
@@ -80,12 +86,14 @@ export async function resolveInboundAddress(
 	if (!domain) return null;
 
 	const domainRules = await listDomainRules(db, domain.id);
-	const matchInput: RuleMatchInput = { toAddress, fromAddress };
+	const matchInput: RuleMatchInput = { toAddress, fromAddress, headers: options.headers };
 
 	// Phase 1 — block rules run before any mailbox lookup so they can block a sender
 	// even when the recipient is a real mailbox.
 	for (const rule of domainRules) {
 		if (rule.action !== "reject") continue;
+		// Backstop: the API refuses this combination; a stored row must never bounce bulk-matched mail.
+		if (rule.matchField === "mail_type") continue;
 		if (!matchesRule(rule, matchInput)) continue;
 		return {
 			action: "reject",
@@ -120,7 +128,7 @@ export async function resolveInboundAddress(
 			return {
 				action: "forward",
 				forwardTo: forward.forwardTo,
-				keepCopy: forward.keepCopy,
+				keepCopy: forward.keepCopy || forward.matchField === "mail_type",
 				mailbox: resolved,
 				ruleId: forward.id,
 			};
@@ -137,10 +145,13 @@ export async function resolveInboundAddress(
 			const forwardTo = rule.forwardTo?.trim();
 			if (!forwardTo) continue;
 			const catchAll = rule.mailboxId ? await getRuleMailbox(db, rule.mailboxId, domain.id) : null;
+			const bulkRule = rule.matchField === "mail_type";
+			// Backstop: a mail_type forward always keeps a copy; without a copy target it is skipped.
+			if (bulkRule && !catchAll) continue;
 			return {
 				action: "forward",
 				forwardTo,
-				keepCopy: rule.keepCopy && !!catchAll,
+				keepCopy: (rule.keepCopy || bulkRule) && !!catchAll,
 				mailbox: catchAll ?? undefined,
 				ruleId: rule.id,
 			};
@@ -299,6 +310,7 @@ export async function resolveInboxRuleDestination(
 		fromAddress?: string | null;
 		subject?: string | null;
 		content?: string | null;
+		headers?: MailHeaders | null;
 	},
 ): Promise<InboxRuleDestination> {
 	const rules = await db
@@ -338,6 +350,10 @@ type MatchableRule = {
 };
 
 export function matchesRule(rule: MatchableRule, input: RuleMatchInput): boolean {
+	// The condition is the field itself ("is bulk mail"); operator and "*" do not apply.
+	if (rule.matchField === "mail_type") {
+		return (rule.matchValue || rule.pattern).trim().toLowerCase() === MAIL_TYPE_BULK && isBulkMail(input.headers).bulk;
+	}
 	const rawValue = (rule.matchValue || rule.pattern).trim();
 	// "*" is the catch-all pattern used by catch-all and block-everything rules.
 	if (rawValue === "*") return true;

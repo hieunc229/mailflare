@@ -12,11 +12,12 @@ export async function resolveIncomingMail(
 	env: CloudflareEnv,
 	from: string,
 	to: string,
-	headers?: { subject?: string | null; from?: string | null; alreadyForwarded?: boolean },
+	headers?: { subject?: string | null; from?: string | null; alreadyForwarded?: boolean; all?: Record<string, string> },
 ): Promise<RoutingDecision | null> {
 	try {
 		const db = getDb(env);
 		const decision = await resolveInboundAddress(db, to, from, {
+			headers: headers?.all,
 			// A message that already went through a forward is never forwarded again by a
 			// mailbox rule, so two inboxes forwarding to each other cannot loop.
 			mailboxForwards: headers?.alreadyForwarded ? undefined : { subject: headers?.subject, from: headers?.from },

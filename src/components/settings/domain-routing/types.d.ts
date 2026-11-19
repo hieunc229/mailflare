@@ -1,5 +1,5 @@
 export type DomainRuleAction = "store" | "forward" | "reject";
-export type DomainRuleField = "recipient" | "sender" | "title" | "content";
+export type DomainRuleField = "recipient" | "sender" | "title" | "content" | "mail_type";
 export type DomainRuleOperator = "contains" | "exact" | "starts_with" | "ends_with" | "regex";
 
 export type DomainRule = {

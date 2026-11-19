@@ -48,7 +48,7 @@ export async function processInboundMessage(
 	const db = getDb(env);
 	// The sender is passed so that sender-based block rules resolve the same way here as they
 	// do in the Worker email handler.
-	const decision = await resolveInboundAddress(db, payload.to, payload.from);
+	const decision = await resolveInboundAddress(db, payload.to, payload.from, { headers: payload.headers });
 
 	// Nothing references the raw object on these paths, so keep it from piling up in storage.
 	const dropRaw = () => env.BUCKET.delete(payload.rawR2Key).catch((error) => console.error(`Raw cleanup failed for ${payload.rawR2Key}`, error));
@@ -124,6 +124,7 @@ export async function processInboundMessage(
 		fromAddress: fromAddr,
 		subject: parsed.subject,
 		content: [parsed.text, parsed.html, snippet].filter(Boolean).join(" "),
+		headers: payload.headers,
 	});
 	let spamAnalysis: Awaited<ReturnType<typeof analyzeSpam>> | null = null;
 	let spamAnalysisError: string | null = null;

@@ -736,7 +736,7 @@ export const routingRules = sqliteTable(
 		enabled: bool("enabled").notNull().default(true),
 		pattern: text("pattern").notNull(),
 		matchField: text("match_field", {
-			enum: ["email", "content", "title", "sender", "recipient"],
+			enum: ["email", "content", "title", "sender", "recipient", "mail_type"],
 		})
 			.notNull()
 			.default("email"),

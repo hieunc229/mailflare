@@ -6,7 +6,7 @@ export type RuleFolder = {
 export type InboxRule = {
 	id: string;
 	pattern: string;
-	matchField: "email" | "content" | "title";
+	matchField: "email" | "content" | "title" | "mail_type";
 	matchOperator: "contains" | "exact";
 	matchValue: string;
 	action: "store" | "forward" | "reject" | "spam" | "trash";
@@ -18,7 +18,7 @@ export type InboxRule = {
 
 export type InboxRuleInput = {
 	mailboxId: string;
-	matchField: "email" | "content" | "title";
+	matchField: "email" | "content" | "title" | "mail_type";
 	matchOperator: "contains" | "exact";
 	matchValue: string;
 	destination: string;
