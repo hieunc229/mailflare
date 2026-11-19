@@ -11,9 +11,6 @@ on:
 permissions:
   contents: read
 
-env:
-  IMAGE: ghcr.io/hieunc229/mailflare
-
 jobs:
   build:
     # Update Mailflare copies .github/workflows into every installation
@@ -33,6 +30,9 @@ jobs:
       contents: read
       packages: write
     steps:
+      - name: Set image name
+        run: echo "IMAGE=ghcr.io/${GITHUB_REPOSITORY,,}" >> "$GITHUB_ENV"
+
       - name: Prepare
         run: |
           platform=${{ matrix.platform }}
@@ -87,6 +87,9 @@ jobs:
       contents: read
       packages: write
     steps:
+      - name: Set image name
+        run: echo "IMAGE=ghcr.io/${GITHUB_REPOSITORY,,}" >> "$GITHUB_ENV"
+
       - uses: actions/checkout@v7
 
       - name: Read package version
