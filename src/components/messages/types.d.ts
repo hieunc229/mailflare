@@ -3,6 +3,7 @@ import type { LucideIcon } from "@/components/icons";
 import type { Dispatch, ReactNode, SetStateAction } from "react";
 import type { Message, MessageFolder } from "@/hooks/types";
 import type { BulkMessageAction } from "@/app/api/messages/bulk/types";
+import type { MailboxChip } from "./all-inboxes-utils";
 
 export type MessageFolderConfig = {
 	folder: MessageFolder;
@@ -17,6 +18,8 @@ export type MessageFolderConfig = {
 	headerIcons?: LucideIcon[];
 	badgeVariant?: "default" | "secondary" | "outline";
 	showRowBadge?: boolean;
+	/** List the folder across every readable mailbox instead of the selected one (All inboxes). */
+	allMailboxes?: boolean;
 };
 
 export type MessageListRowProps = {
@@ -34,6 +37,8 @@ export type MessageListRowProps = {
 	showCompactRowActions?: boolean;
 	dragMessageIds?: string[];
 	todayKey: string;
+	/** Set in All inboxes: the mailbox this row belongs to. */
+	mailboxChip?: MailboxChip;
 };
 
 export type RowMessageAction = "archive" | "trash" | "read" | "unread" | "inbox" | "delete";
@@ -79,6 +84,8 @@ export type BulkMessageToolbarProps = {
 	pending: boolean;
 	/** Folder being listed; archived, spam and trash offer a way back instead of the same move. */
 	folder?: MessageFolder;
+	/** Custom folders belong to one mailbox, so a selection that can span mailboxes is not offered them. */
+	hideCustomFolders?: boolean;
 };
 
 export type SelectedMessage = Pick<Message, "id" | "read">;
@@ -94,6 +101,7 @@ export type MessageListStateControl = {
 
 export type BulkMessageActionBarProps = {
 	folder?: MessageFolder;
+	hideCustomFolders?: boolean;
 	selectedMessages: SelectedMessage[];
 	onClearSelection: () => void;
 };
