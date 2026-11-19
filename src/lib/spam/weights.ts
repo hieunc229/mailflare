@@ -1,7 +1,9 @@
 export const SPAM_THRESHOLDS = { suspicious: 40, spam: 70 } as const;
 
 export const SPAM_WEIGHTS = {
-	authentication: { dmarcFail: 18, dmarcPass: -8, dkimFail: 8, dkimPass: -4, spfFail: 6, spfPass: -2 },
+	authentication: { dmarcFail: 18, dmarcPass: -8, dkimFail: 8, dkimPass: -4, spfFail: 6, spfPass: -2,
+		/** Passes count this fraction for a first contact; saved or written-to contacts, good reputation and recurring senders get all of it. */
+		unknownSenderPassScale: 0.5 },
 	relationships: { manuallySavedContact: -15, previouslySentTo: -25 },
 	reputation: { establishedSpam: 25, establishedHam: -15 },
 	content: { maximum: 30 },

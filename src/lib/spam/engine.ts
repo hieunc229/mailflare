@@ -16,6 +16,8 @@ import { SPAM_THRESHOLDS, SPAM_WEIGHTS } from "./weights";
 import { LocalSpamIntelligenceProvider } from "./providers/local";
 
 const MAX_KNOWN_DOMAINS = 2000;
+/** Earlier messages from the exact address after which a sender counts as recurring rather than a first contact. */
+const RECURRING_SENDER_MESSAGES = 2;
 
 /** Domains a lookalike sender would imitate: ones the user wrote to or saved, and the instance's own. */
 async function listKnownDomains(db: AppDatabase, userId: string): Promise<string[]> {
@@ -79,6 +81,21 @@ export async function analyzeSpam(db: AppDatabase, input: SpamAnalysisInput): Pr
 		const spamRatio = (record.spamCount + 1) / (record.spamCount + record.hamCount + 2);
 		if (spamRatio >= 0.8) reputationSignals.push({ id: `poor_${identity.type}_reputation`, score: SPAM_WEIGHTS.reputation.establishedSpam, reason: `${identity.type === "fingerprint" ? "Similar messages have" : "This sender has"} repeatedly been marked as spam` });
 		if (spamRatio <= 0.2) reputationSignals.push({ id: `good_${identity.type}_reputation`, score: SPAM_WEIGHTS.reputation.establishedHam, reason: `${identity.type === "fingerprint" ? "Similar messages have" : "This sender has"} repeatedly been marked as legitimate` });
+	}
+	// A pass proves the mail came from the domain it claims, not that the domain is trustworthy: a throwaway
+	// domain passes DMARC and DKIM for its own mail. Full credit goes to senders the user has a relationship
+	// with or who have written to this mailbox repeatedly without being reported; a first contact gets a
+	// partial credit. Failures above are never softened.
+	const emailRecord = reputationRecords.find(({ identity }) => identity.type === "email")?.record;
+	const established = contact?.source === "manual" || contact?.source === "outbound"
+		|| reputationSignals.some((signal) => signal.id === "good_email_reputation" || signal.id === "good_domain_reputation")
+		|| (!!emailRecord && emailRecord.messagesSeen >= RECURRING_SENDER_MESSAGES && emailRecord.spamCount === 0);
+	if (!established) {
+		for (const signal of signals) {
+			if (signal.id === "dmarc_passed" || signal.id === "dkim_passed" || signal.id === "spf_passed") {
+				signal.score = Math.round(signal.score * SPAM_WEIGHTS.authentication.unknownSenderPassScale);
+			}
+		}
 	}
 	const strongestReputation = reputationSignals.sort((a, b) => Math.abs(b.score) - Math.abs(a.score))[0];
 	if (strongestReputation) signals.push(strongestReputation);
