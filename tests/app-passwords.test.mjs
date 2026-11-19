@@ -85,8 +85,9 @@ test("the app protocols are separate from the general API key scopes", () => {
 	for (const protocol of ["dav", "imap", "submission"]) assert.equal(API_KEY_SCOPES.includes(protocol), false);
 });
 
-test("only protocols the server can serve are offered", () => {
-	assert.deepEqual(availableAppPasswordProtocols(), ["jmap"]);
+test("only protocols the server can serve are offered", async (t) => {
+	const { env } = await fixture(t);
+	assert.deepEqual(await availableAppPasswordProtocols(env), ["jmap"]);
 });
 
 test("an app password works for its protocol only, never for another", async (t) => {

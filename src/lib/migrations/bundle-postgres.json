@@ -457,6 +457,12 @@
         "ALTER TABLE \"api_keys\" ADD COLUMN \"last_used_protocol\" text;",
         "ALTER TABLE \"api_keys\" ADD COLUMN \"last_used_ip\" text;"
       ]
+    },
+    {
+      "name": "0021_dav_enabled.sql",
+      "statements": [
+        "ALTER TABLE \"app_settings\" ADD COLUMN \"dav_enabled\" boolean DEFAULT false NOT NULL;"
+      ]
     }
   ]
 }

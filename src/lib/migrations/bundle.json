@@ -903,6 +903,12 @@
         "ALTER TABLE `api_keys` ADD `last_used_protocol` text;",
         "ALTER TABLE `api_keys` ADD `last_used_ip` text;"
       ]
+    },
+    {
+      "name": "0097_dav_enabled.sql",
+      "statements": [
+        "ALTER TABLE `app_settings` ADD `dav_enabled` integer DEFAULT 0 NOT NULL;"
+      ]
     }
   ]
 }

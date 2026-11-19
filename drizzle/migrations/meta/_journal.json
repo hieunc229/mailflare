@@ -617,6 +617,13 @@
       "when": 1795027681014,
       "tag": "0096_app_password_usage",
       "breakpoints": true
+    },
+    {
+      "idx": 83,
+      "version": "6",
+      "when": 1794516481571,
+      "tag": "0097_dav_enabled",
+      "breakpoints": true
     }
   ]
 }
