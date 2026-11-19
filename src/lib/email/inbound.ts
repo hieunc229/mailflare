@@ -31,6 +31,8 @@ import {
 } from "@/lib/realtime/utils";
 import { scheduleAutoDraft } from "@/lib/agent/jobs/utils";
 import { buildNewMessageNotification } from "@/lib/email/inbound-notification";
+import { readHeaderMap } from "@/lib/email/provider-trace";
+import { classifyInboundCategory } from "@/lib/promotions/classify";
 
 export type InboundQueueMessage = {
 	from: string;
@@ -167,6 +169,12 @@ export async function processInboundMessage(
 		console.error(`Contact upsert failed for ${messageId}`, error);
 		return null;
 	});
+	const { category, senderAddress } = await classifyInboundCategory(db, {
+		mailboxId: decision.mailbox.mailboxId,
+		from: fromAddr,
+		headers: payload.headers ?? readHeaderMap(buffer),
+		contactSource: contact?.source,
+	});
 	let threadId: string;
 	try {
 		threadId = await resolveThreadId(db, {
@@ -210,6 +218,8 @@ export async function processInboundMessage(
 			inReplyTo: parsed.inReplyTo,
 			references: parsed.references.length ? parsed.references.join(" ") : null,
 			hasUnsubscribe: !!extractUnsubscribeUrlFromRaw(buffer) || !!extractUnsubscribeLinkFromBody(parsed.html, parsed.text),
+			category,
+			senderAddress,
 			spamScore: spamAnalysis?.score ?? null,
 			spamVerdict: spamAnalysis?.verdict ?? null,
 			spamSignals: spamAnalysis ? JSON.stringify(spamAnalysis.signals) : null,
