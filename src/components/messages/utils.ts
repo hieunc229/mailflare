@@ -57,6 +57,16 @@ export function getUnreadFlipCount(message: Message, readValue: boolean): number
 	return message.read === readValue ? 0 : 1;
 }
 
+/** Inbox unread changes for a read or unread action, one per mailbox, so each mailbox's counts move only for its own messages. */
+export function getInboxUnreadDeltas(messages: Message[], readValue: boolean): Array<{ mailboxId: string | null; inboxUnreadDelta: number }> {
+	const flipsByMailbox = new Map<string | null, number>();
+	for (const message of messages) {
+		const flips = getUnreadFlipCount(message, readValue);
+		if (flips) flipsByMailbox.set(message.mailboxId, (flipsByMailbox.get(message.mailboxId) ?? 0) + flips);
+	}
+	return Array.from(flipsByMailbox, ([mailboxId, flips]) => ({ mailboxId, inboxUnreadDelta: readValue ? -flips : flips }));
+}
+
 export function getMessagePreview(message: Message, folder: MessageFolderConfig["folder"], t: Translator = defaultTranslator) {
 	if (folder === "drafts") return message.snippet || message.toAddr || t("list.noContent");
 	return message.snippet || t("thread.noPreview");

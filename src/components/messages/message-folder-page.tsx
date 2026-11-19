@@ -40,6 +40,7 @@ import {
 	getMessagePartyClassName,
 	getMessagePreview,
 	getUnreadFlipCount,
+	getInboxUnreadDeltas,
 	isMessageListRowUnread,
 	formatEmailPageTitle,
 	getMailboxAddress,
@@ -156,18 +157,18 @@ function MessageListRowComponent({
 			if (action === "read") setThreadUnread(0);
 			if (action === "unread") setThreadUnread(message.threadMessageIds.length);
 		}
-		if (unreadDelta) dispatchMessageCountsDelta({ inboxUnreadDelta: unreadDelta });
+		if (unreadDelta) dispatchMessageCountsDelta({ inboxUnreadDelta: unreadDelta, mailboxId: message.mailboxId });
 		try {
 			await onMessageAction(message.id, action);
 		} catch (error) {
 			if (action === "read" || action === "unread") {
 				setRead(previousRead);
 				setThreadUnread(previousThreadUnread);
-				if (unreadDelta) dispatchMessageCountsDelta({ inboxUnreadDelta: -unreadDelta });
+				if (unreadDelta) dispatchMessageCountsDelta({ inboxUnreadDelta: -unreadDelta, mailboxId: message.mailboxId });
 			}
 			throw error;
 		}
-	}, [affectsInboxCount, message.id, message.threadMessageIds, onMessageAction, read, rowMessage, threadUnread]);
+	}, [affectsInboxCount, message.id, message.mailboxId, message.threadMessageIds, onMessageAction, read, rowMessage, threadUnread]);
 
 	const swipeable = compact && (config.folder === "inbox" || config.folder === "snoozed") && message.direction === "inbound";
 
@@ -179,11 +180,11 @@ function MessageListRowComponent({
 			const previousThreadUnread = threadUnread;
 			setRead(true);
 			if (previousThreadUnread !== undefined) setThreadUnread(Math.max(0, previousThreadUnread - 1));
-			if (affectsInboxCount && message.direction === "inbound") dispatchMessageCountsDelta({ inboxUnreadDelta: -1 });
+			if (affectsInboxCount && message.direction === "inbound") dispatchMessageCountsDelta({ inboxUnreadDelta: -1, mailboxId: message.mailboxId });
 			void runBulkMessageAction([message.id], "read", false, undefined, { undo: false }).catch(() => {
 				setRead(false);
 				setThreadUnread(previousThreadUnread);
-				if (affectsInboxCount && message.direction === "inbound") dispatchMessageCountsDelta({ inboxUnreadDelta: 1 });
+				if (affectsInboxCount && message.direction === "inbound") dispatchMessageCountsDelta({ inboxUnreadDelta: 1, mailboxId: message.mailboxId });
 			});
 		}
 		navigation.onNavigate(event, !read);
@@ -623,11 +624,9 @@ export function MessageFolderPage({
 			.map((message) => [message.id, { read: message.read, threadUnread: message.threadUnread }]));
 		const previousSelectedRead = new Map(selectedMessages.map((message) => [message.id, message.read]));
 		const readValue = action === "read" ? true : action === "unread" ? false : null;
-		const inboxUnreadDelta = readValue === null || config.folder !== "inbox" || config.folderId
-			? 0
-			: messages
-				.filter((message) => selectedIdSet.has(message.id))
-				.reduce((total, message) => total + getUnreadFlipCount(message, readValue), 0) * (readValue ? -1 : 1);
+		const inboxUnreadDeltas = readValue === null || config.folder !== "inbox" || config.folderId
+			? []
+			: getInboxUnreadDeltas(messages.filter((message) => selectedIdSet.has(message.id)), readValue);
 		if (readValue !== null) {
 			updateMessages((current) => current.map((message) =>
 				selectedIdSet.has(message.id)
@@ -635,7 +634,7 @@ export function MessageFolderPage({
 					: message,
 			));
 			setSelectedMessages((current) => current.map((message) => ({ ...message, read: readValue })));
-			if (inboxUnreadDelta) dispatchMessageCountsDelta({ inboxUnreadDelta });
+			for (const delta of inboxUnreadDeltas) dispatchMessageCountsDelta(delta);
 		}
 		try {
 			await runBulkMessageAction(expandSelectedIds(selectedIds), action, true, folderId);
@@ -657,7 +656,7 @@ export function MessageFolderPage({
 					const previous = previousSelectedRead.get(message.id);
 					return previous === undefined ? message : { ...message, read: previous };
 				}));
-				if (inboxUnreadDelta) dispatchMessageCountsDelta({ inboxUnreadDelta: -inboxUnreadDelta });
+				for (const delta of inboxUnreadDeltas) dispatchMessageCountsDelta({ ...delta, inboxUnreadDelta: -delta.inboxUnreadDelta });
 			}
 			throw error;
 		} finally {
