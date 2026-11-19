@@ -13,6 +13,7 @@ import { tracksAccountIdentity } from "@/lib/profile/identity-utils";
 import { buildSearchConditions } from "@/lib/search/conditions";
 import { getRequestTimeZone } from "@/lib/time/utils";
 import { scheduledMessageCondition } from "@/lib/email/scheduled";
+import { selectInBatches } from "@/lib/db-params";
 import { getMessageListColumns, loadConversationPage } from "./utils";
 import type { ListMessage } from "./types";
 import { getOpenCounts } from "@/lib/tracking/open-tracking";
@@ -122,16 +123,16 @@ export async function GET(request: Request) {
 		const page = await loadConversationPage({ db, where, offset, limit });
 		total = page.total;
 		rows = page.ids.length
-			? await db.select(messageListColumns).from(messages).where(and(where, inArray(messages.id, page.ids)))
+			? await selectInBatches(page.ids, (batch) => db.select(messageListColumns).from(messages).where(and(where, inArray(messages.id, batch))))
 			: [];
 		const rowById = new Map(rows.map((row) => [row.id, row]));
 		rows = page.ids.map((id) => rowById.get(id)).filter((row): row is ListMessage => !!row);
 		const keys = rows.map((row) => row.threadId ?? row.id);
 		if (keys.length > 0) {
-			const members = await db
+			const members = await selectInBatches(keys, (batch) => db
 				.select({ id: messages.id, key: threadKey, read: messages.read })
 				.from(messages)
-				.where(and(where, inArray(threadKey, keys)));
+				.where(and(where, inArray(threadKey, batch))));
 			for (const member of members) {
 				const list = threadMessageIds.get(member.key) ?? [];
 				list.push(member.id);
@@ -167,21 +168,21 @@ export async function GET(request: Request) {
 	// These enrichments depend only on the selected page, not on each other.
 	const [countRows, jobs, openCounts, noteSummaries, contactMaps] = await Promise.all([
 		threadIds.length > 0
-			? db
+			? selectInBatches(threadIds, (batch) => db
 				.select({
 					threadId: messages.threadId,
 					total: count(),
 					unread: sum(sql`case when ${messages.read} then 0 else 1 end`),
 				})
 				.from(messages)
-				.where(and(scope, inArray(messages.threadId, threadIds), isNotNull(messages.threadId), notInArray(messages.status, ["draft", "trash"])))
-				.groupBy(messages.threadId)
+				.where(and(scope, inArray(messages.threadId, batch), isNotNull(messages.threadId), notInArray(messages.status, ["draft", "trash"])))
+				.groupBy(messages.threadId))
 			: [],
 		scheduled === "true" && rows.length > 0
-			? db
+			? selectInBatches(rows.map((row) => row.id), (batch) => db
 				.select({ messageId: outboundJobs.messageId, scheduledAt: outboundJobs.scheduledAt })
 				.from(outboundJobs)
-				.where(and(inArray(outboundJobs.messageId, rows.map((row) => row.id)), eq(outboundJobs.status, "queued"), isNotNull(outboundJobs.scheduledAt)))
+				.where(and(inArray(outboundJobs.messageId, batch), eq(outboundJobs.status, "queued"), isNotNull(outboundJobs.scheduledAt))))
 			: [],
 		getOpenCounts(env, rows.filter((row) => row.direction === "outbound").map((row) => row.id)),
 		// Optional: a database without the notes migration has no notes to show.
