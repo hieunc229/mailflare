@@ -369,6 +369,8 @@
 	"attachment.saveToDrive": "Hifadhi kwenye Drive",
 	"attachment.savedToDrive": "Imehifadhiwa kwenye Drive",
 	"attachment.saveToDriveFailed": "Imeshindwa kuhifadhi kwenye Drive",
+	"attachment.sharedIntro": "Faili zilizoshirikiwa kupitia Mailflare (viungo vya kupakua vinaisha baada ya siku {days}):",
+	"attachment.sharedDownload": "Pakua faili",
 	"auth.logout": "Toka",
 	"license.upgrade": "Boresha",
 	"contact.title": "Maelezo ya mwasiliani",

@@ -389,6 +389,8 @@
 	"attachment.saveToDrive": "حفظ في Drive",
 	"attachment.savedToDrive": "تم الحفظ في Drive",
 	"attachment.saveToDriveFailed": "تعذر الحفظ في Drive",
+	"attachment.sharedIntro": "ملفات تمت مشاركتها عبر Mailflare (تنتهي صلاحية روابط التنزيل بعد {days} يومًا):",
+	"attachment.sharedDownload": "تنزيل الملف",
 	"auth.logout": "تسجيل الخروج",
 	"license.upgrade": "ترقية",
 	"contact.title": "تفاصيل جهة الاتصال",

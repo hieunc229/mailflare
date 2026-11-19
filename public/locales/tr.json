@@ -360,6 +360,8 @@
 	"attachment.saveToDrive": "Drive'a kaydet",
 	"attachment.savedToDrive": "Drive'a kaydedildi",
 	"attachment.saveToDriveFailed": "Drive'a kaydedilemedi",
+	"attachment.sharedIntro": "Mailflare ile paylaşılan dosyalar (indirme bağlantılarının süresi {days} gün sonra dolar):",
+	"attachment.sharedDownload": "Dosyayı indir",
 	"auth.logout": "Çıkış yap",
 	"license.upgrade": "Planı yükselt",
 	"contact.title": "Kişi ayrıntıları",

@@ -364,6 +364,8 @@
 	"attachment.saveToDrive": "保存到 Drive",
 	"attachment.savedToDrive": "已保存到 Drive",
 	"attachment.saveToDriveFailed": "无法保存到 Drive",
+	"attachment.sharedIntro": "通过 Mailflare 分享的文件（下载链接将在 {days} 天后失效）：",
+	"attachment.sharedDownload": "下载文件",
 	"auth.logout": "退出登录",
 	"license.upgrade": "升级",
 	"contact.title": "联系人详情",

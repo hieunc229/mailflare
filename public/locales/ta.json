@@ -369,6 +369,8 @@
 	"attachment.saveToDrive": "Drive-இல் சேமி",
 	"attachment.savedToDrive": "Drive-இல் சேமிக்கப்பட்டது",
 	"attachment.saveToDriveFailed": "Drive-இல் சேமிக்க முடியவில்லை",
+	"attachment.sharedIntro": "Mailflare மூலம் பகிரப்பட்ட கோப்புகள் (பதிவிறக்க இணைப்புகள் {days} நாட்களுக்குப் பிறகு காலாவதியாகும்):",
+	"attachment.sharedDownload": "கோப்பைப் பதிவிறக்கு",
 	"auth.logout": "வெளியேறு",
 	"license.upgrade": "மேம்படுத்து",
 	"contact.title": "தொடர்பு விவரங்கள்",

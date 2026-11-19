@@ -369,6 +369,8 @@
 	"attachment.saveToDrive": "Drive වෙත සුරකින්න",
 	"attachment.savedToDrive": "Drive වෙත සුරකින ලදී",
 	"attachment.saveToDriveFailed": "Drive වෙත සුරැකීමට නොහැකි විය",
+	"attachment.sharedIntro": "Mailflare හරහා බෙදාගත් ගොනු (බාගැනීමේ සබැඳි දින {days} කට පසු කල් ඉකුත් වේ):",
+	"attachment.sharedDownload": "ගොනුව බාගන්න",
 	"auth.logout": "වරන්න",
 	"license.upgrade": "උත්ශ්‍රේණි කරන්න",
 	"contact.title": "සම්බන්ධතා විස්තර",

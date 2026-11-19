@@ -369,6 +369,8 @@
 	"attachment.saveToDrive": "Drive-এ সংরক্ষণ করুন",
 	"attachment.savedToDrive": "Drive-এ সংরক্ষণ করা হয়েছে",
 	"attachment.saveToDriveFailed": "Drive-এ সংরক্ষণ করা যায়নি",
+	"attachment.sharedIntro": "Mailflare-এর মাধ্যমে শেয়ার করা ফাইল (ডাউনলোড লিঙ্কের মেয়াদ {days} দিন পরে শেষ হয়):",
+	"attachment.sharedDownload": "ফাইল ডাউনলোড করুন",
 	"auth.logout": "লগ আউট",
 	"license.upgrade": "আপগ্রেড করুন",
 	"contact.title": "যোগাযোগের বিবরণ",

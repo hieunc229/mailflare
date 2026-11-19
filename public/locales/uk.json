@@ -379,6 +379,8 @@
 	"attachment.saveToDrive": "Зберегти на Drive",
 	"attachment.savedToDrive": "Збережено на Drive",
 	"attachment.saveToDriveFailed": "Не вдалося зберегти на Drive",
+	"attachment.sharedIntro": "Файли, надіслані через Mailflare (посилання для завантаження діють {days} дн.):",
+	"attachment.sharedDownload": "Завантажити файл",
 	"auth.logout": "Вийти",
 	"license.upgrade": "Оновити тариф",
 	"contact.title": "Відомості про контакт",

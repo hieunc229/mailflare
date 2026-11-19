@@ -369,6 +369,8 @@
 	"attachment.saveToDrive": "Opslaan in Drive",
 	"attachment.savedToDrive": "Opgeslagen in Drive",
 	"attachment.saveToDriveFailed": "Opslaan in Drive mislukt",
+	"attachment.sharedIntro": "Bestanden gedeeld via Mailflare (downloadlinks verlopen na {days} dagen):",
+	"attachment.sharedDownload": "Bestand downloaden",
 	"auth.logout": "Uitloggen",
 	"license.upgrade": "Upgraden",
 	"contact.title": "Contactgegevens",

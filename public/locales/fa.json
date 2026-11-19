@@ -369,6 +369,8 @@
 	"attachment.saveToDrive": "ذخیره در Drive",
 	"attachment.savedToDrive": "در Drive ذخیره شد",
 	"attachment.saveToDriveFailed": "ذخیره در Drive ممکن نشد",
+	"attachment.sharedIntro": "فایل‌های اشتراک‌گذاری‌شده از طریق Mailflare (پیوندهای دانلود پس از {days} روز منقضی می‌شوند):",
+	"attachment.sharedDownload": "دانلود فایل",
 	"auth.logout": "خروج",
 	"license.upgrade": "ارتقا",
 	"contact.title": "جزئیات مخاطب",

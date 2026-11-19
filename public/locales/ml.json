@@ -369,6 +369,8 @@
 	"attachment.saveToDrive": "Drive-ലേക്ക് സേവ് ചെയ്യുക",
 	"attachment.savedToDrive": "Drive-ലേക്ക് സേവ് ചെയ്തു",
 	"attachment.saveToDriveFailed": "Drive-ലേക്ക് സേവ് ചെയ്യാൻ കഴിഞ്ഞില്ല",
+	"attachment.sharedIntro": "Mailflare വഴി പങ്കിട്ട ഫയലുകൾ (ഡൗൺലോഡ് ലിങ്കുകൾ {days} ദിവസത്തിനുശേഷം കാലഹരണപ്പെടും):",
+	"attachment.sharedDownload": "ഫയൽ ഡൗൺലോഡ് ചെയ്യുക",
 	"auth.logout": "ലോഗ് ഔട്ട് ചെയ്യുക",
 	"license.upgrade": "അപ്ഗ്രേഡ് ചെയ്യുക",
 	"contact.title": "കോൺടാക്റ്റ് വിശദാംശങ്ങൾ",

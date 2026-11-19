@@ -369,6 +369,8 @@
 	"attachment.saveToDrive": "Drive मध्ये जतन करा",
 	"attachment.savedToDrive": "Drive मध्ये जतन केले",
 	"attachment.saveToDriveFailed": "Drive मध्ये जतन करू शकलो नाही",
+	"attachment.sharedIntro": "Mailflare द्वारे शेअर केलेल्या फाइल्स (डाउनलोड लिंक {days} दिवसांनंतर कालबाह्य होतात):",
+	"attachment.sharedDownload": "फाइल डाउनलोड करा",
 	"auth.logout": "लॉग आउट करा",
 	"license.upgrade": "अपग्रेड करा",
 	"contact.title": "संपर्काचा तपशील",

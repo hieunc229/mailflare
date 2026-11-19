@@ -374,6 +374,8 @@
 	"attachment.saveToDrive": "Guardar no Drive",
 	"attachment.savedToDrive": "Guardado no Drive",
 	"attachment.saveToDriveFailed": "Não foi possível guardar no Drive",
+	"attachment.sharedIntro": "Ficheiros partilhados através do Mailflare (as ligações de transferência expiram após {days} dias):",
+	"attachment.sharedDownload": "Transferir ficheiro",
 	"auth.logout": "Terminar sessão",
 	"license.upgrade": "Fazer upgrade",
 	"contact.title": "Detalhes do contacto",

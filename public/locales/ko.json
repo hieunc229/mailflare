@@ -368,6 +368,8 @@
 	"attachment.saveToDrive": "Drive에 저장",
 	"attachment.savedToDrive": "Drive에 저장됨",
 	"attachment.saveToDriveFailed": "Drive에 저장할 수 없습니다",
+	"attachment.sharedIntro": "Mailflare로 공유된 파일 (다운로드 링크는 {days}일 후 만료됩니다):",
+	"attachment.sharedDownload": "파일 다운로드",
 	"auth.logout": "로그아웃",
 	"license.upgrade": "업그레이드",
 	"contact.title": "연락처 세부 정보",
