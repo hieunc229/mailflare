@@ -143,9 +143,9 @@ export const emailQuery: JmapMethodHandler = async (ctx, args) => {
 	if (args.anchor) {
 		const index = ordered.indexOf(String(args.anchor));
 		if (index < 0) return { type: "anchorNotFound" };
-		position = index + Number(args.anchorOffset ?? 0);
-	}
-	if (position < 0) position = Math.max(ordered.length + position, 0);
+		// An offset that reaches before the first result clamps to 0 (RFC 8620 §5.5).
+		position = Math.max(index + Number(args.anchorOffset ?? 0), 0);
+	} else if (position < 0) position = Math.max(ordered.length + position, 0);
 	const page = ordered.slice(position, position + limit);
 
 	return {

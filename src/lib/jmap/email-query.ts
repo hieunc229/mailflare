@@ -120,7 +120,8 @@ export function filterToSql(filter: Filter | null | undefined, accessible: Set<s
 		if (children.length === 0) return undefined;
 		if (filter.operator === "AND") return and(...children);
 		if (filter.operator === "OR") return or(...children);
-		if (filter.operator === "NOT") return not(and(...children)!);
+		// RFC 8620 §5.5: NOT matches when none of its conditions match.
+		if (filter.operator === "NOT") return not(or(...children)!);
 		throw invalidArguments(`Unknown operator ${String(filter.operator)}`);
 	}
 	const parts = conditionToSql(filter, accessible);
@@ -130,7 +131,8 @@ export function filterToSql(filter: Filter | null | undefined, accessible: Set<s
 export function sortToSql(sort: Comparator[] | null | undefined): SQL[] {
 	const comparators = sort && sort.length ? sort : [{ property: "receivedAt", isAscending: false }];
 	return comparators.map((item) => {
-		const direction = item.isAscending ? asc : desc;
+		// RFC 8620 §5.5: isAscending defaults to true when omitted.
+		const direction = item.isAscending === false ? desc : asc;
 		switch (item.property) {
 			case "receivedAt":
 			case "sentAt":
