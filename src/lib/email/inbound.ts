@@ -10,6 +10,7 @@ import { getMessageContactNames, upsertContactFromAddress } from "@/lib/contacts
 import { getEmailAddress } from "@/lib/email/address";
 import { sendMailboxAutoReply } from "@/lib/email/auto-reply";
 import { isOthersDraft } from "@/lib/email/draft-access";
+import { recordDsnBounces } from "@/lib/deliverability/suppression";
 import { getMailboxAccessLevel } from "@/lib/mailboxes/access";
 import { listMessageAttachments, storeMessageAttachments } from "@/lib/email/attachments";
 import { registerInboundInvite } from "@/lib/calendar/invite-store";
@@ -250,6 +251,13 @@ export async function processInboundMessage(
 	} catch (error) {
 		await db.delete(messages).where(eq(messages.id, messageId));
 		throw error;
+	}
+
+	// A returned message is still delivered to the mailbox; recording its failed recipients is best effort.
+	try {
+		await recordDsnBounces(env, { mailboxId: decision.mailbox.mailboxId, raw: buffer });
+	} catch (error) {
+		console.error(`Bounce recording failed for ${messageId}`, error);
 	}
 
 	if (status === "received") {
