@@ -10,7 +10,7 @@ test("an address containing a LIKE wildcard is matched literally", async (t) => 
 			('m-1', 'admin', 'mb-team', 'outbound', 'team@example.com', 'a%b@example.net, c_d@example.net', 'Hi', 'sent', 1);`);
 	// One address per call: the candidate rows are shared by a chunk, so a neighbour could mask a missed match.
 	for (const email of ["a%b@example.net", "c_d@example.net"]) {
-		assert.deepEqual([...await app.addressesSeenInMailbox(db, "mb-team", [email])], [email]);
+		assert.deepEqual([...await app.addressesSeenInMailbox(db, "mb-team", [email], "delegate")], [email]);
 	}
-	assert.equal((await app.addressesSeenInMailbox(db, "mb-team", ["axb@example.net"])).size, 0);
+	assert.equal((await app.addressesSeenInMailbox(db, "mb-team", ["axb@example.net"], "delegate")).size, 0);
 });

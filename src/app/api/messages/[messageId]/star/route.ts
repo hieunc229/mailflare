@@ -4,6 +4,7 @@ import { getDb } from "@/db";
 import { messages } from "@/db/schema";
 import { getCurrentUser } from "@/lib/auth/cookies";
 import { getEnv } from "@/lib/cloudflare";
+import { isOthersDraft } from "@/lib/email/draft-access";
 import { getMailboxAccessLevel } from "@/lib/mailboxes/access";
 
 export async function POST(
@@ -17,11 +18,11 @@ export async function POST(
 
 	const db = getDb(env);
 	const [message] = await db
-		.select({ id: messages.id, mailboxId: messages.mailboxId, starred: messages.starred })
+		.select({ id: messages.id, userId: messages.userId, mailboxId: messages.mailboxId, status: messages.status, starred: messages.starred })
 		.from(messages)
 		.where(eq(messages.id, messageId))
 		.limit(1);
-	if (!message?.mailboxId) return NextResponse.json({ error: "Message not found" }, { status: 404 });
+	if (!message?.mailboxId || isOthersDraft(message, user.id)) return NextResponse.json({ error: "Message not found" }, { status: 404 });
 
 	const access = await getMailboxAccessLevel(db, user, message.mailboxId);
 	if (!access?.canRead) return NextResponse.json({ error: "Message not found" }, { status: 404 });

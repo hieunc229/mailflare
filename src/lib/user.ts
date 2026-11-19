@@ -1,6 +1,7 @@
 import { eq, desc, and } from "drizzle-orm";
 import { getDb } from "@/db";
 import { messages, domains, mailboxes } from "@/db/schema";
+import { isOthersDraft } from "@/lib/email/draft-access";
 import { getMailboxAccessLevel, listAccessibleMailboxIds } from "@/lib/mailboxes/access";
 import { createAuditLog } from "@/lib/mailboxes/audit";
 import type { SessionUser } from "@/lib/auth/types";
@@ -82,7 +83,7 @@ export async function markMessageAsRead(env: CloudflareEnv, userId: string, mess
 export async function markMessageAsReadForUser(env: CloudflareEnv, user: SessionUser, messageId: string) {
 	const db = getDb(env);
 	const [message] = await db.select().from(messages).where(eq(messages.id, messageId)).limit(1);
-	if (!message?.mailboxId) return false;
+	if (!message?.mailboxId || isOthersDraft(message, user.id)) return false;
 	const access = await getMailboxAccessLevel(db, user, message.mailboxId);
 	if (!access?.canRead) return false;
 	await db.update(messages).set({ read: true }).where(eq(messages.id, messageId));
@@ -103,7 +104,7 @@ export async function updateMessageStatusForUser(
 ) {
 	const db = getDb(env);
 	const [message] = await db.select().from(messages).where(eq(messages.id, messageId)).limit(1);
-	if (!message?.mailboxId) return false;
+	if (!message?.mailboxId || isOthersDraft(message, user.id)) return false;
 	const access = await getMailboxAccessLevel(db, user, message.mailboxId);
 	if (!access?.canManage) return false;
 	if (status === "spam") return applySpamFeedback(env, user, messageId, "spam");

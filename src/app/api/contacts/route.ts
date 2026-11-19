@@ -42,7 +42,7 @@ export async function GET(request: Request) {
 			limit: ownerOnly ? CONTACTS_LIST_MAX_LIMIT : limit,
 		});
 		if (ownerOnly) {
-			const seen = await addressesSeenInMailbox(db, access.mailbox.id, rows.map((contact) => contact.email));
+			const seen = await addressesSeenInMailbox(db, access.mailbox.id, rows.map((contact) => contact.email), user.id);
 			rows = rows.filter((contact) => seen.has(contact.email)).slice(0, limit);
 		}
 		return NextResponse.json({
@@ -50,7 +50,7 @@ export async function GET(request: Request) {
 		});
 	}
 
-	if (ownerOnly && !(await addressesSeenInMailbox(db, access.mailbox.id, [email])).has(email)) {
+	if (ownerOnly && !(await addressesSeenInMailbox(db, access.mailbox.id, [email], user.id)).has(email)) {
 		return NextResponse.json({ contact: { email, displayName: null, hasAvatar: false, source: null, blocked: false, lastSeenAt: null } });
 	}
 

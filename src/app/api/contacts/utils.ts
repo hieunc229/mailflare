@@ -1,4 +1,5 @@
 import { and, asc, eq, or, sql } from "drizzle-orm";
+import { draftsVisibleTo } from "@/lib/email/draft-access";
 import { addressListIncludes } from "@/lib/email/address";
 import type { getDb } from "@/db";
 import { contacts, messages } from "@/db/schema";
@@ -54,7 +55,7 @@ export async function listContacts(db: Db, input: { userId: string; query: strin
  * address book. Anyone who is not that owner may only see contacts whose address appears on mail in this mailbox.
  * Returns the subset of `emails` that does (exact address match).
  */
-export async function addressesSeenInMailbox(db: Db, mailboxId: string, emails: string[]): Promise<Set<string>> {
+export async function addressesSeenInMailbox(db: Db, mailboxId: string, emails: string[], viewerUserId: string): Promise<Set<string>> {
 	const seen = new Set<string>();
 	const unique = [...new Set(emails)];
 	// D1 allows 100 bound parameters per statement: 3 per address plus the mailbox id.
@@ -68,7 +69,7 @@ export async function addressesSeenInMailbox(db: Db, mailboxId: string, emails: 
 		const rows = await db
 			.select({ fromAddr: messages.fromAddr, toAddr: messages.toAddr, ccAddr: messages.ccAddr })
 			.from(messages)
-			.where(and(eq(messages.mailboxId, mailboxId), or(...conditions)!))
+			.where(and(eq(messages.mailboxId, mailboxId), draftsVisibleTo(viewerUserId), or(...conditions)!))
 			.limit(500);
 		for (const email of chunk) {
 			if (rows.some((row) => [row.fromAddr, row.toAddr, row.ccAddr].some((value) => addressListIncludes(value, email)))) seen.add(email);
