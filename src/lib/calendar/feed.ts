@@ -40,6 +40,13 @@ function dateProperty(name: string, value: Date, timeZone: string | null): strin
 	return timeZone ? `${name};TZID=${timeZone}:${local(value, timeZone)}` : `${name}:${utc(value)}`;
 }
 
+// The app moves a monthly event anchored on the 29th-31st to the last day of shorter months, while a plain
+// BYMONTHDAY=31 skips them (RFC 5545 drops invalid dates), so those anchors list 28..anchor and keep the last.
+function monthDayRule(day: number): string {
+	if (day < 29) return `BYMONTHDAY=${day}`;
+	return `BYMONTHDAY=${Array.from({ length: day - 27 }, (_, index) => 28 + index).join(",")};BYSETPOS=-1`;
+}
+
 function recurrenceRule(event: FeedEvent): string | null {
 	if (event.repeat === "none") return null;
 	const parts: string[] = [];
@@ -47,7 +54,9 @@ function recurrenceRule(event: FeedEvent): string | null {
 	else if (event.repeat === "weekly") parts.push("FREQ=WEEKLY");
 	else if (event.repeat === "monthly") {
 		parts.push("FREQ=MONTHLY");
-		if (event.repeatAnchorDay) parts.push(`BYMONTHDAY=${event.repeatAnchorDay}`);
+		const zone = validTimeZone(event.timeZone);
+		const day = event.repeatAnchorDay || Number((zone ? local(event.startsAt, zone) : utc(event.startsAt)).slice(6, 8));
+		parts.push(monthDayRule(day));
 	} else {
 		const days = parseCalendarRepeatDays(event.repeatDays);
 		if (!days.length) return null;
