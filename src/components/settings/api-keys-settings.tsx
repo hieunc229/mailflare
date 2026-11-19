@@ -17,12 +17,17 @@ import { SectionRowSkeleton } from "@/components/page-skeletons";
 import { formatUserDate } from "@/lib/time/utils";
 import { McpAgentInstructions } from "@/components/settings/mcp-agent-instructions";
 import type { ApiKeyScope } from "@/lib/api/scopes";
+import { ClientRequestError } from "@/lib/http/client-error";
 import type { ManagedApiKey, McpKeyScope } from "./api-keys-settings-types";
+import { useSecurityStatus } from "./security-status-store";
+import { StepUpDialog } from "./step-up-dialog";
 import { createManagedApiKey, keyPermissions, loadManagedApiKeys, MCP_KEY_SCOPES, revokeManagedApiKey, STANDARD_KEY_SCOPES } from "./api-keys-settings-utils";
 
 export function ApiKeysSettings() {
 	const { t } = useLanguage();
 	const { mailboxes, selectedMailbox } = useSelectedMailbox();
+	const { status } = useSecurityStatus();
+	const [confirming, setConfirming] = useState(false);
 	const [keys, setKeys] = useState<ManagedApiKey[]>([]);
 	const [loading, setLoading] = useState(true);
 	const [busy, setBusy] = useState(false);
@@ -46,18 +51,28 @@ export function ApiKeysSettings() {
 		return () => { cancelled = true; window.removeEventListener("mailflare:api-keys-changed", refresh); };
 	}, [t]);
 
-	async function create(event: React.FormEvent) {
+	// A jmap key signs in like an app password, so it needs the same fresh confirmation first.
+	const needsStepUp = !mcpAllowed && standardScopes.includes("jmap");
+
+	function submit(event: React.FormEvent) {
 		event.preventDefault();
+		if (needsStepUp) setConfirming(true);
+		else void create();
+	}
+
+	async function create(stepUpToken?: string) {
 		setBusy(true);
 		setError(null);
 		try {
-			const secret = await createManagedApiKey({ name: name.trim(), mcpAllowed, scopes: mcpAllowed ? mcpScopes : standardScopes, mailboxIds });
+			const secret = await createManagedApiKey({ name: name.trim(), mcpAllowed, scopes: mcpAllowed ? mcpScopes : standardScopes, mailboxIds }, stepUpToken);
 			setNewKey(secret);
 			setCreatedMcpAllowed(mcpAllowed);
 			setCopied(false);
 			setName("");
 			setKeys(await loadManagedApiKeys());
 		} catch (cause) {
+			// A refused confirmation is the dialog's to explain; anything else belongs on the form.
+			if (cause instanceof ClientRequestError && cause.code) throw cause;
 			setError(cause instanceof Error ? cause.message : t("apiKeys.createFailed"));
 		} finally { setBusy(false); }
 	}
@@ -81,7 +96,7 @@ export function ApiKeysSettings() {
 			<DialogTrigger asChild><Button type="button" className={mobilePrimaryActionAboveNavClass}><Plus className="h-4 w-4" />{t("apiKeys.new")}</Button></DialogTrigger>
 			<DialogContent className="max-h-[calc(100vh-4rem)] overflow-y-auto">
 				<DialogHeader><DialogTitle>{newKey ? t("apiKeys.createdTitle") : t("apiKeys.createTitle")}</DialogTitle><DialogDescription>{newKey ? t("apiKeys.copyNow") : t("apiKeys.nameAndAccess")}</DialogDescription></DialogHeader>
-		{!newKey && <form onSubmit={(event) => void create(event)} className="space-y-4">
+		{!newKey && <form onSubmit={submit} className="space-y-4">
 			<div className="space-y-2"><Label htmlFor="managed-key-name">{t("apiKeys.keyName")}</Label><Input id="managed-key-name" value={name} onChange={(event) => setName(event.target.value)} maxLength={100} placeholder={t("apiKeys.namePlaceholder")} /></div>
 			<label className="flex items-start gap-3 text-sm"><Checkbox checked={mcpAllowed} onChange={(event) => setMcpAllowed(event.target.checked)} /><span><strong>{t("apiKeys.allowMcp")}</strong><span className="mt-1 block text-neutral-500">{t("apiKeys.allowMcpHint")}</span></span></label>
 			<label className={`flex items-start gap-3 text-sm ${mcpAllowed ? "opacity-50" : ""}`}><Checkbox checked={!mcpAllowed && standardScopes.includes("jmap")} disabled={mcpAllowed} onChange={(event) => setStandardScopes((current) => event.target.checked ? [...current, "jmap"] : current.filter((scope) => scope !== "jmap"))} /><span><strong>{t("apiKeys.allowJmap")}</strong><span className="mt-1 block text-neutral-500">{mcpAllowed ? t("apiKeys.jmapNeedsStandard") : t("apiKeys.jmapHint")}</span></span></label>
@@ -93,6 +108,18 @@ export function ApiKeysSettings() {
 		{error && <p role="alert" className="mt-4 text-sm text-red-600">{error}</p>}
 			</DialogContent>
 		</Dialog>
+		<StepUpDialog
+			open={confirming}
+			hasPassword={status?.passwordSet ?? false}
+			hasPasskey={(status?.passkeys.length ?? 0) > 0}
+			requireSecondFactor={status?.requireSecondFactor ?? false}
+			totpEnabled={status?.totpEnabled ?? false}
+			action="app_password.create"
+			title={t("appPasswords.stepUpTitle")}
+			description={t("appPasswords.stepUpDescription")}
+			onOpenChange={setConfirming}
+			onAuthorized={create}
+		/>
 		</div>
 		<p className="text-sm text-neutral-500">{t("apiKeys.description")}</p>
 		{error && !createOpen && <p role="alert" className="text-sm text-red-600">{error}</p>}
