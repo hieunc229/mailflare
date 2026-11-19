@@ -26,6 +26,7 @@ import { canManageDomains } from "@/lib/auth/admin";
 import { ClientRequestError } from "@/lib/http/client-error";
 import { useSecurityStatus } from "../security-status-store";
 import { StepUpDialog } from "../step-up-dialog";
+import { MAIL_TYPE_UNSAFE_ACTION } from "@/lib/email/mail-type-rule";
 import type { DomainRoutingProps, DomainRule, DomainRuleInput } from "./types";
 import {
 	ACTION_LABELS,
@@ -61,6 +62,7 @@ export function DomainRouting({ domain }: DomainRoutingProps = {}) {
 
 	const domainId = domain?.id ?? selectedMailbox?.domainId ?? "";
 	const mailboxId = selectedMailbox?.id ?? "";
+	const isMailType = form.matchField === "mail_type";
 	const canManage = !!currentUser && canManageDomains(currentUser);
 	const rulesQueryKey = ["domain-rules", domainId] as const;
 
@@ -75,7 +77,7 @@ export function DomainRouting({ domain }: DomainRoutingProps = {}) {
 
 	const save = useMutation({
 		mutationFn: (stepUpToken?: string) => {
-			const payload: DomainRuleInput = { ...form, domainId, ...(stepUpToken ? { stepUpToken } : {}) };
+			const payload: DomainRuleInput = { ...form, domainId, keepCopy: form.keepCopy || isMailType, ...(stepUpToken ? { stepUpToken } : {}) };
 			return editing
 				? updateDomainRule(editing.id, payload)
 				: createDomainRule(payload);
@@ -225,11 +227,13 @@ export function DomainRouting({ domain }: DomainRoutingProps = {}) {
 							<RoutingRuleSelect
 								id="rule-action"
 								value={form.action}
-								onChange={(e) =>
-									setForm({ ...form, action: e.target.value as DomainRuleInput["action"] })
-								}
+								onChange={(e) => {
+									const action = e.target.value as DomainRuleInput["action"];
+									// Forwarding newsletters must keep a copy, or a misjudged message is lost.
+									setForm({ ...form, action, keepCopy: action === "forward" && isMailType ? true : form.keepCopy });
+								}}
 							>
-								{Object.entries(ACTION_LABELS).map(([value, label]) => (
+								{Object.entries(ACTION_LABELS).filter(([value]) => !(isMailType && value === "reject")).map(([value, label]) => (
 									<option key={value} value={value}>
 										{t(label)}
 									</option>
@@ -244,9 +248,13 @@ export function DomainRouting({ domain }: DomainRoutingProps = {}) {
 								<RoutingRuleSelect
 									id="rule-field"
 									value={form.matchField}
-									onChange={(e) =>
-										setForm({ ...form, matchField: e.target.value as DomainRuleInput["matchField"] })
-									}
+									onChange={(e) => {
+										const matchField = e.target.value as DomainRuleInput["matchField"];
+										// "Newsletter or promotional mail" is a yes/no condition: no text to enter.
+										// Reject would lose mail, so it is not offered for this condition.
+										if (matchField === "mail_type") setForm({ ...form, matchField, matchOperator: "contains", matchValue: "bulk", action: form.action === "reject" ? "store" : form.action, keepCopy: form.action === "forward" ? true : form.keepCopy });
+										else setForm({ ...form, matchField, matchValue: form.matchField === "mail_type" ? "" : form.matchValue });
+									}}
 								>
 									{Object.entries(MATCH_FIELD_LABELS).map(([value, label]) => (
 										<option key={value} value={value}>
@@ -255,6 +263,9 @@ export function DomainRouting({ domain }: DomainRoutingProps = {}) {
 									))}
 								</RoutingRuleSelect>
 							</div>
+							{form.matchField === "mail_type" ? (
+								<p className="text-xs leading-5 text-neutral-500">{t("rules.mailTypeHint")}</p>
+							) : (
 							<div className="grid min-w-0 gap-2">
 								<Label htmlFor="rule-operator">{t("routing.condition")}</Label>
 								<RoutingRuleSelect
@@ -274,9 +285,11 @@ export function DomainRouting({ domain }: DomainRoutingProps = {}) {
 									))}
 								</RoutingRuleSelect>
 							</div>
+							)}
 						</div>
 
 						<div className="grid grid-cols-1 items-end gap-4 sm:grid-cols-2">
+							{form.matchField !== "mail_type" && (
 							<div className="grid min-w-0 gap-2">
 								<div className="flex items-center gap-2">
 									<Label htmlFor="rule-value">{t("routing.matchValue")}</Label>
@@ -292,6 +305,7 @@ export function DomainRouting({ domain }: DomainRoutingProps = {}) {
 									onChange={(e) => setForm({ ...form, matchValue: e.target.value })}
 								/>
 							</div>
+							)}
 							<div className="grid min-w-0 gap-2">
 								<div className="flex items-center gap-2">
 									<Label htmlFor="rule-priority">{t("routing.priority")}</Label>
@@ -356,7 +370,8 @@ export function DomainRouting({ domain }: DomainRoutingProps = {}) {
 									</div>
 								</div>
 								<Switch
-									checked={form.keepCopy}
+									checked={form.keepCopy || isMailType}
+									disabled={isMailType}
 									onCheckedChange={(keepCopy) => setForm({ ...form, keepCopy })}
 									aria-label={t("routing.keepCopy")}
 								/>
@@ -375,7 +390,7 @@ export function DomainRouting({ domain }: DomainRoutingProps = {}) {
 							</div>
 						)}
 
-						{error && <p role="alert" className="text-sm text-red-600">{error}</p>}
+						{error && <p role="alert" className="text-sm text-red-600">{error === MAIL_TYPE_UNSAFE_ACTION ? t("rules.mailTypeUnsafeAction") : error}</p>}
 
 						<div className="flex justify-end gap-2 border-t border-neutral-200 pt-4">
 							<Button type="button" variant="outline" onClick={() => setDialogOpen(false)}>

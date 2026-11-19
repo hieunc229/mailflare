@@ -17,6 +17,7 @@ export async function intakeIncomingMail(env: CloudflareEnv, input: IntakeInput,
 		subject: input.headers.subject,
 		from: input.headers.from,
 		alreadyForwarded,
+		all: input.headers,
 	});
 
 	if (decision?.action === "reject") {
