@@ -11,6 +11,7 @@ import { getEnv } from "@/lib/cloudflare";
 import { getMailboxAccessLevel, listAccessibleMailboxIds } from "@/lib/mailboxes/access";
 import type { MessageFolder } from "@/hooks/types";
 import type { MessageNavigationEntry } from "./types";
+import { conversationKey } from "../utils";
 
 const folders: MessageFolder[] = ["inbox", "starred", "snoozed", "sent", "scheduled", "archived", "spam", "trash"];
 
@@ -74,7 +75,7 @@ export async function GET(request: Request) {
 	if (grouped) {
 		const byThread = new Map<string, MessageNavigationEntry>();
 		for (const row of rows) {
-			const key = row.threadId ?? row.id;
+			const key = conversationKey(row.mailboxId, row.threadId ?? row.id);
 			const unread = row.direction === "inbound" && !row.read;
 			const existing = byThread.get(key);
 			if (existing) existing.unread ||= unread;
@@ -94,6 +95,7 @@ export async function GET(request: Request) {
 
 const NAV_COLUMNS = {
 	id: messages.id,
+	mailboxId: messages.mailboxId,
 	read: messages.read,
 	direction: messages.direction,
 	threadId: messages.threadId,
@@ -101,6 +103,7 @@ const NAV_COLUMNS = {
 
 type NavigationRow = {
 	id: string;
+	mailboxId: string | null;
 	read: boolean;
 	direction: "inbound" | "outbound";
 	threadId: string | null;
