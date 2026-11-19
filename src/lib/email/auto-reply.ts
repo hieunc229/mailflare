@@ -4,6 +4,7 @@ import { autoReplyDeliveries, mailboxes } from "@/db/schema";
 import { formatEmailAddress, normalizeEmailAddress } from "@/lib/email/address";
 import { resolveInboundAddress } from "@/lib/email/routing";
 import { sendEmail } from "@/lib/email/send";
+import { SuppressedRecipientError } from "@/lib/deliverability/suppression-utils";
 import { newId } from "@/lib/ids";
 import type { MailboxAutoReplyInput } from "./auto-reply-types";
 
@@ -52,15 +53,21 @@ export async function sendMailboxAutoReply(
 		headers.References = input.incomingMessageId;
 	}
 
-	await sendEmail(env, {
-		userId: input.userId,
-		mailboxId: input.mailboxId,
-		from: formatEmailAddress(deliveredAddress, mailbox.displayName),
-		to: recipient,
-		subject: mailbox.autoReplySubject.trim() || "Out of office",
-		text: mailbox.autoReplyBody.trim(),
-		headers,
-	});
+	try {
+		await sendEmail(env, {
+			userId: input.userId,
+			mailboxId: input.mailboxId,
+			from: formatEmailAddress(deliveredAddress, mailbox.displayName),
+			to: recipient,
+			subject: mailbox.autoReplySubject.trim() || "Out of office",
+			text: mailbox.autoReplyBody.trim(),
+			headers,
+		});
+	} catch (error) {
+		// The sender bounced or complained before: an out-of-office reply is not worth another bounce.
+		if (error instanceof SuppressedRecipientError) return;
+		throw error;
+	}
 
 	await db
 		.insert(autoReplyDeliveries)

@@ -3,9 +3,10 @@ import { getDb } from "@/db";
 import { appSettings, domains, emailSuppressions, messages } from "@/db/schema";
 import { getEmailAddressList } from "@/lib/email/address";
 import { newId } from "@/lib/ids";
+import { getAuthorizedSenderAddress } from "@/lib/email/sender";
 import { parseDeliveryStatus } from "./dsn";
 import {
-	addressDomain, cleanAddress, MAX_SUPPRESSION_DETAIL,
+	addressDomain, cleanAddress, filterSuppressed, MAX_SUPPRESSION_DETAIL, SuppressedRecipientError,
 	type SuppressionEntry, type SuppressionMode, type SuppressionReason, type SuppressionSource,
 } from "./suppression-utils";
 
@@ -148,4 +149,46 @@ export async function recordDsnBounces(env: CloudflareEnv, input: { mailboxId: s
 		await recordSuppression(env, { domainId, email, reason: "hard_bounce", source: "dsn", detail: diagnostic, confirmed: false, evidenceRef: id });
 	}
 	return entries.size;
+}
+
+/** Suppressed addresses among the recipients; always empty unless the mode is "enforce". */
+async function enforcedSuppressions(env: CloudflareEnv, from: string, recipients: string[]): Promise<Set<string>> {
+	if (await getSuppressionMode(env) !== "enforce") return new Set();
+	const domainId = await domainIdForAddress(env, from);
+	return domainId ? findSuppressed(env, domainId, recipients) : new Set();
+}
+
+/** Refuses a send to any suppressed recipient of the sending domain (mode "enforce" only). */
+export async function assertNoSuppressedRecipients(env: CloudflareEnv, from: string, recipients: string[]): Promise<void> {
+	const suppressed = await enforcedSuppressions(env, from, recipients);
+	if (!suppressed.size) return;
+	const blocked = new Set<string>();
+	for (const recipient of recipients) {
+		const address = cleanAddress(recipient);
+		if (address && suppressed.has(address)) blocked.add(address);
+	}
+	throw new SuppressedRecipientError([...blocked]);
+}
+
+/** Same refusal for features that store something before sending (calendar invitations): call it first, so nothing is half-done. */
+export async function assertInviteesAllowed(
+	env: CloudflareEnv,
+	input: { userId: string; mailboxId: string; from: string; attendees: string[] },
+): Promise<void> {
+	const sender = await getAuthorizedSenderAddress(env, input);
+	await assertNoSuppressedRecipients(env, sender.fromAddr, input.attendees);
+}
+
+/** Delivery-time twin of the check above: removes suppressed recipients instead of refusing. */
+export async function dropSuppressedRecipients(
+	env: CloudflareEnv,
+	from: string,
+	lists: { to: string[]; cc: string[]; bcc: string[] },
+): Promise<{ to: string[]; cc: string[]; bcc: string[]; dropped: string[] }> {
+	const suppressed = await enforcedSuppressions(env, from, [...lists.to, ...lists.cc, ...lists.bcc]);
+	if (!suppressed.size) return { ...lists, dropped: [] };
+	const to = filterSuppressed(lists.to, suppressed);
+	const cc = filterSuppressed(lists.cc, suppressed);
+	const bcc = filterSuppressed(lists.bcc, suppressed);
+	return { to: to.allowed, cc: cc.allowed, bcc: bcc.allowed, dropped: [...new Set([...to.suppressed, ...cc.suppressed, ...bcc.suppressed])] };
 }

@@ -3,6 +3,7 @@ import { getEnv } from "@/lib/cloudflare";
 import { requireUser } from "@/lib/auth/cookies";
 import { sendEmailSchema } from "@/lib/validators";
 import { sendEmail } from "@/lib/email/send";
+import { SuppressedRecipientError, suppressedRecipientBody } from "@/lib/deliverability/suppression-utils";
 import { isPastSchedule, parseSendRequest } from "./utils";
 import { RequestBodyTooLargeError } from "@/lib/http/errors";
 import { getSendErrorStatus } from "./error-utils";
@@ -54,6 +55,7 @@ export async function POST(request: Request) {
 		});
 		return NextResponse.json(result);
 	} catch (err) {
+		if (err instanceof SuppressedRecipientError) return NextResponse.json(suppressedRecipientBody(err), { status: 422 });
 		const message = err instanceof Error ? err.message : "Send failed";
 		return NextResponse.json({ error: message }, { status: getSendErrorStatus(message) });
 	}
