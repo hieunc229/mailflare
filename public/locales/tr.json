@@ -121,6 +121,8 @@
 	"message.mailingListNotice": "Bu ileti bir e-posta listesinden geliyor.",
 	"message.date": "Tarih",
 	"message.blockContact": "Kişiyi engelle",
+	"message.blockDomain": "Gönderen alan adını engelle",
+	"message.blockDomainConfirm": "{domain} alan adından gelen tüm postalar engellensin mi? Bu alan adından ve alt alan adlarından gelecek iletiler Çöp Kutusu'na gider.",
 	"message.star": "Yıldızla",
 	"message.removeStar": "Yıldızı kaldır",
 	"message.error.star": "Yıldız güncellenemedi",

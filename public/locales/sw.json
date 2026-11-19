@@ -122,6 +122,8 @@
 	"message.mailingListNotice": "Ujumbe huu umetoka kwenye orodha ya barua.",
 	"message.date": "Tarehe",
 	"message.blockContact": "Zuia mwasiliani",
+	"message.blockDomain": "Zuia kikoa cha mtumaji",
+	"message.blockDomainConfirm": "Zuia barua zote kutoka {domain}? Ujumbe wa baadaye kutoka kikoa hiki na vikoa vyake vidogo utaenda kwenye Tupio.",
 	"message.star": "Tia nyota",
 	"message.removeStar": "Ondoa nyota",
 	"message.error.star": "Imeshindwa kusasisha nyota",

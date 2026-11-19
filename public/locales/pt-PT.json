@@ -126,6 +126,8 @@
 	"message.mailingListNotice": "Esta mensagem é de uma lista de distribuição.",
 	"message.date": "Data",
 	"message.blockContact": "Bloquear contacto",
+	"message.blockDomain": "Bloquear domínio do remetente",
+	"message.blockDomainConfirm": "Bloquear todo o correio de {domain}? As próximas mensagens deste domínio e dos subdomínios irão para o Lixo.",
 	"message.star": "Marcar com estrela",
 	"message.removeStar": "Remover estrela",
 	"message.error.star": "Não foi possível atualizar a estrela",

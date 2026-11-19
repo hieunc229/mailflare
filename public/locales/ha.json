@@ -122,6 +122,8 @@
 	"message.mailingListNotice": "Wannan saƙo yana fitowa daga jerin mailing.",
 	"message.date": "Kwanan wata",
 	"message.blockContact": "Toshe abokin hulɗa",
+	"message.blockDomain": "Toshe yankin mai aikawa",
+	"message.blockDomainConfirm": "A toshe duk saƙonni daga {domain}? Saƙonnin da za su zo nan gaba daga wannan yanki da ƙananan yankunansa za su tafi Shara.",
 	"message.star": "Sa tauraro",
 	"message.removeStar": "Cire tauraro",
 	"message.error.star": "Ba a iya sabunta tauraro ba",

@@ -121,6 +121,8 @@
 	"message.mailingListNotice": "ข้อความนี้มาจากเมลลิงลิสต์",
 	"message.date": "วันที่",
 	"message.blockContact": "บล็อกผู้ติดต่อ",
+	"message.blockDomain": "บล็อกโดเมนผู้ส่ง",
+	"message.blockDomainConfirm": "บล็อกอีเมลทั้งหมดจาก {domain} หรือไม่ ข้อความต่อไปจากโดเมนนี้และโดเมนย่อยจะถูกย้ายไปถังขยะ",
 	"message.star": "ติดดาว",
 	"message.removeStar": "ลบดาว",
 	"message.error.star": "ไม่สามารถอัปเดตดาวได้",

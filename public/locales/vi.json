@@ -118,6 +118,8 @@
 	"message.mailingListNotice": "Thư này đến từ một danh sách gửi thư.",
 	"message.date": "Ngày",
 	"message.blockContact": "Chặn liên hệ",
+	"message.blockDomain": "Chặn tên miền người gửi",
+	"message.blockDomainConfirm": "Chặn tất cả thư từ {domain}? Thư mới từ tên miền này và các tên miền con sẽ vào Thùng rác.",
 	"message.star": "Gắn sao",
 	"message.removeStar": "Bỏ gắn sao",
 	"message.error.star": "Không thể cập nhật gắn sao",

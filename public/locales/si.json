@@ -122,6 +122,8 @@
 	"message.mailingListNotice": "මෙම පණිවිඩය තැපැල් ලැයිස්තුවකින් ලැබුණි.",
 	"message.date": "දිනය",
 	"message.blockContact": "සම්බන්ධතාව අවහිර කරන්න",
+	"message.blockDomain": "යවන්නාගේ ඩොමේනය අවහිර කරන්න",
+	"message.blockDomainConfirm": "{domain} වෙතින් එන සියලු තැපැල් අවහිර කරන්නද? මෙම ඩොමේනයෙන් සහ එහි උප ඩොමේන වලින් එන පණිවිඩ කුණු කූඩයට යනු ඇත.",
 	"message.star": "තරු ලකුණු කරන්න",
 	"message.removeStar": "තරු ලකුණ ඉවත් කරන්න",
 	"message.error.star": "තරු ලකුණ යාවත්කාලීන කළ නොහැක",

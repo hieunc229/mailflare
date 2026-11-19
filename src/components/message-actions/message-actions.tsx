@@ -25,6 +25,7 @@ import { getPermanentDeleteConfirmText, PartialDeleteError, supportsPermanentDel
 import {
 	confirmTrashWithoutUnsubscribe,
 	blockMessageContact,
+	getSenderDomain,
 	createForwardDraft,
 	createReplyDraft,
 	createTrashSenderRule,
@@ -270,6 +271,28 @@ export function MessageActions({
 		}
 	}
 
+	async function onBlockDomain() {
+		setError(null);
+		const domain = getSenderDomain(senderAddress);
+		if (!mailboxId || !domain) {
+			setError(t("message.error.block"));
+			return;
+		}
+		if (!await confirmDestructive(t("message.blockDomainConfirm", { domain }))) return;
+
+		setPendingAction("block");
+		try {
+			await blockMessageContact({ mailboxId, senderAddress, scope: "domain" });
+			await runSingleMessageAction(messageId, "trash", { undo: false });
+			router.push(autoAdvance() ?? listHref);
+			router.refresh();
+		} catch (blockError) {
+			setError(blockError instanceof Error ? blockError.message : t("message.error.block"));
+		} finally {
+			setPendingAction(null);
+		}
+	}
+
 	async function onUnsubscribeDeleteAll() {
 		setError(null);
 		setPendingAction("unsubscribe");
@@ -484,6 +507,9 @@ export function MessageActions({
 							)}
 							<MessageActionMenuItem icon={<Ban size={iconSize} />} onSelect={() => void onBlockContact()}>
 								{t("message.blockContact")}
+							</MessageActionMenuItem>
+							<MessageActionMenuItem icon={<Ban size={iconSize} />} onSelect={() => void onBlockDomain()}>
+								{t("message.blockDomain")}
 							</MessageActionMenuItem>
 							<MessageActionMenuSeparator />
 						</>

@@ -122,6 +122,8 @@
 	"message.mailingListNotice": "این پیام از یک فهرست پستی است.",
 	"message.date": "تاریخ",
 	"message.blockContact": "مسدود کردن مخاطب",
+	"message.blockDomain": "مسدود کردن دامنهٔ فرستنده",
+	"message.blockDomainConfirm": "همهٔ نامه‌های {domain} مسدود شود؟ پیام‌های بعدی این دامنه و زیردامنه‌هایش به سطل زباله می‌روند.",
 	"message.star": "ستاره‌دار کردن",
 	"message.removeStar": "حذف ستاره",
 	"message.error.star": "به‌روزرسانی ستاره ممکن نشد",

@@ -130,6 +130,8 @@
 	"message.mailingListNotice": "Це повідомлення надійшло зі списку розсилки.",
 	"message.date": "Дата",
 	"message.blockContact": "Заблокувати контакт",
+	"message.blockDomain": "Заблокувати домен відправника",
+	"message.blockDomainConfirm": "Заблокувати всю пошту з {domain}? Майбутні листи з цього домену та його піддоменів потраплятимуть до кошика.",
 	"message.star": "Позначити зірочкою",
 	"message.removeStar": "Зняти зірочку",
 	"message.error.star": "Не вдалося оновити зірочку",

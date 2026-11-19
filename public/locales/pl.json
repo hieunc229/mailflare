@@ -130,6 +130,8 @@
 	"message.mailingListNotice": "Ta wiadomość pochodzi z listy mailingowej.",
 	"message.date": "Data",
 	"message.blockContact": "Zablokuj kontakt",
+	"message.blockDomain": "Zablokuj domenę nadawcy",
+	"message.blockDomainConfirm": "Zablokować całą pocztę z domeny {domain}? Przyszłe wiadomości z niej i jej subdomen trafią do Kosza.",
 	"message.star": "Oznacz gwiazdką",
 	"message.removeStar": "Usuń gwiazdkę",
 	"message.error.star": "Nie można zaktualizować gwiazdki",

@@ -126,6 +126,8 @@
 	"message.mailingListNotice": "Questo messaggio proviene da una mailing list.",
 	"message.date": "Data",
 	"message.blockContact": "Blocca contatto",
+	"message.blockDomain": "Blocca il dominio del mittente",
+	"message.blockDomainConfirm": "Bloccare tutta la posta da {domain}? I messaggi futuri di questo dominio e dei suoi sottodomini andranno nel Cestino.",
 	"message.star": "Contrassegna",
 	"message.removeStar": "Rimuovi contrassegno",
 	"message.error.star": "Impossibile aggiornare il contrassegno",

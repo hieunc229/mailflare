@@ -122,6 +122,8 @@
 	"message.mailingListNotice": "ಈ ಸಂದೇಶವು ಮೆಯ್ಲಿಂಗ್ ಪಟ್ಟಿಯಿಂದ ಬಂದಿದೆ.",
 	"message.date": "ದಿನಾಂಕ",
 	"message.blockContact": "ಸಂಪರ್ಕವನ್ನು ನಿರ್ಬಂಧಿಸಿ",
+	"message.blockDomain": "ಕಳುಹಿಸಿದವರ ಡೊಮೇನ್ ನಿರ್ಬಂಧಿಸಿ",
+	"message.blockDomainConfirm": "{domain} ನಿಂದ ಬರುವ ಎಲ್ಲಾ ಮೇಲ್ ನಿರ್ಬಂಧಿಸಬೇಕೇ? ಈ ಡೊಮೇನ್ ಮತ್ತು ಅದರ ಉಪಡೊಮೇನ್‌ಗಳಿಂದ ಮುಂದಿನ ಸಂದೇಶಗಳು ಟ್ರ್ಯಾಶ್‌ಗೆ ಹೋಗುತ್ತವೆ.",
 	"message.star": "ನಕ್ಷತ್ರ ಹಾಕಿ",
 	"message.removeStar": "ನಕ್ಷತ್ರ ತೆಗೆಯಿರಿ",
 	"message.error.star": "ನಕ್ಷತ್ರವನ್ನು ನವೀಕರಿಸಲು ಸಾಧ್ಯವಾಗಲಿಲ್ಲ",

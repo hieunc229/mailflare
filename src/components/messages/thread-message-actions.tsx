@@ -9,6 +9,7 @@ import { getOwnAddressForMessage } from "@/app/(dashboard)/inbox/[messageId]/uti
 import { useLanguage } from "@/components/language-provider";
 import { Button } from "@/components/ui/button";
 import { Tooltip } from "@/components/ui/tooltip";
+import { confirmDestructive } from "@/components/ui/confirm-dialog";
 import { cn } from "@/lib/utils";
 import {
 	blockMessageContact,
@@ -16,6 +17,7 @@ import {
 	createReplyDraft,
 	getMoveMessageActions,
 	getReplyRecipients,
+	getSenderDomain,
 	getReplyThreading,
 	hasAdditionalRecipients,
 	runSingleMessageAction,
@@ -126,6 +128,22 @@ export function ThreadMessageActions({
 		setError(null);
 		try {
 			await blockMessageContact({ mailboxId, senderAddress: message.fromAddr });
+			await runSingleMessageAction(message.id, "trash", { undo: false });
+		} catch (nextError) {
+			setError(nextError instanceof Error ? nextError.message : t("message.error.block"));
+		} finally {
+			setPending(false);
+		}
+	}
+
+	async function onBlockDomain() {
+		const domain = getSenderDomain(message.fromAddr);
+		if (!mailboxId || !domain) return;
+		if (!await confirmDestructive(t("message.blockDomainConfirm", { domain }))) return;
+		setPending(true);
+		setError(null);
+		try {
+			await blockMessageContact({ mailboxId, senderAddress: message.fromAddr, scope: "domain" });
 			await runSingleMessageAction(message.id, "trash", { undo: false });
 		} catch (nextError) {
 			setError(nextError instanceof Error ? nextError.message : t("message.error.block"));
@@ -251,6 +269,9 @@ export function ThreadMessageActions({
 								<MessageActionMenuSeparator />
 								<MessageActionMenuItem icon={<Ban className="h-4 w-4" />} onSelect={() => void onBlock()}>
 									{t("message.blockContact")}
+								</MessageActionMenuItem>
+								<MessageActionMenuItem icon={<Ban className="h-4 w-4" />} onSelect={() => void onBlockDomain()}>
+									{t("message.blockDomain")}
 								</MessageActionMenuItem>
 							</>
 						)}

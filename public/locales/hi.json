@@ -122,6 +122,8 @@
 	"message.mailingListNotice": "यह संदेश किसी मेलिंग सूची से है।",
 	"message.date": "तारीख़",
 	"message.blockContact": "संपर्क ब्लॉक करें",
+	"message.blockDomain": "भेजने वाले का डोमेन ब्लॉक करें",
+	"message.blockDomainConfirm": "{domain} से आने वाला सारा मेल ब्लॉक करें? इस डोमेन और इसके सबडोमेन से आने वाले संदेश ट्रैश में जाएँगे।",
 	"message.star": "स्टार लगाएँ",
 	"message.removeStar": "स्टार हटाएँ",
 	"message.error.star": "स्टार अपडेट नहीं किया जा सका",

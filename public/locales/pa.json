@@ -122,6 +122,8 @@
 	"message.mailingListNotice": "ਇਹ ਸੁਨੇਹਾ ਮੇਲਿੰਗ ਸੂਚੀ ਤੋਂ ਹੈ।",
 	"message.date": "ਮਿਤੀ",
 	"message.blockContact": "ਸੰਪਰਕ ਬਲੌਕ ਕਰੋ",
+	"message.blockDomain": "ਭੇਜਣ ਵਾਲੇ ਦਾ ਡੋਮੇਨ ਬਲੌਕ ਕਰੋ",
+	"message.blockDomainConfirm": "{domain} ਤੋਂ ਆਉਣ ਵਾਲੀ ਸਾਰੀ ਮੇਲ ਬਲੌਕ ਕਰਨੀ ਹੈ? ਇਸ ਡੋਮੇਨ ਅਤੇ ਇਸ ਦੇ ਸਬਡੋਮੇਨ ਤੋਂ ਆਉਣ ਵਾਲੇ ਸੁਨੇਹੇ ਰੱਦੀ ਵਿੱਚ ਜਾਣਗੇ।",
 	"message.star": "ਤਾਰਾ ਲਗਾਓ",
 	"message.removeStar": "ਤਾਰਾ ਹਟਾਓ",
 	"message.error.star": "ਤਾਰਾ ਅੱਪਡੇਟ ਨਹੀਂ ਕੀਤਾ ਜਾ ਸਕਿਆ",

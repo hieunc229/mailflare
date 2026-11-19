@@ -106,14 +106,20 @@ export async function createTrashSenderRule({
 export async function blockMessageContact({
   mailboxId,
   senderAddress,
+  scope,
 }: BlockMessageContactInput) {
   const response = await authFetch("/api/contacts/block", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ mailboxId, address: senderAddress }),
+    body: JSON.stringify({ mailboxId, address: senderAddress, scope }),
   });
   const data = (await response.json()) as { error?: string };
   if (!response.ok) throw new Error(data.error ?? "Unable to block contact");
+}
+
+export function getSenderDomain(senderAddress: string): string {
+  const address = getEmailAddress(senderAddress).trim().toLowerCase();
+  return address.includes("@") ? address.slice(address.lastIndexOf("@") + 1) : "";
 }
 
 export function getMoveMessageActions(

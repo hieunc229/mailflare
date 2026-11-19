@@ -122,6 +122,8 @@
 	"message.mailingListNotice": "આ સંદેશ મેઇલિંગ સૂચિમાંથી આવ્યો છે.",
 	"message.date": "તારીખ",
 	"message.blockContact": "સંપર્ક બ્લૉક કરો",
+	"message.blockDomain": "મોકલનારનું ડોમેન બ્લૉક કરો",
+	"message.blockDomainConfirm": "{domain} તરફથી આવતો બધો મેઇલ બ્લૉક કરવો? આ ડોમેન અને તેના સબડોમેનના ભાવિ સંદેશા ટ્રૅશમાં જશે.",
 	"message.star": "તારો આપો",
 	"message.removeStar": "તારો દૂર કરો",
 	"message.error.star": "તારો અપડેટ કરી શકાયો નથી",

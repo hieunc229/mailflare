@@ -121,6 +121,8 @@
 	"message.mailingListNotice": "Mesej ini adalah daripada senarai mel.",
 	"message.date": "Tarikh",
 	"message.blockContact": "Sekat kenalan",
+	"message.blockDomain": "Sekat domain penghantar",
+	"message.blockDomainConfirm": "Sekat semua mel daripada {domain}? Mesej akan datang daripada domain ini dan subdomainnya akan masuk ke Sampah.",
 	"message.star": "Bintangkan",
 	"message.removeStar": "Alih keluar bintang",
 	"message.error.star": "Tidak dapat mengemas kini bintang",

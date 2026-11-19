@@ -1,7 +1,7 @@
 import { and, eq, inArray } from "drizzle-orm";
 import { getDb } from "@/db";
 import { selectInBatches } from "@/lib/db-params";
-import { contacts, routingRules } from "@/db/schema";
+import { contacts, domains, routingRules } from "@/db/schema";
 import { getFirstEmailAddressEntry, normalizeEmailAddress } from "@/lib/email/address";
 import type { BlockContactInput, ContactCard, ContactDisplayName, ContactInput, MessageContactNames } from "@/lib/contacts/types";
 import type { ContactSource } from "@/lib/email/address-types";
@@ -255,6 +255,51 @@ export async function blockContact(env: CloudflareEnv, input: BlockContactInput)
 	}
 
 	return { email, blocked: true };
+}
+
+/**
+ * Trashes everything from a sender's domain and its subdomains with a mailbox routing rule, the same kind
+ * of rule `blockContact` adds for one address. Domains hosted on this installation cannot be blocked.
+ */
+export async function blockSenderDomain(env: CloudflareEnv, input: BlockContactInput) {
+	const address = normalizeEmailAddress(input.address);
+	const domain = address.includes("@") ? address.slice(address.lastIndexOf("@") + 1) : "";
+	if (!/^[a-z0-9-]+(\.[a-z0-9-]+)+$/.test(domain)) throw new Error("A valid sender address is required");
+
+	const db = getDb(env);
+	const hosted = await db.select({ hostname: domains.hostname }).from(domains);
+	if (hosted.some(({ hostname }) => domain === hostname.toLowerCase() || domain.endsWith(`.${hostname.toLowerCase()}`))) {
+		throw new Error("Cannot block your own domain");
+	}
+
+	const matchValue = `@(?:[a-z0-9-]+\\.)*${domain.replace(/\./g, "\\.")}$`;
+	const [existingRule] = await db
+		.select({ id: routingRules.id })
+		.from(routingRules)
+		.where(and(
+			eq(routingRules.mailboxId, input.mailboxId),
+			eq(routingRules.matchField, "sender"),
+			eq(routingRules.matchOperator, "regex"),
+			eq(routingRules.matchValue, matchValue),
+			eq(routingRules.action, "trash"),
+		))
+		.limit(1);
+	if (!existingRule) {
+		await db.insert(routingRules).values({
+			id: `block-domain:${input.mailboxId}:${domain}`,
+			userId: input.userId,
+			domainId: input.domainId,
+			name: `Block ${domain}`,
+			pattern: matchValue,
+			matchField: "sender",
+			matchOperator: "regex",
+			matchValue,
+			mailboxId: input.mailboxId,
+			action: "trash",
+			priority: 100,
+		}).onConflictDoNothing();
+	}
+	return { domain, blocked: true };
 }
 
 function getNextDisplayName(existingName: string | null, source: string, nextName: string | null, incomingSource: string): string | null {

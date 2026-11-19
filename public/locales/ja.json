@@ -118,6 +118,8 @@
 	"message.mailingListNotice": "このメッセージはメーリングリストからのものです。",
 	"message.date": "日付",
 	"message.blockContact": "連絡先をブロック",
+	"message.blockDomain": "送信者のドメインをブロック",
+	"message.blockDomainConfirm": "{domain} からのメールをすべてブロックしますか？このドメインとそのサブドメインからの今後のメッセージはゴミ箱に移動します。",
 	"message.star": "スターを付ける",
 	"message.removeStar": "スターを外す",
 	"message.error.star": "スターを更新できません",

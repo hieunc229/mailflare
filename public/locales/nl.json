@@ -122,6 +122,8 @@
 	"message.mailingListNotice": "Dit bericht komt van een mailinglijst.",
 	"message.date": "Datum",
 	"message.blockContact": "Contact blokkeren",
+	"message.blockDomain": "Afzenderdomein blokkeren",
+	"message.blockDomainConfirm": "Alle e-mail van {domain} blokkeren? Toekomstige berichten van dit domein en de subdomeinen gaan naar de Prullenbak.",
 	"message.star": "Ster toevoegen",
 	"message.removeStar": "Ster verwijderen",
 	"message.error.star": "Ster kan niet worden bijgewerkt",

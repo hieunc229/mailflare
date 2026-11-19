@@ -121,6 +121,8 @@
 	"message.mailingListNotice": "이 메시지는 메일링 리스트에서 온 것입니다.",
 	"message.date": "날짜",
 	"message.blockContact": "연락처 차단",
+	"message.blockDomain": "보낸 사람 도메인 차단",
+	"message.blockDomainConfirm": "{domain}의 모든 메일을 차단할까요? 이 도메인과 하위 도메인에서 오는 이후 메시지는 휴지통으로 이동합니다.",
 	"message.star": "별표",
 	"message.removeStar": "별표 해제",
 	"message.error.star": "별표를 업데이트할 수 없습니다",

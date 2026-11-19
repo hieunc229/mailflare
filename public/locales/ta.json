@@ -122,6 +122,8 @@
 	"message.mailingListNotice": "இந்தச் செய்தி அஞ்சல் பட்டியலில் இருந்து வந்தது.",
 	"message.date": "தேதி",
 	"message.blockContact": "தொடர்பைத் தடு",
+	"message.blockDomain": "அனுப்புநர் டொமைனைத் தடு",
+	"message.blockDomainConfirm": "{domain} இலிருந்து வரும் எல்லா அஞ்சலையும் தடுக்கவா? இந்த டொமைன் மற்றும் அதன் துணை டொமைன்களிலிருந்து வரும் செய்திகள் குப்பைக்குச் செல்லும்.",
 	"message.star": "நட்சத்திரமிடு",
 	"message.removeStar": "நட்சத்திரத்தை நீக்கு",
 	"message.error.star": "நட்சத்திரத்தைப் புதுப்பிக்க இயலவில்லை",

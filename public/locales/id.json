@@ -118,6 +118,8 @@
 	"message.mailingListNotice": "Pesan ini berasal dari milis.",
 	"message.date": "Tanggal",
 	"message.blockContact": "Blokir kontak",
+	"message.blockDomain": "Blokir domain pengirim",
+	"message.blockDomainConfirm": "Blokir semua surat dari {domain}? Pesan berikutnya dari domain ini dan subdomainnya akan masuk ke Sampah.",
 	"message.star": "Beri bintang",
 	"message.removeStar": "Hapus bintang",
 	"message.error.star": "Tidak dapat memperbarui bintang",

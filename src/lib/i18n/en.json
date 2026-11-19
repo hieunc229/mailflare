@@ -122,6 +122,8 @@
 	"message.mailingListNotice": "This message is from a mailing list.",
 	"message.date": "Date",
 	"message.blockContact": "Block contact",
+	"message.blockDomain": "Block sender domain",
+	"message.blockDomainConfirm": "Block all mail from {domain}? Future messages from it and its subdomains will go to Trash.",
 	"message.star": "Star",
 	"message.removeStar": "Remove star",
 	"message.error.star": "Unable to update star",

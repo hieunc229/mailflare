@@ -122,6 +122,8 @@
 	"message.mailingListNotice": "ఈ సందేశం మెయిలింగ్ జాబితా నుండి వచ్చింది.",
 	"message.date": "తేదీ",
 	"message.blockContact": "కాంటాక్ట్‌ను బ్లాక్ చేయండి",
+	"message.blockDomain": "పంపినవారి డొమైన్‌ను బ్లాక్ చేయండి",
+	"message.blockDomainConfirm": "{domain} నుండి వచ్చే అన్ని మెయిల్‌లను బ్లాక్ చేయాలా? ఈ డొమైన్ మరియు దాని సబ్‌డొమైన్‌ల నుండి భవిష్యత్తు సందేశాలు ట్రాష్‌కు వెళ్తాయి.",
 	"message.star": "నక్షత్రం పెట్టండి",
 	"message.removeStar": "నక్షత్రం తీసివేయండి",
 	"message.error.star": "నక్షత్రాన్ని నవీకరించలేకపోయాం",

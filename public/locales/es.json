@@ -126,6 +126,8 @@
 	"message.mailingListNotice": "Este mensaje procede de una lista de correo.",
 	"message.date": "Fecha",
 	"message.blockContact": "Bloquear contacto",
+	"message.blockDomain": "Bloquear dominio del remitente",
+	"message.blockDomainConfirm": "¿Bloquear todo el correo de {domain}? Los mensajes futuros de este dominio y sus subdominios irán a la Papelera.",
 	"message.star": "Destacar",
 	"message.removeStar": "Quitar destacado",
 	"message.error.star": "No se pudo actualizar el destacado",

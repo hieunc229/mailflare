@@ -130,6 +130,8 @@
 	"message.mailingListNotice": "Это письмо пришло из списка рассылки.",
 	"message.date": "Дата",
 	"message.blockContact": "Заблокировать контакт",
+	"message.blockDomain": "Заблокировать домен отправителя",
+	"message.blockDomainConfirm": "Заблокировать всю почту с {domain}? Будущие письма с этого домена и его поддоменов будут попадать в корзину.",
 	"message.star": "Пометить",
 	"message.removeStar": "Снять пометку",
 	"message.error.star": "Не удалось обновить пометку",

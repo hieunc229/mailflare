@@ -122,6 +122,8 @@
 	"message.mailingListNotice": "Diese Nachricht stammt von einer Mailingliste.",
 	"message.date": "Datum",
 	"message.blockContact": "Kontakt blockieren",
+	"message.blockDomain": "Absenderdomain blockieren",
+	"message.blockDomainConfirm": "Alle Nachrichten von {domain} blockieren? Künftige Nachrichten dieser Domain und ihrer Subdomains landen im Papierkorb.",
 	"message.star": "Markieren",
 	"message.removeStar": "Markierung entfernen",
 	"message.error.star": "Die Markierung konnte nicht aktualisiert werden",

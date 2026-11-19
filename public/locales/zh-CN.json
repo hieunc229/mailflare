@@ -118,6 +118,8 @@
 	"message.mailingListNotice": "此邮件来自邮件列表。",
 	"message.date": "日期",
 	"message.blockContact": "屏蔽联系人",
+	"message.blockDomain": "屏蔽发件人域名",
+	"message.blockDomainConfirm": "要屏蔽来自 {domain} 的所有邮件吗？今后来自该域名及其子域名的邮件将进入回收站。",
 	"message.star": "加星标",
 	"message.removeStar": "取消星标",
 	"message.error.star": "无法更新星标",

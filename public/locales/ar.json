@@ -138,6 +138,8 @@
 	"message.mailingListNotice": "هذه الرسالة من قائمة بريدية.",
 	"message.date": "التاريخ",
 	"message.blockContact": "حظر جهة الاتصال",
+	"message.blockDomain": "حظر نطاق المرسل",
+	"message.blockDomainConfirm": "هل تريد حظر كل البريد من {domain}؟ ستنتقل الرسائل المستقبلية من هذا النطاق ونطاقاته الفرعية إلى سلة المهملات.",
 	"message.star": "تمييز بنجمة",
 	"message.removeStar": "إزالة النجمة",
 	"message.error.star": "تعذّر تحديث النجمة",

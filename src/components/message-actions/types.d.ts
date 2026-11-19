@@ -75,6 +75,8 @@ export type TrashSenderRuleInput = {
 export type BlockMessageContactInput = {
 	mailboxId: string;
 	senderAddress: string;
+	/** "domain" blocks the sender's whole domain; the default blocks the one address. */
+	scope?: "address" | "domain";
 };
 
 export type MoveMessageActionItem = {

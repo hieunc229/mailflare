@@ -122,6 +122,8 @@
 	"message.mailingListNotice": "हा संदेश मेलिंग यादीतून आला आहे.",
 	"message.date": "तारीख",
 	"message.blockContact": "संपर्क ब्लॉक करा",
+	"message.blockDomain": "पाठवणाऱ्याचा डोमेन ब्लॉक करा",
+	"message.blockDomainConfirm": "{domain} कडून येणारा सर्व मेल ब्लॉक करायचा? या डोमेन आणि त्याच्या सबडोमेनकडून येणारे संदेश ट्रॅशमध्ये जातील.",
 	"message.star": "तारांकित करा",
 	"message.removeStar": "तारा काढा",
 	"message.error.star": "तारा अद्यतनित करता आला नाही",
