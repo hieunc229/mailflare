@@ -364,6 +364,8 @@
 	"attachment.saveToDrive": "Simpan ke Drive",
 	"attachment.savedToDrive": "Tersimpan di Drive",
 	"attachment.saveToDriveFailed": "Tidak dapat menyimpan ke Drive",
+	"attachment.sharedIntro": "File yang dibagikan melalui Mailflare (tautan unduhan kedaluwarsa setelah {days} hari):",
+	"attachment.sharedDownload": "Unduh file",
 	"auth.logout": "Keluar",
 	"license.upgrade": "Tingkatkan",
 	"contact.title": "Detail kontak",

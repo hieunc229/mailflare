@@ -39,6 +39,8 @@ export type SendEmailInput = {
 	threadId?: string | null;
 	mailboxId: string;
 	attachments?: AttachmentContent[];
+	/** The sender's interface language, for text Mailflare adds to the message (such as the large-file note). */
+	locale?: string;
 	/** Future delivery time. Values at or before the current time send immediately. */
 	scheduledAt?: string | Date;
 	/** Hold the send for the user's undo window (via the scheduled queue) so they can cancel it. */
@@ -236,6 +238,7 @@ async function deliverEmail(env: CloudflareEnv, delivery: PreparedDelivery): Pro
 				text: input.text,
 				headers,
 				publicOrigin: input.publicOrigin,
+				locale: input.locale,
 			})
 			: { attachments, html: input.html, text: input.text };
 		if (prepared.text !== input.text || prepared.html !== input.html) {

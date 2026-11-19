@@ -369,6 +369,8 @@
 	"attachment.saveToDrive": "Ajiye a Drive",
 	"attachment.savedToDrive": "An ajiye a Drive",
 	"attachment.saveToDriveFailed": "Ba a iya ajiyawa a Drive ba",
+	"attachment.sharedIntro": "Fayilolin da aka raba ta Mailflare (hanyoyin saukewa za su ƙare bayan kwanaki {days}):",
+	"attachment.sharedDownload": "Sauke fayil",
 	"auth.logout": "Fita",
 	"license.upgrade": "Haɓaka",
 	"contact.title": "Bayanan abokin hulɗa",

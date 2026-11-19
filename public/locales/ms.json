@@ -368,6 +368,8 @@
 	"attachment.saveToDrive": "Simpan ke Drive",
 	"attachment.savedToDrive": "Disimpan ke Drive",
 	"attachment.saveToDriveFailed": "Tidak dapat menyimpan ke Drive",
+	"attachment.sharedIntro": "Fail yang dikongsi melalui Mailflare (pautan muat turun tamat tempoh selepas {days} hari):",
+	"attachment.sharedDownload": "Muat turun fail",
 	"auth.logout": "Log keluar",
 	"license.upgrade": "Naik taraf",
 	"contact.title": "Butiran kenalan",

@@ -11,6 +11,7 @@ import { agentDraftMetadata, messages } from "@/db/schema";
 import { eq } from "drizzle-orm";
 import { loadMessageAttachmentContents } from "@/lib/email/attachments";
 import { userOwnsDraft } from "@/app/api/drafts/utils";
+import { getRequestLocale } from "@/lib/i18n/server";
 
 export async function POST(request: Request) {
 	const env = getEnv();
@@ -51,6 +52,7 @@ export async function POST(request: Request) {
 			...parsed.data,
 			attachments,
 			publicOrigin: new URL(request.url).origin,
+			locale: await getRequestLocale(),
 		});
 		return NextResponse.json(result);
 	} catch (err) {

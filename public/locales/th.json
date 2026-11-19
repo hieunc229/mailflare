@@ -368,6 +368,8 @@
 	"attachment.saveToDrive": "บันทึกไปยัง Drive",
 	"attachment.savedToDrive": "บันทึกไปยัง Drive แล้ว",
 	"attachment.saveToDriveFailed": "ไม่สามารถบันทึกไปยัง Drive ได้",
+	"attachment.sharedIntro": "ไฟล์ที่แชร์ผ่าน Mailflare (ลิงก์ดาวน์โหลดจะหมดอายุหลังจาก {days} วัน):",
+	"attachment.sharedDownload": "ดาวน์โหลดไฟล์",
 	"auth.logout": "ออกจากระบบ",
 	"license.upgrade": "อัปเกรด",
 	"contact.title": "รายละเอียดผู้ติดต่อ",

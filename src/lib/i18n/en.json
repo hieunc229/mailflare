@@ -369,6 +369,8 @@
 	"attachment.saveToDrive": "Save to Drive",
 	"attachment.savedToDrive": "Saved to Drive",
 	"attachment.saveToDriveFailed": "Could not save to Drive",
+	"attachment.sharedIntro": "Files shared through Mailflare (download links expire after {days} days):",
+	"attachment.sharedDownload": "Download file",
 	"attachment.risk.ok": "No known risky file type",
 	"attachment.risk.warning": "This file may not be what it seems.",
 	"attachment.risk.blocked": "This file can run code or hide its real type.",

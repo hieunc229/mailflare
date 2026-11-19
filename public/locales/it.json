@@ -374,6 +374,8 @@
 	"attachment.saveToDrive": "Salva su Drive",
 	"attachment.savedToDrive": "Salvato su Drive",
 	"attachment.saveToDriveFailed": "Impossibile salvare su Drive",
+	"attachment.sharedIntro": "File condivisi tramite Mailflare (i link di download scadono dopo {days} giorni):",
+	"attachment.sharedDownload": "Scarica file",
 	"auth.logout": "Esci",
 	"license.upgrade": "Passa a un piano superiore",
 	"contact.title": "Dettagli del contatto",

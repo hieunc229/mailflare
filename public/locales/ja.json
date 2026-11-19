@@ -364,6 +364,8 @@
 	"attachment.saveToDrive": "Driveに保存",
 	"attachment.savedToDrive": "Driveに保存しました",
 	"attachment.saveToDriveFailed": "Driveに保存できませんでした",
+	"attachment.sharedIntro": "Mailflare で共有されたファイル（ダウンロードリンクの有効期限は {days} 日です）:",
+	"attachment.sharedDownload": "ファイルをダウンロード",
 	"auth.logout": "ログアウト",
 	"license.upgrade": "アップグレード",
 	"contact.title": "連絡先の詳細",

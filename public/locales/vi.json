@@ -364,6 +364,8 @@
 	"attachment.saveToDrive": "Lưu vào Drive",
 	"attachment.savedToDrive": "Đã lưu vào Drive",
 	"attachment.saveToDriveFailed": "Không thể lưu vào Drive",
+	"attachment.sharedIntro": "Tệp được chia sẻ qua Mailflare (liên kết tải xuống hết hạn sau {days} ngày):",
+	"attachment.sharedDownload": "Tải tệp xuống",
 	"auth.logout": "Đăng xuất",
 	"license.upgrade": "Nâng cấp",
 	"contact.title": "Chi tiết liên hệ",
