@@ -16,3 +16,9 @@ signature. The server stores it and replies with the routing decision, so
 reject rules and forwarding rules still act at Cloudflare's edge. If the server
 is unreachable or answers with an error, the Worker throws, so Email Routing
 returns a temporary failure and the sender's mail server retries later.
+
+When a message needs more than one forward (a forwarding rule that keeps a
+copy plus account forwarding), the server lists them all in `forwardToAll` and
+the Worker forwards to each. A relay deployed before that only reads
+`forwardTo` and keeps forwarding to one address; run `npm run deploy` again to
+pick up the change.
