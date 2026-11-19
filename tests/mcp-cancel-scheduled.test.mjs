@@ -21,9 +21,9 @@ const scheduled = (permission) => `${sharedMailboxSeed(permission)}
 	INSERT INTO outbound_jobs (id, user_id, message_id, status, payload, scheduled_at, created_at, updated_at) VALUES ('job-1', 'author', 'm-sched', 'queued', '{}', 4102444800, 1, 1);
 `;
 
-async function cancelAs(t, permission) {
+async function cancelAs(t, permission, who = "delegate") {
 	const { env, sqlite } = await newDatabase(t, scheduled(permission));
-	const delegate = { id: "delegate", email: "delegate@example.com", role: "user" };
+	const delegate = { id: who, email: `${who}@example.com`, role: "user" };
 	const server = app.createMailflareMcpHandler(env, { keyId: "key", user: delegate, scopes: ["mcp:read", "mcp:draft"], mailboxIds: ["mb-team"] }, "http://localhost", "");
 	const result = await server.tools.get("cancel_scheduled_send")({ mailboxId: "mb-team", messageId: "m-sched" });
 	return { data: JSON.parse(result.content[0].text), isError: !!result.isError, sqlite };
@@ -41,4 +41,13 @@ test("a delegate who may send on behalf can still cancel", async (t) => {
 	const { data, isError, sqlite } = await cancelAs(t, "send_on_behalf");
 	assert.equal(isError, false, JSON.stringify(data));
 	assert.equal(sqlite.prepare("SELECT status FROM messages WHERE id = 'm-sched'").get().status, "draft");
+	// The draft now belongs to its author alone, so the colleague who cancelled gets no id to open.
+	assert.equal(data.status, "cancelled");
+	assert.equal("draftId" in data, false, JSON.stringify(data));
+});
+
+test("the author who cancels their own scheduled send gets the draft id", async (t) => {
+	const { data, isError } = await cancelAs(t, "send_on_behalf", "author");
+	assert.equal(isError, false, JSON.stringify(data));
+	assert.deepEqual(data, { messageId: "m-sched", status: "cancelled", draftId: "m-sched" });
 });

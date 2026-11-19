@@ -65,10 +65,10 @@ test("another user's draft is left out of the export", async (t) => {
 	t.after(() => database.db.close());
 	await applyMigrations(database, join(root, "drizzle/migrations"));
 	database.db.pragma("foreign_keys = OFF");
-	const insert = database.db.prepare("INSERT INTO messages (id, user_id, mailbox_id, direction, from_addr, to_addr, subject, text_body, status, created_at) VALUES (?, ?, 'mbx1', 'outbound', 'a@example.com', 'b@example.com', ?, ?, ?, 1)");
-	insert.run("m-sent", "u1", "Sent", "shared", "sent");
-	insert.run("m-mine", "u2", "Mine", "own draft", "draft");
-	insert.run("m-theirs", "u1", "Theirs", "private draft", "draft");
+	const insert = database.db.prepare("INSERT INTO messages (id, user_id, mailbox_id, direction, from_addr, to_addr, subject, text_body, status, private_draft, created_at) VALUES (?, ?, 'mbx1', 'outbound', 'a@example.com', 'b@example.com', ?, ?, ?, ?, 1)");
+	insert.run("m-sent", "u1", "Sent", "shared", "sent", 0);
+	insert.run("m-mine", "u2", "Mine", "own draft", "draft", 1);
+	insert.run("m-theirs", "u1", "Theirs", "private draft", "draft", 1);
 	const mbox = await exportMailboxToMbox({ DB: database }, "mbx1", "u2");
 	assert.match(mbox, /Subject: Sent/);
 	assert.match(mbox, /Subject: Mine/);

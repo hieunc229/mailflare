@@ -110,8 +110,8 @@ async function rowsSince(
 /**
  * Other users' drafts in a shared mailbox are private, so their ids stay out of the email feeds and
  * their activity does not mark the mailbox as changed. Two cases need care:
- *  - a message that was visible and became a draft (a scheduled send cancelled back to Drafts) is
- *    logged with a "hidden" marker: readers who can no longer see it are told it was destroyed,
+ *  - a message that was visible and became a draft (a scheduled send cancelled back to Drafts, a
+ *    status change or a JMAP move into Drafts) is logged with a "hidden" marker (logMessageHidden): readers who can no longer see it are told it was destroyed,
  *    its author just sees an update;
  *  - a draft that has since been deleted can no longer be told apart; its (random) id is still
  *    reported as destroyed.
@@ -120,12 +120,13 @@ async function withoutOthersDrafts(ctx: JmapContext, rows: ChangeRow[]): Promise
 	const ids = [...new Set(rows.filter((row) => row.objectType === "email").map((row) => row.objectId))];
 	if (ids.length === 0) return rows;
 	const hidden = new Set<string>();
-	// D1 allows 100 bound parameters per statement; the predicate binds two more.
-	for (let offset = 0; offset < ids.length; offset += 90) {
+	// D1 allows 100 bound parameters per statement; the draft filter takes some of them.
+	const batch = 100 - DRAFT_FILTER_PARAMS;
+	for (let offset = 0; offset < ids.length; offset += batch) {
 		const found = await ctx.db
 			.select({ id: messages.id })
 			.from(messages)
-			.where(and(inArray(messages.id, ids.slice(offset, offset + 90)), eq(messages.status, "draft"), not(draftsVisibleTo(ctx.auth.userId))));
+			.where(and(inArray(messages.id, ids.slice(offset, offset + batch)), not(draftsVisibleTo(ctx.auth.userId))));
 		for (const row of found) hidden.add(row.id);
 	}
 	const result: ChangeRow[] = [];

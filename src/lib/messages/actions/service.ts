@@ -46,7 +46,7 @@ export class MessageActionError extends Error {
 	}
 }
 
-type LoadedTarget = MessageActionTarget & { mailboxId: string | null; userId: string | null };
+type LoadedTarget = MessageActionTarget & { mailboxId: string | null; userId: string | null; privateDraft: boolean };
 
 type PlannedUpdate = {
 	id: string;
@@ -62,6 +62,7 @@ function selectTargetChunk(db: AppDatabase, chunk: string[]) {
 		userId: messages.userId,
 		mailboxId: messages.mailboxId,
 		direction: messages.direction,
+		privateDraft: messages.privateDraft,
 		status: messages.status,
 		read: messages.read,
 		starred: messages.starred,

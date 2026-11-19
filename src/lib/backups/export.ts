@@ -198,6 +198,15 @@ function fillMissingBackupTables(document: DatabaseBackupDocument): void {
 	for (const row of document.tables.booking_events ?? []) {
 		if (row.slug === undefined && typeof row.id === "string") row.slug = Array.from(new TextEncoder().encode(row.id)).map((byte) => byte.toString(16).padStart(2, "0")).join("");
 	}
+	// `private_draft` was added after drafts existed. A backup from before that column restores with
+	// the default false unless it is derived the way migration 0090 backfills it, which would publish
+	// every draft to the mailbox's other readers: drafts, plus outbound mail in Trash, Archive or the
+	// inbox that no outbound job ever sent.
+	const submitted = new Set((document.tables.outbound_jobs ?? []).map((job) => job.message_id));
+	for (const row of document.tables.messages ?? []) {
+		if (row.private_draft !== undefined) continue;
+		row.private_draft = row.status === "draft" || (row.direction === "outbound" && ["trash", "received", "archived"].includes(String(row.status)) && !submitted.has(row.id)) ? 1 : 0;
+	}
 	// `require_second_factor` was added after TOTP already existed. A backup from
 	// before that column restores with the default false unless it is derived,
 	// which would silently turn MFA off for a TOTP-protected user.

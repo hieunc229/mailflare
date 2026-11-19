@@ -20,7 +20,7 @@ export async function GET(
 
 	const db = getDb(env);
 	const [message] = await db
-		.select({ mailboxId: messages.mailboxId, userId: messages.userId, status: messages.status, direction: messages.direction })
+		.select({ mailboxId: messages.mailboxId, userId: messages.userId, status: messages.status, direction: messages.direction, privateDraft: messages.privateDraft })
 		.from(messages)
 		.where(eq(messages.id, messageId))
 		.limit(1);

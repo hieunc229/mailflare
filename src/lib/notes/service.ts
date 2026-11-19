@@ -18,7 +18,7 @@ export const CONVERSATION_NOTE_MAX_LENGTH = 40_000;
  */
 export async function conversationForUser(db: AppDatabase, user: SessionUser, messageId: string): Promise<NoteConversation | null> {
 	const [message] = await db
-		.select({ id: messages.id, userId: messages.userId, status: messages.status, mailboxId: messages.mailboxId, threadId: messages.threadId })
+		.select({ id: messages.id, userId: messages.userId, status: messages.status, privateDraft: messages.privateDraft, mailboxId: messages.mailboxId, threadId: messages.threadId })
 		.from(messages)
 		.where(eq(messages.id, messageId))
 		.limit(1);

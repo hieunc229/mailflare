@@ -20,7 +20,7 @@ export async function GET(request: Request, { params }: AttachmentsZipRouteParam
 	const { messageId } = await params;
 	const db = getDb(env);
 	const [message] = await db
-		.select({ mailboxId: messages.mailboxId, userId: messages.userId, status: messages.status, subject: messages.subject })
+		.select({ mailboxId: messages.mailboxId, userId: messages.userId, status: messages.status, privateDraft: messages.privateDraft, subject: messages.subject })
 		.from(messages)
 		.where(eq(messages.id, messageId))
 		.limit(1);

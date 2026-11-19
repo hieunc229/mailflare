@@ -56,7 +56,7 @@ export async function POST(request: Request) {
 	let forwardSourceId: string | null = null;
 	if (input.forwardOfMessageId) {
 		const [source] = await db
-			.select({ id: messages.id, userId: messages.userId, status: messages.status, mailboxId: messages.mailboxId })
+			.select({ id: messages.id, userId: messages.userId, status: messages.status, privateDraft: messages.privateDraft, mailboxId: messages.mailboxId })
 			.from(messages)
 			.where(eq(messages.id, input.forwardOfMessageId))
 			.limit(1);
@@ -86,6 +86,7 @@ export async function POST(request: Request) {
 		textBody: text || null,
 		htmlBody: html || null,
 		status: "draft",
+		privateDraft: true,
 		read: true,
 		inReplyTo: input.inReplyTo || null,
 		references: input.references || null,

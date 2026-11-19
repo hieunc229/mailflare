@@ -27,6 +27,7 @@ export async function GET(request: Request, { params }: MessageAuthenticationRou
 			userId: messages.userId,
 			status: messages.status,
 			direction: messages.direction,
+			privateDraft: messages.privateDraft,
 			fromAddr: messages.fromAddr,
 			rawR2Key: messages.rawR2Key,
 		})

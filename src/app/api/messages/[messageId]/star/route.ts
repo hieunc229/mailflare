@@ -18,7 +18,7 @@ export async function POST(
 
 	const db = getDb(env);
 	const [message] = await db
-		.select({ id: messages.id, userId: messages.userId, mailboxId: messages.mailboxId, status: messages.status, starred: messages.starred })
+		.select({ id: messages.id, userId: messages.userId, mailboxId: messages.mailboxId, status: messages.status, privateDraft: messages.privateDraft, starred: messages.starred })
 		.from(messages)
 		.where(eq(messages.id, messageId))
 		.limit(1);

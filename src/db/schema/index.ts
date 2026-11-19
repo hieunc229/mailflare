@@ -345,6 +345,9 @@ export const messages = sqliteTable(
 		status: text("status").notNull().default("received"),
 		read: bool("read").notNull().default(false),
 		starred: bool("starred").notNull().default(false),
+		// An unsent draft stays private to its author for as long as the row exists, wherever it is moved
+		// (Trash, Archive, a folder). Cleared when the row becomes sent mail.
+		privateDraft: bool("private_draft").notNull().default(false),
 		snoozedUntil: timestamp("snoozed_until"),
 		threadId: text("thread_id"),
 		// RFC 5322 threading headers, kept so replies land in the right conversation
@@ -399,6 +402,9 @@ export const messages = sqliteTable(
 			t.read,
 			t.threadId,
 			t.snoozedUntil,
+			// The draft filter (user_id = ? OR NOT private_draft) is evaluated from the index too.
+			t.userId,
+			t.privateDraft,
 		),
 		// Covering index for the folder-counts GROUP BY: lets the counts
 		// endpoint stream grouped rows straight off the index instead of
@@ -411,6 +417,9 @@ export const messages = sqliteTable(
 			t.read,
 			t.starred,
 			t.snoozedUntil,
+			// The draft filter (user_id = ? OR NOT private_draft) is evaluated from the index too.
+			t.userId,
+			t.privateDraft,
 		),
 		// Conversation paging partitions by coalesce(thread_id, id) and orders
 		// each partition by created_at desc, so the thread key must precede

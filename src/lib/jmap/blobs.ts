@@ -65,7 +65,7 @@ export async function readBlob(ctx: JmapContext, blobId: string): Promise<{ body
 	}
 	if (decoded.kind === "att") {
 		const [row] = await ctx.db
-			.select({ r2Key: messageAttachments.r2Key, filename: messageAttachments.filename, type: messageAttachments.contentType, size: messageAttachments.size, mailboxId: messages.mailboxId, status: messages.status, userId: messages.userId })
+			.select({ r2Key: messageAttachments.r2Key, filename: messageAttachments.filename, type: messageAttachments.contentType, size: messageAttachments.size, mailboxId: messages.mailboxId, status: messages.status, privateDraft: messages.privateDraft, userId: messages.userId })
 			.from(messageAttachments)
 			.innerJoin(messages, eq(messageAttachments.messageId, messages.id))
 			.where(and(eq(messageAttachments.id, decoded.id), isNull(messageAttachments.trashedAt)))

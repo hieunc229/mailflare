@@ -4,7 +4,7 @@ import { messageAttachments, messages } from "@/db/schema";
 import { getContactCardMap } from "@/lib/contacts/service";
 import { getPartyDisplayName } from "@/lib/contacts/utils";
 import { getFirstEmailAddressEntry, normalizeEmailAddress } from "@/lib/email/address";
-import { isOthersDraft } from "@/lib/email/draft-access";
+import { draftsVisibleTo, isOthersDraft } from "@/lib/email/draft-access";
 import { getMailboxAccessLevel } from "@/lib/mailboxes/access";
 import type { SessionUser } from "@/lib/auth/types";
 
@@ -24,7 +24,7 @@ function withoutRawKey<T extends { rawR2Key: string | null }>(row: T): Omit<T, "
 export async function getMessageThreadForUser(env: CloudflareEnv, user: SessionUser, messageId: string) {
 	const db = getDb(env);
 	const [message] = await db
-		.select({ mailboxId: messages.mailboxId, userId: messages.userId, threadId: messages.threadId, status: messages.status })
+		.select({ mailboxId: messages.mailboxId, userId: messages.userId, threadId: messages.threadId, status: messages.status, privateDraft: messages.privateDraft })
 		.from(messages)
 		.where(eq(messages.id, messageId))
 		.limit(1);
@@ -41,6 +41,8 @@ export async function getMessageThreadForUser(env: CloudflareEnv, user: SessionU
 						eq(messages.mailboxId, message.mailboxId),
 						eq(messages.threadId, message.threadId),
 						notInArray(messages.status, ["draft", "trash"]),
+						// Another user's draft filed under Archive or a folder is still their private draft.
+						draftsVisibleTo(user.id),
 						// Spam stays out of a conversation unless it is the message being opened.
 						or(ne(messages.status, "spam"), eq(messages.id, messageId)),
 					),

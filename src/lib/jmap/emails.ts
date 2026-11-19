@@ -1,7 +1,7 @@
 import { and, asc, count, desc, eq, inArray, sql } from "drizzle-orm";
 import { emailChangesSince, threadChangesSince } from "./changes";
 import { folders, messages } from "@/db/schema";
-import { DRAFT_FILTER_PARAMS, draftsVisibleTo } from "@/lib/email/draft-access";
+import { DRAFT_FILTER_PARAMS, draftsVisibleTo, logMessageHidden, privateDraftForStatus } from "@/lib/email/draft-access";
 import { newId } from "@/lib/ids";
 import { buildSnippet, parseRawMime } from "@/lib/email/parse";
 import { getAuthorizedSenderAddress } from "@/lib/email/sender";
@@ -60,6 +60,7 @@ async function insertDraft(ctx: JmapContext, row: DraftRow): Promise<string> {
 		textBody: row.textBody,
 		htmlBody: row.htmlBody,
 		status: "draft",
+		privateDraft: true,
 		read: row.read ?? true,
 		starred: row.starred ?? false,
 		inReplyTo: row.inReplyTo,
@@ -195,7 +196,8 @@ function targetFromMailboxIds(row: MessageRow, patch: Record<string, unknown>, a
 	if (!ref || !accessible.has(ref.mailboxId)) return { error: { type: "invalidProperties", properties: ["mailboxIds"], description: "Unknown mailbox" } };
 	if (ref.mailboxId !== row.mailboxId) return { error: { type: "invalidProperties", properties: ["mailboxIds"], description: "Messages cannot move between accounts' mailboxes" } };
 	if (ref.kind === "account") return { error: { type: "invalidProperties", properties: ["mailboxIds"], description: "Choose a folder or system mailbox" } };
-	if (ref.kind === "folder") return { status: row.direction === "outbound" && row.status !== "draft" ? "sent" : "received", folderId: ref.folderId };
+	// A folder move is not a send: a private draft keeps a non-sent status so privateDraftForStatus leaves it private.
+	if (ref.kind === "folder") return { status: row.direction === "outbound" && row.status !== "draft" && !row.privateDraft ? "sent" : "received", folderId: ref.folderId };
 	if (ref.role === "sent" && row.direction === "inbound") return { error: { type: "invalidProperties", properties: ["mailboxIds"], description: "Received mail cannot be moved to Sent" } };
 	return { status: roleToStatus(ref.role), folderId: null };
 }
@@ -330,10 +332,12 @@ export const emailSet: JmapMethodHandler = async (ctx, args) => {
 		if (flags.read !== undefined) set.read = flags.read;
 		if (flags.starred !== undefined) set.starred = flags.starred;
 		if (move) {
-			if (move.status !== undefined) set.status = move.status;
+			if (move.status !== undefined) Object.assign(set, { status: move.status }, privateDraftForStatus(move.status));
 			if (move.folderId !== undefined) set.folderId = move.folderId;
 		}
 		if (Object.keys(set).length) await ctx.db.update(messages).set(set).where(eq(messages.id, id));
+		// Moved into Drafts, the message is gone for the mailbox's other readers.
+		if (set.privateDraft && !row.privateDraft) await logMessageHidden(ctx.db, row);
 		updated[id] = null;
 	}
 

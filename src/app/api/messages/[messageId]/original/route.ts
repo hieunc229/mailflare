@@ -15,7 +15,7 @@ export async function GET(request: Request, { params }: MessageOriginalRoutePara
 	const { messageId } = await params;
 	const db = getDb(env);
 	const [message] = await db
-		.select({ mailboxId: messages.mailboxId, userId: messages.userId, status: messages.status, rawR2Key: messages.rawR2Key })
+		.select({ mailboxId: messages.mailboxId, userId: messages.userId, status: messages.status, privateDraft: messages.privateDraft, rawR2Key: messages.rawR2Key })
 		.from(messages)
 		.where(eq(messages.id, messageId))
 		.limit(1);

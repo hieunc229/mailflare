@@ -43,6 +43,7 @@ function selectMessageChunk(db: AppDatabase, chunk: string[]) {
 		mailboxId: messages.mailboxId,
 		rawR2Key: messages.rawR2Key,
 		status: messages.status,
+		privateDraft: messages.privateDraft,
 	})
 		.from(messages)
 		.where(inArray(messages.id, chunk));

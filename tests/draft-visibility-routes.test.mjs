@@ -19,9 +19,9 @@ const { app, newDatabase } = await loadApp("draft-routes", `
 `, { mocks });
 
 const seed = `${sharedMailboxSeed("read_only")}
-	INSERT INTO messages (id, user_id, mailbox_id, direction, from_addr, to_addr, subject, text_body, status, raw_r2_key, created_at) VALUES
-		('m-1', 'admin', 'mb-team', 'inbound', 'x@example.net', 'team@example.com', 'Hello', 'visible', 'received', NULL, 2),
-		('draft-1', 'author', 'mb-team', 'outbound', 'team@example.com', 'x@example.net', 'Unsent', 'private text', 'draft', 'drafts/draft-1.eml', 3);
+	INSERT INTO messages (id, user_id, mailbox_id, direction, from_addr, to_addr, subject, text_body, status, raw_r2_key, private_draft, created_at) VALUES
+		('m-1', 'admin', 'mb-team', 'inbound', 'x@example.net', 'team@example.com', 'Hello', 'visible', 'received', NULL, 0, 2),
+		('draft-1', 'author', 'mb-team', 'outbound', 'team@example.com', 'x@example.net', 'Unsent', 'private text', 'draft', 'drafts/draft-1.eml', 1, 3);
 	INSERT INTO message_attachments (id, message_id, filename, content_type, size, r2_key, disposition, created_at) VALUES ('att-1', 'draft-1', 'plan.txt', 'text/plain', 3, 'k1', 'attachment', 1);
 `;
 const user = (id) => ({ id, email: `${id}@example.com`, role: "user" });

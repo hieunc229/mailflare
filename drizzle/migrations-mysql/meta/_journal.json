@@ -99,6 +99,13 @@
       "when": 1794516479573,
       "tag": "0013_auto_update",
       "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "5",
+      "when": 1794516479574,
+      "tag": "0014_security_hardening",
+      "breakpoints": true
     }
   ]
 }

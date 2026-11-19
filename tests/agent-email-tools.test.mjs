@@ -89,14 +89,15 @@ test("assistant reads mail, creates an editable reply draft, and invokes tools t
 	assert.equal(searched.emails[0].id, "email-1");
 	const draft = await runEmailTool(context, "draft_reply", { emailId: "email-1", body: "Tuesday works for me.", replyAll: false });
 	assert.equal(draft.status, "draft_created");
-	const saved = database.db.prepare("SELECT to_addr, text_body, status, in_reply_to FROM messages WHERE id = ?").get(draft.draftId);
+	const saved = database.db.prepare("SELECT to_addr, text_body, status, private_draft, in_reply_to FROM messages WHERE id = ?").get(draft.draftId);
 	assert.equal(saved.to_addr, "customer@example.net");
 	assert.equal(saved.text_body, "Tuesday works for me.");
 	assert.equal(saved.status, "draft");
+	assert.equal(saved.private_draft, 1);
 	assert.equal(saved.in_reply_to, "<email-1@example.net>");
 	assert.equal(database.db.prepare("SELECT count(*) AS count FROM agent_send_approvals").get().count, 0);
 	const newDraft = await runEmailTool(context, "draft_email", { to: "customer@example.net", subject: "Follow up", body: "Hello again." });
-	assert.equal(database.db.prepare("SELECT status FROM messages WHERE id = ?").get(newDraft.draftId).status, "draft");
+	assert.deepEqual({ ...database.db.prepare("SELECT status, private_draft FROM messages WHERE id = ?").get(newDraft.draftId) }, { status: "draft", private_draft: 1 });
 	const pendingDiscard = await runEmailTool(context, "discard_draft", { draftId: newDraft.draftId, expectedRevision: 1 });
 	assert.equal(pendingDiscard.status, "pending_approval");
 	assert.ok(database.db.prepare("SELECT id FROM messages WHERE id = ?").get(newDraft.draftId));
@@ -148,12 +149,12 @@ async function paginationContext(t) {
 		INSERT INTO mailboxes (id, user_id, domain_id, local_part, created_at) VALUES
 			('mailbox-1', 'user-1', 'domain-1', 'owner', 1),
 			('mailbox-2', 'user-2', 'domain-1', 'other', 1);
-		INSERT INTO messages (id, user_id, mailbox_id, direction, from_addr, to_addr, subject, text_body, status, created_at) VALUES
-			('email-1', 'user-1', 'mailbox-1', 'inbound', 'sender@example.net', 'owner@example.com', 'First', 'First email', 'received', 2),
-			('email-2', 'user-1', 'mailbox-1', 'inbound', 'sender@example.net', 'owner@example.com', 'Second', 'Second email', 'received', 3),
-			('email-3', 'user-1', 'mailbox-1', 'inbound', 'sender@example.net', 'owner@example.com', 'Third', 'Third email', 'received', 4),
-			('foreign-email', 'user-2', 'mailbox-2', 'inbound', 'sender@example.net', 'other@example.com', 'Other mailbox', 'Private', 'received', 5),
-			('private-draft', 'user-2', 'mailbox-1', 'outbound', 'owner@example.com', 'sender@example.net', 'Other user draft', 'Private', 'draft', 6);
+		INSERT INTO messages (id, user_id, mailbox_id, direction, from_addr, to_addr, subject, text_body, status, private_draft, created_at) VALUES
+			('email-1', 'user-1', 'mailbox-1', 'inbound', 'sender@example.net', 'owner@example.com', 'First', 'First email', 'received', 0, 2),
+			('email-2', 'user-1', 'mailbox-1', 'inbound', 'sender@example.net', 'owner@example.com', 'Second', 'Second email', 'received', 0, 3),
+			('email-3', 'user-1', 'mailbox-1', 'inbound', 'sender@example.net', 'owner@example.com', 'Third', 'Third email', 'received', 0, 4),
+			('foreign-email', 'user-2', 'mailbox-2', 'inbound', 'sender@example.net', 'other@example.com', 'Other mailbox', 'Private', 'received', 0, 5),
+			('private-draft', 'user-2', 'mailbox-1', 'outbound', 'owner@example.com', 'sender@example.net', 'Other user draft', 'Private', 'draft', 1, 6);
 	`);
 	return { env: { DB: database }, user: { id: "user-1", email: "owner@example.com", role: "user" }, mailboxId: "mailbox-1", origin: "chat" };
 }

@@ -87,13 +87,14 @@ export function createMailflareMcpHandler(env: CloudflareEnv, principal: McpPrin
 		server.registerTool("cancel_scheduled_send", { description: "Cancel a scheduled email before it is sent. It returns to Drafts and is not sent.", inputSchema: z.object({ mailboxId: z.string(), messageId: z.string() }) }, async ({ mailboxId, messageId }) => {
 			if (!principal.scopes.includes("mcp:draft") || !principal.mailboxIds.includes(mailboxId)) return output({ error: "Permission denied" }, true);
 			const db = getDb(env);
-			const [row] = await db.select({ mailboxId: messages.mailboxId, status: messages.status }).from(messages).where(eq(messages.id, messageId)).limit(1);
+			const [row] = await db.select({ mailboxId: messages.mailboxId, status: messages.status, userId: messages.userId }).from(messages).where(eq(messages.id, messageId)).limit(1);
 			if (row?.mailboxId !== mailboxId || row.status !== "queued") return output({ error: "Scheduled email not found" }, true);
 			// Cancelling a send needs a sending right on the mailbox, as in the web route; read access is not enough.
 			const access = await getMailboxAccessLevel(db, principal.user, mailboxId);
 			if (!access?.canSendAs && !access?.canSendOnBehalf) return output({ error: "Permission denied" }, true);
 			return await cancelScheduledSend(db, messageId)
-				? output({ messageId, status: "cancelled", draftId: messageId })
+				// The draft goes back to its author alone; a colleague who cancelled it gets no id they cannot open.
+				? output({ messageId, status: "cancelled", ...(row.userId === principal.user.id ? { draftId: messageId } : {}) })
 				: output({ error: "This email is already being sent" }, true);
 		});
 		/** The conversation of `messageId` when it is in `mailboxId` and the key's user may read it. */

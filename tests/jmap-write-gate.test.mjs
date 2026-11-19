@@ -5,11 +5,11 @@ import { loadApp, sharedMailboxSeed } from "./helpers/real-db.mjs";
 const { app, newDatabase } = await loadApp("jmap-write-gate", `export { emailSet } from "./src/lib/jmap/emails.ts";`);
 
 const messages = `
-	INSERT INTO messages (id, user_id, mailbox_id, direction, from_addr, to_addr, subject, status, read, created_at) VALUES
-		('m-1', 'admin', 'mb-team', 'inbound', 'x@example.net', 'team@example.com', 'One', 'received', 0, 2),
-		('m-2', 'admin', 'mb-team', 'inbound', 'x@example.net', 'team@example.com', 'Two', 'received', 0, 3),
-		('d-own', 'delegate', 'mb-team', 'outbound', 'team@example.com', 'x@example.net', 'Mine', 'draft', 1, 4),
-		('d-other', 'author', 'mb-team', 'outbound', 'team@example.com', 'x@example.net', 'Theirs', 'draft', 1, 5);
+	INSERT INTO messages (id, user_id, mailbox_id, direction, from_addr, to_addr, subject, status, read, private_draft, created_at) VALUES
+		('m-1', 'admin', 'mb-team', 'inbound', 'x@example.net', 'team@example.com', 'One', 'received', 0, 0, 2),
+		('m-2', 'admin', 'mb-team', 'inbound', 'x@example.net', 'team@example.com', 'Two', 'received', 0, 0, 3),
+		('d-own', 'delegate', 'mb-team', 'outbound', 'team@example.com', 'x@example.net', 'Mine', 'draft', 1, 1, 4),
+		('d-other', 'author', 'mb-team', 'outbound', 'team@example.com', 'x@example.net', 'Theirs', 'draft', 1, 1, 5);
 `;
 
 const context = (db, env) => ({

@@ -177,7 +177,7 @@ export async function GET(request: Request) {
 					unread: sum(sql`case when ${messages.read} then 0 else 1 end`),
 				})
 				.from(messages)
-				.where(and(scope, inArray(messages.threadId, threadIds), isNotNull(messages.threadId), notInArray(messages.status, ["draft", "trash"])))
+				.where(and(scope, inArray(messages.threadId, threadIds), isNotNull(messages.threadId), notInArray(messages.status, ["draft", "trash"]), draftsVisibleTo(user.id)))
 				.groupBy(messages.threadId)
 			: [],
 		scheduled === "true" && rows.length > 0

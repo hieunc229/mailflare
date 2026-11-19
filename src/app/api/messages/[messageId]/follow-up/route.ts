@@ -20,7 +20,7 @@ async function loadSentMessage(request: Request, context: RouteContext) {
 	if (!user) return { error: NextResponse.json({ error: "Unauthorized" }, { status: 401 }) };
 	const db = getDb(env);
 	const [message] = await db
-		.select({ id: messages.id, userId: messages.userId, mailboxId: messages.mailboxId, direction: messages.direction, status: messages.status })
+		.select({ id: messages.id, userId: messages.userId, mailboxId: messages.mailboxId, direction: messages.direction, status: messages.status, privateDraft: messages.privateDraft })
 		.from(messages)
 		.where(eq(messages.id, messageId))
 		.limit(1);
