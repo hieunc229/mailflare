@@ -98,6 +98,8 @@ cp .env.docker.example .env.docker
 docker compose up -d --build
 ```
 
+Or skip the build and run the prebuilt image: `docker compose -f docker-compose.image.yml up -d`.
+
 See [self-hosting](docs/self-hosting.md).
 
 ## Local development
