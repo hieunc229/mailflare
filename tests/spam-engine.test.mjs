@@ -161,8 +161,24 @@ test("the solicitation signal needs every condition: no unsubscribe link, a prio
 	assert.equal(await flagged("a@bulk.example", { subject: "About example.org", text: "Cheap backlinks." }), false, "one pitch phrase is not enough");
 	addContact("known@vendor.example", "inbound");
 	assert.equal(await flagged("known@vendor.example"), false, "an existing contact is not a first contact");
-	addReputation("domain", "seen.example", 0, 1);
-	assert.equal(await flagged("a@seen.example"), false, "a domain seen before is not a first contact");
+	addReputation("email", "a@seen.example", 0, 1);
+	assert.equal(await flagged("a@seen.example"), false, "an address seen before is not a first contact");
+	addReputation("domain", "gmail.com", 0, 40);
+	assert.equal(await flagged("stranger@gmail.com"), true, "mail from a busy shared domain is still a first contact");
+	addReputation("domain", "busy.example", 0, 40);
+	assert.equal(await flagged("new-person@busy.example"), true, "a new address on a known domain is a first contact");
+});
+
+test("the recipient's own address in a footer does not count as naming their domain", async (t) => {
+	const { analyze } = await createFixture(t);
+	const onboarding = {
+		subject: "Welcome to RankBoost",
+		text: "Boost your traffic with our SEO audit and quality backlinks, and see where you rank on Google.\n\nThis email was sent to kevin@example.org.",
+		toAddr: "kevin@example.org",
+	};
+	assert.equal(ids(await analyze("hello@rankboost.example", onboarding)).includes("unsolicited_solicitation"), false);
+	const named = { ...onboarding, text: `${onboarding.text}\nWe checked example.org for you.` };
+	assert.equal(ids(await analyze("hello@rankboost.example", named)).includes("unsolicited_solicitation"), true);
 });
 
 test("a transactional message that mentions the recipient's domain is not flagged", async (t) => {

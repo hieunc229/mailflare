@@ -25,9 +25,10 @@ function recipientDomains(message: ParsedEmail): string[] {
 	return [...result];
 }
 
+/** True when the text names `domain` as a site, not as part of an email address such as the recipient's own. */
 function mentions(text: string, domain: string): boolean {
 	const escaped = domain.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-	return new RegExp(`(?<![\\w.-])(?:www\\.)?${escaped}(?![\\w-])`, "i").test(text);
+	return new RegExp(`(?<![\\w.@-])(?:www\\.)?${escaped}(?![\\w-])`, "i").test(text);
 }
 
 /**

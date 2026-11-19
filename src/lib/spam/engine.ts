@@ -100,7 +100,8 @@ export async function analyzeSpam(db: AppDatabase, input: SpamAnalysisInput): Pr
 			}
 		}
 	}
-	const seenBefore = reputationRecords.some(({ identity, record }) => identity.type !== "fingerprint" && (record?.messagesSeen ?? 0) > 0);
+	// The exact address only: a shared domain (a freemail provider, a large vendor) has been seen for others, which says nothing about this sender.
+	const seenBefore = reputationRecords.some(({ identity, record }) => identity.type === "email" && (record?.messagesSeen ?? 0) > 0);
 	signals.push(...analyzeSolicitation(input.message, prepared, {
 		firstContact: !contact && !seenBefore,
 		hasUnsubscribe: !!findHeader(input.headers, "list-unsubscribe"),
