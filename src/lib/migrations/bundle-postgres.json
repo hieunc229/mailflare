@@ -417,6 +417,12 @@
         "CREATE UNIQUE INDEX \"calendar_occurrence_responses_event_occurrence_guest_idx\" ON \"calendar_occurrence_responses\" USING btree (\"event_id\",\"occurrence_ms\",\"guest\");",
         "CREATE INDEX \"calendar_occurrence_responses_event_idx\" ON \"calendar_occurrence_responses\" USING btree (\"event_id\");"
       ]
+    },
+    {
+      "name": "0020_shared_files_notice.sql",
+      "statements": [
+        "ALTER TABLE \"app_settings\" ADD COLUMN \"shared_files_notice\" text;"
+      ]
     }
   ]
 }

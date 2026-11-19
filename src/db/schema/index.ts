@@ -1187,6 +1187,8 @@ export const appSettings = sqliteTable("app_settings", {
 	id: text("id").primaryKey(),
 	appName: text("app_name").notNull().default("Mailflare"),
 	outboundAttachmentMaxMb: integer("outbound_attachment_max_mb").notNull().default(25),
+	/** Text added above Shared Files download links; null uses the translated default, empty adds no message. */
+	sharedFilesNotice: text("shared_files_notice"),
 	/** Per-user Drive storage cap in bytes; null means unlimited. */
 	driveStorageLimitBytes: integer("drive_storage_limit_bytes"),
 	resendApiKey: text("resend_api_key"),

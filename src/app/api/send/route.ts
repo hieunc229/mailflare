@@ -5,6 +5,8 @@ import { sendEmailSchema } from "@/lib/validators";
 import { sendEmail } from "@/lib/email/send";
 import { isPastSchedule, parseSendRequest } from "./utils";
 import { RequestBodyTooLargeError } from "@/lib/http/errors";
+import { requestBodyLimit } from "@/lib/email/attachment-limits";
+import { getOutboundAttachmentMaxMb } from "@/lib/email/attachment-policy";
 import { getSendErrorStatus } from "./error-utils";
 import { getDb } from "@/db";
 import { agentDraftMetadata, messages } from "@/db/schema";
@@ -18,7 +20,7 @@ export async function POST(request: Request) {
 	const user = await requireUser(env, request);
 	let input;
 	try {
-		input = await parseSendRequest(request);
+		input = await parseSendRequest(request, requestBodyLimit(await getOutboundAttachmentMaxMb(env)));
 	} catch (error) {
 		const status = error instanceof RequestBodyTooLargeError ? 413 : 400;
 		return NextResponse.json({ error: "Invalid send request" }, { status });

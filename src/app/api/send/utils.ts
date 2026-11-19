@@ -3,8 +3,6 @@ import { readFormDataBody, readJsonBody } from "@/lib/http/request";
 import type { SendRequestPayload } from "./types";
 import { parseFollowUpDays } from "@/lib/follow-ups/follow-up-utils";
 
-const MAX_SEND_REQUEST_SIZE = 30 * 1024 * 1024;
-
 function getOptionalFormValue(form: FormData, key: string): string | undefined {
 	const value = form.get(key);
 	return typeof value === "string" && value ? value : undefined;
@@ -16,12 +14,12 @@ export function isPastSchedule(value: string | undefined, now = Date.now()): boo
 	return !Number.isFinite(time) || time < now - 60_000;
 }
 
-export async function parseSendRequest(request: Request): Promise<SendRequestPayload> {
+export async function parseSendRequest(request: Request, maxBytes: number): Promise<SendRequestPayload> {
 	if (!request.headers.get("content-type")?.includes("multipart/form-data")) {
-		return readJsonBody<SendRequestPayload>(request, MAX_SEND_REQUEST_SIZE);
+		return readJsonBody<SendRequestPayload>(request, maxBytes);
 	}
 
-	const form = await readFormDataBody(request, MAX_SEND_REQUEST_SIZE);
+	const form = await readFormDataBody(request, maxBytes);
 	const attachments: AttachmentContent[] = [];
 	for (const value of form.getAll("attachments")) {
 		if (!(value instanceof File) || value.size === 0) continue;

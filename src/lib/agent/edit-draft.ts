@@ -6,7 +6,8 @@ import { buildSnippet } from "@/lib/email/parse";
 import { getAuthorizedSenderAddress } from "@/lib/email/sender";
 import { getEmailAddress, splitEmailAddressList } from "@/lib/email/address";
 import { getMailboxAccessLevel } from "@/lib/mailboxes/access";
-import { deleteMessageAttachment, getAttachmentForUser, MAX_ATTACHMENT_COUNT, MAX_TOTAL_ATTACHMENT_SIZE, storeMessageAttachments } from "@/lib/email/attachments";
+import { getOutboundAttachmentMaxMb } from "@/lib/email/attachment-policy";
+import { deleteMessageAttachment, getAttachmentForUser, MAX_ATTACHMENT_COUNT, storeMessageAttachments } from "@/lib/email/attachments";
 import type { AttachmentContent } from "@/lib/email/attachment-types";
 import type { AgentDraftEditInput, AgentToolContext } from "./types";
 import { formatAgentDraftBody } from "./draft-format";
@@ -48,7 +49,7 @@ export async function editAgentDraft(context: AgentToolContext, input: AgentDraf
 		if (!found || found.attachment.disposition !== "attachment") throw new Error("Attachment not found on the source email");
 		additions.push({ filename: found.attachment.filename, type: found.attachment.contentType, content: await found.object.arrayBuffer() });
 	}
-	if (remaining.length + additions.length > MAX_ATTACHMENT_COUNT || remaining.reduce((total, attachment) => total + attachment.size, 0) + additions.reduce((total, attachment) => total + attachment.content.byteLength, 0) > MAX_TOTAL_ATTACHMENT_SIZE) throw new Error("Draft attachments exceed the allowed count or total size");
+	if (remaining.length + additions.length > MAX_ATTACHMENT_COUNT || remaining.reduce((total, attachment) => total + attachment.size, 0) + additions.reduce((total, attachment) => total + attachment.content.byteLength, 0) > (await getOutboundAttachmentMaxMb(context.env)) * 1_000_000) throw new Error("Draft attachments exceed the allowed count or total size");
 	const [updated] = await db.update(agentDraftMetadata).set({ revision: sql`${agentDraftMetadata.revision} + 1`, ...(scheduledAt !== undefined ? { scheduledAt } : {}) }).where(and(eq(agentDraftMetadata.draftId, draft.id), eq(agentDraftMetadata.revision, input.expectedRevision))).returning({ revision: agentDraftMetadata.revision, scheduledAt: agentDraftMetadata.scheduledAt });
 	if (!updated) throw new Error("Draft changed; read it again before editing");
 	if (additions.length) await storeMessageAttachments(context.env, draft.id, additions);
