@@ -15,6 +15,7 @@ export function getMessageFolder(row: MessageCountRow): CountableFolder {
 export function createEmptyFolderCounts(): MessageCounts["folders"] {
 	return {
 		inbox: { total: 0, unread: 0 },
+		promotions: { total: 0, unread: 0 },
 		starred: { total: 0, unread: 0 },
 		snoozed: { total: 0, unread: 0 },
 		sent: { total: 0, unread: 0 },
@@ -70,6 +71,27 @@ export function buildMessageCounts(rows: MessageCountRow[]): MessageCounts {
 		customFolders,
 		mailboxes: Array.from(mailboxMap.values()),
 	};
+}
+
+/**
+ * Adds the promotions folder from its own grouped rows (received, unfiled, unsnoozed, category promotions, only
+ * for mailboxes whose mode is `show` or `separate`). Mailboxes in `separate` mode lose those rows from Inbox.
+ */
+export function applyPromotionCounts(
+	counts: MessageCounts,
+	rows: { mailboxId: string | null; read: boolean; total: number }[],
+	separateIds: ReadonlySet<string>,
+): void {
+	for (const row of rows) {
+		const weight = Number(row.total) || 0;
+		counts.folders.promotions.total += weight;
+		if (!row.read) counts.folders.promotions.unread += weight;
+		if (!row.mailboxId || !separateIds.has(row.mailboxId)) continue;
+		counts.folders.inbox.total -= weight;
+		if (!row.read) counts.folders.inbox.unread -= weight;
+		const mailbox = counts.mailboxes.find((entry) => entry.mailboxId === row.mailboxId);
+		if (mailbox) mailbox.inbox -= weight;
+	}
 }
 
 export function getFolderLabelCount(folder: MessageFolder, counts: MessageCounts["folders"]) {
