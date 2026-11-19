@@ -96,7 +96,7 @@ Admin API keys cannot read or send mail. Enable **Allow MCP access** when creati
 | `accounts` | `GET /api/v1/accounts` | List managed accounts |
 | `accounts` | `POST /api/v1/accounts` | Create an account and its mailbox (`{ username, domainId, password, role?, useAllDomains?, aliases? }`) |
 | `accounts` | `GET /api/v1/accounts/[id]` | Get a managed account |
-| `accounts` | `PATCH /api/v1/accounts/[id]` | Update an account (`{ name, role, disabled, canManageMailboxes, calendarEnabled?, driveEnabled?, forwardingEmail?, password? }`) |
+| `accounts` | `PATCH /api/v1/accounts/[id]` | Update an account (`{ name, role, disabled, canManageMailboxes, calendarEnabled?, driveEnabled?, forwardingEmail?, password? }`). An admin API key may set `forwardingEmail` on the accounts it manages without a step-up proof (by design: it already has the authority to reset their passwords). A `PATCH` that changes the forwarding address of the key's own owner account returns `403` with `code: "verification_required"`; change it in the web app, which asks the owner to confirm |
 | `mailboxes` | `GET /api/v1/mailboxes` | List managed mailboxes |
 | `mailboxes` | `POST /api/v1/mailboxes` | Create a mailbox (`{ domainId, localPart, displayName?, type?, ownerUserId? }`) |
 | `mailboxes` | `GET /api/v1/mailboxes/[id]` | Get a managed mailbox |

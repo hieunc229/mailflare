@@ -149,6 +149,7 @@ export const stepUpActionSchema = z.enum([
 	"second_factor.toggle",
 	"admin.password_reset",
 	"admin.recovery_link",
+	"admin.forwarding_email",
 	"profile.recovery_email",
 ]);
 
@@ -256,7 +257,7 @@ export const updateManagedAccountSchema = z.object({
 		(value) => (typeof value === "string" ? value.trim() : value),
 		z.string().min(8).max(128).or(z.literal("")).optional().transform((value) => value || null),
 	),
-	/** Required when `password` is set: the administrator must re-authenticate. */
+	/** Required when `password` or `forwardingEmail` changes: the administrator must re-authenticate. */
 	stepUpToken: z.string().min(8).max(200).optional(),
 });
 
