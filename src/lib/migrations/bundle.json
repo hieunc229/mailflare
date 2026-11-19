@@ -838,6 +838,7 @@
         "CREATE INDEX `messages_nav_cover_idx` ON `messages` (`mailbox_id`, `status`, `folder_id`, `created_at` DESC, `id` DESC, `direction`, `read`, `thread_id`, `snoozed_until`, `user_id`, `private_draft`);",
         "DROP INDEX IF EXISTS `messages_counts_cover_idx`;",
         "CREATE INDEX `messages_counts_cover_idx` ON `messages` (`mailbox_id`, `folder_id`, `direction`, `status`, `read`, `starred`, `snoozed_until`, `user_id`, `private_draft`);",
+        "ALTER TABLE `users` ADD `totp_last_step` integer;",
         "UPDATE `jmap_change_floor` SET `seq` = max(seq, COALESCE((SELECT max(seq) FROM jmap_changes), 0)) WHERE `id` = 1;"
       ]
     }

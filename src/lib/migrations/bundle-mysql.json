@@ -357,6 +357,7 @@
       "statements": [
         "ALTER TABLE `messages` ADD `private_draft` boolean DEFAULT false NOT NULL;",
         "UPDATE `messages` SET `private_draft` = true\nWHERE `status` = 'draft'\n\tOR (`direction` = 'outbound'\n\t\tAND `status` IN ('trash', 'received', 'archived')\n\t\tAND NOT EXISTS (SELECT 1 FROM `outbound_jobs` WHERE `outbound_jobs`.`message_id` = `messages`.`id`));",
+        "ALTER TABLE `users` ADD `totp_last_step` bigint;",
         "UPDATE `jmap_change_floor` SET `seq` = GREATEST(seq, COALESCE((SELECT max(seq) FROM jmap_changes), 0)) WHERE `id` = 1;"
       ]
     }
