@@ -36,6 +36,8 @@ export const users = sqliteTable("users", {
 	driveEnabled: bool("drive_enabled").notNull().default(true),
 	keyboardShortcutsEnabled: bool("keyboard_shortcuts_enabled").notNull().default(true),
 	spamProtectionEnabled: bool("spam_protection_enabled").notNull().default(true),
+	// Score at which incoming mail moves to Spam: relaxed 85, normal 70, strict 55 (SPAM_STRICTNESS_THRESHOLDS).
+	spamStrictness: text("spam_strictness", { enum: ["relaxed", "normal", "strict"] }).notNull().default("normal"),
 	/** Days a message may stay in Trash or Spam before the scheduled purge deletes it; null keeps it forever. */
 	trashRetentionDays: integer("trash_retention_days"),
 	// Off shows the mailbox only. On shows Name <mailbox> on To, Cc, and Bcc.

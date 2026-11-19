@@ -394,8 +394,9 @@ export const updateShortcutsSettingsSchema = z.object({
 });
 
 export const updateSpamSettingsSchema = z.object({
-	enabled: z.boolean(),
-});
+	enabled: z.boolean().optional(),
+	strictness: z.enum(["relaxed", "normal", "strict"]).optional(),
+}).refine((value) => value.enabled !== undefined || value.strictness !== undefined, { message: "Nothing to update" });
 
 export const updateTrashRetentionSettingsSchema = z.object({
 	days: z.number().int().min(1).max(365).nullable(),

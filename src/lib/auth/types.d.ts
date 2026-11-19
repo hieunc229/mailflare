@@ -18,6 +18,7 @@ export type SessionUser = {
 	driveEnabled: boolean;
 	keyboardShortcutsEnabled: boolean;
 	spamProtectionEnabled: boolean;
+	spamStrictness: "relaxed" | "normal" | "strict";
 	trashRetentionDays: number | null;
 	showFullRecipientAddresses: boolean;
 	remoteContentMode: "ask" | "new_sender" | "allow";

@@ -48,8 +48,8 @@ async function createFixture(t) {
 	const addReputation = (type, key, spamCount, hamCount, seen = spamCount + hamCount) => database.db.prepare(
 		"INSERT INTO spam_reputation (mailbox_id, type, key, messages_seen, spam_count, ham_count, first_seen_at, last_seen_at) VALUES ('mb1', ?, ?, ?, ?, ?, ?, ?)",
 	).run(type, key, seen, spamCount, hamCount, now, now);
-	const analyze = (from, overrides = {}, verdicts = PASS, intelligenceProvider, headers) => analyzeSpam(createDb(database), {
-		mailboxId: "mb1", userId: "u1", envelopeFrom: from, verdicts, intelligenceProvider, headers,
+	const analyze = (from, overrides = {}, verdicts = PASS, intelligenceProvider, headers, strictness) => analyzeSpam(createDb(database), {
+		mailboxId: "mb1", userId: "u1", envelopeFrom: from, verdicts, intelligenceProvider, headers, strictness,
 		message: {
 			subject: "Hello", text: "Plain note.", html: null, messageId: null, fromAddr: from, toAddr: "kevin@example.com",
 			ccAddr: null, bccAddr: null, replyTo: null, inReplyTo: null, references: [], date: null, attachments: [],
@@ -172,4 +172,25 @@ test("a transactional message that mentions the recipient's domain is not flagge
 		text: "A new owner was added to example.org in Search Console.",
 	});
 	assert.equal(ids(result).includes("unsolicited_solicitation"), false);
+});
+
+test("strictness moves the spam threshold; normal stays at 70", async (t) => {
+	const { analyze } = await createFixture(t);
+	const provider = (score) => ({ check: async () => [{ id: "listed", score, reason: "Listed" }] });
+	const verdict = async (score, strictness) => (await analyze("a@b.example", {}, {}, provider(score), undefined, strictness)).verdict;
+	assert.equal(await verdict(60, undefined), "suspicious");
+	assert.equal(await verdict(60, "normal"), "suspicious");
+	assert.equal(await verdict(70, "normal"), "spam");
+	assert.equal(await verdict(60, "strict"), "spam");
+	assert.equal(await verdict(54, "strict"), "suspicious");
+	assert.equal(await verdict(75, "relaxed"), "suspicious");
+	assert.equal(await verdict(85, "relaxed"), "spam");
+});
+
+test("a failed DMARC is still filed as spam at every strictness", async (t) => {
+	const { analyze } = await createFixture(t);
+	for (const strictness of ["relaxed", "normal", "strict"]) {
+		const result = await analyze("a@b.example", {}, { dmarc: "fail" }, undefined, undefined, strictness);
+		assert.equal(result.verdict, "spam", strictness);
+	}
 });
