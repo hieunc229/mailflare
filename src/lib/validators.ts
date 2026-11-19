@@ -152,6 +152,7 @@ export const stepUpActionSchema = z.enum([
 	"admin.forwarding_email",
 	"profile.recovery_email",
 	"routing.forward",
+	"webhook.change",
 ]);
 
 export const passkeyRegistrationSchema = passkeyCeremonySchema.extend({
@@ -460,6 +461,7 @@ export const domainRoutingRuleSchema = z
 	});
 
 export const webhookSchema = z.object({
+	...recoveryProofFields,
 	url: z.string().url().max(2048).refine(isPublicHttpsUrl, PUBLIC_HTTPS_URL_MESSAGE),
 	description: z.string().trim().max(200).optional(),
 	events: z
@@ -470,6 +472,7 @@ export const webhookSchema = z.object({
 });
 
 export const webhookUpdateSchema = z.object({
+	...recoveryProofFields,
 	url: z.string().url().max(2048).refine(isPublicHttpsUrl, PUBLIC_HTTPS_URL_MESSAGE).optional(),
 	description: z.string().trim().max(200).nullish(),
 	events: z
