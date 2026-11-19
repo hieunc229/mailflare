@@ -10,6 +10,7 @@ const REFRESH_DEBOUNCE_MS = 150;
 const emptyCounts: MessageCounts = {
 	folders: {
 		inbox: { total: 0, unread: 0 },
+		promotions: { total: 0, unread: 0 },
 		starred: { total: 0, unread: 0 },
 		snoozed: { total: 0, unread: 0 },
 		sent: { total: 0, unread: 0 },
