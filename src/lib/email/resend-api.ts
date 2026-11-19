@@ -134,8 +134,8 @@ export async function listResendWebhooks(client: ResendClient): Promise<ResendWe
 	return (await resendRequest<{ data: ResendWebhook[] }>(client, "/webhooks")).data;
 }
 
-export function createResendWebhook(client: ResendClient, endpoint: string): Promise<{ id: string; signing_secret: string }> {
-	return resendRequest(client, "/webhooks", { method: "POST", body: JSON.stringify({ endpoint, events: ["email.received"] }) });
+export function createResendWebhook(client: ResendClient, endpoint: string, events: string[] = ["email.received"]): Promise<{ id: string; signing_secret: string }> {
+	return resendRequest(client, "/webhooks", { method: "POST", body: JSON.stringify({ endpoint, events }) });
 }
 
 export async function deleteResendWebhook(client: ResendClient, id: string): Promise<void> {

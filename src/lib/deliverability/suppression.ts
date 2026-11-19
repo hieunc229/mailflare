@@ -28,6 +28,11 @@ export async function getSuppressionMode(env: CloudflareEnv): Promise<Suppressio
 	}
 }
 
+export async function setSuppressionMode(env: CloudflareEnv, mode: SuppressionMode): Promise<void> {
+	const values = { suppressionMode: mode, updatedAt: new Date() };
+	await getDb(env).insert(appSettings).values({ id: SETTINGS_ID, ...values }).onConflictDoUpdate({ target: appSettings.id, set: values });
+}
+
 export async function domainIdForAddress(env: CloudflareEnv, address: string): Promise<string | null> {
 	const email = cleanAddress(address);
 	if (!email) return null;
