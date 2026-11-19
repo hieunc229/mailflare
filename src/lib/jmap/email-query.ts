@@ -116,7 +116,8 @@ function conditionToSql(condition: FilterCondition, accessible: Set<string>): SQ
 export function filterToSql(filter: Filter | null | undefined, accessible: Set<string>): SQL | undefined {
 	if (!filter) return undefined;
 	if ("operator" in filter) {
-		const children = (filter.conditions ?? []).map((child) => filterToSql(child, accessible)).filter((part): part is SQL => !!part);
+		// An empty condition (`{}`) matches every email, so it stays a child instead of being dropped (RFC 8621 4.4.1).
+		const children = (filter.conditions ?? []).map((child) => filterToSql(child, accessible) ?? matchEverything);
 		if (children.length === 0) return undefined;
 		if (filter.operator === "AND") return and(...children);
 		if (filter.operator === "OR") return or(...children);
