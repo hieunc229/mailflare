@@ -104,19 +104,6 @@ export async function updatePassword(currentPassword: string, newPassword: strin
 	if (!res.ok) throw requestError(data, "Failed to change password");
 }
 
-/** An API key limited to the JMAP scope, for external mail apps. */
-export async function createJmapApiKey(name: string, mailboxIds: string[]): Promise<string> {
-	const res = await authFetch("/api/api-keys", {
-		method: "POST",
-		headers: { "Content-Type": "application/json" },
-		body: JSON.stringify({ name, scopes: ["jmap"], mailboxIds }),
-	});
-	const data = (await res.json().catch(() => ({}))) as { key?: string; error?: unknown };
-	if (!res.ok || !data.key) throw new Error(typeof data.error === "string" ? data.error : "Could not create a key");
-	window.dispatchEvent(new Event("mailflare:api-keys-changed"));
-	return data.key;
-}
-
 export async function beginMfaEnrollment(password: string | null, stepUpToken?: string): Promise<Required<Pick<MfaEnrollmentResponse, "secret" | "otpauthUrl" | "qrSvg">>> {
 	const res = await authFetch("/api/settings/mfa/enroll", {
 		method: "POST",
