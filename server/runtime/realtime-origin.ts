@@ -21,5 +21,5 @@ export function isRealtimeOriginAllowed(headers: IncomingHttpHeaders, options: {
 		const value = first(headers[name]);
 		if (value) forwarded.set(name, value);
 	}
-	return hasValidSessionMutationOrigin(new Request(`${base}/api/realtime`, { headers: forwarded }));
+	return hasValidSessionMutationOrigin(new Request(`${base}/api/realtime`, { headers: forwarded }), new URL(base).origin);
 }

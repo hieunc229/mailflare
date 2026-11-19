@@ -78,6 +78,8 @@ export function createNodeRuntime(): NodeRuntime {
 		// Marks the runtime for the few places that must behave differently.
 		MAILFLARE_RUNTIME: "node",
 		APP_URL: optional("APP_URL")?.replace(/\/$/, ""),
+		// Whether a reverse proxy sits in front: its x-forwarded-proto is then trusted (server/index.ts).
+		TRUST_PROXY: optional("TRUST_PROXY"),
 		INBOUND_WEBHOOK_SECRET: optional("INBOUND_WEBHOOK_SECRET"),
 		VAPID_PUBLIC_KEY: optional("VAPID_PUBLIC_KEY"),
 		VAPID_PRIVATE_KEY: optional("VAPID_PRIVATE_KEY"),
