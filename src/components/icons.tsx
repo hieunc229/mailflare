@@ -87,6 +87,7 @@ import {
 	MailOpenIcon as HugeMailOpenIcon,
 	MailPlusIcon as HugeMailPlusIcon,
 	MailSend01Icon as HugeMailSend01Icon,
+	MailsIcon as HugeMailsIcon,
 	MapPinIcon as HugeMapPinIcon,
 	ExpandIcon as HugeMaximize02Icon,
 	CollapseIcon as HugeMinimize02Icon,
@@ -273,6 +274,7 @@ export const MailCheck = createIcon(HugeMailCheckIcon, "MailCheck");
 export const MailOpen = createIcon(HugeMailOpenIcon, "MailOpen");
 export const MailSend01 = createIcon(HugeMailSend01Icon, "MailSend01");
 export const MailPlus = createIcon(HugeMailPlusIcon, "MailPlus");
+export const Mails = createIcon(HugeMailsIcon, "Mails");
 export const MapPin = createIcon(HugeMapPinIcon, "MapPin");
 export const Maximize2 = createIcon(HugeMaximize02Icon, "Maximize2");
 export const Menu: LucideIcon = HamburgerMenuIcon;

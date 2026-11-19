@@ -14,6 +14,7 @@ import {
   Folder,
   Inbox,
   MailPlus,
+  Mails,
   Plus,
   Send,
   ShieldAlert,
@@ -49,6 +50,7 @@ import {
   moveMessagesToCustomFolder,
   moveMessagesToSystemFolder,
 } from "./dashboard-nav-utils";
+import { shouldShowAllInboxes } from "@/components/messages/all-inboxes-utils";
 import { NavSectionHeader, useSectionOpen } from "./nav-section-header";
 import { ReorderableList } from "./reorderable-list";
 import { readStorage, writeStorage } from "./reorderable-list-utils";
@@ -111,8 +113,10 @@ export function DashboardNav({ className }: { className?: string }) {
   const moreOpen = moreOpenChoice ?? (hydrated && readStorage(MORE_OPEN_KEY, false));
   const foldersOpen = foldersOpenChoice ?? (hydrated && readStorage(FOLDERS_OPEN_KEY, false));
   const [foldersSectionOpen, toggleFoldersSection] = useSectionOpen("mailflare:nav:folders-section-open");
-  const { selectedMailbox, isLoading } = useSelectedMailbox();
+  const { selectedMailbox, mailboxes, isLoading } = useSelectedMailbox();
   const { counts } = useMessageCounts(selectedMailbox?.id, !isLoading);
+  const showAllInboxes = shouldShowAllInboxes(mailboxes);
+  const { counts: allMailboxCounts } = useMessageCounts(null, showAllInboxes && !isLoading);
   const [folders, setFolders] = useState<CustomFolder[]>([]);
   const [foldersMailboxId, setFoldersMailboxId] = useState(selectedMailbox?.id);
   if (foldersMailboxId !== selectedMailbox?.id) {
@@ -171,6 +175,11 @@ export function DashboardNav({ className }: { className?: string }) {
     }
     return link;
   });
+
+  // Outside the reorderable list: a saved order appends unknown links at the end, below Inbox.
+  const allInboxesLink: NavLink | null = showAllInboxes
+    ? { href: "/all-inboxes", label: t("navigation.allInboxes"), icon: Mails, count: getFolderNavCount("inbox", allMailboxCounts.folders) }
+    : null;
 
   useEffect(() => {
     const reset = () => setFolders([]);
@@ -253,6 +262,7 @@ export function DashboardNav({ className }: { className?: string }) {
     <SidebarScaffold className={className} header={<SidebarHeader href="/inbox" />} footer={<SidebarFooter />}>
       {composeLink && !mobile && <NavItem labelClassName="font-medium" link={composeLink} />}
       {minimal && <hr className="mx-6 my-2 border-neutral-200/70" />}
+      {allInboxesLink && <NavItem link={allInboxesLink} />}
       <ReorderableList
         storageKey="mailflare:nav:layout"
         enabled={!minimal}
