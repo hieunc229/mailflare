@@ -10,6 +10,7 @@ import { getDatabaseConfig } from "@/db/with-database";
 import { openExternalDatabase } from "@/db/external";
 import { staleGuard } from "@/lib/dav/writes";
 import { mirrorCardStatements } from "@/lib/dav/contact-mirror";
+import { seedStep } from "@/lib/dav/contact-seed";
 import { applyPendingMigrations, getMigrationStatus } from "@/lib/migrations/service";
 import { buildSearchConditions } from "@/lib/search/conditions";
 import { createBookedCalendarEvents } from "@/lib/booking/create";
@@ -345,6 +346,19 @@ check("card mirror promotes and links a contact without touching blocked", mirro
 check("card mirror: the first card to link an address keeps it and its name", mirrorBoth?.card === "card_a" && mirrorBoth.name === "Card A" && mirrorOnlyB?.card === "card_b" && mirrorOnlyB.name === "Card B");
 await db.batch(mirrorCardStatements(db, userId, { id: "card_a", fn: "Card A", emails: ["both@example.com"], group: false, own: new Set<string>() }) as never);
 check("card mirror unlinks an address taken off its card and keeps the contact", (await mirrorOf("old@example.com"))?.card === null && (await mirrorOf("old@example.com"))?.source === "manual");
+
+// F6-6: seeding copies unlinked manual contacts into cards in one batch (multi-row insert plus one CASE update) and finishes the address book.
+await db.insert(contacts).values([{ id: `${userId}:seed1@example.com`, userId, email: "seed1@example.com", displayName: "Seed One", source: "manual" }, { id: `${userId}:seed2@example.com`, userId, email: "seed2@example.com", source: "manual" }] as never);
+await db.insert(davCollections).values({ id: `card:${userId}`, userId, kind: "addressbook" } as never).onConflictDoNothing();
+// An address already on some card gets no second card (the LIKE over the card's JSON addresses, with the UID list in one OR).
+await db.insert(contacts).values({ id: `${userId}:seed3@example.com`, userId, email: "seed3@example.com", source: "manual" } as never);
+await db.insert(davCards).values({ id: "card_listed", userId, collectionId: `card:${userId}`, name: "listed.vcf", uid: "listed", body: "x", version: "3.0", fn: "Listed", emails: JSON.stringify(["seed3@example.com"]), size: 1 } as never);
+const seeded = await seedStep(env, userId);
+const seedLinks = await db.select({ email: contacts.email, card: contacts.davCardId }).from(contacts).where(and(eq(contacts.userId, userId), sql`${contacts.email} like 'seed%'`));
+const seedCards = await db.all<{ n: number }>(sql`SELECT count(*) AS n FROM dav_cards WHERE user_id = ${userId} AND uid LIKE 'mf-%'`);
+const seedDone = await db.all<{ at: number | null }>(sql`SELECT seeded_at AS at FROM dav_collections WHERE id = ${`card:${userId}`}`);
+check("contact seeding links each manual contact to its own card and finishes", seeded === "done" && seedLinks.filter((row) => row.card).length === 2 && seedLinks.filter((row) => row.card).every((row) => row.card?.startsWith("card_")) && Number(seedCards[0].n) >= 2 && seedDone[0].at !== null);
+check("contact seeding skips an address that is already on a card", seedLinks.find((row) => row.email === "seed3@example.com")?.card === null);
 
 const [settings] = await db.select().from(appSettings).where(eq(appSettings.id, "default"));
 check("seed rows present", settings?.appName === "Mailflare");
