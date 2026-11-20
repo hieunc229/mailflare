@@ -27,7 +27,7 @@ const { expandToolEvents } = await load("tools");
 const { expandCalendarEvents, nextCalendarOccurrence } = await load("ui");
 const { repeatsDuring, busyCheck } = await load("avail");
 const { isInactiveCalendarResponse, isOffCalendarResponse, OFF_CALENDAR_RESPONSES } = await load("status");
-const { editedTimeZone, resolveRepeat, repeatForToolUpdate, isConsistentRepeat, shiftCustomSeries, sameZonedDay } = await load("fields");
+const { editedTimeZone, resolveRepeat, repeatForToolUpdate, isConsistentRepeat, shiftCustomSeries, sameZonedDay, endLegacySeries } = await load("fields");
 const { inviteEventValues } = await load("store");
 const { buildCalendarFeed } = await load("feed");
 
@@ -244,4 +244,15 @@ test("busyCheck fails closed: a rule whose walk hit the work budget is busy for 
 	// A rule that walked completely is exact: no occurrence in June 2100 means free.
 	const exact = row({ rrule: "FREQ=DAILY;BYMONTH=2", startsAt: new Date("2026-02-01T09:00:00Z"), endsAt: new Date("2026-02-01T10:00:00Z") });
 	assert.equal(busyCheck([exact], new Date("2100-06-01T00:00:00Z"), new Date("2100-06-15T00:00:00Z"))(new Date("2100-06-03T12:00:00Z"), new Date("2100-06-03T12:30:00Z")), false);
+});
+
+// Pre-existing: "delete this and following" on a legacy series wrote repeat_until = now whatever it held, so deleting
+// from now on an already-ended series pushed its end forward and brought back every occurrence in between.
+test("delete-future never extends a series that already ended", () => {
+	const ended = new Date("2026-03-01T00:00:00Z");
+	const cut = new Date("2026-06-01T00:00:00Z");
+	assert.equal(endLegacySeries(ended, cut).toISOString(), ended.toISOString());
+	assert.equal(endLegacySeries(new Date("2026-09-01T00:00:00Z"), cut).toISOString(), cut.toISOString());
+	assert.equal(endLegacySeries(null, cut).toISOString(), cut.toISOString());
+	assert.equal(endLegacySeries(cut, cut).toISOString(), cut.toISOString());
 });

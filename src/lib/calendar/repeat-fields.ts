@@ -61,6 +61,11 @@ export function repeatForToolUpdate(row: RepeatRow, item: { repeat?: string; rep
 	};
 }
 
+/** repeat_until after "delete this and following" from `cut`: the earlier of the existing end and the cut, so a series that already ended is never extended. */
+export function endLegacySeries(repeatUntil: Date | null, cut: Date): Date {
+	return repeatUntil && repeatUntil < cut ? repeatUntil : cut;
+}
+
 /** Shown when an edit would move a custom series to another day; the API answers 409 with it and the calendar shows it. */
 export const CUSTOM_DAY_LOCKED = "This repeat was set in another app; change the day there";
 

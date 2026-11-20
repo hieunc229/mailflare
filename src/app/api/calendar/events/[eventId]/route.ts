@@ -11,7 +11,7 @@ import type { CalendarEventRouteParams } from "./types";
 import { normalizeCalendarColor } from "@/lib/calendar/colors";
 import { normalizeReminderMinutes } from "@/lib/calendar/reminder-utils";
 import { normalizeRepeatInterval, normalizeRepeatWeek, normalizeRepeatWeekday, parseCalendarOccurrenceId, parseCalendarRepeatDays, parseExcludedOccurrences } from "@/lib/calendar/recurrence";
-import { CUSTOM_DAY_LOCKED, editedTimeZone, resolveRepeat, shiftCustomSeries } from "@/lib/calendar/repeat-fields";
+import { CUSTOM_DAY_LOCKED, editedTimeZone, endLegacySeries, resolveRepeat, shiftCustomSeries } from "@/lib/calendar/repeat-fields";
 import { limitRrule, rruleEndedBefore } from "@/lib/calendar/rrule";
 import { deleteOverridesFrom, deleteSeriesRows, shiftOverrides, splitSeriesRows } from "@/lib/calendar/series-rows";
 import { newId } from "@/lib/ids";
@@ -158,7 +158,7 @@ export async function DELETE(request: Request, { params }: CalendarEventRoutePar
 	const isInboundInvite = existing.responseStatus != null || existing.inviteMessageId != null;
 	if (existing.mailboxId && input.from && !calendarKeyCanSendInvitations(key, existing.mailboxId)) return NextResponse.json({ error: "Sending invitations requires mail send permission for this mailbox" }, { status: 403 });
 	if (existing.repeat !== "none" && effectiveFrom && effectiveFrom > existing.startsAt) {
-		await db.update(calendarEvents).set(existing.rrule ? { rrule: limitRrule(existing.rrule, effectiveFrom, existing.startsAt, existing.timeZone, existing.allDay), updatedAt: new Date() } : { repeatUntil: effectiveFrom, updatedAt: new Date() }).where(eq(calendarEvents.id, existing.id));
+		await db.update(calendarEvents).set(existing.rrule ? { rrule: limitRrule(existing.rrule, effectiveFrom, existing.startsAt, existing.timeZone, existing.allDay), updatedAt: new Date() } : { repeatUntil: endLegacySeries(existing.repeatUntil, effectiveFrom), updatedAt: new Date() }).where(eq(calendarEvents.id, existing.id));
 		// Moved occurrences of a DAV series that fall in the part being deleted go with it.
 		if (existing.davObjectId === existing.id) await deleteOverridesFrom(db, user.id, existing.id, effectiveFrom);
 		return NextResponse.json({ ok: true });
