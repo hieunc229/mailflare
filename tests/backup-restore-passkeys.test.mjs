@@ -105,3 +105,16 @@ test("a newer backup restores into a database that has the passkey table but not
 	assert.equal(target.prepare("SELECT COUNT(*) AS count FROM passkey_credentials").get().count, 1);
 	assert.equal(target.prepare("PRAGMA table_info(passkey_credentials)").all().some((column) => column.name === "aaguid"), false);
 });
+
+test("a restore clears the DAV change log and sync state so clients resync from a new epoch", async () => {
+	const sqlite = database();
+	addUser(sqlite);
+	sqlite.prepare("INSERT INTO calendar_events (id, user_id, title, starts_at, ends_at, created_at, updated_at) VALUES ('e1', 'u1', 't', 1, 2, 1, 1)").run();
+	sqlite.prepare("INSERT INTO dav_sync_state (collection_id, epoch, floor) VALUES ('cal:u1', 'old-epoch', 0)").run();
+	sqlite.prepare("INSERT INTO dav_changes (collection_id, object_key, change_type) VALUES ('cal:u1', 'ghost', 'updated')").run();
+	const databaseHandle = d1(sqlite);
+	const backup = await exportDatabaseRecords(databaseHandle);
+	await restoreDatabaseRecords(databaseHandle, backup.buffer.slice(backup.byteOffset, backup.byteOffset + backup.byteLength));
+	assert.equal(sqlite.prepare("SELECT COUNT(*) AS count FROM dav_sync_state").get().count, 0);
+	assert.deepEqual(sqlite.prepare("SELECT object_key AS k, change_type AS t FROM dav_changes ORDER BY seq").all(), [{ k: "e1", t: "created" }]);
+});
