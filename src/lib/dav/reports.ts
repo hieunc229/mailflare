@@ -1,5 +1,5 @@
 import { and } from "drizzle-orm";
-import { CALENDAR_CHUNK, endedBefore, hiddenCalendarNames, isDavMaster, listCalendar, liveCalendarNames, loadCalendarByNames, matchesUid, MAX_LISTED, MAX_QUERY_CANDIDATES, occursInRange, overlapsRange, withOverrides } from "./calendar-store";
+import { CALENDAR_CHUNK, endedBefore, hiddenCalendarNames, isDavMaster, listCalendar, liveCalendarNames, loadCalendarByNames, matchesUid, MAX_LISTED, MAX_QUERY_CANDIDATES, occursInRange, overlapsRange, planCalendarChunks, releaseStored, withOverrides, withStored } from "./calendar-store";
 import { cardMatches, CARD_CHUNK, listCards, liveCardNames, loadCardBodies, loadCardMetaByNames, MAX_CARDS, planCardChunks, type PropFilter, type TextMatch } from "./card-store";
 import { changesSince, currentSeq, ensureSyncState, etagSeqs, formatSyncToken } from "./changes";
 import { calendarMember, cardMember, collectionIdFor, collectionPath, etagOf, listMembers, memberResponse, type Area, type DavContext, type Member } from "./collections";
@@ -125,6 +125,20 @@ const unsupportedFilter = (area: Area) => precondition(403, "supported-filter", 
 
 const wantsData = (wanted: DavElement | undefined, area: Area) => wanted?.name === "prop" && wanted.children.some((child) => child.ns === (area === "calendars" ? NS.caldav : NS.carddav) && child.name === (area === "calendars" ? "calendar-data" : "address-data"));
 
+/** Whether a calendar answer renders the body: the data itself or its length (`getcontentlength` is only computed when asked for by name). */
+const wantsCalendarBody = (wanted: DavElement | undefined) => wanted?.name === "prop" && wanted.children.some((child) => (child.ns === NS.caldav && child.name === "calendar-data") || (child.ns === NS.dav && child.name === "getcontentlength"));
+
+/** Calendar resources as response chunks: each chunk (cut by stored size) has its bodies loaded only when the answer renders them, and they are dropped with it. */
+export async function* respondCalendar(ctx: DavContext, resources: CalendarResource[], seqs: Map<string, number>, wanted: DavElement | undefined): AsyncGenerator<DavResponse[]> {
+	if (!resources.length) yield [];
+	const bodies = wantsCalendarBody(wanted);
+	for (const plan of planCalendarChunks(resources)) {
+		if (bodies) await withStored(ctx.env, ctx.userId, plan);
+		yield await Promise.all(plan.map((resource) => memberResponse("calendars", ctx, calendarMember(resource, seqs, ctx.timeZone), wanted)));
+		releaseStored(plan);
+	}
+}
+
 /** Wrap members already in memory as response chunks of 90, rendering each only when its turn comes. */
 async function* respond(area: Area, ctx: DavContext, members: Member[], wanted: DavElement | undefined): AsyncGenerator<DavResponse[]> {
 	yield* inChunks(members, 90, (chunk) => Promise.all(chunk.map((member) => memberResponse(area, ctx, member, wanted))));
@@ -148,10 +162,10 @@ async function multiget(area: Area, ctx: DavContext, root: DavElement, wanted: D
 		for (let i = 0; i < requested.length; i += size) {
 			const slice = requested.slice(i, i + size);
 			if (area === "calendars") {
-				const resources = await loadCalendarByNames(ctx.env, ctx.userId, slice);
+				const resources = await loadCalendarByNames(ctx.env, ctx.userId, slice, false);
 				const seqs = await etagSeqs(ctx.env, collectionIdFor(area, ctx.userId), resources.map((resource) => resource.id));
 				for (const resource of resources) found.add(resource.name);
-				yield await Promise.all(resources.map((resource) => memberResponse(area, ctx, calendarMember(resource, seqs, ctx.timeZone), wanted)));
+				for await (const part of respondCalendar(ctx, resources, seqs, wanted)) yield part;
 			} else {
 				const metas = await loadCardMetaByNames(ctx.env, ctx.userId, slice);
 				const seqs = await etagSeqs(ctx.env, collectionIdFor(area, ctx.userId), metas.map((card) => card.id));
@@ -223,7 +237,7 @@ async function calendarQuery(ctx: DavContext, root: DavElement, wanted: DavEleme
 	}
 	await withOverrides(ctx.env, ctx.userId, matched.filter((resource) => !loaded.has(resource.id)));
 	const seqs = await etagSeqs(ctx.env, calendarCollectionId(ctx.userId), matched.map((resource) => resource.id));
-	return streamMultistatus(respond(area, ctx, matched.map((resource) => calendarMember(resource, seqs, ctx.timeZone)), wanted), { href, trailer: () => (truncated ? [{ href, status: 507, error: "<D:number-of-matches-within-limits/>" }] : []) });
+	return streamMultistatus(respondCalendar(ctx, matched, seqs, wanted), { href, trailer: () => (truncated ? [{ href, status: 507, error: "<D:number-of-matches-within-limits/>" }] : []) });
 }
 
 async function addressBookQuery(ctx: DavContext, root: DavElement, wanted: DavElement | undefined): Promise<Response> {

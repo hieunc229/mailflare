@@ -65,7 +65,7 @@ function mapEvent(event: Component, userZone: string, addresses: Set<string>): E
 	const organizer = mailto(firstProp(event, "ORGANIZER")?.value ?? "");
 	const guests: string[] = [];
 	const responses: Record<string, string> = {};
-	let own: string | undefined;
+	let own: (typeof PARTSTATS)[string] | undefined;
 	for (const property of event.props) {
 		if (property.name !== "ATTENDEE" || guests.length >= MAX_ATTENDEES) continue;
 		const address = mailto(property.value);
@@ -101,7 +101,9 @@ function mapRepeat(rule: string | undefined, fields: EventFields): Pick<MasterFi
 	if (!value) return none;
 	const zone = fields.timeZone ?? "UTC";
 	const legacy = legacyRepeatFor(value, fields.startsAt, zone);
-	if (legacy) return { repeat: legacy.repeat as MasterFields["repeat"], repeatDays: JSON.stringify(legacy.repeatDays), repeatAnchorDay: legacy.repeatAnchorDay, repeatUntil: legacy.repeatUntil, rrule: null };
+	// The columns hold whole seconds: an exclusive bound of "UNTIL plus 1 ms" must not be floored back onto the last occurrence.
+	const until = legacy?.repeatUntil && new Date(Math.ceil(legacy.repeatUntil.getTime() / 1000) * 1000);
+	if (legacy) return { repeat: legacy.repeat as MasterFields["repeat"], repeatDays: JSON.stringify(legacy.repeatDays), repeatAnchorDay: legacy.repeatAnchorDay, repeatUntil: until ?? null, rrule: null };
 	if (parseRrule(value, zone)) return { repeat: "custom", repeatDays: "[]", repeatAnchorDay: null, repeatUntil: null, rrule: value };
 	return none;
 }

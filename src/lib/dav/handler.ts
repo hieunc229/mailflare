@@ -4,9 +4,10 @@ import { domains, mailboxes } from "@/db/schema";
 import { authenticateAppPasswordRequest } from "@/lib/auth/app-passwords";
 import { getSecurityHeaders } from "@/lib/security/headers";
 import { loadCalendarByNames } from "./calendar-store";
+import { deleteCalendarResource, putCalendarResource } from "./calendar-write";
 import { loadCardBodies, loadCardMetaByNames } from "./card-store";
 import { calendarMember, cardMember, collectionIdFor, collectionProperties, collectionPath, memberResponse, propfindCollection, type Area, type DavContext } from "./collections";
-import { BASE_HEADERS, collection, el, href, NS, precondition, readXmlBody, selectProps, text, wantedProps, XML_HEADERS, type Property } from "./common";
+import { BASE_HEADERS, collection, el, etagListed, etagMatches, href, NS, precondition, readXmlBody, selectProps, text, wantedProps, XML_HEADERS, type Property } from "./common";
 import { etagSeqs } from "./changes";
 import { handleReport } from "./reports";
 import { isDavEnabled } from "./settings";
@@ -14,7 +15,7 @@ import type { DavElement } from "./xml";
 import { escapeXml, multistatus } from "./xml-writer";
 
 const DAV_CLASSES = "1, 3, calendar-access, addressbook";
-const ALLOW = "OPTIONS, PROPFIND, REPORT, GET, HEAD";
+const ALLOW = "OPTIONS, PROPFIND, REPORT, GET, HEAD, PUT, DELETE";
 const MAX_ADDRESSES = 50;
 const MEMBER_NAME = /^[A-Za-z0-9._~@+=-]{1,200}$/;
 
@@ -116,10 +117,16 @@ async function withinKeyBudget(env: CloudflareEnv, keyId: string): Promise<boole
 	}
 }
 
-/** Whether `If-None-Match` (or a `*`) names the current ETag, in which case a GET is answered 304. Weak comparison: `W/` is ignored. */
-const etagListed = (header: string, etag: string) => header.split(",").some((item) => item.trim() === "*" || item.trim().replace(/^W\//, "") === etag);
-/** `If-Match` compares strongly (RFC 9110 13.1.1): a weak validator never matches. */
-const etagMatches = (header: string, etag: string) => header.split(",").some((item) => item.trim() === "*" || item.trim() === etag);
+/** Spend one write from the user's budget (120 per minute on their own limiter, apart from the request limiter), so a client looping on PUT cannot fill the change log. */
+async function withinWriteBudget(env: CloudflareEnv, userId: string): Promise<boolean> {
+	if (!env.DAV_WRITE_RATE_LIMIT) return true;
+	try {
+		return (await env.DAV_WRITE_RATE_LIMIT.limit({ key: `dav-write:${userId}` })).success;
+	} catch (error) {
+		console.warn("DAV write limiter unavailable", error);
+		return true;
+	}
+}
 
 /** GET and HEAD of one resource: the stored body or its generated text, with its ETag. */
 async function getResource(area: Area, ctx: DavContext, name: string, request: Request): Promise<Response> {
@@ -201,6 +208,14 @@ async function route(request: Request, env: CloudflareEnv): Promise<Response | n
 		if (root instanceof Response) return root;
 		if (!root) return text(400, "A REPORT needs a request body");
 		return handleReport(target.area, ctx, root);
+	}
+
+	if (request.method === "PUT" || request.method === "DELETE") {
+		if (target.kind === "collection" && request.method === "DELETE") return text(403, "A collection cannot be deleted");
+		if (target.kind !== "resource") return text(405, "Method not allowed", { Allow: ALLOW });
+		if (target.area === "addressbooks") return text(405, "Method not allowed", { Allow: ALLOW });
+		if (!(await withinWriteBudget(env, auth.userId))) return text(503, "Too many requests", { "Retry-After": "30" });
+		return request.method === "PUT" ? putCalendarResource(ctx, target.name, request, () => userAddresses(env, user)) : deleteCalendarResource(ctx, target.name, request);
 	}
 
 	if (request.method !== "PROPFIND") return text(405, "Method not allowed", { Allow: ALLOW });

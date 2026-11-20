@@ -80,6 +80,9 @@ test("repeat rules: legacy columns when exact, custom when not, one occurrence w
 	m = repeat("FREQ=DAILY;COUNT=3");
 	assert.equal(m.repeat, "daily");
 	assert.ok(m.repeatUntil > new Date("2026-11-04T17:00:00Z"));
+	assert.equal(m.repeatUntil.getTime() % 1000, 0, "the bound is a whole second, as the column stores it");
+	m = repeat("FREQ=DAILY;UNTIL=20261105T170000Z");
+	assert.equal(m.repeatUntil.toISOString(), "2026-11-05T17:00:01.000Z", "UNTIL is inclusive: the exclusive bound is just after it");
 	m = repeat("FREQ=DAILY;BYHOUR=9");
 	assert.deepEqual([m.repeat, m.rrule, m.repeatDays], ["none", null, "[]"]);
 	m = repeat("FREQ=YEARLY;BYMONTH=2;BYMONTHDAY=30");
