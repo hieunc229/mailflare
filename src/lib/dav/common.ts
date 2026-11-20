@@ -128,3 +128,8 @@ export async function* inChunks<T>(items: T[], size: number, make: (chunk: T[]) 
 	if (!items.length) yield [];
 	for (let i = 0; i < items.length; i += size) yield await make(items.slice(i, i + size));
 }
+
+/** Whether `If-None-Match` (or a `*`) names the current ETag, in which case a GET is answered 304. Weak comparison: `W/` is ignored. */
+export const etagListed = (header: string, etag: string) => header.split(",").some((item) => item.trim() === "*" || item.trim().replace(/^W\//, "") === etag);
+/** `If-Match` compares strongly (RFC 9110 13.1.1): a weak validator never matches. */
+export const etagMatches = (header: string, etag: string) => header.split(",").some((item) => item.trim() === "*" || item.trim() === etag);

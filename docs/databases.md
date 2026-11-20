@@ -86,6 +86,8 @@ Also kept on every dialect: foreign keys and cascades, the JMAP change log, mail
 | `batch` atomicity | Atomic | Atomic | Atomic for DML; MySQL commits DDL implicitly, so a failed migration can leave earlier statements applied |
 | `neon` (HTTP) | n/a | Batches run as separate statements (the HTTP protocol has no interactive transaction); use `node-postgres` for atomic batches | n/a |
 
+On the Neon HTTP driver batches are not transactional, so the preconditions of CalDAV/CardDAV writes (`If-Match`, `If-None-Match`, the stale-version guard) give no lock there; use `node-postgres` when clients write concurrently.
+
 Why search is the main difference: FTS5 is an SQLite extension, PostgreSQL's equivalent (`tsvector`) and MySQL's `FULLTEXT` have different grammars and ranking, and the search syntax (`from:`, `subject:`, quoted phrases, `-term`) is translated into plain predicates on those dialects instead. That is correct but unindexed, so searches scan the messages of the mailbox being searched. For large mailboxes, D1/SQLite, or PostgreSQL with `pg_trgm`, searches faster.
 
 Other things to know:

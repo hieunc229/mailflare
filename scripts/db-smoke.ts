@@ -8,6 +8,7 @@ import { createDb } from "@/db";
 import { users, domains, mailboxes, messages, folders, jmapChanges, calendarEvents, davCalendarObjects, davCards, davCollections, appSettings, webhooks, spamTokenStats, spamReputation } from "@/db/schema";
 import { getDatabaseConfig } from "@/db/with-database";
 import { openExternalDatabase } from "@/db/external";
+import { staleGuard } from "@/lib/dav/writes";
 import { applyPendingMigrations, getMigrationStatus } from "@/lib/migrations/service";
 import { buildSearchConditions } from "@/lib/search/conditions";
 import { createBookedCalendarEvents } from "@/lib/booking/create";
@@ -168,6 +169,24 @@ await db.delete(calendarEvents).where(eq(calendarEvents.id, namedId));
 check("dav trigger records the name of a destroyed DAV event", (await davNameOf(`cal:${userId}`, namedId)) === "phone-made.ics");
 await db.delete(davCards).where(eq(davCards.id, `card_${stamp}`));
 check("dav trigger records the name of a destroyed card", (await davNameOf(`card:${userId}-moved`, `card_${stamp}`)) === "a.vcf");
+// F6-5: the write guard fails a whole batch when the resource is no longer as it was read, on every dialect, and leaves no rows behind.
+const guardId = `evt_${stamp}_guard`;
+const guardCollection = `cal:${userId}`;
+await db.insert(calendarEvents).values({ id: guardId, userId, title: "Guard", startsAt: new Date(Date.now() + 3_600_000), endsAt: new Date(Date.now() + 7_200_000) } as never);
+const guardSeq = Number((await db.all<{ seq: number }>(sql`SELECT max(seq) AS seq FROM dav_changes WHERE collection_id = ${guardCollection} AND object_key = ${guardId}`))[0].seq);
+const guarded = (title: string) => db.batch([...staleGuard(db, calendarEvents, guardCollection, guardId, userId, { seq: guardSeq, updatedAt: new Date() }), db.update(calendarEvents).set({ title }).where(eq(calendarEvents.id, guardId))] as never);
+const guardTitle = async () => (await db.select({ title: calendarEvents.title }).from(calendarEvents).where(eq(calendarEvents.id, guardId)))[0].title;
+await guarded("First writer");
+check("dav write guard lets a batch through while the resource is as it was read", (await guardTitle()) === "First writer");
+let guardRefused = false;
+try {
+	await guarded("Second writer");
+} catch (error) {
+	guardRefused = isUniqueConstraintError(error);
+}
+check("dav write guard fails the whole batch once the resource changed", guardRefused && (await guardTitle()) === "First writer");
+const guardRows = await db.all<{ n: number }>(sql`SELECT count(*) AS n FROM dav_sync_state WHERE collection_id LIKE 'guard:%'`);
+check("dav write guard leaves no rows behind", Number(guardRows[0].n) === 0);
 await db.delete(calendarEvents).where(eq(calendarEvents.id, davEventId));
 check("dav trigger logs a deleted event", (await davLog(`cal:${userId}`, davEventId)).endsWith("destroyed"));
 

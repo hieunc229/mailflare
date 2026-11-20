@@ -5,6 +5,7 @@ import { OFF_CALENDAR_RESPONSES } from "@/lib/calendar/response-status";
 import { expandEvent, rruleEndedBefore } from "@/lib/calendar/rrule";
 import { etagFromSeq, newestSeqOf } from "./changes";
 import type { ListedRow } from "./common";
+import { rowsHash } from "./calendar-merge";
 import { nativeResourceName, nativeUid, type CalendarResource, type EventRow } from "./calendar-render";
 
 type Env = Pick<CloudflareEnv, "DB">;
@@ -28,13 +29,41 @@ const isMaster = or(isNull(calendarEvents.davObjectId), eq(calendarEvents.davObj
 
 const joined = (env: Env) =>
 	getDb(env)
-		.select({ event: calendarEvents, name: davCalendarObjects.name, uid: davCalendarObjects.uid })
+		.select({ event: calendarEvents, name: davCalendarObjects.name, uid: davCalendarObjects.uid, size: davCalendarObjects.size })
 		.from(calendarEvents)
 		.leftJoin(davCalendarObjects, eq(davCalendarObjects.id, calendarEvents.id));
 
-type Joined = { event: EventRow; name: string | null; uid: string | null };
+type Joined = { event: EventRow; name: string | null; uid: string | null; size: number | null };
 
-const toResource = ({ event, name, uid }: Joined): CalendarResource => ({ id: event.id, name: name ?? nativeResourceName(event.id), uid: uid ?? nativeUid(event.id), master: event, overrides: [] });
+const toResource = ({ event, name, uid, size }: Joined): CalendarResource => ({ id: event.id, name: name ?? nativeResourceName(event.id), uid: uid ?? nativeUid(event.id), master: event, overrides: [], size: size ?? undefined });
+
+/** A response is cut into groups whose stored bodies add up to at most this many bytes (always at least one resource), so bodies never sit in memory together. */
+const CHUNK_BYTES = 8 * 1024 * 1024;
+
+/** Groups of resources that have their bodies loaded and rendered together: at most 90 resources and CHUNK_BYTES, from the sizes already known. */
+export function planCalendarChunks(resources: CalendarResource[]): CalendarResource[][] {
+	const chunks: CalendarResource[][] = [];
+	let current: CalendarResource[] = [];
+	let bytes = 0;
+	for (const resource of resources) {
+		const size = resource.size ?? 0;
+		if (current.length && (current.length >= OVERRIDE_CHUNK || bytes + size > CHUNK_BYTES)) {
+			chunks.push(current);
+			current = [];
+			bytes = 0;
+		}
+		current.push(resource);
+		bytes += size;
+	}
+	if (current.length) chunks.push(current);
+	return chunks;
+}
+
+/** Bytes of the user's stored calendar resources (the covering index on user and size answers it without reading bodies). */
+export async function calendarBytes(env: Env, userId: string): Promise<number> {
+	const [row] = await getDb(env).select({ total: sql<number | null>`sum(${davCalendarObjects.size})` }).from(davCalendarObjects).where(eq(davCalendarObjects.userId, userId));
+	return Number(row?.total ?? 0);
+}
 
 /** Only masters made by a DAV client can have override rows. */
 export const isDavMaster = (resource: CalendarResource) => resource.master.davObjectId === resource.id;
@@ -56,16 +85,54 @@ export async function withOverrides(env: Env, userId: string, resources: Calenda
 }
 
 /**
- * The visible resources behind a set of href names, in one query per chunk. A name only matches the resource that
+ * Attach the body a client PUT to the DAV-written resources (their overrides must be loaded already): `stored.fresh` says
+ * no row changed since it was written. Kept apart from withOverrides because only the resources that are answered need it.
+ */
+export async function withStored(env: Env, userId: string, resources: CalendarResource[]): Promise<CalendarResource[]> {
+	const byId = new Map(resources.filter(isDavMaster).map((resource) => [resource.id, resource]));
+	const ids = [...byId.keys()];
+	for (let i = 0; i < ids.length; i += OVERRIDE_CHUNK) {
+		const rows = await getDb(env).select({ id: davCalendarObjects.id, body: davCalendarObjects.body, rowsHash: davCalendarObjects.rowsHash }).from(davCalendarObjects).where(and(eq(davCalendarObjects.userId, userId), inArray(davCalendarObjects.id, ids.slice(i, i + OVERRIDE_CHUNK))));
+		for (const row of rows) {
+			const resource = byId.get(row.id)!;
+			if (row.body !== null) resource.stored = { body: row.body, fresh: row.rowsHash !== null && row.rowsHash === (await rowsHash(resource.master, resource.overrides)) };
+		}
+	}
+	return resources;
+}
+
+/** Drops the stored bodies of a group once its response has been sent, so at most one group of bodies is in memory. */
+export function releaseStored(resources: CalendarResource[]): void {
+	for (const resource of resources) resource.stored = undefined;
+}
+
+/**
+ * The visible resources behind a set of href names, in one query per chunk (`bodies` false: without the stored bodies, which the caller loads with `withStored` in planned chunks). A name only matches the resource that
  * is served under exactly that name: `<id>.ics` for a native event, the stored name for a DAV-created one.
  */
-export async function loadCalendarByNames(env: Env, userId: string, names: string[]): Promise<CalendarResource[]> {
+export async function loadCalendarByNames(env: Env, userId: string, names: string[], bodies = true): Promise<CalendarResource[]> {
 	if (!names.length) return [];
 	const wanted = new Set(names);
 	const rows = await joined(env)
 		.where(and(eq(calendarEvents.userId, userId), isMaster, visible, or(inArray(calendarEvents.id, names.map((name) => name.replace(/\.ics$/, ""))), inArray(davCalendarObjects.name, names))))
 		.orderBy(asc(calendarEvents.id));
-	return withOverrides(env, userId, rows.map(toResource).filter((resource) => wanted.has(resource.name)));
+	const resources = await withOverrides(env, userId, rows.map(toResource).filter((resource) => wanted.has(resource.name)));
+	return bodies ? withStored(env, userId, resources) : resources;
+}
+
+/**
+ * The resource served under a name whether or not it is visible: a PUT onto the name of a hidden (cancelled, declined)
+ * resource replaces it, and DELETE removes it. Without the stored body and overrides: a write replaces both.
+ */
+export async function findCalendarByName(env: Env, userId: string, name: string): Promise<CalendarResource | undefined> {
+	const rows = await joined(env).where(and(eq(calendarEvents.userId, userId), isMaster, or(eq(davCalendarObjects.name, name), eq(calendarEvents.id, name.replace(/\.ics$/, "")))));
+	return rows.map(toResource).find((resource) => resource.name === name);
+}
+
+/** Another resource of this user that already has this UID (a stored UID, or `<id>@mailflare` of a native event), hidden ones included. */
+export async function findUidConflict(env: Env, userId: string, uid: string, exceptId: string | null): Promise<CalendarResource | undefined> {
+	const rows = await joined(env).where(and(eq(calendarEvents.userId, userId), isMaster, matchesUid(uid), exceptId === null ? undefined : ne(calendarEvents.id, exceptId)));
+	return rows.map(toResource).find((resource) => resource.uid === uid);
 }
 
 /** Visible resources in id order after `after`, one more than `limit` so the caller can tell it was cut. Without overrides: `withOverrides` adds them to the rows that need them. */

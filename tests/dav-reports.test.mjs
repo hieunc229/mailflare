@@ -129,9 +129,9 @@ test("the calendar collection carries the properties clients ask for", async (t)
 	assert.match(token, /^https:\/\/mail\.example\.test\/dav\/sync\/cal%3Au1\/[0-9a-f-]{36}\/0$/);
 	assert.match(text, new RegExp(`<CS:getctag>${token.replace(/[/.]/g, "\\$&")}</CS:getctag>`));
 	for (const report of ["calendar-multiget", "calendar-query", "sync-collection"]) assert.match(text, new RegExp(`<D:report><[A-Z]+:${report}/></D:report>`));
-	// Read-only until the write methods exist: no write privileges are claimed.
-	assert.match(text, /<D:privilege><D:read\/><\/D:privilege><D:privilege><D:read-current-user-privilege-set\/><\/D:privilege>/);
-	assert.doesNotMatch(text, /write|bind/);
+	// PUT and DELETE are served, PROPPATCH is not: no write-properties.
+	for (const privilege of ["read", "write", "write-content", "bind", "unbind", "read-current-user-privilege-set"]) assert.match(text, new RegExp(`<D:privilege><D:${privilege}/></D:privilege>`), privilege);
+	assert.doesNotMatch(text, /write-properties/);
 	assert.match(text, /<D:owner><D:href>\/dav\/principals\/u1\/<\/D:href><\/D:owner>/);
 });
 

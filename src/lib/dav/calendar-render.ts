@@ -1,23 +1,28 @@
 import type { calendarEvents } from "@/db/schema";
 import { buildVevent, eventZone, type FeedEvent } from "@/lib/calendar/feed";
 import { formatIcsUtc, joinIcsLines } from "@/lib/calendar/ics";
-import { parseExcludedOccurrences } from "@/lib/calendar/recurrence";
 import { buildVtimezone } from "@/lib/calendar/vtimezone";
+import { feedRow, mergeCalendarBody } from "./calendar-merge";
 
 export type EventRow = typeof calendarEvents.$inferSelect;
 
 /** One CalDAV resource: the master row, its override rows (moved occurrences of a DAV series) and the names it is served under. */
-export type CalendarResource = { id: string; name: string; uid: string; master: EventRow; overrides: EventRow[] };
+export type CalendarResource = {
+	id: string;
+	name: string;
+	uid: string;
+	master: EventRow;
+	overrides: EventRow[];
+	/** Bytes of the stored body (the `size` column), known without loading it; undefined for a native event. */
+	size?: number;
+	/** The iCalendar text a client PUT, for a resource a DAV client wrote; `fresh` when no row changed since (see rowsHash). */
+	stored?: { body: string; fresh: boolean };
+};
 
 /** The href segment of a resource: the stored name of a DAV-created one, `<id>.ics` for a native event. */
 export const nativeResourceName = (id: string) => `${id}.ics`;
 export const nativeUid = (id: string) => `${id}@mailflare`;
 
-const feedRow = (row: EventRow, excluded?: Set<number>): FeedEvent => ({
-	...row,
-	repeat: row.repeat,
-	excludedOccurrences: excluded ? JSON.stringify(parseExcludedOccurrences(row.excludedOccurrences).filter((at) => !excluded.has(at))) : row.excludedOccurrences,
-});
 
 /** Latest change among the rows of a resource, for Last-Modified. */
 export function resourceUpdatedAt(resource: CalendarResource): Date {
@@ -32,6 +37,10 @@ export function resourceUpdatedAt(resource: CalendarResource): Date {
  * VALARM (spec 7.3), and an all-day event that has no zone of its own gets its dates in `userZone`.
  */
 export function renderCalendarObject(resource: CalendarResource, userZone?: string | null): string {
+	if (resource.stored?.fresh) return resource.stored.body;
+	// A Mailflare-side edit of a DAV event: the mapped properties are rewritten into what the client sent (spec 7.3).
+	const merged = resource.stored && mergeCalendarBody(resource.stored.body, resource, userZone);
+	if (merged) return merged;
 	const { master, overrides, uid } = resource;
 	const overridden = new Set(overrides.flatMap((row) => (row.recurrenceId ? [row.recurrenceId.getTime()] : [])));
 	const parts: { event: FeedEvent; recurrenceId?: Date }[] = [{ event: feedRow(master, overridden) }];

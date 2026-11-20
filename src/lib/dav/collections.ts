@@ -21,7 +21,8 @@ const REPORTS: Record<Area, string[]> = {
 	calendars: [`<C:calendar-multiget/>`, `<C:calendar-query/>`, `<D:sync-collection/>`],
 	addressbooks: [`<CR:addressbook-multiget/>`, `<CR:addressbook-query/>`, `<D:sync-collection/>`],
 };
-const PRIVILEGES = ["read", "read-current-user-privilege-set"];
+// PROPPATCH is not served, so write-properties is not claimed.
+const PRIVILEGES = ["read", "write", "write-content", "bind", "unbind", "read-current-user-privilege-set"];
 
 /** A resource as the report and PROPFIND code sees it: what the live properties need, with the body produced on demand. */
 export type Member = { name: string; etag: string; lastModified: Date; contentType: string; /** Known without the body (a stored card), so the length is cheap. */ size?: number; body?: () => string };

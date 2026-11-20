@@ -33,8 +33,10 @@ interface CloudflareEnv {
 	LOGIN_RATE_LIMIT?: RateLimit;
 	/** Mobile device sign-in (`/api/auth/device`), stricter than the web login. */
 	DEVICE_LOGIN_RATE_LIMIT?: RateLimit;
-	/** CalDAV/CardDAV requests per app password (600 per minute) and writes per user. */
+	/** CalDAV/CardDAV requests per app password (600 per minute). */
 	DAV_RATE_LIMIT?: RateLimit;
+	/** CalDAV/CardDAV writes (PUT, DELETE) per user, 120 per minute. */
+	DAV_WRITE_RATE_LIMIT?: RateLimit;
 	/** APNs auth key for the mobile push relay (src/lib/push/native.ts). */
 	APNS_KEY_ID?: string;
 	APNS_TEAM_ID?: string;
