@@ -267,13 +267,18 @@ export function splitVcards(bytes: Uint8Array, maxLine = MAX_VCARD_LINE_BYTES, m
 	return result;
 }
 
-const IMAGE_SIGNATURES: number[][] = [[0xff, 0xd8, 0xff], [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a], [0x47, 0x49, 0x46, 0x38]];
+const IMAGE_SIGNATURES: { mime: string; bytes: number[] }[] = [
+	{ mime: "image/jpeg", bytes: [0xff, 0xd8, 0xff] },
+	{ mime: "image/png", bytes: [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a] },
+	{ mime: "image/gif", bytes: [0x47, 0x49, 0x46, 0x38] },
+];
 
 /**
- * The bytes of an inline photo, or null. The data must be plain base64, decode to at most 10 MB and start like a
- * JPEG, PNG, GIF or WebP file. Anything else, SVG included, is refused. Call this in the browser only.
+ * An inline photo as bytes and image type, or null. The data must be plain base64, decode to at most 10 MB and start
+ * like a JPEG, PNG, GIF or WebP file; the type comes from those first bytes, never from the card. Anything else, SVG
+ * included, is refused. Call this in the browser only.
  */
-export function contactPhotoBytes(photo: ContactPhoto | null): Uint8Array | null {
+export function decodeContactPhoto(photo: ContactPhoto | null): { bytes: Uint8Array; mime: string } | null {
 	if (!photo || photo.kind !== "inline") return null;
 	const base64 = photo.base64.replace(/\s+/g, "");
 	if (!base64 || base64.length > Math.ceil((MAX_PHOTO_BYTES * 4) / 3) + 4 || !/^[A-Za-z0-9+/]*={0,2}$/.test(base64)) return null;
@@ -285,7 +290,7 @@ export function contactPhotoBytes(photo: ContactPhoto | null): Uint8Array | null
 	}
 	if (binary.length > MAX_PHOTO_BYTES) return null;
 	const bytes = Uint8Array.from(binary, (char) => char.charCodeAt(0));
-	const startsWith = (signature: number[]) => signature.every((byte, index) => bytes[index] === byte);
 	const webp = bytes.length >= 12 && String.fromCharCode(...bytes.subarray(0, 4)) === "RIFF" && String.fromCharCode(...bytes.subarray(8, 12)) === "WEBP";
-	return IMAGE_SIGNATURES.some(startsWith) || webp ? bytes : null;
+	const mime = webp ? "image/webp" : IMAGE_SIGNATURES.find((signature) => signature.bytes.every((byte, index) => bytes[index] === byte))?.mime;
+	return mime ? { bytes, mime } : null;
 }
