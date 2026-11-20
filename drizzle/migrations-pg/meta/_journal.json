@@ -99,6 +99,27 @@
       "when": 1794516479572,
       "tag": "0013_auto_update",
       "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1794516480572,
+      "tag": "0018_app_password_usage",
+      "breakpoints": true
+    },
+    {
+      "idx": 15,
+      "version": "7",
+      "when": 1794516481572,
+      "tag": "0021_dav_enabled",
+      "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "7",
+      "when": 1794516482572,
+      "tag": "0026_dav_storage",
+      "breakpoints": true
     }
   ]
 }
