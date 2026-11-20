@@ -33,7 +33,8 @@ export function memberNameFromHref(raw: string, area: Area, ctx: DavContext): st
 		return null;
 	}
 	const base = collectionPath(area, ctx.userId);
-	if (url.origin !== ctx.origin || !url.pathname.startsWith(base)) return null;
+	// Same host, any scheme: behind a TLS proxy the request URL may say http while the client addresses https.
+	if (url.host !== new URL(ctx.origin).host || !url.pathname.startsWith(base)) return null;
 	let name: string;
 	try {
 		name = decodeURIComponent(url.pathname.slice(base.length));
