@@ -8,6 +8,7 @@ import { useEffect, useState, useSyncExternalStore } from "react";
 import { usePathname } from "next/navigation";
 import {
   Archive,
+  BellOff,
   CalendarClock,
   Clock,
   FileText,
@@ -76,11 +77,12 @@ const links = [
   },
   { href: "/spam", labelKey: "navigation.spam", icon: ShieldAlert, preloadMessages: true },
   { href: "/trash", labelKey: "navigation.trash", icon: Trash2, preloadMessages: true },
+  { href: "/subscriptions", labelKey: "navigation.subscriptions", icon: BellOff },
 ] satisfies (Omit<NavLink, "label"> & { labelKey: TranslationKey })[];
 
 
-// Drafts, Archived, Spam and Trash start tucked under "More...".
-const MORE_LINK_HREFS = ["/drafts", "/archived", "/spam", "/trash"];
+// Drafts, Archived, Spam, Trash and Subscriptions start tucked under "More...".
+const MORE_LINK_HREFS = ["/drafts", "/archived", "/spam", "/trash", "/subscriptions"];
 const MAX_VISIBLE_FOLDERS = 3;
 const MORE_OPEN_KEY = "mailflare:nav:more-open";
 const FOLDERS_OPEN_KEY = "mailflare:nav:folders-open";
@@ -129,7 +131,7 @@ export function DashboardNav({ className }: { className?: string }) {
   const [folderDialogOpen, setFolderDialogOpen] = useState(false);
   const [folderError, setFolderError] = useState<string | null>(null);
   const promotionsOn = hasActivePromotions(counts.promotionModes);
-  const linksWithCounts: NavLink[] = links.filter((link) => (link.href !== "/scheduled" || counts.folders.scheduled.total > 0) && (link.href !== "/promotions" || promotionsOn)).map(({ labelKey, ...rest }): NavLink => {
+  const linksWithCounts: NavLink[] = links.filter((link) => (link.href !== "/scheduled" || counts.folders.scheduled.total > 0) && (link.href !== "/promotions" || promotionsOn) && (link.href !== "/subscriptions" || promotionsOn)).map(({ labelKey, ...rest }): NavLink => {
     const link = { ...rest, label: t(labelKey) };
     if (link.href === "/inbox") {
       return { ...link, count: getFolderNavCount("inbox", counts.folders) };
