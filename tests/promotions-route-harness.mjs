@@ -7,7 +7,8 @@ import { build } from "esbuild";
 export const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 
 /** Bundles the given entry source against the real app code; only the session lookup is replaced. */
-export async function loadRoutes(name, contents) {
+/** `mocks` maps a module specifier to replacement source, for network and provider calls a test must not make. */
+export async function loadRoutes(name, contents, mocks = {}) {
 	const directory = mkdtempSync(join(root, "node_modules", `mailflare-${name}-`));
 	after(() => rmSync(directory, { recursive: true, force: true }));
 	await build({
@@ -29,6 +30,10 @@ export async function loadRoutes(name, contents) {
 			setup(builder) {
 				builder.onResolve({ filter: /^@\/lib\/auth\/cookies$/ }, (args) => ({ path: args.path, namespace: "mock" }));
 				builder.onLoad({ filter: /.*/, namespace: "mock" }, () => ({ contents: "export async function getCurrentUser(){return globalThis.__testUser}", loader: "js" }));
+				for (const specifier of Object.keys(mocks)) {
+					builder.onResolve({ filter: new RegExp(`^${specifier.replace(/[.*+?^${}()|[\]\\\/]/g, "\\$&")}$`) }, (args) => ({ path: args.path, namespace: "mock-module" }));
+				}
+				builder.onLoad({ filter: /.*/, namespace: "mock-module" }, (args) => ({ contents: mocks[args.path], loader: "js" }));
 			},
 		}],
 		logLevel: "silent",

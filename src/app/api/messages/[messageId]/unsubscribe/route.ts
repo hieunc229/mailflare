@@ -7,6 +7,8 @@ import { getEnv } from "@/lib/cloudflare";
 import { getEmailAddress } from "@/lib/email/address";
 import { getOutboundProviderConfig, sendThroughProvider } from "@/lib/email/outbound-provider";
 import { extractUnsubscribeLinkFromBody, getUnsubscribeUrlFromRawR2Key, parseMailtoUnsubscribe } from "@/lib/email/unsubscribe";
+import { recordUnsubscribed } from "@/lib/promotions/subscriptions";
+import { toSenderAddress } from "@/lib/promotions/classify-utils";
 import { createAuditLog } from "@/lib/mailboxes/audit";
 import { getMailboxAccessLevel } from "@/lib/mailboxes/access";
 import type { MailtoUnsubscribeTarget, UnsubscribePayload, UnsubscribeRouteParams } from "./types";
@@ -112,12 +114,19 @@ export async function POST(request: Request, { params }: UnsubscribeRouteParams)
 		trashedCount = ids.length;
 	}
 
+	// Subscriptions shows "Unsubscribed on ..." from this. Only a completed one-click or mailto counts, and it never fails the request.
+	const rememberUnsubscribe = async () => {
+		const sender = toSenderAddress(message.fromAddr);
+		if (sender && message.mailboxId) await recordUnsubscribed(db, { mailboxId: message.mailboxId, senderAddress: sender, userId: user.id });
+	};
+
 	const candidate = await getUnsubscribeUrlFromRawR2Key(env, message.rawR2Key);
 	const url = candidate?.url ?? null;
 
 	// Gmail's order: RFC 8058 one-click POST, then an unsubscribe email, then
 	// the sender's page for the person to finish.
 	if (url?.startsWith("https://") && candidate?.oneClick && candidate.dkimCoversUnsubscribe && (await postOneClickUnsubscribe(url))) {
+		await rememberUnsubscribe();
 		return NextResponse.json({ ok: true, method: "one-click", trashedCount });
 	}
 
@@ -126,6 +135,7 @@ export async function POST(request: Request, { params }: UnsubscribeRouteParams)
 		const target = parseMailtoUnsubscribe(mailtoUrl);
 		const canSend = access.canSendAs || access.canSendOnBehalf || access.canManage;
 		if (target && canSend && (await sendUnsubscribeEmail(env, message.mailboxId, target))) {
+			await rememberUnsubscribe();
 			return NextResponse.json({ ok: true, method: "mailto", trashedCount });
 		}
 	}
