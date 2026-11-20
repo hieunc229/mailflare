@@ -378,8 +378,8 @@ export const messages = sqliteTable(
 		spamAnalysisError: text("spam_analysis_error"),
 		/** When the message last entered Trash or Spam; maintained by triggers (migration 0053). */
 		trashedAt: timestamp("trashed_at"),
-		/** Set at intake from bulk-mail headers. Null is a normal message or one not classified (older mail). */
-		category: text("category", { enum: ["promotions"] }),
+		/** `promotions` from bulk-mail headers or a manual move. `primary` is an explicit "not promotions" marker (Move to Inbox) that the backfill must not reclassify. Null is a normal message or one not classified yet; every reader treats `primary` like null. */
+		category: text("category", { enum: ["promotions", "primary"] }),
 		/** Lower-cased bare From address, grouped on by Subscriptions. Null when longer than 191 characters (MySQL index limit), never truncated. */
 		senderAddress: text("sender_address"),
 		createdAt: timestamp("created_at")
@@ -404,6 +404,8 @@ export const messages = sqliteTable(
 		),
 		// Covers the Promotions count (equality columns first, then the grouped and filtered `read` and `snoozed_until`).
 		index("messages_category_count_idx").on(t.mailboxId, t.category, t.folderId, t.direction, t.status, t.read, t.snoozedUntil),
+		// Serves the bounded sender re-file (one sender, newest first) and the Subscriptions sender grouping.
+		index("messages_sender_idx").on(t.mailboxId, t.senderAddress, t.createdAt),
 		index("messages_inbox_page_idx").on(
 			t.mailboxId,
 			t.status,
@@ -672,8 +674,14 @@ export const mailboxPromotionSettings = sqliteTable(
 	{
 		mailboxId: text("mailbox_id").primaryKey().references(() => mailboxes.id, { onDelete: "cascade" }),
 		mode: text("mode", { enum: ["off", "show", "separate"] }).notNull().default("off"),
-		backfillStatus: text("backfill_status", { enum: ["idle", "pending", "running", "done"] }).notNull().default("idle"),
+		backfillStatus: text("backfill_status", { enum: ["idle", "pending", "running", "done", "failed"] }).notNull().default("idle"),
 		backfillCursor: text("backfill_cursor"),
+		/** Consecutive backfill takeovers that made no progress; the job is marked failed after 3. */
+		backfillStalls: integer("backfill_stalls").notNull().default(0),
+		backfillError: text("backfill_error"),
+		/** UTC day number (`floor(ms / 86_400_000)`) that `backfill_day_rows` counts rows for; the installation-wide daily cap sums the rows of today. */
+		backfillDay: integer("backfill_day").notNull().default(0),
+		backfillDayRows: integer("backfill_day_rows").notNull().default(0),
 		backfillScanned: integer("backfill_scanned").notNull().default(0),
 		updatedAt: timestamp("updated_at").notNull().$defaultFn(() => new Date()),
 	},

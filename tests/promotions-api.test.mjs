@@ -122,3 +122,13 @@ test("the promotions count is answered from a covering index", async (t) => {
 	const plan = database.db.prepare(`EXPLAIN QUERY PLAN ${captured[0].sql}`).all(...captured[0].values).map((row) => row.detail).join("\n");
 	assert.match(plan, /USING COVERING INDEX messages_category_count_idx/);
 });
+
+test("a row marked primary (manual Move to Inbox) behaves like uncategorised: in Inbox, not in Promotions, counted in Inbox", async (t) => {
+	await fixture(t, { a: "separate" });
+	globalThis.__mailflareNodeEnv.DB.db.prepare("UPDATE messages SET category = 'primary' WHERE id = 'a-promo'").run();
+	assert.deepEqual(ids(await list(`${INBOX}&mailboxId=a`)), ["a-plain", "a-promo"]);
+	assert.deepEqual(ids(await list(`${INBOX}&category=promotions&mailboxId=a`)), ["a-promo-read"]);
+	const { counts } = await (await m.counts.GET(new Request("https://mail.test/api/messages/counts"))).json();
+	assert.equal(counts.mailboxes.find((box) => box.mailboxId === "a").inbox, 2);
+	assert.deepEqual(counts.folders.promotions, { total: 1, unread: 0 });
+});
