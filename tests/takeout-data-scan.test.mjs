@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import test, { after } from "node:test";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { deflateRawSync } from "node:zlib";
+import { crc32, deflateRawSync } from "node:zlib";
 import { build } from "esbuild";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
@@ -22,12 +22,14 @@ function buildZip(entries) {
 	const centrals = [];
 	let offset = 0;
 	for (const { name, data, method = 8, declared, mode } of entries) {
+		const crc = crc32(data);
 		const nameBytes = Buffer.from(name);
 		const payload = method === 8 ? deflateRawSync(data) : data;
 		const size = declared ?? data.length;
 		const local = Buffer.alloc(30);
 		local.writeUInt32LE(0x04034b50, 0);
 		local.writeUInt16LE(method, 8);
+		local.writeUInt32LE(crc, 14);
 		local.writeUInt32LE(payload.length, 18);
 		local.writeUInt32LE(size, 22);
 		local.writeUInt16LE(nameBytes.length, 26);
@@ -36,6 +38,7 @@ function buildZip(entries) {
 		central.writeUInt32LE(0x02014b50, 0);
 		if (mode !== undefined) { central.writeUInt16LE(0x0314, 4); central.writeUInt32LE((mode << 16) >>> 0, 38); }
 		central.writeUInt16LE(method, 10);
+		central.writeUInt32LE(crc, 16);
 		central.writeUInt32LE(payload.length, 20);
 		central.writeUInt32LE(size, 24);
 		central.writeUInt16LE(nameBytes.length, 28);
