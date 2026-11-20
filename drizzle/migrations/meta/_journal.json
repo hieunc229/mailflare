@@ -603,6 +603,13 @@
       "when": 1794516483572,
       "tag": "0104_dav_change_names",
       "breakpoints": true
+    },
+    {
+      "idx": 87,
+      "version": "6",
+      "when": 1794516483575,
+      "tag": "0105_contacts_dav_card",
+      "breakpoints": true
     }
   ]
 }

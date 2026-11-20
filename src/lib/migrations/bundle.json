@@ -898,6 +898,15 @@
         "CREATE INDEX `dav_cards_user_size_idx` ON `dav_cards` (`user_id`,`size`);",
         "DROP INDEX `dav_cards_user_idx`;"
       ]
+    },
+    {
+      "name": "0105_contacts_dav_card.sql",
+      "statements": [
+        "ALTER TABLE `contacts` ADD `dav_card_id` text;",
+        "CREATE INDEX `contacts_dav_card_idx` ON `contacts` (`dav_card_id`);",
+        "ALTER TABLE `dav_collections` ADD `seed_started_at` integer;",
+        "ALTER TABLE `dav_collections` ADD `seed_cursor` text;"
+      ]
     }
   ]
 }

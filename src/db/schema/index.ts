@@ -211,6 +211,8 @@ export const contacts = sqliteTable(
 		// Set when the user allows remote content from this sender; "new_sender" mode loads it without asking afterwards.
 		remoteContentAllowed: bool("remote_content_allowed").notNull().default(false),
 		lastSeenAt: timestamp("last_seen_at"),
+		/** The CardDAV card (`dav_cards.id`) that owns this contact's name; no foreign key, the DAV code keeps it in step (spec 8.2). */
+		davCardId: text("dav_card_id"),
 		createdAt: timestamp("created_at")
 			.notNull()
 			.$defaultFn(() => new Date()),
@@ -218,6 +220,7 @@ export const contacts = sqliteTable(
 	(t) => [
 		uniqueIndex("contacts_user_email_idx").on(t.userId, t.email),
 		index("contacts_user_idx").on(t.userId),
+		index("contacts_dav_card_idx").on(t.davCardId),
 	],
 );
 
@@ -720,6 +723,10 @@ export const davCollections = sqliteTable(
 		deadProps: text("dead_props").notNull().default("{}"),
 		/** Address book only: when the user's manual contacts were copied in as cards. */
 		seededAt: timestamp("seeded_at"),
+		/** Address book only: when seeding began. Only contacts created before it are copied in; later ones are carded by the Contacts API hooks. */
+		seedStartedAt: timestamp("seed_started_at"),
+		/** Address book only: the last contact id seeding has dealt with. Seeding only moves forward, so a card deleted on a phone is not made again. */
+		seedCursor: text("seed_cursor"),
 		createdAt: timestamp("created_at").notNull().$defaultFn(() => new Date()),
 		updatedAt: timestamp("updated_at").notNull().$defaultFn(() => new Date()),
 	},

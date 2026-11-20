@@ -134,6 +134,13 @@
       "when": 1794516483573,
       "tag": "0028_dav_change_names",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1794516483576,
+      "tag": "0029_contacts_dav_card",
+      "breakpoints": true
     }
   ]
 }

@@ -50,7 +50,9 @@ export async function listContacts(db: Db, input: { userId: string; query: strin
 
 export function toContactDetails(contact: Awaited<ReturnType<typeof getContactByEmail>>) {
 	if (!contact) return null;
+	// The CardDAV link is bookkeeping for the DAV code, not part of the API shape.
 	const { avatarKey, ...details } = contact;
+	delete (details as { davCardId?: unknown }).davCardId;
 	return { ...details, hasAvatar: !!avatarKey };
 }
 
