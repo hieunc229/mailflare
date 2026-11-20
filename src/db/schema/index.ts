@@ -591,6 +591,21 @@ export const domainDeliverability = sqliteTable("domain_deliverability", {
 	updatedAt: timestamp("updated_at").notNull().$defaultFn(() => new Date()),
 	/** The `_dmarc` record text Mailflare created because none existed, so turning reports off can remove it again (only while it is unchanged). */
 	dmarcCreatedRecord: text("dmarc_created_record"),
+	/** TLS-RPT reporting (`_smtp._tls`) shares the DMARC report address, so it needs `reportsEnabled`. */
+	tlsRptEnabled: bool("tls_rpt_enabled").notNull().default(false),
+	/** The MTA-STS policy this domain publishes. `none` with a policy id means the removal period is running; no policy id means off. */
+	mtaStsMode: text("mta_sts_mode", { enum: ["none", "testing", "enforce"] }).notNull().default("none"),
+	/** The `id` of the `_mta-sts` TXT record; it changes whenever the policy changes. */
+	mtaStsPolicyId: text("mta_sts_policy_id"),
+	/** JSON array of the MX host names listed in the policy. */
+	mtaStsMx: text("mta_sts_mx"),
+	mtaStsMaxAge: integer("mta_sts_max_age").notNull().default(604800),
+	/** The longest max_age any policy served since this one was first published: the removal period waits that long so no sender still caches an older policy. */
+	mtaStsServedMaxAge: integer("mta_sts_served_max_age"),
+	/** When the admin last confirmed from the browser that the policy host serves the expected policy. */
+	mtaStsVerifiedAt: timestamp("mta_sts_verified_at"),
+	/** While the removal policy (`mode: none`) is served: when the `_mta-sts` record may be deleted. */
+	mtaStsRetireAfter: timestamp("mta_sts_retire_after"),
 });
 
 /** One row per aggregate report mail. The raw XML is never stored. */
@@ -599,6 +614,7 @@ export const deliverabilityReports = sqliteTable(
 	{
 		id: text("id").primaryKey(),
 		domainId: text("domain_id").notNull().references(() => domains.id, { onDelete: "cascade" }),
+		kind: text("kind", { enum: ["dmarc", "tlsrpt"] }).notNull().default("dmarc"),
 		/** sha256 of reporter org and report id; the same report arriving twice conflicts here. */
 		reportKey: text("report_key").notNull(),
 		reporterOrg: text("reporter_org"),
@@ -649,6 +665,31 @@ export const dmarcDailyStats = sqliteTable(
 	(t) => [
 		uniqueIndex("dmarc_daily_stats_domain_day_key_idx").on(t.domainId, t.day, t.rowKey),
 		index("dmarc_daily_stats_day_idx").on(t.day),
+	],
+);
+
+/**
+ * Daily TLS-RPT (RFC 8460) totals from verified reporters only. One row per (day, reporter, policy, result): the
+ * summary success count sits on the row with an empty `resultType`, each failure type on its own row, so an upsert
+ * only ever adds integers and needs no JSON merge on any dialect.
+ */
+export const tlsDailyStats = sqliteTable(
+	"tls_daily_stats",
+	{
+		id: autoId("id"),
+		domainId: text("domain_id").notNull().references(() => domains.id, { onDelete: "cascade" }),
+		day: text("day").notNull(),
+		rowKey: text("row_key").notNull(),
+		reporterOrg: text("reporter_org").notNull(),
+		policyType: text("policy_type").notNull(),
+		mxHost: text("mx_host"),
+		resultType: text("result_type").notNull(),
+		successCount: integer("success_count").notNull().default(0),
+		failureCount: integer("failure_count").notNull().default(0),
+	},
+	(t) => [
+		uniqueIndex("tls_daily_stats_domain_day_key_idx").on(t.domainId, t.day, t.rowKey),
+		index("tls_daily_stats_day_idx").on(t.day),
 	],
 );
 

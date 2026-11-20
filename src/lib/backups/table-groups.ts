@@ -6,7 +6,7 @@ export const BACKUP_TABLE_GROUPS: { id: BackupTableGroupId; label: string; table
 	{ id: "automation", label: "Routing and webhooks", tables: ["routing_rules", "webhooks", "webhook_deliveries"] },
 	{ id: "assistant", label: "Assistant and AI usage", tables: ["mailbox_agent_settings", "agent_conversations", "agent_chat_messages", "agent_jobs", "agent_draft_metadata", "agent_send_approvals", "ai_usage"] },
 	{ id: "drive", label: "Drive uploads and shares", tables: ["drive_items", "drive_upload_parts", "drive_shares"] },
-	{ id: "system", label: "App settings and history", tables: ["audit_logs", "backup_settings", "backups", "app_settings", "deliverability_reports", "dmarc_daily_stats", "deliverability_alerts", "license_settings"] },
+	{ id: "system", label: "App settings and history", tables: ["audit_logs", "backup_settings", "backups", "app_settings", "deliverability_reports", "dmarc_daily_stats", "tls_daily_stats", "deliverability_alerts", "license_settings"] },
 ];
 
 export function getSelectedBackupTables(excludedGroups: BackupTableGroupId[]): Set<DatabaseBackupTable> {

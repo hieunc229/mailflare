@@ -411,6 +411,24 @@
         "CREATE UNIQUE INDEX \"deliverability_alerts_domain_kind_day_idx\" ON \"deliverability_alerts\" USING btree (\"domain_id\",\"kind\",\"day\");",
         "CREATE INDEX \"deliverability_alerts_ack_user_idx\" ON \"deliverability_alerts\" USING btree (\"acknowledged_by_user_id\");"
       ]
+    },
+    {
+      "name": "0024_mta_sts_tls_rpt.sql",
+      "statements": [
+        "ALTER TABLE \"domain_deliverability\" ADD COLUMN \"tls_rpt_enabled\" boolean DEFAULT false NOT NULL;",
+        "ALTER TABLE \"domain_deliverability\" ADD COLUMN \"mta_sts_mode\" text DEFAULT 'none' NOT NULL;",
+        "ALTER TABLE \"domain_deliverability\" ADD COLUMN \"mta_sts_policy_id\" text;",
+        "ALTER TABLE \"domain_deliverability\" ADD COLUMN \"mta_sts_mx\" text;",
+        "ALTER TABLE \"domain_deliverability\" ADD COLUMN \"mta_sts_max_age\" bigint DEFAULT 604800 NOT NULL;",
+        "ALTER TABLE \"domain_deliverability\" ADD COLUMN \"mta_sts_served_max_age\" bigint;",
+        "ALTER TABLE \"domain_deliverability\" ADD COLUMN \"mta_sts_verified_at\" bigint;",
+        "ALTER TABLE \"domain_deliverability\" ADD COLUMN \"mta_sts_retire_after\" bigint;",
+        "ALTER TABLE \"deliverability_reports\" ADD COLUMN \"kind\" text DEFAULT 'dmarc' NOT NULL;",
+        "CREATE TABLE \"tls_daily_stats\" (\n\t\"id\" bigserial PRIMARY KEY NOT NULL,\n\t\"domain_id\" text NOT NULL,\n\t\"day\" text NOT NULL,\n\t\"row_key\" text NOT NULL,\n\t\"reporter_org\" text NOT NULL,\n\t\"policy_type\" text NOT NULL,\n\t\"mx_host\" text,\n\t\"result_type\" text NOT NULL,\n\t\"success_count\" bigint DEFAULT 0 NOT NULL,\n\t\"failure_count\" bigint DEFAULT 0 NOT NULL\n);",
+        "ALTER TABLE \"tls_daily_stats\" ADD CONSTRAINT \"tls_daily_stats_domain_id_domains_id_fk\" FOREIGN KEY (\"domain_id\") REFERENCES \"public\".\"domains\"(\"id\") ON DELETE cascade ON UPDATE no action;",
+        "CREATE UNIQUE INDEX \"tls_daily_stats_domain_day_key_idx\" ON \"tls_daily_stats\" USING btree (\"domain_id\",\"day\",\"row_key\");",
+        "CREATE INDEX \"tls_daily_stats_day_idx\" ON \"tls_daily_stats\" USING btree (\"day\");"
+      ]
     }
   ]
 }

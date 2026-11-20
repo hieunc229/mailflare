@@ -382,6 +382,23 @@
         "CREATE INDEX `dmarc_daily_stats_day_idx` ON `dmarc_daily_stats` (`day`);",
         "CREATE INDEX `deliverability_alerts_ack_user_idx` ON `deliverability_alerts` (`acknowledged_by_user_id`);"
       ]
+    },
+    {
+      "name": "0024_mta_sts_tls_rpt.sql",
+      "statements": [
+        "ALTER TABLE `domain_deliverability` ADD `tls_rpt_enabled` boolean NOT NULL DEFAULT false;",
+        "ALTER TABLE `domain_deliverability` ADD `mta_sts_mode` varchar(64) NOT NULL DEFAULT 'none';",
+        "ALTER TABLE `domain_deliverability` ADD `mta_sts_policy_id` longtext;",
+        "ALTER TABLE `domain_deliverability` ADD `mta_sts_mx` longtext;",
+        "ALTER TABLE `domain_deliverability` ADD `mta_sts_max_age` bigint NOT NULL DEFAULT 604800;",
+        "ALTER TABLE `domain_deliverability` ADD `mta_sts_served_max_age` bigint;",
+        "ALTER TABLE `domain_deliverability` ADD `mta_sts_verified_at` bigint;",
+        "ALTER TABLE `domain_deliverability` ADD `mta_sts_retire_after` bigint;",
+        "ALTER TABLE `deliverability_reports` ADD `kind` varchar(64) NOT NULL DEFAULT 'dmarc';",
+        "CREATE TABLE `tls_daily_stats` (\n\t`id` bigint AUTO_INCREMENT NOT NULL,\n\t`domain_id` varchar(191) NOT NULL,\n\t`day` varchar(191) NOT NULL,\n\t`row_key` varchar(191) NOT NULL,\n\t`reporter_org` longtext NOT NULL,\n\t`policy_type` longtext NOT NULL,\n\t`mx_host` longtext,\n\t`result_type` longtext NOT NULL,\n\t`success_count` bigint NOT NULL DEFAULT 0,\n\t`failure_count` bigint NOT NULL DEFAULT 0,\n\tCONSTRAINT `tls_daily_stats_id` PRIMARY KEY(`id`),\n\tCONSTRAINT `tls_daily_stats_domain_day_key_idx` UNIQUE(`domain_id`,`day`,`row_key`)\n);",
+        "ALTER TABLE `tls_daily_stats` ADD CONSTRAINT `tls_daily_stats_domain_id_domains_id_fk` FOREIGN KEY (`domain_id`) REFERENCES `domains`(`id`) ON DELETE cascade ON UPDATE no action;",
+        "CREATE INDEX `tls_daily_stats_day_idx` ON `tls_daily_stats` (`day`);"
+      ]
     }
   ]
 }
