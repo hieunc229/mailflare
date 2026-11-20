@@ -19,6 +19,10 @@ import { recordSuppression } from "@/lib/deliverability/suppression";
 import { ingestReportMail } from "@/lib/deliverability/ingest";
 import { runDeliverabilityDaily } from "@/lib/deliverability/daily";
 import { getDmarcStats } from "@/lib/deliverability/dmarc-stats";
+import { getTlsStats } from "@/lib/deliverability/tls-stats";
+import { markMtaStsVerified, updateMtaSts, type MtaStsDeps } from "@/lib/deliverability/mta-sts-admin";
+import { assertDomainRemovable, assertMxChangeAllowed } from "@/lib/deliverability/mta-sts-guard";
+import { serveMtaStsPolicy } from "@/lib/deliverability/mta-sts-serve";
 import { gzipSync } from "node:zlib";
 
 const [url, driver] = process.argv.slice(2);
@@ -145,10 +149,53 @@ const dmarc = await getDmarcStats(reportEnv, reportTarget.domainId, { days: 7 })
 const dmarcTotal = (key: "pass" | "rejected") => dmarc.series.reduce((sum, day) => sum + day[key], 0);
 check("dmarc ingest adds counts across reports and ignores a redelivery", dmarcTotal("pass") === 80 && dmarcTotal("rejected") === 4 && dmarc.sources.length === 2 && dmarc.reporters[0]?.reports === 2);
 
+// TLS-RPT ingest: same path, the upsert adds integer counts, a redelivery changes nothing.
+const tlsJson = (reportId: string) => JSON.stringify({ "organization-name": "Google Inc.", "date-range": { "start-datetime": new Date(reportDay * 1000).toISOString(), "end-datetime": new Date((reportDay + 3600) * 1000).toISOString() }, "contact-info": "smtp-tls-reporting@google.com", "report-id": reportId, policies: [{ policy: { "policy-type": "sts", "policy-domain": "smoke.test", "mx-host": ["mx.smoke.test"] }, summary: { "total-successful-session-count": 10, "total-failure-session-count": 2 }, "failure-details": [{ "result-type": "certificate-expired", "failed-session-count": 2 }] }] });
+const tlsMime = (reportId: string) => Buffer.from(`From: smtp-tls-reporting@google.com\r\nTo: mailflare-reports@smoke.test\r\nMIME-Version: 1.0\r\nContent-Type: multipart/mixed; boundary=b\r\n\r\n--b\r\nContent-Type: application/tlsrpt+gzip\r\nContent-Transfer-Encoding: base64\r\nContent-Disposition: attachment; filename="r.json.gz"\r\n\r\n${Buffer.from(gzipSync(tlsJson(reportId))).toString("base64")}\r\n--b--\r\n`);
+for (const [key, id] of [["tls1", `t1_${stamp}`], ["tls2", `t2_${stamp}`], ["tls1", `t1_${stamp}`]] as const) {
+	reportObjects.set(key, tlsMime(id));
+	await ingestReportMail(reportEnv, reportTarget, { rawR2Key: key, authenticated: true, from: "smtp-tls-reporting@google.com" }, { lookupPtr: async () => null });
+}
+const tls = await getTlsStats(reportEnv, reportTarget.domainId, { days: 7 });
+check("tls-rpt ingest adds counts across reports and ignores a redelivery", tls.series.reduce((sum, day) => sum + day.success, 0) === 20 && tls.series.reduce((sum, day) => sum + day.failure, 0) === 4 && tls.failureTypes[0]?.resultType === "certificate-expired" && tls.failureTypes[0].failure === 4 && tls.recentReports.length === 2);
+check("dmarc stats ignore tls-rpt reports", (await getDmarcStats(reportEnv, reportTarget.domainId, { days: 7 })).recentReports.every((report) => report.reporterOrg === "google.com") && dmarcTotal("pass") === 80);
+
+// MTA-STS: publish, serve through the host-keyed join, mark checked, then the removal period and the daily retirement.
+const stsDomain = { id: `dom_${stamp}`, hostname: `${stamp}.example.com`, zoneId: "z" };
+let stsRecord: string | null = null;
+const stsDeps: MtaStsDeps = {
+	listTxt: async () => (stsRecord ? [{ id: "r1", content: stsRecord }] : []),
+	queryTxt: async () => (stsRecord ? [stsRecord] : []),
+	createTxt: async (_env, _zone, _name, content) => { stsRecord = content; },
+	updateTxt: async (_env, _zone, _id, content) => { stsRecord = content; },
+	deleteTxt: async () => { stsRecord = null; },
+	ensureRoute: async () => undefined,
+	deleteRoute: async () => undefined,
+	queryMx: async () => ["10 route1.mx.cloudflare.net."],
+	zoneMx: async () => ["10 route1.mx.cloudflare.net."],
+};
+const published = await updateMtaSts(reportEnv, stsDomain, { mode: "testing" }, stsDeps);
+const policyRequest = () => new Request(`https://mta-sts.${stsDomain.hostname}/.well-known/mta-sts.txt`);
+const served = await serveMtaStsPolicy(reportEnv, policyRequest());
+check("mta-sts publishes and serves the stored policy", published.kind === "ok" && served.status === 200 && (await served.text()).includes("mx: route1.mx.cloudflare.net") && String(stsRecord).startsWith("v=STSv1; id="));
+const checked = await markMtaStsVerified(reportEnv, stsDomain);
+check("mta-sts records the browser check", checked.kind === "ok" && checked.state.verifiedAt !== null);
+const enforced = await updateMtaSts(reportEnv, stsDomain, { mode: "enforce", acknowledgeRisk: true }, stsDeps, new Date(Date.now() + 2000));
+check("mta-sts switches to enforce with a new id", enforced.kind === "ok" && published.kind === "ok" && enforced.state.mode === "enforce" && enforced.state.policyId !== published.state.policyId);
+const changedMx = await updateMtaSts(reportEnv, stsDomain, { mode: "enforce", acknowledgeRisk: true }, { ...stsDeps, queryMx: async () => ["10 other.smoke.test."] }, new Date(Date.now() + 3000));
+check("mta-sts refuses a changed MX list while enforce", changedMx.kind === "error" && changedMx.code === "MX_CHANGED_IN_ENFORCE");
+const blockedMx = await assertMxChangeAllowed(reportEnv, stsDomain).then(() => null, (error: unknown) => (error as { code?: string }).code);
+const blockedDelete = await assertDomainRemovable(reportEnv, stsDomain, stsDeps).then(() => null, (error: unknown) => (error as { code?: string }).code);
+check("mta-sts blocks MX changes in enforce and domain deletion while published", blockedMx === "MTA_STS_ENFORCED" && blockedDelete === "MTA_STS_PUBLISHED");
+const retiring = await updateMtaSts(reportEnv, stsDomain, { mode: "none" }, stsDeps, new Date(Date.now() + 4000));
+check("mta-sts removal serves mode none", retiring.kind === "ok" && retiring.state.status === "retiring" && (await (await serveMtaStsPolicy(reportEnv, policyRequest())).text()).includes("mode: none"));
+
 await db.insert(domainDeliverability).values({ domainId: reportTarget.domainId, reportsEnabled: true, reportsEnabledAt: new Date(), updatedAt: new Date() }).onConflictDoNothing();
-await runDeliverabilityDaily(reportEnv, new Date(), { sendMail: async () => true });
-await runDeliverabilityDaily(reportEnv, new Date(Date.now() + 200 * 86_400_000), { sendMail: async () => true });
-const leftover = await db.all<{ n: number }>(sql`SELECT (SELECT count(*) FROM dmarc_daily_stats WHERE domain_id = ${reportTarget.domainId}) + (SELECT count(*) FROM deliverability_reports WHERE domain_id = ${reportTarget.domainId}) AS n`);
+await runDeliverabilityDaily(reportEnv, new Date(), { sendMail: async () => true, mtaStsDeps: stsDeps });
+check("mta-sts is still served before the removal period ends", (await serveMtaStsPolicy(reportEnv, policyRequest())).status === 200);
+await runDeliverabilityDaily(reportEnv, new Date(Date.now() + 200 * 86_400_000), { sendMail: async () => true, mtaStsDeps: stsDeps });
+check("mta-sts retires after the removal period: record deleted, host answers 404", (stsRecord as string | null) === null && (await serveMtaStsPolicy(reportEnv, policyRequest())).status === 404);
+const leftover = await db.all<{ n: number }>(sql`SELECT (SELECT count(*) FROM dmarc_daily_stats WHERE domain_id = ${reportTarget.domainId}) + (SELECT count(*) FROM tls_daily_stats WHERE domain_id = ${reportTarget.domainId}) + (SELECT count(*) FROM deliverability_reports WHERE domain_id = ${reportTarget.domainId}) AS n`);
 check("deliverability daily job purges data past retention", Number(leftover[0].n) === 0);
 
 try {
