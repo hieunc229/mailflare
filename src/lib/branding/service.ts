@@ -2,6 +2,7 @@ import { eq } from "drizzle-orm";
 import { getDb } from "@/db";
 import { appSettings } from "@/db/schema";
 import type { Branding } from "./types";
+import { DEFAULT_ACCENT_COLOR, isAccentColorId, type AccentColorId } from "./accents";
 import { getLicenseEntitlements } from "@/lib/licenses/service";
 
 export const APP_SETTINGS_ID = "default";
@@ -11,7 +12,7 @@ export const BRANDING_ICON_KEY = "branding/app-icon";
 export async function getBranding(env: CloudflareEnv): Promise<Branding> {
 	const entitlements = await getLicenseEntitlements(env);
 	if (!entitlements.canCustomizeBranding) {
-		return { appName: DEFAULT_APP_NAME, hasCustomIcon: false, canCustomizeBranding: false };
+		return { appName: DEFAULT_APP_NAME, accentColor: DEFAULT_ACCENT_COLOR, hasCustomIcon: false, canCustomizeBranding: false };
 	}
 
 	try {
@@ -22,17 +23,18 @@ export async function getBranding(env: CloudflareEnv): Promise<Branding> {
 			.limit(1);
 		return {
 			appName: settings?.appName || DEFAULT_APP_NAME,
+			accentColor: isAccentColorId(settings?.accentColor) ? settings.accentColor : DEFAULT_ACCENT_COLOR,
 			hasCustomIcon: !!settings?.iconKey,
 			canCustomizeBranding: true,
 		};
 	} catch {
-		return { appName: DEFAULT_APP_NAME, hasCustomIcon: false, canCustomizeBranding: true };
+		return { appName: DEFAULT_APP_NAME, accentColor: DEFAULT_ACCENT_COLOR, hasCustomIcon: false, canCustomizeBranding: true };
 	}
 }
 
 export async function updateBranding(
 	env: CloudflareEnv,
-	input: { appName: string; icon?: File | null },
+	input: { appName: string; accentColor: AccentColorId; icon?: File | null },
 ): Promise<Branding> {
 	if (!(await getLicenseEntitlements(env)).canCustomizeBranding) {
 		throw new Error("A Pro or Team license is required to customize branding");
@@ -50,12 +52,14 @@ export async function updateBranding(
 		.values({
 			id: APP_SETTINGS_ID,
 			appName: input.appName,
+			accentColor: input.accentColor,
 			iconKey: iconKey ?? null,
 		})
 		.onConflictDoUpdate({
 			target: appSettings.id,
 			set: {
 				appName: input.appName,
+				accentColor: input.accentColor,
 				...(iconKey ? { iconKey } : {}),
 				updatedAt: new Date(),
 			},
