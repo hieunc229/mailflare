@@ -104,14 +104,14 @@ export function eventZone(event: FeedEvent, recurrenceId?: Date | null, fallback
 
 /**
  * The lines of one VEVENT. `stamp` is DTSTAMP, passed in so output is deterministic. `recurrenceId` makes it an
- * override of one occurrence of a series (the row then repeats `none`).
+ * override of one occurrence of a series (the row then repeats `none`). `uid` replaces the default `<id>@mailflare`.
  */
-export function buildVevent(event: FeedEvent, options: { stamp: string; recurrenceId?: Date | null; fallbackZone?: string | null; alarm?: boolean }): string[] {
+export function buildVevent(event: FeedEvent, options: { stamp: string; recurrenceId?: Date | null; uid?: string; fallbackZone?: string | null; alarm?: boolean }): string[] {
 	// Recurring events keep their local clock time across daylight saving changes only when they carry a zone.
 	const zone = eventZone(event, options.recurrenceId, options.fallbackZone);
 	const rule = recurrenceRule(event, zone);
 	const allDay = !!event.allDay;
-	const lines = ["BEGIN:VEVENT", `UID:${event.id}@mailflare`, `DTSTAMP:${options.stamp}`];
+	const lines = ["BEGIN:VEVENT", `UID:${options.uid ?? `${event.id}@mailflare`}`, `DTSTAMP:${options.stamp}`];
 	if (options.recurrenceId) lines.push(dateProperty("RECURRENCE-ID", options.recurrenceId, zone, allDay));
 	lines.push(dateProperty("DTSTART", event.startsAt, zone, allDay), dateProperty("DTEND", event.endsAt, zone, allDay), `SUMMARY:${escapeIcsText(event.title)}`);
 	if (event.description) lines.push(`DESCRIPTION:${escapeIcsText(event.description)}`);
