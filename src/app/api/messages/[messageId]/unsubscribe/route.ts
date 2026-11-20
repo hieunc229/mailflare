@@ -1,4 +1,4 @@
-import { and, eq, isNull, ne, sql } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { NextResponse } from "next/server";
 import { getDb } from "@/db";
 import { domains, mailboxes, messages } from "@/db/schema";
@@ -7,9 +7,11 @@ import { getEnv } from "@/lib/cloudflare";
 import { getEmailAddress } from "@/lib/email/address";
 import { getOutboundProviderConfig, sendThroughProvider } from "@/lib/email/outbound-provider";
 import { extractUnsubscribeLinkFromBody, getUnsubscribeUrlFromRawR2Key, parseMailtoUnsubscribe } from "@/lib/email/unsubscribe";
+import { recordUnsubscribed } from "@/lib/promotions/subscriptions";
+import { toSenderAddress } from "@/lib/promotions/classify-utils";
 import { createAuditLog } from "@/lib/mailboxes/audit";
 import { getMailboxAccessLevel } from "@/lib/mailboxes/access";
-import { escapeLike, insensitiveLike } from "@/db/sql";
+import { senderTrashCondition } from "@/lib/email/sender-sweep";
 import type { MailtoUnsubscribeTarget, UnsubscribePayload, UnsubscribeRouteParams } from "./types";
 import { allowUnsubscribeRequest, postOneClickUnsubscribe } from "./utils";
 
@@ -38,17 +40,6 @@ async function sendUnsubscribeEmail(env: CloudflareEnv, mailboxId: string, targe
 	} catch {
 		return false;
 	}
-}
-
-/** Past messages from the same sender that a sweep would move to Trash. Starred mail and mail filed by the user stay put. */
-function senderTrashCondition(mailboxId: string, senderAddress: string) {
-	return and(
-		eq(messages.mailboxId, mailboxId),
-		insensitiveLike(messages.fromAddr, `%${escapeLike(senderAddress)}%`),
-		eq(messages.starred, false),
-		isNull(messages.folderId),
-		ne(messages.status, "trash"),
-	);
 }
 
 /**
@@ -118,12 +109,19 @@ export async function POST(request: Request, { params }: UnsubscribeRouteParams)
 		trashedCount = count;
 	}
 
+	// Subscriptions shows "Unsubscribed on ..." from this. Only a completed one-click or mailto counts, and it never fails the request.
+	const rememberUnsubscribe = async () => {
+		const sender = toSenderAddress(message.fromAddr);
+		if (sender && message.mailboxId) await recordUnsubscribed(db, { mailboxId: message.mailboxId, senderAddress: sender, userId: user.id });
+	};
+
 	const candidate = await getUnsubscribeUrlFromRawR2Key(env, message.rawR2Key);
 	const url = candidate?.url ?? null;
 
 	// Gmail's order: RFC 8058 one-click POST, then an unsubscribe email, then
 	// the sender's page for the person to finish.
 	if (url?.startsWith("https://") && candidate?.oneClick && candidate.dkimCoversUnsubscribe && (await postOneClickUnsubscribe(url))) {
+		await rememberUnsubscribe();
 		return NextResponse.json({ ok: true, method: "one-click", trashedCount });
 	}
 
@@ -132,6 +130,7 @@ export async function POST(request: Request, { params }: UnsubscribeRouteParams)
 		const target = parseMailtoUnsubscribe(mailtoUrl);
 		const canSend = access.canSendAs || access.canSendOnBehalf || access.canManage;
 		if (target && canSend && (await sendUnsubscribeEmail(env, message.mailboxId, target))) {
+			await rememberUnsubscribe();
 			return NextResponse.json({ ok: true, method: "mailto", trashedCount });
 		}
 	}

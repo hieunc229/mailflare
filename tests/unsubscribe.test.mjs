@@ -76,3 +76,22 @@ test("non-mailto and empty targets return null", () => {
 	assert.equal(parseMailtoUnsubscribe("https://x.com/u"), null);
 	assert.equal(parseMailtoUnsubscribe("mailto:"), null);
 });
+
+// senderTrashCondition moved to src/lib/email/sender-sweep.ts: the unsubscribe-and-trash sweep must build the same SQL as before.
+import { loadRoutes } from "./promotions-route-harness.mjs";
+
+test("senderTrashCondition builds the same SQL after extraction", async () => {
+	const m = await loadRoutes("unsubscribe-sweep", `
+		export { senderTrashCondition } from "./src/lib/email/sender-sweep.ts";
+		export { getDb } from "./src/db/index.ts";
+		export { messages } from "./src/db/schema/index.ts";
+	`);
+	globalThis.__mailflareNodeEnv = { DB: new m.SqliteDatabase(":memory:"), MAILFLARE_RUNTIME: "node" };
+	try {
+		const query = m.getDb(globalThis.__mailflareNodeEnv).select({ id: m.messages.id }).from(m.messages).where(m.senderTrashCondition("mbx", "News_100%@Acme.com")).toSQL();
+		assert.equal(query.sql, 'select "id" from "messages" where ("messages"."mailbox_id" = ? and "messages"."from_addr" like ? escape \'!\' and "messages"."starred" = ? and "messages"."folder_id" is null and "messages"."status" <> ?)');
+		assert.deepEqual(query.params, ["mbx", "%News!_100!%@Acme.com%", 0, "trash"]);
+	} finally {
+		delete globalThis.__mailflareNodeEnv;
+	}
+});
