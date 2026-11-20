@@ -5,6 +5,7 @@ import { getEmailAddress, splitEmailAddressList } from "@/lib/email/address";
 import { DEFAULT_FOLDER_COLOR, FOLDER_COLOR_VALUES } from "@/lib/folders/colors";
 import { MAX_FOLLOW_UP_DAYS } from "@/lib/follow-ups/follow-up-utils";
 import { isValidBase64 } from "@/lib/email/base64";
+import { MAIL_TYPE_BULK, MAIL_TYPE_UNSAFE_ACTION } from "@/lib/email/mail-type-rule";
 
 /**
  * Recipients arrive either as one comma-separated header string (the composer)
@@ -376,10 +377,29 @@ export const changePasswordSchema = z.object({
 	newPassword: z.string().min(8).max(128),
 });
 
+/**
+ * A `mail_type` rule is a yes/no condition, so its value must name the one supported type. It
+ * also matches some notifications, so it may only act on mail that stays recoverable: a folder,
+ * Spam, Trash, or a forward that keeps a copy. Reject and a forward without a copy would lose mail.
+ */
+function checkMailTypeRule(
+	value: { matchField: string; matchValue: string; action?: string; destination?: string; keepCopy?: boolean },
+	ctx: z.RefinementCtx,
+) {
+	if (value.matchField !== "mail_type") return;
+	if (value.matchValue.toLowerCase() !== MAIL_TYPE_BULK) {
+		ctx.addIssue({ code: "custom", path: ["matchValue"], message: 'Mail type must be "bulk"' });
+	}
+	const forwards = value.action === "forward" || value.destination === "forward";
+	if (value.action === "reject" || (forwards && !value.keepCopy)) {
+		ctx.addIssue({ code: "custom", path: ["action"], message: MAIL_TYPE_UNSAFE_ACTION });
+	}
+}
+
 export const routingRuleSchema = z.object({
 	domainId: z.string().optional(),
 	pattern: z.string().trim().min(1).max(200).optional(),
-	matchField: z.enum(["email", "content", "title"]).default("email"),
+	matchField: z.enum(["email", "content", "title", "mail_type"]).default("email"),
 	matchOperator: z.enum(["contains", "exact"]).default("contains"),
 	matchValue: z.string().trim().min(1).max(500),
 	action: z.enum(["store", "forward", "reject", "spam", "trash"]).optional(),
@@ -389,14 +409,14 @@ export const routingRuleSchema = z.object({
 	forwardTo: z.string().trim().email().optional(),
 	keepCopy: z.boolean().optional(),
 	priority: z.number().int().default(0),
-});
+}).superRefine(checkMailTypeRule);
 
 export const domainRoutingRuleSchema = z
 	.object({
 		domainId: z.string().min(1),
 		name: z.string().trim().max(120).optional(),
 		enabled: z.boolean().default(true),
-		matchField: z.enum(["recipient", "sender", "title", "content"]).default("recipient"),
+		matchField: z.enum(["recipient", "sender", "title", "content", "mail_type"]).default("recipient"),
 		matchOperator: z.enum(["contains", "exact", "starts_with", "ends_with", "regex"]).default("contains"),
 		matchValue: z.string().trim().min(1).max(500),
 		action: z.enum(["store", "forward", "reject"]),
@@ -411,6 +431,7 @@ export const domainRoutingRuleSchema = z
 		priority: z.number().int().min(0).max(1000).default(0),
 	})
 	.superRefine((value, ctx) => {
+		checkMailTypeRule(value, ctx);
 		if (value.action === "store" && !value.mailboxId) {
 			ctx.addIssue({
 				code: "custom",

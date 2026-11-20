@@ -351,6 +351,32 @@
         "ALTER TABLE `app_settings` ADD `auto_update_dispatched_version` text;",
         "ALTER TABLE `app_settings` ADD `auto_update_channel` varchar(16) NOT NULL DEFAULT 'release';"
       ]
+    },
+    {
+      "name": "0015_promotions.sql",
+      "statements": [
+        "CREATE TABLE `mailbox_promotion_settings` (\n\t`mailbox_id` varchar(191) NOT NULL,\n\t`mode` varchar(64) NOT NULL DEFAULT 'off',\n\t`backfill_status` varchar(64) NOT NULL DEFAULT 'idle',\n\t`backfill_cursor` longtext,\n\t`backfill_scanned` int NOT NULL DEFAULT 0,\n\t`updated_at` bigint NOT NULL,\n\tCONSTRAINT `mailbox_promotion_settings_mailbox_id` PRIMARY KEY(`mailbox_id`)\n);",
+        "CREATE TABLE `mailbox_sender_preferences` (\n\t`id` varchar(191) NOT NULL,\n\t`mailbox_id` varchar(191) NOT NULL,\n\t`sender_address` varchar(191) NOT NULL,\n\t`category_override` varchar(64),\n\t`unsubscribed_at` bigint,\n\t`updated_by_user_id` varchar(191),\n\t`updated_at` bigint NOT NULL,\n\tCONSTRAINT `mailbox_sender_preferences_id` PRIMARY KEY(`id`),\n\tCONSTRAINT `mailbox_sender_preferences_mailbox_sender_idx` UNIQUE(`mailbox_id`,`sender_address`)\n);",
+        "ALTER TABLE `messages` ADD `category` varchar(64);",
+        "ALTER TABLE `messages` ADD `sender_address` varchar(191);",
+        "ALTER TABLE `mailbox_promotion_settings` ADD CONSTRAINT `mailbox_promotion_settings_mailbox_id_mailboxes_id_fk` FOREIGN KEY (`mailbox_id`) REFERENCES `mailboxes`(`id`) ON DELETE cascade ON UPDATE no action;",
+        "ALTER TABLE `mailbox_sender_preferences` ADD CONSTRAINT `mailbox_sender_preferences_mailbox_id_mailboxes_id_fk` FOREIGN KEY (`mailbox_id`) REFERENCES `mailboxes`(`id`) ON DELETE cascade ON UPDATE no action;",
+        "ALTER TABLE `mailbox_sender_preferences` ADD CONSTRAINT `mailbox_sender_preferences_updated_by_user_id_users_id_fk` FOREIGN KEY (`updated_by_user_id`) REFERENCES `users`(`id`) ON DELETE set null ON UPDATE no action;",
+        "CREATE INDEX `mailbox_promotion_settings_backfill_idx` ON `mailbox_promotion_settings` (`backfill_status`);",
+        "CREATE INDEX `mailbox_sender_preferences_updated_by_idx` ON `mailbox_sender_preferences` (`updated_by_user_id`);",
+        "CREATE INDEX `messages_category_page_idx` ON `messages` (`mailbox_id`,`category`,`status`,`folder_id`,`created_at`);",
+        "CREATE INDEX `messages_category_count_idx` ON `messages` (`mailbox_id`,`category`,`folder_id`,`direction`,`status`,`read`,`snoozed_until`);"
+      ]
+    },
+    {
+      "name": "0020_promotion_sender_backfill.sql",
+      "statements": [
+        "ALTER TABLE `mailbox_promotion_settings` ADD `backfill_stalls` int DEFAULT 0 NOT NULL;",
+        "ALTER TABLE `mailbox_promotion_settings` ADD `backfill_error` longtext;",
+        "ALTER TABLE `mailbox_promotion_settings` ADD `backfill_day` int DEFAULT 0 NOT NULL;",
+        "ALTER TABLE `mailbox_promotion_settings` ADD `backfill_day_rows` int DEFAULT 0 NOT NULL;",
+        "CREATE INDEX `messages_sender_idx` ON `messages` (`mailbox_id`,`sender_address`,`created_at`);"
+      ]
     }
   ]
 }

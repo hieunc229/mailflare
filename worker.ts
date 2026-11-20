@@ -39,6 +39,7 @@ import { runAccountRetention } from "./src/lib/accounts/deletion";
 import { purgeExpiredAuthRows } from "./src/lib/auth/purge";
 import { runJmapChangeRetention } from "./src/lib/jmap/changes";
 import { runFollowUpReminders } from "./src/lib/follow-ups/service";
+import { runPromotionsBackfill } from "@/lib/promotions/backfill";
 import { runCalendarReminders } from "./src/lib/calendar/reminders";
 export { RealtimeHub } from "./src/lib/realtime/hub";
 
@@ -82,10 +83,12 @@ export default {
 			// Domain routing rules are resolved here rather than in the queue because reject and
 			// forward can only be actioned on the live ForwardableEmailMessage.
 			const alreadyForwarded = await isForwardedMarkerValid(env, message.headers.get(MAILFLARE_FORWARDED_HEADER));
+			const headerMap = Object.fromEntries(message.headers);
 			const decision = await resolveIncomingMail(env, message.from, message.to, {
 				subject: message.headers.get("subject"),
 				from: message.headers.get("from"),
 				alreadyForwarded,
+				all: headerMap,
 			});
 
 			if (decision?.action === "reject") {
@@ -117,7 +120,7 @@ export default {
 				from: message.from,
 				to: message.to,
 				rawR2Key,
-				headers: Object.fromEntries(message.headers),
+				headers: headerMap,
 			};
 			await env.INBOUND_QUEUE.send(payload);
 		} catch (err) {
@@ -165,6 +168,7 @@ export default {
 		ctx.waitUntil(runTrashRetention(env, new Date(controller.scheduledTime)));
 		ctx.waitUntil(runFollowUpReminders(env, new Date(controller.scheduledTime)));
 		ctx.waitUntil(runCalendarReminders(env, new Date(controller.scheduledTime)));
+		ctx.waitUntil(runPromotionsBackfill(env, new Date(controller.scheduledTime)).catch((error) => console.error("Promotions backfill failed", error)));
 		ctx.waitUntil(sweepImportJobs(env, new Date(controller.scheduledTime)));
 		ctx.waitUntil(pruneExpiredMessageActionUndoClaims(env, new Date(controller.scheduledTime)));
 		if (controller.cron === "0 2 * * *") ctx.waitUntil(runAccountRetention(env, new Date(controller.scheduledTime)));

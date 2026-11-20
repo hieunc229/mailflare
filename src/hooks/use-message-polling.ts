@@ -14,6 +14,7 @@ import {
 	parseNewMessageEvent,
 	REALTIME_FALLBACK_INTERVAL_MS,
 	REALTIME_HEARTBEAT_INTERVAL_MS,
+	countsDeltaForNewMessage,
 	showBrowserNewMessageNotification,
 } from "./message-realtime-utils";
 
@@ -87,6 +88,8 @@ export function useMessagePolling(): MessageRealtimeState {
 			} catch { return; }
 			const event = parseNewMessageEvent(payload);
 			if (!event) return;
+			const countsDelta = countsDeltaForNewMessage(event);
+			if (countsDelta) window.dispatchEvent(new CustomEvent("mailflare:message-counts-delta", { detail: countsDelta }));
 			dispatchMessagesChanged();
 			setNotification(event);
 			if (fromSocket) {

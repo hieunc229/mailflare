@@ -20,7 +20,8 @@ export type SesNotification = {
 	bucket: string;
 	key: string;
 	virusFailed: boolean;
-	headers: Record<string, string>;
+	/** Undefined when SES cut the list short, so the caller reads the headers from the raw message. */
+	headers?: Record<string, string>;
 	verdicts: ProviderVerdicts;
 };
 
@@ -28,7 +29,7 @@ type Verdict = { status?: string };
 
 type RawNotification = {
 	notificationType?: string;
-	mail?: { source?: string; destination?: string[]; headers?: { name: string; value: string }[] };
+	mail?: { source?: string; destination?: string[]; headers?: { name: string; value: string }[]; headersTruncated?: boolean };
 	receipt?: {
 		recipients?: string[];
 		spfVerdict?: Verdict;
@@ -60,7 +61,7 @@ export function parseSesNotification(message: string): SesNotification | null {
 		bucket: action.bucketName,
 		key: action.objectKey,
 		virusFailed: receipt?.virusVerdict?.status === "FAIL",
-		headers,
+		headers: parsed.mail?.headersTruncated ? undefined : headers,
 		verdicts: {
 			spf: receipt?.spfVerdict?.status,
 			dkim: receipt?.dkimVerdict?.status,

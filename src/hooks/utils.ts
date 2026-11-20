@@ -45,6 +45,11 @@ export function getMessageQueryParams(
 		params.set("direction", "inbound");
 		params.set("status", "received");
 	}
+	if (folder === "promotions") {
+		params.set("direction", "inbound");
+		params.set("status", "received");
+		params.set("category", "promotions");
+	}
 	if (folder === "starred") params.set("starred", "true");
 	if (folder === "snoozed") params.set("snoozed", "true");
 

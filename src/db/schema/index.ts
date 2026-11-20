@@ -360,6 +360,10 @@ export const messages = sqliteTable(
 		spamAnalysisError: text("spam_analysis_error"),
 		/** When the message last entered Trash or Spam; maintained by triggers (migration 0053). */
 		trashedAt: timestamp("trashed_at"),
+		/** `promotions` from bulk-mail headers or a manual move. `primary` is an explicit "not promotions" marker (Move to Inbox) that the backfill must not reclassify. Null is a normal message or one not classified yet; every reader treats `primary` like null. */
+		category: text("category", { enum: ["promotions", "primary"] }),
+		/** Lower-cased bare From address, grouped on by Subscriptions. Null when longer than 191 characters (MySQL index limit), never truncated. */
+		senderAddress: text("sender_address"),
 		createdAt: timestamp("created_at")
 			.notNull()
 			.$defaultFn(() => new Date()),
@@ -372,6 +376,18 @@ export const messages = sqliteTable(
 		index("messages_provider_message_idx").on(t.mailboxId, t.providerMessageId),
 		index("messages_raw_r2_key_idx").on(t.rawR2Key),
 		index("messages_trashed_at_idx").on(t.trashedAt),
+		index("messages_category_page_idx").on(
+			t.mailboxId,
+			t.category,
+			t.status,
+			t.folderId,
+			desc(t.createdAt),
+			desc(t.id),
+		),
+		// Covers the Promotions count (equality columns first, then the grouped and filtered `read` and `snoozed_until`).
+		index("messages_category_count_idx").on(t.mailboxId, t.category, t.folderId, t.direction, t.status, t.read, t.snoozedUntil),
+		// Serves the bounded sender re-file (one sender, newest first) and the Subscriptions sender grouping.
+		index("messages_sender_idx").on(t.mailboxId, t.senderAddress, t.createdAt),
 		index("messages_inbox_page_idx").on(
 			t.mailboxId,
 			t.status,
@@ -628,6 +644,44 @@ export const conversationNotes = sqliteTable(
 	],
 );
 
+/** Per-mailbox Promotions mode. A missing row means `off`; mail delivery never depends on this table. */
+export const mailboxPromotionSettings = sqliteTable(
+	"mailbox_promotion_settings",
+	{
+		mailboxId: text("mailbox_id").primaryKey().references(() => mailboxes.id, { onDelete: "cascade" }),
+		mode: text("mode", { enum: ["off", "show", "separate"] }).notNull().default("off"),
+		backfillStatus: text("backfill_status", { enum: ["idle", "pending", "running", "done", "failed"] }).notNull().default("idle"),
+		backfillCursor: text("backfill_cursor"),
+		/** Consecutive backfill takeovers that made no progress; the job is marked failed after 3. */
+		backfillStalls: integer("backfill_stalls").notNull().default(0),
+		backfillError: text("backfill_error"),
+		/** UTC day number (`floor(ms / 86_400_000)`) that `backfill_day_rows` counts rows for; the installation-wide daily cap sums the rows of today. */
+		backfillDay: integer("backfill_day").notNull().default(0),
+		backfillDayRows: integer("backfill_day_rows").notNull().default(0),
+		backfillScanned: integer("backfill_scanned").notNull().default(0),
+		updatedAt: timestamp("updated_at").notNull().$defaultFn(() => new Date()),
+	},
+	(t) => [index("mailbox_promotion_settings_backfill_idx").on(t.backfillStatus)],
+);
+
+/** Per-sender override ("always Inbox" / "always Promotions") and unsubscribe record, keyed on the exact sender address. */
+export const mailboxSenderPreferences = sqliteTable(
+	"mailbox_sender_preferences",
+	{
+		id: text("id").primaryKey(),
+		mailboxId: text("mailbox_id").notNull().references(() => mailboxes.id, { onDelete: "cascade" }),
+		senderAddress: text("sender_address").notNull(),
+		categoryOverride: text("category_override", { enum: ["inbox", "promotions"] }),
+		unsubscribedAt: timestamp("unsubscribed_at"),
+		updatedByUserId: text("updated_by_user_id").references((): AnySQLiteColumn => users.id, { onDelete: "set null" }),
+		updatedAt: timestamp("updated_at").notNull().$defaultFn(() => new Date()),
+	},
+	(t) => [
+		uniqueIndex("mailbox_sender_preferences_mailbox_sender_idx").on(t.mailboxId, t.senderAddress),
+		index("mailbox_sender_preferences_updated_by_idx").on(t.updatedByUserId),
+	],
+);
+
 export const emailTemplates = sqliteTable(
 	"email_templates",
 	{
@@ -736,7 +790,7 @@ export const routingRules = sqliteTable(
 		enabled: bool("enabled").notNull().default(true),
 		pattern: text("pattern").notNull(),
 		matchField: text("match_field", {
-			enum: ["email", "content", "title", "sender", "recipient"],
+			enum: ["email", "content", "title", "sender", "recipient", "mail_type"],
 		})
 			.notNull()
 			.default("email"),

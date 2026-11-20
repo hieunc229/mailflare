@@ -29,7 +29,11 @@ import {
 	notifyUsersOfNewMessage,
 } from "@/lib/realtime/utils";
 import { scheduleAutoDraft } from "@/lib/agent/jobs/utils";
+import { isSilentPromotion } from "@/lib/promotions/mode-utils";
+import { loadPromotionModes, type PromotionMode } from "@/lib/promotions/settings";
 import { buildNewMessageNotification } from "@/lib/email/inbound-notification";
+import { readHeaderMap } from "@/lib/email/provider-trace";
+import { classifyInboundCategory } from "@/lib/promotions/classify";
 
 export type InboundQueueMessage = {
 	from: string;
@@ -48,7 +52,7 @@ export async function processInboundMessage(
 	const db = getDb(env);
 	// The sender is passed so that sender-based block rules resolve the same way here as they
 	// do in the Worker email handler.
-	const decision = await resolveInboundAddress(db, payload.to, payload.from);
+	const decision = await resolveInboundAddress(db, payload.to, payload.from, { headers: payload.headers });
 
 	// Nothing references the raw object on these paths, so keep it from piling up in storage.
 	const dropRaw = () => env.BUCKET.delete(payload.rawR2Key).catch((error) => console.error(`Raw cleanup failed for ${payload.rawR2Key}`, error));
@@ -124,6 +128,7 @@ export async function processInboundMessage(
 		fromAddress: fromAddr,
 		subject: parsed.subject,
 		content: [parsed.text, parsed.html, snippet].filter(Boolean).join(" "),
+		headers: payload.headers,
 	});
 	let spamAnalysis: Awaited<ReturnType<typeof analyzeSpam>> | null = null;
 	let spamAnalysisError: string | null = null;
@@ -170,6 +175,12 @@ export async function processInboundMessage(
 		console.error(`Contact upsert failed for ${messageId}`, error);
 		return null;
 	});
+	const { category, senderAddress } = await classifyInboundCategory(db, {
+		mailboxId: decision.mailbox.mailboxId,
+		from: fromAddr,
+		headers: payload.headers ?? readHeaderMap(buffer),
+		contactSource: contact?.source,
+	});
 	let threadId: string;
 	try {
 		threadId = await resolveThreadId(db, {
@@ -213,6 +224,8 @@ export async function processInboundMessage(
 			inReplyTo: parsed.inReplyTo,
 			references: parsed.references.length ? parsed.references.join(" ") : null,
 			hasUnsubscribe: !!extractUnsubscribeUrlFromRaw(buffer) || !!extractUnsubscribeLinkFromBody(parsed.html, parsed.text),
+			category,
+			senderAddress,
 			spamScore: spamAnalysis?.score ?? null,
 			spamVerdict: spamAnalysis?.verdict ?? null,
 			spamSignals: spamAnalysis ? JSON.stringify(spamAnalysis.signals) : null,
@@ -266,13 +279,18 @@ export async function processInboundMessage(
 			decision.mailbox.mailboxId,
 			decision.mailbox.userId,
 		);
+		// Promotions a `separate` mailbox files away are not announced. Any lookup failure announces: delivery and notification never depend on this.
+		const mode = category === "promotions"
+			? (await loadPromotionModes(db, [decision.mailbox.mailboxId]).catch(() => new Map<string, PromotionMode>())).get(decision.mailbox.mailboxId)
+			: undefined;
 		await notifyUsersOfNewMessage(env, notificationUserIds, buildNewMessageNotification({
 			messageId,
 			mailboxId: decision.mailbox.mailboxId,
 			fromAddr,
 			contact,
 			subject: parsed.subject,
-		}));
+			category,
+		}), { silent: isSilentPromotion(category, mode) });
 	}
 	// Spam and blocked mail carry an unauthenticated From; consumers acting on it would be fooled.
 	if (status !== "spam" && status !== "trash") {
@@ -285,6 +303,7 @@ export async function processInboundMessage(
 			threadId,
 			spamScore: spamAnalysis?.score,
 			spamVerdict: spamAnalysis?.verdict,
+			category,
 		});
 	}
 	try {

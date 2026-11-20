@@ -16,3 +16,5 @@ export const LIMITS = {
 export const KEYWORD_SEEN = "$seen";
 export const KEYWORD_FLAGGED = "$flagged";
 export const KEYWORD_DRAFT = "$draft";
+/** Read-only: set while the message is in Promotions. Clients cannot write it; the Inbox mailbox is unchanged in every mode. */
+export const KEYWORD_PROMOTION = "$promotion";

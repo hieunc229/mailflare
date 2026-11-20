@@ -19,6 +19,7 @@ import { getOpenCounts } from "@/lib/tracking/open-tracking";
 import { summarizeNotesForRows } from "@/lib/notes/service";
 import { isMissingTableError } from "@/lib/database-errors";
 import { parseLimit, parseOffset } from "@/lib/api/query-params";
+import { categoryScopeCondition } from "@/lib/promotions/settings";
 
 export async function GET(request: Request) {
 	const env = getEnv();
@@ -36,6 +37,7 @@ export async function GET(request: Request) {
 	const title = url.searchParams.get("title")?.trim();
 	const read = url.searchParams.get("read");
 	const starred = url.searchParams.get("starred");
+	const category = url.searchParams.get("category");
 	const snoozed = url.searchParams.get("snoozed");
 	const scheduled = url.searchParams.get("scheduled");
 	const limit = parseLimit(url.searchParams.get("limit"), 50, 100);
@@ -43,6 +45,10 @@ export async function GET(request: Request) {
 	// Conversation view: one row per thread, represented by its newest message
 	// that matches the filter. Drafts are never grouped.
 	const groupByThread = url.searchParams.get("group") === "thread" && status !== "draft";
+
+	if (category && (category !== "promotions" || status !== "received" || folderId)) {
+		return NextResponse.json({ error: "category=promotions needs status=received and no folderId" }, { status: 400 });
+	}
 
 	const db = getDb(env);
 	const accessibleMailboxes = await listAccessibleMailboxes(db, user);
@@ -80,6 +86,9 @@ export async function GET(request: Request) {
 	if (status === "received" && !folderId) {
 		conditions.push(isNull(messages.folderId));
 		conditions.push(or(isNull(messages.snoozedUntil), lte(messages.snoozedUntil, new Date()))!);
+		// Promotions is its own view, only for mailboxes that turned it on; the Inbox hides what `separate` mailboxes moved there.
+		const hidden = await categoryScopeCondition(db, mailboxId ? [mailboxId] : accessibleMailboxIds, category ? "promotions" : "inbox");
+		if (hidden) conditions.push(hidden);
 	}
 	if (starred === "true") {
 		conditions.push(eq(messages.starred, true));

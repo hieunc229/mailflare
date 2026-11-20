@@ -3,6 +3,7 @@ import { getEnv } from "@/lib/cloudflare";
 import { intakeIncomingMail } from "@/lib/email/intake";
 import { verifyInboundSignature, verifyInboundSignatureV2 } from "@/lib/email/intake-signature";
 import { inboundAttachmentLimitReasonFromRaw } from "@/lib/email/inbound-attachments";
+import { readHeaderMap } from "@/lib/email/provider-trace";
 
 export const dynamic = "force-dynamic";
 
@@ -46,6 +47,8 @@ export async function POST(request: Request) {
 	} catch {
 		// The header map is advisory; the raw message is authoritative.
 	}
+	// A relay that sends no map (`{}` or no header) still gets the plain headers read from the message.
+	if (!headers || Object.keys(headers).length === 0) headers = readHeaderMap(raw);
 
 	let forwardTo: string | null = null;
 	let forwardHeaders: Record<string, string> = {};
