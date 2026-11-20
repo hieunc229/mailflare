@@ -6,6 +6,8 @@ export interface NewMessageNotification {
 	mailboxId: string;
 	messageId: string;
 	subject: string | null;
+	/** Set for bulk mail; omitted otherwise. */
+	category?: "promotions";
 	type: "new_message";
 }
 
