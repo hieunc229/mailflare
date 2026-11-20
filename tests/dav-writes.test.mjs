@@ -587,3 +587,181 @@ test("merging a series: overrides are rebuilt keeping the client's lines, droppe
 	assert.match(merged, /TZID:Europe\/Berlin/);
 	assert.equal(await (await get(env, key, "s.ics")).text(), merged, "reads of the same rows are identical");
 });
+
+const vcard = (lines = [], { version = "3.0", uid = "card-1" } = {}) => `BEGIN:VCARD\r\nVERSION:${version}\r\nUID:${uid}\r\n${lines.join("\r\n")}${lines.length ? "\r\n" : ""}END:VCARD\r\n`;
+const putCard = (env, key, name, body, headers = {}) => put(env, key, name, body, { "Content-Type": "text/vcard; charset=utf-8", ...headers }, BOOK);
+const card = (sql, name) => sql.prepare("SELECT * FROM dav_cards WHERE name = ?").get(name);
+
+test("a card is PUT, served byte for byte and kept exactly, with its name, e-mail addresses and version indexed", async (t) => {
+	const { env, key, sql } = await fixture(t);
+	const body = vcard(["FN:Ann Lee", "N:Lee;Ann;;;", "item1.EMAIL;TYPE=INTERNET:Ann@Example.test", "EMAIL:ann@work.test", "TEL;TYPE=CELL:+1 555 0100", "PHOTO;ENCODING=b;TYPE=JPEG:AAAA", "X-CUSTOM:kept"]);
+	const created = await putCard(env, key, "ann.vcf", body, { "If-None-Match": "*" });
+	assert.equal(created.status, 201);
+	const etag = created.headers.get("ETag");
+	const fetched = await get(env, key, "ann.vcf", BOOK);
+	assert.equal(await fetched.text(), body);
+	assert.equal(fetched.headers.get("ETag"), etag);
+	assert.match(fetched.headers.get("Content-Type"), /^text\/vcard/);
+	const stored = card(sql, "ann.vcf");
+	assert.deepEqual([stored.uid, stored.version, stored.fn, stored.emails, stored.size, stored.collection_id, stored.user_id], ["card-1", "3.0", "Ann Lee", '["ann@example.test","ann@work.test"]', body.length, "card:u1", "u1"]);
+	assert.equal(sql.prepare("SELECT count(*) AS n FROM contacts").get().n, 0, "mirroring into contacts is the next PR");
+	const four = await putCard(env, key, "four.vcf", vcard(["FN:Four", "EMAIL:four@example.test"], { version: "4.0", uid: "card-4" }));
+	assert.equal(four.status, 201);
+	assert.equal(card(sql, "four.vcf").version, "4.0");
+	assert.equal((await putCard(env, key, "x.vcf", vcard(["FN:X"], { uid: "card-x" }), { "Content-Type": "text/x-vcard" })).status, 201);
+});
+
+test("the name falls back to N, then the first address; addresses are capped and checked", async (t) => {
+	const { env, key, sql } = await fixture(t);
+	await putCard(env, key, "n.vcf", vcard(["N:Lee;Ann;;;"], { uid: "n" }));
+	await putCard(env, key, "e.vcf", vcard(["EMAIL:only@example.test"], { uid: "e" }));
+	await putCard(env, key, "none.vcf", vcard([], { uid: "none" }));
+	assert.deepEqual(["n.vcf", "e.vcf", "none.vcf"].map((name) => card(sql, name).fn), ["Ann Lee", "only@example.test", ""]);
+	const many = Array.from({ length: 30 }, (_, i) => `EMAIL:a${i}@example.test`);
+	await putCard(env, key, "many.vcf", vcard(["FN:Many", "EMAIL:not an address", "EMAIL:mailto:Ok@Example.test", `EMAIL:${"x".repeat(400)}@example.test`, ...many], { uid: "many" }));
+	const emails = JSON.parse(card(sql, "many.vcf").emails);
+	assert.equal(emails.length, 20);
+	assert.equal(emails[0], "ok@example.test");
+	assert.ok(emails.every((address) => /^[^\s@]+@[^\s@]+$/.test(address)));
+});
+
+test("rejects malformed addresses on a card", async (t) => {
+	const { env, key, sql } = await fixture(t);
+	const exact = `${"a".repeat(300)}@example.test`;
+	const over = `${"a".repeat(320)}@example.test`;
+	await putCard(env, key, "o.vcf", vcard(["FN:O", `EMAIL:${over}`, `EMAIL:${exact}`, "EMAIL:a@b@example.test", "EMAIL:@example.test", "EMAIL:a@", "EMAIL:a,b@example.test", "EMAIL:ok@example.test"], { uid: "o" }));
+	assert.deepEqual(JSON.parse(card(sql, "o.vcf").emails), [exact, "ok@example.test"]);
+});
+
+test("a card PUT follows If-Match and If-None-Match, and a UID taken by another card is 403 no-uid-conflict", async (t) => {
+	const { env, key, sql } = await fixture(t);
+	const first = await putCard(env, key, "a.vcf", vcard(["FN:One"]), { "If-None-Match": "*" });
+	const etag1 = first.headers.get("ETag");
+	assert.equal((await putCard(env, key, "a.vcf", vcard(["FN:Two"]), { "If-None-Match": "*" })).status, 412);
+	const second = await putCard(env, key, "a.vcf", vcard(["FN:Two"]), { "If-Match": etag1 });
+	assert.equal(second.status, 204);
+	assert.notEqual(second.headers.get("ETag"), etag1);
+	assert.equal(card(sql, "a.vcf").fn, "Two");
+	assert.equal((await putCard(env, key, "a.vcf", vcard(["FN:Stale"]), { "If-Match": etag1 })).status, 412);
+	assert.equal(card(sql, "a.vcf").fn, "Two");
+	assert.equal((await putCard(env, key, "ghost.vcf", vcard(["FN:G"], { uid: "g" }), { "If-Match": "*" })).status, 412);
+	const clash = await putCard(env, key, "b.vcf", vcard(["FN:Clash"]));
+	assert.equal(clash.status, 403);
+	assert.match(await clash.text(), /<CR:no-uid-conflict><D:href>\/dav\/addressbooks\/u1\/default\/a\.vcf<\/D:href><\/CR:no-uid-conflict>/);
+	assert.equal(sql.prepare("SELECT count(*) AS n FROM dav_cards").get().n, 1);
+});
+
+test("a card edited or deleted between the read and the write is 412 and nothing is overwritten", async (t) => {
+	const { env, key, sql, stats } = await fixture(t);
+	const etag = (await putCard(env, key, "a.vcf", vcard(["FN:One"]))).headers.get("ETag");
+	stats.beforeBatch = () => sql.prepare("UPDATE dav_cards SET fn = 'Edited', updated_at = updated_at + 1 WHERE name = 'a.vcf'").run();
+	assert.equal((await putCard(env, key, "a.vcf", vcard(["FN:Phone"]), { "If-Match": etag })).status, 412);
+	assert.equal(card(sql, "a.vcf").fn, "Edited");
+	assert.equal(guardRows(sql), 0);
+	stats.beforeBatch = () => sql.prepare("DELETE FROM dav_cards WHERE name = 'a.vcf'").run();
+	assert.equal((await putCard(env, key, "a.vcf", vcard(["FN:Phone"]))).status, 412);
+	assert.equal(sql.prepare("SELECT count(*) AS n FROM dav_cards").get().n, 0, "a vanished card is not resurrected by an update");
+	const next = (await putCard(env, key, "b.vcf", vcard(["FN:B"], { uid: "b" }))).headers.get("ETag");
+	stats.beforeBatch = () => sql.prepare("UPDATE dav_cards SET fn = 'Edited', updated_at = updated_at + 1 WHERE name = 'b.vcf'").run();
+	assert.equal((await del(env, key, "b.vcf", { "If-Match": next }, BOOK)).status, 412);
+	assert.equal(card(sql, "b.vcf").fn, "Edited");
+});
+
+test("cards are capped at 20 MB in total per user: over it is 507; replacing a card with a smaller one still works", async (t) => {
+	const { env, key, sql } = await fixture(t);
+	const body = vcard(["FN:Fresh"], { uid: "fresh" });
+	sql.prepare("INSERT INTO dav_cards (id, user_id, collection_id, name, uid, body, version, size, created_at, updated_at) VALUES ('big', 'u1', 'card:u1', 'big.vcf', 'big', 'b', '3.0', ?, 1, 1)").run(20 * MiB - body.length + 1);
+	assert.equal((await putCard(env, key, "fresh.vcf", body)).status, 507);
+	sql.prepare("UPDATE dav_cards SET size = ? WHERE id = 'big'").run(20 * MiB - body.length);
+	sql.prepare("INSERT INTO dav_cards (id, user_id, collection_id, name, uid, body, version, size, created_at, updated_at) VALUES ('o', 'u2', 'card:u2', 'o.vcf', 'o', 'b', '3.0', ?, 1, 1)").run(20 * MiB);
+	assert.equal((await putCard(env, key, "fresh.vcf", body)).status, 201, "exactly at the cap");
+	assert.equal((await putCard(env, key, "fresh.vcf", vcard(["FN:Fresh and longer"], { uid: "fresh" }))).status, 507);
+	assert.equal((await putCard(env, key, "big.vcf", vcard(["FN:Small now"], { uid: "big" }))).status, 204);
+	assert.equal((await putCard(env, key, "fresh.vcf", vcard(["FN:Fresh and longer"], { uid: "fresh" }))).status, 204);
+});
+
+test("a PUT onto an existing card cannot change its UID", async (t) => {
+	const { env, key, sql } = await fixture(t);
+	await putCard(env, key, "a.vcf", vcard(["FN:One"], { uid: "card-a" }));
+	const cardRefused = await putCard(env, key, "a.vcf", vcard(["FN:Two"], { uid: "card-other" }));
+	assert.equal(cardRefused.status, 403);
+	assert.match(await cardRefused.text(), /<CR:no-uid-conflict><D:href>\/dav\/addressbooks\/u1\/default\/a\.vcf<\/D:href>/);
+	assert.equal(card(sql, "a.vcf").fn, "One");
+});
+
+test("what is refused for a card: version, shape, UID, size, type", async (t) => {
+	const { env, key, sql } = await fixture(t);
+	const refused = async (promise, status, pattern) => {
+		const response = await promise;
+		assert.equal(response.status, status);
+		if (pattern) assert.match(await response.text(), pattern);
+	};
+	await refused(putCard(env, key, "v.vcf", vcard(["FN:X"], { version: "2.1" })), 403, /<CR:supported-address-data\/>/);
+	await refused(putCard(env, key, "nv.vcf", "BEGIN:VCARD\r\nUID:x\r\nFN:X\r\nEND:VCARD\r\n"), 403, /<CR:supported-address-data\/>/);
+	await refused(putCard(env, key, "two.vcf", vcard(["FN:X"]) + vcard(["FN:Y"], { uid: "y" })), 403, /<CR:valid-address-data\/>/);
+	await refused(putCard(env, key, "nouid.vcf", "BEGIN:VCARD\r\nVERSION:3.0\r\nFN:X\r\nEND:VCARD\r\n"), 403, /<CR:valid-address-data\/>/);
+	await refused(putCard(env, key, "long.vcf", vcard(["FN:X"], { uid: "x".repeat(192) })), 403, /<CR:valid-address-data\/>/);
+	await refused(putCard(env, key, "junk.vcf", "BEGIN:VCARD\r\nVERSION:3.0\r\nUID:x\r\n"), 403, /<CR:valid-address-data\/>/);
+	await refused(putCard(env, key, "big.vcf", "x".repeat(1_048_577)), 413);
+	await refused(putCard(env, key, "ty.vcf", vcard(["FN:X"]), { "Content-Type": "text/calendar" }), 415);
+	await refused(put(env, key, "ty.vcf", vcard(["FN:X"]), {}, BOOK), 415, undefined);
+	await refused(putCard(env, key, "bad name.vcf", vcard(["FN:X"])), 400);
+	await refused(putCard(env, key, "a.ics", vcard(["FN:X"])), 400);
+	await refused(call(env, "PUT", "/dav/addressbooks/u2/default/x.vcf", { key, body: vcard(["FN:X"]), headers: { "Content-Type": "text/vcard" } }), 404);
+	assert.equal(sql.prepare("SELECT count(*) AS n FROM dav_cards").get().n, 0);
+});
+
+test("the 5001st card is 507; replacing an existing one still works at the limit", async (t) => {
+	const { env, key, sql } = await fixture(t);
+	sql.exec("BEGIN");
+	const insert = sql.prepare("INSERT INTO dav_cards (id, user_id, collection_id, name, uid, body, version, size, created_at, updated_at) VALUES (?, 'u1', 'card:u1', ?, ?, 'b', '3.0', 1, 1, 1)");
+	for (let i = 0; i < 5000; i++) insert.run(`c${i}`, `c${String(i).padStart(4, "0")}.vcf`, `uid-${i}`);
+	sql.exec("COMMIT");
+	assert.equal((await putCard(env, key, "extra.vcf", vcard(["FN:Extra"], { uid: "extra" }))).status, 507);
+	assert.equal((await putCard(env, key, "c0001.vcf", vcard(["FN:Same slot"], { uid: "uid-1" }))).status, 204);
+	assert.equal(sql.prepare("SELECT count(*) AS n FROM dav_cards").get().n, 5000);
+});
+
+test("DELETE of a card honours If-Match, and sync reports it gone under its real name", async (t) => {
+	const { env, key, sql } = await fixture(t);
+	const etag = (await putCard(env, key, "ann.vcf", vcard(["FN:Ann"]))).headers.get("ETag");
+	const token = tokenOf(await (await syncSince(env, key, "", BOOK)).text());
+	assert.equal((await del(env, key, "ann.vcf", { "If-Match": '"0"' }, BOOK)).status, 412);
+	assert.equal(sql.prepare("SELECT count(*) AS n FROM dav_cards").get().n, 1);
+	assert.equal((await del(env, key, "ann.vcf", { "If-Match": etag }, BOOK)).status, 204);
+	assert.equal(sql.prepare("SELECT count(*) AS n FROM dav_cards").get().n, 0);
+	assert.equal((await del(env, key, "ann.vcf", {}, BOOK)).status, 404);
+	assert.equal((await get(env, key, "ann.vcf", BOOK)).status, 404);
+	const gone = await (await syncSince(env, key, token, BOOK)).text();
+	assert.match(gone, new RegExp(`<D:href>${BOOK}ann\\.vcf</D:href><D:status>HTTP/1.1 404 Not Found</D:status>`));
+	assert.doesNotMatch(gone, /card_/);
+});
+
+test("card writes need the dav scope and work with the calendar turned off; the write budget and the switch apply", async (t) => {
+	const noCalendar = await fixture(t, { calendarEnabled: false });
+	assert.equal((await putCard(noCalendar.env, noCalendar.key, "a.vcf", vcard(["FN:A"]))).status, 201);
+	const scoped = await fixture(t, { scopes: '["jmap"]' });
+	assert.equal((await putCard(scoped.env, scoped.key, "a.vcf", vcard(["FN:A"]))).status, 401);
+	const limited = await fixture(t, { writeLimiter: { limit: async () => ({ success: false }) } });
+	assert.equal((await putCard(limited.env, limited.key, "a.vcf", vcard(["FN:A"]))).status, 503);
+	assert.equal(limited.sql.prepare("SELECT count(*) AS n FROM dav_cards").get().n, 0);
+	const off = await fixture(t, { enabled: false });
+	assert.equal((await putCard(off.env, off.key, "a.vcf", vcard(["FN:A"]))).status, 404);
+	assert.equal(off.sql.prepare("SELECT count(*) AS n FROM dav_cards").get().n, 0);
+});
+
+test("a card PUT is a handful of statements and never fetches", async (t) => {
+	const { env, key, stats } = await fixture(t);
+	const real = globalThis.fetch;
+	globalThis.fetch = () => {
+		throw new Error("DAV must not fetch");
+	};
+	try {
+		reset(stats);
+		assert.equal((await putCard(env, key, "p.vcf", vcard(["FN:P", "PHOTO;VALUE=uri:http://photo.invalid/p.jpg", "URL:http://url.invalid/"]))).status, 201);
+		assert.ok(stats.queries <= 15, `statements: ${stats.queries}`);
+		assert.ok(stats.maxParams < 100);
+	} finally {
+		globalThis.fetch = real;
+	}
+});

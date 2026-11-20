@@ -36,6 +36,12 @@ export async function countCards(env: Env, userId: string): Promise<number> {
 	return Number(row?.count ?? 0);
 }
 
+/** How many cards the address book has and how many bytes they take (the covering index on user and size answers it without reading bodies). */
+export async function cardUsage(env: Env, userId: string): Promise<{ count: number; bytes: number }> {
+	const [row] = await getDb(env).select({ count: sql<number>`count(*)`, bytes: sql<number | null>`sum(${davCards.size})` }).from(davCards).where(mine(userId));
+	return { count: Number(row?.count ?? 0), bytes: Number(row?.bytes ?? 0) };
+}
+
 /** Every card's name, size and ETag, in pages of `page` by name (keyset): one statement a page, for PROPFIND depth 1 and the first sync. Stops at `max`. */
 export async function* pageCards(env: Env, userId: string, page: number, max: number): AsyncGenerator<ListedRow[]> {
 	let after = "";

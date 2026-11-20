@@ -5,6 +5,7 @@ import { authenticateAppPasswordRequest } from "@/lib/auth/app-passwords";
 import { getSecurityHeaders } from "@/lib/security/headers";
 import { loadCalendarByNames } from "./calendar-store";
 import { deleteCalendarResource, putCalendarResource } from "./calendar-write";
+import { deleteCard, putCard } from "./card-write";
 import { loadCardBodies, loadCardMetaByNames } from "./card-store";
 import { calendarMember, cardMember, collectionIdFor, collectionProperties, collectionPath, memberResponse, propfindCollection, type Area, type DavContext } from "./collections";
 import { BASE_HEADERS, collection, el, etagListed, etagMatches, href, NS, precondition, readXmlBody, selectProps, text, wantedProps, XML_HEADERS, type Property } from "./common";
@@ -213,9 +214,10 @@ async function route(request: Request, env: CloudflareEnv): Promise<Response | n
 	if (request.method === "PUT" || request.method === "DELETE") {
 		if (target.kind === "collection" && request.method === "DELETE") return text(403, "A collection cannot be deleted");
 		if (target.kind !== "resource") return text(405, "Method not allowed", { Allow: ALLOW });
-		if (target.area === "addressbooks") return text(405, "Method not allowed", { Allow: ALLOW });
 		if (!(await withinWriteBudget(env, auth.userId))) return text(503, "Too many requests", { "Retry-After": "30" });
-		return request.method === "PUT" ? putCalendarResource(ctx, target.name, request, () => userAddresses(env, user)) : deleteCalendarResource(ctx, target.name, request);
+		const put = request.method === "PUT";
+		if (target.area === "addressbooks") return put ? putCard(ctx, target.name, request) : deleteCard(ctx, target.name, request);
+		return put ? putCalendarResource(ctx, target.name, request, () => userAddresses(env, user)) : deleteCalendarResource(ctx, target.name, request);
 	}
 
 	if (request.method !== "PROPFIND") return text(405, "Method not allowed", { Allow: ALLOW });
