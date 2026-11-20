@@ -150,12 +150,16 @@ async function multiget(area: Area, ctx: DavContext, root: DavElement, wanted: D
 			if (area === "calendars") {
 				const resources = await loadCalendarByNames(ctx.env, ctx.userId, slice);
 				const seqs = await etagSeqs(ctx.env, collectionIdFor(area, ctx.userId), resources.map((resource) => resource.id));
-				yield await Promise.all(resources.map((resource) => (found.add(resource.name), memberResponse(area, ctx, calendarMember(resource, seqs, ctx.timeZone), wanted))));
+				for (const resource of resources) found.add(resource.name);
+				yield await Promise.all(resources.map((resource) => memberResponse(area, ctx, calendarMember(resource, seqs, ctx.timeZone), wanted)));
 			} else {
 				const metas = await loadCardMetaByNames(ctx.env, ctx.userId, slice);
 				const seqs = await etagSeqs(ctx.env, collectionIdFor(area, ctx.userId), metas.map((card) => card.id));
 				const out: DavResponse[] = [];
-				for (const plan of planCardChunks(metas)) for (const card of wantsData(wanted, area) ? await loadCardBodies(ctx.env, ctx.userId, plan) : plan) (found.add(card.name), out.push(await memberResponse(area, ctx, cardMember(card, seqs), wanted)));
+				for (const plan of planCardChunks(metas)) for (const card of wantsData(wanted, area) ? await loadCardBodies(ctx.env, ctx.userId, plan) : plan) {
+					found.add(card.name);
+					out.push(await memberResponse(area, ctx, cardMember(card, seqs), wanted));
+				}
 				yield out;
 			}
 		}
