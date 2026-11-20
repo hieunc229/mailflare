@@ -1864,6 +1864,8 @@
 	"calendar.repeatWeek.5": "Fifth",
 	"calendar.repeatWeek.last": "Last",
 	"calendar.repeatWeekday": "Weekday",
+	"calendar.repeat.custom": "કસ્ટમ પુનરાવર્તન (બીજી ઍપમાં સેટ કરેલું)",
+	"calendar.repeat.customDayLocked": "આ પુનરાવર્તન બીજી એપ્લિકેશનમાં સેટ કરવામાં આવ્યું હતું; દિવસ ત્યાં બદલો",
 	"calendar.repeatOnWeekdays": "અઠવાડિયાના દિવસોમાં પુનરાવર્તન",
 	"calendar.repeatOn": "{day} ના રોજ પુનરાવર્તન",
 	"calendar.weekdayShort.0": "રવિ",

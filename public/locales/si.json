@@ -1864,6 +1864,8 @@
 	"calendar.repeatWeek.5": "Fifth",
 	"calendar.repeatWeek.last": "Last",
 	"calendar.repeatWeekday": "Weekday",
+	"calendar.repeat.custom": "අභිරුචි පුනරාවර්තනය (වෙනත් යෙදුමක සකසා ඇත)",
+	"calendar.repeat.customDayLocked": "මෙම පුනරාවර්තනය වෙනත් යෙදුමක සකසා ඇත; දිනය එහිදී වෙනස් කරන්න",
 	"calendar.repeatOnWeekdays": "සතියේ වැඩ කරන දිනවල පුනරාවර්තනය කරන්න",
 	"calendar.repeatOn": "{day} දින පුනරාවර්තනය කරන්න",
 	"calendar.weekdayShort.0": "ඉරි",

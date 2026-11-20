@@ -4,8 +4,10 @@ import { calendarEventOverrides, calendarEvents, calendarInviteTombstones, calen
 import { newId } from "@/lib/ids";
 import type { AttachmentContent } from "@/lib/email/attachment-types";
 import { inviteAttendeeAddresses, inviteRepeat, parseInvite, type ParsedInvite } from "./invite";
+import { legacyRepeatFor, parseRrule, repeatMatchesRule } from "./rrule";
 import { isIcsAddress } from "./ics";
 import { getEmailAddress } from "@/lib/email/address";
+import type { CalendarRepeat } from "./types";
 import { findInviteAttachment, MAX_INVITE_BYTES } from "./invite-attachment";
 import { addExcludedOccurrence, chooseRecipientZone, inboundNeedsRecipientZone, inviteSenderMatches, mergeExcludedOccurrences, normalizeInviteSender, planInboundInvite } from "./invite-rules";
 
@@ -72,17 +74,37 @@ async function mergeRdateOverrides(db: ReturnType<typeof getDb>, eventId: string
  * own zone, else the recipient's); `existingExcluded` keeps occurrences already excluded when the series is refreshed.
  */
 export function inviteEventValues(invite: ParsedInvite, timeZone: string | null, existingExcluded?: string | null) {
-	const repeat = inviteRepeat(invite.rrule, invite.startsAt, timeZone);
+	const repeat = inviteRepeatFields(invite, timeZone);
 	return {
 		title: invite.title, description: invite.description, location: invite.location,
 		// Flat address list only (organizer plus attendees); guest statuses stay on the message card.
 		attendees: JSON.stringify(inviteAttendeeAddresses(invite)),
-		repeat: repeat.repeat, repeatDays: JSON.stringify(repeat.repeatDays), repeatAnchorDay: repeat.repeatAnchorDay, repeatUntil: repeat.repeatUntil,
-		repeatInterval: repeat.repeatInterval, repeatWeekday: repeat.repeatWeekday, repeatWeek: repeat.repeatWeek,
+		...repeat,
 		excludedOccurrences: mergeExcludedOccurrences(existingExcluded, invite.excludedDates), timeZone,
 		inviteSequence: invite.sequence,
 		startsAt: invite.startsAt, endsAt: invite.endsAt, updatedAt: new Date(),
 	};
+}
+
+/**
+ * The repeat columns for an invitation's rule. A rule the legacy columns express exactly (legacyRepeatFor compares the
+ * occurrences) uses them; a rule the parser reads but they cannot hold (every 2 weeks, the 2nd Tuesday, yearly) is kept as
+ * a custom repeat, so a refresh neither drops it nor clears one; a rule the parser rejects keeps inviteRepeat's mapping,
+ * which downgrades what it cannot store.
+ */
+function inviteRepeatFields(invite: ParsedInvite, timeZone: string | null) {
+	const zone = timeZone ?? undefined;
+	const native = inviteRepeat(invite.rrule, invite.startsAt, timeZone);
+	const columns = (repeat: { repeat: string; repeatDays: number[]; repeatAnchorDay: number | null; repeatUntil: Date | null; repeatInterval?: number | null; repeatWeekday?: number | null; repeatWeek?: number | null }) => ({
+		repeat: repeat.repeat as Exclude<CalendarRepeat, "custom">, rrule: null, repeatDays: JSON.stringify(repeat.repeatDays), repeatAnchorDay: repeat.repeatAnchorDay, repeatUntil: repeat.repeatUntil,
+		repeatInterval: repeat.repeatInterval ?? 1, repeatWeekday: repeat.repeatWeekday ?? null, repeatWeek: repeat.repeatWeek ?? null,
+	});
+	if (!invite.rrule || !parseRrule(invite.rrule, zone)) return columns(native);
+	const legacy = legacyRepeatFor(invite.rrule, invite.startsAt, zone);
+	if (legacy) return columns(legacy);
+	// The mapper stores intervals, yearly and nth-weekday rules itself; keep that only when it reproduces the rule exactly.
+	if (native.repeat !== "none" && repeatMatchesRule(invite.rrule, native as Parameters<typeof repeatMatchesRule>[1], invite.startsAt, zone)) return columns(native);
+	return { repeat: "custom" as const, rrule: invite.rrule.replace(/^RRULE:/i, ""), repeatDays: "[]", repeatAnchorDay: null, repeatUntil: null, repeatInterval: 1, repeatWeekday: null, repeatWeek: null };
 }
 
 /**

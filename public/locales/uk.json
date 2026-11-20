@@ -1886,6 +1886,8 @@
 	"calendar.repeatWeek.5": "Fifth",
 	"calendar.repeatWeek.last": "Last",
 	"calendar.repeatWeekday": "Weekday",
+	"calendar.repeat.custom": "Особливе повторення (задано в іншому застосунку)",
+	"calendar.repeat.customDayLocked": "Це повторення задано в іншому застосунку; змініть день там",
 	"calendar.repeatOnWeekdays": "Повторювати у будні",
 	"calendar.repeatOn": "Повторювати: {day}",
 	"calendar.weekdayShort.0": "нд",

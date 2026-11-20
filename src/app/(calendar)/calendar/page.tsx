@@ -17,6 +17,7 @@ import { formatUserDate, getUserTimeZone, parseUserDateTimeLocal } from "@/lib/t
 import { normalizeCalendarColor } from "@/lib/calendar/colors";
 import { REMINDER_MINUTE_OPTIONS } from "@/lib/calendar/reminder-utils";
 import { DEFAULT_REPEAT_DAYS, parseCalendarRepeatDays } from "@/lib/calendar/recurrence";
+import { sameZonedDay } from "@/lib/calendar/repeat-fields";
 import { DEFAULT_FOLDER_COLOR, FOLDER_COLOR_OPTIONS } from "@/lib/folders/colors";
 import type { TranslationKey } from "@/lib/i18n/types";
 import type { CalendarRepeat } from "@/lib/calendar/types";
@@ -241,9 +242,18 @@ export default function CalendarPage() {
       const editedEnd = editing && endsAt === formatLocalDateTime(new Date(editing.endsAt)) ? new Date(editing.endsAt) : parseUserDateTimeLocal(endsAt);
       if (!editedStart || !editedEnd || editedEnd <= editedStart) { toast.error(t("calendar.invalidTimes")); return; }
       const movingToPast = Boolean(editing && editing.repeat !== "none" && editedStart.getTime() < Date.now() && editedStart.getTime() !== new Date(editing.startsAt).getTime());
-      const effectiveFrom = editing && editing.repeat !== "none" && !movingToPast ? new Date() : null;
+      // A custom repeat that stays custom is edited as a whole series (it cannot be split), so the edit moves the series by the same amount.
+      const keepsCustom = editing?.repeat === "custom" && repeat === "custom";
+      const effectiveFrom = editing && editing.repeat !== "none" && !movingToPast && !keepsCustom ? new Date() : null;
       let savedStart = editedStart;
       let savedEnd = editedEnd;
+      if (editing && keepsCustom && !movingToPast) {
+        if (!sameZonedDay(editedStart, new Date(editing.startsAt), getUserTimeZone())) { toast.error(t("calendar.repeat.customDayLocked")); return; }
+        const shift = editedStart.getTime() - new Date(editing.startsAt).getTime();
+        const seriesStart = new Date(editing.seriesStartsAt ?? editing.startsAt).getTime();
+        savedStart = new Date(seriesStart + shift);
+        savedEnd = new Date(seriesStart + shift + editedEnd.getTime() - editedStart.getTime());
+      }
       if (editing && effectiveFrom) {
         const next = rescheduleCalendarOccurrence(editing, editedStart, editedEnd, effectiveFrom, overridesFor(editing));
         if (!next) { toast.error(t("calendar.noFuture")); return; }
@@ -349,9 +359,17 @@ export default function CalendarPage() {
     let saved = false;
     try {
       const movingToPast = event.repeat !== "none" && startsAt.getTime() < Date.now();
-      const effectiveFrom = event.repeat !== "none" && !movingToPast ? new Date() : null;
+      const effectiveFrom = event.repeat !== "none" && event.repeat !== "custom" && !movingToPast ? new Date() : null;
       let savedStart = startsAt;
       let savedEnd = endsAt;
+      if (event.repeat === "custom" && !movingToPast) {
+        // A custom repeat cannot be split, so dragging one occurrence moves the whole series by the same amount, within its day.
+        if (!sameZonedDay(startsAt, new Date(event.startsAt), getUserTimeZone())) { toast.error(t("calendar.repeat.customDayLocked")); return; }
+        const shift = startsAt.getTime() - new Date(event.startsAt).getTime();
+        const seriesStart = new Date(event.seriesStartsAt ?? event.startsAt).getTime();
+        savedStart = new Date(seriesStart + shift);
+        savedEnd = new Date(seriesStart + shift + endsAt.getTime() - startsAt.getTime());
+      }
       if (effectiveFrom) {
         const next = rescheduleCalendarOccurrence(event, startsAt, endsAt, effectiveFrom, overridesFor(event));
         if (!next) { toast.error(t("calendar.noFuture")); return; }
@@ -686,6 +704,7 @@ export default function CalendarPage() {
                     <option value="monthly">{t("calendar.repeat.monthly")}</option>
                     <option value="yearly">{t("calendar.repeat.yearly")}</option>
                     <option value="weekdays">{t("calendar.repeat.weekdays")}</option>
+                    {editing?.repeat === "custom" && <option value="custom">{t("calendar.repeat.custom")}</option>}
                     </Select>
                   </div>
                   {repeat !== "none" && (

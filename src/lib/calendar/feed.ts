@@ -13,7 +13,8 @@ export type FeedEvent = {
 	location: string;
 	startsAt: Date;
 	endsAt: Date;
-	repeat: "none" | "daily" | "weekly" | "monthly" | "weekdays" | "yearly";
+	repeat: "none" | "daily" | "weekly" | "monthly" | "weekdays" | "yearly" | "custom";
+	rrule?: string | null;
 	repeatDays: string;
 	repeatAnchorDay: number | null;
 	repeatUntil: Date | null;
@@ -57,6 +58,7 @@ function monthDayRule(day: number): string {
 
 function recurrenceRule(event: FeedEvent): string | null {
 	if (event.repeat === "none") return null;
+	if (event.repeat === "custom") return event.rrule ? `RRULE:${event.rrule.replace(/^RRULE:/i, "").replace(/[\u0000-\u001f\u007f]/g, "")}` : null;
 	const parts: string[] = [];
 	if (event.repeat === "daily") parts.push("FREQ=DAILY");
 	else if (event.repeat === "weekly") parts.push("FREQ=WEEKLY");

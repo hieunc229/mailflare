@@ -1853,6 +1853,8 @@
 	"calendar.repeatWeek.5": "Fifth",
 	"calendar.repeatWeek.last": "Last",
 	"calendar.repeatWeekday": "Weekday",
+	"calendar.repeat.custom": "Lặp lại tùy chỉnh (đặt trong ứng dụng khác)",
+	"calendar.repeat.customDayLocked": "Lặp lại này được đặt trong ứng dụng khác; hãy đổi ngày ở đó",
 	"calendar.repeatOnWeekdays": "Lặp lại vào các ngày trong tuần",
 	"calendar.repeatOn": "Lặp lại vào {day}",
 	"calendar.weekdayShort.0": "CN",

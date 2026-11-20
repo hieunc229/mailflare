@@ -42,7 +42,13 @@ export type Rrule = {
 };
 
 /** The repeat_* columns of a calendar row. `repeatUntil` is exclusive, as the legacy expanders read it. */
-export type LegacyRepeat = { repeat: "none" | "daily" | "weekly" | "monthly" | "weekdays"; repeatDays: number[]; repeatAnchorDay: number | null; repeatUntil: Date | null };
+export type LegacyRepeat = {
+	repeat: "none" | "daily" | "weekly" | "monthly" | "weekdays" | "yearly"; repeatDays: number[]; repeatAnchorDay: number | null; repeatUntil: Date | null;
+	/** Step between recurrences (1..999); a listed-days repeat always steps by 1. */
+	repeatInterval?: number | null;
+	/** Weekday (0-6) and week (1-5, -1 = last) of an nth-weekday monthly repeat. */
+	repeatWeekday?: number | null; repeatWeek?: number | null;
+};
 
 export type RecurringEvent = {
 	startsAt: Date;
@@ -53,6 +59,9 @@ export type RecurringEvent = {
 	repeatDays?: string;
 	repeatAnchorDay?: number | null;
 	repeatUntil?: Date | null;
+	repeatInterval?: number | null;
+	repeatWeekday?: number | null;
+	repeatWeek?: number | null;
 	excludedOccurrences?: string;
 };
 
@@ -319,9 +328,15 @@ export function rruleEndedBefore(value: string, dtstart: Date, zone: string | nu
 export function legacyRrule(legacy: LegacyRepeat, start?: Date, zone?: string | null): Rrule | null {
 	if (legacy.repeat === "none") return null;
 	const rule: Rrule = { freq: "DAILY", interval: 1, count: null, untilMs: legacy.repeatUntil ? legacy.repeatUntil.getTime() - 1 : null, untilDay: null, byDay: [], byMonthDay: [], byMonth: [], bySetPos: [], wkst: 1 };
+	const interval = Number.isInteger(legacy.repeatInterval) && legacy.repeatInterval! >= 1 && legacy.repeatInterval! <= 999 ? legacy.repeatInterval! : 1;
+	if (legacy.repeat !== "weekdays") rule.interval = interval;
 	if (legacy.repeat === "weekly") rule.freq = "WEEKLY";
+	else if (legacy.repeat === "yearly") rule.freq = "YEARLY";
 	else if (legacy.repeat === "weekdays") rule.byDay = legacy.repeatDays.map((day) => ({ ordinal: 0, day }));
-	else if (legacy.repeat === "monthly") {
+	else if (legacy.repeat === "monthly" && legacy.repeatWeekday != null && legacy.repeatWeek != null) {
+		rule.freq = "MONTHLY";
+		rule.byDay = [{ ordinal: legacy.repeatWeek, day: legacy.repeatWeekday }];
+	} else if (legacy.repeat === "monthly") {
 		rule.freq = "MONTHLY";
 		const day = legacy.repeatAnchorDay ?? (start ? zonedDateFields(start, normalizeTimeZone(zone)).getUTCDate() : null);
 		if (day) rule.byMonthDay = [day];
@@ -351,7 +366,7 @@ export function expandEvent(event: RecurringEvent, from: Date, to: Date, max = 5
 	const zone = normalizeTimeZone(event.timeZone);
 	let rule: Rrule | null = null;
 	if (event.repeat === "custom") rule = event.rrule ? parseRrule(event.rrule, zone) : null;
-	else if (event.repeat !== "none") rule = legacyRrule({ repeat: event.repeat as LegacyRepeat["repeat"], repeatDays: parseDays(event.repeatDays), repeatAnchorDay: event.repeatAnchorDay ?? null, repeatUntil: event.repeatUntil ?? null }, event.startsAt, zone);
+	else if (event.repeat !== "none") rule = legacyRrule({ repeat: event.repeat as LegacyRepeat["repeat"], repeatDays: parseDays(event.repeatDays), repeatAnchorDay: event.repeatAnchorDay ?? null, repeatUntil: event.repeatUntil ?? null, repeatInterval: event.repeatInterval, repeatWeekday: event.repeatWeekday, repeatWeek: event.repeatWeek }, event.startsAt, zone);
 	const excluded = parseExcluded(event.excludedOccurrences);
 	const { starts, exhausted } = rule ? walk(rule, event.startsAt, zone, from, to, max + excluded.size) : { starts: event.startsAt >= from && event.startsAt < to ? [event.startsAt] : [], exhausted: false };
 	return { starts: starts.filter((at) => !excluded.has(at.getTime())).slice(0, max), exhausted };
@@ -425,4 +440,20 @@ export function legacyRepeatFor(value: string, start: Date, zone?: string | null
 	const legacy = legacyRrule(candidate, start, timeZone)!;
 	const got = expandRrule(legacy, start, timeZone, start, far, MAX_LEGACY_CHECK);
 	return got.length === wanted.length && got.every((at, index) => at.getTime() === wanted[index].getTime()) ? candidate : null;
+}
+
+/**
+ * True when the repeat_* columns in `candidate` give exactly the occurrences of the rule `value` (compared over the first
+ * 400). Used for a rule another app set that the invitation mapper stored natively: only an exact match is kept as
+ * columns, anything else stays a custom rule so no occurrence is lost.
+ */
+export function repeatMatchesRule(value: string, candidate: LegacyRepeat, start: Date, zone?: string | null): boolean {
+	const timeZone = normalizeTimeZone(zone);
+	const rule = parseRrule(value, timeZone);
+	const legacy = legacyRrule(candidate, start, timeZone);
+	if (!rule || !legacy) return false;
+	const far = new Date(start.getTime() + 200 * 366 * DAY);
+	const wanted = expandRrule(rule, start, timeZone, start, far, MAX_LEGACY_CHECK);
+	const got = expandRrule(legacy, start, timeZone, start, far, MAX_LEGACY_CHECK);
+	return got.length === wanted.length && got.every((at, index) => at.getTime() === wanted[index].getTime());
 }

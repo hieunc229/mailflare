@@ -1875,6 +1875,8 @@
 	"calendar.repeatWeek.5": "Fifth",
 	"calendar.repeatWeek.last": "Last",
 	"calendar.repeatWeekday": "Weekday",
+	"calendar.repeat.custom": "Repetição personalizada (definida em outro app)",
+	"calendar.repeat.customDayLocked": "Esta repetição foi definida em outro app; altere o dia lá",
 	"calendar.repeatOnWeekdays": "Repetir nos dias da semana",
 	"calendar.repeatOn": "Repetir em {day}",
 	"calendar.weekdayShort.0": "Dom",

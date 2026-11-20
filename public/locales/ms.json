@@ -1863,6 +1863,8 @@
 	"calendar.repeatWeek.5": "Fifth",
 	"calendar.repeatWeek.last": "Last",
 	"calendar.repeatWeekday": "Weekday",
+	"calendar.repeat.custom": "Ulangan tersuai (ditetapkan dalam apl lain)",
+	"calendar.repeat.customDayLocked": "Ulangan ini ditetapkan dalam apl lain; tukar hari di sana",
 	"calendar.repeatOnWeekdays": "Ulang pada hari bekerja",
 	"calendar.repeatOn": "Ulang pada hari {day}",
 	"calendar.weekdayShort.0": "Ahd",

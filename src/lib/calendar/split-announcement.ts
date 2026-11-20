@@ -10,6 +10,8 @@ export type SplitAnnouncementSide = {
 	startsAt: Date;
 	endsAt: Date;
 	repeat: CalendarRepeat;
+	/** The rule of a "custom" repeat. */
+	rrule?: string | null;
 	repeatDays: number[];
 	repeatAnchorDay: number | null;
 	/**
@@ -40,7 +42,7 @@ export function buildSplitAnnouncement(args: { original: SplitAnnouncementSide; 
 		startsAt: side.startsAt, endsAt: side.endsAt, uid: side.uid,
 		organizer: args.organizer, attendees: args.attendees, sequence: side.sequence,
 		reminderMinutes: side.reminderMinutes,
-		repeat: side.repeat, repeatDays: side.repeatDays, repeatAnchorDay: side.repeatAnchorDay,
+		repeat: side.repeat, rrule: side.rrule, repeatDays: side.repeatDays, repeatAnchorDay: side.repeatAnchorDay,
 		repeatUntil: side.repeatUntil, repeatInterval: side.repeatInterval,
 		repeatWeekday: side.repeatWeekday, repeatWeek: side.repeatWeek,
 		excludedOccurrences: side.excludedOccurrences, overrides: side.overrides,

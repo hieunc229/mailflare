@@ -16,7 +16,9 @@ type CalendarInvitationInput = {
 	/** Revision of this invitation: 0 for a new UID, bumped on every update so guests ignore stale mail. */
 	sequence: number;
 	/** Recurrence of the series; absent or "none" writes no RRULE. */
-	repeat?: "none" | "daily" | "weekly" | "monthly" | "weekdays" | "yearly";
+	repeat?: "none" | "daily" | "weekly" | "monthly" | "weekdays" | "yearly" | "custom";
+	/** RFC 5545 rule written as is when `repeat` is "custom" (a repeat set in another app). */
+	rrule?: string | null;
 	/** Listed weekdays (0-6) of a weekdays repeat. */
 	repeatDays?: number[];
 	/** Month day (1-31) of a plain monthly repeat. */
@@ -38,6 +40,7 @@ const INVITE_BYDAY = ["SU", "MO", "TU", "WE", "TH", "FR", "SA"];
 
 function invitationRecurrenceRule(input: CalendarInvitationInput): string | null {
 	if (!input.repeat || input.repeat === "none") return null;
+	if (input.repeat === "custom") return input.rrule ? `RRULE:${input.rrule.replace(/^RRULE:/i, "").replace(/[\u0000-\u001f\u007f]/g, "")}` : null;
 	const parts: string[] = [];
 	// A listed-days repeat steps day by day, so its interval is always 1 and never written.
 	const interval = input.repeat === "weekdays" ? 1 : input.repeatInterval;

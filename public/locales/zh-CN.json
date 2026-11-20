@@ -1853,6 +1853,8 @@
 	"calendar.repeatWeek.5": "Fifth",
 	"calendar.repeatWeek.last": "Last",
 	"calendar.repeatWeekday": "Weekday",
+	"calendar.repeat.custom": "自定义重复（在其他应用中设置）",
+	"calendar.repeat.customDayLocked": "此重复是在其他应用中设置的；请在那里更改日期",
 	"calendar.repeatOnWeekdays": "在工作日重复",
 	"calendar.repeatOn": "在{day}重复",
 	"calendar.weekdayShort.0": "周日",

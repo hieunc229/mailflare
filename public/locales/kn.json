@@ -1864,6 +1864,8 @@
 	"calendar.repeatWeek.5": "Fifth",
 	"calendar.repeatWeek.last": "Last",
 	"calendar.repeatWeekday": "Weekday",
+	"calendar.repeat.custom": "ಕಸ್ಟಮ್ ಪುನರಾವರ್ತನೆ (ಇನ್ನೊಂದು ಆ್ಯಪ್‌ನಲ್ಲಿ ಹೊಂದಿಸಲಾಗಿದೆ)",
+	"calendar.repeat.customDayLocked": "ಈ ಪುನರಾವರ್ತನೆಯನ್ನು ಇನ್ನೊಂದು ಆ್ಯಪ್‌ನಲ್ಲಿ ಹೊಂದಿಸಲಾಗಿದೆ; ದಿನವನ್ನು ಅಲ್ಲಿಯೇ ಬದಲಾಯಿಸಿ",
 	"calendar.repeatOnWeekdays": "ವಾರದ ದಿನಗಳಲ್ಲಿ ಪುನರಾವರ್ತಿಸಿ",
 	"calendar.repeatOn": "{day} ರಂದು ಪುನರಾವರ್ತಿಸಿ",
 	"calendar.weekdayShort.0": "ಭಾನು",
