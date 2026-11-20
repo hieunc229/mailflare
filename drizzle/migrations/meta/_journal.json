@@ -568,6 +568,20 @@
       "when": 1794516479571,
       "tag": "0089_auto_update",
       "breakpoints": true
+    },
+    {
+      "idx": 82,
+      "version": "6",
+      "when": 1794516480571,
+      "tag": "0094_app_password_usage",
+      "breakpoints": true
+    },
+    {
+      "idx": 83,
+      "version": "6",
+      "when": 1794516481571,
+      "tag": "0097_dav_enabled",
+      "breakpoints": true
     }
   ]
 }

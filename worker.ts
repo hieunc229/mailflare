@@ -40,10 +40,16 @@ import { purgeExpiredAuthRows } from "./src/lib/auth/purge";
 import { runJmapChangeRetention } from "./src/lib/jmap/changes";
 import { runFollowUpReminders } from "./src/lib/follow-ups/service";
 import { runCalendarReminders } from "./src/lib/calendar/reminders";
+import { handleDavRequest, isDavPath } from "./src/lib/dav/handler";
 export { RealtimeHub } from "./src/lib/realtime/hub";
 
 export default {
 	async fetch(request: Request, rawEnv: CloudflareEnv, ctx: ExecutionContext) {
+		// CalDAV/CardDAV use methods Next route handlers cannot express (PROPFIND, REPORT). They skip the D1 read
+		// session on purpose: a client that writes and then asks for changes must read its own writes.
+		if (isDavPath(new URL(request.url).pathname)) {
+			return (await handleDavRequest(request, withDatabase(withStorage(rawEnv)))) ?? new Response("Not found", { status: 404 });
+		}
 		// Reads go through a D1 session anchored at the client's bookmark cookie so D1 can serve
 		// them from read replicas; email/queue/scheduled below keep primary reads on purpose.
 		const d1Session = withD1ReadSession(rawEnv, request);
