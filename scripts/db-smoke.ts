@@ -5,7 +5,7 @@
  */
 import { and, eq, sql } from "drizzle-orm";
 import { createDb } from "@/db";
-import { users, domains, mailboxes, messages, calendarEvents, folders, jmapChanges, appSettings, webhooks, spamTokenStats, spamReputation } from "@/db/schema";
+import { users, domains, mailboxes, messages, calendarEvents, folders, jmapChanges, appSettings, webhooks, spamTokenStats, spamReputation, mailboxPromotionSettings } from "@/db/schema";
 import { getDatabaseConfig } from "@/db/with-database";
 import { openExternalDatabase } from "@/db/external";
 import { applyPendingMigrations, getMigrationStatus } from "@/lib/migrations/service";
@@ -16,6 +16,8 @@ import { exportDatabaseRecords, restoreDatabaseRecords } from "@/lib/backups/exp
 import { getSearchIndexStatus } from "@/lib/search/index-admin";
 import { recordReputationObservation } from "@/lib/spam/repository";
 import { isUniqueConstraintError } from "@/lib/database-errors";
+import { listSubscriptions } from "@/lib/promotions/subscriptions";
+import { runPromotionsBackfill, selectBackfillCandidates } from "@/lib/promotions/backfill";
 
 const [url, driver] = process.argv.slice(2);
 if (!url) throw new Error("usage: db-smoke <DATABASE_URL> [driver]");
@@ -128,6 +130,26 @@ try {
 
 const searchStatus = await getSearchIndexStatus(env);
 check("search index status", searchStatus.messages === searchStatus.indexed && searchStatus.messages >= 1);
+
+// Promotions: the grouped Subscriptions query (group by, count distinct, sum(case), batched latest-message selects)
+// and the backfill (claim, keyset select, batched updates, fenced save) in this dialect.
+const promo = { id: `pro_${stamp}`, base: { userId, mailboxId: `mbx_${stamp}`, direction: "inbound", toAddr: "me@example.com", status: "received" } };
+await db.insert(messages).values([
+	{ ...promo.base, id: `${promo.id}_1`, fromAddr: "Acme <news@acme.com>", senderAddress: "news@acme.com", category: "promotions", hasUnsubscribe: true, read: true },
+	{ ...promo.base, id: `${promo.id}_2`, fromAddr: "Acme <news@acme.com>", senderAddress: "news@acme.com", category: "promotions", hasUnsubscribe: true },
+	{ ...promo.base, id: `${promo.id}_3`, fromAddr: "Shop <deals@shop.com>", senderAddress: "deals@shop.com", category: "promotions" },
+	{ ...promo.base, id: `${promo.id}_4`, fromAddr: "Late <late@news.com>", hasUnsubscribe: true, rawR2Key: `raw/${promo.id}_4` },
+] as never);
+const subscriptions = await listSubscriptions(db, { mailboxId: `mbx_${stamp}`, offset: 0, limit: 50 });
+check("subscriptions grouped query", subscriptions.total === 2 && subscriptions.senders[0]?.senderAddress === "news@acme.com" && subscriptions.senders[0].total === 2 && subscriptions.senders[0].readRate === 50 && subscriptions.senders[0].canUnsubscribe && subscriptions.senders[0].lastReceived instanceof Date && subscriptions.senders[1]?.latestMessageId === `${promo.id}_3`);
+await db.insert(mailboxPromotionSettings).values({ mailboxId: `mbx_${stamp}`, mode: "show", backfillStatus: "pending" } as never);
+const candidates = await selectBackfillCandidates(db, { mailboxId: `mbx_${stamp}`, cursor: null, now: new Date() });
+check("backfill candidate select", candidates.length === 1 && candidates[0].id === `${promo.id}_4`);
+const bucket = { get: async () => ({ arrayBuffer: async () => new TextEncoder().encode("List-Unsubscribe: <mailto:u@late.com>\r\n\r\nbody").buffer }) };
+const backfilled = await runPromotionsBackfill({ DB: d1, BUCKET: bucket } as unknown as CloudflareEnv, new Date());
+const [late] = await db.select({ category: messages.category, senderAddress: messages.senderAddress }).from(messages).where(eq(messages.id, `${promo.id}_4`));
+const [progress] = await db.select().from(mailboxPromotionSettings).where(eq(mailboxPromotionSettings.mailboxId, `mbx_${stamp}`));
+check("backfill claims, classifies and saves", backfilled.claimed && late.category === "promotions" && late.senderAddress === "late@news.com" && progress.backfillStatus === "done" && progress.backfillScanned === 1 && progress.backfillStalls === 0);
 
 const backup = await exportDatabaseRecords(d1);
 const exported = JSON.parse(new TextDecoder().decode(backup)) as { tables: Record<string, Array<Record<string, unknown>>> };

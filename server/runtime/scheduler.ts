@@ -7,9 +7,14 @@ import { purgeExpiredAuthRows } from "@/lib/auth/purge";
 import { runJmapChangeRetention } from "@/lib/jmap/changes";
 import { runFollowUpReminders } from "@/lib/follow-ups/service";
 import { runCalendarReminders } from "@/lib/calendar/reminders";
+import { runPromotionsBackfill } from "@/lib/promotions/backfill";
 import { sweepImportJobs } from "@/lib/import/jobs";
 import { sweepOrphanedRawMail } from "@/lib/email/raw-sweeper";
 import { pruneExpiredMessageActionUndoClaims } from "@/lib/messages/actions/claims";
+
+/** The backfill's budget assumes one run per 5 minutes (the Worker cron); this loop ticks every minute. */
+const BACKFILL_INTERVAL_MS = 5 * 60_000;
+let lastBackfillAt = 0;
 
 /** Fire the daily 02:00 UTC backup and the recurring maintenance jobs, matching the cron triggers in wrangler.jsonc. */
 export function startScheduler(env: CloudflareEnv) {
@@ -22,6 +27,10 @@ export function startScheduler(env: CloudflareEnv) {
 		const now = new Date();
 		runFollowUpReminders(env, now).catch((error) => console.error("Follow-up reminders failed", error));
 		runCalendarReminders(env, now).catch((error) => console.error("Calendar reminders failed", error));
+		if (now.getTime() - lastBackfillAt >= BACKFILL_INTERVAL_MS) {
+			lastBackfillAt = now.getTime();
+			runPromotionsBackfill(env, now).catch((error) => console.error("Promotions backfill failed", error));
+		}
 		const day = now.toISOString().slice(0, 10);
 		if (now.getUTCHours() !== 2 || lastRunDay === day) return;
 		lastRunDay = day;
