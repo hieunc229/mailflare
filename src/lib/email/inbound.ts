@@ -30,6 +30,8 @@ import {
 	notifyUsersOfNewMessage,
 } from "@/lib/realtime/utils";
 import { scheduleAutoDraft } from "@/lib/agent/jobs/utils";
+import { isSilentPromotion } from "@/lib/promotions/mode-utils";
+import { loadPromotionModes, type PromotionMode } from "@/lib/promotions/settings";
 import { buildNewMessageNotification } from "@/lib/email/inbound-notification";
 import { readHeaderMap } from "@/lib/email/provider-trace";
 import { classifyInboundCategory } from "@/lib/promotions/classify";
@@ -273,13 +275,18 @@ export async function processInboundMessage(
 			decision.mailbox.mailboxId,
 			decision.mailbox.userId,
 		);
+		// Promotions a `separate` mailbox files away are not announced. Any lookup failure announces: delivery and notification never depend on this.
+		const mode = category === "promotions"
+			? (await loadPromotionModes(db, [decision.mailbox.mailboxId]).catch(() => new Map<string, PromotionMode>())).get(decision.mailbox.mailboxId)
+			: undefined;
 		await notifyUsersOfNewMessage(env, notificationUserIds, buildNewMessageNotification({
 			messageId,
 			mailboxId: decision.mailbox.mailboxId,
 			fromAddr,
 			contact,
 			subject: parsed.subject,
-		}));
+			category,
+		}), { silent: isSilentPromotion(category, mode) });
 	}
 	// Spam and blocked mail carry an unauthenticated From; consumers acting on it would be fooled.
 	if (status !== "spam" && status !== "trash") {
@@ -292,6 +299,7 @@ export async function processInboundMessage(
 			threadId,
 			spamScore: spamAnalysis?.score,
 			spamVerdict: spamAnalysis?.verdict,
+			category,
 		});
 	}
 	try {
