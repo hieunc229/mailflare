@@ -169,6 +169,20 @@
       "when": 1795027665151,
       "tag": "0023_email_suppressions",
       "breakpoints": true
+    },
+    {
+      "idx": 15,
+      "version": "5",
+      "when": 1794516490573,
+      "tag": "0022_dmarc_reports",
+      "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "5",
+      "when": 1794516491573,
+      "tag": "0024_dmarc_reports",
+      "breakpoints": true
     }
   ]
 }
