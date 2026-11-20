@@ -351,6 +351,54 @@
         "ALTER TABLE `app_settings` ADD `auto_update_dispatched_version` text;",
         "ALTER TABLE `app_settings` ADD `auto_update_channel` varchar(16) NOT NULL DEFAULT 'release';"
       ]
+    },
+    {
+      "name": "0019_email_suppressions.sql",
+      "statements": [
+        "ALTER TABLE `app_settings` ADD `suppression_mode` varchar(64) NOT NULL DEFAULT 'off';",
+        "ALTER TABLE `app_settings` ADD `resend_events_webhook_id` longtext;",
+        "ALTER TABLE `app_settings` ADD `resend_events_webhook_secret` longtext;",
+        "ALTER TABLE `app_settings` ADD `ses_feedback` longtext;",
+        "CREATE TABLE `email_suppressions` (\n\t`id` varchar(191) NOT NULL,\n\t`domain_id` varchar(191) NOT NULL,\n\t`email` varchar(320) NOT NULL,\n\t`reason` varchar(64) NOT NULL,\n\t`source` varchar(64) NOT NULL,\n\t`detail` longtext,\n\t`confirmed` boolean NOT NULL DEFAULT true,\n\t`evidence_ref` longtext,\n\t`event_count` bigint NOT NULL DEFAULT 1,\n\t`first_event_at` bigint NOT NULL,\n\t`last_event_at` bigint NOT NULL,\n\t`created_by_user_id` varchar(191),\n\tCONSTRAINT `email_suppressions_id` PRIMARY KEY(`id`),\n\tCONSTRAINT `email_suppressions_domain_email_idx` UNIQUE(`domain_id`,`email`)\n);",
+        "ALTER TABLE `email_suppressions` ADD CONSTRAINT `email_suppressions_domain_id_domains_id_fk` FOREIGN KEY (`domain_id`) REFERENCES `domains`(`id`) ON DELETE cascade ON UPDATE no action;",
+        "ALTER TABLE `email_suppressions` ADD CONSTRAINT `email_suppressions_created_by_user_id_users_id_fk` FOREIGN KEY (`created_by_user_id`) REFERENCES `users`(`id`) ON DELETE set null ON UPDATE no action;",
+        "CREATE INDEX `email_suppressions_created_by_idx` ON `email_suppressions` (`created_by_user_id`);"
+      ]
+    },
+    {
+      "name": "0022_dmarc_reports.sql",
+      "statements": [
+        "CREATE TABLE `domain_deliverability` (\n\t`domain_id` varchar(191) NOT NULL,\n\t`reports_enabled` boolean NOT NULL DEFAULT false,\n\t`reports_enabled_at` bigint,\n\t`alert_email` boolean NOT NULL DEFAULT false,\n\t`last_report_at` bigint,\n\t`updated_at` bigint NOT NULL,\n\t`dmarc_created_record` longtext,\n\tCONSTRAINT `domain_deliverability_domain_id` PRIMARY KEY(`domain_id`)\n);",
+        "CREATE TABLE `deliverability_reports` (\n\t`id` varchar(191) NOT NULL,\n\t`domain_id` varchar(191) NOT NULL,\n\t`report_key` varchar(191) NOT NULL,\n\t`reporter_org` longtext,\n\t`reporter_email` longtext,\n\t`external_report_id` longtext,\n\t`date_begin` bigint,\n\t`date_end` bigint,\n\t`policy_p` longtext,\n\t`policy_pct` bigint,\n\t`record_count` bigint NOT NULL DEFAULT 0,\n\t`message_count` bigint NOT NULL DEFAULT 0,\n\t`authenticated` boolean NOT NULL DEFAULT false,\n\t`sender_domain` longtext,\n\t`verified_reporter` boolean NOT NULL DEFAULT false,\n\t`stats_rows` bigint NOT NULL DEFAULT 0,\n\t`status` varchar(64) NOT NULL DEFAULT 'processing',\n\t`error` longtext,\n\t`received_at` bigint NOT NULL,\n\tCONSTRAINT `deliverability_reports_id` PRIMARY KEY(`id`),\n\tCONSTRAINT `deliverability_reports_domain_key_idx` UNIQUE(`domain_id`,`report_key`)\n);",
+        "CREATE TABLE `dmarc_daily_stats` (\n\t`id` bigint AUTO_INCREMENT NOT NULL,\n\t`domain_id` varchar(191) NOT NULL,\n\t`day` varchar(191) NOT NULL,\n\t`row_key` varchar(191) NOT NULL,\n\t`source_ip` longtext NOT NULL,\n\t`source_host` longtext,\n\t`reporter_org` longtext NOT NULL,\n\t`header_from` longtext NOT NULL,\n\t`disposition` varchar(64) NOT NULL,\n\t`dkim_aligned` boolean NOT NULL,\n\t`spf_aligned` boolean NOT NULL,\n\t`message_count` bigint NOT NULL DEFAULT 0,\n\tCONSTRAINT `dmarc_daily_stats_id` PRIMARY KEY(`id`),\n\tCONSTRAINT `dmarc_daily_stats_domain_day_key_idx` UNIQUE(`domain_id`,`day`,`row_key`)\n);",
+        "CREATE TABLE `deliverability_alerts` (\n\t`id` varchar(191) NOT NULL,\n\t`domain_id` varchar(191) NOT NULL,\n\t`kind` varchar(64) NOT NULL,\n\t`day` varchar(191) NOT NULL,\n\t`detail` longtext NOT NULL,\n\t`created_at` bigint NOT NULL,\n\t`acknowledged_at` bigint,\n\t`acknowledged_by_user_id` varchar(191),\n\tCONSTRAINT `deliverability_alerts_id` PRIMARY KEY(`id`),\n\tCONSTRAINT `deliverability_alerts_domain_kind_day_idx` UNIQUE(`domain_id`,`kind`,`day`)\n);",
+        "ALTER TABLE `domain_deliverability` ADD CONSTRAINT `domain_deliverability_domain_id_domains_id_fk` FOREIGN KEY (`domain_id`) REFERENCES `domains`(`id`) ON DELETE cascade ON UPDATE no action;",
+        "ALTER TABLE `deliverability_reports` ADD CONSTRAINT `deliverability_reports_domain_id_domains_id_fk` FOREIGN KEY (`domain_id`) REFERENCES `domains`(`id`) ON DELETE cascade ON UPDATE no action;",
+        "ALTER TABLE `dmarc_daily_stats` ADD CONSTRAINT `dmarc_daily_stats_domain_id_domains_id_fk` FOREIGN KEY (`domain_id`) REFERENCES `domains`(`id`) ON DELETE cascade ON UPDATE no action;",
+        "ALTER TABLE `deliverability_alerts` ADD CONSTRAINT `deliverability_alerts_domain_id_domains_id_fk` FOREIGN KEY (`domain_id`) REFERENCES `domains`(`id`) ON DELETE cascade ON UPDATE no action;",
+        "ALTER TABLE `deliverability_alerts` ADD CONSTRAINT `deliverability_alerts_acknowledged_by_user_id_users_id_fk` FOREIGN KEY (`acknowledged_by_user_id`) REFERENCES `users`(`id`) ON DELETE set null ON UPDATE no action;",
+        "CREATE INDEX `deliverability_reports_domain_received_idx` ON `deliverability_reports` (`domain_id`,`received_at`);",
+        "CREATE INDEX `deliverability_reports_received_idx` ON `deliverability_reports` (`received_at`);",
+        "CREATE INDEX `dmarc_daily_stats_day_idx` ON `dmarc_daily_stats` (`day`);",
+        "CREATE INDEX `deliverability_alerts_ack_user_idx` ON `deliverability_alerts` (`acknowledged_by_user_id`);"
+      ]
+    },
+    {
+      "name": "0024_mta_sts_tls_rpt.sql",
+      "statements": [
+        "ALTER TABLE `domain_deliverability` ADD `tls_rpt_enabled` boolean NOT NULL DEFAULT false;",
+        "ALTER TABLE `domain_deliverability` ADD `mta_sts_mode` varchar(64) NOT NULL DEFAULT 'none';",
+        "ALTER TABLE `domain_deliverability` ADD `mta_sts_policy_id` longtext;",
+        "ALTER TABLE `domain_deliverability` ADD `mta_sts_mx` longtext;",
+        "ALTER TABLE `domain_deliverability` ADD `mta_sts_max_age` bigint NOT NULL DEFAULT 604800;",
+        "ALTER TABLE `domain_deliverability` ADD `mta_sts_served_max_age` bigint;",
+        "ALTER TABLE `domain_deliverability` ADD `mta_sts_verified_at` bigint;",
+        "ALTER TABLE `domain_deliverability` ADD `mta_sts_retire_after` bigint;",
+        "ALTER TABLE `deliverability_reports` ADD `kind` varchar(64) NOT NULL DEFAULT 'dmarc';",
+        "CREATE TABLE `tls_daily_stats` (\n\t`id` bigint AUTO_INCREMENT NOT NULL,\n\t`domain_id` varchar(191) NOT NULL,\n\t`day` varchar(191) NOT NULL,\n\t`row_key` varchar(191) NOT NULL,\n\t`reporter_org` longtext NOT NULL,\n\t`policy_type` longtext NOT NULL,\n\t`mx_host` longtext,\n\t`result_type` longtext NOT NULL,\n\t`success_count` bigint NOT NULL DEFAULT 0,\n\t`failure_count` bigint NOT NULL DEFAULT 0,\n\tCONSTRAINT `tls_daily_stats_id` PRIMARY KEY(`id`),\n\tCONSTRAINT `tls_daily_stats_domain_day_key_idx` UNIQUE(`domain_id`,`day`,`row_key`)\n);",
+        "ALTER TABLE `tls_daily_stats` ADD CONSTRAINT `tls_daily_stats_domain_id_domains_id_fk` FOREIGN KEY (`domain_id`) REFERENCES `domains`(`id`) ON DELETE cascade ON UPDATE no action;",
+        "CREATE INDEX `tls_daily_stats_day_idx` ON `tls_daily_stats` (`day`);"
+      ]
     }
   ]
 }

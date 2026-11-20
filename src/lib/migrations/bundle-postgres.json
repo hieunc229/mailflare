@@ -376,6 +376,59 @@
         "ALTER TABLE \"app_settings\" ADD COLUMN \"auto_update_dispatched_version\" text;",
         "ALTER TABLE \"app_settings\" ADD COLUMN \"auto_update_channel\" varchar(16) NOT NULL DEFAULT 'release';"
       ]
+    },
+    {
+      "name": "0019_email_suppressions.sql",
+      "statements": [
+        "ALTER TABLE \"app_settings\" ADD COLUMN \"suppression_mode\" text DEFAULT 'off' NOT NULL;",
+        "ALTER TABLE \"app_settings\" ADD COLUMN \"resend_events_webhook_id\" text;",
+        "ALTER TABLE \"app_settings\" ADD COLUMN \"resend_events_webhook_secret\" text;",
+        "ALTER TABLE \"app_settings\" ADD COLUMN \"ses_feedback\" text;",
+        "CREATE TABLE \"email_suppressions\" (\n\t\"id\" text PRIMARY KEY NOT NULL,\n\t\"domain_id\" text NOT NULL,\n\t\"email\" text NOT NULL,\n\t\"reason\" text NOT NULL,\n\t\"source\" text NOT NULL,\n\t\"detail\" text,\n\t\"confirmed\" boolean DEFAULT true NOT NULL,\n\t\"evidence_ref\" text,\n\t\"event_count\" bigint DEFAULT 1 NOT NULL,\n\t\"first_event_at\" bigint NOT NULL,\n\t\"last_event_at\" bigint NOT NULL,\n\t\"created_by_user_id\" text\n);",
+        "ALTER TABLE \"email_suppressions\" ADD CONSTRAINT \"email_suppressions_domain_id_domains_id_fk\" FOREIGN KEY (\"domain_id\") REFERENCES \"public\".\"domains\"(\"id\") ON DELETE cascade ON UPDATE no action;",
+        "ALTER TABLE \"email_suppressions\" ADD CONSTRAINT \"email_suppressions_created_by_user_id_users_id_fk\" FOREIGN KEY (\"created_by_user_id\") REFERENCES \"public\".\"users\"(\"id\") ON DELETE set null ON UPDATE no action;",
+        "CREATE UNIQUE INDEX \"email_suppressions_domain_email_idx\" ON \"email_suppressions\" USING btree (\"domain_id\",\"email\");",
+        "CREATE INDEX \"email_suppressions_created_by_idx\" ON \"email_suppressions\" USING btree (\"created_by_user_id\");"
+      ]
+    },
+    {
+      "name": "0022_dmarc_reports.sql",
+      "statements": [
+        "CREATE TABLE \"domain_deliverability\" (\n\t\"domain_id\" text PRIMARY KEY NOT NULL,\n\t\"reports_enabled\" boolean DEFAULT false NOT NULL,\n\t\"reports_enabled_at\" bigint,\n\t\"alert_email\" boolean DEFAULT false NOT NULL,\n\t\"last_report_at\" bigint,\n\t\"updated_at\" bigint NOT NULL,\n\t\"dmarc_created_record\" text\n);",
+        "CREATE TABLE \"deliverability_reports\" (\n\t\"id\" text PRIMARY KEY NOT NULL,\n\t\"domain_id\" text NOT NULL,\n\t\"report_key\" text NOT NULL,\n\t\"reporter_org\" text,\n\t\"reporter_email\" text,\n\t\"external_report_id\" text,\n\t\"date_begin\" bigint,\n\t\"date_end\" bigint,\n\t\"policy_p\" text,\n\t\"policy_pct\" bigint,\n\t\"record_count\" bigint DEFAULT 0 NOT NULL,\n\t\"message_count\" bigint DEFAULT 0 NOT NULL,\n\t\"authenticated\" boolean DEFAULT false NOT NULL,\n\t\"sender_domain\" text,\n\t\"verified_reporter\" boolean DEFAULT false NOT NULL,\n\t\"stats_rows\" bigint DEFAULT 0 NOT NULL,\n\t\"status\" text DEFAULT 'processing' NOT NULL,\n\t\"error\" text,\n\t\"received_at\" bigint NOT NULL\n);",
+        "CREATE TABLE \"dmarc_daily_stats\" (\n\t\"id\" bigserial PRIMARY KEY NOT NULL,\n\t\"domain_id\" text NOT NULL,\n\t\"day\" text NOT NULL,\n\t\"row_key\" text NOT NULL,\n\t\"source_ip\" text NOT NULL,\n\t\"source_host\" text,\n\t\"reporter_org\" text NOT NULL,\n\t\"header_from\" text NOT NULL,\n\t\"disposition\" text NOT NULL,\n\t\"dkim_aligned\" boolean NOT NULL,\n\t\"spf_aligned\" boolean NOT NULL,\n\t\"message_count\" bigint DEFAULT 0 NOT NULL\n);",
+        "CREATE TABLE \"deliverability_alerts\" (\n\t\"id\" text PRIMARY KEY NOT NULL,\n\t\"domain_id\" text NOT NULL,\n\t\"kind\" text NOT NULL,\n\t\"day\" text NOT NULL,\n\t\"detail\" text NOT NULL,\n\t\"created_at\" bigint NOT NULL,\n\t\"acknowledged_at\" bigint,\n\t\"acknowledged_by_user_id\" text\n);",
+        "ALTER TABLE \"domain_deliverability\" ADD CONSTRAINT \"domain_deliverability_domain_id_domains_id_fk\" FOREIGN KEY (\"domain_id\") REFERENCES \"public\".\"domains\"(\"id\") ON DELETE cascade ON UPDATE no action;",
+        "ALTER TABLE \"deliverability_reports\" ADD CONSTRAINT \"deliverability_reports_domain_id_domains_id_fk\" FOREIGN KEY (\"domain_id\") REFERENCES \"public\".\"domains\"(\"id\") ON DELETE cascade ON UPDATE no action;",
+        "ALTER TABLE \"dmarc_daily_stats\" ADD CONSTRAINT \"dmarc_daily_stats_domain_id_domains_id_fk\" FOREIGN KEY (\"domain_id\") REFERENCES \"public\".\"domains\"(\"id\") ON DELETE cascade ON UPDATE no action;",
+        "ALTER TABLE \"deliverability_alerts\" ADD CONSTRAINT \"deliverability_alerts_domain_id_domains_id_fk\" FOREIGN KEY (\"domain_id\") REFERENCES \"public\".\"domains\"(\"id\") ON DELETE cascade ON UPDATE no action;",
+        "ALTER TABLE \"deliverability_alerts\" ADD CONSTRAINT \"deliverability_alerts_acknowledged_by_user_id_users_id_fk\" FOREIGN KEY (\"acknowledged_by_user_id\") REFERENCES \"public\".\"users\"(\"id\") ON DELETE set null ON UPDATE no action;",
+        "CREATE UNIQUE INDEX \"deliverability_reports_domain_key_idx\" ON \"deliverability_reports\" USING btree (\"domain_id\",\"report_key\");",
+        "CREATE INDEX \"deliverability_reports_domain_received_idx\" ON \"deliverability_reports\" USING btree (\"domain_id\",\"received_at\");",
+        "CREATE INDEX \"deliverability_reports_received_idx\" ON \"deliverability_reports\" USING btree (\"received_at\");",
+        "CREATE UNIQUE INDEX \"dmarc_daily_stats_domain_day_key_idx\" ON \"dmarc_daily_stats\" USING btree (\"domain_id\",\"day\",\"row_key\");",
+        "CREATE INDEX \"dmarc_daily_stats_day_idx\" ON \"dmarc_daily_stats\" USING btree (\"day\");",
+        "CREATE UNIQUE INDEX \"deliverability_alerts_domain_kind_day_idx\" ON \"deliverability_alerts\" USING btree (\"domain_id\",\"kind\",\"day\");",
+        "CREATE INDEX \"deliverability_alerts_ack_user_idx\" ON \"deliverability_alerts\" USING btree (\"acknowledged_by_user_id\");"
+      ]
+    },
+    {
+      "name": "0024_mta_sts_tls_rpt.sql",
+      "statements": [
+        "ALTER TABLE \"domain_deliverability\" ADD COLUMN \"tls_rpt_enabled\" boolean DEFAULT false NOT NULL;",
+        "ALTER TABLE \"domain_deliverability\" ADD COLUMN \"mta_sts_mode\" text DEFAULT 'none' NOT NULL;",
+        "ALTER TABLE \"domain_deliverability\" ADD COLUMN \"mta_sts_policy_id\" text;",
+        "ALTER TABLE \"domain_deliverability\" ADD COLUMN \"mta_sts_mx\" text;",
+        "ALTER TABLE \"domain_deliverability\" ADD COLUMN \"mta_sts_max_age\" bigint DEFAULT 604800 NOT NULL;",
+        "ALTER TABLE \"domain_deliverability\" ADD COLUMN \"mta_sts_served_max_age\" bigint;",
+        "ALTER TABLE \"domain_deliverability\" ADD COLUMN \"mta_sts_verified_at\" bigint;",
+        "ALTER TABLE \"domain_deliverability\" ADD COLUMN \"mta_sts_retire_after\" bigint;",
+        "ALTER TABLE \"deliverability_reports\" ADD COLUMN \"kind\" text DEFAULT 'dmarc' NOT NULL;",
+        "CREATE TABLE \"tls_daily_stats\" (\n\t\"id\" bigserial PRIMARY KEY NOT NULL,\n\t\"domain_id\" text NOT NULL,\n\t\"day\" text NOT NULL,\n\t\"row_key\" text NOT NULL,\n\t\"reporter_org\" text NOT NULL,\n\t\"policy_type\" text NOT NULL,\n\t\"mx_host\" text,\n\t\"result_type\" text NOT NULL,\n\t\"success_count\" bigint DEFAULT 0 NOT NULL,\n\t\"failure_count\" bigint DEFAULT 0 NOT NULL\n);",
+        "ALTER TABLE \"tls_daily_stats\" ADD CONSTRAINT \"tls_daily_stats_domain_id_domains_id_fk\" FOREIGN KEY (\"domain_id\") REFERENCES \"public\".\"domains\"(\"id\") ON DELETE cascade ON UPDATE no action;",
+        "CREATE UNIQUE INDEX \"tls_daily_stats_domain_day_key_idx\" ON \"tls_daily_stats\" USING btree (\"domain_id\",\"day\",\"row_key\");",
+        "CREATE INDEX \"tls_daily_stats_day_idx\" ON \"tls_daily_stats\" USING btree (\"day\");"
+      ]
     }
   ]
 }

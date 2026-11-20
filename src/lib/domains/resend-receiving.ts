@@ -29,7 +29,7 @@ function inboundMx(records: ResendDomainRecord[] | undefined) {
 	return (records ?? []).find((record) => record.type === "MX" && (record.record === "Receiving" || isResendInboundMx(record.value))) ?? null;
 }
 
-function isPublicHttps(origin: string): boolean {
+export function isPublicHttps(origin: string): boolean {
 	try {
 		const url = new URL(origin);
 		return url.protocol === "https:" && !/^(localhost|127\.|\[::1\]|.*\.localhost$|.*\.test$)/.test(url.hostname);

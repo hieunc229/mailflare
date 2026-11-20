@@ -556,6 +556,161 @@ export const domainTrackingHosts = sqliteTable(
 	(t) => [uniqueIndex("domain_tracking_hosts_hostname_idx").on(t.hostname)],
 );
 
+/** Recipients that bounced or complained, per sending domain. Whether it is enforced is `app_settings.suppression_mode`. */
+export const emailSuppressions = sqliteTable(
+	"email_suppressions",
+	{
+		id: text("id").primaryKey(),
+		domainId: text("domain_id").notNull().references(() => domains.id, { onDelete: "cascade" }),
+		email: text("email").notNull(),
+		reason: text("reason", { enum: ["hard_bounce", "complaint", "manual"] }).notNull(),
+		source: text("source", { enum: ["resend", "ses", "dsn", "admin"] }).notNull(),
+		detail: text("detail"),
+		/** Only confirmed entries are enforced. A single returned message (DSN) can be forged by a co-recipient, so it is stored unconfirmed. */
+		confirmed: bool("confirmed").notNull().default(true),
+		/** Message-ID of the first message a DSN named; a DSN about a different message corroborates the entry. */
+		evidenceRef: text("evidence_ref"),
+		eventCount: integer("event_count").notNull().default(1),
+		firstEventAt: timestamp("first_event_at").notNull().$defaultFn(() => new Date()),
+		lastEventAt: timestamp("last_event_at").notNull().$defaultFn(() => new Date()),
+		createdByUserId: text("created_by_user_id").references(() => users.id, { onDelete: "set null" }),
+	},
+	(t) => [
+		uniqueIndex("email_suppressions_domain_email_idx").on(t.domainId, t.email),
+		index("email_suppressions_created_by_idx").on(t.createdByUserId),
+	],
+);
+
+/** DMARC reporting per sending domain. No row means off. */
+export const domainDeliverability = sqliteTable("domain_deliverability", {
+	domainId: text("domain_id").primaryKey().references(() => domains.id, { onDelete: "cascade" }),
+	reportsEnabled: bool("reports_enabled").notNull().default(false),
+	reportsEnabledAt: timestamp("reports_enabled_at"),
+	alertEmail: bool("alert_email").notNull().default(false),
+	lastReportAt: timestamp("last_report_at"),
+	updatedAt: timestamp("updated_at").notNull().$defaultFn(() => new Date()),
+	/** The `_dmarc` record text Mailflare created because none existed, so turning reports off can remove it again (only while it is unchanged). */
+	dmarcCreatedRecord: text("dmarc_created_record"),
+	/** TLS-RPT reporting (`_smtp._tls`) shares the DMARC report address, so it needs `reportsEnabled`. */
+	tlsRptEnabled: bool("tls_rpt_enabled").notNull().default(false),
+	/** The MTA-STS policy this domain publishes. `none` with a policy id means the removal period is running; no policy id means off. */
+	mtaStsMode: text("mta_sts_mode", { enum: ["none", "testing", "enforce"] }).notNull().default("none"),
+	/** The `id` of the `_mta-sts` TXT record; it changes whenever the policy changes. */
+	mtaStsPolicyId: text("mta_sts_policy_id"),
+	/** JSON array of the MX host names listed in the policy. */
+	mtaStsMx: text("mta_sts_mx"),
+	mtaStsMaxAge: integer("mta_sts_max_age").notNull().default(604800),
+	/** The longest max_age any policy served since this one was first published: the removal period waits that long so no sender still caches an older policy. */
+	mtaStsServedMaxAge: integer("mta_sts_served_max_age"),
+	/** When the admin last confirmed from the browser that the policy host serves the expected policy. */
+	mtaStsVerifiedAt: timestamp("mta_sts_verified_at"),
+	/** While the removal policy (`mode: none`) is served: when the `_mta-sts` record may be deleted. */
+	mtaStsRetireAfter: timestamp("mta_sts_retire_after"),
+});
+
+/** One row per aggregate report mail. The raw XML is never stored. */
+export const deliverabilityReports = sqliteTable(
+	"deliverability_reports",
+	{
+		id: text("id").primaryKey(),
+		domainId: text("domain_id").notNull().references(() => domains.id, { onDelete: "cascade" }),
+		kind: text("kind", { enum: ["dmarc", "tlsrpt"] }).notNull().default("dmarc"),
+		/** sha256 of reporter org and report id; the same report arriving twice conflicts here. */
+		reportKey: text("report_key").notNull(),
+		reporterOrg: text("reporter_org"),
+		reporterEmail: text("reporter_email"),
+		externalReportId: text("external_report_id"),
+		dateBegin: timestamp("date_begin"),
+		dateEnd: timestamp("date_end"),
+		policyP: text("policy_p"),
+		policyPct: integer("policy_pct"),
+		recordCount: integer("record_count").notNull().default(0),
+		messageCount: integer("message_count").notNull().default(0),
+		/** The report mail itself passed DMARC by the trusted-verdict rules. */
+		authenticated: bool("authenticated").notNull().default(false),
+		/** Organisational domain of the mail's From header; only meaningful when `authenticated`. */
+		senderDomain: text("sender_domain"),
+		/** Authenticated AND the From organisation equals the organisation of the report's own contact email. Only these write aggregates. */
+		verifiedReporter: bool("verified_reporter").notNull().default(false),
+		/** Aggregate rows this report was allowed to write; the daily budgets are sums of it. */
+		statsRows: integer("stats_rows").notNull().default(0),
+		status: text("status", { enum: ["processing", "ok", "rejected", "failed", "unverified", "over_budget"] }).notNull().default("processing"),
+		error: text("error"),
+		receivedAt: timestamp("received_at").notNull().$defaultFn(() => new Date()),
+	},
+	(t) => [
+		uniqueIndex("deliverability_reports_domain_key_idx").on(t.domainId, t.reportKey),
+		index("deliverability_reports_domain_received_idx").on(t.domainId, t.receivedAt),
+		index("deliverability_reports_received_idx").on(t.receivedAt),
+	],
+);
+
+/** Daily DMARC aggregates from verified reporters only, one row per (day, source, result). `day` is the UTC day the report window began; `reporterOrg` is the verified reporter's organisational domain. */
+export const dmarcDailyStats = sqliteTable(
+	"dmarc_daily_stats",
+	{
+		id: autoId("id"),
+		domainId: text("domain_id").notNull().references(() => domains.id, { onDelete: "cascade" }),
+		day: text("day").notNull(),
+		rowKey: text("row_key").notNull(),
+		sourceIp: text("source_ip").notNull(),
+		sourceHost: text("source_host"),
+		reporterOrg: text("reporter_org").notNull(),
+		headerFrom: text("header_from").notNull(),
+		disposition: text("disposition", { enum: ["none", "quarantine", "reject"] }).notNull(),
+		dkimAligned: bool("dkim_aligned").notNull(),
+		spfAligned: bool("spf_aligned").notNull(),
+		messageCount: integer("message_count").notNull().default(0),
+	},
+	(t) => [
+		uniqueIndex("dmarc_daily_stats_domain_day_key_idx").on(t.domainId, t.day, t.rowKey),
+		index("dmarc_daily_stats_day_idx").on(t.day),
+	],
+);
+
+/**
+ * Daily TLS-RPT (RFC 8460) totals from verified reporters only. One row per (day, reporter, policy, result): the
+ * summary success count sits on the row with an empty `resultType`, each failure type on its own row, so an upsert
+ * only ever adds integers and needs no JSON merge on any dialect.
+ */
+export const tlsDailyStats = sqliteTable(
+	"tls_daily_stats",
+	{
+		id: autoId("id"),
+		domainId: text("domain_id").notNull().references(() => domains.id, { onDelete: "cascade" }),
+		day: text("day").notNull(),
+		rowKey: text("row_key").notNull(),
+		reporterOrg: text("reporter_org").notNull(),
+		policyType: text("policy_type").notNull(),
+		mxHost: text("mx_host"),
+		resultType: text("result_type").notNull(),
+		successCount: integer("success_count").notNull().default(0),
+		failureCount: integer("failure_count").notNull().default(0),
+	},
+	(t) => [
+		uniqueIndex("tls_daily_stats_domain_day_key_idx").on(t.domainId, t.day, t.rowKey),
+		index("tls_daily_stats_day_idx").on(t.day),
+	],
+);
+
+export const deliverabilityAlerts = sqliteTable(
+	"deliverability_alerts",
+	{
+		id: text("id").primaryKey(),
+		domainId: text("domain_id").notNull().references(() => domains.id, { onDelete: "cascade" }),
+		kind: text("kind", { enum: ["spoofing", "auth_regression", "no_reports"] }).notNull(),
+		day: text("day").notNull(),
+		detail: text("detail").notNull(),
+		createdAt: timestamp("created_at").notNull().$defaultFn(() => new Date()),
+		acknowledgedAt: timestamp("acknowledged_at"),
+		acknowledgedByUserId: text("acknowledged_by_user_id").references(() => users.id, { onDelete: "set null" }),
+	},
+	(t) => [
+		uniqueIndex("deliverability_alerts_domain_kind_day_idx").on(t.domainId, t.kind, t.day),
+		index("deliverability_alerts_ack_user_idx").on(t.acknowledgedByUserId),
+	],
+);
+
 export const messageOpens = sqliteTable(
 	"message_opens",
 	{
@@ -1111,6 +1266,13 @@ export const appSettings = sqliteTable("app_settings", {
 	/** "release": update on a new package.json version; "commit": update on any new upstream commit. */
 	autoUpdateChannel: text("auto_update_channel", { enum: ["release", "commit"] }).notNull().default("release"),
 	autoUpdateDispatchedVersion: text("auto_update_dispatched_version"),
+	/** "off" ignores bounce and complaint events, "record" stores them, "enforce" also refuses to send to those recipients. */
+	suppressionMode: text("suppression_mode", { enum: ["off", "record", "enforce"] }).notNull().default("off"),
+	/** Resend webhook for email.bounced and email.complained; separate from the receiving webhook above. */
+	resendEventsWebhookId: text("resend_events_webhook_id"),
+	resendEventsWebhookSecret: text("resend_events_webhook_secret"),
+	/** JSON: the SNS topic, URL token and SES identities that feed bounces and complaints (see src/lib/deliverability/ses-feed.ts). */
+	sesFeedback: text("ses_feedback"),
 	updatedAt: timestamp("updated_at")
 		.notNull()
 		.$defaultFn(() => new Date()),

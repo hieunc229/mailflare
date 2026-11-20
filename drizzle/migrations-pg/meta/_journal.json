@@ -99,6 +99,27 @@
       "when": 1794516479572,
       "tag": "0013_auto_update",
       "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1794516480572,
+      "tag": "0019_email_suppressions",
+      "breakpoints": true
+    },
+    {
+      "idx": 15,
+      "version": "7",
+      "when": 1794516490572,
+      "tag": "0022_dmarc_reports",
+      "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "7",
+      "when": 1794516500572,
+      "tag": "0024_mta_sts_tls_rpt",
+      "breakpoints": true
     }
   ]
 }

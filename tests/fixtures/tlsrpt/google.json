@@ -1,0 +1,52 @@
+{
+  "organization-name": "Google Inc.",
+  "date-range": {
+    "start-datetime": "2025-11-18T00:00:00Z",
+    "end-datetime": "2025-11-18T23:59:59Z"
+  },
+  "contact-info": "smtp-tls-reporting@google.com",
+  "report-id": "2025-11-18T00:00:00Z_example.com",
+  "policies": [
+    {
+      "policy": {
+        "policy-type": "sts",
+        "policy-string": [
+          "version: STSv1",
+          "mode: testing",
+          "mx: mail.example.com",
+          "max_age: 86400"
+        ],
+        "policy-domain": "example.com",
+        "mx-host": ["mail.example.com"]
+      },
+      "summary": {
+        "total-successful-session-count": 120,
+        "total-failure-session-count": 7
+      },
+      "failure-details": [
+        {
+          "result-type": "certificate-expired",
+          "sending-mta-ip": "203.0.113.5",
+          "receiving-mx-hostname": "mail.example.com",
+          "failed-session-count": 4
+        },
+        {
+          "result-type": "starttls-not-supported",
+          "sending-mta-ip": "203.0.113.6",
+          "receiving-mx-hostname": "mail.example.com",
+          "failed-session-count": 2
+        }
+      ]
+    },
+    {
+      "policy": {
+        "policy-type": "no-policy-found",
+        "policy-domain": "example.com"
+      },
+      "summary": {
+        "total-successful-session-count": 3,
+        "total-failure-session-count": 0
+      }
+    }
+  ]
+}

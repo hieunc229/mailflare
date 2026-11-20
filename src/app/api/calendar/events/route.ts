@@ -5,6 +5,8 @@ import { calendarEvents } from "@/db/schema";
 import { getEnv } from "@/lib/cloudflare";
 import { newId } from "@/lib/ids";
 import { sendEmail } from "@/lib/email/send";
+import { assertInviteesAllowed } from "@/lib/deliverability/suppression";
+import { SuppressedRecipientError, suppressedRecipientBody } from "@/lib/deliverability/suppression-utils";
 import { createCalendarInvitation } from "@/lib/calendar/utils";
 import { normalizeCalendarColor } from "@/lib/calendar/colors";
 import { normalizeReminderMinutes } from "@/lib/calendar/reminder-utils";
@@ -39,6 +41,15 @@ export async function POST(request: Request) {
 	if (repeat === "weekdays" && repeatDays.length === 0) return NextResponse.json({ error: "Choose at least one weekday" }, { status: 400 });
 	const attendees = (input.attendees ?? []).map((email) => email.trim()).filter((email) => /^\S+@\S+\.\S+$/.test(email));
 	if (attendees.length && input.mailboxId && !calendarKeyCanSendInvitations(key, input.mailboxId)) return NextResponse.json({ error: "Sending invitations requires mail send permission for this mailbox" }, { status: 403 });
+	if (attendees.length && input.mailboxId) {
+		// Before the event is stored: a refused invitation leaves nothing behind, so a retry cannot duplicate it.
+		try {
+			await assertInviteesAllowed(env, { userId: user.id, mailboxId: input.mailboxId, from: input.from ?? "", attendees });
+		} catch (error) {
+			if (error instanceof SuppressedRecipientError) return NextResponse.json(suppressedRecipientBody(error), { status: 422 });
+			throw error;
+		}
+	}
 	const event = { id: newId("evt"), userId: user.id, mailboxId: input.mailboxId ?? null, title: input.title.trim(), description: input.description?.trim() ?? "", location: input.location?.trim() ?? "", attendees: JSON.stringify(attendees), color: normalizeCalendarColor(input.color), repeat, repeatDays: JSON.stringify(repeatDays), repeatAnchorDay: repeat === "monthly" && Number.isInteger(input.repeatAnchorDay) && input.repeatAnchorDay! >= 1 && input.repeatAnchorDay! <= 31 ? input.repeatAnchorDay : null, reminderMinutes: normalizeReminderMinutes(input.reminderMinutes), startsAt, endsAt };
 	const savedEvent = { ...event, timeZone: input.timeZone ? normalizeTimeZone(input.timeZone) : getRequestTimeZone(request, user.timeZone) };
 	await getDb(env).insert(calendarEvents).values(savedEvent);

@@ -10,6 +10,7 @@ import { processAgentDraftJob } from "@/lib/agent/jobs/utils";
 import { processOutboundQueue, type OutboundQueueMessage } from "@/lib/email/send";
 import { processWebhookRetry, type WebhookRetryMessage } from "@/lib/email/webhooks";
 import { processImportJob } from "@/lib/import/jobs";
+import { guardMtaStsHost, hostnameOf, isMtaStsHost } from "@/lib/deliverability/mta-sts";
 import { applyPendingMigrations } from "@/lib/migrations/service";
 import { isImportJobMessage, isInboundQueueMessage, isWebhookRetryMessage } from "../worker-utils";
 import { createNodeRuntime } from "./runtime/env";
@@ -57,6 +58,15 @@ async function main() {
 	const trustProxy = ["1", "true", "yes"].includes((process.env.TRUST_PROXY ?? "").toLowerCase());
 
 	const server = createServer((request, response) => {
+		// An mta-sts.<domain> host serves the policy file and nothing else of the app.
+		const blocked = guardMtaStsHost({ hostname: hostnameOf(request.headers.host ?? ""), pathname: parse(request.url ?? "/").pathname ?? "/", method: request.method ?? "GET" });
+		if (blocked) {
+			void blocked.text().then((body) => {
+				response.writeHead(blocked.status, Object.fromEntries(blocked.headers));
+				response.end(request.method === "HEAD" ? undefined : body);
+			});
+			return;
+		}
 		// The only client IP that cannot be forged is the socket's. Next sees
 		// re-serialized headers, so stamp the resolved IP into a private header
 		// after removing every client-supplied forwarding header — otherwise a
@@ -76,6 +86,10 @@ async function main() {
 
 	const wss = new WebSocketServer({ noServer: true });
 	server.on("upgrade", (request, socket, head) => {
+		if (isMtaStsHost(hostnameOf(request.headers.host ?? ""))) {
+			socket.destroy();
+			return;
+		}
 		const { pathname } = parse(request.url ?? "/");
 		if (pathname !== "/api/realtime") {
 			// Next's own dev-mode HMR socket, or anything else, is not ours.

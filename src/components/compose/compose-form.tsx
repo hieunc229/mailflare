@@ -391,7 +391,7 @@ export function ComposeForm({
 			return;
 		}
 		let res: Response;
-		let data: SendResult & { error?: string };
+		let data: SendResult & { error?: string; code?: string; addresses?: string[] };
 		try {
 			res = await authFetch("/api/send", {
 				method: "POST",
@@ -413,7 +413,7 @@ export function ComposeForm({
 					followUpDays,
 				}),
 			});
-			data = (await res.json()) as SendResult & { error?: string };
+			data = (await res.json()) as SendResult & { error?: string; code?: string; addresses?: string[] };
 		} catch {
 			setLoading(false);
 			setToast({ type: "error", message: t("compose.error.sendFailed") });
@@ -422,7 +422,11 @@ export function ComposeForm({
 		setLoading(false);
 
 		if (!res.ok) {
-			setToast({ type: "error", message: data.error ?? t("compose.error.sendFailed") });
+			// A suppressed recipient is the one send error with its own translated sentence.
+			const message = data.code === "SUPPRESSED_RECIPIENT" && data.addresses?.length
+				? t("compose.error.suppressed", { addresses: data.addresses.join(", ") })
+				: data.error ?? t("compose.error.sendFailed");
+			setToast({ type: "error", message });
 			return;
 		}
 

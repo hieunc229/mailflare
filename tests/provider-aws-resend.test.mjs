@@ -183,6 +183,23 @@ test("SES calls are signed and shaped for the v1 receipt-rule API", async () => 
 	} finally { mock.restore(); }
 });
 
+test("bounce and complaint notifications are routed to a topic and detached with no topic", async () => {
+	const mock = mockAws(() => ({ body: "<R/>" }));
+	try {
+		await sesLib.setIdentityNotificationTopic(creds, "example.com", "Bounce", "arn:aws:sns:us-east-1:1:fb");
+		await sesLib.setIdentityNotificationTopic(creds, "example.com", "Complaint", null);
+		const [attach, detach] = mock.calls;
+		assert.equal(attach.action, "SetIdentityNotificationTopic");
+		assert.equal(attach.url.host, "email.us-east-1.amazonaws.com");
+		const attached = new URLSearchParams(attach.body);
+		assert.deepEqual([attached.get("Version"), attached.get("Identity"), attached.get("NotificationType"), attached.get("SnsTopic")], ["2010-12-01", "example.com", "Bounce", "arn:aws:sns:us-east-1:1:fb"]);
+		assert.match(attach.headers.Authorization, /Credential=AKIAEXAMPLE000000000\/\d{8}\/us-east-1\/ses\/aws4_request/);
+		const detached = new URLSearchParams(detach.body);
+		assert.equal(detached.get("NotificationType"), "Complaint");
+		assert.equal(detached.has("SnsTopic"), false);
+	} finally { mock.restore(); }
+});
+
 test("an existing receipt rule is updated, not duplicated", async () => {
 	const mock = mockAws(({ action }) => action === "CreateReceiptRule"
 		? { status: 400, body: "<ErrorResponse><Error><Code>AlreadyExists</Code><Message>exists</Message></Error></ErrorResponse>" }

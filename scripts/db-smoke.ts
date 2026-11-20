@@ -5,7 +5,7 @@
  */
 import { and, eq, sql } from "drizzle-orm";
 import { createDb } from "@/db";
-import { users, domains, mailboxes, messages, folders, jmapChanges, appSettings, webhooks, spamTokenStats, spamReputation } from "@/db/schema";
+import { users, domains, mailboxes, messages, folders, jmapChanges, appSettings, webhooks, spamTokenStats, spamReputation, emailSuppressions, domainDeliverability } from "@/db/schema";
 import { getDatabaseConfig } from "@/db/with-database";
 import { openExternalDatabase } from "@/db/external";
 import { applyPendingMigrations, getMigrationStatus } from "@/lib/migrations/service";
@@ -15,6 +15,15 @@ import { exportDatabaseRecords, restoreDatabaseRecords } from "@/lib/backups/exp
 import { getSearchIndexStatus } from "@/lib/search/index-admin";
 import { recordReputationObservation } from "@/lib/spam/repository";
 import { isUniqueConstraintError } from "@/lib/database-errors";
+import { recordSuppression } from "@/lib/deliverability/suppression";
+import { ingestReportMail } from "@/lib/deliverability/ingest";
+import { runDeliverabilityDaily } from "@/lib/deliverability/daily";
+import { getDmarcStats } from "@/lib/deliverability/dmarc-stats";
+import { getTlsStats } from "@/lib/deliverability/tls-stats";
+import { markMtaStsVerified, updateMtaSts, type MtaStsDeps } from "@/lib/deliverability/mta-sts-admin";
+import { assertDomainRemovable, assertMxChangeAllowed } from "@/lib/deliverability/mta-sts-guard";
+import { serveMtaStsPolicy } from "@/lib/deliverability/mta-sts-serve";
+import { gzipSync } from "node:zlib";
 
 const [url, driver] = process.argv.slice(2);
 if (!url) throw new Error("usage: db-smoke <DATABASE_URL> [driver]");
@@ -109,6 +118,86 @@ await recordReputationObservation(env, `mbx_${stamp}`, [{ type: "domain", key: "
 const reputation = await db.select().from(spamReputation).where(and(eq(spamReputation.mailboxId, `mbx_${stamp}`), eq(spamReputation.key, "example.com")));
 check("spam reputation upsert", reputation[0]?.messagesSeen === 2);
 
+const suppressed = { domainId: `dom_${stamp}`, email: "a@x.org" };
+await recordSuppression(env, { ...suppressed, reason: "manual", source: "admin", detail: "note" });
+await recordSuppression(env, { ...suppressed, reason: "hard_bounce", source: "ses", detail: "550" });
+await recordSuppression(env, { ...suppressed, reason: "complaint", source: "resend" });
+await recordSuppression(env, { ...suppressed, reason: "hard_bounce", source: "ses", detail: "again" });
+const [suppression] = await db.select().from(emailSuppressions).where(eq(emailSuppressions.domainId, suppressed.domainId));
+check("suppression upsert keeps the strongest reason and counts events", suppression?.reason === "complaint" && suppression.source === "resend" && suppression.eventCount === 4);
+
+const returned = { domainId: `dom_${stamp}`, email: "dsn@x.org", reason: "hard_bounce" as const, source: "dsn" as const, confirmed: false };
+const confirmedOf = async () => (await db.select().from(emailSuppressions).where(and(eq(emailSuppressions.domainId, returned.domainId), eq(emailSuppressions.email, returned.email))))[0]?.confirmed;
+await recordSuppression(env, { ...returned, evidenceRef: "m1" });
+await recordSuppression(env, { ...returned, evidenceRef: "m1" });
+const sameMessage = await confirmedOf();
+await recordSuppression(env, { ...returned, evidenceRef: "m2" });
+check("a DSN is confirmed only by a second, different original message", sameMessage === false && await confirmedOf() === true);
+
+// DMARC report ingest: report row, aggregate upserts in batches, and the stats queries, on this dialect.
+const reportDay = Math.floor(Date.now() / 1000) - 3600;
+const reportXml = (reportId: string) => `<feedback><report_metadata><org_name>google.com</org_name><email>r@google.com</email><report_id>${reportId}</report_id><date_range><begin>${reportDay}</begin><end>${reportDay + 3600}</end></date_range></report_metadata><policy_published><domain>smoke.test</domain><p>none</p><pct>100</pct></policy_published><record><row><source_ip>203.0.113.7</source_ip><count>40</count><policy_evaluated><disposition>none</disposition><dkim>pass</dkim><spf>pass</spf></policy_evaluated></row><identifiers><header_from>smoke.test</header_from></identifiers></record><record><row><source_ip>198.51.100.9</source_ip><count>2</count><policy_evaluated><disposition>reject</disposition><dkim>fail</dkim><spf>fail</spf></policy_evaluated></row><identifiers><header_from>smoke.test</header_from></identifiers></record></feedback>`;
+const reportMime = (reportId: string) => Buffer.from(`From: r@google.com\r\nTo: mailflare-reports@smoke.test\r\nMIME-Version: 1.0\r\nContent-Type: multipart/mixed; boundary=b\r\n\r\n--b\r\nContent-Type: application/gzip\r\nContent-Transfer-Encoding: base64\r\nContent-Disposition: attachment; filename="r.xml.gz"\r\n\r\n${Buffer.from(gzipSync(reportXml(reportId))).toString("base64")}\r\n--b--\r\n`);
+const reportObjects = new Map<string, Buffer>();
+const reportEnv = { DB: d1, BUCKET: { get: async (key: string) => { const bytes = reportObjects.get(key); return bytes ? { size: bytes.length, arrayBuffer: async () => new Uint8Array(bytes).buffer } : null; }, delete: async (key: string) => { reportObjects.delete(key); } } } as unknown as CloudflareEnv;
+const reportTarget = { domainId: `dom_${stamp}`, hostname: "smoke.test" };
+for (const [key, id] of [["raw1", `r1_${stamp}`], ["raw2", `r2_${stamp}`], ["raw1", `r1_${stamp}`]] as const) {
+	reportObjects.set(key, reportMime(id));
+	await ingestReportMail(reportEnv, reportTarget, { rawR2Key: key, authenticated: true, from: "r@google.com" }, { lookupPtr: async () => null });
+}
+const dmarc = await getDmarcStats(reportEnv, reportTarget.domainId, { days: 7 });
+const dmarcTotal = (key: "pass" | "rejected") => dmarc.series.reduce((sum, day) => sum + day[key], 0);
+check("dmarc ingest adds counts across reports and ignores a redelivery", dmarcTotal("pass") === 80 && dmarcTotal("rejected") === 4 && dmarc.sources.length === 2 && dmarc.reporters[0]?.reports === 2);
+
+// TLS-RPT ingest: same path, the upsert adds integer counts, a redelivery changes nothing.
+const tlsJson = (reportId: string) => JSON.stringify({ "organization-name": "Google Inc.", "date-range": { "start-datetime": new Date(reportDay * 1000).toISOString(), "end-datetime": new Date((reportDay + 3600) * 1000).toISOString() }, "contact-info": "smtp-tls-reporting@google.com", "report-id": reportId, policies: [{ policy: { "policy-type": "sts", "policy-domain": "smoke.test", "mx-host": ["mx.smoke.test"] }, summary: { "total-successful-session-count": 10, "total-failure-session-count": 2 }, "failure-details": [{ "result-type": "certificate-expired", "failed-session-count": 2 }] }] });
+const tlsMime = (reportId: string) => Buffer.from(`From: smtp-tls-reporting@google.com\r\nTo: mailflare-reports@smoke.test\r\nMIME-Version: 1.0\r\nContent-Type: multipart/mixed; boundary=b\r\n\r\n--b\r\nContent-Type: application/tlsrpt+gzip\r\nContent-Transfer-Encoding: base64\r\nContent-Disposition: attachment; filename="r.json.gz"\r\n\r\n${Buffer.from(gzipSync(tlsJson(reportId))).toString("base64")}\r\n--b--\r\n`);
+for (const [key, id] of [["tls1", `t1_${stamp}`], ["tls2", `t2_${stamp}`], ["tls1", `t1_${stamp}`]] as const) {
+	reportObjects.set(key, tlsMime(id));
+	await ingestReportMail(reportEnv, reportTarget, { rawR2Key: key, authenticated: true, from: "smtp-tls-reporting@google.com" }, { lookupPtr: async () => null });
+}
+const tls = await getTlsStats(reportEnv, reportTarget.domainId, { days: 7 });
+check("tls-rpt ingest adds counts across reports and ignores a redelivery", tls.series.reduce((sum, day) => sum + day.success, 0) === 20 && tls.series.reduce((sum, day) => sum + day.failure, 0) === 4 && tls.failureTypes[0]?.resultType === "certificate-expired" && tls.failureTypes[0].failure === 4 && tls.recentReports.length === 2);
+check("dmarc stats ignore tls-rpt reports", (await getDmarcStats(reportEnv, reportTarget.domainId, { days: 7 })).recentReports.every((report) => report.reporterOrg === "google.com") && dmarcTotal("pass") === 80);
+
+// MTA-STS: publish, serve through the host-keyed join, mark checked, then the removal period and the daily retirement.
+const stsDomain = { id: `dom_${stamp}`, hostname: `${stamp}.example.com`, zoneId: "z" };
+let stsRecord: string | null = null;
+const stsDeps: MtaStsDeps = {
+	listTxt: async () => (stsRecord ? [{ id: "r1", content: stsRecord }] : []),
+	queryTxt: async () => (stsRecord ? [stsRecord] : []),
+	createTxt: async (_env, _zone, _name, content) => { stsRecord = content; },
+	updateTxt: async (_env, _zone, _id, content) => { stsRecord = content; },
+	deleteTxt: async () => { stsRecord = null; },
+	ensureRoute: async () => undefined,
+	deleteRoute: async () => undefined,
+	queryMx: async () => ["10 route1.mx.cloudflare.net."],
+	zoneMx: async () => ["10 route1.mx.cloudflare.net."],
+};
+const published = await updateMtaSts(reportEnv, stsDomain, { mode: "testing" }, stsDeps);
+const policyRequest = () => new Request(`https://mta-sts.${stsDomain.hostname}/.well-known/mta-sts.txt`);
+const served = await serveMtaStsPolicy(reportEnv, policyRequest());
+check("mta-sts publishes and serves the stored policy", published.kind === "ok" && served.status === 200 && (await served.text()).includes("mx: route1.mx.cloudflare.net") && String(stsRecord).startsWith("v=STSv1; id="));
+const checked = await markMtaStsVerified(reportEnv, stsDomain);
+check("mta-sts records the browser check", checked.kind === "ok" && checked.state.verifiedAt !== null);
+const enforced = await updateMtaSts(reportEnv, stsDomain, { mode: "enforce", acknowledgeRisk: true }, stsDeps, new Date(Date.now() + 2000));
+check("mta-sts switches to enforce with a new id", enforced.kind === "ok" && published.kind === "ok" && enforced.state.mode === "enforce" && enforced.state.policyId !== published.state.policyId);
+const changedMx = await updateMtaSts(reportEnv, stsDomain, { mode: "enforce", acknowledgeRisk: true }, { ...stsDeps, queryMx: async () => ["10 other.smoke.test."] }, new Date(Date.now() + 3000));
+check("mta-sts refuses a changed MX list while enforce", changedMx.kind === "error" && changedMx.code === "MX_CHANGED_IN_ENFORCE");
+const blockedMx = await assertMxChangeAllowed(reportEnv, stsDomain).then(() => null, (error: unknown) => (error as { code?: string }).code);
+const blockedDelete = await assertDomainRemovable(reportEnv, stsDomain, stsDeps).then(() => null, (error: unknown) => (error as { code?: string }).code);
+check("mta-sts blocks MX changes in enforce and domain deletion while published", blockedMx === "MTA_STS_ENFORCED" && blockedDelete === "MTA_STS_PUBLISHED");
+const retiring = await updateMtaSts(reportEnv, stsDomain, { mode: "none" }, stsDeps, new Date(Date.now() + 4000));
+check("mta-sts removal serves mode none", retiring.kind === "ok" && retiring.state.status === "retiring" && (await (await serveMtaStsPolicy(reportEnv, policyRequest())).text()).includes("mode: none"));
+
+await db.insert(domainDeliverability).values({ domainId: reportTarget.domainId, reportsEnabled: true, reportsEnabledAt: new Date(), updatedAt: new Date() }).onConflictDoNothing();
+await runDeliverabilityDaily(reportEnv, new Date(), { sendMail: async () => true, mtaStsDeps: stsDeps });
+check("mta-sts is still served before the removal period ends", (await serveMtaStsPolicy(reportEnv, policyRequest())).status === 200);
+await runDeliverabilityDaily(reportEnv, new Date(Date.now() + 200 * 86_400_000), { sendMail: async () => true, mtaStsDeps: stsDeps });
+check("mta-sts retires after the removal period: record deleted, host answers 404", (stsRecord as string | null) === null && (await serveMtaStsPolicy(reportEnv, policyRequest())).status === 404);
+const leftover = await db.all<{ n: number }>(sql`SELECT (SELECT count(*) FROM dmarc_daily_stats WHERE domain_id = ${reportTarget.domainId}) + (SELECT count(*) FROM tls_daily_stats WHERE domain_id = ${reportTarget.domainId}) + (SELECT count(*) FROM deliverability_reports WHERE domain_id = ${reportTarget.domainId}) AS n`);
+check("deliverability daily job purges data past retention", Number(leftover[0].n) === 0);
+
 try {
 	await db.insert(users).values({ id: `usr2_${stamp}`, email: `a${stamp}@example.com`, passwordHash: "x", name: "B" });
 	check("unique violation throws", false);
@@ -119,12 +208,21 @@ try {
 const searchStatus = await getSearchIndexStatus(env);
 check("search index status", searchStatus.messages === searchStatus.indexed && searchStatus.messages >= 1);
 
+// An aggregate row that exists when the backup is taken: dmarc_daily_stats has a serial id that must not be backed up.
+reportObjects.set("raw4", reportMime(`r4_${stamp}`));
+await ingestReportMail(reportEnv, reportTarget, { rawR2Key: "raw4", authenticated: true, from: "r@google.com" }, { lookupPtr: async () => null });
 const backup = await exportDatabaseRecords(d1);
 const exported = JSON.parse(new TextDecoder().decode(backup)) as { tables: Record<string, Array<Record<string, unknown>>> };
+check("backup leaves out the serial id of dmarc_daily_stats", exported.tables.dmarc_daily_stats.length >= 2 && exported.tables.dmarc_daily_stats.every((row) => !("id" in row)));
 check("backup exports portable values", exported.tables.users.every((row) => typeof row.disabled === "number") && exported.tables.messages.length >= 1);
 await restoreDatabaseRecords(d1, backup.buffer.slice(backup.byteOffset, backup.byteOffset + backup.byteLength) as ArrayBuffer);
 const [afterRestore] = await db.select({ subject: messages.subject, starred: messages.starred, createdAt: messages.createdAt }).from(messages).where(eq(messages.id, `msg_${stamp}`));
 check("backup restores", afterRestore?.subject === "Quarterly Report" && afterRestore.starred === false && afterRestore.createdAt instanceof Date);
+
+reportObjects.set("raw5", reportMime(`r5_${stamp}`));
+await ingestReportMail(reportEnv, reportTarget, { rawR2Key: "raw5", authenticated: true, from: "r@google.com" }, { lookupPtr: async () => null });
+const afterRestoreStats = await getDmarcStats(reportEnv, reportTarget.domainId, { days: 7 });
+check("dmarc ingest keeps working after a restore (sequence not behind the rows)", afterRestoreStats.series.reduce((sum, day) => sum + day.pass, 0) === 80);
 
 const [settings] = await db.select().from(appSettings).where(eq(appSettings.id, "default"));
 check("seed rows present", settings?.appName === "Mailflare");

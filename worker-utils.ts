@@ -91,7 +91,7 @@ function isReadRequest(request: Request): boolean {
 }
 
 /** Paths whose reads must be current: sign-in, single-use tokens, setup and public write endpoints. */
-const PRIMARY_ONLY_PREFIXES = ["/api/auth/", "/api/setup", "/api/seed", "/api/inbound", "/api/i/"];
+const PRIMARY_ONLY_PREFIXES = ["/api/auth/", "/api/setup", "/api/seed", "/api/inbound", "/api/provider-events", "/api/i/"];
 
 /**
  * Replica reads can lag writes the client's bookmark does not cover (other devices, inbound

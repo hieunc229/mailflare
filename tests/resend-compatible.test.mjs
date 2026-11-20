@@ -119,3 +119,15 @@ test("RESEND_OMIT_HEADERS leaves the listed headers out, matching names case-ins
 	assert.equal(calls[0].body.headers["X-Auto-Response-Suppress"], "All");
 	assert.equal(calls[0].body.headers["In-Reply-To"], "<x@example.net>");
 });
+
+test("createResendWebhook keeps email.received as the default and takes other events", async () => {
+	const calls = [];
+	globalThis.fetch = async (input, init = {}) => {
+		calls.push(JSON.parse(init.body));
+		return Response.json({ id: "wh_1", signing_secret: "whsec_x" });
+	};
+	const client = resendApi.resendClient({}, "re_test");
+	await resendApi.createResendWebhook(client, "https://app.example/api/inbound/resend");
+	await resendApi.createResendWebhook(client, "https://app.example/api/provider-events/resend", ["email.bounced", "email.complained"]);
+	assert.deepEqual(calls.map((call) => call.events), [["email.received"], ["email.bounced", "email.complained"]]);
+});
