@@ -10,6 +10,7 @@ import { loadCardBodies, loadCardMetaByNames } from "./card-store";
 import { calendarMember, cardMember, collectionIdFor, collectionProperties, collectionPath, memberResponse, propfindCollection, type Area, type DavContext } from "./collections";
 import { BASE_HEADERS, collection, el, etagListed, etagMatches, href, NS, precondition, readXmlBody, selectProps, text, wantedProps, XML_HEADERS, type Property } from "./common";
 import { etagSeqs } from "./changes";
+import { ensureSeeded } from "./contact-seed";
 import { handleReport } from "./reports";
 import { isDavEnabled } from "./settings";
 import type { DavElement } from "./xml";
@@ -198,6 +199,9 @@ async function route(request: Request, env: CloudflareEnv): Promise<Response | n
 
 	const user: DavUser = { id: auth.userId, email: auth.user.email, name: auth.user.name };
 	const ctx: DavContext = { env, userId: auth.userId, email: auth.user.email, name: auth.user.name, timeZone: auth.user.timeZone ?? null, origin: url.origin };
+
+	// A read of the address book brings the user's manual contacts along as cards (spec 8.4): one bounded step, the cron continues. A PUT or DELETE seeds nothing.
+	if ("area" in target && target.area === "addressbooks" && ["PROPFIND", "REPORT", "GET"].includes(request.method)) await ensureSeeded(env, auth.userId);
 
 	if ((request.method === "GET" || request.method === "HEAD") && target.kind === "resource") return getResource(target.area, ctx, target.name, request);
 

@@ -6,6 +6,7 @@ import { runAccountRetention } from "@/lib/accounts/deletion";
 import { purgeExpiredAuthRows } from "@/lib/auth/purge";
 import { runJmapChangeRetention } from "@/lib/jmap/changes";
 import { runDavChangeRetention } from "@/lib/dav/changes";
+import { runContactSeeding } from "@/lib/dav/contact-seed";
 import { runFollowUpReminders } from "@/lib/follow-ups/service";
 import { runCalendarReminders } from "@/lib/calendar/reminders";
 import { sweepImportJobs } from "@/lib/import/jobs";
@@ -24,6 +25,7 @@ export function startScheduler(env: CloudflareEnv) {
 		runFollowUpReminders(env, now).catch((error) => console.error("Follow-up reminders failed", error));
 		runCalendarReminders(env, now).catch((error) => console.error("Calendar reminders failed", error));
 		runDavChangeRetention(env, now).catch((error) => console.error("DAV change retention failed", error));
+		runContactSeeding(env).catch((error) => console.error("DAV contact seeding failed", error));
 		const day = now.toISOString().slice(0, 10);
 		if (now.getUTCHours() !== 2 || lastRunDay === day) return;
 		lastRunDay = day;

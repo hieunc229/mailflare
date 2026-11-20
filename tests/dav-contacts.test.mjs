@@ -19,6 +19,7 @@ await build({
 			export { SqliteDatabase } from "./server/runtime/sqlite-database.ts";
 			export { applyMigrations } from "./server/runtime/migrate.ts";
 			export { mirrorContactSaved, mirrorContactDeleted } from "./src/lib/dav/contact-hooks.ts";
+			export { seedStep, runContactSeeding, SEED_CHUNK, clearSeedingCache } from "./src/lib/dav/contact-seed.ts";
 		`,
 		resolveDir: root,
 		sourcefile: "dav-contacts-entry.ts",
@@ -34,7 +35,7 @@ await build({
 	logLevel: "silent",
 });
 
-const { handleDavRequest, clearDavEnabledCache, generateAppPassword, clearApiKeyVerificationCache, SqliteDatabase, applyMigrations, mirrorContactSaved, mirrorContactDeleted } = await import(pathToFileURL(join(outDir, "entry.mjs")).href);
+const { handleDavRequest, clearDavEnabledCache, generateAppPassword, clearApiKeyVerificationCache, SqliteDatabase, applyMigrations, mirrorContactSaved, mirrorContactDeleted, seedStep, runContactSeeding, SEED_CHUNK, clearSeedingCache } = await import(pathToFileURL(join(outDir, "entry.mjs")).href);
 
 const ORIGIN = "https://mail.example.test";
 const BOOK = "/dav/addressbooks/u1/default/";
@@ -60,6 +61,7 @@ function counting(database) {
 async function fixture(t, { calendarEnabled = true, enabled = true, limiter, writeLimiter, scopes = '["dav"]' } = {}) {
 	clearApiKeyVerificationCache();
 	clearDavEnabledCache();
+	clearSeedingCache();
 	const database = new SqliteDatabase(":memory:");
 	t.after(() => {
 		database.db.close();
@@ -420,6 +422,14 @@ test("the sides stay in step while the switch is off: a rename and a new contact
 	assert.ok(cardRows(sql).some((row) => row.body.includes("FN:New Person")), "and the new contact has its card");
 });
 
+test("a contact for one of the owner's own addresses gets no card, however often it is saved", async (t) => {
+	const { env, sql } = await bookFixture(t);
+	sql.prepare("INSERT INTO domains (id, user_id, hostname, zone_id, status, created_at) VALUES ('d1', 'u1', 'one.test', 'manual', 'active', 1)").run();
+	sql.prepare("INSERT INTO mailboxes (id, user_id, domain_id, local_part, type, use_all_domains, created_at) VALUES ('m1', 'u1', 'd1', 'u1', 'personal', 0, 1)").run();
+	for (const name of ["Me", "Me Again", "Me Third"]) await mirrorContactSaved(env, "u1", saved(sql, "u1@one.test", name));
+	assert.equal(cardRows(sql).length, 0);
+});
+
 test("a link to a card that no longer exists is replaced by a new card", async (t) => {
 	const { env, sql } = await bookFixture(t);
 	const row = saved(sql, "ann@example.test", "Ann");
@@ -462,4 +472,319 @@ test("a Mailflare edit stays under 40 statements and 100 parameters", async (t) 
 		assert.ok(stats.queries <= 40, `${stats.queries} statements`);
 		assert.ok(stats.maxParams < 100, `${stats.maxParams} parameters`);
 	}
+});
+
+// ---- seeding the address book from existing manual contacts ----
+
+const propfind = (env, key) => call(env, "PROPFIND", BOOK, { key, headers: { Depth: "1" } });
+const seededAt = (sql) => sql.prepare("SELECT seeded_at AS at FROM dav_collections WHERE id = 'card:u1'").get()?.at ?? null;
+const manual = (sql, count, prefix = "p") => Array.from({ length: count }, (_, i) => addContact(sql, `${prefix}${String(i).padStart(3, "0")}@example.test`, { source: "manual", name: `Person ${i}` }));
+/** One cron run is one step: the switch, the book to take, the step (contacts, own addresses, cards already there, quota, the batch). */
+const CRON_STATEMENTS = 11;
+const linked = (sql) => sql.prepare("SELECT count(*) AS n FROM contacts WHERE dav_card_id IS NOT NULL").get().n;
+
+test("the first CardDAV request copies manual contacts into cards; collected addresses stay out", async (t) => {
+	const { env, key, sql } = await fixture(t);
+	manual(sql, 3);
+	addContact(sql, "heard@example.test", { source: "inbound", name: "Heard" });
+	addContact(sql, "sent@example.test", { source: "outbound" });
+	addContact(sql, "u2only@example.test", { source: "manual", userId: "u2" });
+	const response = await propfind(env, key);
+	assert.equal(response.status, 207);
+	const listed = hrefs(await response.text()).filter((href) => href.endsWith(".vcf"));
+	assert.equal(listed.length, 3);
+	assert.equal(cardRows(sql).length, 3);
+	assert.equal(linked(sql), 3);
+	assert.equal(contact(sql, "heard@example.test").dav_card_id, null);
+	assert.equal(contact(sql, "u2only@example.test", "u2").dav_card_id, null);
+	assert.ok(seededAt(sql));
+	assert.ok(cardRows(sql).every((row) => row.version === "3.0" && row.body.includes("PRODID:-//Mailflare//Contacts//EN")));
+	assert.equal(logOf(sql).filter((row) => row.type === "created").length, 3, "every seeded card is in the change log");
+});
+
+test("seeding runs once: later requests and the cron find nothing to do and write nothing", async (t) => {
+	const { env, key, sql, stats } = await fixture(t);
+	manual(sql, 2);
+	await propfind(env, key);
+	const log = logOf(sql).length;
+	reset(stats);
+	await propfind(env, key);
+	assert.equal(logOf(sql).length, log);
+	assert.equal(cardRows(sql).length, 2);
+	assert.ok(!stats.sqls.some((statement) => /(insert into|update) ["`]?(dav_cards|contacts|dav_collections)/i.test(statement)), "the second request writes no card, contact or collection");
+	assert.equal(await runContactSeeding(env), 0);
+	manual(sql, 1, "late");
+	await propfind(env, key);
+	assert.equal(cardRows(sql).length, 2, "a contact added after seeding is the Contacts API hook's job, not seeding's");
+});
+
+test("a large address book is seeded in bounded steps: the request does one, the cron the rest, one card per contact", async (t) => {
+	const { env, key, sql, stats } = await fixture(t);
+	const total = SEED_CHUNK * 3 + 5;
+	manual(sql, total);
+	reset(stats);
+	await propfind(env, key);
+	assert.ok(stats.queries <= 40, `request: ${stats.queries} statements`);
+	assert.equal(cardRows(sql).length, SEED_CHUNK, "a request does one step");
+	assert.equal(seededAt(sql), null, "not finished yet");
+	for (let run = 0; run < 10 && seededAt(sql) === null; run++) {
+		reset(stats);
+		clearDavEnabledCache();
+		await runContactSeeding(env);
+		assert.ok(stats.queries <= CRON_STATEMENTS, `cron: ${stats.queries} statements`);
+		assert.ok(stats.maxParams < 100, `${stats.maxParams} parameters`);
+	}
+	assert.equal(cardRows(sql).length, total);
+	assert.equal(linked(sql), total);
+	assert.equal(new Set(cardRows(sql).map((row) => row.uid)).size, total);
+	assert.ok(seededAt(sql));
+});
+
+test("seeding stopped halfway resumes without a second card for any contact", async (t) => {
+	const { env, key, sql, stats } = await fixture(t);
+	manual(sql, SEED_CHUNK + 6);
+	await propfind(env, key);
+	assert.equal(cardRows(sql).length, SEED_CHUNK);
+	stats.beforeBatch = () => {
+		stats.beforeBatch = null;
+		throw new Error("connection lost");
+	};
+	await assert.rejects(() => seedStep(env, "u1"), /connection lost/);
+	assert.equal(cardRows(sql).length, SEED_CHUNK, "the failed batch wrote nothing");
+	await runContactSeeding(env);
+	assert.equal(cardRows(sql).length, SEED_CHUNK + 6);
+	assert.equal(new Set(sql.prepare("SELECT dav_card_id AS id FROM contacts").all().map((row) => row.id)).size, SEED_CHUNK + 6);
+});
+
+test("two seeders at once make one card per contact", async (t) => {
+	const { env, sql } = await fixture(t);
+	manual(sql, 10);
+	sql.prepare("INSERT INTO dav_collections (id, user_id, kind, dead_props, created_at, updated_at) VALUES ('card:u1', 'u1', 'addressbook', '{}', 1, 1)").run();
+	await Promise.all([seedStep(env, "u1"), seedStep(env, "u1")]);
+	assert.equal(cardRows(sql).length, 10);
+	assert.equal(linked(sql), 10);
+});
+
+test("contacts that already have a card are skipped; blocked manual contacts are seeded; an address that cannot be on a card is left alone", async (t) => {
+	const { env, key, sql } = await fixture(t);
+	addContact(sql, "ann@example.test", { source: "manual", name: "Ann" });
+	addContact(sql, "blocked@example.test", { source: "manual", blocked: 1, name: "Blocked" });
+	addContact(sql, "odd,addr@example.test", { source: "manual" });
+	addContact(sql, "fine@example.test", { source: "manual" });
+	// Ann is on a card already (made by another request before this user's first CardDAV request would have seeded her).
+	sql.prepare("INSERT INTO dav_cards (id, user_id, collection_id, name, uid, body, version, size, created_at, updated_at) VALUES ('card_ann', 'u1', 'card:u1', 'ann.vcf', 'ann', 'b', '3.0', 1, 1, 1)").run();
+	sql.prepare("UPDATE contacts SET dav_card_id = 'card_ann' WHERE email = 'ann@example.test'").run();
+	await propfind(env, key);
+	assert.equal(cardRows(sql).length, 3);
+	assert.ok(contact(sql, "blocked@example.test").dav_card_id);
+	assert.ok(contact(sql, "fine@example.test").dav_card_id);
+	assert.equal(contact(sql, "odd,addr@example.test").dav_card_id, null);
+	assert.equal(contact(sql, "blocked@example.test").blocked, 1);
+	assert.ok(seededAt(sql), "finished, though one contact cannot be seeded");
+});
+
+test("seeding respects the card quota: it fills what is left, pauses, and resumes when there is room", async (t) => {
+	const { env, key, sql } = await fixture(t);
+	const insert = sql.prepare("INSERT INTO dav_cards (id, user_id, collection_id, name, uid, body, version, size, created_at, updated_at) VALUES (?, 'u1', 'card:u1', ?, ?, 'b', '3.0', 1, 1, 1)");
+	sql.exec("BEGIN");
+	for (let i = 0; i < 4999; i++) insert.run(`c${i}`, `c${i}.vcf`, `uid${i}`);
+	sql.exec("COMMIT");
+	manual(sql, 3);
+	await propfind(env, key).then((response) => response.text());
+	assert.equal(sql.prepare("SELECT count(*) AS n FROM dav_cards").get().n, 5000);
+	assert.equal(linked(sql), 1);
+	assert.equal(seededAt(sql), null, "paused, not finished");
+	clearDavEnabledCache();
+	await runContactSeeding(env);
+	assert.equal(linked(sql), 1, "still full: nothing more, nothing lost");
+	sql.prepare("DELETE FROM dav_cards WHERE id IN ('c1', 'c2', 'c3')").run();
+	await runContactSeeding(env);
+	assert.equal(linked(sql), 3, "room again: the rest is seeded");
+	await runContactSeeding(env);
+	assert.ok(seededAt(sql));
+});
+
+test("a paused address book does not keep the others waiting", async (t) => {
+	const { env, sql } = await fixture(t);
+	const insert = sql.prepare("INSERT INTO dav_cards (id, user_id, collection_id, name, uid, body, version, size, created_at, updated_at) VALUES (?, 'u1', 'card:u1', ?, ?, 'b', '3.0', 1, 1, 1)");
+	sql.exec("BEGIN");
+	for (let i = 0; i < 5000; i++) insert.run(`c${i}`, `c${i}.vcf`, `uid${i}`);
+	sql.exec("COMMIT");
+	manual(sql, 2);
+	manual(sql, 2, "q");
+	sql.prepare("UPDATE contacts SET user_id = 'u2', id = 'u2:' || email WHERE email LIKE 'q%'").run();
+	sql.prepare("INSERT INTO dav_collections (id, user_id, kind, dead_props, created_at, updated_at) VALUES ('card:u1', 'u1', 'addressbook', '{}', 1, 1)").run();
+	sql.prepare("INSERT INTO dav_collections (id, user_id, kind, dead_props, created_at, updated_at) VALUES ('card:u2', 'u2', 'addressbook', '{}', 2, 2)").run();
+	clearDavEnabledCache();
+	await runContactSeeding(env);
+	await runContactSeeding(env);
+	assert.equal(sql.prepare("SELECT count(*) AS n FROM contacts WHERE user_id = 'u2' AND dav_card_id IS NOT NULL").get().n, 2, "the second user's contacts were seeded on the second run");
+});
+
+test("seeding does not stop at addresses a card cannot hold: they are skipped and the rest is seeded", async (t) => {
+	const { env, key, sql } = await fixture(t);
+	for (let i = 0; i < SEED_CHUNK + 3; i++) addContact(sql, `a,${String(i).padStart(3, "0")}@example.test`, { source: "manual" });
+	for (const name of ["x1", "x2", "x3"]) addContact(sql, `${name}@example.test`, { source: "manual", name });
+	await propfind(env, key);
+	for (let run = 0; run < 5 && seededAt(sql) === null; run++) await runContactSeeding(env);
+	assert.equal(cardRows(sql).length, 3);
+	assert.equal(linked(sql), 3);
+	assert.ok(seededAt(sql));
+});
+
+test("a card deleted on the phone while seeding is still going is not made again", async (t) => {
+	const { env, key, sql } = await fixture(t);
+	const total = SEED_CHUNK * 2 + 6;
+	manual(sql, total);
+	await propfind(env, key);
+	const gone = cardRows(sql).find((row) => row.body.includes("FN:Person 0\r\n"));
+	assert.ok(gone, "the first contact was carded");
+	assert.equal((await del(env, key, gone.name)).status, 204);
+	assert.equal(contact(sql, "p000@example.test").dav_card_id, null);
+	for (let run = 0; run < 8 && seededAt(sql) === null; run++) await runContactSeeding(env);
+	assert.ok(seededAt(sql));
+	assert.equal(cardRows(sql).length, total - 1, "the others are seeded, that one is not");
+	assert.equal(contact(sql, "p000@example.test").dav_card_id, null);
+	assert.ok(!cardRows(sql).some((row) => row.emails.includes("p000@example.test")));
+});
+
+test("an address that is already on some card gets no second card", async (t) => {
+	const { env, key, sql } = await fixture(t);
+	sql.prepare("INSERT INTO dav_cards (id, user_id, collection_id, name, uid, body, version, fn, emails, size, created_at, updated_at) VALUES ('card_other', 'u1', 'card:u1', 'other.vcf', 'other', 'b', '3.0', 'Other', ?, 1, 1, 1)").run(JSON.stringify(["listed@example.test", "also@example.test"]));
+	addContact(sql, "listed@example.test", { source: "manual", name: "Listed" });
+	addContact(sql, "fresh@example.test", { source: "manual", name: "Fresh" });
+	await propfind(env, key);
+	assert.equal(cardRows(sql).length, 2, "the other card and one for the new address");
+	assert.equal(contact(sql, "listed@example.test").dav_card_id, null);
+	assert.ok(contact(sql, "fresh@example.test").dav_card_id);
+	assert.ok(seededAt(sql));
+});
+
+test("only contacts from before seeding began are seeded; later ones are the hooks' job", async (t) => {
+	const { env, key, sql } = await fixture(t);
+	sql.prepare("INSERT INTO dav_collections (id, user_id, kind, dead_props, seed_started_at, created_at, updated_at) VALUES ('card:u1', 'u1', 'addressbook', '{}', 100, 1, 1)").run();
+	addContact(sql, "before@example.test", { source: "manual" });
+	addContact(sql, "after@example.test", { source: "manual" });
+	sql.prepare("UPDATE contacts SET created_at = 50 WHERE email = 'before@example.test'").run();
+	sql.prepare("UPDATE contacts SET created_at = 200 WHERE email = 'after@example.test'").run();
+	await propfind(env, key);
+	assert.ok(contact(sql, "before@example.test").dav_card_id);
+	assert.equal(contact(sql, "after@example.test").dav_card_id, null);
+	assert.ok(seededAt(sql));
+});
+
+test("seeding starts when the address book is first read and never moves back", async (t) => {
+	const { env, key, sql } = await fixture(t);
+	manual(sql, 2);
+	const before = Math.floor(Date.now() / 1000);
+	await propfind(env, key);
+	const row = sql.prepare("SELECT seed_started_at AS at, seed_cursor AS cursor FROM dav_collections WHERE id = 'card:u1'").get();
+	assert.ok(row.at >= before && row.at <= before + 5, `seed_started_at ${row.at}`);
+	assert.equal(row.cursor, "u1:p001@example.test", "the cursor is the last contact dealt with");
+});
+
+test("the owner's own addresses are not seeded: the mailbox, its aliases and its address on every domain", async (t) => {
+	const { env, key, sql } = await fixture(t);
+	for (const [id, host] of [["d1", "one.test"], ["d2", "two.test"]]) sql.prepare("INSERT INTO domains (id, user_id, hostname, zone_id, status, created_at) VALUES (?, 'u1', ?, 'manual', 'active', 1)").run(id, host);
+	sql.prepare("INSERT INTO mailboxes (id, user_id, domain_id, local_part, type, use_all_domains, created_at) VALUES ('m1', 'u1', 'd1', 'u1', 'personal', 1, 1)").run();
+	sql.prepare("INSERT INTO mailbox_aliases (id, mailbox_id, domain_id, local_part, created_at) VALUES ('a1', 'm1', 'd1', 'sales', 1)").run();
+	for (const email of ["u1@one.test", "sales@one.test", "u1@two.test"]) addContact(sql, email, { source: "manual", name: "User One" });
+	addContact(sql, "friend@example.test", { source: "manual", name: "Friend" });
+	addContact(sql, "u1@elsewhere.test", { source: "manual", name: "Namesake" });
+	await propfind(env, key);
+	assert.deepEqual(cardRows(sql).map((row) => JSON.parse(row.emails)).sort(), [["friend@example.test"], ["u1@elsewhere.test"]]);
+	assert.equal(sql.prepare("SELECT name FROM users WHERE id = 'u1'").get().name, "User One");
+	assert.ok(seededAt(sql));
+});
+
+test("only reads seed: a PUT or a DELETE writes nothing but its own card", async (t) => {
+	const { env, key, sql } = await fixture(t);
+	manual(sql, 3);
+	assert.equal((await putCard(env, key, "ann.vcf", vcard(["FN:Ann", "EMAIL:ann@example.test"]))).status, 201);
+	assert.equal(cardRows(sql).length, 1, "no seeding on a PUT");
+	assert.equal(sql.prepare("SELECT count(*) AS n FROM dav_collections").get().n, 0);
+	assert.equal((await del(env, key, "ann.vcf")).status, 204);
+	assert.equal(cardRows(sql).length, 0, "no seeding on a DELETE");
+	assert.equal((await get(env, key, "nothing.vcf")).status, 404);
+	assert.equal(cardRows(sql).length, 4, "a GET does: the three contacts and the one the PUT made");
+});
+
+test("a REPORT seeds too", async (t) => {
+	const { env, key, sql } = await fixture(t);
+	manual(sql, 2);
+	assert.equal((await report(env, BOOK, key, `<R:addressbook-query ${NS}><A:prop><A:getetag/></A:prop></R:addressbook-query>`)).status, 207);
+	assert.equal(cardRows(sql).length, 2);
+});
+
+test("a seeder that loses a race skips its step without retrying; the next run finishes", async (t) => {
+	const { env, sql, stats } = await fixture(t);
+	manual(sql, 5);
+	const { createHash } = await import("node:crypto");
+	const key = createHash("sha256").update("u1:p002@example.test").digest("hex").slice(0, 32);
+	// Another writer takes one contact's card name just before the batch.
+	stats.beforeBatch = () => sql.prepare("INSERT INTO dav_cards (id, user_id, collection_id, name, uid, body, version, size, created_at, updated_at) VALUES ('card_x', 'u1', 'card:u1', ?, ?, 'b', '3.0', 1, 1, 1)").run(`mf-${key}.vcf`, `mf-${key}`);
+	reset(stats);
+	assert.equal(await seedStep(env, "u1"), "more", "a conflict is not an error");
+	assert.equal(stats.sqls.filter((statement) => /from "?`?contacts"?`?/i.test(statement) && /^select/i.test(statement)).length, 1, "one attempt");
+	assert.equal(linked(sql), 0, "the failed batch wrote nothing");
+	await runContactSeeding(env);
+	assert.equal(linked(sql), 4, "the contact whose card is taken is left, the others are seeded");
+	assert.ok(seededAt(sql));
+});
+
+test("a book whose step keeps failing does not keep the others waiting", async (t) => {
+	const { env, sql, stats } = await fixture(t);
+	manual(sql, 2);
+	manual(sql, 2, "q");
+	sql.prepare("UPDATE contacts SET user_id = 'u2', id = 'u2:' || email WHERE email LIKE 'q%'").run();
+	sql.prepare("INSERT INTO dav_collections (id, user_id, kind, dead_props, seed_started_at, created_at, updated_at) VALUES ('card:u1', 'u1', 'addressbook', '{}', 100, 1, 1)").run();
+	sql.prepare("INSERT INTO dav_collections (id, user_id, kind, dead_props, seed_started_at, created_at, updated_at) VALUES ('card:u2', 'u2', 'addressbook', '{}', 100, 2, 2)").run();
+	clearDavEnabledCache();
+	stats.beforeBatch = () => {
+		throw new Error("connection lost");
+	};
+	await assert.rejects(() => runContactSeeding(env), /connection lost/);
+	await runContactSeeding(env);
+	assert.equal(sql.prepare("SELECT count(*) AS n FROM contacts WHERE user_id = 'u2' AND dav_card_id IS NOT NULL").get().n, 2, "the next run took the other book");
+});
+
+test("one cron run for a book still to seed is one step and a few statements", async (t) => {
+	const { env, sql, stats } = await fixture(t);
+	manual(sql, SEED_CHUNK * 2);
+	sql.prepare("INSERT INTO domains (id, user_id, hostname, zone_id, status, created_at) VALUES ('d1', 'u1', 'one.test', 'manual', 'active', 1)").run();
+	sql.prepare("INSERT INTO mailboxes (id, user_id, domain_id, local_part, type, created_at) VALUES ('m1', 'u1', 'd1', 'u1', 'personal', 1)").run();
+	sql.prepare("INSERT INTO dav_collections (id, user_id, kind, dead_props, seed_started_at, created_at, updated_at) VALUES ('card:u1', 'u1', 'addressbook', '{}', 100, 1, 1)").run();
+	clearDavEnabledCache();
+	reset(stats);
+	assert.equal(await runContactSeeding(env), 1);
+	assert.equal(linked(sql), SEED_CHUNK, "one step");
+	assert.ok(stats.queries <= CRON_STATEMENTS, `${stats.queries} statements`);
+	clearDavEnabledCache();
+	reset(stats);
+	await runContactSeeding(env);
+	assert.equal(linked(sql), SEED_CHUNK * 2);
+	clearDavEnabledCache();
+	reset(stats);
+	assert.equal(await runContactSeeding(env), 1, "the last step finds nothing and finishes");
+	assert.ok(seededAt(sql));
+	clearDavEnabledCache();
+	reset(stats);
+	assert.equal(await runContactSeeding(env), 0);
+	assert.ok(stats.queries <= 2, `a seeded user costs ${stats.queries} statements`);
+});
+
+test("with the switch off the cron seeds nothing", async (t) => {
+	const { env, sql } = await fixture(t, { enabled: false });
+	manual(sql, 2);
+	sql.prepare("INSERT INTO dav_collections (id, user_id, kind, dead_props, created_at, updated_at) VALUES ('card:u1', 'u1', 'addressbook', '{}', 1, 1)").run();
+	assert.equal(await runContactSeeding(env), 0);
+	assert.equal(cardRows(sql).length, 0);
+	assert.equal(seededAt(sql), null);
+});
+
+test("a PUT-created card is reachable in sync-collection together with the seeded ones", async (t) => {
+	const { env, key, sql } = await fixture(t);
+	manual(sql, 2);
+	const first = await report(env, BOOK, key, `<A:sync-collection ${NS}><A:sync-token/><A:sync-level>1</A:sync-level><A:prop><A:getetag/></A:prop></A:sync-collection>`);
+	assert.equal(hrefs(await first.text()).filter((href) => href.endsWith(".vcf")).length, 2, "the very first sync already carries the seeded cards");
 });

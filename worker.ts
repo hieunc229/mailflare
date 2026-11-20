@@ -39,6 +39,7 @@ import { runAccountRetention } from "./src/lib/accounts/deletion";
 import { purgeExpiredAuthRows } from "./src/lib/auth/purge";
 import { runJmapChangeRetention } from "./src/lib/jmap/changes";
 import { runDavChangeRetention } from "./src/lib/dav/changes";
+import { runContactSeeding } from "./src/lib/dav/contact-seed";
 import { runFollowUpReminders } from "./src/lib/follow-ups/service";
 import { runCalendarReminders } from "./src/lib/calendar/reminders";
 import { handleDavRequest, isDavPath } from "./src/lib/dav/handler";
@@ -176,6 +177,8 @@ export default {
 		ctx.waitUntil(pruneExpiredMessageActionUndoClaims(env, new Date(controller.scheduledTime)));
 		// DAV log retention takes a small slice per run (one collection, 90 rows, 3 queries), so it runs on every cron tick.
 		ctx.waitUntil(runDavChangeRetention(env, new Date(controller.scheduledTime)).catch((error) => console.error("DAV change retention failed", error)));
+		// Seeding the address book from existing contacts continues in slices too (one address book, one step of 24 contacts and about a dozen statements per run, only while the switch is on).
+		ctx.waitUntil(runContactSeeding(env).catch((error) => console.error("DAV contact seeding failed", error)));
 		if (controller.cron === "0 2 * * *") ctx.waitUntil(runAccountRetention(env, new Date(controller.scheduledTime)));
 		if (controller.cron === "0 2 * * *") ctx.waitUntil(purgeExpiredAuthRows(env, new Date(controller.scheduledTime)));
 		// Drive trash is emptied once a day, with the 02:00 UTC cron; the 5-minute cron is for queue-like upkeep.
