@@ -909,6 +909,32 @@
       "statements": [
         "ALTER TABLE `app_settings` ADD `dav_enabled` integer DEFAULT 0 NOT NULL;"
       ]
+    },
+    {
+      "name": "0102_dav_storage.sql",
+      "statements": [
+        "CREATE TABLE `dav_collections` (\n\t`id` text PRIMARY KEY NOT NULL,\n\t`user_id` text NOT NULL,\n\t`kind` text NOT NULL,\n\t`display_name` text,\n\t`color` text,\n\t`description` text,\n\t`sort_order` integer,\n\t`dead_props` text DEFAULT '{}' NOT NULL,\n\t`seeded_at` integer,\n\t`created_at` integer NOT NULL,\n\t`updated_at` integer NOT NULL,\n\tFOREIGN KEY (`user_id`) REFERENCES `users`(`id`) ON UPDATE no action ON DELETE cascade\n);",
+        "CREATE INDEX `dav_collections_user_idx` ON `dav_collections` (`user_id`);",
+        "CREATE TABLE `dav_calendar_objects` (\n\t`id` text PRIMARY KEY NOT NULL,\n\t`user_id` text NOT NULL,\n\t`collection_id` text NOT NULL,\n\t`name` text NOT NULL,\n\t`uid` text NOT NULL,\n\t`body` text,\n\t`rows_hash` text,\n\t`size` integer NOT NULL,\n\t`created_at` integer NOT NULL,\n\t`updated_at` integer NOT NULL,\n\tFOREIGN KEY (`id`) REFERENCES `calendar_events`(`id`) ON UPDATE no action ON DELETE cascade\n);",
+        "CREATE UNIQUE INDEX `dav_calendar_objects_name_idx` ON `dav_calendar_objects` (`collection_id`,`name`);",
+        "CREATE UNIQUE INDEX `dav_calendar_objects_uid_idx` ON `dav_calendar_objects` (`collection_id`,`uid`);",
+        "CREATE INDEX `dav_calendar_objects_user_idx` ON `dav_calendar_objects` (`user_id`);",
+        "CREATE TABLE `dav_cards` (\n\t`id` text PRIMARY KEY NOT NULL,\n\t`user_id` text NOT NULL,\n\t`collection_id` text NOT NULL,\n\t`name` text NOT NULL,\n\t`uid` text NOT NULL,\n\t`body` text NOT NULL,\n\t`version` text NOT NULL,\n\t`fn` text DEFAULT '' NOT NULL,\n\t`emails` text DEFAULT '[]' NOT NULL,\n\t`size` integer NOT NULL,\n\t`created_at` integer NOT NULL,\n\t`updated_at` integer NOT NULL,\n\tFOREIGN KEY (`user_id`) REFERENCES `users`(`id`) ON UPDATE no action ON DELETE cascade\n);",
+        "CREATE UNIQUE INDEX `dav_cards_name_idx` ON `dav_cards` (`collection_id`,`name`);",
+        "CREATE UNIQUE INDEX `dav_cards_uid_idx` ON `dav_cards` (`collection_id`,`uid`);",
+        "CREATE INDEX `dav_cards_user_idx` ON `dav_cards` (`user_id`);",
+        "CREATE TABLE `dav_changes` (\n\t`seq` integer PRIMARY KEY AUTOINCREMENT NOT NULL,\n\t`collection_id` text NOT NULL,\n\t`object_key` text NOT NULL,\n\t`change_type` text NOT NULL,\n\t`created_at` integer DEFAULT (unixepoch()) NOT NULL\n);",
+        "CREATE INDEX `dav_changes_collection_seq_idx` ON `dav_changes` (`collection_id`,`seq`);",
+        "CREATE INDEX `dav_changes_object_idx` ON `dav_changes` (`collection_id`,`object_key`,`seq`);",
+        "CREATE TABLE `dav_sync_state` (\n\t`collection_id` text PRIMARY KEY NOT NULL,\n\t`epoch` text NOT NULL,\n\t`floor` integer DEFAULT 0 NOT NULL\n);",
+        "CREATE TRIGGER `dav_changes_calendar_events_ai` AFTER INSERT ON `calendar_events` BEGIN\n\tINSERT INTO dav_changes (collection_id, object_key, change_type) VALUES ('cal:' || NEW.user_id, NEW.id, 'created');\nEND;",
+        "CREATE TRIGGER `dav_changes_calendar_events_au` AFTER UPDATE ON `calendar_events`\nWHEN OLD.user_id <> NEW.user_id OR OLD.mailbox_id IS NOT NEW.mailbox_id OR OLD.title IS NOT NEW.title OR OLD.description IS NOT NEW.description OR OLD.location IS NOT NEW.location OR OLD.attendees IS NOT NEW.attendees OR OLD.color IS NOT NEW.color OR OLD.repeat IS NOT NEW.repeat OR OLD.repeat_days IS NOT NEW.repeat_days OR OLD.excluded_occurrences IS NOT NEW.excluded_occurrences OR OLD.time_zone IS NOT NEW.time_zone OR OLD.response_status IS NOT NEW.response_status OR OLD.invite_message_id IS NOT NEW.invite_message_id OR OLD.invite_sender IS NOT NEW.invite_sender OR OLD.attendee_responses IS NOT NEW.attendee_responses OR OLD.repeat_anchor_day IS NOT NEW.repeat_anchor_day OR OLD.repeat_until IS NOT NEW.repeat_until OR OLD.starts_at IS NOT NEW.starts_at OR OLD.ends_at IS NOT NEW.ends_at OR OLD.reminder_minutes IS NOT NEW.reminder_minutes OR OLD.invite_sequence IS NOT NEW.invite_sequence OR OLD.updated_at IS NOT NEW.updated_at BEGIN\n\tINSERT INTO dav_changes (collection_id, object_key, change_type)\n\tSELECT 'cal:' || OLD.user_id, OLD.id, 'destroyed' WHERE OLD.user_id <> NEW.user_id;\n\tINSERT INTO dav_changes (collection_id, object_key, change_type)\n\tVALUES ('cal:' || NEW.user_id, NEW.id, CASE WHEN OLD.user_id <> NEW.user_id THEN 'created' ELSE 'updated' END);\nEND;",
+        "CREATE TRIGGER `dav_changes_calendar_events_ad` AFTER DELETE ON `calendar_events` BEGIN\n\tINSERT INTO dav_changes (collection_id, object_key, change_type) VALUES ('cal:' || OLD.user_id, OLD.id, 'destroyed');\nEND;",
+        "CREATE TRIGGER `dav_changes_cards_ai` AFTER INSERT ON `dav_cards` BEGIN\n\tINSERT INTO dav_changes (collection_id, object_key, change_type) VALUES (NEW.collection_id, NEW.id, 'created');\nEND;",
+        "CREATE TRIGGER `dav_changes_cards_au` AFTER UPDATE ON `dav_cards`\nWHEN OLD.collection_id <> NEW.collection_id OR OLD.name IS NOT NEW.name OR OLD.uid IS NOT NEW.uid OR OLD.body IS NOT NEW.body OR OLD.version IS NOT NEW.version OR OLD.fn IS NOT NEW.fn OR OLD.emails IS NOT NEW.emails OR OLD.size IS NOT NEW.size OR OLD.updated_at IS NOT NEW.updated_at BEGIN\n\tINSERT INTO dav_changes (collection_id, object_key, change_type)\n\tSELECT OLD.collection_id, OLD.id, 'destroyed' WHERE OLD.collection_id <> NEW.collection_id;\n\tINSERT INTO dav_changes (collection_id, object_key, change_type)\n\tVALUES (NEW.collection_id, NEW.id, CASE WHEN OLD.collection_id <> NEW.collection_id THEN 'created' ELSE 'updated' END);\nEND;",
+        "CREATE TRIGGER `dav_changes_cards_ad` AFTER DELETE ON `dav_cards` BEGIN\n\tINSERT INTO dav_changes (collection_id, object_key, change_type) VALUES (OLD.collection_id, OLD.id, 'destroyed');\nEND;",
+        "INSERT INTO dav_changes (collection_id, object_key, change_type)\nSELECT 'cal:' || user_id, id, 'created' FROM calendar_events ORDER BY created_at, id;"
+      ]
     }
   ]
 }
