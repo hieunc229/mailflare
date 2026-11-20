@@ -22,7 +22,7 @@ async function listKnownDomains(db: AppDatabase, userId: string): Promise<string
 	const contactDomain = sql<string>`lower(substr(${contacts.email}, ${charIndex(contacts.email, "@")} + 1))`;
 	const [contactRows, ownRows] = await Promise.all([
 		db.selectDistinct({ domain: contactDomain }).from(contacts)
-			.where(and(eq(contacts.userId, userId), inArray(contacts.source, ["outbound", "manual"])))
+			.where(and(eq(contacts.userId, userId), inArray(contacts.source, ["outbound", "manual", "import"])))
 			.limit(MAX_KNOWN_DOMAINS),
 		db.select({ domain: domains.hostname }).from(domains),
 	]);
@@ -61,7 +61,7 @@ export async function analyzeSpam(db: AppDatabase, input: SpamAnalysisInput): Pr
 	if (contact?.blocked) {
 		return { score: 100, verdict: "spam", signals: [{ id: "blocked_sender", score: 100, reason: "Sender is blocked" }], fingerprint };
 	}
-	if (!authPolicyReason && contact?.source === "manual") signals.push({ id: "manual_contact", score: SPAM_WEIGHTS.relationships.manuallySavedContact, reason: "Sender is in your manually saved contacts" });
+	if (!authPolicyReason && (contact?.source === "manual" || contact?.source === "import")) signals.push({ id: "manual_contact", score: SPAM_WEIGHTS.relationships.manuallySavedContact, reason: "Sender is in your saved or imported contacts" });
 	if (!authPolicyReason && contact?.source === "outbound") signals.push({ id: "previously_sent", score: SPAM_WEIGHTS.relationships.previouslySentTo, reason: "You have previously sent email to this address" });
 
 	const identities = getReputationKeys(input.message, fingerprint);

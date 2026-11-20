@@ -3,4 +3,4 @@ export type EmailAddressParts = {
 	address: string;
 };
 
-export type ContactSource = "manual" | "inbound" | "outbound";
+export type ContactSource = "manual" | "inbound" | "outbound" | "import";

@@ -11,6 +11,9 @@ const ZIP64_EOCD_SIGNATURE = 0x06064b50;
 const CENTRAL_SIGNATURE = 0x02014b50;
 const LOCAL_SIGNATURE = 0x04034b50;
 const MAX_EOCD_SEARCH = 22 + 0xffff;
+/** A hostile archive can claim a huge directory; the tab reads it whole, so it is capped. */
+export const MAX_ZIP_DIRECTORY_BYTES = 64 * 1024 * 1024;
+export const MAX_ZIP_ENTRIES = 500_000;
 
 async function readView(blob: Blob, start: number, end: number): Promise<DataView> {
 	return new DataView(await blob.slice(start, end).arrayBuffer());
@@ -52,12 +55,14 @@ export async function listZipEntries(blob: Blob): Promise<ZipEntry[]> {
 		directoryOffset = readUint64(record, 48);
 	}
 
+	if (count > MAX_ZIP_ENTRIES || directorySize > MAX_ZIP_DIRECTORY_BYTES) throw new Error("Not a supported zip file");
 	const directory = await readView(blob, directoryOffset, directoryOffset + directorySize);
 	const decoder = new TextDecoder();
 	const entries: ZipEntry[] = [];
 	let offset = 0;
 	for (let index = 0; index < count && offset + 46 <= directory.byteLength; index += 1) {
 		if (directory.getUint32(offset, true) !== CENTRAL_SIGNATURE) throw new Error("Corrupt zip directory");
+		const madeBy = directory.getUint16(offset + 4, true);
 		const flags = directory.getUint16(offset + 8, true);
 		const method = directory.getUint16(offset + 10, true);
 		let compressedSize = directory.getUint32(offset + 20, true);
@@ -66,6 +71,8 @@ export async function listZipEntries(blob: Blob): Promise<ZipEntry[]> {
 		const extraLength = directory.getUint16(offset + 30, true);
 		const commentLength = directory.getUint16(offset + 32, true);
 		let localHeaderOffset = directory.getUint32(offset + 42, true);
+		// Unix zips (host 3) keep st_mode in the high half of the external attributes; 0o120000 is a symbolic link.
+		const isSymlink = madeBy >> 8 === 3 && ((directory.getUint32(offset + 38, true) >>> 16) & 0xf000) === 0xa000;
 		const nameStart = directory.byteOffset + offset + 46;
 		const name = decoder.decode(new Uint8Array(directory.buffer, nameStart, nameLength));
 
@@ -83,7 +90,7 @@ export async function listZipEntries(blob: Blob): Promise<ZipEntry[]> {
 			extra += 4 + length;
 		}
 
-		entries.push({ name, method, compressedSize, size, localHeaderOffset, encrypted: (flags & 1) === 1 });
+		entries.push({ name, method, compressedSize, size, localHeaderOffset, encrypted: (flags & 1) === 1, isSymlink });
 		offset += 46 + nameLength + extraLength + commentLength;
 	}
 	return entries;
@@ -113,4 +120,24 @@ export async function* readStreamChunks(stream: ReadableStream<Uint8Array>, onBy
 	} finally {
 		await reader.cancel().catch(() => {});
 	}
+}
+
+/**
+ * Reads a whole entry into memory. It refuses a declared size over `maxBytes`, and stops as soon as the inflated bytes
+ * pass the declared size, so a header that lies about a decompression bomb cannot make the tab inflate it.
+ */
+export async function readZipEntryBytes(blob: Blob, entry: ZipEntry, maxBytes: number): Promise<Uint8Array> {
+	if (entry.size > maxBytes) throw new Error(`${entry.name} is too large`);
+	const chunks: Uint8Array[] = [];
+	let total = 0;
+	for await (const chunk of readStreamChunks(await openZipEntry(blob, entry))) {
+		total += chunk.length;
+		if (total > entry.size) throw new Error(`${entry.name} is larger than its header says`);
+		chunks.push(chunk);
+	}
+	if (total !== entry.size) throw new Error(`${entry.name} is corrupt`);
+	const bytes = new Uint8Array(total);
+	let offset = 0;
+	for (const chunk of chunks) { bytes.set(chunk, offset); offset += chunk.length; }
+	return bytes;
 }

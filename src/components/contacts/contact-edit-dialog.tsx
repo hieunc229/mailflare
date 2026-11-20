@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { FormEvent } from "react";
 import { useLanguage } from "@/components/language-provider";
 import { Button } from "@/components/ui/button";
@@ -15,6 +15,9 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { parseAddress } from "@/lib/utils";
 import { ContactAvatarForm } from "./contact-avatar-form";
+import type { ContactDetailsRecord } from "./contact-details-types";
+import { fetchContactDetails } from "./contact-details-utils";
+import { ContactImportedDetails } from "./contact-imported-details";
 import type { ContactEditDialogProps, ContactListItem } from "./contacts-page-types";
 import { createContact, renameContact } from "./contacts-page-utils";
 
@@ -67,6 +70,15 @@ function ContactEditForm({
 	const [hasAvatar, setHasAvatar] = useState(contact?.hasAvatar ?? false);
 	const [saving, setSaving] = useState(false);
 	const [error, setError] = useState<string | null>(null);
+	// Phones, addresses and so on from an import. The list does not carry them, so an existing contact is looked up once.
+	const [details, setDetails] = useState<ContactDetailsRecord["details"]>();
+	const editedAddress = contact?.email;
+	useEffect(() => {
+		if (!editedAddress) return;
+		let cancelled = false;
+		fetchContactDetails(mailboxId, editedAddress).then((loaded) => { if (!cancelled) setDetails(loaded.details); }).catch(() => undefined);
+		return () => { cancelled = true; };
+	}, [mailboxId, editedAddress]);
 
 	async function onSubmit(event: FormEvent<HTMLFormElement>) {
 		event.preventDefault();
@@ -129,6 +141,7 @@ function ContactEditForm({
 					required={!editing}
 				/>
 			</div>
+			{editing && <ContactImportedDetails details={details} address={contact.email} />}
 			{error && <p role="alert" className="text-sm text-red-600">{error}</p>}
 			<div className="flex justify-end gap-2 border-t border-neutral-200 pt-4">
 				<Button type="button" variant="outline" onClick={() => onOpenChange(false)}>

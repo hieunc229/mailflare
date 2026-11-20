@@ -1,8 +1,11 @@
 import { and, asc, eq, or, sql } from "drizzle-orm";
 import type { getDb } from "@/db";
-import { contacts } from "@/db/schema";
+import { contactDetails, contacts } from "@/db/schema";
 import { escapeLike, insensitiveLike } from "@/db/sql";
+import { parseStoredDetails } from "@/lib/contacts/details-utils";
+import type { ContactDetailsData } from "@/lib/contacts/details-types";
 import { getContactId } from "@/lib/contacts/utils";
+import { isMissingTableError } from "@/lib/database-errors";
 
 type Db = ReturnType<typeof getDb>;
 
@@ -23,6 +26,18 @@ export async function getContactByEmail(db: Db, userId: string, email: string) {
 		.where(and(eq(contacts.userId, userId), eq(contacts.email, email)))
 		.limit(1);
 	return contact ?? null;
+}
+
+/** The imported phones, addresses and so on of one contact; null when it has none or the migration is not applied yet. */
+export async function getContactDetailsData(db: Db, userId: string, email: string): Promise<ContactDetailsData | null> {
+	try {
+		const [row] = await db.select({ details: contactDetails.details }).from(contactDetails).where(eq(contactDetails.contactId, getContactId(userId, email))).limit(1);
+		const details = parseStoredDetails(row?.details);
+		return Object.keys(details).length ? details : null;
+	} catch (caught) {
+		if (isMissingTableError(caught)) return null;
+		throw caught;
+	}
 }
 
 export async function listContacts(db: Db, input: { userId: string; query: string; limit: number }) {
