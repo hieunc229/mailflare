@@ -176,6 +176,13 @@
       "when": 1795027629043,
       "tag": "0024_dmarc_reports",
       "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "7",
+      "when": 1795027630043,
+      "tag": "0025_mta_sts_tls_rpt",
+      "breakpoints": true
     }
   ]
 }
