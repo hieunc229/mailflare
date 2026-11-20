@@ -33,8 +33,9 @@ export async function getDmarcStats(env: CloudflareEnv, domainId: string, option
 	const now = options.now ?? new Date();
 	const fromDate = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()) - (options.days - 1) * DAY_MS);
 	const filter = and(eq(stats.domainId, domainId), gte(stats.day, isDay(fromDate)));
-	const reportFilter = and(eq(deliverabilityReports.domainId, domainId), eq(deliverabilityReports.status, "ok"), gte(deliverabilityReports.dateBegin, fromDate));
-	const unverifiedFilter = and(eq(deliverabilityReports.domainId, domainId), eq(deliverabilityReports.status, "unverified"), gte(deliverabilityReports.receivedAt, fromDate));
+	const dmarcReport = eq(deliverabilityReports.kind, "dmarc");
+	const reportFilter = and(eq(deliverabilityReports.domainId, domainId), dmarcReport, eq(deliverabilityReports.status, "ok"), gte(deliverabilityReports.dateBegin, fromDate));
+	const unverifiedFilter = and(eq(deliverabilityReports.domainId, domainId), dmarcReport, eq(deliverabilityReports.status, "unverified"), gte(deliverabilityReports.receivedAt, fromDate));
 
 	const [daily, sourceRows, reporterRows, reportCounts, [unverified], recent] = await Promise.all([
 		db.select({
@@ -58,7 +59,7 @@ export async function getDmarcStats(env: CloudflareEnv, domainId: string, option
 		// Verified reports are grouped by the verified sender, the same name the aggregate rows carry.
 		db.select({ reporterOrg: deliverabilityReports.senderDomain, reports: sql<number>`count(*)` }).from(deliverabilityReports).where(reportFilter).groupBy(deliverabilityReports.senderDomain).limit(REPORTER_LIMIT * 2),
 		db.select({ reports: sql<number>`count(*)` }).from(deliverabilityReports).where(unverifiedFilter),
-		db.select().from(deliverabilityReports).where(eq(deliverabilityReports.domainId, domainId)).orderBy(desc(deliverabilityReports.receivedAt)).limit(10),
+		db.select().from(deliverabilityReports).where(and(eq(deliverabilityReports.domainId, domainId), dmarcReport)).orderBy(desc(deliverabilityReports.receivedAt)).limit(10),
 	]);
 
 	const byDay = new Map(daily.map((row) => [row.day, row]));

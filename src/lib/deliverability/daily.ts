@@ -1,7 +1,7 @@
 import { and, desc, eq, inArray, isNotNull, lt, lte, gte, sql } from "drizzle-orm";
 import { getDb } from "@/db";
-import { deliverabilityAlerts, deliverabilityReports, dmarcDailyStats as stats, domainDeliverability, domains, users } from "@/db/schema";
-import { isMissingTableError } from "@/lib/database-errors";
+import { deliverabilityAlerts, deliverabilityReports, dmarcDailyStats as stats, domainDeliverability, domains, tlsDailyStats, users } from "@/db/schema";
+import { isMissingColumnError, isMissingTableError } from "@/lib/database-errors";
 import type { SystemMailInput } from "@/lib/email/system-mail-types";
 import { evaluateNoReports, evaluateSourceAlerts, mergeReporterAlerts, type AlertKind, type EvaluatedAlert, type SourceTotals } from "./daily-utils";
 
@@ -14,7 +14,7 @@ export const RETENTION = Object.freeze({
 	 * use another's share. Each is at least one domain's maximum daily inflow (5,000 aggregate rows; 300 + 2,000
 	 * report rows, see INGEST_LIMITS); a larger backlog clears over the following runs.
 	 */
-	batches: { stats: 12, reports: 6, alerts: 2 },
+	batches: { stats: 12, tls: 12, reports: 6, alerts: 2 },
 	/** D1 allows 100 bound parameters per statement. */
 	deleteChunk: 90,
 });
@@ -155,6 +155,9 @@ async function runRetention(env: CloudflareEnv, now: Date) {
 	await purge(db, RETENTION.batches.stats,
 		async (limit) => (await db.select({ id: stats.id }).from(stats).where(lt(stats.day, isoDay(cutoff))).limit(limit)).map((row) => row.id),
 		(ids) => db.delete(stats).where(inArray(stats.id, ids)));
+	await purge(db, RETENTION.batches.tls,
+		async (limit) => (await db.select({ id: tlsDailyStats.id }).from(tlsDailyStats).where(lt(tlsDailyStats.day, isoDay(cutoff))).limit(limit)).map((row) => row.id),
+		(ids) => db.delete(tlsDailyStats).where(inArray(tlsDailyStats.id, ids)));
 	await purge(db, RETENTION.batches.alerts,
 		async (limit) => (await db.select({ id: deliverabilityAlerts.id }).from(deliverabilityAlerts).where(and(isNotNull(deliverabilityAlerts.acknowledgedAt), lt(deliverabilityAlerts.createdAt, cutoff))).limit(limit)).map((row) => row.id),
 		(ids) => db.delete(deliverabilityAlerts).where(inArray(deliverabilityAlerts.id, ids)));
@@ -169,7 +172,7 @@ export async function runDeliverabilityDaily(env: CloudflareEnv, now: Date = new
 		await runAlerts(env, now, deps.sendMail ?? defaultSendMail);
 		await runRetention(env, now);
 	} catch (error) {
-		if (isMissingTableError(error)) return;
+		if (isMissingTableError(error) || isMissingColumnError(error)) return;
 		throw error;
 	}
 }
