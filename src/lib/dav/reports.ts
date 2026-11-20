@@ -1,5 +1,5 @@
 import { and } from "drizzle-orm";
-import { CALENDAR_CHUNK, endedBefore, isDavMaster, listCalendar, liveCalendarNames, loadCalendarByNames, matchesUid, MAX_LISTED, MAX_QUERY_CANDIDATES, occursInRange, overlapsRange, withOverrides } from "./calendar-store";
+import { CALENDAR_CHUNK, endedBefore, hiddenCalendarNames, isDavMaster, listCalendar, liveCalendarNames, loadCalendarByNames, matchesUid, MAX_LISTED, MAX_QUERY_CANDIDATES, occursInRange, overlapsRange, withOverrides } from "./calendar-store";
 import { cardMatches, CARD_CHUNK, listCards, liveCardNames, loadCardBodies, loadCardMetaByNames, MAX_CARDS, planCardChunks, type PropFilter, type TextMatch } from "./card-store";
 import { changesSince, currentSeq, ensureSyncState, etagSeqs, formatSyncToken } from "./changes";
 import { calendarMember, cardMember, collectionIdFor, collectionPath, etagOf, listMembers, memberResponse, type Area, type DavContext, type Member } from "./collections";
@@ -281,12 +281,15 @@ async function syncCollection(area: Area, ctx: DavContext, root: DavElement, wan
 	const names = area === "calendars" ? await liveCalendarNames(ctx.env, ctx.userId, keys) : await liveCardNames(ctx.env, ctx.userId, keys);
 	const seqs = await etagSeqs(ctx.env, cid, [...names.keys()]);
 	const suffix = area === "calendars" ? ".ics" : ".vcf";
+	// Gone or hidden: a destroyed resource carries the name it had in the change log, a hidden one still has its row.
+	const gone = result.changes.filter((change) => !names.has(change.objectKey));
+	const hidden = area === "calendars" ? await hiddenCalendarNames(ctx.env, ctx.userId, gone.filter((change) => change.type !== "destroyed").map((change) => change.objectKey)) : new Map<string, string>();
+	const nameOfGone = new Map(gone.map((change) => [change.objectKey, change.name ?? hidden.get(change.objectKey) ?? `${change.objectKey}${suffix}`]));
 	const responses: DavResponse[] = [];
 	for (const key of keys) {
 		const row = names.get(key);
 		if (row) responses.push(await live({ name: row.name, etag: etagOf(seqs, key, row.updatedAt), lastModified: row.updatedAt, contentType: area === "calendars" ? "text/calendar; charset=utf-8" : "text/vcard; charset=utf-8" }));
-		// A resource that is gone or hidden. A destroyed DAV-created resource has lost its stored name with its row; only native ids can be named.
-		else responses.push({ href: path + key + suffix, status: 404 });
+		else responses.push({ href: path + nameOfGone.get(key)!, status: 404 });
 	}
 	const { epoch } = await ensureSyncState(ctx.env, cid);
 	const trailer = () => (result.hasMore ? [{ href: path, status: 507, error: "<D:number-of-matches-within-limits/>" }] : []);

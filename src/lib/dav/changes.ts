@@ -72,7 +72,8 @@ export async function currentSeq(env: Pick<CloudflareEnv, "DB">, collectionId: s
 	return newestSeq(env, collectionId, floor);
 }
 
-export type DavChange = { objectKey: string; type: "created" | "updated" | "destroyed" };
+/** `name` is what a destroyed resource was served under (null for a native event, whose name is derived from its id). */
+export type DavChange = { objectKey: string; type: "created" | "updated" | "destroyed"; name: string | null };
 export type DavChanges = { changes: DavChange[]; hasMore: boolean; seq: number };
 
 /**
@@ -88,7 +89,7 @@ export async function changesSince(env: Pick<CloudflareEnv, "DB">, collectionId:
 	const state = await ensureSyncState(env, collectionId);
 	if (parsed.epoch !== state.epoch || parsed.seq < state.floor) return "invalid";
 	const rows = await getDb(env)
-		.select({ seq: davChanges.seq, objectKey: davChanges.objectKey, type: davChanges.changeType })
+		.select({ seq: davChanges.seq, objectKey: davChanges.objectKey, type: davChanges.changeType, name: davChanges.resourceName })
 		.from(davChanges)
 		.where(and(eq(davChanges.collectionId, collectionId), gt(davChanges.seq, parsed.seq)))
 		.orderBy(asc(davChanges.seq))
@@ -96,10 +97,10 @@ export async function changesSince(env: Pick<CloudflareEnv, "DB">, collectionId:
 	if (!rows.length && parsed.seq > (await newestSeq(env, collectionId, state.floor))) return "invalid";
 	const hasMore = rows.length > MAX_SYNC_CHANGES;
 	const page = hasMore ? rows.slice(0, MAX_SYNC_CHANGES) : rows;
-	const latest = new Map<string, DavChange["type"]>();
-	for (const row of page) latest.set(row.objectKey, row.type);
+	const latest = new Map<string, DavChange>();
+	for (const row of page) latest.set(row.objectKey, { objectKey: row.objectKey, type: row.type, name: row.name ?? null });
 	return {
-		changes: [...latest].map(([objectKey, type]) => ({ objectKey, type })),
+		changes: [...latest.values()],
 		hasMore,
 		seq: page.length ? page[page.length - 1].seq : parsed.seq,
 	};

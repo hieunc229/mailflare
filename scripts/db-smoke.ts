@@ -5,7 +5,7 @@
  */
 import { and, eq, sql } from "drizzle-orm";
 import { createDb } from "@/db";
-import { users, domains, mailboxes, messages, folders, jmapChanges, calendarEvents, davCards, davCollections, appSettings, webhooks, spamTokenStats, spamReputation } from "@/db/schema";
+import { users, domains, mailboxes, messages, folders, jmapChanges, calendarEvents, davCalendarObjects, davCards, davCollections, appSettings, webhooks, spamTokenStats, spamReputation } from "@/db/schema";
 import { getDatabaseConfig } from "@/db/with-database";
 import { openExternalDatabase } from "@/db/external";
 import { applyPendingMigrations, getMigrationStatus } from "@/lib/migrations/service";
@@ -159,6 +159,15 @@ check("backup restores", afterRestore?.subject === "Quarterly Report" && afterRe
 
 const davAfterRestore = await db.all<{ n: number }>(sql`SELECT count(*) AS n FROM dav_cards WHERE id = ${`card_${stamp}`}`);
 check("backup restores dav cards and collections", Number(davAfterRestore[0].n) === 1 && exported.tables.dav_cards.length === 1 && exported.tables.dav_collections.length === 1 && !("dav_changes" in exported.tables));
+// F6-5: a destroyed DAV resource keeps the name it was served under (the cascade removes dav_calendar_objects with the event).
+const davNameOf = async (collection: string, key: string) => (await db.all<{ resource_name: string | null }>(sql`SELECT resource_name FROM dav_changes WHERE collection_id = ${collection} AND object_key = ${key} AND change_type = 'destroyed'`)).map((row) => row.resource_name).join(",");
+const namedId = `evt_${stamp}_named`;
+await db.insert(calendarEvents).values({ id: namedId, userId, title: "Phone made", startsAt: new Date(Date.now() + 3_600_000), endsAt: new Date(Date.now() + 7_200_000), davObjectId: namedId } as never);
+await db.insert(davCalendarObjects).values({ id: namedId, userId, collectionId: `cal:${userId}`, name: "phone-made.ics", uid: `uid-${stamp}`, size: 1 } as never);
+await db.delete(calendarEvents).where(eq(calendarEvents.id, namedId));
+check("dav trigger records the name of a destroyed DAV event", (await davNameOf(`cal:${userId}`, namedId)) === "phone-made.ics");
+await db.delete(davCards).where(eq(davCards.id, `card_${stamp}`));
+check("dav trigger records the name of a destroyed card", (await davNameOf(`card:${userId}-moved`, `card_${stamp}`)) === "a.vcf");
 await db.delete(calendarEvents).where(eq(calendarEvents.id, davEventId));
 check("dav trigger logs a deleted event", (await davLog(`cal:${userId}`, davEventId)).endsWith("destroyed"));
 

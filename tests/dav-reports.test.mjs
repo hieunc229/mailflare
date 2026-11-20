@@ -397,6 +397,28 @@ test("sync-collection: first sync, incremental, destroyed and hidden resources",
 	assert.deepEqual(hrefs(await (await sync(next)).text()), []);
 });
 
+// A resource a DAV client named is gone from the database when it is destroyed, and hidden ones are not served: both are still reported under that name.
+test("sync-collection reports destroyed and hidden DAV-named events under their real resource name", async (t) => {
+	const { env, key, sql } = await fixture(t);
+	const named = (id, name, uid, fields = {}) => {
+		addEvent(sql, { id, dav_object_id: id, ...fields });
+		sql.prepare("INSERT INTO dav_calendar_objects (id, user_id, collection_id, name, uid, size, created_at, updated_at) VALUES (?, 'u1', 'cal:u1', ?, ?, 1, 1, 1)").run(id, name, uid);
+	};
+	named("m-gone", "phone-made-1.ics", "uid-1");
+	named("m-hide", "phone-made-2.ics", "uid-2");
+	named("m-decl", "phone-made-3.ics", "uid-3");
+	const sync = (token) => report(env, CAL, key, `<A:sync-collection ${NS}><A:sync-token>${token}</A:sync-token><A:sync-level>1</A:sync-level><A:prop><A:getetag/></A:prop></A:sync-collection>`, "0");
+	const first = await (await sync("")).text();
+	assert.deepEqual(hrefs(first).sort(), [`${CAL}phone-made-1.ics`, `${CAL}phone-made-2.ics`, `${CAL}phone-made-3.ics`]);
+	const token = first.match(/<D:sync-token>([^<]*)<\/D:sync-token>/)[1];
+	sql.prepare("DELETE FROM calendar_events WHERE id = 'm-gone'").run();
+	sql.prepare("UPDATE calendar_events SET response_status = 'cancelled', updated_at = updated_at + 1 WHERE id = 'm-hide'").run();
+	sql.prepare("UPDATE calendar_events SET response_status = 'declined', updated_at = updated_at + 1 WHERE id = 'm-decl'").run();
+	const second = await (await sync(token)).text();
+	for (const name of ["phone-made-1.ics", "phone-made-2.ics", "phone-made-3.ics"]) assert.match(second, new RegExp(`<D:href>${CAL}${name}</D:href><D:status>HTTP/1.1 404 Not Found</D:status></D:response>`), name);
+	assert.doesNotMatch(second, /m-gone|m-hide|m-decl/);
+});
+
 test("sync-collection: tokens from another collection, epoch, the future or garbage are 403 valid-sync-token", async (t) => {
 	const { env, key, sql } = await fixture(t);
 	addEvent(sql, { id: "e1" });
@@ -547,7 +569,8 @@ test("sync-collection on the address book", async (t) => {
 	sql.prepare("DELETE FROM dav_cards WHERE id = 'c1'").run();
 	const second = await (await sync(token)).text();
 	assert.match(second, new RegExp(`<D:href>${BOOK}bob.vcf</D:href><D:propstat>`));
-	assert.match(second, new RegExp(`<D:href>${BOOK}c1.vcf</D:href><D:status>HTTP/1.1 404`));
+	assert.match(second, new RegExp(`<D:href>${BOOK}ann.vcf</D:href><D:status>HTTP/1.1 404`), "a destroyed card is reported under the name it had, not its id");
+	assert.doesNotMatch(second, /c1\.vcf/);
 	assert.equal((await sync(token.replace("card%3Au1", "cal%3Au1"))).status, 403);
 });
 
