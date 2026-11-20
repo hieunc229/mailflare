@@ -6,4 +6,6 @@ export interface ZipEntry {
 	size: number;
 	localHeaderOffset: number;
 	encrypted: boolean;
+	/** A unix symbolic link: its content is a path, never file data. */
+	isSymlink: boolean;
 }
