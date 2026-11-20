@@ -2,7 +2,7 @@
 
 ## Google Calendar
 
-Settings → Import → **Google Takeout: Calendar** brings your Google Calendar events into Mailflare.
+Settings → Import → **Google Takeout: Calendar, Contacts** brings your Google Calendar events and Google Contacts into Mailflare. Pick all your Takeout files at once: each card (Calendar, Contacts) appears when its files are found.
 
 ### Get the file
 
@@ -54,6 +54,51 @@ HTML in descriptions is turned into plain text. Links in files are never opened.
 
 A request the server cannot take is split in halves and retried, down to single events. A request body is kept under 1 MB by its encoded size; one event with all its changes that is still larger is not imported and is counted as too large. When the server answers "too many requests", the import waits (for the time the server names, else 2, 4 and 8 seconds) and sends the same request again. After five tries it stops and tells you; choose the same files again later and it continues.
 
-### Translations
+## Google Contacts
+
+### Get the file
+
+1. Open [Google Takeout](https://takeout.google.com), choose **Deselect all**, then tick **Contacts**.
+2. Export once and download the `.zip` files. Contacts come as `.vcf` files (one per label, and *All Contacts*).
+3. In Mailflare, pick the `.zip` files, or the `.vcf` files inside them. A Google contacts `.csv` (from contacts.google.com → Export → Google CSV) works too, including the older style that starts with the `FF FE` byte order mark. A `.csv` is only offered when its first row looks like a Google contacts header.
+
+Contacts go to the address book of the mailbox selected at the top of the page, the same place the Contacts page edits. For a shared mailbox you need rights to manage it. The files are opened in your browser. Only the parsed contacts are uploaded, a few at a time. Keep the tab open until it finishes. If it stops, pick the same files again.
+
+### What the import does
+
+- **One contact per email address.** Mailflare keys contacts by address, so a card with three addresses becomes three contacts, each showing the card's other addresses under *Other addresses*.
+- **Names.** A name you set yourself in the address book is kept. Any other name (for example one learned from mail you received) is replaced by the imported name, and the contact is marked as imported. Importing again may update a name that came from an import, but never one you edited. Imported contacts count as saved contacts: the spam filter and the agent's send review treat them like contacts you added by hand. Blocked contacts stay blocked, and remote-content settings are not touched.
+- **Details** (phones, postal addresses, organization, title, birthday, note) are saved with the contact and shown read only in the contact dialog and when you edit a contact. A card with one address and nothing else saves no details. A later import adds the new phones and postal addresses to the stored ones and keeps the organization, birthday and note when the card has none; it never erases details. Only people who can manage the mailbox see the details; read-only delegates see the contact without them.
+- **Photos.** *Import photos* (vCard only) uploads a card's embedded picture, only for contacts that have none yet (never your own profile picture), and only when it is a JPEG, PNG, GIF or WebP up to 10 MB. Pictures are converted in your browser with the same tool as the contact photo form. Picture links in files are never opened, and Google CSV photo columns are ignored. Gravatar is not asked for imported contacts.
+- **Preview** counts contacts, those with an email address and those without, and imports nothing.
+- **Importing a file again changes nothing.** The summary says how many contacts were added, updated and already up to date.
+
+### What is not carried over
+
+| In Google Contacts | In Mailflare |
+| --- | --- |
+| Contacts without an email address | Not imported. The summary counts them and names the first five. |
+| An address that is not a plain `name@domain.tld` | Skipped; the contact's other addresses still import. |
+| More than 20 addresses, 20 phones or 10 postal addresses on one card | The first 20, 20 and 10. |
+| Phone type labels, postal address labels | Kept as short text (32 characters). |
+| Websites, chat accounts, relations, custom fields, labels and groups, nicknames, phonetic names, events other than the birthday | Dropped. |
+| Notes | Up to 4,000 characters. |
+
+The details of a contact need a database migration (Admin → Settings). Until it is applied the import answers "Apply pending database migrations", and contacts and mail keep working.
+
+### Limits
+
+| Limit | Value |
+| --- | --- |
+| One `.vcf` or `.csv` file | 64 MB |
+| Contacts read from one file | 50,000 (the rest are not read, and the summary says so) |
+| One request | Up to 100 contacts, 256 KB from the browser, 1 MB hard limit, 400 addresses in all |
+| One contact in a vCard file | 128 KB of text without its photo |
+| Photo | 10 MB source, up to about 750 KB of base64 per line (larger photos are skipped) |
+| Name | 100 characters |
+
+Requests that fail, are too large or are rate limited are handled as for the calendar: halved and retried, then counted, or waited out and stopped after five tries.
+
+## Translations
 
 The text of this screen was machine-translated into every language and needs review by native speakers. Corrections are welcome as pull requests, see [Adding a language](localization.md).
