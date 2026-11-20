@@ -7,6 +7,7 @@ import { requireUser } from "@/lib/auth/cookies";
 import { canManageDomains } from "@/lib/auth/admin";
 import { getDomainForUser, removeDomainForUser } from "@/lib/domains/service";
 import { hasValidSessionMutationOrigin } from "@/lib/auth/origin";
+import { mtaStsBlockedResponse } from "@/lib/deliverability/mta-sts-block-response";
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -43,9 +44,14 @@ export async function DELETE(request: Request, { params }: Params) {
 	if (!canManageDomains(user)) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 	if (!hasValidSessionMutationOrigin(request)) return NextResponse.json({ error: "Invalid origin" }, { status: 403 });
 	try {
-		await removeDomainForUser(env, user.id, id);
-		return NextResponse.json({ ok: true });
+		// `{ force: true, confirm: "<host name>" }` skips the MTA-STS checks; the answer lists the DNS records left to remove by hand.
+		const body = (await request.json().catch(() => null)) as { force?: unknown; confirm?: unknown } | null;
+		const force = body?.force === true ? { confirm: body.confirm } : undefined;
+		const result = await removeDomainForUser(env, user.id, id, force);
+		return NextResponse.json(force ? { ok: true, ...result } : { ok: true });
 	} catch (err) {
+		const blocked = await mtaStsBlockedResponse(err);
+		if (blocked) return blocked;
 		const message = err instanceof Error ? err.message : "Failed to remove domain";
 		return NextResponse.json({ error: message }, { status: 400 });
 	}

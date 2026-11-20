@@ -9,6 +9,8 @@ import { canManageDomains } from "@/lib/auth/admin";
 import { hasValidSessionMutationOrigin } from "@/lib/auth/origin";
 import { getDomainForUser } from "@/lib/domains/service";
 import { receivingPresence, removeReceiving } from "@/lib/domains/receiving";
+import { assertMxChangeAllowed } from "@/lib/deliverability/mta-sts-guard";
+import { mtaStsBlockedResponse } from "@/lib/deliverability/mta-sts-block-response";
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -23,6 +25,15 @@ export async function PUT(request: Request, { params }: Params) {
 	if (!domain) return NextResponse.json({ error: "Not found" }, { status: 404 });
 	const parsed = z.object({ provider: z.enum(["none", "cloudflare", "resend", "ses"]) }).safeParse(await request.json().catch(() => null));
 	if (!parsed.success) return NextResponse.json({ error: "Unknown receiving provider" }, { status: 400 });
+	// Switching who receives mail moves the MX; enforce senders would refuse the new host.
+	if (parsed.data.provider !== domain.receivingProvider) {
+		try { await assertMxChangeAllowed(env, domain); }
+		catch (error) {
+			const blocked = await mtaStsBlockedResponse(error);
+			if (blocked) return blocked;
+			throw error;
+		}
+	}
 	await getDb(env).update(domains).set({ receivingProvider: parsed.data.provider }).where(eq(domains.id, domain.id));
 	return NextResponse.json({ domain: await getDomainForUser(env, user.id, id) }, { headers: { "Cache-Control": "no-store" } });
 }
@@ -53,6 +64,8 @@ export async function DELETE(request: Request, { params }: Params) {
 		await removeReceiving(env, domain, parsed.data.target);
 		return NextResponse.json({ ok: true });
 	} catch (error) {
+		const blocked = await mtaStsBlockedResponse(error);
+		if (blocked) return blocked;
 		return NextResponse.json({ error: error instanceof Error ? error.message : "Could not remove configuration" }, { status: 502 });
 	}
 }

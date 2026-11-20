@@ -4,13 +4,15 @@ import { useEffect, useState } from "react";
 import { useLanguage } from "@/components/language-provider";
 import { Select } from "@/components/ui/select";
 import { DmarcTab } from "./DmarcTab";
+import { MtaStsTab } from "./MtaStsTab";
 import { SettingsPanel } from "./SettingsPanel";
 import { SuppressionList } from "./SuppressionList";
+import { TlsTab } from "./TlsTab";
 import type { DeliverabilitySettings, DomainOption } from "./types";
 import { fetchDomains, fetchSettings } from "./utils";
 
-type Tab = "reports" | "suppressions";
-const TABS: Tab[] = ["reports", "suppressions"];
+type Tab = "reports" | "tls" | "mtasts" | "suppressions";
+const TABS: Tab[] = ["reports", "tls", "mtasts", "suppressions"];
 
 export default function DeliverabilityPage() {
 	const { t } = useLanguage();
@@ -52,6 +54,8 @@ export default function DeliverabilityPage() {
 				{TABS.map((id) => <button key={id} id={`deliverability-tab-${id}`} type="button" role="tab" aria-selected={tab === id} aria-controls={`deliverability-panel-${id}`} tabIndex={tab === id ? 0 : -1} onClick={() => setTab(id)} className={`-mb-px border-b-2 px-3 py-2 text-sm font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 ${tab === id ? "border-blue-600 text-blue-700" : "border-transparent text-neutral-600 hover:text-neutral-900"}`}>{t(`dmarc.tab.${id}`)}</button>)}
 			</div>
 			{tab === "reports" && domainId && <div role="tabpanel" id="deliverability-panel-reports" aria-labelledby="deliverability-tab-reports"><DmarcTab key={domainId} domainId={domainId} /></div>}
+			{tab === "tls" && domainId && <div role="tabpanel" id="deliverability-panel-tls" aria-labelledby="deliverability-tab-tls"><TlsTab key={domainId} domainId={domainId} /></div>}
+			{tab === "mtasts" && domainId && <div role="tabpanel" id="deliverability-panel-mtasts" aria-labelledby="deliverability-tab-mtasts"><MtaStsTab key={domainId} domainId={domainId} /></div>}
 			{tab === "suppressions" && domainId && <div role="tabpanel" id="deliverability-panel-suppressions" aria-labelledby="deliverability-tab-suppressions" className="space-y-6">
 				<p className="text-sm text-neutral-500">{t("deliverability.description")}</p>
 				{settings && <SettingsPanel settings={settings} onChange={setSettings} />}

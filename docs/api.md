@@ -11,7 +11,7 @@ Adding or removing a domain from Mailflare also updates Cloudflare Email Routing
 | `GET /api/domains` | List connected domains |
 | `POST /api/domains` | Connect a domain and configure Cloudflare |
 | `GET /api/domains/[id]` | Get a connected domain |
-| `DELETE /api/domains/[id]` | Remove a domain and clean up its Cloudflare resources |
+| `DELETE /api/domains/[id]` | Remove a domain and clean up its Cloudflare resources; `{ force: true, confirm: "<host>" }` forces it past MTA-STS (see `docs/mta-sts.md`) |
 | `GET /api/domains/[id]/dns` | View its routing and sending DNS status |
 | `PUT /api/domains/[id]/sending` | Choose the sending provider (`{ provider: "none" \| "cloudflare" \| "resend" \| "ses" }`) |
 | `PUT /api/domains/[id]/receiving` | Choose the receiving provider (same values) |
@@ -33,7 +33,7 @@ The same operations are available to scripts through admin API keys with the `do
 | `GET /api/v1/domains` | List connected domains with their DNS status |
 | `POST /api/v1/domains` | Connect a domain and configure Cloudflare (`{ hostname, enableRouting?, enableSending?, replaceMxRecords?, receivingProvider?, sendingProvider? }`; `receivingProvider` defaults to `cloudflare`, and with another value Email Routing is not enabled. `sendingProvider` defaults to `cloudflare` (or `none` when `enableSending` is `false`), and the Cloudflare sending subdomain is only created for `cloudflare`) |
 | `GET /api/v1/domains/[id]` | Get a connected domain |
-| `DELETE /api/v1/domains/[id]` | Remove a domain and clean up its Cloudflare resources |
+| `DELETE /api/v1/domains/[id]` | Remove a domain and clean up its Cloudflare resources; `{ force: true, confirm: "<host>" }` forces it past MTA-STS |
 | `GET /api/v1/domains/[id]/dns` | View its routing, sending and authentication DNS status |
 | `POST /api/v1/domains/[id]/dns/setup` | Create a missing record (`{ record: "mx" \| "spf" \| "dkim" \| "dmarc" }`) |
 

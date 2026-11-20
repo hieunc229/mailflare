@@ -22,7 +22,7 @@ export function reportStatusKey(status: string, receivedAt: string, now = Date.n
 	return status === "ok" || status === "rejected" || status === "unverified" || status === "over_budget" ? status : "failed";
 }
 
-const ERROR_CODES = ["ADDRESS_TAKEN", "RECEIVING_REQUIRED", "MULTIPLE_DMARC_RECORDS", "DNS_FAILED", "ROUTING_FAILED", "MIGRATION_REQUIRED", "DMARC_CHANGED"] as const;
+const ERROR_CODES = ["ADDRESS_TAKEN", "RECEIVING_REQUIRED", "MULTIPLE_DMARC_RECORDS", "DNS_FAILED", "ROUTING_FAILED", "MIGRATION_REQUIRED", "DMARC_CHANGED", "TLS_RPT_ON"] as const;
 
 export function errorKey(code: string | undefined): TranslationKey | null {
 	return (ERROR_CODES as readonly string[]).includes(code ?? "") ? (`dmarc.error.${code}` as TranslationKey) : null;
