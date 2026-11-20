@@ -12,21 +12,26 @@ export function escapeXml(value: string): string {
 const STATUS_TEXT: Record<number, string> = { 200: "OK", 403: "Forbidden", 404: "Not Found", 507: "Insufficient Storage" };
 
 export type DavPropstat = { status: number; /** Already-serialised property elements. Callers escape what they put inside. */ props: string[] };
-export type DavResponse = { href: string; propstats: DavPropstat[] };
+/** Either properties grouped by status, or one status for the whole resource (404 for a gone one, 507 for a truncated answer) with an optional serialised `error`. */
+export type DavResponse = { href: string; propstats: DavPropstat[] } | { href: string; status: number; error?: string };
 
-/** The prefixes every response declares once on its root: D = DAV:, C = CalDAV, CR = CardDAV, CS = calendarserver.org. */
-const ROOT_NAMESPACES = `xmlns:D="DAV:" xmlns:C="urn:ietf:params:xml:ns:caldav" xmlns:CR="urn:ietf:params:xml:ns:carddav" xmlns:CS="http://calendarserver.org/ns/"`;
+/** The prefixes every response declares once on its root: D = DAV:, C = CalDAV, CR = CardDAV, CS = calendarserver.org, ICAL = Apple iCal. */
+const ROOT_NAMESPACES = `xmlns:D="DAV:" xmlns:C="urn:ietf:params:xml:ns:caldav" xmlns:CR="urn:ietf:params:xml:ns:carddav" xmlns:CS="http://calendarserver.org/ns/" xmlns:ICAL="http://apple.com/ns/ical/"`;
 
-export function multistatus(responses: DavResponse[]): string {
-	const body = responses
-		.map(
-			({ href, propstats }) =>
-				`<D:response><D:href>${escapeXml(href)}</D:href>` +
-				propstats
-					.map(({ status, props }) => `<D:propstat><D:prop>${props.join("")}</D:prop><D:status>HTTP/1.1 ${status} ${STATUS_TEXT[status] ?? ""}</D:status></D:propstat>`)
-					.join("") +
-				`</D:response>`,
-		)
-		.join("");
-	return `<?xml version="1.0" encoding="utf-8"?>\n<D:multistatus ${ROOT_NAMESPACES}>${body}</D:multistatus>`;
+const statusLine = (status: number) => `HTTP/1.1 ${status} ${STATUS_TEXT[status] ?? ""}`;
+
+/** The start of a multistatus document, for answers written piece by piece. */
+export const multistatusHead = () => `<?xml version="1.0" encoding="utf-8"?>\n<D:multistatus ${ROOT_NAMESPACES}>`;
+
+export function multistatusResponse(response: DavResponse): string {
+	const href = `<D:href>${escapeXml(response.href)}</D:href>`;
+	if ("status" in response) return `<D:response>${href}<D:status>${statusLine(response.status)}</D:status>${response.error ? `<D:error>${response.error}</D:error>` : ""}</D:response>`;
+	return `<D:response>${href}${response.propstats.map(({ status, props }) => `<D:propstat><D:prop>${props.join("")}</D:prop><D:status>${statusLine(status)}</D:status></D:propstat>`).join("")}</D:response>`;
+}
+
+/** The sync token (RFC 6578) goes last, after every response. */
+export const multistatusTail = (syncToken?: string) => `${syncToken ? `<D:sync-token>${escapeXml(syncToken)}</D:sync-token>` : ""}</D:multistatus>`;
+
+export function multistatus(responses: DavResponse[], syncToken?: string): string {
+	return multistatusHead() + responses.map(multistatusResponse).join("") + multistatusTail(syncToken);
 }
