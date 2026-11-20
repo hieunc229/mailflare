@@ -29,6 +29,7 @@ import { RouteTitle } from "@/components/route-title";
 import { useAppBadge } from "@/hooks/use-app-badge";
 import { UndoToasts } from "@/components/messages/undo-toasts";
 import { Toaster } from "react-hot-toast";
+import { PromotionToast } from "@/components/messages/promotion-toast";
 
 export default function DashboardLayout({
   children,
@@ -97,6 +98,7 @@ export default function DashboardLayout({
                   <FloatingComposer showButton />
                   <UndoToasts />
                   <Toaster position="bottom-left" containerClassName="text-sm" />
+                  <PromotionToast />
                 </div>
               </ShortcutsProvider>
             </MailSearchProvider>
