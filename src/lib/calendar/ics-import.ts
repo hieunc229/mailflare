@@ -31,9 +31,9 @@ const WEEKDAY_CODES = ["SU", "MO", "TU", "WE", "TH", "FR", "SA"];
 
 /**
  * Unfolds on bytes before decoding, so a fold inside a multi-byte character does not corrupt it. CRLF, LF and a
- * bare CR all end a line. Memory per line is bounded by MAX_LINE_BYTES.
+ * bare CR all end a line. Memory per line is bounded by `maxLine`. vCard files use the same folding.
  */
-function* iterIcsLines(bytes: Uint8Array): Generator<string> {
+export function* iterIcsLines(bytes: Uint8Array, maxLine = MAX_LINE_BYTES): Generator<string> {
 	const decoder = new TextDecoder();
 	let pieces: Uint8Array[] = [];
 	let size = 0;
@@ -59,7 +59,7 @@ function* iterIcsLines(bytes: Uint8Array): Generator<string> {
 			const folded = (bytes[start] === 32 || bytes[start] === 9) && pieces.length > 0;
 			if (folded) start++;
 			else yield* flush();
-			const room = MAX_LINE_BYTES - size;
+			const room = maxLine - size;
 			if (room > 0 && end > start) {
 				const piece = bytes.subarray(start, Math.min(end, start + room));
 				pieces.push(piece);
