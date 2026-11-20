@@ -15,7 +15,7 @@ await build({
 	outdir: dir, outExtension: { ".js": ".mjs" }, bundle: true, platform: "node", format: "esm", logLevel: "silent",
 	alias: { "@": join(root, "src") },
 });
-const { scanTakeoutData, readTakeoutSource, MAX_TEXT_SOURCE_BYTES } = await import(pathToFileURL(join(dir, "t.mjs")).href);
+const { scanTakeoutData, readTakeoutSource, MAX_TEXT_SOURCE_BYTES, MAX_DRIVE_FILES } = await import(pathToFileURL(join(dir, "t.mjs")).href);
 
 function buildZip(entries) {
 	const locals = [];
@@ -131,4 +131,74 @@ test("a contacts source reads back its bytes from a zip entry and from a plain f
 	const scan = await scanTakeoutData([file("t.zip", zip), file("b.vcf", vcf)]);
 	assert.equal(scan.contacts.length, 2);
 	for (const source of scan.contacts) assert.equal(Buffer.from(await readTakeoutSource(source)).toString(), vcf);
+});
+
+const driveZip = () => buildZip([
+	{ name: "Takeout/Drive/x/y.txt", data: Buffer.from("hello") },
+	{ name: "Takeout/Drive/Résumé.docx", data: Buffer.from("doc"), method: 0 },
+	{ name: "Takeout/Drive/empty/", data: Buffer.alloc(0), method: 0 },
+	{ name: "Takeout/Drive/shared/notes.ics", data: Buffer.from(ics) },
+	{ name: "Takeout/Drive/shared/people.vcf", data: Buffer.from(vcf) },
+	{ name: "Takeout/Drive/shared/.DS_Store", data: Buffer.from("x") },
+	{ name: "__MACOSX/Takeout/Drive/._y.txt", data: Buffer.from("x") },
+	{ name: "Takeout/Drive/link.txt", data: Buffer.from("/etc/passwd"), mode: 0o120777 },
+	{ name: "Takeout/Drive/../evil.txt", data: Buffer.from("x") },
+	{ name: "Takeout/Drive/a\u0001b.txt", data: Buffer.from("x") },
+	{ name: "Takeout/Kalender/a@gmail.com.ics", data: Buffer.from(ics) },
+	{ name: "Takeout/Mail/All mail.mbox", data: Buffer.from("From x") },
+	{ name: "Takeout/My Activity/Search/MyActivity.html", data: Buffer.from("<html>") },
+	{ name: "Takeout/My Activity/Search/MyActivity.json", data: Buffer.from("{}") },
+	{ name: "Takeout/archive_browser.html", data: Buffer.from("x"), method: 0 },
+]);
+
+test("Drive files are every regular entry under the Drive folder, with their path, size and CRC", async () => {
+	const scan = await scanTakeoutData([file("t.zip", driveZip())]);
+	const drive = scan.drive.files.filter((entry) => entry.rootKey === "Takeout/Drive");
+	assert.deepEqual(drive.map((entry) => entry.segments.join("/")).sort(), ["Résumé.docx", "ab.txt", "shared/notes.ics", "shared/people.vcf", "x/y.txt"]);
+	const text = drive.find((entry) => entry.name === "y.txt");
+	assert.equal(text.size, 5);
+	assert.equal(text.crc32, crc32(Buffer.from("hello")));
+	assert.deepEqual(scan.drive.dirs.map((dir) => dir.segments.join("/")), ["empty"]);
+	assert.equal(scan.drive.skipped.symlinks, 1);
+	// A control character is stripped from a name, not a reason to refuse the file.
+	assert.equal(scan.drive.rejected.length, 1);
+	assert.equal(scan.drive.rejectedCount, 1);
+	assert.match(scan.drive.rejected.map((item) => item.name).join(), /evil\.txt/);
+});
+
+test("a calendar or contacts file inside the Drive folder is a Drive file, not an import source", async () => {
+	const scan = await scanTakeoutData([file("t.zip", driveZip())]);
+	assert.deepEqual(scan.calendars.map((source) => source.label), ["a@gmail.com"]);
+	assert.deepEqual(scan.contacts, []);
+});
+
+test("other product folders are offered as roots, minus mail and JSON sidecars and anything already a source", async () => {
+	const scan = await scanTakeoutData([file("t.zip", driveZip())]);
+	assert.deepEqual(scan.drive.roots.map((root) => [root.key, root.label, root.files]).sort(), [["Takeout/Drive", "Drive", 5], ["Takeout/My Activity", "My Activity", 1]]);
+	assert.equal(scan.drive.roots.find((root) => root.label === "Drive").bytes, 5 + 3 + 1 + ics.length + vcf.length);
+});
+
+test("a zip without the Takeout folder uses its first folder as the root, and plain files never become Drive files", async () => {
+	const zip = buildZip([{ name: "Drive/a.txt", data: Buffer.from("a") }, { name: "top.txt", data: Buffer.from("t") }]);
+	const scan = await scanTakeoutData([file("t.zip", zip), file("loose.txt", "x")]);
+	assert.deepEqual(scan.drive.roots.map((root) => root.key), ["Drive"]);
+	assert.deepEqual(scan.drive.files.map((entry) => entry.segments), [["a.txt"]]);
+	assert.deepEqual(scan.ignored, ["loose.txt"]);
+});
+
+test("the cap is per product folder: one folder cut short does not block another", async () => {
+	const zip = buildZip([
+		...Array.from({ length: 5 }, (_, index) => ({ name: `Takeout/Drive/f${index}.txt`, data: Buffer.from("x") })),
+		...Array.from({ length: 2 }, (_, index) => ({ name: `Takeout/Photos/p${index}.jpg`, data: Buffer.from("x") })),
+		...Array.from({ length: 5 }, (_, index) => ({ name: `Takeout/Drive/d${index}/`, data: Buffer.alloc(0), method: 0 })),
+	]);
+	const scan = await scanTakeoutData([file("t.zip", zip)], { maxDriveFiles: 3 });
+	const root = (label) => scan.drive.roots.find((entry) => entry.label === label);
+	assert.deepEqual([root("Drive").files, root("Drive").tooMany], [3, true]);
+	assert.deepEqual([root("Photos").files, root("Photos").tooMany], [2, false]);
+	assert.equal(scan.drive.files.filter((entry) => entry.rootKey === "Takeout/Photos").length, 2);
+	assert.equal(scan.drive.dirs.length, 3);
+	const all = await scanTakeoutData([file("t.zip", zip)]);
+	assert.deepEqual(all.drive.roots.map((entry) => entry.tooMany), [false, false]);
+	assert.ok(MAX_DRIVE_FILES >= 100_000);
 });
