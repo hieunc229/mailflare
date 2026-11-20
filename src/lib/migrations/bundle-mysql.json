@@ -367,6 +367,16 @@
         "CREATE INDEX `messages_category_page_idx` ON `messages` (`mailbox_id`,`category`,`status`,`folder_id`,`created_at`);",
         "CREATE INDEX `messages_category_count_idx` ON `messages` (`mailbox_id`,`category`,`folder_id`,`direction`,`status`,`read`,`snoozed_until`);"
       ]
+    },
+    {
+      "name": "0020_promotion_sender_backfill.sql",
+      "statements": [
+        "ALTER TABLE `mailbox_promotion_settings` ADD `backfill_stalls` int DEFAULT 0 NOT NULL;",
+        "ALTER TABLE `mailbox_promotion_settings` ADD `backfill_error` longtext;",
+        "ALTER TABLE `mailbox_promotion_settings` ADD `backfill_day` int DEFAULT 0 NOT NULL;",
+        "ALTER TABLE `mailbox_promotion_settings` ADD `backfill_day_rows` int DEFAULT 0 NOT NULL;",
+        "CREATE INDEX `messages_sender_idx` ON `messages` (`mailbox_id`,`sender_address`,`created_at`);"
+      ]
     }
   ]
 }

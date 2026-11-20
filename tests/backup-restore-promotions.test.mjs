@@ -56,10 +56,10 @@ function d1(sqlite) {
 	};
 }
 
-function database(beforePromotions = false) {
+function database(beforePromotions = false, stopBefore = null) {
 	const sqlite = new Database(":memory:");
 	sqlite.pragma("foreign_keys = ON");
-	for (const migration of migrations.filter((m) => !beforePromotions || m.name < "0091")) {
+	for (const migration of migrations.filter((m) => (!beforePromotions || m.name < "0091") && (!stopBefore || m.name < stopBefore))) {
 		for (const statement of migration.statements) sqlite.exec(statement);
 	}
 	return sqlite;
@@ -105,5 +105,18 @@ test("restoring promotion rows into a 0089 database fails before anything is del
 	seed(target);
 	await assert.rejects(restoreDatabaseRecords(d1(target), toBuffer(backup)), /Apply pending database migrations before restoring mailbox_promotion_settings/);
 	assert.equal(count(target, "users"), 1);
+	assert.equal(count(target, "messages"), 1);
+});
+
+test("a backup written after 0096 restores into a database that has the promotion tables but not 0096: its new columns are dropped, nothing fails after the delete", async () => {
+	const source = database();
+	seed(source);
+	source.exec("insert into mailbox_promotion_settings (mailbox_id, mode, backfill_status, backfill_stalls, backfill_error, backfill_day, backfill_day_rows, updated_at) values ('m','show','failed',3,'boom',20000,5,1)");
+	const backup = await exportDatabaseRecords(d1(source));
+	const target = database(false, "0096");
+	seed(target);
+	assert.ok(!target.prepare("pragma table_info(mailbox_promotion_settings)").all().some((column) => column.name === "backfill_stalls"));
+	await restoreDatabaseRecords(d1(target), toBuffer(backup));
+	assert.deepEqual({ ...target.prepare("select mailbox_id, mode, backfill_status from mailbox_promotion_settings").get() }, { mailbox_id: "m", mode: "show", backfill_status: "failed" });
 	assert.equal(count(target, "messages"), 1);
 });

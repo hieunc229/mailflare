@@ -842,6 +842,16 @@
         "CREATE UNIQUE INDEX `mailbox_sender_preferences_mailbox_sender_idx` ON `mailbox_sender_preferences` (`mailbox_id`,`sender_address`);",
         "CREATE INDEX `mailbox_sender_preferences_updated_by_idx` ON `mailbox_sender_preferences` (`updated_by_user_id`);"
       ]
+    },
+    {
+      "name": "0096_promotion_sender_backfill.sql",
+      "statements": [
+        "CREATE INDEX `messages_sender_idx` ON `messages` (`mailbox_id`,`sender_address`,`created_at`);",
+        "ALTER TABLE `mailbox_promotion_settings` ADD `backfill_stalls` integer DEFAULT 0 NOT NULL;",
+        "ALTER TABLE `mailbox_promotion_settings` ADD `backfill_error` text;",
+        "ALTER TABLE `mailbox_promotion_settings` ADD `backfill_day` integer DEFAULT 0 NOT NULL;",
+        "ALTER TABLE `mailbox_promotion_settings` ADD `backfill_day_rows` integer DEFAULT 0 NOT NULL;"
+      ]
     }
   ]
 }
