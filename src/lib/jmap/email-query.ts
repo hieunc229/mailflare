@@ -1,8 +1,8 @@
 import { aliasedTable, and, asc, desc, eq, exists, gt, gte, inArray, isNotNull, isNull, lt, ne, not, or, sql } from "drizzle-orm";
 import type { SQL } from "drizzle-orm";
-import { messageAttachments, messages } from "@/db/schema";
+import { mailboxPromotionSettings, messageAttachments, messages } from "@/db/schema";
 import { concatText, containsLike, escapeLike, insensitiveLike as like, matchEverything, matchNothing } from "@/db/sql";
-import { KEYWORD_DRAFT, KEYWORD_FLAGGED, KEYWORD_SEEN } from "./constants";
+import { KEYWORD_DRAFT, KEYWORD_FLAGGED, KEYWORD_PROMOTION, KEYWORD_SEEN } from "./constants";
 import { invalidArguments, unsupportedFilter } from "./errors";
 import { normalizeMessageId } from "@/lib/email/threading";
 import { decodeMailboxRef, roleToStatus } from "./ids";
@@ -23,7 +23,10 @@ export function mailboxRefCondition(ref: MailboxRef): SQL {
 
 type MessagesTable = typeof messages;
 
-function keywordCondition(keyword: string, present: boolean, table: MessagesTable = messages): SQL {
+/** Whether the row's mailbox has Promotions turned on. */
+const promotionsOn = (table: MessagesTable) => exists(sql`(SELECT 1 FROM ${mailboxPromotionSettings} WHERE ${mailboxPromotionSettings.mailboxId} = ${table.mailboxId} AND ${mailboxPromotionSettings.mode} <> 'off')`);
+
+export function keywordCondition(keyword: string, present: boolean, table: MessagesTable = messages): SQL {
 	switch (keyword) {
 		case KEYWORD_SEEN:
 			return present ? or(eq(table.read, true), eq(table.direction, "outbound"))! : and(eq(table.read, false), eq(table.direction, "inbound"))!;
@@ -31,6 +34,9 @@ function keywordCondition(keyword: string, present: boolean, table: MessagesTabl
 			return eq(table.starred, present);
 		case KEYWORD_DRAFT:
 			return present ? eq(table.status, "draft") : ne(table.status, "draft");
+		case KEYWORD_PROMOTION:
+			// `primary` (a manual move to Inbox) counts as absent, like an unclassified row, and so does everything in a mailbox whose mode is off.
+			return present ? and(eq(table.category, "promotions"), promotionsOn(table))! : or(isNull(table.category), ne(table.category, "promotions"), not(promotionsOn(table)))!;
 		default:
 			// Unknown keywords are never set, so "has" matches nothing and "not" matches all.
 			return present ? matchNothing : matchEverything;

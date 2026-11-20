@@ -76,3 +76,23 @@ test("the state counts changes in every mailbox, past the first chunk of five", 
 	const [[, result]] = response.methodResponses;
 	assert.match(result.state, /^c1:41:/, JSON.stringify(result));
 });
+
+test("a Promotions mode flip changes the state, so Email/changes from before it cannot be calculated (show to off and back)", async (t) => {
+	const ctx = await createContext(t);
+	const db = ctx.env.DB.db;
+	// One context per request: the memo only lives for a single request.
+	const stateNow = async () => (await processRequest({ ...ctx, memo: undefined }, { using: [], methodCalls: [["Mailbox/get", {}, "a"]] })).methodResponses[0][1].state;
+	const changesFrom = async (sinceState) => (await processRequest({ ...ctx, memo: undefined }, { using: [], methodCalls: [["Email/changes", { sinceState }, "a"]] })).methodResponses[0];
+	const setMode = (mode) => db.prepare("INSERT INTO mailbox_promotion_settings (mailbox_id, mode, updated_at) VALUES ('mb1', ?, 1) ON CONFLICT (mailbox_id) DO UPDATE SET mode = excluded.mode").run(mode);
+
+	const unset = await stateNow();
+	assert.equal((await changesFrom(unset))[0], "Email/changes", "no flip yet: still calculable");
+	setMode("show");
+	assert.equal((await changesFrom(unset))[1].type, "cannotCalculateChanges", "off to show");
+	const shown = await stateNow();
+	assert.equal((await changesFrom(shown))[0], "Email/changes", "state taken after the flip is calculable");
+	setMode("separate");
+	assert.equal((await changesFrom(shown))[0], "Email/changes", "show to separate keeps $promotion, so no resync");
+	setMode("off");
+	assert.equal((await changesFrom(shown))[1].type, "cannotCalculateChanges", "show to off");
+});
