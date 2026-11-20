@@ -234,6 +234,18 @@ export const contacts = sqliteTable(
 	],
 );
 
+/** Address-book fields an import brought in (phones, addresses, organization...), JSON. Kept out of `contacts`,
+ *  which inbound mail selects whole, so a deploy before this migration cannot break delivery. */
+export const contactDetails = sqliteTable("contact_details", {
+	contactId: text("contact_id")
+		.primaryKey()
+		.references(() => contacts.id, { onDelete: "cascade" }),
+	details: text("details").notNull().default("{}"),
+	updatedAt: timestamp("updated_at")
+		.notNull()
+		.$defaultFn(() => new Date()),
+});
+
 export const folders = sqliteTable(
 	"folders",
 	{
@@ -1778,6 +1790,7 @@ export const schema = {
 	autoReplyDeliveries,
 	mailboxAccess,
 	contacts,
+	contactDetails,
 	folders,
 	apiKeys,
 	messages,

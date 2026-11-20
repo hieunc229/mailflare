@@ -183,6 +183,13 @@
       "when": 1795027667151,
       "tag": "0025_mta_sts_tls_rpt",
       "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "5",
+      "when": 1795027668151,
+      "tag": "0026_contact_details",
+      "breakpoints": true
     }
   ]
 }
