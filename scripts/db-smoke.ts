@@ -114,6 +114,18 @@ check("dav trigger sees a case-only title change", (await davLog(`cal:${userId}`
 await db.update(calendarEvents).set({ lastRemindedStart: new Date() }).where(eq(calendarEvents.id, davEventId));
 await db.update(calendarEvents).set({ title: "standup" }).where(eq(calendarEvents.id, davEventId));
 check("dav trigger ignores reminder bookkeeping and no-op updates", (await davLog(`cal:${userId}`, davEventId)) === "created,updated");
+// F6-2: an override row is part of its parent's DAV resource, and a master and its override leave no stray change after the master is destroyed.
+const davOverrideId = `${davEventId}_o`;
+const davBase = { userId, title: "Series", startsAt: new Date(Date.now() + 3_600_000), endsAt: new Date(Date.now() + 7_200_000) };
+await db.insert(calendarEvents).values({ ...davBase, id: davEventId + "_m", davObjectId: davEventId + "_m", rrule: "FREQ=WEEKLY;INTERVAL=2", repeat: "custom" } as never);
+await db.insert(calendarEvents).values({ ...davBase, id: davOverrideId, davObjectId: davEventId + "_m", recurrenceId: new Date(Date.now() + 3_600_000) } as never);
+check("dav trigger keys an override row under its parent", (await davLog(`cal:${userId}`, davEventId + "_m")) === "created,updated" && (await davLog(`cal:${userId}`, davOverrideId)) === "");
+await db.update(calendarEvents).set({ allDay: true }).where(eq(calendarEvents.id, davOverrideId));
+check("dav trigger watches the new calendar columns", (await davLog(`cal:${userId}`, davEventId + "_m")) === "created,updated,updated");
+await db.delete(calendarEvents).where(eq(calendarEvents.id, davOverrideId));
+check("dav trigger reports a deleted override as an update of its parent", (await davLog(`cal:${userId}`, davEventId + "_m")) === "created,updated,updated,updated");
+await db.delete(calendarEvents).where(eq(calendarEvents.id, davEventId + "_m"));
+check("dav trigger destroys a deleted master", (await davLog(`cal:${userId}`, davEventId + "_m")).endsWith(",destroyed"));
 await db.insert(davCollections).values({ id: `card:${userId}`, userId, kind: "addressbook" } as never);
 await db.insert(davCards).values({ id: `card_${stamp}`, userId, collectionId: `card:${userId}`, name: "a.vcf", uid: "uid-1", body: "BEGIN:VCARD", version: "3.0", size: 11 } as never);
 await db.update(davCards).set({ body: "BEGIN:VCARD\nEND:VCARD" }).where(eq(davCards.id, `card_${stamp}`));

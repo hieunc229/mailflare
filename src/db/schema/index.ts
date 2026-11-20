@@ -659,7 +659,8 @@ export const calendarEvents = sqliteTable(
 		location: text("location").notNull().default(""),
 		attendees: text("attendees").notNull().default("[]"),
 		color: text("color").notNull().default("blue"),
-		repeat: text("repeat", { enum: ["none", "daily", "weekly", "monthly", "weekdays"] }).notNull().default("none"),
+		/** "custom" means `rrule` holds the rule; every other value uses the repeat_* columns and `rrule` is null. */
+		repeat: text("repeat", { enum: ["none", "daily", "weekly", "monthly", "weekdays", "custom"] }).notNull().default("none"),
 		repeatDays: text("repeat_days").notNull().default("[]"),
 		repeatAnchorDay: integer("repeat_anchor_day"),
 		repeatUntil: timestamp("repeat_until"),
@@ -681,12 +682,21 @@ export const calendarEvents = sqliteTable(
 		inviteSequence: integer("invite_sequence"),
 		/** JSON map of guest address to accepted, tentative or declined, filled from their replies to an invitation this user sent. */
 		attendeeResponses: text("attendee_responses"),
+		/** Raw RFC 5545 RRULE value for a repeat the repeat_* columns cannot express; set exactly when `repeat` is "custom". */
+		rrule: text("rrule"),
+		/** On an override row (one moved occurrence of a DAV series): the original start it replaces. */
+		recurrenceId: timestamp("recurrence_id"),
+		/** Id of the master row of the CalDAV resource this row belongs to; null for events made in Mailflare. */
+		davObjectId: text("dav_object_id"),
+		/** The CalDAV client sent a date without a time. Times are still stored midnight to midnight in the event zone. */
+		allDay: bool("all_day").notNull().default(false),
 		createdAt: timestamp("created_at").notNull().$defaultFn(() => new Date()),
 		updatedAt: timestamp("updated_at").notNull().$defaultFn(() => new Date()),
 	},
 	(t) => [
 		index("calendar_events_user_starts_idx").on(t.userId, t.startsAt),
 		index("calendar_events_mailbox_idx").on(t.mailboxId),
+		index("calendar_events_dav_object_idx").on(t.davObjectId),
 	],
 );
 

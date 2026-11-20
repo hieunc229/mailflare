@@ -120,6 +120,13 @@
       "when": 1794516482572,
       "tag": "0026_dav_storage",
       "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1794516482573,
+      "tag": "0027_calendar_event_rrule",
+      "breakpoints": true
     }
   ]
 }
