@@ -26,6 +26,8 @@ import type { ProfileNameChangedDetail } from "@/lib/profile/types";
 
 export type MailboxOption = {
 	id: string;
+	/** The owner of the mailbox, which is not the signed-in user for a shared mailbox they were given access to. */
+	userId?: string;
 	domainId: string;
 	localPart: string;
 	hostname: string;

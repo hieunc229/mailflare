@@ -10,12 +10,16 @@ import type { TakeoutScan } from "@/lib/import/takeout-data-types";
 import { isZipSupported } from "@/lib/import/zip-utils";
 import { TakeoutCalendarCard } from "./takeout-calendar-card";
 import { TakeoutContactsCard } from "./takeout-contacts-card";
+import { TakeoutDriveCard } from "./takeout-drive-card";
 
-/** Import Google Calendar and Contacts from a Takeout export. The files are read in the browser; only parsed events and contacts are uploaded. */
+/** Import Google Calendar, Contacts and Drive from a Takeout export. The files are read in the browser; only parsed events and contacts, and the Drive files themselves, are uploaded. */
 export function TakeoutDataImport() {
 	const { t } = useLanguage();
 	// The server answers 403 when an admin switched Calendar off; say so up front instead of after a scan.
-	const calendarOff = useCurrentUser()?.calendarEnabled === false;
+	const user = useCurrentUser();
+	const calendarOff = user?.calendarEnabled === false;
+	const driveOff = user?.driveEnabled === false;
+	const hasDrive = (scan: TakeoutScan) => scan.drive.files.length > 0;
 	const [scan, setScan] = useState<TakeoutScan | null>(null);
 	const [scanning, setScanning] = useState(false);
 	const [scanId, setScanId] = useState(0);
@@ -59,6 +63,7 @@ export function TakeoutDataImport() {
 				<p className="text-xs leading-5 text-neutral-500">{t("importPage.takeoutDataHint")}</p>
 			</div>
 			{calendarOff && (!scan || scan.calendars.length > 0) && <p role="status" className="rounded-lg border border-amber-100 bg-amber-50 px-4 py-3 text-sm text-amber-700">{t("importPage.takeoutDataCalendarOff")}</p>}
+			{driveOff && (!scan || hasDrive(scan)) && <p role="status" className="rounded-lg border border-amber-100 bg-amber-50 px-4 py-3 text-sm text-amber-700">{t("importPage.takeoutDriveOff")}</p>}
 			{scanning && <p className="text-xs text-neutral-500" aria-live="polite">{t("importPage.preparing")}</p>}
 			{scan && (
 				<>
@@ -67,7 +72,8 @@ export function TakeoutDataImport() {
 					{notice("importPage.takeoutDataIgnored", scan.ignored)}
 					{scan.calendars.length > 0 && !calendarOff && <TakeoutCalendarCard key={`calendar-${scanId}`} sources={scan.calendars} />}
 					{scan.contacts.length > 0 && <TakeoutContactsCard key={`contacts-${scanId}`} sources={scan.contacts} />}
-					{scan.calendars.length === 0 && scan.contacts.length === 0 && <p className="rounded-lg border border-neutral-200 bg-neutral-50 px-4 py-3 text-sm text-neutral-600">{t("importPage.takeoutDataNothing")}</p>}
+					{hasDrive(scan) && !driveOff && <TakeoutDriveCard key={`drive-${scanId}`} drive={scan.drive} />}
+					{scan.calendars.length === 0 && scan.contacts.length === 0 && !hasDrive(scan) && <p className="rounded-lg border border-neutral-200 bg-neutral-50 px-4 py-3 text-sm text-neutral-600">{t("importPage.takeoutDataNothing")}</p>}
 				</>
 			)}
 			{error && <p role="alert" className="rounded-lg border border-red-100 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</p>}

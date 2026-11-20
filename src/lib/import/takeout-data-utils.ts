@@ -1,6 +1,6 @@
 import { decodeContactsCsv, isGoogleContactsHeader, parseCsv } from "../contacts/google-csv";
 import { takeoutDrivePath } from "../drive/import-utils";
-import type { ContactSource, DriveFile, DriveRoot, TakeoutScan, TakeoutSource } from "./takeout-data-types";
+import type { ContactSource, DriveRoot, TakeoutScan, TakeoutSource } from "./takeout-data-types";
 import type { ZipEntry } from "./zip-types";
 import { listZipEntries, openZipEntry, readStreamChunks, readZipEntryBytes } from "./zip-utils";
 
