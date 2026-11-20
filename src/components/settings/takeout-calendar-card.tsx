@@ -14,7 +14,7 @@ import { FOLDER_COLOR_OPTIONS, FOLDER_COLOR_VALUES } from "@/lib/folders/colors"
 import { folderColorKeys } from "@/lib/folders/color-keys";
 import { importCalendarBytes, parseRetryAfter, previewCalendarBytes } from "@/lib/import/takeout-calendar-utils";
 import type { CalendarPost, CalendarPostResult } from "@/lib/import/takeout-calendar-types";
-import { readCalendarSource } from "@/lib/import/takeout-data-utils";
+import { readTakeoutSource } from "@/lib/import/takeout-data-utils";
 import { getUserTimeZone } from "@/lib/time/utils";
 import { radioTarget, resultTone } from "./takeout-calendar-card-utils";
 import type { CalendarRowState, CalendarRunProgress, CalendarRunResult, TakeoutCalendarCardProps } from "./takeout-calendar-card-types";
@@ -88,7 +88,7 @@ export function TakeoutCalendarCard({ sources }: TakeoutCalendarCardProps) {
 				const base = { mode, label: source.label, index: index + 1, count: chosen.length, done: 0, total: 0 };
 				setProgress(base);
 				setAnnounce(t("importPage.takeoutReading", { source: source.label, index: index + 1, count: chosen.length }));
-				const bytes = await readCalendarSource(source);
+				const bytes = await readTakeoutSource(source);
 				const settings = { name: source.label.slice(0, 120), color: row.color, googleAddress: row.googleAddress.trim(), reminders, skipDeclined };
 				const onProgress = (done: number, total: number) => setProgress({ ...base, done, total });
 				const summary = mode === "import"

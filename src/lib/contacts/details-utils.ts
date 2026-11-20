@@ -103,7 +103,9 @@ export function normalizeContactDetails(input: unknown): ContactDetailsData {
 }
 
 /** The details of one card: its addresses are kept apart, as the contact's own rows. */
-export function withoutEmails({ emails: _emails, ...rest }: ContactDetailsData): Omit<ContactDetailsData, "emails"> {
+export function withoutEmails(details: ContactDetailsData): Omit<ContactDetailsData, "emails"> {
+	const rest = { ...details };
+	delete rest.emails;
 	return rest;
 }
 

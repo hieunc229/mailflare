@@ -14,7 +14,7 @@ await build({
 	outdir: dir, outExtension: { ".js": ".mjs" }, bundle: true, platform: "node", format: "esm", logLevel: "silent",
 	alias: { "@": join(root, "src") },
 });
-const { splitVcards, parseVcard, contactPhotoBytes, MAX_VCARDS } = await import(pathToFileURL(join(dir, "v.mjs")).href);
+const { splitVcards, parseVcard, decodeContactPhoto, MAX_VCARDS } = await import(pathToFileURL(join(dir, "v.mjs")).href);
 
 const bytes = (text) => new TextEncoder().encode(text);
 const card = (...lines) => ["BEGIN:VCARD", "VERSION:3.0", ...lines, "END:VCARD"].join("\r\n");
@@ -158,22 +158,23 @@ test("splitVcards: PHOTO, LOGO, SOUND and KEY lines are removed and the photo is
 	assert.deepEqual(cards[1].photo, { kind: "uri" });
 	assert.deepEqual(cards[2].photo, { kind: "inline", base64: b64 });
 	assert.deepEqual(cards[3].photo, { kind: "inline", base64: b64 });
-	assert.deepEqual([...contactPhotoBytes(cards[0].photo)], [0xff, 0xd8, 0xff, 0xe0, 1, 2, 3, 4]);
-	assert.equal(contactPhotoBytes(cards[1].photo), null);
+	assert.deepEqual([...decodeContactPhoto(cards[0].photo).bytes], [0xff, 0xd8, 0xff, 0xe0, 1, 2, 3, 4]);
+	assert.equal(decodeContactPhoto(cards[0].photo).mime, "image/jpeg");
+	assert.equal(decodeContactPhoto(cards[1].photo), null);
 	assert.equal(parseVcard(cards[0].text).emails[0], "a@b.co");
 });
 
-test("contactPhotoBytes sniffs the image type and refuses SVG, scripts, bad base64 and oversize data", () => {
+test("decodeContactPhoto sniffs the image type and refuses SVG, scripts, bad base64 and oversize data", () => {
 	const inline = (buffer) => ({ kind: "inline", base64: Buffer.from(buffer).toString("base64") });
-	assert.ok(contactPhotoBytes(inline([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0])));
-	assert.ok(contactPhotoBytes(inline(Buffer.from("GIF89a....."))));
-	assert.ok(contactPhotoBytes(inline(Buffer.concat([Buffer.from("RIFF"), Buffer.from([1, 2, 3, 4]), Buffer.from("WEBPVP8 ")]))));
-	assert.equal(contactPhotoBytes(inline(Buffer.from("<svg xmlns='http://www.w3.org/2000/svg'><script>alert(1)</script></svg>"))), null);
-	assert.equal(contactPhotoBytes(inline(Buffer.from("<html>"))), null);
-	assert.equal(contactPhotoBytes({ kind: "inline", base64: "!!!not base64!!!" }), null);
-	assert.equal(contactPhotoBytes({ kind: "inline", base64: "" }), null);
+	assert.equal(decodeContactPhoto(inline([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0])).mime, "image/png");
+	assert.equal(decodeContactPhoto(inline(Buffer.from("GIF89a....."))).mime, "image/gif");
+	assert.equal(decodeContactPhoto(inline(Buffer.concat([Buffer.from("RIFF"), Buffer.from([1, 2, 3, 4]), Buffer.from("WEBPVP8 ")]))).mime, "image/webp");
+	assert.equal(decodeContactPhoto(inline(Buffer.from("<svg xmlns='http://www.w3.org/2000/svg'><script>alert(1)</script></svg>"))), null);
+	assert.equal(decodeContactPhoto(inline(Buffer.from("<html>"))), null);
+	assert.equal(decodeContactPhoto({ kind: "inline", base64: "!!!not base64!!!" }), null);
+	assert.equal(decodeContactPhoto({ kind: "inline", base64: "" }), null);
 	const big = Buffer.concat([Buffer.from([0xff, 0xd8, 0xff]), Buffer.alloc(11 * 1024 * 1024)]);
-	assert.equal(contactPhotoBytes(inline(big)), null);
+	assert.equal(decodeContactPhoto(inline(big)), null);
 });
 
 test("splitVcards: an over-long photo line is dropped as truncated, not decoded", () => {
