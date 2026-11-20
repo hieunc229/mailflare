@@ -690,6 +690,114 @@ export const calendarEvents = sqliteTable(
 	],
 );
 
+/**
+ * CalDAV/CardDAV storage (spec F6-3). One calendar and one address book per user:
+ * the id is derived from the user (`cal:<userId>`, `card:<userId>`), which is also
+ * the collection id the `dav_changes` triggers write.
+ */
+export const davCollections = sqliteTable(
+	"dav_collections",
+	{
+		id: text("id").primaryKey(),
+		userId: text("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+		kind: text("kind", { enum: ["calendar", "addressbook"] }).notNull(),
+		displayName: text("display_name"),
+		/** `#RRGGBBAA` as Apple clients send it. */
+		color: text("color"),
+		description: text("description"),
+		sortOrder: integer("sort_order"),
+		/** JSON object of properties a client stored that Mailflare does not model, capped at 16 KiB by the writer. */
+		deadProps: text("dead_props").notNull().default("{}"),
+		/** Address book only: when the user's manual contacts were copied in as cards. */
+		seededAt: timestamp("seeded_at"),
+		createdAt: timestamp("created_at").notNull().$defaultFn(() => new Date()),
+		updatedAt: timestamp("updated_at").notNull().$defaultFn(() => new Date()),
+	},
+	(t) => [index("dav_collections_user_idx").on(t.userId)],
+);
+
+/** The stored iCalendar text of a calendar event (the DAV resource), keyed by the master event row. */
+export const davCalendarObjects = sqliteTable(
+	"dav_calendar_objects",
+	{
+		id: text("id").primaryKey().references(() => calendarEvents.id, { onDelete: "cascade" }),
+		userId: text("user_id").notNull(),
+		collectionId: text("collection_id").notNull(),
+		name: text("name").notNull(),
+		uid: text("uid").notNull(),
+		/** The iCalendar text last written (client PUT or regeneration); null until first rendered. */
+		body: text("body"),
+		/** SHA-256 of the projected row fields when `body` was written. */
+		rowsHash: text("rows_hash"),
+		size: integer("size").notNull(),
+		createdAt: timestamp("created_at").notNull().$defaultFn(() => new Date()),
+		updatedAt: timestamp("updated_at").notNull().$defaultFn(() => new Date()),
+	},
+	(t) => [
+		uniqueIndex("dav_calendar_objects_name_idx").on(t.collectionId, t.name),
+		uniqueIndex("dav_calendar_objects_uid_idx").on(t.collectionId, t.uid),
+		index("dav_calendar_objects_user_idx").on(t.userId),
+	],
+);
+
+export const davCards = sqliteTable(
+	"dav_cards",
+	{
+		id: text("id").primaryKey(),
+		userId: text("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+		collectionId: text("collection_id").notNull(),
+		name: text("name").notNull(),
+		uid: text("uid").notNull(),
+		/** The vCard text exactly as stored. */
+		body: text("body").notNull(),
+		version: text("version", { enum: ["3.0", "4.0"] }).notNull(),
+		fn: text("fn").notNull().default(""),
+		/** JSON array of normalized addresses, at most 20. */
+		emails: text("emails").notNull().default("[]"),
+		size: integer("size").notNull(),
+		createdAt: timestamp("created_at").notNull().$defaultFn(() => new Date()),
+		updatedAt: timestamp("updated_at").notNull().$defaultFn(() => new Date()),
+	},
+	(t) => [
+		uniqueIndex("dav_cards_name_idx").on(t.collectionId, t.name),
+		uniqueIndex("dav_cards_uid_idx").on(t.collectionId, t.uid),
+		index("dav_cards_user_idx").on(t.userId),
+	],
+);
+
+/**
+ * Change log of the DAV collections, written only by the `dav_changes_*` triggers
+ * (never from application code). A resource's ETag is the newest `seq` for its
+ * `(collection_id, object_key)`; a collection's sync token embeds the newest `seq`.
+ * Derived data, excluded from backups.
+ */
+export const davChanges = sqliteTable(
+	"dav_changes",
+	{
+		seq: autoId("seq"),
+		collectionId: text("collection_id").notNull(),
+		objectKey: text("object_key").notNull(),
+		changeType: text("change_type", { enum: ["created", "updated", "destroyed"] }).notNull(),
+		createdAt: integer("created_at").notNull().default(nowSeconds),
+	},
+	(t) => [
+		index("dav_changes_collection_seq_idx").on(t.collectionId, t.seq),
+		index("dav_changes_object_idx").on(t.collectionId, t.objectKey, t.seq),
+	],
+);
+
+/**
+ * Per-collection sync epoch and pruning floor. Separate from `dav_collections`
+ * (which is backed up) so that after a restore the epoch is regenerated and every
+ * token handed out by the old database is refused.
+ */
+export const davSyncState = sqliteTable("dav_sync_state", {
+	collectionId: text("collection_id").primaryKey(),
+	epoch: text("epoch").notNull(),
+	/** Highest pruned `dav_changes.seq`. */
+	floor: integer("floor").notNull().default(0),
+});
+
 export const bookingEvents = sqliteTable(
 	"booking_events",
 	{
