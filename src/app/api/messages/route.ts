@@ -21,7 +21,7 @@ import { summarizeNotesForRows } from "@/lib/notes/service";
 import { isMissingTableError } from "@/lib/database-errors";
 import { parseLimit, parseOffset } from "@/lib/api/query-params";
 import { draftsVisibleTo } from "@/lib/email/draft-access";
-import { inboxVisibleCondition, loadPromotionModes } from "@/lib/promotions/settings";
+import { categoryScopeCondition } from "@/lib/promotions/settings";
 
 export async function GET(request: Request) {
 	const env = getEnv();
@@ -90,15 +90,9 @@ export async function GET(request: Request) {
 	if (status === "received" && !folderId) {
 		conditions.push(isNull(messages.folderId));
 		conditions.push(or(isNull(messages.snoozedUntil), lte(messages.snoozedUntil, new Date()))!);
-		if (category) {
-			conditions.push(eq(messages.category, "promotions"));
-		} else {
-			// Inbox: mailboxes in "separate" mode keep their promotions in the Promotions view only.
-			const scope = mailboxId ? [mailboxId] : accessibleMailboxIds;
-			const modes = await loadPromotionModes(db, scope);
-			const hidden = inboxVisibleCondition(scope.filter((id) => modes.get(id) === "separate"), scope.filter((id) => modes.get(id) !== "separate"));
-			if (hidden) conditions.push(hidden);
-		}
+		// Promotions is its own view, only for mailboxes that turned it on; the Inbox hides what `separate` mailboxes moved there.
+		const hidden = await categoryScopeCondition(db, mailboxId ? [mailboxId] : accessibleMailboxIds, category ? "promotions" : "inbox");
+		if (hidden) conditions.push(hidden);
 	}
 	if (starred === "true") {
 		conditions.push(eq(messages.starred, true));
