@@ -57,11 +57,12 @@ import {
 import clsx from "clsx";
 import { DueFollowUps } from "@/components/follow-ups/due-follow-ups";
 import { getUserTimeZone, zonedDateFields } from "@/lib/time/utils";
+import { hasActivePromotions, mergeUnreadDeltas, negateUnreadDeltas, unreadDeltas, type UnreadDeltas } from "@/lib/promotions/ui-utils";
 
 const pageSize = 25;
 
 function supportsRowActions(folder: MessageFolderConfig["folder"]): boolean {
-	return folder === "inbox" || folder === "snoozed" || folder === "archived" || folder === "spam" || folder === "trash";
+	return folder === "inbox" || folder === "promotions" || folder === "snoozed" || folder === "archived" || folder === "spam" || folder === "trash";
 }
 
 /** Whether the action takes the row out of the folder that is on screen. */
@@ -116,6 +117,7 @@ function MessageListRowComponent({
 	showCompactRowActions = false,
 	dragMessageIds,
 	todayKey,
+	promotionMode,
 }: MessageListRowProps) {
 	const { t } = useLanguage();
 	const Icon = config.icon;
@@ -141,14 +143,15 @@ function MessageListRowComponent({
 	const href = `${config.hrefPrefix}/${message.id}`;
 	const navigation = useMessageNavigation(href, rowMessage);
 
-	const affectsInboxCount = config.folder === "inbox" && !config.folderId;
+	// Which folder counts a read flip on this row moves; see unreadDeltas.
+	const rowDeltas = useCallback((flip: number) => unreadDeltas({ folder: config.folder, folderId: config.folderId, mode: promotionMode, category: message.category }, flip), [config.folder, config.folderId, promotionMode, message.category]);
 
 	const runRowAction = useCallback(async (action: RowMessageAction) => {
 		const previousRead = read;
 		const previousThreadUnread = threadUnread;
-		const unreadDelta = !affectsInboxCount || (action !== "read" && action !== "unread")
-			? 0
-			: getUnreadFlipCount(rowMessage, action === "read") * (action === "read" ? -1 : 1);
+		const unreadDelta = action !== "read" && action !== "unread"
+			? null
+			: rowDeltas(getUnreadFlipCount(rowMessage, action === "read") * (action === "read" ? -1 : 1));
 		if (action === "read") setRead(true);
 		if (action === "unread") setRead(false);
 		// Grouped rows derive their unread styling from the thread count, so it must change with the row.
@@ -156,18 +159,18 @@ function MessageListRowComponent({
 			if (action === "read") setThreadUnread(0);
 			if (action === "unread") setThreadUnread(message.threadMessageIds.length);
 		}
-		if (unreadDelta) dispatchMessageCountsDelta({ inboxUnreadDelta: unreadDelta });
+		if (unreadDelta) dispatchMessageCountsDelta(unreadDelta);
 		try {
 			await onMessageAction(message.id, action);
 		} catch (error) {
 			if (action === "read" || action === "unread") {
 				setRead(previousRead);
 				setThreadUnread(previousThreadUnread);
-				if (unreadDelta) dispatchMessageCountsDelta({ inboxUnreadDelta: -unreadDelta });
+				if (unreadDelta) dispatchMessageCountsDelta(negateUnreadDeltas(unreadDelta)!);
 			}
 			throw error;
 		}
-	}, [affectsInboxCount, message.id, message.threadMessageIds, onMessageAction, read, rowMessage, threadUnread]);
+	}, [message.id, message.threadMessageIds, onMessageAction, read, rowDeltas, rowMessage, threadUnread]);
 
 	const swipeable = compact && (config.folder === "inbox" || config.folder === "snoozed") && message.direction === "inbound";
 
@@ -179,11 +182,12 @@ function MessageListRowComponent({
 			const previousThreadUnread = threadUnread;
 			setRead(true);
 			if (previousThreadUnread !== undefined) setThreadUnread(Math.max(0, previousThreadUnread - 1));
-			if (affectsInboxCount && message.direction === "inbound") dispatchMessageCountsDelta({ inboxUnreadDelta: -1 });
+			const openDelta = message.direction === "inbound" ? rowDeltas(-1) : null;
+			if (openDelta) dispatchMessageCountsDelta(openDelta);
 			void runBulkMessageAction([message.id], "read", false, undefined, { undo: false }).catch(() => {
 				setRead(false);
 				setThreadUnread(previousThreadUnread);
-				if (affectsInboxCount && message.direction === "inbound") dispatchMessageCountsDelta({ inboxUnreadDelta: 1 });
+				if (openDelta) dispatchMessageCountsDelta(negateUnreadDeltas(openDelta)!);
 			});
 		}
 		navigation.onNavigate(event, !read);
@@ -454,7 +458,10 @@ export function MessageFolderPage({
 		read: unreadOnly ? "unread" : "all",
 		group: grouped ? "thread" : undefined,
 	}, !mailboxesLoading, config.folderId);
-	const { counts } = useMessageCounts(selectedMailbox?.id, !mailboxesLoading);
+	const { counts, isLoading: countsLoading } = useMessageCounts(selectedMailbox?.id, !mailboxesLoading);
+	const getPromotionMode = useCallback((message: Message): "show" | "separate" | undefined => counts.promotionModes?.[message.mailboxId ?? ""], [counts.promotionModes]);
+	// Promotions with every mailbox off is empty by design; say so and point at the setting.
+	const promotionsOff = config.folder === "promotions" && !mailboxesLoading && !countsLoading && !hasActivePromotions(counts.promotionModes);
 	usePageLoading(mailboxesLoading || isLoading, true);
 	const headerIcons = config.headerIcons ?? [];
 	const hasActiveFilters = !!query.trim();
@@ -623,11 +630,14 @@ export function MessageFolderPage({
 			.map((message) => [message.id, { read: message.read, threadUnread: message.threadUnread }]));
 		const previousSelectedRead = new Map(selectedMessages.map((message) => [message.id, message.read]));
 		const readValue = action === "read" ? true : action === "unread" ? false : null;
-		const inboxUnreadDelta = readValue === null || config.folder !== "inbox" || config.folderId
-			? 0
+		const countsDelta = readValue === null
+			? null
 			: messages
 				.filter((message) => selectedIdSet.has(message.id))
-				.reduce((total, message) => total + getUnreadFlipCount(message, readValue), 0) * (readValue ? -1 : 1);
+				.reduce<UnreadDeltas | null>((total, message) => mergeUnreadDeltas(total, unreadDeltas(
+					{ folder: config.folder, folderId: config.folderId, mode: getPromotionMode(message), category: message.category },
+					getUnreadFlipCount(message, readValue) * (readValue ? -1 : 1),
+				)), null);
 		if (readValue !== null) {
 			updateMessages((current) => current.map((message) =>
 				selectedIdSet.has(message.id)
@@ -635,7 +645,7 @@ export function MessageFolderPage({
 					: message,
 			));
 			setSelectedMessages((current) => current.map((message) => ({ ...message, read: readValue })));
-			if (inboxUnreadDelta) dispatchMessageCountsDelta({ inboxUnreadDelta });
+			if (countsDelta) dispatchMessageCountsDelta(countsDelta);
 		}
 		try {
 			await runBulkMessageAction(expandSelectedIds(selectedIds), action, true, folderId);
@@ -657,7 +667,7 @@ export function MessageFolderPage({
 					const previous = previousSelectedRead.get(message.id);
 					return previous === undefined ? message : { ...message, read: previous };
 				}));
-				if (inboxUnreadDelta) dispatchMessageCountsDelta({ inboxUnreadDelta: -inboxUnreadDelta });
+				if (countsDelta) dispatchMessageCountsDelta(negateUnreadDeltas(countsDelta)!);
 			}
 			throw error;
 		} finally {
@@ -794,10 +804,19 @@ export function MessageFolderPage({
 							showCompactRowActions={compactRowActions}
 							dragMessageIds={selectedIdSet.has(message.id) ? selectedDragIds : undefined}
 							todayKey={todayKey}
+							promotionMode={getPromotionMode(message)}
 						/>
 					))}
 				</div>
-				{!isLoading && messages.length === 0 && (
+				{!isLoading && messages.length === 0 && promotionsOff && (
+					<p className="px-6 py-4 text-sm text-neutral-500">
+						{t("folder.empty.promotionsOff")}{" "}
+						<Link href="/settings/inbox" className="font-medium text-blue-700 underline-offset-2 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600">
+							{t("folder.empty.promotionsOffLink")}
+						</Link>
+					</p>
+				)}
+				{!isLoading && messages.length === 0 && !promotionsOff && (
 					<p className="px-6 py-4 text-sm text-neutral-500">
 						{hasActiveFilters ? t("list.noMatch") : config.emptyTextKey ? t(config.emptyTextKey) : config.emptyText}
 					</p>

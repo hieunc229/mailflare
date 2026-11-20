@@ -9,6 +9,7 @@ import { InboxShortcutsSettings } from "@/components/settings/inbox-shortcuts-se
 import { MailboxAutoReplyForm } from "@/components/settings/mailbox-auto-reply-form";
 import { SpamFilterSettings } from "@/components/settings/spam-filter-settings";
 import { TrashRetentionSettings } from "@/components/settings/trash-retention-settings";
+import { PromotionsSettings } from "@/components/settings/promotions-settings";
 import { PushNotificationSettings } from "@/components/settings/push-notification-settings";
 import { BrowserNotificationSettings } from "@/components/settings/browser-notification-settings";
 
@@ -89,6 +90,13 @@ export default async function SettingsInboxPage() {
 							<p className="mt-1 text-sm text-neutral-500">{t("settingsPage.inbox.spamProtectionDescription")}</p>
 						</div>
 						<SpamFilterSettings />
+					</div>
+					<div className="py-6 first:pt-0 last:pb-0">
+						<div className="mb-4">
+							<h3 className="text-base font-semibold text-neutral-900">{t("settingsPage.inbox.promotions")}</h3>
+							<p className="mt-1 text-sm text-neutral-500">{t("settingsPage.inbox.promotionsDescription")}</p>
+						</div>
+						<PromotionsSettings />
 					</div>
 					<div className="py-6 first:pt-0 last:pb-0">
 						<div className="mb-4">

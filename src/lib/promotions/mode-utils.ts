@@ -11,15 +11,19 @@ export function parseModeBody(body: unknown): { mode: PromotionMode } | { error:
 	return { mode: mode as PromotionMode };
 }
 
+const REQUEUE: BackfillPatch = { backfillStatus: "pending", backfillStalls: 0, backfillError: null, backfillCursor: null, backfillScanned: 0 };
+
 /**
  * Backfill fields to write with a mode change. Moving away from off queues the backfill unless it is
- * pending, running or done; an idle or failed job restarts from a clean state. Other changes leave it alone.
+ * pending, running or done; an idle or failed job restarts from a clean state. Saving a non-off mode while the
+ * job is failed also restarts it, which is what the Settings "Try again" button sends. Other changes leave it alone.
  */
 export function backfillPatchForModeChange(current: { mode: PromotionMode; backfillStatus: BackfillStatus } | null, next: PromotionMode): BackfillPatch {
 	const wasOff = !current || current.mode === "off";
+	if (next !== "off" && current && !wasOff && current.backfillStatus === "failed") return { ...REQUEUE };
 	if (!wasOff || next === "off") return current ? {} : { backfillStatus: "idle" };
 	if (current && current.backfillStatus !== "idle" && current.backfillStatus !== "failed") return {};
-	return { backfillStatus: "pending", backfillStalls: 0, backfillError: null, backfillCursor: null, backfillScanned: 0 };
+	return { ...REQUEUE };
 }
 
 export function describeBackfill(row: { backfillStatus: BackfillStatus; backfillScanned: number; backfillError: string | null } | null): { status: BackfillStatus; scanned: number; error?: string } {

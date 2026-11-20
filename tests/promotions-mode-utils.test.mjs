@@ -41,7 +41,7 @@ test("the first move away from off queues the backfill; failed or idle restarts 
 
 test("other changes leave the backfill alone", () => {
 	for (const status of ["pending", "running", "done"]) assert.deepEqual(u.backfillPatchForModeChange({ mode: "off", backfillStatus: status }, "show"), {});
-	assert.deepEqual(u.backfillPatchForModeChange({ mode: "show", backfillStatus: "failed" }, "separate"), {});
+	assert.deepEqual(u.backfillPatchForModeChange({ mode: "show", backfillStatus: "done" }, "separate"), {});
 	assert.deepEqual(u.backfillPatchForModeChange({ mode: "show", backfillStatus: "done" }, "off"), {});
 });
 
@@ -57,4 +57,11 @@ test("only promotions in a separate mailbox are silent", () => {
 	assert.equal(u.isSilentPromotion("promotions", "off"), false);
 	assert.equal(u.isSilentPromotion("promotions", undefined), false);
 	assert.equal(u.isSilentPromotion(null, "separate"), false);
+});
+
+test("saving a non-off mode while the backfill failed requeues it (Try again)", () => {
+	const clean = { backfillStatus: "pending", backfillStalls: 0, backfillError: null, backfillCursor: null, backfillScanned: 0 };
+	assert.deepEqual(u.backfillPatchForModeChange({ mode: "show", backfillStatus: "failed" }, "show"), clean);
+	assert.deepEqual(u.backfillPatchForModeChange({ mode: "separate", backfillStatus: "failed" }, "separate"), clean);
+	assert.deepEqual(u.backfillPatchForModeChange({ mode: "show", backfillStatus: "failed" }, "off"), {});
 });
