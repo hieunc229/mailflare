@@ -1,9 +1,9 @@
-import type { TranslationKey } from "@/lib/i18n/types";
+import type { PluralKey, TranslationKey } from "@/lib/i18n/types";
 
 export type MoveTarget = "promotions" | "inbox";
 export type MoveSummary = { total: number; moved: number; failed: number; changed: number };
 export type Settled<T> = { ok: true; value: T } | { ok: false; error: unknown };
-export type CopyDescriptor = { key: TranslationKey; vars?: Record<string, string | number> };
+export type CopyDescriptor = { key: TranslationKey | PluralKey; vars?: Record<string, string | number> };
 
 /** Rows move between Inbox and Promotions only where Promotions is on, for people who may manage the mailbox, and only for received mail. Off mailboxes see nothing. */
 export function canMoveCategory(input: { mode: string | undefined; permission: string | undefined; direction: string; status: string }): boolean {
