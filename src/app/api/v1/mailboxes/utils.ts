@@ -6,6 +6,7 @@ import { domains, mailboxAliases, mailboxes, users } from "@/db/schema";
 import { authenticateAdminApiKey, canShareAdminMailboxes } from "@/lib/api/admin-auth";
 import { newId } from "@/lib/ids";
 import { mailboxSchema } from "@/lib/validators";
+import { isReportAddressReserved } from "@/lib/deliverability/report-address";
 import { ensureMailboxDomainRouting } from "@/lib/mailboxes/domain-addresses";
 
 export async function GET(request: Request) {
@@ -39,6 +40,7 @@ export async function POST(request: Request) {
 	const [domain] = await db.select().from(domains).where(and(eq(domains.id, parsed.data.domainId), eq(domains.userId, auth.userId))).limit(1);
 	if (!domain) return NextResponse.json({ error: "Domain not found" }, { status: 404 });
 	const localPart = parsed.data.localPart.toLowerCase();
+	if (await isReportAddressReserved(env, domain.id, localPart)) return NextResponse.json({ error: "This address is reserved for DMARC reports" }, { status: 409 });
 	const [existing] = await db.select({ id: mailboxes.id }).from(mailboxes).where(and(eq(mailboxes.domainId, domain.id), eq(mailboxes.localPart, localPart))).limit(1);
 	if (existing) return NextResponse.json({ error: "Mailbox already exists" }, { status: 409 });
 	const [alias] = await db.select({ id: mailboxAliases.id }).from(mailboxAliases).where(and(eq(mailboxAliases.domainId, domain.id), eq(mailboxAliases.localPart, localPart))).limit(1);

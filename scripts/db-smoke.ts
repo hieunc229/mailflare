@@ -5,7 +5,7 @@
  */
 import { and, eq, sql } from "drizzle-orm";
 import { createDb } from "@/db";
-import { users, domains, mailboxes, messages, folders, jmapChanges, appSettings, webhooks, spamTokenStats, spamReputation } from "@/db/schema";
+import { users, domains, mailboxes, messages, folders, jmapChanges, appSettings, webhooks, spamTokenStats, spamReputation, emailSuppressions, domainDeliverability } from "@/db/schema";
 import { getDatabaseConfig } from "@/db/with-database";
 import { openExternalDatabase } from "@/db/external";
 import { applyPendingMigrations, getMigrationStatus } from "@/lib/migrations/service";
@@ -15,6 +15,11 @@ import { exportDatabaseRecords, restoreDatabaseRecords } from "@/lib/backups/exp
 import { getSearchIndexStatus } from "@/lib/search/index-admin";
 import { recordReputationObservation } from "@/lib/spam/repository";
 import { isUniqueConstraintError } from "@/lib/database-errors";
+import { recordSuppression } from "@/lib/deliverability/suppression";
+import { ingestReportMail } from "@/lib/deliverability/ingest";
+import { runDeliverabilityDaily } from "@/lib/deliverability/daily";
+import { getDmarcStats } from "@/lib/deliverability/dmarc-stats";
+import { gzipSync } from "node:zlib";
 
 const [url, driver] = process.argv.slice(2);
 if (!url) throw new Error("usage: db-smoke <DATABASE_URL> [driver]");
@@ -109,6 +114,43 @@ await recordReputationObservation(env, `mbx_${stamp}`, [{ type: "domain", key: "
 const reputation = await db.select().from(spamReputation).where(and(eq(spamReputation.mailboxId, `mbx_${stamp}`), eq(spamReputation.key, "example.com")));
 check("spam reputation upsert", reputation[0]?.messagesSeen === 2);
 
+const suppressed = { domainId: `dom_${stamp}`, email: "a@x.org" };
+await recordSuppression(env, { ...suppressed, reason: "manual", source: "admin", detail: "note" });
+await recordSuppression(env, { ...suppressed, reason: "hard_bounce", source: "ses", detail: "550" });
+await recordSuppression(env, { ...suppressed, reason: "complaint", source: "resend" });
+await recordSuppression(env, { ...suppressed, reason: "hard_bounce", source: "ses", detail: "again" });
+const [suppression] = await db.select().from(emailSuppressions).where(eq(emailSuppressions.domainId, suppressed.domainId));
+check("suppression upsert keeps the strongest reason and counts events", suppression?.reason === "complaint" && suppression.source === "resend" && suppression.eventCount === 4);
+
+const returned = { domainId: `dom_${stamp}`, email: "dsn@x.org", reason: "hard_bounce" as const, source: "dsn" as const, confirmed: false };
+const confirmedOf = async () => (await db.select().from(emailSuppressions).where(and(eq(emailSuppressions.domainId, returned.domainId), eq(emailSuppressions.email, returned.email))))[0]?.confirmed;
+await recordSuppression(env, { ...returned, evidenceRef: "m1" });
+await recordSuppression(env, { ...returned, evidenceRef: "m1" });
+const sameMessage = await confirmedOf();
+await recordSuppression(env, { ...returned, evidenceRef: "m2" });
+check("a DSN is confirmed only by a second, different original message", sameMessage === false && await confirmedOf() === true);
+
+// DMARC report ingest: report row, aggregate upserts in batches, and the stats queries, on this dialect.
+const reportDay = Math.floor(Date.now() / 1000) - 3600;
+const reportXml = (reportId: string) => `<feedback><report_metadata><org_name>google.com</org_name><email>r@google.com</email><report_id>${reportId}</report_id><date_range><begin>${reportDay}</begin><end>${reportDay + 3600}</end></date_range></report_metadata><policy_published><domain>smoke.test</domain><p>none</p><pct>100</pct></policy_published><record><row><source_ip>203.0.113.7</source_ip><count>40</count><policy_evaluated><disposition>none</disposition><dkim>pass</dkim><spf>pass</spf></policy_evaluated></row><identifiers><header_from>smoke.test</header_from></identifiers></record><record><row><source_ip>198.51.100.9</source_ip><count>2</count><policy_evaluated><disposition>reject</disposition><dkim>fail</dkim><spf>fail</spf></policy_evaluated></row><identifiers><header_from>smoke.test</header_from></identifiers></record></feedback>`;
+const reportMime = (reportId: string) => Buffer.from(`From: r@google.com\r\nTo: mailflare-reports@smoke.test\r\nMIME-Version: 1.0\r\nContent-Type: multipart/mixed; boundary=b\r\n\r\n--b\r\nContent-Type: application/gzip\r\nContent-Transfer-Encoding: base64\r\nContent-Disposition: attachment; filename="r.xml.gz"\r\n\r\n${Buffer.from(gzipSync(reportXml(reportId))).toString("base64")}\r\n--b--\r\n`);
+const reportObjects = new Map<string, Buffer>();
+const reportEnv = { DB: d1, BUCKET: { get: async (key: string) => { const bytes = reportObjects.get(key); return bytes ? { size: bytes.length, arrayBuffer: async () => new Uint8Array(bytes).buffer } : null; }, delete: async (key: string) => { reportObjects.delete(key); } } } as unknown as CloudflareEnv;
+const reportTarget = { domainId: `dom_${stamp}`, hostname: "smoke.test" };
+for (const [key, id] of [["raw1", `r1_${stamp}`], ["raw2", `r2_${stamp}`], ["raw1", `r1_${stamp}`]] as const) {
+	reportObjects.set(key, reportMime(id));
+	await ingestReportMail(reportEnv, reportTarget, { rawR2Key: key, authenticated: true, from: "r@google.com" }, { lookupPtr: async () => null });
+}
+const dmarc = await getDmarcStats(reportEnv, reportTarget.domainId, { days: 7 });
+const dmarcTotal = (key: "pass" | "rejected") => dmarc.series.reduce((sum, day) => sum + day[key], 0);
+check("dmarc ingest adds counts across reports and ignores a redelivery", dmarcTotal("pass") === 80 && dmarcTotal("rejected") === 4 && dmarc.sources.length === 2 && dmarc.reporters[0]?.reports === 2);
+
+await db.insert(domainDeliverability).values({ domainId: reportTarget.domainId, reportsEnabled: true, reportsEnabledAt: new Date(), updatedAt: new Date() }).onConflictDoNothing();
+await runDeliverabilityDaily(reportEnv, new Date(), { sendMail: async () => true });
+await runDeliverabilityDaily(reportEnv, new Date(Date.now() + 200 * 86_400_000), { sendMail: async () => true });
+const leftover = await db.all<{ n: number }>(sql`SELECT (SELECT count(*) FROM dmarc_daily_stats WHERE domain_id = ${reportTarget.domainId}) + (SELECT count(*) FROM deliverability_reports WHERE domain_id = ${reportTarget.domainId}) AS n`);
+check("deliverability daily job purges data past retention", Number(leftover[0].n) === 0);
+
 try {
 	await db.insert(users).values({ id: `usr2_${stamp}`, email: `a${stamp}@example.com`, passwordHash: "x", name: "B" });
 	check("unique violation throws", false);
@@ -119,12 +161,21 @@ try {
 const searchStatus = await getSearchIndexStatus(env);
 check("search index status", searchStatus.messages === searchStatus.indexed && searchStatus.messages >= 1);
 
+// An aggregate row that exists when the backup is taken: dmarc_daily_stats has a serial id that must not be backed up.
+reportObjects.set("raw4", reportMime(`r4_${stamp}`));
+await ingestReportMail(reportEnv, reportTarget, { rawR2Key: "raw4", authenticated: true, from: "r@google.com" }, { lookupPtr: async () => null });
 const backup = await exportDatabaseRecords(d1);
 const exported = JSON.parse(new TextDecoder().decode(backup)) as { tables: Record<string, Array<Record<string, unknown>>> };
+check("backup leaves out the serial id of dmarc_daily_stats", exported.tables.dmarc_daily_stats.length >= 2 && exported.tables.dmarc_daily_stats.every((row) => !("id" in row)));
 check("backup exports portable values", exported.tables.users.every((row) => typeof row.disabled === "number") && exported.tables.messages.length >= 1);
 await restoreDatabaseRecords(d1, backup.buffer.slice(backup.byteOffset, backup.byteOffset + backup.byteLength) as ArrayBuffer);
 const [afterRestore] = await db.select({ subject: messages.subject, starred: messages.starred, createdAt: messages.createdAt }).from(messages).where(eq(messages.id, `msg_${stamp}`));
 check("backup restores", afterRestore?.subject === "Quarterly Report" && afterRestore.starred === false && afterRestore.createdAt instanceof Date);
+
+reportObjects.set("raw5", reportMime(`r5_${stamp}`));
+await ingestReportMail(reportEnv, reportTarget, { rawR2Key: "raw5", authenticated: true, from: "r@google.com" }, { lookupPtr: async () => null });
+const afterRestoreStats = await getDmarcStats(reportEnv, reportTarget.domainId, { days: 7 });
+check("dmarc ingest keeps working after a restore (sequence not behind the rows)", afterRestoreStats.series.reduce((sum, day) => sum + day.pass, 0) === 80);
 
 const [settings] = await db.select().from(appSettings).where(eq(appSettings.id, "default"));
 check("seed rows present", settings?.appName === "Mailflare");

@@ -5,6 +5,7 @@ import { ensureEmailRoutingRuleToWorker } from "@/lib/cloudflare-api";
 import { ensureMailboxDomainRouting } from "@/lib/mailboxes/domain-addresses";
 import { newId } from "@/lib/ids";
 import { listAccessibleMailboxes } from "@/lib/mailboxes/access";
+import { isReportAddressReserved } from "@/lib/deliverability/report-address";
 import type { SessionUser } from "@/lib/auth/types";
 
 export async function ensurePersonalMailbox(env: CloudflareEnv, db: AppDatabase, user: SessionUser) {
@@ -15,6 +16,8 @@ export async function ensurePersonalMailbox(env: CloudflareEnv, db: AppDatabase,
 	if (!localPart || !hostname) return current;
 	const [domain] = await db.select().from(domains).where(eq(domains.hostname, hostname)).limit(1);
 	if (!domain) return current;
+	// A domain that receives DMARC reports at this local part has no mailbox there; the address would only swallow them.
+	if (await isReportAddressReserved(env, domain.id, localPart)) return current;
 
 	const [existing] = await db
 		.select({ id: mailboxes.id })
