@@ -1,4 +1,4 @@
-import { and, asc, eq, gt, inArray, sql } from "drizzle-orm";
+import { and, asc, eq, gt, inArray, sql, type AnyColumn } from "drizzle-orm";
 import { getDb } from "@/db";
 import { davChanges, davSyncState } from "@/db/schema";
 import { excluded, greatest } from "@/db/sql";
@@ -119,6 +119,13 @@ export async function etagSeqs(env: Pick<CloudflareEnv, "DB">, collectionId: str
 	}
 	return result;
 }
+
+/** `"<seq>"`; a row the change log has no entry for (it should have one) falls back to its update time. */
+export const etagFromSeq = (seq: number | null | undefined, updatedAt: Date) => `"${seq ?? `t${Math.floor(updatedAt.getTime() / 1000)}`}"`;
+
+/** The newest change seq of the object with this key, as a column: lets a listing carry ETags without a second query. */
+export const newestSeqOf = (collectionId: string, key: AnyColumn) =>
+	sql<number | null>`(select max(${davChanges.seq}) from ${davChanges} where ${davChanges.collectionId} = ${collectionId} and ${davChanges.objectKey} = ${key})`;
 
 /**
  * Prune, run by the 5-minute cron. Removes rows older than 30 days except the newest row of each object

@@ -261,11 +261,11 @@ test("request bodies are checked before and while they are read", async (t) => {
 	assert.equal(streamed.status, 413);
 });
 
-test("everything this PR does not serve yet is refused cleanly", async (t) => {
+test("everything not served yet is refused cleanly", async (t) => {
 	const { env, key } = await fixture(t);
 	for (const method of ["GET", "PUT", "DELETE", "PROPPATCH", "REPORT", "LOCK", "UNLOCK", "POST"]) assert.equal((await dav(env, method, "/dav/principals/u1/", { key })).status, 405, method);
 	for (const method of ["MKCALENDAR", "MKCOL"]) assert.equal((await dav(env, method, "/dav/calendars/u1/new/", { key })).status, 403, method);
-	assert.equal((await propfind(env, "/dav/calendars/u1/default/", key, PROP("<A:displayname/>"))).status, 404);
+	assert.equal((await propfind(env, "/dav/calendars/u1/elsewhere/", key, PROP("<A:displayname/>"))).status, 404);
 	assert.equal((await propfind(env, "/dav/elsewhere/", key, PROP("<A:displayname/>"))).status, 404);
 	const allowed = (await dav(env, "GET", "/dav/", { key })).headers.get("Allow");
 	assert.match(allowed, /PROPFIND/);
