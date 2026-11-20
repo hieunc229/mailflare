@@ -10,7 +10,7 @@ const temp = mkdtempSync(join(root, "node_modules", "mailflare-promotion-counts-
 after(() => rmSync(temp, { recursive: true, force: true }));
 await build({
 	stdin: {
-		contents: `export { applyPromotionCounts, buildMessageCounts, createEmptyFolderCounts } from "./src/app/api/messages/counts/utils.ts";`,
+		contents: `export { activePromotionModes, applyPromotionCounts, buildMessageCounts, createEmptyFolderCounts } from "./src/app/api/messages/counts/utils.ts";`,
 		resolveDir: root,
 		sourcefile: "promotion-counts-entry.ts",
 		loader: "ts",
@@ -22,7 +22,7 @@ await build({
 	alias: { "@": join(root, "src") },
 	logLevel: "silent",
 });
-const { applyPromotionCounts, buildMessageCounts, createEmptyFolderCounts } = await import(pathToFileURL(join(temp, "entry.mjs")).href);
+const { activePromotionModes, applyPromotionCounts, buildMessageCounts, createEmptyFolderCounts } = await import(pathToFileURL(join(temp, "entry.mjs")).href);
 
 const inboxRow = (mailboxId, read, total) => ({ mailboxId, folderId: null, direction: "inbound", status: "received", read, starred: false, snoozedUntil: null, total });
 
@@ -46,4 +46,10 @@ test("separate mode moves promotions out of Inbox totals, unread and per-mailbox
 	assert.deepEqual(counts.folders.inbox, { total: 9 - 3, unread: 7 - 2 });
 	assert.equal(counts.mailboxes.find((m) => m.mailboxId === "a").inbox, 2);
 	assert.equal(counts.mailboxes.find((m) => m.mailboxId === "b").inbox, 4);
+});
+
+test("activePromotionModes lists only mailboxes whose mode is not off", () => {
+	const modes = new Map([["a", "show"], ["b", "off"], ["c", "separate"]]);
+	assert.deepEqual(activePromotionModes(modes), { a: "show", c: "separate" });
+	assert.deepEqual(activePromotionModes(new Map()), {});
 });

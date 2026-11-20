@@ -4,6 +4,8 @@ export interface NewMessageEvent {
 	mailboxId: string;
 	messageId: string;
 	subject: string | null;
+	/** Set for bulk mail the server filed as a promotion. */
+	category?: "promotions";
 	type: "new_message";
 }
 

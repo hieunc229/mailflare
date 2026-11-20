@@ -131,6 +131,7 @@ import {
 	SquareIcon as HugeSquareIcon,
 	StarIcon as HugeStarIcon,
 	StrikethroughIcon as HugeStrikethroughIcon,
+	TagIcon as HugeTagIcon,
 	TextAlignJustifyIcon as HugeTextAlignJustifyIcon,
 	TextAlignLeftIcon as HugeTextAlignLeftIcon,
 	TriangleAlertIcon as HugeTriangleAlertIcon,
@@ -318,6 +319,7 @@ export const Sparkles = createIcon(HugeSparklesIcon, "Sparkles");
 export const Square = createIcon(HugeSquareIcon, "Square");
 export const Star = createIcon(HugeStarIcon, "Star");
 export const Strikethrough = createIcon(HugeStrikethroughIcon, "Strikethrough");
+export const Tag = createIcon(HugeTagIcon, "Tag");
 export const TextAlignJustify = createIcon(HugeTextAlignJustifyIcon, "TextAlignJustify");
 export const Trash2 = createIcon(HugeDelete02Icon, "Trash2");
 export const Underline = createIcon(HugeUnderlineIcon, "Underline");

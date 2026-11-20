@@ -18,6 +18,7 @@ import {
   Send,
   ShieldAlert,
   Star,
+  Tag,
   Trash2,
 } from "@/components/icons";
 import { useSelectedMailbox } from "@/components/mailbox-provider";
@@ -33,6 +34,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useMessageCounts } from "@/hooks/use-message-counts";
+import { hasActivePromotions } from "@/lib/promotions/ui-utils";
 import { AUTH_SESSION_CHANGED_EVENT, authFetch } from "@/lib/auth/client";
 import { getMailboxFolders, invalidateFolderCache } from "@/lib/folders/client";
 import {
@@ -60,6 +62,7 @@ import { useSidebar } from "./sidebar-state";
 const links = [
   { href: "/compose", labelKey: "navigation.compose", icon: MailPlus, primary: true },
   { href: "/inbox", labelKey: "navigation.inbox", icon: Inbox, preloadMessages: true },
+  { href: "/promotions", labelKey: "navigation.promotions", icon: Tag, preloadMessages: true },
   { href: "/starred", labelKey: "navigation.starred", icon: Star, preloadMessages: true },
   { href: "/snoozed", labelKey: "navigation.snoozed", icon: Clock, preloadMessages: true },
   { href: "/sent", labelKey: "navigation.sent", icon: Send, preloadMessages: true },
@@ -124,10 +127,14 @@ export function DashboardNav({ className }: { className?: string }) {
     useState<FolderColor>(DEFAULT_FOLDER_COLOR);
   const [addingFolder, setAddingFolder] = useState(false);
   const [folderDialogOpen, setFolderDialogOpen] = useState(false);
-  const linksWithCounts: NavLink[] = links.filter((link) => link.href !== "/scheduled" || counts.folders.scheduled.total > 0).map(({ labelKey, ...rest }): NavLink => {
+  const promotionsOn = hasActivePromotions(counts.promotionModes);
+  const linksWithCounts: NavLink[] = links.filter((link) => (link.href !== "/scheduled" || counts.folders.scheduled.total > 0) && (link.href !== "/promotions" || promotionsOn)).map(({ labelKey, ...rest }): NavLink => {
     const link = { ...rest, label: t(labelKey) };
     if (link.href === "/inbox") {
       return { ...link, count: getFolderNavCount("inbox", counts.folders) };
+    }
+    if (link.href === "/promotions") {
+      return { ...link, count: getFolderNavCount("promotions", counts.folders) };
     }
     if (link.href === "/starred") {
       return { ...link, count: getFolderNavCount("starred", counts.folders) };

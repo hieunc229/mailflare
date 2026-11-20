@@ -6,7 +6,7 @@ import { messages } from "@/db/schema";
 import { getCurrentUser } from "@/lib/auth/cookies";
 import { getEnv } from "@/lib/cloudflare";
 import { scheduledMessageCondition } from "@/lib/email/scheduled";
-import { applyPromotionCounts, buildMessageCounts } from "./utils";
+import { activePromotionModes, applyPromotionCounts, buildMessageCounts } from "./utils";
 import { loadPromotionModes } from "@/lib/promotions/settings";
 import { getMailboxAccessLevel, listAccessibleMailboxIds } from "@/lib/mailboxes/access";
 
@@ -69,7 +69,8 @@ export async function GET(request: Request) {
 
 	// Promotions get their own query, and only for mailboxes that opted in, so the grouped query above is unchanged.
 	const modes = await loadPromotionModes(db, mailboxIds);
-	const activeIds = [...modes].filter(([, mode]) => mode !== "off").map(([id]) => id);
+	counts.promotionModes = activePromotionModes(modes);
+	const activeIds = Object.keys(counts.promotionModes);
 	if (activeIds.length > 0) {
 		const promotionRows = await db
 			.select({ mailboxId: messages.mailboxId, read: messages.read, total: count() })

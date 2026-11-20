@@ -34,6 +34,8 @@ export type MessageListRowProps = {
 	showCompactRowActions?: boolean;
 	dragMessageIds?: string[];
 	todayKey: string;
+	/** The row mailbox's Promotions mode when it is on; undefined means off. */
+	promotionMode?: "show" | "separate";
 };
 
 export type RowMessageAction = "archive" | "trash" | "read" | "unread" | "inbox" | "delete";

@@ -1,4 +1,5 @@
 import type { MessageCounts, MessageFolder } from "@/hooks/types";
+import type { PromotionMode } from "@/lib/promotions/settings";
 import type { CountableFolder, MessageCountRow } from "./types";
 
 export function getMessageFolder(row: MessageCountRow): CountableFolder {
@@ -96,4 +97,11 @@ export function applyPromotionCounts(
 
 export function getFolderLabelCount(folder: MessageFolder, counts: MessageCounts["folders"]) {
 	return counts[folder].unread;
+}
+
+/** The mailboxes with Promotions turned on, with their mode. The client builds its nav entry and row actions from this, so off mailboxes stay out. */
+export function activePromotionModes(modes: ReadonlyMap<string, PromotionMode>): Record<string, Exclude<PromotionMode, "off">> {
+	const active: Record<string, Exclude<PromotionMode, "off">> = {};
+	for (const [mailboxId, mode] of modes) if (mode !== "off") active[mailboxId] = mode;
+	return active;
 }
