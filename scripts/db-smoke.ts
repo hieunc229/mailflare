@@ -9,6 +9,7 @@ import { users, domains, mailboxes, messages, calendarEvents, contacts, contactD
 import { getDatabaseConfig } from "@/db/with-database";
 import { openExternalDatabase } from "@/db/external";
 import { staleGuard } from "@/lib/dav/writes";
+import { mirrorCardStatements } from "@/lib/dav/contact-mirror";
 import { applyPendingMigrations, getMigrationStatus } from "@/lib/migrations/service";
 import { buildSearchConditions } from "@/lib/search/conditions";
 import { createBookedCalendarEvents } from "@/lib/booking/create";
@@ -333,6 +334,17 @@ reportObjects.set("raw5", reportMime(`r5_${stamp}`));
 await ingestReportMail(reportEnv, reportTarget, { rawR2Key: "raw5", authenticated: true, from: "r@google.com" }, { lookupPtr: async () => null });
 const afterRestoreStats = await getDmarcStats(reportEnv, reportTarget.domainId, { days: 7 });
 check("dmarc ingest keeps working after a restore (sequence not behind the rows)", afterRestoreStats.series.reduce((sum, day) => sum + day.pass, 0) === 80);
+
+// F6-6: a card mirrors into contacts in one batch: upsert with the first-link-wins name rule, promotion to manual, unlink of removed addresses.
+const mirrorOf = (email: string) => db.select({ name: contacts.displayName, source: contacts.source, card: contacts.davCardId, blocked: contacts.blocked }).from(contacts).where(and(eq(contacts.userId, userId), eq(contacts.email, email))).then((rows) => rows[0]);
+await db.insert(contacts).values({ id: `${userId}:old@example.com`, userId, email: "old@example.com", displayName: "Heard", source: "inbound", blocked: true } as never);
+await db.batch(mirrorCardStatements(db, userId, { id: "card_a", fn: "Card A", emails: ["old@example.com", "both@example.com"], group: false, own: new Set<string>() }) as never);
+await db.batch(mirrorCardStatements(db, userId, { id: "card_b", fn: "Card B", emails: ["both@example.com", "only-b@example.com"], group: false, own: new Set<string>() }) as never);
+const [mirrorOld, mirrorBoth, mirrorOnlyB] = [await mirrorOf("old@example.com"), await mirrorOf("both@example.com"), await mirrorOf("only-b@example.com")];
+check("card mirror promotes and links a contact without touching blocked", mirrorOld?.source === "manual" && mirrorOld.name === "Card A" && mirrorOld.card === "card_a" && mirrorOld.blocked === true);
+check("card mirror: the first card to link an address keeps it and its name", mirrorBoth?.card === "card_a" && mirrorBoth.name === "Card A" && mirrorOnlyB?.card === "card_b" && mirrorOnlyB.name === "Card B");
+await db.batch(mirrorCardStatements(db, userId, { id: "card_a", fn: "Card A", emails: ["both@example.com"], group: false, own: new Set<string>() }) as never);
+check("card mirror unlinks an address taken off its card and keeps the contact", (await mirrorOf("old@example.com"))?.card === null && (await mirrorOf("old@example.com"))?.source === "manual");
 
 const [settings] = await db.select().from(appSettings).where(eq(appSettings.id, "default"));
 check("seed rows present", settings?.appName === "Mailflare");
