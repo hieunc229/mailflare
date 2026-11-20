@@ -1,6 +1,6 @@
 import { authFetch } from "@/lib/auth/client";
 import { formatUserDate } from "@/lib/time/utils";
-import type { DeliverabilitySettings, DmarcOverview, DmarcRange, DmarcStats, DomainOption, ReportsResponse, SuppressionMode, SuppressionPage } from "./types";
+import type { DeliverabilitySettings, DmarcOverview, DmarcRange, DmarcStats, DomainOption, MtaStsBody, MtaStsOverview, MtaStsState, ReportsResponse, SuppressionMode, SuppressionPage, TlsOverview, TlsRptResponse } from "./types";
 
 export const PAGE_SIZE = 50;
 
@@ -60,4 +60,24 @@ export async function putReports(domainId: string, body: { enabled?: boolean; al
 
 export async function acknowledgeAlert(domainId: string, alertId: string): Promise<void> {
 	await json(await authFetch(`${base(domainId)}/alerts/${encodeURIComponent(alertId)}`, { method: "PATCH" }));
+}
+
+export async function fetchTls(domainId: string, days: DmarcRange): Promise<TlsOverview> {
+	return json(await authFetch(`${base(domainId)}/tls?days=${days}`, { cache: "no-store" }));
+}
+
+export async function putTlsRpt(domainId: string, enabled: boolean): Promise<TlsRptResponse> {
+	return json(await authFetch(`${base(domainId)}/tls-rpt`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ enabled }) }));
+}
+
+export async function fetchMtaSts(domainId: string): Promise<MtaStsOverview> {
+	return json(await authFetch(`${base(domainId)}/mta-sts`, { cache: "no-store" }));
+}
+
+export async function putMtaSts(domainId: string, body: MtaStsBody): Promise<{ kind: "ok"; state: MtaStsState }> {
+	return json(await authFetch(`${base(domainId)}/mta-sts`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }));
+}
+
+export async function postMtaStsVerified(domainId: string): Promise<void> {
+	await json(await authFetch(`${base(domainId)}/mta-sts/verified`, { method: "POST" }));
 }

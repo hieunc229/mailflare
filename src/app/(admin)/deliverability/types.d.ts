@@ -53,3 +53,47 @@ export type DmarcRange = 7 | 30 | 90;
 export type ReportsResponse =
 	| { kind: "preview"; plan: DmarcPlan }
 	| { kind: "ok"; plan?: DmarcPlan };
+
+export type TlsStats = {
+	days: DmarcRange;
+	series: { day: string; success: number; failure: number }[];
+	reporters: { reporterOrg: string; success: number; failure: number }[];
+	policies: { policyType: string; mxHost: string | null; success: number; failure: number }[];
+	failureTypes: { resultType: string; failure: number }[];
+	unverifiedReports: number;
+	recentReports: DmarcRecentReport[];
+};
+
+export type TlsOverview = {
+	address: string;
+	enabled: boolean;
+	reportsEnabled: boolean;
+	manualZone: boolean;
+	dns: { record: string | null; hasAddress: boolean } | { error: true };
+	stats: TlsStats;
+};
+
+export type TlsRptResponse = { kind: "ok"; plan: { address: string; before: string | null; after: string | null; changed: boolean; manual: boolean } };
+
+export type MtaStsState = {
+	host: string;
+	policyUrl: string;
+	mode: "none" | "testing" | "enforce";
+	status: "off" | "testing" | "enforce" | "retiring";
+	policyId: string | null;
+	mx: string[];
+	unverifiedMx: string[];
+	maxAge: number;
+	policy: string | null;
+	verifiedAt: string | null;
+	retireAfter: string | null;
+	txt?: { name: string; content: string; manual: boolean };
+};
+
+export type MtaStsOverview = MtaStsState & {
+	manualZone: boolean;
+	dns: { record: string | null; matches: boolean } | { error: true };
+	/** The live MX hosts next to the policy's list; null while no policy is published. */
+	mxDrift: { liveMx: string[]; differs: boolean } | { error: true } | null;
+};
+export type MtaStsBody = { mode: "testing" | "enforce" | "none"; maxAge?: number; acknowledgeRisk?: boolean };
