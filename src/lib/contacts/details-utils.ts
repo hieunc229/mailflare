@@ -150,6 +150,19 @@ export function mergeContactDetails(existing: ContactDetailsData | null, incomin
 	});
 }
 
+/** A stored birthday for display in `locale`: "May 1, 1980", or "May 1" when the year is unknown. */
+export function formatBirthday(value: string, locale: string): string {
+	const match = /^(?:(\d{4})-|--)(\d{2})-(\d{2})$/.exec(value);
+	if (!match) return value;
+	const date = new Date(0);
+	date.setUTCFullYear(match[1] ? Number(match[1]) : 2000, Number(match[2]) - 1, Number(match[3]));
+	try {
+		return new Intl.DateTimeFormat(locale, { timeZone: "UTC", month: "long", day: "numeric", ...(match[1] ? { year: "numeric" } : {}) }).format(date);
+	} catch {
+		return value;
+	}
+}
+
 /** A CSV cell that spreadsheet software will not run as a formula: a leading = + - or @ gets a quote in front. */
 export function csvSafeCell(value: string): string {
 	return /^[=+\-@\t\r]/.test(value) ? `'${value}` : value;
