@@ -57,6 +57,8 @@ import {
 import clsx from "clsx";
 import { DueFollowUps } from "@/components/follow-ups/due-follow-ups";
 import { getUserTimeZone, zonedDateFields } from "@/lib/time/utils";
+import { moveMessagesToCategory } from "@/lib/promotions/move-client";
+import { canMoveCategory, moveTargetFor, showsPromotionChip } from "@/lib/promotions/move-utils";
 import { hasActivePromotions, mergeUnreadDeltas, negateUnreadDeltas, unreadDeltas, type UnreadDeltas } from "@/lib/promotions/ui-utils";
 
 const pageSize = 25;
@@ -118,6 +120,7 @@ function MessageListRowComponent({
 	dragMessageIds,
 	todayKey,
 	promotionMode,
+	canMovePromotions = false,
 }: MessageListRowProps) {
 	const { t } = useLanguage();
 	const Icon = config.icon;
@@ -171,6 +174,15 @@ function MessageListRowComponent({
 			throw error;
 		}
 	}, [message.id, message.threadMessageIds, onMessageAction, read, rowDeltas, rowMessage, threadUnread]);
+
+	const promotionTarget = canMovePromotions ? moveTargetFor(message.category) : undefined;
+	const moveToCategory = useCallback(() => {
+		if (!promotionTarget) return;
+		void moveMessagesToCategory({ messageIds: getRowMessageIds(message), target: promotionTarget, mailboxId: message.mailboxId, senderAddress: message.senderAddress });
+	}, [message, promotionTarget]);
+	const promotionChip = showsPromotionChip({ folder: config.folder, folderId: config.folderId, mode: promotionMode, category: message.category })
+		? <span className="ms-2 inline-flex shrink-0 items-center rounded-md bg-amber-50 px-1.5 text-[11px] font-medium leading-5 text-amber-800 ring-1 ring-inset ring-amber-200">{t("promotions.chip")}</span>
+		: null;
 
 	const swipeable = compact && (config.folder === "inbox" || config.folder === "snoozed") && message.direction === "inbound";
 
@@ -235,6 +247,7 @@ function MessageListRowComponent({
 								<span className="ml-2 text-xs font-normal text-neutral-500">{message.threadCount}</span>
 							)}
 							<NoteBadge count={message.noteCount} className="ml-2" />
+							{promotionChip}
 						</span>
 						<span className={clsx(unread ?"font-medium":"text-neutral-500","shrink-0 text-[11px]")}>
 							<OpenedIndicator count={message.openCount} />
@@ -260,6 +273,8 @@ function MessageListRowComponent({
 						compact
 						active={active || opening}
 						onSnoozeChange={onSnoozeChange}
+						promotionTarget={promotionTarget}
+						onPromotionMove={moveToCategory}
 					/>
 				)}
 			</div>
@@ -340,6 +355,7 @@ function MessageListRowComponent({
 					</span>
 					<span className="text-neutral-500"> - {getMessagePreview(rowMessage, config.folder, t)}</span>
 				</Link>
+				{promotionChip}
 			</span>
 			<time
 				dateTime={message.createdAt}
@@ -390,6 +406,8 @@ function MessageListRowComponent({
 					folderId={config.folderId}
 					onAction={runRowAction}
 					onSnoozeChange={onSnoozeChange}
+					promotionTarget={promotionTarget}
+					onPromotionMove={moveToCategory}
 				/>
 			)}
 		</div>
@@ -459,7 +477,15 @@ export function MessageFolderPage({
 		group: grouped ? "thread" : undefined,
 	}, !mailboxesLoading, config.folderId);
 	const { counts, isLoading: countsLoading } = useMessageCounts(selectedMailbox?.id, !mailboxesLoading);
+	const { mailboxes: accessibleMailboxes } = useSelectedMailbox();
 	const getPromotionMode = useCallback((message: Message): "show" | "separate" | undefined => counts.promotionModes?.[message.mailboxId ?? ""], [counts.promotionModes]);
+	// Only received mail in Inbox or Promotions moves between them, in mailboxes with Promotions on that the user manages.
+	const canMovePromotions = useCallback((message: Message) => (config.folder === "promotions" || (config.folder === "inbox" && !config.folderId)) && canMoveCategory({
+		mode: counts.promotionModes?.[message.mailboxId ?? ""],
+		permission: accessibleMailboxes.find((mailbox) => mailbox.id === message.mailboxId)?.permission,
+		direction: message.direction,
+		status: message.status,
+	}), [accessibleMailboxes, config.folder, config.folderId, counts.promotionModes]);
 	// Promotions with every mailbox off is empty by design; say so and point at the setting.
 	const promotionsOff = config.folder === "promotions" && !mailboxesLoading && !countsLoading && !hasActivePromotions(counts.promotionModes);
 	usePageLoading(mailboxesLoading || isLoading, true);
@@ -805,6 +831,7 @@ export function MessageFolderPage({
 							dragMessageIds={selectedIdSet.has(message.id) ? selectedDragIds : undefined}
 							todayKey={todayKey}
 							promotionMode={getPromotionMode(message)}
+							canMovePromotions={canMovePromotions(message)}
 						/>
 					))}
 				</div>

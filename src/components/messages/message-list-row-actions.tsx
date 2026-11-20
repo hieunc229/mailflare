@@ -3,7 +3,7 @@
 import { memo, useState } from "react";
 import type { ReactNode } from "react";
 import clsx from "clsx";
-import { Archive, ArchiveRestore, Clock, Mail, MailOpen, MoreVertical, ShieldCheck, Trash2, Undo2 } from "@/components/icons";
+import { Archive, ArchiveRestore, Clock, Inbox, Mail, MailOpen, MoreVertical, ShieldCheck, Tag, Trash2, Undo2 } from "@/components/icons";
 import { MessageActionMenu, MessageActionMenuItem, MessageActionMenuSeparator } from "@/components/message-actions/action-menu";
 import { useLanguage } from "@/components/language-provider";
 import { Button } from "@/components/ui/button";
@@ -24,7 +24,7 @@ type PrimaryAction = {
 	disabled?: boolean;
 };
 
-function MessageListRowActionsComponent({ message, folder = "inbox", folderId, onAction, compact = false, active = false, onSnoozeChange }: MessageListRowActionsProps) {
+function MessageListRowActionsComponent({ message, folder = "inbox", folderId, onAction, compact = false, active = false, onSnoozeChange, promotionTarget, onPromotionMove }: MessageListRowActionsProps) {
 	const { t } = useLanguage();
 	const [snoozeOpen, setSnoozeOpen] = useState(false);
 	const [snoozedUntil, setSnoozedUntil] = useState("");
@@ -41,6 +41,9 @@ function MessageListRowActionsComponent({ message, folder = "inbox", folderId, o
 	const canArchive = folder === "snoozed";
 	const canTrash = folder !== "spam" && folder !== "trash";
 	const canDeleteForever = folder === "spam" || folder === "trash";
+	const canMoveCategory = !!promotionTarget && !!onPromotionMove;
+	const moveCategoryLabel = promotionTarget === "inbox" ? t("promotions.move.toInbox") : t("promotions.move.toPromotions");
+	const MoveCategoryIcon = promotionTarget === "inbox" ? Inbox : Tag;
 
 	function openSnooze() {
 		const presets = getSnoozePresets();
@@ -176,7 +179,12 @@ function MessageListRowActionsComponent({ message, folder = "inbox", folderId, o
 								{t("common.archive")}
 							</MessageActionMenuItem>
 						)}
-						{(canMarkRead || canSnooze || canArchive) && (canTrash || canDeleteForever) && <MessageActionMenuSeparator />}
+						{canMoveCategory && (
+							<MessageActionMenuItem icon={<MoveCategoryIcon className="h-4 w-4" />} onSelect={onPromotionMove}>
+								{moveCategoryLabel}
+							</MessageActionMenuItem>
+						)}
+						{(canMarkRead || canSnooze || canArchive || canMoveCategory) && (canTrash || canDeleteForever) && <MessageActionMenuSeparator />}
 						{canTrash && (
 							<MessageActionMenuItem icon={<Trash2 className="h-4 w-4" />} destructive onSelect={() => void onAction("trash")}>
 								{t("common.trash")}
@@ -231,6 +239,13 @@ function MessageListRowActionsComponent({ message, folder = "inbox", folderId, o
 						<Tooltip label={readAction === "read" ? t("common.markRead") : t("common.markUnread")}>
 							<Button type="button" variant="ghost" size="sm" onClick={() => void onAction(readAction)} aria-label={readAction === "read" ? t("common.markRead") : t("common.markUnread")}>
 								{readAction === "read" ? <MailOpen className="h-4 w-4" /> : <Mail className="h-4 w-4" />}
+							</Button>
+						</Tooltip>
+					)}
+					{canMoveCategory && (
+						<Tooltip label={moveCategoryLabel}>
+							<Button type="button" variant="ghost" size="sm" onClick={onPromotionMove} aria-label={moveCategoryLabel}>
+								<MoveCategoryIcon className="h-4 w-4" />
 							</Button>
 						</Tooltip>
 					)}

@@ -72,6 +72,7 @@ export const ShieldCheck = Icon;
 export const Star = Icon;
 export const Trash2 = Icon;
 export const Tag = Icon;
+export const Inbox = Icon;
 export const Undo2 = Icon;
 `;
 

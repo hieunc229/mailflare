@@ -36,6 +36,8 @@ export type MessageListRowProps = {
 	todayKey: string;
 	/** The row mailbox's Promotions mode when it is on; undefined means off. */
 	promotionMode?: "show" | "separate";
+	/** Offer "Move to Promotions / Inbox" on this row. */
+	canMovePromotions?: boolean;
 };
 
 export type RowMessageAction = "archive" | "trash" | "read" | "unread" | "inbox" | "delete";
@@ -51,6 +53,9 @@ export type MessageListRowActionsProps = {
 	/** The row holds the open message, so its rail uses the active-row surface. */
 	active?: boolean;
 	onSnoozeChange?: (messageId: string, snoozed: boolean) => void;
+	/** Where "Move to ..." would send this message; undefined hides the action (Promotions off, no full access, wrong folder). */
+	promotionTarget?: "promotions" | "inbox";
+	onPromotionMove?: () => void;
 };
 
 export type MessageFolderPageProps = {
