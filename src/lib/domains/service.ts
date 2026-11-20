@@ -22,6 +22,8 @@ import { findSendingSubdomain } from "@/lib/domains/sending-status";
 import { preflightDomain } from "@/lib/domains/preflight";
 import { normalizeHostname } from "@/lib/domains/utils";
 import { hasCloudflareCredentials } from "@/lib/runtime";
+import { createAuditLog } from "@/lib/mailboxes/audit";
+import { assertDomainRemovable, assertMxChangeAllowed, ForceDeleteConfirmError, forceCleanupMtaSts, type ForceCleanup, republishMtaStsAfterMxChange } from "@/lib/deliverability/mta-sts-guard";
 
 export type DomainDnsView = {
 	routing: { records: CfDnsRecord[]; missing: CfDnsRecord[]; status?: string };
@@ -51,10 +53,12 @@ export async function addDomainForUser(
 }> {
 	const db = getDb(env);
 	const normalizedHostname = normalizeHostname(hostname);
-	const [claimedHostname] = await db.select({ userId: domains.userId }).from(domains).where(eq(domains.hostname, normalizedHostname)).limit(1);
+	const [claimedHostname] = await db.select({ id: domains.id, userId: domains.userId }).from(domains).where(eq(domains.hostname, normalizedHostname)).limit(1);
 	if (claimedHostname && claimedHostname.userId !== userId) {
 		throw new Error("Domain is already registered");
 	}
+	// A re-add provisions the zone again (MX records, Email Routing, receiving provider), so it is an MX change like any other.
+	if (claimedHostname) await assertMxChangeAllowed(env, claimedHostname);
 	if (!options?.skipDns && hasCloudflareCredentials(env)) {
 		const { zone } = await preflightDomain(env, normalizedHostname);
 		const [claimedZone] = await db.select({ userId: domains.userId }).from(domains).where(and(
@@ -142,6 +146,8 @@ export async function addDomainForUser(
 		throw err;
 	}
 
+	if (claimedHostname) await republishMtaStsAfterMxChange(env, domain);
+
 	// Read the DNS view outside the rollback scope: the domain is fully set up by
 	// now, so a failed status read must not tear it back down or make registration
 	// delete the account that now owns the completed Cloudflare configuration.
@@ -205,7 +211,8 @@ export async function removeDomainForUser(
 	env: CloudflareEnv,
 	userId: string,
 	domainId: string,
-): Promise<void> {
+	force?: { confirm: unknown },
+): Promise<ForceCleanup> {
 	const db = getDb(env);
 	const [domain] = await db
 		.select()
@@ -213,6 +220,18 @@ export async function removeDomainForUser(
 		.where(and(eq(domains.id, domainId), eq(domains.userId, userId)))
 		.limit(1);
 	if (!domain) throw new Error("Domain not found");
+	let cleanup: ForceCleanup = { leftovers: [], cachedUntil: null };
+	if (force) {
+		// The admin typed the host name to skip the MTA-STS checks: clean up what DNS allows, report the rest, delete anyway.
+		if (typeof force.confirm !== "string" || force.confirm.trim().toLowerCase() !== domain.hostname) {
+			throw new ForceDeleteConfirmError(`Type the domain name (${domain.hostname}) to confirm the forced delete`);
+		}
+		cleanup = await forceCleanupMtaSts(env, domain);
+		await createAuditLog(env, { actorUserId: userId, action: "domain.force_delete", metadata: { hostname: domain.hostname, leftovers: cleanup.leftovers.map((record) => record.name), cachedUntil: cleanup.cachedUntil } });
+	} else {
+		// A published MTA-STS policy and our TLS-RPT address come off first (MtaStsBlockedError, 409 in the routes).
+		await assertDomainRemovable(env, domain);
+	}
 
 	try {
 		await deleteEmailRoutingRulesForDomain(env, domain.zoneId, domain.hostname);
@@ -241,6 +260,7 @@ export async function removeDomainForUser(
 	}
 
 	await db.delete(domains).where(eq(domains.id, domainId));
+	return cleanup;
 }
 
 export async function getDomainForUser(env: CloudflareEnv, userId: string, domainId: string) {

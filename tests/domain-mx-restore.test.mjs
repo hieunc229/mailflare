@@ -41,6 +41,7 @@ const flow = await bundle(
 	"flow",
 	"export { setupCloudflareReceiving } from './src/lib/domains/receiving';export { setupDomainDnsRecord } from './src/lib/domains/dns-setup';",
 	{
+		"@/lib/deliverability/mta-sts-guard": "export const assertMxChangeAllowed=async()=>{};export const republishMtaStsAfterMxChange=async()=>{};export const assertDomainRemovable=async()=>{};",
 		"drizzle-orm": "export const eq=(c,v)=>({eq:[c,v]});export const and=(...a)=>({and:a});export const or=(...a)=>({or:a});export const ne=(c,v)=>({ne:[c,v]});",
 		"@/db/schema": "export const domains={id:'domains.id'};export const mailboxes={};",
 		"@/db": "export function getDb(){return {select(){throw new Error('unexpected')},update(){return {set(){return {where(){}}}}}}}",

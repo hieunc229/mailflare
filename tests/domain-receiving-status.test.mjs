@@ -13,6 +13,7 @@ const outDir = mkdtempSync(join(root, "tests", ".tmp-domain-receiving-status-"))
 after(() => rmSync(outDir, { recursive: true, force: true }));
 
 const mocks = {
+	"@/lib/deliverability/mta-sts-guard": "export const assertMxChangeAllowed=async()=>{};export const republishMtaStsAfterMxChange=async()=>{};export const assertDomainRemovable=async()=>{};",
 	"drizzle-orm": "export const eq=(c,v)=>({eq:[c,v]});export const and=(...a)=>({and:a});export const or=(...a)=>({or:a});export const ne=(c,v)=>({ne:[c,v]});",
 	"@/db/schema": "export const domains={id:'domains.id',userId:'domains.userId',zoneId:'domains.zoneId'};export const mailboxes={id:'m.id',domainId:'m.domainId',localPart:'m.localPart',useAllDomains:'m.useAllDomains'};",
 	"@/db": "const rows={from(){return rows;},innerJoin(){return rows;},where(){return Promise.resolve([]);}};export function getDb(){return {select(){return rows;},update(){return {set(values){return {where(){globalThis.__updates.push(values);}}}}}}}",

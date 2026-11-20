@@ -3,6 +3,7 @@ import { getDb } from "@/db";
 import { domainDeliverability, mailboxAliases, mailboxes } from "@/db/schema";
 import { deleteEmailRoutingRuleForAddress, ensureEmailRoutingRuleToWorker } from "@/lib/cloudflare-api";
 import { createDnsRecord, deleteDnsRecord, listDnsRecords, updateDnsRecord } from "@/lib/cloudflare-dns";
+import { isCloudflareZoneUnavailable } from "@/lib/cloudflare-api-error";
 import { queryDns } from "@/lib/dns-query";
 import { withoutRuaUri, withRuaUri } from "./dmarc-record";
 import { organisationalDomain } from "./org-domain";
@@ -45,7 +46,13 @@ export const isManual = (domain: Pick<Domain, "zoneId">) => domain.zoneId === "m
 export const unquote = (content: string) => content.replace(/^"([\s\S]*)"$/, "$1").replace(/"\s*"/g, "");
 const isDmarc = (content: string) => /^\s*v=DMARC1\s*(?:;|$)/i.test(content);
 
-export class DnsReadError extends Error {}
+export class DnsReadError extends Error {
+	constructor(message: string, readonly zoneUnavailable = false) {
+		super(message);
+	}
+}
+/** Cloudflare says the zone is gone or off limits (404, 403). Turning a feature off then works as in a manual zone: the record is left to the admin. */
+export const isZoneUnavailable = (error: unknown) => (error instanceof DnsReadError && error.zoneUnavailable) || isCloudflareZoneUnavailable(error);
 export class MultipleRecordsError extends Error {}
 
 /** The single TXT record at `name` that `matches`, read from Cloudflare (or DNS-over-HTTPS for a manual zone). More than one throws. */
@@ -56,7 +63,7 @@ export async function readTxtRecord(env: CloudflareEnv, domain: Pick<Domain, "zo
 			? (await deps.queryTxt(name)).map((content) => ({ id: null, content: unquote(content) }))
 			: (await deps.listTxt(env, domain.zoneId, name)).map((record) => ({ id: record.id ?? null, content: unquote(record.content ?? "") }));
 	} catch (error) {
-		throw new DnsReadError(error instanceof Error ? error.message : "DNS lookup failed");
+		throw new DnsReadError(error instanceof Error ? error.message : "DNS lookup failed", isCloudflareZoneUnavailable(error));
 	}
 	const found = records.filter((record) => matches(record.content));
 	if (found.length > 1) throw new MultipleRecordsError();
