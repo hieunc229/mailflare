@@ -11,6 +11,7 @@ import { runCalendarReminders } from "@/lib/calendar/reminders";
 import { runPromotionsBackfill } from "@/lib/promotions/backfill";
 import { sweepImportJobs } from "@/lib/import/jobs";
 import { sweepOrphanedRawMail } from "@/lib/email/raw-sweeper";
+import { runDeliverabilityDaily } from "@/lib/deliverability/daily";
 import { pruneExpiredMessageActionUndoClaims } from "@/lib/messages/actions/claims";
 
 /** The backfill's budget assumes one run per 5 minutes (the Worker cron); this loop ticks every minute. */
@@ -41,6 +42,7 @@ export function startScheduler(env: CloudflareEnv) {
 		runAccountRetention(env, now).catch((error) => console.error("Account retention failed", error));
 		purgeExpiredAuthRows(env, now).catch((error) => console.error("Expired auth row purge failed", error));
 		runJmapChangeRetention(env, now).catch((error) => console.error("JMAP change retention failed", error));
+		runDeliverabilityDaily(env, now).catch((error) => console.error("Deliverability daily job failed", error));
 		sweepOrphanedRawMail(env, now).catch((error) => console.error("Raw mail sweep failed", error));
 	}, 60_000);
 	return () => clearInterval(timer);

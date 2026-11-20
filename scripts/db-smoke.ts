@@ -5,7 +5,7 @@
  */
 import { and, eq, sql } from "drizzle-orm";
 import { createDb } from "@/db";
-import { users, domains, mailboxes, messages, calendarEvents, davCards, davCollections, folders, jmapChanges, appSettings, webhooks, spamTokenStats, spamReputation, mailboxPromotionSettings, emailSuppressions } from "@/db/schema";
+import { users, domains, mailboxes, messages, calendarEvents, davCards, davCollections, folders, jmapChanges, appSettings, webhooks, spamTokenStats, spamReputation, mailboxPromotionSettings, emailSuppressions, domainDeliverability } from "@/db/schema";
 import { getDatabaseConfig } from "@/db/with-database";
 import { openExternalDatabase } from "@/db/external";
 import { applyPendingMigrations, getMigrationStatus } from "@/lib/migrations/service";
@@ -20,6 +20,7 @@ import { listSubscriptions } from "@/lib/promotions/subscriptions";
 import { runPromotionsBackfill, selectBackfillCandidates } from "@/lib/promotions/backfill";
 import { recordSuppression } from "@/lib/deliverability/suppression";
 import { ingestReportMail } from "@/lib/deliverability/ingest";
+import { runDeliverabilityDaily } from "@/lib/deliverability/daily";
 import { getDmarcStats } from "@/lib/deliverability/dmarc-stats";
 import { gzipSync } from "node:zlib";
 
@@ -173,6 +174,12 @@ for (const [key, id] of [["raw1", `r1_${stamp}`], ["raw2", `r2_${stamp}`], ["raw
 const dmarc = await getDmarcStats(reportEnv, reportTarget.domainId, { days: 7 });
 const dmarcTotal = (key: "pass" | "rejected") => dmarc.series.reduce((sum, day) => sum + day[key], 0);
 check("dmarc ingest adds counts across reports and ignores a redelivery", dmarcTotal("pass") === 80 && dmarcTotal("rejected") === 4 && dmarc.sources.length === 2 && dmarc.reporters[0]?.reports === 2);
+
+await db.insert(domainDeliverability).values({ domainId: reportTarget.domainId, reportsEnabled: true, reportsEnabledAt: new Date(), updatedAt: new Date() }).onConflictDoNothing();
+await runDeliverabilityDaily(reportEnv, new Date(), { sendMail: async () => true });
+await runDeliverabilityDaily(reportEnv, new Date(Date.now() + 200 * 86_400_000), { sendMail: async () => true });
+const leftover = await db.all<{ n: number }>(sql`SELECT (SELECT count(*) FROM dmarc_daily_stats WHERE domain_id = ${reportTarget.domainId}) + (SELECT count(*) FROM deliverability_reports WHERE domain_id = ${reportTarget.domainId}) AS n`);
+check("deliverability daily job purges data past retention", Number(leftover[0].n) === 0);
 
 try {
 	await db.insert(users).values({ id: `usr2_${stamp}`, email: `a${stamp}@example.com`, passwordHash: "x", name: "B" });

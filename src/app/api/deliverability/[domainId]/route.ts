@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getEnv } from "@/lib/cloudflare";
 import { authorizeDomainAdmin } from "@/lib/deliverability/access";
+import { listOpenAlerts } from "@/lib/deliverability/alerts";
 import { hasRuaUri } from "@/lib/deliverability/dmarc-record";
 import { getReportState } from "@/lib/deliverability/reports-admin";
 import { migrationRequired } from "@/lib/deliverability/route-utils";
@@ -24,7 +25,7 @@ export async function GET(request: Request, { params }: Params) {
 		} catch {
 			dns = { error: true };
 		}
-		return NextResponse.json({ ...state, receivingProvider: domain.receivingProvider, manualZone: domain.zoneId === "manual", dns });
+		return NextResponse.json({ ...state, alerts: await listOpenAlerts(env, domain.id), receivingProvider: domain.receivingProvider, manualZone: domain.zoneId === "manual", dns });
 	} catch (error) {
 		return migrationRequired(error);
 	}
