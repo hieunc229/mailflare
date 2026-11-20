@@ -7,6 +7,8 @@ import { newId } from "@/lib/ids";
 import { normalizeTimeZone, zonedDateFields } from "@/lib/time/utils";
 import { normalizeCalendarColor } from "./colors";
 import { DEFAULT_REPEAT_DAYS, normalizeCalendarRepeatDays, parseCalendarOccurrenceId } from "./recurrence";
+import { CUSTOM_DAY_LOCKED, editedTimeZone, keepsCustomRepeat, repeatForToolUpdate, shiftCustomSeries } from "./repeat-fields";
+import { deleteSeriesRows, shiftOverrides } from "./series-rows";
 import { expandToolEvents } from "./tool-occurrences";
 import { CONFIRMED_CALENDAR_TOOLS, createCalendarConfirmation } from "./confirmation";
 import type { CalendarToolContext, CalendarToolName } from "./tool-types";
@@ -123,14 +125,19 @@ export async function runCalendarTool(context: CalendarToolContext, name: Calend
 		for (const [index, item] of updates.entries()) {
 			const row = existing[index]!;
 			if ((item.endsAt ? new Date(item.endsAt) : row.endsAt) <= (item.startsAt ? new Date(item.startsAt) : row.startsAt)) throw new Error("Event end must be after its start");
-			if ((item.repeat ?? row.repeat) === "weekdays" && !normalizeCalendarRepeatDays(item.repeatDays ?? JSON.parse(row.repeatDays)).length) throw new Error("Choose at least one weekday");
+			// Weekdays with no list given repeats on the start's weekday (repeatForToolUpdate); a list that is given must name a day.
+			if ((item.repeat ?? row.repeat) === "weekdays" && item.repeatDays && !normalizeCalendarRepeatDays(item.repeatDays).length) throw new Error("Choose at least one weekday");
+			// A kept custom rule is not editable here: the series may change time of day, never day.
+			if (keepsCustomRepeat(row, item.repeat) && !shiftCustomSeries(row, item.startsAt ? new Date(item.startsAt) : row.startsAt, editedTimeZone(row, item.repeat, item.timeZone))) throw new Error(CUSTOM_DAY_LOCKED);
 		}
 		for (const [index, item] of updates.entries()) {
 			const row = existing[index]!;
 			const startsAt = item.startsAt ? new Date(item.startsAt) : row.startsAt;
 			const endsAt = item.endsAt ? new Date(item.endsAt) : row.endsAt;
-			const timeZone = item.timeZone ? normalizeTimeZone(item.timeZone) : normalizeTimeZone(row.timeZone);
-			await db.update(calendarEvents).set({ title: item.title ?? row.title, description: item.description ?? row.description, location: item.location ?? row.location, startsAt, endsAt, timeZone, color: item.color ? normalizeCalendarColor(item.color) : row.color, repeat: item.repeat ?? row.repeat, repeatDays: item.repeatDays ? JSON.stringify(normalizeCalendarRepeatDays(item.repeatDays)) : row.repeatDays, repeatAnchorDay: (item.repeat ?? row.repeat) === "monthly" ? zonedDateFields(startsAt, timeZone).getUTCDate() : null, attendees: item.attendees ? JSON.stringify(item.attendees) : row.attendees, updatedAt: new Date() }).where(and(eq(calendarEvents.id, row.id), eq(calendarEvents.userId, context.user.id)));
+			const timeZone = editedTimeZone(row, item.repeat, item.timeZone);
+			const shifted = keepsCustomRepeat(row, item.repeat) ? shiftCustomSeries(row, startsAt, timeZone) : null;
+			await db.update(calendarEvents).set({ title: item.title ?? row.title, description: item.description ?? row.description, location: item.location ?? row.location, startsAt, endsAt, timeZone, color: item.color ? normalizeCalendarColor(item.color) : row.color, ...repeatForToolUpdate(row, item, startsAt, timeZone), ...(shifted ? { excludedOccurrences: shifted.excludedOccurrences } : {}), attendees: item.attendees ? JSON.stringify(item.attendees) : row.attendees, updatedAt: new Date() }).where(and(eq(calendarEvents.id, row.id), eq(calendarEvents.userId, context.user.id)));
+			if (shifted?.moved) await shiftOverrides(db, context.user.id, row.id, shifted.shift);
 		}
 		return { eventIds: ids, status: "updated" };
 	}
@@ -138,6 +145,6 @@ export async function runCalendarTool(context: CalendarToolContext, name: Calend
 	if (new Set(ids).size !== ids.length || ids.some((value) => parseCalendarOccurrenceId(value))) throw new Error("Use unique series IDs for deletion");
 	const existing = await Promise.all(ids.map(async (eventId) => (await db.select({ id: calendarEvents.id }).from(calendarEvents).where(and(eq(calendarEvents.id, eventId), eq(calendarEvents.userId, context.user.id))).limit(1))[0]));
 	if (existing.some((row) => !row)) throw new Error("Event not found");
-	for (const eventId of ids) await db.delete(calendarEvents).where(and(eq(calendarEvents.id, eventId), eq(calendarEvents.userId, context.user.id)));
+	for (const eventId of ids) await deleteSeriesRows(db, context.user.id, eventId);
 	return { eventIds: ids, status: "deleted" };
 }

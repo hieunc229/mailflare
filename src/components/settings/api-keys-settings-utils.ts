@@ -1,5 +1,6 @@
 import type { TranslationKey } from "@/lib/i18n/types";
 import { authFetch } from "@/lib/auth/client";
+import { requestError } from "@/lib/http/client-error";
 import type { ApiKeyScope } from "@/lib/api/scopes";
 import type { ManagedApiKey, McpKeyScope } from "./api-keys-settings-types";
 
@@ -39,14 +40,16 @@ export async function loadManagedApiKeys(): Promise<ManagedApiKey[]> {
 	return data.apiKeys;
 }
 
-export async function createManagedApiKey(input: { name: string; mcpAllowed: boolean; scopes: ApiKeyScope[] | McpKeyScope[]; mailboxIds: string[] }): Promise<string> {
+export async function createManagedApiKey(input: { name: string; mcpAllowed: boolean; scopes: ApiKeyScope[] | McpKeyScope[]; mailboxIds: string[] }, stepUpToken?: string): Promise<string> {
+	// With a step-up token (jmap keys), a 401 means that proof was refused, not that the session ended.
 	const response = await authFetch(input.mcpAllowed ? "/api/agent/mcp-keys" : "/api/api-keys", {
 		method: "POST",
+		...(stepUpToken ? { redirectOnUnauthorized: false } : {}),
 		headers: { "Content-Type": "application/json" },
-		body: JSON.stringify({ name: input.name, scopes: input.scopes, mailboxIds: input.mailboxIds }),
+		body: JSON.stringify({ name: input.name, scopes: input.scopes, mailboxIds: input.mailboxIds, ...(stepUpToken ? { stepUpToken } : {}) }),
 	});
-	const data = await responseData(response);
-	if (!response.ok || !data.key) throw new Error(typeof data.error === "string" ? data.error : "Could not create API key");
+	const data = (await responseData(response)) as { error?: unknown; code?: unknown; key?: string };
+	if (!response.ok || !data.key) throw requestError(data, "Could not create API key");
 	return data.key;
 }
 

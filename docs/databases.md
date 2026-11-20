@@ -72,7 +72,7 @@ npm run db:bundle          # rebuild the bundles the Worker applies
 
 The application code is written once. `getDb(env)` and `env.DB` work as before: on other databases `env.DB` is an adapter with the D1 interface (`prepare`, `bind`, `batch`) over the configured driver, and the Drizzle instance is built for the right dialect. Stored values are identical across dialects: timestamps are whole seconds in a `bigint`, booleans are booleans (`tinyint(1)` on MySQL), so SQL fragments and **backups are portable**: a backup taken on D1 restores onto PostgreSQL or MySQL and back.
 
-Also kept on every dialect: foreign keys and cascades, the JMAP change log and mailbox revisions (via triggers), automatic `trashed_at` tracking, and seed rows.
+Also kept on every dialect: foreign keys and cascades, the JMAP change log, mailbox revisions and the CalDAV/CardDAV change log (via triggers), automatic `trashed_at` tracking, and seed rows. TiDB and PlanetScale do not support triggers, so the trigger-based items (both change logs, `trashed_at` tracking) are not available there; CalDAV/CardDAV sync needs MySQL, MariaDB or PostgreSQL.
 
 ## What differs
 
@@ -85,6 +85,8 @@ Also kept on every dialect: foreign keys and cascades, the JMAP change log and m
 | One agent job per mailbox | Atomic in the claim statement | Atomic | Checked just before the claim (small race window) |
 | `batch` atomicity | Atomic | Atomic | Atomic for DML; MySQL commits DDL implicitly, so a failed migration can leave earlier statements applied |
 | `neon` (HTTP) | n/a | Batches run as separate statements (the HTTP protocol has no interactive transaction); use `node-postgres` for atomic batches | n/a |
+
+On the Neon HTTP driver batches are not transactional, so the preconditions of CalDAV/CardDAV writes (`If-Match`, `If-None-Match`, the stale-version guard) give no lock there; use `node-postgres` when clients write concurrently.
 
 Why search is the main difference: FTS5 is an SQLite extension, PostgreSQL's equivalent (`tsvector`) and MySQL's `FULLTEXT` have different grammars and ranking, and the search syntax (`from:`, `subject:`, quoted phrases, `-term`) is translated into plain predicates on those dialects instead. That is correct but unindexed, so searches scan the messages of the mailbox being searched. For large mailboxes, D1/SQLite, or PostgreSQL with `pg_trgm`, searches faster.
 
