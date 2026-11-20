@@ -316,14 +316,15 @@ test("comment, CDATA and quote floods parse in linear time", () => {
 });
 
 test("report_key and row_key are stable hex digests that vary with their inputs", async () => {
-	const a = await reportKey("google.com", "123");
+	const a = await reportKey("google.com", "123", true);
 	assert.match(a, /^[0-9a-f]{64}$/);
-	assert.equal(a, await reportKey("google.com", "123"));
-	assert.notEqual(a, await reportKey("google.com", "124"));
-	assert.notEqual(await reportKey("ab", "c"), await reportKey("a", "bc"), "fields are separated");
+	assert.equal(a, await reportKey("google.com", "123", true));
+	assert.notEqual(a, await reportKey("google.com", "124", true));
+	assert.notEqual(await reportKey("ab", "c", true), await reportKey("a", "bc", true), "fields are separated");
+	assert.notEqual(a, await reportKey("google.com", "123", false), "an unverified report can never claim a verified report's key");
 	const row = { sourceIp: "192.0.2.1", headerFrom: "example.com", disposition: "none", dkimAligned: true, spfAligned: false };
 	const k = await rowKey("google.com", row);
 	assert.match(k, /^[0-9a-f]{64}$/);
 	assert.notEqual(k, await rowKey("google.com", { ...row, spfAligned: true }));
-	assert.notEqual(k, await rowKey("yahoo.com", row));
+	assert.notEqual(k, await rowKey("yahoo.com", row), "rows of different verified reporters never merge");
 });

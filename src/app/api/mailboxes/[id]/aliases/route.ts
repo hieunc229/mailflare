@@ -8,6 +8,7 @@ import { deleteEmailRoutingRuleForAddress, ensureEmailRoutingRuleToWorker } from
 import { newId } from "@/lib/ids";
 import { getMailboxSettingsAccess } from "@/lib/mailboxes/settings-access";
 import { createMailboxAliasSchema } from "@/lib/validators";
+import { isReportAddressReserved } from "@/lib/deliverability/report-address";
 import type { MailboxRouteParams } from "../types";
 
 async function getManagedMailbox(
@@ -99,6 +100,9 @@ export async function POST(request: Request, { params }: MailboxRouteParams) {
 	if (!domain) return NextResponse.json({ error: "Domain not found" }, { status: 404 });
 
 	const { localPart } = parsed.data;
+	if (await isReportAddressReserved(env, domain.id, localPart)) {
+		return NextResponse.json({ error: "This address is reserved for DMARC reports" }, { status: 409 });
+	}
 	const [existingMailbox] = await db
 		.select({ id: mailboxes.id })
 		.from(mailboxes)

@@ -9,6 +9,7 @@ import { getLicenseEntitlements } from "@/lib/licenses/service";
 import { tracksAccountIdentity } from "@/lib/profile/identity-utils";
 import { mailboxSchema } from "@/lib/validators";
 import { ensureMailboxDomainRouting, getMailboxDomainAddresses } from "@/lib/mailboxes/domain-addresses";
+import { isReportAddressReserved } from "@/lib/deliverability/report-address";
 import { ensurePersonalMailbox } from "./utils";
 
 export async function GET(request: Request) {
@@ -71,6 +72,9 @@ export async function POST(request: Request) {
 	}
 
 	const localPart = parsed.data.localPart.toLowerCase();
+	if (await isReportAddressReserved(env, domain.id, localPart)) {
+		return NextResponse.json({ error: "This address is reserved for DMARC reports" }, { status: 409 });
+	}
 	const [existing] = await db
 		.select()
 		.from(mailboxes)

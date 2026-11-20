@@ -44,3 +44,18 @@ export async function createDnsRecord(
 		body: JSON.stringify(record),
 	});
 }
+
+/** Changes the content (and optionally the TTL) of a record in place; nothing else about it can be sent. */
+export async function updateDnsRecord(
+	env: CloudflareEnv,
+	zoneId: string,
+	recordId: string,
+	changes: { content: string; ttl?: number },
+): Promise<CfDnsRecord> {
+	const body: { content: string; ttl?: number } = { content: changes.content };
+	if (changes.ttl !== undefined) body.ttl = changes.ttl;
+	return cfRequest<CfDnsRecord>(env, `/zones/${zoneId}/dns_records/${recordId}`, {
+		method: "PATCH",
+		body: JSON.stringify(body),
+	});
+}
