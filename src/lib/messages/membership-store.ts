@@ -82,10 +82,11 @@ function compactRow(row: Message): KnownMembershipRow {
 	};
 }
 
-function rowIdentity(row: Pick<Message, "id" | "threadId" | "threadMessageIds">): string {
+function rowIdentity(row: Pick<Message, "id" | "mailboxId" | "threadId" | "threadMessageIds">): string {
 	// Only a grouped row identifies the whole conversation. An ungrouped list
-	// can contain several messages from one thread, each with its own row.
-	return row.threadMessageIds?.length && row.threadId ? `thread:${row.threadId}` : `id:${row.id}`;
+	// can contain several messages from one thread, each with its own row, and
+	// an all-mailbox list has one conversation row per mailbox's copy of a thread.
+	return row.threadMessageIds?.length && row.threadId ? `thread:${row.mailboxId ?? ""}\u0000${row.threadId}` : `id:${row.id}`;
 }
 
 function capInsertionOrdered<T>(map: Map<string, T>, limit: number): void {

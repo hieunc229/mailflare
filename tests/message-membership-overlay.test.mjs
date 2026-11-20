@@ -66,8 +66,8 @@ await build({
 				clearMembershipForTests, hasMembershipOverlay,
 			};
 
-			export function Harness({ folder = "inbox", folderId = null, offset = 0 }) {
-				const list = useMessages(folder, "mailbox-1", { limit: 25, offset }, true, folderId);
+			export function Harness({ folder = "inbox", folderId = null, offset = 0, mailboxId = "mailbox-1" }) {
+				const list = useMessages(folder, mailboxId, { limit: 25, offset }, true, folderId);
 				return React.createElement(
 					"div",
 					null,
@@ -208,7 +208,7 @@ async function flush() {
 	});
 }
 
-async function render(strict = false, reset = true) {
+async function render(strict = false, reset = true, props = {}) {
 	if (reset) {
 		m.clearMessageClientState();
 		m.clearMembershipForTests();
@@ -217,7 +217,7 @@ async function render(strict = false, reset = true) {
 	document.body.appendChild(container);
 	const reactRoot = createRoot(container);
 	let disposed = false;
-	const tree = createElement(m.Harness);
+	const tree = createElement(m.Harness, props);
 	await act(async () => {
 		reactRoot.render(strict ? createElement(StrictMode, null, tree) : tree);
 	});
@@ -484,6 +484,76 @@ test("sequential conversation removals keep every member for undo", async (t) =>
 		undoTransport.resolve(undoResponse("archive", ["a"]));
 		await undoing;
 	});
+});
+
+// Mail delivered to two mailboxes is stored twice with one thread id, and the
+// all-mailbox list shows each mailbox's copy as its own conversation row.
+function sharedThreadRows() {
+	return [
+		message("a", { threadId: "t1", threadMessageIds: ["a"], threadCount: 1, threadUnread: 1 }),
+		message("x", { mailboxId: "mailbox-2", threadId: "t1", threadMessageIds: ["x"], threadCount: 1, threadUnread: 1 }),
+	];
+}
+
+async function archiveCommitted(id) {
+	const transport = deferred();
+	const executor = executorFor(() => transport.promise);
+	let running;
+	await act(async () => {
+		running = executor.run({ action: "archive", messageIds: [id] });
+		await Promise.resolve();
+	});
+	await act(async () => {
+		transport.resolve(applyResponse("archive", [archived(id)]));
+		await running;
+	});
+}
+
+async function startUndo(id) {
+	const transport = deferred();
+	const executor = executorFor(() => transport.promise);
+	let undoing;
+	await act(async () => {
+		undoing = executor.undo([archived(id)], "token");
+		await Promise.resolve();
+	});
+	return async () => {
+		await act(async () => {
+			transport.resolve(undoResponse("archive", [id]));
+			await undoing;
+		});
+	};
+}
+
+test("undo restores one mailbox's copy of a thread as its own row", async (t) => {
+	serverList = { messages: sharedThreadRows(), total: 2, limit: 25, offset: 0 };
+	const view = await render(false, true, { mailboxId: null });
+	t.after(view.cleanup);
+
+	await archiveCommitted("a");
+	assert.deepEqual(ids(view.container), ["x"]);
+
+	serverList = { messages: [sharedThreadRows()[1]], total: 1, limit: 25, offset: 0 };
+	const settle = await startUndo("a");
+	assert.deepEqual(ids(view.container), ["a", "x"]);
+	assert.equal(members(view.container, "x"), JSON.stringify(["x"]));
+	await settle();
+});
+
+test("removing both mailboxes' copies of a thread keeps a tombstone for each", async (t) => {
+	serverList = { messages: sharedThreadRows(), total: 2, limit: 25, offset: 0 };
+	const view = await render(false, true, { mailboxId: null });
+	t.after(view.cleanup);
+
+	await archiveCommitted("a");
+	await archiveCommitted("x");
+	assert.deepEqual(ids(view.container), []);
+
+	serverList = { messages: [], total: 0, limit: 25, offset: 0 };
+	const settle = await startUndo("a");
+	assert.deepEqual(ids(view.container), ["a"]);
+	assert.equal(members(view.container, "a"), JSON.stringify(["a"]));
+	await settle();
 });
 
 test("a read/star undo settlement leaves a move tombstone intact", async (t) => {
