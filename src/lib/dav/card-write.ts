@@ -3,6 +3,7 @@ import { getDb } from "@/db";
 import { davCards, davChanges } from "@/db/schema";
 import { newId } from "@/lib/ids";
 import { parseCard } from "./card-parse";
+import { mirrorCardStatements, ownAddresses, unlinkCardStatement } from "./contact-mirror";
 import { cardUsage, loadCardMetaByNames, MAX_CARDS } from "./card-store";
 import { addressBookCollectionId, etagFromSeq, etagSeqs } from "./changes";
 import { BASE_HEADERS, precondition, text, XML_HEADERS } from "./common";
@@ -22,8 +23,8 @@ const seqOf = async (ctx: DavContext, card: { id: string } | undefined) => (card
  * PUT of one card (spec 8.2): size and type checked while reading, parsed, preconditions, the UID rules, the user's limits
  * (5000 cards and 20 MB, 507; checked just before the batch, so two simultaneous writes can overshoot by one card), then one
  * batch that starts with the guard of `staleGuard` (the card must still be as it was read, else 412): the row, and a SELECT
- * of its newest change number, which is the ETag. The body is stored exactly as received. Mirroring the card's addresses
- * into `contacts` is the next change (F6-6).
+ * of its newest change number, which is the ETag. The body is stored exactly as received. The card's addresses are mirrored
+ * into `contacts` in the same batch (spec 8.2, `mirrorCardStatements`).
  */
 export async function putCard(ctx: DavContext, name: string, request: Request): Promise<Response> {
 	const body = await readPutBody(request, ["text/vcard", "text/x-vcard"]);
@@ -51,10 +52,11 @@ export async function putCard(ctx: DavContext, name: string, request: Request): 
 	const now = new Date(Math.floor(Date.now() / 1000) * 1000);
 	const values = { uid: parsed.uid, body, version: parsed.version, fn: parsed.fn, emails: JSON.stringify(parsed.emails), size, updatedAt: now };
 	const id = existing?.id ?? newId("card");
+	const own = parsed.group || !parsed.emails.length ? new Set<string>() : await ownAddresses(env, userId, parsed.emails);
 	const write = existing ? db.update(davCards).set(values).where(and(eq(davCards.id, id), eq(davCards.userId, userId))) : db.insert(davCards).values({ ...values, id, userId, collectionId: cid, name, createdAt: now });
 	let results: unknown[];
 	try {
-		results = (await db.batch([...(existing ? staleGuard(db, davCards, cid, id, userId, { seq: seq ?? null, updatedAt: existing.updatedAt }) : []), write, db.select({ seq: sql<number | null>`max(${davChanges.seq})` }).from(davChanges).where(and(eq(davChanges.collectionId, cid), eq(davChanges.objectKey, id)))] as never)) as unknown[];
+		results = (await db.batch([...(existing ? staleGuard(db, davCards, cid, id, userId, { seq: seq ?? null, updatedAt: existing.updatedAt }) : []), write, ...mirrorCardStatements(db, userId, { id, fn: parsed.fn, emails: parsed.emails, group: parsed.group, own }), db.select({ seq: sql<number | null>`max(${davChanges.seq})` }).from(davChanges).where(and(eq(davChanges.collectionId, cid), eq(davChanges.objectKey, id)))] as never)) as unknown[];
 	} catch (error) {
 		// Two writes raced for the same name or UID; the loser is refused like a failed precondition.
 		if (isUniqueConstraintError(error)) return text(412, "Precondition failed");
@@ -74,7 +76,7 @@ export async function deleteCard(ctx: DavContext, name: string, request: Request
 	if (!existing) return text(404, "Not found");
 	const db = getDb(ctx.env);
 	try {
-		await db.batch([...staleGuard(db, davCards, addressBookCollectionId(ctx.userId), existing.id, ctx.userId, { seq: seq ?? null, updatedAt: existing.updatedAt }), db.delete(davCards).where(and(eq(davCards.id, existing.id), eq(davCards.userId, ctx.userId)))] as never);
+		await db.batch([...staleGuard(db, davCards, addressBookCollectionId(ctx.userId), existing.id, ctx.userId, { seq: seq ?? null, updatedAt: existing.updatedAt }), db.delete(davCards).where(and(eq(davCards.id, existing.id), eq(davCards.userId, ctx.userId))), unlinkCardStatement(db, ctx.userId, existing.id)] as never);
 	} catch (error) {
 		// Changed or removed since it was read.
 		if (isUniqueConstraintError(error)) return text(412, "Precondition failed");

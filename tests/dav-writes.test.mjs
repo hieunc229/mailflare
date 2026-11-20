@@ -604,7 +604,7 @@ test("a card is PUT, served byte for byte and kept exactly, with its name, e-mai
 	assert.match(fetched.headers.get("Content-Type"), /^text\/vcard/);
 	const stored = card(sql, "ann.vcf");
 	assert.deepEqual([stored.uid, stored.version, stored.fn, stored.emails, stored.size, stored.collection_id, stored.user_id], ["card-1", "3.0", "Ann Lee", '["ann@example.test","ann@work.test"]', body.length, "card:u1", "u1"]);
-	assert.equal(sql.prepare("SELECT count(*) AS n FROM contacts").get().n, 0, "mirroring into contacts is the next PR");
+	assert.equal(sql.prepare("SELECT count(*) AS n FROM contacts WHERE dav_card_id = ?").get(stored.id).n, 2, "both addresses are mirrored into contacts (tests/dav-contacts.test.mjs)");
 	const four = await putCard(env, key, "four.vcf", vcard(["FN:Four", "EMAIL:four@example.test"], { version: "4.0", uid: "card-4" }));
 	assert.equal(four.status, 201);
 	assert.equal(card(sql, "four.vcf").version, "4.0");
