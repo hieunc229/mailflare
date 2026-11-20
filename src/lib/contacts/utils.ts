@@ -17,13 +17,13 @@ export function getDisplayNameForAddress(address: string, contactName?: string |
 
 /**
  * The label for one party of a message, sender or recipient. A name the user
- * set on the contact wins, then the message's own header name, then a name
+ * set on the contact (or imported from the address book) wins, then the message's own header name, then a name
  * learned from other mail for the same address. A shared address such as a
  * recruiting no-reply can carry a different company name on every message, so
  * the header must beat the contact's last-learned name.
  */
 export function getPartyDisplayName(address: string, contact?: ContactNameSource | null): string | null {
 	const contactName = contact?.displayName?.trim() || null;
-	if (contact?.source === "manual" && contactName) return contactName;
+	if ((contact?.source === "manual" || contact?.source === "import") && contactName) return contactName;
 	return getContactNameFromAddress(address) ?? contactName;
 }

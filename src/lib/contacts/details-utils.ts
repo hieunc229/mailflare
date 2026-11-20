@@ -118,16 +118,36 @@ export function parseStoredDetails(json: string | null | undefined): ContactDeta
 }
 
 /**
- * What the import writes to an existing (or new) contact's name and source. An address-book name you set yourself is
- * kept; any other name is replaced by the imported one and the contact becomes `manual`, because an imported address
- * book is curated and `getPartyDisplayName` prefers a manual name. Without an imported name nothing changes (a new
- * contact is `manual` with no name). `blocked` and `remoteContentAllowed` are never part of this decision.
+ * What the import writes to an existing (or new) contact's name and source. A name you set yourself (source `manual`) is
+ * kept, and a manual contact stays manual. Any other name is replaced by the imported one and the contact becomes
+ * `import`, so a later import may update that name again but never one you edited (editing makes it `manual`); an
+ * `outbound` contact keeps that source (the name rules still apply) so an import never downgrades it. Without an
+ * imported name the name stays, but an inbound contact on an imported card still becomes `import`.
+ * `import` is treated like `manual` everywhere a contact counts as known or its name is shown (spam score, agent send
+ * review, display name). `blocked` and `remoteContentAllowed` are never part of this decision.
  */
 export function mergeImportedContact(existing: ContactNameSource | null, importedName: string | null): { displayName: string | null; source: ContactNameSource["source"] } {
 	const name = cleanLine(importedName, MAX_NAME) || null;
-	if (existing?.source === "manual" && existing.displayName?.trim()) return { displayName: existing.displayName, source: "manual" };
-	if (name) return { displayName: name, source: "manual" };
-	return existing ? { displayName: existing.displayName, source: existing.source } : { displayName: null, source: "manual" };
+	if (existing?.source === "manual") return { displayName: existing.displayName?.trim() ? existing.displayName : name ?? existing.displayName, source: "manual" };
+	const source = existing?.source === "outbound" ? "outbound" : "import";
+	return { displayName: name ?? existing?.displayName ?? null, source };
+}
+
+/**
+ * The stored details with one more card's details folded in, for a re-import: addresses, phones and postal addresses
+ * are united (same normalized value counts once, the stored label wins); organization, title, birthday and note come
+ * from the card when it has them and stay as stored when it lacks them.
+ */
+export function mergeContactDetails(existing: ContactDetailsData | null, incoming: ContactDetailsData): ContactDetailsData {
+	return normalizeContactDetails({
+		emails: [...(existing?.emails ?? []), ...(incoming.emails ?? [])],
+		phones: [...(existing?.phones ?? []), ...(incoming.phones ?? [])],
+		addresses: [...(existing?.addresses ?? []), ...(incoming.addresses ?? [])],
+		organization: incoming.organization ?? existing?.organization,
+		title: incoming.title ?? existing?.title,
+		birthday: incoming.birthday ?? existing?.birthday,
+		note: incoming.note ?? existing?.note,
+	});
 }
 
 /** A CSV cell that spreadsheet software will not run as a formula: a leading = + - or @ gets a quote in front. */
