@@ -14,7 +14,7 @@ await build({
 	outdir: dir, outExtension: { ".js": ".mjs" }, bundle: true, platform: "node", format: "esm", logLevel: "silent",
 	alias: { "@": join(root, "src") },
 });
-const { normalizeContactDetails, parseStoredDetails, importedContactEmails, mergeImportedContact, mergeContactDetails, normalizeBirthday, csvSafeCell } = await import(pathToFileURL(join(dir, "d.mjs")).href);
+const { normalizeContactDetails, parseStoredDetails, importedContactEmails, mergeImportedContact, mergeContactDetails, normalizeBirthday, formatBirthday, csvSafeCell } = await import(pathToFileURL(join(dir, "d.mjs")).href);
 
 test("a manual contact with a name keeps it; the imported name does not replace it", () => {
 	assert.deepEqual(mergeImportedContact({ displayName: "Mum", source: "manual" }, "Jane Doe"), { displayName: "Mum", source: "manual" });
@@ -128,4 +128,12 @@ test("csvSafeCell neutralizes a leading = + - @, tab or CR for spreadsheets", ()
 	for (const value of ["=SUM(A1)", "+1555", "-2", "@cmd", "\tx", "\rx"]) assert.equal(csvSafeCell(value), `'${value}`);
 	assert.equal(csvSafeCell("Jane"), "Jane");
 	assert.equal(csvSafeCell(""), "");
+});
+
+test("birthdays display in the reader's language, with or without a year", () => {
+	assert.equal(formatBirthday("1980-05-01", "en"), "May 1, 1980");
+	assert.equal(formatBirthday("--05-01", "en"), "May 1");
+	assert.equal(formatBirthday("--05-01", "de"), "1. Mai");
+	assert.equal(formatBirthday("garbage", "en"), "garbage");
+	assert.equal(formatBirthday("--05-01", "not a locale!"), "--05-01");
 });

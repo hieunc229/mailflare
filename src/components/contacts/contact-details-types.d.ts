@@ -25,3 +25,9 @@ export type ContactDetailsTriggerProps = {
 	label?: string;
 	className?: string;
 };
+
+export type ContactImportedDetailsProps = {
+	details?: ContactDetailsData;
+	/** The contact's own address, left out of "other addresses". */
+	address: string;
+};
