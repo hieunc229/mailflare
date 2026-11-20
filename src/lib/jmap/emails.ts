@@ -15,6 +15,7 @@ import { buildEmailObject, loadAttachmentsByMessage, resolveHeaderProperty } fro
 import { importFlags, parseReceivedAt, resolveDraftsMailbox } from "./email-import-utils";
 import { filterToSql, mailboxRefCondition, sortToSql } from "./email-query";
 import { getEmailState } from "./state";
+import { loadPromotionModes } from "@/lib/promotions/settings";
 import { listAccessibleMailboxIdSet, listJmapMailboxes } from "./access";
 import { deleteUpload, readUpload, storeRawDraftMime } from "./blobs";
 import type { Comparator, EmailAddressObject, Filter, JmapContext, JmapMethodHandler, JmapSetError, MailboxRef } from "./types";
@@ -92,6 +93,14 @@ export async function loadMessages(ctx: JmapContext, ids: string[]): Promise<Mes
 	return rows;
 }
 
+type Row = typeof messages.$inferSelect;
+
+/** Modes of the mailboxes that hold a promotion among `rows`, for the `$promotion` keyword; no query when there is none. */
+async function promotionModesOf(ctx: JmapContext, rows: Row[]) {
+	const ids = [...new Set(rows.filter((row) => row.category === "promotions" && row.mailboxId).map((row) => row.mailboxId!))];
+	return ids.length ? loadPromotionModes(ctx.db, ids) : undefined;
+}
+
 export const emailGet: JmapMethodHandler = async (ctx, args) => {
 	const ids = args.ids as string[] | null | undefined;
 	if (!ids) throw new JmapError("requestTooLarge", "Email/get needs an explicit list of ids");
@@ -102,10 +111,11 @@ export const emailGet: JmapMethodHandler = async (ctx, args) => {
 
 	const rows = await loadMessages(ctx, ids);
 	const attachments = await loadAttachmentsByMessage(ctx, rows.map((row) => row.id));
+	const promotionModes = await promotionModesOf(ctx, rows);
 	const found = new Set<string>();
 	const list = rows.map((row) => {
 		found.add(row.id);
-		const full = buildEmailObject(row, attachments.get(row.id) ?? [], { fetchBodies, maxBodyValueBytes });
+		const full = buildEmailObject(row, attachments.get(row.id) ?? [], { fetchBodies, maxBodyValueBytes, promotionModes });
 		if (!properties) return full;
 		const picked: Record<string, unknown> = { id: row.id };
 		for (const key of properties) {
@@ -197,7 +207,8 @@ function targetFromMailboxIds(row: MessageRow, patch: Record<string, unknown>, a
 	return { status: roleToStatus(ref.role), folderId: null };
 }
 
-function keywordsFromPatch(patch: Record<string, unknown>): { read?: boolean; starred?: boolean } {
+/** Only $seen and $flagged are writable; $promotion and any other keyword in a patch are ignored. */
+export function keywordsFromPatch(patch: Record<string, unknown>): { read?: boolean; starred?: boolean } {
 	const result: { read?: boolean; starred?: boolean } = {};
 	const apply = (keyword: string, value: unknown) => {
 		if (keyword === KEYWORD_SEEN) result.read = !!value;
@@ -286,7 +297,7 @@ export const emailSet: JmapMethodHandler = async (ctx, args) => {
 		}
 		ctx.createdIds[creationId] = result.id;
 		const [row] = await loadMessages(ctx, [result.id]);
-		created[creationId] = row ? buildEmailObject(row, [], { fetchBodies: false, maxBodyValueBytes: 0 }) : { id: result.id };
+		created[creationId] = row ? buildEmailObject(row, [], { fetchBodies: false, maxBodyValueBytes: 0, promotionModes: await promotionModesOf(ctx, [row]) }) : { id: result.id };
 	}
 
 	const updates = Object.entries((args.update ?? {}) as Record<string, Record<string, unknown>>);
@@ -448,7 +459,7 @@ export const emailImport: JmapMethodHandler = async (ctx, args) => {
 			continue;
 		}
 		// The same values Email/get would answer, so the client can act on them straight away.
-		const object = buildEmailObject(row, (await loadAttachmentsByMessage(ctx, [row.id])).get(row.id) ?? [], { fetchBodies: false, maxBodyValueBytes: 0 });
+		const object = buildEmailObject(row, (await loadAttachmentsByMessage(ctx, [row.id])).get(row.id) ?? [], { fetchBodies: false, maxBodyValueBytes: 0, promotionModes: await promotionModesOf(ctx, [row]) });
 		created[creationId] = { id: object.id, blobId: object.blobId, threadId: object.threadId, size: object.size };
 	}
 
