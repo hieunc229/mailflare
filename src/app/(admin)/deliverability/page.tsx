@@ -3,10 +3,14 @@
 import { useEffect, useState } from "react";
 import { useLanguage } from "@/components/language-provider";
 import { Select } from "@/components/ui/select";
+import { DmarcTab } from "./DmarcTab";
 import { SettingsPanel } from "./SettingsPanel";
 import { SuppressionList } from "./SuppressionList";
 import type { DeliverabilitySettings, DomainOption } from "./types";
 import { fetchDomains, fetchSettings } from "./utils";
+
+type Tab = "reports" | "suppressions";
+const TABS: Tab[] = ["reports", "suppressions"];
 
 export default function DeliverabilityPage() {
 	const { t } = useLanguage();
@@ -14,6 +18,7 @@ export default function DeliverabilityPage() {
 	const [domainId, setDomainId] = useState("");
 	const [settings, setSettings] = useState<DeliverabilitySettings | null>(null);
 	const [error, setError] = useState<string | null>(null);
+	const [tab, setTab] = useState<Tab>("reports");
 
 	useEffect(() => {
 		let active = true;
@@ -27,10 +32,9 @@ export default function DeliverabilityPage() {
 	}, [t]);
 
 	return <div className="space-y-6">
-		<div><h1 className="text-2xl font-medium text-neutral-900 md:text-3xl">{t("deliverability.title")}</h1><p className="mt-2 text-sm text-neutral-500">{t("deliverability.description")}</p></div>
+		<h1 className="text-2xl font-medium text-neutral-900 md:text-3xl">{t("deliverability.title")}</h1>
 		{error && <p role="alert" className="text-sm text-red-700">{error}</p>}
 		{!domains && !error && <p className="text-sm text-neutral-500">{t("deliverability.loading")}</p>}
-		{settings && <SettingsPanel settings={settings} onChange={setSettings} />}
 		{domains?.length === 0 && <p className="text-sm text-neutral-500">{t("deliverability.noDomains")}</p>}
 		{domains && domains.length > 0 && <>
 			<div className="space-y-2">
@@ -39,7 +43,20 @@ export default function DeliverabilityPage() {
 					{domains.map((domain) => <option key={domain.id} value={domain.id}>{domain.hostname}</option>)}
 				</Select>
 			</div>
-			{domainId && <SuppressionList key={domainId} domainId={domainId} />}
+			<div role="tablist" aria-label={t("dmarc.tabs.label")} className="flex gap-2 border-b border-neutral-200" onKeyDown={(event) => {
+				if (event.key !== "ArrowRight" && event.key !== "ArrowLeft") return;
+				const next = TABS[(TABS.indexOf(tab) + (event.key === "ArrowRight" ? 1 : TABS.length - 1)) % TABS.length];
+				setTab(next);
+				document.getElementById(`deliverability-tab-${next}`)?.focus();
+			}}>
+				{TABS.map((id) => <button key={id} id={`deliverability-tab-${id}`} type="button" role="tab" aria-selected={tab === id} aria-controls={`deliverability-panel-${id}`} tabIndex={tab === id ? 0 : -1} onClick={() => setTab(id)} className={`-mb-px border-b-2 px-3 py-2 text-sm font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 ${tab === id ? "border-blue-600 text-blue-700" : "border-transparent text-neutral-600 hover:text-neutral-900"}`}>{t(`dmarc.tab.${id}`)}</button>)}
+			</div>
+			{tab === "reports" && domainId && <div role="tabpanel" id="deliverability-panel-reports" aria-labelledby="deliverability-tab-reports"><DmarcTab key={domainId} domainId={domainId} /></div>}
+			{tab === "suppressions" && domainId && <div role="tabpanel" id="deliverability-panel-suppressions" aria-labelledby="deliverability-tab-suppressions" className="space-y-6">
+				<p className="text-sm text-neutral-500">{t("deliverability.description")}</p>
+				{settings && <SettingsPanel settings={settings} onChange={setSettings} />}
+				<SuppressionList key={domainId} domainId={domainId} />
+			</div>}
 		</>}
 	</div>;
 }
