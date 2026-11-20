@@ -132,7 +132,6 @@ export function splitIcsEvents(bytes: Uint8Array, limits: { maxEvents?: number; 
 	return result;
 }
 
-type Parsed = NonNullable<ReturnType<typeof parseIcsDate>>;
 type RawEvent = { props: Property[]; alarms: Property[][] };
 
 /** The properties and VALARMs of each VEVENT. Deeper nesting is ignored; counts are capped. */

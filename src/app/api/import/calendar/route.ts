@@ -29,7 +29,7 @@ export async function POST(request: Request) {
 			: NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
 	}
 	const input = readCalendarImportBody(body);
-	if (input.error) return NextResponse.json({ error: input.error }, { status: 400 });
+	if (!input.value) return NextResponse.json({ error: input.error }, { status: 400 });
 	const db = getDb(env);
 	try {
 		const summary = await importCalendarGroups(db, {
