@@ -9,19 +9,14 @@ export function getMessageListColumns(): MessageListColumns {
 }
 
 /**
- * One conversation is one thread within one mailbox: an email delivered to two mailboxes is stored
- * twice with the same thread id, and each copy belongs to its own mailbox's conversation. Mailbox
- * ids never contain the separator, so the key stays unambiguous whatever the thread id holds.
+ * One thread per mailbox: mail delivered to two mailboxes is stored twice with the same thread id.
+ * Mailbox ids never contain `\0`, so the key stays unambiguous.
  */
 export function conversationKey(mailboxId: string | null, threadKey: string): string {
 	return `${mailboxId ?? ""}\u0000${threadKey}`;
 }
 
-/**
- * Distinct threads per mailbox, summed. A `select distinct mailbox_id, thread` subquery counts the same
- * pairs, but across several mailboxes SQLite then reads it through a non-covering index; a one-expression
- * `count(distinct …)` per mailbox stays on the covering index.
- */
+/** Per-mailbox `count(distinct …)`, summed: a distinct (mailbox, thread) subquery leaves the covering index. */
 async function countConversations({ db, where }: Pick<ConversationPageInput, "db" | "where">): Promise<number> {
 	const perMailbox = db
 		.select({ conversations: countDistinct(sql`coalesce(${messages.threadId}, ${messages.id})`).as("conversations") })

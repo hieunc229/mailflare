@@ -18,7 +18,7 @@ export type MessageFolderConfig = {
 	headerIcons?: LucideIcon[];
 	badgeVariant?: "default" | "secondary" | "outline";
 	showRowBadge?: boolean;
-	/** List the folder across every readable mailbox instead of the selected one (All inboxes). */
+	/** Every readable mailbox instead of the selected one. */
 	allMailboxes?: boolean;
 };
 
@@ -37,7 +37,6 @@ export type MessageListRowProps = {
 	showCompactRowActions?: boolean;
 	dragMessageIds?: string[];
 	todayKey: string;
-	/** Set in All inboxes: the mailbox this row belongs to. */
 	mailboxChip?: MailboxChip;
 };
 

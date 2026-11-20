@@ -2,7 +2,6 @@ import type { MailboxOption } from "@/components/mailbox-provider";
 
 export type MailboxChip = {
 	label: string;
-	/** Full address, shown on hover. */
 	title: string;
 	className: string;
 };
