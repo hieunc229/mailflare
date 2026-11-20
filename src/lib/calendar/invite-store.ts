@@ -3,6 +3,7 @@ import { getDb } from "@/db";
 import { calendarEvents, users } from "@/db/schema";
 import type { AttachmentContent } from "@/lib/email/attachment-types";
 import { inviteRepeat, parseInvite, type ParsedInvite } from "./invite";
+import { legacyRepeatFor, parseRrule } from "./rrule";
 import { findInviteAttachment, MAX_INVITE_BYTES } from "./invite-attachment";
 import { addExcludedOccurrence, chooseRecipientZone, inboundNeedsRecipientZone, inviteSenderMatches, mergeExcludedOccurrences, normalizeInviteSender, planInboundInvite } from "./invite-rules";
 
@@ -19,15 +20,31 @@ export async function inviteEventId(userId: string, uid: string): Promise<string
  * own zone, else the recipient's); `existingExcluded` keeps occurrences already excluded when the series is refreshed.
  */
 export function inviteEventValues(invite: ParsedInvite, timeZone: string | null, existingExcluded?: string | null) {
-	const repeat = inviteRepeat(invite.rrule, invite.startsAt, timeZone);
+	const repeat = inviteRepeatFields(invite, timeZone);
 	return {
 		title: invite.title, description: invite.description, location: invite.location,
 		attendees: "[]",
-		repeat: repeat.repeat, repeatDays: JSON.stringify(repeat.repeatDays), repeatAnchorDay: repeat.repeatAnchorDay, repeatUntil: repeat.repeatUntil,
+		...repeat,
 		excludedOccurrences: mergeExcludedOccurrences(existingExcluded, invite.excludedDates), timeZone,
 		inviteSequence: invite.sequence,
 		startsAt: invite.startsAt, endsAt: invite.endsAt, updatedAt: new Date(),
 	};
+}
+
+/**
+ * The repeat columns for an invitation's rule. A rule the legacy columns express exactly (legacyRepeatFor compares the
+ * occurrences) uses them; a rule the parser reads but they cannot hold (every 2 weeks, the 2nd Tuesday, yearly) is kept as
+ * a custom repeat, so a refresh neither drops it nor clears one; a rule the parser rejects keeps inviteRepeat's mapping,
+ * which downgrades what it cannot store.
+ */
+function inviteRepeatFields(invite: ParsedInvite, timeZone: string | null) {
+	const zone = timeZone ?? undefined;
+	const legacy = invite.rrule ? legacyRepeatFor(invite.rrule, invite.startsAt, zone) : null;
+	if (invite.rrule && !legacy && parseRrule(invite.rrule, zone)) {
+		return { repeat: "custom" as const, rrule: invite.rrule.replace(/^RRULE:/i, ""), repeatDays: "[]", repeatAnchorDay: null, repeatUntil: null };
+	}
+	const repeat = legacy ?? inviteRepeat(invite.rrule, invite.startsAt, timeZone);
+	return { repeat: repeat.repeat, rrule: null, repeatDays: JSON.stringify(repeat.repeatDays), repeatAnchorDay: repeat.repeatAnchorDay, repeatUntil: repeat.repeatUntil };
 }
 
 /**

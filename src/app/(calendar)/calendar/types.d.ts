@@ -13,6 +13,8 @@ export type CalendarEvent = {
   repeatDays: string;
   repeatAnchorDay: number | null;
   repeatUntil: string | null;
+  /** RFC 5545 rule of a custom repeat (set in another app); present exactly when `repeat` is "custom". */
+  rrule?: string | null;
   excludedOccurrences: string;
   reminderMinutes?: number | null;
   timeZone?: string | null;
