@@ -5,12 +5,13 @@
  */
 import { and, eq, sql } from "drizzle-orm";
 import { createDb } from "@/db";
-import { users, domains, mailboxes, messages, folders, jmapChanges, appSettings, webhooks, spamTokenStats, spamReputation } from "@/db/schema";
+import { users, domains, mailboxes, messages, calendarEvents, folders, jmapChanges, appSettings, webhooks, spamTokenStats, spamReputation } from "@/db/schema";
 import { getDatabaseConfig } from "@/db/with-database";
 import { openExternalDatabase } from "@/db/external";
 import { applyPendingMigrations, getMigrationStatus } from "@/lib/migrations/service";
 import { buildSearchConditions } from "@/lib/search/conditions";
 import { createBookedCalendarEvents } from "@/lib/booking/create";
+import { importCalendarGroups } from "@/lib/calendar/import-store";
 import { exportDatabaseRecords, restoreDatabaseRecords } from "@/lib/backups/export";
 import { getSearchIndexStatus } from "@/lib/search/index-admin";
 import { recordReputationObservation } from "@/lib/spam/repository";
@@ -103,6 +104,15 @@ const startsAt = new Date(Date.now() + 86_400_000).toISOString();
 const endsAt = new Date(Date.now() + 86_400_000 + 1_800_000).toISOString();
 check("booking inserts", (await createBookedCalendarEvents(env, event, "Guest", "g@example.com", startsAt, endsAt)) === true);
 check("booking refuses a busy slot", (await createBookedCalendarEvents(env, event, "Guest", "g@example.com", startsAt, endsAt)) === false);
+
+const importGroups = Array.from({ length: 9 }, (_, n) => ["BEGIN:VEVENT", `UID:smoke-${n}@google.com`, "DTSTART:20261104T090000Z", "RRULE:FREQ=DAILY", `SUMMARY:Imported ${n}`, "END:VEVENT"].join("\r\n"));
+const importInput = { userId, userZone: "UTC", ownAddresses: [], color: "#16a34a", reminders: true, skipDeclined: true, groups: importGroups };
+const firstImport = await importCalendarGroups(db, importInput);
+check("calendar import inserts", firstImport.imported === 9 && firstImport.failed === 0);
+const secondImport = await importCalendarGroups(db, importInput);
+check("calendar import is idempotent", secondImport.imported === 0 && secondImport.skipped === 9);
+const importedRows = await db.select({ id: calendarEvents.id, repeat: calendarEvents.repeat, mailboxId: calendarEvents.mailboxId }).from(calendarEvents).where(and(eq(calendarEvents.userId, userId), eq(calendarEvents.title, "Imported 3")));
+check("imported event is a plain daily series", importedRows.length === 1 && importedRows[0].repeat === "daily" && importedRows[0].mailboxId === null && importedRows[0].id.startsWith("ics_"));
 
 await recordReputationObservation(env, `mbx_${stamp}`, [{ type: "domain", key: "example.com" }, { type: "email", key: "x@y.z" }] as never);
 await recordReputationObservation(env, `mbx_${stamp}`, [{ type: "domain", key: "example.com" }] as never);
