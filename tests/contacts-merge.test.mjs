@@ -14,23 +14,52 @@ await build({
 	outdir: dir, outExtension: { ".js": ".mjs" }, bundle: true, platform: "node", format: "esm", logLevel: "silent",
 	alias: { "@": join(root, "src") },
 });
-const { normalizeContactDetails, parseStoredDetails, importedContactEmails, mergeImportedContact, normalizeBirthday, csvSafeCell } = await import(pathToFileURL(join(dir, "d.mjs")).href);
+const { normalizeContactDetails, parseStoredDetails, importedContactEmails, mergeImportedContact, mergeContactDetails, normalizeBirthday, csvSafeCell } = await import(pathToFileURL(join(dir, "d.mjs")).href);
 
 test("a manual contact with a name keeps it; the imported name does not replace it", () => {
 	assert.deepEqual(mergeImportedContact({ displayName: "Mum", source: "manual" }, "Jane Doe"), { displayName: "Mum", source: "manual" });
 });
 
-test("an inbound or unnamed contact gets the imported name and becomes manual", () => {
-	assert.deepEqual(mergeImportedContact({ displayName: "Learned Name", source: "inbound" }, "Jane Doe"), { displayName: "Jane Doe", source: "manual" });
-	assert.deepEqual(mergeImportedContact({ displayName: null, source: "outbound" }, "Jane Doe"), { displayName: "Jane Doe", source: "manual" });
-	assert.deepEqual(mergeImportedContact({ displayName: "  ", source: "manual" }, "Jane Doe"), { displayName: "Jane Doe", source: "manual" });
-	assert.deepEqual(mergeImportedContact(null, "Jane Doe"), { displayName: "Jane Doe", source: "manual" });
+test("an inbound or missing contact gets the imported name and becomes an import contact", () => {
+	assert.deepEqual(mergeImportedContact({ displayName: "Learned Name", source: "inbound" }, "Jane Doe"), { displayName: "Jane Doe", source: "import" });
+	assert.deepEqual(mergeImportedContact(null, "Jane Doe"), { displayName: "Jane Doe", source: "import" });
 });
 
-test("without an imported name nothing about an existing contact changes", () => {
-	assert.deepEqual(mergeImportedContact({ displayName: "Learned", source: "inbound" }, null), { displayName: "Learned", source: "inbound" });
-	assert.deepEqual(mergeImportedContact({ displayName: null, source: "inbound" }, "  \u0000 "), { displayName: null, source: "inbound" });
-	assert.deepEqual(mergeImportedContact(null, null), { displayName: null, source: "manual" });
+test("an outbound contact keeps its source when a card is imported onto it; the name rules still apply", () => {
+	assert.deepEqual(mergeImportedContact({ displayName: null, source: "outbound" }, "Jane Doe"), { displayName: "Jane Doe", source: "outbound" });
+	assert.deepEqual(mergeImportedContact({ displayName: "Sent To", source: "outbound" }, "Jane Doe"), { displayName: "Jane Doe", source: "outbound" });
+	assert.deepEqual(mergeImportedContact({ displayName: "Sent To", source: "outbound" }, null), { displayName: "Sent To", source: "outbound" });
+});
+
+test("a nameless manual contact takes the imported name but stays manual", () => {
+	assert.deepEqual(mergeImportedContact({ displayName: "  ", source: "manual" }, "Jane Doe"), { displayName: "Jane Doe", source: "manual" });
+});
+
+test("a re-import updates a name it set earlier (source import) and never one the user edited (manual)", () => {
+	assert.deepEqual(mergeImportedContact({ displayName: "Jane D.", source: "import" }, "Jane Doe"), { displayName: "Jane Doe", source: "import" });
+	assert.deepEqual(mergeImportedContact({ displayName: "Jane D.", source: "import" }, null), { displayName: "Jane D.", source: "import" });
+	assert.deepEqual(mergeImportedContact({ displayName: "Janey", source: "manual" }, "Jane Doe"), { displayName: "Janey", source: "manual" });
+});
+
+test("without an imported name the name stays, and an inbound contact on an imported card still becomes import", () => {
+	assert.deepEqual(mergeImportedContact({ displayName: "Learned", source: "inbound" }, null), { displayName: "Learned", source: "import" });
+	assert.deepEqual(mergeImportedContact({ displayName: null, source: "inbound" }, "  \u0000 "), { displayName: null, source: "import" });
+	assert.deepEqual(mergeImportedContact(null, null), { displayName: null, source: "import" });
+});
+
+test("details merge: phones and addresses are united by normalized value, existing fields survive a card that lacks them", () => {
+	const existing = { emails: ["a@x.co"], phones: [{ type: "cell", value: "+1 555 0100" }], addresses: [{ type: "home", formatted: "1 Main St" }], organization: "Acme", birthday: "1980-05-01", note: "keep me" };
+	const merged = mergeContactDetails(existing, { emails: ["a@x.co", "b@x.co"], phones: [{ type: "work", value: "+1 (555) 0100" }, { type: "work", value: "+1 555 0199" }], addresses: [{ type: "work", formatted: "1 MAIN ST" }, { type: "work", formatted: "2 Side St" }] });
+	assert.deepEqual(merged.emails, ["a@x.co", "b@x.co"]);
+	assert.deepEqual(merged.phones, [{ type: "cell", value: "+1 555 0100" }, { type: "work", value: "+1 555 0199" }]);
+	assert.deepEqual(merged.addresses.map((item) => item.formatted), ["1 Main St", "2 Side St"]);
+	assert.equal(merged.organization, "Acme");
+	assert.equal(merged.birthday, "1980-05-01");
+	assert.equal(merged.note, "keep me");
+	assert.equal(mergeContactDetails(existing, { organization: "New Co", note: "new" }).organization, "New Co");
+	assert.equal(mergeContactDetails(existing, { organization: "New Co", note: "new" }).note, "new");
+	assert.deepEqual(mergeContactDetails(null, { organization: "X" }), { organization: "X" });
+	assert.deepEqual(mergeContactDetails(existing, existing), normalizeContactDetails(existing));
 });
 
 test("an imported name is cleaned and capped at 100 characters", () => {

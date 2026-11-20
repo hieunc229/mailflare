@@ -5,13 +5,14 @@
  */
 import { and, eq, sql } from "drizzle-orm";
 import { createDb } from "@/db";
-import { users, domains, mailboxes, messages, calendarEvents, davCards, davCollections, folders, jmapChanges, appSettings, webhooks, spamTokenStats, spamReputation, mailboxPromotionSettings, emailSuppressions, domainDeliverability } from "@/db/schema";
+import { users, domains, mailboxes, messages, calendarEvents, contacts, contactDetails, davCards, davCollections, folders, jmapChanges, appSettings, webhooks, spamTokenStats, spamReputation, mailboxPromotionSettings, emailSuppressions, domainDeliverability } from "@/db/schema";
 import { getDatabaseConfig } from "@/db/with-database";
 import { openExternalDatabase } from "@/db/external";
 import { applyPendingMigrations, getMigrationStatus } from "@/lib/migrations/service";
 import { buildSearchConditions } from "@/lib/search/conditions";
 import { createBookedCalendarEvents } from "@/lib/booking/create";
 import { importCalendarGroups } from "@/lib/calendar/import-store";
+import { importContacts } from "@/lib/contacts/import-store";
 import { exportDatabaseRecords, restoreDatabaseRecords } from "@/lib/backups/export";
 import { getSearchIndexStatus } from "@/lib/search/index-admin";
 import { recordReputationObservation } from "@/lib/spam/repository";
@@ -142,6 +143,21 @@ await db.update(davCards).set({ body: "BEGIN:VCARD\nEND:VCARD" }).where(eq(davCa
 check("dav trigger ignores a card update that changes nothing", (await davLog(`card:${userId}`, `card_${stamp}`)) === "created,updated");
 await db.update(davCards).set({ collectionId: `card:${userId}-moved` }).where(eq(davCards.id, `card_${stamp}`));
 check("dav trigger logs a card moved between collections", (await davLog(`card:${userId}`, `card_${stamp}`)) === "created,updated,destroyed" && (await davLog(`card:${userId}-moved`, `card_${stamp}`)) === "created");
+
+const contactBody = { mailboxId: `mbx_${stamp}`, format: "vcard" as const, items: [
+	{ vcard: "BEGIN:VCARD\nVERSION:3.0\nFN:Smoke Person\nEMAIL:smoke-a@example.com\nEMAIL:smoke-b@example.com\nTEL:+1 555 0100\nORG:Acme\nEND:VCARD", hasPhoto: true },
+	{ vcard: "BEGIN:VCARD\nVERSION:3.0\nFN:No Mail\nEND:VCARD", hasPhoto: false },
+] };
+const firstContacts = await importContacts(db, { userId, body: contactBody });
+check("contact import inserts one contact per address", firstContacts.created === 2 && firstContacts.noEmail === 1 && firstContacts.photoTargets.join() === "smoke-a@example.com");
+const secondContacts = await importContacts(db, { userId, body: contactBody });
+check("contact import is idempotent", secondContacts.created === 0 && secondContacts.updated === 0 && secondContacts.unchanged === 2);
+const importedContact = await db.select({ name: contacts.displayName, source: contacts.source, details: contactDetails.details }).from(contacts).innerJoin(contactDetails, eq(contactDetails.contactId, contacts.id)).where(eq(contacts.id, `${userId}:smoke-b@example.com`));
+check("imported contact keeps its details", importedContact.length === 1 && importedContact[0].name === "Smoke Person" && importedContact[0].source === "import" && JSON.parse(importedContact[0].details).organization === "Acme");
+await db.delete(contacts).where(eq(contacts.id, `${userId}:smoke-a@example.com`));
+check("deleting a contact removes its details", (await db.select().from(contactDetails).where(eq(contactDetails.contactId, `${userId}:smoke-a@example.com`))).length === 0);
+const ownPhoto = await importContacts(db, { userId, body: { mailboxId: `mbx_${stamp}`, format: "vcard", items: [{ vcard: `BEGIN:VCARD\nVERSION:3.0\nFN:Me\nEMAIL:me@${stamp}.example.com\nEND:VCARD`, hasPhoto: true }] } });
+check("an own identity address is never a photo target", ownPhoto.created === 1 && ownPhoto.photoTargets.length === 0);
 
 await recordReputationObservation(env, `mbx_${stamp}`, [{ type: "domain", key: "example.com" }, { type: "email", key: "x@y.z" }] as never);
 await recordReputationObservation(env, `mbx_${stamp}`, [{ type: "domain", key: "example.com" }] as never);

@@ -1,10 +1,14 @@
+import type { ContactDetailsData } from "@/lib/contacts/details-types";
+
 export type ContactDetailsRecord = {
 	email: string;
 	displayName: string | null;
 	hasAvatar: boolean;
-	source: "manual" | "inbound" | "outbound" | null;
+	source: "manual" | "inbound" | "outbound" | "import" | null;
 	blocked: boolean;
 	lastSeenAt: string | null;
+	/** Phones, addresses and so on brought in by a contact import. */
+	details?: ContactDetailsData;
 };
 
 export type ContactDetailsResponse = {

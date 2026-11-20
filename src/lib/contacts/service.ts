@@ -24,7 +24,7 @@ export async function upsertContactFromAddress(env: CloudflareEnv, input: Contac
 
 	if (existing) {
 		const nextDisplayName = getNextDisplayName(existing.displayName, existing.source, displayName, input.source);
-		const nextSource = existing.source === "manual" || (existing.source === "outbound" && input.source === "inbound")
+		const nextSource = existing.source === "manual" || existing.source === "import" || (existing.source === "outbound" && input.source === "inbound")
 			? existing.source
 			: input.source;
 
@@ -98,7 +98,7 @@ export async function upsertContactsFromAddresses(
 			continue;
 		}
 		const nextDisplayName = getNextDisplayName(current.displayName, current.source, entry.displayName, source);
-		const nextSource = current.source === "manual" || (current.source === "outbound" && source === "inbound")
+		const nextSource = current.source === "manual" || current.source === "import" || (current.source === "outbound" && source === "inbound")
 			? current.source
 			: source;
 		updateQueries.push(db.update(contacts).set({
@@ -337,7 +337,7 @@ export async function blockSenderDomain(env: CloudflareEnv, input: BlockContactI
 }
 
 function getNextDisplayName(existingName: string | null, source: string, nextName: string | null, incomingSource: string): string | null {
-	if (source === "manual") return existingName;
+	if (source === "manual" || source === "import") return existingName;
 	// A sender chooses its own From name, so inbound mail may name a contact but never rename one.
 	if (incomingSource === "inbound" && existingName) return existingName;
 	if (nextName) return nextName;
