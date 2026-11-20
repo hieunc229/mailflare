@@ -123,3 +123,17 @@ test("the per-reporter tables are limited to 100 rows", async (t) => {
 	assert.equal(result.reporters.length, 100);
 	assert.equal(result.reporters[0].reporterOrg, "r119.example");
 });
+
+test("TLS-RPT reports are not DMARC reports: not counted as unverified, as reporter reports or listed as recent", async (t) => {
+	const f = await fixture(t);
+	f.stat({ day: "2025-11-18", org: "google.com", count: 10 });
+	const begin = seconds(new Date("2025-11-18T00:00:00Z"));
+	const insert = f.raw.prepare("INSERT INTO deliverability_reports (id, domain_id, kind, report_key, reporter_org, sender_domain, date_begin, verified_reporter, status, received_at) VALUES (?, 'd1', ?, ?, 'google.com', 'google.com', ?, ?, ?, ?)");
+	insert.run("t1", "tlsrpt", "kt1", begin, 1, "ok", begin);
+	insert.run("t2", "tlsrpt", "kt2", begin, 0, "unverified", seconds(NOW) - 60);
+	insert.run("m1", "dmarc", "km1", begin, 1, "ok", begin);
+	const result = await getDmarcStats(f.env, "d1", { days: 30, now: NOW });
+	assert.equal(result.unverifiedReports, 0);
+	assert.deepEqual(result.reporters.map((row) => [row.reporterOrg, row.reports]), [["google.com", 1]]);
+	assert.deepEqual(result.recentReports.map((row) => row.id), ["m1"]);
+});

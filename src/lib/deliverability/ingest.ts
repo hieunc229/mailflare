@@ -1,11 +1,11 @@
 import { and, eq, gte, sql } from "drizzle-orm";
 import { getDb } from "@/db";
-import { deliverabilityReports, dmarcDailyStats, domainDeliverability } from "@/db/schema";
-import { isUniqueConstraintError } from "@/lib/database-errors";
+import { deliverabilityReports, dmarcDailyStats, domainDeliverability, tlsDailyStats } from "@/db/schema";
+import { isMissingColumnError, isUniqueConstraintError } from "@/lib/database-errors";
 import { queryDns, reverseName } from "@/lib/dns-query";
 import { parseRawMime } from "@/lib/email/parse";
 import { addressOrganisation } from "./org-domain";
-import { extractReportXml, parseDmarcAggregateXml, rawReportKey, REPORT_LIMITS, ReportError, reportKey, rowKey, type DmarcReport } from "./report-parse";
+import { extractReportXml, parseDmarcAggregateXml, parseTlsRptJson, rawReportKey, REPORT_LIMITS, ReportError, reportKey, rowKey, tlsRowKey, type DmarcReport, type TlsReport } from "./report-parse";
 
 export const INGEST_LIMITS = Object.freeze({
 	/** Report rows per domain and UTC day from mail that did not pass DMARC. Such a report can never be verified, so it is only ever a row. */
@@ -86,7 +86,8 @@ const startOfUtcDay = (now: Date) => new Date(Date.UTC(now.getUTCFullYear(), now
 const sum = (value: unknown) => Number(value ?? 0);
 
 /**
- * Reads one DMARC aggregate report mail from the bucket into the report and daily aggregate tables.
+ * Reads one DMARC aggregate or TLS-RPT report mail from the bucket into the report and daily aggregate tables. The
+ * kind is told apart by content (JSON or XML); everything below applies to both.
  *
  * Report mail is attacker-controlled. A report is a "verified reporter" only when the mail passed DMARC AND its
  * From organisation equals the organisation of the contact email inside the report; only verified reports write
@@ -129,15 +130,24 @@ export async function ingestReportMail(env: CloudflareEnv, target: Target, input
 	}
 
 	const reportId = crypto.randomUUID();
-	const [placeholder] = await db.insert(reports).values({
-		id: reportId,
-		domainId: target.domainId,
-		reportKey: await rawReportKey(input.rawR2Key),
-		authenticated: input.authenticated,
-		senderDomain,
-		status: "processing",
-		receivedAt: now,
-	}).onConflictDoNothing({ target: [reports.domainId, reports.reportKey] }).returning({ id: reports.id });
+	let placeholder: { id: string } | undefined;
+	try {
+		[placeholder] = await db.insert(reports).values({
+			id: reportId,
+			domainId: target.domainId,
+			reportKey: await rawReportKey(input.rawR2Key),
+			authenticated: input.authenticated,
+			senderDomain,
+			status: "processing",
+			receivedAt: now,
+		}).onConflictDoNothing({ target: [reports.domainId, reports.reportKey] }).returning({ id: reports.id });
+	} catch (error) {
+		// The `kind` column arrives with migration 0100. Until it is applied a report cannot be recorded; providers send them again.
+		if (!isMissingColumnError(error)) throw error;
+		console.warn(`Report for ${target.hostname} dropped: apply the pending database migration`);
+		await dropRaw();
+		return;
+	}
 	if (!placeholder) {
 		// A previous run for this very mail was killed before it finished. It may have written some aggregates, so it is not repeated.
 		await db.update(reports).set({ status: "failed", error: "Processing was interrupted" }).where(and(eq(reports.domainId, target.domainId), eq(reports.reportKey, await rawReportKey(input.rawR2Key)), eq(reports.status, "processing")));
@@ -146,11 +156,13 @@ export async function ingestReportMail(env: CloudflareEnv, target: Target, input
 	}
 	const finish = (status: "rejected" | "failed", error: string) => db.update(reports).set({ status, error: error.slice(0, INGEST_LIMITS.errorChars) }).where(eq(reports.id, reportId));
 
-	let report: DmarcReport;
+	let parsedReport: { kind: "dmarc"; report: DmarcReport } | { kind: "tlsrpt"; report: TlsReport };
 	try {
 		if (object.size > REPORT_LIMITS.rawMessageBytes) throw new ReportError("rejected", "Report mail exceeds the size limit");
 		const parsed = await parseRawMime(await object.arrayBuffer());
-		report = parseDmarcAggregateXml(await extractReportXml(reportBytes(parsed)), { hostname: target.hostname, now });
+		const text = await extractReportXml(reportBytes(parsed));
+		const options = { hostname: target.hostname, now };
+		parsedReport = text.trimStart().startsWith("{") ? { kind: "tlsrpt", report: parseTlsRptJson(text, options) } : { kind: "dmarc", report: parseDmarcAggregateXml(text, options) };
 	} catch (error) {
 		const failure = error instanceof ReportError ? error : new ReportError("failed", `Could not read the report: ${error instanceof Error ? error.message : "unknown error"}`);
 		await finish(failure.status, failure.message);
@@ -158,6 +170,7 @@ export async function ingestReportMail(env: CloudflareEnv, target: Target, input
 		return;
 	}
 
+	const { kind, report } = parsedReport;
 	const verified = senderDomain !== null && addressOrganisation(report.reporterEmail) === senderDomain;
 	const reporter = verified ? senderDomain : report.reporterOrg;
 	let overBudget = false;
@@ -171,14 +184,15 @@ export async function ingestReportMail(env: CloudflareEnv, target: Target, input
 	const status = !verified ? "unverified" : overBudget ? "over_budget" : "processing";
 	try {
 		await db.update(reports).set({
-			reportKey: await reportKey(reporter, report.reportId, verified),
+			kind,
+			reportKey: await reportKey(reporter, report.reportId, verified, kind),
 			reporterOrg: report.reporterOrg,
 			reporterEmail: report.reporterEmail,
 			externalReportId: report.reportId,
 			dateBegin: report.dateBegin,
 			dateEnd: report.dateEnd,
-			policyP: report.policyP,
-			policyPct: report.policyPct,
+			policyP: parsedReport.kind === "dmarc" ? parsedReport.report.policyP : null,
+			policyPct: parsedReport.kind === "dmarc" ? parsedReport.report.policyPct : null,
 			recordCount: report.recordCount,
 			messageCount: report.messageCount,
 			verifiedReporter: verified,
@@ -193,41 +207,62 @@ export async function ingestReportMail(env: CloudflareEnv, target: Target, input
 		if (isUniqueConstraintError(error)) return;
 		throw error;
 	}
-	// Only a verified reporter's mail counts as "a report arrived", so a forger cannot silence the no-reports alert.
-	if (verified) await db.update(domainDeliverability).set({ lastReportAt: now }).where(eq(domainDeliverability.domainId, target.domainId));
+	// Only a verified DMARC reporter's mail counts as "a report arrived", so a forger cannot silence the no-reports alert.
+	if (verified && kind === "dmarc") await db.update(domainDeliverability).set({ lastReportAt: now }).where(eq(domainDeliverability.domainId, target.domainId));
 	if (status !== "processing") {
 		await dropRaw();
 		return;
 	}
 
 	try {
-		const hosts = await resolveHosts(report, deps);
 		// Keys first: a drizzle query builder is thenable, so it must not be returned from an async callback or it would run.
-		const keys = await Promise.all(report.rows.map((row) => rowKey(reporter, row)));
-		const statements = report.rows.map((row, index) => db.insert(dmarcDailyStats).values({
-			domainId: target.domainId,
-			day: report.day,
-			rowKey: keys[index],
-			sourceIp: row.sourceIp,
-			sourceHost: hosts.get(row.sourceIp) ?? null,
-			reporterOrg: reporter,
-			headerFrom: row.headerFrom,
-			disposition: row.disposition,
-			dkimAligned: row.dkimAligned,
-			spfAligned: row.spfAligned,
-			messageCount: row.count,
-		}).onConflictDoUpdate({
-			target: [dmarcDailyStats.domainId, dmarcDailyStats.day, dmarcDailyStats.rowKey],
-			set: { messageCount: sql`${dmarcDailyStats.messageCount} + ${row.count}` },
-		}));
+		let statements: unknown[];
+		if (parsedReport.kind === "dmarc") {
+			const dmarc = parsedReport.report;
+			const hosts = await resolveHosts(dmarc, deps);
+			const keys = await Promise.all(dmarc.rows.map((row) => rowKey(reporter, row)));
+			statements = dmarc.rows.map((row, index) => db.insert(dmarcDailyStats).values({
+				domainId: target.domainId,
+				day: dmarc.day,
+				rowKey: keys[index],
+				sourceIp: row.sourceIp,
+				sourceHost: hosts.get(row.sourceIp) ?? null,
+				reporterOrg: reporter,
+				headerFrom: row.headerFrom,
+				disposition: row.disposition,
+				dkimAligned: row.dkimAligned,
+				spfAligned: row.spfAligned,
+				messageCount: row.count,
+			}).onConflictDoUpdate({
+				target: [dmarcDailyStats.domainId, dmarcDailyStats.day, dmarcDailyStats.rowKey],
+				set: { messageCount: sql`${dmarcDailyStats.messageCount} + ${row.count}` },
+			}));
+		} else {
+			const tls = parsedReport.report;
+			const keys = await Promise.all(tls.rows.map((row) => tlsRowKey(reporter, row)));
+			statements = tls.rows.map((row, index) => db.insert(tlsDailyStats).values({
+				domainId: target.domainId,
+				day: tls.day,
+				rowKey: keys[index],
+				reporterOrg: reporter,
+				policyType: row.policyType,
+				mxHost: row.mxHost,
+				resultType: row.resultType,
+				successCount: row.success,
+				failureCount: row.failure,
+			}).onConflictDoUpdate({
+				target: [tlsDailyStats.domainId, tlsDailyStats.day, tlsDailyStats.rowKey],
+				set: { successCount: sql`${tlsDailyStats.successCount} + ${row.success}`, failureCount: sql`${tlsDailyStats.failureCount} + ${row.failure}` },
+			}));
+		}
 		for (let start = 0; start < statements.length; start += INGEST_LIMITS.batchStatements) {
-			await db.batch(statements.slice(start, start + INGEST_LIMITS.batchStatements) as [(typeof statements)[number], ...(typeof statements)[number][]]);
+			await db.batch(statements.slice(start, start + INGEST_LIMITS.batchStatements) as never);
 		}
 		await db.update(reports).set({ status: "ok" }).where(eq(reports.id, reportId));
 	} catch (error) {
 		// Some aggregates may be written. The report row stays, so a redelivery stops at the conflict instead of
 		// counting twice: a failed report undercounts, which is safer than double counting.
-		console.error(`DMARC report write failed for ${target.hostname}`, error);
+		console.error(`Report write failed for ${target.hostname}`, error);
 		await db.update(reports).set({ status: "failed", error: "Writing the aggregates was interrupted" }).where(eq(reports.id, reportId)).catch(() => undefined);
 	}
 	await dropRaw();
