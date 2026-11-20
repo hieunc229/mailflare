@@ -15,6 +15,19 @@ export function importName(value: unknown): string | null {
 	return typeof value === "string" ? normalizeDriveName(value.replace(INVISIBLE, "").normalize("NFC")) : null;
 }
 
+/** What the folders route says about a path that nests too deeply; the import card matches it to show its own translated message. */
+export const NESTED_TOO_DEEPLY = "Folders are nested too deeply";
+
+/** Distinct folders one folders request may find or create, every ancestor counted; a 64-deep path fits. Bounds the D1 queries of the request. */
+export const MAX_IMPORT_FOLDERS = 64;
+
+/** The distinct folders (every prefix of every path) of `paths`. */
+export function folderPrefixes(paths: string[][]): Set<string> {
+	const prefixes = new Set<string>();
+	for (const path of paths) for (let length = 1; length <= path.length; length += 1) prefixes.add(JSON.stringify(path.slice(0, length)));
+	return prefixes;
+}
+
 /**
  * The folder and file names of a Takeout zip entry under its Drive folder (`prefix`, e.g. ["Takeout", "Drive"]).
  * Entry names are untrusted: they only ever become Drive item names, never paths, but they are still strict. Both
