@@ -1816,6 +1816,8 @@
 	"calendar.repeat.weekly": "Еженедельно",
 	"calendar.repeat.monthly": "Ежемесячно",
 	"calendar.repeat.weekdays": "По дням недели",
+	"calendar.repeat.custom": "Особое повторение (задано в другом приложении)",
+	"calendar.repeat.customDayLocked": "Это повторение задано в другом приложении; измените день там",
 	"calendar.repeatOnWeekdays": "Повторять по дням недели",
 	"calendar.repeatOn": "Повторять: {day}",
 	"calendar.weekdayShort.0": "Вс",

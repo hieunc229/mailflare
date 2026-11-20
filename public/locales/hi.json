@@ -1796,6 +1796,8 @@
 	"calendar.repeat.weekly": "साप्ताहिक",
 	"calendar.repeat.monthly": "मासिक",
 	"calendar.repeat.weekdays": "कार्यदिवस",
+	"calendar.repeat.custom": "कस्टम दोहराव (किसी अन्य ऐप में सेट किया गया)",
+	"calendar.repeat.customDayLocked": "यह दोहराव किसी दूसरे ऐप में सेट किया गया था; दिन वहीं बदलें",
 	"calendar.repeatOnWeekdays": "कार्यदिवसों पर दोहराएँ",
 	"calendar.repeatOn": "{day} को दोहराएँ",
 	"calendar.weekdayShort.0": "रवि",

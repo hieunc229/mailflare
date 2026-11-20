@@ -1786,6 +1786,8 @@
 	"calendar.repeat.weekly": "Hằng tuần",
 	"calendar.repeat.monthly": "Hằng tháng",
 	"calendar.repeat.weekdays": "Các ngày trong tuần",
+	"calendar.repeat.custom": "Lặp lại tùy chỉnh (đặt trong ứng dụng khác)",
+	"calendar.repeat.customDayLocked": "Lặp lại này được đặt trong ứng dụng khác; hãy đổi ngày ở đó",
 	"calendar.repeatOnWeekdays": "Lặp lại vào các ngày trong tuần",
 	"calendar.repeatOn": "Lặp lại vào {day}",
 	"calendar.weekdayShort.0": "CN",

@@ -1850,6 +1850,8 @@
 	"calendar.repeat.weekly": "Weekly",
 	"calendar.repeat.monthly": "Monthly",
 	"calendar.repeat.weekdays": "Weekdays",
+	"calendar.repeat.custom": "Custom repeat (set in another app)",
+	"calendar.repeat.customDayLocked": "This repeat was set in another app; change the day there",
 	"calendar.repeatOnWeekdays": "Repeat on weekdays",
 	"calendar.repeatOn": "Repeat on {day}",
 	"calendar.weekdayShort.0": "Sun",

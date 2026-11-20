@@ -1794,6 +1794,8 @@
 	"calendar.repeat.weekly": "সাপ্তাহিক",
 	"calendar.repeat.monthly": "মাসিক",
 	"calendar.repeat.weekdays": "কর্মদিবস",
+	"calendar.repeat.custom": "কাস্টম পুনরাবৃত্তি (অন্য অ্যাপে সেট করা)",
+	"calendar.repeat.customDayLocked": "এই পুনরাবৃত্তি অন্য অ্যাপে সেট করা হয়েছে; দিন সেখানে পরিবর্তন করুন",
 	"calendar.repeatOnWeekdays": "কর্মদিবসে পুনরাবৃত্তি করুন",
 	"calendar.repeatOn": "{day}-এ পুনরাবৃত্তি করুন",
 	"calendar.weekdayShort.0": "রবি",

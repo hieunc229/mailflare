@@ -1795,6 +1795,8 @@
 	"calendar.repeat.weekly": "매주",
 	"calendar.repeat.monthly": "매월",
 	"calendar.repeat.weekdays": "평일",
+	"calendar.repeat.custom": "사용자 지정 반복(다른 앱에서 설정됨)",
+	"calendar.repeat.customDayLocked": "이 반복은 다른 앱에서 설정되었습니다. 요일은 그곳에서 변경하세요",
 	"calendar.repeatOnWeekdays": "평일에 반복",
 	"calendar.repeatOn": "{day}에 반복",
 	"calendar.weekdayShort.0": "일",

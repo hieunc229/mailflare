@@ -1794,6 +1794,8 @@
 	"calendar.repeat.weekly": "ہفتہ وار",
 	"calendar.repeat.monthly": "ماہانہ",
 	"calendar.repeat.weekdays": "کام کے دن",
+	"calendar.repeat.custom": "حسب ضرورت تکرار (کسی دوسری ایپ میں ترتیب دیا گیا)",
+	"calendar.repeat.customDayLocked": "یہ تکرار کسی دوسری ایپ میں سیٹ کی گئی تھی؛ دن وہیں تبدیل کریں",
 	"calendar.repeatOnWeekdays": "کام کے دنوں میں دہرائیں",
 	"calendar.repeatOn": "{day} کو دہرائیں",
 	"calendar.weekdayShort.0": "اتوار",

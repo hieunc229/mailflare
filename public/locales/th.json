@@ -1795,6 +1795,8 @@
 	"calendar.repeat.weekly": "ทุกสัปดาห์",
 	"calendar.repeat.monthly": "ทุกเดือน",
 	"calendar.repeat.weekdays": "วันทำงาน",
+	"calendar.repeat.custom": "การทำซ้ำแบบกำหนดเอง (ตั้งค่าในแอปอื่น)",
+	"calendar.repeat.customDayLocked": "การทำซ้ำนี้ตั้งค่าไว้ในแอปอื่น เปลี่ยนวันที่ในแอปนั้น",
 	"calendar.repeatOnWeekdays": "ทำซ้ำในวันทำงาน",
 	"calendar.repeatOn": "ทำซ้ำใน{day}",
 	"calendar.weekdayShort.0": "อา.",

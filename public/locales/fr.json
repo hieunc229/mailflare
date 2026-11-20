@@ -1806,6 +1806,8 @@
 	"calendar.repeat.weekly": "Toutes les semaines",
 	"calendar.repeat.monthly": "Tous les mois",
 	"calendar.repeat.weekdays": "Jours de semaine",
+	"calendar.repeat.custom": "Répétition personnalisée (définie dans une autre application)",
+	"calendar.repeat.customDayLocked": "Cette répétition a été définie dans une autre application ; changez le jour là-bas",
 	"calendar.repeatOnWeekdays": "Répéter certains jours de la semaine",
 	"calendar.repeatOn": "Répéter le {day}",
 	"calendar.weekdayShort.0": "Dim",

@@ -1796,6 +1796,8 @@
 	"calendar.repeat.weekly": "Wekelijks",
 	"calendar.repeat.monthly": "Maandelijks",
 	"calendar.repeat.weekdays": "Werkdagen",
+	"calendar.repeat.custom": "Aangepaste herhaling (ingesteld in een andere app)",
+	"calendar.repeat.customDayLocked": "Deze herhaling is in een andere app ingesteld; wijzig de dag daar",
 	"calendar.repeatOnWeekdays": "Herhalen op werkdagen",
 	"calendar.repeatOn": "Herhalen op {day}",
 	"calendar.weekdayShort.0": "zo",

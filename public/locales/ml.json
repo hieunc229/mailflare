@@ -1796,6 +1796,8 @@
 	"calendar.repeat.weekly": "ആഴ്ചതോറും",
 	"calendar.repeat.monthly": "മാസംതോറും",
 	"calendar.repeat.weekdays": "പ്രവൃത്തി ദിവസങ്ങൾ",
+	"calendar.repeat.custom": "ഇഷ്ടാനുസൃത ആവർത്തനം (മറ്റൊരു ആപ്പിൽ സജ്ജമാക്കിയത്)",
+	"calendar.repeat.customDayLocked": "ഈ ആവർത്തനം മറ്റൊരു ആപ്പിൽ സജ്ജീകരിച്ചതാണ്; ദിവസം അവിടെ മാറ്റുക",
 	"calendar.repeatOnWeekdays": "പ്രവൃത്തി ദിവസങ്ങളിൽ ആവർത്തിക്കുക",
 	"calendar.repeatOn": "{day} ന് ആവർത്തിക്കുക",
 	"calendar.weekdayShort.0": "ഞാ",

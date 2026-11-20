@@ -1796,6 +1796,8 @@
 	"calendar.repeat.weekly": "Kowane mako",
 	"calendar.repeat.monthly": "Kowane wata",
 	"calendar.repeat.weekdays": "Ranakun aiki",
+	"calendar.repeat.custom": "Maimaitawa ta musamman (an saita a wata manhaja)",
+	"calendar.repeat.customDayLocked": "An saita wannan maimaitawa a wata manhaja; canza ranar a can",
 	"calendar.repeatOnWeekdays": "Maimaita a ranakun aiki",
 	"calendar.repeatOn": "Maimaita a {day}",
 	"calendar.weekdayShort.0": "Lah",

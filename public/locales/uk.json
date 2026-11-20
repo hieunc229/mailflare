@@ -1816,6 +1816,8 @@
 	"calendar.repeat.weekly": "Щотижня",
 	"calendar.repeat.monthly": "Щомісяця",
 	"calendar.repeat.weekdays": "У будні",
+	"calendar.repeat.custom": "Особливе повторення (задано в іншому застосунку)",
+	"calendar.repeat.customDayLocked": "Це повторення задано в іншому застосунку; змініть день там",
 	"calendar.repeatOnWeekdays": "Повторювати у будні",
 	"calendar.repeatOn": "Повторювати: {day}",
 	"calendar.weekdayShort.0": "нд",

@@ -1836,6 +1836,8 @@
 	"calendar.repeat.weekly": "أسبوعيًا",
 	"calendar.repeat.monthly": "شهريًا",
 	"calendar.repeat.weekdays": "أيام الأسبوع",
+	"calendar.repeat.custom": "تكرار مخصص (محدد في تطبيق آخر)",
+	"calendar.repeat.customDayLocked": "تم تعيين هذا التكرار في تطبيق آخر؛ غيّر اليوم هناك",
 	"calendar.repeatOnWeekdays": "التكرار في أيام الأسبوع",
 	"calendar.repeatOn": "التكرار يوم {day}",
 	"calendar.weekdayShort.0": "أحد",

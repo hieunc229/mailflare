@@ -1796,6 +1796,8 @@
 	"calendar.repeat.weekly": "Wöchentlich",
 	"calendar.repeat.monthly": "Monatlich",
 	"calendar.repeat.weekdays": "Wochentage",
+	"calendar.repeat.custom": "Benutzerdefinierte Wiederholung (in einer anderen App festgelegt)",
+	"calendar.repeat.customDayLocked": "Diese Wiederholung wurde in einer anderen App festgelegt; ändere den Tag dort",
 	"calendar.repeatOnWeekdays": "An Wochentagen wiederholen",
 	"calendar.repeatOn": "Am {day} wiederholen",
 	"calendar.weekdayShort.0": "So",

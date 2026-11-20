@@ -1795,6 +1795,8 @@
 	"calendar.repeat.weekly": "Mingguan",
 	"calendar.repeat.monthly": "Bulanan",
 	"calendar.repeat.weekdays": "Hari bekerja",
+	"calendar.repeat.custom": "Ulangan tersuai (ditetapkan dalam apl lain)",
+	"calendar.repeat.customDayLocked": "Ulangan ini ditetapkan dalam apl lain; tukar hari di sana",
 	"calendar.repeatOnWeekdays": "Ulang pada hari bekerja",
 	"calendar.repeatOn": "Ulang pada hari {day}",
 	"calendar.weekdayShort.0": "Ahd",

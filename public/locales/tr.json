@@ -1739,6 +1739,8 @@
 	"calendar.repeat.weekly": "Haftalık",
 	"calendar.repeat.monthly": "Aylık",
 	"calendar.repeat.weekdays": "Hafta içi",
+	"calendar.repeat.custom": "Özel tekrar (başka bir uygulamada ayarlandı)",
+	"calendar.repeat.customDayLocked": "Bu tekrar başka bir uygulamada ayarlandı; günü orada değiştirin",
 	"calendar.repeatOnWeekdays": "Hafta içi günlerde tekrarla",
 	"calendar.repeatOn": "Her {day} tekrarla",
 	"calendar.weekdayShort.0": "Paz",

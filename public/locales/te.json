@@ -1794,6 +1794,8 @@
 	"calendar.repeat.weekly": "వారానికోసారి",
 	"calendar.repeat.monthly": "నెలకోసారి",
 	"calendar.repeat.weekdays": "పని దినాలు",
+	"calendar.repeat.custom": "అనుకూల పునరావృతం (మరో యాప్‌లో సెట్ చేయబడింది)",
+	"calendar.repeat.customDayLocked": "ఈ పునరావృతం మరొక యాప్‌లో సెట్ చేయబడింది; రోజును అక్కడే మార్చండి",
 	"calendar.repeatOnWeekdays": "పని దినాలలో పునరావృతం చేయండి",
 	"calendar.repeatOn": "{day} న పునరావృతం చేయండి",
 	"calendar.weekdayShort.0": "ఆది",

@@ -1806,6 +1806,8 @@
 	"calendar.repeat.weekly": "Ogni settimana",
 	"calendar.repeat.monthly": "Ogni mese",
 	"calendar.repeat.weekdays": "Giorni feriali",
+	"calendar.repeat.custom": "Ripetizione personalizzata (impostata in un'altra app)",
+	"calendar.repeat.customDayLocked": "Questa ripetizione è stata impostata in un'altra app; cambia il giorno lì",
 	"calendar.repeatOnWeekdays": "Ripeti nei giorni feriali",
 	"calendar.repeatOn": "Ripeti il {day}",
 	"calendar.weekdayShort.0": "Dom",

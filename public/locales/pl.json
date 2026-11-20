@@ -1816,6 +1816,8 @@
 	"calendar.repeat.weekly": "Co tydzień",
 	"calendar.repeat.monthly": "Co miesiąc",
 	"calendar.repeat.weekdays": "Dni robocze",
+	"calendar.repeat.custom": "Powtarzanie niestandardowe (ustawione w innej aplikacji)",
+	"calendar.repeat.customDayLocked": "To powtarzanie ustawiono w innej aplikacji; zmień dzień tam",
 	"calendar.repeatOnWeekdays": "Powtarzaj w dni robocze",
 	"calendar.repeatOn": "Powtarzaj: {day}",
 	"calendar.weekdayShort.0": "niedz.",

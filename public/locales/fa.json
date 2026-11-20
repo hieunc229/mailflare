@@ -1796,6 +1796,8 @@
 	"calendar.repeat.weekly": "هفتگی",
 	"calendar.repeat.monthly": "ماهانه",
 	"calendar.repeat.weekdays": "روزهای کاری",
+	"calendar.repeat.custom": "تکرار سفارشی (در برنامه دیگری تنظیم شده)",
+	"calendar.repeat.customDayLocked": "این تکرار در برنامه‌ای دیگر تنظیم شده است؛ روز را آنجا تغییر دهید",
 	"calendar.repeatOnWeekdays": "تکرار در روزهای کاری",
 	"calendar.repeatOn": "تکرار در {day}",
 	"calendar.weekdayShort.0": "ی",

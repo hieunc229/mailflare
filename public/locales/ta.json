@@ -1796,6 +1796,8 @@
 	"calendar.repeat.weekly": "வாரந்தோறும்",
 	"calendar.repeat.monthly": "மாதந்தோறும்",
 	"calendar.repeat.weekdays": "வார நாட்கள்",
+	"calendar.repeat.custom": "தனிப்பயன் மீள்நிகழ்வு (மற்றொரு பயன்பாட்டில் அமைக்கப்பட்டது)",
+	"calendar.repeat.customDayLocked": "இந்த மீள்நிகழ்வு வேறொரு பயன்பாட்டில் அமைக்கப்பட்டது; நாளை அங்கே மாற்றவும்",
 	"calendar.repeatOnWeekdays": "வார நாட்களில் மீண்டும் நிகழும்",
 	"calendar.repeatOn": "{day} அன்று மீண்டும் நிகழும்",
 	"calendar.weekdayShort.0": "ஞா",

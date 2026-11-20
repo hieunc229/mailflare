@@ -1786,6 +1786,8 @@
 	"calendar.repeat.weekly": "Mingguan",
 	"calendar.repeat.monthly": "Bulanan",
 	"calendar.repeat.weekdays": "Hari kerja",
+	"calendar.repeat.custom": "Pengulangan khusus (diatur di aplikasi lain)",
+	"calendar.repeat.customDayLocked": "Pengulangan ini diatur di aplikasi lain; ubah harinya di sana",
 	"calendar.repeatOnWeekdays": "Ulangi pada hari kerja",
 	"calendar.repeatOn": "Ulangi pada {day}",
 	"calendar.weekdayShort.0": "Min",

@@ -1794,6 +1794,8 @@
 	"calendar.repeat.weekly": "साप्ताहिक",
 	"calendar.repeat.monthly": "मासिक",
 	"calendar.repeat.weekdays": "आठवड्यातील कामाचे दिवस",
+	"calendar.repeat.custom": "सानुकूल पुनरावृत्ती (दुसऱ्या अ‍ॅपमध्ये सेट केलेली)",
+	"calendar.repeat.customDayLocked": "ही पुनरावृत्ती दुसऱ्या अ‍ॅपमध्ये सेट केली होती; दिवस तिथेच बदला",
 	"calendar.repeatOnWeekdays": "कामाच्या दिवशी पुनरावृत्ती करा",
 	"calendar.repeatOn": "{day} ला पुनरावृत्ती करा",
 	"calendar.weekdayShort.0": "रवि",

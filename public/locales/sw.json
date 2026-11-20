@@ -1796,6 +1796,8 @@
 	"calendar.repeat.weekly": "Kila wiki",
 	"calendar.repeat.monthly": "Kila mwezi",
 	"calendar.repeat.weekdays": "Siku za kazi",
+	"calendar.repeat.custom": "Kurudia maalum (kumewekwa kwenye programu nyingine)",
+	"calendar.repeat.customDayLocked": "Marudio haya yaliwekwa katika programu nyingine; badilisha siku huko",
 	"calendar.repeatOnWeekdays": "Rudia siku za kazi",
 	"calendar.repeatOn": "Rudia {day}",
 	"calendar.weekdayShort.0": "Jpl",

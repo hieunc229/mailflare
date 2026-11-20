@@ -1796,6 +1796,8 @@
 	"calendar.repeat.weekly": "ਹਫ਼ਤਾਵਾਰੀ",
 	"calendar.repeat.monthly": "ਮਹੀਨਾਵਾਰ",
 	"calendar.repeat.weekdays": "ਕੰਮਕਾਜੀ ਦਿਨ",
+	"calendar.repeat.custom": "ਕਸਟਮ ਦੁਹਰਾਓ (ਕਿਸੇ ਹੋਰ ਐਪ ਵਿੱਚ ਸੈੱਟ ਕੀਤਾ)",
+	"calendar.repeat.customDayLocked": "ਇਹ ਦੁਹਰਾਓ ਕਿਸੇ ਹੋਰ ਐਪ ਵਿੱਚ ਸੈੱਟ ਕੀਤਾ ਗਿਆ ਸੀ; ਦਿਨ ਉੱਥੇ ਬਦਲੋ",
 	"calendar.repeatOnWeekdays": "ਕੰਮਕਾਜੀ ਦਿਨਾਂ 'ਤੇ ਦੁਹਰਾਓ",
 	"calendar.repeatOn": "{day} ਨੂੰ ਦੁਹਰਾਓ",
 	"calendar.weekdayShort.0": "ਐਤ",

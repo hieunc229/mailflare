@@ -1786,6 +1786,8 @@
 	"calendar.repeat.weekly": "毎週",
 	"calendar.repeat.monthly": "毎月",
 	"calendar.repeat.weekdays": "平日",
+	"calendar.repeat.custom": "カスタム繰り返し（別のアプリで設定）",
+	"calendar.repeat.customDayLocked": "この繰り返しは別のアプリで設定されました。日付はそちらで変更してください",
 	"calendar.repeatOnWeekdays": "平日に繰り返す",
 	"calendar.repeatOn": "{day}に繰り返す",
 	"calendar.weekdayShort.0": "日",
