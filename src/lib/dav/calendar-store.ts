@@ -123,6 +123,20 @@ export async function liveCalendarNames(env: Env, userId: string, ids: string[])
 	return live;
 }
 
+/** Names of masters that exist but are not served (needs-action, declined, cancelled), so sync can still report them gone by name. */
+export async function hiddenCalendarNames(env: Env, userId: string, ids: string[]): Promise<Map<string, string>> {
+	const names = new Map<string, string>();
+	for (let i = 0; i < ids.length; i += 90) {
+		const rows = await getDb(env)
+			.select({ id: calendarEvents.id, name: davCalendarObjects.name })
+			.from(calendarEvents)
+			.leftJoin(davCalendarObjects, eq(davCalendarObjects.id, calendarEvents.id))
+			.where(and(eq(calendarEvents.userId, userId), isMaster, inArray(calendarEvents.id, ids.slice(i, i + 90))));
+		for (const row of rows) names.set(row.id, row.name ?? nativeResourceName(row.id));
+	}
+	return names;
+}
+
 const listing = (env: Env, userId: string, cid: string, after: string) =>
 	getDb(env)
 		.select({ id: calendarEvents.id, name: davCalendarObjects.name, updatedAt: calendarEvents.updatedAt, seq: newestSeqOf(cid, calendarEvents.id) })

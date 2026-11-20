@@ -1074,7 +1074,7 @@ export const davCalendarObjects = sqliteTable(
 	(t) => [
 		uniqueIndex("dav_calendar_objects_name_idx").on(t.collectionId, t.name),
 		uniqueIndex("dav_calendar_objects_uid_idx").on(t.collectionId, t.uid),
-		index("dav_calendar_objects_user_idx").on(t.userId),
+		index("dav_calendar_objects_user_size_idx").on(t.userId, t.size),
 	],
 );
 
@@ -1099,7 +1099,7 @@ export const davCards = sqliteTable(
 	(t) => [
 		uniqueIndex("dav_cards_name_idx").on(t.collectionId, t.name),
 		uniqueIndex("dav_cards_uid_idx").on(t.collectionId, t.uid),
-		index("dav_cards_user_idx").on(t.userId),
+		index("dav_cards_user_size_idx").on(t.userId, t.size),
 	],
 );
 
@@ -1116,6 +1116,8 @@ export const davChanges = sqliteTable(
 		collectionId: text("collection_id").notNull(),
 		objectKey: text("object_key").notNull(),
 		changeType: text("change_type", { enum: ["created", "updated", "destroyed"] }).notNull(),
+		/** The name a destroyed resource was served under (a DAV-named event or a card); null for other rows and for native events, whose name is derived from the id. */
+		resourceName: text("resource_name"),
 		createdAt: integer("created_at").notNull().default(nowSeconds),
 	},
 	(t) => [

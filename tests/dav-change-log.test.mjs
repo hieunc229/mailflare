@@ -291,3 +291,39 @@ test("the F6-2 migration leaves existing repeat fields and change rows alone and
 	assert.deepEqual([after.rrule, after.recurrence_id, after.dav_object_id, after.all_day], [null, null, null, 0]);
 	assert.equal(db.prepare("SELECT count(*) AS n FROM dav_changes").get().n, seq);
 });
+
+// F6-5: a destroyed resource keeps the name it was served under, so sync-collection can report it as gone under that name.
+const names = (db) => db.prepare("SELECT object_key AS k, change_type AS t, resource_name AS n FROM dav_changes ORDER BY seq").all();
+
+test("destroying a DAV-named event records its resource name; a native event records none", () => {
+	const db = database();
+	addUser(db, "u1");
+	master(db, "m1");
+	db.prepare("INSERT INTO dav_calendar_objects (id, user_id, collection_id, name, uid, size, created_at, updated_at) VALUES ('m1', 'u1', 'cal:u1', 'phone-made.ics', 'uid-1', 1, 1, 1)").run();
+	addEvent(db, "e1");
+	db.prepare("DELETE FROM calendar_events WHERE id IN ('m1', 'e1')").run();
+	const destroyed = names(db).filter((r) => r.t === "destroyed");
+	assert.deepEqual(Object.fromEntries(destroyed.map((r) => [r.k, r.n])), { m1: "phone-made.ics", e1: null });
+});
+
+test("deleting a master and its override in one statement logs the destroyed master once and no stray update", () => {
+	const db = database();
+	addUser(db, "u1");
+	master(db, "m1");
+	override(db, "o1", "m1");
+	db.prepare("INSERT INTO dav_calendar_objects (id, user_id, collection_id, name, uid, size, created_at, updated_at) VALUES ('m1', 'u1', 'cal:u1', 'series.ics', 'uid-1', 1, 1, 1)").run();
+	db.prepare("DELETE FROM dav_changes").run();
+	db.prepare("DELETE FROM calendar_events WHERE id IN ('m1', 'o1')").run();
+	assert.deepEqual(names(db), [{ k: "m1", t: "destroyed", n: "series.ics" }]);
+});
+
+test("deleting a user's cards and events records the names", () => {
+	const db = database();
+	addUser(db, "u1");
+	db.prepare("INSERT INTO dav_cards (id, user_id, collection_id, name, uid, body, version, size, created_at, updated_at) VALUES ('c1', 'u1', 'card:u1', 'ada.vcf', 'uid-1', 'b', '3.0', 1, 1, 1)").run();
+	master(db, "m1");
+	db.prepare("INSERT INTO dav_calendar_objects (id, user_id, collection_id, name, uid, size, created_at, updated_at) VALUES ('m1', 'u1', 'cal:u1', 'series.ics', 'uid-1', 1, 1, 1)").run();
+	db.prepare("DELETE FROM users WHERE id = 'u1'").run();
+	const destroyed = Object.fromEntries(names(db).filter((r) => r.t === "destroyed").map((r) => [r.k, r.n]));
+	assert.deepEqual(destroyed, { c1: "ada.vcf", m1: "series.ics" });
+});
