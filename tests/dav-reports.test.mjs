@@ -261,7 +261,7 @@ test("calendar-multiget returns data, a 404 for missing, foreign and foreign-ori
 	addEvent(sql, { id: "theirs", user_id: "u2" });
 	addEvent(sql, { id: "pending", response_status: "needs-action" });
 	const body = `<C:calendar-multiget ${NS}><A:prop><A:getetag/><C:calendar-data/></A:prop>
-		<A:href>${CAL}e1.ics</A:href><A:href>${CAL}e1.ics</A:href><A:href>${ORIGIN}${CAL}e2.ics</A:href>
+		<A:href>${CAL}e1.ics</A:href><A:href>${CAL}e1.ics</A:href><A:href>${ORIGIN}${CAL}e2.ics</A:href><A:href>http://mail.example.test${CAL}e1.ics</A:href>
 		<A:href>${CAL}missing.ics</A:href><A:href>/dav/calendars/u2/default/theirs.ics</A:href><A:href>${CAL}theirs.ics</A:href><A:href>${CAL}pending.ics</A:href>
 		<A:href>https://evil.example/dav/calendars/u1/default/e1.ics</A:href><A:href>%zz</A:href></C:calendar-multiget>`;
 	const response = await report(env, CAL, key, body);
