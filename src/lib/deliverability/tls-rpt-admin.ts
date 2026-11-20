@@ -2,7 +2,7 @@ import { eq } from "drizzle-orm";
 import { getDb } from "@/db";
 import { domainDeliverability } from "@/db/schema";
 import { hasTlsRuaUri, withoutTlsRuaUri, withTlsRuaUri } from "./dmarc-record";
-import { DnsReadError, isManual, MultipleRecordsError, readTxtRecord, reportsDeps, type ReportsDeps } from "./reports-admin";
+import { DnsReadError, isManual, isZoneUnavailable, MultipleRecordsError, readTxtRecord, reportsDeps, type ReportsDeps } from "./reports-admin";
 import { reportAddress } from "./report-address";
 
 type Domain = { id: string; hostname: string; zoneId: string };
@@ -44,6 +44,7 @@ export async function updateTlsRpt(env: CloudflareEnv, domain: Domain, body: unk
 		current = await readTxtRecord(env, domain, name, isTlsRpt, deps);
 	} catch (error) {
 		if (error instanceof MultipleRecordsError) return fail(409, "MULTIPLE_TLSRPT_RECORDS", "More than one TLS-RPT record exists; remove the extra ones first");
+		if (!enabled && isZoneUnavailable(error)) return updateTlsRpt(env, { ...domain, zoneId: "manual" }, body, deps);
 		if (error instanceof DnsReadError) return fail(502, "DNS_FAILED", "Could not read the current TLS-RPT record");
 		throw error;
 	}
@@ -62,6 +63,7 @@ export async function updateTlsRpt(env: CloudflareEnv, domain: Domain, body: unk
 			else if (current?.id) await deps.updateTxt(env, domain.zoneId, current.id, after);
 			else await deps.createTxt(env, domain.zoneId, name, after);
 		} catch (error) {
+			if (!enabled && isZoneUnavailable(error)) return updateTlsRpt(env, { ...domain, zoneId: "manual" }, body, deps);
 			console.error(`TLS-RPT record edit failed for ${domain.hostname}`, error);
 			return fail(502, "DNS_FAILED", "Could not change the TLS-RPT record; it was left as it was");
 		}

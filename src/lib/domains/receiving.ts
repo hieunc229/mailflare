@@ -12,6 +12,7 @@ import { listDomainMx, MxConflictError } from "@/lib/domains/receiving-dns";
 import { removeResendReceiving, setupResendReceiving, hasResendReceivingConfig } from "@/lib/domains/resend-receiving";
 import { hasSesReceivingConfig, removeSesReceiving, setupSesReceiving } from "@/lib/aws/ses-receiving";
 import { ensureMailboxDomainRouting } from "@/lib/mailboxes/domain-addresses";
+import { assertMxChangeAllowed, republishMtaStsAfterMxChange } from "@/lib/deliverability/mta-sts-guard";
 import type { CfDnsRecord } from "@/lib/cloudflare-api.types";
 import type { DomainRow } from "@/lib/domains/types";
 
@@ -83,18 +84,25 @@ export async function setupReceiving(
 	origin: string,
 	options: { replaceMx: boolean },
 ): Promise<void> {
-	if (provider === "cloudflare") return setupCloudflareReceiving(env, domain, options);
-	if (provider === "resend") await setupResendReceiving(env, domain, origin, options);
+	// Enforce refuses before anything is touched; a testing policy is republished with the new MX list afterwards.
+	await assertMxChangeAllowed(env, domain);
+	if (provider === "cloudflare") await setupCloudflareReceiving(env, domain, options);
+	else if (provider === "resend") await setupResendReceiving(env, domain, origin, options);
 	else await setupSesReceiving(env, domain, origin, options);
+	await republishMtaStsAfterMxChange(env, domain);
+	if (provider === "cloudflare") return;
 	// Same as a domain created with DNS: once receiving works, inbound routing
 	// (which only resolves active domains) must see this domain.
 	await getDb(env).update(domains).set({ status: "active" }).where(eq(domains.id, domain.id));
 }
 
 export async function removeReceiving(env: CloudflareEnv, domain: DomainRow, provider: ConfigurableReceiving): Promise<void> {
-	if (provider === "cloudflare") return removeCloudflareReceiving(env, domain);
-	if (provider === "resend") return removeResendReceiving(env, domain);
-	return removeSesReceiving(env, domain);
+	// Removing a provider's setup deletes its MX records.
+	await assertMxChangeAllowed(env, domain);
+	if (provider === "cloudflare") await removeCloudflareReceiving(env, domain);
+	else if (provider === "resend") await removeResendReceiving(env, domain);
+	else await removeSesReceiving(env, domain);
+	await republishMtaStsAfterMxChange(env, domain);
 }
 
 /** Which providers have leftover receiving configuration (null = could not tell). */

@@ -3,6 +3,7 @@ import { getDb } from "@/db";
 import { deliverabilityAlerts, deliverabilityReports, dmarcDailyStats as stats, domainDeliverability, domains, tlsDailyStats, users } from "@/db/schema";
 import { isMissingColumnError, isMissingTableError } from "@/lib/database-errors";
 import type { SystemMailInput } from "@/lib/email/system-mail-types";
+import { retireMtaSts, type MtaStsDeps } from "./mta-sts-admin";
 import { evaluateNoReports, evaluateSourceAlerts, mergeReporterAlerts, type AlertKind, type EvaluatedAlert, type SourceTotals } from "./daily-utils";
 
 export const RETENTION = Object.freeze({
@@ -164,15 +165,22 @@ async function runRetention(env: CloudflareEnv, now: Date) {
 }
 
 /**
- * The daily DMARC job (02:00 UTC): alerts for domains with reporting on, then retention. Alerts are deduplicated by
+ * The daily deliverability job (02:00 UTC): DMARC alerts for domains with reporting on, retention, and the end of MTA-STS removal periods. Alerts are deduplicated by
  * (domain, kind, day), so a re-run never repeats one or its email. Does nothing before the migration is applied.
  */
-export async function runDeliverabilityDaily(env: CloudflareEnv, now: Date = new Date(), deps: { sendMail?: SendMail } = {}): Promise<void> {
-	try {
-		await runAlerts(env, now, deps.sendMail ?? defaultSendMail);
-		await runRetention(env, now);
-	} catch (error) {
-		if (isMissingTableError(error) || isMissingColumnError(error)) return;
-		throw error;
+export async function runDeliverabilityDaily(env: CloudflareEnv, now: Date = new Date(), deps: { sendMail?: SendMail; mtaStsDeps?: MtaStsDeps } = {}): Promise<void> {
+	// Independent steps: one failing (or one whose migration is not applied yet) never skips the others.
+	let failure: unknown;
+	for (const step of [
+		() => runAlerts(env, now, deps.sendMail ?? defaultSendMail),
+		() => runRetention(env, now),
+		() => (deps.mtaStsDeps ? retireMtaSts(env, now, deps.mtaStsDeps) : retireMtaSts(env, now)),
+	]) {
+		try {
+			await step();
+		} catch (error) {
+			if (!isMissingTableError(error) && !isMissingColumnError(error)) failure ??= error;
+		}
 	}
+	if (failure) throw failure;
 }
