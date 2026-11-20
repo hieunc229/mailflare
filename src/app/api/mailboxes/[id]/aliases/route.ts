@@ -1,4 +1,5 @@
 import { and, eq, ne } from "drizzle-orm";
+import { isReportAddressReserved } from "@/lib/deliverability/report-address";
 import { NextResponse } from "next/server";
 import { getDb } from "@/db";
 import { domains, mailboxAliases, mailboxes } from "@/db/schema";
@@ -147,6 +148,10 @@ export async function POST(request: Request, { params }: MailboxRouteParams) {
 		// Another mailbox receiving this address through "Use all domains" would be silently shadowed.
 		if (await findAllDomainsMailboxFor(db, id, `${localPart}@${domain.hostname}`)) return "mailbox";
 		return null;
+	}
+
+	if (!parsed.data.generate && await isReportAddressReserved(env, domain.id, String(parsed.data.localPart))) {
+		return NextResponse.json({ error: "This address is reserved for DMARC reports" }, { status: 409 });
 	}
 
 	const label = parsed.data.label || null;

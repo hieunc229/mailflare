@@ -300,9 +300,16 @@ async function sha256Hex(parts: string[]): Promise<string> {
 	return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, "0")).join("");
 }
 
-/** Identifies a report, so the same one arriving twice (or a queue redelivery) conflicts. */
-export const reportKey = (reporterOrg: string, reportId: string) => sha256Hex(["dmarc", reporterOrg, reportId]);
+/** Identifies a placeholder row by the raw mail object, so a queue redelivery finds the row it left behind. */
+export const rawReportKey = (rawR2Key: string) => sha256Hex(["dmarc-raw", rawR2Key]);
 
-/** Identifies one aggregate row within a day, keeping the unique index narrow. */
-export const rowKey = (reporterOrg: string, row: Pick<DmarcRow, "sourceIp" | "headerFrom" | "disposition" | "dkimAligned" | "spfAligned">) =>
-	sha256Hex([row.sourceIp, reporterOrg, row.headerFrom, row.disposition, String(row.dkimAligned), String(row.spfAligned)]);
+/**
+ * Identifies a report, so the same one arriving twice (or a queue redelivery) conflicts. `reporter` is the verified
+ * reporter's organisational domain, or the report's own org name when it is unverified, and whether it was verified
+ * is part of the key: an unverified (forgeable) report can never take over a verified report's key.
+ */
+export const reportKey = (reporter: string, reportId: string, verified: boolean) => sha256Hex(["dmarc", verified ? "verified" : "unverified", reporter, reportId]);
+
+/** Identifies one aggregate row within a day. Only verified reporters write rows, so `reporter` is the verified organisational domain and rows of different reporters never merge. */
+export const rowKey = (reporter: string, row: Pick<DmarcRow, "sourceIp" | "headerFrom" | "disposition" | "dkimAligned" | "spfAligned">) =>
+	sha256Hex([row.sourceIp, reporter, row.headerFrom, row.disposition, String(row.dkimAligned), String(row.spfAligned)]);
