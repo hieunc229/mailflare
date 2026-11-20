@@ -7,7 +7,7 @@ Set `DATABASE_URL` to use another database instead. Every database [Drizzle ORM]
 | Dialect | Drivers (`DATABASE_DRIVER`) | Typical services |
 | --- | --- | --- |
 | SQLite | `d1` (default), `libsql`, `better-sqlite3`, `bun-sqlite` | Cloudflare D1, Turso / libSQL, a local file |
-| PostgreSQL | `node-postgres`, `postgres-js`, `neon`, `pglite` | Supabase, Neon, Vercel Postgres, RDS, Cloud SQL, self-hosted, embedded PGlite |
+| PostgreSQL | `node-postgres`, `postgres-js`, `neon`, `pglite` | Supabase, Neon, Vercel Postgres, Prisma Postgres, RDS, Cloud SQL, self-hosted, embedded PGlite |
 | MySQL | `mysql2`, `planetscale` | MySQL 8, MariaDB 11, TiDB, PlanetScale, Aurora |
 
 The driver is inferred from the URL. Set `DATABASE_DRIVER` only to override it. Names such as `pg`, `postgres`, `supabase`, `vercel`, `turso`, `mysql`, `tidb` and `mariadb` are accepted as aliases.
@@ -33,6 +33,7 @@ On Cloudflare Workers set them as Worker variables or secrets (`npx wrangler sec
 | PostgreSQL | `postgres://user:pass@host:5432/db` | node-postgres. Add `?sslmode=require` where TLS is required. |
 | Supabase | the pooler or direct URL from the dashboard | node-postgres. Use the transaction pooler on Workers. |
 | Neon / Vercel Postgres | `postgres://…neon.tech/db?sslmode=require` | Detected from the hostname; uses Neon's HTTP driver (works on Workers). `DATABASE_DRIVER=node-postgres` selects TCP instead. |
+| Prisma Postgres | `postgres://…@db.prisma.io:5432/postgres?sslmode=require` | node-postgres. `pg_trgm` is available, so search gets its indexes. On Workers swap the host for the pooled one, `pooled.db.prisma.io`: with a connection per query the direct host runs out of connection slots under concurrent requests. |
 | postgres.js | any `postgres://` URL + `DATABASE_DRIVER=postgres-js` | |
 | PGlite | `pglite://./data/pg` or `pglite://memory` | Embedded Postgres, Node only; useful for development and tests. |
 | MySQL / MariaDB / TiDB | `mysql://user:pass@host:3306/db` | mysql2. TiDB Cloud hosts get TLS automatically; `?ssl=true` forces it elsewhere. |
