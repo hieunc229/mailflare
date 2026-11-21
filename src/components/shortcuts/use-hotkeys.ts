@@ -2,7 +2,8 @@
 
 import { useEffect, useRef } from "react";
 import type { ShortcutDefinition } from "./types";
-import { findSequenceMatch, hasCommandModifier, isModifierKey } from "./use-hotkeys-utils";
+import { consumeEvent, createSequenceState, matchSequence, recordKey } from "./hotkey-sequence";
+import { hasCommandModifier, isModifierKey } from "./use-hotkeys-utils";
 
 interface UseHotkeysOptions {
   enabled?: boolean;
@@ -12,12 +13,16 @@ export function isTypingInInput(target: EventTarget | null): boolean {
   if (!target || !(target instanceof HTMLElement)) return false;
   const tagName = target.tagName.toUpperCase();
   const isInputOrTextarea =
-    tagName === "INPUT" || tagName === "TEXTAREA" || tagName === "SELECT";
+    tagName === "INPUT" || tagName === "TEXTAREA" || tagName === "SELECT" ||
+    target.closest('[role="combobox"]') !== null;
   const isContentEditable =
     target.isContentEditable ||
     target.getAttribute("contenteditable") === "true";
   return isInputOrTextarea || isContentEditable;
 }
+
+const sequenceState = createSequenceState();
+let sharedTimer: ReturnType<typeof setTimeout> | null = null;
 
 function matchModifiers(
   e: KeyboardEvent,
@@ -54,8 +59,6 @@ export function useHotkeys(
   shortcuts: ShortcutDefinition[],
   options: UseHotkeysOptions = { enabled: true }
 ) {
-  const sequenceBufferRef = useRef<string[]>([]);
-  const sequenceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const shortcutsRef = useRef<ShortcutDefinition[]>(shortcuts);
 
   useEffect(() => {
@@ -65,7 +68,9 @@ export function useHotkeys(
   useEffect(() => {
     if (options.enabled === false) return;
 
+    sequenceState.refs.add(shortcutsRef);
     const handleKeyDown = (e: KeyboardEvent) => {
+      if (sequenceState.consumed.has(e)) return;
       const isInput = isTypingInInput(e.target);
       const key = e.key.toLowerCase();
 
@@ -102,22 +107,19 @@ export function useHotkeys(
 
       if (e.target instanceof Element && e.target.closest('[role="dialog"], [role="menu"], [role="listbox"]')) return;
 
-      // Handle sequence buffer
-      sequenceBufferRef.current.push(key);
-
-      if (sequenceTimerRef.current) {
-        clearTimeout(sequenceTimerRef.current);
+      // Handle sequence buffer (shared; push once per event)
+      if (recordKey(sequenceState, e, key)) {
+        if (sharedTimer) clearTimeout(sharedTimer);
+        sharedTimer = setTimeout(() => {
+          sequenceState.buffer = [];
+        }, 800);
       }
 
-      sequenceTimerRef.current = setTimeout(() => {
-        sequenceBufferRef.current = [];
-      }, 800);
-
-      const sequenceMatch = findSequenceMatch(sequenceBufferRef.current, shortcutsRef.current);
+      const sequenceMatch = matchSequence(sequenceState, shortcutsRef.current);
 
       if (sequenceMatch) {
         e.preventDefault();
-        sequenceBufferRef.current = [];
+        consumeEvent(sequenceState, e);
         sequenceMatch.action();
         return;
       }
@@ -133,7 +135,7 @@ export function useHotkeys(
 
       if (singleMatch) {
         e.preventDefault();
-        sequenceBufferRef.current = [];
+        consumeEvent(sequenceState, e);
         singleMatch.action();
       }
     };
@@ -141,9 +143,7 @@ export function useHotkeys(
     window.addEventListener("keydown", handleKeyDown);
     return () => {
       window.removeEventListener("keydown", handleKeyDown);
-      if (sequenceTimerRef.current) {
-        clearTimeout(sequenceTimerRef.current);
-      }
+      sequenceState.refs.delete(shortcutsRef);
     };
   }, [options.enabled]);
 }

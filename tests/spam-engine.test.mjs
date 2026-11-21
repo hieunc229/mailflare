@@ -1,0 +1,137 @@
+import assert from "node:assert/strict";
+import { mkdtempSync, rmSync } from "node:fs";
+import { dirname, join } from "node:path";
+import test, { after } from "node:test";
+import { fileURLToPath, pathToFileURL } from "node:url";
+import { build } from "esbuild";
+
+const root = join(dirname(fileURLToPath(import.meta.url)), "..");
+const outDir = mkdtempSync(join(root, "tests", ".tmp-spam-engine-"));
+after(() => rmSync(outDir, { recursive: true, force: true }));
+
+await build({
+	entryPoints: {
+		engine: join(root, "src/lib/spam/engine.ts"),
+		database: join(root, "server/runtime/sqlite-database.ts"),
+		migrate: join(root, "server/runtime/migrate.ts"),
+		db: join(root, "src/db/index.ts"),
+	},
+	outdir: outDir,
+	outExtension: { ".js": ".mjs" },
+	bundle: true,
+	platform: "node",
+	format: "esm",
+	target: "node22",
+	tsconfig: join(root, "tsconfig.json"),
+	external: ["better-sqlite3", "drizzle-orm", "drizzle-orm/*"],
+	logLevel: "silent",
+});
+
+const load = (name) => import(pathToFileURL(join(outDir, `${name}.mjs`)).href);
+const { analyzeSpam } = await load("engine");
+const { SqliteDatabase } = await load("database");
+const { applyMigrations } = await load("migrate");
+const { createDb } = await load("db");
+
+const seconds = (date) => Math.floor(date.getTime() / 1000);
+const PASS = { spf: "pass", dkim: "pass", dmarc: "pass" };
+
+async function createFixture(t) {
+	const database = new SqliteDatabase(join(outDir, `${crypto.randomUUID()}.sqlite`));
+	t.after(() => database.db.close());
+	await applyMigrations(database, join(root, "drizzle/migrations"));
+	const now = seconds(new Date());
+	database.db.prepare("INSERT INTO users (id, email, name, password_hash, created_at) VALUES ('u1', 'kevin@example.com', 'Kevin', 'x', ?)").run(now);
+	database.db.prepare("INSERT INTO domains (id, user_id, hostname, zone_id, created_at) VALUES ('d1', 'u1', 'example.com', 'zone', ?)").run(now);
+	database.db.prepare("INSERT INTO mailboxes (id, user_id, domain_id, local_part, created_at) VALUES ('mb1', 'u1', 'd1', 'kevin', ?)").run(now);
+	const addContact = (email, source) => database.db.prepare("INSERT INTO contacts (id, user_id, email, source, created_at) VALUES (?, 'u1', ?, ?, ?)").run(crypto.randomUUID(), email, source, now);
+	const addReputation = (type, key, spamCount, hamCount, seen = spamCount + hamCount) => database.db.prepare(
+		"INSERT INTO spam_reputation (mailbox_id, type, key, messages_seen, spam_count, ham_count, first_seen_at, last_seen_at) VALUES ('mb1', ?, ?, ?, ?, ?, ?, ?)",
+	).run(type, key, seen, spamCount, hamCount, now, now);
+	const analyze = (from, overrides = {}, verdicts = PASS, intelligenceProvider) => analyzeSpam(createDb(database), {
+		mailboxId: "mb1", userId: "u1", envelopeFrom: from, verdicts, intelligenceProvider,
+		message: {
+			subject: "Hello", text: "Plain note.", html: null, messageId: null, fromAddr: from, toAddr: "kevin@example.com",
+			ccAddr: null, bccAddr: null, replyTo: null, inReplyTo: null, references: [], date: null, attachments: [],
+			...overrides,
+		},
+	});
+	return { addContact, addReputation, analyze };
+}
+
+const ids = (result) => result.signals.map((signal) => signal.id);
+// Three weak structural signals (5 + 10 + 8) that sit well under the thresholds on their own.
+const pitchy = {
+	html: '<p>See <a href="https://tracker.example.net/x">https://shop.example.org</a> or http://10.0.0.1/deal</p>',
+	replyTo: "someone@elsewhere.example",
+};
+
+test("authentication passes count half for a first-contact sender", async (t) => {
+	const { analyze } = await createFixture(t);
+	const result = await analyze("hello@throwaway-seo.example", pitchy);
+	const passes = result.signals.filter((signal) => signal.id.endsWith("_passed")).map((signal) => [signal.id, signal.score]).sort();
+	assert.deepEqual(passes, [["dkim_passed", -2], ["dmarc_passed", -4]]);
+});
+
+test("a recurring sender gets the full pass credit once it has been seen twice with no spam reports", async (t) => {
+	const { addReputation, analyze } = await createFixture(t);
+	const dmarc = async (from) => (await analyze(from, pitchy)).signals.find((signal) => signal.id === "dmarc_passed")?.score;
+	addReputation("email", "once@vendor.example", 0, 0, 1);
+	assert.equal(await dmarc("once@vendor.example"), -4, "seen once is still a first contact");
+	addReputation("email", "billing@vendor.example", 0, 0, 2);
+	assert.equal(await dmarc("billing@vendor.example"), -8);
+	addReputation("email", "reported@vendor.example", 1, 0, 2);
+	assert.equal(await dmarc("reported@vendor.example"), -4, "a spam report withdraws the credit");
+	addReputation("domain", "bigbank.example", 0, 0, 40);
+	assert.equal(await dmarc("other@bigbank.example"), -4, "a busy domain does not vouch for a new address");
+});
+
+test("a first-contact password reset from a new domain with passing authentication stays below the spam threshold", async (t) => {
+	const { analyze } = await createFixture(t);
+	const intelligenceProvider = { check: async () => [
+		{ id: "new_sender_domain", score: 25, reason: "young" },
+		{ id: "new_link_domain", score: 10, reason: "young link" },
+	] };
+	const overrides = {
+		subject: "Reset your password",
+		text: "Urgent: confirm your account password within 24 hours.",
+		html: '<p>Urgent: confirm your account password within 24 hours. <a href="https://link.example.net/r">https://app.example.org/reset</a></p>',
+	};
+	const first = await analyze("no-reply@fresh-app.example", overrides, PASS, intelligenceProvider);
+	// 25 + 10 + 24 (credential_phishing_pattern) + 10 (displayed_link_mismatch) = 69, minus half the pass credit (7).
+	assert.equal(first.score, 62, ids(first).join());
+	assert.equal(first.verdict, "suspicious");
+	const failing = await analyze("no-reply@fresh-app.example", overrides, { spf: "pass", dkim: "pass", dmarc: "fail" }, intelligenceProvider);
+	assert.equal(failing.verdict, "spam");
+});
+
+test("authentication passes still count for a sender the user has written to or saved", async (t) => {
+	const { addContact, analyze } = await createFixture(t);
+	addContact("friend@known.example", "outbound");
+	const result = await analyze("friend@known.example", pitchy);
+	assert.ok(ids(result).includes("dmarc_passed"), ids(result).join());
+	assert.ok(ids(result).includes("previously_sent"));
+});
+
+test("authentication passes still count for a sender with a good reputation in the mailbox", async (t) => {
+	const { addReputation, analyze } = await createFixture(t);
+	addReputation("domain", "newsletter.example", 0, 6);
+	const result = await analyze("news@newsletter.example", pitchy);
+	assert.ok(ids(result).includes("dmarc_passed"), ids(result).join());
+});
+
+test("authentication failures still add score for a first-contact sender", async (t) => {
+	const { analyze } = await createFixture(t);
+	const result = await analyze("hello@throwaway-seo.example", {}, { spf: "pass", dkim: "fail", dmarc: "pass" });
+	assert.equal(result.signals.find((signal) => signal.id === "dkim_failed").score, 8);
+});
+
+test("a first-contact receipt with a brand-new sending domain is filed in the Inbox", async (t) => {
+	const { analyze } = await createFixture(t);
+	const html = '<p>Receipt <a href="https://track.example.net/r">https://shop.example.org/order</a></p>';
+	const intelligenceProvider = { check: async () => [{ id: "domain_under_week", score: 25, reason: "Domain registered under a week ago" }] };
+	const result = await analyze("orders@new-shop.example", { html, subject: "Your receipt", text: "Thanks for your order." }, PASS, intelligenceProvider);
+	// 10 (link) + 25 (young domain) = 35, minus half the pass credit (7) = 28. Stays in the Inbox.
+	assert.equal(result.score, 28);
+	assert.equal(result.verdict, "inbox");
+});

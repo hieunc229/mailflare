@@ -1,9 +1,10 @@
-import { and, eq, gt, isNotNull, lte, or, ne, isNull, sql } from "drizzle-orm";
+import { and, eq, gt, inArray, isNotNull, lte, or, ne, isNull, sql } from "drizzle-orm";
 import { getDb } from "@/db";
-import { calendarEvents, users } from "@/db/schema";
+import { calendarEventOverrides, calendarEvents, users } from "@/db/schema";
 import { isMissingColumnError } from "@/lib/database-errors";
 import { sendPushContent } from "@/lib/push/server";
 import { normalizeTimeZone } from "@/lib/time/utils";
+import { chunkIds } from "./chunks";
 import { MAX_REMINDER_MINUTES, REMINDER_GRACE_MS, dueReminderOccurrences, formatReminderBody } from "./reminder-utils";
 
 /** Events read per query; the run pages through all of them by id. */
@@ -40,8 +41,18 @@ export async function runCalendarReminders(env: CloudflareEnv, now: Date): Promi
 		let cursor = "";
 		for (let pageNumber = 1; ; pageNumber++) {
 			const rows = await page(cursor);
+			// Moved/extra occurrences remind at their override time: IN queries in D1-safe chunks.
+			const overridesById = new Map<string, Array<{ occurrenceMs: number; startsAt: Date; endsAt: Date }>>();
+			for (const chunk of chunkIds(rows.map(({ event }) => event.id))) {
+				const overrideRows = await db.select().from(calendarEventOverrides).where(inArray(calendarEventOverrides.eventId, chunk));
+				for (const row of overrideRows) {
+					const list = overridesById.get(row.eventId) ?? [];
+					list.push({ occurrenceMs: row.occurrenceMs, startsAt: row.startsAt, endsAt: row.endsAt });
+					overridesById.set(row.eventId, list);
+				}
+			}
 			for (const { event } of rows) {
-				const due = dueReminderOccurrences(event, now, event.lastRemindedStart?.getTime() ?? 0, MAX_OCCURRENCES_PER_EVENT);
+				const due = dueReminderOccurrences(event, now, event.lastRemindedStart?.getTime() ?? 0, MAX_OCCURRENCES_PER_EVENT, overridesById.get(event.id));
 				if (!due.length) continue;
 
 				const newest = due[due.length - 1].start;

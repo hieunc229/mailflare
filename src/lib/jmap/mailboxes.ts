@@ -1,6 +1,7 @@
 import { and, count, eq, inArray, isNull, sql } from "drizzle-orm";
 import { mailboxChangesSince } from "./changes";
 import { folders, messages } from "@/db/schema";
+import { draftsVisibleTo } from "@/lib/email/draft-access";
 import { newId } from "@/lib/ids";
 import { JmapError } from "./errors";
 import { decodeMailboxRef, encodeMailboxRef, roleToStatus, SYSTEM_ROLES } from "./ids";
@@ -36,7 +37,7 @@ async function loadCounts(ctx: JmapContext, mailboxIds: string[]): Promise<Map<s
 			unread: sql<number>`sum(case when not ${messages.read} and ${messages.direction} = 'inbound' then 1 else 0 end)`,
 		})
 		.from(messages)
-		.where(inArray(messages.mailboxId, mailboxIds))
+		.where(and(inArray(messages.mailboxId, mailboxIds), draftsVisibleTo(ctx.auth.userId)))
 		.groupBy(messages.mailboxId, messages.status, messages.folderId);
 
 	const add = (key: string, row: { total: number; unread: number }) => {
@@ -232,6 +233,11 @@ export const mailboxSet: JmapMethodHandler = async (ctx, args) => {
 			notUpdated[id] = { type: "invalidProperties", properties: keys.filter((key) => key !== "name") };
 			continue;
 		}
+		// Renaming is a manage action, like create and destroy: a read-only or send-only sharee must not rename a shared folder.
+		if (keys.length && mailbox.permission !== "full_access") {
+			notUpdated[id] = { type: "forbidden" };
+			continue;
+		}
 		if (typeof patch.name === "string" && patch.name.trim()) {
 			await ctx.db
 				.update(folders)
@@ -252,10 +258,16 @@ export const mailboxSet: JmapMethodHandler = async (ctx, args) => {
 			notDestroyed[id] = { type: "forbidden" };
 			continue;
 		}
+		// The folder id comes from the client: it must belong to the mailbox the permission was checked on.
+		const [folder] = await ctx.db.select({ id: folders.id }).from(folders).where(and(eq(folders.id, ref.folderId), eq(folders.mailboxId, mailbox.id))).limit(1);
+		if (!folder) {
+			notDestroyed[id] = { type: "notFound" };
+			continue;
+		}
 		if (args.onDestroyRemoveEmails) {
-			await ctx.db.update(messages).set({ status: "trash", folderId: null }).where(eq(messages.folderId, ref.folderId));
+			await ctx.db.update(messages).set({ status: "trash", folderId: null }).where(and(eq(messages.folderId, ref.folderId), eq(messages.mailboxId, mailbox.id)));
 		} else {
-			const [inUse] = await ctx.db.select({ n: count() }).from(messages).where(and(eq(messages.folderId, ref.folderId), isNull(messages.snoozedUntil)));
+			const [inUse] = await ctx.db.select({ n: count() }).from(messages).where(and(eq(messages.folderId, ref.folderId), eq(messages.mailboxId, mailbox.id), isNull(messages.snoozedUntil)));
 			if ((inUse?.n ?? 0) > 0) {
 				notDestroyed[id] = { type: "mailboxHasEmail" };
 				continue;

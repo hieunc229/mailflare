@@ -27,10 +27,10 @@ export function formatReminderBody(startsAt: Date, timeZone: string, location: s
 export const REMINDER_GRACE_MS = 5 * 60_000;
 
 /** Occurrences of `event` whose reminder is due at `now`, newer than `lastReminded` (ms), oldest first. */
-export function dueReminderOccurrences(event: typeof calendarEvents.$inferSelect, now: Date, lastReminded: number, limit: number) {
+export function dueReminderOccurrences(event: typeof calendarEvents.$inferSelect, now: Date, lastReminded: number, limit: number, overrides?: Array<{ occurrenceMs: number; startsAt: Date; endsAt: Date }>) {
 	const lead = (event.reminderMinutes ?? 0) * 60_000;
 	const grace = lead === 0 ? REMINDER_GRACE_MS : 0;
-	return expandToolEvents([event], new Date(now.getTime() - grace), new Date(now.getTime() + lead + 1))
+	return expandToolEvents([event], new Date(now.getTime() - grace), new Date(now.getTime() + lead + 1), 500, overrides ? new Map([[event.id, overrides]]) : undefined)
 		.map((occurrence) => ({ ...occurrence, start: new Date(occurrence.startsAt) }))
 		.filter((occurrence) => {
 			const start = occurrence.start.getTime();

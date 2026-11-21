@@ -22,6 +22,46 @@ password-reset mail and the JMAP session point at the public address, and
 forward WebSocket upgrades for `/api/realtime`. Passkeys also bind to this
 origin, so they need `APP_URL` (or a direct HTTPS connection) to work.
 
+### Prebuilt image (no build)
+
+Every push to `main` publishes a multi-arch (`linux/amd64`, `linux/arm64`)
+image to `ghcr.io/hieunc229/mailflare`. Use it instead of building from source:
+
+```bash
+cp .env.docker.example .env.docker      # edit: how to receive and send mail
+docker compose -f docker-compose.image.yml up -d
+```
+
+`docker-compose.image.yml` only needs that file and `.env.docker`; no source
+checkout. `docker-compose.yml` still builds from source.
+
+| Tag | Meaning |
+| --- | --- |
+| `latest` | Newest build of `main`. |
+| `0.5.5` (the `package.json` version) | Newest build of `main` with that version. It moves while the version stays the same. |
+| `sha-abc1234` | One exact commit. Never moves; pin this to roll back or hold a version. |
+
+**Upgrade (NAS or server).**
+
+1. Back up: copy the `mailflare-data` volume, or download a backup from the
+   admin Backups page.
+2. Pull the image and recreate the container: `docker compose -f
+   docker-compose.image.yml pull && docker compose -f docker-compose.image.yml up -d`.
+   On a NAS UI, pull the image and recreate the container the same way.
+3. Keep the volume and `.env.docker` as they are; they hold your data and
+   settings.
+
+Pending migrations run when the container starts, before it serves requests. A
+failed migration stops the start (the container exits with an error in
+`docker compose logs`). Migrations only move forward: to go back to an older
+image after one has been applied, pin an older `sha-` tag and restore the
+volume or backup taken in step 1.
+
+Turnstile is not in the prebuilt image: its site key is fixed at build time.
+To use it, build from source with
+`docker build --build-arg NEXT_PUBLIC_TURNSTILE_SITE_KEY=<key> .` (or set the
+arg under `build:` in `docker-compose.yml`) and set `TURNSTILE_SECRET_KEY`.
+
 ### PWA and push notifications
 
 Mailflare can be installed as a PWA and can deliver new-mail notifications
@@ -96,7 +136,8 @@ and the DNS page shows what to set by hand.
 | `DATA_DIR` | `/data` | SQLite database, blobs and backups |
 | `DATABASE_URL` | unset | Use PostgreSQL, MySQL or libSQL instead of the SQLite file in `DATA_DIR`; see [Databases](databases.md). Migrations are applied on start. |
 | `DATABASE_DRIVER` | inferred | Only to override the driver inferred from `DATABASE_URL` |
-| `APP_URL` | request origin | Public URL behind a proxy |
+| `APP_URL` | request origin | Public URL behind a proxy. Browser requests that change data must come from this origin. Required for password reset on the self-hosted server: reset links are never built from the `Host` header, so without it no reset email is sent. |
+| `TRUST_PROXY` | unset | Set to `1` when a reverse proxy terminates TLS in front of the container: its `X-Forwarded-For` client IP and `X-Forwarded-Proto` scheme are then trusted (without `APP_URL`, the same-origin check uses `Host` plus that scheme). Leave unset when exposed directly. |
 | `SMTP_INBOUND_PORT` | `25` | Inbound SMTP; `0` disables |
 | `MAIL_HOSTNAME` | `mail.<domain>` | Host the MX record points at; SMTP banner |
 | `SMTP_MAX_SIZE` | 36 MiB | Largest raw inbound message; allows for encoding overhead on up to 25 MB of attachments. Oversized mail receives an SMTP rejection, which the sender's mail provider can report as a delivery failure. |
@@ -127,7 +168,7 @@ and the DNS page shows what to set by hand.
   unchanged; files land under `/data/blobs/backups`. Back up the whole volume
   for a full copy.
 - **Updates.** Pull the new image and recreate the container; migrations run
-  at start. The in-app update button is disabled on self-hosted installs.
+  at start (see [Prebuilt image](#prebuilt-image-no-build)). The in-app update button is disabled on self-hosted installs.
 - **Logs.** `docker compose logs -f mailflare`.
 - **Queues.** Jobs are held in memory. Inbound mail is written to the volume
   before it is queued, so a restart never loses a message; at worst one

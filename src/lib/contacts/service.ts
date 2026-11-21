@@ -158,15 +158,20 @@ export async function getContactAvatarMap(env: CloudflareEnv, userId: string, ad
 	return new Map(rows.map((contact) => [contact.email, !!contact.avatarKey]));
 }
 
+const CONTACT_EMAIL_CHUNK = 90;
+
 export async function getContactCardMap(env: CloudflareEnv, userId: string, addresses: string[]) {
 	const emails = Array.from(new Set(addresses.map(normalizeEmailAddress).filter(Boolean)));
 	if (emails.length === 0) return new Map<string, ContactCard>();
 
 	const db = getDb(env);
-	const rows = await db
+	// userId takes one bound parameter, so keep each email chunk under D1's limit of 100.
+	const chunks: string[][] = [];
+	for (let offset = 0; offset < emails.length; offset += CONTACT_EMAIL_CHUNK) chunks.push(emails.slice(offset, offset + CONTACT_EMAIL_CHUNK));
+	const rows = (await Promise.all(chunks.map((chunk) => db
 		.select({ email: contacts.email, displayName: contacts.displayName, source: contacts.source, avatarKey: contacts.avatarKey })
 		.from(contacts)
-		.where(and(eq(contacts.userId, userId), inArray(contacts.email, emails)));
+		.where(and(eq(contacts.userId, userId), inArray(contacts.email, chunk)))))).flat();
 
 	return new Map(rows.map((contact) => [contact.email, {
 		displayName: contact.displayName,

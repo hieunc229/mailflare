@@ -12,6 +12,7 @@ import {
 	isImportJobMessage,
 	isInboundQueueMessage,
 	isWebhookRetryMessage,
+	settleFailedInboundMessage,
 	withD1BookmarkCookie,
 	withD1ReadSession,
 } from "./worker-utils";
@@ -152,7 +153,8 @@ export default {
 					attempts: msg.attempts,
 					error: err,
 				});
-				msg.retry({ delaySeconds: 10 });
+				if (isInboundQueueMessage(msg.body)) settleFailedInboundMessage(msg, err);
+				else msg.retry({ delaySeconds: 10 });
 			}
 		}
 	},

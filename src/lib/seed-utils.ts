@@ -498,6 +498,7 @@ export async function insertDemoMessages(
 			htmlBody: null,
 			rawR2Key,
 			status: seedMessage.status,
+			privateDraft: seedMessage.status === "draft",
 			read: seedMessage.read ?? true,
 			threadId: seedMessage.threadId ?? seedMessage.providerMessageId ?? null,
 			inReplyTo: seedMessage.inReplyTo ?? null,

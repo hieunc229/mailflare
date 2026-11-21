@@ -1,10 +1,10 @@
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { getEnv } from "@/lib/cloudflare";
+import { isSameOriginRequest } from "@/lib/auth/origin";
 import {
 	ACCOUNTS_COOKIE,
 	cookieOptions,
-	isSameOrigin,
 	parseAccountTokens,
 	resolveAccounts,
 	serializeAccountTokens,
@@ -30,7 +30,7 @@ export async function GET(request: Request) {
 
 /** Remove another signed-in account from this browser and end its session. The active account signs out through /api/auth/logout. */
 export async function DELETE(request: Request) {
-	if (!isSameOrigin(request)) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+	if (!isSameOriginRequest(request)) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 	const env = getEnv();
 	const body = (await request.json().catch(() => null)) as { userId?: unknown } | null;
 	const userId = typeof body?.userId === "string" ? body.userId : "";

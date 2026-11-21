@@ -105,3 +105,27 @@ test("a newer backup restores into a database that has the passkey table but not
 	assert.equal(target.prepare("SELECT COUNT(*) AS count FROM passkey_credentials").get().count, 1);
 	assert.equal(target.prepare("PRAGMA table_info(passkey_credentials)").all().some((column) => column.name === "aaguid"), false);
 });
+
+test("a backup from before private_draft restores drafts as private, derived like the migration backfill", async () => {
+	const source = database();
+	addUser(source);
+	source.exec(`
+		INSERT INTO domains (id, user_id, hostname, zone_id, status, created_at) VALUES ('d1', 'u1', 'example.test', 'z', 'active', 1);
+		INSERT INTO mailboxes (id, user_id, domain_id, local_part, type, created_at) VALUES ('mb1', 'u1', 'd1', 'team', 'shared', 1);
+		INSERT INTO messages (id, user_id, mailbox_id, direction, from_addr, to_addr, status, created_at) VALUES
+			('draft', 'u1', 'mb1', 'outbound', 'team@example.test', 'x@example.net', 'draft', 1),
+			('moved', 'u1', 'mb1', 'outbound', 'team@example.test', 'x@example.net', 'trash', 2),
+			('sent-trashed', 'u1', 'mb1', 'outbound', 'team@example.test', 'x@example.net', 'trash', 3),
+			('sent', 'u1', 'mb1', 'outbound', 'team@example.test', 'x@example.net', 'sent', 4),
+			('inbound', 'u1', 'mb1', 'inbound', 'x@example.net', 'team@example.test', 'trash', 5);
+		INSERT INTO outbound_jobs (id, user_id, message_id, status, payload, created_at, updated_at) VALUES ('j1', 'u1', 'sent-trashed', 'sent', '{}', 1, 1);`);
+	const backup = await exportDatabaseRecords(d1(source));
+	const document = JSON.parse(new TextDecoder().decode(backup));
+	for (const row of document.tables.messages) delete row.private_draft;
+	const old = new TextEncoder().encode(JSON.stringify(document));
+
+	const target = database();
+	await restoreDatabaseRecords(d1(target), old.buffer.slice(old.byteOffset, old.byteOffset + old.byteLength));
+	const flags = Object.fromEntries(target.prepare("SELECT id, private_draft AS p FROM messages").all().map((row) => [row.id, row.p]));
+	assert.deepEqual(flags, { draft: 1, moved: 1, "sent-trashed": 0, sent: 0, inbound: 0 });
+});

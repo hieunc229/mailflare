@@ -1,9 +1,12 @@
 import { dateFromZonedFields, normalizeTimeZone, zonedDateFields } from "../time/utils";
-import { escapeIcsText, formatIcsUtc, ICS_ADDRESS, joinIcsLines } from "./ics";
+import { escapeIcsText, formatIcsUtc, isIcsAddress, joinIcsLines, MAX_ICS_ADDRESS } from "./ics";
+import { normalizeReminderMinutes } from "./reminder-utils";
 
 export type ParsedInvite = {
 	uid: string;
 	method: string;
+	/** True when the file carried no top-level METHOD (method then defaults to "PUBLISH"). */
+	methodAbsent: boolean;
 	title: string;
 	description: string;
 	location: string;
@@ -20,10 +23,14 @@ export type ParsedInvite = {
 	sequence: number;
 	/** EXDATE instants of a recurring series (at most the first 1000 values). */
 	excludedDates: Date[];
+	/** RDATE instants of a recurring series (at most the first 1000 values); stored as overrides by the inbound path, never materialized here. */
+	rdateDates: Date[];
 	/** The zone floating, all-day and unresolvable-TZID times were read in (the `timeZone` option, else UTC). */
 	recipientZone: string;
 	/** True when any time in the event was read in `recipientZone` rather than from the file itself. */
 	usedFallbackZone: boolean;
+	/** VALARM reminder of the invitation in minutes before the start, null when none or unreadable. */
+	alarmMinutes: number | null;
 	/** ATTENDEE lines with their PARTSTAT; a REPLY carries the answering guest here. */
 	attendees: { email: string; status: string }[];
 };
@@ -34,10 +41,15 @@ export type ParseInviteOptions = {
 };
 
 export type InviteRepeat = {
-	repeat: "none" | "daily" | "weekly" | "monthly" | "weekdays";
+	repeat: "none" | "daily" | "weekly" | "monthly" | "weekdays" | "yearly";
 	repeatDays: number[];
 	repeatAnchorDay: number | null;
 	repeatUntil: Date | null;
+	/** Step between recurrences: every N days/weeks/months/years (1..999). */
+	repeatInterval: number;
+	/** Weekday (0-6) and week (1-5, -1 = last) of an nth-weekday monthly repeat; otherwise both null. */
+	repeatWeekday: number | null;
+	repeatWeek: number | null;
 };
 
 const stripControls = (value: string) => value.replace(/[\u0000-\u001f\u007f]/g, "");
@@ -251,32 +263,88 @@ export function parseIcsDuration(value: string | undefined): { days: number; ms:
 }
 
 /** The properties of each VEVENT, ignoring those of components nested in it (VALARM and the like). */
-function readEvents(lines: string[]): { method: string; events: Property[][] } {
+function readEvents(lines: string[]): { method: string; methodAbsent: boolean; events: Property[][]; alarmTriggers: (Property | null)[] } {
 	let method = "PUBLISH";
+	let methodAbsent = true;
 	const events: Property[][] = [];
+	// First TRIGGER seen inside a VALARM of each VEVENT, parallel to `events`; never added to the event props.
+	const alarmTriggers: (Property | null)[] = [];
 	let current: Property[] | null = null;
+	let currentTrigger: Property | null = null;
 	let nested = 0;
+	// Depth inside VEVENT at which the current VALARM opened, null when not inside one.
+	let alarmDepth: number | null = null;
 	for (const line of lines) {
 		const property = parseProperty(line);
 		if (!property) continue;
 		if (property.name === "BEGIN") {
 			const component = property.value.trim().toUpperCase();
-			if (current) nested++;
-			else if (component === "VEVENT") { current = []; nested = 0; }
+			if (current) {
+				nested++;
+				if (component === "VALARM" && alarmDepth === null) alarmDepth = nested;
+			} else if (component === "VEVENT") { current = []; currentTrigger = null; nested = 0; alarmDepth = null; }
 			continue;
 		}
 		if (property.name === "END") {
 			if (!current) continue;
-			if (nested > 0) { nested--; continue; }
+			if (nested > 0) {
+				if (alarmDepth !== null && property.value.trim().toUpperCase() === "VALARM" && nested === alarmDepth) alarmDepth = null;
+				nested--;
+				continue;
+			}
 			events.push(current);
+			alarmTriggers.push(currentTrigger);
 			current = null;
+			currentTrigger = null;
+			alarmDepth = null;
 			continue;
 		}
 		if (current) {
 			if (nested === 0) current.push(property);
-		} else if (property.name === "METHOD") method = property.value.trim().toUpperCase();
+			else if (alarmDepth !== null && !currentTrigger && property.name === "TRIGGER") currentTrigger = property;
+		} else if (property.name === "METHOD") { method = property.value.trim().toUpperCase(); methodAbsent = false; }
 	}
-	return { method, events };
+	return { method, methodAbsent, events, alarmTriggers };
+}
+
+/**
+ * Reminder minutes of a VALARM TRIGGER, or null when it is not a plain countdown. Only a leading-`-` duration
+ * before the start counts (RELATED=START or no params); a VALUE=DATE-TIME or RELATED=END is an absolute time or
+ * runs after the start, so it is ignored. The magnitude reuses the DURATION grammar (at most 366 days) and is
+ * then clamped to the reminder range; -PT0M is a valid at-the-time reminder.
+ */
+export function parseAlarmTrigger(property: Property | null | undefined): number | null {
+	if (!property) return null;
+	const related = property.params.RELATED?.trim().toUpperCase();
+	if (related && related !== "START") return null;
+	const valueType = property.params.VALUE?.trim().toUpperCase();
+	if (valueType && valueType !== "DURATION") return null;
+	const raw = property.value.trim();
+	if (!raw.startsWith("-")) return null;
+	const magnitude = raw.slice(1).trim();
+	const parsed = parseIcsDuration(magnitude);
+	if (parsed) {
+		const minutes = (parsed.days * DAY_MS + parsed.ms) / 60_000;
+		return Number.isInteger(minutes) ? normalizeReminderMinutes(minutes) : null;
+	}
+	// parseIcsDuration treats zero as absent; -PT0M still means "at the time".
+	// The magnitude must hold at least one digit group, so a bare "-P" is rejected instead of yielding 0.
+	if (/\d/.test(magnitude) && /^P(?:0W)?(?:0D)?(?:T(?:0H)?(?:0M)?(?:0S)?)?$/i.test(magnitude) && !magnitude.toUpperCase().endsWith("T")) return 0;
+	return null;
+}
+
+/** Flat organizer-plus-attendees address list for the attendees column: deduped, lower-cased, at most 100. */
+export function inviteAttendeeAddresses(invite: Pick<ParsedInvite, "organizer" | "attendees">): string[] {
+	const seen = new Set<string>();
+	const list: string[] = [];
+	for (const raw of [invite.organizer, ...invite.attendees.map((attendee) => attendee.email)]) {
+		const address = raw?.trim().toLowerCase() ?? "";
+		if (!address || address.length > 254 || seen.has(address) || !isIcsAddress(address)) continue;
+		seen.add(address);
+		list.push(address);
+		if (list.length >= 100) break;
+	}
+	return list;
 }
 
 /**
@@ -293,10 +361,11 @@ export function parseInvite(text: string, options: ParseInviteOptions = {}): Par
 
 function readInvite(text: string, options: ParseInviteOptions): ParsedInvite | null {
 	const localZone = normalizeTimeZone(options.timeZone);
-	const { method, events } = readEvents(unfold(text));
+	const { method, methodAbsent, events, alarmTriggers } = readEvents(unfold(text));
 	if (!events.length) return null;
 	// A file can carry the series and its changed occurrences; the series (no RECURRENCE-ID) describes the invitation.
-	const event = events.find((properties) => !properties.some((property) => property.name === "RECURRENCE-ID")) ?? events[0];
+	const eventIndex = events.findIndex((properties) => !properties.some((property) => property.name === "RECURRENCE-ID"));
+	const event = events[eventIndex >= 0 ? eventIndex : 0];
 	const find = (name: string) => event.find((property) => property.name === name);
 	const uid = find("UID")?.value.trim();
 	const startProperty = find("DTSTART");
@@ -325,10 +394,20 @@ function readInvite(text: string, options: ParseInviteOptions): ParsedInvite | n
 		if (rawExdates.length >= MAX_EXDATES) break;
 	}
 	const exdates = rawExdates.map(({ property, value }) => parseIcsDate({ ...property, value }, localZone)).filter((date): date is ParsedDate => !!date);
-	const usedFallbackZone = start.fallback || !!end?.fallback || !!recurrence?.fallback || exdates.some((date) => date.fallback);
-	const organizer = find("ORGANIZER")?.value.trim().replace(/^mailto:/i, "") || null;
+	// RDATE uses the same DATE/DATE-TIME grammar and cap as EXDATE; the inbound path stores them as overrides.
+	const rawRdates: { property: Property; value: string }[] = [];
+	for (const property of event) {
+		if (property.name !== "RDATE") continue;
+		for (const value of property.value.split(",", MAX_EXDATES - rawRdates.length)) rawRdates.push({ property, value });
+		if (rawRdates.length >= MAX_EXDATES) break;
+	}
+	const rdates = rawRdates.map(({ property, value }) => parseIcsDate({ ...property, value }, localZone)).filter((date): date is ParsedDate => !!date);
+	const usedFallbackZone = start.fallback || !!end?.fallback || !!recurrence?.fallback || exdates.some((date) => date.fallback) || rdates.some((date) => date.fallback);
+	const rawOrganizer = find("ORGANIZER")?.value.trim().replace(/^mailto:/i, "") || null;
+	// A value longer than any mailbox is dropped, so later address checks never see hostile-length input.
+	const organizer = rawOrganizer && rawOrganizer.length <= MAX_ICS_ADDRESS ? rawOrganizer : null;
 	return {
-		uid, method, startsAt, endsAt,
+		uid, method, methodAbsent, startsAt, endsAt,
 		recipientZone: localZone,
 		usedFallbackZone,
 		title: unescapeText(find("SUMMARY")?.value ?? "").trim() || "(no title)",
@@ -340,8 +419,10 @@ function readInvite(text: string, options: ParseInviteOptions): ParsedInvite | n
 		timeZone: start.timeZone,
 		recurrenceId: recurrence?.date ?? null,
 		sequence: Number.isSafeInteger(sequence) && sequence >= 0 ? sequence : 0,
+		alarmMinutes: parseAlarmTrigger(alarmTriggers[eventIndex >= 0 ? eventIndex : 0]),
 		excludedDates: exdates.map((date) => date.date),
-		attendees: event.filter((property) => property.name === "ATTENDEE").map((property) => ({ email: property.value.trim().replace(/^mailto:/i, "").toLowerCase(), status: (property.params.PARTSTAT ?? "NEEDS-ACTION").toUpperCase() })),
+		rdateDates: rdates.map((date) => date.date),
+		attendees: event.filter((property) => property.name === "ATTENDEE" && property.value.length <= MAX_ICS_ADDRESS + 16).map((property) => ({ email: property.value.trim().replace(/^mailto:/i, "").toLowerCase(), status: (property.params.PARTSTAT ?? "NEEDS-ACTION").toUpperCase() })),
 	};
 }
 
@@ -351,16 +432,53 @@ function readInvite(text: string, options: ParseInviteOptions): ParsedInvite | n
  */
 const INCLUSIVE_PAD_MS = 1000;
 
+/** Days in `month` (0-based) of `year`. */
+function daysInMonth(year: number, month: number): number {
+	return new Date(Date.UTC(year, month + 1, 0)).getUTCDate();
+}
+
+/**
+ * Day of the month of the nth `weekday` (0-6) in `month`: week 1-5 counts from the first, -1 is the last.
+ * A week that does not exist (a fifth Monday in a four-Monday month) falls back to the last such weekday,
+ * so every step still yields exactly one occurrence.
+ */
+function nthWeekdayDate(year: number, month: number, weekday: number, week: number): number {
+	const dim = daysInMonth(year, month);
+	if (week === -1) {
+		const lastDow = new Date(Date.UTC(year, month, dim)).getUTCDay();
+		return dim - ((lastDow - weekday + 7) % 7);
+	}
+	const firstDow = new Date(Date.UTC(year, month, 1)).getUTCDay();
+	let date = 1 + ((weekday - firstDow + 7) % 7) + (week - 1) * 7;
+	while (date > dim) date -= 7;
+	return date;
+}
+
 /** Start of the occurrence at `index` (0 is the first), stepping the wall clock of `zone` like the calendar does. */
 function nthOccurrence(start: Date, repeat: InviteRepeat, index: number, zone: string): Date {
 	if (index === 0) return start;
+	const interval = repeat.repeatInterval;
 	const fields = zonedDateFields(start, zone);
 	if (repeat.repeat === "monthly") {
-		const day = repeat.repeatAnchorDay ?? fields.getUTCDate();
+		if (repeat.repeatWeekday != null && repeat.repeatWeek != null) {
+			fields.setUTCDate(1);
+			fields.setUTCMonth(fields.getUTCMonth() + index * interval);
+			fields.setUTCDate(nthWeekdayDate(fields.getUTCFullYear(), fields.getUTCMonth(), repeat.repeatWeekday, repeat.repeatWeek));
+		} else {
+			const day = repeat.repeatAnchorDay ?? fields.getUTCDate();
+			fields.setUTCDate(1);
+			fields.setUTCMonth(fields.getUTCMonth() + index * interval);
+			fields.setUTCDate(Math.min(day, daysInMonth(fields.getUTCFullYear(), fields.getUTCMonth())));
+		}
+	} else if (repeat.repeat === "yearly") {
+		const day = fields.getUTCDate();
+		const month = fields.getUTCMonth();
 		fields.setUTCDate(1);
-		fields.setUTCMonth(fields.getUTCMonth() + index);
-		fields.setUTCDate(Math.min(day, new Date(Date.UTC(fields.getUTCFullYear(), fields.getUTCMonth() + 1, 0)).getUTCDate()));
-	} else fields.setUTCDate(fields.getUTCDate() + index * (repeat.repeat === "weekly" ? 7 : 1));
+		fields.setUTCFullYear(fields.getUTCFullYear() + index * interval);
+		fields.setUTCMonth(month);
+		// February 29 clamps to February 28 outside leap years, like the monthly month-end clamp.
+		fields.setUTCDate(Math.min(day, daysInMonth(fields.getUTCFullYear(), month)));
+	} else fields.setUTCDate(fields.getUTCDate() + index * interval * (repeat.repeat === "weekly" ? 7 : 1));
 	return dateFromZonedFields(fields, zone);
 }
 
@@ -387,7 +505,8 @@ function lastOccurrenceStart(start: Date, repeat: InviteRepeat, count: number, z
 		if (days > MAX_SERIES_SPAN_DAYS) return null;
 		last = nthOccurrence(start, daily, days, zone);
 	} else {
-		const spanDays = (count - 1) * (repeat.repeat === "weekly" ? 7 : repeat.repeat === "monthly" ? 31 : 1);
+		const perStep = repeat.repeat === "weekly" ? 7 : repeat.repeat === "monthly" ? 31 : repeat.repeat === "yearly" ? 366 : 1;
+		const spanDays = (count - 1) * perStep * repeat.repeatInterval;
 		if (spanDays > MAX_SERIES_SPAN_DAYS) return null;
 		last = nthOccurrence(start, repeat, count - 1, zone);
 	}
@@ -399,23 +518,55 @@ function lastOccurrenceStart(start: Date, repeat: InviteRepeat, count: number, z
  * `startsAt` (and the zone its clock time is in) is needed to turn COUNT into an end date.
  */
 export function inviteRepeat(rrule: string | null, startsAt?: Date, timeZone?: string | null): InviteRepeat {
-	const none: InviteRepeat = { repeat: "none", repeatDays: [], repeatAnchorDay: null, repeatUntil: null };
+	const none: InviteRepeat = { repeat: "none", repeatDays: [], repeatAnchorDay: null, repeatUntil: null, repeatInterval: 1, repeatWeekday: null, repeatWeek: null };
 	if (!rrule) return none;
 	const zone = normalizeTimeZone(timeZone);
 	const rule: Record<string, string> = Object.fromEntries(rrule.split(";").map((part) => {
 		const eq = part.indexOf("=");
 		return [part.slice(0, eq).trim().toUpperCase(), part.slice(eq + 1).trim().toUpperCase()];
 	}));
-	if (rule.INTERVAL && rule.INTERVAL !== "1") return none;
-	let repeat: InviteRepeat;
+	// INTERVAL=n (1..999) steps daily/weekly/monthly/yearly; anything else cannot be stored.
+	const interval = rule.INTERVAL === undefined || rule.INTERVAL === "" ? 1 : Number(rule.INTERVAL);
+	if (!Number.isInteger(interval) || interval < 1 || interval > 999) return none;
+	const withInterval = { ...none, repeatInterval: interval };
 	const byDays = [...new Set((rule.BYDAY ?? "").split(",").map((code) => WEEKDAY_CODES.indexOf(code.replace(/^[+-]?\d+/, ""))).filter((day) => day >= 0))].sort((a, b) => a - b);
+	let repeat: InviteRepeat;
 	// DAILY with BYDAY (Outlook's "every weekday") keeps only the listed days, which is Mailflare's weekdays repeat.
-	if (rule.FREQ === "DAILY") repeat = byDays.length ? { ...none, repeat: "weekdays", repeatDays: byDays } : { ...none, repeat: "daily" };
-	else if (rule.FREQ === "WEEKLY") {
-		repeat = byDays.length > 1 ? { ...none, repeat: "weekdays", repeatDays: byDays } : { ...none, repeat: "weekly" };
-	} else if (rule.FREQ === "MONTHLY" && !rule.BYDAY) {
-		const day = Number(rule.BYMONTHDAY);
-		repeat = { ...none, repeat: "monthly", repeatAnchorDay: Number.isInteger(day) && day >= 1 && day <= 31 ? day : null };
+	// A listed-days repeat steps day by day, so any INTERVAL above 1 cannot be stored.
+	if (rule.FREQ === "DAILY") {
+		if (byDays.length && interval !== 1) return none;
+		repeat = byDays.length ? { ...withInterval, repeat: "weekdays", repeatDays: byDays } : { ...withInterval, repeat: "daily" };
+	} else if (rule.FREQ === "WEEKLY") {
+		if (byDays.length > 1) {
+			if (interval !== 1) return none;
+			repeat = { ...withInterval, repeat: "weekdays", repeatDays: byDays };
+		} else if (byDays.length === 1) repeat = { ...withInterval, repeat: "weekly" };
+		else repeat = { ...withInterval, repeat: "weekly" };
+	} else if (rule.FREQ === "MONTHLY") {
+		if (rule.BYSETPOS) return none;
+		if (rule.BYDAY) {
+			// Only one numeric-prefixed BYDAY (2TU, -1FR) maps onto the nth-weekday repeat; the interval composes with it.
+			const codes = rule.BYDAY.split(",");
+			if (codes.length !== 1 || rule.BYMONTHDAY) return none;
+			const match = /^([+-]?\d+)([A-Z]{2})$/.exec(codes[0]);
+			const weekday = match ? WEEKDAY_CODES.indexOf(match[2]) : -1;
+			const week = match ? Number(match[1]) : NaN;
+			if (!match || weekday < 0 || !(Number.isInteger(week) && ((week >= 1 && week <= 5) || week === -1))) return none;
+			repeat = { ...withInterval, repeat: "monthly", repeatWeekday: weekday, repeatWeek: week };
+		} else {
+			const day = Number(rule.BYMONTHDAY);
+			repeat = { ...withInterval, repeat: "monthly", repeatAnchorDay: Number.isInteger(day) && day >= 1 && day <= 31 ? day : null };
+		}
+	} else if (rule.FREQ === "YEARLY") {
+		// Plain yearly, anchored on the DTSTART month and day; a BYMONTH+BYMONTHDAY pair must name that same date.
+		const byKeys = Object.keys(rule).filter((key) => key.startsWith("BY"));
+		if (byKeys.length && (byKeys.length !== 2 || rule.BYMONTH === undefined || rule.BYMONTHDAY === undefined)) return none;
+		if (byKeys.length) {
+			if (!startsAt) return none;
+			const fields = zonedDateFields(startsAt, zone);
+			if (Number(rule.BYMONTH) !== fields.getUTCMonth() + 1 || Number(rule.BYMONTHDAY) !== fields.getUTCDate()) return none;
+		}
+		repeat = { ...withInterval, repeat: "yearly" };
 	} else return none;
 	if (rule.UNTIL) {
 		const until = parseIcsDate({ name: "UNTIL", params: {}, value: rule.UNTIL }, zone);
@@ -434,6 +585,21 @@ export function inviteRepeat(rrule: string | null, startsAt?: Date, timeZone?: s
 
 export type InviteResponse = "accepted" | "tentative" | "declined";
 
+/** Longest guest note kept in an invitation reply email. */
+const MAX_REPLY_NOTE = 1000;
+
+/**
+ * Plain-text body of the email sent for an invitation answer: `${from} ${verb}: ${title}`,
+ * plus the guest's note when it carries text. Control characters other than line breaks and
+ * tabs are stripped and the note is trimmed to at most 1000 characters, so an empty or
+ * whitespace-only note adds nothing. The ICS reply (buildReplyIcs) never carries the note.
+ */
+export function buildReplyText(from: string, verb: string, title: string, note?: string | null): string {
+	const base = `${from} ${verb}: ${title}`;
+	const cleaned = (note ?? "").replace(/[\u0000-\u0008\u000B\u000C\u000D\u000E-\u001F\u007F]/g, "").trim().slice(0, MAX_REPLY_NOTE);
+	return cleaned ? `${base}\n\n${cleaned}` : base;
+}
+
 export function buildReplyIcs(invite: ParsedInvite, attendee: string, response: InviteResponse): string {
 	const status = { accepted: "ACCEPTED", tentative: "TENTATIVE", declined: "DECLINED" }[response];
 	// All-day values were read as midnights in the recipient's zone; write them back as the DATE the sender used.
@@ -445,7 +611,40 @@ export function buildReplyIcs(invite: ParsedInvite, attendee: string, response: 
 		...(invite.recurrenceId ? [dateValue("RECURRENCE-ID", invite.recurrenceId)] : []),
 		`SEQUENCE:${invite.sequence}`,
 		`SUMMARY:${escapeIcsText(invite.title)}`,
-		...(invite.organizer && ICS_ADDRESS.test(invite.organizer) ? [`ORGANIZER:mailto:${invite.organizer}`] : []),
-		`ATTENDEE;PARTSTAT=${status}:mailto:${ICS_ADDRESS.test(attendee) ? attendee : "unknown@invalid"}`, "END:VEVENT", "END:VCALENDAR"];
+		...(invite.organizer && isIcsAddress(invite.organizer) ? [`ORGANIZER:mailto:${invite.organizer}`] : []),
+		`ATTENDEE;PARTSTAT=${status}:mailto:${isIcsAddress(attendee) ? attendee : "unknown@invalid"}`, "END:VEVENT", "END:VCALENDAR"];
+	return joinIcsLines(lines);
+}
+
+/** Proposed range of a COUNTER answer, or null when either datetime is invalid or the end is not after the start. */
+export function parseCounterProposal(startsAt: unknown, endsAt: unknown): { startsAt: Date; endsAt: Date } | null {
+	const start = typeof startsAt === "string" ? new Date(startsAt) : null;
+	const end = typeof endsAt === "string" ? new Date(endsAt) : null;
+	if (!start || !Number.isFinite(start.getTime()) || !end || !Number.isFinite(end.getTime())) return null;
+	if (end <= start) return null;
+	return { startsAt: start, endsAt: end };
+}
+
+/**
+ * COUNTER proposal for an invitation: the same event with the guest's proposed
+ * times. The message rides in DESCRIPTION so it round-trips through parseInvite;
+ * the ICS reply (buildReplyIcs) never carries a note.
+ */
+export function buildCounterIcs(invite: ParsedInvite, attendee: string, proposal: { startsAt: Date; endsAt: Date }, opts?: { message?: string }): string {
+	const message = (opts?.message ?? "").replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g, "").trim().slice(0, MAX_REPLY_NOTE);
+	// All-day values were read as midnights in the recipient's zone; write them back as the DATE the sender used.
+	const dateValue = (name: string, value: Date) => invite.allDay
+		? `${name};VALUE=DATE:${zonedDateFields(value, normalizeTimeZone(invite.recipientZone)).toISOString().slice(0, 10).replace(/-/g, "")}`
+		: `${name}:${formatIcsUtc(value)}`;
+	const lines = ["BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//Mailflare//Calendar//EN", "METHOD:COUNTER", "BEGIN:VEVENT", `UID:${stripControls(invite.uid)}`, `DTSTAMP:${formatIcsUtc(new Date())}`,
+		dateValue("DTSTART", proposal.startsAt),
+		dateValue("DTEND", proposal.endsAt),
+		...(invite.recurrenceId ? [dateValue("RECURRENCE-ID", invite.recurrenceId)] : []),
+		`SEQUENCE:${invite.sequence}`,
+		`SUMMARY:${escapeIcsText(invite.title)}`,
+		...(invite.organizer && isIcsAddress(invite.organizer) ? [`ORGANIZER:mailto:${invite.organizer}`] : []),
+		`ATTENDEE;PARTSTAT=NEEDS-ACTION:mailto:${isIcsAddress(attendee) ? attendee : "unknown@invalid"}`,
+		...(message ? [`DESCRIPTION:${escapeIcsText(message)}`] : []),
+		"END:VEVENT", "END:VCALENDAR"];
 	return joinIcsLines(lines);
 }

@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, exists, gt, gte, inArray, isNotNull, isNull, lt, ne, not, or, sql } from "drizzle-orm";
+import { aliasedTable, and, asc, desc, eq, exists, gt, gte, inArray, isNotNull, isNull, lt, ne, not, or, sql } from "drizzle-orm";
 import type { SQL } from "drizzle-orm";
 import { messageAttachments, messages } from "@/db/schema";
 import { concatText, containsLike, escapeLike, insensitiveLike as like, matchEverything, matchNothing } from "@/db/sql";
@@ -12,25 +12,38 @@ import type { Comparator, Filter, FilterCondition, MailboxRef } from "./types";
 export function mailboxRefCondition(ref: MailboxRef): SQL {
 	const base = eq(messages.mailboxId, ref.mailboxId);
 	if (ref.kind === "account") return base;
-	if (ref.kind === "folder") return and(base, eq(messages.folderId, ref.folderId))!;
+	// isNotNull keeps the predicate false rather than NULL for unfiled rows, so a
+	// negated folder condition (inMailboxOtherThan, NOT) still matches them.
+	if (ref.kind === "folder") return and(base, isNotNull(messages.folderId), eq(messages.folderId, ref.folderId))!;
 	const status = roleToStatus(ref.role);
 	if (ref.role === "inbox") return and(base, eq(messages.status, status), isNull(messages.folderId))!;
 	if (ref.role === "sent") return and(base, inArray(messages.status, ["sent", "queued", "failed"]), isNull(messages.folderId))!;
 	return and(base, eq(messages.status, status), isNull(messages.folderId))!;
 }
 
-function keywordCondition(keyword: string, present: boolean): SQL {
+type MessagesTable = typeof messages;
+
+function keywordCondition(keyword: string, present: boolean, table: MessagesTable = messages): SQL {
 	switch (keyword) {
 		case KEYWORD_SEEN:
-			return present ? or(eq(messages.read, true), eq(messages.direction, "outbound"))! : and(eq(messages.read, false), eq(messages.direction, "inbound"))!;
+			return present ? or(eq(table.read, true), eq(table.direction, "outbound"))! : and(eq(table.read, false), eq(table.direction, "inbound"))!;
 		case KEYWORD_FLAGGED:
-			return eq(messages.starred, present);
+			return eq(table.starred, present);
 		case KEYWORD_DRAFT:
-			return present ? eq(messages.status, "draft") : ne(messages.status, "draft");
+			return present ? eq(table.status, "draft") : ne(table.status, "draft");
 		default:
 			// Unknown keywords are never set, so "has" matches nothing and "not" matches all.
 			return present ? matchNothing : matchEverything;
 	}
+}
+
+const threadPeer = aliasedTable(messages, "thread_peer");
+
+/** Whether another message of this one's thread (itself included) has, or lacks, the keyword. Other users' private drafts do not count: a reader must not learn they exist. */
+function threadHasMessage(keyword: string, present: boolean, viewerId: string): SQL {
+	return exists(
+		sql`(SELECT 1 FROM ${messages} AS ${threadPeer} WHERE ${threadPeer.mailboxId} = ${messages.mailboxId} AND coalesce(${threadPeer.threadId}, ${threadPeer.id}) = coalesce(${messages.threadId}, ${messages.id}) AND (${threadPeer.userId} = ${viewerId} OR NOT ${threadPeer.privateDraft}) AND ${keywordCondition(keyword, present, threadPeer)})`,
+	);
 }
 
 /**
@@ -61,7 +74,7 @@ function headerCondition(header: string[]): SQL {
 	}
 }
 
-function conditionToSql(condition: FilterCondition, accessible: Set<string>): SQL[] {
+function conditionToSql(condition: FilterCondition, accessible: Set<string>, viewerId: string): SQL[] {
 	const parts: SQL[] = [];
 	if (condition.inMailbox !== undefined) {
 		const ref = decodeMailboxRef(condition.inMailbox);
@@ -78,9 +91,10 @@ function conditionToSql(condition: FilterCondition, accessible: Set<string>): SQ
 	if (condition.after) parts.push(gte(messages.createdAt, new Date(condition.after)));
 	if (condition.hasKeyword) parts.push(keywordCondition(condition.hasKeyword, true));
 	if (condition.notKeyword) parts.push(keywordCondition(condition.notKeyword, false));
-	if (condition.someInThreadHaveKeyword) parts.push(keywordCondition(condition.someInThreadHaveKeyword, true));
-	if (condition.allInThreadHaveKeyword) parts.push(keywordCondition(condition.allInThreadHaveKeyword, true));
-	if (condition.noneInThreadHaveKeyword) parts.push(keywordCondition(condition.noneInThreadHaveKeyword, false));
+	// RFC 8621 §4.4.1: the thread keyword conditions look at every message of the thread.
+	if (condition.someInThreadHaveKeyword) parts.push(threadHasMessage(condition.someInThreadHaveKeyword, true, viewerId));
+	if (condition.allInThreadHaveKeyword) parts.push(not(threadHasMessage(condition.allInThreadHaveKeyword, false, viewerId)));
+	if (condition.noneInThreadHaveKeyword) parts.push(not(threadHasMessage(condition.noneInThreadHaveKeyword, true, viewerId)));
 	if (condition.from) parts.push(containsLike(messages.fromAddr, condition.from));
 	if (condition.to) parts.push(containsLike(messages.toAddr, condition.to));
 	if (condition.cc) parts.push(containsLike(messages.ccAddr, condition.cc));
@@ -113,24 +127,26 @@ function conditionToSql(condition: FilterCondition, accessible: Set<string>): SQ
 }
 
 /** FilterOperator trees become nested AND/OR/NOT; a bare condition is an AND of its fields. */
-export function filterToSql(filter: Filter | null | undefined, accessible: Set<string>): SQL | undefined {
+export function filterToSql(filter: Filter | null | undefined, accessible: Set<string>, viewerId: string): SQL | undefined {
 	if (!filter) return undefined;
 	if ("operator" in filter) {
-		const children = (filter.conditions ?? []).map((child) => filterToSql(child, accessible)).filter((part): part is SQL => !!part);
+		const children = (filter.conditions ?? []).map((child) => filterToSql(child, accessible, viewerId)).filter((part): part is SQL => !!part);
 		if (children.length === 0) return undefined;
 		if (filter.operator === "AND") return and(...children);
 		if (filter.operator === "OR") return or(...children);
-		if (filter.operator === "NOT") return not(and(...children)!);
+		// RFC 8620 §5.5: NOT matches when none of its conditions match.
+		if (filter.operator === "NOT") return not(or(...children)!);
 		throw invalidArguments(`Unknown operator ${String(filter.operator)}`);
 	}
-	const parts = conditionToSql(filter, accessible);
+	const parts = conditionToSql(filter, accessible, viewerId);
 	return parts.length ? and(...parts) : undefined;
 }
 
 export function sortToSql(sort: Comparator[] | null | undefined): SQL[] {
 	const comparators = sort && sort.length ? sort : [{ property: "receivedAt", isAscending: false }];
 	return comparators.map((item) => {
-		const direction = item.isAscending ? asc : desc;
+		// RFC 8620 §5.5: isAscending defaults to true when omitted.
+		const direction = item.isAscending === false ? desc : asc;
 		switch (item.property) {
 			case "receivedAt":
 			case "sentAt":

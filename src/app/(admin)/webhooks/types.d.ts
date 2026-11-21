@@ -39,9 +39,12 @@ export type CreateWebhookInput = {
 	description?: string;
 	events: WebhookEvent[];
 	maxAttempts: number;
+	/** Step-up grant, sent when the server asks to confirm the webhook. */
+	stepUpToken?: string;
 };
 
 export type UpdateWebhookInput = {
+	stepUpToken?: string;
 	url?: string;
 	description?: string | null;
 	events?: WebhookEvent[];

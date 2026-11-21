@@ -11,6 +11,7 @@ import { RequestBodyTooLargeError } from "@/lib/http/errors";
 import { recordAuthActivity } from "@/lib/auth/activity";
 import { consumeLoginChallenge, createLoginChallenge, getLoginChallengeUserId } from "@/lib/auth/login-challenge";
 import { verifySecondFactor } from "@/lib/auth/mfa";
+import { clearSecondFactorAttempt, reserveSecondFactorAttempt } from "@/lib/auth/second-factor-attempts";
 import { countUnusedRecoveryCodes } from "@/lib/auth/recovery-codes";
 import { createDeviceKey, revokeDeviceKey } from "@/lib/auth/device-keys";
 import { authenticateApiRequest } from "@/lib/api/key-auth";
@@ -61,7 +62,10 @@ export async function POST(request: Request) {
 		if (!challengeUserId) return json({ error: "This sign-in attempt has expired. Start again." }, 401);
 		const [user] = await db.select().from(users).where(eq(users.id, challengeUserId)).limit(1);
 		if (!user || user.disabled || user.deletedAt) return json({ error: "Account disabled" }, 403);
+		const attempt = await reserveSecondFactorAttempt(env, user.id, request);
+		if (!attempt) return json({ error: "Too many wrong codes. Try again later." }, 429, { "Retry-After": "900" });
 		if (!(await verifySecondFactor(env, user, parsed.data.code))) return json({ error: "That code did not match" }, 401);
+		await clearSecondFactorAttempt(env, attempt);
 		if (!(await consumeLoginChallenge(env, parsed.data.challengeToken))) {
 			return json({ error: "This sign-in attempt has expired. Start again." }, 401);
 		}

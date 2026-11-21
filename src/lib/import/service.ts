@@ -104,6 +104,7 @@ async function importMessageToMailbox(
 		htmlBody: parsed.html,
 		rawR2Key,
 		status: placement.status,
+		privateDraft: placement.status === "draft",
 		read,
 		starred,
 		threadId: await resolveThreadId(db, {
