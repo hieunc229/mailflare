@@ -578,6 +578,31 @@ export const domainTrackingHosts = sqliteTable(
 	(t) => [uniqueIndex("domain_tracking_hosts_hostname_idx").on(t.hostname)],
 );
 
+/** Recipients that bounced or complained, per sending domain. Whether it is enforced is `app_settings.suppression_mode`. */
+export const emailSuppressions = sqliteTable(
+	"email_suppressions",
+	{
+		id: text("id").primaryKey(),
+		domainId: text("domain_id").notNull().references(() => domains.id, { onDelete: "cascade" }),
+		email: text("email").notNull(),
+		reason: text("reason", { enum: ["hard_bounce", "complaint", "manual"] }).notNull(),
+		source: text("source", { enum: ["resend", "ses", "dsn", "admin"] }).notNull(),
+		detail: text("detail"),
+		/** Only confirmed entries are enforced. A single returned message (DSN) can be forged by a co-recipient, so it is stored unconfirmed. */
+		confirmed: bool("confirmed").notNull().default(true),
+		/** Message-ID of the first message a DSN named; a DSN about a different message corroborates the entry. */
+		evidenceRef: text("evidence_ref"),
+		eventCount: integer("event_count").notNull().default(1),
+		firstEventAt: timestamp("first_event_at").notNull().$defaultFn(() => new Date()),
+		lastEventAt: timestamp("last_event_at").notNull().$defaultFn(() => new Date()),
+		createdByUserId: text("created_by_user_id").references(() => users.id, { onDelete: "set null" }),
+	},
+	(t) => [
+		uniqueIndex("email_suppressions_domain_email_idx").on(t.domainId, t.email),
+		index("email_suppressions_created_by_idx").on(t.createdByUserId),
+	],
+);
+
 export const messageOpens = sqliteTable(
 	"message_opens",
 	{
@@ -1216,6 +1241,13 @@ export const appSettings = sqliteTable("app_settings", {
 	/** "release": update on a new package.json version; "commit": update on any new upstream commit. */
 	autoUpdateChannel: text("auto_update_channel", { enum: ["release", "commit"] }).notNull().default("release"),
 	autoUpdateDispatchedVersion: text("auto_update_dispatched_version"),
+	/** "off" ignores bounce and complaint events, "record" stores them, "enforce" also refuses to send to those recipients. */
+	suppressionMode: text("suppression_mode", { enum: ["off", "record", "enforce"] }).notNull().default("off"),
+	/** Resend webhook for email.bounced and email.complained; separate from the receiving webhook above. */
+	resendEventsWebhookId: text("resend_events_webhook_id"),
+	resendEventsWebhookSecret: text("resend_events_webhook_secret"),
+	/** JSON: the SNS topic, URL token and SES identities that feed bounces and complaints (see src/lib/deliverability/ses-feed.ts). */
+	sesFeedback: text("ses_feedback"),
 	updatedAt: timestamp("updated_at")
 		.notNull()
 		.$defaultFn(() => new Date()),
