@@ -712,6 +712,8 @@ test("counter proposals need a valid range on a REQUEST invitation", () => {
 	assert.equal(parseInvite(mailflare).method, "REQUEST");
 	const reply = parseInvite(buildReplyIcs(parseInvite(mailflare), "guest@example.com", "accepted"));
 	assert.notEqual(reply.method, "REQUEST");
+});
+
 test("a crafted ORGANIZER of repeated @ cannot exhaust the CPU (CWE-1333)", () => {
 	const huge = "@".repeat(64 * 1024);
 	// The value is dropped at parse time ...
