@@ -113,7 +113,7 @@
     "react-server-dom-webpack": "^19.3.1",
     "remark-gfm": "^4.0.1",
     "sass": "^1.105.0",
-    "smtp-server": "^3.19.12",
+    "smtp-server": "^3.21.7",
     "tailwind-merge": "^3.6.0",
     "vinext": "1.0.0-beta.13",
     "workers-ai-provider": "^4.0.0",
