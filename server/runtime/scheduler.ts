@@ -10,6 +10,7 @@ import { runCalendarReminders } from "@/lib/calendar/reminders";
 import { sweepImportJobs } from "@/lib/import/jobs";
 import { sweepOrphanedRawMail } from "@/lib/email/raw-sweeper";
 import { sweepOrphanedImapCache } from "@/lib/imap/cache-sweeper";
+import { pruneImapExpunged } from "@/lib/imap/expunge-prune";
 import { pruneExpiredMessageActionUndoClaims } from "@/lib/messages/actions/claims";
 
 /** Fire the daily 02:00 UTC backup and the recurring maintenance jobs, matching the cron triggers in wrangler.jsonc. */
@@ -32,6 +33,8 @@ export function startScheduler(env: CloudflareEnv) {
 		purgeExpiredAuthRows(env, now).catch((error) => console.error("Expired auth row purge failed", error));
 		runJmapChangeRetention(env, now).catch((error) => console.error("JMAP change retention failed", error));
 		sweepOrphanedRawMail(env, now).catch((error) => console.error("Raw mail sweep failed", error));
+		// Daily, and only when IMAP is on: with it off the expunge log is never written and there is nothing to prune.
+		if (process.env.IMAP_ENABLED === "1") pruneImapExpunged(env, now).catch((error) => console.error("IMAP expunge log prune failed", error));
 		// Weekly (Sunday), and only when IMAP is on: with it off this adds no storage listing.
 		if (process.env.IMAP_ENABLED === "1" && now.getUTCDay() === 0) sweepOrphanedImapCache(env, now).catch((error) => console.error("IMAP cache sweep failed", error));
 	}, 60_000);

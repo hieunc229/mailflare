@@ -405,6 +405,13 @@
         "CREATE INDEX \"imap_uids_message_id_idx\" ON \"imap_uids\" USING btree (\"message_id\");",
         "CREATE INDEX \"imap_uids_modseq_idx\" ON \"imap_uids\" USING btree (\"mailbox_id\",\"folder_key\",\"modseq\");"
       ]
+    },
+    {
+      "name": "0031_imap_expunged_floor.sql",
+      "statements": [
+        "ALTER TABLE \"imap_folder_state\" ADD COLUMN \"expunged_floor\" bigint DEFAULT 0 NOT NULL;",
+        "CREATE INDEX \"imap_expunged_created_idx\" ON \"imap_expunged\" USING btree (\"created_at\",\"mailbox_id\",\"folder_key\",\"modseq\");"
+      ]
     }
   ]
 }
