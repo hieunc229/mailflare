@@ -1,6 +1,7 @@
 import type { TranslationKey } from "@/lib/i18n/types";
 import { defaultTranslator } from "@/lib/i18n/utils";
 import { authFetch } from "@/lib/auth/client";
+import { requestError } from "@/lib/http/client-error";
 import { formatUserDate } from "@/lib/time/utils";
 import type {
 	CreateWebhookInput,
@@ -25,9 +26,9 @@ export const DELIVERY_STATUS_LABELS = {
 } as const satisfies Record<string, TranslationKey>;
 
 async function readJson<T>(res: Response): Promise<T> {
-	const json = (await res.json()) as T & { error?: unknown };
+	const json = (await res.json()) as T & { error?: unknown; code?: unknown };
 	if (!res.ok) {
-		throw new Error(typeof json.error === "string" ? json.error : defaultTranslator("domains.requestFailed"));
+		throw requestError(json, defaultTranslator("domains.requestFailed"));
 	}
 	return json;
 }
@@ -48,6 +49,8 @@ export async function createWebhook(input: CreateWebhookInput) {
 	return readJson<{ id: string; secret: string }>(
 		await authFetch("/api/webhooks", {
 			method: "POST",
+			// A 401 means "confirm it is you", not "signed out": the page opens the step-up dialog.
+			redirectOnUnauthorized: false,
 			headers: { "Content-Type": "application/json" },
 			body: JSON.stringify(input),
 		}),
@@ -58,6 +61,7 @@ export async function updateWebhook(id: string, input: UpdateWebhookInput) {
 	return readJson<{ ok: boolean; secret?: string }>(
 		await authFetch(`/api/webhooks/${id}`, {
 			method: "PATCH",
+			redirectOnUnauthorized: false,
 			headers: { "Content-Type": "application/json" },
 			body: JSON.stringify(input),
 		}),

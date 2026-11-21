@@ -13,6 +13,10 @@ import {
 import type { DomainRoutingRuleRouteParams } from "./types";
 import { hasValidSessionMutationOrigin } from "@/lib/auth/origin";
 import { readJsonObject } from "@/lib/http/request";
+import { getSessionTokenFromRequestHeaders } from "@/lib/auth/session";
+import { authorizeSecurityChange } from "@/lib/auth/webauthn/authorize";
+import { authError } from "@/lib/http/auth-error";
+import { forwardTargetChanged, isExternalForwardTarget } from "@/lib/routing/forward-proof";
 
 /** Loads a domain-scope rule the caller is allowed to administer. */
 async function loadRule(request: Request, id: string) {
@@ -57,6 +61,11 @@ export async function PATCH(request: Request, { params }: DomainRoutingRuleRoute
 		: true;
 	if (!destinationAllowed) {
 		return NextResponse.json({ error: "Mailbox access is required for the destination" }, { status: 403 });
+	}
+
+	if (forwardTargetChanged(loaded.rule, parsed.data) && await isExternalForwardTarget(loaded.db, loaded.user, parsed.data.forwardTo!)
+		&& !(await authorizeSecurityChange(loaded.env, loaded.user, getSessionTokenFromRequestHeaders(request), parsed.data, "routing.forward"))) {
+		return authError("verification_failed", 401);
 	}
 
 	await loaded.db.update(routingRules).set(toRuleColumns(parsed.data)).where(eq(routingRules.id, id));

@@ -12,6 +12,9 @@ import { webhookSchema } from "@/lib/validators";
 import { readJsonBody } from "@/lib/http/request";
 import { RequestBodyTooLargeError } from "@/lib/http/errors";
 import { hasValidSessionMutationOrigin } from "@/lib/auth/origin";
+import { getSessionTokenFromRequestHeaders } from "@/lib/auth/session";
+import { authorizeSecurityChange } from "@/lib/auth/webauthn/authorize";
+import { authError } from "@/lib/http/auth-error";
 
 export async function GET(request: Request) {
 	const env = getEnv();
@@ -69,6 +72,11 @@ export async function POST(request: Request) {
 	const parsed = webhookSchema.safeParse(body);
 	if (!parsed.success) {
 		return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
+	}
+
+	// A webhook copies message content to an outside URL: creating one needs fresh proof.
+	if (!(await authorizeSecurityChange(env, user, getSessionTokenFromRequestHeaders(request), parsed.data, "webhook.change"))) {
+		return authError("verification_failed", 401);
 	}
 
 	const secret = newId("whsec");

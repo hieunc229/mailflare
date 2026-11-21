@@ -95,7 +95,8 @@ export async function getUnsubscribeUrlFromRawR2Key(env: CloudflareEnv, rawR2Key
 }
 
 const unsubscribeWord = /unsubscribe/i;
-const anchorPattern = /<a\b[^>]*?href\s*=\s*["']([^"']+)["'][^>]*>([\s\S]*?)<\/a\s*>/gi;
+// Bounded quantifiers keep a run of unclosed <a tags linear instead of quadratic.
+const anchorPattern = /<a\b[^>]{0,300}?href\s*=\s*["']([^"']{1,1024})["'][^>]{0,300}>([\s\S]{0,600}?)<\/a\s*>/gi;
 const textUrlPattern = /https?:\/\/[^\s<>"']+/g;
 
 function isHttpUrl(value: string): boolean {

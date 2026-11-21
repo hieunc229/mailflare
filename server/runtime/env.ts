@@ -78,6 +78,8 @@ export function createNodeRuntime(): NodeRuntime {
 		// Marks the runtime for the few places that must behave differently.
 		MAILFLARE_RUNTIME: "node",
 		APP_URL: optional("APP_URL")?.replace(/\/$/, ""),
+		// Whether a reverse proxy sits in front: its x-forwarded-proto is then trusted (server/index.ts).
+		TRUST_PROXY: optional("TRUST_PROXY"),
 		INBOUND_WEBHOOK_SECRET: optional("INBOUND_WEBHOOK_SECRET"),
 		// Resend provider settings (src/lib/email/outbound-provider.ts, resend-api.ts): the key fallback and a
 		// Resend-compatible API, read from env on Workers and passed through here for the Node runtime.
@@ -88,6 +90,22 @@ export function createNodeRuntime(): NodeRuntime {
 		VAPID_PUBLIC_KEY: optional("VAPID_PUBLIC_KEY"),
 		VAPID_PRIVATE_KEY: optional("VAPID_PRIVATE_KEY"),
 		VAPID_SUBJECT: optional("VAPID_SUBJECT"),
+		// Documented in .env.docker.example / docs/self-hosting.md and read from env by the app. Without
+		// them here they never reached the code (INBOUND_REQUIRE_SIGNED_HEADERS=1 stayed off).
+		INBOUND_REQUIRE_SIGNED_HEADERS: optional("INBOUND_REQUIRE_SIGNED_HEADERS"),
+		RESEND_API_KEY: optional("RESEND_API_KEY"),
+		AWS_ACCESS_KEY_ID: optional("AWS_ACCESS_KEY_ID"),
+		AWS_SECRET_ACCESS_KEY: optional("AWS_SECRET_ACCESS_KEY"),
+		AWS_REGION: optional("AWS_REGION"),
+		AWS_DEFAULT_REGION: optional("AWS_DEFAULT_REGION"),
+		CF_ACCOUNT_ID: optional("CF_ACCOUNT_ID"),
+		SPAMHAUS_DQS_KEY: optional("SPAMHAUS_DQS_KEY"),
+		ABUSECH_AUTH_KEY: optional("ABUSECH_AUTH_KEY"),
+		SPAM_DOMAIN_AGE_CHECK: optional("SPAM_DOMAIN_AGE_CHECK"),
+		APNS_KEY_ID: optional("APNS_KEY_ID"),
+		APNS_TEAM_ID: optional("APNS_TEAM_ID"),
+		APNS_PRIVATE_KEY: optional("APNS_PRIVATE_KEY"),
+		APNS_RELAY_URL: optional("APNS_RELAY_URL"),
 	} as unknown as CloudflareEnv;
 	const storageEnv = withDatabase(withStorage(env));
 	realtime.bindEnv(storageEnv);

@@ -1,14 +1,16 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { CheckCircle2, CircleX, Database, RefreshCw } from "@/components/icons";
+import { CheckCircle2, ChevronDown, CircleX, Database, RefreshCw } from "@/components/icons";
 import { useLanguage } from "@/components/language-provider";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Switch } from "@/components/ui/switch";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
 	applyDatabaseMigrations,
 	getApplicationUpdateStatus,
 	getMigrationStatus,
+	saveUpdateSettings,
 	triggerApplicationUpdate,
 } from "./admin-update-card-utils";
 import type { MigrationStatusResponse, UpdateStatusResponse, UpdateWorkflowResponse } from "./admin-update-card-types";
@@ -73,6 +75,22 @@ export function AdminUpdateCard() {
 		}
 	}
 
+	async function handleSettings(values: { autoUpdate?: boolean; channel?: "release" | "commit" }) {
+		setError("");
+		try {
+			await saveUpdateSettings(values);
+			setStatus((current) => (current ? { ...current, ...(values.autoUpdate !== undefined && { autoUpdate: values.autoUpdate }), ...(values.channel && { channel: values.channel }) } : current));
+			if (values.channel) {
+				setIsChecking(true);
+				setStatus(await getApplicationUpdateStatus());
+			}
+		} catch (toggleError) {
+			setError(toggleError instanceof Error ? toggleError.message : t("update.autoUpdateFailed"));
+		} finally {
+			setIsChecking(false);
+		}
+	}
+
 	async function handleMigrate() {
 		setMigrationError("");
 		setIsMigrating(true);
@@ -103,29 +121,55 @@ export function AdminUpdateCard() {
 			<CardContent className="space-y-5 pt-5">
 				{isChecking && <Skeleton className="h-20 w-full rounded-2xl" />}
 
-				{!isChecking && status?.configured === false && (
-					<div className="space-y-3">
-						<p className="text-sm text-neutral-600">
-							{status.configuration?.length ? t("update.completeConfig") : t("update.selfHosted")}
-						</p>
-						{!!status.configuration?.length && (
-							<ul className="divide-y divide-neutral-100 overflow-hidden rounded-2xl border border-neutral-100">
-								{status.configuration.map((item) => (
-									<li key={item.name} className="flex items-center gap-3 px-4 py-3 text-sm">
-										{item.configured ? (
-											<CheckCircle2 className="h-4 w-4 shrink-0 text-green-600" />
-										) : (
-											<CircleX className="h-4 w-4 shrink-0 text-red-600" />
-										)}
-										<code className="text-xs font-medium text-neutral-800">{item.name}</code>
-										<span className={`ml-auto text-xs font-medium ${item.configured ? "text-green-700" : "text-red-600"}`}>
-											{item.configured ? t("update.configured") : t("update.missing")}
-										</span>
-									</li>
-								))}
-							</ul>
-						)}
-					</div>
+				{!isChecking && status && (!status.configuration?.length || !status.configured) && (
+					<p className="text-sm text-neutral-600">
+						{status.configuration?.length ? t("update.completeConfig") : t("update.selfHosted")}
+					</p>
+				)}
+
+				{!isChecking && !!status?.configuration?.length && (
+					<ul className="divide-y divide-neutral-100 overflow-hidden rounded-2xl border border-neutral-100">
+						{status.configuration.map((item) => (
+							<li key={item.name} className="flex items-center gap-3 px-4 py-3 text-sm">
+								{item.configured ? (
+									<CheckCircle2 className="h-4 w-4 shrink-0 text-green-600" />
+								) : (
+									<CircleX className="h-4 w-4 shrink-0 text-red-600" />
+								)}
+								<code className="text-xs font-medium text-neutral-800">{item.name}</code>
+								<span className={`ml-auto text-xs font-medium ${item.configured ? "text-green-700" : "text-red-600"}`}>
+									{item.configured ? t("update.configured") : t("update.missing")}
+								</span>
+							</li>
+						))}
+						<li className="flex items-center gap-3 px-4 py-3 text-sm">
+							<div className="min-w-0">
+								<p className="text-neutral-800">{t("update.autoUpdate")}</p>
+								<p className="text-xs text-neutral-400">{t("update.autoUpdateHint")}</p>
+							</div>
+							<Switch
+								className="ml-auto origin-right scale-75"
+								checked={!!status.autoUpdate}
+								onCheckedChange={(enabled) => handleSettings({ autoUpdate: enabled })}
+								aria-label={t("update.autoUpdate")}
+							/>
+						</li>
+						<li className="flex items-center gap-3 px-4 py-3 text-sm">
+							<label htmlFor="update-channel" className="text-neutral-800">{t("update.channel")}</label>
+							<span className="relative ml-auto inline-flex items-center">
+								<select
+									id="update-channel"
+									value={status.channel ?? "release"}
+									onChange={(event) => handleSettings({ channel: event.target.value as "release" | "commit" })}
+									className="cursor-pointer appearance-none bg-transparent p-0 pr-5 text-right text-sm text-neutral-700 focus:outline-none"
+								>
+									<option value="release">{t("update.channelRelease")}</option>
+									<option value="commit">{t("update.channelCommit")}</option>
+								</select>
+								<ChevronDown className="pointer-events-none absolute right-0 h-4 w-4 text-neutral-500" />
+							</span>
+						</li>
+					</ul>
 				)}
 
 				{!isChecking && status?.configured && (
@@ -137,7 +181,9 @@ export function AdminUpdateCard() {
 								<CheckCircle2 className="h-4 w-4 shrink-0 text-green-600" />
 							)}
 							<p className="min-w-0 text-sm text-neutral-700">
-								{status.available
+								{status.available && status.channel === "commit"
+									? t("update.availableCommits", { count: status.commitsBehind ?? 0, target: status.targetVersion })
+									: status.available
 									? t("update.available", { target: status.targetVersion, current: status.currentVersion })
 									: t("update.upToDate", { current: status.currentVersion })}
 							</p>

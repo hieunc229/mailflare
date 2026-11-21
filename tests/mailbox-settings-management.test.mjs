@@ -216,6 +216,31 @@ test("administrators can manage aliases within the mailbox's domain-owner scope"
 	assert.ok(f.calls.some(call => call.method === "DELETE"));
 });
 
+test("mailbox owners who cannot create mailboxes on the domain cannot add aliases there", async t => {
+	const f = await fixture(t);
+	for (const [actor, mailboxId, domainId] of [["remote", "m-remote", "two"], ["sam", "m-sales", "one"]]) {
+		const response = await aliases.POST(f.request(actor, `/api/mailboxes/${mailboxId}/aliases`, "POST", { localPart: "postmaster", domainId }), context(mailboxId));
+		assert.equal(response.status, 404);
+	}
+	assert.equal(f.sql.prepare("SELECT count(*) AS count FROM mailbox_aliases").get().count, 0);
+});
+
+test("an alias cannot take an address another mailbox receives on all domains", async t => {
+	const f = await fixture(t);
+	f.sql.exec(`
+		INSERT INTO domains (id, user_id, hostname, zone_id, status, created_at) VALUES ('three', 'primary', 'three.test', 'zone-three', 'active', 1);
+		UPDATE mailboxes SET use_all_domains=1 WHERE id='m-sam';
+	`);
+	const path = "/api/mailboxes/m-owner/aliases";
+	for (const localPart of ["sam", "s.am", "sam+billing"]) {
+		const taken = await aliases.POST(f.request("primary", path, "POST", { localPart, domainId: "three" }), context("m-owner"));
+		assert.equal(taken.status, 409);
+	}
+	assert.equal(f.sql.prepare("SELECT count(*) AS count FROM mailbox_aliases").get().count, 0);
+	const free = await aliases.POST(f.request("primary", path, "POST", { localPart: "billing", domainId: "three" }), context("m-owner"));
+	assert.equal(free.status, 200);
+});
+
 test("administrative avatar edits follow the mailbox owner's primary identity", async t => {
 	const f = await fixture(t);
 	const response = await avatar.GET(f.request("primary", "/api/mailboxes/m-sam/avatar"), context("m-sam"));

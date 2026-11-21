@@ -2,7 +2,7 @@ import { and, eq, gt, isNull } from "drizzle-orm";
 import { getDb } from "@/db";
 import { passwordResetTokens, users } from "@/db/schema";
 import { newId } from "@/lib/ids";
-import { hasPasswordHash, hashPassword } from "@/lib/auth/password";
+import { hashPassword } from "@/lib/auth/password";
 import { deleteUserSessions, hashSessionToken } from "@/lib/auth/session";
 import { getBranding } from "@/lib/branding/service";
 import { sendSystemEmail } from "@/lib/email/system-mail";
@@ -21,8 +21,17 @@ const TOKEN_MINUTES = 30;
 export async function requestPasswordReset(env: CloudflareEnv, email: string, origin: string, t: Translator): Promise<void> {
 	const db = getDb(env);
 	const [user] = await db.select().from(users).where(eq(users.email, email.trim().toLowerCase())).limit(1);
-	// A passkey-only account must not regain password sign-in through email.
-	if (!user || user.disabled || !user.resetEmail || !hasPasswordHash(user.passwordHash)) return;
+	// The response stays uniform for the caller, but the operator needs to know
+	// why no mail went out, so each skip is logged (without the address).
+	if (!user) return;
+	if (user.disabled) {
+		console.warn("Password reset skipped: account is disabled");
+		return;
+	}
+	if (!user.resetEmail) {
+		console.warn("Password reset skipped: account has no recovery email");
+		return;
+	}
 
 	const token = newId("prt");
 	await db.insert(passwordResetTokens).values({
@@ -68,10 +77,10 @@ export async function completePasswordReset(
 			),
 		)
 		.limit(1);
-	if (!row || !hasPasswordHash(row.passwordHash)) return { ok: false, error: "This reset link is invalid or has expired. Request a new one." };
+	if (!row) return { ok: false, error: "This reset link is invalid or has expired. Request a new one." };
 
-	// A password reset never creates a password for a passkey-only account; a
-	// token issued before the password was removed must not become a bypass.
+	// A passkey-only account can set its first password this way. Sign-in with
+	// that password still goes through the account's second-factor rules.
 	const consumed = await db
 		.update(passwordResetTokens)
 		.set({ usedAt: new Date() })

@@ -4,6 +4,7 @@ import { getDb } from "@/db";
 import { messages } from "@/db/schema";
 import { getCurrentUser } from "@/lib/auth/cookies";
 import { getEnv } from "@/lib/cloudflare";
+import { isOthersDraft } from "@/lib/email/draft-access";
 import { parseFollowUpDays } from "@/lib/follow-ups/follow-up-utils";
 import { isMissingTableError } from "@/lib/database-errors";
 import { getMessageFollowUp, setFollowUp, updateFollowUp } from "@/lib/follow-ups/service";
@@ -19,12 +20,12 @@ async function loadSentMessage(request: Request, context: RouteContext) {
 	if (!user) return { error: NextResponse.json({ error: "Unauthorized" }, { status: 401 }) };
 	const db = getDb(env);
 	const [message] = await db
-		.select({ id: messages.id, mailboxId: messages.mailboxId, direction: messages.direction, status: messages.status })
+		.select({ id: messages.id, userId: messages.userId, mailboxId: messages.mailboxId, direction: messages.direction, status: messages.status, privateDraft: messages.privateDraft })
 		.from(messages)
 		.where(eq(messages.id, messageId))
 		.limit(1);
 	const access = message?.mailboxId ? await getMailboxAccessLevel(db, user, message.mailboxId) : null;
-	if (!message || !access?.canRead) return { error: NextResponse.json({ error: "Message not found" }, { status: 404 }) };
+	if (!message || isOthersDraft(message, user.id) || !access?.canRead) return { error: NextResponse.json({ error: "Message not found" }, { status: 404 }) };
 	return { env, user, message };
 }
 

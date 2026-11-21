@@ -9,6 +9,10 @@ import { routingRuleSchema } from "@/lib/validators";
 import { resolveRuleTarget } from "../utils";
 import type { RoutingRuleRouteParams } from "./types";
 import { readJsonObject } from "@/lib/http/request";
+import { getSessionTokenFromRequestHeaders } from "@/lib/auth/session";
+import { authorizeSecurityChange } from "@/lib/auth/webauthn/authorize";
+import { authError } from "@/lib/http/auth-error";
+import { forwardTargetChanged, isExternalForwardTarget } from "@/lib/routing/forward-proof";
 
 export async function PATCH(request: Request, { params }: RoutingRuleRouteParams) {
 	const { id } = await params;
@@ -32,6 +36,11 @@ export async function PATCH(request: Request, { params }: RoutingRuleRouteParams
 	const target = await resolveRuleTarget(db, rule.mailboxId, parsed.data);
 	if ("error" in target) {
 		return NextResponse.json({ error: target.error }, { status: target.status });
+	}
+
+	if (forwardTargetChanged(rule, { ...target, matchField: parsed.data.matchField, matchOperator: parsed.data.matchOperator, matchValue: parsed.data.matchValue }) && await isExternalForwardTarget(db, user, target.forwardTo!)
+		&& !(await authorizeSecurityChange(env, user, getSessionTokenFromRequestHeaders(request), parsed.data, "routing.forward"))) {
+		return authError("verification_failed", 401);
 	}
 
 	await db

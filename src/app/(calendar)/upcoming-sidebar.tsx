@@ -9,7 +9,7 @@ import { useSidebar } from "@/components/sidebar-state";
 import { authFetch } from "@/lib/auth/client";
 import { normalizeCalendarColor } from "@/lib/calendar/colors";
 import type { CalendarEvent } from "./calendar/types";
-import { addDays, expandCalendarEvents, formatEventRange, groupUpcomingEvents, startOfDay, takeUpcomingGroups, UPCOMING_BATCH_SIZE } from "./calendar/utils";
+import { addDays, expandCalendarEvents, formatEventRange, groupUpcomingEvents, startOfDay, takeUpcomingGroups, toCalendarOverrides, UPCOMING_BATCH_SIZE, type CalendarOverridesInput } from "./calendar/utils";
 import type { UpcomingSidebarProps } from "./upcoming-sidebar-types";
 
 export function UpcomingSidebar({ events, onSelect, drawer = false, refreshKey }: UpcomingSidebarProps) {
@@ -37,9 +37,9 @@ export function UpcomingSidebar({ events, onSelect, drawer = false, refreshKey }
 		void authFetch(`/api/calendar/events?start=${today.toISOString()}&end=${end.toISOString()}`)
 			.then(async (response) => {
 				if (!response.ok) throw new Error();
-				return response.json() as Promise<{ events?: CalendarEvent[] }>;
+				return response.json() as Promise<{ events?: CalendarEvent[]; overrides?: CalendarOverridesInput }>;
 			})
-			.then((data) => { if (active) { setLoadedEvents(expandCalendarEvents(data.events ?? [], today, end)); setLoadError(false); setLoaded(true); } })
+			.then((data) => { if (active) { setLoadedEvents(expandCalendarEvents(data.events ?? [], today, end, toCalendarOverrides(data.overrides))); setLoadError(false); setLoaded(true); } })
 			.catch(() => { if (active) setLoadError(true); });
 		return () => { active = false; };
 	}, [events, today, refreshKey]);
