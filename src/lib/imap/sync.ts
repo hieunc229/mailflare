@@ -313,6 +313,8 @@ async function applyChanges(env: SyncEnv, mailboxId: string, fromSeq: number, me
 			note(plan.bump.key, offset);
 		}
 		if (plan.assign) {
+			// \Deleted belongs to the folder the client flagged the message in: a message that came here from another folder starts unflagged.
+			if (plan.expunge.length) updates.push(statement(env, "UPDATE imap_message_flags SET deleted = ? WHERE message_id = ?", false, id));
 			const offset = nextModseq();
 			const index = used.get(plan.assign.key) ?? 0;
 			used.set(plan.assign.key, index + 1);
@@ -369,7 +371,9 @@ async function reconcileFolder(env: SyncEnv, mailboxId: string, folderKey: strin
 		const hashes = folderKey === "drafts" ? await draftHashes(env, ids) : new Map<string, string>();
 		await assertFolderConsistent(env, mailboxId, folderKey);
 		const items = ids.map((id, index): NewUid => ({ folderKey, uidOffset: index - ids.length, messageId: id, modseqOffset: index + 1 - ids.length, hash: hashes.get(id) ?? null }));
-		await lockedBatch(env, mailboxId, marker, { modseq: ids.length, uids: new Map([[folderKey, ids.length]]) }, [...insertUidStatements(env, mailboxId, items), raiseHighest(env, mailboxId, folderKey, 0)]);
+		// A message indexed here for the first time was not flagged \Deleted in this folder, whatever an earlier folder's flag says.
+		const unflag = chunks(ids, ID_CHUNK).map((part) => statement(env, `UPDATE imap_message_flags SET deleted = ? WHERE message_id IN (${placeholders(part.length)})`, false, ...part));
+		await lockedBatch(env, mailboxId, marker, { modseq: ids.length, uids: new Map([[folderKey, ids.length]]) }, [...insertUidStatements(env, mailboxId, items), ...unflag, raiseHighest(env, mailboxId, folderKey, 0)]);
 	}
 }
 

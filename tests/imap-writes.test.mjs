@@ -910,3 +910,40 @@ test("imapflow can create, rename and delete a mailbox", async (t) => {
 	await flow.mailboxDelete("Projects/Beta");
 	assert.deepEqual(foldersOf(w), []);
 });
+
+test("a message another client moved keeps no \\Deleted flag, so an EXPUNGE in its new folder cannot remove what nobody flagged there", async (t) => {
+	const w = await world(t);
+	const key = await w.addKey({ id: "k1" });
+	w.addMessage({ id: "g1" });
+	w.addMessage({ id: "g2" });
+	const client = await loggedIn(w, key);
+	t.after(() => client.end());
+	await client.cmd("SELECT INBOX");
+	await client.cmd("STORE 1,2 +FLAGS (\\Deleted)");
+	// The web app moves one of them to Trash and the other to a user folder while the flag is set.
+	addFolder(w, "f1", "Keep");
+	w.sqlite.prepare("UPDATE messages SET status = 'trash' WHERE id = 'g1'").run();
+	w.sqlite.prepare("UPDATE messages SET folder_id = 'f1' WHERE id = 'g2'").run();
+	await client.cmd("NOOP");
+	assert.equal(flagsOf(w, "g1").deleted, 0);
+	assert.equal(flagsOf(w, "g2").deleted, 0);
+	await client.cmd("SELECT Trash");
+	await client.cmd("EXPUNGE");
+	await client.cmd("SELECT Keep");
+	await client.cmd("EXPUNGE");
+	assert.equal(w.sqlite.prepare("SELECT count(*) AS n FROM messages").get().n, 2, "nothing was removed");
+	assert.deepEqual([statusOf(w, "g1").status, statusOf(w, "g2").folder], ["trash", "f1"]);
+});
+
+test("a message that is first indexed in a folder after the flag was set elsewhere starts without \\Deleted", async (t) => {
+	const w = await world(t);
+	const key = await w.addKey({ id: "k1" });
+	w.addMessage({ id: "g1", status: "trash" });
+	w.sqlite.prepare("INSERT INTO imap_message_flags (message_id, deleted, updated_at) VALUES ('g1', 1, 1)").run();
+	const client = await loggedIn(w, key);
+	t.after(() => client.end());
+	assert.match((await client.cmd("SELECT Trash")).text, /\* 1 EXISTS/);
+	assert.match((await client.cmd("FETCH 1 FLAGS")).text, /FLAGS \(\)/);
+	await client.cmd("EXPUNGE");
+	assert.equal(w.sqlite.prepare("SELECT count(*) AS n FROM messages").get().n, 1);
+});
