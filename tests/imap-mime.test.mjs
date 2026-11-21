@@ -1,9 +1,37 @@
 import assert from "node:assert/strict";
-import test from "node:test";
+import { mkdtempSync, rmSync } from "node:fs";
+import { dirname, join } from "node:path";
+import test, { after } from "node:test";
+import { fileURLToPath, pathToFileURL } from "node:url";
+import { build } from "esbuild";
+import PostalMime from "postal-mime";
 import bodystructure from "../server/imap/vendor/imapkit/bodystructure.js";
 import envelope from "../server/imap/vendor/imapkit/envelope.js";
 import addressparser from "../server/imap/vendor/imapkit/addressparser.js";
 import { normalizeLineBreaks, parseTree, render } from "../server/imap/vendor/imapkit/mimeparser.js";
+
+const root = join(dirname(fileURLToPath(import.meta.url)), "..");
+const directory = mkdtempSync(join(process.env.TMPDIR ?? root, "mailflare-imap-mime-"));
+after(() => rmSync(directory, { recursive: true, force: true }));
+await build({
+	stdin: {
+		contents: `
+			export { synthesizeMessage } from "./src/lib/imap/synthesize.ts";
+		`,
+		resolveDir: root,
+		sourcefile: "imap-mime-test-entry.ts",
+	},
+	outfile: join(directory, "entry.mjs"),
+	bundle: true,
+	platform: "node",
+	format: "esm",
+	target: "node24",
+	tsconfig: join(root, "tsconfig.json"),
+	packages: "external",
+	alias: { "cloudflare:workers": "./server/runtime/cloudflare-workers.ts" },
+	logLevel: "silent",
+});
+const { synthesizeMessage } = await import(pathToFileURL(join(directory, "entry.mjs")).href);
 
 const crlf = (lines) => lines.join("\r\n");
 const tree = (lines) => parseTree(normalizeLineBreaks(crlf(lines)));
@@ -85,6 +113,7 @@ test("vendored parser: broken MIME is described, not rejected", () => {
 test("vendored parser: bare line breaks are served as CRLF", () => {
 	assert.equal(normalizeLineBreaks("A: b\n\nbody\n"), "A: b\r\n\r\nbody\r\n");
 });
+
 const nest = (depth, line = "x") => {
 	let source = "Subject: x\r\n";
 	for (let level = 0; level < depth; level += 1) source += `Content-Type: multipart/mixed; boundary=b${level}\r\n\r\n--b${level}\r\n`;
@@ -184,4 +213,148 @@ test("vendored parser: long white space runs in header values are unfolded and t
 	assert.equal(parsed["content-type"].params.name, `x${run}y`);
 	assert.equal(tree(["Subject: a \r\n \t\r\n  b", "X-Folded: one", "\ttwo", "", "x"]).parsedHeader.subject, "a b", "a run with line breaks becomes one space");
 	assert.equal(tree(["Content-Type: text/plain; name='  q  '", "", "x"]).parsedHeader["content-type"].params.name, "q", "quotes and spaces at the ends are removed");
+});
+
+// ---- synthesizeMessage ----
+
+const baseRow = {
+	id: "msg_abc123",
+	fromAddr: '"Ann" <ann@example.test>',
+	toAddr: "bob@example.test",
+	ccAddr: null,
+	bccAddr: null,
+	replyTo: null,
+	subject: "Hello",
+	textBody: "plain text",
+	htmlBody: null,
+	providerMessageId: null,
+	inReplyTo: null,
+	references: null,
+	createdAt: new Date("2024-03-05T10:20:30Z"),
+};
+const decode = (bytes) => Buffer.from(bytes).toString("latin1");
+const synth = (row = {}, attachments = []) => synthesizeMessage({ ...baseRow, ...row }, attachments, { hostname: "mail.example.test" });
+const headerOf = (text) => text.slice(0, text.indexOf("\r\n\r\n"));
+
+test("synthesizeMessage is deterministic and parseable", async () => {
+	const row = { htmlBody: "<p>hi</p>", ccAddr: "c@example.test", inReplyTo: "p1@example.test", references: "p0@example.test p1@example.test" };
+	const attachments = [{ filename: "a.txt", contentType: "text/plain", disposition: "attachment", contentId: null, bytes: new TextEncoder().encode("attached") }];
+	const first = synth(row, attachments);
+	assert.deepEqual(synth(row, attachments), first, "same input, same bytes");
+	const parsed = await PostalMime.parse(first);
+	assert.equal(parsed.subject, "Hello");
+	assert.equal(parsed.from.address, "ann@example.test");
+	assert.equal(parsed.text.trim(), "plain text");
+	assert.equal(parsed.html.trim(), "<p>hi</p>");
+	assert.equal(parsed.attachments.length, 1);
+	assert.equal(new TextDecoder().decode(parsed.attachments[0].content), "attached");
+	assert.equal(parsed.messageId, "<msg_abc123@mail.example.test>");
+	assert.equal(parsed.inReplyTo, "<p1@example.test>");
+	assert.equal(parsed.date, "2024-03-05T10:20:30.000Z");
+	assert.ok(!decode(first).includes("\n") || decode(first).split("\n").every((line) => line.endsWith("\r") || line === ""), "CRLF only");
+});
+
+test("synthesizeMessage layouts: text, html, alternative, mixed, related", () => {
+	const type = (bytes) => /Content-Type: ([a-z/]+)/.exec(headerOf(decode(bytes)))[1];
+	assert.equal(type(synth()), "text/plain");
+	assert.equal(type(synth({ textBody: null, htmlBody: "<b>x</b>" })), "text/html");
+	assert.equal(type(synth({ htmlBody: "<b>x</b>" })), "multipart/alternative");
+	const file = { filename: "f.bin", contentType: "application/octet-stream", disposition: "attachment", contentId: null, bytes: new Uint8Array([1, 2, 3]) };
+	assert.equal(type(synth({}, [file])), "multipart/mixed");
+	const inline = { filename: "i.png", contentType: "image/png", disposition: "inline", contentId: "<cid1@x>", bytes: new Uint8Array([9]) };
+	const tree = parseTree(normalizeLineBreaks(decode(synth({ htmlBody: '<img src="cid:cid1@x">' }, [inline]))));
+	const [alt] = tree.childNodes ?? [tree];
+	assert.equal(tree.parsedHeader["content-type"].value, "multipart/alternative");
+	assert.equal(alt.parsedHeader["content-type"].value, "text/plain");
+	assert.equal(tree.childNodes[1].parsedHeader["content-type"].value, "multipart/related", "html and its inline image travel together");
+	assert.equal(tree.childNodes[1].childNodes[1].parsedHeader["content-id"], "<cid1@x>");
+});
+
+test("synthesizeMessage cannot be made to add headers or break structure", async () => {
+	const bytes = synth({
+		subject: "x\r\nBcc: evil@example.test",
+		toAddr: '"Bob\r\nX-Injected: 1" <bob@example.test>, carol@example.test',
+		providerMessageId: "<a@b>\r\nX-Other: 1",
+		inReplyTo: "p\r\nX-Third: 1",
+	}, [{ filename: 'x"\r\nX-Fourth: 1.txt', contentType: "text/plain\r\nX-Fifth: 1", disposition: "attachment", contentId: "c\r\nX-Sixth: 1", bytes: new Uint8Array([65]) }]);
+	const text = decode(bytes);
+	for (const name of ["Bcc", "X-Injected", "X-Other", "X-Third", "X-Fourth", "X-Fifth", "X-Sixth"]) assert.ok(!new RegExp(`^${name}:`, "mi").test(text), `${name} is not a header`);
+	const parsed = await PostalMime.parse(bytes);
+	assert.equal(parsed.to.length, 2);
+	assert.equal(parsed.attachments.length, 1);
+});
+
+test("synthesizeMessage encodes non-ASCII subjects, names and file names", async () => {
+	const subject = "Grüße ".repeat(20) + "日本語";
+	const bytes = synth({ subject, fromAddr: '"Zoë Ünal" <zoe@example.test>', textBody: "ünïcode\ntwo" }, [
+		{ filename: "résumé \"v2\".pdf", contentType: "application/pdf", disposition: "attachment", contentId: null, bytes: new Uint8Array([1]) },
+	]);
+	assert.ok([...bytes].every((byte) => byte < 128), "headers and bodies are 7-bit");
+	assert.ok(decode(bytes).split("\r\n").every((line) => line.length <= 998));
+	const parsed = await PostalMime.parse(bytes);
+	assert.equal(parsed.subject, subject);
+	assert.equal(parsed.from.name, "Zoë Ünal");
+	assert.equal(parsed.text.replace(/\r\n/g, "\n").trim(), "ünïcode\ntwo");
+	assert.equal(parsed.attachments[0].filename, 'résumé "v2".pdf');
+});
+
+test("synthesizeMessage keeps long reference chains within header line limits and never yields a message/* base64 part", async () => {
+	const references = Array.from({ length: 200 }, (_, index) => `ref${index}@example.test`).join(" ");
+	const bytes = synth({ references }, [{ filename: "m.eml", contentType: "message/rfc822", disposition: "attachment", contentId: null, bytes: new Uint8Array([65]) }]);
+	const text = decode(bytes);
+	assert.ok(text.split("\r\n").every((line) => line.length <= 998));
+	assert.ok(!/Content-Type: message\//i.test(text));
+	assert.equal((await PostalMime.parse(bytes)).references.trim().split(/\s+/).length, 200);
+});
+const headerLines = (bytes) => headerOf(decode(bytes)).split("\r\n");
+
+test("synthesizeMessage folds long values without empty lines and keeps every line under 998", async () => {
+	const rows = [
+		{ subject: "é".repeat(2000) },
+		{ subject: "héllo wörld ".repeat(300) },
+		{ subject: "a".repeat(5000) },
+		{ subject: `${"word ".repeat(400)}${"b".repeat(3000)}` },
+		{ toAddr: `"${"N".repeat(4000)}" <n@example.test>, "${"Ö".repeat(300)}" <o@example.test>` },
+		{ references: Array.from({ length: 800 }, (_, index) => `<r${index}@example.test>`).join(" ") },
+	];
+	for (const row of rows) {
+		const bytes = synth(row);
+		const lines = headerLines(bytes);
+		assert.ok(lines.every((line) => line.length <= 998), "no line over 998");
+		assert.ok(lines.every((line) => line.trim().length > 0), "no empty or white-space-only line inside the header");
+		assert.ok(lines.every((line, index) => index === 0 || /^[ \t]/.test(line) || /^[A-Za-z-]+:/.test(line)), "every line is a field or a continuation");
+		const parsed = await PostalMime.parse(bytes);
+		if (row.subject) assert.equal(parsed.subject.replace(/\s+/g, " ").trim(), row.subject.replace(/\s+/g, " ").trim().replace(/^$/, ""));
+		assert.equal(parsed.to.length, row.toAddr ? 2 : 1);
+	}
+});
+
+test("synthesizeMessage keeps attachment headers short however long the file name is", async () => {
+	const names = ["ü".repeat(400) + ".pdf", "n".repeat(3000) + ".txt", `${"日本語".repeat(60)} "quoted".bin`];
+	const bytes = synth({}, names.map((filename) => ({ filename, contentType: `text/${"p".repeat(500)}`, disposition: "attachment", contentId: null, bytes: new Uint8Array([1, 2]) })));
+	const text = decode(bytes);
+	assert.ok(text.split("\r\n").every((line) => line.length <= 998), "no line over 998");
+	assert.ok([...bytes].every((byte) => byte < 128));
+	const parsed = await PostalMime.parse(bytes);
+	assert.deepEqual(parsed.attachments.map((attachment) => attachment.filename), names);
+	assert.ok(parsed.attachments.every((attachment) => attachment.mimeType === "application/octet-stream"), "an absurd content type is sent as opaque data");
+});
+
+test("synthesizeMessage writes display names as encoded words and addresses as valid addr-specs", async () => {
+	const bytes = synth({ toAddr: '"Zoë Ünal" <zoe@exämple.test>, "d:e" <d:e@x.test>, plain@x.test, "Semi" <a;b,c@x.test>, <bad@exa_mple.test>, "Long" <' + "l".repeat(300) + "@x.test>, ünï@x.test" });
+	const text = decode(bytes);
+	const to = /^To: ([\s\S]*?)\r\n[A-Z]/m.exec(headerOf(text))[1].replace(/\r\n\s/g, " ");
+	assert.match(to, /=\?UTF-8\?B\?[A-Za-z0-9+/=]+\?= <zoe@xn--exmple-cua\.test>/, "RFC 2047 for the name, an A-label for the domain");
+	assert.match(to, /"d:e"@x\.test/, "a local part with a colon is quoted");
+	assert.match(to, /"a;b,c"@x\.test/);
+	assert.ok(!to.includes("bad@"), "a domain that cannot be one drops the entry");
+	assert.ok(!to.includes("l".repeat(300)), "a mailbox longer than a path can be is dropped");
+	assert.ok(to.includes("plain@x.test"));
+	assert.ok(to.includes(Buffer.from("ünï@x.test").toString("latin1")), "a non-ASCII local part is written as UTF-8 (RFC 6532)");
+	const parsed = await PostalMime.parse(bytes);
+	assert.deepEqual(parsed.to.map((address) => address.address), ["zoe@xn--exmple-cua.test", '"d:e"@x.test', "plain@x.test", '"a;b,c"@x.test', "ünï@x.test"]);
+	assert.equal(parsed.to[0].name, "Zoë Ünal");
+	const tree = parseTree(normalizeLineBreaks(decode(bytes)));
+	assert.equal(envelope(tree.parsedHeader)[5].length, 5, "ENVELOPE agrees");
+	assert.ok([...synth({ toAddr: "zoe@exämple.test" })].every((byte) => byte < 128), "an address without a non-ASCII local part keeps the message 7-bit");
 });
