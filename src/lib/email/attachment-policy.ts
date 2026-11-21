@@ -22,16 +22,3 @@ export async function getOutboundAttachmentMaxMb(env: CloudflareEnv): Promise<nu
 	return clampOutboundAttachmentMb(settings?.maxMb ?? DEFAULT_OUTBOUND_ATTACHMENT_MAX_MB, isNodeRuntime(env));
 }
 
-/** The administrator's Shared Files text; null (also while the migration is not applied) means the translated default. */
-export async function getSharedFilesNotice(env: CloudflareEnv): Promise<string | null> {
-	try {
-		const [settings] = await getDb(env)
-			.select({ notice: appSettings.sharedFilesNotice })
-			.from(appSettings)
-			.where(eq(appSettings.id, "default"))
-			.limit(1);
-		return settings?.notice ?? null;
-	} catch {
-		return null;
-	}
-}

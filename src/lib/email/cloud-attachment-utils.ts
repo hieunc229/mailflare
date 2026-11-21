@@ -1,6 +1,5 @@
 import type { AttachmentContent } from "./attachment-types";
 import { planAttachmentDelivery } from "./attachment-limits";
-import { getSharedFilesNotice } from "./attachment-policy";
 import type { SendingProvider } from "./outbound-provider-types";
 import { SHARED_ATTACHMENT_LINK_DAYS, getOrCreateSharedAttachmentUrl } from "./shared-attachments";
 import { sharedFileNotice } from "./shared-file-notice";
@@ -52,7 +51,7 @@ export async function prepareOutboundAttachments(
 		if (cloudflare && estimatedSize > GENERAL_MESSAGE_LIMIT_BYTES - MIME_SAFETY_MARGIN_BYTES) throw new Error("Message exceeds Cloudflare's 5 MiB email size limit");
 		return { attachments: direct, html: message.html, text: message.text };
 	}
-	const notice = sharedFileNotice(linked, SHARED_ATTACHMENT_LINK_DAYS, await senderTranslator(env, message.locale), await getSharedFilesNotice(env));
+	const notice = sharedFileNotice(linked, SHARED_ATTACHMENT_LINK_DAYS, await senderTranslator(env, message.locale));
 	const text = notice.textBlock(message.text);
 	const html = `${message.html ?? ""}${notice.htmlBlock}`;
 	if (cloudflare && estimatedSize + encoder.encode(notice.text + notice.html + notice.intro + notice.intro).byteLength + 4096 > GENERAL_MESSAGE_LIMIT_BYTES - MIME_SAFETY_MARGIN_BYTES) {
