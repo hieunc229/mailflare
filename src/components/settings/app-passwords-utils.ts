@@ -25,6 +25,11 @@ export function davConnectionUrls(origin: string, userId: string) {
 	};
 }
 
+/** A live region only speaks when its text changes, so every other copy of the same value gets a trailing no-break space. */
+export function copyAnnouncement(text: string, count: number): string {
+	return count % 2 ? text : `${text}\u00A0`;
+}
+
 export async function loadAppPasswords(): Promise<AppPasswordList> {
 	const res = await authFetch("/api/app-passwords");
 	const data = (await res.json().catch(() => ({}))) as Partial<AppPasswordList> & { error?: unknown };

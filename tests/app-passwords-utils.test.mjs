@@ -9,7 +9,7 @@ const fixture = await loadFixture({
 		"@/lib/auth/client": "export async function authFetch(url, init){globalThis.appPwUtils.calls.push({url, init}); return globalThis.appPwUtils.respond(url, init)}",
 	},
 });
-const { davConnectionUrls, appPasswordProtocolName, createAppPassword, groupAppPassword, loadAppPasswords, revokeAppPassword } = await fixture.import();
+const { copyAnnouncement, davConnectionUrls, appPasswordProtocolName, createAppPassword, groupAppPassword, loadAppPasswords, revokeAppPassword } = await fixture.import();
 after(() => { delete globalThis.appPwUtils; fixture.dispose(); });
 
 function respond(status, body) {
@@ -77,4 +77,10 @@ test("connection addresses follow the shape the DAV server answers on", () => {
 	});
 	// The id is a path segment, never able to add more of the path.
 	assert.equal(davConnectionUrls("https://mail.example.com", "a/../b").caldav, "https://mail.example.com/dav/calendars/a%2F..%2Fb/default/");
+});
+
+test("a repeated copy changes the announced text so a screen reader says it again", () => {
+	assert.notEqual(copyAnnouncement("Copied Server", 1), copyAnnouncement("Copied Server", 2));
+	assert.equal(copyAnnouncement("Copied Server", 1), copyAnnouncement("Copied Server", 3));
+	assert.equal(copyAnnouncement("Copied Server", 1).trim(), "Copied Server");
 });
