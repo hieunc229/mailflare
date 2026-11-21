@@ -47,6 +47,8 @@ export const users = sqliteTable("users", {
 	totpSecret: text("totp_secret"),
 	totpEnabled: bool("totp_enabled").notNull().default(false),
 	totpConfirmedAt: timestamp("totp_confirmed_at"),
+	/** Last accepted TOTP time step (unix seconds / 30); codes for this step or an earlier one are refused, so a code works once. */
+	totpLastStep: integer("totp_last_step"),
 	/**
 	 * Password sign-ins must prove a second factor (a passkey or TOTP/recovery
 	 * code). Passkey sign-ins already satisfy it, so they need no extra step.
@@ -273,7 +275,9 @@ export const jmapChanges = sqliteTable(
 		objectType: text("object_type", { enum: ["email", "mailbox"] }).notNull(),
 		objectId: text("object_id").notNull(),
 		threadId: text("thread_id"),
-		change: text("change", { enum: ["created", "updated", "destroyed"] }).notNull(),
+		// "hidden" marks a message that stopped being visible to everyone but its author (a scheduled send
+		// cancelled back to a draft): readers who could see it are told it was destroyed, the author is not.
+		change: text("change", { enum: ["created", "updated", "destroyed", "hidden"] }).notNull(),
 		createdAt: integer("created_at").notNull().default(nowSeconds),
 	},
 	(table) => [index("jmap_changes_mailbox_seq_idx").on(table.mailboxId, table.seq)],
@@ -352,6 +356,9 @@ export const messages = sqliteTable(
 		status: text("status").notNull().default("received"),
 		read: bool("read").notNull().default(false),
 		starred: bool("starred").notNull().default(false),
+		// An unsent draft stays private to its author for as long as the row exists, wherever it is moved
+		// (Trash, Archive, a folder). Cleared when the row becomes sent mail.
+		privateDraft: bool("private_draft").notNull().default(false),
 		snoozedUntil: timestamp("snoozed_until"),
 		threadId: text("thread_id"),
 		// RFC 5322 threading headers, kept so replies land in the right conversation
@@ -406,6 +413,9 @@ export const messages = sqliteTable(
 			t.read,
 			t.threadId,
 			t.snoozedUntil,
+			// The draft filter (user_id = ? OR NOT private_draft) is evaluated from the index too.
+			t.userId,
+			t.privateDraft,
 		),
 		// Covering index for the folder-counts GROUP BY: lets the counts
 		// endpoint stream grouped rows straight off the index instead of
@@ -418,6 +428,9 @@ export const messages = sqliteTable(
 			t.read,
 			t.starred,
 			t.snoozedUntil,
+			// The draft filter (user_id = ? OR NOT private_draft) is evaluated from the index too.
+			t.userId,
+			t.privateDraft,
 		),
 		// Conversation paging partitions by coalesce(thread_id, id) and orders
 		// each partition by created_at desc, so the thread key must precede

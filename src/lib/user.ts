@@ -1,6 +1,7 @@
 import { eq, desc, and } from "drizzle-orm";
 import { getDb } from "@/db";
 import { messages, domains, mailboxes } from "@/db/schema";
+import { isOthersDraft, logMessageHidden, privateDraftForStatus } from "@/lib/email/draft-access";
 import { getMailboxAccessLevel, listAccessibleMailboxIds } from "@/lib/mailboxes/access";
 import { createAuditLog } from "@/lib/mailboxes/audit";
 import type { SessionUser } from "@/lib/auth/types";
@@ -82,7 +83,7 @@ export async function markMessageAsRead(env: CloudflareEnv, userId: string, mess
 export async function markMessageAsReadForUser(env: CloudflareEnv, user: SessionUser, messageId: string) {
 	const db = getDb(env);
 	const [message] = await db.select().from(messages).where(eq(messages.id, messageId)).limit(1);
-	if (!message?.mailboxId) return false;
+	if (!message?.mailboxId || isOthersDraft(message, user.id)) return false;
 	const access = await getMailboxAccessLevel(db, user, message.mailboxId);
 	if (!access?.canRead) return false;
 	await db.update(messages).set({ read: true }).where(eq(messages.id, messageId));
@@ -103,12 +104,14 @@ export async function updateMessageStatusForUser(
 ) {
 	const db = getDb(env);
 	const [message] = await db.select().from(messages).where(eq(messages.id, messageId)).limit(1);
-	if (!message?.mailboxId) return false;
+	if (!message?.mailboxId || isOthersDraft(message, user.id)) return false;
 	const access = await getMailboxAccessLevel(db, user, message.mailboxId);
 	if (!access?.canManage) return false;
 	if (status === "spam") return applySpamFeedback(env, user, messageId, "spam");
 	if (status === "received" && message.status === "spam") return applySpamFeedback(env, user, messageId, "ham");
-	await db.update(messages).set({ status }).where(eq(messages.id, messageId));
+	await db.update(messages).set({ status, ...privateDraftForStatus(status) }).where(eq(messages.id, messageId));
+	// A visible message that became a draft is gone for the mailbox's other readers.
+	if (status === "draft" && message.privateDraft === false) await logMessageHidden(db, message);
 	await createAuditLog(env, {
 		actorUserId: user.id,
 		mailboxId: message.mailboxId,
@@ -134,7 +137,8 @@ export async function updateMessageStatus(
 	if (!message || message.userId !== userId) return false;
 	await db
 		.update(messages)
-		.set({ status })
+		.set({ status, ...privateDraftForStatus(status) })
 		.where(eq(messages.id, messageId));
+	if (status === "draft" && message.privateDraft === false) await logMessageHidden(db, message);
 	return true;
 }

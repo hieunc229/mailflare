@@ -150,6 +150,10 @@ export const stepUpActionSchema = z.enum([
 	"second_factor.toggle",
 	"admin.password_reset",
 	"admin.recovery_link",
+	"admin.forwarding_email",
+	"profile.recovery_email",
+	"routing.forward",
+	"webhook.change",
 ]);
 
 export const passkeyRegistrationSchema = passkeyCeremonySchema.extend({
@@ -256,7 +260,7 @@ export const updateManagedAccountSchema = z.object({
 		(value) => (typeof value === "string" ? value.trim() : value),
 		z.string().min(8).max(128).or(z.literal("")).optional().transform((value) => value || null),
 	),
-	/** Required when `password` is set: the administrator must re-authenticate. */
+	/** Required when `password` or `forwardingEmail` changes: the administrator must re-authenticate. */
 	stepUpToken: z.string().min(8).max(200).optional(),
 });
 
@@ -356,7 +360,15 @@ export const folderSchema = z.object({
 	color: z.enum(FOLDER_COLOR_VALUES).default(DEFAULT_FOLDER_COLOR),
 });
 
+/** Proof of identity for changing where password-reset or forwarded mail goes. */
+const recoveryProofFields = {
+	password: z.string().min(1).max(1024).optional(),
+	stepUpToken: z.string().min(8).max(200).optional(),
+	code: z.string().trim().min(6).max(32).optional(),
+};
+
 export const updateProfileSchema = z.object({
+	...recoveryProofFields,
 	// Optional so a recovery-email-only save leaves the name alone instead of writing back a stale one.
 	name: z.string().trim().min(1).max(100).optional(),
 	resetEmail: z.preprocess(
@@ -370,6 +382,7 @@ export const updateProfileSchema = z.object({
 });
 
 export const updateForwardingEmailSchema = z.object({
+	...recoveryProofFields,
 	forwardingEmail: z.preprocess(
 		(value) => (typeof value === "string" ? value.trim() : value),
 		z.string().email().or(z.literal("")).transform((value) => value || null),
@@ -406,6 +419,7 @@ export const changePasswordSchema = z.object({
 });
 
 export const routingRuleSchema = z.object({
+	...recoveryProofFields,
 	domainId: z.string().optional(),
 	pattern: z.string().trim().min(1).max(200).optional(),
 	matchField: z.enum(["email", "content", "title"]).default("email"),
@@ -422,6 +436,7 @@ export const routingRuleSchema = z.object({
 
 export const domainRoutingRuleSchema = z
 	.object({
+		...recoveryProofFields,
 		domainId: z.string().min(1),
 		name: z.string().trim().max(120).optional(),
 		enabled: z.boolean().default(true),
@@ -475,6 +490,7 @@ export const domainRoutingRuleSchema = z
 	});
 
 export const webhookSchema = z.object({
+	...recoveryProofFields,
 	url: z.string().url().max(2048).refine(isPublicHttpsUrl, PUBLIC_HTTPS_URL_MESSAGE),
 	description: z.string().trim().max(200).optional(),
 	events: z
@@ -485,6 +501,7 @@ export const webhookSchema = z.object({
 });
 
 export const webhookUpdateSchema = z.object({
+	...recoveryProofFields,
 	url: z.string().url().max(2048).refine(isPublicHttpsUrl, PUBLIC_HTTPS_URL_MESSAGE).optional(),
 	description: z.string().trim().max(200).nullish(),
 	events: z

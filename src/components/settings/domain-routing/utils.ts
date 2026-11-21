@@ -1,3 +1,4 @@
+import { requestError } from "@/lib/http/client-error";
 import type { TranslationKey } from "@/lib/i18n/types";
 import { defaultTranslator, type Translator } from "@/lib/i18n/utils";
 import { authFetch } from "@/lib/auth/client";
@@ -32,9 +33,9 @@ export const ACTION_LABELS = {
 } satisfies Record<DomainRule["action"], TranslationKey>;
 
 async function readJson<T>(res: Response): Promise<T> {
-	const json = (await res.json()) as T & { error?: unknown };
+	const json = (await res.json()) as T & { error?: unknown; code?: unknown };
 	if (!res.ok) {
-		throw new Error(typeof json.error === "string" ? json.error : defaultTranslator("routing.requestFailed"));
+		throw requestError(json, defaultTranslator("routing.requestFailed"));
 	}
 	return json;
 }
@@ -63,6 +64,8 @@ export async function createDomainRule(input: DomainRuleInput, mailboxId?: strin
 	return readJson(
 		await authFetch(domainRuleUrl(null, mailboxId), {
 			method: "POST",
+			// A 401 means "confirm it is you", not "signed out": the screen opens the step-up dialog.
+			redirectOnUnauthorized: false,
 			headers: { "Content-Type": "application/json" },
 			body: JSON.stringify(input),
 		}),
@@ -73,6 +76,7 @@ export async function updateDomainRule(id: string, input: DomainRuleInput, mailb
 	return readJson(
 		await authFetch(domainRuleUrl(id, mailboxId), {
 			method: "PATCH",
+			redirectOnUnauthorized: false,
 			headers: { "Content-Type": "application/json" },
 			body: JSON.stringify(input),
 		}),

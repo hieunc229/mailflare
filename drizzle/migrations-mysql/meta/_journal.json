@@ -103,8 +103,15 @@
     {
       "idx": 14,
       "version": "5",
-      "when": 1794516479576,
-      "tag": "0014_masked_aliases",
+      "when": 1794516479574,
+      "tag": "0014_security_hardening",
+      "breakpoints": true
+    },
+    {
+      "idx": 15,
+      "version": "5",
+      "when": 1794516479577,
+      "tag": "0015_masked_aliases",
       "breakpoints": true
     }
   ]

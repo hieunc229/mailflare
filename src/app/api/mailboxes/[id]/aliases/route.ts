@@ -5,7 +5,9 @@ import { domains, mailboxAliases, mailboxes } from "@/db/schema";
 import { requireUser } from "@/lib/auth/cookies";
 import { getEnv } from "@/lib/cloudflare";
 import { deleteEmailRoutingRuleForAddress, ensureEmailRoutingRuleToWorker } from "@/lib/cloudflare-api";
+import { parseRecipientAddress } from "@/lib/email/recipient-address";
 import { newId } from "@/lib/ids";
+import { getMailboxDomainAddresses } from "@/lib/mailboxes/domain-addresses";
 import { getMailboxSettingsAccess } from "@/lib/mailboxes/settings-access";
 import { normalizeRecipientLocalPart } from "@/lib/email/recipient-address";
 import { mailboxAliasBodySchema, updateMailboxAliasSchema } from "@/lib/validators";
@@ -42,6 +44,26 @@ const MASKED_ALPHABET = "abcdefghjkmnpqrstuvwxyz23456789";
 function generateMaskedLocalPart(): string {
 	const bytes = crypto.getRandomValues(new Uint8Array(10));
 	return Array.from(bytes, (byte) => MASKED_ALPHABET[byte % MASKED_ALPHABET.length]).join("");
+}
+
+/** An alias is a new address, so it follows the same rule as creating a mailbox on the domain. */
+function canCreateAddressesOn(user: Awaited<ReturnType<typeof requireUser>>, domainOwnerId: string) {
+	return domainOwnerId === user.id || (user.canManageMailboxes && !!user.createdByUserId && domainOwnerId === user.createdByUserId);
+}
+
+/** Another mailbox that receives this address through "Use all domains", which an alias would silently take over. */
+async function findAllDomainsMailboxFor(db: ReturnType<typeof getDb>, mailboxId: string, address: string) {
+	const target = parseRecipientAddress(address)?.normalizedAddress;
+	if (!target) return null;
+	const candidates = await db
+		.select({ id: mailboxes.id, domainId: mailboxes.domainId, localPart: mailboxes.localPart, useAllDomains: mailboxes.useAllDomains })
+		.from(mailboxes)
+		.where(and(eq(mailboxes.useAllDomains, true), ne(mailboxes.id, mailboxId)));
+	for (const candidate of candidates) {
+		const addresses = await getMailboxDomainAddresses(db, candidate);
+		if (addresses.some((item) => parseRecipientAddress(item)?.normalizedAddress === target)) return candidate;
+	}
+	return null;
 }
 
 function listMailboxAliases(db: ReturnType<typeof getDb>, mailboxId: string) {
@@ -97,7 +119,7 @@ export async function POST(request: Request, { params }: MailboxRouteParams) {
 	if (!mailbox) return NextResponse.json({ error: "Mailbox not found" }, { status: 404 });
 
 	const ownerId = await getDomainOwnerId(db, mailbox.domainId);
-	const [domain] = ownerId
+	const [domain] = ownerId && canCreateAddressesOn(user, ownerId)
 		? await db
 				.select({ id: domains.id, hostname: domains.hostname, zoneId: domains.zoneId, receivingProvider: domains.receivingProvider })
 				.from(domains)
@@ -118,10 +140,12 @@ export async function POST(request: Request, { params }: MailboxRouteParams) {
 	]);
 	const takenMailboxParts = new Set(domainMailboxes.map((row) => normalizeRecipientLocalPart(row.localPart)));
 	const takenAliasParts = new Set(domainAliases.map((row) => normalizeRecipientLocalPart(row.localPart)));
-	function aliasAddressTaken(localPart: string): "mailbox" | "alias" | null {
+	async function aliasAddressTaken(localPart: string): Promise<"mailbox" | "alias" | null> {
 		const normalized = normalizeRecipientLocalPart(localPart);
 		if (takenMailboxParts.has(normalized)) return "mailbox";
 		if (takenAliasParts.has(normalized)) return "alias";
+		// Another mailbox receiving this address through "Use all domains" would be silently shadowed.
+		if (await findAllDomainsMailboxFor(db, id, `${localPart}@${domain.hostname}`)) return "mailbox";
 		return null;
 	}
 
@@ -135,7 +159,7 @@ export async function POST(request: Request, { params }: MailboxRouteParams) {
 	let createdLocalPart: string | null = null;
 	let conflict: "mailbox" | "alias" | null = null;
 	for (const localPart of candidates) {
-		const taken = aliasAddressTaken(localPart);
+		const taken = await aliasAddressTaken(localPart);
 		if (taken) {
 			conflict = taken;
 			continue;
