@@ -43,7 +43,7 @@ await build({
 });
 const { list, item, download } = await import(pathToFileURL(join(temporary, "routes.mjs")).href);
 const admin = { id: "a", role: "admin", isPrimaryAdmin: true };
-const request = (method = "GET", body) => new Request("https://mail.test/api/backups", { method, ...(body === undefined ? {} : { body }) });
+const request = (method = "GET", body) => new Request("https://mail.test/api/backups", { method, headers: { Origin: "https://mail.test" }, ...(body === undefined ? {} : { body }) });
 const context = { params: Promise.resolve({ id: "b1" }) };
 
 test("only auth failures are 401/403", async () => {

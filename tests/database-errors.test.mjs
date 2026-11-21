@@ -27,7 +27,7 @@ await build({
 });
 
 const load = (name) => import(pathToFileURL(join(outDir, `${name}.mjs`)).href);
-const { isMissingTableError, isUniqueConstraintError } = await load("errors");
+const { isMissingColumnError, isMissingTableError, isUniqueConstraintError } = await load("errors");
 const { getOpenCounts } = await load("tracking");
 const { SqliteDatabase } = await load("database");
 
@@ -38,6 +38,31 @@ test("driver errors are found through drizzle's wrapper", () => {
 	assert.equal(isMissingTableError(new Error("Failed query", { cause: new Error("database is locked") })), false);
 	assert.equal(isUniqueConstraintError(new Error("Failed query", { cause: new Error("UNIQUE constraint failed: domain_tracking_hosts.hostname") })), true);
 	assert.equal(isUniqueConstraintError(new Error("no such table")), false);
+});
+
+test("missing column wording per dialect", () => {
+	for (const message of [
+		"no such column: messages.new_col",
+		"table messages has no column named new_col",
+		'column "new_col" of relation "messages" does not exist',
+		"column messages.new_col does not exist",
+		"Unknown column 'new_col' in 'field list'",
+	]) assert.equal(isMissingColumnError(new Error("Failed query", { cause: new Error(message) })), true, message);
+	assert.equal(isMissingColumnError(new Error("column reference \"id\" is ambiguous")), false);
+	assert.equal(isMissingColumnError(new Error("syntax error")), false);
+});
+
+test("driver error codes win over the message", () => {
+	const coded = (props) => new Error("Failed query", { cause: Object.assign(new Error("localised or reworded"), props) });
+	assert.equal(isMissingColumnError(coded({ code: "42703" })), true);
+	assert.equal(isMissingTableError(coded({ code: "42P01" })), true);
+	assert.equal(isMissingColumnError(coded({ errno: 1054 })), true);
+	assert.equal(isMissingColumnError(coded({ code: "ER_BAD_FIELD_ERROR" })), true);
+	assert.equal(isMissingTableError(coded({ errno: 1146 })), true);
+	assert.equal(isMissingTableError(coded({ code: "ER_NO_SUCH_TABLE" })), true);
+	assert.equal(isMissingTableError(coded({ code: "42703" })), false);
+	assert.equal(isMissingColumnError(coded({ code: "42P01" })), false);
+	assert.equal(isMissingColumnError(coded({ code: "23505" })), false);
 });
 
 test("message lists with sent mail keep working before migration 0068", async (t) => {

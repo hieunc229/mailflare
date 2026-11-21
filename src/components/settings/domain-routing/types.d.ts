@@ -29,6 +29,8 @@ export type DomainRuleMailbox = {
 
 export type DomainRuleInput = {
 	domainId: string;
+	/** Step-up grant, sent when the server asks to confirm a forward to an outside address. */
+	stepUpToken?: string;
 	name?: string;
 	enabled: boolean;
 	matchField: DomainRuleField;

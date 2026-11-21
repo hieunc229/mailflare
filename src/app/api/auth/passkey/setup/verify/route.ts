@@ -124,6 +124,7 @@ export async function POST(request: Request) {
 							totpSecret: null,
 							totpEnabled: false,
 							totpConfirmedAt: null,
+							totpLastStep: null,
 							requireSecondFactor: false,
 						})
 						.where(eq(users.id, user.id)),

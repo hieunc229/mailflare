@@ -5,7 +5,7 @@ import { domains } from "@/db/schema";
 import { getEnv } from "@/lib/cloudflare";
 import { requireUser } from "@/lib/auth/cookies";
 import { canManageDomains } from "@/lib/auth/admin";
-import { getDomainForUser, removeDomainForUser } from "@/lib/domains/service";
+import { dnsSkippedUpdate, getDomainForUser, removeDomainForUser } from "@/lib/domains/service";
 import { hasValidSessionMutationOrigin } from "@/lib/auth/origin";
 
 type Params = { params: Promise<{ id: string }> };
@@ -19,7 +19,7 @@ export async function GET(request: Request, { params }: Params) {
 	return NextResponse.json({ domain });
 }
 
-/** Clears the "DNS skipped" warning once the operator has set the records themselves. */
+/** Clears the "DNS skipped" warning once the operator has set the records themselves (activating a manual domain). */
 export async function PATCH(request: Request, { params }: Params) {
 	const { id } = await params;
 	const env = getEnv();
@@ -32,8 +32,9 @@ export async function PATCH(request: Request, { params }: Params) {
 	}
 	const domain = await getDomainForUser(env, user.id, id);
 	if (!domain) return NextResponse.json({ error: "Not found" }, { status: 404 });
-	await getDb(env).update(domains).set({ dnsSkipped: body.dnsSkipped }).where(eq(domains.id, id));
-	return NextResponse.json({ domain: { ...domain, dnsSkipped: body.dnsSkipped } });
+	const update = dnsSkippedUpdate(domain, body.dnsSkipped);
+	await getDb(env).update(domains).set(update).where(eq(domains.id, id));
+	return NextResponse.json({ domain: { ...domain, ...update } });
 }
 
 export async function DELETE(request: Request, { params }: Params) {

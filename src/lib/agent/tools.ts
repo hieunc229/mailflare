@@ -1,4 +1,5 @@
 import { and, desc, eq, isNull, lt, or } from "drizzle-orm";
+import { draftsVisibleTo, isOthersDraft } from "@/lib/email/draft-access";
 import { z } from "zod";
 import { scheduledMessageCondition } from "@/lib/email/scheduled";
 import { getDb } from "@/db";
@@ -86,7 +87,7 @@ async function requireAccess(context: AgentToolContext, write = false, manage = 
 async function ownMessage(context: AgentToolContext, messageId: string, notFoundMessage = "Message not found") {
 	await requireAccess(context);
 	const [row] = await getDb(context.env).select().from(messages).where(and(eq(messages.id, messageId), eq(messages.mailboxId, context.mailboxId))).limit(1);
-	if (!row || (row.status === "draft" && row.userId !== context.user.id)) throw new Error(notFoundMessage);
+	if (!row || isOthersDraft(row, context.user.id)) throw new Error(notFoundMessage);
 	return row;
 }
 
@@ -105,7 +106,7 @@ async function createDraft(context: AgentToolContext, input: { to: string; cc?: 
 		id: draftId, userId: context.user.id, mailboxId: context.mailboxId,
 		direction: "outbound", fromAddr: sender.fromAddr, toAddr: input.to, ccAddr: input.cc || null,
 		subject: input.subject, textBody: formattedBody.text, htmlBody: formattedBody.html, snippet: buildSnippet(formattedBody.text, null),
-		status: "draft", read: true, inReplyTo: source?.providerMessageId ?? null,
+		status: "draft", privateDraft: true, read: true, inReplyTo: source?.providerMessageId ?? null,
 		references: references.length ? formatMessageIdHeader(references) : null,
 		threadId: source?.threadId ?? null,
 	});
@@ -124,7 +125,7 @@ export async function runEmailTool(context: AgentToolContext, name: EmailToolNam
 	if (name === "list_emails" || name === "search_emails") {
 		await requireAccess(context);
 		const folder = (name === "list_emails" ? input.folder : input.folder) as string | undefined;
-		const conditions = [eq(messages.mailboxId, context.mailboxId)];
+		const conditions = [eq(messages.mailboxId, context.mailboxId), draftsVisibleTo(context.user.id)];
 		if (folder === "draft") conditions.push(eq(messages.status, "draft"), eq(messages.userId, context.user.id));
 		else if (folder === "sent") conditions.push(eq(messages.status, "sent"));
 		else if (folder === "scheduled") conditions.push(scheduledMessageCondition(db));
@@ -134,10 +135,10 @@ export async function runEmailTool(context: AgentToolContext, name: EmailToolNam
 		if (name === "search_emails") conditions.push(...buildSearchConditions(input.query as string, context.timeZone));
 		if (input.cursor) {
 			const cursor = await ownMessage(context, input.cursor as string, "Invalid pagination cursor. To start from the first page, omit cursor or set it to null. For subsequent pages, use only the nextCursor returned by list_emails for this mailbox and folder; never invent a cursor or use a page number or offset.");
-			conditions.push(lt(messages.createdAt, cursor.createdAt));
+			conditions.push(or(lt(messages.createdAt, cursor.createdAt), and(eq(messages.createdAt, cursor.createdAt), lt(messages.id, cursor.id)))!);
 		}
 		const pageSize = input.limit as number;
-		const rows = await db.select().from(messages).where(and(...conditions)).orderBy(desc(messages.createdAt)).limit(pageSize + 1);
+		const rows = await db.select().from(messages).where(and(...conditions)).orderBy(desc(messages.createdAt), desc(messages.id)).limit(pageSize + 1);
 		return { emails: rows.slice(0, pageSize).map(publicMessage), nextCursor: rows.length > pageSize ? rows[pageSize - 1]?.id : null };
 	}
 	if (name === "get_email") {
@@ -152,7 +153,7 @@ export async function runEmailTool(context: AgentToolContext, name: EmailToolNam
 		const rows = anchor.threadId
 			? await db.select().from(messages).where(and(eq(messages.mailboxId, context.mailboxId), eq(messages.threadId, anchor.threadId))).orderBy(desc(messages.createdAt)).limit(21)
 			: [anchor];
-		return { emails: rows.slice(0, 20).reverse().filter((row) => row.status === "draft" ? row.userId === context.user.id : (row.status !== "spam" && row.status !== "trash") || row.id === anchor.id).map((row) => ({ ...publicMessage(row), text: (row.textBody || htmlToReadableText(row.htmlBody)).slice(0, 5_000) })), truncated: rows.length > 20 };
+		return { emails: rows.slice(0, 20).reverse().filter((row) => !isOthersDraft(row, context.user.id) && (row.status === "draft" || (row.status !== "spam" && row.status !== "trash") || row.id === anchor.id)).map((row) => ({ ...publicMessage(row), text: (row.textBody || htmlToReadableText(row.htmlBody)).slice(0, 5_000) })), truncated: rows.length > 20 };
 	}
 	if (name === "draft_email") return createDraft(context, { to: input.to as string, subject: input.subject as string, body: input.body as string });
 	if (name === "draft_reply") {

@@ -1,7 +1,7 @@
 import type { SnsEnvelope } from "@/lib/aws/ses-notification";
 
 const CERT_HOST = /^sns\.[a-z0-9-]+\.amazonaws\.com(?:\.cn)?$/;
-const MAX_AGE_MS = 24 * 60 * 60 * 1000;
+export const SNS_MAX_AGE_MS = 24 * 60 * 60 * 1000;
 const certCache = new Map<string, Promise<ArrayBuffer>>();
 
 /** The fields SNS signs, in the order it signs them (Amazon SNS "Verifying the signatures" docs). */
@@ -95,7 +95,7 @@ export async function verifySnsSignature(
 		if ((version !== "1" && version !== "2") || !envelope.Signature || !isValidSigningCertUrl(envelope.SigningCertURL)) return false;
 		const signed = stringToSign(envelope);
 		const sentAt = Date.parse(envelope.Timestamp ?? "");
-		if (signed === null || Number.isNaN(sentAt) || Math.abs((options.now ?? Date.now()) - sentAt) > MAX_AGE_MS) return false;
+		if (signed === null || Number.isNaN(sentAt) || Math.abs((options.now ?? Date.now()) - sentAt) > SNS_MAX_AGE_MS) return false;
 		const der = new Uint8Array(await (options.loadCertificate ?? fetchCertificate)(envelope.SigningCertURL));
 		const spki = spkiFromCertificate(der);
 		const key = await crypto.subtle.importKey(

@@ -1,0 +1,32 @@
+<!doctype html>
+<!-- English only on purpose: this is a static file served from the service worker cache while offline,
+     outside the app's i18n (catalogs load over the network and the locale comes from a server-read cookie). -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex">
+<title>Offline - Mailflare</title>
+<style>
+:root { color-scheme: light dark; --bg: #f6f8fc; --fg: #202124; --muted: #5f6368; }
+@media (prefers-color-scheme: dark) { :root { --bg: #202124; --fg: #e8eaed; --muted: #9aa0a6; } }
+html, body { margin: 0; min-height: 100%; background: var(--bg); color: var(--fg); font: 16px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; }
+body { display: flex; min-height: 100dvh; align-items: center; justify-content: center; padding: env(safe-area-inset-top) max(16px, env(safe-area-inset-right)) env(safe-area-inset-bottom) max(16px, env(safe-area-inset-left)); box-sizing: border-box; }
+main { max-width: 360px; text-align: center; }
+svg { width: 72px; height: 72px; }
+h1 { font-size: 20px; margin: 16px 0 8px; font-weight: 600; }
+p { margin: 0 0 20px; color: var(--muted); }
+button { font: inherit; padding: 10px 20px; border: 0; border-radius: 999px; background: #0b57d0; color: #fff; cursor: pointer; }
+button:focus-visible { outline: 3px solid #0b57d0; outline-offset: 3px; }
+@media (prefers-color-scheme: dark) { button { background: #8ab4f8; color: #202124; } }
+</style>
+</head>
+<body>
+<main>
+<svg viewBox="0 0 72 72" aria-hidden="true"><rect width="72" height="72" rx="16" fill="#0b57d0"/><path d="M18 27l18 12 18-12" fill="none" stroke="#fff" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><rect x="16" y="22" width="40" height="28" rx="5" fill="none" stroke="#fff" stroke-width="4"/></svg>
+<h1>You are offline</h1>
+<p>Mailflare cannot reach the server right now. Check your connection and try again.</p>
+<button type="button" onclick="location.reload()">Try again</button>
+</main>
+</body>
+</html>

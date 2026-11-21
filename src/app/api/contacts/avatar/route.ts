@@ -11,6 +11,7 @@ import { getMailboxAccessLevel } from "@/lib/mailboxes/access";
 import { avatarKeyFor } from "@/app/api/profile/avatar/utils";
 import { getPersonalIdentityForAddress, syncPersonalIdentity } from "@/lib/profile/sync";
 import { contactAvatarKeyFor } from "./utils";
+import { addressesSeenInMailbox } from "../utils";
 
 export async function GET(request: Request) {
 	const env = getEnv();
@@ -23,6 +24,7 @@ export async function GET(request: Request) {
 	const db = getDb(env);
 	const access = await getMailboxAccessLevel(db, user, mailboxId);
 	if (!access?.canRead) return new Response("Not found", { status: 404 });
+	if (!access.isOwner && !(await addressesSeenInMailbox(db, access.mailbox.id, [email], user.id)).has(email)) return new Response("Not found", { status: 404 });
 	const account = await getPersonalIdentityForAddress(db, access.mailbox.userId, email);
 	const [contact] = await db
 		.select({ avatarKey: contacts.avatarKey })
