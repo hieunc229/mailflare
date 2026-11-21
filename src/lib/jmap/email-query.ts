@@ -12,7 +12,9 @@ import type { Comparator, Filter, FilterCondition, MailboxRef } from "./types";
 export function mailboxRefCondition(ref: MailboxRef): SQL {
 	const base = eq(messages.mailboxId, ref.mailboxId);
 	if (ref.kind === "account") return base;
-	if (ref.kind === "folder") return and(base, eq(messages.folderId, ref.folderId))!;
+	// isNotNull keeps the predicate false rather than NULL for unfiled rows, so a
+	// negated folder condition (inMailboxOtherThan, NOT) still matches them.
+	if (ref.kind === "folder") return and(base, isNotNull(messages.folderId), eq(messages.folderId, ref.folderId))!;
 	const status = roleToStatus(ref.role);
 	if (ref.role === "inbox") return and(base, eq(messages.status, status), isNull(messages.folderId))!;
 	if (ref.role === "sent") return and(base, inArray(messages.status, ["sent", "queued", "failed"]), isNull(messages.folderId))!;
