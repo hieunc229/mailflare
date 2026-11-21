@@ -157,6 +157,7 @@ const lintConfig = {
     "drizzle/**",
     "dist/**",
     "data/**",
+    "server/imap/vendor/**",
     "deploy/**/node_modules/**",
     "cloudflare-env.d.ts",
     "next-env.d.ts"
