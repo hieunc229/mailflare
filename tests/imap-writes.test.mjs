@@ -23,13 +23,7 @@ await build({
 			export { applyMigrations } from "./server/runtime/migrate.ts";
 			export { openFileBucket } from "./server/runtime/file-bucket.ts";
 			export { openRateLimiter } from "./server/runtime/misc.ts";
-			export { refusalKey } from "./src/lib/imap/fetch.ts";
-			export { SearchEvaluator, parseSearchCriteria, decoderFor, MAX_KEYS } from "./src/lib/imap/search.ts";
-			export { FolderView } from "./src/lib/imap/view.ts";
 			export { rememberSubmission, clearSubmissionMemory } from "./src/lib/imap/sent-dedupe.ts";
-			export { getDb } from "./src/db/index.ts";
-			export { messages } from "./src/db/schema/index.ts";
-			export { eq } from "drizzle-orm";
 		`,
 		resolveDir: root,
 		sourcefile: "imap-protocol-test-entry.ts",
@@ -44,7 +38,7 @@ await build({
 	alias: { "cloudflare:workers": "./server/runtime/cloudflare-workers.ts" },
 	logLevel: "silent",
 });
-const { ImapServer, SearchEvaluator, parseSearchCriteria, decoderFor, MAX_KEYS, FolderView, rememberSubmission, clearSubmissionMemory, refusalKey, getDb, messages, eq, generateAppPassword, clearApiKeyVerificationCache, clearLoginAuditMemory, SqliteDatabase, applyMigrations, openFileBucket, openRateLimiter } = await import(pathToFileURL(join(directory, "entry.mjs")).href);
+const { ImapServer, rememberSubmission, clearSubmissionMemory, generateAppPassword, clearApiKeyVerificationCache, clearLoginAuditMemory, SqliteDatabase, applyMigrations, openFileBucket, openRateLimiter } = await import(pathToFileURL(join(directory, "entry.mjs")).href);
 
 // A throwaway certificate for 127.0.0.1 / localhost, made once for the file.
 const keyPath = join(directory, "key.pem");
@@ -73,8 +67,6 @@ const RAW_ALTERNATIVE = [
 	"--A--",
 	"",
 ].join("\r\n");
-// A header holding raw 8-bit octets (not an encoded word): it cannot be written as a quoted string.
-const RAW_EIGHT_BIT = Buffer.concat([Buffer.from("From: a@x.test\r\nTo: me@example.test\r\nSubject: caf"), Buffer.from([0xe9]), Buffer.from("\r\nDate: Tue, 2 Jan 2024 10:00:00 +0000\r\n\r\nbody\r\n", "latin1")]);
 
 async function world(t, options = {}) {
 	clearApiKeyVerificationCache();

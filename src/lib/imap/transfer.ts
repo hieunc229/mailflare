@@ -122,7 +122,9 @@ export async function copyMessages(env: CloudflareEnv, identity: ImapIdentity, r
 			const rawKey = row.rawR2Key ? `copies/${id}.eml` : null;
 			rawKeys.set(id, rawKey);
 			const sameMailbox = row.mailboxId === dest.mailboxId;
-			const { trashedAt: _trashedAt, ...columns } = row;
+			// The trash time is kept by triggers from the new status.
+			const { trashedAt, ...columns } = row;
+			void trashedAt;
 			if (rawKey) {
 				const object = await env.BUCKET.get(row.rawR2Key!);
 				if (!object) rawKeys.set(id, null);
