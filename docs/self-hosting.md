@@ -141,6 +141,7 @@ and the DNS page shows what to set by hand.
 | `DATABASE_DRIVER` | inferred | Only to override the driver inferred from `DATABASE_URL` |
 | `APP_URL` | request origin | Public URL behind a proxy. Browser requests that change data must come from this origin. Required for password reset on the self-hosted server: reset links are never built from the `Host` header, so without it no reset email is sent. |
 | `TRUST_PROXY` | unset | Set to `1` when a reverse proxy terminates TLS in front of the container: its `X-Forwarded-For` client IP and `X-Forwarded-Proto` scheme are then trusted (without `APP_URL`, the same-origin check uses `Host` plus that scheme). Leave unset when exposed directly. |
+| `MAX_HTTP_HEADER_SIZE` | `65536` | Largest request header block the HTTP server accepts, in bytes (minimum 16384). The Cloudflare email relay sends each message's headers in one request header, and long Gmail header chains exceed Node's 16 KiB default (answered with 431). |
 | `SMTP_INBOUND_PORT` | `25` | Inbound SMTP; `0` disables |
 | `MAIL_HOSTNAME` | `mail.<domain>` | Host the MX record points at; SMTP banner |
 | `SMTP_MAX_SIZE` | 36 MiB | Largest raw inbound message; allows for encoding overhead on up to 25 MB of attachments. Oversized mail receives an SMTP rejection, which the sender's mail provider can report as a delivery failure. |
