@@ -57,6 +57,8 @@ Each user has a personal calendar at **Calendar** in the dashboard. Events have 
 
 When you add attendees and choose a sending mailbox, Mailflare emails each attendee an invitation with a calendar (`.ics`) file from that mailbox, and sends updates and cancellations the same way. Events created through MCP tools or the assistant record attendees but do not send invitations.
 
+The calendar also syncs both ways with phone and desktop calendar apps over CalDAV (and contacts over CardDAV) once an administrator turns it on; see [Calendar and contacts sync](caldav-carddav.md).
+
 | Mailflare route | Purpose |
 | --- | --- |
 | `GET /api/calendar/events?start=&end=` | List events in an ISO 8601 range (default: the next 31 days). Repeating events are returned once, with their rule |
