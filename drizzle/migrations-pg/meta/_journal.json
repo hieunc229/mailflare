@@ -113,6 +113,13 @@
       "when": 1794516479576,
       "tag": "0015_masked_aliases",
       "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "7",
+      "when": 1795027621043,
+      "tag": "0016_calendar_invite_complete",
+      "breakpoints": true
     }
   ]
 }

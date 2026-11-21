@@ -849,6 +849,23 @@
         "ALTER TABLE `mailbox_aliases` ADD `enabled` integer DEFAULT true NOT NULL;",
         "ALTER TABLE `mailbox_aliases` ADD `masked` integer DEFAULT false NOT NULL;"
       ]
+    },
+    {
+      "name": "0092_calendar_invite_complete.sql",
+      "statements": [
+        "ALTER TABLE `calendar_events` ADD `repeat_interval` integer NOT NULL DEFAULT 1;",
+        "ALTER TABLE `calendar_events` ADD `repeat_weekday` integer;",
+        "ALTER TABLE `calendar_events` ADD `repeat_week` integer;",
+        "ALTER TABLE `calendar_events` ADD `event_sequence` integer NOT NULL DEFAULT 0;",
+        "CREATE TABLE `calendar_event_overrides` (\n\t`id` text PRIMARY KEY NOT NULL,\n\t`event_id` text NOT NULL,\n\t`occurrence_ms` integer NOT NULL,\n\t`starts_at` integer NOT NULL,\n\t`ends_at` integer NOT NULL,\n\t`title` text,\n\t`description` text,\n\t`location` text,\n\t`created_at` integer NOT NULL,\n\t`updated_at` integer NOT NULL,\n\tFOREIGN KEY (`event_id`) REFERENCES `calendar_events`(`id`) ON UPDATE no action ON DELETE cascade\n);",
+        "CREATE TABLE `calendar_invite_tombstones` (\n\t`id` text PRIMARY KEY NOT NULL,\n\t`user_id` text NOT NULL,\n\t`invite_sequence` integer NOT NULL DEFAULT 0,\n\t`invite_sender` text NOT NULL DEFAULT '',\n\t`cancelled_at` integer NOT NULL,\n\tFOREIGN KEY (`user_id`) REFERENCES `users`(`id`) ON UPDATE no action ON DELETE cascade\n);",
+        "CREATE TABLE `calendar_occurrence_responses` (\n\t`id` text PRIMARY KEY NOT NULL,\n\t`event_id` text NOT NULL,\n\t`occurrence_ms` integer NOT NULL,\n\t`guest` text NOT NULL,\n\t`status` text NOT NULL,\n\t`updated_at` integer NOT NULL,\n\tFOREIGN KEY (`event_id`) REFERENCES `calendar_events`(`id`) ON UPDATE no action ON DELETE cascade\n);",
+        "CREATE UNIQUE INDEX `calendar_event_overrides_event_occurrence_idx` ON `calendar_event_overrides` (`event_id`,`occurrence_ms`);",
+        "CREATE INDEX `calendar_event_overrides_event_idx` ON `calendar_event_overrides` (`event_id`);",
+        "CREATE INDEX `calendar_invite_tombstones_user_idx` ON `calendar_invite_tombstones` (`user_id`);",
+        "CREATE UNIQUE INDEX `calendar_occurrence_responses_event_occurrence_guest_idx` ON `calendar_occurrence_responses` (`event_id`,`occurrence_ms`,`guest`);",
+        "CREATE INDEX `calendar_occurrence_responses_event_idx` ON `calendar_occurrence_responses` (`event_id`);"
+      ]
     }
   ]
 }
