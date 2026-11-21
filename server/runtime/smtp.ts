@@ -125,7 +125,7 @@ export function startSmtpListener(
 							reject: (reason) => {
 								rejectReason = reason;
 							},
-							forward: async (destination) => mailer.sendRaw(from, destination, raw),
+							forward: async (destination, extra) => mailer.sendRaw(from, destination, prependHeaders(raw, extra)),
 						},
 					).catch((error) => {
 						console.error(`SMTP intake failed for ${recipient.address}`, error);
@@ -164,6 +164,19 @@ export function parseHeaders(raw: Buffer): Record<string, string> {
 		if (!(name in headers)) headers[name] = line.slice(index + 1).trim();
 	}
 	return headers;
+}
+
+/**
+ * Put extra headers on top of the raw message, the way the Worker's `message.forward(to, headers)`
+ * does. The X-Mailflare-Forwarded marker rides here; without it two mailboxes forwarding to each
+ * other bounce the message back and forth forever.
+ */
+export function prependHeaders(raw: Buffer, headers: Record<string, string>): Buffer {
+	const lines = Object.entries(headers)
+		// A header value must not carry its own line breaks into the message.
+		.map(([name, value]) => `${name}: ${value.replace(/[\r\n]+/g, " ")}\r\n`)
+		.join("");
+	return lines ? Buffer.concat([Buffer.from(lines, "latin1"), raw]) : raw;
 }
 
 function toArrayBuffer(buffer: Buffer): ArrayBuffer {
