@@ -13,7 +13,7 @@ after(() => rmSync(outDir, { recursive: true, force: true }));
 await build({
 	stdin: {
 		contents: [
-			`export { readSesAuthentication, readSesTrace } from "./src/lib/email/provider-trace";`,
+			`export { readSesAuthentication, readSesTrace, readStoredAuthentication, isIntakeStorageKey } from "./src/lib/email/provider-trace";`,
 			`export { getSenderWarning } from "./src/components/messages/message-details-utils";`,
 		].join("\n"),
 		resolveDir: root,
@@ -160,4 +160,24 @@ Body`), "news@news.example.com");
 		),
 		null,
 	);
+});
+
+test("the provider trace is trusted only for messages stored at intake", () => {
+	const message = raw(`${sesHeaders}
+From: "Ashby Recruiting" <no-reply@example.com>
+To: me@example.org
+Subject: Hello
+
+Body`);
+	for (const key of ["inbound/1700000000000-abc.eml", `inbound/${"a".repeat(64)}.eml`, "seed/msg_1.eml"]) {
+		assert.equal(provider.isIntakeStorageKey(key), true, key);
+		const authentication = provider.readStoredAuthentication(key, message, "no-reply@example.com");
+		assert.equal(authentication?.spf?.status, "PASS", key);
+		assert.equal(authentication?.aligned, true, key);
+	}
+	// The same headers in a message that was imported, appended or copied are not a trace of its delivery.
+	for (const key of ["imports/msg_1.eml", "drafts/msg_1.eml", "copies/msg_1.eml", "raw/msg_1.eml", "x/inbound/msg_1.eml", "inbound", "", null, undefined]) {
+		assert.equal(provider.isIntakeStorageKey(key), false, String(key));
+		assert.equal(provider.readStoredAuthentication(key, message, "no-reply@example.com"), null, String(key));
+	}
 });
