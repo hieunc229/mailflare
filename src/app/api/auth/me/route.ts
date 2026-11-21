@@ -39,6 +39,7 @@ export async function GET(request: Request) {
 			driveEnabled: user.driveEnabled,
 			keyboardShortcutsEnabled: user.keyboardShortcutsEnabled,
 			spamProtectionEnabled: user.spamProtectionEnabled,
+			spamStrictness: user.spamStrictness,
 			showFullRecipientAddresses: user.showFullRecipientAddresses,
 			hasAvatar: !!user.avatarKey,
 			mfaEnabled: user.totpEnabled,
