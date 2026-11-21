@@ -9,8 +9,6 @@ export async function callPaymugLicenseApi(
 ): Promise<PaymugLicenseResponse> {
 	let response: Response;
 
-	console.log(input);
-	
 	try {
 		response = await fetch(`${PAYMUG_BASE_URL}/api/v1/licenses/${action}`, {
 			method: "POST",
@@ -21,9 +19,6 @@ export async function callPaymugLicenseApi(
 	} catch {
 		throw new Error("Unable to reach Paymug. Try again later.");
 	}
-
-	const rs = await response.json()
-	console.log('response', rs);
 
 	if (!response.ok) {
 		if (response.status === 409) {
@@ -39,7 +34,7 @@ export async function callPaymugLicenseApi(
 	}
 
 	try {
-		return parsePaymugLicenseResponse(rs);
+		return parsePaymugLicenseResponse(await response.json());
 	} catch {
 		throw new Error("Paymug returned an invalid license response");
 	}

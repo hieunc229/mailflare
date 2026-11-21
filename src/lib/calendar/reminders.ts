@@ -1,10 +1,11 @@
-import { and, eq, gt, isNotNull, lte, or, ne, isNull, sql } from "drizzle-orm";
+import { and, eq, gt, inArray, isNotNull, lte, or, ne, isNull, sql } from "drizzle-orm";
 import { getDb } from "@/db";
-import { calendarEvents, users } from "@/db/schema";
+import { calendarEventOverrides, calendarEvents, users } from "@/db/schema";
 import { isMissingColumnError } from "@/lib/database-errors";
 import { sendPushContent } from "@/lib/push/server";
 import { normalizeTimeZone } from "@/lib/time/utils";
 import { expandToolEvents } from "./tool-occurrences";
+import { chunkIds } from "./chunks";
 import { MAX_REMINDER_MINUTES, formatReminderBody } from "./reminder-utils";
 
 /** Events checked per cron run; the next run picks up the rest. */
@@ -34,10 +35,24 @@ export async function runCalendarReminders(env: CloudflareEnv, now: Date): Promi
 			))
 			.limit(REMINDER_BATCH);
 
+		// Moved/extra occurrences remind at their override time: IN queries in D1-safe chunks.
+		const overridesById = new Map<string, Array<{ occurrenceMs: number; startsAt: Date; endsAt: Date }>>();
+		if (rows.length) {
+			for (const chunk of chunkIds(rows.map(({ event }) => event.id))) {
+				const overrideRows = await db.select().from(calendarEventOverrides).where(inArray(calendarEventOverrides.eventId, chunk));
+				for (const row of overrideRows) {
+					const list = overridesById.get(row.eventId) ?? [];
+					list.push({ occurrenceMs: row.occurrenceMs, startsAt: row.startsAt, endsAt: row.endsAt });
+					overridesById.set(row.eventId, list);
+				}
+			}
+		}
+
 		for (const { event } of rows) {
 			const lead = (event.reminderMinutes ?? 0) * 60_000;
 			const last = event.lastRemindedStart?.getTime() ?? 0;
-			const due = expandToolEvents([event], now, new Date(now.getTime() + lead + 1))
+			const overrides = overridesById.get(event.id);
+			const due = expandToolEvents([event], now, new Date(now.getTime() + lead + 1), 500, overrides ? new Map([[event.id, overrides]]) : undefined)
 				.map((occurrence) => ({ ...occurrence, start: new Date(occurrence.startsAt) }))
 				.filter((occurrence) => occurrence.start > now && occurrence.start.getTime() - lead <= now.getTime() && occurrence.start.getTime() > last)
 				.slice(0, MAX_OCCURRENCES_PER_EVENT);

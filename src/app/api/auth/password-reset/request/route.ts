@@ -6,6 +6,7 @@ import { verifyTurnstileToken } from "@/lib/auth/turnstile";
 import { readJsonBody } from "@/lib/http/request";
 import { RequestBodyTooLargeError } from "@/lib/http/errors";
 import { requestPasswordReset } from "@/lib/auth/password-reset";
+import { trustedResetOrigin } from "@/lib/auth/password-reset-utils";
 import { getServerTranslator } from "@/lib/i18n/server";
 
 /**
@@ -32,7 +33,12 @@ export async function POST(request: Request) {
 		return NextResponse.json({ error: "Verification failed. Please try again." }, { status: 400 });
 	}
 
-	const origin = env.APP_URL?.trim() || new URL(request.url).origin;
+	// The link carries a live token, so its origin is never taken from the Host header (see trustedResetOrigin).
+	const origin = trustedResetOrigin(env, request.url);
+	if (!origin) {
+		console.warn("Password reset skipped: set APP_URL to this install's public URL so reset links cannot be built from the Host header");
+		return NextResponse.json({ ok: true }, { headers: { "Cache-Control": "no-store" } });
+	}
 	try {
 		await requestPasswordReset(env, parsed.data.email, origin, await getServerTranslator());
 	} catch (error) {

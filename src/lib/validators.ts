@@ -2,6 +2,7 @@ import { z } from "zod";
 import { isPublicHttpsUrl, PUBLIC_HTTPS_URL_MESSAGE } from "@/lib/security/public-url";
 import { isValidHostname, normalizeHostname } from "@/lib/domains/utils";
 import { getEmailAddress, splitEmailAddressList } from "@/lib/email/address";
+import { normalizeRecipientLocalPart } from "@/lib/email/recipient-address";
 import { DEFAULT_FOLDER_COLOR, FOLDER_COLOR_VALUES } from "@/lib/folders/colors";
 import { MAX_FOLLOW_UP_DAYS } from "@/lib/follow-ups/follow-up-utils";
 import { isValidBase64 } from "@/lib/email/base64";
@@ -149,6 +150,10 @@ export const stepUpActionSchema = z.enum([
 	"second_factor.toggle",
 	"admin.password_reset",
 	"admin.recovery_link",
+	"admin.forwarding_email",
+	"profile.recovery_email",
+	"routing.forward",
+	"webhook.change",
 ]);
 
 export const passkeyRegistrationSchema = passkeyCeremonySchema.extend({
@@ -255,7 +260,7 @@ export const updateManagedAccountSchema = z.object({
 		(value) => (typeof value === "string" ? value.trim() : value),
 		z.string().min(8).max(128).or(z.literal("")).optional().transform((value) => value || null),
 	),
-	/** Required when `password` is set: the administrator must re-authenticate. */
+	/** Required when `password` or `forwardingEmail` changes: the administrator must re-authenticate. */
 	stepUpToken: z.string().min(8).max(200).optional(),
 });
 
@@ -274,6 +279,34 @@ export const createMailboxAliasSchema = z.object({
 	domainId: z.string().min(1),
 	localPart: z.string().trim().min(1).max(64).regex(/^[a-zA-Z0-9._%+-]+$/)
 		.transform((value) => value.toLowerCase()),
+});
+
+// The aliases endpoint additionally accepts a label, a masked flag, and
+// `generate` to mint a random masked address without a client-chosen local part.
+// Labels become outbound display names, so control and format characters that
+// could corrupt headers are refused.
+const aliasLabelSchema = z.string().trim().max(100).regex(/^[^\p{Cc}\p{Cf}]*$/u);
+
+export const mailboxAliasBodySchema = createMailboxAliasSchema
+	.partial({ localPart: true })
+	.extend({
+		label: aliasLabelSchema.optional(),
+		masked: z.boolean().default(false),
+		generate: z.boolean().default(false),
+	})
+	.refine((value) => value.generate || !!value.localPart, {
+		message: "Enter an alias username or request a generated address",
+	})
+	// A local part made only of dots or a +tag normalizes to nothing: inbound
+	// routing could never match it, so the alias would be unreachable.
+	.refine((value) => !value.localPart || normalizeRecipientLocalPart(value.localPart).length > 0, {
+		message: "Alias username needs at least one letter or digit outside dots and +tags",
+	});
+
+export const updateMailboxAliasSchema = z.object({
+	aliasId: z.string().min(1),
+	label: aliasLabelSchema.nullable().optional(),
+	enabled: z.boolean().optional(),
 });
 
 export const createUserAccountSchema = z.object({
@@ -327,7 +360,15 @@ export const folderSchema = z.object({
 	color: z.enum(FOLDER_COLOR_VALUES).default(DEFAULT_FOLDER_COLOR),
 });
 
+/** Proof of identity for changing where password-reset or forwarded mail goes. */
+const recoveryProofFields = {
+	password: z.string().min(1).max(1024).optional(),
+	stepUpToken: z.string().min(8).max(200).optional(),
+	code: z.string().trim().min(6).max(32).optional(),
+};
+
 export const updateProfileSchema = z.object({
+	...recoveryProofFields,
 	// Optional so a recovery-email-only save leaves the name alone instead of writing back a stale one.
 	name: z.string().trim().min(1).max(100).optional(),
 	resetEmail: z.preprocess(
@@ -341,6 +382,7 @@ export const updateProfileSchema = z.object({
 });
 
 export const updateForwardingEmailSchema = z.object({
+	...recoveryProofFields,
 	forwardingEmail: z.preprocess(
 		(value) => (typeof value === "string" ? value.trim() : value),
 		z.string().email().or(z.literal("")).transform((value) => value || null),
@@ -377,6 +419,7 @@ export const changePasswordSchema = z.object({
 });
 
 export const routingRuleSchema = z.object({
+	...recoveryProofFields,
 	domainId: z.string().optional(),
 	pattern: z.string().trim().min(1).max(200).optional(),
 	matchField: z.enum(["email", "content", "title"]).default("email"),
@@ -393,6 +436,7 @@ export const routingRuleSchema = z.object({
 
 export const domainRoutingRuleSchema = z
 	.object({
+		...recoveryProofFields,
 		domainId: z.string().min(1),
 		name: z.string().trim().max(120).optional(),
 		enabled: z.boolean().default(true),
@@ -446,6 +490,7 @@ export const domainRoutingRuleSchema = z
 	});
 
 export const webhookSchema = z.object({
+	...recoveryProofFields,
 	url: z.string().url().max(2048).refine(isPublicHttpsUrl, PUBLIC_HTTPS_URL_MESSAGE),
 	description: z.string().trim().max(200).optional(),
 	events: z
@@ -456,6 +501,7 @@ export const webhookSchema = z.object({
 });
 
 export const webhookUpdateSchema = z.object({
+	...recoveryProofFields,
 	url: z.string().url().max(2048).refine(isPublicHttpsUrl, PUBLIC_HTTPS_URL_MESSAGE).optional(),
 	description: z.string().trim().max(200).nullish(),
 	events: z
