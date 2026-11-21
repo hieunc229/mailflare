@@ -17,7 +17,7 @@ await build({
 			export { authenticateApiRequest } from "./src/lib/api/key-auth.ts";
 			export { authenticateAppPassword, authenticateAppPasswordRequest, availableAppPasswordProtocols, isSecureAppPasswordTransport, revokeAllAppPasswords } from "./src/lib/auth/app-passwords.ts";
 			export { handleJmapRequest } from "./src/lib/jmap/handler.ts";
-			export { appPasswordGuessKey } from "./src/lib/auth/app-passwords.ts";
+			export { appPasswordGuessKey, allowAppPasswordGuess, allowAppPasswordGuessFrom } from "./src/lib/auth/app-passwords.ts";
 			export { deleteUserSessions } from "./src/lib/auth/session.ts";
 			export { API_KEY_SCOPES, APP_PASSWORD_PROTOCOLS } from "./src/lib/api/scopes.ts";
 			export { SqliteDatabase } from "./server/runtime/sqlite-database.ts";
@@ -50,6 +50,8 @@ const {
 	deleteUserSessions,
 	handleJmapRequest,
 	appPasswordGuessKey,
+	allowAppPasswordGuess,
+	allowAppPasswordGuessFrom,
 	API_KEY_SCOPES,
 	APP_PASSWORD_PROTOCOLS,
 	SqliteDatabase,
@@ -88,6 +90,75 @@ test("the app protocols are separate from the general API key scopes", () => {
 test("only protocols the server can serve are offered", async (t) => {
 	const { env } = await fixture(t);
 	assert.deepEqual(await availableAppPasswordProtocols(env), ["jmap"]);
+});
+
+test("imap is offered only on the Node runtime with IMAP_ENABLED and a certificate", async (t) => {
+	const { env } = await fixture(t);
+	const saved = { ...process.env };
+	t.after(() => {
+		for (const name of ["IMAP_ENABLED", "IMAP_PORT", "IMAP_STARTTLS_PORT", "IMAP_ALLOW_PLAINTEXT", "SMTP_TLS_KEY", "SMTP_TLS_CERT"]) {
+			if (saved[name] === undefined) delete process.env[name];
+			else process.env[name] = saved[name];
+		}
+	});
+	const node = { ...env, MAILFLARE_RUNTIME: "node" };
+	for (const name of ["IMAP_ENABLED", "IMAP_PORT", "IMAP_STARTTLS_PORT", "IMAP_ALLOW_PLAINTEXT", "SMTP_TLS_KEY", "SMTP_TLS_CERT"]) delete process.env[name];
+	assert.deepEqual(await availableAppPasswordProtocols(node), ["jmap"], "off by default");
+	process.env.IMAP_ENABLED = "1";
+	assert.deepEqual(await availableAppPasswordProtocols(node), ["jmap"], "no certificate, no listener");
+	process.env.SMTP_TLS_KEY = "/k";
+	process.env.SMTP_TLS_CERT = "/c";
+	assert.deepEqual(await availableAppPasswordProtocols(node), ["jmap", "imap"]);
+	assert.deepEqual(await availableAppPasswordProtocols({ ...env, MAILFLARE_RUNTIME: undefined }), ["jmap"], "never on Workers");
+	process.env.IMAP_PORT = "0";
+	assert.deepEqual(await availableAppPasswordProtocols(node), ["jmap"], "both ports off");
+	process.env.IMAP_STARTTLS_PORT = "143";
+	assert.deepEqual(await availableAppPasswordProtocols(node), ["jmap", "imap"]);
+	process.env.IMAP_ENABLED = "true";
+	assert.deepEqual(await availableAppPasswordProtocols(node), ["jmap"], "only 1 turns it on");
+});
+
+test("imap is not offered when no listener could start: plain login needs a loopback bind, the TLS port needs a certificate", async (t) => {
+	const { env } = await fixture(t);
+	const saved = { ...process.env };
+	t.after(() => {
+		for (const name of ["IMAP_ENABLED", "IMAP_PORT", "IMAP_STARTTLS_PORT", "IMAP_ALLOW_PLAINTEXT", "IMAP_HOST", "SMTP_TLS_KEY", "SMTP_TLS_CERT"]) {
+			if (saved[name] === undefined) delete process.env[name];
+			else process.env[name] = saved[name];
+		}
+	});
+	const node = { ...env, MAILFLARE_RUNTIME: "node" };
+	for (const name of ["IMAP_ENABLED", "IMAP_PORT", "IMAP_STARTTLS_PORT", "IMAP_ALLOW_PLAINTEXT", "IMAP_HOST", "SMTP_TLS_KEY", "SMTP_TLS_CERT"]) delete process.env[name];
+	process.env.IMAP_ENABLED = "1";
+	process.env.IMAP_ALLOW_PLAINTEXT = "1";
+	process.env.IMAP_PORT = "0";
+	process.env.IMAP_STARTTLS_PORT = "143";
+	assert.deepEqual(await availableAppPasswordProtocols(node), ["jmap"], "plain login, no certificate, bound to every interface");
+	process.env.IMAP_HOST = "0.0.0.0";
+	assert.deepEqual(await availableAppPasswordProtocols(node), ["jmap"], "an address that is not loopback");
+	process.env.IMAP_HOST = "127.0.0.1";
+	assert.deepEqual(await availableAppPasswordProtocols(node), ["jmap", "imap"], "loopback test mode");
+	process.env.IMAP_HOST = "::1";
+	assert.deepEqual(await availableAppPasswordProtocols(node), ["jmap", "imap"]);
+	process.env.IMAP_PORT = "993";
+	assert.deepEqual(await availableAppPasswordProtocols(node), ["jmap"], "the TLS port cannot start without a certificate, so nothing starts");
+	process.env.SMTP_TLS_KEY = "/k";
+	process.env.SMTP_TLS_CERT = "/c";
+	process.env.IMAP_HOST = "0.0.0.0";
+	assert.deepEqual(await availableAppPasswordProtocols(node), ["jmap", "imap"], "with a certificate every port can start");
+});
+
+test("IMAP guesses share the per-IP budget with the HTTP protocols", async (t) => {
+	const calls = [];
+	const limiter = { limit: async ({ key }) => { calls.push(key); return { success: calls.length <= 2 }; } };
+	const { env } = await fixture(t, { DEVICE_LOGIN_RATE_LIMIT: limiter });
+	const request = new Request("https://mail.example/dav/", { headers: { "cf-connecting-ip": "203.0.113.5" } });
+	assert.equal(await allowAppPasswordGuess(env, request, "guess-one-guess-one"), true);
+	assert.equal(await allowAppPasswordGuessFrom(env, "203.0.113.5", "guess-two-guess-two"), true);
+	assert.equal(await allowAppPasswordGuessFrom(env, "203.0.113.5", "guess-three-guess"), false, "the third guess from this address, over either protocol, is refused");
+	assert.deepEqual(calls, ["app-auth:ip:203.0.113.5", "app-auth:ip:203.0.113.5", "app-auth:ip:203.0.113.5"]);
+	assert.equal(await allowAppPasswordGuessFrom(env, "2001:db8:1:2:3:4:5:6", "x-guess-x-guess-x"), false, "an IPv6 address counts by its /64 bucket");
+	assert.equal(calls[3], appPasswordGuessKey("2001:db8:1:2::1", "other"));
 });
 
 test("an app password works for its protocol only, never for another", async (t) => {
