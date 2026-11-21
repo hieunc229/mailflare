@@ -16,6 +16,10 @@ import { getSearchIndexStatus } from "@/lib/search/index-admin";
 import { recordReputationObservation } from "@/lib/spam/repository";
 import { isUniqueConstraintError } from "@/lib/database-errors";
 import { syncMailbox } from "@/lib/imap/sync";
+import { pruneImapExpunged } from "@/lib/imap/expunge-prune";
+import { changedSince, maxModseqOf, modseqsOf, vanishedSince } from "@/lib/imap/condstore";
+import { unchangedSinceLogged } from "@/lib/jmap/emails";
+import { FolderView } from "@/lib/imap/view";
 
 const [url, driver] = process.argv.slice(2);
 if (!url) throw new Error("usage: db-smoke <DATABASE_URL> [driver]");
@@ -166,6 +170,33 @@ const movedRight = await db.update(messages).set({ status: "archived", folderId:
 const deletedRight = await db.delete(messages).where(and(eq(messages.id, guarded), eq(messages.mailboxId, imapMailbox), eq(messages.status, "archived"), isNull(messages.folderId))).returning({ id: messages.id });
 check("imap conditional move and delete return the rows they changed", movedRight.length === 1 && deletedRight.length === 1);
 
+// IMAP STORE UNCHANGEDSINCE: the write is conditional on the change log, in the statement that writes.
+const logged = `msg_log_${stamp}`;
+await db.insert(messages).values({ id: logged, userId, mailboxId: imapMailbox, direction: "inbound", fromAddr: "x@y.z", toAddr: "me@example.com", subject: "Logged", textBody: "body", status: "received" } as never);
+const [logTop] = await db.all<{ top: number }>(sql`SELECT max(seq) AS top FROM jmap_changes WHERE mailbox_id = ${imapMailbox}`);
+const loggedGuard = { mailboxId: imapMailbox, jmapSeq: Number(logTop.top) };
+const writtenFirst = await db.update(messages).set({ starred: true }).where(and(eq(messages.id, logged), unchangedSinceLogged(loggedGuard, logged))).returning({ id: messages.id });
+const writtenAgain = await db.update(messages).set({ starred: false }).where(and(eq(messages.id, logged), unchangedSinceLogged(loggedGuard, logged))).returning({ id: messages.id });
+const [loggedRow] = await db.select({ starred: messages.starred }).from(messages).where(eq(messages.id, logged));
+check("imap conditional update on the change log writes when nothing is newer and skips once something is", writtenFirst.length === 1 && writtenAgain.length === 0 && loggedRow.starred === true);
+await db.delete(messages).where(eq(messages.id, logged));
+await syncMailbox(env, imapMailbox);
+
+// IMAP CONDSTORE and QRESYNC: the mod-sequence reads, the expunge log prune (state lock, floor update and delete in one batch, old rows read through the age index) and the vanished-UID answer on both sides of the floor.
+const inboxView = await FolderView.open(env, imapMailbox, "inbox");
+const inboxChanged = await changedSince(env, imapMailbox, "inbox", 0);
+const inboxModseqs = await modseqsOf(env, imapMailbox, "inbox", [...inboxChanged]);
+check("imap mod-sequence reads (by UID list, maximum in SQL, changed since) agree", inboxChanged.size >= 1 && inboxModseqs.size === inboxChanged.size && (await maxModseqOf(env, imapMailbox, "inbox", [...inboxChanged])) === Math.max(...inboxModseqs.values()));
+const [loggedExpunges] = await db.all<{ n: number }>(sql`SELECT count(*) AS n FROM imap_expunged WHERE mailbox_id = ${imapMailbox} AND folder_key = 'inbox'`);
+const vanishedFromLog = await vanishedSince(env, inboxView, 0, null);
+await db.run(sql`UPDATE imap_expunged SET created_at = 1 WHERE mailbox_id = ${imapMailbox}`);
+const pruned = await pruneImapExpunged(env, new Date());
+const [floorRow] = await db.all<{ expunged_floor: number }>(sql`SELECT expunged_floor FROM imap_folder_state WHERE id = ${`${imapMailbox}:inbox`}`);
+const [logLeft] = await db.all<{ n: number }>(sql`SELECT count(*) AS n FROM imap_expunged WHERE mailbox_id = ${imapMailbox}`);
+check("imap prune drops the old expunge rows and records the floor", pruned >= Number(loggedExpunges.n) && Number(logLeft.n) === 0 && Number(floorRow.expunged_floor) > 0);
+const vanishedFromUids = await vanishedSince(env, inboxView, 0, null);
+check("imap vanished UIDs are the same from the log and from the UIDs that exist", vanishedFromLog.length > 0 && JSON.stringify(vanishedFromLog) === JSON.stringify(vanishedFromUids));
+
 await db.run(sql`INSERT INTO imap_message_flags (message_id, answered, keywords) VALUES (${`msg_${stamp}`}, ${true}, ${'["$label1"]'})`);
 const backup = await exportDatabaseRecords(d1);
 const exported = JSON.parse(new TextDecoder().decode(backup)) as { tables: Record<string, Array<Record<string, unknown>>> };
@@ -173,10 +204,11 @@ check("backup exports portable values", exported.tables.users.every((row) => typ
 await restoreDatabaseRecords(d1, backup.buffer.slice(backup.byteOffset, backup.byteOffset + backup.byteLength) as ArrayBuffer);
 const [afterRestore] = await db.select({ subject: messages.subject, starred: messages.starred, createdAt: messages.createdAt }).from(messages).where(eq(messages.id, `msg_${stamp}`));
 check("backup restores", afterRestore?.subject === "Quarterly Report" && afterRestore.starred === false && afterRestore.createdAt instanceof Date);
-const [imapLeft] = await db.all<{ n: number }>(sql`SELECT (SELECT count(*) FROM imap_uids) + (SELECT count(*) FROM imap_expunged) + (SELECT count(*) FROM imap_mailbox_state) + (SELECT count(*) FROM imap_folder_state WHERE uid_next <> 1 OR highest_modseq <> 0) AS n`);
+const [imapLeft] = await db.all<{ n: number }>(sql`SELECT (SELECT count(*) FROM imap_uids) + (SELECT count(*) FROM imap_expunged) + (SELECT count(*) FROM imap_mailbox_state) + (SELECT count(*) FROM imap_folder_state WHERE uid_next <> 1 OR highest_modseq > 1) AS n`);
 check("restore clears the derived IMAP state tables", Number(imapLeft.n) === 0);
-const [validity] = await db.all<{ uidvalidity: number }>(sql`SELECT uidvalidity FROM imap_folder_state WHERE id = ${`${imapMailbox}:archive`}`);
+const [validity] = await db.all<{ uidvalidity: number; highest_modseq: number }>(sql`SELECT uidvalidity, highest_modseq FROM imap_folder_state WHERE id = ${`${imapMailbox}:archive`}`);
 check("restore keeps UIDVALIDITY above its old value", Number(validity?.uidvalidity) > 1_000_000_000);
+check("restore re-seeds a folder with HIGHESTMODSEQ 1, never 0", Number(validity?.highest_modseq) === 1);
 const [flags] = await db.all<{ answered: unknown; keywords: string }>(sql`SELECT answered, keywords FROM imap_message_flags WHERE message_id = ${`msg_${stamp}`}`);
 check("imap_message_flags are backed up and restored", Boolean(flags) && Number(flags.answered) === 1 || flags?.answered === true);
 
