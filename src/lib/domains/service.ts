@@ -252,3 +252,14 @@ export async function getDomainForUser(env: CloudflareEnv, userId: string, domai
 		.limit(1);
 	return domain ?? null;
 }
+
+/**
+ * Columns to write when the operator flips the "DNS skipped" flag. A skipped
+ * domain on the manual zone was stored as pending, and nothing else activates
+ * it without Cloudflare credentials, so confirming the records are in place
+ * makes it live the way a manual domain added without skipping already is.
+ */
+export function dnsSkippedUpdate(domain: typeof domains.$inferSelect, dnsSkipped: boolean): Partial<typeof domains.$inferInsert> {
+	if (dnsSkipped || !isManualZone(domain.zoneId) || domain.status === "active") return { dnsSkipped };
+	return { dnsSkipped, status: "active", routingEnabled: true, routingStatus: "manual" };
+}
