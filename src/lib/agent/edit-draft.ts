@@ -1,4 +1,5 @@
 import { and, eq, sql } from "drizzle-orm";
+import { isOthersDraft } from "@/lib/email/draft-access";
 import { getDb } from "@/db";
 import { agentDraftMetadata, messageAttachments, messages } from "@/db/schema";
 import { buildSnippet } from "@/lib/email/parse";
@@ -41,8 +42,8 @@ export async function editAgentDraft(context: AgentToolContext, input: AgentDraf
 	const remaining = existing.filter((attachment) => !removeIds.has(attachment.id));
 	const additions: AttachmentContent[] = [];
 	for (const attachment of input.addAttachments ?? []) {
-		const [source] = await db.select({ id: messages.id, userId: messages.userId, status: messages.status }).from(messages).where(and(eq(messages.id, attachment.sourceEmailId), eq(messages.mailboxId, context.mailboxId))).limit(1);
-		if (!source || (source.status === "draft" && source.userId !== context.user.id)) throw new Error("Attachment source email not found in the selected mailbox");
+		const [source] = await db.select({ id: messages.id, userId: messages.userId, status: messages.status, privateDraft: messages.privateDraft }).from(messages).where(and(eq(messages.id, attachment.sourceEmailId), eq(messages.mailboxId, context.mailboxId))).limit(1);
+		if (!source || isOthersDraft(source, context.user.id)) throw new Error("Attachment source email not found in the selected mailbox");
 		const found = await getAttachmentForUser(context.env, context.user, source.id, attachment.attachmentId);
 		if (!found || found.attachment.disposition !== "attachment") throw new Error("Attachment not found on the source email");
 		additions.push({ filename: found.attachment.filename, type: found.attachment.contentType, content: await found.object.arrayBuffer() });

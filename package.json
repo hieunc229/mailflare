@@ -103,7 +103,7 @@
     "parse-srcset": "^1.0.2",
     "parse5": "^8.0.1",
     "pg": "^8.23.1",
-    "postal-mime": "^2.7.4",
+    "postal-mime": "^4.2.1",
     "postgres": "^3.4.9",
     "qrcode": "^1.5.4",
     "react": "^19.2.6",

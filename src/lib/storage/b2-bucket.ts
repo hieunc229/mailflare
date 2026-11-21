@@ -12,6 +12,11 @@ type PutOptions = { httpMetadata?: B2HttpMetadata | Headers; customMetadata?: Re
 
 const META_PREFIX = "x-amz-meta-";
 
+/** The URL parser resolves `.` and `..` segments, so such a key would be sent as a different key. */
+function assertPlainKey(key: string) {
+	if (key.split("/").some((part) => part === "." || part === "..")) throw new Error("Object key has a . or .. segment");
+}
+
 const encodePath = (key: string) => `/${key.split("/").map((part) => encodeURIComponent(part).replace(/[!'()*]/g, (c) => `%${c.charCodeAt(0).toString(16).toUpperCase()}`)).join("/")}`;
 const escapeXml = (value: string) => value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 
@@ -85,6 +90,7 @@ export class B2Bucket {
 	}
 
 	private request(key: string | null, init: { method?: string; query?: Record<string, string>; body?: string | ArrayBuffer; headers?: Record<string, string> } = {}) {
+		if (key !== null) assertPlainKey(key);
 		return awsRequest({ config: this.credentials, service: "s3", host: this.host, path: key === null ? "/" : encodePath(key), ...init });
 	}
 

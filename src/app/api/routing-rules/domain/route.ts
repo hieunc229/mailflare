@@ -15,6 +15,10 @@ import {
 } from "@/lib/domains/routing-rules";
 import { hasValidSessionMutationOrigin } from "@/lib/auth/origin";
 import { readJsonObject } from "@/lib/http/request";
+import { getSessionTokenFromRequestHeaders } from "@/lib/auth/session";
+import { authorizeSecurityChange } from "@/lib/auth/webauthn/authorize";
+import { authError } from "@/lib/http/auth-error";
+import { forwardTargetChanged, isExternalForwardTarget } from "@/lib/routing/forward-proof";
 
 export async function GET(request: Request) {
 	const env = getEnv();
@@ -66,6 +70,12 @@ export async function POST(request: Request) {
 		: true;
 	if (!destinationAllowed) {
 		return NextResponse.json({ error: "Mailbox access is required for the destination" }, { status: 403 });
+	}
+
+	// A forward to an outside address copies all matching mail there: it needs fresh proof.
+	if (forwardTargetChanged(null, parsed.data) && await isExternalForwardTarget(db, user, parsed.data.forwardTo!)
+		&& !(await authorizeSecurityChange(env, user, getSessionTokenFromRequestHeaders(request), parsed.data, "routing.forward"))) {
+		return authError("verification_failed", 401);
 	}
 
 	const id = newId("rule");
