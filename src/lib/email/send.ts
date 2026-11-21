@@ -525,5 +525,17 @@ export async function processOutboundQueue(
 		return;
 	}
 	delivery.attachments = await loadMessageAttachmentContents(env, payload.messageId);
-	await deliverEmail(env, delivery, { attempt, maxAttempts: 3 });
+	try {
+		await deliverEmail(env, delivery, { attempt, maxAttempts: 3 });
+	} catch (err) {
+		// When the error is permanent or retries are exhausted, deliverEmail has already
+		// updated the database (messages and outbound_jobs set to 'failed') and dispatched
+		// the failure webhook. Suppress re-throw so the queue consumer acknowledges
+		// the message immediately instead of scheduling a redundant retry.
+		if (isPermanentDeliveryError(err) || attempt >= 3) {
+			return;
+		}
+		// For transient errors with attempts remaining, re-throw so worker.ts calls msg.retry({ delaySeconds: 10 })
+		throw err;
+	}
 }
