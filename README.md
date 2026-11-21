@@ -132,3 +132,4 @@ A schema change needs a migration for each database type. See [Databases](docs/d
 ## License
 
 See [LICENSE](LICENSE).
+Deployment maintained by Varunya Web Tech and Fintech Solutions.
