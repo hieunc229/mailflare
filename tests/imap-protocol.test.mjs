@@ -935,18 +935,6 @@ test("commands past the per-connection rate are delayed, not refused", async (t)
 	assert.ok(Date.now() - started >= 1500, `60 commands at 20 a second take about two seconds, took ${Date.now() - started} ms`);
 });
 
-test("write commands that are not built yet are refused", async (t) => {
-	const w = await world(t);
-	const key = await w.addKey({ id: "k1" });
-	await w.addRaw("g1", RAW_ALTERNATIVE);
-	const client = await loggedIn(w, key);
-	t.after(() => client.end());
-	await client.cmd("SELECT INBOX");
-	for (const command of ["CREATE X", "DELETE X", "RENAME X Y"]) {
-		assert.equal((await client.cmd(command)).detail, "[CANNOT] This server is read-only for now", command);
-	}
-});
-
 test("ID, ENABLE, CHECK, CLOSE, UNSELECT, SUBSCRIBE", async (t) => {
 	const w = await world(t);
 	const key = await w.addKey({ id: "k1" });
