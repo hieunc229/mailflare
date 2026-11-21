@@ -1,6 +1,6 @@
 "use client";
 
-import type { FormEvent, KeyboardEvent } from "react";
+import type { FormEvent } from "react";
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Folder, Forward, Plus, ShieldAlert, Trash2 } from "@/components/icons";
@@ -138,15 +138,6 @@ export function InboxRules() {
     setDialogOpen(true);
   }
 
-  function onRuleKeyDown(
-    event: KeyboardEvent<HTMLDivElement>,
-    rule: InboxRule,
-  ) {
-    if (event.key !== "Enter" && event.key !== " ") return;
-    event.preventDefault();
-    openEditDialog(rule);
-  }
-
   function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     save.mutate(undefined);
@@ -177,44 +168,42 @@ export function InboxRules() {
           {(rules.data?.rules ?? []).map((rule) => (
             <div
               key={rule.id}
-              role="button"
-              tabIndex={0}
-              onClick={() => openEditDialog(rule)}
-              onKeyDown={(event) => onRuleKeyDown(event, rule)}
-              className="group flex cursor-pointer items-center gap-3 rounded-xl bg-neutral-50 px-3 py-3 outline-none transition-colors hover:bg-neutral-100 focus-visible:ring-2 focus-visible:ring-blue-200"
+              className="group relative flex items-center gap-3 rounded-xl bg-neutral-50 px-3 py-3 transition-colors hover:bg-neutral-100"
             >
-              <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-blue-50 text-blue-700">
-                {rule.action === "forward" ? (
-                  <Forward className="h-4 w-4" />
-                ) : rule.action === "spam" ? (
-                  <ShieldAlert className="h-4 w-4" />
-                ) : rule.action === "trash" ? (
-                  <Trash2 className="h-4 w-4" />
-                ) : (
-                  <Folder className="h-4 w-4" />
-                )}
-              </div>
-              <div className="min-w-0 flex-1">
-                <p className="truncate text-sm font-medium text-neutral-900">
-                  {getRuleFieldLabel(rule.matchField, t)}{" "}
-                  {getRuleOperatorLabel(rule.matchOperator, t)}{" "}
-                  {rule.matchValue || rule.pattern}
-                </p>
-                <p className="truncate text-xs text-neutral-500">
-                  {getRuleDestinationLabel(rule)}
-                </p>
-              </div>
+              <button
+                type="button"
+                onClick={() => openEditDialog(rule)}
+                className="flex min-w-0 flex-1 cursor-pointer items-center gap-3 rounded-lg text-left outline-none after:absolute after:inset-0 after:rounded-xl after:content-[''] focus-visible:after:ring-2 focus-visible:after:ring-blue-200"
+              >
+                <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-blue-50 text-blue-700">
+                  {rule.action === "forward" ? (
+                    <Forward className="h-4 w-4" />
+                  ) : rule.action === "spam" ? (
+                    <ShieldAlert className="h-4 w-4" />
+                  ) : rule.action === "trash" ? (
+                    <Trash2 className="h-4 w-4" />
+                  ) : (
+                    <Folder className="h-4 w-4" />
+                  )}
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-sm font-medium text-neutral-900">
+                    {getRuleFieldLabel(rule.matchField, t)}{" "}
+                    {getRuleOperatorLabel(rule.matchOperator, t)}{" "}
+                    {rule.matchValue || rule.pattern}
+                  </p>
+                  <p className="truncate text-xs text-neutral-500">
+                    {getRuleDestinationLabel(rule)}
+                  </p>
+                </div>
+              </button>
               <Button
                 type="button"
                 variant="ghost"
                 size="sm"
                 disabled={remove.isPending}
-                onClick={(event) => {
-                  event.stopPropagation();
-                  remove.mutate(rule.id);
-                }}
-                onKeyDown={(event) => event.stopPropagation()}
-                className="opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100"
+                onClick={() => remove.mutate(rule.id)}
+                className="relative z-10 opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100"
                 aria-label={t("rules.delete")}
               >
                 <Trash2 className="h-4 w-4" />
