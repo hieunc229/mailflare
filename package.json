@@ -118,7 +118,7 @@
     "remark-gfm": "^4.0.1",
     "sass": "^1.105.0",
     "saxes": "^6.0.0",
-    "smtp-server": "^3.19.12",
+    "smtp-server": "^3.21.7",
     "tailwind-merge": "^3.6.0",
     "tldts": "^7.4.16",
     "vinext": "1.0.0-beta.13",
