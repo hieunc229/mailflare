@@ -8,6 +8,7 @@ import { newId } from "@/lib/ids";
 import { buildSnippet } from "@/lib/email/parse";
 import { readJsonBody } from "@/lib/http/request";
 import { copyMessageAttachments } from "@/lib/email/attachments";
+import { isOthersDraft } from "@/lib/email/draft-access";
 import { getMailboxAccessLevel } from "@/lib/mailboxes/access";
 import { RequestBodyTooLargeError } from "@/lib/http/errors";
 import type { DraftPayload } from "./types";
@@ -55,12 +56,13 @@ export async function POST(request: Request) {
 	let forwardSourceId: string | null = null;
 	if (input.forwardOfMessageId) {
 		const [source] = await db
-			.select({ id: messages.id, mailboxId: messages.mailboxId })
+			.select({ id: messages.id, userId: messages.userId, status: messages.status, privateDraft: messages.privateDraft, mailboxId: messages.mailboxId })
 			.from(messages)
 			.where(eq(messages.id, input.forwardOfMessageId))
 			.limit(1);
 		const sourceAccess = source?.mailboxId ? await getMailboxAccessLevel(db, user, source.mailboxId) : null;
-		if (!source || !sourceAccess?.canRead) {
+		// Another user's draft in a shared mailbox is not readable by this user, so it cannot be forwarded either.
+		if (!source || !sourceAccess?.canRead || isOthersDraft(source, user.id)) {
 			return NextResponse.json({ error: "Message not found" }, { status: 404 });
 		}
 		forwardSourceId = source.id;
@@ -84,6 +86,7 @@ export async function POST(request: Request) {
 		textBody: text || null,
 		htmlBody: html || null,
 		status: "draft",
+		privateDraft: true,
 		read: true,
 		inReplyTo: input.inReplyTo || null,
 		references: input.references || null,

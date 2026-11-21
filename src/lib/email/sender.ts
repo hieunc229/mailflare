@@ -3,7 +3,7 @@ import { getDb } from "@/db";
 import { domains, mailboxes, users } from "@/db/schema";
 import { getMailboxAccessLevel } from "@/lib/mailboxes/access";
 import { formatEmailAddress, getEmailAddress } from "@/lib/email/address";
-import { getMailboxDomainAddresses } from "@/lib/mailboxes/domain-addresses";
+import { getMailboxAliasForAddress, getMailboxDomainAddresses } from "@/lib/mailboxes/domain-addresses";
 import { resolveMailboxDisplayName } from "@/lib/profile/identity-utils";
 
 export async function getAuthorizedSenderAddress(
@@ -51,8 +51,12 @@ export async function getAuthorizedSenderAddress(
 	}
 	const senderAddress = requestedAddress.toLowerCase();
 	// The primary mailbox sends under the account name; every other mailbox
-	// sends under its own.
-	const senderName = resolveMailboxDisplayName(mailbox, mailbox.ownerEmail, mailbox.ownerName);
+	// sends under its own. A masked alias hides both and sends under its own
+	// label, or the bare address when it has none.
+	const alias = await getMailboxAliasForAddress(db, mailbox.id, senderAddress);
+	const senderName = alias?.masked
+		? alias.label?.trim() || null
+		: resolveMailboxDisplayName(mailbox, mailbox.ownerEmail, mailbox.ownerName);
 
 	if (access.canSendAs) {
 		return {
@@ -61,6 +65,9 @@ export async function getAuthorizedSenderAddress(
 		};
 	}
 
+	// On-behalf sends keep the acting delegate's name for accountability, while
+	// the mailbox side still resolves to the alias label or bare address — a
+	// masked alias never exposes the mailbox owner's name either way.
 	const mailboxName = senderName || senderAddress;
 	return {
 		fromAddr: formatEmailAddress(senderAddress, `${actor.name} on behalf of ${mailboxName}`),

@@ -172,14 +172,46 @@ async function readLimitedBody(response: Response, maxBytes: number): Promise<Ui
 	return body;
 }
 
+/** Parses any textual IPv6 form (compressed, mixed dotted tail, zone id) into 8 groups, or null if malformed. */
+function parseIpv6(input: string): number[] | null {
+	let value = input.split("%", 1)[0];
+	const tail = /(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/.exec(value);
+	if (tail) {
+		const octets = tail.slice(1).map(Number);
+		if (octets.some((octet) => octet > 255)) return null;
+		value = `${value.slice(0, tail.index)}${((octets[0] << 8) | octets[1]).toString(16)}:${((octets[2] << 8) | octets[3]).toString(16)}`;
+	}
+	const halves = value.split("::");
+	if (halves.length > 2) return null;
+	const toGroups = (part: string) => (part === "" ? [] : part.split(":"));
+	const head = toGroups(halves[0]);
+	const rest = halves.length === 2 ? toGroups(halves[1]) : [];
+	const missing = 8 - head.length - rest.length;
+	if (halves.length === 2 ? missing < 1 : missing !== 0) return null;
+	const groups = [...head, ...Array<string>(halves.length === 2 ? missing : 0).fill("0"), ...rest];
+	if (groups.length !== 8 || groups.some((group) => !/^[0-9a-f]{1,4}$/.test(group))) return null;
+	return groups.map((group) => parseInt(group, 16));
+}
+
+const ipv4Of = (high: number, low: number) => `${high >> 8}.${high & 255}.${low >> 8}.${low & 255}`;
+
 export function isPublicAddress(address: string): boolean {
 	const value = address.trim().toLowerCase();
 	if (!value.includes(":")) return isPublicIpv4(value);
-	const mapped = /^::ffff:(\d{1,3}(?:\.\d{1,3}){3})$/.exec(value);
-	if (mapped) return isPublicIpv4(mapped[1]);
-	if (value === "::" || value === "::1") return false;
-	// Unique local (fc00::/7), link-local (fe80::/10) and multicast (ff00::/8).
-	return !/^(f[cd]|fe[89ab]|ff)/.test(value);
+	const g = parseIpv6(value);
+	if (!g) return false;
+	const leadingZeros = (count: number) => g.slice(0, count).every((group) => group === 0);
+	// IPv4-mapped (::ffff:0:0/96) and IPv4-compatible (::/96, which also covers :: and ::1) take the embedded IPv4's verdict.
+	if (leadingZeros(5) && g[5] === 0xffff) return isPublicIpv4(ipv4Of(g[6], g[7]));
+	if (leadingZeros(6)) return isPublicIpv4(ipv4Of(g[6], g[7]));
+	// NAT64 (64:ff9b::/96) and 6to4 (2002::/16) carry an IPv4 address; local-use NAT64 (64:ff9b:1::/48) is never public.
+	if (g[0] === 0x64 && g[1] === 0xff9b) return g[2] === 0 && g[3] === 0 && g[4] === 0 && g[5] === 0 && isPublicIpv4(ipv4Of(g[6], g[7]));
+	if (g[0] === 0x2002) return isPublicIpv4(ipv4Of(g[1], g[2]));
+	// Any other address starting 0000::/8 is reserved.
+	if (g[0] >> 8 === 0) return false;
+	// Unique local (fc00::/7), link-local and deprecated site-local (fe80::/10, fec0::/10) and multicast (ff00::/8).
+	const first = g[0] >> 8;
+	return !(first === 0xfc || first === 0xfd || first === 0xfe || first === 0xff);
 }
 
 async function defaultResolveHost(hostname: string): Promise<string[]> {

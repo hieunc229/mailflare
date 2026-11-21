@@ -44,6 +44,12 @@ export async function PATCH(request: Request, { params }: AdminAccountRouteParam
 	}
 	const canForwardEmail = (await getLicenseEntitlements(env)).canForwardEmail;
 	if (!canForwardEmail && parsed.data.forwardingEmail && parsed.data.forwardingEmail !== account.forwardingEmail) return NextResponse.json({ error: "A Pro or Team license is required for email forwarding" }, { status: 403 });
+	// A forwarding address receives a copy of the account's mail. An API key cannot present the
+	// step-up proof the web UI asks for, so a key may only set it on accounts it manages (the same
+	// authority it already has to reset their password), never on its owner's own account.
+	if (account.id === auth.userId && parsed.data.forwardingEmail !== undefined && parsed.data.forwardingEmail !== account.forwardingEmail) {
+		return NextResponse.json({ error: "Change your own forwarding address from the web app, where it asks you to confirm it is you", code: "verification_required" }, { status: 403 });
+	}
 	try {
 		await updateAccountCredentials(db, id, { name: parsed.data.name, password: parsed.data.password ?? null });
 	} catch (error) {
