@@ -60,6 +60,12 @@ test("From at the start of a later body line is still escaped", async (t) => {
 	assert.equal(splitMboxMessages(mbox).length, 1);
 });
 
+test("a body line that already starts with >From survives export and import unchanged", async (t) => {
+	const body = "Hi,\n>From the archive: quoted line\n>>From deeper\nBye";
+	const [message] = splitMboxMessages(await exportBodies(t, [body]));
+	assert.match(message.replace(/\r\n/g, "\n"), /\n\nHi,\n>From the archive: quoted line\n>>From deeper\nBye$/);
+});
+
 test("another user's draft is left out of the export", async (t) => {
 	const database = new SqliteDatabase(join(outDir, `${crypto.randomUUID()}.sqlite`));
 	t.after(() => database.db.close());
