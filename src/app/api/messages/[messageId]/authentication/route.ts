@@ -5,7 +5,7 @@ import { messages } from "@/db/schema";
 import { getCurrentUser } from "@/lib/auth/cookies";
 import { getEnv } from "@/lib/cloudflare";
 import { getEmailAddress } from "@/lib/email/address";
-import { readSesAuthentication } from "@/lib/email/provider-trace";
+import { isIntakeStorageKey, readStoredAuthentication } from "@/lib/email/provider-trace";
 import { getMailboxAccessLevel } from "@/lib/mailboxes/access";
 import type { MessageAuthenticationResponse } from "@/lib/email/authentication-types";
 import type { MessageAuthenticationRouteParams } from "./types";
@@ -44,10 +44,12 @@ export async function GET(request: Request, { params }: MessageAuthenticationRou
 	// message has no equivalent provider trace.
 	if (message.direction !== "inbound") return unavailable("outbound");
 	if (!message.rawR2Key) return unavailable("not-retained");
+	// The provider trace belongs to messages stored at intake; imported and appended messages are not checked.
+	if (!isIntakeStorageKey(message.rawR2Key)) return unavailable("untrusted");
 
 	const object = await env.BUCKET.get(message.rawR2Key, { range: { offset: 0, length: HEADER_SCAN_BYTES } });
 	if (!object) return unavailable("unavailable");
-	const authentication = readSesAuthentication(await object.arrayBuffer(), getEmailAddress(message.fromAddr));
+	const authentication = readStoredAuthentication(message.rawR2Key, await object.arrayBuffer(), getEmailAddress(message.fromAddr));
 	if (!authentication) return unavailable("untrusted");
 
 	const response: MessageAuthenticationResponse = { available: true, ...authentication };
