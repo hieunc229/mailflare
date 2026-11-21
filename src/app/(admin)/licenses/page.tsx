@@ -1,7 +1,5 @@
-import { getServerTranslator } from "@/lib/i18n/server";
-import { Check, ExternalLink } from "@/components/icons";
+import { Check, ShieldCheck } from "@/components/icons";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import {
   Card,
   CardContent,
@@ -9,75 +7,55 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { LicenseActivation } from "./license-activation";
-import { LICENSE_PLANS } from "./utils";
 
 export default async function LicensesPage() {
-  const t = await getServerTranslator();
+  const activeFeatures = [
+    "Independent Varunya company branding & custom favicon",
+    "Unlimited user accounts & administrator management",
+    "Shared inboxes with granular access delegation",
+    "Inbound and outbound email routing & forwarding",
+    "Multi-host calendar booking & event management",
+    "Cloudflare Email Routing & Resend API delivery",
+    "Full-text search, spam protection & audit logging",
+  ];
+
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl md:text-3xl font-medium text-neutral-900">{t("licenses.title")}</h1>
+        <h1 className="text-2xl md:text-3xl font-medium text-neutral-900">Platform Status & License</h1>
         <p className="mt-2 text-sm text-neutral-500">
-          {t("licenses.description")}
+          Varunya Mail self-hosted deployment information and open-source licensing.
         </p>
       </div>
-      <LicenseActivation>
-      <div className="grid gap-4 md:grid-cols-2">
-        {LICENSE_PLANS.map((plan) => {
-          const Icon = plan.icon;
-          return (
-            <Card
-              key={plan.name}
-              className="rounded-3xl border-0 bg-white p-6 flex flex-col"
-            >
-              <CardHeader className="space-y-4 py-0">
-                <div className="flex items-center justify-between">
-                  <span className="flex h-10 w-10 items-center justify-center rounded-full bg-blue-100 text-blue-700">
-                    <Icon className="h-5 w-5" />
-                  </span>
-                </div>
-                <div className="relative">
-                  <CardTitle>{plan.name}</CardTitle>
-                  <p className="mt-2 text-6xl text-neutral-950 flex">
-                    <span className="text-[12px] mt-2">$</span>
-                    <b>{plan.price}</b>
-                    {plan.originalPrice && (
-                      <span className="absolute right-0 bottom-6 line-through text-base opacity-40">
-                        ${plan.originalPrice}
-                      </span>
-                    )}
-                  </p>
-                </div>
-                <CardDescription>{t(plan.descriptionKey)}</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-3 pt-6 flex flex-col flex-1 min-h-0">
-                {plan.featureKeys.map((feature) => (
-                  <p
-                    key={feature}
-                    className="flex gap-2 text-sm text-neutral-600"
-                  >
-                    <Check className="mt-0.5 h-4 w-4 shrink-0 text-green-600" />
-                    {t(feature)}
-                  </p>
-                ))}
-                <span className="flex-1" />
-                <Button asChild className="mt-4 w-full">
-                  <a
-                    href={plan.checkoutUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                  >
-                    {t("licenses.get", { plan: plan.name })}
-                    <ExternalLink className="h-4 w-4" />
-                  </a>
-                </Button>
-              </CardContent>
-            </Card>
-          );
-        })}
-      </div>
-      </LicenseActivation>
+
+      <Card className="rounded-3xl border-0 bg-white p-6">
+        <CardHeader className="py-0">
+          <div className="flex items-center justify-between">
+            <span className="flex h-11 w-11 items-center justify-center rounded-full bg-green-100 text-green-700">
+              <ShieldCheck className="h-6 w-6" />
+            </span>
+            <Badge variant="outline" className="border-green-300 bg-green-50 text-green-700">
+              Active / Unlimited
+            </Badge>
+          </div>
+          <CardTitle className="mt-4">Varunya Mail — Enterprise Self-Hosted</CardTitle>
+          <CardDescription>
+            Licensed under the GNU Affero General Public License v3.0 (AGPL-3.0). All platform features are unlocked and operating without external commercial license dependencies.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="mt-6 space-y-3 pt-0">
+          <h2 className="text-sm font-medium text-neutral-900">Active Capabilities:</h2>
+          <div className="grid gap-2 sm:grid-cols-2">
+            {activeFeatures.map((feature) => (
+              <p key={feature} className="flex items-center gap-2 text-sm text-neutral-600">
+                <Check className="h-4 w-4 shrink-0 text-green-600" />
+                {feature}
+              </p>
+            ))}
+          </div>
+        </CardContent>
+      </Card>
     </div>
   );
 }
+

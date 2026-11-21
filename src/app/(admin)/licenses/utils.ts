@@ -6,26 +6,7 @@ import { formatUserDate } from "@/lib/time/utils";
 import { LICENSE_STATUS_CHANGED_EVENT } from "@/lib/licenses/constants";
 import type { ActivatableLicensePlan, LicenseAction, LicenseResponse } from "./types";
 
-export const LICENSE_PLANS: LicensePlan[] = [
-	{
-		name: "Pro",
-		price: 29,
-		originalPrice: 39,
-		descriptionKey: "licenses.pro.description",
-		featureKeys: ["licenses.pro.feature1", "licenses.pro.feature2", "licenses.keepVersion"],
-		icon: Sparkles,
-		checkoutUrl: "https://app.paymug.co/buy/mailflare-pro",
-	},
-	{
-		name: "Team",
-		price: 249,
-		originalPrice: 349,
-		descriptionKey: "licenses.team.description",
-		featureKeys: ["licenses.team.feature1", "licenses.team.feature2", "licenses.team.feature3", "licenses.keepVersion"],
-		icon: Building2,
-		checkoutUrl: "https://app.paymug.co/buy/mailflare-team",
-	},
-];
+export const LICENSE_PLANS: LicensePlan[] = [];
 
 export async function loadLicenseStatus(): Promise<NonNullable<LicenseResponse["license"]>> {
 	const response = await authFetch("/api/licenses");
