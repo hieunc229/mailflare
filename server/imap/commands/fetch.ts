@@ -1,0 +1,252 @@
+import type { ParsedCommand } from "imap-handler";
+import { bad, no } from "@/lib/imap/errors";
+import { MimeIndexError, getMessageIndex, readSection, reviveLists, type MimeIndex, type SectionSpec } from "@/lib/imap/fetch";
+import { parseSequenceSet, selectByNumber, selectByUid } from "@/lib/imap/sets";
+import { flagsOf, loadMessageRows, type MessageFlagsRow } from "@/lib/imap/view";
+import type { Completion, ImapConnection } from "../connection";
+import { args, isList, text, type Arg } from "./args";
+
+/**
+ * FETCH and UID FETCH. The message rows come from the selected mailbox only (the
+ * query names the mailbox), and the ENVELOPE, BODYSTRUCTURE and sections come from
+ * the F8-2 index of those rows' messages, so nothing is read for a message that is
+ * not in the folder the access layer opened.
+ */
+type Item =
+	| { kind: "uid" | "flags" | "internaldate" | "size" | "envelope" | "bodystructure" | "body" }
+	| { kind: "section"; label: string; spec: SectionSpec; alias?: string; origin: number | null };
+
+const MACROS: Record<string, string[]> = {
+	ALL: ["FLAGS", "INTERNALDATE", "RFC822.SIZE", "ENVELOPE"],
+	FAST: ["FLAGS", "INTERNALDATE", "RFC822.SIZE"],
+	FULL: ["FLAGS", "INTERNALDATE", "RFC822.SIZE", "ENVELOPE", "BODY"],
+};
+
+const MAX_PART_DEPTH = 64;
+const FIELD_NAME = /^[\x21-\x27\x2a-\x39\x3b-\x5a\x5e-\x7a\x7c\x7e]{1,128}$/;
+const MAX_FIELDS = 64;
+/** Items in one FETCH, as the client wrote them (a macro counts once). */
+const MAX_ITEMS = 64;
+
+/** `HEADER`, `TEXT`, `MIME`, `HEADER.FIELDS`, `HEADER.FIELDS.NOT`, optionally behind a part number such as `1.2.`. */
+function parseSection(node: Arg & { section: Arg[] }): { spec: SectionSpec; label: string } {
+	const [first, second, ...extra] = node.section;
+	if (extra.length) throw bad("The section is not valid");
+	if (first === undefined) return { spec: { part: "", kind: "all" }, label: "" };
+	const word = text(first);
+	if (word === null) throw bad("The section is not valid");
+	const pieces = word.split(".");
+	const numbers: string[] = [];
+	while (pieces.length && /^\d{1,9}$/.test(pieces[0]) && Number(pieces[0]) >= 1) numbers.push(pieces.shift()!);
+	if (numbers.length > MAX_PART_DEPTH) throw bad("The part number is too deep");
+	const part = numbers.join(".");
+	const name = pieces.join(".").toUpperCase();
+	const kinds: Record<string, SectionSpec["kind"]> = { "": "all", HEADER: "header", TEXT: "text", MIME: "mime", "HEADER.FIELDS": "header.fields", "HEADER.FIELDS.NOT": "header.fields.not" };
+	const kind = kinds[name];
+	if (kind === undefined) throw bad("The section is not valid");
+	if (kind === "mime" && !part) throw bad("MIME needs a part number");
+	const prefix = part ? `${part}.` : "";
+	if (kind === "header.fields" || kind === "header.fields.not") {
+		if (!isList(second) || !second.length || second.length > MAX_FIELDS) throw bad("The header field list is not valid");
+		const fields = second.map((field) => text(field));
+		if (fields.some((field) => field === null || !FIELD_NAME.test(field))) throw bad("A header field name is not valid");
+		return { spec: { part, kind, fields: fields as string[] }, label: `${prefix}${name} (${(fields as string[]).join(" ")})` };
+	}
+	if (second !== undefined) throw bad("The section is not valid");
+	return { spec: { part, kind }, label: kind === "all" ? part : `${prefix}${name}` };
+}
+
+function parseItem(node: Arg): Item[] {
+	const word = text(node);
+	if (!node || Array.isArray(node) || word === null) throw bad("A FETCH item is not valid");
+	const name = word.toUpperCase();
+	if (MACROS[name] && !node.section) return MACROS[name].flatMap((item) => parseItem({ type: "ATOM", value: item }));
+	const bare = !node.section && !node.partial;
+	switch (name) {
+		case "UID": case "FLAGS": case "INTERNALDATE": case "ENVELOPE": case "BODYSTRUCTURE":
+			if (bare) return [{ kind: name.toLowerCase() as "uid" }];
+			break;
+		case "RFC822.SIZE": if (bare) return [{ kind: "size" }]; break;
+		case "BODY": if (bare) return [{ kind: "body" }]; break;
+		case "RFC822": if (bare) return [{ kind: "section", label: "RFC822", alias: "RFC822", spec: { part: "", kind: "all" }, origin: null }]; break;
+		case "RFC822.HEADER": if (bare) return [{ kind: "section", label: "RFC822.HEADER", alias: "RFC822.HEADER", spec: { part: "", kind: "header" }, origin: null }]; break;
+		case "RFC822.TEXT": if (bare) return [{ kind: "section", label: "RFC822.TEXT", alias: "RFC822.TEXT", spec: { part: "", kind: "text" }, origin: null }]; break;
+		case "BODY.PEEK": break;
+		default: throw bad("A FETCH item is not supported");
+	}
+	if ((name === "BODY" || name === "BODY.PEEK") && node.section) {
+		const { spec, label } = parseSection(node as Arg & { section: Arg[] });
+		let origin: number | null = null;
+		if (node.partial) {
+			if (node.partial.length !== 2 || node.partial[1] < 1) throw bad("The partial range is not valid");
+			origin = node.partial[0];
+			spec.partial = { offset: node.partial[0], length: node.partial[1] };
+		}
+		return [{ kind: "section", label, spec, origin }];
+	}
+	throw bad("A FETCH item is not supported");
+}
+
+// ---- Responses ----
+
+const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+const two = (value: number) => String(value).padStart(2, "0");
+
+/** `dd-Mon-yyyy hh:mm:ss +0000`, in UTC. */
+export function internalDate(date: Date): string {
+	return `${two(date.getUTCDate())}-${MONTHS[date.getUTCMonth()]}-${date.getUTCFullYear()} ${two(date.getUTCHours())}:${two(date.getUTCMinutes())}:${two(date.getUTCSeconds())} +0000`;
+}
+
+const atom = (value: string) => ({ type: "ATOM" as const, value });
+const raw = (value: string) => ({ type: "TEXT" as const, value });
+const flagList = (flags: string[]) => flags.map(raw);
+
+/** BODY: BODYSTRUCTURE without its extension data (RFC 3501 section 7.4.2). */
+export function withoutExtensions(structure: unknown[]): unknown[] {
+	const marked = (list: unknown[]) => {
+		if (Array.isArray(list[0])) Object.defineProperty(list, "adjacentLists", { value: true });
+		return list;
+	};
+	if (Array.isArray(structure[0])) {
+		const children: unknown[] = [];
+		let at = 0;
+		while (Array.isArray(structure[at])) children.push(withoutExtensions(structure[at++] as unknown[]));
+		return marked([...children, structure[at]]);
+	}
+	const type = String(structure[0]).toLowerCase();
+	const subtype = String(structure[1]).toLowerCase();
+	const count = type === "text" ? 8 : type === "message" && subtype === "rfc822" ? 10 : 7;
+	const basic = structure.slice(0, count);
+	if (count === 10 && Array.isArray(basic[8])) basic[8] = withoutExtensions(basic[8] as unknown[]);
+	return basic;
+}
+
+/** What a message that cannot be indexed is shown as: empty, with a subject that says so. */
+const UNINDEXABLE: MimeIndex = {
+	size: 0,
+	headerSize: 0,
+	envelope: [null, "Message cannot be displayed", null, null, null, null, null, null, null, null],
+	bodystructure: ["TEXT", "PLAIN", ["CHARSET", "us-ascii"], null, null, "7BIT", 0, 0, null, null, null, null],
+	ranges: { "": { span: [0, 0, 0] } },
+};
+
+async function indexOf(c: ImapConnection, id: string): Promise<MimeIndex | null> {
+	try {
+		const index = await getMessageIndex(c.env, id);
+		return index ? { ...index, envelope: reviveLists(index.envelope), bodystructure: reviveLists(index.bodystructure) } : null;
+	} catch (error) {
+		if (error instanceof MimeIndexError) return UNINDEXABLE;
+		throw error;
+	}
+}
+
+async function section(c: ImapConnection, id: string, spec: SectionSpec, unindexable: boolean): Promise<Buffer | null> {
+	if (unindexable) return spec.part === "" ? Buffer.alloc(0) : null;
+	try {
+		const result = await readSection(c.env, id, spec);
+		// A view of the bytes that were read: the literal is sent from this memory, never copied again.
+		return result ? Buffer.from(result.data.buffer, result.data.byteOffset, result.data.byteLength) : null;
+	} catch (error) {
+		if (error instanceof MimeIndexError) return spec.part === "" ? Buffer.alloc(0) : null;
+		throw error;
+	}
+}
+
+/** The most octets a section can hold, from the index alone (the same ranges `readSection` reads). */
+function sectionBound(index: MimeIndex, spec: SectionSpec): number {
+	const entry = index.ranges[spec.part];
+	if (!entry) return 0;
+	const [start, bodyStart, end] = entry.span;
+	const inner = entry.inner;
+	let bound: number;
+	if (spec.part === "") bound = spec.kind === "all" ? index.size : spec.kind === "text" ? end - bodyStart : spec.kind === "mime" ? 0 : bodyStart - start;
+	else if (spec.kind === "all") bound = end - bodyStart;
+	else if (spec.kind === "mime") bound = bodyStart - start;
+	else bound = inner ? (spec.kind === "text" ? inner[2] - inner[1] : inner[1] - inner[0]) : 0;
+	return Math.max(0, spec.partial ? Math.min(bound, spec.partial.length) : bound);
+}
+
+/** Two items that would produce the same response part are the same item. */
+function itemKey(item: Item): string {
+	return item.kind === "section" ? `section ${item.alias ?? item.label} ${item.origin} ${item.spec.partial?.length}` : item.kind;
+}
+
+type Row = { msn: number; uid: number; id: string };
+
+/**
+ * One FETCH response line per message, written as soon as it is built so a large fetch holds one message at a
+ * time. The line is sent in pieces: the text between literals is one write, each literal is written from the
+ * buffer it was read into. `byteBudget` bounds what the sections of the whole command may add up to.
+ */
+async function respond(c: ImapConnection, rows: Row[], items: Item[], uidMode: boolean, byteBudget = Infinity): Promise<void> {
+	const selected = c.selected!;
+	const withUid = uidMode && !items.some((item) => item.kind === "uid") ? [{ kind: "uid" as const }, ...items] : items;
+	const needsIndex = withUid.some((item) => ["size", "envelope", "bodystructure", "body", "section"].includes(item.kind));
+	const sections = withUid.filter((item): item is Item & { kind: "section" } => item.kind === "section");
+	let charged = 0;
+	const pair = (name: string, value: unknown) => c.compile({ tag: "*", command: "X", attributes: [atom(name), value as never] }).slice("* X ".length);
+	for (let at = 0; at < rows.length; at += 90) {
+		const slice = rows.slice(at, at + 90);
+		const found = await loadMessageRows(c.env, selected.mailboxId, slice.map((row) => row.id));
+		for (const row of slice) {
+			const message: MessageFlagsRow | undefined = found.get(row.id);
+			if (!message) continue;
+			const index = needsIndex ? await indexOf(c, row.id) : null;
+			if (needsIndex && index === null) continue;
+			const unindexable = index === UNINDEXABLE;
+			if (sections.length && !unindexable) {
+				charged += sections.reduce((total, item) => total + sectionBound(index!, item.spec), 0);
+				if (charged > byteBudget) throw no("The fetch is too large; fetch fewer messages at once", "LIMIT");
+			}
+			let pending = `* ${row.msn} FETCH (`;
+			let first = true;
+			const add = (text: string) => {
+				pending += first ? text : ` ${text}`;
+				first = false;
+			};
+			for (const item of withUid) {
+				switch (item.kind) {
+					case "uid": add(pair("UID", row.uid)); break;
+					case "flags": add(pair("FLAGS", flagList(flagsOf(message)))); break;
+					case "internaldate": add(pair("INTERNALDATE", internalDate(message.createdAt))); break;
+					case "size": add(pair("RFC822.SIZE", index!.size)); break;
+					case "envelope": add(pair("ENVELOPE", index!.envelope)); break;
+					case "bodystructure": add(pair("BODYSTRUCTURE", index!.bodystructure)); break;
+					case "body": add(pair("BODY", unindexable ? index!.bodystructure : withoutExtensions(index!.bodystructure as unknown[]))); break;
+					case "section": {
+						const data = await section(c, row.id, item.spec, unindexable);
+						const name = item.alias ?? `BODY[${item.label}]${item.origin !== null ? `<${item.origin}>` : ""}`;
+						if (data === null) add(`${name} NIL`);
+						else {
+							add(`${name} {${data.length}}\r\n`);
+							await c.write(Buffer.from(pending, "latin1"));
+							await c.write(data);
+							pending = "";
+						}
+					}
+				}
+			}
+			await c.write(Buffer.from(`${pending})\r\n`, "latin1"));
+		}
+	}
+}
+
+export async function runFetch(c: ImapConnection, command: ParsedCommand, uidMode: boolean): Promise<Completion> {
+	const [setArg, itemsArg, ...extra] = args(command);
+	const ranges = parseSequenceSet(text(setArg) ?? "");
+	if (!ranges || itemsArg === undefined || extra.length) throw bad("FETCH takes a message set and the items to fetch");
+	const requested = isList(itemsArg) ? itemsArg : [itemsArg];
+	if (requested.length > MAX_ITEMS) throw bad("Too many FETCH items");
+	const seen = new Set<string>();
+	const items = requested.flatMap(parseItem).filter((item) => !seen.has(itemKey(item)) && seen.add(itemKey(item)));
+	if (!items.length) throw bad("FETCH needs at least one item");
+	const view = c.selected!.view;
+	const numbers = uidMode ? selectByUid(ranges, view.uids) : selectByNumber(ranges, view.exists);
+	await respond(c, numbers.map((msn) => ({ msn, uid: view.uids[msn - 1], id: view.messageIds[msn - 1] })), items, uidMode, c.fetchByteBudget);
+}
+
+/** Unsolicited `FETCH (UID n FLAGS (...))` for messages whose flags changed. */
+export async function sendFlags(c: ImapConnection, flagged: Array<{ msn: number; uid: number }>): Promise<void> {
+	const view = c.selected!.view;
+	await respond(c, flagged.map(({ msn, uid }) => ({ msn, uid, id: view.messageIds[msn - 1] })), [{ kind: "flags" }, { kind: "uid" }], false);
+}
