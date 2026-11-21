@@ -34,6 +34,9 @@ export type MailboxAlias = {
 	id: string;
 	domainId: string;
 	localPart: string;
+	label: string | null;
+	enabled: boolean;
+	masked: boolean;
 	hostname: string;
 	createdAt: string;
 };

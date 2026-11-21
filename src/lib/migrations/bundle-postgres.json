@@ -389,6 +389,14 @@
         "ALTER TABLE \"users\" ADD COLUMN \"totp_last_step\" bigint;",
         "UPDATE \"jmap_change_floor\" SET \"seq\" = GREATEST(seq, COALESCE((SELECT max(seq) FROM jmap_changes), 0)) WHERE \"id\" = 1;"
       ]
+    },
+    {
+      "name": "0015_masked_aliases.sql",
+      "statements": [
+        "ALTER TABLE \"mailbox_aliases\" ADD COLUMN \"label\" text;",
+        "ALTER TABLE \"mailbox_aliases\" ADD COLUMN \"enabled\" boolean DEFAULT true NOT NULL;",
+        "ALTER TABLE \"mailbox_aliases\" ADD COLUMN \"masked\" boolean DEFAULT false NOT NULL;"
+      ]
     }
   ]
 }

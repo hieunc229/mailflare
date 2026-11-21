@@ -145,6 +145,16 @@ alias records are inserted atomically. If Cloudflare routing fails, the new reco
 are removed and routing changes from that attempt are rolled back, preserving existing
 rules. If cleanup itself fails, the response reports that manual checking is needed.
 
+### Masked addresses ("Hide My Email")
+
+Each mailbox's settings page can also mint **masked** aliases: a random address on an
+active domain with an optional label, created via **Generate masked address**. Sending
+from a masked alias uses the label — or the bare address when it has none — so the
+account and mailbox names never reach the recipient. Replies to mail delivered to a
+masked alias default to replying from it. Toggling an alias off stops its incoming
+mail, including through catch-all rules, and removes it from the sender list until it
+is re-enabled.
+
 ## Sending email
 
 Send email through `POST /api/v1/send`. `to`, `cc` and `bcc` accept either a comma-separated header string or an array of addresses; each entry may carry a display name (`"Maya Chen" <maya@example.net>`). A message can reach up to 50 recipients across the three fields. Attachments are optional and use Base64-encoded content:

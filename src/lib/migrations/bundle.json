@@ -841,6 +841,14 @@
         "ALTER TABLE `users` ADD `totp_last_step` integer;",
         "UPDATE `jmap_change_floor` SET `seq` = max(seq, COALESCE((SELECT max(seq) FROM jmap_changes), 0)) WHERE `id` = 1;"
       ]
+    },
+    {
+      "name": "0091_masked_aliases.sql",
+      "statements": [
+        "ALTER TABLE `mailbox_aliases` ADD `label` text;",
+        "ALTER TABLE `mailbox_aliases` ADD `enabled` integer DEFAULT true NOT NULL;",
+        "ALTER TABLE `mailbox_aliases` ADD `masked` integer DEFAULT false NOT NULL;"
+      ]
     }
   ]
 }
