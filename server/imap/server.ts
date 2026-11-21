@@ -1,7 +1,7 @@
 import { createServer as createPlainServer, type Server as PlainServer, type Socket } from "node:net";
 import { createSecureContext, createServer as createTlsServer, type SecureContext, type Server as TlsServer, type TLSSocket } from "node:tls";
 import { ipBucket } from "@/lib/auth/app-passwords";
-import { DEFAULT_MAX_MESSAGE_SIZE, MAX_APPEND_BUDGET, isLoopbackHost } from "@/lib/imap/config";
+import { APPEND_MEMORY_FACTOR, DEFAULT_MAX_MESSAGE_SIZE, MAX_APPEND_BUDGET, isLoopbackHost } from "@/lib/imap/config";
 import type { CertificateMaterial } from "../runtime/tls-files";
 import { ImapConnection, type ConnectionContext } from "./connection";
 import { Notifier, type RealtimeSource } from "./notifier";
@@ -33,7 +33,7 @@ export type ImapServerOptions = {
 	maxFetchBytes?: number;
 	/** The largest message one APPEND may carry (APPENDLIMIT). */
 	maxMessageSize?: number;
-	/** Octets of APPEND data the whole process may hold at once; over that an APPEND is told to try again. */
+	/** Memory the whole process may spend on APPEND data at once, each message charged `APPEND_MEMORY_FACTOR` times its size; over that an APPEND is told to try again. */
 	appendBudget?: number;
 	pollMs?: number;
 	timeouts?: ConnectionContext["timeouts"];
@@ -83,7 +83,7 @@ export class ImapServer {
 		this.tlsServer?.setSecureContext({ key: material.key, cert: material.cert, minVersion: "TLSv1.2" });
 	}
 
-	/** Octets of APPEND data held right now (for tests and the status line). */
+	/** Memory charged to APPEND data right now: the declared sizes times `APPEND_MEMORY_FACTOR` (for tests and the status line). */
 	get appendBytesInFlight(): number {
 		return this.appendInFlight;
 	}
@@ -113,14 +113,15 @@ export class ImapServer {
 			failureDelayMs: this.options.failureDelayMs ?? 1000,
 			commandsPerSecond: this.options.commandsPerSecond ?? 100,
 			fetchByteBudget: this.options.maxFetchBytes ?? DEFAULT_MAX_FETCH_BYTES,
-			maxMessageSize: Math.min(this.options.maxMessageSize ?? DEFAULT_MAX_MESSAGE_SIZE, this.options.appendBudget ?? MAX_APPEND_BUDGET),
+			maxMessageSize: Math.min(this.options.maxMessageSize ?? DEFAULT_MAX_MESSAGE_SIZE, Math.floor((this.options.appendBudget ?? MAX_APPEND_BUDGET) / APPEND_MEMORY_FACTOR)),
 			reserveAppend: (bytes) => {
-				if (this.appendInFlight + bytes > (this.options.appendBudget ?? MAX_APPEND_BUDGET)) return false;
-				this.appendInFlight += bytes;
+				const cost = bytes * APPEND_MEMORY_FACTOR;
+				if (this.appendInFlight + cost > (this.options.appendBudget ?? MAX_APPEND_BUDGET)) return false;
+				this.appendInFlight += cost;
 				return true;
 			},
 			releaseAppend: (bytes) => {
-				this.appendInFlight = Math.max(0, this.appendInFlight - bytes);
+				this.appendInFlight = Math.max(0, this.appendInFlight - bytes * APPEND_MEMORY_FACTOR);
 			},
 			timeouts: this.options.timeouts,
 		};

@@ -25,6 +25,9 @@ await build({
 			export { openRateLimiter } from "./server/runtime/misc.ts";
 			export { rememberSubmission, clearSubmissionMemory } from "./src/lib/imap/sent-dedupe.ts";
 			export { deleteUnchanged } from "./src/lib/imap/transfer.ts";
+			export { Gate } from "./src/lib/imap/gate.ts";
+			export { appendGate, MAX_CONCURRENT_APPENDS } from "./src/lib/imap/append.ts";
+			export { APPEND_MEMORY_FACTOR } from "./src/lib/imap/config.ts";
 		`,
 		resolveDir: root,
 		sourcefile: "imap-protocol-test-entry.ts",
@@ -39,7 +42,7 @@ await build({
 	alias: { "cloudflare:workers": "./server/runtime/cloudflare-workers.ts" },
 	logLevel: "silent",
 });
-const { ImapServer, deleteUnchanged, rememberSubmission, clearSubmissionMemory, generateAppPassword, clearApiKeyVerificationCache, clearLoginAuditMemory, SqliteDatabase, applyMigrations, openFileBucket, openRateLimiter } = await import(pathToFileURL(join(directory, "entry.mjs")).href);
+const { ImapServer, Gate, appendGate, MAX_CONCURRENT_APPENDS, APPEND_MEMORY_FACTOR, deleteUnchanged, rememberSubmission, clearSubmissionMemory, generateAppPassword, clearApiKeyVerificationCache, clearLoginAuditMemory, SqliteDatabase, applyMigrations, openFileBucket, openRateLimiter } = await import(pathToFileURL(join(directory, "entry.mjs")).href);
 
 // A throwaway certificate for 127.0.0.1 / localhost, made once for the file.
 const keyPath = join(directory, "key.pem");
@@ -787,14 +790,14 @@ test("an APPEND bigger than the limit is refused with [TOOBIG]: before the conti
 });
 
 test("the process-wide budget of in-flight APPEND data refuses the next message as busy and is given back afterwards", async (t) => {
-	const w = await world(t, { maxMessageSize: 1000, appendBudget: 1500 });
+	const w = await world(t, { maxMessageSize: 1000, appendBudget: 9000 });
 	const key = await w.addKey({ id: "k1" });
 	const first = await loggedIn(w, key);
 	const second = await loggedIn(w, key);
 	t.after(() => { first.end(); second.end(); });
 	first.write("a1 APPEND INBOX {1000}\r\n");
 	await first.expect("+ Ready\r\n");
-	assert.equal(w.server.appendBytesInFlight, 1000);
+	assert.equal(w.server.appendBytesInFlight, 1000 * APPEND_MEMORY_FACTOR);
 	second.write("b1 APPEND INBOX {1000}\r\n");
 	const busy = await second.finish("b1");
 	assert.deepEqual([busy.status, busy.detail], ["NO", "[LIMIT] Server busy, try again"]);
@@ -806,16 +809,112 @@ test("the process-wide budget of in-flight APPEND data refuses the next message 
 	assert.equal((await append(second, "INBOX", raw)).status, "OK", "the budget is free again");
 });
 
+test("an APPEND is charged several times its size, so the largest message is a fraction of the budget", async (t) => {
+	const w = await world(t, { appendBudget: 6000 });
+	const key = await w.addKey({ id: "k1" });
+	const client = await loggedIn(w, key);
+	t.after(() => client.end());
+	assert.equal(APPEND_MEMORY_FACTOR, 6);
+	assert.match((await client.cmd("CAPABILITY")).text, /\bAPPENDLIMIT=1000\b/);
+	const refused = await append(client, "INBOX", mail({ body: "z".repeat(1500) }), { plus: true });
+	assert.deepEqual([refused.status, refused.detail.split("]")[0]], ["NO", "[TOOBIG"]);
+	const raw = mail({ body: "y".repeat(1000 - mail({ body: "" }).length) });
+	assert.equal(Buffer.byteLength(raw, "latin1"), 1000);
+	assert.equal((await append(client, "INBOX", raw)).status, "OK", "a message of the limit fits when nothing else is held");
+	assert.equal(w.server.appendBytesInFlight, 0);
+});
+
+test("the gate runs a limited number of jobs, queues the others in order, refuses beyond the queue and frees a place after an error", async () => {
+	const gate = new Gate(2, 3);
+	const releases = [];
+	const started = [];
+	let running = 0;
+	let most = 0;
+	const job = (name) => gate.run(() => new Promise((resolve, reject) => {
+		started.push(name);
+		running += 1;
+		most = Math.max(most, running);
+		releases.push(() => {
+			running -= 1;
+			if (name === "bad") reject(new Error("failed"));
+			else resolve(name);
+		});
+	}));
+	const all = ["a", "b", "bad", "d", "e"].map((name) => job(name).then(() => "fulfilled", () => "rejected"));
+	assert.deepEqual([gate.running, gate.queued, started], [2, 3, ["a", "b"]]);
+	await assert.rejects(job("f"), { status: "NO", code: "LIMIT" });
+	releases.shift()();
+	await new Promise((resolve) => setImmediate(resolve));
+	assert.deepEqual(started, ["a", "b", "bad"], "the first waiting job takes the place");
+	releases.shift()();
+	releases.shift()();
+	await new Promise((resolve) => setImmediate(resolve));
+	assert.deepEqual(started, ["a", "b", "bad", "d", "e"]);
+	releases.shift()();
+	releases.shift()();
+	assert.deepEqual(await Promise.all(all), ["fulfilled", "fulfilled", "rejected", "fulfilled", "fulfilled"]);
+	assert.deepEqual([most, gate.running, gate.queued], [2, 0, 0]);
+	assert.equal(await gate.run(async () => "after"), "after");
+});
+
+test("APPEND parses and stores through a gate of two: a third message waits for a place and is then stored", async (t) => {
+	assert.equal(MAX_CONCURRENT_APPENDS, 2);
+	const w = await world(t);
+	const key = await w.addKey({ id: "k1" });
+	const client = await loggedIn(w, key);
+	t.after(() => client.end());
+	const held = [];
+	const holds = Array.from({ length: MAX_CONCURRENT_APPENDS }, () => appendGate.run(() => new Promise((resolve) => held.push(resolve))));
+	client.write(`g1 APPEND INBOX {${Buffer.byteLength(mail())}+}\r\n${mail()}\r\n`);
+	for (let waited = 0; appendGate.queued !== 1 && waited < 5000; waited += 20) await new Promise((resolve) => setTimeout(resolve, 20));
+	assert.equal(appendGate.queued, 1, "the APPEND waits for a place");
+	assert.equal(w.sqlite.prepare("SELECT count(*) AS n FROM messages").get().n, 0);
+	held.forEach((release) => release());
+	await Promise.all(holds);
+	assert.equal((await client.finish("g1", 8000)).status, "OK");
+	assert.equal(w.sqlite.prepare("SELECT count(*) AS n FROM messages").get().n, 1);
+});
+
 test("a client that goes away in the middle of an APPEND gives its share of the budget back", async (t) => {
-	const w = await world(t, { maxMessageSize: 1000, appendBudget: 1500 });
+	const w = await world(t, { maxMessageSize: 1000, appendBudget: 9000 });
 	const key = await w.addKey({ id: "k1" });
 	const client = await loggedIn(w, key);
 	client.write("a1 APPEND INBOX {1000}\r\n");
 	await client.expect("+ Ready\r\n");
 	client.write("partial");
-	assert.equal(w.server.appendBytesInFlight, 1000);
+	assert.equal(w.server.appendBytesInFlight, 1000 * APPEND_MEMORY_FACTOR);
 	client.end();
 	for (let waited = 0; w.server.appendBytesInFlight !== 0 && waited < 3000; waited += 50) await new Promise((resolve) => setTimeout(resolve, 50));
+	assert.equal(w.server.appendBytesInFlight, 0);
+});
+
+test("an APPEND that waits behind unread output gives its share of the budget back when the client goes away", async (t) => {
+	const w = await world(t, { maxMessageSize: 1000, appendBudget: 9000 });
+	const key = await w.addKey({ id: "k1" });
+	const client = await loggedIn(w, key);
+	// The client has stopped reading: more output is queued than the next command may wait behind.
+	const [connection] = w.server.connections;
+	Object.defineProperty(connection.socket, "writableLength", { configurable: true, get: () => 2 * 1024 * 1024 });
+	client.write(`a1 APPEND INBOX {${Buffer.byteLength(mail())}+}\r\n${mail()}\r\n`);
+	for (let waited = 0; w.server.appendBytesInFlight === 0 && waited < 3000; waited += 20) await new Promise((resolve) => setTimeout(resolve, 20));
+	assert.equal(w.server.appendBytesInFlight, Buffer.byteLength(mail()) * APPEND_MEMORY_FACTOR);
+	await new Promise((resolve) => setTimeout(resolve, 100));
+	client.end();
+	for (let waited = 0; w.server.appendBytesInFlight !== 0 && waited < 3000; waited += 50) await new Promise((resolve) => setTimeout(resolve, 50));
+	assert.equal(w.server.appendBytesInFlight, 0);
+	assert.equal(w.sqlite.prepare("SELECT count(*) AS n FROM messages").get().n, 0);
+});
+
+test("an APPEND sent instead of DONE during IDLE gives its share of the budget back", async (t) => {
+	const w = await world(t, { maxMessageSize: 1000, appendBudget: 9000 });
+	const key = await w.addKey({ id: "k1" });
+	const client = await loggedIn(w, key);
+	t.after(() => client.end());
+	await client.cmd("SELECT INBOX");
+	client.write("i1 IDLE\r\n");
+	await client.expect("+ idling\r\n");
+	client.write(`a1 APPEND INBOX {${Buffer.byteLength(mail())}+}\r\n${mail()}\r\n`);
+	assert.equal((await client.finish("i1")).status, "BAD");
 	assert.equal(w.server.appendBytesInFlight, 0);
 });
 

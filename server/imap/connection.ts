@@ -334,9 +334,14 @@ export class ImapConnection {
 					continue;
 				}
 				this.consecutiveRejects = 0;
-				await this.waitForOutput();
-				if (this.closed) return;
-				await this.execute(event.text, event.body, event.reserved);
+				try {
+					await this.waitForOutput();
+					if (this.closed) return;
+					await this.execute(event.text, event.body);
+				} finally {
+					// The budget held for an APPEND's bytes is returned however the command ended, or if it never ran.
+					if (event.reserved) this.context.releaseAppend(event.reserved);
+				}
 				if (this.closing) return;
 			}
 		} catch (error) {
@@ -359,16 +364,7 @@ export class ImapConnection {
 		this.lastRefill = Date.now();
 	}
 
-	private async execute(text: string, body?: Buffer, reserved = 0): Promise<void> {
-		try {
-			await this.executeCommand(text, body);
-		} finally {
-			// The budget held for an APPEND's bytes is returned however the command ended.
-			if (reserved) this.context.releaseAppend(reserved);
-		}
-	}
-
-	private async executeCommand(text: string, body?: Buffer): Promise<void> {
+	private async execute(text: string, body?: Buffer): Promise<void> {
 		await this.takeToken();
 		let command: ParsedCommand;
 		try {
@@ -745,6 +741,8 @@ export class ImapConnection {
 			for (;;) {
 				const event = this.framer.next();
 				if (event?.type === "command") {
+					// An APPEND sent instead of DONE is not run; what the budget holds for it goes back.
+					if (event.reserved) this.context.releaseAppend(event.reserved);
 					if (event.text.trim().toUpperCase() === "DONE") return { text: "IDLE terminated" };
 					throw bad("Expected DONE");
 				}
