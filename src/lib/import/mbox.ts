@@ -5,7 +5,8 @@ function trimTrailingLineBreaks(value: string): string {
 }
 
 function unescapeMboxBody(value: string): string {
-	return value.replace(/\n>From /g, "\nFrom ");
+	// mboxrd: drop one ">" from every quoted ">*From " line, matching the export.
+	return value.replace(/\n>(>*From )/g, "\n$1");
 }
 
 export function splitMboxMessages(content: string): string[] {

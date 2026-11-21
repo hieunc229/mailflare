@@ -4,6 +4,7 @@ import { messageAttachments, messages } from "@/db/schema";
 import { newId } from "@/lib/ids";
 import { assessAttachmentRisk, inspectZipDirectory, locateZipDirectory, mergeRisks, type AttachmentRisk } from "@/lib/email/attachment-risk";
 import { truncateUtf8 } from "@/lib/email/inbound-limits";
+import { isOthersDraft } from "@/lib/email/draft-access";
 import { getMailboxAccessLevel } from "@/lib/mailboxes/access";
 import type { SessionUser } from "@/lib/auth/types";
 import type {
@@ -247,7 +248,7 @@ export async function getAttachmentForUser(
 ) {
 	const db = getDb(env);
 	const [message] = await db.select().from(messages).where(eq(messages.id, messageId)).limit(1);
-	if (!message) return null;
+	if (!message || isOthersDraft(message, user.id)) return null;
 
 	if (message.mailboxId) {
 		const access = await getMailboxAccessLevel(db, user, message.mailboxId);

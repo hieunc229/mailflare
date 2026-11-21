@@ -4,6 +4,7 @@ import { getDb } from "@/db";
 import { schemaDialect } from "@/db/dialect";
 import { folders, messages } from "@/db/schema";
 import type { SessionUser } from "@/lib/auth/types";
+import { isOthersDraft } from "@/lib/email/draft-access";
 import { createAuditLogs } from "@/lib/mailboxes/audit";
 import { getMailboxAccessLevel } from "@/lib/mailboxes/access";
 import type { MailboxAccessLevel } from "@/lib/mailboxes/types";
@@ -45,7 +46,7 @@ export class MessageActionError extends Error {
 	}
 }
 
-type LoadedTarget = MessageActionTarget & { mailboxId: string | null };
+type LoadedTarget = MessageActionTarget & { mailboxId: string | null; userId: string | null; privateDraft: boolean };
 
 type PlannedUpdate = {
 	id: string;
@@ -58,8 +59,10 @@ type PlannedUpdate = {
 function selectTargetChunk(db: AppDatabase, chunk: string[]) {
 	return db.select({
 		id: messages.id,
+		userId: messages.userId,
 		mailboxId: messages.mailboxId,
 		direction: messages.direction,
+		privateDraft: messages.privateDraft,
 		status: messages.status,
 		read: messages.read,
 		starred: messages.starred,
@@ -284,7 +287,8 @@ export async function applyMessageActionForUser(
 
 	for (const row of rows) {
 		seen.add(row.id);
-		if (!row.mailboxId) {
+		// Another user's draft is invisible to this user: report it exactly like a missing message.
+		if (!row.mailboxId || isOthersDraft(row, user.id)) {
 			skipped.push({ id: row.id, reason: "not_found" });
 			continue;
 		}
@@ -460,7 +464,7 @@ async function performUndoMessageAction(
 
 	for (const record of records) {
 		const current = byId.get(record.id);
-		if (!current) {
+		if (!current || isOthersDraft(current, user.id)) {
 			skipped.push({ id: record.id, reason: "not_found" });
 			continue;
 		}

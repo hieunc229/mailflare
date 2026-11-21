@@ -7,7 +7,8 @@ import type { ParsedSearchQuery } from "./types";
 
 /** `!` is the escape character because it needs no escaping itself in either SQL string syntax. */
 const likePattern = (term: string) => `%${term.toLowerCase().replace(/[!%_]/g, "!$&")}%`;
-const contains = (column: SQL | AnyColumn, term: string) => sql`lower(${column}) like ${likePattern(term)} escape '!'`;
+/** A NULL column counts as empty text: otherwise `NOT (a OR b)` is NULL and a negated term hides the row. */
+const contains = (column: SQL | AnyColumn, term: string) => sql`coalesce(lower(${column}), '') like ${likePattern(term)} escape '!'`;
 
 /**
  * Text search for databases without FTS5 (PostgreSQL, MySQL): every term must appear as a substring of the

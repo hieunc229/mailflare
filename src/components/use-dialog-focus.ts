@@ -11,6 +11,11 @@ export function getFocusable(container: HTMLElement): HTMLElement[] {
 	return [...container.querySelectorAll<HTMLElement>(FOCUSABLE)].filter((element) => element.offsetParent !== null || element === document.activeElement);
 }
 
+/** True when the event came from a different open dialog (such as a portaled confirm), which handles its own Tab. */
+export function isInsideOtherDialog(root: HTMLElement, target: EventTarget | null): boolean {
+	return target instanceof Element && !root.contains(target) && !!target.closest('[role="dialog"], [role="alertdialog"]');
+}
+
 export function useDialogFocus(container: RefObject<HTMLElement | null>, initialFocus?: RefObject<HTMLElement | null>) {
 	const [opener] = useState(() => (typeof document !== "undefined" && document.activeElement instanceof HTMLElement ? document.activeElement : null));
 
@@ -19,7 +24,7 @@ export function useDialogFocus(container: RefObject<HTMLElement | null>, initial
 		(initialFocus?.current ?? (root ? getFocusable(root)[0] : null) ?? root)?.focus();
 
 		function onKeyDown(event: KeyboardEvent) {
-			if (event.key !== "Tab" || !root) return;
+			if (event.key !== "Tab" || !root || isInsideOtherDialog(root, event.target)) return;
 			const focusable = getFocusable(root);
 			if (focusable.length === 0) {
 				event.preventDefault();

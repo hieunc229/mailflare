@@ -1,4 +1,4 @@
-import { and, eq } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import type { AppDatabase } from "@/db";
 import { domains, mailboxAccess, mailboxes, users } from "@/db/schema";
 import { getAccountStatus } from "@/lib/accounts/deletion-utils";
@@ -37,6 +37,26 @@ export async function getMailboxAccessLevel(
 	if (delegatedAccess) return buildAccess(mailbox, delegatedAccess.permission, false);
 
 	return null;
+}
+
+/** Enabled users who may send for the mailbox: its owner plus, on a shared mailbox, anyone granted send_on_behalf or more. */
+export async function listMailboxSenders(db: AppDatabase, mailbox: Pick<MailboxAccessLevel["mailbox"], "id" | "userId" | "type">) {
+	const ids = new Set([mailbox.userId]);
+	if (mailbox.type === "shared" && (await isTeamMailboxSharingEnabled(db))) {
+		const grants = await db
+			.select({ userId: mailboxAccess.userId })
+			.from(mailboxAccess)
+			.where(and(eq(mailboxAccess.mailboxId, mailbox.id), inArray(mailboxAccess.permission, ["send_on_behalf", "send_as", "full_access"])));
+		for (const grant of grants) ids.add(grant.userId);
+	}
+	const all = [...ids];
+	const senders: { id: string; name: string; email: string }[] = [];
+	// D1 allows at most 100 bound parameters per statement.
+	for (let index = 0; index < all.length; index += 90) {
+		const rows = await db.select({ id: users.id, name: users.name, email: users.email, disabled: users.disabled }).from(users).where(inArray(users.id, all.slice(index, index + 90)));
+		for (const { id, name, email, disabled } of rows) if (!disabled) senders.push({ id, name, email });
+	}
+	return senders;
 }
 
 export async function listAccessibleMailboxes(db: AppDatabase, user: Pick<SessionUser, "id" | "email" | "role">) {

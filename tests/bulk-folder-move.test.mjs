@@ -21,9 +21,10 @@ await build({
 });
 const { canMoveToFolder } = await import(pathToFileURL(join(outDir, "entry.mjs")).href);
 
-test("a bulk folder move only takes received mail from the folder's own mailbox", () => {
-	assert.equal(canMoveToFolder({ mailboxId: "A", direction: "inbound" }, "A"), true);
-	assert.equal(canMoveToFolder({ mailboxId: "B", direction: "inbound" }, "A"), false);
-	assert.equal(canMoveToFolder({ mailboxId: "A", direction: "outbound" }, "A"), false);
-	assert.equal(canMoveToFolder({ mailboxId: null, direction: "inbound" }, "A"), false);
+test("a bulk folder move takes mail from the folder's own mailbox, but never drafts", () => {
+	assert.equal(canMoveToFolder({ mailboxId: "A", status: "received" }, "A"), true);
+	assert.equal(canMoveToFolder({ mailboxId: "A", status: "sent" }, "A"), true);
+	assert.equal(canMoveToFolder({ mailboxId: "B", status: "received" }, "A"), false);
+	assert.equal(canMoveToFolder({ mailboxId: "A", status: "draft" }, "A"), false);
+	assert.equal(canMoveToFolder({ mailboxId: null, status: "received" }, "A"), false);
 });

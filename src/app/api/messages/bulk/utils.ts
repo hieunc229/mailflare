@@ -42,7 +42,7 @@ export function isPermanentDeleteFolder(folder: unknown): folder is PermanentDel
 	return folder === "trash" || folder === "spam";
 }
 
-/** Moving into a folder only applies to received mail already in that folder's mailbox, never sent mail, drafts or another mailbox's mail. */
-export function canMoveToFolder(message: { mailboxId: string | null; direction: string | null }, folderMailboxId: string): boolean {
-	return message.mailboxId === folderMailboxId && message.direction === "inbound";
+/** Moving into a folder only applies to mail already in that folder's mailbox, and never to drafts (they stay private to their author). */
+export function canMoveToFolder(message: { mailboxId: string | null; status?: string | null }, folderMailboxId: string): boolean {
+	return message.mailboxId === folderMailboxId && message.status !== "draft";
 }

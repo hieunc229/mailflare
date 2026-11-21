@@ -1,9 +1,10 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useLanguage } from "@/components/language-provider";
 import { authFetch } from "@/lib/auth/client";
 import { formatUserDate } from "@/lib/time/utils";
+import { useDialogFocus } from "@/components/use-dialog-focus";
 import { htmlToPlainText } from "@/components/compose/rich-text-utils";
 import type { SendReviewProps } from "./send-review-types";
 
@@ -20,6 +21,10 @@ export function SendReview({ approvalId, snapshot, unfamiliarRecipients: provide
 		}).catch(() => undefined);
 	}, [approvalId, provided]);
 	const [busy, setBusy] = useState(false);
+	const dialogRef = useRef<HTMLDivElement>(null);
+	const cancelRef = useRef<HTMLButtonElement>(null);
+	// Start on Cancel (or the dialog itself), never on the irreversible Confirm.
+	useDialogFocus(dialogRef, onClose ? cancelRef : dialogRef);
 	const [error, setError] = useState<string | null>(null);
 	async function confirm() {
 		setBusy(true);
@@ -33,7 +38,7 @@ export function SendReview({ approvalId, snapshot, unfamiliarRecipients: provide
 		} catch (cause) { setError(cause instanceof Error ? cause.message : t("agent.review.couldNotSend")); }
 		finally { setBusy(false); }
 	}
-	return <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/60 p-4 dark:bg-black/70" role="dialog" aria-modal="true" aria-label={t("agent.review.dialog")}>
+	return <div ref={dialogRef} tabIndex={-1} onKeyDown={(event) => { if (event.key === "Escape" && onClose && !busy) { event.stopPropagation(); onClose(); } }} className="fixed inset-0 z-[70] flex outline-none items-center justify-center bg-black/60 p-4 dark:bg-black/70" role="dialog" aria-modal="true" aria-label={t("agent.review.dialog")}>
 		<div className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-xl bg-white p-5 shadow-2xl">
 			<h2 className="text-lg font-semibold">{snapshot.scheduledAt ? t("agent.review.reviewSchedule") : t("agent.review.reviewSend")}</h2>
 			<p className="mt-1 text-sm text-neutral-500">{snapshot.scheduledAt ? t("agent.review.confirmScheduled") : t("agent.review.confirmDelivered")}</p>
@@ -51,7 +56,7 @@ export function SendReview({ approvalId, snapshot, unfamiliarRecipients: provide
 			{snapshot.attachments.length > 0 && <p className="mt-3 text-sm">{t("agent.review.attachments", { list: snapshot.attachments.map((item) => `${item.filename} (${Math.max(1, Math.round(item.size / 1024))} KB)`).join(", ") })}</p>}
 			{error && <p role="alert" className="mt-3 text-sm text-red-600">{error}</p>}
 			<div className="mt-5 flex justify-end gap-3">
-				{onClose && <button type="button" className="rounded-lg border px-4 py-2" onClick={onClose} disabled={busy}>{t("common.cancel")}</button>}
+				{onClose && <button ref={cancelRef} type="button" className="rounded-lg border px-4 py-2" onClick={onClose} disabled={busy}>{t("common.cancel")}</button>}
 				<button type="button" className="rounded-lg bg-blue-600 px-4 py-2 font-medium text-white disabled:opacity-50" onClick={() => void confirm()} disabled={busy}>{busy ? snapshot.scheduledAt ? t("agent.review.scheduling") : t("agent.review.sending") : snapshot.scheduledAt ? t("agent.review.confirmSchedule") : t("agent.review.confirmSend")}</button>
 			</div>
 		</div>

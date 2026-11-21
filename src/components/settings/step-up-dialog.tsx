@@ -98,7 +98,7 @@ export function StepUpDialog({
 			<DialogContent className="sm:max-w-[440px]">
 				<DialogHeader>
 					{step && step.total > 1 && (
-						<p aria-live="polite" className="text-xs font-medium uppercase tracking-wide text-neutral-400">
+						<p aria-live="polite" className="text-xs font-medium uppercase tracking-wide text-neutral-500">
 							{t("passkey.stepOf", { current: step.current, total: step.total })}
 						</p>
 					)}
@@ -116,7 +116,7 @@ export function StepUpDialog({
 							{t("passkey.verifyHint")}
 						</p>
 						{passwordPathAllowed && (
-							<p className="text-center text-xs uppercase tracking-wide text-neutral-400">{t("passkey.or")}</p>
+							<p className="text-center text-xs uppercase tracking-wide text-neutral-500">{t("passkey.or")}</p>
 						)}
 					</div>
 				)}

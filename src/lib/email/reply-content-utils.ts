@@ -9,11 +9,35 @@ import { normalizeEmailAddress } from "./address";
 const ORIGINAL_MESSAGE_RE = /^-{2,}\s*Original Message\s*-{2,}$/i;
 const UNDERSCORE_SEPARATOR_RE = /^_{8,}$/;
 const WROTE_RE = /^On\s+(.+?)\s+wrote:\s*$/i;
+const MAX_WROTE_LINE_LENGTH = 400;
+const MAX_QUOTE_DEPTH = 8;
 const HEADER_RE = /^(From|To|Cc|Subject|Date|Sent):\s*(.*)$/i;
+
+// Quoted content is split recursively; the counter bounds nesting so hostile input cannot overflow the stack.
+// The split is synchronous, so a module-level counter is safe.
+let quoteDepth = 0;
+
+function isWroteLine(line: string): boolean {
+	const trimmed = line.trim();
+	return trimmed.length <= MAX_WROTE_LINE_LENGTH && WROTE_RE.test(trimmed);
+}
 
 export function splitRepliedEmailContent(
 	content: string | null | undefined,
 	options: SplitReplyContentOptions = {},
+): ReplyContentParts {
+	if (quoteDepth >= MAX_QUOTE_DEPTH) return { latestContent: normalizeContent(content).trim(), quotedContent: [] };
+	quoteDepth += 1;
+	try {
+		return splitReplied(content, options);
+	} finally {
+		quoteDepth -= 1;
+	}
+}
+
+function splitReplied(
+	content: string | null | undefined,
+	options: SplitReplyContentOptions,
 ): ReplyContentParts {
 	const lines = normalizeContent(content).split("\n");
 	const originalMessageIndex = lines.findIndex((line) => ORIGINAL_MESSAGE_RE.test(line.trim()));
@@ -26,7 +50,7 @@ export function splitRepliedEmailContent(
 		return splitSeparatorQuotedContent(lines, underscoreSeparatorIndex, options);
 	}
 
-	const wroteIndex = lines.findIndex((line) => WROTE_RE.test(line.trim()));
+	const wroteIndex = lines.findIndex(isWroteLine);
 	if (wroteIndex >= 0) {
 		const markerLine = lines[wroteIndex]?.trim() ?? "";
 		const quotedLines = stripSingleQuotePrefix(lines.slice(wroteIndex + 1));

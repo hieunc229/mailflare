@@ -243,7 +243,7 @@ export function PasskeySettings() {
 										{" · "}
 										{passkey.backedUp ? t("passkey.backedUp") : t("passkey.deviceOnly")}
 									</p>
-									<p className="mt-0.5 text-xs text-neutral-400">{t("passkey.createdAt", { date: new Date(passkey.createdAt).toLocaleDateString() })}</p>
+									<p className="mt-0.5 text-xs text-neutral-500">{t("passkey.createdAt", { date: new Date(passkey.createdAt).toLocaleDateString() })}</p>
 								</div>
 							</div>
 							<div className="flex shrink-0 items-center gap-1">

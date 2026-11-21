@@ -1,11 +1,12 @@
 import { NextResponse } from "next/server";
 import { saveAutoUpdateSettings } from "@/lib/update/auto-update";
+import { hasValidSessionMutationOrigin } from "@/lib/auth/origin";
 import { authorizeAdminRequest } from "./utils";
 
 export async function PATCH(request: Request) {
 	const authorization = await authorizeAdminRequest(request);
 	if ("error" in authorization) return authorization.error;
-	if (request.headers.get("Origin") !== new URL(request.url).origin) {
+	if (!hasValidSessionMutationOrigin(request)) {
 		return NextResponse.json({ error: "Invalid request origin" }, { status: 403 });
 	}
 

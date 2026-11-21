@@ -114,6 +114,8 @@ export async function fetchManagedAccount(accountId: string): Promise<ManagedAcc
 export async function saveManagedAccount(account: ManagedAccount, stepUpToken?: string): Promise<void> {
 	const response = await authFetch(`/api/accounts/${account.id}`, {
 		method: "PATCH",
+		// With a proof attached, a 401 means the proof was refused, not that the session ended.
+		redirectOnUnauthorized: !stepUpToken,
 		headers: { "Content-Type": "application/json" },
 		body: JSON.stringify({
 			name: account.name,

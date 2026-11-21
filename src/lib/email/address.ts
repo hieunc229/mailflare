@@ -18,7 +18,8 @@ export function parseEmailAddressParts(value: string): EmailAddressParts {
 	const trimmed = value.trim();
 	// A quoted display name may contain backslash-escaped quotes and
 	// backslashes, as written by formatEmailAddress (`"Maya \"MJ\" Chen"`).
-	const headerMatch = trimmed.match(/^(?:"((?:[^"\\]|\\.)*)"|([^<"]+))\s*<([^>]+)>$/);
+	// The name is optional: `<bob@example.com>` is a valid address on its own.
+	const headerMatch = trimmed.match(/^(?:"((?:[^"\\]|\\.)*)"|([^<"]+))?\s*<([^>]+)>$/);
 
 	if (headerMatch) {
 		const quotedName = headerMatch[1]?.replace(/\\(.)/g, "$1");
@@ -119,6 +120,12 @@ export function getEmailAddressList(value: string | null | undefined): string[] 
 		result.push(address);
 	}
 	return result;
+}
+
+/** True when `address` is exactly one of the addresses in the header `value` (case-insensitive, never a substring). */
+export function addressListIncludes(value: string | null | undefined, address: string): boolean {
+	const wanted = normalizeEmailAddress(address);
+	return Boolean(wanted) && getEmailAddressList(value).includes(wanted);
 }
 
 export function joinEmailAddressList(values: string[]): string {

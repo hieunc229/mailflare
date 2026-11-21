@@ -4,7 +4,7 @@ import { getDb } from "@/db";
 import { agentJobs, mailboxAgentSettings, users } from "@/db/schema";
 import { getEnv } from "@/lib/cloudflare";
 import { getCurrentUser } from "@/lib/auth/cookies";
-import { getMailboxAccessLevel } from "@/lib/mailboxes/access";
+import { getMailboxAccessLevel, listMailboxSenders } from "@/lib/mailboxes/access";
 import { getAgentProviderPublicConfig } from "@/lib/agent/provider";
 import { isPrimaryAdmin } from "@/lib/auth/admin";
 import { hasValidSessionMutationOrigin } from "@/lib/auth/origin";
@@ -23,8 +23,7 @@ export async function GET(request: Request) {
 	const [settings] = await db.select().from(mailboxAgentSettings).where(eq(mailboxAgentSettings.mailboxId, mailboxId)).limit(1);
 	const reviewers: { id: string; name: string; email: string }[] = [];
 	if (access.canManage) {
-		const candidates = await db.select({ id: users.id, name: users.name, email: users.email, disabled: users.disabled }).from(users).limit(200);
-		for (const candidate of candidates) if (!candidate.disabled && (await getMailboxAccessLevel(db, { id: candidate.id, role: "user" }, mailboxId))?.canSendOnBehalf) reviewers.push({ id: candidate.id, name: candidate.name, email: candidate.email });
+		reviewers.push(...(await listMailboxSenders(db, access.mailbox)));
 	}
 	const agentProvider = await getAgentProviderPublicConfig(env);
 	const provider = agentProvider.configured ? { kind: agentProvider.provider === "cloudflare" ? "Cloudflare Workers AI" : agentProvider.preset === "custom" ? "OpenAI-compatible API" : agentProvider.preset, model: agentProvider.model } : null;
