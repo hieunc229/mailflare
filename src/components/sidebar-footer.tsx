@@ -38,16 +38,28 @@ export function SidebarFooter() {
 export function PoweredBy({ className = "px-1" }: { className?: string }) {
 	const { t } = useLanguage();
 	return (
-      <p className={`${className} text-[11px] text-neutral-500`}>
-        {t("navigation.poweredBy")}{" "}
-        <a
-          href={`https://mailflare.co/?ref=${typeof window !== "undefined" ? location.hostname : ""}&v=${packageJson.version}`}
-          target="_blank"
-          className="hover:underline text-neutral-500"
-          rel="noreferrer"
-        >
-          Mailflare v{packageJson.version}
-        </a>
-      </p>
+      <div className={`${className} flex flex-col gap-0.5 text-[11px] text-neutral-500`}>
+        <p>
+          {t("navigation.poweredBy")}{" "}
+          <a
+            href={`https://mailflare.co/?ref=${typeof window !== "undefined" ? location.hostname : ""}&v=${packageJson.version}`}
+            target="_blank"
+            className="hover:underline text-neutral-500"
+            rel="noreferrer"
+          >
+            Mailflare v{packageJson.version}
+          </a>
+        </p>
+        <p>
+          <a
+            href="https://github.com/Bhuvan2402-bhuvan/mailflare"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-neutral-400 hover:text-neutral-600 hover:underline transition-colors"
+          >
+            Source Code (AGPL-3.0)
+          </a>
+        </p>
+      </div>
 	);
 }
