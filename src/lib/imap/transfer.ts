@@ -1,7 +1,8 @@
 import { and, eq, inArray, isNull } from "drizzle-orm";
 import { getDb } from "@/db";
-import { imapMessageFlags, messages } from "@/db/schema";
+import { imapMessageFlags, messageAttachments, messages } from "@/db/schema";
 import { copyMessageAttachments } from "@/lib/email/attachments";
+import { deleteUnreferencedObjects } from "@/lib/drive/shared-objects";
 import { deleteMessageWithObjects } from "@/lib/email/message-cleanup";
 import { newId } from "@/lib/ids";
 import { encodeMailboxRef } from "@/lib/jmap/ids";
@@ -11,7 +12,6 @@ import { applySpamFeedback } from "@/lib/spam/feedback";
 import type { ImapIdentity } from "./auth";
 import { no } from "./errors";
 import { folderKeyOf, folderRefOfKey, type FolderKey } from "./folders";
-import { jmapEmailSet } from "./flags";
 import { ensureFolderState, syncMailbox } from "./sync";
 
 /**
@@ -55,6 +55,48 @@ export function placeIn(row: MessageRow, dest: Destination): { status: string; f
 	return { status: result.status ?? row.status, folderId: result.folderId ?? null };
 }
 
+/** The row is still in the status and folder it was read in. */
+const unchanged = (row: MessageRow) =>
+	and(eq(messages.id, row.id), eq(messages.mailboxId, row.mailboxId!), eq(messages.status, row.status), row.folderId === null ? isNull(messages.folderId) : eq(messages.folderId, row.folderId));
+
+/**
+ * Removes messages for good, each only if it is still in the status and folder it was read in (so a message another client
+ * filed elsewhere meanwhile is kept), then its raw object and attachment objects. Returns the rows that were removed.
+ */
+export async function deleteUnchanged(env: CloudflareEnv, identity: ImapIdentity, rows: MessageRow[]): Promise<MessageRow[]> {
+	const db = getDb(env);
+	const removed: MessageRow[] = [];
+	for (const row of rows) {
+		const attachments = await db.select({ id: messageAttachments.id, r2Key: messageAttachments.r2Key }).from(messageAttachments).where(eq(messageAttachments.messageId, row.id));
+		const gone = await db.delete(messages).where(unchanged(row)).returning({ id: messages.id });
+		if (!gone.length) continue;
+		removed.push(row);
+		try {
+			await deleteUnreferencedObjects(env, db, attachments.map((attachment) => attachment.r2Key), { attachmentIds: attachments.map((attachment) => attachment.id) });
+			if (row.rawR2Key) await env.BUCKET.delete(row.rawR2Key);
+		} catch (error) {
+			console.error(`IMAP could not remove the objects of ${row.id}`, error);
+		}
+	}
+	await createAuditLogs(env, removed.map((row) => ({ actorUserId: identity.userId, mailboxId: row.mailboxId, action: "email.delete", metadata: { permanent: true, source: "imap", messageId: row.id, previousStatus: row.status } })));
+	return removed;
+}
+
+/** Moves messages to Trash (what JMAP destroy does outside Trash and Drafts), each only if it is still in the status and folder it was read in. Returns the rows that moved. */
+async function trashUnchanged(env: CloudflareEnv, identity: ImapIdentity, rows: MessageRow[]): Promise<MessageRow[]> {
+	const db = getDb(env);
+	const moved: MessageRow[] = [];
+	for (const row of rows) {
+		const result = await db.update(messages).set({ status: "trash", folderId: null }).where(unchanged(row)).returning({ id: messages.id });
+		if (result.length) moved.push(row);
+	}
+	if (moved.length) {
+		await db.update(imapMessageFlags).set({ deleted: false }).where(inArray(imapMessageFlags.messageId, moved.map((row) => row.id)));
+		await createAuditLogs(env, moved.map((row) => ({ actorUserId: identity.userId, mailboxId: row.mailboxId, messageId: row.id, action: "email.delete", metadata: { status: "trash", source: "imap" } })));
+	}
+	return moved;
+}
+
 /** Moves messages of one mailbox to another folder of it; throws `NO [CANNOT]` before any change when a message may not go there. */
 export async function moveMessages(env: CloudflareEnv, identity: ImapIdentity, rows: MessageRow[], dest: Destination, fromKey: FolderKey): Promise<void> {
 	if (!rows.length) return;
@@ -79,10 +121,13 @@ export async function moveMessages(env: CloudflareEnv, identity: ImapIdentity, r
 	const flagResets = chunksOf(rows.map((row) => row.id), ID_CHUNK).map((chunk) => db.update(imapMessageFlags).set({ deleted: false }).where(inArray(imapMessageFlags.messageId, chunk)));
 	// One transaction for the whole command when it fits one batch; a larger MOVE is a few batches that each hold whole groups.
 	for (const part of chunksOf([...statements, ...flagResets], STATEMENTS_PER_BATCH)) await db.batch(part as never);
+	// What follows concerns the messages that are in the destination now; one that another client filed elsewhere meanwhile was not moved by this command.
+	const landed = new Set((await loadFolderRows(env, dest.mailboxId, dest.key, rows.map((row) => row.id))).map((entry) => entry.row.id));
+	const moved = rows.filter((row) => landed.has(row.id));
 	if (dest.key === "trash") {
-		await createAuditLogs(env, rows.map((row) => ({ actorUserId: identity.userId, mailboxId: dest.mailboxId, messageId: row.id, action: "email.delete", metadata: { status: "trash", source: "imap" } })));
+		await createAuditLogs(env, moved.map((row) => ({ actorUserId: identity.userId, mailboxId: dest.mailboxId, messageId: row.id, action: "email.delete", metadata: { status: "trash", source: "imap" } })));
 	}
-	await learnFromMove(env, identity, rows, dest.key, fromKey);
+	await learnFromMove(env, identity, moved, dest.key, fromKey);
 	await syncMailbox(env, dest.mailboxId);
 }
 
@@ -181,10 +226,10 @@ export async function uidsOf(env: CloudflareEnv, mailboxId: string, key: string,
 const MAX_EXPUNGE_CANDIDATES = 10_000;
 
 /**
- * Removes the messages flagged \Deleted in a folder (optionally only those whose UID is in `uids`):
- * through the JMAP destroy rule, which moves to Trash and removes for good from Trash and Drafts.
- * A message is re-read before it goes, and goes only if it is still in this folder and still flagged,
- * so what another client changed meanwhile is never lost. Returns how many were removed from the folder.
+ * Removes the messages flagged \Deleted in a folder (optionally only those whose UID is in `uids`) by the
+ * JMAP destroy rule: out of Trash and Drafts for good, from any other folder to Trash. A message is re-read
+ * before it goes, goes only if it is still in this folder and still flagged, and the removal itself only matches
+ * the status and folder it was read in, so what another client changed meanwhile is never lost. Returns how many were removed from the folder.
  */
 export async function expungeDeleted(env: CloudflareEnv, identity: ImapIdentity, mailboxId: string, key: FolderKey, only?: (uid: number) => boolean): Promise<number> {
 	await syncMailbox(env, mailboxId);
@@ -196,19 +241,9 @@ export async function expungeDeleted(env: CloudflareEnv, identity: ImapIdentity,
 	for (const chunk of chunksOf(candidates.map((row) => row.message_id), 90)) {
 		const current = (await loadFolderRows(env, mailboxId, key, chunk)).filter((entry) => entry.deleted).map((entry) => entry.row);
 		if (!current.length) continue;
-		const result = await jmapEmailSet(env, identity, { destroy: current.map((row) => row.id) });
-		for (const failure of Object.values(result.notDestroyed ?? {})) if (failure.type === "forbidden") throw no("The mailbox is read-only", "NOPERM");
-		const gone = new Set(result.destroyed ?? []);
-		const done = current.filter((row) => gone.has(row.id));
-		removed += done.length;
-		const permanent = done.filter((row) => row.status === "trash" || row.status === "draft");
-		const toTrash = done.filter((row) => !permanent.includes(row));
-		const db = getDb(env);
-		if (toTrash.length) await db.update(imapMessageFlags).set({ deleted: false }).where(inArray(imapMessageFlags.messageId, toTrash.map((row) => row.id)));
-		await createAuditLogs(env, [
-			...permanent.map((row) => ({ actorUserId: identity.userId, mailboxId, action: "email.delete", metadata: { permanent: true, source: "imap", messageId: row.id, previousStatus: row.status } })),
-			...toTrash.map((row) => ({ actorUserId: identity.userId, mailboxId, messageId: row.id, action: "email.delete", metadata: { status: "trash", source: "imap" } })),
-		]);
+		const permanent = current.filter((row) => row.status === "trash" || row.status === "draft");
+		removed += (await trashUnchanged(env, identity, current.filter((row) => !permanent.includes(row)))).length;
+		removed += (await deleteUnchanged(env, identity, permanent)).length;
 	}
 	await syncMailbox(env, mailboxId);
 	return removed;
