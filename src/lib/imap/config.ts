@@ -28,8 +28,15 @@ const port = (value: string | undefined, fallback: number) => {
 
 /** The size limit for inbound SMTP mail when none is set, which IMAP_MAX_MESSAGE_SIZE follows. */
 export const DEFAULT_MAX_MESSAGE_SIZE = 36 * 1024 * 1024;
-/** One message is never allowed to be more than the budget of in-flight APPEND data the server holds. */
+/** The most memory the in-flight APPEND data of the whole process may account for, in octets. */
 export const MAX_APPEND_BUDGET = 512 * 1024 * 1024;
+/**
+ * What one octet of an APPEND literal costs while the message is received, parsed and stored: the received pieces and
+ * their join, the parser's text and HTML, and the object written. The budget is charged this many times the declared size.
+ */
+export const APPEND_MEMORY_FACTOR = 6;
+/** The largest message the budget can hold at its full cost. */
+export const MAX_APPEND_MESSAGE = Math.floor(MAX_APPEND_BUDGET / APPEND_MEMORY_FACTOR);
 
 const positive = (value: string | undefined, fallback: number) => {
 	const parsed = Number(value?.trim() === "" ? undefined : value);
@@ -45,7 +52,7 @@ export function readImapConfig(source: Source): ImapConfig {
 		host: source.IMAP_HOST?.trim() || undefined,
 		hostname: source.MAIL_HOSTNAME?.trim() || undefined,
 		maxConnections: Number.isInteger(maxConnections) && maxConnections > 0 ? maxConnections : 500,
-		maxMessageSize: Math.min(positive(source.IMAP_MAX_MESSAGE_SIZE, positive(source.SMTP_MAX_SIZE, DEFAULT_MAX_MESSAGE_SIZE)), MAX_APPEND_BUDGET),
+		maxMessageSize: Math.min(positive(source.IMAP_MAX_MESSAGE_SIZE, positive(source.SMTP_MAX_SIZE, DEFAULT_MAX_MESSAGE_SIZE)), MAX_APPEND_MESSAGE),
 		allowPlaintext: source.IMAP_ALLOW_PLAINTEXT?.trim() === "1",
 		hasCertificate: !!(source.SMTP_TLS_KEY?.trim() && source.SMTP_TLS_CERT?.trim()),
 	};

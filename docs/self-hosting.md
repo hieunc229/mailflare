@@ -154,7 +154,7 @@ and the DNS page shows what to set by hand.
 | `IMAP_STARTTLS_PORT` | `0` (off) | A plain port that requires STARTTLS before login; usually `143` |
 | `IMAP_HOST` | every interface, IPv6 and IPv4 (`::`) | Address the IMAP listeners bind to. Without it the listener takes IPv6 and IPv4 together, and IPv4 only where the system has no IPv6 |
 | `IMAP_MAX_CONNECTIONS` | `500` | IMAP connections for the whole process; each address may hold 30 (an IPv6 client counts by its /64) and each account 20 |
-| `IMAP_MAX_MESSAGE_SIZE` | `SMTP_MAX_SIZE` (36 MiB) | The largest message a mail app may upload with APPEND (advertised as `APPENDLIMIT`); at most 512 MiB, which is also the most APPEND data the whole process holds at once |
+| `IMAP_MAX_MESSAGE_SIZE` | `SMTP_MAX_SIZE` (36 MiB) | The largest message a mail app may upload with APPEND (advertised as `APPENDLIMIT`); at most 85 MiB: the process spends at most 512 MiB on upload data at once and charges each upload six times its size, and two uploads are parsed and stored at a time (more wait, up to 32, then are told to try again) |
 | `IMAP_ALLOW_PLAINTEXT` | unset | `1` allows login without TLS, only when `IMAP_HOST` is a loopback address (for local testing); ignored with a warning otherwise |
 | `SMTP_URL` | unset | Outbound relay |
 | `SMTP_TLS_REJECT_UNAUTHORIZED` | `true` | Trust self-signed relay certificates when `false` |
