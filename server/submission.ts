@@ -43,6 +43,8 @@ export type SubmissionServerOptions = {
 	authTimeoutMs?: number;
 	/** How often a logged-in connection checks that its key still stands. */
 	revalidateMs?: number;
+	/** MAIL FROM commands one connection may issue per minute (each one costs database reads). */
+	maxTransactionsPerMinute?: number;
 	/** Idle time after which a connection is closed. */
 	idleTimeoutMs?: number;
 };
@@ -113,7 +115,7 @@ const MAX_USERNAME = 320;
 const MAX_SECRET = 256;
 
 /** `dropData` gives back the data-budget charge of the message being received, if any; it is safe to call more than once. */
-type Guard = { socket: Socket; failures: number; authenticated: boolean; timers: NodeJS.Timeout[]; stops: Array<() => void>; dropData: (() => void) | null; release: () => void };
+type Guard = { socket: Socket; failures: number; transactions: number[]; authenticated: boolean; timers: NodeJS.Timeout[]; stops: Array<() => void>; dropData: (() => void) | null; release: () => void };
 
 export class SubmissionServer {
 	readonly allowPlaintext: boolean;
@@ -229,6 +231,7 @@ export class SubmissionServer {
 		const guard: Guard = {
 			socket,
 			failures: 0,
+			transactions: [],
 			authenticated: false,
 			timers: [],
 			stops: [watchOutput(socket, this.maxPendingOutput, this.outputCheckMs)],
@@ -336,7 +339,19 @@ export class SubmissionServer {
 
 	// ---- the transaction ----
 
+	/** One MAIL FROM, counted against the connection's budget; false when it has had its share this minute. */
+	private allowTransaction(session: SMTPServerSession): boolean {
+		const guard = this.guards.get(session.id);
+		if (!guard) return true;
+		const now = Date.now();
+		guard.transactions = guard.transactions.filter((at) => now - at < 60_000);
+		if (guard.transactions.length >= (this.options.maxTransactionsPerMinute ?? 60)) return false;
+		guard.transactions.push(now);
+		return true;
+	}
+
 	private async onMailFrom(address: SMTPServerAddress, session: SMTPServerSession, callback: (error?: Error) => void): Promise<void> {
+		if (!this.allowTransaction(session)) return callback(smtpError(450, "Too many transactions, slow down"));
 		const identity = await this.stillLoggedIn(session);
 		if (!identity) return callback(smtpError(421, "Credentials revoked"));
 		if (!this.limiter.hasRoom(identity.userId)) return callback(smtpError(450, "Sending limit reached, try again later"));

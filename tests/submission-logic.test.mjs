@@ -271,6 +271,19 @@ test("attachments and inline images go through; the outgoing size limit of sendE
 	await w.rejects(w.submit(Buffer.from(big.replace("<att@x>", "<att2@x>"))), 554, /exceed/i);
 });
 
+test("an attachment's media type is passed on only when it is a plain type/subtype, otherwise it is a generic file", async (t) => {
+	const w = await sendWorld(t);
+	const part = (type, index) => ["--M", `Content-Type: ${type}; name="f${index}.bin"`, "Content-Transfer-Encoding: base64", `Content-Disposition: attachment; filename="f${index}.bin"`, "", Buffer.from("data").toString("base64")];
+	const types = ["application/pdf", 'x"y/z w', "image/png<script>", "text/plain"];
+	const raw = Buffer.from(CRLF(["From: me@example.test", "To: a@x.test", "Subject: types", "Message-ID: <types@x>", "MIME-Version: 1.0", 'Content-Type: multipart/mixed; boundary="M"', "", "--M", "Content-Type: text/plain", "", "body", ...types.flatMap((type, index) => part(type, index)), "--M--", ""]));
+	await w.submit(raw);
+	const sent = w.sent[0].attachments.map((attachment) => attachment.type);
+	assert.equal(sent.length, 4);
+	for (const type of sent) assert.match(type, /^[a-z0-9!#$&^_.+-]+\/[a-z0-9!#$&^_.+-]+$/i, type);
+	assert.equal(sent[0], "application/pdf");
+	assert.equal(sent[3], "text/plain");
+});
+
 test("the SIZE limit follows the outgoing attachment limit plus MIME overhead, never above 36 MiB", () => {
 	assert.equal(m.submissionSizeLimit(25), Math.floor(25_000_000 * 1.35));
 	assert.equal(m.submissionSizeLimit(1), 1_350_000);
