@@ -22,6 +22,16 @@ async function sign(secret: string, raw: ArrayBuffer, from: string, to: string, 
 	return Array.from(new Uint8Array(await crypto.subtle.sign("HMAC", key, data)), (byte) => byte.toString(16).padStart(2, "0")).join("");
 }
 
+/**
+ * JSON with every non-ASCII character as a \u escape. Header values must be ASCII: decoded
+ * headers such as `From: Jürgen Öztürk <…>` are otherwise re-encoded in transit, the server
+ * reads a different string than the one signed and answers 401. JSON.parse on the server
+ * restores the original text, so the server needs no change.
+ */
+function asciiJson(value: unknown): string {
+	return JSON.stringify(value).replace(/[^\x00-\x7e]/g, (char) => `\\u${char.charCodeAt(0).toString(16).padStart(4, "0")}`);
+}
+
 export default {
 	async email(message: ForwardableEmailMessage, env: Env) {
 		if (message.rawSize > 25 * 1024 * 1024) {
@@ -29,7 +39,7 @@ export default {
 			return;
 		}
 		const raw = await new Response(message.raw).arrayBuffer();
-		const headers = JSON.stringify(Object.fromEntries(message.headers));
+		const headers = asciiJson(Object.fromEntries(message.headers));
 		const timestamp = String(Math.floor(Date.now() / 1000));
 		let decision: Decision;
 		try {
