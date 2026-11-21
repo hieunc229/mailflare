@@ -16,7 +16,7 @@ export const DRIVE_MAX_DEPTH = 64;
 
 export function normalizeDriveName(value: unknown): string | null {
 	if (typeof value !== "string") return null;
-	const name = value.replace(/[\u0000-\u001f/\\]/g, " ").replace(/\s+/g, " ").trim().slice(0, DRIVE_MAX_NAME_LENGTH);
+	const name = value.replace(/[\u0000-\u001f/\\]/g, " ").replace(/\s+/g, " ").trim().slice(0, DRIVE_MAX_NAME_LENGTH).replace(/[\ud800-\udbff]$/, "");
 	return name && name !== "." && name !== ".." ? name : null;
 }
 
@@ -42,6 +42,10 @@ export function formatDriveSize(bytes: number): string {
 }
 
 export function driveContentDisposition(filename: string, inline: boolean): string {
-	const ascii = filename.replace(/[^\x20-\x7e]/g, "_").replace(/["\\]/g, "_");
-	return `${inline ? "inline" : "attachment"}; filename="${ascii}"; filename*=UTF-8''${encodeURIComponent(filename)}`;
+	// A stored name can hold half a surrogate pair (older names were cut at 255 units), which encodeURIComponent rejects.
+	const name = filename.toWellFormed();
+	const ascii = name.replace(/[^\x20-\x7e]/g, "_").replace(/["\\%]/g, "_");
+	// RFC 5987 attr-chars exclude ' ( ) *, which encodeURIComponent leaves as they are.
+	const encoded = encodeURIComponent(name).replace(/['()*]/g, (char) => `%${char.charCodeAt(0).toString(16).toUpperCase()}`);
+	return `${inline ? "inline" : "attachment"}; filename="${ascii}"; filename*=UTF-8''${encoded}`;
 }

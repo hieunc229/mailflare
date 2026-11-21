@@ -1,12 +1,15 @@
 import { and, eq, isNull } from "drizzle-orm";
 import { messageAttachments, messages } from "@/db/schema";
+import { isOthersDraft } from "@/lib/email/draft-access";
 import { newId } from "@/lib/ids";
 import { LIMITS } from "./constants";
 import { decodeBlobId, uploadBlobId } from "./ids";
 import { listAccessibleMailboxIdSet } from "./access";
 import type { JmapContext } from "./types";
 
-const UPLOAD_PREFIX = "jmap-uploads";
+export const UPLOAD_PREFIX = "jmap-uploads";
+/** Ids `storeUpload` hands out (`newId("upl")`). Anything else, such as `../` segments, could reach keys outside the user's prefix. */
+const UPLOAD_ID = /^upl_[\w-]+$/;
 
 /** Uploads are namespaced by user, so only the account that stored one can read it. */
 function uploadKey(ctx: JmapContext, uploadId: string): string {
@@ -25,6 +28,7 @@ export async function storeUpload(ctx: JmapContext, body: ArrayBuffer, type: str
 }
 
 export async function readUpload(ctx: JmapContext, uploadId: string) {
+	if (!UPLOAD_ID.test(uploadId)) return null;
 	const object = await ctx.env.BUCKET.get(uploadKey(ctx, uploadId));
 	if (!object) return null;
 	return { content: await object.arrayBuffer(), type: object.httpMetadata?.contentType ?? "application/octet-stream", name: object.customMetadata?.name ?? null };
@@ -32,6 +36,7 @@ export async function readUpload(ctx: JmapContext, uploadId: string) {
 
 /** Drop an upload once a message owns its bytes. */
 export async function deleteUpload(ctx: JmapContext, uploadId: string): Promise<void> {
+	if (!UPLOAD_ID.test(uploadId)) return;
 	await ctx.env.BUCKET.delete(uploadKey(ctx, uploadId));
 }
 
@@ -64,17 +69,17 @@ export async function readBlob(ctx: JmapContext, blobId: string): Promise<{ body
 	}
 	if (decoded.kind === "att") {
 		const [row] = await ctx.db
-			.select({ r2Key: messageAttachments.r2Key, filename: messageAttachments.filename, type: messageAttachments.contentType, size: messageAttachments.size, mailboxId: messages.mailboxId })
+			.select({ r2Key: messageAttachments.r2Key, filename: messageAttachments.filename, type: messageAttachments.contentType, size: messageAttachments.size, mailboxId: messages.mailboxId, status: messages.status, privateDraft: messages.privateDraft, userId: messages.userId })
 			.from(messageAttachments)
 			.innerJoin(messages, eq(messageAttachments.messageId, messages.id))
 			.where(and(eq(messageAttachments.id, decoded.id), isNull(messageAttachments.trashedAt)))
 			.limit(1);
-		if (!row || !row.mailboxId || !accessible.has(row.mailboxId)) return null;
+		if (!row || !row.mailboxId || !accessible.has(row.mailboxId) || isOthersDraft(row, ctx.auth.userId)) return null;
 		const object = await ctx.env.BUCKET.get(row.r2Key);
 		return object ? { body: object.body, type: row.type, name: row.filename, size: row.size } : null;
 	}
 	const [row] = await ctx.db.select().from(messages).where(and(eq(messages.id, decoded.id))).limit(1);
-	if (!row || !row.mailboxId || !accessible.has(row.mailboxId)) return null;
+	if (!row || !row.mailboxId || !accessible.has(row.mailboxId) || isOthersDraft(row, ctx.auth.userId)) return null;
 	if (row.rawR2Key) {
 		const object = await ctx.env.BUCKET.get(row.rawR2Key);
 		if (object) return { body: object.body, type: "message/rfc822", name: `${row.id}.eml`, size: object.size };

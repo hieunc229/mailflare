@@ -33,8 +33,9 @@ import type { CalendarEvent, CalendarView, EventDragPreview, EventResizeEdge, Ev
 import {
   addDays, addMonths, calendarAnchorDay, CALENDAR_END_HOUR, CALENDAR_HOUR_HEIGHT, CALENDAR_START_HOUR,
   currentTimePosition, isPendingInvite, dateKey, defaultCalendarStart, dropStartForPosition, EVENT_COLOR_CLASSES, eventEndAfterMinutes, eventPosition, expandCalendarEvents,
-  formatEventRange, formatHour, formatLocalDateTime,
+  formatEventRange, formatHour, formatLocalDateTime, toCalendarOverrides,
   monthGridDates, PAST_EVENT_COLOR_CLASSES, rescheduleCalendarOccurrence, resizeEventTimes, startOfDay, startOfMonth, startOfWeek, WEEKDAY_OPTIONS,
+  type CalendarOccurrenceOverride, type CalendarOccurrenceResponse, type CalendarOverridesInput,
 } from "./utils";
 import clsx from "clsx";
 import { DialogFrame } from "@/components/dialog-frame";
@@ -83,7 +84,17 @@ export default function CalendarPage() {
   const [color, setColor] = useState<string>(DEFAULT_FOLDER_COLOR);
   const [repeat, setRepeat] = useState<CalendarRepeat>("none");
   const [repeatDays, setRepeatDays] = useState<number[]>(DEFAULT_REPEAT_DAYS);
+  const [repeatInterval, setRepeatInterval] = useState(1);
+  const [repeatWeekday, setRepeatWeekday] = useState<number | null>(null);
+  const [repeatWeek, setRepeatWeek] = useState<number | null>(null);
+  const [monthlyMode, setMonthlyMode] = useState<"day" | "weekday">("day");
   const [reminderMinutes, setReminderMinutes] = useState<number | null>(null);
+  const [occurrenceResponses, setOccurrenceResponses] = useState<Record<string, CalendarOccurrenceResponse[]>>({});
+  const overridesRef = useRef<Map<string, CalendarOccurrenceOverride[]> | undefined>(undefined);
+  const overridesFor = useCallback((event: CalendarEvent) => {
+    const seriesId = event.id.includes("@") ? event.id.slice(0, event.id.lastIndexOf("@")) : event.id;
+    return overridesRef.current?.get(seriesId) ?? overridesRef.current?.get(event.id);
+  }, []);
   const [startsAt, setStartsAt] = useState("");
   const [endsAt, setEndsAt] = useState("");
   const [durationOptionsOpen, setDurationOptionsOpen] = useState(false);
@@ -98,6 +109,19 @@ export default function CalendarPage() {
       const responses = JSON.parse(editing?.attendeeResponses || "{}") as Record<string, string>;
       return Object.entries(responses).map(([email, status]) => `${email} ${t(`calendar.guestResponse.${status}` as Parameters<typeof t>[0])}`).join(", ");
     } catch { return ""; }
+  })();
+  const occurrenceReplies = (() => {
+    if (!editing) return "";
+    const separator = editing.id.lastIndexOf("@");
+    const seriesId = separator > 0 ? editing.id.slice(0, separator) : editing.id;
+    const list = [...(occurrenceResponses[seriesId] ?? []), ...(separator < 0 ? [] : occurrenceResponses[editing.id] ?? [])];
+    const occurrenceMs = separator > 0 ? Number(editing.id.slice(separator + 1)) : null;
+    const relevant = occurrenceMs != null && Number.isSafeInteger(occurrenceMs) ? list.filter((item) => item.occurrenceMs === occurrenceMs) : list;
+    if (!relevant.length) return "";
+    return relevant.map((item) => {
+      const day = formatUserDate(new Date(item.occurrenceMs), { month: "short", day: "numeric" });
+      return `${day}: ${item.guest} ${t(`calendar.guestResponse.${item.status}` as Parameters<typeof t>[0])}`;
+    }).join(", ");
   })();
   const [pendingAction, setPendingAction] = useState<"save" | string | null>(null);
   const router = useRouter();
@@ -163,9 +187,15 @@ export default function CalendarPage() {
     void authFetch(`/api/calendar/events?start=${start.toISOString()}&end=${end.toISOString()}`)
       .then((response) => {
         if (!response.ok) throw new Error(t("calendar.loadFailed"));
-        return response.json() as Promise<{ events?: Parameters<typeof expandCalendarEvents>[0] }>;
+        return response.json() as Promise<{ events?: Parameters<typeof expandCalendarEvents>[0]; overrides?: CalendarOverridesInput; occurrenceResponses?: Record<string, CalendarOccurrenceResponse[]> }>;
       })
-      .then((data) => { if (active) setEvents(expandCalendarEvents(data.events ?? [], start, end)); })
+      .then((data) => {
+        if (!active) return;
+        const overrides = toCalendarOverrides(data.overrides);
+        overridesRef.current = overrides;
+        setOccurrenceResponses(data.occurrenceResponses ?? {});
+        setEvents(expandCalendarEvents(data.events ?? [], start, end, overrides));
+      })
       .catch(() => { if (active) toast.error(t("calendar.loadFailed")); })
       .finally(() => { if (active) setLoading(false); });
     return () => { active = false; };
@@ -189,6 +219,10 @@ export default function CalendarPage() {
     setColor(DEFAULT_FOLDER_COLOR);
     setRepeat("none");
     setRepeatDays(DEFAULT_REPEAT_DAYS);
+    setRepeatInterval(1);
+    setRepeatWeekday(null);
+    setRepeatWeek(null);
+    setMonthlyMode("day");
     setReminderMinutes(null);
     setGuests("");
     setLocation("");
@@ -211,11 +245,16 @@ export default function CalendarPage() {
       let savedStart = editedStart;
       let savedEnd = editedEnd;
       if (editing && effectiveFrom) {
-        const next = rescheduleCalendarOccurrence(editing, editedStart, editedEnd, effectiveFrom);
+        const next = rescheduleCalendarOccurrence(editing, editedStart, editedEnd, effectiveFrom, overridesFor(editing));
         if (!next) { toast.error(t("calendar.noFuture")); return; }
         savedStart = next.startsAt;
         savedEnd = next.endsAt;
       }
+      const interval = Number.isInteger(repeatInterval) ? Math.min(999, Math.max(1, repeatInterval)) : 1;
+      // Mirrors the server: nth-weekday fields are monthly-only and both-or-null.
+      const weekday = repeat === "monthly" && monthlyMode === "weekday" ? repeatWeekday : null;
+      const week = repeat === "monthly" && monthlyMode === "weekday" ? repeatWeek : null;
+      if (repeat === "monthly" && monthlyMode === "weekday" && (weekday == null || week == null)) { toast.error(t("calendar.saveFailed")); return; }
       const repeatAnchorDay = editing?.repeat === "monthly" && startsAt.slice(0, 10) === formatLocalDateTime(new Date(editing.startsAt)).slice(0, 10)
         ? editing.repeatAnchorDay ?? calendarAnchorDay(editing, new Date(editing.seriesStartsAt ?? editing.startsAt))
         : calendarAnchorDay(editing, editedStart);
@@ -223,7 +262,7 @@ export default function CalendarPage() {
         method: editing ? "PATCH" : "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          title, startsAt: savedStart.toISOString(), endsAt: savedEnd.toISOString(), color, repeat, repeatDays, repeatAnchorDay, reminderMinutes, effectiveFrom: effectiveFrom?.toISOString(), moveOccurrenceToPast: movingToPast, attendees: guests.split(","),
+          title, startsAt: savedStart.toISOString(), endsAt: savedEnd.toISOString(), color, repeat, repeatDays, repeatAnchorDay, repeatInterval: interval, repeatWeekday: weekday, repeatWeek: week, reminderMinutes, effectiveFrom: effectiveFrom?.toISOString(), moveOccurrenceToPast: movingToPast, attendees: guests.split(","),
           timeZone: getUserTimeZone(),
           description,
           location,
@@ -233,6 +272,8 @@ export default function CalendarPage() {
         }),
       });
       if (response.ok) {
+        const result = (await response.json().catch(() => ({}))) as { inviteErrors?: string[] };
+        if (result.inviteErrors?.length) toast.error(t("calendar.inviteFailed"));
         setEventsVersion((version) => version + 1);
         setClosingEventEditor(true);
       } else {
@@ -252,7 +293,9 @@ export default function CalendarPage() {
     setPendingAction(id);
     try {
       const effectiveFrom = recurring ? new Date().toISOString() : undefined;
-      const response = await authFetch(`/api/calendar/events/${id}`, { method: "DELETE", headers: effectiveFrom ? { "Content-Type": "application/json" } : undefined, body: effectiveFrom ? JSON.stringify({ effectiveFrom }) : undefined });
+      const from = selectedMailbox?.senderAddresses?.[0] ??
+        (selectedMailbox ? `${selectedMailbox.localPart}@${selectedMailbox.hostname}` : "");
+      const response = await authFetch(`/api/calendar/events/${id}`, { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ effectiveFrom, from }) });
       if (response.ok) {
         setEventsVersion((version) => version + 1);
         setClosingEventEditor(true);
@@ -275,6 +318,11 @@ export default function CalendarPage() {
     setRepeat(event.repeat);
     setReminderMinutes(event.reminderMinutes ?? null);
     setRepeatDays(event.repeat === "weekdays" ? parseCalendarRepeatDays(event.repeatDays) : DEFAULT_REPEAT_DAYS);
+    setRepeatInterval(Number.isInteger(event.repeatInterval) && (event.repeatInterval as number) >= 1 && (event.repeatInterval as number) <= 999 ? event.repeatInterval as number : 1);
+    const hasNth = event.repeat === "monthly" && event.repeatWeekday != null && event.repeatWeek != null;
+    setMonthlyMode(hasNth ? "weekday" : "day");
+    setRepeatWeekday(hasNth ? event.repeatWeekday ?? null : null);
+    setRepeatWeek(hasNth ? event.repeatWeek ?? null : null);
     setLocation(event.location ?? "");
     setDescription(event.description ?? "");
     setStartsAt(formatLocalDateTime(new Date(event.startsAt)));
@@ -305,7 +353,7 @@ export default function CalendarPage() {
       let savedStart = startsAt;
       let savedEnd = endsAt;
       if (effectiveFrom) {
-        const next = rescheduleCalendarOccurrence(event, startsAt, endsAt, effectiveFrom);
+        const next = rescheduleCalendarOccurrence(event, startsAt, endsAt, effectiveFrom, overridesFor(event));
         if (!next) { toast.error(t("calendar.noFuture")); return; }
         savedStart = next.startsAt;
         savedEnd = next.endsAt;
@@ -321,6 +369,9 @@ export default function CalendarPage() {
           color: event.color,
           repeat: event.repeat,
           repeatDays: parseCalendarRepeatDays(event.repeatDays),
+          repeatInterval: event.repeatInterval ?? 1,
+          repeatWeekday: event.repeatWeekday ?? null,
+          repeatWeek: event.repeatWeek ?? null,
           timeZone: getUserTimeZone(),
           repeatAnchorDay: event.repeat === "monthly" && dateKey(startsAt) === dateKey(new Date(event.startsAt))
             ? event.repeatAnchorDay ?? calendarAnchorDay(event, new Date(event.seriesStartsAt ?? event.startsAt))
@@ -633,9 +684,64 @@ export default function CalendarPage() {
                     <option value="daily">{t("calendar.repeat.daily")}</option>
                     <option value="weekly">{t("calendar.repeat.weekly")}</option>
                     <option value="monthly">{t("calendar.repeat.monthly")}</option>
+                    <option value="yearly">{t("calendar.repeat.yearly")}</option>
                     <option value="weekdays">{t("calendar.repeat.weekdays")}</option>
                     </Select>
                   </div>
+                  {repeat !== "none" && (
+                    <label className="flex items-center gap-2 px-2 pt-1 text-xs text-neutral-600">
+                      <span>{t("calendar.repeatInterval")}</span>
+                      <Input type="number" min={1} max={999} value={repeatInterval} onChange={(event) => {
+                        const next = Number(event.target.value);
+                        setRepeatInterval(Number.isInteger(next) ? Math.min(999, Math.max(1, next)) : 1);
+                      }} aria-label={t("calendar.repeatInterval")} className="h-7 w-20 px-2 text-xs" />
+                      <span>{t(`calendar.intervalUnit.${repeat}` as TranslationKey)}</span>
+                    </label>
+                  )}
+                  {repeat === "monthly" && (
+                    <div role="group" aria-label={t("calendar.repeat")} className="flex flex-wrap gap-1.5 px-2 pt-1">
+                      <button type="button" aria-pressed={monthlyMode === "day"} onClick={() => setMonthlyMode("day")}
+                        className={clsx("rounded-full px-2.5 py-1 text-xs font-medium", monthlyMode === "day" ? "bg-blue-600 text-white" : "bg-neutral-100 text-neutral-600 hover:bg-neutral-200")}>
+                        {t("calendar.monthlyMode.day")}
+                      </button>
+                      <button type="button" aria-pressed={monthlyMode === "weekday"} onClick={() => {
+                        setMonthlyMode("weekday");
+                        if (repeatWeekday == null) {
+                          const anchor = parseUserDateTimeLocal(startsAt);
+                          setRepeatWeekday(anchor ? anchor.getDay() : 1);
+                        }
+                        if (repeatWeek == null) setRepeatWeek(1);
+                      }}
+                        className={clsx("rounded-full px-2.5 py-1 text-xs font-medium", monthlyMode === "weekday" ? "bg-blue-600 text-white" : "bg-neutral-100 text-neutral-600 hover:bg-neutral-200")}>
+                        {t("calendar.monthlyMode.weekday")}
+                      </button>
+                    </div>
+                  )}
+                  {repeat === "monthly" && monthlyMode === "weekday" && (
+                    <div className="flex flex-wrap items-center gap-2 px-2 pt-1">
+                      <label className="text-xs text-neutral-600">
+                        <span className="mr-1">{t("calendar.repeatWeek")}</span>
+                        <Select value={repeatWeek ?? ""} onChange={(event) => setRepeatWeek(event.target.value === "" ? null : Number(event.target.value))} aria-label={t("calendar.repeatWeek")} containerClassName="contents"
+                          className="h-7 rounded-md border border-neutral-200 bg-white px-1 text-xs">
+                          <option value={1}>{t("calendar.repeatWeek.1")}</option>
+                          <option value={2}>{t("calendar.repeatWeek.2")}</option>
+                          <option value={3}>{t("calendar.repeatWeek.3")}</option>
+                          <option value={4}>{t("calendar.repeatWeek.4")}</option>
+                          <option value={5}>{t("calendar.repeatWeek.5")}</option>
+                          <option value={-1}>{t("calendar.repeatWeek.last")}</option>
+                        </Select>
+                      </label>
+                      <label className="text-xs text-neutral-600">
+                        <span className="mr-1">{t("calendar.repeatWeekday")}</span>
+                        <Select value={repeatWeekday ?? ""} onChange={(event) => setRepeatWeekday(event.target.value === "" ? null : Number(event.target.value))} aria-label={t("calendar.repeatWeekday")} containerClassName="contents"
+                          className="h-7 rounded-md border border-neutral-200 bg-white px-1 text-xs">
+                          {WEEKDAY_OPTIONS.map((day) => (
+                            <option key={day.value} value={day.value}>{t(`weekday.${day.value}` as TranslationKey)}</option>
+                          ))}
+                        </Select>
+                      </label>
+                    </div>
+                  )}
                   {repeat === "weekdays" && (
                     <div role="group" aria-label={t("calendar.repeatOnWeekdays")} className="flex flex-wrap gap-1.5 px-2 pt-1">
                       {WEEKDAY_OPTIONS.map((day) => (
@@ -653,6 +759,7 @@ export default function CalendarPage() {
                 <UsersRound aria-hidden="true" className="h-5 w-5 text-neutral-600" />
                 <Input value={guests} onChange={(event) => setGuests(event.target.value)} placeholder={t("calendar.addGuests")} aria-label={t("calendar.guestsLabel")} className={eventFieldClass} />
                 {guestReplies && <p className="mt-1 px-2 text-xs text-neutral-600">{t("calendar.guestResponses", { list: guestReplies })}</p>}
+                {occurrenceReplies && <p className="mt-1 px-2 text-xs text-neutral-600">{t("calendar.occurrenceResponses", { list: occurrenceReplies })}</p>}
               </div>
               <div className="grid grid-cols-[24px_minmax(0,1fr)] items-center gap-3">
                 <MapPin aria-hidden="true" className="h-5 w-5 text-neutral-600" />
@@ -676,7 +783,7 @@ export default function CalendarPage() {
                 <div />
                 <div className="flex justify-between gap-2">
                   <div>{editing && <Button variant="ghost" disabled={pendingAction !== null} onClick={() => void deleteEvent(editing.id)} className="px-2 text-red-600 hover:bg-red-50"><Trash2 className="h-4 w-4" />{t("common.delete")}</Button>}</div>
-                  <Button onClick={() => void addEvent()} disabled={!title.trim() || !parseUserDateTimeLocal(startsAt) || !parseUserDateTimeLocal(endsAt) || parseUserDateTimeLocal(endsAt)! <= parseUserDateTimeLocal(startsAt)! || (repeat === "weekdays" && repeatDays.length === 0) || pendingAction === "save"} className="rounded-full bg-blue-600 px-6 text-white hover:bg-blue-700">
+                  <Button onClick={() => void addEvent()} disabled={!title.trim() || !parseUserDateTimeLocal(startsAt) || !parseUserDateTimeLocal(endsAt) || parseUserDateTimeLocal(endsAt)! <= parseUserDateTimeLocal(startsAt)! || (repeat === "weekdays" && repeatDays.length === 0) || (repeat === "monthly" && monthlyMode === "weekday" && (repeatWeekday == null || repeatWeek == null)) || pendingAction === "save"} className="rounded-full bg-blue-600 px-6 text-white hover:bg-blue-700">
                     {pendingAction === "save" ? t("common.saving") : t("settings.autoReply.save")}
                   </Button>
                 </div>

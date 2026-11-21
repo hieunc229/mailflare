@@ -35,7 +35,7 @@ export function SidebarAside({ children, className }: { children: ReactNode; cla
 				aria-hidden={hidden}
 				inert={hidden}
 				className={clsx(
-					"fixed inset-y-0 left-0 z-[110] w-[min(85vw,300px)] min-h-0 min-w-0 bg-[#f6f8fc] transition-transform duration-200 ease-out motion-reduce:transition-none",
+					"fixed inset-y-0 left-0 z-[110] w-[min(85vw,300px)] pb-[env(safe-area-inset-bottom)] md:pb-0 min-h-0 min-w-0 bg-[#f6f8fc] transition-transform duration-200 ease-out motion-reduce:transition-none",
 					"md:relative md:z-30 md:w-[var(--sidebar-width)] md:translate-x-0 md:shadow-none",
 					mobileOpen ? "translate-x-0 shadow-xl" : "-translate-x-full",
 					className,

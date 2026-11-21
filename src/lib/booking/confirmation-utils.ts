@@ -122,5 +122,5 @@ export function buildBookingConfirmation(content: BookingConfirmationContent, lo
  * REQUEST file.
  */
 export function buildBookingCalendarFile(input: { title: string; description: string; location: string; startsAt: Date; endsAt: Date; uid: string }): ArrayBuffer {
-	return createCalendarInvitation({ ...input, method: "PUBLISH" });
+	return createCalendarInvitation({ ...input, method: "PUBLISH", sequence: 0 });
 }

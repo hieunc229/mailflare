@@ -30,7 +30,7 @@ export default function PublicBookingListPage() {
 		}).then((data) => { if (active) { setName(data.name); setEvents(data.events); } }).catch(() => { if (active) setError(t("public.listUnavailable")); }).finally(() => { if (active) setLoading(false); });
 		return () => { active = false; };
 	}, [query, t]);
-	return <main className="page-transition-enter flex min-h-dvh flex-col bg-[#f6f8fc] p-4 lg:pt-12 text-neutral-900">
+	return <main className="page-transition-enter flex min-h-dvh flex-col bg-[#f6f8fc] p-4 pt-[max(1rem,env(safe-area-inset-top))] pr-[max(1rem,env(safe-area-inset-right))] pb-[max(1rem,env(safe-area-inset-bottom))] pl-[max(1rem,env(safe-area-inset-left))] lg:pt-[max(3rem,env(safe-area-inset-top))] text-neutral-900">
 		{loading && <RouteLoadingBar />}
 		<div className="mx-auto flex w-full max-w-2xl flex-1 flex-col">
 			<div className="mb-7"><h1 className="text-2xl md:text-3xl font-semibold">{name ? t("public.bookMeetingWith", { name }) : t("public.bookMeeting")}</h1><p className="mt-2 text-sm text-neutral-500">{t("public.chooseMeeting")}</p></div>

@@ -1,12 +1,12 @@
 import { and, eq, isNotNull } from "drizzle-orm";
 import { getDb } from "@/db";
-import { conversationNotes, messages, outboundJobs } from "@/db/schema";
+import { conversationNotes, mailboxes, messages, outboundJobs } from "@/db/schema";
 import { newId } from "@/lib/ids";
 import { buildSnippet } from "@/lib/email/parse";
 import { dispatchWebhooks } from "@/lib/email/webhooks";
 import { upsertContactsFromAddresses } from "@/lib/contacts/service";
 import { getAuthorizedSenderAddress } from "@/lib/email/sender";
-import { getEmailAddressList, joinEmailAddressList, splitEmailAddressList } from "@/lib/email/address";
+import { getEmailAddress, getEmailAddressList, joinEmailAddressList, splitEmailAddressList } from "@/lib/email/address";
 import { formatMessageIdHeader, normalizeMessageId, parseMessageIdList } from "@/lib/email/threading";
 import { createAuditLog } from "@/lib/mailboxes/audit";
 import { loadMessageAttachmentContents, storeMessageAttachments, validateAttachments } from "@/lib/email/attachments";
@@ -18,6 +18,7 @@ import { ensureTrackingToken, getTrackingHostForSender } from "@/lib/tracking/op
 import { setFollowUp } from "@/lib/follow-ups/service";
 import { buildTrackingPixelUrl, injectTrackingPixel, resolveTrackingOrigin } from "@/lib/tracking/open-tracking-utils";
 import { getComposePreferences } from "@/lib/compose/preferences";
+import { getMailboxDomainAddresses } from "@/lib/mailboxes/domain-addresses";
 
 export type SendEmailInput = {
 	userId: string;
@@ -205,7 +206,26 @@ async function deliverEmail(env: CloudflareEnv, delivery: PreparedDelivery): Pro
 	const { input, messageId, jobId, from, mailboxId, to, cc, bcc, headers, attachments } = delivery;
 	const db = getDb(env);
 	const toAddr = joinEmailAddressList(to);
+	let accepted = false;
 	try {
+		// The sender address was validated at queue time; recheck that the mailbox
+		// still owns it before delivery so a disabled or deleted alias — or a
+		// use-all-domains change — cannot still send from it.
+		const [mailbox] = await db
+			.select({
+				id: mailboxes.id,
+				domainId: mailboxes.domainId,
+				localPart: mailboxes.localPart,
+				useAllDomains: mailboxes.useAllDomains,
+				disabled: mailboxes.disabled,
+			})
+			.from(mailboxes)
+			.where(eq(mailboxes.id, mailboxId))
+			.limit(1);
+		const fromAddress = getEmailAddress(from).toLowerCase();
+		if (!mailbox || mailbox.disabled || !(await getMailboxDomainAddresses(db, mailbox)).includes(fromAddress)) {
+			throw new Error("The sender address is no longer available for this mailbox");
+		}
 		const provider = await getOutboundProviderConfig(env, from);
 		// Cloudflare's 5 MiB cap forces big files into download links; Resend takes
 		// the attachments directly (the admin's outgoing limit still applies).
@@ -244,6 +264,7 @@ async function deliverEmail(env: CloudflareEnv, delivery: PreparedDelivery): Pro
 			},
 			jobId,
 		);
+		accepted = true;
 
 		// A fresh message starts its own conversation; Cloudflare's Message-ID is what
 		// any reply will name in In-Reply-To, so key the thread by it.
@@ -284,6 +305,12 @@ async function deliverEmail(env: CloudflareEnv, delivery: PreparedDelivery): Pro
 			metadata: { to: toAddr, cc: cc.length ? joinEmailAddressList(cc) : undefined, subject: input.subject },
 		});
 	} catch (err) {
+		if (accepted) {
+			// The provider already took the message. A late bookkeeping error must not mark it failed or
+			// make the caller retry (a queue or JMAP retry would send it twice), so it is only logged.
+			console.error("Post-send bookkeeping failed", err);
+			return;
+		}
 		const error = err instanceof Error ? err.message : "Send failed";
 		await db.update(messages).set({ status: "failed" }).where(eq(messages.id, messageId));
 		await db
@@ -430,6 +457,8 @@ export async function processOutboundQueue(
 		await enqueueScheduledDelivery(env, delivery, scheduledAt);
 		return;
 	}
+	// Load first: a failure here must leave the job queued so the queue retry can send it.
+	delivery.attachments = await loadMessageAttachmentContents(env, payload.messageId);
 	// Claim the job before delivering. Cancelling deletes only a job that is still
 	// "queued", so exactly one of cancel and delivery wins.
 	const claimed = await claimJob(db, payload.jobId, job.scheduledAt);
@@ -440,6 +469,5 @@ export async function processOutboundQueue(
 		if (current?.status === "queued") await processOutboundQueue(env, payload);
 		return;
 	}
-	delivery.attachments = await loadMessageAttachmentContents(env, payload.messageId);
 	await deliverEmail(env, delivery);
 }

@@ -7,6 +7,7 @@ import { authenticateAdminApiKey, canShareAdminMailboxes } from "@/lib/api/admin
 import { newId } from "@/lib/ids";
 import { mailboxSchema } from "@/lib/validators";
 import { ensureMailboxDomainRouting } from "@/lib/mailboxes/domain-addresses";
+import { normalizeRecipientLocalPart } from "@/lib/email/recipient-address";
 
 export async function GET(request: Request) {
 	const env = getEnv();
@@ -39,10 +40,14 @@ export async function POST(request: Request) {
 	const [domain] = await db.select().from(domains).where(and(eq(domains.id, parsed.data.domainId), eq(domains.userId, auth.userId))).limit(1);
 	if (!domain) return NextResponse.json({ error: "Domain not found" }, { status: 404 });
 	const localPart = parsed.data.localPart.toLowerCase();
-	const [existing] = await db.select({ id: mailboxes.id }).from(mailboxes).where(and(eq(mailboxes.domainId, domain.id), eq(mailboxes.localPart, localPart))).limit(1);
-	if (existing) return NextResponse.json({ error: "Mailbox already exists" }, { status: 409 });
-	const [alias] = await db.select({ id: mailboxAliases.id }).from(mailboxAliases).where(and(eq(mailboxAliases.domainId, domain.id), eq(mailboxAliases.localPart, localPart))).limit(1);
-	if (alias) return NextResponse.json({ error: "An alias already uses this address" }, { status: 409 });
+	// Inbound routing resolves normalized local parts, so conflicts must too.
+	const [domainMailboxes, domainAliases] = await Promise.all([
+		db.select({ localPart: mailboxes.localPart }).from(mailboxes).where(eq(mailboxes.domainId, domain.id)),
+		db.select({ localPart: mailboxAliases.localPart }).from(mailboxAliases).where(eq(mailboxAliases.domainId, domain.id)),
+	]);
+	const normalized = normalizeRecipientLocalPart(localPart);
+	if (domainMailboxes.some((row) => normalizeRecipientLocalPart(row.localPart) === normalized)) return NextResponse.json({ error: "Mailbox already exists" }, { status: 409 });
+	if (domainAliases.some((row) => normalizeRecipientLocalPart(row.localPart) === normalized)) return NextResponse.json({ error: "An alias already uses this address" }, { status: 409 });
 	const id = newId("mbx");
 	await db.insert(mailboxes).values({ id, userId: ownerUserId, domainId: domain.id, localPart, displayName: parsed.data.displayName, type: mailboxType });
 	try {

@@ -64,6 +64,7 @@ export function RecipientInput({
 	}, [draft, disabled, mailboxId]);
 
 	function closeSuggestions() {
+		requestRef.current++; // drop any in-flight lookup so it cannot reopen the list
 		setSuggestionsOpen(false);
 		setActiveIndex(-1);
 	}

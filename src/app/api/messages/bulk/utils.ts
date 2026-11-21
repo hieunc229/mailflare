@@ -41,3 +41,8 @@ export function isPermanentlyDeletableStatus(status: string | null | undefined):
 export function isPermanentDeleteFolder(folder: unknown): folder is PermanentDeleteFolder {
 	return folder === "trash" || folder === "spam";
 }
+
+/** Moving into a folder only applies to mail already in that folder's mailbox, and never to drafts (they stay private to their author). */
+export function canMoveToFolder(message: { mailboxId: string | null; status?: string | null }, folderMailboxId: string): boolean {
+	return message.mailboxId === folderMailboxId && message.status !== "draft";
+}

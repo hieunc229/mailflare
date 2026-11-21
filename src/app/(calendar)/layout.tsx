@@ -50,7 +50,7 @@ export default function CalendarLayout({ children }: { children: React.ReactNode
             <MailSearchProvider>
               <ShortcutsProvider>
                 <RouteTitle />
-              <div className="grid h-dvh grid-cols-[minmax(0,1fr)] overflow-hidden bg-[#f6f8fc]">
+              <div className="safe-area grid h-dvh grid-cols-[minmax(0,1fr)] overflow-hidden bg-[#f6f8fc]">
                 <SkipToContent />
                 <SidebarAside className="md:hidden"><CalendarMobileUpcoming /></SidebarAside>
                 <div className="flex min-h-0 min-w-0 flex-col">

@@ -1,10 +1,11 @@
-import { and, asc, count, desc, eq, inArray, sql } from "drizzle-orm";
+import { and, asc, count, countDistinct, desc, eq, inArray, sql } from "drizzle-orm";
 import { emailChangesSince, threadChangesSince } from "./changes";
-import { messages } from "@/db/schema";
+import { folders, messages } from "@/db/schema";
+import { DRAFT_FILTER_PARAMS, draftsVisibleTo, logMessageHidden, privateDraftForStatus } from "@/lib/email/draft-access";
 import { newId } from "@/lib/ids";
 import { buildSnippet, parseRawMime } from "@/lib/email/parse";
 import { getAuthorizedSenderAddress } from "@/lib/email/sender";
-import { joinEmailAddressList } from "@/lib/email/address";
+import { formatEmailAddress, joinEmailAddressList } from "@/lib/email/address";
 import { resolveThreadId } from "@/lib/email/threading";
 import { storeMessageAttachments } from "@/lib/email/attachments";
 import { deleteMessageWithObjects } from "@/lib/email/message-cleanup";
@@ -59,6 +60,7 @@ async function insertDraft(ctx: JmapContext, row: DraftRow): Promise<string> {
 		textBody: row.textBody,
 		htmlBody: row.htmlBody,
 		status: "draft",
+		privateDraft: true,
 		read: row.read ?? true,
 		starred: row.starred ?? false,
 		inReplyTo: row.inReplyTo,
@@ -73,17 +75,19 @@ async function insertDraft(ctx: JmapContext, row: DraftRow): Promise<string> {
 
 async function scope(ctx: JmapContext) {
 	const ids = Array.from(await listAccessibleMailboxIdSet(ctx));
-	return { ids, condition: ids.length ? inArray(messages.mailboxId, ids) : ctx.auth.mailboxIds ? sql`1 = 0` : eq(messages.userId, ctx.auth.userId) };
+	const mailboxScope = ids.length ? inArray(messages.mailboxId, ids) : ctx.auth.mailboxIds ? sql`1 = 0` : eq(messages.userId, ctx.auth.userId);
+	// Other users' drafts in a shared mailbox are private, as over REST.
+	return { ids, condition: and(mailboxScope, draftsVisibleTo(ctx.auth.userId))! };
 }
 
 export async function loadMessages(ctx: JmapContext, ids: string[]): Promise<MessageRow[]> {
 	if (ids.length === 0) return [];
 	const { ids: accessible, condition } = await scope(ctx);
 	// D1 caps bound parameters per query at 100, and the scope predicate
-	// already binds the accessible mailbox ids, so the remainder is the id
-	// batch size. Callers key rows by id, so dedupe first: an id split over
-	// two batches would otherwise return its row twice.
-	const batch = Math.max(1, 100 - accessible.length);
+	// already binds the accessible mailbox ids and the draft filter, so the
+	// remainder is the id batch size. Callers key rows by id, so dedupe first:
+	// an id split over two batches would otherwise return its row twice.
+	const batch = Math.max(1, 100 - accessible.length - DRAFT_FILTER_PARAMS);
 	const unique = [...new Set(ids)];
 	const rows: MessageRow[] = [];
 	for (let offset = 0; offset < unique.length; offset += batch) {
@@ -117,36 +121,57 @@ export const emailGet: JmapMethodHandler = async (ctx, args) => {
 	return { accountId: ctx.accountId, state: await getEmailState(ctx), list, notFound: ids.filter((id) => !found.has(id)) };
 };
 
+/** How many ordered ids Email/query loads when it has to resolve an anchor or collapse threads. */
+const MATERIALISED_QUERY_LIMIT = 10_000;
+
 export const emailQuery: JmapMethodHandler = async (ctx, args) => {
 	const { ids: accessibleIds, condition } = await scope(ctx);
-	const filter = filterToSql(args.filter as Filter | null | undefined, new Set(accessibleIds));
+	const filter = filterToSql(args.filter as Filter | null | undefined, new Set(accessibleIds), ctx.auth.userId);
 	const where = filter ? and(condition, filter) : condition;
-	const order = sortToSql(args.sort as Comparator[] | null | undefined);
+	// The id breaks ties, so OFFSET pages are stable on databases (PostgreSQL)
+	// that return equal rows in any order.
+	const order = [...sortToSql(args.sort as Comparator[] | null | undefined), asc(messages.id)];
 	const collapse = !!args.collapseThreads;
 	const limit = Math.min(Math.max(Number(args.limit ?? LIMITS.maxQueryLimit), 0), LIMITS.maxQueryLimit);
 	let position = Number(args.position ?? 0);
 
-	// Anchors are resolved by materialising the ordered id list up to a bound;
-	// mailboxes here are small enough that this stays cheap.
 	const threadKey = sql<string>`coalesce(${messages.threadId}, ${messages.id})`;
-	const allRows = await ctx.db
-		.select({ id: messages.id, thread: threadKey })
-		.from(messages)
-		.where(where)
-		.orderBy(...order)
-		.limit(10_000);
-	let ordered = allRows.map((row) => row.id);
-	if (collapse) {
-		const seen = new Set<string>();
-		ordered = allRows.filter((row) => (seen.has(row.thread) ? false : (seen.add(row.thread), true))).map((row) => row.id);
+	const countTotal = async () => {
+		const [row] = await ctx.db.select({ n: collapse ? countDistinct(threadKey) : count() }).from(messages).where(where);
+		return Number(row?.n ?? 0);
+	};
+
+	let page: string[];
+	let total: number | undefined;
+	if (!args.anchor && !collapse) {
+		// Plain paging is done in SQL, so neither the page nor the total is bounded.
+		if (args.calculateTotal || position < 0) total = await countTotal();
+		if (position < 0) position = Math.max(total! + position, 0);
+		const rows = await ctx.db.select({ id: messages.id }).from(messages).where(where).orderBy(...order).limit(limit).offset(position);
+		page = rows.map((row) => row.id);
+	} else {
+		// Anchors and collapsed threads are resolved by materialising the ordered
+		// id list up to a bound; positions past it are not reachable this way.
+		const allRows = await ctx.db
+			.select({ id: messages.id, thread: threadKey })
+			.from(messages)
+			.where(where)
+			.orderBy(...order)
+			.limit(MATERIALISED_QUERY_LIMIT);
+		let ordered = allRows.map((row) => row.id);
+		if (collapse) {
+			const seen = new Set<string>();
+			ordered = allRows.filter((row) => (seen.has(row.thread) ? false : (seen.add(row.thread), true))).map((row) => row.id);
+		}
+		if (args.anchor) {
+			const index = ordered.indexOf(String(args.anchor));
+			if (index < 0) return { type: "anchorNotFound" };
+			// An offset that reaches before the first result clamps to 0 (RFC 8620 §5.5).
+			position = Math.max(index + Number(args.anchorOffset ?? 0), 0);
+		} else if (position < 0) position = Math.max(ordered.length + position, 0);
+		page = ordered.slice(position, position + limit);
+		if (args.calculateTotal) total = allRows.length < MATERIALISED_QUERY_LIMIT ? ordered.length : await countTotal();
 	}
-	if (args.anchor) {
-		const index = ordered.indexOf(String(args.anchor));
-		if (index < 0) return { type: "anchorNotFound" };
-		position = index + Number(args.anchorOffset ?? 0);
-	}
-	if (position < 0) position = Math.max(ordered.length + position, 0);
-	const page = ordered.slice(position, position + limit);
 
 	return {
 		accountId: ctx.accountId,
@@ -154,7 +179,7 @@ export const emailQuery: JmapMethodHandler = async (ctx, args) => {
 		canCalculateChanges: false,
 		position,
 		ids: page,
-		...(args.calculateTotal ? { total: ordered.length } : {}),
+		...(total !== undefined ? { total } : {}),
 	};
 };
 
@@ -192,7 +217,8 @@ function targetFromMailboxIds(row: MessageRow, patch: Record<string, unknown>, a
 	if (!ref || !accessible.has(ref.mailboxId)) return { error: { type: "invalidProperties", properties: ["mailboxIds"], description: "Unknown mailbox" } };
 	if (ref.mailboxId !== row.mailboxId) return { error: { type: "invalidProperties", properties: ["mailboxIds"], description: "Messages cannot move between accounts' mailboxes" } };
 	if (ref.kind === "account") return { error: { type: "invalidProperties", properties: ["mailboxIds"], description: "Choose a folder or system mailbox" } };
-	if (ref.kind === "folder") return { status: row.direction === "outbound" && row.status !== "draft" ? "sent" : "received", folderId: ref.folderId };
+	// A folder move is not a send: a private draft keeps a non-sent status so privateDraftForStatus leaves it private.
+	if (ref.kind === "folder") return { status: row.direction === "outbound" && row.status !== "draft" && !row.privateDraft ? "sent" : "received", folderId: ref.folderId };
 	if (ref.role === "sent" && row.direction === "inbound") return { error: { type: "invalidProperties", properties: ["mailboxIds"], description: "Received mail cannot be moved to Sent" } };
 	return { status: roleToStatus(ref.role), folderId: null };
 }
@@ -227,7 +253,7 @@ async function createDraft(ctx: JmapContext, value: Record<string, unknown>, acc
 		return { error: { type: "forbidden", description: error instanceof Error ? error.message : "Cannot send from that address" } };
 	}
 	const addressList = (list: unknown) =>
-		Array.isArray(list) ? joinEmailAddressList((list as EmailAddressObject[]).map((item) => (item.name ? `"${item.name.replace(/"/g, '\\"')}" <${item.email}>` : item.email))) : "";
+		Array.isArray(list) ? joinEmailAddressList((list as EmailAddressObject[]).map((item) => formatEmailAddress(item.email, item.name))) : "";
 	const bodyValues = (value.bodyValues ?? {}) as Record<string, { value: string }>;
 	const partText = (parts: unknown) => (Array.isArray(parts) && parts[0]?.partId ? bodyValues[parts[0].partId]?.value ?? "" : "");
 	const text = partText(value.textBody);
@@ -270,7 +296,10 @@ export const emailSet: JmapMethodHandler = async (ctx, args) => {
 	const oldState = await getEmailState(ctx);
 	if (args.ifInState && args.ifInState !== oldState) return { type: "stateMismatch" };
 	const accessible = await listAccessibleMailboxIdSet(ctx);
-	const writable = new Set((await listJmapMailboxes(ctx)).filter((row) => row.permission !== "read_only").map((row) => row.id));
+	const mailboxRows = await listJmapMailboxes(ctx);
+	const writable = new Set(mailboxRows.filter((row) => row.permission !== "read_only").map((row) => row.id));
+	// Moving or deleting mail needs full_access, as in the REST routes (canManage); delegates keep flags and drafts.
+	const manageable = new Set(mailboxRows.filter((row) => row.permission === "full_access").map((row) => row.id));
 	const created: Record<string, unknown> = {};
 	const notCreated: Record<string, unknown> = {};
 	const updated: Record<string, null> = {};
@@ -307,15 +336,29 @@ export const emailSet: JmapMethodHandler = async (ctx, args) => {
 			notUpdated[id] = move.error;
 			continue;
 		}
+		if (move && !manageable.has(row.mailboxId)) {
+			notUpdated[id] = { type: "forbidden", description: "Moving mail needs full access to the mailbox" };
+			continue;
+		}
+		if (move && typeof move.folderId === "string") {
+			// A folder id in a mailboxIds patch is client input: it must be a folder of the message's own mailbox.
+			const [folder] = await ctx.db.select({ id: folders.id }).from(folders).where(and(eq(folders.id, move.folderId), eq(folders.mailboxId, row.mailboxId))).limit(1);
+			if (!folder) {
+				notUpdated[id] = { type: "invalidProperties", properties: ["mailboxIds"], description: "Unknown folder" };
+				continue;
+			}
+		}
 		const flags = keywordsFromPatch(patch);
 		const set: Partial<MessageRow> = {};
 		if (flags.read !== undefined) set.read = flags.read;
 		if (flags.starred !== undefined) set.starred = flags.starred;
 		if (move) {
-			if (move.status !== undefined) set.status = move.status;
+			if (move.status !== undefined) Object.assign(set, { status: move.status }, privateDraftForStatus(move.status));
 			if (move.folderId !== undefined) set.folderId = move.folderId;
 		}
 		if (Object.keys(set).length) await ctx.db.update(messages).set(set).where(eq(messages.id, id));
+		// Moved into Drafts, the message is gone for the mailbox's other readers.
+		if (set.privateDraft && !row.privateDraft) await logMessageHidden(ctx.db, row);
 		updated[id] = null;
 	}
 
@@ -330,7 +373,9 @@ export const emailSet: JmapMethodHandler = async (ctx, args) => {
 			notDestroyed[id] = { type: "notFound" };
 			continue;
 		}
-		if (!writable.has(row.mailboxId)) {
+		// Delegates may delete their own drafts; anything else needs full_access.
+		const ownDraft = row.status === "draft" && row.userId === ctx.auth.userId;
+		if (!writable.has(row.mailboxId) || !(manageable.has(row.mailboxId) || ownDraft)) {
 			notDestroyed[id] = { type: "forbidden" };
 			continue;
 		}
@@ -465,7 +510,7 @@ export const threadGet: JmapMethodHandler = async (ctx, args) => {
 	const threadKey = sql<string>`coalesce(${messages.threadId}, ${messages.id})`;
 	// Same D1 bound-parameter budget as loadMessages; dedupe so a repeated
 	// thread id cannot list its messages twice within one group.
-	const batch = Math.max(1, 100 - accessible.length);
+	const batch = Math.max(1, 100 - accessible.length - DRAFT_FILTER_PARAMS);
 	const unique = [...new Set(ids)];
 	const rows: { id: string; thread: string }[] = [];
 	for (let offset = 0; offset < unique.length; offset += batch) {

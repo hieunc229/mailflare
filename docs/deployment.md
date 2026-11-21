@@ -201,6 +201,8 @@ If the Cloudflare dashboard has a custom deploy command containing `wrangler d1 
 
 Each migration and its `d1_migrations` history entry run in one D1 batch. If a migration fails, its changes are rolled back, the failed filename is shown, and it can be retried after the problem is corrected. Wrangler remains available as a manual recovery tool.
 
+If mail arrives after a deploy but before its migrations are applied and the new code needs a column or table that does not exist yet, the inbound queue retries that message every 5 minutes, up to 12 times (about an hour), instead of dropping it. Applying the migrations inside that hour, from **Update database** or with automatic updates enabled (the 5-minute cron applies them), delivers the held mail. Mail still failing after that is lost from the queue and its raw copy in R2 is deleted by the daily sweep, so apply migrations promptly after a deploy. The self-hosted Node server applies migrations at startup before it consumes mail, so it does not hit this.
+
 New application releases must remain compatible with the previous schema until an administrator applies their migrations. Prefer additive changes, keep old columns during the transition, and avoid making authentication or the admin settings page depend immediately on a newly added column. Plan a maintenance window for an incompatible schema change.
 
 When adding a schema change, create a new uniquely named SQL file in `drizzle/migrations` and do not edit an applied migration. Build and development commands generate the Worker migration bundle from those files. `npm run db:bundle` can generate it explicitly.

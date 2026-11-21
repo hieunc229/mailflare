@@ -59,13 +59,20 @@ export function MessageNotesPopover({ messageId, count, preview }: { messageId: 
 
 	useEffect(() => {
 		if (!open) return;
+		// The popover is itself role=dialog; only dialogs opened over it (the delete confirm) are foreign.
+		function inForeignDialog(target: EventTarget | null) {
+			const dialog = target instanceof Element ? target.closest('[role="dialog"], [role="alertdialog"]') : null;
+			return !!dialog && !panelRef.current?.contains(dialog);
+		}
 		function onPointerDown(event: PointerEvent) {
 			const target = event.target as Node;
 			if (triggerRef.current?.contains(target) || panelRef.current?.contains(target)) return;
+			// The delete confirmation is a portaled dialog; interacting with it must not close the popover.
+			if (inForeignDialog(event.target)) return;
 			close();
 		}
 		function onKeyDown(event: KeyboardEvent) {
-			if (event.key === "Escape") close();
+			if (event.key === "Escape" && !inForeignDialog(event.target)) close();
 		}
 		document.addEventListener("pointerdown", onPointerDown, true);
 		document.addEventListener("keydown", onKeyDown);

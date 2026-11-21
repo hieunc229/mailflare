@@ -72,7 +72,10 @@ export function AgentPanel({ open, fullSize, onClose, onToggleFullSize }: AgentP
 		{ label: t("agent.welcome.actions"), detail: t("agent.welcome.actionsDetail"), prompt: "Find action items in my recent email.", icon: ListChecks },
 	];
 
-	const refresh = useCallback(async () => {
+	const viewRef = useRef(view);
+	useEffect(() => { viewRef.current = view; }, [view]);
+	// Background refreshes must not overwrite unsaved edits while the settings form is open.
+	const refresh = useCallback(async (replaceSettings = false) => {
 		if (!mailboxId) return;
 		const [settingsResponse, conversationsResponse, jobsResponse] = await Promise.all([
 			authFetch(`/api/agent/settings?mailboxId=${encodeURIComponent(mailboxId)}`),
@@ -86,7 +89,7 @@ export function AgentPanel({ open, fullSize, onClose, onToggleFullSize }: AgentP
 		}
 		if (settingsResponse.ok) {
 			const data = await settingsResponse.json() as AgentSettingsResponse;
-			setSettings(data.settings);
+			if (replaceSettings || viewRef.current !== "settings") setSettings(data.settings);
 			setAvailableModels(data.models ?? []);
 			setCanManage(data.canManage);
 			setProviderConfigured(data.providerConfigured);
@@ -127,7 +130,7 @@ export function AgentPanel({ open, fullSize, onClose, onToggleFullSize }: AgentP
 		setView("chat");
 		if (menuRef.current) menuRef.current.open = false;
 		setError(null);
-		void refresh().catch(() => { if (!cancelled) setError(t("agent.panel.settingsLoadFailed")); });
+		void refresh(true).catch(() => { if (!cancelled) setError(t("agent.panel.settingsLoadFailed")); });
 		const savedId = readAgentConversationId(mailboxId);
 		selectedConversationRef.current = savedId;
 		setLoadingConversation(Boolean(savedId));
@@ -325,7 +328,7 @@ export function AgentPanel({ open, fullSize, onClose, onToggleFullSize }: AgentP
 		try {
 			const response = await authFetch("/api/agent/settings", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(settings) });
 			if (!response.ok) throw new Error(((await response.json()) as AgentErrorResponse).error || t("agent.panel.saveFailed"));
-			await refresh();
+			await refresh(true);
 		} catch (cause) { setError(cause instanceof Error ? cause.message : t("agent.panel.saveFailed")); }
 		finally { setBusy(false); }
 	}

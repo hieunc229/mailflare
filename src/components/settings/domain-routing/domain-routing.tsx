@@ -23,6 +23,9 @@ import { CardGridSkeleton } from "@/components/page-skeletons";
 import { useSelectedMailbox } from "@/components/mailbox-provider";
 import { useCurrentUser } from "@/hooks/use-current-user";
 import { canManageDomains } from "@/lib/auth/admin";
+import { ClientRequestError } from "@/lib/http/client-error";
+import { useSecurityStatus } from "../security-status-store";
+import { StepUpDialog } from "../step-up-dialog";
 import type { DomainRoutingProps, DomainRule, DomainRuleInput } from "./types";
 import {
 	ACTION_LABELS,
@@ -53,6 +56,8 @@ export function DomainRouting({ domain }: DomainRoutingProps = {}) {
 	const [editing, setEditing] = useState<DomainRule | null>(null);
 	const [form, setForm] = useState<DomainRuleInput>(emptyRuleInput(""));
 	const [error, setError] = useState<string | null>(null);
+	const [confirmingForward, setConfirmingForward] = useState(false);
+	const { status: securityStatus } = useSecurityStatus();
 
 	const domainId = domain?.id ?? selectedMailbox?.domainId ?? "";
 	const mailboxId = selectedMailbox?.id ?? "";
@@ -69,19 +74,26 @@ export function DomainRouting({ domain }: DomainRoutingProps = {}) {
 	const mailboxes = rules.data?.mailboxes ?? [];
 
 	const save = useMutation({
-		mutationFn: () => {
-			const payload: DomainRuleInput = { ...form, domainId };
+		mutationFn: (stepUpToken?: string) => {
+			const payload: DomainRuleInput = { ...form, domainId, ...(stepUpToken ? { stepUpToken } : {}) };
 			return editing
 				? updateDomainRule(editing.id, payload)
 				: createDomainRule(payload);
 		},
 		onSuccess: () => {
+			setConfirmingForward(false);
 			setDialogOpen(false);
 			setEditing(null);
 			setError(null);
 			qc.invalidateQueries({ queryKey: rulesQueryKey });
 		},
-		onError: (e: Error) => setError(e.message),
+		// A forward to an outside address asks the user to confirm it is them, then retries.
+		onError: (e: Error) => {
+			if (e instanceof ClientRequestError && e.code === "verification_failed") {
+				setError(null);
+				setConfirmingForward(true);
+			} else setError(e.message);
+		},
 	});
 
 	const remove = useMutation({
@@ -90,11 +102,19 @@ export function DomainRouting({ domain }: DomainRoutingProps = {}) {
 		onSuccess: () => qc.invalidateQueries({ queryKey: rulesQueryKey }),
 	});
 
+	// Switching an outside forward back on needs the same proof as creating it.
+	const [togglingRule, setTogglingRule] = useState<DomainRule | null>(null);
 	const toggle = useMutation({
-		mutationFn: (rule: DomainRule) =>
-			updateDomainRule(rule.id, { ...ruleToInput(rule), enabled: !rule.enabled }),
+		mutationFn: ({ rule, stepUpToken }: { rule: DomainRule; stepUpToken?: string }) =>
+			updateDomainRule(rule.id, { ...ruleToInput(rule), enabled: !rule.enabled, ...(stepUpToken ? { stepUpToken } : {}) }),
 		onMutate: () => remove.reset(),
-		onSuccess: () => qc.invalidateQueries({ queryKey: rulesQueryKey }),
+		onSuccess: () => {
+			setTogglingRule(null);
+			qc.invalidateQueries({ queryKey: rulesQueryKey });
+		},
+		onError: (e: Error, { rule }) => {
+			if (e instanceof ClientRequestError && e.code === "verification_failed") setTogglingRule(rule);
+		},
 	});
 
 	function openCreate() {
@@ -158,7 +178,7 @@ export function DomainRouting({ domain }: DomainRoutingProps = {}) {
 						mailboxes={mailboxes}
 						onEdit={openEdit}
 						onDelete={(id) => remove.mutate(id)}
-						onToggle={(rule) => toggle.mutate(rule)}
+						onToggle={(rule) => toggle.mutate({ rule })}
 					/>
 					<RuleSection
 						className="rounded-b-3xl rounded-t-lg"
@@ -169,7 +189,7 @@ export function DomainRouting({ domain }: DomainRoutingProps = {}) {
 						mailboxes={mailboxes}
 						onEdit={openEdit}
 						onDelete={(id) => remove.mutate(id)}
-						onToggle={(rule) => toggle.mutate(rule)}
+						onToggle={(rule) => toggle.mutate({ rule })}
 					/>
 				</div>
 			)}
@@ -186,7 +206,7 @@ export function DomainRouting({ domain }: DomainRoutingProps = {}) {
 						className="space-y-4"
 						onSubmit={(e) => {
 							e.preventDefault();
-							save.mutate();
+							save.mutate(undefined);
 						}}
 					>
 						<div className="grid grid-cols-1 items-end gap-4 sm:grid-cols-2">
@@ -368,6 +388,26 @@ export function DomainRouting({ domain }: DomainRoutingProps = {}) {
 					</form>
 				</DialogContent>
 			</Dialog>
+			<StepUpDialog
+				open={confirmingForward}
+				hasPassword={securityStatus?.passwordSet ?? true}
+				hasPasskey={(securityStatus?.passkeys.length ?? 0) > 0}
+				requireSecondFactor={securityStatus?.requireSecondFactor ?? false}
+				totpEnabled={securityStatus?.totpEnabled ?? false}
+				action="routing.forward"
+				onOpenChange={setConfirmingForward}
+				onAuthorized={(token) => save.mutate(token)}
+			/>
+			<StepUpDialog
+				open={!!togglingRule}
+				hasPassword={securityStatus?.passwordSet ?? true}
+				hasPasskey={(securityStatus?.passkeys.length ?? 0) > 0}
+				requireSecondFactor={securityStatus?.requireSecondFactor ?? false}
+				totpEnabled={securityStatus?.totpEnabled ?? false}
+				action="routing.forward"
+				onOpenChange={(open) => { if (!open) setTogglingRule(null); }}
+				onAuthorized={(token) => { if (togglingRule) toggle.mutate({ rule: togglingRule, stepUpToken: token }); }}
+			/>
 		</div>
 	);
 }

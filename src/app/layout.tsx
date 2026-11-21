@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { Providers } from "@/components/providers";
 import { LanguageProvider } from "@/components/language-provider";
@@ -19,12 +19,22 @@ const geistMono = Geist_Mono({
 	subsets: ["latin"],
 });
 
+// Colours are the --background tokens in globals.css (light #f6f8fc, dark #202124).
+// viewportFit "cover" lets the shell reach the notch and home indicator; the env(safe-area-inset-*) padding keeps content clear of them.
+export const viewport: Viewport = {
+	themeColor: [
+		{ media: "(prefers-color-scheme: light)", color: "#f6f8fc" },
+		{ media: "(prefers-color-scheme: dark)", color: "#202124" },
+	],
+	viewportFit: "cover",
+};
+
 export async function generateMetadata(): Promise<Metadata> {
 	const { appName } = await getHomeBranding();
 	return {
 		title: appName,
 		description: "Multi-tenant email on Cloudflare",
-		icons: { icon: "/api/branding/icon", apple: "/icon-192.png" },
+		icons: { icon: "/api/branding/icon", apple: "/apple-touch-icon.png" },
 		appleWebApp: {
 			capable: true,
 			title: appName,
