@@ -1807,6 +1807,8 @@ export const imapFolderState = sqliteTable("imap_folder_state", {
 	uidvalidity: integer("uidvalidity").notNull(),
 	uidNext: integer("uid_next").notNull().default(1),
 	highestModseq: integer("highest_modseq").notNull().default(0),
+	// Highest mod-sequence of any imap_expunged row that pruning dropped: a QRESYNC client at or above it gets an exact answer from what is kept.
+	expungedFloor: integer("expunged_floor").notNull().default(0),
 	initializedAt: integer("initialized_at").notNull().default(nowSeconds),
 }, (t) => [uniqueIndex("imap_folder_state_folder_idx").on(t.mailboxId, t.folderKey)]);
 
@@ -1845,6 +1847,8 @@ export const imapExpunged = sqliteTable("imap_expunged", {
 }, (t) => [
 	uniqueIndex("imap_expunged_uid_idx").on(t.mailboxId, t.folderKey, t.uid),
 	index("imap_expunged_modseq_idx").on(t.mailboxId, t.folderKey, t.modseq),
+	// The daily prune looks for rows by age.
+	index("imap_expunged_created_idx").on(t.createdAt, t.mailboxId, t.folderKey, t.modseq),
 ]);
 
 export const imapMessageCache = sqliteTable("imap_message_cache", {

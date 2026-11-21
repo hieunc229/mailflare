@@ -1004,6 +1004,13 @@
         "CREATE INDEX `imap_expunged_modseq_idx` ON `imap_expunged` (`mailbox_id`,`folder_key`,`modseq`);",
         "CREATE TABLE `imap_message_cache` (\n\t`message_id` text PRIMARY KEY NOT NULL,\n\t`size` integer NOT NULL,\n\t`synth_key` text,\n\t`envelope` text NOT NULL,\n\t`bodystructure` text NOT NULL,\n\t`header_size` integer NOT NULL,\n\t`created_at` integer DEFAULT (unixepoch()) NOT NULL,\n\tFOREIGN KEY (`message_id`) REFERENCES `messages`(`id`) ON UPDATE no action ON DELETE cascade\n);"
       ]
+    },
+    {
+      "name": "0104_imap_expunged_floor.sql",
+      "statements": [
+        "ALTER TABLE `imap_folder_state` ADD `expunged_floor` integer DEFAULT 0 NOT NULL;",
+        "CREATE INDEX `imap_expunged_created_idx` ON `imap_expunged` (`created_at`,`mailbox_id`,`folder_key`,`modseq`);"
+      ]
     }
   ]
 }
