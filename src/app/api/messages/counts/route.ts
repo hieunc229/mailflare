@@ -6,6 +6,7 @@ import { messages } from "@/db/schema";
 import { getCurrentUser } from "@/lib/auth/cookies";
 import { getEnv } from "@/lib/cloudflare";
 import { scheduledMessageCondition } from "@/lib/email/scheduled";
+import { draftsVisibleTo } from "@/lib/email/draft-access";
 import { buildMessageCounts } from "./utils";
 import { getMailboxAccessLevel, listAccessibleMailboxIds } from "@/lib/mailboxes/access";
 
@@ -35,6 +36,8 @@ export async function GET(request: Request) {
 			conditions.push(eq(messages.userId, user.id));
 		}
 	}
+
+	conditions.push(draftsVisibleTo(user.id));
 
 	const rows = await db
 		.select({

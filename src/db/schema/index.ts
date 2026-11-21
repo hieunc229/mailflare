@@ -47,6 +47,8 @@ export const users = sqliteTable("users", {
 	totpSecret: text("totp_secret"),
 	totpEnabled: bool("totp_enabled").notNull().default(false),
 	totpConfirmedAt: timestamp("totp_confirmed_at"),
+	/** Last accepted TOTP time step (unix seconds / 30); codes for this step or an earlier one are refused, so a code works once. */
+	totpLastStep: integer("totp_last_step"),
 	/**
 	 * Password sign-ins must prove a second factor (a passkey or TOTP/recovery
 	 * code). Passkey sign-ins already satisfy it, so they need no extra step.
@@ -142,6 +144,15 @@ export const mailboxAliases = sqliteTable(
 			.notNull()
 			.references(() => domains.id, { onDelete: "cascade" }),
 		localPart: text("local_part").notNull(),
+		// User-facing name for the alias ("Shopping", "Newsletter"). Masked aliases
+		// use it as their only identity so the account name stays hidden.
+		label: text("label"),
+		// Disabled aliases reject inbound mail before catch-all rules and cannot
+		// be used as a sender address.
+		enabled: bool("enabled").notNull().default(true),
+		// Masked aliases are generated addresses that hide the account name when
+		// sending ("Hide My Email"-style), unlike manually created aliases.
+		masked: bool("masked").notNull().default(false),
 		createdAt: timestamp("created_at")
 			.notNull()
 			.$defaultFn(() => new Date()),
@@ -264,7 +275,9 @@ export const jmapChanges = sqliteTable(
 		objectType: text("object_type", { enum: ["email", "mailbox"] }).notNull(),
 		objectId: text("object_id").notNull(),
 		threadId: text("thread_id"),
-		change: text("change", { enum: ["created", "updated", "destroyed"] }).notNull(),
+		// "hidden" marks a message that stopped being visible to everyone but its author (a scheduled send
+		// cancelled back to a draft): readers who could see it are told it was destroyed, the author is not.
+		change: text("change", { enum: ["created", "updated", "destroyed", "hidden"] }).notNull(),
 		createdAt: integer("created_at").notNull().default(nowSeconds),
 	},
 	(table) => [index("jmap_changes_mailbox_seq_idx").on(table.mailboxId, table.seq)],
@@ -343,6 +356,9 @@ export const messages = sqliteTable(
 		status: text("status").notNull().default("received"),
 		read: bool("read").notNull().default(false),
 		starred: bool("starred").notNull().default(false),
+		// An unsent draft stays private to its author for as long as the row exists, wherever it is moved
+		// (Trash, Archive, a folder). Cleared when the row becomes sent mail.
+		privateDraft: bool("private_draft").notNull().default(false),
 		snoozedUntil: timestamp("snoozed_until"),
 		threadId: text("thread_id"),
 		// RFC 5322 threading headers, kept so replies land in the right conversation
@@ -397,6 +413,9 @@ export const messages = sqliteTable(
 			t.read,
 			t.threadId,
 			t.snoozedUntil,
+			// The draft filter (user_id = ? OR NOT private_draft) is evaluated from the index too.
+			t.userId,
+			t.privateDraft,
 		),
 		// Covering index for the folder-counts GROUP BY: lets the counts
 		// endpoint stream grouped rows straight off the index instead of
@@ -409,6 +428,9 @@ export const messages = sqliteTable(
 			t.read,
 			t.starred,
 			t.snoozedUntil,
+			// The draft filter (user_id = ? OR NOT private_draft) is evaluated from the index too.
+			t.userId,
+			t.privateDraft,
 		),
 		// Conversation paging partitions by coalesce(thread_id, id) and orders
 		// each partition by created_at desc, so the thread key must precede
@@ -653,10 +675,15 @@ export const calendarEvents = sqliteTable(
 		location: text("location").notNull().default(""),
 		attendees: text("attendees").notNull().default("[]"),
 		color: text("color").notNull().default("blue"),
-		repeat: text("repeat", { enum: ["none", "daily", "weekly", "monthly", "weekdays"] }).notNull().default("none"),
+		repeat: text("repeat", { enum: ["none", "daily", "weekly", "monthly", "weekdays", "yearly"] }).notNull().default("none"),
 		repeatDays: text("repeat_days").notNull().default("[]"),
 		repeatAnchorDay: integer("repeat_anchor_day"),
 		repeatUntil: timestamp("repeat_until"),
+		/** Step between recurrences: every N days/weeks/months/years. */
+		repeatInterval: integer("repeat_interval").notNull().default(1),
+		/** Weekday (0-6) and week-of-month (1-5, -1 = last) for nth-weekday monthly repeats. */
+		repeatWeekday: integer("repeat_weekday"),
+		repeatWeek: integer("repeat_week"),
 		excludedOccurrences: text("excluded_occurrences").notNull().default("[]"),
 		timeZone: text("time_zone"),
 		startsAt: timestamp("starts_at").notNull(),
@@ -673,6 +700,8 @@ export const calendarEvents = sqliteTable(
 		inviteSender: text("invite_sender"),
 		/** SEQUENCE of the invitation revision the event reflects, so an older revision arriving late is ignored. */
 		inviteSequence: integer("invite_sequence"),
+		/** Outgoing iTIP revision counter; every sent invitation or update bumps SEQUENCE so guests ignore stale mail. */
+		eventSequence: integer("event_sequence").notNull().default(0),
 		/** JSON map of guest address to accepted, tentative or declined, filled from their replies to an invitation this user sent. */
 		attendeeResponses: text("attendee_responses"),
 		createdAt: timestamp("created_at").notNull().$defaultFn(() => new Date()),
@@ -681,6 +710,82 @@ export const calendarEvents = sqliteTable(
 	(t) => [
 		index("calendar_events_user_starts_idx").on(t.userId, t.startsAt),
 		index("calendar_events_mailbox_idx").on(t.mailboxId),
+	],
+);
+
+/**
+ * Per-occurrence edits of a recurring series (RECURRENCE-ID): null fields
+ * inherit the series value. Fully deleted occurrences stay in
+ * `excludedOccurrences` on the series instead.
+ */
+export const calendarEventOverrides = sqliteTable(
+	"calendar_event_overrides",
+	{
+		id: text("id").primaryKey(),
+		eventId: text("event_id")
+			.notNull()
+			.references(() => calendarEvents.id, { onDelete: "cascade" }),
+		/** Start of the overridden occurrence, epoch ms. */
+		occurrenceMs: integer("occurrence_ms").notNull(),
+		startsAt: timestamp("starts_at").notNull(),
+		endsAt: timestamp("ends_at").notNull(),
+		title: text("title"),
+		description: text("description"),
+		location: text("location"),
+		createdAt: timestamp("created_at")
+			.notNull()
+			.$defaultFn(() => new Date()),
+		updatedAt: timestamp("updated_at")
+			.notNull()
+			.$defaultFn(() => new Date()),
+	},
+	(t) => [
+		uniqueIndex("calendar_event_overrides_event_occurrence_idx").on(t.eventId, t.occurrenceMs),
+		index("calendar_event_overrides_event_idx").on(t.eventId),
+	],
+);
+
+/**
+ * Cancellation memory for invitations this user sent: the SEQUENCE of the last
+ * CANCEL per UID, so a late RSVP arriving after cancellation is ignored. The
+ * id is a caller-provided hash of userId and UID.
+ */
+export const calendarInviteTombstones = sqliteTable(
+	"calendar_invite_tombstones",
+	{
+		id: text("id").primaryKey(),
+		userId: text("user_id")
+			.notNull()
+			.references(() => users.id, { onDelete: "cascade" }),
+		inviteSequence: integer("invite_sequence").notNull().default(0),
+		inviteSender: text("invite_sender").notNull().default(""),
+		cancelledAt: timestamp("cancelled_at").notNull(),
+	},
+	(t) => [index("calendar_invite_tombstones_user_idx").on(t.userId)],
+);
+
+/**
+ * Latest RSVP per guest per occurrence of an invitation this user sent. The id
+ * is a caller-provided hash of eventId, occurrenceMs and guest.
+ */
+export const calendarOccurrenceResponses = sqliteTable(
+	"calendar_occurrence_responses",
+	{
+		id: text("id").primaryKey(),
+		eventId: text("event_id")
+			.notNull()
+			.references(() => calendarEvents.id, { onDelete: "cascade" }),
+		/** Start of the occurrence the guest answered, epoch ms. */
+		occurrenceMs: integer("occurrence_ms").notNull(),
+		guest: text("guest").notNull(),
+		status: text("status").notNull(),
+		updatedAt: timestamp("updated_at")
+			.notNull()
+			.$defaultFn(() => new Date()),
+	},
+	(t) => [
+		uniqueIndex("calendar_occurrence_responses_event_occurrence_guest_idx").on(t.eventId, t.occurrenceMs, t.guest),
+		index("calendar_occurrence_responses_event_idx").on(t.eventId),
 	],
 );
 
@@ -1105,6 +1210,12 @@ export const appSettings = sqliteTable("app_settings", {
 	spamDomainAgeCheck: bool("spam_domain_age_check").notNull().default(true),
 	/** JSON: brands the administrator added for display-name impersonation checks (see src/lib/spam/settings.ts). */
 	spamBrands: text("spam_brands"),
+	/** Run the update workflow and apply pending migrations automatically (cron). Off by default. */
+	autoUpdate: bool("auto_update").notNull().default(false),
+	/** Release version the cron last dispatched, so it does not dispatch the same one every five minutes. */
+	/** "release": update on a new package.json version; "commit": update on any new upstream commit. */
+	autoUpdateChannel: text("auto_update_channel", { enum: ["release", "commit"] }).notNull().default("release"),
+	autoUpdateDispatchedVersion: text("auto_update_dispatched_version"),
 	updatedAt: timestamp("updated_at")
 		.notNull()
 		.$defaultFn(() => new Date()),
@@ -1344,6 +1455,9 @@ export const schema = {
 	outboundJobs,
 	emailTemplates,
 	calendarEvents,
+	calendarEventOverrides,
+	calendarInviteTombstones,
+	calendarOccurrenceResponses,
 	bookingEvents,
 	routingRules,
 	webhooks,

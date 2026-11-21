@@ -92,6 +92,34 @@
       "when": 1794516478572,
       "tag": "0012_message_action_undo_claims",
       "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1794516479572,
+      "tag": "0013_auto_update",
+      "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1794516479573,
+      "tag": "0014_security_hardening",
+      "breakpoints": true
+    },
+    {
+      "idx": 15,
+      "version": "7",
+      "when": 1794516479576,
+      "tag": "0015_masked_aliases",
+      "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "7",
+      "when": 1795027621043,
+      "tag": "0016_calendar_invite_complete",
+      "breakpoints": true
     }
   ]
 }

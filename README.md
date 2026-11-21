@@ -5,7 +5,7 @@
 
 A self-hosted alternative to Google Workspace. Setup **custom domain Emails**, **Calendar, Drive, Booking** and **built-in AI agents**.
 
-Run it on Cloudflare or Docker. Send and receive with Cloudflare, Resend or Amazon SES. Store files in R2, Backblaze B2 or AWS S3. Use D1, Postgres, MySQL or Turso for the database.
+Self-host it on Cloudflare or Docker. **Or try [Mailflare Cloud](https://cloud.mailflare.co?ref=github) with high-deliverable emails** from $4​
 
 [![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/hieunc229/mailflare)
 
@@ -23,14 +23,6 @@ Run it on Cloudflare or Docker. Send and receive with Cloudflare, Resend or Amaz
     <td align="center"><img src="screenshots/6.png" alt="Drive" width="320"><br>Drive</td>
   </tr>
 </table>
-
-### Sponsors
-
-<a target="_blank" href="https://sequenzy.com/?ref=hieunc229/mailflare"><img height="80" src="sponsors/sequenzy.png" alt="Sequenzy"></a>
-&nbsp;
-<a target="_blank" href="https://drivemug.com/?ref=hieunc229/mailflare"><img height="80" src="sponsors/drivemug.png" alt="Drivemug"></a>
-
-Want to support Mailflare? [Become a sponsor](https://store.paymug.co/buy/mailflare-sponsor).
 
 ## Features
 

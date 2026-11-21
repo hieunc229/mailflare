@@ -43,9 +43,7 @@ export function ForgotPasswordClient() {
 			icon={KeyRound}
 			title={t("auth.forgot.title")}
 			description={
-				sent
-					? t("auth.forgot.sent")
-					: t("auth.forgot.description")
+				sent ? undefined : t("auth.forgot.description")
 			}
 			footer={
 				<Link href="/login" className="text-sm text-neutral-500 hover:text-neutral-800">
@@ -53,11 +51,17 @@ export function ForgotPasswordClient() {
 				</Link>
 			}
 		>
+			{sent && (
+				<p role="status" className="rounded-2xl border border-emerald-100 bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-800">
+					{t("auth.forgot.sent")}
+				</p>
+			)}
 			{!sent && (
 				<form onSubmit={onSubmit} className="space-y-5">
 					<div className="space-y-2">
 						<Label htmlFor="email">{t("auth.email")}</Label>
 						<Input id="email" name="email" type="email" autoComplete="email" required autoFocus />
+						<p className="text-xs text-neutral-500">{t("auth.forgot.hint")}</p>
 					</div>
 					{error && (
 						<p role="alert" className="rounded-2xl border border-red-100 bg-red-50 px-4 py-3 text-sm font-medium text-red-700">{error}</p>

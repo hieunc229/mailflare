@@ -29,17 +29,27 @@ export type ParsedEmail = {
 /** Mail that can never parse within bounds; retrying it only repeats the work. */
 export class MimeLimitError extends Error {}
 
+const POSTAL_MIME_LIMIT_CODES = new Set(["EMAXNESTINGDEPTH", "EMAXHEADERSIZE", "EMAXPARTCOUNT", "EMAXFORWARDEDADDRESSES"]);
+
 export async function parseRawMime(raw: ArrayBuffer): Promise<ParsedEmail> {
 	// Every caller (inbound, import, JMAP) gets the cheap structural check before any decode.
 	const limitReason = mimePreflightReason(raw);
 	if (limitReason) throw new MimeLimitError(limitReason);
 	// forceRfc822Attachments keeps postal-mime from re-parsing inline message/rfc822 with fresh
 	// options, which would reset the nesting cap at every level.
-	const email = await PostalMime.parse(raw, {
-		maxNestingDepth: MIME_LIMITS.maxNestingDepth,
-		maxHeadersSize: MIME_LIMITS.maxHeaderBytes,
-		forceRfc822Attachments: true,
-	});
+	let email: Awaited<ReturnType<typeof PostalMime.parse>>;
+	try {
+		email = await PostalMime.parse(raw, {
+			maxNestingDepth: MIME_LIMITS.maxNestingDepth,
+			maxHeadersSize: MIME_LIMITS.maxParsedHeaderBytes,
+			forceRfc822Attachments: true,
+		});
+	} catch (error) {
+		// postal-mime 4 reports its own limits by code; those messages can never parse, so retrying is pointless.
+		const code = (error as { code?: unknown } | null)?.code;
+		if (typeof code === "string" && POSTAL_MIME_LIMIT_CODES.has(code)) throw new MimeLimitError(`Message rejected: ${code}.`);
+		throw error;
+	}
 	const date = email.date ? new Date(email.date) : null;
 	return {
 		subject: email.subject ?? null,
@@ -64,7 +74,16 @@ export async function parseRawMime(raw: ArrayBuffer): Promise<ParsedEmail> {
 	};
 }
 
+// The snippet only needs the head of the body; bounding the input bounds the work.
+const SNIPPET_SOURCE_CHARS = 20_000;
+
 export function buildSnippet(text: string | null, html: string | null, max = 200): string {
-	const source = getLatestEmailContent(text?.trim() || htmlToReadableText(html));
+	const raw = (text?.trim() || htmlToReadableText(html)).slice(0, SNIPPET_SOURCE_CHARS);
+	let source: string;
+	try {
+		source = getLatestEmailContent(raw);
+	} catch {
+		source = raw;
+	}
 	return source.replace(/\s+/g, " ").trim().slice(0, max);
 }

@@ -78,3 +78,11 @@ Confirm that:
 - Email Routing is enabled for the domain in Cloudflare.
 - The mailbox has an Email Routing rule pointing to the Worker.
 - If the domain receives through Resend or Amazon SES instead, its receiving checklist is all green, the MX record points at that provider, and `APP_URL` is a public HTTPS address.
+
+## The password-reset email never arrives
+
+The reset form always answers success, so it cannot tell you why no mail was sent. Check the Worker logs for one of these lines:
+
+- `Password reset skipped: account has no recovery email` — set the recovery email on the account first.
+- `Password reset requested but no domain can send mail` — enable sending on a domain (Cloudflare, Resend or SES) with an active mailbox owned by an enabled user.
+- `Password reset request failed` — the sending provider rejected the message; the error follows.
