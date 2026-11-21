@@ -25,6 +25,9 @@ export type ImapIdentity = {
 /** Why a login failed, for the server's log only: the client is told the same thing for every reason but `throttled`. */
 export type LoginFailure = "throttled" | "bad_secret" | "no_mailbox" | "malformed";
 
+/** The app-password protocols that log in with a user name: the scope each one needs is the protocol's own name. */
+export type MailProtocol = "imap" | "submission";
+
 export type LoginResult = { ok: true; identity: ImapIdentity } | { ok: false; reason: Exclude<LoginFailure, "malformed"> };
 
 /** A JMAP context for one call: no per-request memo, so a long session re-reads mailbox access every time (spec section 5). */
@@ -86,16 +89,16 @@ async function recordLogin(env: CloudflareEnv, identity: ImapIdentity, ip: strin
 }
 
 /**
- * LOGIN / AUTHENTICATE PLAIN. The guess budget (shared with DAV and JMAP) is spent
- * before anything is looked up; the app password decides who the user is, and only
- * then is the username matched against what that user may access. A wrong secret,
- * a wrong username, a missing scope, a disabled user and an address outside the
- * key's mailbox scope all end the same way, so a client learns nothing about which
- * accounts or addresses exist. The account password is never accepted.
+ * LOGIN / AUTHENTICATE PLAIN, and AUTH PLAIN / LOGIN on the submission ports. The guess budget (shared with
+ * DAV, JMAP and between the two mail protocols) is spent before anything is looked up; the app password decides
+ * who the user is, and only then is the username matched against what that user may access. A wrong secret,
+ * a wrong username, a missing scope, a disabled user and an address outside the key's mailbox scope all end the
+ * same way, so a client learns nothing about which accounts or addresses exist. The account password is never
+ * accepted.
  */
-export async function authenticateImap(env: CloudflareEnv, input: { username: string; secret: string; ip: string | null; client: string }): Promise<LoginResult> {
+async function authenticateMailApp(env: CloudflareEnv, protocol: MailProtocol, input: { username: string; secret: string; ip: string | null; client: string }): Promise<LoginResult> {
 	if (!(await allowAppPasswordGuessFrom(env, input.ip, input.secret.replace(/[\s-]/g, ""), "app"))) return { ok: false, reason: "throttled" };
-	const auth = await authenticateAppPassword(env, { secret: input.secret, protocol: "imap", clientIp: input.ip });
+	const auth = await authenticateAppPassword(env, { secret: input.secret, protocol, clientIp: input.ip });
 	if (!auth) return { ok: false, reason: "bad_secret" };
 	const username = input.username.trim().toLowerCase();
 	const mailbox = await resolveLoginMailbox(imapContext(env, auth), username);
@@ -105,16 +108,21 @@ export async function authenticateImap(env: CloudflareEnv, input: { username: st
 	return { ok: true, identity };
 }
 
+export const authenticateImap = (env: CloudflareEnv, input: { username: string; secret: string; ip: string | null; client: string }): Promise<LoginResult> => authenticateMailApp(env, "imap", input);
+
+/** AUTH on the submission ports: the same checks with an app password that carries the `submission` scope. */
+export const authenticateSubmission = (env: CloudflareEnv, input: { username: string; secret: string; ip: string | null; client: string }): Promise<LoginResult> => authenticateMailApp(env, "submission", input);
+
 /**
  * Whether the login still stands: the key row exists, is still an app password
- * with the `imap` scope, and its user is not disabled. Reads the primary database,
+ * with the protocol's scope (`imap` unless told otherwise), and its user is not disabled. Reads the primary database,
  * so a replica that lags cannot keep a revoked key alive. Returns the identity with
  * the key's current mailbox scope, or null.
  */
-export async function revalidateIdentity(env: CloudflareEnv, identity: ImapIdentity): Promise<ImapIdentity | null> {
+export async function revalidateIdentity(env: CloudflareEnv, identity: ImapIdentity, protocol: MailProtocol = "imap"): Promise<ImapIdentity | null> {
 	const db = getDb({ DB: env.DB_PRIMARY ?? env.DB });
 	const [key] = await db.select().from(apiKeys).where(eq(apiKeys.id, identity.keyId)).limit(1);
-	if (!key || key.userId !== identity.userId || key.kind !== "app" || !parseScopes(key.scopes).includes("imap")) return null;
+	if (!key || key.userId !== identity.userId || key.kind !== "app" || !parseScopes(key.scopes).includes(protocol)) return null;
 	const [user] = await db.select().from(users).where(eq(users.id, key.userId)).limit(1);
 	if (!user || user.disabled) return null;
 	const scope = key.mailboxScopeEnabled ? (await db.select({ mailboxId: mcpKeyMailboxes.mailboxId }).from(mcpKeyMailboxes).where(eq(mcpKeyMailboxes.keyId, key.id))).map((row) => row.mailboxId) : null;
