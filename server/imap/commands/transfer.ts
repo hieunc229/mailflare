@@ -107,6 +107,8 @@ export async function runExpunge(c: ImapConnection, command: ParsedCommand, uidM
 	await expungeDeleted(c.env, c.identity!, selected.mailboxId, selected.view.folderKey as never, only);
 	// Sequence numbers may change now (RFC 3501 7.4.1), so the client is told which messages went.
 	await c.pushUpdates();
+	// With QRESYNC the tagged answer carries the folder's highest mod-sequence (RFC 7162 sections 3.2.7 and 3.2.9).
+	if (c.qresync) return { code: `HIGHESTMODSEQ ${selected.view.highest}`, text: `${uidMode ? "UID " : ""}EXPUNGE completed` };
 }
 
 /** CLOSE of a read-write session removes the \Deleted messages first, without announcing them. */

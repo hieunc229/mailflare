@@ -5,6 +5,7 @@ import type { ParsedCommand } from "imap-handler";
 import { ipBucket } from "@/lib/auth/app-passwords";
 import { authenticateImap, revalidateIdentity, type ImapIdentity, type LoginFailure } from "@/lib/imap/auth";
 import { ImapError, bad } from "@/lib/imap/errors";
+import { RANGES_PER_LINE, formatRanges, type UidRange } from "@/lib/imap/condstore";
 import { canStillSee, loadNamespace, type Namespace } from "@/lib/imap/namespace";
 import type { FolderView } from "@/lib/imap/view";
 import { runFetch, sendFlags } from "./commands/fetch";
@@ -76,6 +77,17 @@ type Phase = "notauth" | "auth" | "selected" | "logout";
 /** `skipResponse`: the command already wrote its own tagged response (STARTTLS must, before the handshake). */
 export type Completion = { code?: string; text?: string; skipResponse?: boolean } | void;
 
+/** Ascending UIDs as ranges. */
+function rangesOf(uids: number[]): UidRange[] {
+	const ranges: UidRange[] = [];
+	for (const uid of uids) {
+		const last = ranges[ranges.length - 1];
+		if (last && last[1] + 1 === uid) last[1] = uid;
+		else ranges.push([uid, uid]);
+	}
+	return ranges;
+}
+
 const binary = (text: string) => Buffer.from(text, "latin1");
 /** Text that goes into a response line: printable ASCII only. */
 const printable = (text: string) => text.replace(/[^\x20-\x7e]/g, "?");
@@ -107,6 +119,10 @@ export class ImapConnection {
 	/** Updates the notifier found while a command ran; sent before the next tagged response that may carry them. */
 	dirty = false;
 	idling = false;
+	/** CONDSTORE is on for this connection (ENABLE, or the first use of a mod-sequence feature): flag updates carry MODSEQ. */
+	condstore = false;
+	/** QRESYNC is on: removals are announced as VANISHED, never as EXPUNGE. */
+	qresync = false;
 	readonly done: Promise<void>;
 	private finish!: () => void;
 
@@ -295,7 +311,7 @@ export class ImapConnection {
 			else base.push("STARTTLS", "LOGINDISABLED");
 			return base;
 		}
-		return [...base, "IDLE", "NAMESPACE", "UIDPLUS", "MOVE", `APPENDLIMIT=${this.context.maxMessageSize}`, "UNSELECT", "CHILDREN", "SPECIAL-USE", "LIST-EXTENDED", "LIST-STATUS", "ESEARCH"];
+		return [...base, "IDLE", "NAMESPACE", "UIDPLUS", "MOVE", `APPENDLIMIT=${this.context.maxMessageSize}`, "UNSELECT", "CHILDREN", "SPECIAL-USE", "LIST-EXTENDED", "LIST-STATUS", "ESEARCH", "CONDSTORE", "QRESYNC"];
 	}
 
 	private async run(): Promise<void> {
@@ -473,12 +489,14 @@ export class ImapConnection {
 		this.dirty = false;
 		const update = await selected.view.refresh();
 		if (update.uidvalidityChanged) return void (await this.bye("The mailbox was reset; select it again", false));
-		for (const msn of update.expunged) this.untagged(`${msn} EXPUNGE`);
+		if (this.qresync) await this.sendVanished(rangesOf(update.vanished), false);
+		else for (const msn of update.expunged) this.untagged(`${msn} EXPUNGE`);
 		if (update.exists !== null) {
 			this.untagged(`${update.exists} EXISTS`);
 			this.untagged("0 RECENT");
 		}
 		if (update.flagged.length) await sendFlags(this, update.flagged);
+		if (this.condstore && update.highestModseq !== null) this.untagged(`OK [HIGHESTMODSEQ ${update.highestModseq}] Highest`);
 	}
 
 	private async noop(check: boolean): Promise<Completion> {
@@ -597,9 +615,43 @@ export class ImapConnection {
 	}
 
 	private enable(command: ParsedCommand): Completion {
-		for (const attribute of command.attributes ?? []) if (Array.isArray(attribute)) throw bad("ENABLE takes capability names");
-		// No extension that ENABLE switches on is offered yet, so nothing is enabled.
-		this.untagged("ENABLED");
+		const names: string[] = [];
+		for (const attribute of command.attributes ?? []) {
+			if (Array.isArray(attribute)) throw bad("ENABLE takes capability names");
+			const value = (attribute as { value?: unknown } | null)?.value;
+			if (typeof value === "string") names.push(value.toUpperCase());
+		}
+		// QRESYNC changes how removals are announced, so it must be on before a folder is open (RFC 5161 section 3.1, RFC 7162 section 3.2.3).
+		if (names.includes("QRESYNC") && !this.qresync && this.selected) throw bad("QRESYNC cannot be enabled while a mailbox is selected");
+		const enabled: string[] = [];
+		const turnOnCondstore = (names.includes("CONDSTORE") || names.includes("QRESYNC")) && !this.condstore;
+		if (turnOnCondstore) enabled.push("CONDSTORE");
+		if (names.includes("QRESYNC") && !this.qresync) {
+			this.qresync = true;
+			enabled.push("QRESYNC");
+		}
+		// Other names (the IMAP4rev2 ones arrive in a later change) are not enabled; unknown names are ignored, as RFC 5161 asks.
+		this.untagged(`ENABLED${enabled.map((name) => ` ${name}`).join("")}`);
+		if (turnOnCondstore) this.enableCondstore();
+	}
+
+	/**
+	 * Turns CONDSTORE on for this connection. When a folder is selected and it was not on, the folder's highest mod-sequence
+	 * is announced, as the client learns it from SELECT otherwise (RFC 7162 section 3.1).
+	 */
+	enableCondstore(): void {
+		if (this.condstore) return;
+		this.condstore = true;
+		if (this.selected) this.untagged(`OK [HIGHESTMODSEQ ${this.selected.view.highest}] Highest`);
+	}
+
+	/** `VANISHED` lines for UID ranges, a bounded number of ranges per line; `earlier` marks the answer to a resync (RFC 7162 section 3.2.10). */
+	async sendVanished(ranges: UidRange[], earlier: boolean): Promise<void> {
+		for (let at = 0; at < ranges.length; at += RANGES_PER_LINE) {
+			await this.waitForOutput();
+			if (this.closed) return;
+			this.untagged(`VANISHED${earlier ? " (EARLIER)" : ""} ${formatRanges(ranges.slice(at, at + RANGES_PER_LINE))}`);
+		}
 	}
 
 	private async startTls(command: ParsedCommand): Promise<Completion> {

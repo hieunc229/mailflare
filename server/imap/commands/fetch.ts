@@ -1,7 +1,8 @@
 import type { ParsedCommand } from "imap-handler";
 import { bad, no } from "@/lib/imap/errors";
 import { MimeIndexError, getMessageIndex, readSection, reviveLists, type MimeIndex, type SectionSpec } from "@/lib/imap/fetch";
-import { parseSequenceSet, selectByNumber, selectByUid } from "@/lib/imap/sets";
+import { changedSince, modseqsOf, parseModseq, vanishedSince } from "@/lib/imap/condstore";
+import { parseSequenceSet, resolveRanges, selectByNumber, selectByUid } from "@/lib/imap/sets";
 import { parseFlagWords, storeFlags } from "@/lib/imap/flags";
 import { flagsOf, loadMessageRows, type MessageFlagsRow } from "@/lib/imap/view";
 import type { Completion, ImapConnection } from "../connection";
@@ -14,7 +15,7 @@ import { args, isList, text, type Arg } from "./args";
  * not in the folder the access layer opened.
  */
 type Item =
-	| { kind: "uid" | "flags" | "internaldate" | "size" | "envelope" | "bodystructure" | "body" }
+	| { kind: "uid" | "flags" | "internaldate" | "size" | "envelope" | "bodystructure" | "body" | "modseq" }
 	| { kind: "section"; label: string; spec: SectionSpec; alias?: string; origin: number | null; peek?: boolean };
 
 const MACROS: Record<string, string[]> = {
@@ -64,7 +65,7 @@ function parseItem(node: Arg): Item[] {
 	if (MACROS[name] && !node.section) return MACROS[name].flatMap((item) => parseItem({ type: "ATOM", value: item }));
 	const bare = !node.section && !node.partial;
 	switch (name) {
-		case "UID": case "FLAGS": case "INTERNALDATE": case "ENVELOPE": case "BODYSTRUCTURE":
+		case "UID": case "FLAGS": case "INTERNALDATE": case "ENVELOPE": case "BODYSTRUCTURE": case "MODSEQ":
 			if (bare) return [{ kind: name.toLowerCase() as "uid" }];
 			break;
 		case "RFC822.SIZE": if (bare) return [{ kind: "size" }]; break;
@@ -180,17 +181,22 @@ type Row = { msn: number; uid: number; id: string };
  * buffer it was read into. `byteBudget` bounds what the sections of the whole command may add up to.
  * With `markSeen`, each unread message is shown as read and is marked read once its response has been written;
  * a message that is skipped, or that comes after the budget stopped the command, stays unread.
+ * With `sent`, the mod-sequence each message's response was built from is recorded there, for `noteOwn`.
  */
-async function respond(c: ImapConnection, rows: Row[], items: Item[], uidMode: boolean, byteBudget = Infinity, markSeen = false): Promise<void> {
+async function respond(c: ImapConnection, rows: Row[], items: Item[], uidMode: boolean, byteBudget = Infinity, markSeen = false, sent?: Map<number, number>): Promise<void> {
 	const selected = c.selected!;
 	const withUid = uidMode && !items.some((item) => item.kind === "uid") ? [{ kind: "uid" as const }, ...items] : items;
 	const needsIndex = withUid.some((item) => ["size", "envelope", "bodystructure", "body", "section"].includes(item.kind));
 	const sections = withUid.filter((item): item is Item & { kind: "section" } => item.kind === "section");
 	let charged = 0;
 	const hasFlags = withUid.some((item) => item.kind === "flags");
+	const needsModseq = withUid.some((item) => item.kind === "modseq");
 	const pair = (name: string, value: unknown) => c.compile({ tag: "*", command: "X", attributes: [atom(name), value as never] }).slice("* X ".length);
 	for (let at = 0; at < rows.length; at += 90) {
 		const slice = rows.slice(at, at + 90);
+		// The mod-sequence is read before the flags: a change in between then shows up as a newer number at the next refresh,
+		// where the other order would pair old flags with a number that already counts the change.
+		const modseqs = needsModseq || sent ? await modseqsOf(c.env, selected.mailboxId, selected.view.folderKey, slice.map((row) => row.uid)) : null;
 		const found = await loadMessageRows(c.env, selected.mailboxId, slice.map((row) => row.id));
 		const delivered: Row[] = [];
 		try {
@@ -215,6 +221,11 @@ async function respond(c: ImapConnection, rows: Row[], items: Item[], uidMode: b
 				for (const item of withUid) {
 					switch (item.kind) {
 						case "uid": add(pair("UID", row.uid)); break;
+						case "modseq": {
+							const value = modseqs!.get(row.uid);
+							if (value !== undefined) add(pair("MODSEQ", [raw(String(value))]));
+							break;
+						}
 						case "flags": add(pair("FLAGS", flagList(flagsOf(message)))); break;
 						case "internaldate": add(pair("INTERNALDATE", internalDate(message.createdAt))); break;
 						case "size": add(pair("RFC822.SIZE", index!.size)); break;
@@ -236,6 +247,8 @@ async function respond(c: ImapConnection, rows: Row[], items: Item[], uidMode: b
 				}
 				if (marks && !hasFlags) add(pair("FLAGS", flagList(flagsOf(message))));
 				await c.write(Buffer.from(`${pending})\r\n`, "latin1"));
+				const version = modseqs?.get(row.uid);
+				if (sent && version !== undefined) sent.set(row.uid, version);
 				if (marks) delivered.push(row);
 			}
 		} finally {
@@ -244,8 +257,29 @@ async function respond(c: ImapConnection, rows: Row[], items: Item[], uidMode: b
 	}
 }
 
+type FetchModifiers = { changedSince: number | null; vanished: boolean };
+
+/** `(CHANGEDSINCE n [VANISHED])` after the items (RFC 7162 sections 3.1.4 and 3.2.6). */
+function parseModifiers(c: ImapConnection, arg: Arg, uidMode: boolean): FetchModifiers {
+	const result: FetchModifiers = { changedSince: null, vanished: false };
+	if (arg === undefined) return result;
+	if (!isList(arg)) throw bad("FETCH modifiers are a list");
+	for (let at = 0; at < arg.length; at += 1) {
+		const word = text(arg[at])?.toUpperCase();
+		if (word === "CHANGEDSINCE") {
+			const value = parseModseq(text(arg[++at]) ?? "");
+			if (value === null) throw bad("CHANGEDSINCE takes a mod-sequence");
+			result.changedSince = value;
+		} else if (word === "VANISHED") result.vanished = true;
+		else throw bad("A FETCH modifier is not supported");
+	}
+	if (result.vanished && (result.changedSince === null || !uidMode || !c.qresync)) throw bad("VANISHED needs UID FETCH with CHANGEDSINCE, and QRESYNC enabled");
+	if (result.changedSince !== null) c.enableCondstore();
+	return result;
+}
+
 export async function runFetch(c: ImapConnection, command: ParsedCommand, uidMode: boolean): Promise<Completion> {
-	const [setArg, itemsArg, ...extra] = args(command);
+	const [setArg, itemsArg, modifiersArg, ...extra] = args(command);
 	const ranges = parseSequenceSet(text(setArg) ?? "");
 	if (!ranges || itemsArg === undefined || extra.length) throw bad("FETCH takes a message set and the items to fetch");
 	const requested = isList(itemsArg) ? itemsArg : [itemsArg];
@@ -256,9 +290,18 @@ export async function runFetch(c: ImapConnection, command: ParsedCommand, uidMod
 	const marksSeen = parsed.some((item) => item.kind === "section" && !item.peek);
 	const items = parsed.filter((item) => !seen.has(itemKey(item)) && seen.add(itemKey(item)));
 	if (!items.length) throw bad("FETCH needs at least one item");
+	const modifiers = parseModifiers(c, modifiersArg, uidMode);
+	// MODSEQ is part of the answer to CHANGEDSINCE, asked for or not, and asking for it turns CONDSTORE on.
+	if (modifiers.changedSince !== null && !items.some((item) => item.kind === "modseq")) items.push({ kind: "modseq" });
+	if (items.some((item) => item.kind === "modseq")) c.enableCondstore();
 	const view = c.selected!.view;
 	const numbers = uidMode ? selectByUid(ranges, view.uids) : selectByNumber(ranges, view.exists);
-	const rows = numbers.map((msn) => ({ msn, uid: view.uids[msn - 1], id: view.messageIds[msn - 1] }));
+	let rows = numbers.map((msn) => ({ msn, uid: view.uids[msn - 1], id: view.messageIds[msn - 1] }));
+	if (modifiers.changedSince !== null) {
+		if (modifiers.vanished) await c.sendVanished(await vanishedSince(c.env, view, modifiers.changedSince, resolveRanges(ranges, Math.max(view.uidNext - 1, 0))), true);
+		const changed = await changedSince(c.env, view.mailboxId, view.folderKey, modifiers.changedSince);
+		rows = rows.filter((row) => changed.has(row.uid));
+	}
 	// A body section fetched without PEEK marks the message read (RFC 3501 6.4.5), in a read-write session only,
 	// and the response carries the FLAGS the fetch changed, as the RFC requires.
 	await respond(c, rows, items, uidMode, c.fetchByteBudget, !c.selected!.readOnly && marksSeen && (await mayMark(c)));
@@ -275,7 +318,11 @@ async function mayMark(c: ImapConnection): Promise<boolean> {
 	}
 }
 
-/** Sets `\Seen` on messages whose response has been written. A fetch must not fail because the flag could not be set; the mail simply stays unread. */
+/**
+ * Sets `\Seen` on messages whose response has been written, then tells the client what the messages are now: the response
+ * carried the flags as they would be, this carries them as they are, with the new mod-sequence once CONDSTORE is on
+ * (RFC 7162 section 3.2.4). A fetch must not fail because the flag could not be set; the mail simply stays unread.
+ */
 async function markDelivered(c: ImapConnection, rows: Row[]): Promise<void> {
 	const selected = c.selected!;
 	try {
@@ -284,11 +331,15 @@ async function markDelivered(c: ImapConnection, rows: Row[]): Promise<void> {
 		console.warn("IMAP could not set \\Seen on fetch", error);
 		return;
 	}
-	await selected.view.noteOwn(rows.map((row) => row.uid));
+	const sent = new Map<number, number>();
+	await sendFlags(c, rows.map(({ msn, uid }) => ({ msn, uid })), true, sent);
+	selected.view.noteOwn(sent);
 }
 
-/** Unsolicited `FETCH (UID n FLAGS (...))` for messages whose flags changed. */
-export async function sendFlags(c: ImapConnection, flagged: Array<{ msn: number; uid: number }>): Promise<void> {
+/** Unsolicited `FETCH (UID n FLAGS (...))` for messages whose flags changed; `sent` collects the mod-sequences that went out with them. */
+export async function sendFlags(c: ImapConnection, flagged: Array<{ msn: number; uid: number }>, withFlags = true, sent?: Map<number, number>): Promise<void> {
 	const view = c.selected!.view;
-	await respond(c, flagged.map(({ msn, uid }) => ({ msn, uid, id: view.messageIds[msn - 1] })), [{ kind: "flags" }, { kind: "uid" }], false);
+	// Once CONDSTORE is on, a flag update carries the message's mod-sequence too.
+	const items: Item[] = [...(withFlags ? [{ kind: "flags" as const }] : []), { kind: "uid" }, ...(c.condstore ? [{ kind: "modseq" as const }] : [])];
+	await respond(c, flagged.map(({ msn, uid }) => ({ msn, uid, id: view.messageIds[msn - 1] })), items, false, Infinity, false, sent);
 }

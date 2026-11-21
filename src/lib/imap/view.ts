@@ -18,6 +18,10 @@ export type ViewUpdate = {
 	exists: number | null;
 	/** Messages whose flags changed, by their number after the expunges. */
 	flagged: Array<{ msn: number; uid: number }>;
+	/** UIDs of the removed messages, ascending (what a QRESYNC client is told instead of EXPUNGE). */
+	vanished: number[];
+	/** Set when the folder's highest mod-sequence moved: the value now. */
+	highestModseq: number | null;
 	/** The folder was reset: UIDs are no longer comparable and the session must end. */
 	uidvalidityChanged: boolean;
 };
@@ -48,9 +52,9 @@ export class FolderView {
 		return this.uids.length;
 	}
 
-	/** The folder's highest mod-sequence as of the last time the view was read. */
+	/** The folder's highest mod-sequence as of the last time the view was read; never below 1: 0 is not a valid mod-sequence for a client to hold. */
 	get highest(): number {
-		return Math.max(this.highestModseq, 0);
+		return Math.max(this.highestModseq, 1);
 	}
 
 	private async readState(): Promise<FolderStateRow> {
@@ -72,35 +76,30 @@ export class FolderView {
 	}
 
 	/**
-	 * The client changed these messages itself and has been told: their current mod-sequences become
-	 * the ones it knows, so the next refresh does not announce its own change again. Anything that
-	 * another writer changed afterwards still differs and is announced.
+	 * The client has been told these messages' flags together with these mod-sequences (UID to mod-sequence, the
+	 * values that were sent): they become the ones it knows, so the next refresh does not announce them again.
+	 * A change another writer made after the value was read still differs and is announced.
 	 */
-	async noteOwn(uids: number[]): Promise<void> {
-		const wanted = new Set(uids);
-		const known = this.uids.filter((uid) => wanted.has(uid));
-		for (let at = 0; at < known.length; at += ID_CHUNK) {
-			const part = known.slice(at, at + ID_CHUNK);
-			const rows = (await this.env.DB.prepare(`SELECT uid, modseq FROM imap_uids WHERE mailbox_id = ? AND folder_key = ? AND uid IN (${part.map(() => "?").join(", ")})`).bind(this.mailboxId, this.folderKey, ...part).all<{ uid: number; modseq: number }>()).results;
-			const byUid = new Map(rows.map((row) => [Number(row.uid), Number(row.modseq)]));
-			this.uids.forEach((uid, index) => {
-				const value = byUid.get(uid);
-				if (value !== undefined) this.modseqs[index] = value;
-			});
-		}
+	noteOwn(sent: Map<number, number>): void {
+		this.uids.forEach((uid, index) => {
+			const value = sent.get(uid);
+			if (value !== undefined) this.modseqs[index] = value;
+		});
 	}
 
 	async refresh(): Promise<ViewUpdate> {
 		await syncMailbox(this.env, this.mailboxId);
 		const state = await this.readState();
-		const none: ViewUpdate = { expunged: [], exists: null, flagged: [], uidvalidityChanged: false };
+		const none: ViewUpdate = { expunged: [], exists: null, flagged: [], vanished: [], highestModseq: null, uidvalidityChanged: false };
 		if (Number(state.uidvalidity) !== this.uidvalidity) return { ...none, uidvalidityChanged: true };
 		if (Number(state.highest_modseq) === this.highestModseq && Number(state.uid_next) === this.uidNext) return none;
 		const before = { uids: this.uids, modseqs: this.modseqs };
+		const announced = this.highestModseq;
 		await this.load();
 		const kept = new Map(this.uids.map((uid, index) => [uid, index]));
 		const expunged: number[] = [];
 		for (let index = before.uids.length - 1; index >= 0; index -= 1) if (!kept.has(before.uids[index])) expunged.push(index + 1);
+		const vanished = before.uids.filter((uid) => !kept.has(uid));
 		const after = before.uids.length - expunged.length;
 		const flagged: ViewUpdate["flagged"] = [];
 		const previous = new Map(before.uids.map((uid, index) => [uid, before.modseqs[index]]));
@@ -108,7 +107,7 @@ export class FolderView {
 			const old = previous.get(uid);
 			if (old !== undefined && old !== this.modseqs[index]) flagged.push({ msn: index + 1, uid });
 		});
-		return { expunged, exists: this.uids.length !== after ? this.uids.length : null, flagged, uidvalidityChanged: false };
+		return { expunged, exists: this.uids.length !== after ? this.uids.length : null, flagged, vanished, highestModseq: this.highestModseq !== announced ? this.highest : null, uidvalidityChanged: false };
 	}
 }
 

@@ -222,7 +222,7 @@ export async function restoreDatabaseRecords(db: D1Database, content: ArrayBuffe
 		const now = Math.floor(Date.now() / 1000);
 		const carried = priorValidity.filter((row) => mailboxIds.has(row.mailbox_id));
 		for (let index = 0; index < carried.length; index += INSERT_BATCH_SIZE) {
-			await db.batch(carried.slice(index, index + INSERT_BATCH_SIZE).map((row) => db.prepare("INSERT INTO imap_folder_state (id, mailbox_id, folder_key, uidvalidity, uid_next, highest_modseq) VALUES (?, ?, ?, ?, 1, 0)").bind(row.id, row.mailbox_id, row.folder_key, Math.max(now, Number(row.uidvalidity) + 1))));
+			await db.batch(carried.slice(index, index + INSERT_BATCH_SIZE).map((row) => db.prepare("INSERT INTO imap_folder_state (id, mailbox_id, folder_key, uidvalidity, uid_next, highest_modseq) VALUES (?, ?, ?, ?, 1, 1)").bind(row.id, row.mailbox_id, row.folder_key, Math.max(now, Number(row.uidvalidity) + 1))));
 		}
 	}
 }

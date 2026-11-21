@@ -131,14 +131,16 @@ test("the folder view reports expunges (highest first), new messages and flag ch
 	const view = await m.FolderView.open(env, "m1", "inbox");
 	assert.deepEqual(view.uids, [1, 2, 3]);
 	assert.equal(view.exists, 3);
-	assert.deepEqual(await view.refresh(), { expunged: [], exists: null, flagged: [], uidvalidityChanged: false });
+	assert.deepEqual(await view.refresh(), { expunged: [], exists: null, flagged: [], vanished: [], highestModseq: null, uidvalidityChanged: false });
 
 	sqlite.prepare("DELETE FROM messages WHERE id = ?").run(ids[0]);
 	sqlite.prepare("DELETE FROM messages WHERE id = ?").run(ids[2]);
 	addMessage();
 	sqlite.prepare("UPDATE messages SET read = 1 WHERE id = ?").run(ids[1]);
 	assert.deepEqual(view.uids, [1, 2, 3], "nothing changes until refresh");
-	assert.deepEqual(await view.refresh(), { expunged: [3, 1], exists: 2, flagged: [{ msn: 1, uid: 2 }], uidvalidityChanged: false });
+	const update = await view.refresh();
+	assert.equal(typeof update.highestModseq, "number", "the new highest mod-sequence comes with the update");
+	assert.deepEqual({ ...update, highestModseq: null }, { expunged: [3, 1], exists: 2, flagged: [{ msn: 1, uid: 2 }], vanished: [1, 3], highestModseq: null, uidvalidityChanged: false });
 	assert.deepEqual(view.uids, [2, 4]);
 
 	sqlite.prepare("UPDATE imap_folder_state SET uidvalidity = uidvalidity + 5 WHERE id = 'm1:inbox'").run();

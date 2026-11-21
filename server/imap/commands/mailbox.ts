@@ -2,10 +2,13 @@ import type { ParsedCommand } from "imap-handler";
 import { bad, no } from "@/lib/imap/errors";
 import { decodeFolderName, encodeFolderName } from "@/lib/imap/folders";
 import { SHARED_PREFIX, findFolder, type Namespace, type NamespaceFolder } from "@/lib/imap/namespace";
+import { changedSince, parseModseq, vanishedSince } from "@/lib/imap/condstore";
+import { parseSequenceSet, resolveRanges, type SetRange } from "@/lib/imap/sets";
 import { ensureFolderState, syncMailbox } from "@/lib/imap/sync";
 import { FolderView } from "@/lib/imap/view";
 import type { Completion, ImapConnection } from "../connection";
 import { args, isList, text, type Arg } from "./args";
+import { sendFlags } from "./fetch";
 
 const FLAGS = "\\Answered \\Flagged \\Deleted \\Seen \\Draft $Forwarded";
 const PERMANENT_FLAGS = "\\Answered \\Flagged \\Deleted \\Seen $Forwarded \\*";
@@ -36,9 +39,13 @@ export function runNamespace(c: ImapConnection): Completion {
  * watched before its state is read, so a change in between is not missed.
  */
 export async function runSelect(c: ImapConnection, command: ParsedCommand, examine: boolean): Promise<Completion> {
-	const [nameArg, ...rest] = args(command);
+	const [nameArg, paramsArg, ...rest] = args(command);
 	if (!nameArg || rest.length) throw bad(`${examine ? "EXAMINE" : "SELECT"} takes a mailbox name`);
+	const params = parseSelectParams(c, paramsArg);
+	const hadFolder = c.selected !== null;
 	c.deselect();
+	// A server that offers CONDSTORE or QRESYNC announces the folder that is left as closed (RFC 7162 section 3.2.11); both are always offered.
+	if (hadFolder) c.untagged("OK [CLOSED] Previous mailbox is now closed");
 	const name = folderName(nameArg);
 	if (!(await c.checkCredentials(true))) throw no("Credentials revoked");
 	const namespace = await c.namespace();
@@ -66,19 +73,69 @@ export async function runSelect(c: ImapConnection, command: ParsedCommand, exami
 	c.untagged(`OK [UIDVALIDITY ${view.uidvalidity}] UIDs valid`);
 	c.untagged(`OK [UIDNEXT ${view.uidNext}] Predicted next UID`);
 	c.untagged(readOnly ? "OK [PERMANENTFLAGS ()] No permanent flags" : `OK [PERMANENTFLAGS (${PERMANENT_FLAGS})] Limited`);
+	c.untagged(`OK [HIGHESTMODSEQ ${view.highest}] Highest`);
+	if (params.qresync && params.qresync.uidvalidity === view.uidvalidity) await resync(c, view, params.qresync);
 	return { code: readOnly ? "READ-ONLY" : "READ-WRITE", text: `${examine ? "EXAMINE" : "SELECT"} completed` };
+}
+
+type Resync = { uidvalidity: number; modseq: number; known: SetRange[] | null };
+
+const DIGITS = /^\d{1,10}$/;
+
+/** `(CONDSTORE)` and `(QRESYNC (uidvalidity modseq [known-uids [(seq-match-data)]]))` after the mailbox name (RFC 7162 sections 3.1.8 and 3.2.5). */
+function parseSelectParams(c: ImapConnection, arg: Arg): { qresync: Resync | null } {
+	if (arg === undefined) return { qresync: null };
+	if (!isList(arg)) throw bad("SELECT parameters are a list");
+	let qresync: Resync | null = null;
+	let condstore = false;
+	for (let at = 0; at < arg.length; at += 1) {
+		const word = text(arg[at])?.toUpperCase();
+		if (word === "CONDSTORE") condstore = true;
+		else if (word === "QRESYNC") {
+			const inner = arg[++at];
+			if (!c.qresync) throw bad("QRESYNC is not enabled");
+			if (!isList(inner) || inner.length < 2 || inner.length > 4) throw bad("QRESYNC takes a UIDVALIDITY, a mod-sequence and optional known UIDs");
+			const [validity, modseqArg, known, match] = inner;
+			const uidvalidity = text(validity);
+			const modseq = parseModseq(text(modseqArg) ?? "");
+			if (uidvalidity === null || !DIGITS.test(uidvalidity) || modseq === null) throw bad("The QRESYNC values are not valid");
+			let knownRanges: SetRange[] | null = null;
+			if (known !== undefined) {
+				knownRanges = parseSequenceSet(text(known) ?? "");
+				if (!knownRanges) throw bad("The known UIDs are not a valid set");
+			}
+			// The message number matching data only lets a server say less; this server answers in full, so it is checked and not used.
+			if (match !== undefined && (!isList(match) || match.length !== 2 || match.some((part) => !parseSequenceSet(text(part) ?? "")))) throw bad("The sequence match data is not valid");
+			qresync = { uidvalidity: Number(uidvalidity), modseq, known: knownRanges };
+		} else throw bad("A SELECT parameter is not supported");
+	}
+	if (condstore || qresync) c.condstore = true;
+	return { qresync };
+}
+
+/**
+ * The answer to a QRESYNC select: what vanished since the client's mod-sequence, and a FETCH (UID, FLAGS and
+ * MODSEQ) for every message that is new or changed since, so the client catches up without a rescan.
+ * A UIDVALIDITY that is not the folder's is not an error: the select goes on as a plain one and the client sees the new value.
+ */
+async function resync(c: ImapConnection, view: FolderView, request: Resync): Promise<void> {
+	const within = request.known ? resolveRanges(request.known, Math.max(view.uidNext - 1, 0)) : null;
+	await c.sendVanished(await vanishedSince(c.env, view, request.modseq, within), true);
+	const changed = await changedSince(c.env, view.mailboxId, view.folderKey, request.modseq);
+	const flagged = view.uids.flatMap((uid, index) => (changed.has(uid) ? [{ msn: index + 1, uid }] : []));
+	if (flagged.length) await sendFlags(c, flagged);
 }
 
 // ---- STATUS ----
 
-type StatusItem = "MESSAGES" | "RECENT" | "UIDNEXT" | "UIDVALIDITY" | "UNSEEN";
-const STATUS_ITEMS: StatusItem[] = ["MESSAGES", "RECENT", "UIDNEXT", "UIDVALIDITY", "UNSEEN"];
+type StatusItem = "MESSAGES" | "RECENT" | "UIDNEXT" | "UIDVALIDITY" | "UNSEEN" | "HIGHESTMODSEQ";
+const STATUS_ITEMS: StatusItem[] = ["MESSAGES", "RECENT", "UIDNEXT", "UIDVALIDITY", "UNSEEN", "HIGHESTMODSEQ"];
 
 async function statusLine(c: ImapConnection, folder: NamespaceFolder, items: StatusItem[]): Promise<string> {
 	const mailboxId = folder.mailboxId!;
 	await syncMailbox(c.env, mailboxId);
 	await ensureFolderState(c.env, mailboxId, folder.key!);
-	const [state] = (await c.env.DB.prepare("SELECT uidvalidity, uid_next FROM imap_folder_state WHERE id = ?").bind(`${mailboxId}:${folder.key}`).all<{ uidvalidity: number; uid_next: number }>()).results;
+	const [state] = (await c.env.DB.prepare("SELECT uidvalidity, uid_next, highest_modseq FROM imap_folder_state WHERE id = ?").bind(`${mailboxId}:${folder.key}`).all<{ uidvalidity: number; uid_next: number; highest_modseq: number }>()).results;
 	const count = async (unseenOnly: boolean) => {
 		const query = unseenOnly
 			? "SELECT count(*) AS n FROM imap_uids u INNER JOIN messages m ON m.id = u.message_id AND m.mailbox_id = u.mailbox_id WHERE u.mailbox_id = ? AND u.folder_key = ? AND m.read = ?"
@@ -93,6 +150,11 @@ async function statusLine(c: ImapConnection, folder: NamespaceFolder, items: Sta
 		else if (item === "RECENT") parts.push("RECENT 0");
 		else if (item === "UIDNEXT") parts.push(`UIDNEXT ${Number(state.uid_next)}`);
 		else if (item === "UIDVALIDITY") parts.push(`UIDVALIDITY ${Number(state.uidvalidity)}`);
+		else if (item === "HIGHESTMODSEQ") {
+			// Asking for it turns CONDSTORE on (RFC 7162 section 3.1.2).
+			c.enableCondstore();
+			parts.push(`HIGHESTMODSEQ ${Math.max(Number(state.highest_modseq), 1)}`);
+		}
 		else parts.push(`UNSEEN ${await count(true)}`);
 	}
 	return `STATUS ${quoteName(c, folder.name)} (${parts.join(" ")})`;

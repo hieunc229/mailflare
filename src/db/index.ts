@@ -1,5 +1,6 @@
 import { drizzle } from "drizzle-orm/d1";
 import { schema } from "@/db/schema";
+import type { DatabaseDialect } from "./dialect";
 import { isExternalDatabase } from "./external";
 
 export type AppDatabase = ReturnType<typeof createD1Db>;
@@ -26,3 +27,8 @@ export function getDb(env: Pick<CloudflareEnv, "DB">) {
 }
 
 export { schema };
+
+/** The dialect `env.DB` speaks; SQLite for the D1 binding and for anything that is not an external database. */
+export function getDialect(env: Pick<CloudflareEnv, "DB">): DatabaseDialect {
+	return isExternalDatabase(env.DB) ? env.DB.config.dialect : "sqlite";
+}
