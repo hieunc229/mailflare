@@ -116,7 +116,9 @@ export async function renameFolders(env: CloudflareEnv, mailbox: AccessibleMailb
 	for (const entry of plan) if (keyOfSystemFolderName(entry.name) || staying.has(entry.name)) throw no("Mailbox already exists", "ALREADYEXISTS");
 	if (new Set(plan.map((entry) => entry.name)).size !== plan.length) throw no("Mailbox already exists", "ALREADYEXISTS");
 	const db = getDb(env);
-	// Deepest first, so a folder is never renamed to a name another folder of the plan still holds.
-	const ordered = [...plan].sort((a, b) => b.old.length - a.old.length);
+	// A new name that is another folder's old name (`A/B` to `A` turns `A/B/B` into `A/B`) must be free by then: when the names get longer
+	// the deepest folder goes first, when they get shorter the shallowest does.
+	const longer = canonicalName(to).length > canonicalName(base).length;
+	const ordered = [...plan].sort((a, b) => (longer ? b.old.length - a.old.length : a.old.length - b.old.length));
 	await db.batch(ordered.map((entry) => db.update(folders).set({ name: entry.name }).where(and(eq(folders.id, entry.id), eq(folders.mailboxId, mailbox.id)))) as never);
 }

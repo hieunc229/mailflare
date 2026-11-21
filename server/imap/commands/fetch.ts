@@ -264,9 +264,10 @@ export async function runFetch(c: ImapConnection, command: ParsedCommand, uidMod
 	await respond(c, rows, items, uidMode, c.fetchByteBudget, !c.selected!.readOnly && marksSeen && (await mayMark(c)));
 }
 
-/** Whether this login may still change the selected mailbox; a fetch that cannot mark messages read still works. */
+/** Whether this login (its app password and its permission) still allows changing the selected mailbox; a fetch that cannot mark messages read still works. */
 async function mayMark(c: ImapConnection): Promise<boolean> {
 	try {
+		if (!(await c.checkCredentials(true))) return false;
 		await c.requireMailboxWritable(c.selected!.mailboxId);
 		return true;
 	} catch {

@@ -55,6 +55,8 @@ export const WRITE_STALL_MS = 5 * 60_000;
 /** The next command waits while more than this much output is queued for the socket. */
 export const WRITE_QUEUE_LIMIT = 1024 * 1024;
 export const REVALIDATE_MS = 60_000;
+/** Commands that write: the credentials are checked again right before they run. */
+const MUTATING = new Set(["STORE", "COPY", "MOVE", "EXPUNGE", "APPEND", "CREATE", "DELETE", "RENAME", "CLOSE"]);
 const MAX_FAILED_LOGINS = 5;
 /** Refusals of oversize input in a row (no command in between) after which the connection ends. */
 const MAX_CONSECUTIVE_REJECTS = 5;
@@ -414,6 +416,8 @@ export class ImapConnection {
 			}
 		}
 		if (name === "LOGIN" || name.startsWith("AUTHENTICATE") || name === "STARTTLS") throw bad("Already logged in");
+		// A command that changes mail first makes sure the app password still stands, so a revoked one cannot write until the next periodic check.
+		if (MUTATING.has(base) && !(await this.checkCredentials(true))) throw new ImapError("NO", "Credentials revoked");
 		switch (base) {
 			case "CAPABILITY": return this.capability();
 			case "NOOP": case "CHECK": return this.noop(base === "CHECK");

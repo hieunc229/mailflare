@@ -215,6 +215,39 @@ test("STORE leaves a message another client filed elsewhere alone, and never wri
 	assert.equal(flagsOf(w, "g2").answered, 1);
 });
 
+for (const command of ["STORE 1 +FLAGS (\\Seen)", "COPY 1 Archive", "MOVE 1 Archive", "EXPUNGE", "CLOSE", "CREATE Made", "APPEND"]) {
+	test(`${command.split(" ")[0]} from an app password revoked since the last check changes nothing`, async (t) => {
+		const w = await world(t);
+		const key = await w.addKey({ id: "k1" });
+		w.addMessage({ id: "g1" });
+		const client = await loggedIn(w, key);
+		t.after(() => client.end());
+		await client.cmd("SELECT INBOX");
+		await client.cmd("STORE 1 +FLAGS (\\Deleted)");
+		w.sqlite.prepare("DELETE FROM api_keys WHERE id = 'k1'").run();
+		const result = command === "APPEND" ? await append(client, "INBOX", mail()) : await client.cmd(command);
+		assert.equal(result.status, "NO");
+		assert.match(result.text, /\* BYE Credentials revoked/);
+		await client.closedPromise;
+		assert.deepEqual(w.sqlite.prepare("SELECT count(*) AS n, min(status) AS status, min(read) AS read FROM messages").get(), { n: 1, status: "received", read: 0 });
+		assert.equal(w.sqlite.prepare("SELECT count(*) AS n FROM folders").get().n, 0);
+	});
+}
+
+test("a fetch from an app password revoked since the last check does not mark the message read", async (t) => {
+	const w = await world(t);
+	const key = await w.addKey({ id: "k1" });
+	await w.addRaw("g1", RAW_ALTERNATIVE);
+	const client = await loggedIn(w, key);
+	t.after(() => client.end());
+	await client.cmd("SELECT INBOX");
+	w.sqlite.prepare("DELETE FROM api_keys WHERE id = 'k1'").run();
+	const result = await client.cmd("FETCH 1 BODY[TEXT]");
+	assert.match(result.text, /\* BYE Credentials revoked/);
+	await client.closedPromise;
+	assert.equal(w.sqlite.prepare("SELECT read FROM messages WHERE id = 'g1'").get().read, 0);
+});
+
 test("a flag change reaches a second session that is in IDLE", async (t) => {
 	const w = await world(t);
 	const key = await w.addKey({ id: "k1" });
@@ -871,6 +904,23 @@ test("CREATE refuses system names, reserved and malformed names, and too many fo
 	assert.equal(foldersOf(w).length, 1);
 	for (let index = 0; index < 499; index += 1) w.sqlite.prepare("INSERT INTO folders (id, user_id, mailbox_id, name, created_at) VALUES (?, 'u1', 'm1', ?, 1)").run(`bulk${index}`, `bulk ${index}`);
 	assert.equal((await client.cmd("CREATE one-too-many")).detail, "[LIMIT] Too many folders in this mailbox");
+});
+
+test("RENAME never gives two folders one name, not even between two of its statements", async (t) => {
+	const w = await world(t);
+	const key = await w.addKey({ id: "k1" });
+	addFolder(w, "f1", "A/B");
+	addFolder(w, "f2", "A/B/B");
+	addFolder(w, "f3", "A/B/B/C");
+	w.sqlite.exec("CREATE UNIQUE INDEX folders_name_once ON folders (mailbox_id, name)");
+	const client = await loggedIn(w, key);
+	t.after(() => client.end());
+	const shorter = await client.cmd('RENAME "A/B" A');
+	assert.equal(shorter.status, "OK", shorter.detail);
+	assert.deepEqual(foldersOf(w).map((row) => row.name), ["A", "A/B", "A/B/C"]);
+	const longer = await client.cmd('RENAME A "A/B/B/Q"');
+	assert.equal(longer.status, "OK", longer.detail);
+	assert.deepEqual(foldersOf(w).map((row) => row.name), ["A/B/B/Q", "A/B/B/Q/B", "A/B/B/Q/B/C"]);
 });
 
 test("CREATE, DELETE and RENAME in a shared mailbox need full access there", async (t) => {
