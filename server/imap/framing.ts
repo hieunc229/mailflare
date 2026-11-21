@@ -90,13 +90,13 @@ export class Framer {
 	}
 
 	push(chunk: Buffer): void {
-		let data = chunk;
+		let data: Buffer = chunk;
 		// Literal bytes go straight to their command, so they neither fill the buffer nor count as lines.
 		if (this.state === "literal" && this.literalNeed > 0 && this.buffered === 0) {
 			const take = Math.min(this.literalNeed, data.length);
 			this.literalChunks.push(Buffer.from(data.subarray(0, take)));
 			this.literalNeed -= take;
-			data = data.subarray(take);
+			data = data.subarray(take) as Buffer;
 		}
 		if (!data.length) return;
 		if (this.end + data.length > this.buffer.length) {
@@ -104,20 +104,20 @@ export class Framer {
 			// Doubling stops at one command, one more line and one TLS record; only a chunk that does not fit is allowed past it.
 			const ceiling = this.backlogLimit + TLS_RECORD;
 			const next = live + data.length > this.buffer.length / 2 ? Buffer.allocUnsafe(Math.max(Math.min(this.buffer.length * 2, ceiling), live + data.length)) : this.buffer;
-			this.buffer.copy(next, 0, this.start, this.end);
+			next.set(this.buffer.subarray(this.start, this.end), 0);
 			this.buffer = next;
 			this.scanned -= this.start;
 			this.start = 0;
 			this.end = live;
 		}
-		data.copy(this.buffer, this.end);
+		this.buffer.set(data, this.end);
 		this.end += data.length;
 		for (const byte of data) if (byte === LF) this.lines += 1;
 		if (this.state === "line" && this.lines > MAX_PENDING_LINES) this.overflowed = true;
 	}
 
 	private consume(length: number): Buffer {
-		const taken = this.buffer.subarray(this.start, this.start + length);
+		const taken = this.buffer.subarray(this.start, this.start + length) as Buffer;
 		for (const byte of taken) if (byte === LF) this.lines -= 1;
 		this.start += length;
 		this.scanned = Math.max(this.scanned, this.start);
@@ -171,12 +171,13 @@ export class Framer {
 			if (at < 0 || at >= this.end) {
 				this.scanned = this.end;
 				// One more byte may be the CR of a line that is exactly at the limit.
-				if (this.buffered > this.limits.maxLine + 1) return this.reject("line", true, this.buffer.toString("latin1", this.start, Math.min(this.end, this.start + 80)));
+				if (this.buffered > this.limits.maxLine + 1) return this.reject("line", true, Buffer.from(this.buffer.buffer, this.buffer.byteOffset + this.start, Math.min(this.end - this.start, 80)).toString("latin1"));
 				return null;
 			}
 			const length = at - this.start;
 			const raw = this.consume(length + 1);
-			const line = raw.toString("latin1", 0, raw[length - 1] === CR && length > 0 ? length - 1 : length);
+			const lineLength = raw[length - 1] === CR && length > 0 ? length - 1 : length;
+			const line = Buffer.from(raw.buffer, raw.byteOffset, lineLength).toString("latin1");
 			if (line.length > this.limits.maxLine) return this.reject("line", true, line);
 			this.total += line.length;
 			if (this.total > this.limits.maxCommand) return this.reject("command", true, line);

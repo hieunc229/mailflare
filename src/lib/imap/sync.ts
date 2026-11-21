@@ -454,6 +454,13 @@ export async function syncMailboxUnserialized(env: SyncEnv, mailboxId: string): 
 	}
 }
 
+/** Makes sure a folder has its state row (UIDVALIDITY, `uid_next`), for a folder nothing has been assigned a UID in yet. Needs a synced mailbox. */
+export async function ensureFolderState(env: SyncEnv, mailboxId: string, folderKey: string): Promise<void> {
+	const state = await readState(env, mailboxId);
+	if (!state) throw new Error(`The IMAP state of mailbox ${mailboxId} has not been created`);
+	await ensureFolder(env, mailboxId, folderKey, state.modseq);
+}
+
 const running = new Map<string, Promise<void>>();
 
 /**

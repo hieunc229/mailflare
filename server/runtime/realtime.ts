@@ -10,6 +10,7 @@ import type { RevisionPing, RevisionNotification } from "@/lib/realtime/types";
  */
 export class RealtimeHubRegistry {
 	private readonly sockets = new Map<string, Set<WebSocket>>();
+	private readonly listeners = new Map<string, Set<(payload: unknown) => void>>();
 	private env: CloudflareEnv | null = null;
 
 	bindEnv(env: CloudflareEnv) {
@@ -43,7 +44,25 @@ export class RealtimeHubRegistry {
 		});
 	}
 
+	/** In-process listeners for a user's notifications (the IMAP server's IDLE sessions). Returns the way to stop listening. */
+	subscribe(userId: string, listener: (payload: unknown) => void): () => void {
+		const set = this.listeners.get(userId) ?? new Set();
+		set.add(listener);
+		this.listeners.set(userId, set);
+		return () => {
+			set.delete(listener);
+			if (set.size === 0 && this.listeners.get(userId) === set) this.listeners.delete(userId);
+		};
+	}
+
 	notify(userId: string, payload: unknown) {
+		for (const listener of [...(this.listeners.get(userId) ?? [])]) {
+			try {
+				listener(payload);
+			} catch (error) {
+				console.error("Realtime listener failed", error);
+			}
+		}
 		const message = JSON.stringify(payload);
 		for (const socket of this.sockets.get(userId) ?? []) {
 			try {
