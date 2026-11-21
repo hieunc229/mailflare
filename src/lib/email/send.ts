@@ -206,6 +206,7 @@ async function deliverEmail(env: CloudflareEnv, delivery: PreparedDelivery): Pro
 	const { input, messageId, jobId, from, mailboxId, to, cc, bcc, headers, attachments } = delivery;
 	const db = getDb(env);
 	const toAddr = joinEmailAddressList(to);
+	let accepted = false;
 	try {
 		// The sender address was validated at queue time; recheck that the mailbox
 		// still owns it before delivery so a disabled or deleted alias — or a
@@ -263,6 +264,7 @@ async function deliverEmail(env: CloudflareEnv, delivery: PreparedDelivery): Pro
 			},
 			jobId,
 		);
+		accepted = true;
 
 		// A fresh message starts its own conversation; Cloudflare's Message-ID is what
 		// any reply will name in In-Reply-To, so key the thread by it.
@@ -303,6 +305,12 @@ async function deliverEmail(env: CloudflareEnv, delivery: PreparedDelivery): Pro
 			metadata: { to: toAddr, cc: cc.length ? joinEmailAddressList(cc) : undefined, subject: input.subject },
 		});
 	} catch (err) {
+		if (accepted) {
+			// The provider already took the message. A late bookkeeping error must not mark it failed or
+			// make the caller retry (a queue or JMAP retry would send it twice), so it is only logged.
+			console.error("Post-send bookkeeping failed", err);
+			return;
+		}
 		const error = err instanceof Error ? err.message : "Send failed";
 		await db.update(messages).set({ status: "failed" }).where(eq(messages.id, messageId));
 		await db

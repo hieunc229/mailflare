@@ -203,7 +203,8 @@ export async function deleteMessageAttachment(
 		.limit(1);
 	if (!row) return false;
 	await db.delete(messageAttachments).where(eq(messageAttachments.id, attachmentId));
-	await env.BUCKET.delete(row.r2Key);
+	// A Drive item saved from this attachment keeps the object alive.
+	await deleteUnreferencedObjects(env, db, [row.r2Key], { attachmentIds: [attachmentId] });
 	return true;
 }
 

@@ -29,7 +29,7 @@ await build({
 
 const load = (name) => import(pathToFileURL(join(outDir, `${name}.mjs`)).href);
 const { exportMailboxToMbox } = await load("exporter");
-const { splitMboxMessages } = await load("importer");
+const { splitMboxBytes, splitMboxMessages } = await load("importer");
 const { SqliteDatabase } = await load("database");
 const { applyMigrations } = await load("migrate");
 
@@ -58,6 +58,14 @@ test("From at the start of a later body line is still escaped", async (t) => {
 	const mbox = await exportBodies(t, ["Hello\nFrom here on, reply inline."]);
 	assert.match(mbox, /\n>From here on/);
 	assert.equal(splitMboxMessages(mbox).length, 1);
+});
+
+test("splitting bytes keeps 8-bit bodies exactly as written", () => {
+	const latin1 = Uint8Array.from([...Buffer.from("From a@x Thu\nSubject: s\n\ncaf"), 0xe9, 0x0a, 0x81, 0xff, 0x0a, ...Buffer.from("From b@x Thu\nSubject: t\n\nbody\n")]);
+	const parts = splitMboxBytes(latin1.buffer).map((part) => [...new Uint8Array(part)]);
+	assert.equal(parts.length, 2);
+	assert.deepEqual(parts[0], [...Buffer.from("Subject: s\n\ncaf"), 0xe9, 0x0a, 0x81, 0xff]);
+	assert.deepEqual(parts[1], [...Buffer.from("Subject: t\n\nbody")]);
 });
 
 test("a body line that already starts with >From survives export and import unchanged", async (t) => {

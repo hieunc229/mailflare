@@ -5,7 +5,7 @@ import { DRAFT_FILTER_PARAMS, draftsVisibleTo, logMessageHidden, privateDraftFor
 import { newId } from "@/lib/ids";
 import { buildSnippet, parseRawMime } from "@/lib/email/parse";
 import { getAuthorizedSenderAddress } from "@/lib/email/sender";
-import { joinEmailAddressList } from "@/lib/email/address";
+import { formatEmailAddress, joinEmailAddressList } from "@/lib/email/address";
 import { resolveThreadId } from "@/lib/email/threading";
 import { storeMessageAttachments } from "@/lib/email/attachments";
 import { deleteMessageWithObjects } from "@/lib/email/message-cleanup";
@@ -253,7 +253,7 @@ async function createDraft(ctx: JmapContext, value: Record<string, unknown>, acc
 		return { error: { type: "forbidden", description: error instanceof Error ? error.message : "Cannot send from that address" } };
 	}
 	const addressList = (list: unknown) =>
-		Array.isArray(list) ? joinEmailAddressList((list as EmailAddressObject[]).map((item) => (item.name ? `"${item.name.replace(/"/g, '\\"')}" <${item.email}>` : item.email))) : "";
+		Array.isArray(list) ? joinEmailAddressList((list as EmailAddressObject[]).map((item) => formatEmailAddress(item.email, item.name))) : "";
 	const bodyValues = (value.bodyValues ?? {}) as Record<string, { value: string }>;
 	const partText = (parts: unknown) => (Array.isArray(parts) && parts[0]?.partId ? bodyValues[parts[0].partId]?.value ?? "" : "");
 	const text = partText(value.textBody);

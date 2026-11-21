@@ -7,7 +7,7 @@ import { decodeBlobId, uploadBlobId } from "./ids";
 import { listAccessibleMailboxIdSet } from "./access";
 import type { JmapContext } from "./types";
 
-const UPLOAD_PREFIX = "jmap-uploads";
+export const UPLOAD_PREFIX = "jmap-uploads";
 /** Ids `storeUpload` hands out (`newId("upl")`). Anything else, such as `../` segments, could reach keys outside the user's prefix. */
 const UPLOAD_ID = /^upl_[\w-]+$/;
 

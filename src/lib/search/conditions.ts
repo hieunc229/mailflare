@@ -48,9 +48,11 @@ export function buildSearchConditions(raw: string, timeZone = "UTC"): SQL[] {
 	const conditions: SQL[] = [];
 
 	if (schemaDialect() === "sqlite") {
-		const match = buildFtsMatch(parsed);
+		const { match, exclude } = buildFtsMatch(parsed);
 		if (match) {
 			conditions.push(sql`${messages}.rowid IN (SELECT rowid FROM messages_fts WHERE messages_fts MATCH ${match})`);
+		} else if (exclude) {
+			conditions.push(sql`${messages}.rowid NOT IN (SELECT rowid FROM messages_fts WHERE messages_fts MATCH ${exclude})`);
 		}
 	} else {
 		conditions.push(...buildLikeConditions(parsed));

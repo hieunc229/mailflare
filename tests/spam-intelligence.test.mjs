@@ -182,3 +182,10 @@ test("without keys only the domain age is checked, and failures add no signal", 
 	assert.deepEqual(await disabled.check({ senderDomain: "other.example", urlDomains: ["a.example"], fingerprint: "f" }), []);
 	assert.equal(calls.length, 1);
 });
+
+test("display names containing escaped quotes or angle brackets are still analysed", () => {
+	const ids = (signals) => signals.map((signal) => signal.id);
+	const known = ["northwind.email"];
+	assert.deepEqual(ids(spam.analyzeImpersonation('"PayPal \\"Support\\"" <x@evil.test>', known)), ["brand_display_name"]);
+	assert.deepEqual(ids(spam.analyzeImpersonation('"John <ceo@northwind.email>" <x@evil.test>', known)), ["address_in_display_name"]);
+});
