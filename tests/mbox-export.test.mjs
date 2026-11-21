@@ -41,7 +41,7 @@ async function exportBodies(t, bodies) {
 	database.db.pragma("foreign_keys = OFF");
 	const insert = database.db.prepare("INSERT INTO messages (id, user_id, mailbox_id, direction, from_addr, to_addr, subject, text_body, status, created_at) VALUES (?, 'u1', 'mbx1', 'inbound', 'maya@example.com', 'me@example.com', ?, ?, 'inbox', ?)");
 	bodies.forEach((body, index) => insert.run(`msg${index}`, `Message ${index}`, body, 1_790_000_000 + index));
-	return exportMailboxToMbox({ DB: database }, "mbx1");
+	return exportMailboxToMbox({ DB: database }, "mbx1", "u1");
 }
 
 test("a body whose first line starts with From is escaped, so the export reads back as one message", async (t) => {
@@ -58,4 +58,19 @@ test("From at the start of a later body line is still escaped", async (t) => {
 	const mbox = await exportBodies(t, ["Hello\nFrom here on, reply inline."]);
 	assert.match(mbox, /\n>From here on/);
 	assert.equal(splitMboxMessages(mbox).length, 1);
+});
+
+test("another user's draft is left out of the export", async (t) => {
+	const database = new SqliteDatabase(join(outDir, `${crypto.randomUUID()}.sqlite`));
+	t.after(() => database.db.close());
+	await applyMigrations(database, join(root, "drizzle/migrations"));
+	database.db.pragma("foreign_keys = OFF");
+	const insert = database.db.prepare("INSERT INTO messages (id, user_id, mailbox_id, direction, from_addr, to_addr, subject, text_body, status, private_draft, created_at) VALUES (?, ?, 'mbx1', 'outbound', 'a@example.com', 'b@example.com', ?, ?, ?, ?, 1)");
+	insert.run("m-sent", "u1", "Sent", "shared", "sent", 0);
+	insert.run("m-mine", "u2", "Mine", "own draft", "draft", 1);
+	insert.run("m-theirs", "u1", "Theirs", "private draft", "draft", 1);
+	const mbox = await exportMailboxToMbox({ DB: database }, "mbx1", "u2");
+	assert.match(mbox, /Subject: Sent/);
+	assert.match(mbox, /Subject: Mine/);
+	assert.doesNotMatch(mbox, /Theirs|private draft/);
 });

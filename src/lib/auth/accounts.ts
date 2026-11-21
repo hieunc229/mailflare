@@ -32,17 +32,6 @@ export function cookieOptions(maxAge = COOKIE_MAX_AGE) {
 	};
 }
 
-/** Cross-site POSTs must not be able to switch or add accounts. */
-export function isSameOrigin(request: Request): boolean {
-	const origin = request.headers.get("Origin");
-	if (!origin) return true;
-	try {
-		return new URL(origin).host === new URL(request.url).host;
-	} catch {
-		return false;
-	}
-}
-
 export type AccountSummary = {
 	userId: string;
 	email: string;

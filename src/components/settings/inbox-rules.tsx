@@ -18,6 +18,9 @@ import {
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { ClientRequestError } from "@/lib/http/client-error";
+import { useSecurityStatus } from "./security-status-store";
+import { StepUpDialog } from "./step-up-dialog";
 import { RoutingRuleSelect } from "./domain-routing/routing-rule-select";
 import type { InboxRule, InboxRuleInput } from "./inbox-rules-types";
 import {
@@ -47,6 +50,8 @@ export function InboxRules() {
   const [destination, setDestination] = useState("");
   const [forwardTo, setForwardTo] = useState("");
   const [keepCopy, setKeepCopy] = useState(false);
+  const [confirmingForward, setConfirmingForward] = useState(false);
+  const { status: securityStatus } = useSecurityStatus();
   const isForward = destination === "forward";
   const mailboxId = selectedMailbox?.id ?? "";
 
@@ -62,7 +67,7 @@ export function InboxRules() {
   });
 
   const save = useMutation({
-    mutationFn: () => {
+    mutationFn: (stepUpToken?: string) => {
       const input: InboxRuleInput = {
         mailboxId,
         matchField,
@@ -71,12 +76,18 @@ export function InboxRules() {
         destination,
         ...(isForward ? { forwardTo: forwardTo.trim(), keepCopy } : {}),
         priority: editingRule?.priority ?? 10,
+        ...(stepUpToken ? { stepUpToken } : {}),
       };
       return editingRule
         ? updateInboxRule(editingRule.id, input)
         : createInboxRule(input);
     },
+    // A forward to an outside address asks the user to confirm it is them, then retries.
+    onError: (error) => {
+      if (error instanceof ClientRequestError && error.code === "verification_failed") setConfirmingForward(true);
+    },
     onSuccess: () => {
+      setConfirmingForward(false);
       setDialogOpen(false);
       setEditingRule(null);
       queryClient.invalidateQueries({ queryKey: ["routing-rules", mailboxId] });
@@ -138,7 +149,7 @@ export function InboxRules() {
 
   function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    save.mutate();
+    save.mutate(undefined);
   }
 
   return (
@@ -312,7 +323,7 @@ export function InboxRules() {
                 </label>
               </div>
             )}
-            {save.isError && (
+            {save.isError && !confirmingForward && (
               <p role="alert" className="text-sm text-red-600">{save.error.message}</p>
             )}
             <div className="flex justify-end gap-2 border-t border-neutral-200 pt-4">
@@ -343,6 +354,16 @@ export function InboxRules() {
           </form>
         </DialogContent>
       </Dialog>
+      <StepUpDialog
+        open={confirmingForward}
+        hasPassword={securityStatus?.passwordSet ?? true}
+        hasPasskey={(securityStatus?.passkeys.length ?? 0) > 0}
+        requireSecondFactor={securityStatus?.requireSecondFactor ?? false}
+        totpEnabled={securityStatus?.totpEnabled ?? false}
+        action="routing.forward"
+        onOpenChange={setConfirmingForward}
+        onAuthorized={(token) => save.mutate(token)}
+      />
     </section>
   );
 }

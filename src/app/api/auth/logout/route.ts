@@ -4,8 +4,10 @@ import { getEnv } from "@/lib/cloudflare";
 import { deleteSession, getUserFromSession, SESSION_COOKIE } from "@/lib/auth/session";
 import { ACCOUNTS_COOKIE, cookieOptions, parseAccountTokens, resolveAccounts, serializeAccountTokens } from "@/lib/auth/accounts";
 import { recordAuthActivity } from "@/lib/auth/activity";
+import { hasValidSessionMutationOrigin } from "@/lib/auth/origin";
 
 export async function POST(request: Request) {
+	if (!hasValidSessionMutationOrigin(request)) return NextResponse.json({ error: "Invalid origin" }, { status: 403 });
 	const env = getEnv();
 	const jar = await cookies();
 	const authorization = request.headers.get("Authorization");

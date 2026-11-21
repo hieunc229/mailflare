@@ -37,17 +37,94 @@ export const PAST_EVENT_COLOR_CLASSES: Record<FolderColor, string> = {
   "#0d9488": "bg-teal-200 text-teal-900",
 };
 
-function recurringStart(first: Date, repeat: CalendarRepeat, index: number, timeZone: string, anchorDay?: number | null): Date {
+function validInterval(value: unknown): number {
+  return Number.isInteger(value) && (value as number) >= 1 && (value as number) <= 999 ? (value as number) : 1;
+}
+
+function daysInMonth(year: number, month: number): number {
+  return new Date(Date.UTC(year, month + 1, 0)).getUTCDate();
+}
+
+function nthWeekdayDate(year: number, month: number, weekday: number, week: number): number {
+  const dim = daysInMonth(year, month);
+  if (week === -1) {
+    const lastDow = new Date(Date.UTC(year, month, dim)).getUTCDay();
+    return dim - ((lastDow - weekday + 7) % 7);
+  }
+  const firstDow = new Date(Date.UTC(year, month, 1)).getUTCDay();
+  let date = 1 + ((weekday - firstDow + 7) % 7) + (week - 1) * 7;
+  while (date > dim) date -= 7;
+  return date;
+}
+
+/** Nth-weekday of a monthly repeat, or null for a plain month-day repeat. */
+function eventNthWeekday(event: CalendarEvent): { weekday: number; week: number } | null {
+  const weekday = (event as { repeatWeekday?: unknown }).repeatWeekday;
+  const week = (event as { repeatWeek?: unknown }).repeatWeek;
+  return event.repeat === "monthly" && Number.isInteger(weekday) && (weekday as number) >= 0 && (weekday as number) <= 6
+    && Number.isInteger(week) && (((week as number) >= 1 && (week as number) <= 5) || week === -1)
+    ? { weekday: weekday as number, week: week as number }
+    : null;
+}
+
+function eventInterval(event: CalendarEvent): number {
+  // A listed-days repeat steps day by day, so its interval is always 1.
+  return event.repeat === "weekdays" ? 1 : validInterval((event as { repeatInterval?: unknown }).repeatInterval);
+}
+
+/** One edited occurrence (RECURRENCE-ID): replaces the rule occurrence at `occurrenceMs`, or adds an extra one when no rule occurrence has that start. */
+export type CalendarOccurrenceOverride = { occurrenceMs: number; startsAt: Date; endsAt: Date };
+
+/** A guest's latest RSVP on one occurrence of an organized series. */
+export type CalendarOccurrenceResponse = { occurrenceMs: number; guest: string; status: string };
+
+/** Overrides as they arrive from GET /api/calendar/events (Dates serialize to ISO strings). */
+export type CalendarOverridesInput = Record<string, Array<{ occurrenceMs: number; startsAt: string | Date; endsAt: string | Date }>>;
+
+/** Converts the additive `overrides` map of the events list response into expander input. */
+export function toCalendarOverrides(input?: CalendarOverridesInput | null): Map<string, CalendarOccurrenceOverride[]> | undefined {
+	if (!input || typeof input !== "object") return undefined;
+	const map = new Map<string, CalendarOccurrenceOverride[]>();
+	for (const [id, list] of Object.entries(input)) {
+		if (!Array.isArray(list)) continue;
+		const parsed: CalendarOccurrenceOverride[] = [];
+		for (const item of list) {
+			if (!item || !Number.isSafeInteger(item.occurrenceMs)) continue;
+			const startsAt = new Date(item.startsAt);
+			const endsAt = new Date(item.endsAt);
+			if (Number.isNaN(startsAt.getTime()) || Number.isNaN(endsAt.getTime())) continue;
+			parsed.push({ occurrenceMs: item.occurrenceMs, startsAt, endsAt });
+		}
+		if (parsed.length) map.set(id, parsed);
+	}
+	return map.size ? map : undefined;
+}
+
+function recurringStart(first: Date, repeat: CalendarRepeat, index: number, timeZone: string, anchorDay?: number | null, nth?: { weekday: number; week: number } | null, interval = 1): Date {
   if (index === 0) return new Date(first);
   const fields = zonedDateFields(first, timeZone);
   if (repeat === "monthly") {
-    const day = anchorDay ?? fields.getUTCDate();
+    if (nth) {
+      fields.setUTCDate(1);
+      fields.setUTCMonth(fields.getUTCMonth() + index * interval);
+      fields.setUTCDate(nthWeekdayDate(fields.getUTCFullYear(), fields.getUTCMonth(), nth.weekday, nth.week));
+    } else {
+      const day = anchorDay ?? fields.getUTCDate();
+      fields.setUTCDate(1);
+      fields.setUTCMonth(fields.getUTCMonth() + index * interval);
+      const lastDay = daysInMonth(fields.getUTCFullYear(), fields.getUTCMonth());
+      fields.setUTCDate(Math.min(day, lastDay));
+    }
+  } else if (repeat === "yearly") {
+    const day = fields.getUTCDate();
+    const month = fields.getUTCMonth();
     fields.setUTCDate(1);
-    fields.setUTCMonth(fields.getUTCMonth() + index);
-    const lastDay = new Date(Date.UTC(fields.getUTCFullYear(), fields.getUTCMonth() + 1, 0)).getUTCDate();
-    fields.setUTCDate(Math.min(day, lastDay));
+    fields.setUTCFullYear(fields.getUTCFullYear() + index * interval);
+    fields.setUTCMonth(month);
+    // February 29 clamps to February 28 outside leap years, like the monthly month-end clamp.
+    fields.setUTCDate(Math.min(day, daysInMonth(fields.getUTCFullYear(), month)));
   } else {
-    fields.setUTCDate(fields.getUTCDate() + index * (repeat === "weekly" ? 7 : 1));
+    fields.setUTCDate(fields.getUTCDate() + index * interval * (repeat === "weekly" ? 7 : 1));
   }
   return dateFromZonedFields(fields, timeZone);
 }
@@ -67,14 +144,15 @@ export function calendarAnchorDay(event: CalendarEvent | null, value: Date): num
   return zonedDateFields(value, calendarTimeZone(event)).getUTCDate();
 }
 
-function recurrenceStartIndex(first: Date, repeat: CalendarRepeat, after: Date, timeZone: string): number {
+function recurrenceStartIndex(first: Date, repeat: CalendarRepeat, after: Date, timeZone: string, interval = 1): number {
   const start = zonedDateFields(first, timeZone);
   const end = zonedDateFields(after, timeZone);
-  if (repeat === "monthly") return Math.max(0, (end.getUTCFullYear() - start.getUTCFullYear()) * 12 + end.getUTCMonth() - start.getUTCMonth() - 1);
-  return Math.max(0, Math.floor((end.getTime() - start.getTime()) / (86_400_000 * (repeat === "weekly" ? 7 : 1))) - 1);
+  if (repeat === "monthly") return Math.max(0, Math.floor(((end.getUTCFullYear() - start.getUTCFullYear()) * 12 + end.getUTCMonth() - start.getUTCMonth() - 1) / interval));
+  if (repeat === "yearly") return Math.max(0, Math.floor((end.getUTCFullYear() - start.getUTCFullYear() - 1) / interval));
+  return Math.max(0, Math.floor((end.getTime() - start.getTime()) / (86_400_000 * (repeat === "weekly" ? 7 : 1) * interval)) - 1);
 }
 
-export function expandCalendarEvents(events: CalendarEvent[], rangeStart: Date, rangeEnd: Date): CalendarEvent[] {
+export function expandCalendarEvents(events: CalendarEvent[], rangeStart: Date, rangeEnd: Date, overrides?: Map<string, CalendarOccurrenceOverride[]>): CalendarEvent[] {
   const occurrences: CalendarEvent[] = [];
   for (const event of events) {
     const first = new Date(event.startsAt);
@@ -87,43 +165,73 @@ export function expandCalendarEvents(events: CalendarEvent[], rangeStart: Date, 
     const repeatDays = parseCalendarRepeatDays(event.repeatDays);
     const excluded = new Set(parseExcludedOccurrences(event.excludedOccurrences));
     const timeZone = calendarTimeZone(event);
-    const firstIndex = recurrenceStartIndex(first, event.repeat, new Date(rangeStart.getTime() - duration), timeZone);
+    const interval = eventInterval(event);
+    const nth = eventNthWeekday(event);
+    const byMs = new Map((overrides?.get(event.id) ?? []).map((override) => [override.occurrenceMs, override]));
+    const ruleMs = new Set<number>();
+    const firstIndex = recurrenceStartIndex(first, event.repeat, new Date(rangeStart.getTime() - duration), timeZone, interval);
     for (let index = firstIndex; index < firstIndex + 20_000; index++) {
-      const startsAt = recurringStart(first, event.repeat, index, timeZone, event.repeatAnchorDay);
+      const startsAt = recurringStart(first, event.repeat, index, timeZone, event.repeatAnchorDay, nth, interval);
       if (startsAt >= rangeEnd || startsAt.getTime() >= until) break;
+      ruleMs.add(startsAt.getTime());
       if (excluded.has(startsAt.getTime()) || (event.repeat === "weekdays" && !repeatDays.includes(zonedDateFields(startsAt, timeZone).getUTCDay()))) continue;
       const endsAt = new Date(startsAt.getTime() + duration);
-      if (endsAt > rangeStart) occurrences.push({ ...event, id: `${event.id}@${startsAt.getTime()}`, seriesStartsAt: event.startsAt, startsAt: startsAt.toISOString(), endsAt: endsAt.toISOString() });
+      if (endsAt > rangeStart) {
+        const override = byMs.get(startsAt.getTime());
+        occurrences.push(override
+          ? { ...event, id: `${event.id}@${startsAt.getTime()}`, seriesStartsAt: event.startsAt, startsAt: override.startsAt.toISOString(), endsAt: override.endsAt.toISOString() }
+          : { ...event, id: `${event.id}@${startsAt.getTime()}`, seriesStartsAt: event.startsAt, startsAt: startsAt.toISOString(), endsAt: endsAt.toISOString() });
+      }
+    }
+    // Overrides on no rule occurrence (RDATEs) are extra occurrences, unless excluded or outside the range.
+    for (const override of byMs.values()) {
+      if (ruleMs.has(override.occurrenceMs) || excluded.has(override.occurrenceMs)) continue;
+      if (override.endsAt <= rangeStart || override.startsAt >= rangeEnd) continue;
+      occurrences.push({ ...event, id: `${event.id}@${override.occurrenceMs}`, seriesStartsAt: event.startsAt, startsAt: override.startsAt.toISOString(), endsAt: override.endsAt.toISOString() });
     }
   }
   return occurrences.sort((a, b) => a.startsAt.localeCompare(b.startsAt));
 }
 
-export function nextCalendarOccurrence(event: CalendarEvent, after: Date): Date | null {
+export function nextCalendarOccurrence(event: CalendarEvent, after: Date, overrides?: CalendarOccurrenceOverride[]): Date | null {
   const first = new Date(event.seriesStartsAt ?? event.startsAt);
   const until = event.repeatUntil ? new Date(event.repeatUntil).getTime() : Infinity;
   const repeatDays = parseCalendarRepeatDays(event.repeatDays);
   const excluded = new Set(parseExcludedOccurrences(event.excludedOccurrences));
   const timeZone = calendarTimeZone(event);
-  const firstIndex = recurrenceStartIndex(first, event.repeat, after, timeZone);
+  const interval = eventInterval(event);
+  const nth = eventNthWeekday(event);
+  const byMs = new Map((overrides ?? []).map((override) => [override.occurrenceMs, override]));
+  const firstIndex = recurrenceStartIndex(first, event.repeat, after, timeZone, interval);
+  let next: Date | null = null;
+  const ruleMs = new Set<number>();
   for (let index = firstIndex; index < firstIndex + 20_000; index++) {
-    const startsAt = recurringStart(first, event.repeat, index, timeZone, event.repeatAnchorDay);
-    if (startsAt.getTime() >= until) return null;
-    if (startsAt < after || excluded.has(startsAt.getTime()) || (event.repeat === "weekdays" && !repeatDays.includes(zonedDateFields(startsAt, timeZone).getUTCDay()))) continue;
-    return startsAt;
+    const startsAt = recurringStart(first, event.repeat, index, timeZone, event.repeatAnchorDay, nth, interval);
+    if (startsAt.getTime() >= until) break;
+    ruleMs.add(startsAt.getTime());
+    if (excluded.has(startsAt.getTime()) || (event.repeat === "weekdays" && !repeatDays.includes(zonedDateFields(startsAt, timeZone).getUTCDay()))) continue;
+    const effective = byMs.get(startsAt.getTime())?.startsAt ?? startsAt;
+    if (effective < after) continue;
+    next = effective;
+    break;
   }
-  return null;
+  // An extra occurrence (RDATE) can be earlier than the next rule occurrence.
+  for (const override of byMs.values()) {
+    if (ruleMs.has(override.occurrenceMs) || excluded.has(override.occurrenceMs) || override.startsAt < after) continue;
+    if (!next || override.startsAt < next) next = override.startsAt;
+  }
+  return next;
 }
 
-export function rescheduleCalendarOccurrence(event: CalendarEvent, startsAt: Date, endsAt: Date, effectiveFrom: Date): CalendarEventTimes | null {
+export function rescheduleCalendarOccurrence(event: CalendarEvent, startsAt: Date, endsAt: Date, effectiveFrom: Date, overrides?: CalendarOccurrenceOverride[]): CalendarEventTimes | null {
   const timeZone = calendarTimeZone(event);
   const shift = zonedDateFields(startsAt, timeZone).getTime() - zonedDateFields(new Date(event.startsAt), timeZone).getTime();
   const threshold = dateFromZonedFields(new Date(zonedDateFields(effectiveFrom, timeZone).getTime() - shift), timeZone);
-  let next = nextCalendarOccurrence(event, threshold);
+  let next = nextCalendarOccurrence(event, threshold, overrides);
   while (next) {
     const savedStart = shift === 0 ? next : dateFromZonedFields(new Date(zonedDateFields(next, timeZone).getTime() + shift), timeZone);
     if (savedStart >= effectiveFrom) return { startsAt: savedStart, endsAt: new Date(savedStart.getTime() + endsAt.getTime() - startsAt.getTime()) };
-    next = nextCalendarOccurrence(event, new Date(next.getTime() + 1));
+    next = nextCalendarOccurrence(event, new Date(next.getTime() + 1), overrides);
   }
   return null;
 }

@@ -13,6 +13,7 @@ import { processImportJob } from "@/lib/import/jobs";
 import { applyPendingMigrations } from "@/lib/migrations/service";
 import { isImportJobMessage, isInboundQueueMessage, isWebhookRetryMessage } from "../worker-utils";
 import { createNodeRuntime } from "./runtime/env";
+import { isRealtimeOriginAllowed } from "./runtime/realtime-origin";
 import { applyMigrations } from "./runtime/migrate";
 import { startScheduler } from "./runtime/scheduler";
 import { startSmtpListener } from "./runtime/smtp";
@@ -83,6 +84,11 @@ async function main() {
 			else socket.destroy();
 			return;
 		}
+		if (!isRealtimeOriginAllowed(request.headers, { appUrl: env.APP_URL, trustProxy })) {
+			socket.write("HTTP/1.1 403 Forbidden\r\n\r\n");
+			socket.destroy();
+			return;
+		}
 		const cookie = request.headers.cookie ?? "";
 		const token = getSessionTokenFromRequest(new Request("http://localhost/", { headers: { cookie } }));
 		void getUserFromSession(env, token).then((user) => {
@@ -92,6 +98,11 @@ async function main() {
 				return;
 			}
 			wss.handleUpgrade(request, socket, head, (ws) => runtime.realtime.attach(user.id, ws));
+		}).catch((error) => {
+			// A failed session lookup must not leave the socket hanging.
+			console.error("Realtime session lookup failed", error);
+			socket.write("HTTP/1.1 500 Internal Server Error\r\n\r\n");
+			socket.destroy();
 		});
 	});
 

@@ -6,6 +6,7 @@ import { folders, messages } from "@/db/schema";
 import { getCurrentUser } from "@/lib/auth/cookies";
 import { getEnv } from "@/lib/cloudflare";
 import { getMailboxAccessLevel } from "@/lib/mailboxes/access";
+import { isOthersDraft } from "@/lib/email/draft-access";
 import { createAuditLogs } from "@/lib/mailboxes/audit";
 import { permanentlyDeleteMessages } from "@/lib/email/permanent-delete";
 import { applySpamFeedback } from "@/lib/spam/feedback";
@@ -38,9 +39,11 @@ async function loadMessagesByIds(db: AppDatabase, ids: string[]) {
 function selectMessageChunk(db: AppDatabase, chunk: string[]) {
 	return db.select({
 		id: messages.id,
+		userId: messages.userId,
 		mailboxId: messages.mailboxId,
 		rawR2Key: messages.rawR2Key,
 		status: messages.status,
+		privateDraft: messages.privateDraft,
 	})
 		.from(messages)
 		.where(inArray(messages.id, chunk));
@@ -108,7 +111,8 @@ export async function POST(request: Request) {
 	const allowedMessageIds: string[] = [];
 
 	for (const message of selectedMessages) {
-		if (!message.mailboxId) continue;
+		// Another user's draft is invisible to this user, so it is never part of their selection.
+		if (!message.mailboxId || isOthersDraft(message, user.id)) continue;
 		const access = accessByMailbox.get(message.mailboxId);
 		const canUpdate = payload.action === "read" || payload.action === "unread" ? access?.canRead : access?.canManage;
 		if (!canUpdate) continue;

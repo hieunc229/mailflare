@@ -3,6 +3,8 @@ import { getEnv } from "@/lib/cloudflare";
 import { intakeIncomingMail } from "@/lib/email/intake";
 import { verifyInboundSignature, verifyInboundSignatureV2 } from "@/lib/email/intake-signature";
 import { inboundAttachmentLimitReasonFromRaw } from "@/lib/email/inbound-attachments";
+import { RequestBodyTooLargeError } from "@/lib/http/errors";
+import { readRawBody } from "@/lib/http/request";
 
 export const dynamic = "force-dynamic";
 
@@ -17,8 +19,15 @@ export async function POST(request: Request) {
 	const secret = env.INBOUND_WEBHOOK_SECRET?.trim();
 	if (!secret) return NextResponse.json({ error: "INBOUND_WEBHOOK_SECRET is not configured" }, { status: 503 });
 
-	const raw = await request.arrayBuffer();
-	if (raw.byteLength > 25 * 1024 * 1024) return NextResponse.json({ error: "Message exceeds the 25 MiB receiving limit" }, { status: 413 });
+	// Unsigned requests are refused before the body is read; the body is then read with a hard cap.
+	if (!request.headers.get("x-mailflare-signature")) return NextResponse.json({ error: "Invalid signature" }, { status: 401 });
+	let raw: ArrayBuffer;
+	try {
+		raw = await readRawBody(request, 25 * 1024 * 1024);
+	} catch (error) {
+		if (error instanceof RequestBodyTooLargeError) return NextResponse.json({ error: "Message exceeds the 25 MiB receiving limit" }, { status: 413 });
+		throw error;
+	}
 	const from = request.headers.get("x-mailflare-from") ?? "";
 	const to = request.headers.get("x-mailflare-to") ?? "";
 	const signature = request.headers.get("x-mailflare-signature") ?? "";
