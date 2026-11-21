@@ -20,6 +20,7 @@ await build({
 				CONTACTS_LIST_MAX_LIMIT,
 				listContacts,
 				saveManualContact,
+				toContactDetails,
 			} from "./src/app/api/contacts/utils.ts";
 			export { filterContactSuggestions, formatContactSuggestion } from "./src/components/compose/recipient-suggestions-utils.ts";
 			export { mergeRecipients } from "./src/components/compose/recipient-utils.ts";
@@ -45,6 +46,7 @@ const {
 	CONTACTS_LIST_MAX_LIMIT,
 	listContacts,
 	saveManualContact,
+	toContactDetails,
 	filterContactSuggestions,
 	formatContactSuggestion,
 	mergeRecipients,
@@ -177,4 +179,10 @@ test("saveManualContact creates then renames without duplicating the address", a
 
 	const rows = await listContacts(db, { userId: "owner", query: "", limit: 100 });
 	assert.equal(rows.length, 1);
+});
+
+test("the CardDAV link of a contact is internal: the API shape does not carry it", () => {
+	const details = toContactDetails({ id: "u:a@b.test", userId: "u", email: "a@b.test", displayName: "A", avatarKey: "k", source: "manual", blocked: false, remoteContentAllowed: false, lastSeenAt: null, davCardId: "card_1", createdAt: new Date(0) });
+	assert.equal("davCardId" in details, false);
+	assert.equal(details.hasAvatar, true);
 });

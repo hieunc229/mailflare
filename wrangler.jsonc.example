@@ -33,6 +33,21 @@
 			},
 		},
 		{
+			"name": "DEVICE_LOGIN_RATE_LIMIT",
+			"namespace_id": "1003",
+			"simple": { "limit": 10, "period": 60 },
+		},
+		{
+			"name": "DAV_RATE_LIMIT",
+			"namespace_id": "1004",
+			"simple": { "limit": 600, "period": 60 },
+		},
+		{
+			"name": "DAV_WRITE_RATE_LIMIT",
+			"namespace_id": "1005",
+			"simple": { "limit": 120, "period": 60 },
+		},
+		{
 			"name": "AGENT_RATE_LIMIT",
 			"namespace_id": "1002",
 			"simple": { "limit": 120, "period": 60 },

@@ -351,6 +351,84 @@
         "ALTER TABLE `app_settings` ADD `auto_update_dispatched_version` text;",
         "ALTER TABLE `app_settings` ADD `auto_update_channel` varchar(16) NOT NULL DEFAULT 'release';"
       ]
+    },
+    {
+      "name": "0018_app_password_usage.sql",
+      "statements": [
+        "ALTER TABLE `api_keys` ADD `last_used_protocol` text;",
+        "ALTER TABLE `api_keys` ADD `last_used_ip` text;"
+      ]
+    },
+    {
+      "name": "0021_dav_enabled.sql",
+      "statements": [
+        "ALTER TABLE `app_settings` ADD `dav_enabled` boolean NOT NULL DEFAULT false;"
+      ]
+    },
+    {
+      "name": "0026_dav_storage.sql",
+      "statements": [
+        "CREATE TABLE `dav_calendar_objects` (\n\t`id` varchar(191) NOT NULL,\n\t`user_id` varchar(191) NOT NULL,\n\t`collection_id` varchar(191) NOT NULL,\n\t`name` varchar(255) NOT NULL,\n\t`uid` varchar(191) NOT NULL,\n\t`body` longtext,\n\t`rows_hash` longtext,\n\t`size` bigint NOT NULL,\n\t`created_at` bigint NOT NULL,\n\t`updated_at` bigint NOT NULL,\n\tCONSTRAINT `dav_calendar_objects_id` PRIMARY KEY(`id`),\n\tCONSTRAINT `dav_calendar_objects_name_idx` UNIQUE(`collection_id`,`name`),\n\tCONSTRAINT `dav_calendar_objects_uid_idx` UNIQUE(`collection_id`,`uid`)\n);",
+        "CREATE TABLE `dav_cards` (\n\t`id` varchar(191) NOT NULL,\n\t`user_id` varchar(191) NOT NULL,\n\t`collection_id` varchar(191) NOT NULL,\n\t`name` varchar(255) NOT NULL,\n\t`uid` varchar(191) NOT NULL,\n\t`body` longtext NOT NULL,\n\t`version` varchar(64) NOT NULL,\n\t`fn` longtext NOT NULL DEFAULT (''),\n\t`emails` longtext NOT NULL DEFAULT ('[]'),\n\t`size` bigint NOT NULL,\n\t`created_at` bigint NOT NULL,\n\t`updated_at` bigint NOT NULL,\n\tCONSTRAINT `dav_cards_id` PRIMARY KEY(`id`),\n\tCONSTRAINT `dav_cards_name_idx` UNIQUE(`collection_id`,`name`),\n\tCONSTRAINT `dav_cards_uid_idx` UNIQUE(`collection_id`,`uid`)\n);",
+        "CREATE TABLE `dav_changes` (\n\t`seq` bigint AUTO_INCREMENT NOT NULL,\n\t`collection_id` varchar(191) NOT NULL,\n\t`object_key` varchar(191) NOT NULL,\n\t`change_type` varchar(64) NOT NULL,\n\t`created_at` bigint NOT NULL DEFAULT (unix_timestamp()),\n\tCONSTRAINT `dav_changes_seq` PRIMARY KEY(`seq`)\n);",
+        "CREATE TABLE `dav_collections` (\n\t`id` varchar(191) NOT NULL,\n\t`user_id` varchar(191) NOT NULL,\n\t`kind` varchar(64) NOT NULL,\n\t`display_name` longtext,\n\t`color` longtext,\n\t`description` longtext,\n\t`sort_order` bigint,\n\t`dead_props` longtext NOT NULL DEFAULT ('{}'),\n\t`seeded_at` bigint,\n\t`created_at` bigint NOT NULL,\n\t`updated_at` bigint NOT NULL,\n\tCONSTRAINT `dav_collections_id` PRIMARY KEY(`id`)\n);",
+        "CREATE TABLE `dav_sync_state` (\n\t`collection_id` varchar(191) NOT NULL,\n\t`epoch` longtext NOT NULL,\n\t`floor` bigint NOT NULL DEFAULT 0,\n\tCONSTRAINT `dav_sync_state_collection_id` PRIMARY KEY(`collection_id`)\n);",
+        "ALTER TABLE `dav_calendar_objects` ADD CONSTRAINT `dav_calendar_objects_id_calendar_events_id_fk` FOREIGN KEY (`id`) REFERENCES `calendar_events`(`id`) ON DELETE cascade ON UPDATE no action;",
+        "ALTER TABLE `dav_cards` ADD CONSTRAINT `dav_cards_user_id_users_id_fk` FOREIGN KEY (`user_id`) REFERENCES `users`(`id`) ON DELETE cascade ON UPDATE no action;",
+        "ALTER TABLE `dav_collections` ADD CONSTRAINT `dav_collections_user_id_users_id_fk` FOREIGN KEY (`user_id`) REFERENCES `users`(`id`) ON DELETE cascade ON UPDATE no action;",
+        "CREATE INDEX `dav_calendar_objects_user_idx` ON `dav_calendar_objects` (`user_id`);",
+        "CREATE INDEX `dav_cards_user_idx` ON `dav_cards` (`user_id`);",
+        "CREATE INDEX `dav_changes_collection_seq_idx` ON `dav_changes` (`collection_id`,`seq`);",
+        "CREATE INDEX `dav_changes_object_idx` ON `dav_changes` (`collection_id`,`object_key`,`seq`);",
+        "CREATE INDEX `dav_collections_user_idx` ON `dav_collections` (`user_id`);",
+        "CREATE TRIGGER dav_changes_calendar_events_ai AFTER INSERT ON calendar_events FOR EACH ROW\nBEGIN\n\tINSERT INTO dav_changes (collection_id, object_key, change_type) VALUES (CONCAT('cal:', NEW.user_id), NEW.id, 'created');\nEND;",
+        "CREATE TRIGGER dav_changes_calendar_events_au AFTER UPDATE ON calendar_events FOR EACH ROW\nBEGIN\n\tIF NOT (CAST(OLD.user_id AS BINARY) <=> CAST(NEW.user_id AS BINARY)) OR NOT (CAST(OLD.mailbox_id AS BINARY) <=> CAST(NEW.mailbox_id AS BINARY) AND CAST(OLD.title AS BINARY) <=> CAST(NEW.title AS BINARY) AND CAST(OLD.description AS BINARY) <=> CAST(NEW.description AS BINARY) AND CAST(OLD.location AS BINARY) <=> CAST(NEW.location AS BINARY) AND CAST(OLD.attendees AS BINARY) <=> CAST(NEW.attendees AS BINARY) AND CAST(OLD.color AS BINARY) <=> CAST(NEW.color AS BINARY) AND CAST(OLD.`repeat` AS BINARY) <=> CAST(NEW.`repeat` AS BINARY) AND CAST(OLD.repeat_days AS BINARY) <=> CAST(NEW.repeat_days AS BINARY) AND CAST(OLD.excluded_occurrences AS BINARY) <=> CAST(NEW.excluded_occurrences AS BINARY) AND CAST(OLD.time_zone AS BINARY) <=> CAST(NEW.time_zone AS BINARY) AND CAST(OLD.response_status AS BINARY) <=> CAST(NEW.response_status AS BINARY) AND CAST(OLD.invite_message_id AS BINARY) <=> CAST(NEW.invite_message_id AS BINARY) AND CAST(OLD.invite_sender AS BINARY) <=> CAST(NEW.invite_sender AS BINARY) AND CAST(OLD.attendee_responses AS BINARY) <=> CAST(NEW.attendee_responses AS BINARY) AND OLD.repeat_anchor_day <=> NEW.repeat_anchor_day AND OLD.repeat_until <=> NEW.repeat_until AND OLD.starts_at <=> NEW.starts_at AND OLD.ends_at <=> NEW.ends_at AND OLD.reminder_minutes <=> NEW.reminder_minutes AND OLD.invite_sequence <=> NEW.invite_sequence AND OLD.updated_at <=> NEW.updated_at) THEN\n\t\tIF NOT (CAST(OLD.user_id AS BINARY) <=> CAST(NEW.user_id AS BINARY)) THEN\n\t\t\tINSERT INTO dav_changes (collection_id, object_key, change_type) VALUES (CONCAT('cal:', OLD.user_id), OLD.id, 'destroyed');\n\t\t\tINSERT INTO dav_changes (collection_id, object_key, change_type) VALUES (CONCAT('cal:', NEW.user_id), NEW.id, 'created');\n\t\tELSE\n\t\t\tINSERT INTO dav_changes (collection_id, object_key, change_type) VALUES (CONCAT('cal:', NEW.user_id), NEW.id, 'updated');\n\t\tEND IF;\n\tEND IF;\nEND;",
+        "CREATE TRIGGER dav_changes_calendar_events_ad AFTER DELETE ON calendar_events FOR EACH ROW\nBEGIN\n\tINSERT INTO dav_changes (collection_id, object_key, change_type) VALUES (CONCAT('cal:', OLD.user_id), OLD.id, 'destroyed');\nEND;",
+        "CREATE TRIGGER dav_changes_cards_ai AFTER INSERT ON dav_cards FOR EACH ROW\nBEGIN\n\tINSERT INTO dav_changes (collection_id, object_key, change_type) VALUES (NEW.collection_id, NEW.id, 'created');\nEND;",
+        "CREATE TRIGGER dav_changes_cards_au AFTER UPDATE ON dav_cards FOR EACH ROW\nBEGIN\n\tIF NOT (CAST(OLD.collection_id AS BINARY) <=> CAST(NEW.collection_id AS BINARY)) OR NOT (CAST(OLD.name AS BINARY) <=> CAST(NEW.name AS BINARY) AND CAST(OLD.uid AS BINARY) <=> CAST(NEW.uid AS BINARY) AND CAST(OLD.body AS BINARY) <=> CAST(NEW.body AS BINARY) AND CAST(OLD.version AS BINARY) <=> CAST(NEW.version AS BINARY) AND CAST(OLD.fn AS BINARY) <=> CAST(NEW.fn AS BINARY) AND CAST(OLD.emails AS BINARY) <=> CAST(NEW.emails AS BINARY) AND OLD.size <=> NEW.size AND OLD.updated_at <=> NEW.updated_at) THEN\n\t\tIF NOT (CAST(OLD.collection_id AS BINARY) <=> CAST(NEW.collection_id AS BINARY)) THEN\n\t\t\tINSERT INTO dav_changes (collection_id, object_key, change_type) VALUES (OLD.collection_id, OLD.id, 'destroyed');\n\t\t\tINSERT INTO dav_changes (collection_id, object_key, change_type) VALUES (NEW.collection_id, NEW.id, 'created');\n\t\tELSE\n\t\t\tINSERT INTO dav_changes (collection_id, object_key, change_type) VALUES (NEW.collection_id, NEW.id, 'updated');\n\t\tEND IF;\n\tEND IF;\nEND;",
+        "CREATE TRIGGER dav_changes_cards_ad AFTER DELETE ON dav_cards FOR EACH ROW\nBEGIN\n\tINSERT INTO dav_changes (collection_id, object_key, change_type) VALUES (OLD.collection_id, OLD.id, 'destroyed');\nEND;",
+        "INSERT INTO dav_changes (collection_id, object_key, change_type)\nSELECT CONCAT('cal:', user_id), id, 'created' FROM calendar_events ORDER BY created_at, id;"
+      ]
+    },
+    {
+      "name": "0027_calendar_event_rrule.sql",
+      "statements": [
+        "ALTER TABLE `calendar_events` ADD `rrule` longtext;",
+        "ALTER TABLE `calendar_events` ADD `recurrence_id` bigint;",
+        "ALTER TABLE `calendar_events` ADD `dav_object_id` varchar(191);",
+        "ALTER TABLE `calendar_events` ADD `all_day` boolean DEFAULT false NOT NULL;",
+        "CREATE INDEX `calendar_events_dav_object_idx` ON `calendar_events` (`dav_object_id`);",
+        "DROP TRIGGER IF EXISTS dav_changes_calendar_events_ai;",
+        "DROP TRIGGER IF EXISTS dav_changes_calendar_events_au;",
+        "DROP TRIGGER IF EXISTS dav_changes_calendar_events_ad;",
+        "CREATE TRIGGER dav_changes_calendar_events_ai AFTER INSERT ON calendar_events FOR EACH ROW\nBEGIN\n\tINSERT INTO dav_changes (collection_id, object_key, change_type) VALUES (CONCAT('cal:', NEW.user_id), COALESCE(NEW.dav_object_id, NEW.id), CASE WHEN NEW.dav_object_id IS NULL OR CAST(NEW.dav_object_id AS BINARY) = CAST(NEW.id AS BINARY) THEN 'created' ELSE 'updated' END);\nEND;",
+        "CREATE TRIGGER dav_changes_calendar_events_au AFTER UPDATE ON calendar_events FOR EACH ROW\nBEGIN\n\tIF NOT (CAST(OLD.user_id AS BINARY) <=> CAST(NEW.user_id AS BINARY)) OR NOT (CAST(OLD.mailbox_id AS BINARY) <=> CAST(NEW.mailbox_id AS BINARY) AND CAST(OLD.title AS BINARY) <=> CAST(NEW.title AS BINARY) AND CAST(OLD.description AS BINARY) <=> CAST(NEW.description AS BINARY) AND CAST(OLD.location AS BINARY) <=> CAST(NEW.location AS BINARY) AND CAST(OLD.attendees AS BINARY) <=> CAST(NEW.attendees AS BINARY) AND CAST(OLD.color AS BINARY) <=> CAST(NEW.color AS BINARY) AND CAST(OLD.`repeat` AS BINARY) <=> CAST(NEW.`repeat` AS BINARY) AND CAST(OLD.repeat_days AS BINARY) <=> CAST(NEW.repeat_days AS BINARY) AND CAST(OLD.excluded_occurrences AS BINARY) <=> CAST(NEW.excluded_occurrences AS BINARY) AND CAST(OLD.time_zone AS BINARY) <=> CAST(NEW.time_zone AS BINARY) AND CAST(OLD.response_status AS BINARY) <=> CAST(NEW.response_status AS BINARY) AND CAST(OLD.invite_message_id AS BINARY) <=> CAST(NEW.invite_message_id AS BINARY) AND CAST(OLD.invite_sender AS BINARY) <=> CAST(NEW.invite_sender AS BINARY) AND CAST(OLD.attendee_responses AS BINARY) <=> CAST(NEW.attendee_responses AS BINARY) AND OLD.repeat_anchor_day <=> NEW.repeat_anchor_day AND OLD.repeat_until <=> NEW.repeat_until AND OLD.starts_at <=> NEW.starts_at AND OLD.ends_at <=> NEW.ends_at AND OLD.reminder_minutes <=> NEW.reminder_minutes AND OLD.invite_sequence <=> NEW.invite_sequence AND OLD.updated_at <=> NEW.updated_at AND CAST(OLD.rrule AS BINARY) <=> CAST(NEW.rrule AS BINARY) AND OLD.recurrence_id <=> NEW.recurrence_id AND CAST(OLD.dav_object_id AS BINARY) <=> CAST(NEW.dav_object_id AS BINARY) AND OLD.all_day <=> NEW.all_day) THEN\n\t\tIF NOT (CAST(OLD.user_id AS BINARY) <=> CAST(NEW.user_id AS BINARY)) AND (OLD.dav_object_id IS NULL OR CAST(OLD.dav_object_id AS BINARY) = CAST(OLD.id AS BINARY)) THEN\n\t\t\tINSERT INTO dav_changes (collection_id, object_key, change_type) VALUES (CONCAT('cal:', OLD.user_id), OLD.id, 'destroyed');\n\t\tEND IF;\n\t\tINSERT INTO dav_changes (collection_id, object_key, change_type) VALUES (CONCAT('cal:', NEW.user_id), COALESCE(NEW.dav_object_id, NEW.id), CASE WHEN NOT (CAST(OLD.user_id AS BINARY) <=> CAST(NEW.user_id AS BINARY)) AND (NEW.dav_object_id IS NULL OR CAST(NEW.dav_object_id AS BINARY) = CAST(NEW.id AS BINARY)) THEN 'created' ELSE 'updated' END);\n\t\tIF CAST(OLD.user_id AS BINARY) <=> CAST(NEW.user_id AS BINARY) AND NOT (CAST(COALESCE(OLD.dav_object_id, OLD.id) AS BINARY) <=> CAST(COALESCE(NEW.dav_object_id, NEW.id) AS BINARY)) THEN\n\t\t\tINSERT INTO dav_changes (collection_id, object_key, change_type) VALUES (CONCAT('cal:', OLD.user_id), COALESCE(OLD.dav_object_id, OLD.id), 'updated');\n\t\tEND IF;\n\tEND IF;\nEND;",
+        "CREATE TRIGGER dav_changes_calendar_events_ad AFTER DELETE ON calendar_events FOR EACH ROW\nBEGIN\n\tIF OLD.dav_object_id IS NULL OR CAST(OLD.dav_object_id AS BINARY) = CAST(OLD.id AS BINARY) THEN\n\t\tINSERT INTO dav_changes (collection_id, object_key, change_type) VALUES (CONCAT('cal:', OLD.user_id), OLD.id, 'destroyed');\n\tELSEIF EXISTS (SELECT 1 FROM calendar_events WHERE id = OLD.dav_object_id) THEN\n\t\tINSERT INTO dav_changes (collection_id, object_key, change_type) VALUES (CONCAT('cal:', OLD.user_id), OLD.dav_object_id, 'updated');\n\tEND IF;\nEND;"
+      ]
+    },
+    {
+      "name": "0028_dav_change_names.sql",
+      "statements": [
+        "ALTER TABLE `dav_changes` ADD `resource_name` longtext;",
+        "DROP TRIGGER IF EXISTS dav_changes_calendar_events_ad;",
+        "DROP TRIGGER IF EXISTS dav_changes_cards_ad;",
+        "CREATE TRIGGER dav_changes_calendar_events_bd BEFORE DELETE ON calendar_events FOR EACH ROW\nBEGIN\n\tIF OLD.dav_object_id IS NULL OR CAST(OLD.dav_object_id AS BINARY) = CAST(OLD.id AS BINARY) THEN\n\t\tINSERT INTO dav_changes (collection_id, object_key, change_type, resource_name) VALUES (CONCAT('cal:', OLD.user_id), OLD.id, 'destroyed', (SELECT name FROM dav_calendar_objects WHERE id = OLD.id));\n\tEND IF;\nEND;",
+        "CREATE TRIGGER dav_changes_calendar_events_ad AFTER DELETE ON calendar_events FOR EACH ROW\nBEGIN\n\tIF OLD.dav_object_id IS NOT NULL AND CAST(OLD.dav_object_id AS BINARY) <> CAST(OLD.id AS BINARY) AND EXISTS (SELECT 1 FROM calendar_events WHERE id = OLD.dav_object_id) THEN\n\t\tINSERT INTO dav_changes (collection_id, object_key, change_type) VALUES (CONCAT('cal:', OLD.user_id), OLD.dav_object_id, 'updated');\n\tEND IF;\nEND;",
+        "CREATE TRIGGER dav_changes_cards_ad AFTER DELETE ON dav_cards FOR EACH ROW\nBEGIN\n\tINSERT INTO dav_changes (collection_id, object_key, change_type, resource_name) VALUES (OLD.collection_id, OLD.id, 'destroyed', OLD.name);\nEND;",
+        "CREATE INDEX `dav_calendar_objects_user_size_idx` ON `dav_calendar_objects` (`user_id`,`size`);",
+        "DROP INDEX `dav_calendar_objects_user_idx` ON `dav_calendar_objects`;",
+        "CREATE INDEX `dav_cards_user_size_idx` ON `dav_cards` (`user_id`,`size`);",
+        "DROP INDEX `dav_cards_user_idx` ON `dav_cards`;"
+      ]
+    },
+    {
+      "name": "0029_contacts_dav_card.sql",
+      "statements": [
+        "ALTER TABLE `contacts` ADD `dav_card_id` varchar(191);",
+        "CREATE INDEX `contacts_dav_card_idx` ON `contacts` (`dav_card_id`);",
+        "ALTER TABLE `dav_collections` ADD `seed_started_at` bigint;",
+        "ALTER TABLE `dav_collections` ADD `seed_cursor` text;"
+      ]
     }
   ]
 }
