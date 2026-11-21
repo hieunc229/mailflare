@@ -10,6 +10,7 @@ import type { FolderView } from "@/lib/imap/view";
 import { runFetch, sendFlags } from "./commands/fetch";
 import { runList, runNamespace, runSelect, runStatus } from "./commands/mailbox";
 import { runStore } from "./commands/store";
+import { closeExpunge, runCopy, runExpunge, runMove } from "./commands/transfer";
 import { runSearch } from "./commands/search";
 import { AUTH_LIMITS, Framer, PRE_AUTH_LIMITS, tagOf } from "./framing";
 import type { Notifier } from "./notifier";
@@ -282,7 +283,7 @@ export class ImapConnection {
 			else base.push("STARTTLS", "LOGINDISABLED");
 			return base;
 		}
-		return [...base, "IDLE", "NAMESPACE", "UNSELECT", "CHILDREN", "SPECIAL-USE", "LIST-EXTENDED", "LIST-STATUS", "ESEARCH"];
+		return [...base, "IDLE", "NAMESPACE", "UIDPLUS", "MOVE", "UNSELECT", "CHILDREN", "SPECIAL-USE", "LIST-EXTENDED", "LIST-STATUS", "ESEARCH"];
 	}
 
 	private async run(): Promise<void> {
@@ -405,7 +406,10 @@ export class ImapConnection {
 			case "FETCH": return this.inSelected(() => runFetch(this, command, uid));
 			case "SEARCH": return this.inSelected(() => runSearch(this, command, uid));
 			case "STORE": return this.inSelected(() => runStore(this, command, uid));
-			case "COPY": case "MOVE": case "EXPUNGE": case "APPEND": case "CREATE": case "DELETE": case "RENAME":
+			case "COPY": return this.inSelected(() => runCopy(this, command, uid));
+			case "MOVE": return this.inSelected(() => runMove(this, command, uid));
+			case "EXPUNGE": return this.inSelected(() => runExpunge(this, command, uid));
+			case "APPEND": case "CREATE": case "DELETE": case "RENAME":
 				throw new ImapError("NO", "This server is read-only for now", "CANNOT");
 			default: throw this.refusedCommand(name);
 		}
@@ -473,9 +477,10 @@ export class ImapConnection {
 		if (this.phase === "selected") this.phase = "auth";
 	}
 
-	private unselect(command: string): Completion {
+	private async unselect(command: string): Promise<Completion> {
 		if (!this.selected) throw bad("No mailbox is selected");
-		// Nothing is flagged \Deleted in a read-only session, so CLOSE has nothing to remove.
+		// CLOSE removes what is flagged \Deleted (a read-only session has nothing to remove); UNSELECT does not.
+		if (command === "CLOSE") await closeExpunge(this);
 		this.deselect();
 		return { text: `${command} completed` };
 	}

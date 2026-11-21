@@ -170,7 +170,7 @@ function unescapeJsonPointer(token: string): string {
 }
 
 /** Where a patched `mailboxIds` puts the message: exactly one JMAP mailbox is supported. */
-function targetFromMailboxIds(row: MessageRow, patch: Record<string, unknown>, accessible: Set<string>): { status?: string; folderId?: string | null } | { error: Record<string, unknown> } | null {
+export function targetFromMailboxIds(row: MessageRow, patch: Record<string, unknown>, accessible: Set<string>): { status?: string; folderId?: string | null } | { error: Record<string, unknown> } | null {
 	let ids: string[] | null = null;
 	if (patch.mailboxIds && typeof patch.mailboxIds === "object") {
 		ids = Object.entries(patch.mailboxIds as Record<string, boolean>).filter(([, on]) => on).map(([id]) => id);
