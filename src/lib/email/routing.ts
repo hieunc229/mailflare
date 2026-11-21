@@ -42,6 +42,12 @@ export type RuleMatchInput = {
 
 export type ResolveInboundOptions = {
 	/**
+	 * The Subject header, so domain-scope rules that match on "Subject" can fire. A domain
+	 * rule is evaluated before the body is parsed, so callers that have the header pass it;
+	 * without it a subject rule can only fail to match.
+	 */
+	subject?: string | null;
+	/**
 	 * Apply the mailbox owner's own forwarding rules. Only the receiving handlers set this:
 	 * they can still forward the live message, and they know the subject.
 	 *
@@ -80,7 +86,9 @@ export async function resolveInboundAddress(
 	if (!domain) return null;
 
 	const domainRules = await listDomainRules(db, domain.id);
-	const matchInput: RuleMatchInput = { toAddress, fromAddress };
+	// `subject` comes from the caller: a domain rule runs before the body is parsed, so the
+	// Subject header is the only content field it can match on.
+	const matchInput: RuleMatchInput = { toAddress, fromAddress, subject: options.subject };
 
 	// Phase 1 — block rules run before any mailbox lookup so they can block a sender
 	// even when the recipient is a real mailbox.

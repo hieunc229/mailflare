@@ -17,6 +17,8 @@ export async function resolveIncomingMail(
 	try {
 		const db = getDb(env);
 		const decision = await resolveInboundAddress(db, to, from, {
+			// The Subject header, for domain rules that match on it.
+			subject: headers?.subject,
 			// A message that already went through a forward is never forwarded again by a
 			// mailbox rule, so two inboxes forwarding to each other cannot loop.
 			mailboxForwards: headers?.alreadyForwarded ? undefined : { subject: headers?.subject, from: headers?.from },
