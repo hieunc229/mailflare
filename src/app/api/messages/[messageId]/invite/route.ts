@@ -3,6 +3,8 @@ import { NextResponse } from "next/server";
 import { getDb } from "@/db";
 import { calendarEvents, messages } from "@/db/schema";
 import { getCurrentUser } from "@/lib/auth/cookies";
+import { authorizeCalendarRequest, calendarKeyCanSendInvitations } from "@/lib/calendar/api-auth";
+import type { ApiAuthResult } from "@/lib/api/key-auth-types";
 import { getEnv } from "@/lib/cloudflare";
 import { buildCounterIcs, buildReplyIcs, buildReplyText, parseCounterProposal, parseInvite, type InviteResponse, type ParsedInvite } from "@/lib/calendar/invite";
 import { findInviteAttachment, MAX_INVITE_BYTES } from "@/lib/calendar/invite-attachment";
@@ -44,11 +46,32 @@ async function inviteZone(db: ReturnType<typeof getDb>, request: Request, user: 
 
 const UNREADABLE = { error: "This invitation could not be read" };
 
+/**
+ * Who is answering: the dashboard session, or an API key with the calendar scope (read to look, write to
+ * answer) that may also read the message's mailbox. A key needs the `send` scope for that mailbox before the
+ * reply goes out, as for invitations the calendar API sends.
+ */
+async function inviteCaller(env: CloudflareEnv, request: Request, messageId: string, scope: "calendar:read" | "calendar:write"):
+	Promise<{ user: CurrentUser; key: ApiAuthResult | null; error: null } | { user: null; key: null; error: NextResponse }> {
+	const authorization = request.headers.get("Authorization") ?? "";
+	if (!authorization.startsWith("Bearer ep_") && !authorization.startsWith("Basic ")) {
+		const user = await getCurrentUser(env, request);
+		return user ? { user, key: null, error: null } : { user: null, key: null, error: NextResponse.json({ error: "Unauthorized" }, { status: 401 }) };
+	}
+	const { user, key, error } = await authorizeCalendarRequest(env, request, scope);
+	if (error || !user || !key) return { user: null, key: null, error: error ?? NextResponse.json({ error: "Unauthorized" }, { status: 401 }) };
+	const [row] = await getDb(env).select({ mailboxId: messages.mailboxId }).from(messages).where(eq(messages.id, messageId)).limit(1);
+	if (!row?.mailboxId || (key.mailboxIds !== null && !key.mailboxIds.includes(row.mailboxId))) {
+		return { user: null, key: null, error: NextResponse.json({ error: "Message not found" }, { status: 404 }) };
+	}
+	return { user: user as CurrentUser, key, error: null };
+}
+
 export async function GET(request: Request, { params }: InviteRouteParams) {
 	const env = getEnv();
-	const user = await getCurrentUser(env, request);
-	if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 	const { messageId } = await params;
+	const { user, error } = await inviteCaller(env, request, messageId, "calendar:read");
+	if (error) return error;
 	const db = getDb(env);
 	const { invite, unreadable } = await loadInvite(env, user, messageId, () => inviteZone(db, request, user));
 	if (unreadable) return NextResponse.json({ invite: null, ...UNREADABLE }, { status: 422 });
@@ -66,10 +89,10 @@ export async function GET(request: Request, { params }: InviteRouteParams) {
 
 export async function POST(request: Request, { params }: InviteRouteParams) {
 	const env = getEnv();
-	const user = await getCurrentUser(env, request);
-	if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-	if (!hasValidSessionMutationOrigin(request)) return NextResponse.json({ error: "Invalid origin" }, { status: 403 });
 	const { messageId } = await params;
+	const { user, key, error } = await inviteCaller(env, request, messageId, "calendar:write");
+	if (error) return error;
+	if (!key && !hasValidSessionMutationOrigin(request)) return NextResponse.json({ error: "Invalid origin" }, { status: 403 });
 	const body = await request.json().catch(() => ({})) as { response?: InviteResponse; sendReply?: boolean; note?: string; action?: string; startsAt?: string; endsAt?: string; rsvp?: InviteResponse };
 	const isCounter = body.action === "counter";
 	let response: InviteResponse;
@@ -146,7 +169,7 @@ export async function POST(request: Request, { params }: InviteRouteParams) {
 	const domainOf = (address: string) => address.slice(address.indexOf("@") + 1);
 	const replyTo = SINGLE_ADDRESS.test(organizer) && SINGLE_ADDRESS.test(replySender) && domainOf(organizer) === domainOf(replySender) ? organizer : replySender;
 	if (!SINGLE_ADDRESS.test(replyTo)) return NextResponse.json({ ok: true, eventId, replySent: false });
-	if (sendReply && invite.method === "REQUEST" && message.mailboxId && replyTo) {
+	if (sendReply && invite.method === "REQUEST" && message.mailboxId && replyTo && calendarKeyCanSendInvitations(key, message.mailboxId)) {
 		const candidates = [...splitEmailAddressList(message.toAddr), ...splitEmailAddressList(message.ccAddr ?? "")].map(getEmailAddress).filter(Boolean);
 		if (isCounter && !proposal) return NextResponse.json({ error: "Choose a valid proposed start and end" }, { status: 400 });
 		const counterProposal = isCounter ? proposal : null;
