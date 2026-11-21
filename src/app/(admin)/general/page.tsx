@@ -12,6 +12,7 @@ import { loadGeneralSettings, saveGeneralSettings } from "./utils";
 export default function GeneralSettingsPage() {
 	const { t } = useLanguage();
 	const [maxMb, setMaxMb] = useState(25);
+	const [ceilingMb, setCeilingMb] = useState(25);
 	const [loaded, setLoaded] = useState(false);
 	const [saving, setSaving] = useState(false);
 	const [status, setStatus] = useState("");
@@ -23,7 +24,7 @@ export default function GeneralSettingsPage() {
 	useEffect(() => {
 		let active = true;
 		void loadGeneralSettings().then((settings) => {
-			if (active) { setMaxMb(settings.outboundAttachmentMaxMb); setUnlimited(settings.driveStorageLimitGb === null); if (settings.driveStorageLimitGb !== null) setLimitGb(settings.driveStorageLimitGb); setLoaded(true); }
+			if (active) { setMaxMb(settings.outboundAttachmentMaxMb); setCeilingMb(settings.outboundAttachmentCeilingMb); setUnlimited(settings.driveStorageLimitGb === null); if (settings.driveStorageLimitGb !== null) setLimitGb(settings.driveStorageLimitGb); setLoaded(true); }
 		}).catch((error) => { if (active) setStatus(error instanceof Error ? error.message : t("general.loadFailed")); });
 		return () => { active = false; };
 	}, [t]);
@@ -60,10 +61,10 @@ export default function GeneralSettingsPage() {
 		<Card className="rounded-3xl border-0 bg-white p-6">
 			<CardHeader className="py-0"><CardTitle>{t("general.attachments")}</CardTitle></CardHeader>
 			<CardContent className="pt-6"><form onSubmit={save} className="space-y-4">
-				<div className="space-y-2"><Label htmlFor="attachment-limit">{t("general.maxAttachments")}</Label><Input id="attachment-limit" type="number" min="1" max="25" step="1" value={maxMb} onChange={(event) => setMaxMb(Number(event.target.value))} disabled={!loaded || saving} className="max-w-40" required /><p className="text-sm text-neutral-500">{t("general.appliesTo")}</p></div>
-				<div className="space-y-2 rounded-xl bg-neutral-50 p-4 text-sm text-neutral-700"><p>{t("general.cloudflareLimit")}</p><p>{t("general.largeFiles")}</p></div>
+				<div className="space-y-2"><Label htmlFor="attachment-limit">{t("general.maxAttachments")}</Label><Input id="attachment-limit" type="number" min="1" max={ceilingMb} step="1" value={maxMb} onChange={(event) => setMaxMb(Number(event.target.value))} disabled={!loaded || saving} className="max-w-40" required /><p className="text-sm text-neutral-500">{t("general.appliesToMax", { max: ceilingMb })}</p></div>
+				<div className="space-y-2 rounded-xl bg-neutral-50 p-4 text-sm text-neutral-700"><p>{t("general.cloudflareLimit")}</p><p>{t("general.largeFiles")}</p><p>{t("general.largeFilesOthers")}</p></div>
 				{status && <p role="status" className="text-sm text-neutral-700">{status}</p>}
-				<Button type="submit" disabled={!loaded || saving || !Number.isInteger(maxMb) || maxMb < 1 || maxMb > 25}>{saving ? t("common.saving") : t("general.save")}</Button>
+				<Button type="submit" disabled={!loaded || saving || !Number.isInteger(maxMb) || maxMb < 1 || maxMb > ceilingMb}>{saving ? t("common.saving") : t("general.save")}</Button>
 			</form></CardContent>
 		</Card>
 		<Card className="rounded-3xl border-0 bg-white p-6">
