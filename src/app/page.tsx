@@ -48,7 +48,7 @@ export default async function HomePage() {
 
   return (
     <HomeAuthProvider initialUser={initialUser}>
-    <div className="min-h-dvh bg-[#f6f8fc] text-neutral-900">
+    <div className="safe-area min-h-dvh bg-[#f6f8fc] text-neutral-900">
       <header className="mx-auto flex h-16 w-full max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
         <Link
           href="/"
