@@ -5,8 +5,6 @@ export const DEFAULT_OUTBOUND_ATTACHMENT_MAX_MB = 25;
 const WORKERS_ATTACHMENT_CEILING_MB = 25;
 /** Node/Docker have far more memory. */
 const NODE_ATTACHMENT_CEILING_MB = 50;
-/** Longest custom Shared Files notice an administrator can save. */
-export const MAX_SHARED_FILES_NOTICE_LENGTH = 500;
 /** Cloudflare Email Sending sends files over this size as download links. */
 export const CLOUD_ATTACHMENT_THRESHOLD_BYTES = 3_000_000;
 
@@ -24,8 +22,8 @@ export function clampOutboundAttachmentMb(value: number | null | undefined, node
 const LEGACY_REQUEST_BODY_BYTES = 30 * 1024 * 1024;
 const CLOUDFLARE_MESSAGE_LIMIT_BYTES = 5 * 1024 * 1024;
 const MIME_SAFETY_MARGIN_BYTES = 256 * 1024;
-/** Resend and SES have no limit recorded in this code base, so the long-standing 25 MB cap stays their direct-attachment limit. */
-const OTHER_PROVIDER_ATTACHMENT_BYTES = 25_000_000;
+/** Resend and SES attach directly up to 20 MB: encoding grows a file by a third, and many receiving servers refuse messages over about 25 MB. Larger files go as download links. */
+const OTHER_PROVIDER_ATTACHMENT_BYTES = 20_000_000;
 
 /** An error message when the files break the administrator's limit (each file and all files together), else null. */
 export function outgoingSizeError(sizes: number[], maxMb: number): string | null {

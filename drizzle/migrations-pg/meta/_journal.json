@@ -120,13 +120,6 @@
       "when": 1795027621043,
       "tag": "0016_calendar_invite_complete",
       "breakpoints": true
-    },
-    {
-      "idx": 17,
-      "version": "7",
-      "when": 1795027622043,
-      "tag": "0020_shared_files_notice",
-      "breakpoints": true
     }
   ]
 }

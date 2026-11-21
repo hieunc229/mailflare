@@ -84,7 +84,7 @@ You cannot clean up the provider that is currently selected.
 ## Behavior that differs from Cloudflare
 
 - **Routing rules.** Reject and forward rules need to act on the live SMTP session, which only Cloudflare's email handler can do. For mail received through Resend or SES, a reject rule drops the message and forward rules are not applied. Store and categorize rules, mailbox rules, spam handling and webhooks work as usual.
-- **Attachments.** Cloudflare sends large files as download links from your storage bucket to stay under its 5 MiB limit. Resend and SES send attachments directly, within the administrator's outgoing limit; past 25 MB (only reachable on Node/Docker, where the limit can be raised to 50 MB; Workers stay at 25 MB) they too go as download links.
+- **Attachments.** Cloudflare sends large files as download links from your storage bucket to stay under its 5 MiB limit. Resend and SES send attachments directly, within the administrator's outgoing limit; past 20 MB they too go as download links, which keeps the encoded message under what most receiving servers accept (the limit can be raised to 50 MB on Node/Docker; Workers stay at 25 MB).
 - **Size.** Inbound mail from any provider is capped at 25 MiB and the same attachment limits apply; larger messages are dropped.
 
 ## Configuration reference

@@ -386,12 +386,6 @@
         "CREATE INDEX `calendar_invite_tombstones_user_idx` ON `calendar_invite_tombstones` (`user_id`);",
         "CREATE INDEX `calendar_occurrence_responses_event_idx` ON `calendar_occurrence_responses` (`event_id`);"
       ]
-    },
-    {
-      "name": "0020_shared_files_notice.sql",
-      "statements": [
-        "ALTER TABLE `app_settings` ADD `shared_files_notice` longtext;"
-      ]
     }
   ]
 }
