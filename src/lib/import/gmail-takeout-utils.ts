@@ -129,7 +129,9 @@ function headerEnd(raw: Uint8Array): number {
 }
 
 function decodeEncodedWords(value: string): string {
-	return value.replace(/=\?([^?]+)\?([bq])\?([^?]*)\?=/gi, (match, charset: string, encoding: string, text: string) => {
+	// RFC 2047 6.2: whitespace between two adjacent encoded-words is not part of the text. A long label is
+	// folded into several words, so keeping it would add a space at every fold.
+	return value.replace(/(=\?[^?]+\?[bq]\?[^?]*\?=)[ \t]+(?==\?[^?]+\?[bq]\?[^?]*\?=)/gi, "$1").replace(/=\?([^?]+)\?([bq])\?([^?]*)\?=/gi, (match, charset: string, encoding: string, text: string) => {
 		try {
 			const binary = encoding.toLowerCase() === "b"
 				? atob(text)

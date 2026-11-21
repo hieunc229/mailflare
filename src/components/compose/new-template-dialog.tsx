@@ -47,7 +47,12 @@ export function NewTemplateDialog({ open, onOpenChange, mailboxId, from }: NewTe
 					<DialogHeader><DialogTitle>{t("template.new")}</DialogTitle></DialogHeader>
 					<form
 						className="space-y-4"
-						onSubmit={(event) => { event.preventDefault(); void save(); }}
+						onSubmit={(event) => {
+							event.preventDefault();
+							// React submit events bubble through the portal into the composer form.
+							event.stopPropagation();
+							void save();
+						}}
 					>
 						<div className="space-y-1.5">
 							<Label htmlFor="template-title">{t("template.title")}</Label>

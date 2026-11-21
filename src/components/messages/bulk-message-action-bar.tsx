@@ -5,7 +5,8 @@ import type { BulkMessageAction } from "@/app/api/messages/bulk/types";
 import { useLanguage } from "@/components/language-provider";
 import { BulkMessageToolbar } from "./bulk-message-toolbar";
 import type { BulkMessageActionBarProps } from "./types";
-import { PartialDeleteError } from "@/lib/messages/permanent-delete-utils";
+import { confirmDestructive } from "@/components/ui/confirm-dialog";
+import { PartialDeleteError, getPermanentDeleteConfirmText } from "@/lib/messages/permanent-delete-utils";
 import { runBulkMessageAction } from "./utils";
 
 /**
@@ -24,6 +25,7 @@ export function BulkMessageActionBar({
 
 	async function runAction(action: BulkMessageAction, folderId?: string) {
 		if (selectedMessages.length === 0) return;
+		if (action === "delete" && !await confirmDestructive(getPermanentDeleteConfirmText(selectedMessages.length, t))) return;
 
 		setPending(true);
 		setError(null);

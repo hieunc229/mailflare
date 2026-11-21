@@ -164,7 +164,7 @@ export async function processWebhookRetry(
 	env: CloudflareEnv,
 	message: WebhookRetryMessage,
 ): Promise<void> {
-	await runDelivery(env, message.deliveryId);
+	await runDelivery(env, message.deliveryId, { scheduled: true });
 }
 
 /**
@@ -174,7 +174,7 @@ export async function processWebhookRetry(
 export async function runDelivery(
 	env: CloudflareEnv,
 	deliveryId: string,
-	options?: { userId?: string },
+	options?: { userId?: string; scheduled?: boolean },
 ): Promise<{ status: WebhookDeliveryStatus } | null> {
 	const db = getDb(env);
 	const [delivery] = await db
@@ -187,6 +187,15 @@ export async function runDelivery(
 	const [hook] = await db.select().from(webhooks).where(eq(webhooks.id, delivery.webhookId)).limit(1);
 	if (!hook) return null;
 	if (options?.userId && hook.userId !== options.userId) return null;
+	// Retries queued before the webhook was switched off must not keep posting to it.
+	// A manual retry is still allowed; it is the operator asking for it.
+	if (options?.scheduled && !hook.enabled) {
+		await db
+			.update(webhookDeliveries)
+			.set({ status: "failed", error: "Webhook is disabled", nextRetryAt: null })
+			.where(eq(webhookDeliveries.id, delivery.id));
+		return { status: "failed" };
+	}
 
 	return { status: await attemptDelivery(env, db, hook, delivery) };
 }

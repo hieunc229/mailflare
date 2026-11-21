@@ -11,6 +11,7 @@ import { syncPersonalIdentity } from "@/lib/profile/sync";
 import { updateMailboxSchema } from "@/lib/validators";
 import type { MailboxRouteParams } from "./types";
 import { getMailboxUpdateValues, selectMailboxById } from "./utils";
+import { hasValidSessionMutationOrigin } from "@/lib/auth/origin";
 
 export async function GET(request: Request, { params }: MailboxRouteParams) {
 	const { id } = await params;
@@ -45,6 +46,7 @@ export async function PATCH(request: Request, { params }: MailboxRouteParams) {
 	const { id } = await params;
 	const env = getEnv();
 	const user = await requireUser(env, request);
+	if (!hasValidSessionMutationOrigin(request)) return NextResponse.json({ error: "Invalid origin" }, { status: 403 });
 	const parsed = updateMailboxSchema.safeParse(await request.json());
 
 	if (!parsed.success) {
@@ -117,6 +119,7 @@ export async function DELETE(request: Request, { params }: MailboxRouteParams) {
 	const { id } = await params;
 	const env = getEnv();
 	const user = await requireUser(env, request);
+	if (!hasValidSessionMutationOrigin(request)) return NextResponse.json({ error: "Invalid origin" }, { status: 403 });
 	const db = getDb(env);
 	const [mailbox] = await db.select().from(mailboxes).where(eq(mailboxes.id, id)).limit(1);
 	if (!mailbox) return NextResponse.json({ error: "Mailbox not found" }, { status: 404 });

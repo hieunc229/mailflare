@@ -221,7 +221,7 @@ export async function createEmailRoutingRuleToWorker(
 	zoneId: string,
 	address: string,
 ) {
-	const workerName = getEmailWorkerName();
+	const workerName = getEmailWorkerName(env);
 	return cfRequest<CfEmailRoutingRule>(
 		env,
 		`/zones/${zoneId}/email/routing/rules`,
@@ -275,7 +275,7 @@ export async function ensureEmailRoutingRuleToWorker(
 ) {
 	if (zoneId === "manual") return;
 	const normalized = address.toLowerCase();
-	const workerName = getEmailWorkerName();
+	const workerName = getEmailWorkerName(env);
 	const rules = await listEmailRoutingRulesCached(env, zoneId, ruleCache);
 	const existing = rules.find((rule) => isWorkerRouteForAddress(rule, normalized, workerName));
 
@@ -327,7 +327,7 @@ export async function deleteEmailRoutingRuleForAddress(
 ): Promise<boolean> {
 	if (zoneId === "manual") return false;
 	const normalized = address.toLowerCase();
-	const workerName = getEmailWorkerName();
+	const workerName = getEmailWorkerName(env);
 	const rules = await listEmailRoutingRules(env, zoneId);
 	const existing = rules.find((rule) => isWorkerRouteForAddress(rule, normalized, workerName));
 	if (!existing?.id) return false;

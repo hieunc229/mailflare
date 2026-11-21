@@ -2,6 +2,7 @@ import { and, asc, eq, inArray } from "drizzle-orm";
 import type { AppDatabase } from "@/db";
 import { conversationNotes, messages, users } from "@/db/schema";
 import { getMailboxAccessLevel } from "@/lib/mailboxes/access";
+import { isOthersDraft } from "@/lib/email/draft-access";
 import { newId } from "@/lib/ids";
 import { selectInBatches } from "@/lib/db-params";
 import type { SessionUser } from "@/lib/auth/types";
@@ -18,11 +19,11 @@ export const CONVERSATION_NOTE_MAX_LENGTH = 40_000;
  */
 export async function conversationForUser(db: AppDatabase, user: SessionUser, messageId: string): Promise<NoteConversation | null> {
 	const [message] = await db
-		.select({ id: messages.id, mailboxId: messages.mailboxId, threadId: messages.threadId })
+		.select({ id: messages.id, userId: messages.userId, status: messages.status, privateDraft: messages.privateDraft, mailboxId: messages.mailboxId, threadId: messages.threadId })
 		.from(messages)
 		.where(eq(messages.id, messageId))
 		.limit(1);
-	if (!message?.mailboxId) return null;
+	if (!message?.mailboxId || isOthersDraft(message, user.id)) return null;
 	const access = await getMailboxAccessLevel(db, user, message.mailboxId);
 	if (!access?.canRead) return null;
 	const threadKey = message.threadId ?? message.id;

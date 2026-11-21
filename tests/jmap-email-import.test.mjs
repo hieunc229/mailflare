@@ -168,3 +168,11 @@ test("the de-duplication query a client sends narrows the mailbox instead of mat
 	assert.doesNotMatch(unfiltered.sql, /provider_message_id/);
 	assert.ok(query.sql.length > unfiltered.sql.length);
 });
+
+test("an empty filter condition matches every email, also inside an operator", () => {
+	assert.equal(filterToSql({}, writable), undefined);
+	const or = renderFilter({ operator: "OR", conditions: [{}, { from: "x" }] });
+	assert.match(or.sql, /1 = 1/);
+	assert.match(or.sql, / or /i);
+	assert.match(renderFilter({ operator: "NOT", conditions: [{}] }).sql, /not 1 = 1/i);
+});

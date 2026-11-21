@@ -29,7 +29,7 @@ manage before accepting DATA.
 
 Webhook URLs must be `https://` on a public host. Redirects are not followed, and hooks
 saved before this rule are re-checked at delivery. Mail filed as spam or trash does not
-trigger `message.inbound`.
+trigger `message.inbound`. A webhook copies message content to the URL, so creating one, changing its URL, adding events or switching a disabled one back on needs the same fresh proof as other sensitive changes (step-up action `webhook.change`); existing webhooks keep working, and switching one off or rotating the secret needs none.
 
 ## Forwarding loop guard
 

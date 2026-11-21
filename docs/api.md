@@ -60,8 +60,8 @@ When you add attendees and choose a sending mailbox, Mailflare emails each atten
 | Mailflare route | Purpose |
 | --- | --- |
 | `GET /api/calendar/events?start=&end=` | List events in an ISO 8601 range (default: the next 31 days). Repeating events are returned once, with their rule |
-| `POST /api/calendar/events` | Create an event (`{ title, startsAt, endsAt, description?, location?, attendees?, color?, repeat?, repeatDays?, timeZone?, mailboxId?, from? }`) |
-| `PATCH /api/calendar/events/[eventId]` | Update an event or series. For a repeating event, pass an occurrence ID or `effectiveFrom` to change it from that occurrence onward |
+| `POST /api/calendar/events` | Create an event (`{ title, startsAt, endsAt, description?, location?, attendees?, color?, repeat?, repeatDays?, timeZone?, mailboxId?, from? }`). If the event is saved but some invitations fail to send, the response is still successful and includes `inviteErrors`, the list of attendee addresses that were not emailed |
+| `PATCH /api/calendar/events/[eventId]` | Update an event or series. For a repeating event, pass an occurrence ID or `effectiveFrom` to change it from that occurrence onward. Like `POST`, the response carries `inviteErrors` when some updated invitations could not be sent |
 | `DELETE /api/calendar/events/[eventId]` | Delete an event, or a series from an occurrence onward |
 
 These routes accept the dashboard session or an API key (`Authorization: Bearer <key>`) with the **Read calendar** (`calendar:read`) or **Manage calendar** (`calendar:write`) scope, which you choose when creating the key in **Settings → API keys**. A key can only send invitations if it also has the `send` scope for the chosen mailbox. MCP and the assistant use separate calendar tools, described in [Email assistant and MCP](email-assistant-and-mcp.md).
@@ -70,7 +70,7 @@ These routes accept the dashboard session or an API key (`Authorization: Bearer 
 
 Open **Booking** to create booking events: a name, link (slug), duration, location, weekdays, one or more daily time ranges, a time zone and an on/off switch. Two disabled templates (15 and 30 minute meetings) are offered to start from. Each user gets a booking username, derived from their email and unique across the instance; an administrator can change it. Booking events are served at `/book/<username>` (the list) and `/book/<username>/<event>` (one event), with no login.
 
-A guest picks a slot, enters a name, email, optional extra guest emails and notes, and the booking is added to the host's calendar with the guest as attendee. Slots come from the host's availability: every 15 minutes inside the allowed ranges, up to 60 days ahead, at least an hour from now, and only where the host's calendar is free, repeating events included. The booking is inserted in one statement that re-checks for conflicts, so two guests cannot take the same slot. Mailflare does not email the guest a confirmation; the booking page confirms on screen.
+A guest picks a slot, enters a name, email, optional extra guest emails and notes, and the booking is added to the host's calendar with the guest as attendee. Slots come from the host's availability: every 15 minutes inside the allowed ranges, up to 60 days ahead, at least an hour from now, and only where the host's calendar is free, repeating events included. The booking is inserted in one statement that re-checks for conflicts, so two guests cannot take the same slot. Mailflare emails the booker a confirmation with a calendar file, sent from the event owner's mailbox (customizable per event); extra guests are not emailed. The booking page also confirms on screen.
 
 On a Team license an administrator can add other users as hosts of a booking event. The booking is created on every host's calendar, and a slot is offered only when all hosts are free.
 
@@ -85,7 +85,7 @@ On a Team license an administrator can add other users as hosts of a booking eve
 
 ## Account and mailbox management
 
-Admin > API keys can also grant the `accounts`, `mailboxes` and `storage` scopes independently. These routes use `Authorization: Bearer <key>` and require the key owner to retain the admin role. Account management requires a Team license; creating a shared mailbox also requires a Team license. Each key can access only accounts created by its owner and mailboxes owned by those accounts or the admin.
+Admin > API keys can also grant the `accounts`, `mailboxes` and `storage` scopes independently. These routes use `Authorization: Bearer <key>` and require the key owner to retain the admin role. Account management requires a Pro or Team license; creating a shared mailbox requires a Team license. Each key can access only accounts created by its owner and mailboxes owned by those accounts or the admin.
 
 The `storage` scope reports and tests object storage: `GET /api/v1/storage` returns `{ storage: { provider: "backblaze" | "s3" | "r2" | "files", configured, bucket, endpoint }, warning }` (credentials are never returned; `warning` explains a half-set `B2_*` configuration), and `POST /api/v1/storage` round-trips a small object and returns `{ ok, error?, latencyMs, storage }` (HTTP 502 on failure). Backblaze B2 (`B2_KEY_ID`, `B2_APPLICATION_KEY`, `B2_BUCKET`, `B2_ENDPOINT`) or AWS S3 (`S3_BUCKET`, `S3_REGION`, credentials) replaces R2 for all stored objects when configured.
 
@@ -96,7 +96,7 @@ Admin API keys cannot read or send mail. Enable **Allow MCP access** when creati
 | `accounts` | `GET /api/v1/accounts` | List managed accounts |
 | `accounts` | `POST /api/v1/accounts` | Create an account and its mailbox (`{ username, domainId, password, role?, useAllDomains?, aliases? }`) |
 | `accounts` | `GET /api/v1/accounts/[id]` | Get a managed account |
-| `accounts` | `PATCH /api/v1/accounts/[id]` | Update an account (`{ name, role, disabled, canManageMailboxes, calendarEnabled?, driveEnabled?, forwardingEmail?, password? }`) |
+| `accounts` | `PATCH /api/v1/accounts/[id]` | Update an account (`{ name, role, disabled, canManageMailboxes, calendarEnabled?, driveEnabled?, forwardingEmail?, password? }`). An admin API key may set `forwardingEmail` on the accounts it manages without a step-up proof (by design: it already has the authority to reset their passwords). A `PATCH` that changes the forwarding address of the key's own owner account returns `403` with `code: "verification_required"`; change it in the web app, which asks the owner to confirm |
 | `mailboxes` | `GET /api/v1/mailboxes` | List managed mailboxes |
 | `mailboxes` | `POST /api/v1/mailboxes` | Create a mailbox (`{ domainId, localPart, displayName?, type?, ownerUserId? }`) |
 | `mailboxes` | `GET /api/v1/mailboxes/[id]` | Get a managed mailbox |
@@ -145,12 +145,23 @@ alias records are inserted atomically. If Cloudflare routing fails, the new reco
 are removed and routing changes from that attempt are rolled back, preserving existing
 rules. If cleanup itself fails, the response reports that manual checking is needed.
 
+### Masked addresses ("Hide My Email")
+
+Each mailbox's settings page can also mint **masked** aliases: a random address on an
+active domain with an optional label, created via **Generate masked address**. Sending
+from a masked alias uses the label — or the bare address when it has none — so the
+account and mailbox names never reach the recipient. Replies to mail delivered to a
+masked alias default to replying from it. Toggling an alias off stops its incoming
+mail, including through catch-all rules, and removes it from the sender list until it
+is re-enabled.
+
 ## Sending email
 
-Send email through `POST /api/v1/send`. `to`, `cc` and `bcc` accept either a comma-separated header string or an array of addresses; each entry may carry a display name (`"Maya Chen" <maya@example.net>`). A message can reach up to 50 recipients across the three fields. Attachments are optional and use Base64-encoded content:
+Send email through `POST /api/v1/send`. `to`, `cc` and `bcc` accept either a comma-separated header string or an array of addresses; each entry may carry a display name (`"Maya Chen" <maya@example.net>`). A message can reach up to 50 recipients across the three fields. `mailboxId` is required: it is the id of the mailbox you send from, and a key limited to specific mailboxes must include it (otherwise the request is refused with 404). Attachments are optional and use Base64-encoded content:
 
 ```json
 {
+  "mailboxId": "<mailbox id>",
   "from": "support@example.com",
   "to": ["user@example.net", "\"Maya Chen\" <maya@example.net>"],
   "cc": "ops@example.com",
@@ -171,6 +182,7 @@ To send a reply that threads correctly in the recipient's client, pass the paren
 
 ```json
 {
+  "mailboxId": "<mailbox id>",
   "from": "support@example.com",
   "to": "user@example.net",
   "subject": "Re: Report",
@@ -196,7 +208,7 @@ Incoming mail that exceeds the attachment count or 25 MB decoded attachment limi
 
 Mailflare serves [JMAP](https://jmap.io) (RFC 8620 core and RFC 8621 mail, plus submission) so external mail apps can read and send mail. Discovery is at `/.well-known/jmap`, which redirects to `/jmap/session`. Authenticate with an API key that has the `jmap` scope, either as `Authorization: Bearer <key>` or as the password of HTTP Basic auth (the username is ignored). Settings > Account > App passwords mints such a key.
 
-The account id is the user id. Each Mailflare mailbox appears as a top-level JMAP Mailbox with system children (`inbox`, `drafts`, `sent`, `archive`, `junk`, `trash`) and one child per user folder; a message belongs to exactly one of them. Supported methods: `Mailbox/get|query|set` (folders only), `Thread/get`, `Email/get|query|set|import`, `SearchSnippet/get`, `Identity/get`, `EmailSubmission/set`, and `Core/echo`. `Email/copy` and `Email/parse` are not implemented. `*/changes` return `cannotCalculateChanges`, so clients re-query on a state change; `/jmap/eventsource` pushes state changes by polling. `Email/set` creates drafts, updates `$seen` and `$flagged`, moves between mailboxes, and destroys (to Trash first, then permanently). `EmailSubmission/set` sends a draft and reports it destroyed, since the sent copy is a new message. Blob download and upload follow the Session's `downloadUrl` and `uploadUrl`.
+The account id is the user id. Each Mailflare mailbox appears as a top-level JMAP Mailbox with system children (`inbox`, `drafts`, `sent`, `archive`, `junk`, `trash`) and one child per user folder; a message belongs to exactly one of them. Supported methods: `Mailbox/get|query|set|changes` (folders only), `Thread/get|changes`, `Email/get|query|set|import|changes`, `SearchSnippet/get`, `Identity/get|set|changes`, `EmailSubmission/get|query|set|changes`, and `Core/echo`. `Email/copy` and `Email/parse` are not implemented. `Email/changes`, `Mailbox/changes` and `Thread/changes` return real deltas; `*/queryChanges`, `Identity/changes` and `EmailSubmission/changes` return `cannotCalculateChanges`, so clients re-query those; `/jmap/eventsource` pushes state changes by polling. `Email/set` creates drafts, updates `$seen` and `$flagged`, moves between mailboxes, and destroys (to Trash first, then permanently). `EmailSubmission/set` sends a draft and reports it destroyed, since the sent copy is a new message. Blob download and upload follow the Session's `downloadUrl` and `uploadUrl`.
 
 `Email/import` takes a `message/rfc822` blob that was uploaded first and stores it as a draft, which is how clients that compose MIME themselves send: upload, import, then `EmailSubmission/set`. Each entry takes `blobId`, `mailboxIds`, and optionally `keywords` and `receivedAt`. **The target must be exactly one Drafts mailbox** — importing into Inbox or a folder is rejected with `invalidProperties` on `mailboxIds`, because delivered mail belongs to the inbound pipeline that does threading and spam scoring. `$seen` and `$flagged` are stored, `$draft` is implied, and other keywords are ignored. `receivedAt` sets the message date, falling back to the `Date` header and then to now. The uploaded bytes are kept verbatim, so downloading the new message's `blobId` returns exactly what was uploaded rather than a reconstruction, and the `Message-ID` header is stored so the client can find its own draft again. Per-message failures come back in `notCreated` as `blobNotFound`, `invalidEmail`, `invalidProperties`, `forbidden` (the `From` address is not one the key may send from) or `tooLarge`.
 
@@ -210,9 +222,9 @@ Passkeys are discoverable WebAuthn credentials. `POST /api/auth/passkey/options`
 
 When a second step is required after a password sign-in, `POST /api/auth/login` returns `{ ok: true, mfaRequired: true, challengeToken, methods }` instead of a session. `methods` names the available passkey, authenticator (`totp`) and authenticator-recovery (`recovery`) options. Finish with a passkey through `/api/auth/passkey/mfa/options` and `/api/auth/passkey/mfa/verify`, or with a code through `POST /api/auth/mfa/verify`. Challenges expire after 5 minutes.
 
-Passkeys satisfy the second step by themselves. Authentication recovery codes belong to the authenticator-app flow; they cannot replace passkeys. When every passkey is lost, an administrator can issue a one-time passkey enrolment link from the account page. For a sole administrator, run `npm run auth:recovery-link -- admin@example.com https://mail.example.com` on the server and send the printed 30-minute link through a trusted channel. With `DATABASE_URL` set it writes the grant directly; without it, the command prints the `wrangler d1 execute DB --remote …` statements to run against the default D1 database.
+Passkeys satisfy the second step by themselves. Authentication recovery codes belong to the authenticator-app flow; they cannot replace passkeys. When every passkey is lost, an administrator can issue a one-time passkey enrolment link from the account page. For a sole administrator, run `npm run auth:recovery-link -- admin@example.com https://mail.example.com` from a source checkout (the Docker image does not include the script) and send the printed 30-minute link through a trusted channel. With `DATABASE_URL` set it writes the grant directly; without it, the command prints the `wrangler d1 execute DB --remote …` statements to run against the default D1 database. For the default Docker install (SQLite file `mailflare.sqlite` in `DATA_DIR`) the statements are wrapped in `wrangler d1 execute --command "..."`: copy the SQL between the quotes and run it against that file with the `sqlite3` CLI on the host (the image has no `sqlite3`).
 
-Sensitive changes (`passkey.add`, `passkey.remove`, `password.set`, `password.remove`, `mfa.enroll`, `mfa.disable`, `mfa.codes`, `second_factor.toggle`, and the administrator actions) require fresh identity verification. The web client obtains a short-lived step-up grant from `POST /api/auth/step-up` (password plus code where required) or `/api/auth/step-up/options` + `/api/auth/step-up/verify` (passkey). Grants are single-use, bound to the session, action, actor and target account, and become invalid when either account's security configuration changes. The authenticator-management and administrator recovery-link endpoints also accept direct password verification, with an authenticator code or recovery code when required.
+Sensitive changes (`passkey.add`, `passkey.remove`, `password.set`, `password.remove`, `mfa.enroll`, `mfa.disable`, `mfa.codes`, `second_factor.toggle`, `profile.recovery_email`, `routing.forward` (creating or retargeting a forward rule to an address that is not a mailbox, alias or catch-all store the user can access, changing the match criteria or copy mailbox of such a rule, or switching a disabled one back on; an unclaimed address on the user's own domain counts as outside), `webhook.change` (creating a webhook, changing its URL, adding events, or switching a disabled one back on), and the administrator actions, including `admin.forwarding_email`) require fresh identity verification. The web client obtains a short-lived step-up grant from `POST /api/auth/step-up` (password plus code where required) or `/api/auth/step-up/options` + `/api/auth/step-up/verify` (passkey). Grants are single-use, bound to the session, action, actor and target account, and become invalid when either account's security configuration changes. The authenticator-management and administrator recovery-link endpoints also accept direct password verification, with an authenticator code or recovery code when required. A change that needs proof answers `401` with `code: "verification_failed"` when the proof is missing or refused; the web screens call these endpoints without the sign-out redirect and open the step-up dialog instead.
 
 Turning the authenticator app off (`POST /api/settings/mfa/disable`) leaves the second-step requirement as the account had it: a passkey can take over as the second step, but an account that never required one does not start requiring it. Removing the password (`DELETE /api/settings/password`) and removing the authenticator app are separate changes, so a client that moves an account to passkey-only confirms each one on its own.
 
@@ -232,7 +244,7 @@ Removing the last passkey (`DELETE /api/settings/passkeys/:id`) is allowed when 
 | `from:maya`, `to:sam`, `subject:report` | restrict a term to one field (`to:` covers Cc) |
 | `has:attachment` | at least one non-inline attachment |
 | `is:unread`, `is:read`, `is:starred` | flags |
-| `after:2026-09-01`, `before:2026-09-30` | date bounds (UTC, `before` exclusive) |
+| `after:2026-09-01`, `before:2026-09-30` | date bounds (midnight in the account's time zone, or the `X-Time-Zone` header when none is saved; `before` exclusive) |
 
 Terms combine with AND. Admins can check or rebuild the index with `GET` / `POST /api/admin/search-index`; triggers keep it current, so a rebuild is only needed after restoring a backup made before the index existed.
 

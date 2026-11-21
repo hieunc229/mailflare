@@ -61,3 +61,13 @@ test("plain and unquoted names still parse as before", () => {
 test("an empty quoted display name leaves just the address", () => {
 	assert.deepEqual(address.parseEmailAddressParts('"" <ada@example.com>'), { name: null, address: "ada@example.com" });
 });
+
+test("a name ending in a backslash does not swallow the next recipient in a list", () => {
+	// JMAP Email/set builds its recipient lists with formatEmailAddress.
+	const list = address.joinEmailAddressList([
+		address.formatEmailAddress("a@example.com", "Smith\\"),
+		address.formatEmailAddress("b@example.com", "Bob"),
+	]);
+	assert.deepEqual(address.getEmailAddressList(list), ["a@example.com", "b@example.com"]);
+	assert.equal(address.getEmailDisplayName(address.splitEmailAddressList(list)[0]), "Smith\\");
+});

@@ -1,3 +1,6 @@
+import { and, eq, isNull, ne, or, sql } from "drizzle-orm";
+import { LIKE_ESCAPE, escapeLike } from "@/db/sql";
+import { messages } from "@/db/schema";
 import { assertResolvesPublic, isPublicHttpsUrl } from "@/lib/security/public-url";
 
 const ONE_CLICK_TIMEOUT_MS = 10_000;
@@ -41,4 +44,22 @@ export async function postOneClickUnsubscribe(url: string): Promise<boolean> {
 	} catch {
 		return false;
 	}
+}
+
+/**
+ * Past inbound mail from exactly this sender address that a sweep would move to Trash. The stored From is
+ * either the bare address or `Name <address>`, so match the whole value or the bracketed address at the end,
+ * never a substring of some other address. Starred mail and mail filed by the user stay put.
+ */
+export function senderTrashCondition(mailboxId: string, senderAddress: string) {
+	const fromAddr = sql`lower(${messages.fromAddr})`;
+	const bracketed = sql`${fromAddr} like ${`%<${escapeLike(senderAddress)}>`} escape ${sql.raw(`'${LIKE_ESCAPE}'`)}`;
+	return and(
+		eq(messages.mailboxId, mailboxId),
+		eq(messages.direction, "inbound"),
+		or(sql`${fromAddr} = ${senderAddress}`, bracketed),
+		eq(messages.starred, false),
+		isNull(messages.folderId),
+		ne(messages.status, "trash"),
+	);
 }

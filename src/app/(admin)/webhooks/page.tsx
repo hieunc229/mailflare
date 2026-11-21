@@ -1,7 +1,7 @@
 "use client";
 
 import { mobilePrimaryActionClass } from "@/components/page-header-utils";
-import { confirmDialog } from "@/components/ui/confirm-dialog";
+import { confirmDestructive, confirmDialog } from "@/components/ui/confirm-dialog";
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Activity, Plus, RefreshCw, Send, Trash2 } from "@/components/icons";
@@ -30,6 +30,9 @@ import {
 	updateWebhook,
 } from "./utils";
 import { WebhookDeliveries } from "./deliveries";
+import { useSecurityStatus } from "@/components/settings/security-status-store";
+import { StepUpDialog } from "@/components/settings/step-up-dialog";
+import { ClientRequestError } from "@/lib/http/client-error";
 import { Checkbox } from "@/components/ui/checkbox";
 
 export default function WebhooksPage() {
@@ -41,6 +44,8 @@ export default function WebhooksPage() {
 	const [maxAttempts, setMaxAttempts] = useState(5);
 	const [events, setEvents] = useState<WebhookEvent[]>(WEBHOOK_EVENTS.map((e) => e.value));
 	const [secret, setSecret] = useState<string | null>(null);
+	const [confirming, setConfirming] = useState(false);
+	const { status: securityStatus } = useSecurityStatus();
 	const [error, setError] = useState<string | null>(null);
 	const [expanded, setExpanded] = useState<string | null>(null);
 	const [testResult, setTestResult] = useState<Record<string, string>>({});
@@ -49,8 +54,9 @@ export default function WebhooksPage() {
 	const invalidate = () => qc.invalidateQueries({ queryKey: ["webhooks"] });
 
 	const create = useMutation({
-		mutationFn: () => createWebhook({ url, description: description || undefined, events, maxAttempts }),
+		mutationFn: (stepUpToken?: string) => createWebhook({ url, description: description || undefined, events, maxAttempts, ...(stepUpToken ? { stepUpToken } : {}) }),
 		onSuccess: (result) => {
+			setConfirming(false);
 			setSecret(result.secret);
 			setUrl("");
 			setDescription("");
@@ -58,12 +64,29 @@ export default function WebhooksPage() {
 			setDialogOpen(false);
 			invalidate();
 		},
-		onError: (e: Error) => setError(e.message),
+		// Sending message content to an outside URL asks the user to confirm it is them, then retries.
+		onError: (e: Error) => {
+			if (e instanceof ClientRequestError && e.code === "verification_failed") {
+				setError(null);
+				setConfirming(true);
+			} else setError(e.message);
+		},
 	});
 
+	// Switching a disabled webhook back on needs the same proof as creating one.
+	const [enabling, setEnabling] = useState<Webhook | null>(null);
 	const toggle = useMutation({
-		mutationFn: (hook: Webhook) => updateWebhook(hook.id, { enabled: !hook.enabled }),
-		onSuccess: invalidate,
+		mutationFn: ({ hook, stepUpToken }: { hook: Webhook; stepUpToken?: string }) =>
+			updateWebhook(hook.id, { enabled: !hook.enabled, ...(stepUpToken ? { stepUpToken } : {}) }),
+		onSuccess: () => {
+			setError(null);
+			setEnabling(null);
+			invalidate();
+		},
+		onError: (e: Error, { hook }) => {
+			if (e instanceof ClientRequestError && e.code === "verification_failed") setEnabling(hook);
+			else setError(e.message);
+		},
 	});
 	const rotate = useMutation({
 		mutationFn: (id: string) => updateWebhook(id, { rotateSecret: true }),
@@ -74,7 +97,14 @@ export default function WebhooksPage() {
 		onError: (cause: Error) => setError(cause.message),
 	});
 
-	const remove = useMutation({ mutationFn: deleteWebhook, onSuccess: invalidate });
+	const remove = useMutation({
+		mutationFn: deleteWebhook,
+		onSuccess: () => {
+			setError(null);
+			invalidate();
+		},
+		onError: (cause: Error) => setError(cause.message),
+	});
 
 	const runTest = useMutation({
 		mutationFn: testWebhook,
@@ -157,7 +187,7 @@ export default function WebhooksPage() {
 									<span className="text-xs font-medium text-neutral-600">{hook.enabled ? t("webhooks.enabled") : t("webhooks.disabled")}</span>
 									<Switch
 										checked={hook.enabled}
-										onCheckedChange={() => toggle.mutate(hook)}
+										onCheckedChange={() => toggle.mutate({ hook })}
 										aria-label={t(hook.enabled ? "webhooks.toggleLabel.disable" : "webhooks.toggleLabel.enable", { url: hook.url })}
 									/>
 								</div>
@@ -227,7 +257,10 @@ export default function WebhooksPage() {
 									<Button
 										variant="ghost"
 										size="sm"
-										onClick={() => remove.mutate(hook.id)}
+										onClick={async () => {
+											if (await confirmDestructive(t("webhooks.deleteConfirm"))) remove.mutate(hook.id);
+										}}
+										disabled={remove.isPending}
 										aria-label={t("webhooks.deleteLabel", { url: hook.url })}
 									>
 										<Trash2 className="h-4 w-4" /> {t("common.delete")}
@@ -257,7 +290,7 @@ export default function WebhooksPage() {
 						className="space-y-4"
 						onSubmit={(e) => {
 							e.preventDefault();
-							create.mutate();
+							create.mutate(undefined);
 						}}
 					>
 						<div className="space-y-2">
@@ -325,6 +358,26 @@ export default function WebhooksPage() {
 					</form>
 				</DialogContent>
 			</Dialog>
+			<StepUpDialog
+				open={confirming}
+				hasPassword={securityStatus?.passwordSet ?? true}
+				hasPasskey={(securityStatus?.passkeys.length ?? 0) > 0}
+				requireSecondFactor={securityStatus?.requireSecondFactor ?? false}
+				totpEnabled={securityStatus?.totpEnabled ?? false}
+				action="webhook.change"
+				onOpenChange={setConfirming}
+				onAuthorized={(token) => create.mutate(token)}
+			/>
+			<StepUpDialog
+				open={!!enabling}
+				hasPassword={securityStatus?.passwordSet ?? true}
+				hasPasskey={(securityStatus?.passkeys.length ?? 0) > 0}
+				requireSecondFactor={securityStatus?.requireSecondFactor ?? false}
+				totpEnabled={securityStatus?.totpEnabled ?? false}
+				action="webhook.change"
+				onOpenChange={(open) => { if (!open) setEnabling(null); }}
+				onAuthorized={(token) => { if (enabling) toggle.mutate({ hook: enabling, stepUpToken: token }); }}
+			/>
 		</div>
 	);
 }

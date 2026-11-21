@@ -73,6 +73,7 @@ export function fetchInviteCard(messageId: string): Promise<InviteCardData | nul
 				eventId?: string | null;
 				response?: InviteResponse | null;
 				canRespond?: boolean;
+				answeredAt?: string | null;
 				error?: string;
 			};
 			// The session can change while the body is being read, after the check above.
@@ -82,7 +83,11 @@ export function fetchInviteCard(messageId: string): Promise<InviteCardData | nul
 			const cacheResult = requestVersion === dataVersion;
 			if (response.ok) {
 				const data = body.invite
-					? { invite: body.invite, eventId: body.eventId ?? null, response: body.response ?? null, canRespond: !!body.canRespond }
+					? {
+						invite: body.invite, eventId: body.eventId ?? null, response: body.response ?? null, canRespond: !!body.canRespond,
+						// Kept out when the server sent none so cached shapes stay comparable.
+						...(typeof body.answeredAt === "string" && body.answeredAt ? { answeredAt: body.answeredAt } : {}),
+					}
 					: null;
 				if (cacheResult) cacheInviteCard(messageId, data);
 				return data;

@@ -28,13 +28,13 @@ export default function PublicDrivePage({ params }: { params: Promise<{ token: s
 		return () => { active = false; };
 	}, [token, itemId]);
 
-	if (missing) return <main className="flex min-h-dvh items-center justify-center bg-[#f6f8fc] p-6 text-center text-neutral-600">{t("drive.publicNotFound")}</main>;
-	if (!data) return <main className="min-h-dvh bg-[#f6f8fc]" aria-busy="true" />;
+	if (missing) return <main className="safe-area flex min-h-dvh items-center justify-center bg-[#f6f8fc] text-center text-neutral-600"><p className="p-6">{t("drive.publicNotFound")}</p></main>;
+	if (!data) return <main className="safe-area min-h-dvh bg-[#f6f8fc]" aria-busy="true" />;
 	const { item, items, path } = data;
 	const isFile = item.kind === "file";
 
 	return (
-		<main className="mx-auto flex min-h-dvh max-w-5xl flex-col bg-[#f6f8fc] p-4 md:p-8">
+		<main className="mx-auto flex min-h-dvh max-w-5xl flex-col bg-[#f6f8fc] p-4 md:p-8 pt-[max(1rem,env(safe-area-inset-top))] pr-[max(1rem,env(safe-area-inset-right))] pb-[max(1rem,env(safe-area-inset-bottom))] pl-[max(1rem,env(safe-area-inset-left))] md:pt-[max(2rem,env(safe-area-inset-top))] md:pr-[max(2rem,env(safe-area-inset-right))] md:pb-[max(2rem,env(safe-area-inset-bottom))] md:pl-[max(2rem,env(safe-area-inset-left))]">
 			<nav className="mb-4 flex flex-wrap items-center gap-1 text-lg text-neutral-800">
 				{path.map((crumb, index) => (
 					<span key={crumb.id} className="flex items-center gap-1">
