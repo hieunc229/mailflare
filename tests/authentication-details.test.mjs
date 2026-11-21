@@ -15,6 +15,7 @@ await build({
 		contents: [
 			`export { readSesAuthentication, readSesTrace, readStoredAuthentication, isIntakeStorageKey } from "./src/lib/email/provider-trace";`,
 			`export { getSenderWarning } from "./src/components/messages/message-details-utils";`,
+			`export { summarizeMessageSource } from "./src/components/messages/message-source-utils";`,
 		].join("\n"),
 		resolveDir: root,
 		loader: "ts",
@@ -180,4 +181,36 @@ Body`);
 		assert.equal(provider.isIntakeStorageKey(key), false, String(key));
 		assert.equal(provider.readStoredAuthentication(key, message, "no-reply@example.com"), null, String(key));
 	}
+});
+
+test("the original-message summary shows only results the server checked", () => {
+	const source = `Authentication-Results: example.net; spf=pass smtp.mailfrom=example.com; dkim=pass header.d=example.com; dmarc=pass
+Received-SPF: pass (example.net: domain of example.com designates 203.0.113.9 as permitted sender) client-ip=203.0.113.9;
+From: <no-reply@example.com>
+Subject: Hello
+
+Body`.replace(/\n/g, "\r\n");
+
+	for (const authentication of [null, { available: false, reason: "untrusted" }, { available: false, reason: "outbound" }]) {
+		const summary = provider.summarizeMessageSource(source, authentication);
+		assert.equal(summary.spf, null, JSON.stringify(authentication));
+		assert.equal(summary.dkim, null);
+		assert.equal(summary.dmarc, null);
+		assert.equal(summary.subject, "Hello");
+	}
+
+	const checked = provider.summarizeMessageSource(source, {
+		available: true,
+		spf: { status: "FAIL", detail: "IP 198.51.100.7" },
+		dkim: null,
+		dmarc: { status: "PASS", detail: "header.from=example.com" },
+		signedBy: null,
+		mailedBy: null,
+		senderIp: null,
+		encryption: null,
+		aligned: null,
+	});
+	assert.deepEqual(checked.spf, { status: "FAIL", detail: "IP 198.51.100.7" });
+	assert.equal(checked.dkim, null);
+	assert.deepEqual(checked.dmarc, { status: "PASS", detail: "header.from=example.com" });
 });
