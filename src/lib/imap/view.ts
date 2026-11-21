@@ -48,6 +48,11 @@ export class FolderView {
 		return this.uids.length;
 	}
 
+	/** The folder's highest mod-sequence as of the last time the view was read. */
+	get highest(): number {
+		return Math.max(this.highestModseq, 0);
+	}
+
 	private async readState(): Promise<FolderStateRow> {
 		const [row] = (await this.env.DB.prepare("SELECT uidvalidity, uid_next, highest_modseq FROM imap_folder_state WHERE id = ?").bind(`${this.mailboxId}:${this.folderKey}`).all<FolderStateRow>()).results;
 		if (!row) throw new Error(`No IMAP state for folder ${this.mailboxId}:${this.folderKey}`);
