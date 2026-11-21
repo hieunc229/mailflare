@@ -10,8 +10,7 @@ type Env = { MAILFLARE_URL: string; INBOUND_WEBHOOK_SECRET: string };
 
 type Decision =
 	| { action: "reject"; reason: string }
-	| { action: "forward"; forwardTo: string | null; forwardHeaders?: Record<string, string> }
-	| { action: "store"; forwardTo: string | null; forwardHeaders?: Record<string, string> };
+	| { action: "forward" | "store"; forwardTo: string | null; forwardToAll?: string[]; forwardHeaders?: Record<string, string> };
 
 /** HMAC-SHA256 over `v2\ntimestamp\nfrom\nto\nheaders\n` + raw body; matches src/lib/email/intake-signature.ts. */
 async function sign(secret: string, raw: ArrayBuffer, from: string, to: string, headers: string, timestamp: string): Promise<string> {
@@ -62,11 +61,13 @@ export default {
 			message.setReject(decision.reason);
 			return;
 		}
-		if (decision.forwardTo) {
+		// Older servers only send forwardTo; newer ones list every destination in forwardToAll.
+		const destinations = decision.forwardToAll ?? (decision.forwardTo ? [decision.forwardTo] : []);
+		for (const destination of destinations) {
 			try {
-				await message.forward(decision.forwardTo, new Headers(decision.forwardHeaders ?? {}));
+				await message.forward(destination, new Headers(decision.forwardHeaders ?? {}));
 			} catch (error) {
-				console.error(`Forward to ${decision.forwardTo} failed`, error);
+				console.error(`Forward to ${destination} failed`, error);
 			}
 		}
 	},

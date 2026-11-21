@@ -3,6 +3,7 @@ import { and, asc, desc, eq, gt, inArray, isNull, lt, lte, or } from "drizzle-or
 import type { SQL } from "drizzle-orm";
 import type { AppDatabase } from "@/db";
 import { scheduledMessageCondition } from "@/lib/email/scheduled";
+import { draftsVisibleTo } from "@/lib/email/draft-access";
 import { getDb } from "@/db";
 import { messages } from "@/db/schema";
 import { getCurrentUser } from "@/lib/auth/cookies";
@@ -41,6 +42,8 @@ export async function GET(request: Request) {
 			? inArray(messages.mailboxId, accessibleIds)
 			: eq(messages.userId, user.id));
 	}
+
+	conditions.push(draftsVisibleTo(user.id));
 
 	if (folder === "inbox") {
 		conditions.push(eq(messages.direction, "inbound"));

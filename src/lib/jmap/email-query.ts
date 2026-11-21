@@ -12,7 +12,9 @@ import type { Comparator, Filter, FilterCondition, MailboxRef } from "./types";
 export function mailboxRefCondition(ref: MailboxRef): SQL {
 	const base = eq(messages.mailboxId, ref.mailboxId);
 	if (ref.kind === "account") return base;
-	if (ref.kind === "folder") return and(base, eq(messages.folderId, ref.folderId))!;
+	// isNotNull keeps the predicate false rather than NULL for unfiled rows, so a
+	// negated folder condition (inMailboxOtherThan, NOT) still matches them.
+	if (ref.kind === "folder") return and(base, isNotNull(messages.folderId), eq(messages.folderId, ref.folderId))!;
 	const status = roleToStatus(ref.role);
 	if (ref.role === "inbox") return and(base, eq(messages.status, status), isNull(messages.folderId))!;
 	if (ref.role === "sent") return and(base, inArray(messages.status, ["sent", "queued", "failed"]), isNull(messages.folderId))!;
@@ -132,7 +134,8 @@ export function filterToSql(filter: Filter | null | undefined, accessible: Set<s
 		if (children.length === 0) return undefined;
 		if (filter.operator === "AND") return and(...children);
 		if (filter.operator === "OR") return or(...children);
-		if (filter.operator === "NOT") return not(and(...children)!);
+		// RFC 8620 §5.5: NOT matches when none of its conditions match.
+		if (filter.operator === "NOT") return not(or(...children)!);
 		throw invalidArguments(`Unknown operator ${String(filter.operator)}`);
 	}
 	const parts = conditionToSql(filter, accessible);
@@ -142,7 +145,8 @@ export function filterToSql(filter: Filter | null | undefined, accessible: Set<s
 export function sortToSql(sort: Comparator[] | null | undefined): SQL[] {
 	const comparators = sort && sort.length ? sort : [{ property: "receivedAt", isAscending: false }];
 	return comparators.map((item) => {
-		const direction = item.isAscending ? asc : desc;
+		// RFC 8620 §5.5: isAscending defaults to true when omitted.
+		const direction = item.isAscending === false ? desc : asc;
 		switch (item.property) {
 			case "receivedAt":
 			case "sentAt":

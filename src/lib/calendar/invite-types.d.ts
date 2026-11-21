@@ -12,6 +12,8 @@ export type InviteView = {
 	allDay: boolean;
 	organizer: string | null;
 	method: string;
+	/** Set when this invitation is about one occurrence of a recurring series. */
+	recurrenceId?: string | null;
 	attendees?: { email: string; status: string }[];
 };
 
@@ -21,4 +23,6 @@ export type InviteCardData = {
 	eventId: string | null;
 	response: InviteResponse | null;
 	canRespond?: boolean;
+	/** When the answer last changed, from the calendar row; absent for unanswered or declined answers. */
+	answeredAt?: string | null;
 };

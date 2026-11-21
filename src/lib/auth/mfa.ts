@@ -1,11 +1,11 @@
-import { eq, sql } from "drizzle-orm";
+import { and, eq, isNull, lt, or, sql } from "drizzle-orm";
 import QRCode from "qrcode";
 import { getDb } from "@/db";
 import { mfaRecoveryCodes, users } from "@/db/schema";
 import { getBranding } from "@/lib/branding/service";
 import { consumeRecoveryCode, countUnusedRecoveryCodes, issueRecoveryCodes } from "@/lib/auth/recovery-codes";
 import { deleteUserSessions } from "@/lib/auth/session";
-import { buildOtpauthUrl, generateTotpSecret, verifyTotp } from "@/lib/auth/totp";
+import { buildOtpauthUrl, generateTotpSecret, matchTotpStep } from "@/lib/auth/totp";
 import type { MfaEnrollment, MfaStatus } from "@/lib/auth/mfa-types";
 
 export async function getMfaStatus(env: CloudflareEnv, user: { id: string; totpEnabled: boolean; totpConfirmedAt: Date | null }): Promise<MfaStatus> {
@@ -24,7 +24,7 @@ export async function getMfaStatus(env: CloudflareEnv, user: { id: string; totpE
 export async function beginMfaEnrollment(env: CloudflareEnv, user: { id: string; email: string }): Promise<MfaEnrollment> {
 	const db = getDb(env);
 	const secret = generateTotpSecret();
-	await db.update(users).set({ totpSecret: secret, totpEnabled: false, totpConfirmedAt: null }).where(eq(users.id, user.id));
+	await db.update(users).set({ totpSecret: secret, totpEnabled: false, totpConfirmedAt: null, totpLastStep: null }).where(eq(users.id, user.id));
 	const { appName } = await getBranding(env);
 	const otpauthUrl = buildOtpauthUrl({ issuer: appName, account: user.email, secret });
 	const qrSvg = await QRCode.toString(otpauthUrl, { type: "svg", margin: 1, errorCorrectionLevel: "M" });
@@ -39,10 +39,12 @@ export async function confirmMfaEnrollment(
 ): Promise<{ ok: true; recoveryCodes: string[] } | { ok: false; error: string }> {
 	if (!user.totpSecret) return { ok: false, error: "Start enrolment first" };
 	if (user.totpEnabled) return { ok: false, error: "Two-factor authentication is already on" };
-	if (!(await verifyTotp(user.totpSecret, code))) return { ok: false, error: "That code did not match. Check the time on your device and try again." };
+	const step = await matchTotpStep(user.totpSecret, code);
+	if (step === null) return { ok: false, error: "That code did not match. Check the time on your device and try again." };
 
 	const db = getDb(env);
-	await db.update(users).set({ totpEnabled: true, totpConfirmedAt: new Date(), requireSecondFactor: true }).where(eq(users.id, user.id));
+	// The confirming code is spent: it cannot also sign in.
+	await db.update(users).set({ totpEnabled: true, totpConfirmedAt: new Date(), requireSecondFactor: true, totpLastStep: step }).where(eq(users.id, user.id));
 	const recoveryCodes = await issueRecoveryCodes(env, user.id);
 	// Other sessions predate the second factor; make them sign in again with it.
 	await deleteUserSessions(env, user.id, currentSessionToken);
@@ -65,10 +67,25 @@ export async function disableMfa(env: CloudflareEnv, userId: string): Promise<vo
 			totpSecret: null,
 			totpEnabled: false,
 			totpConfirmedAt: null,
+			totpLastStep: null,
 			requireSecondFactor: sql`case when ${users.passkeyCount} > 0 then ${users.requireSecondFactor} else false end`,
 		})
 		.where(eq(users.id, userId));
 	await db.delete(mfaRecoveryCodes).where(eq(mfaRecoveryCodes.userId, userId));
+}
+
+/**
+ * Record a TOTP step as used. The conditional update is the check: of any
+ * number of concurrent requests with the same code, only one changes a row,
+ * and a step at or below the last accepted one never does.
+ */
+async function claimTotpStep(env: CloudflareEnv, userId: string, step: number): Promise<boolean> {
+	const claimed = await getDb(env)
+		.update(users)
+		.set({ totpLastStep: step })
+		.where(and(eq(users.id, userId), or(isNull(users.totpLastStep), lt(users.totpLastStep, step))))
+		.returning({ id: users.id });
+	return claimed.length > 0;
 }
 
 /** A login's second step: a TOTP code, or one of the recovery codes as a fallback. */
@@ -77,7 +94,10 @@ export async function verifySecondFactor(
 	user: { id: string; totpSecret: string | null; totpEnabled: boolean },
 	code: string,
 ): Promise<"totp" | "recovery" | null> {
-	if (user.totpEnabled && user.totpSecret && (await verifyTotp(user.totpSecret, code))) return "totp";
+	if (user.totpEnabled && user.totpSecret) {
+		const step = await matchTotpStep(user.totpSecret, code);
+		if (step !== null && (await claimTotpStep(env, user.id, step))) return "totp";
+	}
 	// Recovery codes belong to the authenticator flow. They must not become a
 	// second factor for an account that never enrolled TOTP.
 	if (user.totpEnabled && (await consumeRecoveryCode(env, user.id, code))) return "recovery";

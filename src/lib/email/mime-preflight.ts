@@ -5,6 +5,8 @@
  */
 export const MIME_LIMITS = {
 	maxHeaderBytes: 64 * 1024,
+	// postal-mime 4 sums header bytes over every part (at least 64 per line); the top-level header is capped by maxHeaderBytes above.
+	maxParsedHeaderBytes: 2 * 1024 * 1024,
 	maxBoundaryLines: 1_000,
 	maxNestedMessages: 20,
 	// Lines outside base64 parts: postal-mime spends memory per line there, so 262k lines of

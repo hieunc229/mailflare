@@ -5,11 +5,13 @@ import { messages } from "@/db/schema";
 import { getCurrentUser } from "@/lib/auth/cookies";
 import { getEnv } from "@/lib/cloudflare";
 import { getMailboxAccessLevel } from "@/lib/mailboxes/access";
+import { isOthersDraft } from "@/lib/email/draft-access";
 import { cancelScheduledSend, getScheduledTime } from "@/lib/email/scheduled";
 
 /**
  * Cancels a scheduled send and returns the message to Drafts. Deleting the job is
- * what stops delivery: the queue consumer skips messages whose job is gone.
+ * what stops delivery: the queue consumer skips messages whose job is gone. The draft belongs to the
+ * message's author; the answer never names it, so a colleague who cancels is not pointed at a draft they cannot open.
  */
 export async function POST(
 	request: Request,
@@ -22,11 +24,11 @@ export async function POST(
 
 	const db = getDb(env);
 	const [message] = await db
-		.select({ id: messages.id, mailboxId: messages.mailboxId, direction: messages.direction, status: messages.status })
+		.select({ id: messages.id, mailboxId: messages.mailboxId, direction: messages.direction, status: messages.status, userId: messages.userId, privateDraft: messages.privateDraft })
 		.from(messages)
 		.where(eq(messages.id, messageId))
 		.limit(1);
-	if (!message?.mailboxId) return NextResponse.json({ error: "Message not found" }, { status: 404 });
+	if (!message?.mailboxId || isOthersDraft(message, user.id)) return NextResponse.json({ error: "Message not found" }, { status: 404 });
 
 	const access = await getMailboxAccessLevel(db, user, message.mailboxId);
 	if (!access?.canRead) return NextResponse.json({ error: "Message not found" }, { status: 404 });

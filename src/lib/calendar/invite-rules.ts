@@ -57,6 +57,7 @@ export type InboundInvitePlan =
 	| { action: "ignore"; reason: string }
 	| { action: "insert" }
 	| { action: "update" }
+	| { action: "upsert-override"; occurrence: Date }
 	| { action: "delete" }
 	| { action: "exclude"; occurrence: Date };
 
@@ -64,16 +65,21 @@ type ExistingInviteEvent = { inviteSequence?: number | null };
 
 /**
  * What an incoming REQUEST or CANCEL does to the recipient's calendar, once the sender check has passed.
- * A message about one occurrence (RECURRENCE-ID) never edits or deletes the series: a cancel excludes that occurrence,
- * anything else is ignored. A REQUEST older than the stored one (lower SEQUENCE) arrived out of order and is ignored.
+ * A cancel of one occurrence excludes it; a request about one occurrence upserts an override for it.
+ * Anything older than the stored revision (lower SEQUENCE) arrived out of order and is ignored.
  */
 export function planInboundInvite(invite: Pick<ParsedInvite, "method" | "recurrenceId" | "sequence">, existing: ExistingInviteEvent | null | undefined): InboundInvitePlan {
 	if (invite.method === "CANCEL") {
 		if (!existing) return { action: "ignore", reason: "no event" };
+		if (existing.inviteSequence != null && invite.sequence < existing.inviteSequence) return { action: "ignore", reason: "stale" };
 		return invite.recurrenceId ? { action: "exclude", occurrence: invite.recurrenceId } : { action: "delete" };
 	}
 	if (invite.method !== "REQUEST") return { action: "ignore", reason: "method" };
-	if (invite.recurrenceId) return { action: "ignore", reason: "single occurrence" };
+	if (invite.recurrenceId) {
+		if (!existing) return { action: "ignore", reason: "no event" };
+		if (existing.inviteSequence != null && invite.sequence < existing.inviteSequence) return { action: "ignore", reason: "stale" };
+		return { action: "upsert-override", occurrence: invite.recurrenceId };
+	}
 	if (!existing) return { action: "insert" };
 	if (existing.inviteSequence != null && invite.sequence < existing.inviteSequence) return { action: "ignore", reason: "stale" };
 	return { action: "update" };
@@ -83,18 +89,25 @@ export type InviteAnswerPlan =
 	| { action: "none" }
 	| { action: "delete" }
 	| { action: "exclude"; occurrence: Date }
+	| { action: "upsert-override"; occurrence: Date }
 	| { action: "status" }
 	| { action: "upsert" };
 
 /**
  * What answering an invitation from the message (Accept, Maybe, Decline, or Remove on a cancellation) does to the
- * calendar. One occurrence: Decline or a cancel excludes it, Accept and Maybe change nothing. The whole series:
- * Decline or a cancel deletes it; Accept and Maybe write the invitation, or only the answer when the calendar
+ * calendar. One occurrence: Decline or a cancel excludes it, Accept and Maybe upsert an override for it. The whole
+ * series: Decline or a cancel deletes it; Accept and Maybe write the invitation, or only the answer when the calendar
  * already holds a newer revision (higher SEQUENCE) than this message.
  */
 export function planInviteAnswer(invite: Pick<ParsedInvite, "method" | "recurrenceId" | "sequence">, response: "accepted" | "tentative" | "declined", existing: ExistingInviteEvent | null | undefined): InviteAnswerPlan {
 	const removing = invite.method === "CANCEL" || response === "declined";
-	if (invite.recurrenceId) return removing && existing ? { action: "exclude", occurrence: invite.recurrenceId } : { action: "none" };
+	if (invite.recurrenceId) {
+		if (!existing) return { action: "none" };
+		if (removing) return { action: "exclude", occurrence: invite.recurrenceId };
+		// The calendar already holds a newer revision of this series: record the answer without reverting it.
+		if (existing.inviteSequence != null && existing.inviteSequence > invite.sequence) return { action: "status" };
+		return { action: "upsert-override", occurrence: invite.recurrenceId };
+	}
 	if (removing) return existing ? { action: "delete" } : { action: "none" };
 	if (existing?.inviteSequence != null && existing.inviteSequence > invite.sequence) return { action: "status" };
 	return { action: "upsert" };
