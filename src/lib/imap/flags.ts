@@ -106,12 +106,16 @@ export function nextFlags(row: MessageFlagsRow, mode: FlagMode, parsed: ParsedFl
 	return next;
 }
 
-/** One `Email/set` call through the JMAP handlers, as this login. */
-export async function jmapEmailSet(env: CloudflareEnv, identity: ImapIdentity, args: Record<string, unknown>) {
-	const response = await processRequest(imapContext(env, identity.auth), { using: [], methodCalls: [["Email/set", args, "set"]] });
+/** One call through the JMAP handlers, as this login. */
+export async function jmapCall(env: CloudflareEnv, identity: ImapIdentity, method: string, args: Record<string, unknown>): Promise<Record<string, unknown>> {
+	const response = await processRequest(imapContext(env, identity.auth), { using: [], methodCalls: [[method, args, "call"]] });
 	const [name, body] = response.methodResponses[0];
 	if (name === "error") throw no("The change could not be made", "SERVERBUG");
-	return body as { updated?: Record<string, unknown>; notUpdated?: Record<string, { type?: string }>; destroyed?: string[]; notDestroyed?: Record<string, { type?: string }> };
+	return body;
+}
+
+export async function jmapEmailSet(env: CloudflareEnv, identity: ImapIdentity, args: Record<string, unknown>) {
+	return (await jmapCall(env, identity, "Email/set", args)) as { updated?: Record<string, unknown>; notUpdated?: Record<string, { type?: string }>; destroyed?: string[]; notDestroyed?: Record<string, { type?: string }> };
 }
 
 const chunksOf = <T>(items: T[], size: number) => Array.from({ length: Math.ceil(items.length / size) }, (_, index) => items.slice(index * size, (index + 1) * size));

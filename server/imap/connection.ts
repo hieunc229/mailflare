@@ -10,6 +10,7 @@ import type { FolderView } from "@/lib/imap/view";
 import { runFetch, sendFlags } from "./commands/fetch";
 import { runList, runNamespace, runSelect, runStatus } from "./commands/mailbox";
 import { runAppend } from "./commands/append";
+import { runCreate, runDelete, runRename, runSubscribe } from "./commands/folders";
 import { runStore } from "./commands/store";
 import { closeExpunge, runCopy, runExpunge, runMove } from "./commands/transfer";
 import { runSearch } from "./commands/search";
@@ -422,7 +423,7 @@ export class ImapConnection {
 			case "NAMESPACE": return runNamespace(this);
 			case "LIST": return runList(this, command, "LIST");
 			case "LSUB": return runList(this, command, "LSUB");
-			case "SUBSCRIBE": case "UNSUBSCRIBE": return;
+			case "SUBSCRIBE": case "UNSUBSCRIBE": return runSubscribe(command);
 			case "STATUS": return runStatus(this, command);
 			case "SELECT": return runSelect(this, command, false);
 			case "EXAMINE": return runSelect(this, command, true);
@@ -435,8 +436,9 @@ export class ImapConnection {
 			case "MOVE": return this.inSelected(() => runMove(this, command, uid));
 			case "EXPUNGE": return this.inSelected(() => runExpunge(this, command, uid));
 			case "APPEND": return runAppend(this, command, body);
-			case "CREATE": case "DELETE": case "RENAME":
-				throw new ImapError("NO", "This server is read-only for now", "CANNOT");
+			case "CREATE": return runCreate(this, command);
+			case "DELETE": return runDelete(this, command);
+			case "RENAME": return runRename(this, command);
 			default: throw this.refusedCommand(name);
 		}
 	}
