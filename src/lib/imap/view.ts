@@ -1,6 +1,7 @@
 import { and, eq, inArray } from "drizzle-orm";
 import { getDb } from "@/db";
 import { imapMessageFlags, messages } from "@/db/schema";
+import { folderKeyOf } from "./folders";
 import { ensureFolderState, syncMailbox } from "./sync";
 
 /**
@@ -65,6 +66,25 @@ export class FolderView {
 		this.modseqs = rows.map((row) => Number(row.modseq));
 	}
 
+	/**
+	 * The client changed these messages itself and has been told: their current mod-sequences become
+	 * the ones it knows, so the next refresh does not announce its own change again. Anything that
+	 * another writer changed afterwards still differs and is announced.
+	 */
+	async noteOwn(uids: number[]): Promise<void> {
+		const wanted = new Set(uids);
+		const known = this.uids.filter((uid) => wanted.has(uid));
+		for (let at = 0; at < known.length; at += ID_CHUNK) {
+			const part = known.slice(at, at + ID_CHUNK);
+			const rows = (await this.env.DB.prepare(`SELECT uid, modseq FROM imap_uids WHERE mailbox_id = ? AND folder_key = ? AND uid IN (${part.map(() => "?").join(", ")})`).bind(this.mailboxId, this.folderKey, ...part).all<{ uid: number; modseq: number }>()).results;
+			const byUid = new Map(rows.map((row) => [Number(row.uid), Number(row.modseq)]));
+			this.uids.forEach((uid, index) => {
+				const value = byUid.get(uid);
+				if (value !== undefined) this.modseqs[index] = value;
+			});
+		}
+	}
+
 	async refresh(): Promise<ViewUpdate> {
 		await syncMailbox(this.env, this.mailboxId);
 		const state = await this.readState();
@@ -99,17 +119,19 @@ export type MessageFlagsRow = {
 	keywords: string | null;
 };
 
-/** The columns FETCH and SEARCH need per message, for messages of this mailbox only. */
-export async function loadMessageRows(env: CloudflareEnv, mailboxId: string, ids: string[]): Promise<Map<string, MessageFlagsRow>> {
+/** The columns FETCH and SEARCH need per message, for messages of this mailbox only (and, with `folderKey`, only those still in that folder). */
+export async function loadMessageRows(env: CloudflareEnv, mailboxId: string, ids: string[], folderKey?: string): Promise<Map<string, MessageFlagsRow>> {
 	const result = new Map<string, MessageFlagsRow>();
 	const db = getDb(env);
 	for (let at = 0; at < ids.length; at += ID_CHUNK) {
 		const rows = await db
-			.select({ id: messages.id, read: messages.read, starred: messages.starred, status: messages.status, createdAt: messages.createdAt, answered: imapMessageFlags.answered, forwarded: imapMessageFlags.forwarded, deleted: imapMessageFlags.deleted, keywords: imapMessageFlags.keywords })
+			.select({ id: messages.id, folderId: messages.folderId, read: messages.read, starred: messages.starred, status: messages.status, createdAt: messages.createdAt, answered: imapMessageFlags.answered, forwarded: imapMessageFlags.forwarded, deleted: imapMessageFlags.deleted, keywords: imapMessageFlags.keywords })
 			.from(messages)
 			.leftJoin(imapMessageFlags, eq(imapMessageFlags.messageId, messages.id))
 			.where(and(eq(messages.mailboxId, mailboxId), inArray(messages.id, ids.slice(at, at + ID_CHUNK))));
-		for (const row of rows) result.set(row.id, row);
+		for (const { folderId, ...row } of rows) {
+			if (folderKey === undefined || folderKeyOf({ mailboxId, folderId, status: row.status }) === folderKey) result.set(row.id, row);
+		}
 	}
 	return result;
 }

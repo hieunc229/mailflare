@@ -9,6 +9,7 @@ import { canStillSee, loadNamespace, type Namespace } from "@/lib/imap/namespace
 import type { FolderView } from "@/lib/imap/view";
 import { runFetch, sendFlags } from "./commands/fetch";
 import { runList, runNamespace, runSelect, runStatus } from "./commands/mailbox";
+import { runStore } from "./commands/store";
 import { runSearch } from "./commands/search";
 import { AUTH_LIMITS, Framer, PRE_AUTH_LIMITS, tagOf } from "./framing";
 import type { Notifier } from "./notifier";
@@ -55,6 +56,7 @@ export type SelectedFolder = {
 	mailboxId: string;
 	/** The name the client selected, kept to answer in kind. */
 	name: string;
+	/** EXAMINE, or a mailbox this login may only read. */
 	readOnly: boolean;
 	unwatch: () => void;
 };
@@ -402,7 +404,8 @@ export class ImapConnection {
 			case "IDLE": return this.idle();
 			case "FETCH": return this.inSelected(() => runFetch(this, command, uid));
 			case "SEARCH": return this.inSelected(() => runSearch(this, command, uid));
-			case "STORE": case "COPY": case "MOVE": case "EXPUNGE": case "APPEND": case "CREATE": case "DELETE": case "RENAME":
+			case "STORE": return this.inSelected(() => runStore(this, command, uid));
+			case "COPY": case "MOVE": case "EXPUNGE": case "APPEND": case "CREATE": case "DELETE": case "RENAME":
 				throw new ImapError("NO", "This server is read-only for now", "CANNOT");
 			default: throw this.refusedCommand(name);
 		}
@@ -491,6 +494,22 @@ export class ImapConnection {
 			await this.bye("Access to this mailbox was removed", false);
 			throw new ImapError("NO", "Access to this mailbox was removed");
 		}
+	}
+
+	/**
+	 * Before any command that changes mail: the session must have selected the folder read-write, and
+	 * the login's permission on the mailbox is read again, so a delegation lowered to read-only
+	 * mid-session stops writes at once.
+	 */
+	async requireWritable(): Promise<void> {
+		const selected = this.selected;
+		if (!selected || selected.readOnly) throw new ImapError("NO", "The mailbox is read-only", "NOPERM");
+		await this.requireMailboxWritable(selected.mailboxId);
+	}
+
+	async requireMailboxWritable(mailboxId: string): Promise<void> {
+		const mailbox = (await this.namespace()).mailboxes.find((entry) => entry.id === mailboxId);
+		if (!mailbox || mailbox.permission === "read_only") throw new ImapError("NO", "The mailbox is read-only", "NOPERM");
 	}
 
 	/** The key row and the user are read again: a revoked app password ends the session. */
