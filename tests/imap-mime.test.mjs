@@ -20,6 +20,7 @@ await build({
 		contents: `
 			export { synthesizeMessage } from "./src/lib/imap/synthesize.ts";
 			export { getMessageIndex, readSection, indexMime, reviveLists, MimeIndexError, cacheKey } from "./src/lib/imap/fetch.ts";
+			export { sweepOrphanedImapCache } from "./src/lib/imap/cache-sweeper.ts";
 			export { syncMailbox } from "./src/lib/imap/sync.ts";
 			export { SqliteDatabase } from "./server/runtime/sqlite-database.ts";
 			export { applyMigrations } from "./server/runtime/migrate.ts";
@@ -38,7 +39,7 @@ await build({
 	alias: { "cloudflare:workers": "./server/runtime/cloudflare-workers.ts" },
 	logLevel: "silent",
 });
-const { synthesizeMessage, getMessageIndex, readSection, indexMime, reviveLists, MimeIndexError, cacheKey, MimeIndexError, syncMailbox, SqliteDatabase, applyMigrations, openFileBucket } = await import(pathToFileURL(join(directory, "entry.mjs")).href);
+const { synthesizeMessage, getMessageIndex, readSection, indexMime, reviveLists, MimeIndexError, cacheKey, sweepOrphanedImapCache, syncMailbox, SqliteDatabase, applyMigrations, openFileBucket } = await import(pathToFileURL(join(directory, "entry.mjs")).href);
 
 const crlf = (lines) => lines.join("\r\n");
 const tree = (lines) => parseTree(normalizeLineBreaks(crlf(lines)));
@@ -597,6 +598,7 @@ test("an edit that lands while a draft is being indexed is not cached under the 
 	assert.equal(index.envelope[1], "new");
 	assert.equal(JSON.parse(cache(id).envelope)[1], "new");
 });
+
 test("a draft is served from its columns even when it carries stored raw bytes", async (t) => {
 	const { env, bucket, add, cache } = await store(t);
 	await bucket.put("inbound/draft.eml", crlf(["From: a@b.test", "Subject: stale subject", "", "stale body"]));
@@ -685,6 +687,18 @@ test("a missing raw object of an inbound message is logged once", async (t) => {
 	assert.match(String(warn.mock.calls[0].arguments[0]), /inbound\/purged-2\.eml/);
 });
 
+test("a cached object that went missing is rebuilt instead of failing every read", async (t) => {
+	const { env, bucket, add, cache } = await store(t);
+	const id = add({ direction: "outbound", status: "sent", subject: "Kept", text_body: "body text", from_addr: "me@example.test", to_addr: "to@x.test" });
+	const index = await getMessageIndex(env, id);
+	const whole = Buffer.from((await readSection(env, id, { part: "", kind: "all" })).data);
+	// A sweep that listed the object as unreferenced just before an identical rebuild wrote its row.
+	await bucket.delete(index.key);
+	assert.deepEqual(Buffer.from((await readSection(env, id, { part: "", kind: "all" })).data), whole);
+	assert.equal(cache(id).synth_key, index.key);
+	assert.ok(await bucket.get(index.key), "the object is written again");
+});
+
 test("a ranged read of a file bucket object reads only the range", async (t) => {
 	const { bucket } = await store(t);
 	const data = Buffer.alloc(5000, "a");
@@ -703,4 +717,48 @@ test("a ranged read of a file bucket object reads only the range", async (t) => 
 	assert.deepEqual(wholeFileReads, [], "the object was not read whole");
 	assert.equal((await (await bucket.get("big/object")).arrayBuffer()).byteLength, 5000);
 	assert.equal(wholeFileReads.length, 1, "an unranged read still reads the file");
+});
+
+test("the cache sweep deletes imap-cache objects that no cache row points at, and nothing else", async (t) => {
+	const { env, bucket, add, sqlite } = await store(t);
+	const kept = add();
+	const gone = add();
+	const edited = add();
+	const keptKey = `imap-cache/${kept}/aaa.eml`;
+	const editedKey = `imap-cache/${edited}/new.eml`;
+	for (const key of [keptKey, `imap-cache/${gone}/bbb.eml`, `imap-cache/${edited}/old.eml`, editedKey, "imap-cache/never-existed/ccc.eml", "inbound/other.eml", "att/other"]) await bucket.put(key, "x");
+	for (const [id, key] of [[kept, keptKey], [edited, editedKey]]) sqlite.prepare("INSERT INTO imap_message_cache (message_id, size, synth_key, envelope, bodystructure, header_size) VALUES (?, 1, ?, '[]', '{}', 0)").run(id, key);
+	sqlite.prepare("DELETE FROM messages WHERE id = ?").run(gone);
+	const tomorrow = new Date(Date.now() + 2 * 24 * 3600 * 1000);
+	assert.equal(await sweepOrphanedImapCache(env, new Date()), 0, "objects younger than a day may belong to an index still being written");
+	assert.equal(await sweepOrphanedImapCache(env, tomorrow), 3, "a vanished message, an earlier version of an edited draft, and a stray object");
+	const left = (await bucket.list({ prefix: "" })).objects.map((object) => object.key).filter((key) => !key.startsWith("imap-cache-state/")).sort();
+	assert.deepEqual(left, [keptKey, editedKey, "att/other", "inbound/other.eml"].sort());
+});
+
+test("the cache sweep pages through more objects than one listing returns", async (t) => {
+	const { env, bucket, add, sqlite } = await store(t);
+	const live = add();
+	const liveKey = `imap-cache/${live}/live.eml`;
+	await bucket.put(liveKey, "x");
+	sqlite.prepare("INSERT INTO imap_message_cache (message_id, size, synth_key, envelope, bodystructure, header_size) VALUES (?, 1, ?, '[]', '{}', 0)").run(live, liveKey);
+	for (let index = 0; index < 230; index += 1) await bucket.put(`imap-cache/orphan-${String(index).padStart(3, "0")}/x.eml`, "x");
+	assert.equal(await sweepOrphanedImapCache(env, new Date(Date.now() + 2 * 24 * 3600 * 1000)), 230);
+	assert.deepEqual((await bucket.list({ prefix: "imap-cache/" })).objects.map((object) => object.key), [liveKey]);
+});
+
+test("a sweep that stops early continues where it stopped, so every orphan is reached", async (t) => {
+	const { env, bucket } = await store(t);
+	const total = 5400;
+	const put = [];
+	for (let index = 0; index < total; index += 1) put.push(bucket.put(`imap-cache/orphan-${String(index).padStart(5, "0")}/x.eml`, "x"));
+	await Promise.all(put);
+	const later = new Date(Date.now() + 2 * 24 * 3600 * 1000);
+	const first = await sweepOrphanedImapCache(env, later);
+	assert.ok(first > 0 && first < total, `one run does a bounded amount of work (${first})`);
+	assert.ok(await bucket.get("imap-cache-state/sweep-cursor"), "and leaves a cursor");
+	const second = await sweepOrphanedImapCache(env, later);
+	assert.equal(first + second, total, "the next run reaches the rest");
+	assert.equal(await bucket.get("imap-cache-state/sweep-cursor"), null, "a finished listing clears the cursor");
+	assert.equal((await bucket.list({ prefix: "imap-cache/" })).objects.length, 0);
 });

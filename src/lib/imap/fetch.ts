@@ -297,10 +297,12 @@ export type SectionSpec = {
 
 export type SectionResult = { data: Uint8Array; /** octets in the whole section, before any partial */ total: number };
 
+class MissingBytesError extends Error {}
+
 async function readRange(env: Env, key: string, start: number, end: number): Promise<Uint8Array> {
 	if (end <= start) return new Uint8Array();
 	const object = await env.BUCKET.get(key, { range: { offset: start, length: end - start } });
-	if (!object) throw new Error(`IMAP message bytes are missing: ${key}`);
+	if (!object) throw new MissingBytesError(`IMAP message bytes are missing: ${key}`);
 	return new Uint8Array(await object.arrayBuffer());
 }
 
@@ -321,8 +323,20 @@ function filterFields(header: string, names: string[], exclude: boolean): string
  * One FETCH body section. Null when the message or the section does not exist
  * (HEADER, TEXT and the field lists exist for the message and for message/rfc822
  * parts; MIME only for numbered parts). Reads a byte range of the stored object.
+ * When that object is gone (a sweep can delete an object just before an identical
+ * rebuild records it again), the cache row is dropped and the message indexed once more.
  */
 export async function readSection(env: Env, messageId: string, spec: SectionSpec): Promise<SectionResult | null> {
+	try {
+		return await readCachedSection(env, messageId, spec);
+	} catch (error) {
+		if (!(error instanceof MissingBytesError)) throw error;
+		await getDb(env).delete(imapMessageCache).where(eq(imapMessageCache.messageId, messageId));
+		return readCachedSection(env, messageId, spec);
+	}
+}
+
+async function readCachedSection(env: Env, messageId: string, spec: SectionSpec): Promise<SectionResult | null> {
 	const index = await getMessageIndex(env, messageId);
 	if (!index) return null;
 	const entry = index.ranges[spec.part];
