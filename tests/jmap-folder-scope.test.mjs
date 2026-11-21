@@ -51,3 +51,21 @@ test("moving an email into a folder of another mailbox is refused", async (t) =>
 	assert.deepEqual(own.updated, { "m-own": null });
 	assert.equal(sqlite.prepare("SELECT folder_id FROM messages WHERE id = 'm-own'").get().folder_id, "f-own");
 });
+
+test("a read-only sharee cannot rename a folder of the shared mailbox", async (t) => {
+	const teamSeed = `${sharedMailboxSeed("read_only")}
+		INSERT INTO folders (id, user_id, mailbox_id, name, created_at) VALUES ('f-team', 'admin', 'mb-team', 'Team', 1);
+	`;
+	const { env, db, sqlite } = await newDatabase(t, teamSeed);
+	const result = await app.mailboxSet(context(db, env), { update: { "mb-team~f~f-team": { name: "renamed" } } });
+	assert.deepEqual(result.updated, {});
+	assert.deepEqual(result.notUpdated["mb-team~f~f-team"], { type: "forbidden" });
+	assert.equal(sqlite.prepare("SELECT name FROM folders WHERE id = 'f-team'").get().name, "Team");
+});
+
+test("a full-access owner can still rename their own folder", async (t) => {
+	const { env, db, sqlite } = await newDatabase(t, seed);
+	const result = await app.mailboxSet(context(db, env), { update: { "mb-delegate~f~f-own": { name: "Renamed" } } });
+	assert.ok("mb-delegate~f~f-own" in result.updated);
+	assert.equal(sqlite.prepare("SELECT name FROM folders WHERE id = 'f-own'").get().name, "Renamed");
+});

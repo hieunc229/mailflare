@@ -233,6 +233,11 @@ export const mailboxSet: JmapMethodHandler = async (ctx, args) => {
 			notUpdated[id] = { type: "invalidProperties", properties: keys.filter((key) => key !== "name") };
 			continue;
 		}
+		// Renaming is a manage action, like create and destroy: a read-only or send-only sharee must not rename a shared folder.
+		if (keys.length && mailbox.permission !== "full_access") {
+			notUpdated[id] = { type: "forbidden" };
+			continue;
+		}
 		if (typeof patch.name === "string" && patch.name.trim()) {
 			await ctx.db
 				.update(folders)

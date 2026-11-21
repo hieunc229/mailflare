@@ -96,7 +96,7 @@ and the DNS page shows what to set by hand.
 | `DATA_DIR` | `/data` | SQLite database, blobs and backups |
 | `DATABASE_URL` | unset | Use PostgreSQL, MySQL or libSQL instead of the SQLite file in `DATA_DIR`; see [Databases](databases.md). Migrations are applied on start. |
 | `DATABASE_DRIVER` | inferred | Only to override the driver inferred from `DATABASE_URL` |
-| `APP_URL` | request origin | Public URL behind a proxy. Browser requests that change data must come from this origin. |
+| `APP_URL` | request origin | Public URL behind a proxy. Browser requests that change data must come from this origin. Required for password reset on the self-hosted server: reset links are never built from the `Host` header, so without it no reset email is sent. |
 | `TRUST_PROXY` | unset | Set to `1` when a reverse proxy terminates TLS in front of the container: its `X-Forwarded-For` client IP and `X-Forwarded-Proto` scheme are then trusted (without `APP_URL`, the same-origin check uses `Host` plus that scheme). Leave unset when exposed directly. |
 | `SMTP_INBOUND_PORT` | `25` | Inbound SMTP; `0` disables |
 | `MAIL_HOSTNAME` | `mail.<domain>` | Host the MX record points at; SMTP banner |
