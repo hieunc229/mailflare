@@ -22,6 +22,11 @@ password-reset mail and the JMAP session point at the public address, and
 forward WebSocket upgrades for `/api/realtime`. Passkeys also bind to this
 origin, so they need `APP_URL` (or a direct HTTPS connection) to work.
 
+Calendar and contacts sync (CalDAV and CardDAV) needs this proxy too: Mailflare
+refuses app passwords over plain HTTP, so set `TRUST_PROXY` so the proxy's
+`X-Forwarded-Proto: https` is believed, and let `PROPFIND`, `PROPPATCH`,
+`REPORT` and `OPTIONS` through. See [Calendar and contacts sync](caldav-carddav.md).
+
 ### PWA and push notifications
 
 Mailflare can be installed as a PWA and can deliver new-mail notifications
