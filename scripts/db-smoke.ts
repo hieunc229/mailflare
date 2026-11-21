@@ -3,9 +3,9 @@
  * (insert/select/update, returning, onConflict*, raw sql, batch), the triggers and search.
  * Run with `npm run db:smoke -- <DATABASE_URL> [driver]`; PGlite needs no server (`pglite://memory`).
  */
-import { and, eq, sql } from "drizzle-orm";
+import { and, eq, isNull, sql } from "drizzle-orm";
 import { createDb } from "@/db";
-import { users, domains, mailboxes, messages, folders, jmapChanges, appSettings, webhooks, spamTokenStats, spamReputation } from "@/db/schema";
+import { users, domains, mailboxes, messages, folders, jmapChanges, appSettings, webhooks, spamTokenStats, spamReputation, imapMessageFlags } from "@/db/schema";
 import { getDatabaseConfig } from "@/db/with-database";
 import { openExternalDatabase } from "@/db/external";
 import { applyPendingMigrations, getMigrationStatus } from "@/lib/migrations/service";
@@ -136,6 +136,35 @@ await db.run(sql`DELETE FROM imap_mailbox_state WHERE mailbox_id = ${imapMailbox
 await syncMailbox(env, imapMailbox);
 check("imap reconcile is idempotent", (await imapUids()).length === 1);
 await db.update(messages).set({ status: "received" }).where(eq(messages.id, `msg_${stamp}`));
+
+// IMAP writes: the flag upsert with the message touch (one batch), the expunge candidate join, the unflag update, the UID lookup and the conditional move and delete.
+const flagsMessage = `msg_${stamp}`;
+await syncMailbox(env, imapMailbox);
+const [beforeFlags] = await db.all<{ modseq: number }>(sql`SELECT modseq FROM imap_uids WHERE mailbox_id = ${imapMailbox} AND message_id = ${flagsMessage}`);
+const flagValues = { answered: true, forwarded: false, deleted: true, keywords: '["Orders"]', updatedAt: Math.floor(Date.now() / 1000) };
+await db.batch([
+	db.insert(imapMessageFlags).values({ messageId: flagsMessage, ...flagValues }).onConflictDoUpdate({ target: imapMessageFlags.messageId, set: flagValues }),
+	db.update(messages).set({ read: sql`${messages.read}` }).where(and(eq(messages.id, flagsMessage), eq(messages.mailboxId, imapMailbox))),
+] as never);
+await syncMailbox(env, imapMailbox);
+const [afterFlags] = await db.all<{ modseq: number }>(sql`SELECT modseq FROM imap_uids WHERE mailbox_id = ${imapMailbox} AND message_id = ${flagsMessage}`);
+check("imap flag write gives the UID a later mod-sequence (upsert plus touch)", Number(afterFlags.modseq) > Number(beforeFlags.modseq));
+const candidates = (await d1.prepare("SELECT u.uid AS uid, u.message_id AS message_id FROM imap_uids u INNER JOIN imap_message_flags f ON f.message_id = u.message_id WHERE u.mailbox_id = ? AND u.folder_key = ? AND f.deleted = ? ORDER BY u.uid LIMIT ?").bind(imapMailbox, "inbox", true, 10).all<{ uid: number; message_id: string }>()).results;
+check("imap expunge candidates (join on the \\Deleted flag)", candidates.length === 1 && candidates[0].message_id === flagsMessage);
+await d1.prepare("UPDATE imap_message_flags SET deleted = ? WHERE message_id IN (?, ?)").bind(false, flagsMessage, "none").run();
+const [unflagged] = await db.all<{ n: number }>(sql`SELECT count(*) AS n FROM imap_message_flags WHERE message_id = ${flagsMessage} AND NOT deleted`);
+check("imap unflag update", Number(unflagged.n) === 1);
+const looked = (await d1.prepare("SELECT message_id, uid FROM imap_uids WHERE mailbox_id = ? AND folder_key = ? AND message_id IN (?, ?)").bind(imapMailbox, "inbox", flagsMessage, "none").all<{ message_id: string; uid: number }>()).results;
+check("imap UID lookup by message ids", looked.length === 1 && Number(looked[0].uid) >= 1);
+await db.run(sql`DELETE FROM imap_message_flags WHERE message_id = ${flagsMessage}`);
+const guarded = `msg_guard_${stamp}`;
+await db.insert(messages).values({ id: guarded, userId, mailboxId: imapMailbox, direction: "inbound", fromAddr: "x@y.z", toAddr: "me@example.com", subject: "Guarded", textBody: "body", status: "trash" } as never);
+const movedWrong = await db.update(messages).set({ status: "trash", folderId: null }).where(and(eq(messages.id, guarded), eq(messages.mailboxId, imapMailbox), eq(messages.status, "archived"), isNull(messages.folderId))).returning({ id: messages.id });
+const deletedWrong = await db.delete(messages).where(and(eq(messages.id, guarded), eq(messages.mailboxId, imapMailbox), eq(messages.status, "archived"), isNull(messages.folderId))).returning({ id: messages.id });
+check("imap conditional move and delete skip a row that changed", movedWrong.length === 0 && deletedWrong.length === 0);
+const movedRight = await db.update(messages).set({ status: "archived", folderId: null }).where(and(eq(messages.id, guarded), eq(messages.mailboxId, imapMailbox), eq(messages.status, "trash"), isNull(messages.folderId))).returning({ id: messages.id });
+const deletedRight = await db.delete(messages).where(and(eq(messages.id, guarded), eq(messages.mailboxId, imapMailbox), eq(messages.status, "archived"), isNull(messages.folderId))).returning({ id: messages.id });
+check("imap conditional move and delete return the rows they changed", movedRight.length === 1 && deletedRight.length === 1);
 
 await db.run(sql`INSERT INTO imap_message_flags (message_id, answered, keywords) VALUES (${`msg_${stamp}`}, ${true}, ${'["$label1"]'})`);
 const backup = await exportDatabaseRecords(d1);
