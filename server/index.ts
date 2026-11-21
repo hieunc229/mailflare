@@ -13,6 +13,7 @@ import { processImportJob } from "@/lib/import/jobs";
 import { applyPendingMigrations } from "@/lib/migrations/service";
 import { isImportJobMessage, isInboundQueueMessage, isWebhookRetryMessage } from "../worker-utils";
 import { createNodeRuntime } from "./runtime/env";
+import { resolveMaxHeaderSize } from "./runtime/http-options";
 import { isRealtimeOriginAllowed } from "./runtime/realtime-origin";
 import { applyMigrations } from "./runtime/migrate";
 import { startScheduler } from "./runtime/scheduler";
@@ -57,7 +58,7 @@ async function main() {
 	// Direct exposure must leave it unset so only the socket IP is trusted.
 	const trustProxy = ["1", "true", "yes"].includes((process.env.TRUST_PROXY ?? "").toLowerCase());
 
-	const server = createServer((request, response) => {
+	const server = createServer({ maxHeaderSize: resolveMaxHeaderSize(process.env.MAX_HTTP_HEADER_SIZE) }, (request, response) => {
 		// The only client IP that cannot be forged is the socket's. Next sees
 		// re-serialized headers, so stamp the resolved IP into a private header
 		// after removing every client-supplied forwarding header — otherwise a
