@@ -126,7 +126,7 @@ const MATERIALISED_QUERY_LIMIT = 10_000;
 
 export const emailQuery: JmapMethodHandler = async (ctx, args) => {
 	const { ids: accessibleIds, condition } = await scope(ctx);
-	const filter = filterToSql(args.filter as Filter | null | undefined, new Set(accessibleIds));
+	const filter = filterToSql(args.filter as Filter | null | undefined, new Set(accessibleIds), ctx.auth.userId);
 	const where = filter ? and(condition, filter) : condition;
 	// The id breaks ties, so OFFSET pages are stable on databases (PostgreSQL)
 	// that return equal rows in any order.
