@@ -8,7 +8,7 @@ import type { AppPasswordScope } from "@/lib/api/scopes";
 import { apiKeyLookupPrefix } from "@/lib/api-keys";
 import { isListedAsAppPassword } from "@/lib/auth/app-password-utils";
 import { getClientIp } from "@/lib/auth/client-ip";
-import { imapIsOffered } from "@/lib/imap/config";
+import { imapIsOffered, submissionIsOffered } from "@/lib/imap/config";
 import { getNodeEnv, isNodeRuntime } from "@/lib/runtime";
 
 export type AppPasswordProtocol = "jmap" | "caldav" | "carddav" | "imap" | "submission";
@@ -27,11 +27,12 @@ const PROTOCOL_SCOPE: Record<AppPasswordProtocol, AppPasswordScope> = {
  * The scopes a new app password may carry on this server. The protocols that
  * need a listener of their own are offered only where that listener runs, so
  * nobody can mint a credential nothing accepts: `imap` on the Node runtime with
- * `IMAP_ENABLED=1` (CalDAV/CardDAV and SMTP submission are added when they ship).
+ * `IMAP_ENABLED=1`, `submission` on the Node runtime with `SUBMISSION_ENABLED=1` (CalDAV/CardDAV are added when they ship).
  */
 export function availableAppPasswordProtocols(env: Pick<CloudflareEnv, "MAILFLARE_RUNTIME"> | undefined = getNodeEnv()): AppPasswordScope[] {
 	const protocols: AppPasswordScope[] = ["jmap"];
 	if (isNodeRuntime(env) && imapIsOffered(process.env)) protocols.push("imap");
+	if (isNodeRuntime(env) && submissionIsOffered(process.env)) protocols.push("submission");
 	return protocols;
 }
 

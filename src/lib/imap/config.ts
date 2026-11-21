@@ -72,3 +72,56 @@ export function imapIsOffered(source: Source): boolean {
 	const plainOk = config.allowPlaintext && isLoopbackHost(config.host);
 	return (config.port === 0 || config.hasCertificate) && (config.starttlsPort === 0 || config.hasCertificate || plainOk);
 }
+
+/**
+ * SMTP submission listener settings (Docker/Node only), read from the same process environment.
+ * Port 587 requires STARTTLS before AUTH; port 465 is implicit TLS. Either may be turned off with `0`.
+ */
+export type SubmissionConfig = {
+	enabled: boolean;
+	/** STARTTLS port; 0 disables it. */
+	port: number;
+	/** Implicit TLS port; 0 disables it. */
+	tlsPort: number;
+	host: string | undefined;
+	hostname: string | undefined;
+	/** Messages one account may submit per hour. */
+	maxPerHour: number;
+	/** Recipients (To, Cc and Bcc together) one account may submit per hour. */
+	maxRecipientsPerHour: number;
+	/** The largest message the listener ever accepts, in octets (the admin's outgoing limit lowers it further). */
+	maxSize: number;
+	/** AUTH without TLS, honoured only when the listener is bound to a loopback address. */
+	allowPlaintext: boolean;
+	hasCertificate: boolean;
+};
+
+export const DEFAULT_SUBMISSION_PER_HOUR = 200;
+
+export function readSubmissionConfig(source: Source): SubmissionConfig {
+	const maxPerHour = positive(source.SUBMISSION_MAX_PER_HOUR, DEFAULT_SUBMISSION_PER_HOUR);
+	return {
+		enabled: source.SUBMISSION_ENABLED?.trim() === "1",
+		port: port(source.SUBMISSION_PORT, 587),
+		tlsPort: port(source.SUBMISSIONS_PORT, 465),
+		host: source.SUBMISSION_HOST?.trim() || undefined,
+		hostname: source.MAIL_HOSTNAME?.trim() || undefined,
+		maxPerHour,
+		maxRecipientsPerHour: positive(source.SUBMISSION_MAX_RECIPIENTS_PER_HOUR, maxPerHour * 5),
+		maxSize: Math.min(positive(source.SMTP_MAX_SIZE, DEFAULT_MAX_MESSAGE_SIZE), DEFAULT_MAX_MESSAGE_SIZE),
+		allowPlaintext: source.SUBMISSION_ALLOW_PLAINTEXT?.trim() === "1",
+		hasCertificate: !!(source.SMTP_TLS_KEY?.trim() && source.SMTP_TLS_CERT?.trim()),
+	};
+}
+
+/**
+ * Whether a mail app could submit: the flag is on and every configured listener can start, as the
+ * server decides it. Both ports need a certificate; the STARTTLS port may also run in the plain
+ * test mode, which only works for a loopback bind.
+ */
+export function submissionIsOffered(source: Source): boolean {
+	const config = readSubmissionConfig(source);
+	if (!config.enabled || (config.port === 0 && config.tlsPort === 0)) return false;
+	const plainOk = config.allowPlaintext && isLoopbackHost(config.host);
+	return (config.tlsPort === 0 || config.hasCertificate) && (config.port === 0 || config.hasCertificate || plainOk);
+}
