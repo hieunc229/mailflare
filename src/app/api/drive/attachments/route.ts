@@ -15,7 +15,9 @@ const MAX_BULK = 200;
  * - `restore` puts it back on the email.
  * - `delete` removes the database row and the stored file for good, and only works on trashed attachments.
  *
- * The message itself is never touched. Read-only mailbox access is not enough for any of these.
+ * The message is never edited, but a draft is written back unchanged: the attachment set is part of what
+ * IMAP sync hashes for a draft, and the change log only records a draft when its row is written.
+ * Read-only mailbox access is not enough for any of these.
  */
 export async function POST(request: Request) {
 	const auth = await authorizeDrive(request, true);
@@ -27,12 +29,12 @@ export async function POST(request: Request) {
 	if (body.action !== "trash" && body.action !== "restore" && body.action !== "delete") return NextResponse.json({ error: "Unknown action" }, { status: 400 });
 	if (!ids.length || ids.length > MAX_BULK) return NextResponse.json({ error: "Select between 1 and 200 attachments" }, { status: 400 });
 
-	const permitted: { id: string; r2Key: string; trashedAt: Date | null }[] = [];
+	const permitted: { id: string; r2Key: string; trashedAt: Date | null; draftId: string | null }[] = [];
 	const accessCache = new Map<string, boolean>();
 	let denied = 0;
 	for (let index = 0; index < ids.length; index += 50) {
 		const rows = await db
-			.select({ id: messageAttachments.id, r2Key: messageAttachments.r2Key, trashedAt: messageAttachments.trashedAt, mailboxId: messages.mailboxId, userId: messages.userId })
+			.select({ id: messageAttachments.id, r2Key: messageAttachments.r2Key, trashedAt: messageAttachments.trashedAt, mailboxId: messages.mailboxId, userId: messages.userId, messageId: messages.id, status: messages.status })
 			.from(messageAttachments)
 			.innerJoin(messages, eq(messageAttachments.messageId, messages.id))
 			.where(inArray(messageAttachments.id, ids.slice(index, index + 50)));
@@ -46,7 +48,7 @@ export async function POST(request: Request) {
 				}
 				allowed = accessCache.get(row.mailboxId)!;
 			}
-			if (allowed) permitted.push({ id: row.id, r2Key: row.r2Key, trashedAt: row.trashedAt }); else denied += 1;
+			if (allowed) permitted.push({ id: row.id, r2Key: row.r2Key, trashedAt: row.trashedAt, draftId: row.status === "draft" ? row.messageId : null }); else denied += 1;
 		}
 	}
 	if (denied && !permitted.length) return NextResponse.json({ error: "You cannot change these attachments" }, { status: 403 });
@@ -61,6 +63,8 @@ export async function POST(request: Request) {
 		if (body.action === "delete") await db.delete(messageAttachments).where(inArray(messageAttachments.id, slice));
 		else await db.update(messageAttachments).set({ trashedAt: body.action === "trash" ? new Date() : null }).where(inArray(messageAttachments.id, slice));
 	}
+	const draftIds = [...new Set(targets.flatMap((row) => (row.draftId ? [row.draftId] : [])))];
+	for (let index = 0; index < draftIds.length; index += 50) await db.update(messages).set({ snippet: messages.snippet }).where(inArray(messages.id, draftIds.slice(index, index + 50)));
 	if (body.action === "delete" && targets.length) await deleteUnreferencedObjects(env, db, targets.map((row) => row.r2Key), { attachmentIds: targetIds });
 	return NextResponse.json({ count: targets.length, denied });
 }

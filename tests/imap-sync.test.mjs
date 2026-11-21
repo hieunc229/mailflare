@@ -4,6 +4,8 @@ import { dirname, join } from "node:path";
 import test, { after } from "node:test";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { build } from "esbuild";
+import { drizzle } from "drizzle-orm/sqlite-proxy";
+import { loadFixture } from "./helpers/fixtures.mjs";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 const directory = mkdtempSync(join(process.env.TMPDIR ?? root, "mailflare-imap-sync-"));
@@ -261,6 +263,53 @@ test("a draft whose sender, reply-to or attachment trash changes is replaced and
 		assert.deepEqual(expunged("drafts").map((row) => row.uid), Array.from({ length: index + 1 }, (_, n) => n + 1), edit);
 		assert.equal(cached(), 0, `the cache is dropped: ${edit}`);
 	}
+});
+
+const attachmentRoute = await loadFixture({
+	name: "imap-attachment-route",
+	entryPoint: "src/app/api/drive/attachments/route.ts",
+	mocks: {
+		"next/server": "export const NextResponse={json:(data,init)=>Response.json(data,init)};",
+		"@/db": "export function getDb(){return globalThis.imapAttachmentRoute.db}",
+		"@/lib/drive/auth": "export async function authorizeDrive(){return {env:{},user:{id:'u1'},error:null}}",
+		"@/lib/mailboxes/access": "export async function getMailboxAccessLevel(){return {permission:'owner'}} export function hasMailboxPermission(){return true}",
+		"@/lib/drive/shared-objects": "export async function deleteUnreferencedObjects(){return []}",
+	},
+});
+after(() => { delete globalThis.imapAttachmentRoute; attachmentRoute.dispose(); });
+const { POST: attachmentAction } = await attachmentRoute.import();
+
+test("trashing or restoring an attachment of a draft gives the draft a new UID; other messages are left alone", async (t) => {
+	const { add, sqlite, database, uids, sync } = await fixture(t);
+	globalThis.imapAttachmentRoute = {
+		db: drizzle(async (sql, params, method) => {
+			const statement = database.db.prepare(sql);
+			if (method === "run") { statement.run(...params); return { rows: [] }; }
+			return { rows: statement.raw().all(...params) };
+		}),
+	};
+	const draft = add({ status: "draft", direction: "outbound" });
+	const received = add({});
+	for (const [id, owner] of [["ad1", draft], ["ad2", draft], ["ar1", received]]) {
+		sqlite.prepare("INSERT INTO message_attachments (id, message_id, filename, content_type, size, r2_key, created_at) VALUES (?, ?, 'f.txt', 'text/plain', 1, ?, 1)").run(id, owner, `k-${id}`);
+	}
+	await sync();
+	const act = (action, ...ids) => attachmentAction(new Request("https://mail.test/api/drive/attachments", { method: "POST", body: JSON.stringify({ action, ids }) }));
+	const uidOf = (folder, id) => uids(folder).find((row) => row.message_id === id)?.uid;
+	let expected = uidOf("drafts", draft);
+	const inboxUid = uidOf("inbox", received);
+	for (const [action, ids] of [["trash", ["ad1"]], ["restore", ["ad1"]], ["trash", ["ad2"]], ["delete", ["ad2"]]]) {
+		assert.equal((await (await act(action, ...ids)).json()).count, 1, action);
+		await sync();
+		// A trashed attachment is already left out of the draft's bytes, so deleting it changes nothing the client sees.
+		if (action === "delete") assert.equal(uidOf("drafts", draft), expected, "deleting a trashed attachment keeps the UID");
+		else assert.ok(uidOf("drafts", draft) > expected, `${action} gives the draft a new UID`);
+		expected = uidOf("drafts", draft);
+	}
+	await act("trash", "ar1");
+	await sync();
+	assert.equal(uidOf("inbox", received), inboxUid, "a received message keeps its UID");
+	assert.equal(uidOf("drafts", draft), expected);
 });
 
 test("a sync with nothing to do writes nothing", async (t) => {
