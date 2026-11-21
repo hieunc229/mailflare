@@ -56,7 +56,8 @@ export async function POST(request: Request) {
 		// The header map is advisory; the raw message is authoritative.
 	}
 
-	let forwardTo: string | null = null;
+	// A keep-copy forward rule and account forwarding can both ask for a forward.
+	const forwardToAll: string[] = [];
 	let forwardHeaders: Record<string, string> = {};
 	const result = await intakeIncomingMail(
 		env,
@@ -64,11 +65,13 @@ export async function POST(request: Request) {
 		{
 			// The relay performs the forward on the live message; report it as done so keep-copy applies.
 			forward: async (destination, extra) => {
-				forwardTo = destination;
+				forwardToAll.push(destination);
 				forwardHeaders = extra;
 				return true;
 			},
 		},
 	);
-	return NextResponse.json({ ...result, forwardTo, forwardHeaders });
+	// Relays deployed before forwardToAll only read forwardTo, which keeps its old value (the last one).
+	const forwardTo = forwardToAll.at(-1) ?? null;
+	return NextResponse.json({ ...result, forwardTo, forwardToAll, forwardHeaders });
 }
