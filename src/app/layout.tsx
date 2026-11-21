@@ -23,7 +23,7 @@ export async function generateMetadata(): Promise<Metadata> {
 	const { appName } = await getHomeBranding();
 	return {
 		title: appName,
-		description: "Multi-tenant email on Cloudflare",
+		description: "Varunya Mail — Enterprise email platform for Varunya Web Technologies and Fintech Solutions",
 		icons: { icon: "/api/branding/icon", apple: "/icon-192.png" },
 		appleWebApp: {
 			capable: true,

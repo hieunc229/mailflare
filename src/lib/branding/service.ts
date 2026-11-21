@@ -5,7 +5,7 @@ import type { Branding } from "./types";
 import { getLicenseEntitlements } from "@/lib/licenses/service";
 
 export const APP_SETTINGS_ID = "default";
-export const DEFAULT_APP_NAME = "Mailflare";
+export const DEFAULT_APP_NAME = "Varunya Mail";
 export const BRANDING_ICON_KEY = "branding/app-icon";
 
 export async function getBranding(env: CloudflareEnv): Promise<Branding> {
