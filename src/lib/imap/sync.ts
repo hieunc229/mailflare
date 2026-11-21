@@ -195,16 +195,21 @@ async function resetFolder(env: SyncEnv, mailboxId: string, folderKey: string): 
 
 // ---- Drafts ----
 
-/** SHA-256 of what the composer edits, so an autosave that changes the draft replaces its UID (spec 8.4). */
+/**
+ * SHA-256 of what the composer edits, so an autosave that changes the draft replaces its UID (spec 8.4).
+ * It covers every column the synthesized bytes are built from (fetch.ts `contentKey`) and the attachments
+ * still in the message, since a trashed attachment is left out of them.
+ */
 async function draftHashes(env: SyncEnv, ids: string[]): Promise<Map<string, string>> {
 	const hashes = new Map<string, string>();
 	for (const chunk of chunks(ids, ID_CHUNK)) {
 		const marks = placeholders(chunk.length);
-		const messages = await rows<{ id: string; subject: string | null; to_addr: string; cc_addr: string | null; bcc_addr: string | null; text_body: string | null; html_body: string | null }>(env, `SELECT id, subject, to_addr, cc_addr, bcc_addr, text_body, html_body FROM messages WHERE id IN (${marks})`, ...chunk);
-		const attachments = await rows<{ message_id: string; id: string }>(env, `SELECT message_id, id FROM message_attachments WHERE message_id IN (${marks}) ORDER BY id`, ...chunk);
+		type DraftColumns = { id: string; from_addr: string; to_addr: string; cc_addr: string | null; bcc_addr: string | null; reply_to: string | null; subject: string | null; text_body: string | null; html_body: string | null; provider_message_id: string | null; in_reply_to: string | null; references_header: string | null };
+		const messages = await rows<DraftColumns>(env, `SELECT id, from_addr, to_addr, cc_addr, bcc_addr, reply_to, subject, text_body, html_body, provider_message_id, in_reply_to, references_header FROM messages WHERE id IN (${marks})`, ...chunk);
+		const attachments = await rows<{ message_id: string; id: string }>(env, `SELECT message_id, id FROM message_attachments WHERE message_id IN (${marks}) AND trashed_at IS NULL ORDER BY id`, ...chunk);
 		for (const message of messages) {
 			const attached = attachments.filter((attachment) => attachment.message_id === message.id).map((attachment) => attachment.id);
-			const content = JSON.stringify([message.subject, message.to_addr, message.cc_addr, message.bcc_addr, message.text_body, message.html_body, attached]);
+			const content = JSON.stringify([message.from_addr, message.to_addr, message.cc_addr, message.bcc_addr, message.reply_to, message.subject, message.text_body, message.html_body, message.provider_message_id, message.in_reply_to, message.references_header, attached]);
 			const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(content));
 			hashes.set(message.id, [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, "0")).join(""));
 		}

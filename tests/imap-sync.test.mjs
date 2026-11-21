@@ -240,6 +240,29 @@ test("a draft with a changed attachment set is replaced", async (t) => {
 	assert.deepEqual(uids("drafts").map((row) => row.uid), [2]);
 });
 
+test("a draft whose sender, reply-to or attachment trash changes is replaced and its cache dropped", async (t) => {
+	const { add, sqlite, uids, sync, expunged } = await fixture(t);
+	const id = add({ status: "draft", direction: "outbound" });
+	sqlite.prepare("INSERT INTO message_attachments (id, message_id, filename, content_type, size, r2_key, created_at) VALUES ('at1', ?, 'f.txt', 'text/plain', 1, 'k', 1)").run(id);
+	await sync();
+	const cached = () => sqlite.prepare("SELECT COUNT(*) AS n FROM imap_message_cache WHERE message_id = ?").get(id).n;
+	const cache = () => sqlite.prepare("INSERT INTO imap_message_cache (message_id, size, envelope, bodystructure, header_size) VALUES (?, 1, '{}', '{}', 1)").run(id);
+	const edits = [
+		"UPDATE messages SET from_addr = 'other@example.test' WHERE id = ?",
+		"UPDATE messages SET reply_to = 'reply@example.test' WHERE id = ?",
+		"UPDATE message_attachments SET trashed_at = 5 WHERE message_id = ?",
+	];
+	for (const [index, edit] of edits.entries()) {
+		cache();
+		sqlite.prepare(edit).run(id);
+		sqlite.prepare("UPDATE messages SET snippet = ? WHERE id = ?").run(`edit ${index}`, id);
+		await sync();
+		assert.deepEqual(uids("drafts").map((row) => row.uid), [index + 2], edit);
+		assert.deepEqual(expunged("drafts").map((row) => row.uid), Array.from({ length: index + 1 }, (_, n) => n + 1), edit);
+		assert.equal(cached(), 0, `the cache is dropped: ${edit}`);
+	}
+});
+
 test("a sync with nothing to do writes nothing", async (t) => {
 	const { add, sqlite, sync } = await fixture(t);
 	add();
