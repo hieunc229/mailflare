@@ -9,6 +9,7 @@ import { canStillSee, loadNamespace, type Namespace } from "@/lib/imap/namespace
 import type { FolderView } from "@/lib/imap/view";
 import { runFetch, sendFlags } from "./commands/fetch";
 import { runList, runNamespace, runSelect, runStatus } from "./commands/mailbox";
+import { runAppend } from "./commands/append";
 import { runStore } from "./commands/store";
 import { closeExpunge, runCopy, runExpunge, runMove } from "./commands/transfer";
 import { runSearch } from "./commands/search";
@@ -35,6 +36,11 @@ export type ConnectionContext = {
 	commandsPerSecond: number;
 	/** The most octets the body sections of one FETCH may add up to. */
 	fetchByteBudget: number;
+	/** The largest message an APPEND may carry. */
+	maxMessageSize: number;
+	/** Takes octets from the process-wide budget of in-flight APPEND data; false when it is spent. */
+	reserveAppend: (bytes: number) => boolean;
+	releaseAppend: (bytes: number) => void;
 	/** Overrides of the timers below, for tests. */
 	timeouts?: Partial<{ preAuthIdleMs: number; authIdleMs: number; loginDeadlineMs: number; revalidateMs: number; writeStallMs: number }>;
 };
@@ -106,6 +112,8 @@ export class ImapConnection {
 		this.encrypted = encrypted;
 		this.remoteAddress = socket.remoteAddress ?? null;
 		this.tokens = context.commandsPerSecond;
+		this.framer.reserve = context.reserveAppend;
+		this.framer.release = context.releaseAppend;
 		this.done = new Promise((resolve) => (this.finish = resolve));
 		this.attach(socket);
 		this.deadlineTimer = setTimeout(() => void this.bye("Login timed out"), context.timeouts?.loginDeadlineMs ?? LOGIN_DEADLINE_MS);
@@ -171,6 +179,7 @@ export class ImapConnection {
 		for (const timer of [this.idleTimer, this.deadlineTimer, this.revalidateTimer]) if (timer) clearTimeout(timer);
 		if (this.revalidateTimer) clearInterval(this.revalidateTimer);
 		this.deselect();
+		this.framer.dispose();
 		if (this.identity) this.context.releaseUser(this.identity.userId);
 		this.identity = null;
 		this.socket.destroy();
@@ -283,7 +292,7 @@ export class ImapConnection {
 			else base.push("STARTTLS", "LOGINDISABLED");
 			return base;
 		}
-		return [...base, "IDLE", "NAMESPACE", "UIDPLUS", "MOVE", "UNSELECT", "CHILDREN", "SPECIAL-USE", "LIST-EXTENDED", "LIST-STATUS", "ESEARCH"];
+		return [...base, "IDLE", "NAMESPACE", "UIDPLUS", "MOVE", `APPENDLIMIT=${this.context.maxMessageSize}`, "UNSELECT", "CHILDREN", "SPECIAL-USE", "LIST-EXTENDED", "LIST-STATUS", "ESEARCH"];
 	}
 
 	private async run(): Promise<void> {
@@ -308,6 +317,13 @@ export class ImapConnection {
 				if (event.type === "reject") {
 					// A refusal is an answer like any other: it waits for the client to read, uses a token, and a run of them ends the connection.
 					if (!(await this.pace())) return;
+					if (event.code === "append-size" || event.code === "append-busy") {
+						// The message is refused (and its bytes already being thrown away); the connection stays usable.
+						this.send(event.code === "append-size" ? `${event.tag} NO [TOOBIG] The message is larger than this server accepts` : `${event.tag} NO [LIMIT] Server busy, try again`);
+						this.consecutiveRejects += 1;
+						if (this.consecutiveRejects >= MAX_CONSECUTIVE_REJECTS) return void (await this.bye("Too many refused messages"));
+						continue;
+					}
 					const text = event.code === "line" ? "Command line too long" : event.code === "literal" ? "Literal too large" : "Command too large";
 					this.send(`${event.tag} BAD [TOOBIG] ${text}`);
 					this.consecutiveRejects += 1;
@@ -317,7 +333,7 @@ export class ImapConnection {
 				this.consecutiveRejects = 0;
 				await this.waitForOutput();
 				if (this.closed) return;
-				await this.execute(event.text);
+				await this.execute(event.text, event.body, event.reserved);
 				if (this.closing) return;
 			}
 		} catch (error) {
@@ -340,7 +356,16 @@ export class ImapConnection {
 		this.lastRefill = Date.now();
 	}
 
-	private async execute(text: string): Promise<void> {
+	private async execute(text: string, body?: Buffer, reserved = 0): Promise<void> {
+		try {
+			await this.executeCommand(text, body);
+		} finally {
+			// The budget held for an APPEND's bytes is returned however the command ended.
+			if (reserved) this.context.releaseAppend(reserved);
+		}
+	}
+
+	private async executeCommand(text: string, body?: Buffer): Promise<void> {
 		await this.takeToken();
 		let command: ParsedCommand;
 		try {
@@ -352,7 +377,7 @@ export class ImapConnection {
 		const tag = command.tag;
 		const name = command.command.toUpperCase();
 		try {
-			const completion = await this.dispatch(name, command);
+			const completion = await this.dispatch(name, command, body);
 			if (this.closed || this.ended) return;
 			if (completion?.skipResponse) return;
 			if (!this.endAfterResponse && !this.closing) await this.flushBeforeResponse(name);
@@ -372,7 +397,7 @@ export class ImapConnection {
 
 	// ---- Dispatch ----
 
-	private async dispatch(name: string, command: ParsedCommand): Promise<Completion> {
+	private async dispatch(name: string, command: ParsedCommand, body?: Buffer): Promise<Completion> {
 		const uid = name === "UID" || name.startsWith("UID ");
 		const base = uid ? name.slice(4) : name;
 		if (this.phase === "notauth") {
@@ -409,7 +434,8 @@ export class ImapConnection {
 			case "COPY": return this.inSelected(() => runCopy(this, command, uid));
 			case "MOVE": return this.inSelected(() => runMove(this, command, uid));
 			case "EXPUNGE": return this.inSelected(() => runExpunge(this, command, uid));
-			case "APPEND": case "CREATE": case "DELETE": case "RENAME":
+			case "APPEND": return runAppend(this, command, body);
+			case "CREATE": case "DELETE": case "RENAME":
 				throw new ImapError("NO", "This server is read-only for now", "CANNOT");
 			default: throw this.refusedCommand(name);
 		}
@@ -684,7 +710,7 @@ export class ImapConnection {
 		if (!this.context.admitUser(result.identity.userId)) throw new ImapError("NO", "Too many connections for this account", "UNAVAILABLE");
 		this.identity = result.identity;
 		this.phase = "auth";
-		this.framer.limits = AUTH_LIMITS;
+		this.framer.limits = { ...AUTH_LIMITS, maxAppend: this.context.maxMessageSize };
 		if (this.deadlineTimer) clearTimeout(this.deadlineTimer);
 		this.deadlineTimer = null;
 		this.armIdle();

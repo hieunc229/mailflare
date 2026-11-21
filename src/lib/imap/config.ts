@@ -12,6 +12,8 @@ export type ImapConfig = {
 	host: string | undefined;
 	hostname: string | undefined;
 	maxConnections: number;
+	/** The largest message an APPEND may carry, in octets; advertised as APPENDLIMIT. */
+	maxMessageSize: number;
 	/** LOGIN without TLS, honoured only when the listener is bound to a loopback address. */
 	allowPlaintext: boolean;
 	hasCertificate: boolean;
@@ -24,6 +26,16 @@ const port = (value: string | undefined, fallback: number) => {
 	return Number.isInteger(parsed) && parsed >= 0 && parsed <= 65535 ? parsed : fallback;
 };
 
+/** The size limit for inbound SMTP mail when none is set, which IMAP_MAX_MESSAGE_SIZE follows. */
+export const DEFAULT_MAX_MESSAGE_SIZE = 36 * 1024 * 1024;
+/** One message is never allowed to be more than the budget of in-flight APPEND data the server holds. */
+export const MAX_APPEND_BUDGET = 512 * 1024 * 1024;
+
+const positive = (value: string | undefined, fallback: number) => {
+	const parsed = Number(value?.trim() === "" ? undefined : value);
+	return Number.isInteger(parsed) && parsed > 0 ? parsed : fallback;
+};
+
 export function readImapConfig(source: Source): ImapConfig {
 	const maxConnections = Number(source.IMAP_MAX_CONNECTIONS);
 	return {
@@ -33,6 +45,7 @@ export function readImapConfig(source: Source): ImapConfig {
 		host: source.IMAP_HOST?.trim() || undefined,
 		hostname: source.MAIL_HOSTNAME?.trim() || undefined,
 		maxConnections: Number.isInteger(maxConnections) && maxConnections > 0 ? maxConnections : 500,
+		maxMessageSize: Math.min(positive(source.IMAP_MAX_MESSAGE_SIZE, positive(source.SMTP_MAX_SIZE, DEFAULT_MAX_MESSAGE_SIZE)), MAX_APPEND_BUDGET),
 		allowPlaintext: source.IMAP_ALLOW_PLAINTEXT?.trim() === "1",
 		hasCertificate: !!(source.SMTP_TLS_KEY?.trim() && source.SMTP_TLS_CERT?.trim()),
 	};

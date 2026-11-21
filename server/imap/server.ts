@@ -1,7 +1,7 @@
 import { createServer as createPlainServer, type Server as PlainServer, type Socket } from "node:net";
 import { createSecureContext, createServer as createTlsServer, type SecureContext, type Server as TlsServer, type TLSSocket } from "node:tls";
 import { ipBucket } from "@/lib/auth/app-passwords";
-import { isLoopbackHost } from "@/lib/imap/config";
+import { DEFAULT_MAX_MESSAGE_SIZE, MAX_APPEND_BUDGET, isLoopbackHost } from "@/lib/imap/config";
 import type { CertificateMaterial } from "../runtime/tls-files";
 import { ImapConnection, type ConnectionContext } from "./connection";
 import { Notifier, type RealtimeSource } from "./notifier";
@@ -31,6 +31,10 @@ export type ImapServerOptions = {
 	commandsPerSecond?: number;
 	/** Most octets the body sections of one FETCH command may add up to. */
 	maxFetchBytes?: number;
+	/** The largest message one APPEND may carry (APPENDLIMIT). */
+	maxMessageSize?: number;
+	/** Octets of APPEND data the whole process may hold at once; over that an APPEND is told to try again. */
+	appendBudget?: number;
 	pollMs?: number;
 	timeouts?: ConnectionContext["timeouts"];
 	/** The realtime hub, so new mail reaches IDLE clients at once instead of at the next poll. */
@@ -48,6 +52,7 @@ export class ImapServer {
 	private readonly byIp = new Map<string, number>();
 	private readonly byUser = new Map<string, number>();
 	private admitted = 0;
+	private appendInFlight = 0;
 	private secureContext: SecureContext | null;
 	private tlsServer: TlsServer | null = null;
 	private plainServer: PlainServer | null = null;
@@ -78,6 +83,11 @@ export class ImapServer {
 		this.tlsServer?.setSecureContext({ key: material.key, cert: material.cert, minVersion: "TLSv1.2" });
 	}
 
+	/** Octets of APPEND data held right now (for tests and the status line). */
+	get appendBytesInFlight(): number {
+		return this.appendInFlight;
+	}
+
 	get connectionCount(): number {
 		return this.admitted;
 	}
@@ -103,6 +113,15 @@ export class ImapServer {
 			failureDelayMs: this.options.failureDelayMs ?? 1000,
 			commandsPerSecond: this.options.commandsPerSecond ?? 100,
 			fetchByteBudget: this.options.maxFetchBytes ?? DEFAULT_MAX_FETCH_BYTES,
+			maxMessageSize: Math.min(this.options.maxMessageSize ?? DEFAULT_MAX_MESSAGE_SIZE, this.options.appendBudget ?? MAX_APPEND_BUDGET),
+			reserveAppend: (bytes) => {
+				if (this.appendInFlight + bytes > (this.options.appendBudget ?? MAX_APPEND_BUDGET)) return false;
+				this.appendInFlight += bytes;
+				return true;
+			},
+			releaseAppend: (bytes) => {
+				this.appendInFlight = Math.max(0, this.appendInFlight - bytes);
+			},
 			timeouts: this.options.timeouts,
 		};
 	}
