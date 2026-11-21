@@ -1,3 +1,4 @@
+import { sweepOrphanedImapCache } from "@/lib/imap/cache-sweeper";
 import { dailyJobs, frequentJobs, runScheduledJob } from "@/lib/scheduled/jobs";
 
 /** Jobs marked `everyFiveMinutes` assume the Worker cron's cadence; this loop ticks every minute. */
@@ -18,6 +19,8 @@ export function startScheduler(env: CloudflareEnv) {
 		if (now.getUTCHours() !== 2 || lastRunDay === day) return;
 		lastRunDay = day;
 		for (const job of dailyJobs(env, now)) void runScheduledJob(job);
+		// Weekly (Sunday), self-hosted only, and only when IMAP is on: with it off this adds no storage listing.
+		if (process.env.IMAP_ENABLED === "1" && now.getUTCDay() === 0) void runScheduledJob({ name: "IMAP cache sweep", run: () => sweepOrphanedImapCache(env, now) });
 	}, 60_000);
 	return () => clearInterval(timer);
 }
