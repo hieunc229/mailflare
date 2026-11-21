@@ -1,14 +1,16 @@
 import assert from "node:assert/strict";
 import { mkdtempSync, rmSync } from "node:fs";
+import fsPromises from "node:fs/promises";
+import { syncBuiltinESMExports } from "node:module";
 import { dirname, join } from "node:path";
-import test, { after } from "node:test";
+import test, { after, mock } from "node:test";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { build } from "esbuild";
 import PostalMime from "postal-mime";
 import bodystructure from "../server/imap/vendor/imapkit/bodystructure.js";
 import envelope from "../server/imap/vendor/imapkit/envelope.js";
 import addressparser from "../server/imap/vendor/imapkit/addressparser.js";
-import { normalizeLineBreaks, parseTree, render } from "../server/imap/vendor/imapkit/mimeparser.js";
+import { embeddedMessage, headerSection, normalizeLineBreaks, parseTree, render, resolveNode } from "../server/imap/vendor/imapkit/mimeparser.js";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 const directory = mkdtempSync(join(process.env.TMPDIR ?? root, "mailflare-imap-mime-"));
@@ -17,6 +19,11 @@ await build({
 	stdin: {
 		contents: `
 			export { synthesizeMessage } from "./src/lib/imap/synthesize.ts";
+			export { getMessageIndex, readSection, indexMime, reviveLists, MimeIndexError, cacheKey } from "./src/lib/imap/fetch.ts";
+			export { syncMailbox } from "./src/lib/imap/sync.ts";
+			export { SqliteDatabase } from "./server/runtime/sqlite-database.ts";
+			export { applyMigrations } from "./server/runtime/migrate.ts";
+			export { openFileBucket } from "./server/runtime/file-bucket.ts";
 		`,
 		resolveDir: root,
 		sourcefile: "imap-mime-test-entry.ts",
@@ -31,7 +38,7 @@ await build({
 	alias: { "cloudflare:workers": "./server/runtime/cloudflare-workers.ts" },
 	logLevel: "silent",
 });
-const { synthesizeMessage } = await import(pathToFileURL(join(directory, "entry.mjs")).href);
+const { synthesizeMessage, getMessageIndex, readSection, indexMime, reviveLists, MimeIndexError, cacheKey, MimeIndexError, syncMailbox, SqliteDatabase, applyMigrations, openFileBucket } = await import(pathToFileURL(join(directory, "entry.mjs")).href);
 
 const crlf = (lines) => lines.join("\r\n");
 const tree = (lines) => parseTree(normalizeLineBreaks(crlf(lines)));
@@ -306,6 +313,7 @@ test("synthesizeMessage keeps long reference chains within header line limits an
 	assert.ok(!/Content-Type: message\//i.test(text));
 	assert.equal((await PostalMime.parse(bytes)).references.trim().split(/\s+/).length, 200);
 });
+
 const headerLines = (bytes) => headerOf(decode(bytes)).split("\r\n");
 
 test("synthesizeMessage folds long values without empty lines and keeps every line under 998", async () => {
@@ -357,4 +365,342 @@ test("synthesizeMessage writes display names as encoded words and addresses as v
 	const tree = parseTree(normalizeLineBreaks(decode(bytes)));
 	assert.equal(envelope(tree.parsedHeader)[5].length, 5, "ENVELOPE agrees");
 	assert.ok([...synth({ toAddr: "zoe@exämple.test" })].every((byte) => byte < 128), "an address without a non-ASCII local part keeps the message 7-bit");
+});
+
+// ---- fetch: index, cache and sections ----
+
+const rfc822 = [
+	"From: top@x.test", "Subject: outer", "MIME-Version: 1.0", 'Content-Type: multipart/mixed; boundary="O"', "",
+	"preamble", "--O", "Content-Type: text/plain", "", "first", "--O", "Content-Type: message/rfc822", "",
+	"From: in@x.test", "Subject: inner", 'Content-Type: multipart/alternative; boundary="I"', "", "--I", "Content-Type: text/plain", "", "in-a", "--I", "Content-Type: text/html", "", "<i>in-b</i>", "--I--", "",
+	"--O--", "epilogue", "",
+];
+
+/** The octets of a section worked out from the parsed tree, independent of the offsets the index records. */
+function expected(source, path, kind) {
+	const root = parseTree(source);
+	const node = path === "" ? root : resolveNode(root, path);
+	const message = path === "" ? root : embeddedMessage(node);
+	if (kind === "all") return path === "" ? source : render(node, true);
+	if (kind === "mime") return headerSection(node);
+	if (kind === "header") return headerSection(message);
+	return render(message, true);
+}
+
+for (const [name, lines, paths] of [
+	["mixed over alternative", mixed, ["", "1", "1.1", "1.2", "2"]],
+	["message/rfc822 part", rfc822, ["", "1", "2", "2.1", "2.2"]],
+	["no parts at all", ["Subject: x", "", "just a body", ""], ["", "1"]],
+	["header only, no blank line", ["Subject: x"], [""]],
+	["multipart without boundary parameter", ["Content-Type: multipart/mixed", "", "body"], ["", "1"]],
+	["multipart that never closes", ["Content-Type: multipart/mixed; boundary=B", "", "--B", "Content-Type: text/plain", "", "cut off"], ["", "1"]],
+]) {
+	test(`indexMime offsets match the parsed tree: ${name}`, () => {
+		const source = normalizeLineBreaks(crlf(lines));
+		const index = indexMime(source);
+		assert.equal(index.size, source.length);
+		for (const path of paths) {
+			const entry = index.ranges[path];
+			assert.ok(entry, `part ${JSON.stringify(path)} is indexed`);
+			const [start, bodyStart, end] = entry.span;
+			const node = path === "" ? parseTree(source) : resolveNode(parseTree(source), path);
+			assert.equal(source.slice(bodyStart, end), path === "" ? render(node, true) : render(node, true), `body of ${path}`);
+			if (path !== "") assert.equal(source.slice(start, bodyStart), headerSection(node), `header of ${path}`);
+			if (entry.inner) {
+				assert.equal(source.slice(entry.inner[0], entry.inner[1]), expected(source, path, "header"));
+				assert.equal(source.slice(entry.inner[1], entry.inner[2]), expected(source, path, "text"));
+			}
+		}
+		assert.equal(source.slice(0, index.headerSize), headerSection(parseTree(source)));
+	});
+}
+
+test("reviveLists restores the no-space-between-lists marker that JSON drops", () => {
+	const index = indexMime(normalizeLineBreaks(crlf(mixed)));
+	const revived = reviveLists(JSON.parse(JSON.stringify(index.bodystructure)));
+	assert.equal(revived.adjacentLists, true, "a multipart's list of bodies");
+	assert.equal(revived[0].adjacentLists, true, "the nested multipart");
+	assert.equal(revived[0][0].adjacentLists, undefined, "a single part is not one");
+	const addresses = reviveLists(JSON.parse(JSON.stringify(index.envelope)))[5];
+	assert.equal(addresses.adjacentLists, true, "an envelope address list");
+});
+
+async function store(t) {
+	const database = new SqliteDatabase(":memory:");
+	t.after(() => database.db.close());
+	await applyMigrations(database, join(root, "drizzle/migrations"));
+	const sqlite = database.db;
+	sqlite.exec(`
+		INSERT INTO users (id, email, password_hash, name, role, created_at) VALUES ('u1', 'u1@example.test', 'x', 'U', 'user', 1);
+		INSERT INTO domains (id, user_id, hostname, zone_id, created_at) VALUES ('d1', 'u1', 'example.test', 'z', 1);
+		INSERT INTO mailboxes (id, user_id, domain_id, local_part, created_at) VALUES ('m1', 'u1', 'd1', 'me', 1);
+	`);
+	const bucketDirectory = mkdtempSync(join(directory, "bucket-"));
+	const bucket = openFileBucket(bucketDirectory);
+	const reads = [];
+	const spyBucket = {
+		get: (key, options) => { reads.push({ key, range: options?.range }); return bucket.get(key, options); },
+		put: (...args) => bucket.put(...args),
+		delete: (...args) => bucket.delete(...args),
+		list: (...args) => bucket.list(...args),
+		head: (...args) => bucket.head(...args),
+	};
+	const env = { DB: database, BUCKET: spyBucket, MAIL_HOSTNAME: "mail.example.test" };
+	let counter = 0;
+	const add = (overrides = {}) => {
+		const id = overrides.id ?? `g${++counter}`;
+		const row = { user_id: "u1", mailbox_id: "m1", direction: "inbound", from_addr: "a@b.test", to_addr: "me@example.test", status: "received", subject: "s", text_body: "t", html_body: null, created_at: 1000 + counter, ...overrides, id };
+		const names = Object.keys(row);
+		sqlite.prepare(`INSERT INTO messages (${names.join(", ")}) VALUES (${names.map(() => "?").join(", ")})`).run(...Object.values(row));
+		return id;
+	};
+	const cache = (id) => sqlite.prepare("SELECT * FROM imap_message_cache WHERE message_id = ?").get(id);
+	return { sqlite, env, bucket, reads, add, cache };
+}
+
+test("a stored CRLF message is served from its own object and indexed once", async (t) => {
+	const { env, bucket, reads, add, cache, sqlite } = await store(t);
+	const source = crlf(rfc822);
+	await bucket.put("inbound/a.eml", source);
+	const id = add({ raw_r2_key: "inbound/a.eml" });
+	const index = await getMessageIndex(env, id);
+	assert.equal(index.size, source.length);
+	assert.equal(index.key, "inbound/a.eml");
+	assert.equal(cache(id).synth_key, null, "nothing was copied");
+	assert.equal(cache(id).size, source.length);
+	reads.length = 0;
+	const again = await getMessageIndex(env, id);
+	assert.deepEqual(again.ranges, index.ranges);
+	assert.deepEqual(again.envelope[1], "outer");
+	assert.equal(reads.length, 0, "the second call is answered from the cache row");
+	sqlite.prepare("DELETE FROM messages WHERE id = ?").run(id);
+	assert.equal(cache(id), undefined, "the cache row goes with the message");
+});
+
+test("section reads fetch byte ranges, not the object", async (t) => {
+	const { env, bucket, reads, add } = await store(t);
+	const source = crlf(rfc822);
+	await bucket.put("inbound/a.eml", source);
+	const id = add({ raw_r2_key: "inbound/a.eml" });
+	await getMessageIndex(env, id);
+	reads.length = 0;
+	const text = (result) => Buffer.from(result.data).toString("latin1");
+	const tree = parseTree(source);
+	assert.equal(text(await readSection(env, id, { part: "1", kind: "all" })), "first");
+	assert.deepEqual(reads, [{ key: "inbound/a.eml", range: { offset: source.indexOf("first"), length: 5 } }]);
+	assert.equal(text(await readSection(env, id, { part: "2", kind: "header" })), headerSection(resolveNode(tree, "2").message));
+	assert.equal(text(await readSection(env, id, { part: "2", kind: "mime" })), "Content-Type: message/rfc822\r\n\r\n");
+	assert.equal(text(await readSection(env, id, { part: "2.2", kind: "all" })), "<i>in-b</i>");
+	assert.equal(text(await readSection(env, id, { part: "", kind: "header" })), headerSection(tree));
+	assert.equal(text(await readSection(env, id, { part: "", kind: "all" })), source);
+	const partial = await readSection(env, id, { part: "", kind: "all", partial: { offset: 5, length: 10 } });
+	assert.equal(text(partial), source.slice(5, 15));
+	assert.equal(partial.total, source.length);
+	assert.deepEqual((await readSection(env, id, { part: "", kind: "all", partial: { offset: source.length + 50, length: 10 } })).data.length, 0);
+	assert.equal(await readSection(env, id, { part: "9", kind: "all" }), null);
+	assert.equal(await readSection(env, id, { part: "1", kind: "header" }), null, "HEADER needs a message/rfc822 part");
+	assert.equal(await readSection(env, id, { part: "", kind: "mime" }), null);
+	assert.equal(await readSection(env, "nope", { part: "", kind: "all" }), null);
+	assert.ok(reads.every((read) => read.range), "every read was ranged");
+});
+
+test("HEADER.FIELDS and HEADER.FIELDS.NOT filter whole folded fields", async (t) => {
+	const { env, bucket, add } = await store(t);
+	await bucket.put("inbound/h.eml", crlf(["Subject: one", " continued", "From: a@x.test", "X-Other: y", "", "body"]));
+	const id = add({ raw_r2_key: "inbound/h.eml" });
+	const text = (result) => Buffer.from(result.data).toString("latin1");
+	assert.equal(text(await readSection(env, id, { part: "", kind: "header.fields", fields: ["SUBJECT", "x-missing"] })), "Subject: one\r\n continued\r\n\r\n");
+	assert.equal(text(await readSection(env, id, { part: "", kind: "header.fields.not", fields: ["subject"] })), "From: a@x.test\r\nX-Other: y\r\n\r\n");
+	assert.equal(text(await readSection(env, id, { part: "", kind: "header.fields", fields: [] })), "\r\n");
+});
+
+test("a stored message with bare line breaks is served as a CRLF copy under imap-cache/", async (t) => {
+	const { env, bucket, add, cache } = await store(t);
+	await bucket.put("inbound/lf.eml", "Subject: lf\n\nline one\nline two\n");
+	const id = add({ raw_r2_key: "inbound/lf.eml" });
+	const index = await getMessageIndex(env, id);
+	assert.match(index.key, new RegExp(`^imap-cache/${id}/[0-9a-f]{32}\\.eml$`), "the key carries the hash of the bytes");
+	assert.equal(cache(id).synth_key, index.key);
+	const whole = await readSection(env, id, { part: "", kind: "all" });
+	assert.equal(Buffer.from(whole.data).toString("latin1"), "Subject: lf\r\n\r\nline one\r\nline two\r\n");
+	assert.equal(index.size, whole.data.length, "RFC822.SIZE is the size of the bytes served");
+	assert.equal(await (await bucket.get("inbound/lf.eml")).text(), "Subject: lf\n\nline one\nline two\n", "the stored message is untouched");
+});
+
+test("a row without raw bytes is synthesized once, with its attachments, and parses", async (t) => {
+	const { env, bucket, add, cache, sqlite } = await store(t);
+	await bucket.put("att/one", "attached bytes");
+	const id = add({ direction: "outbound", status: "sent", subject: "Sent mail", text_body: "body text", html_body: "<p>body</p>", from_addr: "me@example.test", to_addr: "to@x.test" });
+	sqlite.prepare("INSERT INTO message_attachments (id, message_id, filename, content_type, size, disposition, r2_key, created_at) VALUES ('at1', ?, 'a.txt', 'text/plain', 14, 'attachment', 'att/one', 1)").run(id);
+	sqlite.prepare("INSERT INTO message_attachments (id, message_id, filename, content_type, size, disposition, r2_key, created_at, trashed_at) VALUES ('at2', ?, 'gone.txt', 'text/plain', 1, 'attachment', 'att/two', 2, 5)").run(id);
+	const index = await getMessageIndex(env, id);
+	assert.match(index.key, new RegExp(`^imap-cache/${id}/[0-9a-f]{32}\\.eml$`));
+	const bytes = Buffer.from((await readSection(env, id, { part: "", kind: "all" })).data);
+	assert.equal(bytes.length, index.size);
+	const parsed = await PostalMime.parse(bytes);
+	assert.equal(parsed.subject, "Sent mail");
+	assert.equal(parsed.attachments.length, 1, "a trashed attachment is not part of the message");
+	assert.equal(new TextDecoder().decode(parsed.attachments[0].content), "attached bytes");
+	assert.equal(index.envelope[1], "Sent mail");
+	assert.match(index.envelope[9], /^<g\d+@mail\.example\.test>$/);
+	sqlite.prepare("UPDATE messages SET provider_message_id = '<later@x>' WHERE id = ?").run(id);
+	assert.deepEqual((await getMessageIndex(env, id)).envelope, index.envelope, "the cached bytes stay stable when the row changes");
+	assert.equal(cache(id).size, index.size);
+});
+
+test("a missing attachment object leaves an empty part instead of failing the fetch", async (t) => {
+	const { env, add, sqlite } = await store(t);
+	const id = add({ direction: "outbound", status: "sent" });
+	sqlite.prepare("INSERT INTO message_attachments (id, message_id, filename, content_type, size, disposition, r2_key, created_at) VALUES ('at1', ?, 'lost.bin', 'application/octet-stream', 9, 'attachment', 'att/lost', 1)").run(id);
+	const bytes = Buffer.from((await readSection(env, id, { part: "", kind: "all" })).data);
+	const parsed = await PostalMime.parse(bytes);
+	assert.equal(parsed.attachments[0].filename, "lost.bin");
+	assert.equal(parsed.attachments[0].content.byteLength, 0);
+});
+
+test("a raw key whose object is gone falls back to synthesis", async (t) => {
+	const { env, add } = await store(t);
+	const id = add({ raw_r2_key: "inbound/purged.eml", subject: "still here" });
+	const index = await getMessageIndex(env, id);
+	assert.equal(index.envelope[1], "still here");
+	assert.match(index.key, new RegExp(`^imap-cache/${id}/`));
+});
+
+test("a draft edited after the first fetch gets new bytes once the sync drops its cache", async (t) => {
+	const { env, add, sqlite, cache } = await store(t);
+	const id = add({ direction: "outbound", status: "draft", subject: "v1", text_body: "first version" });
+	await syncMailbox(env, "m1");
+	assert.equal((await getMessageIndex(env, id)).envelope[1], "v1");
+	sqlite.prepare("UPDATE messages SET subject = 'v2', text_body = 'second version' WHERE id = ?").run(id);
+	await syncMailbox(env, "m1");
+	assert.equal(cache(id), undefined, "F8-1's sync dropped the stale row");
+	const next = await getMessageIndex(env, id);
+	assert.equal(next.envelope[1], "v2");
+	assert.match(Buffer.from((await readSection(env, id, { part: "1", kind: "all" })).data).toString("latin1"), /^[A-Za-z0-9+/=\r\n]+$/);
+	const decoded = Buffer.from(Buffer.from((await readSection(env, id, { part: "1", kind: "all" })).data).toString("latin1"), "base64").toString();
+	assert.equal(decoded, "second version");
+});
+
+test("an edit that lands while a draft is being indexed is not cached under the old bytes", async (t) => {
+	const { env, add, sqlite, cache } = await store(t);
+	const id = add({ direction: "outbound", status: "draft", subject: "old", text_body: "x" });
+	const put = env.BUCKET.put;
+	let raced = false;
+	env.BUCKET.put = async (...args) => {
+		if (!raced) {
+			raced = true;
+			sqlite.prepare("UPDATE messages SET subject = 'new' WHERE id = ?").run(id);
+		}
+		return put(...args);
+	};
+	const index = await getMessageIndex(env, id);
+	assert.equal(index.envelope[1], "new");
+	assert.equal(JSON.parse(cache(id).envelope)[1], "new");
+});
+test("a draft is served from its columns even when it carries stored raw bytes", async (t) => {
+	const { env, bucket, add, cache } = await store(t);
+	await bucket.put("inbound/draft.eml", crlf(["From: a@b.test", "Subject: stale subject", "", "stale body"]));
+	const id = add({ direction: "outbound", status: "draft", raw_r2_key: "inbound/draft.eml", subject: "edited subject", text_body: "edited body" });
+	const index = await getMessageIndex(env, id);
+	assert.equal(index.envelope[1], "edited subject");
+	assert.match(index.key, new RegExp(`^imap-cache/${id}/`));
+	assert.equal(cache(id).synth_key, index.key);
+	const sent = add({ direction: "inbound", status: "received", raw_r2_key: "inbound/draft.eml", subject: "column subject" });
+	assert.equal((await getMessageIndex(env, sent)).envelope[1], "stale subject", "any other row is still served from its raw bytes");
+});
+
+test("a row that is still being sent is not cached, so its Message-ID can change", async (t) => {
+	const { env, add, cache, sqlite } = await store(t);
+	for (const status of ["queued", "scheduled"]) {
+		const id = add({ direction: "outbound", status, subject: status });
+		const queued = await getMessageIndex(env, id);
+		assert.equal(cache(id), undefined, `${status}: no cache row`);
+		assert.match(queued.envelope[9], /^<g\d+@mail\.example\.test>$/);
+		const text = Buffer.from((await readSection(env, id, { part: "", kind: "header" })).data).toString("latin1");
+		assert.match(text, /^Message-ID: <g\d+@mail\.example\.test>\r$/m, "its bytes can still be read");
+		sqlite.prepare("UPDATE messages SET status = 'sent', provider_message_id = '<ses-1@x.test>' WHERE id = ?").run(id);
+		assert.equal((await getMessageIndex(env, id)).envelope[9], "<ses-1@x.test>", "the next read sees the provider's id");
+		assert.ok(cache(id), "and a sent row is cached");
+	}
+});
+
+test("a synthesized object is keyed by its bytes, so an edit never overwrites what was served", async (t) => {
+	const { env, bucket, add, sqlite } = await store(t);
+	const id = add({ direction: "outbound", status: "draft", subject: "v1", text_body: "first" });
+	const first = await getMessageIndex(env, id);
+	const firstBytes = await (await bucket.get(first.key)).text();
+	sqlite.prepare("DELETE FROM imap_message_cache WHERE message_id = ?").run(id);
+	sqlite.prepare("UPDATE messages SET subject = 'v2' WHERE id = ?").run(id);
+	const second = await getMessageIndex(env, id);
+	assert.notEqual(second.key, first.key);
+	assert.equal(await (await bucket.get(first.key)).text(), firstBytes, "the earlier object is untouched");
+	assert.equal(cacheKey(id, "abc"), `imap-cache/${id}/abc.eml`);
+});
+
+test("a message the indexer refuses is recorded and not parsed again until it changes", async (t) => {
+	const { env, add, cache, sqlite } = await store(t);
+	const id = add({ subject: "odd" });
+	let calls = 0;
+	const refuse = () => { calls += 1; throw new RangeError("too much"); };
+	await assert.rejects(() => getMessageIndex(env, id, refuse), (error) => error instanceof MimeIndexError && /RangeError/.test(error.message), "any failure becomes a MimeIndexError");
+	assert.equal(calls, 1);
+	assert.equal(cache(id).size, -1);
+	assert.match(JSON.parse(cache(id).envelope).unindexable, /too much/);
+	await assert.rejects(() => getMessageIndex(env, id, refuse), MimeIndexError);
+	assert.equal(calls, 1, "the second read is answered from the recorded outcome");
+	sqlite.prepare("UPDATE messages SET subject = 'changed' WHERE id = ?").run(id);
+	assert.equal((await getMessageIndex(env, id)).envelope[1], "changed", "an edit makes the message worth another try");
+	assert.ok(cache(id).size > 0);
+});
+
+test("any failure of the indexer is a MimeIndexError", () => {
+	for (const input of [undefined, null, 5, {}]) assert.throws(() => indexMime(input), MimeIndexError);
+});
+
+test("deep nesting is indexed as a leaf and a very wide multipart is capped", () => {
+	const deep = indexMime(nest(8000));
+	assert.ok(Object.keys(deep.ranges).length < 100);
+	assert.ok(JSON.stringify(deep.bodystructure).length < 100_000);
+	let wide = "Content-Type: multipart/mixed; boundary=b\r\n\r\n";
+	for (let part = 0; part < 5000; part += 1) wide += `--b\r\n\r\nx\r\n`;
+	const index = indexMime(`${wide}--b--\r\n`);
+	assert.ok(Object.keys(index.ranges).length <= 1001);
+});
+
+test("a message with an oversized address field is indexed with NIL for that field", () => {
+	const source = `From: ${"a.".repeat(20000)}@x.test\r\nTo: ok@x.test\r\nSubject: s\r\n\r\nbody`;
+	const index = indexMime(source);
+	assert.equal(index.envelope[2], null);
+	assert.equal(index.envelope[5][0][2], "ok");
+});
+
+test("a missing raw object of an inbound message is logged once", async (t) => {
+	const { env, add } = await store(t);
+	const warn = mock.method(console, "warn", () => {});
+	t.after(() => warn.mock.restore());
+	const id = add({ raw_r2_key: "inbound/purged-2.eml" });
+	await getMessageIndex(env, id);
+	await getMessageIndex(env, id);
+	assert.equal(warn.mock.calls.length, 1);
+	assert.match(String(warn.mock.calls[0].arguments[0]), /inbound\/purged-2\.eml/);
+});
+
+test("a ranged read of a file bucket object reads only the range", async (t) => {
+	const { bucket } = await store(t);
+	const data = Buffer.alloc(5000, "a");
+	data.write("RANGE", 1234);
+	await bucket.put("big/object", data);
+	const original = fsPromises.readFile;
+	const wholeFileReads = [];
+	fsPromises.readFile = async (path, ...rest) => { if (!String(path).endsWith(".meta.json")) wholeFileReads.push(String(path)); return original(path, ...rest); };
+	syncBuiltinESMExports();
+	t.after(() => { fsPromises.readFile = original; syncBuiltinESMExports(); });
+	const read = async (range) => Buffer.from(await (await bucket.get("big/object", { range })).arrayBuffer()).toString("latin1");
+	assert.equal(await read({ offset: 1234, length: 5 }), "RANGE");
+	assert.equal(await read({ offset: 4990, length: 100 }), "a".repeat(10), "a range past the end is cut");
+	assert.equal(await read({ offset: 6000, length: 10 }), "");
+	assert.equal((await read({ suffix: 3 })).length, 3);
+	assert.deepEqual(wholeFileReads, [], "the object was not read whole");
+	assert.equal((await (await bucket.get("big/object")).arrayBuffer()).byteLength, 5000);
+	assert.equal(wholeFileReads.length, 1, "an unranged read still reads the file");
 });
