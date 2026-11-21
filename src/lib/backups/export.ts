@@ -4,14 +4,14 @@ import type { BackupTableGroupId, DatabaseBackupDocument, DatabaseBackupTable, D
 import { mergeLegacyMessageBodies } from "./utils";
 import { BACKUP_TABLE_GROUPS, getSelectedBackupTables } from "./table-groups";
 
-export const BACKUP_TABLES: DatabaseBackupTable[] = ["users", "user_compose_preferences", "domains", "domain_tracking_hosts", "mailboxes", "mailbox_access", "contacts", "folders", "api_keys", "messages", "message_attachments", "shared_attachment_links", "outbound_jobs", "message_tracking", "message_opens", "follow_ups", "conversation_notes", "routing_rules", "webhooks", "webhook_deliveries", "sessions", "audit_logs", "backup_settings", "backups", "app_settings", "license_settings", "email_templates", "calendar_events", "booking_events", "booking_confirmation_templates", "auto_reply_deliveries", "spam_token_stats", "spam_reputation", "spam_feedback", "mailbox_aliases", "password_reset_tokens", "mfa_recovery_codes", "login_challenges", "passkey_credentials", "mailbox_agent_settings", "agent_conversations", "agent_chat_messages", "agent_jobs", "agent_draft_metadata", "agent_send_approvals", "mcp_key_mailboxes", "ai_usage", "drive_items", "drive_upload_parts", "drive_shares"];
+export const BACKUP_TABLES: DatabaseBackupTable[] = ["users", "user_compose_preferences", "domains", "domain_tracking_hosts", "mailboxes", "mailbox_access", "contacts", "folders", "api_keys", "messages", "message_attachments", "imap_message_flags", "shared_attachment_links", "outbound_jobs", "message_tracking", "message_opens", "follow_ups", "conversation_notes", "routing_rules", "webhooks", "webhook_deliveries", "sessions", "audit_logs", "backup_settings", "backups", "app_settings", "license_settings", "email_templates", "calendar_events", "booking_events", "booking_confirmation_templates", "auto_reply_deliveries", "spam_token_stats", "spam_reputation", "spam_feedback", "mailbox_aliases", "password_reset_tokens", "mfa_recovery_codes", "login_challenges", "passkey_credentials", "mailbox_agent_settings", "agent_conversations", "agent_chat_messages", "agent_jobs", "agent_draft_metadata", "agent_send_approvals", "mcp_key_mailboxes", "ai_usage", "drive_items", "drive_upload_parts", "drive_shares"];
 /**
  * Tables every backup document must contain. Tables added to BACKUP_TABLES
  * after the format shipped are absent from older documents, so they stay
  * optional here and are filled in as empty on restore.
  */
 /** Added by migrations 0068 and later; databases that have not applied them yet back up and restore without them. */
-const LATER_MIGRATION_TABLES: DatabaseBackupTable[] = ["domain_tracking_hosts", "message_tracking", "message_opens", "follow_ups", "conversation_notes", "user_compose_preferences", "booking_confirmation_templates"];
+const LATER_MIGRATION_TABLES: DatabaseBackupTable[] = ["domain_tracking_hosts", "message_tracking", "message_opens", "follow_ups", "conversation_notes", "user_compose_preferences", "booking_confirmation_templates", "imap_message_flags"];
 const REQUIRED_BACKUP_TABLES: DatabaseBackupTable[] = ["users", "domains", "mailboxes", "mailbox_access", "contacts", "folders", "api_keys", "messages", "message_attachments", "outbound_jobs", "routing_rules", "webhooks", "webhook_deliveries", "sessions", "audit_logs", "backup_settings", "backups", "app_settings", "license_settings"];
 const INSERT_BATCH_SIZE = 50;
 
@@ -58,7 +58,27 @@ export const INTERNAL_TABLES = [
 	// let an already-used undo token be replayed, and the table is rewritten by
 	// the installation that owns the tokens.
 	"message_action_undo_claims",
+	// Derived IMAP state is rebuilt from `messages` by the IMAP process (UIDs,
+	// mod-sequences, expunge log, MIME cache). Restoring it would pair old UIDs with
+	// new message rows, so a restore clears it and clients resync under a new
+	// UIDVALIDITY. `imap_message_flags` is NOT here: answered, forwarded, deleted and
+	// keyword flags are set by mail clients and exist nowhere else, so it is backed up
+	// with the messages. Keep this list and IMAP_STATE_TABLES below in step.
+	"imap_mailbox_state",
+	"imap_folder_state",
+	"imap_uids",
+	"imap_expunged",
+	"imap_message_cache",
 ];
+
+/**
+ * The derived IMAP tables restore must empty. Only the mailbox, folder-state and cache
+ * tables cascade away with their parents; `imap_uids` and `imap_expunged` have no
+ * foreign key (a deleted message must still resolve to its UID), so without an
+ * explicit delete they would keep stale UIDs that collide with the re-created folders.
+ * `imap_message_flags` is user data and is restored from the backup instead.
+ */
+const IMAP_STATE_TABLES = ["imap_expunged", "imap_uids", "imap_message_cache", "imap_folder_state", "imap_mailbox_state"];
 
 /**
  * Groups a document of this format version was expected to cover. Format 1
@@ -138,6 +158,13 @@ export async function restoreDatabaseRecords(db: D1Database, content: ArrayBuffe
 	// cascade to remove the last credential only for an account that is being
 	// purged. Deleting users first also empties the table the restore inserts
 	// into last, so the rest of the teardown has no live accounts to protect.
+	// Derived IMAP state is not in the backup. Databases that have not applied the IMAP migration lack the tables.
+	// UIDVALIDITY must still never go backwards (a client that cached the old value would trust stale UIDs), so
+	// the old values are read first and written back, bumped, once the mailboxes exist again.
+	const priorValidity = existing.has("imap_folder_state") ? (await db.prepare("SELECT id, mailbox_id, folder_key, uidvalidity FROM imap_folder_state").all<{ id: string; mailbox_id: string; folder_key: string; uidvalidity: number }>()).results : [];
+	for (const table of IMAP_STATE_TABLES) {
+		if (existing.has(table)) await db.prepare(`DELETE FROM ${table}`).run();
+	}
 	await db.prepare("UPDATE users SET deleted_at = ?").bind(Math.floor(Date.now() / 1000)).run();
 	await db.prepare("DELETE FROM users").run();
 	for (const table of [...restoreTables].reverse()) {
@@ -157,6 +184,16 @@ export async function restoreDatabaseRecords(db: D1Database, content: ArrayBuffe
 			const statements = rows.slice(index, index + INSERT_BATCH_SIZE).map((row) => createInsertStatement(db, dialect, table, row, columns));
 			// MySQL checks foreign keys per statement, so the batch suspends them for its own connection.
 			if (statements.length > 0) await db.batch(dialect === "mysql" ? [db.prepare("SET FOREIGN_KEY_CHECKS = 0"), ...statements, db.prepare("SET FOREIGN_KEY_CHECKS = 1")] : statements);
+		}
+	}
+	if (priorValidity.length) {
+		// Empty folders that remember only a UIDVALIDITY above every value clients have seen. The next sync fills them
+		// (a folder that no longer exists is dropped by the reconcile); nothing else about the old state survives.
+		const mailboxIds = new Set((await db.prepare("SELECT id FROM mailboxes").all<{ id: string }>()).results.map((row) => row.id));
+		const now = Math.floor(Date.now() / 1000);
+		const carried = priorValidity.filter((row) => mailboxIds.has(row.mailbox_id));
+		for (let index = 0; index < carried.length; index += INSERT_BATCH_SIZE) {
+			await db.batch(carried.slice(index, index + INSERT_BATCH_SIZE).map((row) => db.prepare("INSERT INTO imap_folder_state (id, mailbox_id, folder_key, uidvalidity, uid_next, highest_modseq) VALUES (?, ?, ?, ?, 1, 0)").bind(row.id, row.mailbox_id, row.folder_key, Math.max(now, Number(row.uidvalidity) + 1))));
 		}
 	}
 }
