@@ -9,7 +9,7 @@ import { apiKeyLookupPrefix } from "@/lib/api-keys";
 import { isListedAsAppPassword } from "@/lib/auth/app-password-utils";
 import { getClientIp } from "@/lib/auth/client-ip";
 import { isDavEnabled } from "@/lib/dav/settings";
-import { imapIsOffered } from "@/lib/imap/config";
+import { imapIsOffered, submissionIsOffered } from "@/lib/imap/config";
 import { isNodeRuntime, isVercelRuntime } from "@/lib/runtime";
 
 export type AppPasswordProtocol = "jmap" | "caldav" | "carddav" | "imap" | "submission";
@@ -28,13 +28,14 @@ const PROTOCOL_SCOPE: Record<AppPasswordProtocol, AppPasswordScope> = {
  * The scopes a new app password may carry on this server: JMAP always, `dav`
  * (CalDAV and CardDAV) while an administrator has turned it on, and `imap` on
  * the Node runtime with `IMAP_ENABLED=1` when every configured IMAP listener can
- * start. SMTP submission is added when its server ships, so nobody can mint a
- * credential nothing accepts.
+ * start, and `submission` on the Node runtime with `SUBMISSION_ENABLED=1` when a submission
+ * listener can start, so nobody can mint a credential nothing accepts.
  */
 export async function availableAppPasswordProtocols(env: CloudflareEnv): Promise<AppPasswordScope[]> {
 	const protocols: AppPasswordScope[] = ["jmap"];
 	if (await isDavEnabled(env)) protocols.push("dav");
 	if (isNodeRuntime(env) && imapIsOffered(process.env)) protocols.push("imap");
+	if (isNodeRuntime(env) && submissionIsOffered(process.env)) protocols.push("submission");
 	return protocols;
 }
 
