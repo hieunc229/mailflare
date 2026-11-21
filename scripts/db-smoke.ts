@@ -28,6 +28,7 @@ import { markMtaStsVerified, updateMtaSts, type MtaStsDeps } from "@/lib/deliver
 import { assertDomainRemovable, assertMxChangeAllowed } from "@/lib/deliverability/mta-sts-guard";
 import { serveMtaStsPolicy } from "@/lib/deliverability/mta-sts-serve";
 import { gzipSync } from "node:zlib";
+import { syncMailbox } from "@/lib/imap/sync";
 
 const [url, driver] = process.argv.slice(2);
 if (!url) throw new Error("usage: db-smoke <DATABASE_URL> [driver]");
@@ -277,13 +278,39 @@ check("backfill claims, classifies and saves", backfilled.claimed && late.catego
 // An aggregate row that exists when the backup is taken: dmarc_daily_stats has a serial id that must not be backed up.
 reportObjects.set("raw4", reportMime(`r4_${stamp}`));
 await ingestReportMail(reportEnv, reportTarget, { rawR2Key: "raw4", authenticated: true, from: "r@google.com" }, { lookupPtr: async () => null });
+// IMAP state: the sync engine's own query shapes (conditional counter update, anti-join reconcile, multi-row insert, batch).
+const imapMailbox = `imbx_${stamp}`;
+await db.insert(mailboxes).values({ id: imapMailbox, userId, domainId: `dom_${stamp}`, localPart: "imap" });
+await db.insert(messages).values({ id: `imsg_${stamp}`, userId, mailboxId: imapMailbox, direction: "inbound", fromAddr: "x@y.z", toAddr: "imap@example.com", subject: "Quarterly Report", textBody: "numbers inside", status: "received" } as never);
+await syncMailbox(env, imapMailbox);
+const imapUids = () => db.all<{ uid: number; message_id: string; folder_key: string }>(sql`SELECT uid, message_id, folder_key FROM imap_uids WHERE mailbox_id = ${imapMailbox} ORDER BY folder_key, uid`);
+check("imap reconcile assigns a UID (anti-join, multi-row insert)", (await imapUids()).length === 1 && Number((await imapUids())[0].uid) === 1 && (await imapUids())[0].folder_key === "inbox");
+const [folderCounters] = await db.all<{ uid_next: number; modseq: number }>(sql`SELECT f.uid_next AS uid_next, m.modseq AS modseq FROM imap_folder_state f JOIN imap_mailbox_state m ON m.mailbox_id = f.mailbox_id WHERE f.id = ${`${imapMailbox}:inbox`}`);
+check("imap counters are reserved in the batch that uses them (derived UID and modseq)", Number(folderCounters.uid_next) === 2 && Number(folderCounters.modseq) >= 2);
+await db.update(messages).set({ status: "archived" }).where(eq(messages.id, `imsg_${stamp}`));
+await syncMailbox(env, imapMailbox);
+const movedUids = await imapUids();
+const expungedRows = await db.all<{ uid: number }>(sql`SELECT uid FROM imap_expunged WHERE mailbox_id = ${imapMailbox} AND folder_key = 'inbox'`);
+check("imap move expunges and assigns a new UID (change-log sync)", movedUids.length === 1 && movedUids[0].folder_key === "archive" && expungedRows.length === 1);
+await db.run(sql`DELETE FROM imap_mailbox_state WHERE mailbox_id = ${imapMailbox}`);
+await syncMailbox(env, imapMailbox);
+check("imap reconcile is idempotent", (await imapUids()).length === 1);
+await db.update(messages).set({ status: "received" }).where(eq(messages.id, `imsg_${stamp}`));
+
+await db.run(sql`INSERT INTO imap_message_flags (message_id, answered, keywords) VALUES (${`imsg_${stamp}`}, ${true}, ${'["$label1"]'})`);
 const backup = await exportDatabaseRecords(d1);
 const exported = JSON.parse(new TextDecoder().decode(backup)) as { tables: Record<string, Array<Record<string, unknown>>> };
 check("backup leaves out the serial id of dmarc_daily_stats", exported.tables.dmarc_daily_stats.length >= 2 && exported.tables.dmarc_daily_stats.every((row) => !("id" in row)));
 check("backup exports portable values", exported.tables.users.every((row) => typeof row.disabled === "number") && exported.tables.messages.length >= 1);
 await restoreDatabaseRecords(d1, backup.buffer.slice(backup.byteOffset, backup.byteOffset + backup.byteLength) as ArrayBuffer);
-const [afterRestore] = await db.select({ subject: messages.subject, starred: messages.starred, createdAt: messages.createdAt }).from(messages).where(eq(messages.id, `msg_${stamp}`));
+const [afterRestore] = await db.select({ subject: messages.subject, starred: messages.starred, createdAt: messages.createdAt }).from(messages).where(eq(messages.id, `imsg_${stamp}`));
 check("backup restores", afterRestore?.subject === "Quarterly Report" && afterRestore.starred === false && afterRestore.createdAt instanceof Date);
+const [imapLeft] = await db.all<{ n: number }>(sql`SELECT (SELECT count(*) FROM imap_uids) + (SELECT count(*) FROM imap_expunged) + (SELECT count(*) FROM imap_mailbox_state) + (SELECT count(*) FROM imap_folder_state WHERE uid_next <> 1 OR highest_modseq <> 0) AS n`);
+check("restore clears the derived IMAP state tables", Number(imapLeft.n) === 0);
+const [validity] = await db.all<{ uidvalidity: number }>(sql`SELECT uidvalidity FROM imap_folder_state WHERE id = ${`${imapMailbox}:archive`}`);
+check("restore keeps UIDVALIDITY above its old value", Number(validity?.uidvalidity) > 1_000_000_000);
+const [flags] = await db.all<{ answered: unknown; keywords: string }>(sql`SELECT answered, keywords FROM imap_message_flags WHERE message_id = ${`imsg_${stamp}`}`);
+check("imap_message_flags are backed up and restored", Boolean(flags) && Number(flags.answered) === 1 || flags?.answered === true);
 
 const davAfterRestore = await db.all<{ n: number }>(sql`SELECT count(*) AS n FROM dav_cards WHERE id = ${`card_${stamp}`}`);
 check("backup restores dav cards and collections", Number(davAfterRestore[0].n) === 1 && exported.tables.dav_cards.length === 1 && exported.tables.dav_collections.length === 1 && !("dav_changes" in exported.tables));
