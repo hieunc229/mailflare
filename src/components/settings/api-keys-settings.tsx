@@ -13,6 +13,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { List, ListRow } from "@/components/ui/list";
+import { Switch } from "@/components/ui/switch";
 import { SectionRowSkeleton } from "@/components/page-skeletons";
 import { formatUserDate } from "@/lib/time/utils";
 import { McpAgentInstructions } from "@/components/settings/mcp-agent-instructions";
@@ -21,7 +22,7 @@ import { ClientRequestError } from "@/lib/http/client-error";
 import type { ManagedApiKey, McpKeyScope } from "./api-keys-settings-types";
 import { useSecurityStatus } from "./security-status-store";
 import { StepUpDialog } from "./step-up-dialog";
-import { createManagedApiKey, keyPermissions, loadManagedApiKeys, MCP_KEY_SCOPES, revokeManagedApiKey, STANDARD_KEY_SCOPES } from "./api-keys-settings-utils";
+import { createManagedApiKey, keyPermissions, loadManagedApiKeys, MCP_KEY_SCOPES, revokeManagedApiKey, setMcpKeyOwnSendApproval, STANDARD_KEY_SCOPES } from "./api-keys-settings-utils";
 
 export function ApiKeysSettings() {
 	const { t } = useLanguage();
@@ -33,6 +34,7 @@ export function ApiKeysSettings() {
 	const [busy, setBusy] = useState(false);
 	const [createOpen, setCreateOpen] = useState(false);
 	const [revokingId, setRevokingId] = useState<string | null>(null);
+	const [approvalSavingId, setApprovalSavingId] = useState<string | null>(null);
 	const [error, setError] = useState<string | null>(null);
 	const [name, setName] = useState("");
 	const [mcpAllowed, setMcpAllowed] = useState(false);
@@ -89,6 +91,18 @@ export function ApiKeysSettings() {
 		} finally { setRevokingId(null); }
 	}
 
+	async function setOwnSendApproval(key: ManagedApiKey, canApproveOwnSends: boolean) {
+		setApprovalSavingId(key.id);
+		setError(null);
+		setKeys((current) => current.map((item) => item.id === key.id ? { ...item, canApproveOwnSends } : item));
+		try {
+			await setMcpKeyOwnSendApproval(key.id, canApproveOwnSends);
+		} catch (cause) {
+			setKeys((current) => current.map((item) => item.id === key.id ? { ...item, canApproveOwnSends: !canApproveOwnSends } : item));
+			setError(cause instanceof Error ? cause.message : t("apiKeys.ownSendApproval.failed"));
+		} finally { setApprovalSavingId(null); }
+	}
+
 	return <div className="space-y-6">
 		<div className="flex items-center justify-between gap-4">
 			<h1 className="text-2xl md:text-3xl font-medium">{t("apiKeys.title")}</h1>
@@ -134,6 +148,13 @@ export function ApiKeysSettings() {
 						<span className="block truncate no-font-mono text-sm text-neutral-500">{key.prefix}… · {t("apiKeys.createdOn", { date: formatUserDate(key.createdAt, { dateStyle: "short" }) })} · {key.lastUsedAt ? t("apiKeys.lastUsed", { date: formatUserDate(key.lastUsedAt, { dateStyle: "short" }) }) : t("apiKeys.neverUsed")}</span>
 						<span className="flex flex-wrap gap-1">{keyPermissions(key).map((scope) => <Badge key={scope} variant="outline">{scope}</Badge>)}</span>
 						<span className="block text-xs text-neutral-500">{t("apiKeys.mailboxesLabel", { list: key.mailboxScopeEnabled || key.kind === "mcp" ? key.mailboxIds.map((id) => { const mailbox = mailboxes.find((item) => item.id === id); return mailbox ? `${mailbox.localPart}@${mailbox.hostname}` : id; }).join(", ") || t("common.none") : t("apiKeys.allAccessible") })}</span>
+						{key.kind === "mcp" && keyPermissions(key).includes("mcp:request-send") && <label className="flex items-start gap-3 rounded-xl bg-neutral-50 p-3">
+							<span className="flex-1">
+								<span className="block text-sm font-medium text-neutral-900">{t("apiKeys.ownSendApproval.label")}</span>
+								<span className="mt-1 block text-xs text-neutral-500">{t("apiKeys.ownSendApproval.description")}</span>
+							</span>
+							<Switch checked={key.canApproveOwnSends} disabled={approvalSavingId === key.id} onCheckedChange={(next) => void setOwnSendApproval(key, next)} />
+						</label>}
 					</span>
 					<Button type="button" size="sm" variant="outline" disabled={revokingId === key.id} onClick={() => void revoke(key)}><Trash2 className="h-4 w-4" />{revokingId === key.id ? t("common.revoking") : t("common.revoke")}</Button>
 				</ListRow>)}
