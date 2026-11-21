@@ -38,12 +38,20 @@ import { runDriveTrashRetention } from "./src/lib/drive/retention";
 import { runAccountRetention } from "./src/lib/accounts/deletion";
 import { purgeExpiredAuthRows } from "./src/lib/auth/purge";
 import { runJmapChangeRetention } from "./src/lib/jmap/changes";
+import { runDavChangeRetention } from "./src/lib/dav/changes";
+import { runContactSeeding } from "./src/lib/dav/contact-seed";
 import { runFollowUpReminders } from "./src/lib/follow-ups/service";
 import { runCalendarReminders } from "./src/lib/calendar/reminders";
+import { handleDavRequest, isDavPath } from "./src/lib/dav/handler";
 export { RealtimeHub } from "./src/lib/realtime/hub";
 
 export default {
 	async fetch(request: Request, rawEnv: CloudflareEnv, ctx: ExecutionContext) {
+		// CalDAV/CardDAV use methods Next route handlers cannot express (PROPFIND, REPORT). They skip the D1 read
+		// session on purpose: a client that writes and then asks for changes must read its own writes.
+		if (isDavPath(new URL(request.url).pathname)) {
+			return (await handleDavRequest(request, withDatabase(withStorage(rawEnv)))) ?? new Response("Not found", { status: 404 });
+		}
 		// Reads go through a D1 session anchored at the client's bookmark cookie so D1 can serve
 		// them from read replicas; email/queue/scheduled below keep primary reads on purpose.
 		const d1Session = withD1ReadSession(rawEnv, request);
@@ -167,6 +175,10 @@ export default {
 		ctx.waitUntil(runCalendarReminders(env, new Date(controller.scheduledTime)));
 		ctx.waitUntil(sweepImportJobs(env, new Date(controller.scheduledTime)));
 		ctx.waitUntil(pruneExpiredMessageActionUndoClaims(env, new Date(controller.scheduledTime)));
+		// DAV log retention takes a small slice per run (one collection, 90 rows, 3 queries), so it runs on every cron tick.
+		ctx.waitUntil(runDavChangeRetention(env, new Date(controller.scheduledTime)).catch((error) => console.error("DAV change retention failed", error)));
+		// Seeding the address book from existing contacts continues in slices too (one address book, one step of 24 contacts and about a dozen statements per run, only while the switch is on).
+		ctx.waitUntil(runContactSeeding(env).catch((error) => console.error("DAV contact seeding failed", error)));
 		if (controller.cron === "0 2 * * *") ctx.waitUntil(runAccountRetention(env, new Date(controller.scheduledTime)));
 		if (controller.cron === "0 2 * * *") ctx.waitUntil(purgeExpiredAuthRows(env, new Date(controller.scheduledTime)));
 		// Drive trash is emptied once a day, with the 02:00 UTC cron; the 5-minute cron is for queue-like upkeep.

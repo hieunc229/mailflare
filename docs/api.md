@@ -57,11 +57,13 @@ Each user has a personal calendar at **Calendar** in the dashboard. Events have 
 
 When you add attendees and choose a sending mailbox, Mailflare emails each attendee an invitation with a calendar (`.ics`) file from that mailbox, and sends updates and cancellations the same way. Events created through MCP tools or the assistant record attendees but do not send invitations.
 
+The calendar also syncs both ways with phone and desktop calendar apps over CalDAV (and contacts over CardDAV) once an administrator turns it on; see [Calendar and contacts sync](caldav-carddav.md).
+
 | Mailflare route | Purpose |
 | --- | --- |
 | `GET /api/calendar/events?start=&end=` | List events in an ISO 8601 range (default: the next 31 days). Repeating events are returned once, with their rule |
 | `POST /api/calendar/events` | Create an event (`{ title, startsAt, endsAt, description?, location?, attendees?, color?, repeat?, repeatDays?, timeZone?, mailboxId?, from? }`) |
-| `PATCH /api/calendar/events/[eventId]` | Update an event or series. For a repeating event, pass an occurrence ID or `effectiveFrom` to change it from that occurrence onward |
+| `PATCH /api/calendar/events/[eventId]` | Update an event or series. For a repeating event, pass an occurrence ID or `effectiveFrom` to change it from that occurrence onward. An event whose repeat was set in another app has `repeat: "custom"` and an `rrule`; it is edited as a whole series, and sending another `repeat` replaces the rule. Only its time of day may change; a `startsAt` on another day answers 409 |
 | `DELETE /api/calendar/events/[eventId]` | Delete an event, or a series from an occurrence onward |
 
 These routes accept the dashboard session or an API key (`Authorization: Bearer <key>`) with the **Read calendar** (`calendar:read`) or **Manage calendar** (`calendar:write`) scope, which you choose when creating the key in **Settings → API keys**. A key can only send invitations if it also has the `send` scope for the chosen mailbox. MCP and the assistant use separate calendar tools, described in [Email assistant and MCP](email-assistant-and-mcp.md).
@@ -194,7 +196,7 @@ Incoming mail that exceeds the attachment count or 25 MB decoded attachment limi
 
 ## JMAP
 
-Mailflare serves [JMAP](https://jmap.io) (RFC 8620 core and RFC 8621 mail, plus submission) so external mail apps can read and send mail. Discovery is at `/.well-known/jmap`, which redirects to `/jmap/session`. Authenticate with an API key that has the `jmap` scope, either as `Authorization: Bearer <key>` or as the password of HTTP Basic auth (the username is ignored). Settings > Account > App passwords mints such a key.
+Mailflare serves [JMAP](https://jmap.io) (RFC 8620 core and RFC 8621 mail, plus submission) so external mail apps can read and send mail. Discovery is at `/.well-known/jmap`, which redirects to `/jmap/session`. Authenticate with an API key that has the `jmap` scope, either as `Authorization: Bearer <key>` or as the password of HTTP Basic auth (the username is ignored; repeated wrong guesses are rate limited; plain HTTP still works but sends the key in the clear, so use HTTPS). Create one under Settings > App passwords: it is a 16-character password limited to the mailboxes you pick, shown once, and you confirm your identity (password and second step, or a passkey) to create it. The page lists each app password with when, how (protocol) and from which IP address it was last used, and revokes it. Changing or resetting your password, changing two-step sign-in, or signing out everywhere revokes every app password, mobile device key and older JMAP-only key; a general API key that adds `jmap` to other scopes is kept. Creating an API key with the `jmap` scope needs the same confirmation.
 
 The account id is the user id. Each Mailflare mailbox appears as a top-level JMAP Mailbox with system children (`inbox`, `drafts`, `sent`, `archive`, `junk`, `trash`) and one child per user folder; a message belongs to exactly one of them. Supported methods: `Mailbox/get|query|set` (folders only), `Thread/get`, `Email/get|query|set|import`, `SearchSnippet/get`, `Identity/get`, `EmailSubmission/set`, and `Core/echo`. `Email/copy` and `Email/parse` are not implemented. `*/changes` return `cannotCalculateChanges`, so clients re-query on a state change; `/jmap/eventsource` pushes state changes by polling. `Email/set` creates drafts, updates `$seen` and `$flagged`, moves between mailboxes, and destroys (to Trash first, then permanently). `EmailSubmission/set` sends a draft and reports it destroyed, since the sent copy is a new message. Blob download and upload follow the Session's `downloadUrl` and `uploadUrl`.
 

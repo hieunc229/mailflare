@@ -1,5 +1,6 @@
 import { getDb } from "@/db";
 import { authenticateApiRequest, hasScope } from "@/lib/api/key-auth";
+import { allowAppPasswordGuess, basicPassword } from "@/lib/auth/app-passwords";
 import { LIMITS } from "./constants";
 import { corsHeaders, JmapError, problemResponse } from "./errors";
 import { readBlob, storeUpload } from "./blobs";
@@ -27,7 +28,13 @@ export async function handleJmapRequest(request: Request, env: CloudflareEnv): P
 	}
 	if (!path.startsWith("/jmap/")) return null;
 
-	const auth = await authenticateApiRequest(env, request);
+	// Basic carries the key as a password: a key not seen recently spends the guess budget. Plain HTTP stays
+	// accepted for existing LAN/Docker clients (unlike the DAV/IMAP helper, which requires HTTPS).
+	const basic = basicPassword(request);
+	if (basic !== null) {
+		if (!(await allowAppPasswordGuess(env, request, basic))) return new Response(JSON.stringify({ error: "Too many attempts" }), { status: 429, headers: { ...JSON_HEADERS, "Retry-After": "60" } });
+	}
+	const auth = await authenticateApiRequest(env, request, "jmap");
 	if (!auth) {
 		return new Response(JSON.stringify({ error: "Unauthorized" }), {
 			status: 401,

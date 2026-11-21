@@ -11,11 +11,16 @@ import { newId } from "@/lib/ids";
 import { ADMIN_API_KEY_SCOPES } from "@/lib/api/scopes";
 import { getMailboxAccessLevel } from "@/lib/mailboxes/access";
 import { hasValidSessionMutationOrigin } from "@/lib/auth/origin";
+import { isListedAsAppPassword } from "@/lib/auth/app-password-utils";
+import { getSessionTokenFromRequestHeaders } from "@/lib/auth/session";
+import { consumeStepUpGrant } from "@/lib/auth/webauthn/grants";
+import { authError } from "@/lib/http/auth-error";
 
 const createKeySchema = z.object({
 	name: z.string().trim().min(1).max(100),
 	scopes: z.array(z.enum([...API_KEY_SCOPES])).min(1),
 	mailboxIds: z.array(z.string().min(1)).max(30),
+	stepUpToken: z.string().min(8).max(200).optional(),
 });
 
 export async function GET(request: Request) {
@@ -37,7 +42,7 @@ export async function GET(request: Request) {
 		.where(eq(apiKeys.userId, user.id));
 	const keyIds = rows.map((row) => row.id);
 	const allowed = keyIds.length ? await db.select().from(mcpKeyMailboxes).where(inArray(mcpKeyMailboxes.keyId, keyIds)) : [];
-	return NextResponse.json({ apiKeys: rows.filter((row) => row.kind !== "device" && !parseScopes(row.scopes).some((scope) => (ADMIN_API_KEY_SCOPES as readonly string[]).includes(scope))).map((row) => ({ ...row, mailboxIds: allowed.filter((item) => item.keyId === row.id).map((item) => item.mailboxId) })) });
+	return NextResponse.json({ apiKeys: rows.filter((row) => row.kind !== "device" && !isListedAsAppPassword(row) && !parseScopes(row.scopes).some((scope) => (ADMIN_API_KEY_SCOPES as readonly string[]).includes(scope))).map((row) => ({ ...row, mailboxIds: allowed.filter((item) => item.keyId === row.id).map((item) => item.mailboxId) })) });
 }
 
 export async function POST(request: Request) {
@@ -55,6 +60,13 @@ export async function POST(request: Request) {
 	const mailboxIds = [...new Set(parsed.data.mailboxIds)];
 	if (!mailboxIds.length && parsed.data.scopes.some((scope) => !scope.startsWith("calendar:"))) return NextResponse.json({ error: "Choose a mailbox for mail permissions" }, { status: 400 });
 	for (const mailboxId of mailboxIds) if (!(await getMailboxAccessLevel(db, user, mailboxId))?.canRead) return NextResponse.json({ error: "Mailbox not found" }, { status: 403 });
+	// A jmap key signs in like an app password, without a second step, so minting one needs the same fresh confirmation.
+	// It is checked after the request validated, so a typo does not burn the grant.
+	if (parsed.data.scopes.includes("jmap")) {
+		const sessionToken = getSessionTokenFromRequestHeaders(request);
+		if (!parsed.data.stepUpToken || !sessionToken) return authError("verification_required", 400);
+		if (!(await consumeStepUpGrant(env, { token: parsed.data.stepUpToken, userId: user.id, sessionToken, action: "app_password.create" }))) return authError("verification_required", 401);
+	}
 	const id = newId("key");
 	await db.insert(apiKeys).values({
 		id,

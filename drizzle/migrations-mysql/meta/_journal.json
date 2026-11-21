@@ -99,6 +99,48 @@
       "when": 1794516479573,
       "tag": "0013_auto_update",
       "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "5",
+      "when": 1794516480573,
+      "tag": "0018_app_password_usage",
+      "breakpoints": true
+    },
+    {
+      "idx": 15,
+      "version": "5",
+      "when": 1794516481573,
+      "tag": "0021_dav_enabled",
+      "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "5",
+      "when": 1794516482573,
+      "tag": "0026_dav_storage",
+      "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "5",
+      "when": 1794516482574,
+      "tag": "0027_calendar_event_rrule",
+      "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "5",
+      "when": 1794516483574,
+      "tag": "0028_dav_change_names",
+      "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "5",
+      "when": 1794516483577,
+      "tag": "0029_contacts_dav_card",
+      "breakpoints": true
     }
   ]
 }
