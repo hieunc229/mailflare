@@ -6,6 +6,7 @@ services:
     ports:
       - "3000:3000"   # web app and JMAP
       - "25:25"       # inbound SMTP (point your domain's MX here)
+      # - "993:993"   # IMAP over TLS, when IMAP_ENABLED=1 (needs SMTP_TLS_KEY and SMTP_TLS_CERT)
     env_file: .env.docker
     volumes:
       - mailflare-data:/data

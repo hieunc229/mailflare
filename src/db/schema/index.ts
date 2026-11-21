@@ -292,8 +292,11 @@ export const messageActionUndoClaims = sqliteTable(
 
 export const apiKeys = sqliteTable("api_keys", {
 	id: text("id").primaryKey(),
-	/** `device` keys come from a mobile sign-in (`/api/auth/device`) and are listed under Devices. */
-	kind: text("kind", { enum: ["legacy", "mcp", "device"] }).notNull().default("legacy"),
+	/**
+	 * `device` keys come from a mobile sign-in (`/api/auth/device`) and are listed under Devices.
+	 * `app` keys are per-protocol app passwords (`/api/app-passwords`).
+	 */
+	kind: text("kind", { enum: ["legacy", "mcp", "device", "app"] }).notNull().default("legacy"),
 	userId: text("user_id")
 		.notNull()
 		.references(() => users.id, { onDelete: "cascade" }),
@@ -316,6 +319,9 @@ export const apiKeys = sqliteTable("api_keys", {
 		.notNull()
 		.$defaultFn(() => new Date()),
 	lastUsedAt: timestamp("last_used_at"),
+	/** Protocol (`jmap`, `caldav`, `carddav`, `imap`, `submission`) and client IP of the last use, written with `lastUsedAt`. */
+	lastUsedProtocol: text("last_used_protocol"),
+	lastUsedIp: text("last_used_ip"),
 }, (t) => [index("api_keys_user_idx").on(t.userId), uniqueIndex("api_keys_key_sha256_idx").on(t.keySha256)]);
 
 export const messages = sqliteTable(
@@ -1331,6 +1337,83 @@ export const importJobs = sqliteTable("import_jobs", {
 	finishedAt: timestamp("finished_at"),
 }, (t) => [index("import_jobs_user_idx").on(t.userId, t.createdAt), index("import_jobs_status_idx").on(t.status, t.updatedAt)]);
 
+/**
+ * IMAP state (Docker/Node runtime only). Five of the six tables are derived: the
+ * IMAP process maintains them from `jmap_changes`, no trigger writes to them, and
+ * a restore clears them so clients resync under a new UIDVALIDITY (see
+ * `INTERNAL_TABLES` in src/lib/backups/export.ts). `imap_message_flags` is user
+ * data (flags set by mail clients exist nowhere else) and is part of the backup.
+ * Uniqueness is by unique index because the schema kit has no composite primary keys.
+ */
+export const imapMailboxState = sqliteTable("imap_mailbox_state", {
+	mailboxId: text("mailbox_id").primaryKey().references(() => mailboxes.id, { onDelete: "cascade" }),
+	// Last jmap_changes.seq applied, and the mod-sequence counter of this mailbox.
+	jmapSeq: integer("jmap_seq").notNull(),
+	modseq: integer("modseq").notNull().default(1),
+	updatedAt: integer("updated_at").notNull().default(nowSeconds),
+});
+
+export const imapFolderState = sqliteTable("imap_folder_state", {
+	// mailbox_id:folder_key, computed in application code.
+	id: text("id").primaryKey(),
+	mailboxId: text("mailbox_id").notNull().references(() => mailboxes.id, { onDelete: "cascade" }),
+	// 'inbox' | 'sent' | 'drafts' | 'archive' | 'junk' | 'trash' | 'f:<folderId>'
+	folderKey: text("folder_key").notNull(),
+	uidvalidity: integer("uidvalidity").notNull(),
+	uidNext: integer("uid_next").notNull().default(1),
+	highestModseq: integer("highest_modseq").notNull().default(0),
+	initializedAt: integer("initialized_at").notNull().default(nowSeconds),
+}, (t) => [uniqueIndex("imap_folder_state_folder_idx").on(t.mailboxId, t.folderKey)]);
+
+export const imapUids = sqliteTable("imap_uids", {
+	mailboxId: text("mailbox_id").notNull(),
+	folderKey: text("folder_key").notNull(),
+	uid: integer("uid").notNull(),
+	// No foreign key: a deleted message must still resolve to its UID once, to be expunged.
+	messageId: text("message_id").notNull(),
+	modseq: integer("modseq").notNull(),
+	// Drafts only: hash of the editable content, to detect an autosave that replaced the message.
+	contentHash: text("content_hash"),
+}, (t) => [
+	uniqueIndex("imap_uids_uid_idx").on(t.mailboxId, t.folderKey, t.uid),
+	uniqueIndex("imap_uids_message_idx").on(t.mailboxId, t.folderKey, t.messageId),
+	index("imap_uids_message_id_idx").on(t.messageId),
+	index("imap_uids_modseq_idx").on(t.mailboxId, t.folderKey, t.modseq),
+]);
+
+export const imapMessageFlags = sqliteTable("imap_message_flags", {
+	messageId: text("message_id").primaryKey().references(() => messages.id, { onDelete: "cascade" }),
+	answered: bool("answered").notNull().default(false),
+	forwarded: bool("forwarded").notNull().default(false),
+	deleted: bool("deleted").notNull().default(false),
+	// JSON array, at most 50 atoms of at most 64 characters.
+	keywords: text("keywords").notNull().default("[]"),
+	updatedAt: integer("updated_at").notNull().default(nowSeconds),
+});
+
+export const imapExpunged = sqliteTable("imap_expunged", {
+	mailboxId: text("mailbox_id").notNull(),
+	folderKey: text("folder_key").notNull(),
+	uid: integer("uid").notNull(),
+	modseq: integer("modseq").notNull(),
+	createdAt: integer("created_at").notNull().default(nowSeconds),
+}, (t) => [
+	uniqueIndex("imap_expunged_uid_idx").on(t.mailboxId, t.folderKey, t.uid),
+	index("imap_expunged_modseq_idx").on(t.mailboxId, t.folderKey, t.modseq),
+]);
+
+export const imapMessageCache = sqliteTable("imap_message_cache", {
+	messageId: text("message_id").primaryKey().references(() => messages.id, { onDelete: "cascade" }),
+	// RFC822.SIZE of the served bytes.
+	size: integer("size").notNull(),
+	// Object key when the bytes were synthesized rather than stored.
+	synthKey: text("synth_key"),
+	envelope: text("envelope").notNull(),
+	bodystructure: text("bodystructure").notNull(),
+	headerSize: integer("header_size").notNull(),
+	createdAt: integer("created_at").notNull().default(nowSeconds),
+});
+
 export const schema = {
 	users,
 	domains,
@@ -1373,4 +1456,10 @@ export const schema = {
 	agentSendApprovals,
 	mcpKeyMailboxes,
 	importJobs,
+	imapMailboxState,
+	imapFolderState,
+	imapUids,
+	imapMessageFlags,
+	imapExpunged,
+	imapMessageCache,
 };
