@@ -1,0 +1,21 @@
+# Notices for Varunya Mail
+
+This project is a customized distribution of Mailflare, originally licensed under the GNU Affero General Public License version 3 (AGPL-3.0).
+
+## Original Work
+Copyright (c) 2024-2026 Mailflare Authors and Contributors.
+Licensed under the GNU Affero General Public License, Version 3.0 (AGPL-3.0).
+See [LICENSE](file:///LICENSE) for the full license terms.
+
+## Modifications
+Copyright (c) 2026 Varunya Web Technologies and Fintech Solutions Private Limited.
+Modified under the terms of the GNU Affero General Public License, Version 3.0.
+
+In compliance with AGPL-3.0 Section 5:
+- **Date of Modification:** November 2026
+- **Modified By:** Varunya Web Technologies and Fintech Solutions Private Limited
+- **Summary of Modifications:**
+  1. **Licensing Decoupling (Task 1):** Replaced commercial Paymug remote license checks with a native self-hosted Varunya feature policy. Unlocked enterprise collaboration capabilities (account management, custom branding, mailbox sharing, email forwarding) and removed seat restrictions while preserving the underlying database schema and migration bundles. Removed commercial purchase links, license activation modal, and lock overlays.
+  2. **Branding (Task 2):** Configured application identity to Varunya Mail across UI, document titles, Web App Manifest, and default branding settings, while preserving administrator branding customization.
+  3. **Outbound Queue Retry Defect (Task 3):** Corrected premature failure marking in `src/lib/email/send.ts`. Distinguishes transient network/provider errors from permanent failures; preserves `queued` state across up to 3 queue retry attempts; enforces idempotency on provider calls.
+  4. **Provider Architecture (Task 4):** Standardized decoupled provider architecture with Cloudflare Email Routing for inbound and Resend API for outbound, retaining Svix webhook signature verification, content-hashed message deduplication, and independent domain routing.

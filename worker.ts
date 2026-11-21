@@ -140,7 +140,7 @@ export default {
 				} else if (isImportJobMessage(msg.body)) {
 					await processImportJob(env, { ...msg.body, attempt: msg.attempts });
 				} else if (typeof msg.body === "object" && msg.body !== null && (msg.body as { kind?: unknown }).kind === "email.scheduled") {
-					await processOutboundQueue(env, msg.body as OutboundQueueMessage);
+					await processOutboundQueue(env, msg.body as OutboundQueueMessage, msg.attempts);
 				} else {
 					throw new Error("Unknown queue message type");
 				}

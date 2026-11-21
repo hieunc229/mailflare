@@ -232,28 +232,13 @@ for (const enabled of [true, false]) {
 	});
 }
 
-test("account creation still enforces admin authorization and the Team license", async (t) => {
+test("account creation enforces admin authorization without commercial license gating", async (t) => {
 	const f = await fixture(t);
 	assert.equal((await f.post("api", {}, "invalid-test-key")).status, 401);
 	assert.equal((await f.post("dashboard", {}, "invalid-test-session")).status, 403);
-	f.database.db.exec("UPDATE license_settings SET state = 'inactive'");
-	assert.equal((await f.post("api")).status, 403);
-	assert.equal((await f.post("dashboard")).status, 403);
-	assert.equal(f.calls.length, 0);
-});
-
-test("a Pro license creates accounts only while seats remain; Team and unlimited Pro have no limit", async (t) => {
-	const f = await fixture(t);
-	const users = () => f.database.db.prepare("SELECT count(*) AS count FROM users WHERE disabled = 0").get().count;
-	f.database.db.exec(`UPDATE license_settings SET plan = 'pro', seat_limit = ${users()}`);
-	assert.equal((await f.post("api")).status, 403, "no seat left");
-	f.database.db.exec(`UPDATE license_settings SET seat_limit = ${users() + 1}`);
-	assert.equal((await f.post("api", { username: "seat-one" })).status, 201);
-	assert.equal((await f.post("api", { username: "seat-two" })).status, 403, "seat just used");
-	f.database.db.exec("UPDATE license_settings SET seat_limit = NULL");
-	assert.equal((await f.post("api", { username: "seat-three" })).status, 201);
-	f.database.db.exec("UPDATE license_settings SET plan = 'team', seat_limit = 1");
-	assert.equal((await f.post("api", { username: "seat-four" })).status, 201);
+	// Authorized admin can create accounts without seat limits
+	assert.equal((await f.post("api", { username: "varunya-user-one" })).status, 201);
+	assert.equal((await f.post("api", { username: "varunya-user-two" })).status, 201);
 });
 
 for (const separateDomains of [false, true]) {

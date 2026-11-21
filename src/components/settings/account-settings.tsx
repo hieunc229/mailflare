@@ -85,6 +85,30 @@ export function AccountSettings() {
 					<TimeZoneForm userId={user.id} initialTimeZone={user.timeZone} />
 				</div>
 			</section>
+
+			<section className="space-y-4">
+				<div>
+					<h2 className="text-xl font-semibold text-neutral-900">About & License</h2>
+					<p className="mt-1 text-sm text-neutral-500">Varunya Mail open-source distribution and licensing information.</p>
+				</div>
+				<div className="rounded-3xl bg-white p-6 space-y-2 text-sm text-neutral-600">
+					<p>
+						Varunya Mail is customized from the open-source Mailflare platform and released under the{" "}
+						<span className="font-medium text-neutral-900">GNU Affero General Public License v3.0 (AGPL-3.0)</span>.
+					</p>
+					<p>
+						In compliance with AGPL-3.0, the corresponding source code for this application is publicly available at{" "}
+						<a
+							href="https://github.com/Bhuvan2402-bhuvan/mailflare"
+							target="_blank"
+							rel="noopener noreferrer"
+							className="text-neutral-900 underline hover:text-neutral-700"
+						>
+							GitHub (Bhuvan2402-bhuvan/mailflare)
+						</a>.
+					</p>
+				</div>
+			</section>
 		</div>
 	);
 }

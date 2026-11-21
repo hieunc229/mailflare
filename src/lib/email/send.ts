@@ -201,10 +201,71 @@ export async function sendEmail(
 	return { messageId };
 }
 
-async function deliverEmail(env: CloudflareEnv, delivery: PreparedDelivery): Promise<void> {
+export function isPermanentDeliveryError(error: unknown): boolean {
+	if (!error) return false;
+	const message = (error instanceof Error ? error.message : String(error)).toLowerCase();
+	const status = typeof (error as { status?: unknown }).status === "number"
+		? (error as { status: number }).status
+		: undefined;
+
+	// Explicit HTTP response status checks
+	if (status !== undefined) {
+		// 429 Too Many Requests or 5xx Server Errors are transient and retryable
+		if (status === 429 || status >= 500) return false;
+		// 4xx Client Errors (except 429) indicate permanent misconfiguration or invalid input
+		if (status === 400 || status === 401 || status === 403 || status === 404 || status === 422) return true;
+	}
+
+	// Message content checks for known transient issues
+	if (
+		message.includes("rate limit") ||
+		message.includes("too many requests") ||
+		message.includes("429") ||
+		message.includes("timeout") ||
+		message.includes("timed out") ||
+		message.includes("econnreset") ||
+		message.includes("econnrefused") ||
+		message.includes("fetch failed") ||
+		message.includes("500 internal") ||
+		message.includes("502 bad gateway") ||
+		message.includes("503") ||
+		message.includes("504") ||
+		message.includes("network error") ||
+		message.includes("temporarily unavailable")
+	) {
+		return false;
+	}
+
+	// Message content checks for known permanent issues
+	if (
+		message.includes("invalid email") ||
+		message.includes("invalid recipient") ||
+		message.includes("not verified") ||
+		message.includes("unauthorized") ||
+		message.includes("forbidden") ||
+		message.includes("exceeds limit") ||
+		message.includes("blacklisted") ||
+		message.includes("does not exist") ||
+		message.includes("rejected by provider")
+	) {
+		return true;
+	}
+
+	return false;
+}
+
+export type DeliveryRetryOptions = {
+	attempt?: number;
+	maxAttempts?: number;
+};
+
+async function deliverEmail(env: CloudflareEnv, delivery: PreparedDelivery, options?: DeliveryRetryOptions): Promise<void> {
 	const { input, messageId, jobId, from, mailboxId, to, cc, bcc, headers, attachments } = delivery;
 	const db = getDb(env);
 	const toAddr = joinEmailAddressList(to);
+	const attempt = options?.attempt ?? 1;
+	const maxAttempts = options?.maxAttempts ?? 3;
+
 	try {
 		const provider = await getOutboundProviderConfig(env, from);
 		// Cloudflare's 5 MiB cap forces big files into download links; Resend takes
@@ -264,7 +325,7 @@ async function deliverEmail(env: CloudflareEnv, delivery: PreparedDelivery): Pro
 				.set({ threadKey: threadId })
 				.where(and(eq(conversationNotes.mailboxId, mailboxId), eq(conversationNotes.threadKey, messageId)));
 		}
-		await db.update(outboundJobs).set({ status: "sent", updatedAt: new Date() }).where(eq(outboundJobs.id, jobId));
+		await db.update(outboundJobs).set({ status: "sent", error: null, updatedAt: new Date() }).where(eq(outboundJobs.id, jobId));
 		if (input.followUpDays) {
 			// The message is already out; a reminder that cannot be stored must not fail the send.
 			await setFollowUp(env, { messageId, userId: input.userId, days: input.followUpDays }).catch((error) => console.error("Follow-up reminder skipped", error));
@@ -285,12 +346,33 @@ async function deliverEmail(env: CloudflareEnv, delivery: PreparedDelivery): Pro
 		});
 	} catch (err) {
 		const error = err instanceof Error ? err.message : "Send failed";
-		await db.update(messages).set({ status: "failed" }).where(eq(messages.id, messageId));
-		await db
-			.update(outboundJobs)
-			.set({ status: "failed", error, updatedAt: new Date() })
-			.where(eq(outboundJobs.id, jobId));
-		await dispatchWebhooks(env, input.userId, "message.failed", { messageId, error });
+		const isPermanent = isPermanentDeliveryError(err);
+		const isExhausted = attempt >= maxAttempts;
+
+		if (isPermanent || isExhausted) {
+			// Permanent failure or max attempts exhausted: mark failed and dispatch webhook
+			await db.update(messages).set({ status: "failed" }).where(eq(messages.id, messageId));
+			await db
+				.update(outboundJobs)
+				.set({
+					status: "failed",
+					error: isPermanent ? `[Permanent error] ${error}` : `[Exhausted after ${attempt} attempt(s)] ${error}`,
+					updatedAt: new Date(),
+				})
+				.where(eq(outboundJobs.id, jobId));
+			await dispatchWebhooks(env, input.userId, "message.failed", { messageId, error });
+		} else {
+			// Transient failure: release claim and reset status to 'queued' so Queue retry can proceed
+			await db
+				.update(outboundJobs)
+				.set({
+					status: "queued",
+					error: `[Attempt ${attempt}/${maxAttempts} failed, retrying] ${error}`,
+					updatedAt: new Date(),
+				})
+				.where(eq(outboundJobs.id, jobId));
+			await db.update(messages).set({ status: "queued" }).where(eq(messages.id, messageId));
+		}
 		throw err;
 	}
 }
@@ -317,6 +399,7 @@ export type OutboundQueueMessage = {
 	jobId: string;
 	messageId: string;
 	scheduledAt: string;
+	attempt?: number;
 };
 
 /** Wakes the outbound queue when a job is due; runs again at the delay cap for later times. */
@@ -414,6 +497,7 @@ export async function sendScheduledMessageNow(env: CloudflareEnv, messageId: str
 export async function processOutboundQueue(
 	env: CloudflareEnv,
 	payload: OutboundQueueMessage,
+	attempt: number = payload.attempt ?? 1,
 ): Promise<void> {
 	const db = getDb(env);
 	const [job] = await db
@@ -437,9 +521,21 @@ export async function processOutboundQueue(
 		// Lost to a cancel or another consumer, or the send time moved after we
 		// read it. In the last case the job is still queued: look again.
 		const [current] = await db.select({ status: outboundJobs.status }).from(outboundJobs).where(eq(outboundJobs.id, payload.jobId)).limit(1);
-		if (current?.status === "queued") await processOutboundQueue(env, payload);
+		if (current?.status === "queued") await processOutboundQueue(env, payload, attempt);
 		return;
 	}
 	delivery.attachments = await loadMessageAttachmentContents(env, payload.messageId);
-	await deliverEmail(env, delivery);
+	try {
+		await deliverEmail(env, delivery, { attempt, maxAttempts: 3 });
+	} catch (err) {
+		// When the error is permanent or retries are exhausted, deliverEmail has already
+		// updated the database (messages and outbound_jobs set to 'failed') and dispatched
+		// the failure webhook. Suppress re-throw so the queue consumer acknowledges
+		// the message immediately instead of scheduling a redundant retry.
+		if (isPermanentDeliveryError(err) || attempt >= 3) {
+			return;
+		}
+		// For transient errors with attempts remaining, re-throw so worker.ts calls msg.retry({ delaySeconds: 10 })
+		throw err;
+	}
 }
