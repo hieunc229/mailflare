@@ -39,10 +39,10 @@ function keywordCondition(keyword: string, present: boolean, table: MessagesTabl
 
 const threadPeer = aliasedTable(messages, "thread_peer");
 
-/** Whether another message of this one's thread (itself included) has, or lacks, the keyword. */
-function threadHasMessage(keyword: string, present: boolean): SQL {
+/** Whether another message of this one's thread (itself included) has, or lacks, the keyword. Other users' private drafts do not count: a reader must not learn they exist. */
+function threadHasMessage(keyword: string, present: boolean, viewerId: string): SQL {
 	return exists(
-		sql`(SELECT 1 FROM ${messages} AS ${threadPeer} WHERE ${threadPeer.mailboxId} = ${messages.mailboxId} AND coalesce(${threadPeer.threadId}, ${threadPeer.id}) = coalesce(${messages.threadId}, ${messages.id}) AND ${keywordCondition(keyword, present, threadPeer)})`,
+		sql`(SELECT 1 FROM ${messages} AS ${threadPeer} WHERE ${threadPeer.mailboxId} = ${messages.mailboxId} AND coalesce(${threadPeer.threadId}, ${threadPeer.id}) = coalesce(${messages.threadId}, ${messages.id}) AND (${threadPeer.userId} = ${viewerId} OR NOT ${threadPeer.privateDraft}) AND ${keywordCondition(keyword, present, threadPeer)})`,
 	);
 }
 
@@ -74,7 +74,7 @@ function headerCondition(header: string[]): SQL {
 	}
 }
 
-function conditionToSql(condition: FilterCondition, accessible: Set<string>): SQL[] {
+function conditionToSql(condition: FilterCondition, accessible: Set<string>, viewerId: string): SQL[] {
 	const parts: SQL[] = [];
 	if (condition.inMailbox !== undefined) {
 		const ref = decodeMailboxRef(condition.inMailbox);
@@ -92,9 +92,9 @@ function conditionToSql(condition: FilterCondition, accessible: Set<string>): SQ
 	if (condition.hasKeyword) parts.push(keywordCondition(condition.hasKeyword, true));
 	if (condition.notKeyword) parts.push(keywordCondition(condition.notKeyword, false));
 	// RFC 8621 §4.4.1: the thread keyword conditions look at every message of the thread.
-	if (condition.someInThreadHaveKeyword) parts.push(threadHasMessage(condition.someInThreadHaveKeyword, true));
-	if (condition.allInThreadHaveKeyword) parts.push(not(threadHasMessage(condition.allInThreadHaveKeyword, false)));
-	if (condition.noneInThreadHaveKeyword) parts.push(not(threadHasMessage(condition.noneInThreadHaveKeyword, true)));
+	if (condition.someInThreadHaveKeyword) parts.push(threadHasMessage(condition.someInThreadHaveKeyword, true, viewerId));
+	if (condition.allInThreadHaveKeyword) parts.push(not(threadHasMessage(condition.allInThreadHaveKeyword, false, viewerId)));
+	if (condition.noneInThreadHaveKeyword) parts.push(not(threadHasMessage(condition.noneInThreadHaveKeyword, true, viewerId)));
 	if (condition.from) parts.push(containsLike(messages.fromAddr, condition.from));
 	if (condition.to) parts.push(containsLike(messages.toAddr, condition.to));
 	if (condition.cc) parts.push(containsLike(messages.ccAddr, condition.cc));
@@ -127,10 +127,10 @@ function conditionToSql(condition: FilterCondition, accessible: Set<string>): SQ
 }
 
 /** FilterOperator trees become nested AND/OR/NOT; a bare condition is an AND of its fields. */
-export function filterToSql(filter: Filter | null | undefined, accessible: Set<string>): SQL | undefined {
+export function filterToSql(filter: Filter | null | undefined, accessible: Set<string>, viewerId: string): SQL | undefined {
 	if (!filter) return undefined;
 	if ("operator" in filter) {
-		const children = (filter.conditions ?? []).map((child) => filterToSql(child, accessible)).filter((part): part is SQL => !!part);
+		const children = (filter.conditions ?? []).map((child) => filterToSql(child, accessible, viewerId)).filter((part): part is SQL => !!part);
 		if (children.length === 0) return undefined;
 		if (filter.operator === "AND") return and(...children);
 		if (filter.operator === "OR") return or(...children);
@@ -138,7 +138,7 @@ export function filterToSql(filter: Filter | null | undefined, accessible: Set<s
 		if (filter.operator === "NOT") return not(or(...children)!);
 		throw invalidArguments(`Unknown operator ${String(filter.operator)}`);
 	}
-	const parts = conditionToSql(filter, accessible);
+	const parts = conditionToSql(filter, accessible, viewerId);
 	return parts.length ? and(...parts) : undefined;
 }
 
