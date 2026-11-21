@@ -24,6 +24,7 @@ await build({
 			export { openFileBucket } from "./server/runtime/file-bucket.ts";
 			export { openRateLimiter } from "./server/runtime/misc.ts";
 			export { rememberSubmission, clearSubmissionMemory } from "./src/lib/imap/sent-dedupe.ts";
+			export { deleteUnchanged } from "./src/lib/imap/transfer.ts";
 		`,
 		resolveDir: root,
 		sourcefile: "imap-protocol-test-entry.ts",
@@ -38,7 +39,7 @@ await build({
 	alias: { "cloudflare:workers": "./server/runtime/cloudflare-workers.ts" },
 	logLevel: "silent",
 });
-const { ImapServer, rememberSubmission, clearSubmissionMemory, generateAppPassword, clearApiKeyVerificationCache, clearLoginAuditMemory, SqliteDatabase, applyMigrations, openFileBucket, openRateLimiter } = await import(pathToFileURL(join(directory, "entry.mjs")).href);
+const { ImapServer, deleteUnchanged, rememberSubmission, clearSubmissionMemory, generateAppPassword, clearApiKeyVerificationCache, clearLoginAuditMemory, SqliteDatabase, applyMigrations, openFileBucket, openRateLimiter } = await import(pathToFileURL(join(directory, "entry.mjs")).href);
 
 // A throwaway certificate for 127.0.0.1 / localhost, made once for the file.
 const keyPath = join(directory, "key.pem");
@@ -395,7 +396,7 @@ test("COPY duplicates the row, the raw bytes and the attachments, keeps the flag
 	assert.equal((await client.cmd("COPY 1 Nowhere")).detail, "[TRYCREATE] Mailbox does not exist");
 });
 
-test("COPY into Trash of the same mailbox moves the message instead of filling Trash with copies", async (t) => {
+test("COPY into Trash is a copy: the original stays where it is", async (t) => {
 	const w = await world(t);
 	const key = await w.addKey({ id: "k1" });
 	w.addMessage({ id: "g1" });
@@ -404,9 +405,10 @@ test("COPY into Trash of the same mailbox moves the message instead of filling T
 	await client.cmd("SELECT INBOX");
 	const result = await client.cmd("COPY 1 Trash");
 	assert.match(result.detail, /^\[COPYUID \d+ 1 1\]/);
-	assert.match(result.text, /\* 1 EXPUNGE/);
-	assert.equal(statusOf(w, "g1").status, "trash");
-	assert.equal(w.sqlite.prepare("SELECT count(*) AS n FROM messages").get().n, 1);
+	assert.doesNotMatch(result.text, /EXPUNGE/);
+	assert.equal(statusOf(w, "g1").status, "received");
+	assert.equal(w.sqlite.prepare("SELECT count(*) AS n FROM messages WHERE status = 'trash'").get().n, 1);
+	assert.equal(w.sqlite.prepare("SELECT count(*) AS n FROM messages").get().n, 2);
 });
 
 test("COPY into another mailbox the login may write creates the row there, owned by that mailbox's owner", async (t) => {
@@ -461,6 +463,53 @@ test("EXPUNGE removes only what is \\Deleted in the selected folder: to Trash fr
 	assert.equal(w.sqlite.prepare("SELECT count(*) AS n FROM messages WHERE id = 'd1'").get().n, 0);
 	assert.equal((await client.cmd("UID EXPUNGE")).status, "BAD");
 	assert.equal((await client.cmd("UID EXPUNGE 1:x")).status, "BAD");
+});
+
+test("a permanent delete only removes a message that is still in the status it was read in", async (t) => {
+	const w = await world(t);
+	await w.addRaw("t1", RAW_ALTERNATIVE, { status: "trash" });
+	const stale = { id: "t1", mailboxId: "m1", status: "trash", folderId: null, rawR2Key: "raw/t1.eml" };
+	// Another client filed the message in Archive after it was read.
+	w.sqlite.prepare("UPDATE messages SET status = 'archived' WHERE id = 't1'").run();
+	assert.deepEqual(await deleteUnchanged(w.env, { userId: "u1" }, [stale]), []);
+	assert.equal(w.sqlite.prepare("SELECT count(*) AS n FROM messages WHERE id = 't1'").get().n, 1);
+	assert.ok(await w.bucket.get("raw/t1.eml"), "its raw object stays");
+	w.sqlite.prepare("UPDATE messages SET status = 'trash' WHERE id = 't1'").run();
+	assert.equal((await deleteUnchanged(w.env, { userId: "u1" }, [stale])).length, 1);
+	assert.equal(w.sqlite.prepare("SELECT count(*) AS n FROM messages WHERE id = 't1'").get().n, 0);
+	assert.equal(await w.bucket.get("raw/t1.eml"), null);
+});
+
+test("MOVE out of Trash into another mailbox leaves one copy: the source goes for good", async (t) => {
+	const w = await world(t);
+	const key = await w.addKey({ id: "k1" });
+	w.sqlite.prepare("UPDATE mailbox_access SET permission = 'full_access'").run();
+	await w.addRaw("t1", RAW_ALTERNATIVE, { status: "trash" });
+	const client = await loggedIn(w, key);
+	t.after(() => client.end());
+	await client.cmd("SELECT Trash");
+	const moved = await client.cmd("MOVE 1 Shared/team@other.test/Archive");
+	assert.match(moved.text, /\[COPYUID \d+ 1 1\] Moved/);
+	assert.match(moved.text, /\* 1 EXPUNGE/);
+	assert.equal(w.sqlite.prepare("SELECT count(*) AS n FROM messages WHERE id = 't1'").get().n, 0, "removed from Trash, not filed in Trash again");
+	assert.equal(await w.bucket.get("raw/t1.eml"), null);
+	const copies = w.sqlite.prepare("SELECT mailbox_id, status FROM messages").all();
+	assert.deepEqual(copies.map((row) => ({ ...row })), [{ mailbox_id: "ms", status: "archived" }]);
+});
+
+test("the spam filter only learns from a message that is in Junk after the move", async (t) => {
+	const w = await world(t);
+	const key = await w.addKey({ id: "k1" });
+	w.addMessage({ id: "g1" });
+	const client = await loggedIn(w, key);
+	t.after(() => client.end());
+	await client.cmd("SELECT INBOX");
+	await client.cmd("STORE 1 +FLAGS (\\Answered)");
+	// Another client files the message in Archive right after this MOVE wrote it.
+	w.sqlite.exec("CREATE TRIGGER other_client AFTER UPDATE ON imap_message_flags BEGIN UPDATE messages SET status = 'archived' WHERE id = NEW.message_id; END;");
+	await client.cmd("MOVE 1 Junk");
+	assert.equal(statusOf(w, "g1").status, "archived");
+	assert.equal(w.sqlite.prepare("SELECT count(*) AS n FROM spam_feedback").get().n, 0);
 });
 
 test("CLOSE removes the \\Deleted messages without EXPUNGE responses; EXAMINE then CLOSE and UNSELECT remove nothing", async (t) => {
@@ -619,11 +668,40 @@ test("APPEND into a shared mailbox needs permission there, and the row belongs t
 	const denied = await append(client, "Shared/team@other.test/INBOX", mail());
 	assert.deepEqual([denied.status, denied.detail], ["NO", "[NOPERM] The mailbox is read-only"]);
 	assert.equal(w.sqlite.prepare("SELECT count(*) AS n FROM messages").get().n, 0);
-	w.sqlite.prepare("UPDATE mailbox_access SET permission = 'send_as'").run();
+	w.sqlite.prepare("UPDATE mailbox_access SET permission = 'full_access'").run();
 	const ok = await append(client, "Shared/team@other.test/INBOX", mail({ subject: "Team" }));
 	assert.equal(ok.status, "OK", ok.detail);
 	assert.deepEqual([rowOf(w, "subject = 'Team'").mailbox_id, rowOf(w, "subject = 'Team'").user_id], ["ms", "u2"]);
 	assert.equal((await append(client, "Shared/two@other.test/INBOX", mail())).detail, "[TRYCREATE] Mailbox does not exist", "another user's mailbox cannot be named");
+});
+
+test("what a login may add to a folder depends on the folder's kind: Drafts a write permission, Sent the right to send, the rest full access", async (t) => {
+	const w = await world(t);
+	const key = await w.addKey({ id: "k1" });
+	w.addMessage({ id: "g1" });
+	const client = await loggedIn(w, key);
+	t.after(() => client.end());
+	await client.cmd("SELECT INBOX");
+	const roles = {
+		read_only: { Drafts: false, Sent: false, INBOX: false, Archive: false },
+		send_on_behalf: { Drafts: true, Sent: true, INBOX: false, Archive: false },
+		send_as: { Drafts: true, Sent: true, INBOX: false, Archive: false },
+		full_access: { Drafts: true, Sent: true, INBOX: true, Archive: true },
+	};
+	const refused = (result) => result.status === "NO" && /^\[NOPERM\] (The mailbox is read-only|You may not add messages to that folder)$/.test(result.detail);
+	let count = 0;
+	for (const [permission, folders] of Object.entries(roles)) {
+		w.sqlite.prepare("UPDATE mailbox_access SET permission = ?").run(permission);
+		for (const [folder, allowed] of Object.entries(folders)) {
+			const target = `Shared/team@other.test/${folder}`;
+			const label = `${permission} -> ${folder}`;
+			const appended = await append(client, target, mail({ from: "team@other.test", id: `<role${++count}@x.test>`, subject: `role ${count}` }));
+			assert.equal(refused(appended), !allowed, `APPEND ${label}: ${appended.detail}`);
+			assert.equal(refused(await client.cmd(`COPY 1 ${target}`)), !allowed, `COPY ${label}`);
+			if (!allowed) assert.equal(refused(await client.cmd(`MOVE 1 ${target}`)), true, `MOVE ${label}`);
+		}
+	}
+	assert.equal(statusOf(w, "g1").status, "received", "a refused MOVE leaves the message where it is");
 });
 
 test("APPEND checks its arguments and flags", async (t) => {

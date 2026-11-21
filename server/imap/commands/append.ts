@@ -3,7 +3,7 @@ import { appendMessage } from "@/lib/imap/append";
 import { bad, no } from "@/lib/imap/errors";
 import { MAX_KEYWORDS, parseFlagWords } from "@/lib/imap/flags";
 import { decodeFolderName } from "@/lib/imap/folders";
-import { findFolder } from "@/lib/imap/namespace";
+import { addRefusal, findFolder, mayAddTo } from "@/lib/imap/namespace";
 import type { Completion, ImapConnection } from "../connection";
 import { args, isList, text } from "./args";
 import { flagWords } from "./store";
@@ -27,7 +27,7 @@ export function parseInternalDate(value: string): Date | null {
 /**
  * APPEND mailbox [flags] [date-time] message. The message arrives as `body`, framed by the connection under the
  * APPEND size limit; the command text holds an empty string in its place. A folder name that does not exist is
- * NO [TRYCREATE]; writing needs permission on the mailbox. Answered with APPENDUID (UIDPLUS).
+ * NO [TRYCREATE]; what the login may add depends on the folder (`mayAddTo`). Answered with APPENDUID (UIDPLUS).
  */
 export async function runAppend(c: ImapConnection, command: ParsedCommand, body: Buffer | undefined): Promise<Completion> {
 	if (!body) throw bad("APPEND needs the message as a literal");
@@ -53,7 +53,8 @@ export async function runAppend(c: ImapConnection, command: ParsedCommand, body:
 	const folder = findFolder(namespace, name);
 	if (!folder || !folder.key || !folder.mailboxId) throw no("Mailbox does not exist", "TRYCREATE");
 	const mailbox = namespace.mailboxes.find((entry) => entry.id === folder.mailboxId);
-	if (!mailbox || mailbox.permission === "read_only") throw no("The mailbox is read-only", "NOPERM");
+	if (!mailbox) throw no("Mailbox does not exist", "TRYCREATE");
+	if (!mayAddTo(mailbox.permission, folder.key)) throw no(addRefusal(mailbox.permission), "NOPERM");
 	const result = await appendMessage(c.env, c.identity!, { mailboxId: folder.mailboxId, key: folder.key, ownerUserId: mailbox.userId }, { raw: body, flags: parsedFlags, internalDate });
 	// A message appended to the folder the session has open is announced before the answer.
 	if (c.selected?.mailboxId === folder.mailboxId) c.dirty = true;

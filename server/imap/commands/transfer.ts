@@ -1,13 +1,13 @@
 import type { ParsedCommand } from "imap-handler";
 import { bad, no } from "@/lib/imap/errors";
 import { decodeFolderName } from "@/lib/imap/folders";
-import { findFolder } from "@/lib/imap/namespace";
+import { addRefusal, findFolder, mayAddTo } from "@/lib/imap/namespace";
 import { compactSet, parseSequenceSet, resolveRanges, selectByNumber, selectByUid } from "@/lib/imap/sets";
-import { MAX_COPY_MESSAGES, MAX_MOVE_MESSAGES, copyMessages, expungeDeleted, loadFolderRows, moveMessages, uidsOf, type Destination, type MessageRow } from "@/lib/imap/transfer";
+import { MAX_COPY_MESSAGES, MAX_MOVE_MESSAGES, copyMessages, deleteUnchanged, expungeDeleted, loadFolderRows, moveMessages, uidsOf, type Destination, type MessageRow } from "@/lib/imap/transfer";
 import type { Completion, ImapConnection } from "../connection";
 import { args, text, type Arg } from "./args";
 
-/** The folder a COPY or MOVE names: it must be a real folder of a mailbox this login may write. */
+/** The folder a COPY or MOVE names: it must be a real folder this login may add messages to (by the folder's kind, as for APPEND). */
 async function destination(c: ImapConnection, arg: Arg): Promise<Destination> {
 	const raw = text(arg);
 	const name = raw === null ? null : decodeFolderName(raw);
@@ -16,7 +16,8 @@ async function destination(c: ImapConnection, arg: Arg): Promise<Destination> {
 	const folder = findFolder(namespace, name);
 	if (!folder || !folder.key || !folder.mailboxId) throw no("Mailbox does not exist", "TRYCREATE");
 	const mailbox = namespace.mailboxes.find((entry) => entry.id === folder.mailboxId);
-	if (!mailbox || mailbox.permission === "read_only") throw no("The mailbox is read-only", "NOPERM");
+	if (!mailbox) throw no("Mailbox does not exist", "TRYCREATE");
+	if (!mayAddTo(mailbox.permission, folder.key)) throw no(addRefusal(mailbox.permission), "NOPERM");
 	return { mailboxId: folder.mailboxId, key: folder.key, ownerUserId: mailbox.userId };
 }
 
@@ -45,7 +46,7 @@ async function copyUid(c: ImapConnection, dest: Destination, picked: Picked, des
 	return `COPYUID ${uidvalidity} ${compactSet(pairs.map((pair) => pair[0]))} ${compactSet(pairs.map((pair) => pair[1]))}`;
 }
 
-/** A MOVE inside one mailbox is one batch; to another mailbox it is a copy there and then the source goes to its own Trash. */
+/** A MOVE inside one mailbox is one batch; to another mailbox it is a copy there and then the source is removed: to its own Trash, or for good when it was in Trash. */
 async function moveInto(c: ImapConnection, picked: Picked, dest: Destination): Promise<string[]> {
 	const selected = c.selected!;
 	if (dest.mailboxId === selected.mailboxId) {
@@ -53,6 +54,11 @@ async function moveInto(c: ImapConnection, picked: Picked, dest: Destination): P
 		return picked.rows.map((row) => row.id);
 	}
 	const made = await copyMessages(c.env, c.identity!, picked.rows, dest);
+	// The copies are committed. Out of Trash the source goes for good (RFC 6851: a move out of a folder is a remove there); from any other folder it goes to Trash.
+	if (selected.view.folderKey === "trash") {
+		await deleteUnchanged(c.env, c.identity!, picked.rows);
+		return picked.rows.map((row) => made.get(row.id)!);
+	}
 	await moveMessages(c.env, c.identity!, picked.rows, { mailboxId: selected.mailboxId, key: "trash", ownerUserId: c.identity!.userId }, selected.view.folderKey as never);
 	return picked.rows.map((row) => made.get(row.id)!);
 }
@@ -77,14 +83,10 @@ export async function runCopy(c: ImapConnection, command: ParsedCommand, uidMode
 	const [setArg, destArg] = args(command);
 	if (!parseSequenceSet(text(setArg) ?? "") || destArg === undefined) throw bad("COPY takes a message set and a mailbox name");
 	const dest = await destination(c, destArg);
-	const selected = c.selected!;
-	// A client that deletes by COPY to Trash (then \Deleted and EXPUNGE) would fill Trash with duplicates: within one mailbox that is a move.
-	const asMove = dest.key === "trash" && dest.mailboxId === selected.mailboxId && selected.view.folderKey !== "trash";
-	if (asMove) await c.requireWritable();
-	const { picked } = await pick(c, command, uidMode, asMove ? MAX_MOVE_MESSAGES : MAX_COPY_MESSAGES);
+	// COPY always copies, also into Trash: a message is removed only by MOVE, or by \Deleted and EXPUNGE.
+	const { picked } = await pick(c, command, uidMode, MAX_COPY_MESSAGES);
 	if (!picked.rows.length) return;
-	const destIds = asMove ? await moveInto(c, picked, dest) : [...(await copyMessages(c.env, c.identity!, picked.rows, dest)).values()];
-	if (asMove) c.dirty = true;
+	const destIds = [...(await copyMessages(c.env, c.identity!, picked.rows, dest)).values()];
 	const code = await copyUid(c, dest, picked, destIds);
 	return code ? { code, text: "COPY completed" } : undefined;
 }

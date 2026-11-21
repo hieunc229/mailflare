@@ -1,3 +1,4 @@
+import { hasMailboxPermission } from "@/lib/mailboxes/access";
 import { listFoldersByMailbox, listJmapMailboxes } from "@/lib/jmap/access";
 import type { AccessibleMailbox } from "@/lib/jmap/types";
 import { imapContext, type ImapIdentity } from "./auth";
@@ -28,6 +29,22 @@ export type Namespace = {
 };
 
 export const SHARED_PREFIX = "Shared";
+
+/**
+ * Whether a login with `permission` on a mailbox may put a message into the folder `key` of it (APPEND, COPY, MOVE).
+ * Drafts need any write permission, Sent needs the right to send, every other folder needs full access, which is
+ * what importing a message through the web app needs.
+ */
+export function mayAddTo(permission: AccessibleMailbox["permission"], key: FolderKey): boolean {
+	if (key === "drafts") return permission !== "read_only";
+	if (key === "sent") return hasMailboxPermission(permission, "send_on_behalf");
+	return permission === "full_access";
+}
+
+/** The refusal for a login that may not add to a folder: read-only mailboxes keep their own wording. */
+export function addRefusal(permission: AccessibleMailbox["permission"]): string {
+	return permission === "read_only" ? "The mailbox is read-only" : "You may not add messages to that folder";
+}
 
 export const mailboxAddress = (mailbox: Pick<AccessibleMailbox, "localPart" | "hostname">) => `${mailbox.localPart}@${mailbox.hostname}`.toLowerCase();
 
