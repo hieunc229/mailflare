@@ -336,15 +336,21 @@ test("impossible dates are rejected instead of rolling over", () => {
 	assert.equal(parseInvite(event("DTSTART;VALUE=DATE:20240229")).allDay, true);
 });
 
-test("EXDATE values are capped before they are parsed", () => {
-	const values = Array.from({ length: 15_000 }, (_, i) => `2027${String(1 + (i % 12)).padStart(2, "0")}${String(1 + (i % 28)).padStart(2, "0")}T100000`).join(",");
-	const text = event("DTSTART;TZID=America/Los_Angeles:20261105T100000", "RRULE:FREQ=DAILY", `EXDATE;TZID=America/Los_Angeles:${values}`, `EXDATE;TZID=Pacific Standard Time:${values}`);
-	parseInvite(text);
-	const started = performance.now();
-	const invite = parseInvite(text);
-	const elapsed = performance.now() - started;
-	assert.equal(invite.excludedDates.length, 1000);
-	assert.ok(elapsed < 100, `took ${elapsed} ms`);
+test("EXDATE values are capped before they are parsed", (t) => {
+	const values = (count) => Array.from({ length: count }, (_, i) => `2027${String(1 + (i % 12)).padStart(2, "0")}${String(1 + (i % 28)).padStart(2, "0")}T100000`).join(",");
+	const invite = (count) => event("DTSTART;TZID=America/Los_Angeles:20261105T100000", "RRULE:FREQ=DAILY", `EXDATE;TZID=America/Los_Angeles:${values(count)}`, `EXDATE;TZID=Pacific Standard Time:${values(count)}`);
+	// Every parsed date goes through Date.UTC, so counting calls measures parsing work without a wall-clock bound.
+	const utc = t.mock.method(Date, "UTC");
+	const parsedWith = (text) => {
+		utc.mock.resetCalls();
+		const result = parseInvite(text);
+		return { excluded: result.excludedDates.length, calls: utc.mock.callCount() };
+	};
+	const capped = parsedWith(invite(1000));
+	const huge = parsedWith(invite(15_000));
+	assert.equal(capped.excluded, 1000);
+	assert.equal(huge.excluded, 1000);
+	assert.equal(huge.calls, capped.calls, "values past the cap were parsed");
 });
 
 test("COUNT of any size gives a finite end or a single event, quickly", () => {
