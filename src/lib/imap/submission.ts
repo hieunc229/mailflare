@@ -83,7 +83,7 @@ const flatten = (value: string | null | undefined): string => (value ?? "").repl
 
 /** Unfolded top-level headers by lower-case name, read from the first 64 KiB (the parser's own header limit). */
 function topHeaders(raw: Buffer): Map<string, string[]> {
-	const text = raw.subarray(0, MIME_LIMITS.maxHeaderBytes).toString("latin1");
+	const text = new TextDecoder("latin1").decode(raw.subarray(0, MIME_LIMITS.maxHeaderBytes));
 	const end = text.search(/\r?\n\r?\n/);
 	const block = (end >= 0 ? text.slice(0, end) : text).replace(/\r?\n[ \t]+/g, " ");
 	const headers = new Map<string, string[]>();
