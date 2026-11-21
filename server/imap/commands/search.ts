@@ -1,6 +1,7 @@
 import type { ParsedCommand } from "imap-handler";
 import { bad, no } from "@/lib/imap/errors";
-import { SearchEvaluator, decoderFor, parseSearchCriteria } from "@/lib/imap/search";
+import { maxModseqOf } from "@/lib/imap/condstore";
+import { SearchEvaluator, decoderFor, parseSearchCriteria, usesModseq } from "@/lib/imap/search";
 import { compactSet } from "@/lib/imap/sets";
 import type { Completion, ImapConnection } from "../connection";
 import { args, isList, text } from "./args";
@@ -29,8 +30,14 @@ export async function runSearch(c: ImapConnection, command: ParsedCommand, uidMo
 	const uids = await new SearchEvaluator(c.env, view).run(criteria);
 	const msnOfUid = new Map(view.uids.map((uid, index) => [uid, index + 1]));
 	const numbers = uidMode ? uids : uids.map((uid) => msnOfUid.get(uid)!);
+	// A search that names MODSEQ turns CONDSTORE on and reports the highest mod-sequence among the messages it found.
+	let highest: number | null = null;
+	if (usesModseq(criteria)) {
+		c.enableCondstore();
+		if (uids.length) highest = await maxModseqOf(c.env, view.mailboxId, view.folderKey, uids);
+	}
 	if (returns === null) {
-		c.untagged(`SEARCH${numbers.length ? ` ${numbers.join(" ")}` : ""}`);
+		c.untagged(`SEARCH${numbers.length ? ` ${numbers.join(" ")}` : ""}${highest !== null ? ` (MODSEQ ${highest})` : ""}`);
 		return;
 	}
 	const parts: string[] = [];
@@ -38,5 +45,6 @@ export async function runSearch(c: ImapConnection, command: ParsedCommand, uidMo
 	if (returns.includes("MAX") && numbers.length) parts.push(`MAX ${numbers[numbers.length - 1]}`);
 	if (returns.includes("COUNT")) parts.push(`COUNT ${numbers.length}`);
 	if (returns.includes("ALL") && numbers.length) parts.push(`ALL ${compactSet(numbers)}`);
+	if (highest !== null) parts.push(`MODSEQ ${highest}`);
 	c.untagged(`ESEARCH (TAG "${command.tag}")${uidMode ? " UID" : ""}${parts.length ? ` ${parts.join(" ")}` : ""}`);
 }

@@ -2,6 +2,7 @@ import { and, eq, gte, isNull, lt, or, type SQL } from "drizzle-orm";
 import { getDb } from "@/db";
 import { imapMessageFlags, imapUids, messages } from "@/db/schema";
 import { containsLike } from "@/db/sql";
+import { parseModseq } from "./condstore";
 import { bad, no } from "./errors";
 import { MimeIndexError, getMessageIndex, readSection } from "./fetch";
 import { parseSequenceSet, selectByNumber, selectByUid, type SetRange } from "./sets";
@@ -29,7 +30,8 @@ export type SearchKey =
 	| { t: "text"; field: "from" | "to" | "cc" | "bcc" | "subject" | "body" | "text"; value: string }
 	| { t: "date"; op: "before" | "on" | "since"; day: number }
 	| { t: "header"; name: string; value: string }
-	| { t: "size"; op: "larger" | "smaller"; bytes: number };
+	| { t: "size"; op: "larger" | "smaller"; bytes: number }
+	| { t: "modseq"; value: number };
 
 export const MAX_DEPTH = 32;
 export const MAX_STRING = 2048;
@@ -132,6 +134,18 @@ function parseKey(cursor: Cursor, decode: Decoder, depth: number): SearchKey {
 			if (!field || !HEADER_NAME_CHARS.test(field)) throw bad("A header name is not valid");
 			return { t: "header", name: field.toLowerCase(), value: stringArg(cursor, decode) };
 		}
+		case "MODSEQ": {
+			// `MODSEQ n`, or `MODSEQ "/flags/\\Seen" all n` (RFC 7162 section 3.1.5): the entry says which metadata, and this server has one mod-sequence per message.
+			const first = cursor.items[cursor.at];
+			if (atom(first) === null || !/^\d+$/.test(atom(first)!)) {
+				const entry = cursor.items[cursor.at++];
+				const kind = atom(cursor.items[cursor.at++])?.toLowerCase();
+				if (!entry || Array.isArray(entry) || typeof entry.value !== "string" || entry.value.length > 256 || !kind || !["shared", "priv", "all"].includes(kind)) throw bad("MODSEQ takes an entry name and type, or just a mod-sequence");
+			}
+			const value = parseModseq(atom(cursor.items[cursor.at++]) ?? "");
+			if (value === null) throw bad("MODSEQ takes a mod-sequence");
+			return { t: "modseq", value };
+		}
 		case "NOT": return { t: "not", key: parseKey(cursor, decode, depth + 1) };
 		case "OR": return { t: "or", a: parseKey(cursor, decode, depth + 1), b: parseKey(cursor, decode, depth + 1) };
 		case "UID": {
@@ -140,6 +154,17 @@ function parseKey(cursor: Cursor, decode: Decoder, depth: number): SearchKey {
 			return { t: "set", ranges, byUid: true };
 		}
 		default: throw bad("A search key is not supported");
+	}
+}
+
+/** Whether the search names MODSEQ anywhere: the answer then reports the highest mod-sequence found. */
+export function usesModseq(key: SearchKey): boolean {
+	switch (key.t) {
+		case "modseq": return true;
+		case "not": return usesModseq(key.key);
+		case "or": return usesModseq(key.a) || usesModseq(key.b);
+		case "and": return key.keys.some(usesModseq);
+		default: return false;
 	}
 }
 
@@ -202,6 +227,7 @@ function predicate(key: SearchKey): SQL | null {
 			if (key.op === "since") return gte(messages.createdAt, new Date(key.day));
 			if (key.op === "before") return lt(messages.createdAt, new Date(key.day));
 			return and(gte(messages.createdAt, new Date(key.day)), lt(messages.createdAt, new Date(key.day + DAY)))!;
+		case "modseq": return gte(imapUids.modseq, key.value);
 		case "header":
 			// The threading headers are columns; every other header needs the message data.
 			if (key.name === "message-id") return containsLike(messages.providerMessageId, key.value);

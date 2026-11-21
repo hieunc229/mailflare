@@ -1,5 +1,6 @@
 import { and, asc, count, desc, eq, inArray, sql } from "drizzle-orm";
 import { emailChangesSince, threadChangesSince } from "./changes";
+import { getDialect } from "@/db";
 import { messages } from "@/db/schema";
 import { newId } from "@/lib/ids";
 import { buildSnippet, parseRawMime } from "@/lib/email/parse";
@@ -266,9 +267,64 @@ async function createDraft(ctx: JmapContext, value: Record<string, unknown>, acc
 	return { id };
 }
 
+/**
+ * `ctx.emailUpdateGuard`, set only by callers that decided to write from a read of the change log (the IMAP server's
+ * `STORE ... UNCHANGEDSINCE`), never by a request: `update` entries of messages in `mailboxId` are written only if the message has no entry in
+ * the change log after `jmapSeq`, checked in the very statement that writes, and the ones that were not written come back
+ * in `notUpdated` as `changedSince`. Without it nothing here is conditional.
+ */
+type UpdateGuard = NonNullable<JmapContext["emailUpdateGuard"]>;
+
+/** True while no change of the message was logged after `guard.jmapSeq`. */
+export const unchangedSinceLogged = (guard: UpdateGuard, messageId: string) =>
+	sql`not exists (select 1 from jmap_changes where mailbox_id = ${guard.mailboxId} and object_type = 'email' and object_id = ${messageId} and seq > ${guard.jmapSeq})`;
+
+/** Ids per statement on the MySQL path: with the mailbox and the sequence, each statement stays within 100 parameters. */
+const GUARD_IDS = 90;
+
+type GuardDb = {
+	update(table: typeof messages): { set(values: Record<string, unknown>): { where(condition: ReturnType<typeof and>): PromiseLike<unknown> & { returning(fields: { id: typeof messages.id }): PromiseLike<Array<{ id: string }>> } } };
+	all(query: ReturnType<typeof sql>): Promise<unknown[]>;
+	atomically?: <R>(fn: () => Promise<R>) => Promise<R>;
+};
+
+/**
+ * Writes `set` to the messages `ids` of `guard.mailboxId` that have no change logged after `guard.jmapSeq`, and returns the ids that were not written
+ * because one has. The check is part of the write on SQLite and PostgreSQL (one statement per message). MySQL refuses a statement whose trigger
+ * writes a table the statement reads (error 1442, and the change-log trigger does), so there it is a locking read of the change log followed by a
+ * plain UPDATE of the other ids, in one transaction: the read lock also holds back inserts into that range until the commit. Row counts are
+ * not used on MySQL (some servers count only rows whose values changed); the read is the answer.
+ */
+export async function updateUnlessChangedSince(env: Pick<CloudflareEnv, "DB">, database: unknown, guard: UpdateGuard, ids: string[], set: Record<string, unknown>): Promise<Set<string>> {
+	const db = database as GuardDb;
+	const changed = new Set<string>();
+	if (getDialect(env) !== "mysql") {
+		for (const id of ids) {
+			const written = await db.update(messages).set(set).where(and(eq(messages.id, id), eq(messages.mailboxId, guard.mailboxId), unchangedSinceLogged(guard, id))).returning({ id: messages.id });
+			if (!written.length) changed.add(id);
+		}
+		return changed;
+	}
+	const run = async () => {
+		for (let start = 0; start < ids.length; start += GUARD_IDS) {
+			const group = ids.slice(start, start + GUARD_IDS);
+			const rows = (await db.all(
+				sql`select object_id from jmap_changes where mailbox_id = ${guard.mailboxId} and object_type = 'email' and object_id in (${sql.join(group.map((id) => sql`${id}`), sql`, `)}) and seq > ${guard.jmapSeq} lock in share mode`,
+			)) as Array<{ object_id?: string } | unknown[]>;
+			for (const row of rows) changed.add(String(Array.isArray(row) ? row[0] : row.object_id));
+			const open = group.filter((id) => !changed.has(id));
+			if (open.length) await db.update(messages).set(set).where(and(inArray(messages.id, open), eq(messages.mailboxId, guard.mailboxId)));
+		}
+	};
+	if (db.atomically) await db.atomically(run);
+	else await run();
+	return changed;
+}
+
 export const emailSet: JmapMethodHandler = async (ctx, args) => {
 	const oldState = await getEmailState(ctx);
 	if (args.ifInState && args.ifInState !== oldState) return { type: "stateMismatch" };
+	const guard = ctx.emailUpdateGuard ?? null;
 	const accessible = await listAccessibleMailboxIdSet(ctx);
 	const writable = new Set((await listJmapMailboxes(ctx)).filter((row) => row.permission !== "read_only").map((row) => row.id));
 	const created: Record<string, unknown> = {};
@@ -302,6 +358,10 @@ export const emailSet: JmapMethodHandler = async (ctx, args) => {
 			notUpdated[id] = { type: "forbidden" };
 			continue;
 		}
+		if (guard && row.mailboxId !== guard.mailboxId) {
+			notUpdated[id] = { type: "notFound" };
+			continue;
+		}
 		const move = targetFromMailboxIds(row, patch, accessible);
 		if (move && "error" in move) {
 			notUpdated[id] = move.error;
@@ -315,7 +375,13 @@ export const emailSet: JmapMethodHandler = async (ctx, args) => {
 			if (move.status !== undefined) set.status = move.status;
 			if (move.folderId !== undefined) set.folderId = move.folderId;
 		}
-		if (Object.keys(set).length) await ctx.db.update(messages).set(set).where(eq(messages.id, id));
+		if (Object.keys(set).length) {
+			if (!guard) await ctx.db.update(messages).set(set).where(eq(messages.id, id));
+			else if ((await updateUnlessChangedSince(ctx.env, ctx.db, guard, [id], set)).size) {
+				notUpdated[id] = { type: "changedSince" };
+				continue;
+			}
+		}
 		updated[id] = null;
 	}
 

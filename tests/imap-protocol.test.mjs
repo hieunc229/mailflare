@@ -295,7 +295,7 @@ test("STATUS and SELECT report the folder; EXAMINE is read-only, SELECT of an ow
 	assert.equal((await client.cmd("SELECT Shared")).status, "NO", "a placeholder cannot be selected");
 	assert.equal((await client.cmd("SELECT Shared/team@other.test")).status, "NO");
 	assert.equal((await client.cmd("SELECT inbox/..")).status, "NO");
-	assert.equal((await client.cmd("SELECT INBOX (CONDSTORE)")).status, "BAD", "no select parameters are offered");
+	assert.equal((await client.cmd("SELECT INBOX (BOGUS)")).status, "BAD", "an unknown select parameter");
 });
 
 test("FETCH: flags, internal date, size, envelope, bodystructure, sections and partials", async (t) => {
@@ -327,7 +327,7 @@ test("FETCH: flags, internal date, size, envelope, bodystructure, sections and p
 	assert.equal((await client.cmd("FETCH 1 BODY[HEADER.FIELDS ()]")).status, "BAD");
 	assert.equal((await client.cmd("FETCH abc FLAGS")).status, "BAD");
 	assert.equal((await client.cmd("FETCH 1 BODY[]<0.0>")).status, "BAD");
-	assert.equal((await client.cmd("FETCH 1 MODSEQ")).status, "BAD", "CONDSTORE is not offered");
+	assert.equal((await client.cmd("FETCH 1 (FLAGS) (BOGUS)")).status, "BAD", "an unknown FETCH modifier");
 });
 
 test("FETCH: at most 64 items, repeated items are sent once, and a literal goes to the socket as its own buffer", async (t) => {
@@ -946,7 +946,7 @@ test("ID, ENABLE, CHECK, CLOSE, UNSELECT, SUBSCRIBE", async (t) => {
 	assert.equal((await client.cmd(`ID (${'"k" "v" '.repeat(40)})`)).status, "BAD", "too many fields");
 	assert.equal((await client.cmd("ENABLE CONDSTORE")).status, "BAD", "log in first");
 	await client.login("me@example.test", key.fullKey);
-	assert.equal((await client.cmd("ENABLE CONDSTORE")).text.split("\r\n")[0], "* ENABLED");
+	assert.equal((await client.cmd("ENABLE CONDSTORE")).text.split("\r\n")[0], "* ENABLED CONDSTORE");
 	assert.equal((await client.cmd("CHECK")).status, "BAD", "no mailbox selected");
 	await client.cmd("SELECT INBOX");
 	assert.equal((await client.cmd("CHECK")).status, "OK");

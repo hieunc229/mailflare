@@ -76,6 +76,11 @@ async function readState(env: SyncEnv, mailboxId: string): Promise<State | null>
 	return row ? { jmapSeq: num(row.jmap_seq), modseq: num(row.modseq) } : null;
 }
 
+/** The change-log position (`jmap_seq`) the IMAP state of a mailbox is built from: every change at or below it is in the mod-sequences. Null before the first sync. */
+export async function syncedChangeSeq(env: SyncEnv, mailboxId: string): Promise<number | null> {
+	return (await readState(env, mailboxId))?.jmapSeq ?? null;
+}
+
 async function readFloor(env: SyncEnv): Promise<number> {
 	const [row] = await rows<{ seq: number }>(env, "SELECT seq FROM jmap_change_floor WHERE id = 1");
 	return num(row?.seq);
