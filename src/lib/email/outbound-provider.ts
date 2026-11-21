@@ -104,11 +104,27 @@ async function sendWithResend(
 		body: JSON.stringify(resendPayload(message, setsMessageId ? mintedId : null, resendOmittedHeaders(env))),
 	});
 	const body = (await response.json().catch(() => null)) as { id?: string; message?: string } | null;
-	if (!response.ok) throw new Error(`Resend: ${body?.message ?? `request failed (${response.status})`}`);
+	if (!response.ok) throw Object.assign(new Error(`Resend: ${body?.message ?? `request failed (${response.status})`}`), { status: response.status });
 	if (setsMessageId || !body?.id) return { messageId: mintedId };
 	// Without our own header, thread replies against the ID the provider assigned.
 	// It can be missing while the send is still queued; the minted ID is the fallback.
 	return { messageId: (await fetchSentMessageId(client, body.id)) ?? mintedId };
+}
+
+/** Codes of the Cloudflare send binding for refusals that sending again cannot fix. */
+const CLOUDFLARE_FINAL_CODES = new Set(["E_SENDER_NOT_VERIFIED", "E_SENDER_DOMAIN_NOT_AVAILABLE", "E_RECIPIENT_NOT_ALLOWED", "E_RECIPIENT_SUPPRESSED", "E_VALIDATION_ERROR", "E_FIELD_MISSING", "E_TOO_MANY_RECIPIENTS", "E_CONTENT_TOO_LARGE", "E_HEADER_NOT_ALLOWED"]);
+
+/**
+ * Whether an error from `sendThroughProvider` is a final refusal: an HTTP 4xx (Resend, SES) other than a timeout,
+ * a conflict or a rate or quota limit, an SMTP 5xx (the Node runtime's relay), or a final Cloudflare code. Network
+ * failures, 5xx answers and anything unknown are not final.
+ */
+export function isFinalProviderRefusal(error: unknown): boolean {
+	if (!error || typeof error !== "object") return false;
+	const { status, code, responseCode } = error as { status?: unknown; code?: unknown; responseCode?: unknown };
+	if (typeof status === "number") return status >= 400 && status < 500 && ![408, 409, 429].includes(status) && !/Throttl|LimitExceeded|TooManyRequests|SendingPaused/.test(String(code ?? ""));
+	if (typeof responseCode === "number") return responseCode >= 500 && responseCode < 600;
+	return typeof code === "string" && CLOUDFLARE_FINAL_CODES.has(code);
 }
 
 export async function sendThroughProvider(

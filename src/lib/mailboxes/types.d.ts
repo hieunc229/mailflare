@@ -18,6 +18,7 @@ export type AuditAction =
 	| "auth.login"
 	| "auth.logout"
 	| "email.send"
+	| "email.submit"
 	| "email.read"
 	| "email.delete"
 	| "permission.change"
