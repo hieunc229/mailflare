@@ -1,12 +1,13 @@
 import { eq } from "drizzle-orm";
 import { getDb } from "@/db";
+import { dialectOf } from "@/db/introspect";
 import { agentSendApprovals, messages } from "@/db/schema";
 import { confirmAgentSend } from "@/lib/agent/approvals/utils";
 import { createAuditLog } from "@/lib/mailboxes/audit";
 import type { McpPrincipal } from "./types";
 
-/** Why an approval was refused. `permission_denied` and `not_found` say "you may not do this"; `expired` says the request is gone. */
-export type ApproveSendRefusal = "permission_denied" | "not_found" | "expired" | "refused";
+/** Why an approval was refused. `permission_denied` and `not_found` say "you may not do this"; `expired` says the request is gone; `unsupported_dialect` says this deployment cannot promise a single send. */
+export type ApproveSendRefusal = "permission_denied" | "not_found" | "expired" | "refused" | "unsupported_dialect";
 
 export type ApproveSendOutcome =
 	| { ok: true; approvalId: string; status: string; messageId: string | null }
@@ -40,6 +41,20 @@ export async function approveAgentSend(
 	if (!principal.canApproveOwnSends) {
 		return { ok: false, error: "Permission denied: this key may not approve its own sends", code: "permission_denied" };
 	}
+	// 3. Single-send is a database guarantee, and MySQL does not have it here. The other dialects create
+	// `agent_send_approvals_delivery_idx` as a partial UNIQUE index on (draft_id) where status in
+	// ('claimed','sent','unknown') — src/db/schema/index.ts:1366, drizzle/migrations/0032_add_agentic_mail.sql
+	// and drizzle/migrations-pg/0000_baseline.sql:754 — so only one approval per draft can ever be claimed.
+	// MySQL cannot express that partial index: drizzle/migrations-mysql/0000_baseline.sql:823 creates a
+	// plain nonunique index of the same name, so `requestAgentSend`'s check (utils.ts:51-59) is only a
+	// pre-check there and two pending approvals for one draft can both be claimed and both enqueued.
+	// Refusing is the honest answer; the web review page keeps working, and `approve_send` comes back once
+	// MySQL has an equivalent constraint (a generated column that is NULL outside the delivery states,
+	// unique on (draft_id), or an explicit per-draft send lock table), which a baseline edit cannot give
+	// existing deployments anyway.
+	if (dialectOf(env.DB) === "mysql") {
+		return { ok: false, error: "approve_send is unavailable on MySQL: this deployment lacks the delivery uniqueness constraint that makes an approval single-send; use the web review page", code: "unsupported_dialect" };
+	}
 	const [approval] = await getDb(env)
 		.select({
 			mailboxId: agentSendApprovals.mailboxId,
@@ -49,7 +64,7 @@ export async function approveAgentSend(
 		.from(agentSendApprovals)
 		.where(eq(agentSendApprovals.id, input.approvalId))
 		.limit(1);
-	// 3. Own drafts only: the stored creating key must be this key's server-side id. A request made
+	// 4. Own drafts only: the stored creating key must be this key's server-side id. A request made
 	// in the web UI has no key on it, and another key's request names that key, so both are "not found"
 	// rather than being reported as existing.
 	if (!approval || approval.userId !== principal.user.id || approval.mailboxId !== input.mailboxId || approval.requestKeyId !== principal.keyId) {

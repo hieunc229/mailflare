@@ -120,3 +120,33 @@ test("a fresh request is approved through the pipeline and reported as queued", 
 	assert.deepEqual(again.data, { approvalId: request.approvalId, status: "queued", messageId: result.data.messageId });
 	assert.equal(deliveries.length, 1);
 });
+
+test("MySQL refuses approve_send, and the same approval still works on SQLite", async (t) => {
+	const { sqlite, call } = await setUp(t);
+	decided(sqlite, "ap-mine", "pending");
+	let drizzleCalls = 0;
+	// `dialectOf` reads the connection's own config, exactly as the migrations service does
+	// (`src/lib/migrations/service.ts:34`); this stands in for a MySQL deployment, which needs no server
+	// to check the guard's decision. The MySQL-side double-send itself was proven by the auditor's /tmp
+	// reproduction, not here.
+	const mysqlEnv = {
+		DB: { config: { dialect: "mysql" }, createDrizzle: () => { drizzleCalls += 1; throw new Error("no database access expected"); } },
+		OUTBOUND_QUEUE: { send: () => { throw new Error("no delivery expected"); } },
+	};
+	const server = app.createMailflareMcpHandler(mysqlEnv, principal(), "https://mailflare.test", "");
+	const refusal = await server.tools.get("approve_send")({ mailboxId: "mb-owner", approvalId: "ap-mine" });
+	const data = JSON.parse(refusal.content[0].text);
+	assert.equal(refusal.isError, true);
+	assert.equal(data.code, "unsupported_dialect");
+	assert.match(data.error, /MySQL/);
+	assert.match(data.error, /web review page/);
+	// The refusal comes before any read or transition.
+	assert.equal(drizzleCalls, 0);
+	assert.equal(sqlite.prepare("SELECT status FROM agent_send_approvals WHERE id = 'ap-mine'").get().status, "pending");
+
+	// The gate is the dialect, not the approval: the same request on SQLite is answered as usual.
+	sqlite.prepare("UPDATE agent_send_approvals SET status = 'claimed' WHERE id = 'ap-mine'").run();
+	const sqliteResult = await call(principal(), "ap-mine");
+	assert.equal(sqliteResult.isError, false, JSON.stringify(sqliteResult.data));
+	assert.deepEqual(sqliteResult.data, { approvalId: "ap-mine", status: "claimed", messageId: null });
+});
