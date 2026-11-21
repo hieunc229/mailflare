@@ -15,6 +15,7 @@ import { encodeMailboxRef } from "@/lib/jmap/ids";
 import { imapContext, type ImapIdentity } from "./auth";
 import { no } from "./errors";
 import { MAX_KEYWORDS, type ParsedFlags } from "./flags";
+import { Gate } from "./gate";
 import { findSubmission } from "./sent-dedupe";
 import { syncMailbox } from "./sync";
 import { uidsOf, type Destination } from "./transfer";
@@ -58,7 +59,13 @@ function destinationOf(dest: Destination): ImportDestination {
 	return dest.key.startsWith("f:") ? { type: "folder", folderId: dest.key.slice(2) } : { type: "system", section: SECTIONS[dest.key] };
 }
 
-const arrayBufferOf = (raw: Buffer): ArrayBuffer => raw.buffer.slice(raw.byteOffset, raw.byteOffset + raw.byteLength) as ArrayBuffer;
+/** The message bytes as an ArrayBuffer: the buffer itself when it holds nothing else (every literal of any size), a copy of the view otherwise. */
+const arrayBufferOf = (raw: Buffer): ArrayBuffer => (raw.byteOffset === 0 && raw.byteLength === raw.buffer.byteLength ? raw.buffer : raw.buffer.slice(raw.byteOffset, raw.byteOffset + raw.byteLength)) as ArrayBuffer;
+
+/** Messages parsed and stored at the same time in one process, and how many more may wait; a message holds its memory budget while it waits. */
+export const MAX_CONCURRENT_APPENDS = 2;
+export const MAX_QUEUED_APPENDS = 32;
+export const appendGate = new Gate(MAX_CONCURRENT_APPENDS, MAX_QUEUED_APPENDS);
 
 async function parse(raw: Buffer): Promise<ParsedEmail> {
 	try {
@@ -69,7 +76,9 @@ async function parse(raw: Buffer): Promise<ParsedEmail> {
 	}
 }
 
-export async function appendMessage(env: CloudflareEnv, identity: ImapIdentity, dest: Destination, input: AppendInput): Promise<AppendResult> {
+export const appendMessage = (env: CloudflareEnv, identity: ImapIdentity, dest: Destination, input: AppendInput): Promise<AppendResult> => appendGate.run(() => appendNow(env, identity, dest, input));
+
+async function appendNow(env: CloudflareEnv, identity: ImapIdentity, dest: Destination, input: AppendInput): Promise<AppendResult> {
 	if (input.raw.length === 0) throw no("The message is empty", "CANNOT");
 	if (input.flags.keywords.length > MAX_KEYWORDS) throw no("A message may have at most 50 keywords", "LIMIT");
 	const db = getDb(env);

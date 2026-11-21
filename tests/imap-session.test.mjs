@@ -323,10 +323,10 @@ test("IMAP settings: off by default, ports, limits, and the loopback-only plain 
 	assert.deepEqual(on, { enabled: true, port: 0, starttlsPort: 143, host: "127.0.0.1", hostname: "mail.x", maxConnections: 50, maxMessageSize: 36 * 1024 * 1024, allowPlaintext: true, hasCertificate: true });
 	for (const bad of ["abc", "-1", "70000", "1.5"]) assert.equal(m.readImapConfig({ IMAP_PORT: bad }).port, 993, bad);
 	for (const bad of ["0", "-3", "x", ""]) assert.equal(m.readImapConfig({ IMAP_MAX_CONNECTIONS: bad }).maxConnections, 500, bad);
-	// The APPEND limit follows IMAP_MAX_MESSAGE_SIZE, then SMTP_MAX_SIZE, and is never above the in-flight budget.
+	// The APPEND limit follows IMAP_MAX_MESSAGE_SIZE, then SMTP_MAX_SIZE, and is never above the budget divided by the memory one octet costs (6).
 	assert.equal(m.readImapConfig({ SMTP_MAX_SIZE: "1000" }).maxMessageSize, 1000);
 	assert.equal(m.readImapConfig({ SMTP_MAX_SIZE: "1000", IMAP_MAX_MESSAGE_SIZE: "2000" }).maxMessageSize, 2000);
-	assert.equal(m.readImapConfig({ IMAP_MAX_MESSAGE_SIZE: String(10 * 1024 ** 3) }).maxMessageSize, 512 * 1024 * 1024);
+	assert.equal(m.readImapConfig({ IMAP_MAX_MESSAGE_SIZE: String(10 * 1024 ** 3) }).maxMessageSize, Math.floor((512 * 1024 * 1024) / 6));
 	for (const bad of ["0", "-1", "x", "1.5"]) assert.equal(m.readImapConfig({ IMAP_MAX_MESSAGE_SIZE: bad }).maxMessageSize, 36 * 1024 * 1024, bad);
 	assert.equal(m.imapIsOffered({ IMAP_ENABLED: "1" }), false);
 	assert.equal(m.imapIsOffered({ IMAP_ENABLED: "1", SMTP_TLS_KEY: "k", SMTP_TLS_CERT: "c" }), true);
