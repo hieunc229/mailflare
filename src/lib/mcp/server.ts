@@ -7,6 +7,7 @@ import { getMailboxAccessLevel, listAccessibleMailboxes } from "@/lib/mailboxes/
 import { runEmailTool, EMAIL_TOOL_NAMES, emailToolDescriptions, emailToolSchemas } from "@/lib/agent/tools";
 import { editAgentDraft } from "@/lib/agent/edit-draft";
 import { requestAgentSend, getAgentSendRequest } from "@/lib/agent/approvals/utils";
+import { approveAgentSend } from "./approve-send";
 import { cancelScheduledSend, getScheduledTime } from "@/lib/email/scheduled";
 import { addConversationNote, conversationForUser, CONVERSATION_NOTE_MAX_LENGTH, deleteConversationNote, listConversationNotes, updateConversationNote } from "@/lib/notes/service";
 import type { EmailToolName } from "@/lib/agent/types";
@@ -76,6 +77,13 @@ export function createMailflareMcpHandler(env: CloudflareEnv, principal: McpPrin
 				return output({ ...result, reviewUrl: new URL(result.reviewUrl, env.APP_URL || baseUrl).toString() });
 			}
 			catch (error) { return output({ error: error instanceof Error ? error.message : "Request failed" }, true); }
+		});
+		server.registerTool("approve_send", { description: "Approve a send review request this key created and send it now. Only works when this key is allowed to approve its own sends; a request made in the web UI, another key's request, and an expired request are refused. Returns the delivery status and the message id.", inputSchema: z.object({ mailboxId: z.string().min(1), approvalId: z.string().min(1) }), annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: false } }, async ({ mailboxId, approvalId }) => {
+			audit(principal, "approve_send", mailboxId);
+			const result = await approveAgentSend(env, principal, { mailboxId, approvalId }, env.APP_URL || baseUrl);
+			return result.ok
+				? output({ approvalId: result.approvalId, status: result.status, messageId: result.messageId })
+				: output({ error: result.error, ...(result.status ? { status: result.status } : {}) }, true);
 		});
 		server.registerTool("get_scheduled_send", { description: "Get when a scheduled email (from the scheduled folder) will be sent.", inputSchema: z.object({ mailboxId: z.string(), messageId: z.string() }) }, async ({ mailboxId, messageId }) => {
 			if (!principal.scopes.includes("mcp:read") || !principal.mailboxIds.includes(mailboxId)) return output({ error: "Permission denied" }, true);

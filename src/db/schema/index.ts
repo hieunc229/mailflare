@@ -342,6 +342,11 @@ export const apiKeys = sqliteTable("api_keys", {
 	keySha256: text("key_sha256"),
 	scopes: text("scopes").notNull(),
 	mailboxScopeEnabled: bool("mailbox_scope_enabled").notNull().default(false),
+	/**
+	 * Lets this key approve the send review requests it created itself (`approve_send`).
+	 * Off by default: a key alone never releases a send.
+	 */
+	canApproveOwnSends: bool("can_approve_own_sends").notNull().default(false),
 	createdAt: timestamp("created_at")
 		.notNull()
 		.$defaultFn(() => new Date()),

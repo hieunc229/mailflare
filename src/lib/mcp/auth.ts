@@ -31,7 +31,7 @@ export async function authenticateMcpRequest(env: CloudflareEnv, request: Reques
 		for (const { mailboxId } of allowed) if ((await getMailboxAccessLevel(db, user, mailboxId))?.canRead) mailboxIds.push(mailboxId);
 		const stale = new Date(Date.now() - 60_000);
 		await db.update(apiKeys).set({ lastUsedAt: new Date() }).where(and(eq(apiKeys.id, candidate.id), or(isNull(apiKeys.lastUsedAt), lt(apiKeys.lastUsedAt, stale))));
-		return { keyId: candidate.id, user, scopes: allScopes, mailboxIds };
+		return { keyId: candidate.id, user, scopes: allScopes, mailboxIds, canApproveOwnSends: candidate.canApproveOwnSends };
 	}
 	return null;
 }
