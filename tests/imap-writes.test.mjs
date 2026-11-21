@@ -761,3 +761,152 @@ test("imapflow can append, store, copy, move and expunge", async (t) => {
 	}
 	assert.equal(w.sqlite.prepare("SELECT status FROM messages WHERE subject = 'Via imapflow' AND status = 'trash'").all().length, 1, "deleting outside Trash moves to Trash");
 });
+
+// ---- CREATE, DELETE, RENAME, SUBSCRIBE ----
+
+const foldersOf = (w, mailbox = "m1") => w.sqlite.prepare("SELECT id, name, user_id AS user FROM folders WHERE mailbox_id = ? ORDER BY name").all(mailbox);
+
+test("CREATE makes a flat folder for the mailbox, LIST shows it under a placeholder parent, and the web folder list has it", async (t) => {
+	const w = await world(t);
+	const key = await w.addKey({ id: "k1" });
+	const client = await loggedIn(w, key);
+	t.after(() => client.end());
+	assert.equal((await client.cmd('CREATE "Clients/Acme"')).status, "OK");
+	assert.deepEqual(foldersOf(w).map((row) => [row.name, row.user]), [["Clients/Acme", "u1"]]);
+	const list = await client.cmd('LIST "" "Clients*"');
+	assert.match(list.text, /\* LIST \(\\HasNoChildren\) "\/" "Clients\/Acme"\r\n\* LIST \(\\Noselect \\HasChildren\) "\/" "Clients"\r\n/);
+	assert.equal((await client.cmd("SELECT Clients/Acme")).status, "OK");
+	assert.equal((await client.cmd('CREATE "Clients/Acme"')).detail, "[ALREADYEXISTS] Mailbox already exists");
+	assert.equal((await client.cmd("CREATE Clients")).status, "OK", "a placeholder name can become a folder");
+	assert.equal((await client.cmd("CREATE inbox/Sub")).status, "OK");
+	assert.deepEqual(foldersOf(w).map((row) => row.name), ["Clients", "Clients/Acme", "INBOX/Sub"]);
+	assert.equal((await client.cmd("CREATE &AOQ-")).status, "OK", "modified UTF-7 names are decoded");
+	assert.ok(foldersOf(w).some((row) => row.name === "\u00e4"));
+	assert.equal((await client.cmd("CREATE Newparent/")).status, "OK", "a trailing delimiter only announces children");
+	assert.equal(foldersOf(w).some((row) => row.name.startsWith("Newparent")), false);
+});
+
+test("CREATE refuses system names, reserved and malformed names, and too many folders", async (t) => {
+	const w = await world(t);
+	const key = await w.addKey({ id: "k1" });
+	const client = await loggedIn(w, key);
+	t.after(() => client.end());
+	for (const name of ["INBOX", "inbox", "Sent", "Drafts", "Archive", "Junk", "Trash"]) assert.equal((await client.cmd(`CREATE ${name}`)).detail, "[ALREADYEXISTS] Mailbox already exists", name);
+	for (const name of ["Shared", "Shared/x", "shared/x"]) assert.equal((await client.cmd(`CREATE ${name}`)).status, "NO", name);
+	const bad = ['"a*"', '"a%"', '"a//b"', '"/a"', '"a/../b"', '"./a"', '" lead"', '"trail "', "&x", `"${"a".repeat(81)}"`, `"${Array.from({ length: 12 }, () => "a").join("/")}"`];
+	for (const name of bad) assert.equal((await client.cmd(`CREATE ${name}`)).detail.split("]")[0], "[CANNOT", name);
+	assert.equal((await client.cmd(`CREATE "${"a".repeat(80)}"`)).status, "OK", "80 characters is allowed");
+	client.write("c1 CREATE {3+}\r\na\x01b\r\n");
+	assert.equal((await client.finish("c1")).detail.split("]")[0], "[CANNOT", "control characters");
+	assert.equal(foldersOf(w).length, 1);
+	for (let index = 0; index < 499; index += 1) w.sqlite.prepare("INSERT INTO folders (id, user_id, mailbox_id, name, created_at) VALUES (?, 'u1', 'm1', ?, 1)").run(`bulk${index}`, `bulk ${index}`);
+	assert.equal((await client.cmd("CREATE one-too-many")).detail, "[LIMIT] Too many folders in this mailbox");
+});
+
+test("CREATE, DELETE and RENAME in a shared mailbox need full access there", async (t) => {
+	const w = await world(t);
+	const key = await w.addKey({ id: "k1" });
+	addFolder(w, "sf", "Team stuff", "ms");
+	const client = await loggedIn(w, key);
+	t.after(() => client.end());
+	for (const command of ['CREATE "Shared/team@other.test/New"', 'DELETE "Shared/team@other.test/Team stuff"', 'RENAME "Shared/team@other.test/Team stuff" "Shared/team@other.test/Other"']) {
+		assert.equal((await client.cmd(command)).detail, "[NOPERM] You may not change folders in this mailbox", command);
+	}
+	w.sqlite.prepare("UPDATE mailbox_access SET permission = 'send_as'").run();
+	assert.equal((await client.cmd('CREATE "Shared/team@other.test/New"')).detail, "[NOPERM] You may not change folders in this mailbox", "send_as may write mail, not manage folders");
+	w.sqlite.prepare("UPDATE mailbox_access SET permission = 'full_access'").run();
+	assert.equal((await client.cmd('CREATE "Shared/team@other.test/New"')).status, "OK");
+	assert.deepEqual(foldersOf(w, "ms").map((row) => [row.name, row.user]), [["New", "u2"], ["Team stuff", "u1"]]);
+	assert.equal((await client.cmd('RENAME "Shared/team@other.test/New" "Shared/team@other.test/Newer"')).status, "OK");
+	assert.equal((await client.cmd('RENAME "Shared/team@other.test/Newer" "Moved"')).detail.split("]")[0], "[CANNOT", "not into another mailbox");
+	assert.equal((await client.cmd('DELETE "Shared/team@other.test/Newer"')).status, "OK");
+	assert.equal((await client.cmd("CREATE Shared/nobody@x.test/F")).status, "NO");
+	assert.equal((await client.cmd("CREATE Shared/team@other.test")).status, "NO");
+});
+
+test("DELETE removes a user folder and moves its messages to Trash; system folders and placeholders cannot be deleted", async (t) => {
+	const w = await world(t);
+	const key = await w.addKey({ id: "k1" });
+	addFolder(w, "f1", "Work");
+	addFolder(w, "f2", "Clients/Acme");
+	w.addMessage({ id: "g1", folder_id: "f1" });
+	w.addMessage({ id: "g2", folder_id: "f1", snoozed_until: 4_000_000_000 });
+	w.addMessage({ id: "g3" });
+	const client = await loggedIn(w, key);
+	t.after(() => client.end());
+	await client.cmd("SELECT Work");
+	assert.equal((await client.cmd("DELETE Work")).status, "OK");
+	assert.deepEqual(foldersOf(w).map((row) => row.name), ["Clients/Acme"]);
+	assert.deepEqual([statusOf(w, "g1").status, statusOf(w, "g1").folder, statusOf(w, "g2").status], ["trash", null, "trash"]);
+	assert.equal(statusOf(w, "g3").status, "received");
+	assert.equal(w.sqlite.prepare("SELECT count(*) AS n FROM messages").get().n, 3, "nothing was destroyed");
+	for (const name of ["INBOX", "Sent", "Trash"]) assert.equal((await client.cmd(`DELETE ${name}`)).detail, "[CANNOT] System folders cannot be deleted", name);
+	assert.equal((await client.cmd("DELETE Clients")).detail, "[NONEXISTENT] Mailbox does not exist", "a placeholder is not a folder");
+	assert.equal((await client.cmd("DELETE Nothing")).detail, "[NONEXISTENT] Mailbox does not exist");
+	assert.equal((await client.cmd("DELETE Shared")).status, "NO");
+	assert.equal((await client.cmd("DELETE Clients/Acme")).status, "OK", "deleting a child leaves no placeholder");
+	assert.doesNotMatch((await client.cmd('LIST "" "*"')).text, /Clients/);
+	await client.cmd("SELECT Trash");
+	assert.match((await client.cmd("SEARCH ALL")).text, /\* SEARCH 1 2/, "the messages are in Trash now");
+});
+
+test("RENAME keeps the folder's messages and UIDs, renames the folders below it too, and is all or nothing", async (t) => {
+	const w = await world(t);
+	const key = await w.addKey({ id: "k1" });
+	addFolder(w, "f1", "Clients/Acme");
+	addFolder(w, "f2", "Clients/Globex");
+	addFolder(w, "f3", "Clients");
+	addFolder(w, "f4", "Other");
+	w.addMessage({ id: "g1", folder_id: "f1" });
+	const client = await loggedIn(w, key);
+	t.after(() => client.end());
+	const uid = (await client.cmd("SELECT Clients/Acme")).text.match(/UIDVALIDITY (\d+)/)[1];
+	assert.equal((await client.cmd('RENAME "Clients/Acme" "Customers/Acme"')).status, "OK");
+	assert.deepEqual(foldersOf(w).map((row) => row.name), ["Clients", "Clients/Globex", "Customers/Acme", "Other"]);
+	const again = await client.cmd("SELECT Customers/Acme");
+	assert.match(again.text, new RegExp(`UIDVALIDITY ${uid}\\]`), "same folder, same UIDs");
+	assert.match(again.text, /\* 1 EXISTS/);
+	assert.equal((await client.cmd("RENAME Clients Accounts")).status, "OK");
+	assert.deepEqual(foldersOf(w).map((row) => row.name), ["Accounts", "Accounts/Globex", "Customers/Acme", "Other"], "the folder and the one below it");
+	assert.equal((await client.cmd("RENAME Customers Kunden")).status, "OK", "a placeholder renames what is below it");
+	assert.ok(foldersOf(w).some((row) => row.name === "Kunden/Acme"));
+	assert.equal((await client.cmd("RENAME Other Accounts")).detail, "[ALREADYEXISTS] Mailbox already exists");
+	assert.equal((await client.cmd("RENAME Other Sent")).detail, "[ALREADYEXISTS] Mailbox already exists");
+	assert.equal((await client.cmd("RENAME Other Kunden")).status, "OK", "a placeholder name is free");
+	addFolder(w, "f5", "Long/A");
+	assert.equal((await client.cmd(`RENAME Long "${"x".repeat(79)}"`)).detail.split("]")[0], "[CANNOT", "a child whose new name is too long stops the whole rename");
+	assert.ok(foldersOf(w).some((row) => row.name === "Long") === false && foldersOf(w).some((row) => row.name === "Long/A"), "nothing was renamed");
+	for (const name of ["INBOX", "Sent", "Trash"]) assert.equal((await client.cmd(`RENAME ${name} Elsewhere`)).detail, "[CANNOT] System folders cannot be renamed", name);
+	assert.equal((await client.cmd("RENAME Nothing Else")).detail, "[NONEXISTENT] Mailbox does not exist");
+	assert.equal((await client.cmd("RENAME Kunden Sent")).detail, "[ALREADYEXISTS] Mailbox already exists");
+	assert.equal((await client.cmd("RENAME Kunden Shared/x")).status, "NO");
+});
+
+test("SUBSCRIBE and UNSUBSCRIBE take one mailbox name; LSUB lists what LIST does", async (t) => {
+	const w = await world(t);
+	const key = await w.addKey({ id: "k1" });
+	addFolder(w, "f1", "Work");
+	const client = await loggedIn(w, key);
+	t.after(() => client.end());
+	assert.equal((await client.cmd("SUBSCRIBE Work")).status, "OK");
+	assert.equal((await client.cmd("UNSUBSCRIBE Work")).status, "OK");
+	assert.equal((await client.cmd("SUBSCRIBE")).status, "BAD");
+	assert.equal((await client.cmd("SUBSCRIBE Work Extra")).status, "BAD");
+	assert.equal((await client.cmd("SUBSCRIBE (a)")).status, "BAD");
+	assert.match((await client.cmd('LSUB "" "*"')).text, /\* LSUB \(\\HasNoChildren \\Subscribed\) "\/" "Work"/);
+});
+
+test("imapflow can create, rename and delete a mailbox", async (t) => {
+	const w = await world(t);
+	const key = await w.addKey({ id: "k1" });
+	const flow = new ImapFlow({ host: "127.0.0.1", port: w.ports.tlsPort, secure: true, auth: { user: "me@example.test", pass: key.fullKey }, tls: { ca: certificate.cert, servername: "localhost" }, logger: false });
+	flow.on("error", () => {});
+	await flow.connect();
+	t.after(async () => { await flow.logout().catch(() => {}); });
+	assert.equal((await flow.mailboxCreate("Projects/Alpha")).created, true);
+	assert.deepEqual(foldersOf(w).map((row) => row.name), ["Projects/Alpha"]);
+	assert.equal((await flow.mailboxRename("Projects/Alpha", "Projects/Beta")).newPath, "Projects/Beta");
+	assert.deepEqual(foldersOf(w).map((row) => row.name), ["Projects/Beta"]);
+	await flow.mailboxDelete("Projects/Beta");
+	assert.deepEqual(foldersOf(w), []);
+});
