@@ -12,8 +12,9 @@ import { processWebhookRetry, type WebhookRetryMessage } from "@/lib/email/webho
 import { processImportJob } from "@/lib/import/jobs";
 import { applyPendingMigrations } from "@/lib/migrations/service";
 import { isImportJobMessage, isInboundQueueMessage, isWebhookRetryMessage } from "../worker-utils";
-import { readImapConfig } from "@/lib/imap/config";
+import { readImapConfig, readSubmissionConfig } from "@/lib/imap/config";
 import { ImapServer } from "./imap/server";
+import { SubmissionServer } from "./submission";
 import { createNodeRuntime } from "./runtime/env";
 import { applyMigrations } from "./runtime/migrate";
 import { startScheduler } from "./runtime/scheduler";
@@ -143,10 +144,41 @@ async function main() {
 			}
 		}
 	}
+
+	// SMTP submission for mail apps (Docker/Node only, off unless SUBMISSION_ENABLED=1); same certificate again.
+	const submissionConfig = readSubmissionConfig(process.env);
+	let submissionServer: SubmissionServer | null = null;
+	if (submissionConfig.enabled) {
+		const ports = { starttls: submissionConfig.port > 0 ? submissionConfig.port : null, tls: submissionConfig.tlsPort > 0 ? submissionConfig.tlsPort : null };
+		if (ports.starttls === null && ports.tls === null) console.warn("SUBMISSION_ENABLED=1 but SUBMISSION_PORT and SUBMISSIONS_PORT are both 0; SMTP submission is not started");
+		else if (!certificateFiles && !submissionConfig.allowPlaintext) console.error("SUBMISSION_ENABLED=1 needs SMTP_TLS_KEY and SMTP_TLS_CERT; SMTP submission is not started");
+		else {
+			try {
+				submissionServer = new SubmissionServer({
+					env,
+					hostname: submissionConfig.hostname ?? "localhost",
+					tlsPort: ports.tls,
+					starttlsPort: ports.starttls,
+					host: submissionConfig.host,
+					certificate: certificateFiles ? readCertificate(certificateFiles) : null,
+					allowPlaintext: submissionConfig.allowPlaintext,
+					maxPerHour: submissionConfig.maxPerHour,
+					maxRecipientsPerHour: submissionConfig.maxRecipientsPerHour,
+					maxSize: submissionConfig.maxSize,
+				});
+				const bound = await submissionServer.start();
+				console.log(`SMTP submission listening on ${submissionConfig.host ?? "all interfaces"}, port ${[bound.starttlsPort, bound.tlsPort].filter((value) => value !== null).join(", ")}`);
+			} catch (error) {
+				console.error("SMTP submission failed to start", error);
+				submissionServer = null;
+			}
+		}
+	}
 	// Renewed certificates (certbot, Caddy) apply without a restart: checked every 10 minutes.
-	const stopCertificateWatch = certificateFiles && (imapServer || smtpServer)
+	const stopCertificateWatch = certificateFiles && (imapServer || smtpServer || submissionServer)
 		? watchCertificate(certificateFiles, 10 * 60_000, (material) => {
 			imapServer?.reloadCertificate(material);
+			submissionServer?.reloadCertificate(material);
 			smtpServer?.updateSecureContext({ key: material.key, cert: material.cert });
 		})
 		: () => {};
@@ -155,7 +187,7 @@ async function main() {
 	const shutdown = () => {
 		stopScheduler();
 		stopCertificateWatch();
-		const imapStopped = imapServer?.stop() ?? Promise.resolve();
+		const imapStopped = Promise.all([imapServer?.stop(), submissionServer?.stop()]);
 		runtime.inboundQueue.stop();
 		runtime.outboundQueue.stop();
 		runtime.agentQueue.stop();

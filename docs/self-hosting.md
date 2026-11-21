@@ -102,6 +102,57 @@ the port on a bridge that has IPv4 and IPv6 enabled and set
 Then check that the `IMAP login failed ip=` line shows real client addresses and
 not the gateway address.
 
+**SMTP submission (sending from mail apps).** Set `SUBMISSION_ENABLED=1`, give the
+container `SMTP_TLS_KEY` and `SMTP_TLS_CERT` for `MAIL_HOSTNAME`, and publish ports
+587 and 465 (uncomment `"587:587"` and `"465:465"` in `docker-compose.yml`). Then
+create an app password with the SMTP protocol in Settings, App passwords, and set
+the outgoing server of your mail app to `MAIL_HOSTNAME`, port 465 with SSL/TLS (or
+587 with STARTTLS), user name your mailbox address, password the app password.
+Port 587 offers no login until STARTTLS has completed, and nothing is accepted
+before a login. The listener is not a relay for anyone: the message is handed to
+the same sending code as the web app, so the domain's sending provider, DKIM, the
+outgoing attachment limit and the Sent copy are the ones you already have.
+
+- The `From` address, and the address in `MAIL FROM`, must be one the login may
+  send as: the account's own mailboxes and their aliases, and shared mailboxes with
+  the Send as or Send on behalf permission (a message sent on behalf goes out as
+  "Your Name on behalf of Mailbox Name", as from the web app). Anything else is
+  refused with 550.
+- Delivery follows the envelope. Recipients that the headers do not show are sent
+  as Bcc, and a Bcc header is never sent. A message needs a To recipient that is also
+  in the envelope, at most 50 recipients, a subject of at most 500 characters and
+  text and HTML parts of at most 2 MiB each, as in the web app.
+- Mail is re-composed by Mailflare, as the web app composes it: your mail app's own
+  `Message-ID`, custom headers and MIME layout are not kept, and signed or encrypted
+  messages (S/MIME, PGP/MIME) are refused with a clear error. Turn off "save sent
+  messages" in your mail app; if it still uploads a copy to Sent within 15 minutes, IMAP
+  recognises it and does not store it twice (the memory is lost on a restart).
+- The size limit (`SIZE`) is the administrator's outgoing attachment limit plus 35 %
+  for encoding, at most 36 MiB. Each account may submit `SUBMISSION_MAX_PER_HOUR`
+  messages and `SUBMISSION_MAX_RECIPIENTS_PER_HOUR` recipients an hour.
+- Only app passwords with the SMTP protocol work, never the account password. The
+  login budget is the one IMAP, CalDAV and JMAP share. A deleted app password, one
+  that lost the SMTP protocol, or a disabled user stops the session before the next
+  message and at the latest within a minute.
+- A connection that has not logged in within 30 seconds is closed, a failed login is
+  answered after one second, and three failed logins end the connection; each address
+  may hold 10 connections and the process 100.
+- Once the sending provider has taken a message, the answer is success even if
+  recording it afterwards fails (the error is logged), so the mail app does not send
+  it twice. A provider's final refusal is answered with 554; only a temporary
+  failure gets 451, which the mail app retries.
+
+Failed logins write one line to the container log, like IMAP's:
+
+```
+SMTP login failed ip=203.0.113.7 reason=bad_secret user="me@example.test"
+```
+
+(`reason` is `bad_secret`, `no_mailbox`, `throttled` or `malformed`; fail2ban can
+match `SMTP login failed ip=<ADDR>(?:/64)? reason=`.) The same note about Docker's
+userland proxy applies as for IMAP. Running more than one container against the same
+database with submission on is not supported, and Workers installs cannot run it.
+
 **Cloudflare Email Routing relay.** Keep MX on Cloudflare and deploy the
 Worker in `deploy/cloudflare-email-relay`. It posts each message to
 `/api/inbound` on your server, signed with `INBOUND_WEBHOOK_SECRET`, and acts
@@ -148,7 +199,7 @@ and the DNS page shows what to set by hand.
 | `SMTP_INBOUND_PORT` | `25` | Inbound SMTP; `0` disables |
 | `MAIL_HOSTNAME` | `mail.<domain>` | Host the MX record points at; SMTP banner |
 | `SMTP_MAX_SIZE` | 36 MiB | Largest raw inbound message; allows for encoding overhead on up to 25 MB of attachments. Oversized mail receives an SMTP rejection, which the sender's mail provider can report as a delivery failure. |
-| `SMTP_TLS_KEY`, `SMTP_TLS_CERT` | unset | Certificate for inbound SMTP STARTTLS and for IMAP. The files are checked every 10 minutes and a renewed certificate is used without a restart |
+| `SMTP_TLS_KEY`, `SMTP_TLS_CERT` | unset | Certificate for inbound SMTP STARTTLS, IMAP and SMTP submission. The files are checked every 10 minutes and a renewed certificate is used without a restart |
 | `IMAP_ENABLED` | unset (off) | `1` starts the IMAP listener; needs the certificate above. Adds the IMAP choice to Settings, App passwords. Docker and Node only |
 | `IMAP_PORT` | `993` | IMAP over TLS; `0` disables it |
 | `IMAP_STARTTLS_PORT` | `0` (off) | A plain port that requires STARTTLS before login; usually `143` |
@@ -156,6 +207,13 @@ and the DNS page shows what to set by hand.
 | `IMAP_MAX_CONNECTIONS` | `500` | IMAP connections for the whole process; each address may hold 30 (an IPv6 client counts by its /64) and each account 20 |
 | `IMAP_MAX_MESSAGE_SIZE` | `SMTP_MAX_SIZE` (36 MiB) | The largest message a mail app may upload with APPEND (advertised as `APPENDLIMIT`); at most 85 MiB: the process spends at most 512 MiB on upload data at once and charges each upload six times its size, and two uploads are parsed and stored at a time (more wait, up to 32, then are told to try again) |
 | `IMAP_ALLOW_PLAINTEXT` | unset | `1` allows login without TLS, only when `IMAP_HOST` is a loopback address (for local testing); ignored with a warning otherwise |
+| `SUBMISSION_ENABLED` | unset (off) | `1` starts the SMTP submission listeners; needs the certificate above. Adds the SMTP choice to Settings, App passwords. Docker and Node only |
+| `SUBMISSION_PORT` | `587` | Submission with STARTTLS (no login before it); `0` disables it |
+| `SUBMISSIONS_PORT` | `465` | Submission over implicit TLS; `0` disables it |
+| `SUBMISSION_HOST` | every interface, IPv6 and IPv4 (`::`) | Address the submission listeners bind to |
+| `SUBMISSION_MAX_PER_HOUR` | `200` | Messages one account may submit per hour |
+| `SUBMISSION_MAX_RECIPIENTS_PER_HOUR` | 5 times `SUBMISSION_MAX_PER_HOUR` | Recipients (To, Cc and Bcc) one account may submit per hour |
+| `SUBMISSION_ALLOW_PLAINTEXT` | unset | `1` allows login without TLS, only when `SUBMISSION_HOST` is a loopback address (for local testing); ignored with a warning otherwise |
 | `SMTP_URL` | unset | Outbound relay |
 | `SMTP_TLS_REJECT_UNAUTHORIZED` | `true` | Trust self-signed relay certificates when `false` |
 | `CF_ACCOUNT_ID`, `CF_TOKEN` | unset | Cloudflare Email Sending, and zone management if the token allows |
