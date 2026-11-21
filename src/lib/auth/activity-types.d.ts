@@ -16,7 +16,8 @@ export type AuthActivityAction =
 	| "auth.admin_recovery_created"
 	| "auth.admin_password_reset"
 	| "auth.app_password_created"
-	| "auth.app_password_revoked";
+	| "auth.app_password_revoked"
+	| "auth.app_password_login";
 
 export type AuthActivityMetadata = {
 	ipAddress: string;

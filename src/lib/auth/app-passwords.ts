@@ -8,7 +8,8 @@ import type { AppPasswordScope } from "@/lib/api/scopes";
 import { apiKeyLookupPrefix } from "@/lib/api-keys";
 import { isListedAsAppPassword } from "@/lib/auth/app-password-utils";
 import { getClientIp } from "@/lib/auth/client-ip";
-import { isNodeRuntime } from "@/lib/runtime";
+import { imapIsOffered } from "@/lib/imap/config";
+import { getNodeEnv, isNodeRuntime } from "@/lib/runtime";
 
 export type AppPasswordProtocol = "jmap" | "caldav" | "carddav" | "imap" | "submission";
 export type AppPasswordCheck = { secret: string; protocol: AppPasswordProtocol; clientIp: string | null };
@@ -23,13 +24,15 @@ const PROTOCOL_SCOPE: Record<AppPasswordProtocol, AppPasswordScope> = {
 };
 
 /**
- * The scopes a new app password may carry on this server. Only JMAP exists
- * today; the protocols that need a server of their own (CalDAV/CardDAV, IMAP,
- * SMTP submission) are added here when they ship, so nobody can mint a
- * credential nothing accepts.
+ * The scopes a new app password may carry on this server. The protocols that
+ * need a listener of their own are offered only where that listener runs, so
+ * nobody can mint a credential nothing accepts: `imap` on the Node runtime with
+ * `IMAP_ENABLED=1` (CalDAV/CardDAV and SMTP submission are added when they ship).
  */
-export function availableAppPasswordProtocols(): AppPasswordScope[] {
-	return ["jmap"];
+export function availableAppPasswordProtocols(env: Pick<CloudflareEnv, "MAILFLARE_RUNTIME"> | undefined = getNodeEnv()): AppPasswordScope[] {
+	const protocols: AppPasswordScope[] = ["jmap"];
+	if (isNodeRuntime(env) && imapIsOffered(process.env)) protocols.push("imap");
+	return protocols;
 }
 
 /**
@@ -91,7 +94,7 @@ export function basicPassword(request: Request): string | null {
 }
 
 /** An IPv4 address, or the first 64 bits of an IPv6 one, so a client cannot dodge the limit by rotating addresses in its /64. */
-function ipBucket(ip: string): string {
+export function ipBucket(ip: string): string {
 	const text = ip.trim().replace(/^\[|\]$/g, "").replace(/%.*$/, "").toLowerCase();
 	const mapped = text.match(/^::ffff:(\d+\.\d+\.\d+\.\d+)$/);
 	if (mapped) return mapped[1];
@@ -118,12 +121,21 @@ export function appPasswordGuessKey(ip: string | null, secret: string): string {
  * recently (a working client hits the cache and never spends). False when the
  * budget is spent. A limiter that is missing or throws lets the request through.
  */
-export async function allowAppPasswordGuess(env: CloudflareEnv, request: Request, password: string, kind?: "app"): Promise<boolean> {
+export function allowAppPasswordGuess(env: CloudflareEnv, request: Request, password: string, kind?: "app"): Promise<boolean> {
+	return allowAppPasswordGuessFrom(env, getClientIp(request), password, kind);
+}
+
+/**
+ * The same budget for protocols with no HTTP request (IMAP, SMTP submission): the
+ * caller passes the socket's IP. DAV, IMAP and submission guesses from one address
+ * share one limit, because the bucket depends only on the address.
+ */
+export async function allowAppPasswordGuessFrom(env: CloudflareEnv, clientIp: string | null, password: string, kind?: "app"): Promise<boolean> {
 	if (await isApiKeyVerificationCached(password, kind)) return true;
 	const limiter = env.DEVICE_LOGIN_RATE_LIMIT ?? env.LOGIN_RATE_LIMIT;
 	if (!limiter) return true;
 	try {
-		return (await limiter.limit({ key: appPasswordGuessKey(getClientIp(request), password) })).success;
+		return (await limiter.limit({ key: appPasswordGuessKey(clientIp, password) })).success;
 	} catch (error) {
 		console.warn("App password rate limiter unavailable", error);
 		return true;
