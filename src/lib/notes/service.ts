@@ -4,6 +4,7 @@ import { conversationNotes, messages, users } from "@/db/schema";
 import { getMailboxAccessLevel } from "@/lib/mailboxes/access";
 import { isOthersDraft } from "@/lib/email/draft-access";
 import { newId } from "@/lib/ids";
+import { selectInBatches } from "@/lib/db-params";
 import type { SessionUser } from "@/lib/auth/types";
 import { canDeleteNote, canEditNote } from "./note-permissions";
 import type { ConversationNote, NoteChangeResult, NoteConversation } from "./types";
@@ -215,8 +216,11 @@ export async function summarizeNotesForRows(
 	const scoped = rows.filter((row): row is { id: string; mailboxId: string; threadId: string | null } => !!row.mailboxId);
 	if (scoped.length === 0) return summaries;
 	const keys = [...new Set(scoped.flatMap((row) => [row.id, ...(row.threadId ? [row.threadId] : [])]))];
-	const found = await db
+	const mailboxIds = [...new Set(scoped.map((row) => row.mailboxId))];
+	const found = await selectInBatches(keys, (batch) => db
 		.select({
+			id: conversationNotes.id,
+			createdAt: conversationNotes.createdAt,
 			mailboxId: conversationNotes.mailboxId,
 			threadKey: conversationNotes.threadKey,
 			html: conversationNotes.html,
@@ -224,11 +228,9 @@ export async function summarizeNotesForRows(
 		})
 		.from(conversationNotes)
 		.leftJoin(users, eq(conversationNotes.authorUserId, users.id))
-		.where(and(
-			inArray(conversationNotes.mailboxId, [...new Set(scoped.map((row) => row.mailboxId))]),
-			inArray(conversationNotes.threadKey, keys),
-		))
-		.orderBy(asc(conversationNotes.createdAt), asc(conversationNotes.id));
+		.where(and(inArray(conversationNotes.mailboxId, mailboxIds), inArray(conversationNotes.threadKey, batch))));
+	// Batches arrive one after another; the previews want the notes oldest first.
+	found.sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime() || (a.id < b.id ? -1 : 1));
 	if (found.length === 0) return summaries;
 	for (const row of scoped) {
 		const mine = found.filter((note) => note.mailboxId === row.mailboxId && (note.threadKey === row.id || note.threadKey === row.threadId));

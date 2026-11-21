@@ -1,5 +1,6 @@
 import { and, eq, inArray } from "drizzle-orm";
 import { getDb } from "@/db";
+import { selectInBatches } from "@/lib/db-params";
 import { contacts, routingRules } from "@/db/schema";
 import { getFirstEmailAddressEntry, normalizeEmailAddress } from "@/lib/email/address";
 import type { BlockContactInput, ContactCard, ContactDisplayName, ContactInput, MessageContactNames } from "@/lib/contacts/types";
@@ -131,10 +132,10 @@ export async function getContactDisplayNameMap(env: CloudflareEnv, userId: strin
 	if (emails.length === 0) return new Map<string, ContactDisplayName>();
 
 	const db = getDb(env);
-	const rows = await db
+	const rows = await selectInBatches(emails, (batch) => db
 		.select()
 		.from(contacts)
-		.where(and(eq(contacts.userId, userId), inArray(contacts.email, emails)));
+		.where(and(eq(contacts.userId, userId), inArray(contacts.email, batch))));
 
 	const entries = rows
 		.filter((contact) => !!contact.displayName)
