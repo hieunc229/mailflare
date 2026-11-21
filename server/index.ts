@@ -12,10 +12,14 @@ import { processWebhookRetry, type WebhookRetryMessage } from "@/lib/email/webho
 import { processImportJob } from "@/lib/import/jobs";
 import { applyPendingMigrations } from "@/lib/migrations/service";
 import { isImportJobMessage, isInboundQueueMessage, isWebhookRetryMessage } from "../worker-utils";
+import { readImapConfig, readSubmissionConfig } from "@/lib/imap/config";
+import { ImapServer } from "./imap/server";
+import { SubmissionServer } from "./submission";
 import { createNodeRuntime } from "./runtime/env";
 import { applyMigrations } from "./runtime/migrate";
 import { startScheduler } from "./runtime/scheduler";
 import { startSmtpListener } from "./runtime/smtp";
+import { readCertificate, watchCertificate } from "./runtime/tls-files";
 
 /**
  * The self-hosted entrypoint: one Node process serving the Next app, the
@@ -100,23 +104,94 @@ async function main() {
 	});
 
 	const smtpPort = Number(process.env.SMTP_INBOUND_PORT ?? 25);
-	if (smtpPort > 0) {
-		startSmtpListener(env, runtime.mailer, {
+	const certificateFiles = process.env.SMTP_TLS_KEY && process.env.SMTP_TLS_CERT ? { keyPath: process.env.SMTP_TLS_KEY, certPath: process.env.SMTP_TLS_CERT } : null;
+	const smtpServer = smtpPort > 0
+		? startSmtpListener(env, runtime.mailer, {
 			port: smtpPort,
 			host: process.env.SMTP_INBOUND_HOST,
 			maxSize: Number(process.env.SMTP_MAX_SIZE ?? 36 * 1024 * 1024),
 			hostname: process.env.MAIL_HOSTNAME,
-			tls: process.env.SMTP_TLS_KEY && process.env.SMTP_TLS_CERT ? { keyPath: process.env.SMTP_TLS_KEY, certPath: process.env.SMTP_TLS_CERT } : null,
-		});
+			tls: certificateFiles,
+		})
+		: null;
+
+	// IMAP (Docker/Node only, off unless IMAP_ENABLED=1). It shares the certificate with inbound SMTP.
+	const imapConfig = readImapConfig(process.env);
+	let imapServer: ImapServer | null = null;
+	if (imapConfig.enabled) {
+		const ports = { tls: imapConfig.port > 0 ? imapConfig.port : null, starttls: imapConfig.starttlsPort > 0 ? imapConfig.starttlsPort : null };
+		if (ports.tls === null && ports.starttls === null) console.warn("IMAP_ENABLED=1 but IMAP_PORT and IMAP_STARTTLS_PORT are both 0; IMAP is not started");
+		else if (!certificateFiles && !imapConfig.allowPlaintext) console.error("IMAP_ENABLED=1 needs SMTP_TLS_KEY and SMTP_TLS_CERT; IMAP is not started");
+		else {
+			try {
+				imapServer = new ImapServer({
+					env,
+					hostname: imapConfig.hostname ?? "localhost",
+					tlsPort: ports.tls,
+					starttlsPort: ports.starttls,
+					host: imapConfig.host,
+					certificate: certificateFiles ? readCertificate(certificateFiles) : null,
+					allowPlaintext: imapConfig.allowPlaintext,
+					maxConnections: imapConfig.maxConnections,
+					maxMessageSize: imapConfig.maxMessageSize,
+					realtime: runtime.realtime,
+				});
+				const bound = await imapServer.start();
+				console.log(`IMAP listening on ${imapConfig.host ?? "all interfaces"}, port ${[bound.tlsPort, bound.starttlsPort].filter((value) => value !== null).join(", ")}`);
+			} catch (error) {
+				console.error("IMAP failed to start", error);
+				imapServer = null;
+			}
+		}
 	}
+
+	// SMTP submission for mail apps (Docker/Node only, off unless SUBMISSION_ENABLED=1); same certificate again.
+	const submissionConfig = readSubmissionConfig(process.env);
+	let submissionServer: SubmissionServer | null = null;
+	if (submissionConfig.enabled) {
+		const ports = { starttls: submissionConfig.port > 0 ? submissionConfig.port : null, tls: submissionConfig.tlsPort > 0 ? submissionConfig.tlsPort : null };
+		if (ports.starttls === null && ports.tls === null) console.warn("SUBMISSION_ENABLED=1 but SUBMISSION_PORT and SUBMISSIONS_PORT are both 0; SMTP submission is not started");
+		else if (!certificateFiles && !submissionConfig.allowPlaintext) console.error("SUBMISSION_ENABLED=1 needs SMTP_TLS_KEY and SMTP_TLS_CERT; SMTP submission is not started");
+		else {
+			try {
+				submissionServer = new SubmissionServer({
+					env,
+					hostname: submissionConfig.hostname ?? "localhost",
+					tlsPort: ports.tls,
+					starttlsPort: ports.starttls,
+					host: submissionConfig.host,
+					certificate: certificateFiles ? readCertificate(certificateFiles) : null,
+					allowPlaintext: submissionConfig.allowPlaintext,
+					maxPerHour: submissionConfig.maxPerHour,
+					maxRecipientsPerHour: submissionConfig.maxRecipientsPerHour,
+					maxSize: submissionConfig.maxSize,
+				});
+				const bound = await submissionServer.start();
+				console.log(`SMTP submission listening on ${submissionConfig.host ?? "all interfaces"}, port ${[bound.starttlsPort, bound.tlsPort].filter((value) => value !== null).join(", ")}`);
+			} catch (error) {
+				console.error("SMTP submission failed to start", error);
+				submissionServer = null;
+			}
+		}
+	}
+	// Renewed certificates (certbot, Caddy) apply without a restart: checked every 10 minutes.
+	const stopCertificateWatch = certificateFiles && (imapServer || smtpServer || submissionServer)
+		? watchCertificate(certificateFiles, 10 * 60_000, (material) => {
+			imapServer?.reloadCertificate(material);
+			submissionServer?.reloadCertificate(material);
+			smtpServer?.updateSecureContext({ key: material.key, cert: material.cert });
+		})
+		: () => {};
 	const stopScheduler = startScheduler(env);
 
 	const shutdown = () => {
 		stopScheduler();
+		stopCertificateWatch();
+		const imapStopped = Promise.all([imapServer?.stop(), submissionServer?.stop()]);
 		runtime.inboundQueue.stop();
 		runtime.outboundQueue.stop();
 		runtime.agentQueue.stop();
-		server.close(() => process.exit(0));
+		server.close(() => void imapStopped.finally(() => process.exit(0)));
 		setTimeout(() => process.exit(0), 5000).unref();
 	};
 	process.on("SIGTERM", shutdown);

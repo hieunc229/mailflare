@@ -12,7 +12,7 @@ import { createAuditLog } from "@/lib/mailboxes/audit";
 import { loadMessageAttachmentContents, storeMessageAttachments, validateAttachments } from "@/lib/email/attachments";
 import type { AttachmentContent } from "@/lib/email/attachment-types";
 import { getOutboundAttachmentMaxMb } from "@/lib/email/attachment-policy";
-import { getOutboundProviderConfig, sendThroughProvider } from "@/lib/email/outbound-provider";
+import { getOutboundProviderConfig, isFinalProviderRefusal, sendThroughProvider } from "@/lib/email/outbound-provider";
 import { prepareCloudflareAttachments } from "@/lib/email/cloud-attachment-utils";
 import { ensureTrackingToken, getTrackingHostForSender } from "@/lib/tracking/open-tracking";
 import { setFollowUp } from "@/lib/follow-ups/service";
@@ -201,10 +201,24 @@ export async function sendEmail(
 	return { messageId };
 }
 
+/** How far a failed send got: the provider took the message and something after it failed, or the provider refused it. */
+export type DeliveryFailure = { providerAccepted: true; messageId: string } | { providerAccepted: false; final: boolean };
+const deliveryFailures = new WeakMap<object, DeliveryFailure>();
+
+/** What an error thrown by `sendEmail` says about the provider; null when the send failed before reaching it. */
+export function deliveryFailureOf(error: unknown): DeliveryFailure | null {
+	return error && typeof error === "object" ? (deliveryFailures.get(error) ?? null) : null;
+}
+
+function noteDeliveryFailure(error: unknown, failure: DeliveryFailure | null): void {
+	if (failure && error && typeof error === "object") deliveryFailures.set(error, failure);
+}
+
 async function deliverEmail(env: CloudflareEnv, delivery: PreparedDelivery): Promise<void> {
 	const { input, messageId, jobId, from, mailboxId, to, cc, bcc, headers, attachments } = delivery;
 	const db = getDb(env);
 	const toAddr = joinEmailAddressList(to);
+	let reached: DeliveryFailure | null = null;
 	try {
 		const provider = await getOutboundProviderConfig(env, from);
 		// Cloudflare's 5 MiB cap forces big files into download links; Resend takes
@@ -243,7 +257,11 @@ async function deliverEmail(env: CloudflareEnv, delivery: PreparedDelivery): Pro
 				})),
 			},
 			jobId,
-		);
+		).catch((error: unknown) => {
+			reached = { providerAccepted: false, final: isFinalProviderRefusal(error) };
+			throw error;
+		});
+		reached = { providerAccepted: true, messageId };
 
 		// A fresh message starts its own conversation; Cloudflare's Message-ID is what
 		// any reply will name in In-Reply-To, so key the thread by it.
@@ -285,12 +303,18 @@ async function deliverEmail(env: CloudflareEnv, delivery: PreparedDelivery): Pro
 		});
 	} catch (err) {
 		const error = err instanceof Error ? err.message : "Send failed";
-		await db.update(messages).set({ status: "failed" }).where(eq(messages.id, messageId));
-		await db
-			.update(outboundJobs)
-			.set({ status: "failed", error, updatedAt: new Date() })
-			.where(eq(outboundJobs.id, jobId));
-		await dispatchWebhooks(env, input.userId, "message.failed", { messageId, error });
+		try {
+			await db.update(messages).set({ status: "failed" }).where(eq(messages.id, messageId));
+			await db
+				.update(outboundJobs)
+				.set({ status: "failed", error, updatedAt: new Date() })
+				.where(eq(outboundJobs.id, jobId));
+			await dispatchWebhooks(env, input.userId, "message.failed", { messageId, error });
+		} catch (later) {
+			noteDeliveryFailure(later, reached);
+			throw later;
+		}
+		noteDeliveryFailure(err, reached);
 		throw err;
 	}
 }

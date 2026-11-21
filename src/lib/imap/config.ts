@@ -1,0 +1,127 @@
+/**
+ * IMAP listener settings, read from the process environment (Docker/Node only).
+ * Shared by the server entry point and by the app-password page, which offers the
+ * `imap` protocol only when a listener can actually start.
+ */
+export type ImapConfig = {
+	enabled: boolean;
+	/** Implicit TLS port; 0 disables it. */
+	port: number;
+	/** Plain port that requires STARTTLS before login; 0 (the default) disables it. */
+	starttlsPort: number;
+	host: string | undefined;
+	hostname: string | undefined;
+	maxConnections: number;
+	/** The largest message an APPEND may carry, in octets; advertised as APPENDLIMIT. */
+	maxMessageSize: number;
+	/** LOGIN without TLS, honoured only when the listener is bound to a loopback address. */
+	allowPlaintext: boolean;
+	hasCertificate: boolean;
+};
+
+type Source = Record<string, string | undefined>;
+
+const port = (value: string | undefined, fallback: number) => {
+	const parsed = Number(value?.trim() === "" ? undefined : value);
+	return Number.isInteger(parsed) && parsed >= 0 && parsed <= 65535 ? parsed : fallback;
+};
+
+/** The size limit for inbound SMTP mail when none is set, which IMAP_MAX_MESSAGE_SIZE follows. */
+export const DEFAULT_MAX_MESSAGE_SIZE = 36 * 1024 * 1024;
+/** The most memory the in-flight APPEND data of the whole process may account for, in octets. */
+export const MAX_APPEND_BUDGET = 512 * 1024 * 1024;
+/**
+ * What one octet of an APPEND literal costs while the message is received, parsed and stored: the received pieces and
+ * their join, the parser's text and HTML, and the object written. The budget is charged this many times the declared size.
+ */
+export const APPEND_MEMORY_FACTOR = 6;
+/** The largest message the budget can hold at its full cost. */
+export const MAX_APPEND_MESSAGE = Math.floor(MAX_APPEND_BUDGET / APPEND_MEMORY_FACTOR);
+
+const positive = (value: string | undefined, fallback: number) => {
+	const parsed = Number(value?.trim() === "" ? undefined : value);
+	return Number.isInteger(parsed) && parsed > 0 ? parsed : fallback;
+};
+
+export function readImapConfig(source: Source): ImapConfig {
+	const maxConnections = Number(source.IMAP_MAX_CONNECTIONS);
+	return {
+		enabled: source.IMAP_ENABLED?.trim() === "1",
+		port: port(source.IMAP_PORT, 993),
+		starttlsPort: port(source.IMAP_STARTTLS_PORT, 0),
+		host: source.IMAP_HOST?.trim() || undefined,
+		hostname: source.MAIL_HOSTNAME?.trim() || undefined,
+		maxConnections: Number.isInteger(maxConnections) && maxConnections > 0 ? maxConnections : 500,
+		maxMessageSize: Math.min(positive(source.IMAP_MAX_MESSAGE_SIZE, positive(source.SMTP_MAX_SIZE, DEFAULT_MAX_MESSAGE_SIZE)), MAX_APPEND_MESSAGE),
+		allowPlaintext: source.IMAP_ALLOW_PLAINTEXT?.trim() === "1",
+		hasCertificate: !!(source.SMTP_TLS_KEY?.trim() && source.SMTP_TLS_CERT?.trim()),
+	};
+}
+
+/** Whether a listener bound to this address is only reachable from the machine itself (no address means every interface). */
+export const isLoopbackHost = (host: string | undefined) => !!host && (host === "localhost" || host === "::1" || host === "[::1]" || host.startsWith("127."));
+
+/**
+ * Whether a mail app could log in: the flag is on and every configured listener can start, as the
+ * server decides it. The TLS port needs a certificate; the STARTTLS port needs a certificate or the
+ * plain test mode, which only works for a loopback bind.
+ */
+export function imapIsOffered(source: Source): boolean {
+	const config = readImapConfig(source);
+	if (!config.enabled || (config.port === 0 && config.starttlsPort === 0)) return false;
+	const plainOk = config.allowPlaintext && isLoopbackHost(config.host);
+	return (config.port === 0 || config.hasCertificate) && (config.starttlsPort === 0 || config.hasCertificate || plainOk);
+}
+
+/**
+ * SMTP submission listener settings (Docker/Node only), read from the same process environment.
+ * Port 587 requires STARTTLS before AUTH; port 465 is implicit TLS. Either may be turned off with `0`.
+ */
+export type SubmissionConfig = {
+	enabled: boolean;
+	/** STARTTLS port; 0 disables it. */
+	port: number;
+	/** Implicit TLS port; 0 disables it. */
+	tlsPort: number;
+	host: string | undefined;
+	hostname: string | undefined;
+	/** Messages one account may submit per hour. */
+	maxPerHour: number;
+	/** Recipients (To, Cc and Bcc together) one account may submit per hour. */
+	maxRecipientsPerHour: number;
+	/** The largest message the listener ever accepts, in octets (the admin's outgoing limit lowers it further). */
+	maxSize: number;
+	/** AUTH without TLS, honoured only when the listener is bound to a loopback address. */
+	allowPlaintext: boolean;
+	hasCertificate: boolean;
+};
+
+export const DEFAULT_SUBMISSION_PER_HOUR = 200;
+
+export function readSubmissionConfig(source: Source): SubmissionConfig {
+	const maxPerHour = positive(source.SUBMISSION_MAX_PER_HOUR, DEFAULT_SUBMISSION_PER_HOUR);
+	return {
+		enabled: source.SUBMISSION_ENABLED?.trim() === "1",
+		port: port(source.SUBMISSION_PORT, 587),
+		tlsPort: port(source.SUBMISSIONS_PORT, 465),
+		host: source.SUBMISSION_HOST?.trim() || undefined,
+		hostname: source.MAIL_HOSTNAME?.trim() || undefined,
+		maxPerHour,
+		maxRecipientsPerHour: positive(source.SUBMISSION_MAX_RECIPIENTS_PER_HOUR, maxPerHour * 5),
+		maxSize: Math.min(positive(source.SMTP_MAX_SIZE, DEFAULT_MAX_MESSAGE_SIZE), DEFAULT_MAX_MESSAGE_SIZE),
+		allowPlaintext: source.SUBMISSION_ALLOW_PLAINTEXT?.trim() === "1",
+		hasCertificate: !!(source.SMTP_TLS_KEY?.trim() && source.SMTP_TLS_CERT?.trim()),
+	};
+}
+
+/**
+ * Whether a mail app could submit: the flag is on and every configured listener can start, as the
+ * server decides it. Both ports need a certificate; the STARTTLS port may also run in the plain
+ * test mode, which only works for a loopback bind.
+ */
+export function submissionIsOffered(source: Source): boolean {
+	const config = readSubmissionConfig(source);
+	if (!config.enabled || (config.port === 0 && config.tlsPort === 0)) return false;
+	const plainOk = config.allowPlaintext && isLoopbackHost(config.host);
+	return (config.tlsPort === 0 || config.hasCertificate) && (config.port === 0 || config.hasCertificate || plainOk);
+}

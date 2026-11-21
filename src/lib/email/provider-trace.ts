@@ -195,6 +195,22 @@ export function readSesAuthentication(raw: ArrayBuffer, fromAddress: string): Me
 	};
 }
 
+/**
+ * Where the raw copy of a message lives when it was stored at intake (and where demo messages are seeded). Messages added
+ * later (imported, appended by a mail app, copied) keep their bytes elsewhere, and the headers in them say nothing
+ * about how the message was delivered.
+ */
+const INTAKE_STORAGE_PREFIXES = ["inbound/", "seed/"];
+
+export function isIntakeStorageKey(rawR2Key: string | null | undefined): boolean {
+	return !!rawR2Key && INTAKE_STORAGE_PREFIXES.some((prefix) => rawR2Key.startsWith(prefix));
+}
+
+/** `readSesAuthentication` for a stored message: its provider trace counts only when the message was stored at intake. */
+export function readStoredAuthentication(rawR2Key: string | null | undefined, raw: ArrayBuffer, fromAddress: string): MessageAuthentication | null {
+	return isIntakeStorageKey(rawR2Key) ? readSesAuthentication(raw, fromAddress) : null;
+}
+
 /** Headers a provider has not vouched for: nothing the sender wrote here may count as authentication. */
 const UNTRUSTED_PROVIDER_HEADERS = new Set(["authentication-results", "received-spf", "arc-authentication-results", "received", "return-path", "x-ses-receipt", "x-ses-spam-verdict", "x-ses-virus-verdict", "x-ses-dkim-signature"]);
 const MAX_HEADER_ENTRIES = 200;
