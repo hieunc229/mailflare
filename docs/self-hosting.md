@@ -19,7 +19,10 @@ container): the SQLite database, raw messages, attachments and backups.
 
 Behind a reverse proxy, set `APP_URL=https://mail.example.com` so links in
 password-reset mail and the JMAP session point at the public address, and
-forward WebSocket upgrades for `/api/realtime`. Passkeys also bind to this
+forward WebSocket upgrades for `/api/realtime`. Also set `TRUST_PROXY=1`:
+without it every request appears to come from the proxy's address, so login
+rate limits are shared by all users. Leave it unset when the container is
+exposed directly. Passkeys also bind to this
 origin, so they need `APP_URL` (or a direct HTTPS connection) to work.
 
 ### Prebuilt image (no build)
@@ -144,6 +147,7 @@ and the DNS page shows what to set by hand.
 | `SMTP_TLS_KEY`, `SMTP_TLS_CERT` | unset | STARTTLS certificate for the listener |
 | `SMTP_URL` | unset | Outbound relay |
 | `SMTP_TLS_REJECT_UNAUTHORIZED` | `true` | Trust self-signed relay certificates when `false` |
+| `CF_EMAIL_WORKER_NAME` | `mailflare` | Worker name that Email Routing rules created through the Cloudflare API target. If you change it on an install whose rules already target `mailflare`, recreate those rules; the old ones are no longer recognised |
 | `CF_ACCOUNT_ID`, `CF_TOKEN` | unset | Cloudflare Email Sending, and zone management if the token allows |
 | `B2_KEY_ID`, `B2_APPLICATION_KEY`, `B2_BUCKET`, `B2_ENDPOINT` | unset | Store blobs in Backblaze B2 (all four required) instead of files under `/data/blobs`; see [Deployment](deployment.md#object-storage-r2-or-backblaze-b2) |
 | `S3_BUCKET`, `S3_REGION`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY` | unset | Store blobs in AWS S3; the keys fall back to `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY`. Backblaze wins if both are set |
@@ -170,9 +174,12 @@ and the DNS page shows what to set by hand.
 - **Updates.** Pull the new image and recreate the container; migrations run
   at start (see [Prebuilt image](#prebuilt-image-no-build)). The in-app update button is disabled on self-hosted installs.
 - **Logs.** `docker compose logs -f mailflare`.
-- **Queues.** Jobs are held in memory. Inbound mail is written to the volume
-  before it is queued, so a restart never loses a message; at worst one
-  stays unparsed until it is re-imported.
+- **Queues.** Jobs are held in memory and are not re-queued after a restart.
+  Inbound mail is written to the volume before it is queued, but a message
+  whose job is lost stays unparsed, and the nightly clean-up removes raw
+  inbound files that no message references after 24 hours. Scheduled and
+  undo-send mail that has not been sent when the container restarts is not
+  sent automatically.
 
 ## Email assistant and MCP
 

@@ -1,9 +1,10 @@
 /**
  * The Queue producer API with an in-process consumer. Delivery order and the
  * retry policy match wrangler.jsonc (three retries, ten seconds apart on
- * failure). Jobs live in memory: inbound mail is already on disk before it is
- * enqueued, so a restart at worst leaves a message unprocessed in the blob
- * store, never lost.
+ * failure). Jobs live in memory and are not re-queued after a restart: inbound
+ * mail is already on disk before it is enqueued, but a message whose job is
+ * lost stays unprocessed in the blob store, and the raw-mail sweeper removes
+ * unreferenced inbound files after 24 hours.
  */
 export type QueueConsumer = (body: unknown) => Promise<void>;
 
