@@ -5,9 +5,12 @@ import { confirmAgentSend } from "@/lib/agent/approvals/utils";
 import { createAuditLog } from "@/lib/mailboxes/audit";
 import type { McpPrincipal } from "./types";
 
+/** Why an approval was refused. `permission_denied` and `not_found` say "you may not do this"; `expired` says the request is gone. */
+export type ApproveSendRefusal = "permission_denied" | "not_found" | "expired" | "refused";
+
 export type ApproveSendOutcome =
 	| { ok: true; approvalId: string; status: string; messageId: string | null }
-	| { ok: false; error: string; approvalId?: string; status?: string; messageId?: string | null };
+	| { ok: false; error: string; code: ApproveSendRefusal; approvalId?: string; status?: string };
 
 /** `queued` while the outbound job still waits (a scheduled time or the undo window), `sent` once the provider accepted it. */
 async function deliveryStatus(env: CloudflareEnv, messageId: string) {
@@ -31,11 +34,11 @@ export async function approveAgentSend(
 ): Promise<ApproveSendOutcome> {
 	// 1. The key needs the send-review scope and this mailbox, as `request_send` does.
 	if (!principal.scopes.includes("mcp:request-send") || !principal.mailboxIds.includes(input.mailboxId)) {
-		return { ok: false, error: "Permission denied" };
+		return { ok: false, error: "Permission denied", code: "permission_denied" };
 	}
 	// 2. Per-key flag, off by default: holding a key alone never releases a send.
 	if (!principal.canApproveOwnSends) {
-		return { ok: false, error: "Permission denied: this key may not approve its own sends" };
+		return { ok: false, error: "Permission denied: this key may not approve its own sends", code: "permission_denied" };
 	}
 	const [approval] = await getDb(env)
 		.select({
@@ -50,7 +53,7 @@ export async function approveAgentSend(
 	// in the web UI has no key on it, and another key's request names that key, so both are "not found"
 	// rather than being reported as existing.
 	if (!approval || approval.userId !== principal.user.id || approval.mailboxId !== input.mailboxId || approval.requestKeyId !== principal.keyId) {
-		return { ok: false, error: "Approval not found" };
+		return { ok: false, error: "Approval not found", code: "not_found" };
 	}
 
 	const record = async (status: string, messageId: string | null) => createAuditLog(env, {
@@ -73,13 +76,23 @@ export async function approveAgentSend(
 			await record(status, messageId);
 			return { ok: true, approvalId: input.approvalId, status, messageId };
 		}
-		// Emptying the claim means the caller lost the race or the reviewer already decided; report that
-		// state without sending, and never resurrect an expired approval (the page shows it as expired too).
-		await record(result.status, messageId);
-		return { ok: false, error: `Send was not released: ${result.status}`, approvalId: input.approvalId, status: result.status, messageId };
+		// A decided or in-flight approval is not a refusal: the caller gets the state it settled on
+		// (`claimed` from the confirmation that won the race, `queued`/`sent` once that one finishes,
+		// `cancelled`) and nothing is sent twice. Only `expired` stays an error, below.
+		if (result.status !== "expired") {
+			await record(result.status, messageId);
+			return { ok: true, approvalId: input.approvalId, status: result.status, messageId };
+		}
+		await record("expired", messageId);
+		return { ok: false, error: "Approval expired", code: "expired", approvalId: input.approvalId, status: "expired" };
 	} catch (error) {
 		const reason = error instanceof Error ? error.message : "Approval failed";
-		await record(reason === "Approval expired" ? "expired" : "error", null);
-		return { ok: false, error: reason, approvalId: input.approvalId };
+		// `confirmAgentSend` throws "Approval expired" when it is the call that expired the request.
+		if (reason === "Approval expired") {
+			await record("expired", null);
+			return { ok: false, error: reason, code: "expired", approvalId: input.approvalId, status: "expired" };
+		}
+		await record("error", null);
+		return { ok: false, error: reason, code: "refused", approvalId: input.approvalId };
 	}
 }

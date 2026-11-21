@@ -83,27 +83,28 @@ const approvalRow = async (id: string) => (await db.select().from(agentSendAppro
 const draftA = await agentDraft("a");
 const requestA = await requestAgentSend(env, user as never, draftA, 1, ownKeyId);
 const denied = await approveAgentSend(env, principal(ownKeyId, false), { mailboxId, approvalId: requestA.approvalId });
-check("flag off is denied", !denied.ok && /may not approve/.test(denied.error));
+check("flag off is denied", !denied.ok && /may not approve/.test(denied.error) && denied.code === "permission_denied");
 check("flag off changed nothing", (await queuedMessages()).length === 0 && (await approvalRow(requestA.approvalId)).status === "pending" && deliveries.length === 0);
 
 // 2. The key's own request: approved, and exactly one message leaves.
 const approved = await approveAgentSend(env, principal(ownKeyId), { mailboxId, approvalId: requestA.approvalId });
+const approvedMessageId = approved.ok ? approved.messageId : null;
 const afterApproval = await approvalRow(requestA.approvalId);
-check("own draft is approved", approved.ok && approved.status === "queued" && !!approved.messageId);
-check("exactly one message was created", (await queuedMessages()).length === 1 && (await queuedMessages())[0].id === approved.messageId);
-check("exactly one delivery was queued", deliveries.length === 1 && deliveries[0].messageId === approved.messageId);
-check("approval records the send and the message", afterApproval.status === "sent" && afterApproval.messageId === approved.messageId);
+check("own draft is approved", approved.ok && approved.status === "queued" && !!approvedMessageId);
+check("exactly one message was created", (await queuedMessages()).length === 1 && (await queuedMessages())[0].id === approvedMessageId);
+check("exactly one delivery was queued", deliveries.length === 1 && deliveries[0].messageId === approvedMessageId);
+check("approval records the send and the message", afterApproval.status === "sent" && afterApproval.messageId === approvedMessageId);
 
 // 3. A second call returns the same status and sends nothing again.
 const again = await approveAgentSend(env, principal(ownKeyId), { mailboxId, approvalId: requestA.approvalId });
-check("second call is idempotent", again.ok && again.status === approved.status && again.messageId === approved.messageId);
+check("second call is idempotent", again.ok && again.status === "queued" && again.messageId === approvedMessageId);
 check("second call sent nothing", (await queuedMessages()).length === 1 && deliveries.length === 1);
 
 // 4. Another key's approval: denied, still pending.
 const draftB = await agentDraft("b");
 const requestB = await requestAgentSend(env, user as never, draftB, 1, otherKeyId);
 const foreign = await approveAgentSend(env, principal(ownKeyId), { mailboxId, approvalId: requestB.approvalId });
-check("another key's approval is denied", !foreign.ok && /not found/i.test(foreign.error));
+check("another key's approval is denied", !foreign.ok && /not found/i.test(foreign.error) && foreign.code === "not_found");
 check("another key's approval is untouched", (await approvalRow(requestB.approvalId)).status === "pending" && (await queuedMessages()).length === 1);
 
 // 5. A request made in the web UI (no key on it): denied.
@@ -119,7 +120,22 @@ const requestD = await requestAgentSend(env, user as never, draftD, 1, ownKeyId)
 await db.update(agentSendApprovals).set({ expiresAt: new Date(Date.now() - 60_000) }).where(eq(agentSendApprovals.id, requestD.approvalId));
 const expired = await approveAgentSend(env, principal(ownKeyId), { mailboxId, approvalId: requestD.approvalId });
 check("expired approval is denied", !expired.ok && /expired/i.test(expired.error));
+// "Expired" is its own answer, not a permissions problem the caller cannot act on.
+check("expired is distinguishable from a refusal", !expired.ok && expired.code === "expired" && expired.status === "expired");
 check("expired approval is marked expired, not sent", (await approvalRow(requestD.approvalId)).status === "expired" && (await queuedMessages()).length === 1);
+
+// 6b. A request another confirmation has already claimed is a decided answer, not an error: the caller
+// gets the state it settled on, and nothing is delivered.
+const draftE = await agentDraft("e");
+const requestE = await requestAgentSend(env, user as never, draftE, 1, ownKeyId);
+await db.update(agentSendApprovals).set({ status: "claimed", claimedAt: new Date() }).where(eq(agentSendApprovals.id, requestE.approvalId));
+const inFlight = await approveAgentSend(env, principal(ownKeyId), { mailboxId, approvalId: requestE.approvalId });
+check("an in-flight request returns its status, not an error", inFlight.ok && inFlight.status === "claimed" && inFlight.messageId === null);
+check("an in-flight request is not sent twice", deliveries.length === 1 && (await queuedMessages()).length === 1);
+// A request cancelled with its key is also a decided answer.
+await db.update(agentSendApprovals).set({ status: "cancelled" }).where(eq(agentSendApprovals.id, requestE.approvalId));
+const cancelled = await approveAgentSend(env, principal(ownKeyId), { mailboxId, approvalId: requestE.approvalId });
+check("a cancelled request returns its status, not an error", cancelled.ok && cancelled.status === "cancelled" && deliveries.length === 1);
 
 // 7. Audit: the approval, the key, a timestamp and the resulting message id.
 const auditRows = await db.select().from(auditLogs).where(eq(auditLogs.action, "email.approve_send"));
@@ -127,8 +143,8 @@ const auditForA = auditRows.map((row) => ({ row, metadata: JSON.parse(row.metada
 	.filter(({ metadata }) => metadata.approvalId === requestA.approvalId);
 check("approval is audited", auditForA.length >= 1);
 check("audit names the key id", auditForA.every(({ metadata }) => metadata.keyId === ownKeyId));
-check("audit names the message id", auditForA.every(({ metadata }) => metadata.messageId === approved.messageId && metadata.status === "queued"));
-check("audit actor and timestamp", auditForA.every(({ row }) => row.actorUserId === userId && row.mailboxId === mailboxId && row.messageId === approved.messageId && row.createdAt instanceof Date && Math.abs(row.createdAt.getTime() - Date.now()) < 120_000));
+check("audit names the message id", auditForA.every(({ metadata }) => metadata.messageId === approvedMessageId && metadata.status === "queued"));
+check("audit actor and timestamp", auditForA.every(({ row }) => row.actorUserId === userId && row.mailboxId === mailboxId && row.messageId === approvedMessageId && row.createdAt instanceof Date && Math.abs(row.createdAt.getTime() - Date.now()) < 120_000));
 check("expired attempt is audited", auditRows.some((row) => JSON.parse(row.metadata ?? "{}").approvalId === requestD.approvalId));
 
 await external.sqlExecutor.close?.();
