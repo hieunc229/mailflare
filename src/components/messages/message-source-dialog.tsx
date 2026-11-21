@@ -6,6 +6,8 @@ import { useLanguage } from "@/components/language-provider";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import type { MessageSourceDialogProps } from "./message-source-dialog-types";
+import type { MessageAuthenticationResponse } from "@/lib/email/authentication-types";
+import { fetchMessageAuthentication } from "./message-details-utils";
 import { copyMessageSource, downloadMessageSource, fetchMessageSource, summarizeMessageSource } from "./message-source-utils";
 
 export function MessageSourceDialog({ messageId, open, onOpenChange }: MessageSourceDialogProps) {
@@ -15,7 +17,8 @@ export function MessageSourceDialog({ messageId, open, onOpenChange }: MessageSo
 	const [loading, setLoading] = useState(false);
 	const [copied, setCopied] = useState(false);
 	const [copyError, setCopyError] = useState(false);
-	const summary = useMemo(() => source === null ? null : summarizeMessageSource(source), [source]);
+	const [authentication, setAuthentication] = useState<MessageAuthenticationResponse | null>(null);
+	const summary = useMemo(() => source === null ? null : summarizeMessageSource(source, authentication), [source, authentication]);
 	// Start each load from a clean slate whenever the dialog opens or the message changes while open.
 	const loadKey = open ? messageId : null;
 	const [prevLoadKey, setPrevLoadKey] = useState<string | null>(null);
@@ -23,6 +26,7 @@ export function MessageSourceDialog({ messageId, open, onOpenChange }: MessageSo
 		setPrevLoadKey(loadKey);
 		if (loadKey !== null) {
 			setSource(null);
+			setAuthentication(null);
 			setError(null);
 			setCopied(false);
 			setCopyError(false);
@@ -33,6 +37,11 @@ export function MessageSourceDialog({ messageId, open, onOpenChange }: MessageSo
 	useEffect(() => {
 		if (!open) return;
 		const controller = new AbortController();
+		fetchMessageAuthentication(messageId, controller.signal)
+			.then((value) => {
+				if (!controller.signal.aborted) setAuthentication(value);
+			})
+			.catch(() => {});
 		fetchMessageSource(messageId, controller.signal)
 			.then((value) => {
 				if (!controller.signal.aborted) setSource(value);
