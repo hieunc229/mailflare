@@ -275,7 +275,7 @@ test("LIST-STATUS answers STATUS for the folders it lists", async (t) => {
 	assert.match(result, /\* LIST \(\\HasNoChildren\) "\/" "INBOX"\r\n\* STATUS "INBOX" \(MESSAGES 2 UNSEEN 1 UIDNEXT 3\)\r\n/);
 });
 
-test("STATUS and SELECT report the folder; EXAMINE and SELECT are both read-only; unknown folders do not exist", async (t) => {
+test("STATUS and SELECT report the folder; EXAMINE is read-only, SELECT of an own mailbox is read-write; unknown folders do not exist", async (t) => {
 	const w = await world(t);
 	const key = await w.addKey({ id: "k1" });
 	await w.addRaw("g1", RAW_ALTERNATIVE);
@@ -286,8 +286,8 @@ test("STATUS and SELECT report the folder; EXAMINE and SELECT are both read-only
 	assert.equal((await client.cmd("STATUS INBOX (SIZE)")).status, "BAD");
 	assert.equal((await client.cmd("STATUS Nope (MESSAGES)")).detail, "[NONEXISTENT] Mailbox does not exist");
 	const select = await client.cmd("SELECT INBOX");
-	assert.match(select.text, /\* FLAGS \(\\Answered \\Flagged \\Deleted \\Seen \\Draft\)\r\n\* 2 EXISTS\r\n\* 0 RECENT\r\n\* OK \[UIDVALIDITY \d+\] UIDs valid\r\n\* OK \[UIDNEXT 3\] Predicted next UID\r\n\* OK \[PERMANENTFLAGS \(\)\] No permanent flags\r\n/);
-	assert.equal(select.detail, "[READ-ONLY] SELECT completed");
+	assert.match(select.text, /\* FLAGS \(\\Answered \\Flagged \\Deleted \\Seen \\Draft \$Forwarded\)\r\n\* 2 EXISTS\r\n\* 0 RECENT\r\n\* OK \[UIDVALIDITY \d+\] UIDs valid\r\n\* OK \[UIDNEXT 3\] Predicted next UID\r\n\* OK \[PERMANENTFLAGS \(\\Answered \\Flagged \\Deleted \\Seen \$Forwarded \\\*\)\] Limited\r\n/);
+	assert.equal(select.detail, "[READ-WRITE] SELECT completed");
 	assert.equal((await client.cmd("EXAMINE Sent")).detail, "[READ-ONLY] EXAMINE completed");
 	assert.equal((await client.cmd("SELECT Clients/None")).status, "NO");
 	assert.equal((await client.cmd("FETCH 1 FLAGS")).status, "BAD", "a failed SELECT leaves nothing selected");
@@ -346,7 +346,7 @@ test("FETCH: at most 64 items, repeated items are sent once, and a literal goes 
 	assert.equal((await client.cmd(`FETCH 1 (${many(65, "FLAGS")})`)).status, "BAD");
 	assert.equal((await client.cmd(`FETCH 1 (${many(64, "FLAGS")})`)).status, "OK");
 
-	const once = (await client.cmd("FETCH 1 (FLAGS UID FLAGS BODY.PEEK[1] BODY[1] UID FLAGS)")).text;
+	const once = (await client.cmd("FETCH 1 (FLAGS UID FLAGS BODY.PEEK[1] BODY.PEEK[1] UID FLAGS)")).text;
 	assert.equal(once.match(/FLAGS/g).length, 1);
 	assert.equal(once.match(/UID/g).length, 1);
 	assert.equal(once.match(/BODY\[1\]/g).length, 1);
@@ -935,21 +935,16 @@ test("commands past the per-connection rate are delayed, not refused", async (t)
 	assert.ok(Date.now() - started >= 1500, `60 commands at 20 a second take about two seconds, took ${Date.now() - started} ms`);
 });
 
-test("write commands are refused in this read-only version", async (t) => {
+test("write commands that are not built yet are refused", async (t) => {
 	const w = await world(t);
 	const key = await w.addKey({ id: "k1" });
 	await w.addRaw("g1", RAW_ALTERNATIVE);
 	const client = await loggedIn(w, key);
 	t.after(() => client.end());
 	await client.cmd("SELECT INBOX");
-	for (const command of ["STORE 1 +FLAGS (\\Seen)", "COPY 1 Trash", "MOVE 1 Trash", "EXPUNGE", "CREATE X", "DELETE X", "RENAME X Y"]) {
+	for (const command of ["COPY 1 Trash", "MOVE 1 Trash", "EXPUNGE", "CREATE X", "DELETE X", "RENAME X Y"]) {
 		assert.equal((await client.cmd(command)).detail, "[CANNOT] This server is read-only for now", command);
 	}
-	assert.equal((await client.cmd("UID STORE 1 +FLAGS (\\Seen)")).status, "NO");
-	assert.equal(w.sqlite.prepare("SELECT read FROM messages WHERE id = 'g1'").get().read, 0);
-	// Fetching the body without PEEK would set \Seen on a writable server; here nothing changes.
-	await client.cmd("FETCH 1 BODY[]");
-	assert.equal(w.sqlite.prepare("SELECT read FROM messages WHERE id = 'g1'").get().read, 0);
 });
 
 test("ID, ENABLE, CHECK, CLOSE, UNSELECT, SUBSCRIBE", async (t) => {
@@ -1002,7 +997,7 @@ test("imapflow can log in, list, open a mailbox and download a message", async (
 	const lock = await flow.getMailboxLock("INBOX");
 	try {
 		assert.equal(flow.mailbox.exists, 1);
-		assert.equal(flow.mailbox.readOnly, true);
+		assert.equal(flow.mailbox.readOnly, false);
 		const message = await flow.fetchOne("1", { envelope: true, bodyStructure: true, uid: true, source: true });
 		assert.equal(message.envelope.subject, "Hello there");
 		assert.equal(message.bodyStructure.childNodes.length, 2);

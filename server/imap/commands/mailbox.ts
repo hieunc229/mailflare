@@ -7,7 +7,8 @@ import { FolderView } from "@/lib/imap/view";
 import type { Completion, ImapConnection } from "../connection";
 import { args, isList, text, type Arg } from "./args";
 
-const FLAGS = "\\Answered \\Flagged \\Deleted \\Seen \\Draft";
+const FLAGS = "\\Answered \\Flagged \\Deleted \\Seen \\Draft $Forwarded";
+const PERMANENT_FLAGS = "\\Answered \\Flagged \\Deleted \\Seen $Forwarded \\*";
 /** Longest LIST pattern and most wildcards in one. */
 const MAX_PATTERN = 256;
 const MAX_WILDCARDS = 8;
@@ -29,8 +30,8 @@ export function runNamespace(c: ImapConnection): Completion {
 // ---- SELECT / EXAMINE ----
 
 /**
- * Everything is read-only in this version (writes are a later step), so both commands
- * answer [READ-ONLY]; a client then offers no flag changes. The folder is found through
+ * EXAMINE, and SELECT of a mailbox this login may only read, answer [READ-ONLY] with no
+ * permanent flags, so a client offers no changes; otherwise the session is read-write. The folder is found through
  * the access layer, the app password is checked again, and the folder's change feed is
  * watched before its state is read, so a change in between is not missed.
  */
@@ -57,14 +58,15 @@ export async function runSelect(c: ImapConnection, command: ParsedCommand, exami
 		unwatch();
 		throw no("The connection is closed");
 	}
-	c.select({ view, mailboxId, name: folder.name, readOnly: true, unwatch });
+	const readOnly = examine || folder.permission === "read_only";
+	c.select({ view, mailboxId, name: folder.name, readOnly, unwatch });
 	c.untagged(`FLAGS (${FLAGS})`);
 	c.untagged(`${view.exists} EXISTS`);
 	c.untagged("0 RECENT");
 	c.untagged(`OK [UIDVALIDITY ${view.uidvalidity}] UIDs valid`);
 	c.untagged(`OK [UIDNEXT ${view.uidNext}] Predicted next UID`);
-	c.untagged("OK [PERMANENTFLAGS ()] No permanent flags");
-	return { code: "READ-ONLY", text: `${examine ? "EXAMINE" : "SELECT"} completed` };
+	c.untagged(readOnly ? "OK [PERMANENTFLAGS ()] No permanent flags" : `OK [PERMANENTFLAGS (${PERMANENT_FLAGS})] Limited`);
+	return { code: readOnly ? "READ-ONLY" : "READ-WRITE", text: `${examine ? "EXAMINE" : "SELECT"} completed` };
 }
 
 // ---- STATUS ----
