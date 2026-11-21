@@ -73,6 +73,8 @@ export async function appendMessage(env: CloudflareEnv, identity: ImapIdentity, 
 	if (input.raw.length === 0) throw no("The message is empty", "CANNOT");
 	if (input.flags.keywords.length > MAX_KEYWORDS) throw no("A message may have at most 50 keywords", "LIMIT");
 	const db = getDb(env);
+	// The folder's state exists before the message does, so the message is indexed by the change log (which keeps the flags written below), not by a rebuild.
+	await syncMailbox(env, dest.mailboxId);
 	let id: string;
 	if (dest.key === "drafts") id = await appendDraft(env, identity, dest, input);
 	else {
@@ -123,7 +125,6 @@ async function appendDraft(env: CloudflareEnv, identity: ImapIdentity, dest: Des
 		if (type === "forbidden") throw no("You may not send from that address, so it cannot be saved as a draft", "NOPERM");
 		throw no(type === "invalidEmail" ? (description ?? "The message is not valid") : "The draft could not be stored", "CANNOT");
 	}
-	await syncMailbox(env, dest.mailboxId);
 	return result.id;
 }
 
@@ -172,6 +173,5 @@ async function storeMessage(env: CloudflareEnv, identity: ImapIdentity, dest: De
 	}
 	// The contact is a by-product; the message is stored either way.
 	await upsertContactFromAddress(env, { userId: identity.userId, address: placement.direction === "outbound" ? toAddr : fromAddr, source: placement.direction === "outbound" ? "outbound" : "inbound" }).catch((error) => console.warn("IMAP APPEND contact update failed", error));
-	await syncMailbox(env, dest.mailboxId);
 	return id;
 }
