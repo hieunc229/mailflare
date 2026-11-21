@@ -77,7 +77,8 @@ function recurrenceRule(event: FeedEvent): string | null {
 	const interval = event.repeat === "weekdays" ? 1 : Number.isInteger(event.repeatInterval) ? (event.repeatInterval as number) : 1;
 	// A listed-days repeat steps day by day, so its interval is always 1 and never written.
 	if (interval > 1) parts.push(`INTERVAL=${interval}`);
-	if (event.repeatUntil) parts.push(`UNTIL=${utc(event.repeatUntil)}`);
+	// repeatUntil is an exclusive bound in the app; RFC 5545 UNTIL is inclusive, so stop one second earlier.
+	if (event.repeatUntil) parts.push(`UNTIL=${utc(new Date(event.repeatUntil.getTime() - 1000))}`);
 	return `RRULE:${parts.join(";")}`;
 }
 

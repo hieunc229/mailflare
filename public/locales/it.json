@@ -1725,6 +1725,7 @@
 	"calendar.invalidTimes": "Inserisci orari validi per l'evento.",
 	"calendar.noFuture": "Non restano occorrenze future da aggiornare.",
 	"calendar.saveFailed": "Impossibile salvare l'evento. Riprova.",
+	"calendar.inviteFailed": "L'evento è stato salvato, ma non è stato possibile inviare alcuni inviti.",
 	"calendar.deleteFuture": "Eliminare le occorrenze future da adesso?",
 	"calendar.deleteEvent": "Eliminare questo evento?",
 	"calendar.deleteFailed": "Impossibile eliminare l'evento. Riprova.",

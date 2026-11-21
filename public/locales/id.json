@@ -1703,6 +1703,7 @@
 	"calendar.invalidTimes": "Masukkan waktu acara yang valid.",
 	"calendar.noFuture": "Tidak ada kejadian mendatang yang tersisa untuk diperbarui.",
 	"calendar.saveFailed": "Tidak dapat menyimpan acara. Silakan coba lagi.",
+	"calendar.inviteFailed": "Acara disimpan, tetapi beberapa undangan tidak dapat dikirim.",
 	"calendar.deleteFuture": "Hapus kejadian mendatang mulai sekarang?",
 	"calendar.deleteEvent": "Hapus acara ini?",
 	"calendar.deleteFailed": "Tidak dapat menghapus acara. Silakan coba lagi.",

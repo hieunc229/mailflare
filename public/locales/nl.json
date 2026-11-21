@@ -1714,6 +1714,7 @@
 	"calendar.invalidTimes": "Voer geldige afspraaktijden in.",
 	"calendar.noFuture": "Er zijn geen toekomstige herhalingen meer om bij te werken.",
 	"calendar.saveFailed": "Afspraak kan niet worden opgeslagen. Probeer het opnieuw.",
+	"calendar.inviteFailed": "De afspraak is opgeslagen, maar sommige uitnodigingen konden niet worden verzonden.",
 	"calendar.deleteFuture": "Toekomstige herhalingen vanaf nu verwijderen?",
 	"calendar.deleteEvent": "Deze afspraak verwijderen?",
 	"calendar.deleteFailed": "Afspraak kan niet worden verwijderd. Probeer het opnieuw.",

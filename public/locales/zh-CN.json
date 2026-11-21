@@ -1703,6 +1703,7 @@
 	"calendar.invalidTimes": "请输入有效的日程时间。",
 	"calendar.noFuture": "没有可更新的未来重复日程。",
 	"calendar.saveFailed": "无法保存日程，请重试。",
+	"calendar.inviteFailed": "活动已保存，但部分邀请未能发送。",
 	"calendar.deleteFuture": "从现在起删除未来的重复日程？",
 	"calendar.deleteEvent": "删除此日程？",
 	"calendar.deleteFailed": "无法删除日程，请重试。",

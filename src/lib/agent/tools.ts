@@ -135,10 +135,10 @@ export async function runEmailTool(context: AgentToolContext, name: EmailToolNam
 		if (name === "search_emails") conditions.push(...buildSearchConditions(input.query as string, context.timeZone));
 		if (input.cursor) {
 			const cursor = await ownMessage(context, input.cursor as string, "Invalid pagination cursor. To start from the first page, omit cursor or set it to null. For subsequent pages, use only the nextCursor returned by list_emails for this mailbox and folder; never invent a cursor or use a page number or offset.");
-			conditions.push(lt(messages.createdAt, cursor.createdAt));
+			conditions.push(or(lt(messages.createdAt, cursor.createdAt), and(eq(messages.createdAt, cursor.createdAt), lt(messages.id, cursor.id)))!);
 		}
 		const pageSize = input.limit as number;
-		const rows = await db.select().from(messages).where(and(...conditions)).orderBy(desc(messages.createdAt)).limit(pageSize + 1);
+		const rows = await db.select().from(messages).where(and(...conditions)).orderBy(desc(messages.createdAt), desc(messages.id)).limit(pageSize + 1);
 		return { emails: rows.slice(0, pageSize).map(publicMessage), nextCursor: rows.length > pageSize ? rows[pageSize - 1]?.id : null };
 	}
 	if (name === "get_email") {

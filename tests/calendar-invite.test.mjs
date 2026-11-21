@@ -10,7 +10,7 @@ const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 const dir = mkdtempSync(join(tmpdir(), "mailflare-calendar-invite-"));
 after(() => rmSync(dir, { recursive: true, force: true }));
 await build({
-	entryPoints: { i: join(root, "src/lib/calendar/invite.ts"), r: join(root, "src/lib/calendar/invite-rules.ts"), u: join(root, "src/lib/calendar/utils.ts"), t: join(root, "src/lib/calendar/tool-occurrences.ts"), s: join(root, "src/lib/calendar/split-announcement.ts") },
+	entryPoints: { d: join(root, "src/lib/calendar/invite-delivery.ts"), i: join(root, "src/lib/calendar/invite.ts"), r: join(root, "src/lib/calendar/invite-rules.ts"), u: join(root, "src/lib/calendar/utils.ts"), t: join(root, "src/lib/calendar/tool-occurrences.ts"), s: join(root, "src/lib/calendar/split-announcement.ts") },
 	outdir: dir, outExtension: { ".js": ".mjs" }, bundle: true, platform: "node", format: "esm", logLevel: "silent",
 	alias: { "@": join(root, "src") },
 });
@@ -18,6 +18,7 @@ const { parseInvite, inviteRepeat, buildReplyIcs, buildReplyText, buildCounterIc
 const { expandToolEvents } = await import(pathToFileURL(join(dir, "t.mjs")).href);
 const { planInboundInvite, planInviteAnswer, inviteSenderMatches, addExcludedOccurrence, mergeExcludedOccurrences, normalizeInviteSender, chooseRecipientZone, inboundNeedsRecipientZone } = await import(pathToFileURL(join(dir, "r.mjs")).href);
 const { createCalendarInvitation } = await import(pathToFileURL(join(dir, "u.mjs")).href);
+const { sendToAttendees } = await import(pathToFileURL(join(dir, "d.mjs")).href);
 const { buildSplitAnnouncement } = await import(pathToFileURL(join(dir, "s.mjs")).href);
 
 const ics = (...lines) => lines.join("\r\n");
@@ -742,4 +743,15 @@ test("ordinary addresses are still written to a reply", () => {
 	const reply = buildReplyIcs(invite, "me@example.org", "declined");
 	assert.ok(reply.includes("ORGANIZER:mailto:o.rganizer+tag@example.com"));
 	assert.ok(reply.includes("PARTSTAT=DECLINED:mailto:me@example.org"));
+});
+
+test("a failing invitation is reported per attendee instead of rejecting", async () => {
+	const sent = [];
+	const failed = await sendToAttendees(["a@example.com", "b@example.com", "c@example.com"], async (to) => {
+		if (to === "b@example.com") throw new Error("sender not authorized");
+		sent.push(to);
+	});
+	assert.deepEqual(failed, ["b@example.com"]);
+	assert.deepEqual(sent, ["a@example.com", "c@example.com"]);
+	assert.deepEqual(await sendToAttendees([], async () => { throw new Error("unused"); }), []);
 });

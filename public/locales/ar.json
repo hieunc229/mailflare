@@ -1758,6 +1758,7 @@
 	"calendar.invalidTimes": "أدخل أوقات صالحة للحدث.",
 	"calendar.noFuture": "لا توجد تكرارات مستقبلية متبقية للتحديث.",
 	"calendar.saveFailed": "تعذّر حفظ الحدث. يُرجى المحاولة مرة أخرى.",
+	"calendar.inviteFailed": "تم حفظ الحدث، لكن تعذّر إرسال بعض الدعوات.",
 	"calendar.deleteFuture": "حذف التكرارات المستقبلية من الآن؟",
 	"calendar.deleteEvent": "حذف هذا الحدث؟",
 	"calendar.deleteFailed": "تعذّر حذف الحدث. يُرجى المحاولة مرة أخرى.",

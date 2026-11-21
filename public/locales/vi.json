@@ -1703,6 +1703,7 @@
 	"calendar.invalidTimes": "Hãy nhập thời gian sự kiện hợp lệ.",
 	"calendar.noFuture": "Không còn lần lặp lại nào trong tương lai để cập nhật.",
 	"calendar.saveFailed": "Không thể lưu sự kiện. Vui lòng thử lại.",
+	"calendar.inviteFailed": "Đã lưu sự kiện, nhưng không thể gửi một số lời mời.",
 	"calendar.deleteFuture": "Xóa các lần lặp lại trong tương lai kể từ bây giờ?",
 	"calendar.deleteEvent": "Xóa sự kiện này?",
 	"calendar.deleteFailed": "Không thể xóa sự kiện. Vui lòng thử lại.",

@@ -1712,6 +1712,7 @@
 	"calendar.invalidTimes": "درست تقریب کے اوقات درج کریں۔",
 	"calendar.noFuture": "اپ ڈیٹ کرنے کے لیے کوئی مستقبل کی تکرار باقی نہیں۔",
 	"calendar.saveFailed": "تقریب محفوظ نہیں ہو سکی۔ براہ کرم دوبارہ کوشش کریں۔",
+	"calendar.inviteFailed": "ایونٹ محفوظ ہو گیا، لیکن کچھ دعوت نامے نہیں بھیجے جا سکے۔",
 	"calendar.deleteFuture": "ابھی سے مستقبل کی تکرار حذف کریں؟",
 	"calendar.deleteEvent": "یہ تقریب حذف کریں؟",
 	"calendar.deleteFailed": "تقریب حذف نہیں ہو سکی۔ براہ کرم دوبارہ کوشش کریں۔",

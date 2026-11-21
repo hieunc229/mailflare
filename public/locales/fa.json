@@ -1714,6 +1714,7 @@
 	"calendar.invalidTimes": "زمان‌های معتبر برای رویداد وارد کنید.",
 	"calendar.noFuture": "هیچ رخداد آینده‌ای برای به‌روزرسانی باقی نمانده است.",
 	"calendar.saveFailed": "ذخیره رویداد ممکن نشد. دوباره تلاش کنید.",
+	"calendar.inviteFailed": "رویداد ذخیره شد، اما ارسال برخی از دعوت‌نامه‌ها ممکن نشد.",
 	"calendar.deleteFuture": "رخدادهای آینده از همین حالا حذف شوند؟",
 	"calendar.deleteEvent": "این رویداد حذف شود؟",
 	"calendar.deleteFailed": "حذف رویداد ممکن نشد. دوباره تلاش کنید.",

@@ -1714,6 +1714,7 @@
 	"calendar.invalidTimes": "Shigar da lokutan taron da suka dace.",
 	"calendar.noFuture": "Babu maimaitawar nan gaba da ta rage don sabuntawa.",
 	"calendar.saveFailed": "Ba a iya adana taron ba. Don Allah a sake gwadawa.",
+	"calendar.inviteFailed": "An adana taron, amma ba a iya aika wasu gayyata ba.",
 	"calendar.deleteFuture": "Share maimaitawar nan gaba daga yanzu?",
 	"calendar.deleteEvent": "Share wannan taron?",
 	"calendar.deleteFailed": "Ba a iya share taron ba. Don Allah a sake gwadawa.",

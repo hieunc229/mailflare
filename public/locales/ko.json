@@ -1713,6 +1713,7 @@
 	"calendar.invalidTimes": "올바른 일정 시간을 입력하세요.",
 	"calendar.noFuture": "업데이트할 이후 일정이 없습니다.",
 	"calendar.saveFailed": "일정을 저장할 수 없습니다. 다시 시도해 주세요.",
+	"calendar.inviteFailed": "일정은 저장되었지만 일부 초대장을 보내지 못했습니다.",
 	"calendar.deleteFuture": "지금부터의 이후 반복 일정을 삭제하시겠습니까?",
 	"calendar.deleteEvent": "이 일정을 삭제하시겠습니까?",
 	"calendar.deleteFailed": "일정을 삭제할 수 없습니다. 다시 시도해 주세요.",

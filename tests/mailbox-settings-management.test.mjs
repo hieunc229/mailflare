@@ -15,7 +15,7 @@ await build({
 			export { applyMigrations } from "./server/runtime/migrate.ts";
 			export { getDb } from "./src/db/index.ts";
 			export { createSession } from "./src/lib/auth/session.ts";
-			export { getMailboxAccessLevel, listAccessibleMailboxIds } from "./src/lib/mailboxes/access.ts";
+			export { getMailboxAccessLevel, listAccessibleMailboxIds, listMailboxSenders } from "./src/lib/mailboxes/access.ts";
 			export { getAuthorizedSenderAddress } from "./src/lib/email/sender.ts";
 			export * as detail from "./src/app/api/mailboxes/[id]/route.ts";
 			export * as aliases from "./src/app/api/mailboxes/[id]/aliases/route.ts";
@@ -35,7 +35,7 @@ await build({
 	alias: { "next/headers": "next/headers.js", "next/server": "next/server.js", "cloudflare:workers": "./server/runtime/cloudflare-workers.ts" },
 	logLevel: "silent",
 });
-const { SqliteDatabase, applyMigrations, getDb, createSession, getMailboxAccessLevel, listAccessibleMailboxIds,
+const { SqliteDatabase, applyMigrations, getDb, createSession, getMailboxAccessLevel, listAccessibleMailboxIds, listMailboxSenders,
 	getAuthorizedSenderAddress, detail, aliases, avatar, accountMailboxes } = await import(pathToFileURL(join(directory, "entry.mjs")).href);
 const context = id => ({ params: Promise.resolve({ id }) });
 
@@ -277,4 +277,32 @@ test("configuration access does not grant message access, sending rights or shar
 	assert.equal(mailbox.permission, null);
 	assert.equal(mailbox.displayName, "Managed Team");
 	assert.equal(await getMailboxAccessLevel(f.db, { id: "primary", role: "admin" }, "m-other-shared"), null);
+});
+
+test("reviewer candidates are the owner plus enabled users with send permission on a shared mailbox", async (t) => {
+	const f = await fixture(t);
+	f.sql.exec(`
+		INSERT INTO mailbox_access (id,mailbox_id,user_id,permission,created_by_user_id,created_at) VALUES
+			('g1','m-shared','sam','send_on_behalf','primary',1),
+			('g2','m-shared','remote','read_only','primary',1),
+			('g3','m-shared','manager','full_access','primary',1),
+			('g4','m-shared','other-admin','send_as','primary',1);
+		UPDATE users SET disabled = 1 WHERE id = 'other-admin';
+	`);
+	const db = getDb(f.env);
+	const ids = async (mailbox) => (await listMailboxSenders(db, mailbox)).map((row) => row.id).sort();
+	assert.deepEqual(await ids({ id: "m-shared", userId: "primary", type: "shared" }), ["manager", "primary", "sam"]);
+	assert.deepEqual(await ids({ id: "m-sam", userId: "sam", type: "personal" }), ["sam"]);
+});
+
+test("reviewer candidates are collected across more grantees than one query can bind", async (t) => {
+	const f = await fixture(t);
+	const addUser = f.sql.prepare("INSERT INTO users (id, email, password_hash, name, role, created_at) VALUES (?, ?, 'hash', ?, 'user', 1)");
+	const addGrant = f.sql.prepare("INSERT INTO mailbox_access (id, mailbox_id, user_id, permission, created_at) VALUES (?, 'm-shared', ?, 'send_on_behalf', 1)");
+	for (let index = 0; index < 150; index++) {
+		addUser.run(`bulk-${index}`, `bulk-${index}@one.test`, `Bulk ${index}`);
+		addGrant.run(`bulk-grant-${index}`, `bulk-${index}`);
+	}
+	const senders = await listMailboxSenders(getDb(f.env), { id: "m-shared", userId: "primary", type: "shared" });
+	assert.equal(senders.length, 151);
 });

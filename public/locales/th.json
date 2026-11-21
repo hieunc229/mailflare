@@ -1713,6 +1713,7 @@
 	"calendar.invalidTimes": "ใส่เวลากิจกรรมที่ถูกต้อง",
 	"calendar.noFuture": "ไม่เหลือรายการซ้ำในอนาคตให้อัปเดต",
 	"calendar.saveFailed": "ไม่สามารถบันทึกกิจกรรมได้ โปรดลองอีกครั้ง",
+	"calendar.inviteFailed": "บันทึกกิจกรรมแล้ว แต่ส่งคำเชิญบางรายการไม่สำเร็จ",
 	"calendar.deleteFuture": "ลบรายการซ้ำในอนาคตตั้งแต่ตอนนี้หรือไม่",
 	"calendar.deleteEvent": "ลบกิจกรรมนี้หรือไม่",
 	"calendar.deleteFailed": "ไม่สามารถลบกิจกรรมได้ โปรดลองอีกครั้ง",

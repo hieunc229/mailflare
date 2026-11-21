@@ -1,3 +1,6 @@
+import { expandToolEvents } from "./tool-occurrences";
+import type { calendarEvents } from "@/db/schema";
+
 /** Offsets the event editor offers, in minutes before the start. */
 export const REMINDER_MINUTE_OPTIONS = [0, 5, 10, 15, 30, 60, 120, 1440, 2880, 10080] as const;
 
@@ -18,4 +21,22 @@ export function formatReminderBody(startsAt: Date, timeZone: string, location: s
 	}
 	const place = location.trim();
 	return place ? `${time} · ${place}` : time;
+}
+
+/** The reminder cron period. An "at time of event" reminder has a zero-width window, so it also fires for starts up to this long ago, but only for events that existed (were last saved) before that start. */
+export const REMINDER_GRACE_MS = 5 * 60_000;
+
+/** Occurrences of `event` whose reminder is due at `now`, newer than `lastReminded` (ms), oldest first. */
+export function dueReminderOccurrences(event: typeof calendarEvents.$inferSelect, now: Date, lastReminded: number, limit: number, overrides?: Array<{ occurrenceMs: number; startsAt: Date; endsAt: Date }>) {
+	const lead = (event.reminderMinutes ?? 0) * 60_000;
+	const grace = lead === 0 ? REMINDER_GRACE_MS : 0;
+	return expandToolEvents([event], new Date(now.getTime() - grace), new Date(now.getTime() + lead + 1), 500, overrides ? new Map([[event.id, overrides]]) : undefined)
+		.map((occurrence) => ({ ...occurrence, start: new Date(occurrence.startsAt) }))
+		.filter((occurrence) => {
+			const start = occurrence.start.getTime();
+			// An occurrence already under way only counts if the event was not created or edited after it began.
+			if (start <= now.getTime() && event.updatedAt.getTime() > start) return false;
+			return start + grace > now.getTime() && start - lead <= now.getTime() && start > lastReminded;
+		})
+		.slice(0, limit);
 }
