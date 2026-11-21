@@ -97,6 +97,44 @@ Optional: `SMTP_TLS_KEY` and `SMTP_TLS_CERT` (paths inside the container)
 enable STARTTLS with your own certificate. Without them STARTTLS is not
 offered, which is safe but means transport encryption depends on the sender.
 
+**IMAP (mail apps, read-only for now).** Set `IMAP_ENABLED=1`, give the container
+`SMTP_TLS_KEY` and `SMTP_TLS_CERT` for `MAIL_HOSTNAME`, and publish port 993
+(uncomment `"993:993"` in `docker-compose.yml`). Then create an app password with
+the IMAP protocol in Settings, App passwords, and add an IMAP account in your
+mail app: server `MAIL_HOSTNAME`, port 993, SSL/TLS, user name your mailbox
+address, password the app password. Only app passwords work, never the account
+password, and only over TLS; ten wrong passwords a minute from one address lock
+that address out for the rest of the minute (the limit is shared with CalDAV and
+JMAP). Mailboxes shared with you appear under `Shared/<address>/`. Running more
+than one container against the same database with IMAP on is not supported.
+Workers installs cannot run IMAP: Cloudflare Workers cannot accept TCP connections.
+
+Every failed login writes one line to the container log (standard output), and
+nothing to the database:
+
+```
+IMAP login failed ip=203.0.113.7 reason=bad_secret user="me@example.test"
+```
+
+`ip` is the client address (an IPv6 client appears as its /64, for example
+`2001:db8:1:2::/64`, the same unit the guess limit counts), `reason` is
+`bad_secret` (no app password with that secret and the IMAP protocol),
+`no_mailbox` (the secret is right but the user name is not a mailbox it may
+use), `throttled` (the address has spent its guesses) or `malformed` (a broken
+AUTHENTICATE response), and `user` is the user name as sent, cut to 64 printable
+characters and quoted. The password is never logged. To ban repeat offenders
+with fail2ban, point a filter at the container log with a `failregex` such as
+`IMAP login failed ip=<ADDR>(?:/64)? reason=`.
+
+Behind Docker's default port publishing, the userland proxy can make every client
+appear to come from the bridge gateway address. All clients then share one
+per-address connection cap (30) and one login guess budget, so a single bad
+client can lock everyone out. Run the container with host networking, or publish
+the port on a bridge that has IPv4 and IPv6 enabled and set
+`"userland-proxy": false` in the Docker daemon configuration (`daemon.json`).
+Then check that the `IMAP login failed ip=` line shows real client addresses and
+not the gateway address.
+
 **Cloudflare Email Routing relay.** Keep MX on Cloudflare and deploy the
 Worker in `deploy/cloudflare-email-relay`. It posts each message to
 `/api/inbound` on your server, signed with `INBOUND_WEBHOOK_SECRET`, and acts
@@ -144,7 +182,13 @@ and the DNS page shows what to set by hand.
 | `SMTP_INBOUND_PORT` | `25` | Inbound SMTP; `0` disables |
 | `MAIL_HOSTNAME` | `mail.<domain>` | Host the MX record points at; SMTP banner |
 | `SMTP_MAX_SIZE` | 36 MiB | Largest raw inbound message; allows for encoding overhead on up to 25 MB of attachments. Oversized mail receives an SMTP rejection, which the sender's mail provider can report as a delivery failure. |
-| `SMTP_TLS_KEY`, `SMTP_TLS_CERT` | unset | STARTTLS certificate for the listener |
+| `SMTP_TLS_KEY`, `SMTP_TLS_CERT` | unset | Certificate for inbound SMTP STARTTLS and for IMAP. The files are checked every 10 minutes and a renewed certificate is used without a restart |
+| `IMAP_ENABLED` | unset (off) | `1` starts the IMAP listener (read-only for now); needs the certificate above. Adds the IMAP choice to Settings, App passwords. Docker and Node only |
+| `IMAP_PORT` | `993` | IMAP over TLS; `0` disables it |
+| `IMAP_STARTTLS_PORT` | `0` (off) | A plain port that requires STARTTLS before login; usually `143` |
+| `IMAP_HOST` | every interface, IPv6 and IPv4 (`::`) | Address the IMAP listeners bind to. Without it the listener takes IPv6 and IPv4 together, and IPv4 only where the system has no IPv6 |
+| `IMAP_MAX_CONNECTIONS` | `500` | IMAP connections for the whole process; each address may hold 30 (an IPv6 client counts by its /64) and each account 20 |
+| `IMAP_ALLOW_PLAINTEXT` | unset | `1` allows login without TLS, only when `IMAP_HOST` is a loopback address (for local testing); ignored with a warning otherwise |
 | `SMTP_URL` | unset | Outbound relay |
 | `SMTP_TLS_REJECT_UNAUTHORIZED` | `true` | Trust self-signed relay certificates when `false` |
 | `CF_EMAIL_WORKER_NAME` | `mailflare` | Worker name that Email Routing rules created through the Cloudflare API target. If you change it on an install whose rules already target `mailflare`, recreate those rules; the old ones are no longer recognised |
