@@ -40,7 +40,7 @@ export async function PATCH(request: Request, { params }: CalendarEventRoutePara
 	if (existing.repeat !== "none" && effectiveFrom && existing.repeatUntil && effectiveFrom >= existing.repeatUntil) return NextResponse.json({ error: "No future occurrences remain" }, { status: 404 });
 	const attendees = (input.attendees ?? []).map((email) => email.trim()).filter((email) => /^\S+@\S+\.\S+$/.test(email));
 	if (attendees.length && existing.mailboxId && input.from && !calendarKeyCanSendInvitations(key, existing.mailboxId)) return NextResponse.json({ error: "Sending invitations requires mail send permission for this mailbox" }, { status: 403 });
-	let inviteErrors: string[] = [];
+	const inviteErrors: string[] = [];
 	if (input.moveOccurrenceToPast) {
 		if (!occurrence || existing.repeat === "none" || startsAt >= new Date()) return NextResponse.json({ error: "Choose a past time for this occurrence" }, { status: 400 });
 		const excluded = parseExcludedOccurrences(existing.excludedOccurrences);
