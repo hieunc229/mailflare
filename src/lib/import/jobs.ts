@@ -1,6 +1,7 @@
 import { and, desc, eq, inArray, lt } from "drizzle-orm";
 import { getDb } from "@/db";
-import { importJobs, mailboxes } from "@/db/schema";
+import { importJobs, mailboxes, users } from "@/db/schema";
+import { getMailboxAccessLevel } from "@/lib/mailboxes/access";
 import { newId } from "@/lib/ids";
 import { getImportMessageUserId, parseImportDestination } from "./destination";
 import { fetchImapMessages } from "./imap";
@@ -182,6 +183,23 @@ export async function cancelOrDismissImportJob(env: CloudflareEnv, userId: strin
 	return true;
 }
 
+const ACCESS_LOST = "You no longer have access to this mailbox";
+
+/**
+ * Access was proven when the job was created, but jobs run for a long time. Re-check on resume and on every
+ * chunk that the owner is still enabled and still manages the destination mailbox.
+ */
+async function ownerMayImport(env: CloudflareEnv, job: Pick<JobRow, "userId" | "mailboxId">): Promise<boolean> {
+	const db = getDb(env);
+	const [owner] = await db
+		.select({ id: users.id, role: users.role, disabled: users.disabled, deletedAt: users.deletedAt })
+		.from(users)
+		.where(eq(users.id, job.userId))
+		.limit(1);
+	if (!owner || owner.disabled || owner.deletedAt) return false;
+	return !!(await getMailboxAccessLevel(db, owner, job.mailboxId))?.canManage;
+}
+
 export type ResumeImportResult =
 	| { ok: true; job: ImportJobSummary }
 	| { ok: false; status: 400 | 404 | 409; error: string };
@@ -204,6 +222,7 @@ export async function resumeImportJob(
 		.limit(1);
 	if (!row) return { ok: false, status: 404, error: "Import not found" };
 	if (row.status !== "failed") return { ok: false, status: 409, error: "Only a failed import can be resumed" };
+	if (!(await ownerMayImport(env, row))) return { ok: false, status: 409, error: ACCESS_LOST };
 
 	let cursor = row.cursor;
 	if (row.kind === "imap") {
@@ -234,6 +253,14 @@ export async function processImportJob(env: CloudflareEnv, delivered: ImportJobM
 	const db = getDb(env);
 	const [job] = await db.select().from(importJobs).where(eq(importJobs.id, message.jobId)).limit(1);
 	if (!job || (job.status !== "queued" && job.status !== "running")) return;
+	if (!(await ownerMayImport(env, job))) {
+		const now = new Date();
+		await db
+			.update(importJobs)
+			.set({ status: "failed", error: ACCESS_LOST, finishedAt: now, updatedAt: now })
+			.where(and(eq(importJobs.id, job.id), inArray(importJobs.status, [...ACTIVE])));
+		return;
+	}
 
 	if (job.status === "queued") {
 		await db

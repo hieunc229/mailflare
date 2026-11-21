@@ -33,3 +33,11 @@ test("a read-only tool cannot be confirmed into existence", async () => {
 	const token = await createCalendarConfirmation(env, "usr_1", "get_schedule", {}, Date.now());
 	assert.equal(await readCalendarConfirmation(env, token, "usr_1"), null);
 });
+
+test("a very large proposal still round-trips through a token", async () => {
+	const now = 1_900_000_000_000;
+	const big = { updates: Array.from({ length: 20 }, (_, i) => ({ id: `evt_${i}`, description: "é".repeat(10_000) })) };
+	const token = await createCalendarConfirmation(env, "usr_1", "update_events", big, now);
+	const read = await readCalendarConfirmation(env, token, "usr_1", now + 1000);
+	assert.deepEqual(read.input, big);
+});

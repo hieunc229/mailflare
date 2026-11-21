@@ -35,6 +35,7 @@ export function SettingsNav() {
 									<Link
 										key={item.href}
 										href={item.href}
+										aria-current={active ? "page" : undefined}
 										className={cn(
 											"block rounded-full px-4 py-1.5 text-sm font-medium transition-colors",
 											active

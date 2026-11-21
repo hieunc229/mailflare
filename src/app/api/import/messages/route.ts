@@ -49,7 +49,7 @@ export async function POST(request: Request) {
 			destination: input.destination,
 			messages: input.messages,
 		});
-		return NextResponse.json(result);
+		return NextResponse.json({ ...result, ...(input.truncated ? { truncated: input.truncated } : {}) });
 	}
 
 	const job = await createFileImportJob(env, {
@@ -59,7 +59,7 @@ export async function POST(request: Request) {
 		destination: input.destinationValue,
 		messages: input.messages,
 	});
-	return NextResponse.json({ job }, { status: 202 });
+	return NextResponse.json({ job, ...(input.truncated ? { truncated: input.truncated } : {}) }, { status: 202 });
 }
 
 function summarizeFilenames(names: string[]): string {

@@ -14,6 +14,7 @@ await build({
 			export { SqliteDatabase } from "./server/runtime/sqlite-database.ts";
 			export { applyMigrations } from "./server/runtime/migrate.ts";
 			export { getDb } from "./src/db/index.ts";
+			export { blockContact } from "./src/lib/contacts/service.ts";
 			export {
 				parseContactsLimit,
 				CONTACTS_LIST_DEFAULT_LIMIT,
@@ -40,6 +41,7 @@ const {
 	SqliteDatabase,
 	applyMigrations,
 	getDb,
+	blockContact,
 	parseContactsLimit,
 	CONTACTS_LIST_DEFAULT_LIMIT,
 	CONTACTS_LIST_MAX_LIMIT,
@@ -177,4 +179,22 @@ test("saveManualContact creates then renames without duplicating the address", a
 
 	const rows = await listContacts(db, { userId: "owner", query: "", limit: 100 });
 	assert.equal(rows.length, 1);
+});
+
+test("blocking again after the generated rule was edited updates it instead of failing", async (t) => {
+	const database = new SqliteDatabase(":memory:");
+	t.after(() => database.db.close());
+	await applyMigrations(database, join(root, "drizzle/migrations"));
+	database.db.exec(`
+		INSERT INTO users (id, email, password_hash, name, role, created_at) VALUES ('owner', 'owner@one.test', 'hash', 'Owner', 'admin', 1), ('second', 'second@one.test', 'hash', 'Second', 'user', 1);
+		INSERT INTO contacts (id, user_id, email, display_name, source, blocked, last_seen_at, created_at) VALUES ('c1', 'owner', 'spam@example.com', 'Spam', 'inbound', 0, NULL, 1), ('c2', 'second', 'spam@example.com', 'Spam', 'inbound', 0, NULL, 1);
+	`);
+	database.db.exec("PRAGMA foreign_keys = OFF");
+	const env = { DB: database };
+	const input = { userId: "owner", mailboxId: "mbx_1", domainId: "dom_1", address: "spam@example.com" };
+	await blockContact(env, input);
+	database.db.exec("UPDATE routing_rules SET action = 'archive', enabled = 0, user_id = 'owner'");
+	await blockContact(env, { ...input, userId: "second" });
+	const rules = database.db.prepare("SELECT action, enabled, user_id FROM routing_rules").all();
+	assert.deepEqual(rules.map((rule) => [rule.action, rule.enabled, rule.user_id]), [["trash", 1, "owner"]]);
 });

@@ -17,7 +17,7 @@ export async function GET(request: Request) {
 		return NextResponse.json({ error: "Mailbox not found" }, { status: 404 });
 	}
 
-	const mbox = await exportMailboxToMbox(env, mailboxId);
+	const mbox = await exportMailboxToMbox(env, mailboxId, user.id);
 	const address = `${access.mailbox.localPart}.mbox`;
 	return new Response(mbox, {
 		headers: {

@@ -3,6 +3,7 @@ import { authenticateApiRequest, hasScope } from "@/lib/api/key-auth";
 import { LIMITS } from "./constants";
 import { corsHeaders, JmapError, problemResponse } from "./errors";
 import { readBlob, storeUpload } from "./blobs";
+import { parsePingSeconds, tryDecodeURIComponent } from "./request-utils";
 import { processRequest, sessionState, validateRequest } from "./processor";
 import { buildSession } from "./session";
 import { getEmailState, getMailboxState } from "./state";
@@ -64,10 +65,14 @@ export async function handleJmapRequest(request: Request, env: CloudflareEnv): P
 	const download = path.match(/^\/jmap\/download\/([^/]+)\/([^/]+)\/(.*)$/);
 	if (download && request.method === "GET") {
 		const [, accountId, blobId, rawName] = download;
-		if (decodeURIComponent(accountId) !== ctx.accountId) return new Response("Not found", { status: 404, headers: corsHeaders() });
-		const blob = await readBlob(ctx, decodeURIComponent(blobId));
+		const decodedAccountId = tryDecodeURIComponent(accountId);
+		const decodedBlobId = tryDecodeURIComponent(blobId);
+		const decodedName = tryDecodeURIComponent(rawName);
+		if (decodedAccountId === null || decodedBlobId === null || decodedName === null) return new Response("Bad request", { status: 400, headers: corsHeaders() });
+		if (decodedAccountId !== ctx.accountId) return new Response("Not found", { status: 404, headers: corsHeaders() });
+		const blob = await readBlob(ctx, decodedBlobId);
 		if (!blob) return new Response("Not found", { status: 404, headers: corsHeaders() });
-		const name = decodeURIComponent(rawName) || blob.name || "blob";
+		const name = decodedName || blob.name || "blob";
 		const type = url.searchParams.get("type") || blob.type;
 		return new Response(blob.body, {
 			headers: {
@@ -84,11 +89,12 @@ export async function handleJmapRequest(request: Request, env: CloudflareEnv): P
 
 	const upload = path.match(/^\/jmap\/upload\/([^/]+)$/);
 	if (upload && request.method === "POST") {
-		if (decodeURIComponent(upload[1]) !== ctx.accountId) return problemResponse("accountNotFound", 404, "Unknown account");
+		const uploadAccountId = tryDecodeURIComponent(upload[1]);
+		if (uploadAccountId !== ctx.accountId) return problemResponse("accountNotFound", 404, "Unknown account");
 		const type = request.headers.get("content-type") || "application/octet-stream";
 		const disposition = request.headers.get("content-disposition") ?? "";
 		const name = disposition.match(/filename\*?=(?:UTF-8'')?"?([^";]+)"?/i)?.[1] ?? null;
-		const stored = await storeUpload(ctx, await request.arrayBuffer(), type, name ? decodeURIComponent(name) : null);
+		const stored = await storeUpload(ctx, await request.arrayBuffer(), type, name ? (tryDecodeURIComponent(name) ?? name) : null);
 		if (!stored) return problemResponse("limit", 413, "Upload too large", { limit: "maxSizeUpload" });
 		return new Response(JSON.stringify(stored), { status: 201, headers: JSON_HEADERS });
 	}
@@ -106,7 +112,7 @@ export async function handleJmapRequest(request: Request, env: CloudflareEnv): P
  * every `ping` seconds (default 30, minimum 10) until the client leaves.
  */
 function eventSource(ctx: JmapContext, url: URL): Response {
-	const ping = Math.max(Number(url.searchParams.get("ping") || 30), 10);
+	const ping = parsePingSeconds(url.searchParams.get("ping"));
 	const closeAfter = url.searchParams.get("closeafter") === "state";
 	const encoder = new TextEncoder();
 	let last = "";

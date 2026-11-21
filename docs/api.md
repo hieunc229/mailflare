@@ -60,8 +60,8 @@ When you add attendees and choose a sending mailbox, Mailflare emails each atten
 | Mailflare route | Purpose |
 | --- | --- |
 | `GET /api/calendar/events?start=&end=` | List events in an ISO 8601 range (default: the next 31 days). Repeating events are returned once, with their rule |
-| `POST /api/calendar/events` | Create an event (`{ title, startsAt, endsAt, description?, location?, attendees?, color?, repeat?, repeatDays?, timeZone?, mailboxId?, from? }`) |
-| `PATCH /api/calendar/events/[eventId]` | Update an event or series. For a repeating event, pass an occurrence ID or `effectiveFrom` to change it from that occurrence onward |
+| `POST /api/calendar/events` | Create an event (`{ title, startsAt, endsAt, description?, location?, attendees?, color?, repeat?, repeatDays?, timeZone?, mailboxId?, from? }`). If the event is saved but some invitations fail to send, the response is still successful and includes `inviteErrors`, the list of attendee addresses that were not emailed |
+| `PATCH /api/calendar/events/[eventId]` | Update an event or series. For a repeating event, pass an occurrence ID or `effectiveFrom` to change it from that occurrence onward. Like `POST`, the response carries `inviteErrors` when some updated invitations could not be sent |
 | `DELETE /api/calendar/events/[eventId]` | Delete an event, or a series from an occurrence onward |
 
 These routes accept the dashboard session or an API key (`Authorization: Bearer <key>`) with the **Read calendar** (`calendar:read`) or **Manage calendar** (`calendar:write`) scope, which you choose when creating the key in **Settings → API keys**. A key can only send invitations if it also has the `send` scope for the chosen mailbox. MCP and the assistant use separate calendar tools, described in [Email assistant and MCP](email-assistant-and-mcp.md).
@@ -96,7 +96,7 @@ Admin API keys cannot read or send mail. Enable **Allow MCP access** when creati
 | `accounts` | `GET /api/v1/accounts` | List managed accounts |
 | `accounts` | `POST /api/v1/accounts` | Create an account and its mailbox (`{ username, domainId, password, role?, useAllDomains?, aliases? }`) |
 | `accounts` | `GET /api/v1/accounts/[id]` | Get a managed account |
-| `accounts` | `PATCH /api/v1/accounts/[id]` | Update an account (`{ name, role, disabled, canManageMailboxes, calendarEnabled?, driveEnabled?, forwardingEmail?, password? }`) |
+| `accounts` | `PATCH /api/v1/accounts/[id]` | Update an account (`{ name, role, disabled, canManageMailboxes, calendarEnabled?, driveEnabled?, forwardingEmail?, password? }`). An admin API key may set `forwardingEmail` on the accounts it manages without a step-up proof (by design: it already has the authority to reset their passwords). A `PATCH` that changes the forwarding address of the key's own owner account returns `403` with `code: "verification_required"`; change it in the web app, which asks the owner to confirm |
 | `mailboxes` | `GET /api/v1/mailboxes` | List managed mailboxes |
 | `mailboxes` | `POST /api/v1/mailboxes` | Create a mailbox (`{ domainId, localPart, displayName?, type?, ownerUserId? }`) |
 | `mailboxes` | `GET /api/v1/mailboxes/[id]` | Get a managed mailbox |
@@ -144,6 +144,16 @@ Creation validates all selected addresses before provisioning. Account, mailbox,
 alias records are inserted atomically. If Cloudflare routing fails, the new records
 are removed and routing changes from that attempt are rolled back, preserving existing
 rules. If cleanup itself fails, the response reports that manual checking is needed.
+
+### Masked addresses ("Hide My Email")
+
+Each mailbox's settings page can also mint **masked** aliases: a random address on an
+active domain with an optional label, created via **Generate masked address**. Sending
+from a masked alias uses the label — or the bare address when it has none — so the
+account and mailbox names never reach the recipient. Replies to mail delivered to a
+masked alias default to replying from it. Toggling an alias off stops its incoming
+mail, including through catch-all rules, and removes it from the sender list until it
+is re-enabled.
 
 ## Sending email
 
@@ -214,7 +224,7 @@ When a second step is required after a password sign-in, `POST /api/auth/login` 
 
 Passkeys satisfy the second step by themselves. Authentication recovery codes belong to the authenticator-app flow; they cannot replace passkeys. When every passkey is lost, an administrator can issue a one-time passkey enrolment link from the account page. For a sole administrator, run `npm run auth:recovery-link -- admin@example.com https://mail.example.com` from a source checkout (the Docker image does not include the script) and send the printed 30-minute link through a trusted channel. With `DATABASE_URL` set it writes the grant directly; without it, the command prints the `wrangler d1 execute DB --remote …` statements to run against the default D1 database. For the default Docker install (SQLite file `mailflare.sqlite` in `DATA_DIR`) the statements are wrapped in `wrangler d1 execute --command "..."`: copy the SQL between the quotes and run it against that file with the `sqlite3` CLI on the host (the image has no `sqlite3`).
 
-Sensitive changes (`passkey.add`, `passkey.remove`, `password.set`, `password.remove`, `mfa.enroll`, `mfa.disable`, `mfa.codes`, `second_factor.toggle`, and the administrator actions) require fresh identity verification. The web client obtains a short-lived step-up grant from `POST /api/auth/step-up` (password plus code where required) or `/api/auth/step-up/options` + `/api/auth/step-up/verify` (passkey). Grants are single-use, bound to the session, action, actor and target account, and become invalid when either account's security configuration changes. The authenticator-management and administrator recovery-link endpoints also accept direct password verification, with an authenticator code or recovery code when required.
+Sensitive changes (`passkey.add`, `passkey.remove`, `password.set`, `password.remove`, `mfa.enroll`, `mfa.disable`, `mfa.codes`, `second_factor.toggle`, `profile.recovery_email`, `routing.forward` (creating or retargeting a forward rule to an address that is not a mailbox, alias or catch-all store the user can access, changing the match criteria or copy mailbox of such a rule, or switching a disabled one back on; an unclaimed address on the user's own domain counts as outside), `webhook.change` (creating a webhook, changing its URL, adding events, or switching a disabled one back on), and the administrator actions, including `admin.forwarding_email`) require fresh identity verification. The web client obtains a short-lived step-up grant from `POST /api/auth/step-up` (password plus code where required) or `/api/auth/step-up/options` + `/api/auth/step-up/verify` (passkey). Grants are single-use, bound to the session, action, actor and target account, and become invalid when either account's security configuration changes. The authenticator-management and administrator recovery-link endpoints also accept direct password verification, with an authenticator code or recovery code when required. A change that needs proof answers `401` with `code: "verification_failed"` when the proof is missing or refused; the web screens call these endpoints without the sign-out redirect and open the step-up dialog instead.
 
 Turning the authenticator app off (`POST /api/settings/mfa/disable`) leaves the second-step requirement as the account had it: a passkey can take over as the second step, but an account that never required one does not start requiring it. Removing the password (`DELETE /api/settings/password`) and removing the authenticator app are separate changes, so a client that moves an account to passkey-only confirms each one on its own.
 

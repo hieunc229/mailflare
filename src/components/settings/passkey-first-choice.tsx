@@ -110,7 +110,7 @@ export function PasskeyFirstChoice({
 								<span className="block text-sm font-medium text-neutral-900">{option.title}</span>
 								<span className="mt-0.5 block text-sm leading-5 text-neutral-500">{option.hint}</span>
 								{option.notes?.map((note) => (
-									<span key={note} className="mt-1 flex items-start gap-1.5 text-xs leading-5 text-neutral-400">
+									<span key={note} className="mt-1 flex items-start gap-1.5 text-xs leading-5 text-neutral-500">
 										<Info className="mt-0.5 h-3 w-3 shrink-0" />
 										{note}
 									</span>

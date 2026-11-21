@@ -1,4 +1,4 @@
-import { getEmailAddress } from "@/lib/email/address";
+import { getEmailAddress, parseEmailAddressParts } from "@/lib/email/address";
 import { domainOwnerLabel, isLookalikeDomain, registrableDomain } from "../domain-utils";
 import type { SpamBrand, SpamSignal } from "../types";
 import { SPAM_WEIGHTS } from "../weights";
@@ -35,8 +35,7 @@ function customBrandMatcher(brand: SpamBrand): BrandMatcher {
 }
 
 function displayName(from: string | null | undefined): string {
-	const match = (from ?? "").match(/^\s*"?([^"<]*?)"?\s*</);
-	return match?.[1]?.trim() ?? "";
+	return parseEmailAddressParts(from ?? "").name ?? "";
 }
 
 /**

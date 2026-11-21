@@ -82,6 +82,8 @@ interface CloudflareEnv {
 	CF_ACCOUNT_ID?: string;
 	/** Public origin of this install (https://mail.example.com) when it sits behind a proxy. */
 	APP_URL?: string;
+	/** Node runtime only: set when a reverse proxy terminates TLS, so x-forwarded-proto is trusted. */
+	TRUST_PROXY?: string;
 	/** VAPID public key (uncompressed P-256 point, URL-safe base64) for Web Push. */
 	VAPID_PUBLIC_KEY?: string;
 	/** VAPID private scalar (URL-safe base64). Keep this secret. */

@@ -27,13 +27,15 @@ export function AccountSettingsNav() {
 				<nav className="space-y-1">
 					{accountSettingsNavItems.map((item) => {
 						const href = getAccountSettingsHref(id, item.segment);
+						const active = isActiveAccountSettingsPath(pathname, href);
 						return (
 							<Link
 								key={item.segment || "details"}
 								href={href}
+								aria-current={active ? "page" : undefined}
 								className={cn(
 									"block rounded-full px-4 py-2.5 text-sm font-medium transition-colors",
-									isActiveAccountSettingsPath(pathname, href)
+									active
 										? "bg-blue-100 text-blue-900"
 										: "text-neutral-600 hover:bg-white/70 hover:text-neutral-900",
 								)}

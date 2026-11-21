@@ -9,6 +9,7 @@ import { getLicenseEntitlements } from "@/lib/licenses/service";
 import { tracksAccountIdentity } from "@/lib/profile/identity-utils";
 import { mailboxSchema } from "@/lib/validators";
 import { ensureMailboxDomainRouting, getMailboxDomainAddresses } from "@/lib/mailboxes/domain-addresses";
+import { normalizeRecipientLocalPart } from "@/lib/email/recipient-address";
 import { ensurePersonalMailbox } from "./utils";
 
 export async function GET(request: Request) {
@@ -71,20 +72,17 @@ export async function POST(request: Request) {
 	}
 
 	const localPart = parsed.data.localPart.toLowerCase();
-	const [existing] = await db
-		.select()
-		.from(mailboxes)
-		.where(and(eq(mailboxes.domainId, domain.id), eq(mailboxes.localPart, localPart)))
-		.limit(1);
-	if (existing) {
+	// Inbound routing resolves normalized local parts, so a mailbox that only
+	// differs by dots or a +tag would shadow the existing address either way.
+	const [domainMailboxes, domainAliases] = await Promise.all([
+		db.select({ localPart: mailboxes.localPart }).from(mailboxes).where(eq(mailboxes.domainId, domain.id)),
+		db.select({ localPart: mailboxAliases.localPart }).from(mailboxAliases).where(eq(mailboxAliases.domainId, domain.id)),
+	]);
+	const normalized = normalizeRecipientLocalPart(localPart);
+	if (domainMailboxes.some((row) => normalizeRecipientLocalPart(row.localPart) === normalized)) {
 		return NextResponse.json({ error: "Mailbox already exists" }, { status: 409 });
 	}
-	const [existingAlias] = await db
-		.select({ id: mailboxAliases.id })
-		.from(mailboxAliases)
-		.where(and(eq(mailboxAliases.domainId, domain.id), eq(mailboxAliases.localPart, localPart)))
-		.limit(1);
-	if (existingAlias) {
+	if (domainAliases.some((row) => normalizeRecipientLocalPart(row.localPart) === normalized)) {
 		return NextResponse.json({ error: "An alias already uses this address" }, { status: 409 });
 	}
 

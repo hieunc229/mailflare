@@ -2,6 +2,7 @@ import type { ImportMessageInput } from "./types";
 import type { ImapImportInput } from "./imap-types";
 import {
 	assertSafeImapHost,
+	encodeImapMailboxName,
 	getLiteralLength,
 	planImapFetchGroups,
 	isTaggedCompletion,
@@ -216,7 +217,7 @@ export async function fetchImapMessages(input: ImapImportInput): Promise<ImapFet
 	try {
 		await imap.readGreeting();
 		await imap.command(`LOGIN ${quoteImapString(input.username)} ${quoteImapString(input.password)}`);
-		await imap.command(`EXAMINE ${quoteImapString(input.folder)}`);
+		await imap.command(`EXAMINE ${quoteImapString(encodeImapMailboxName(input.folder))}`);
 		const searchLines = await imap.command("UID SEARCH ALL");
 		const batch = selectImapUidBatch(searchLines.flatMap(parseSearchUids), input.limit, input.offset);
 		const messages: ImportMessageInput[] = [];
@@ -260,7 +261,7 @@ export async function listImapFolders(input: Omit<ImapImportInput, "folder" | "l
 		await imap.command(`LOGIN ${quoteImapString(input.username)} ${quoteImapString(input.password)}`);
 		const lines = await imap.command('LIST "" "*"');
 		await imap.command("LOGOUT").catch(() => undefined);
-		return Array.from(new Set(lines.map(parseListMailboxName).filter((name): name is string => !!name)));
+		return Array.from(new Set(lines.map((line, index) => parseListMailboxName(line, lines[index + 1])).filter((name): name is string => !!name)));
 	} finally {
 		await imap.close();
 	}
