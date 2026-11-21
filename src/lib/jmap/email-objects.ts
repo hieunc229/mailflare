@@ -19,7 +19,7 @@ export function toAddressObjects(value: string | null | undefined): EmailAddress
 	});
 }
 
-export function mailboxIdsFor(row: MessageRow): Record<string, boolean> {
+export function mailboxIdsFor(row: Pick<MessageRow, "mailboxId" | "folderId" | "status">): Record<string, boolean> {
 	if (!row.mailboxId) return {};
 	if (row.folderId) return { [encodeMailboxRef({ kind: "folder", mailboxId: row.mailboxId, folderId: row.folderId })]: true };
 	const role = statusToRole(row.status);
