@@ -124,6 +124,7 @@ export function DashboardNav({ className }: { className?: string }) {
     useState<FolderColor>(DEFAULT_FOLDER_COLOR);
   const [addingFolder, setAddingFolder] = useState(false);
   const [folderDialogOpen, setFolderDialogOpen] = useState(false);
+  const [folderError, setFolderError] = useState<string | null>(null);
   const linksWithCounts: NavLink[] = links.filter((link) => link.href !== "/scheduled" || counts.folders.scheduled.total > 0).map(({ labelKey, ...rest }): NavLink => {
     const link = { ...rest, label: t(labelKey) };
     if (link.href === "/inbox") {
@@ -217,6 +218,7 @@ export function DashboardNav({ className }: { className?: string }) {
     if (!selectedMailbox?.id || !newFolderName.trim()) return;
 
     setAddingFolder(true);
+    setFolderError(null);
     try {
       const response = await authFetch("/api/folders", {
         method: "POST",
@@ -227,7 +229,11 @@ export function DashboardNav({ className }: { className?: string }) {
           color: newFolderColor,
         }),
       });
-      if (!response.ok) return;
+      if (!response.ok) {
+        const body = (await response.json().catch(() => null)) as { error?: unknown } | null;
+        setFolderError(typeof body?.error === "string" ? body.error : t("navigation.createFolderFailed"));
+        return;
+      }
       const folder = (await response.json()) as CustomFolder;
       invalidateFolderCache();
       setFolders((items) =>
@@ -236,6 +242,8 @@ export function DashboardNav({ className }: { className?: string }) {
       setNewFolderName("");
       setNewFolderColor(DEFAULT_FOLDER_COLOR);
       setFolderDialogOpen(false);
+    } catch {
+      setFolderError(t("auth.serverUnreachable"));
     } finally {
       setAddingFolder(false);
     }
@@ -262,7 +270,7 @@ export function DashboardNav({ className }: { className?: string }) {
       {!minimal && (
         <NavSectionHeader label={t("navigation.folders")} open={foldersSectionOpen} onToggle={toggleFoldersSection}>
           {selectedMailbox && (
-            <Dialog open={folderDialogOpen} onOpenChange={setFolderDialogOpen}>
+            <Dialog open={folderDialogOpen} onOpenChange={(open) => { setFolderDialogOpen(open); if (!open) setFolderError(null); }}>
               <DialogTrigger asChild>
                 <button
                   type="button"
@@ -316,6 +324,7 @@ export function DashboardNav({ className }: { className?: string }) {
                       ))}
                     </div>
                   </div>
+                  {folderError && <p role="alert" className="text-sm text-red-600">{folderError}</p>}
                   <Button
                     type="submit"
                     disabled={addingFolder || !newFolderName.trim()}
