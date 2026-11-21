@@ -6,6 +6,7 @@ import { dirname, join } from "node:path";
 import test, { after, mock } from "node:test";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { build } from "esbuild";
+import { eq } from "drizzle-orm";
 import PostalMime from "postal-mime";
 import bodystructure from "../server/imap/vendor/imapkit/bodystructure.js";
 import envelope from "../server/imap/vendor/imapkit/envelope.js";
@@ -19,7 +20,9 @@ await build({
 	stdin: {
 		contents: `
 			export { synthesizeMessage } from "./src/lib/imap/synthesize.ts";
-			export { getMessageIndex, readSection, indexMime, reviveLists, MimeIndexError, cacheKey } from "./src/lib/imap/fetch.ts";
+			export { getMessageIndex, readSection, indexMime, reviveLists, MimeIndexError, cacheKey, refusalKey, INDEXER_VERSION } from "./src/lib/imap/fetch.ts";
+			export { getDb } from "./src/db/index.ts";
+			export { messages } from "./src/db/schema/index.ts";
 			export { sweepOrphanedImapCache } from "./src/lib/imap/cache-sweeper.ts";
 			export { syncMailbox } from "./src/lib/imap/sync.ts";
 			export { SqliteDatabase } from "./server/runtime/sqlite-database.ts";
@@ -39,7 +42,7 @@ await build({
 	alias: { "cloudflare:workers": "./server/runtime/cloudflare-workers.ts" },
 	logLevel: "silent",
 });
-const { synthesizeMessage, getMessageIndex, readSection, indexMime, reviveLists, MimeIndexError, cacheKey, sweepOrphanedImapCache, syncMailbox, SqliteDatabase, applyMigrations, openFileBucket } = await import(pathToFileURL(join(directory, "entry.mjs")).href);
+const { synthesizeMessage, getMessageIndex, readSection, indexMime, reviveLists, MimeIndexError, cacheKey, refusalKey, INDEXER_VERSION, getDb, messages, sweepOrphanedImapCache, syncMailbox, SqliteDatabase, applyMigrations, openFileBucket } = await import(pathToFileURL(join(directory, "entry.mjs")).href);
 
 const crlf = (lines) => lines.join("\r\n");
 const tree = (lines) => parseTree(normalizeLineBreaks(crlf(lines)));
@@ -653,6 +656,29 @@ test("a message the indexer refuses is recorded and not parsed again until it ch
 	sqlite.prepare("UPDATE messages SET subject = 'changed' WHERE id = ?").run(id);
 	assert.equal((await getMessageIndex(env, id)).envelope[1], "changed", "an edit makes the message worth another try");
 	assert.ok(cache(id).size > 0);
+});
+
+test("a recorded refusal is tried again after an indexer version bump or an attachment change", async (t) => {
+	const { env, add, cache, sqlite } = await store(t);
+	const id = add({ subject: "odd", direction: "outbound", status: "sent" });
+	const row = async () => (await getDb(env).select().from(messages).where(eq(messages.id, id)))[0];
+	const recorded = () => JSON.parse(cache(id).bodystructure).k;
+	let calls = 0;
+	const refuse = () => { calls += 1; throw new RangeError("too much"); };
+	await assert.rejects(() => getMessageIndex(env, id, refuse), MimeIndexError);
+	assert.equal(recorded(), await refusalKey(env, await row()), "the key is the current one");
+	assert.notEqual(recorded(), await refusalKey(env, await row(), INDEXER_VERSION + 1), "the key depends on the indexer version");
+	await assert.rejects(() => getMessageIndex(env, id, refuse), MimeIndexError);
+	assert.equal(calls, 1);
+	// What an older indexer would have recorded.
+	sqlite.prepare("UPDATE imap_message_cache SET bodystructure = ? WHERE message_id = ?").run(JSON.stringify({ k: await refusalKey(env, await row(), INDEXER_VERSION - 1) }), id);
+	await assert.rejects(() => getMessageIndex(env, id, refuse), MimeIndexError);
+	assert.equal(calls, 2, "a refusal from another version is tried again");
+	sqlite.prepare("INSERT INTO message_attachments (id, message_id, filename, content_type, size, r2_key, created_at) VALUES ('at1', ?, 'f.txt', 'text/plain', 1, 'k', 1)").run(id);
+	await assert.rejects(() => getMessageIndex(env, id, refuse), MimeIndexError);
+	assert.equal(calls, 3, "a new attachment of a synthesized message is tried again");
+	await assert.rejects(() => getMessageIndex(env, id, refuse), MimeIndexError);
+	assert.equal(calls, 3);
 });
 
 test("any failure of the indexer is a MimeIndexError", () => {

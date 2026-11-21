@@ -40,6 +40,8 @@ export class MimeIndexError extends Error {}
 
 /** Nothing deeper is walked by the recursive helpers; the parser stops splitting far above this. */
 const MAX_TREE_DEPTH = 200;
+/** Bump when the indexer or the parser changes in a way that could let a refused message through. */
+export const INDEXER_VERSION = 1;
 /** Cache rows with this size mark a message that cannot be indexed. */
 const UNINDEXABLE = -1;
 
@@ -228,11 +230,17 @@ function fromCache(row: NonNullable<Awaited<ReturnType<typeof readRow>>>): Cache
 	};
 }
 
-/** The row of a message the indexer cannot describe: the reason, and the hash of the columns it was built from. */
+/** What a recorded refusal is tied to: the indexer, the columns, and the attachments a synthesized message carries. */
+export async function refusalKey(env: Env, row: MessageRow, version = INDEXER_VERSION): Promise<string> {
+	const attached = usesRaw(row) ? [] : (await getDb(env).select({ id: messageAttachments.id }).from(messageAttachments).where(and(eq(messageAttachments.messageId, row.id), isNull(messageAttachments.trashedAt))).orderBy(asc(messageAttachments.id))).map((attachment) => attachment.id);
+	return sha256Hex(JSON.stringify([version, contentKey(row), attached]));
+}
+
+/** The row of a message the indexer cannot describe: the reason, and the key of what it was built from. */
 async function recordUnindexable(env: Env, row: MessageRow, error: MimeIndexError): Promise<void> {
 	await getDb(env)
 		.insert(imapMessageCache)
-		.values({ messageId: row.id, size: UNINDEXABLE, synthKey: null, envelope: JSON.stringify({ unindexable: error.message.slice(0, 200) }), bodystructure: JSON.stringify({ k: await sha256Hex(contentKey(row)) }), headerSize: 0 })
+		.values({ messageId: row.id, size: UNINDEXABLE, synthKey: null, envelope: JSON.stringify({ unindexable: error.message.slice(0, 200) }), bodystructure: JSON.stringify({ k: await refusalKey(env, row) }), headerSize: 0 })
 		.onConflictDoNothing();
 }
 
@@ -250,7 +258,7 @@ export async function getMessageIndex(env: Env, messageId: string, index: (sourc
 		const [row] = await db.select().from(messages).where(eq(messages.id, messageId)).limit(1);
 		if (!row) return null;
 		const recorded = JSON.parse(cached.cache.bodystructure) as { k?: string };
-		if (recorded.k === (await sha256Hex(contentKey(row)))) throw new MimeIndexError((JSON.parse(cached.cache.envelope) as { unindexable?: string }).unindexable ?? "The message cannot be indexed");
+		if (recorded.k === (await refusalKey(env, row))) throw new MimeIndexError((JSON.parse(cached.cache.envelope) as { unindexable?: string }).unindexable ?? "The message cannot be indexed");
 		await db.delete(imapMessageCache).where(eq(imapMessageCache.messageId, messageId));
 	}
 	for (let attempt = 0; attempt < 3; attempt += 1) {
