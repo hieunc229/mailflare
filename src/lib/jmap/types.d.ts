@@ -37,6 +37,8 @@ export type JmapContext = {
 	 * write runs, since it reads the state before and after its change.
 	 */
 	memo?: { mailboxes?: Promise<AccessibleMailbox[]>; scope?: Promise<ChangeScope> } | null;
+	/** Set only by the IMAP server for `Email/set` (see `emailSet`); no JMAP request can carry it. */
+	emailUpdateGuard?: { mailboxId: string; jmapSeq: number };
 };
 
 export type JmapMethodHandler = (ctx: JmapContext, args: Record<string, unknown>) => Promise<Record<string, unknown> | JmapMethodError>;

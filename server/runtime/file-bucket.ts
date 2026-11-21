@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { createReadStream, createWriteStream } from "node:fs";
-import { mkdir, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { mkdir, open, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { dirname, join, resolve, sep } from "node:path";
 import { Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
@@ -61,9 +61,25 @@ class FileObject {
 		return false;
 	}
 	async arrayBuffer(): Promise<ArrayBuffer> {
-		const buffer = await readFile(this.path);
-		const slice = this.range ? buffer.subarray(this.range.offset, this.range.offset + this.range.length) : buffer;
-		return slice.buffer.slice(slice.byteOffset, slice.byteOffset + slice.byteLength) as ArrayBuffer;
+		if (!this.range) {
+			const buffer = await readFile(this.path);
+			return buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength) as ArrayBuffer;
+		}
+		// Only the requested octets are read, however large the object is.
+		const length = Math.max(this.range.length, 0);
+		const buffer = Buffer.alloc(length);
+		const handle = await open(this.path, "r");
+		try {
+			let filled = 0;
+			while (filled < length) {
+				const { bytesRead } = await handle.read(buffer, filled, length - filled, this.range.offset + filled);
+				if (bytesRead === 0) break;
+				filled += bytesRead;
+			}
+			return buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + filled) as ArrayBuffer;
+		} finally {
+			await handle.close();
+		}
 	}
 	async text(): Promise<string> {
 		return Buffer.from(await this.arrayBuffer()).toString("utf8");

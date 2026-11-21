@@ -1,6 +1,7 @@
 import { authFetch } from "@/lib/auth/client";
 import { formatUserDate } from "@/lib/time/utils";
-import type { AuthenticationSummary, MessageSourceSummary } from "./message-source-types";
+import type { MessageAuthenticationResponse } from "@/lib/email/authentication-types";
+import type { MessageSourceSummary } from "./message-source-types";
 
 export async function fetchMessageSource(messageId: string, signal: AbortSignal): Promise<string> {
 	const response = await authFetch(`/api/messages/${encodeURIComponent(messageId)}/original`, {
@@ -56,28 +57,11 @@ function deliveryDuration(headers: Map<string, string[]>, sentAt: Date): string 
 	return `Delivered after ${days} ${days === 1 ? "day" : "days"}`;
 }
 
-function authResult(headers: Map<string, string[]>, method: "spf" | "dkim" | "dmarc"): AuthenticationSummary | null {
-	const resultHeader = headers.get("authentication-results")?.find((value) => new RegExp(`(?:^|[;\\s])${method}\\s*=`, "i").test(value));
-	const result = resultHeader?.match(new RegExp(`(?:^|[;\\s])${method}\\s*=\\s*([a-z]+)`, "i"))?.[1]
-		?? (method === "spf" ? firstHeader(headers, "received-spf")?.match(/^\s*([a-z]+)/i)?.[1] : null);
-	if (!result) return null;
-	const status = result.toUpperCase();
-	if (status !== "PASS") return { status, detail: null };
-	const section = resultHeader?.split(";").find((value) => new RegExp(`(?:^|\\s)${method}\\s*=`, "i").test(value)) ?? "";
-	if (method === "spf") {
-		const ip = section.match(/\bclient-ip\s*=\s*([^\s;)]+)/i)?.[1]
-			?? firstHeader(headers, "received-spf")?.match(/\bclient-ip\s*=\s*([^\s;)]+)/i)?.[1];
-		return { status, detail: ip ? `with IP ${ip}` : null };
-	}
-	if (method === "dkim") {
-		const domain = section.match(/\bheader\.d\s*=\s*([^\s;)]+)/i)?.[1]
-			?? firstHeader(headers, "dkim-signature")?.match(/(?:^|;)\s*d\s*=\s*([^\s;)]+)/i)?.[1];
-		return { status, detail: domain ? `with domain ${domain}` : null };
-	}
-	return { status, detail: null };
-}
-
-export function summarizeMessageSource(source: string): MessageSourceSummary {
+/**
+ * Summary of the original message. SPF, DKIM and DMARC come only from the server's checked result (the provider trace of
+ * a message stored at intake); headers inside the source itself stay visible as raw text and are never shown as a result.
+ */
+export function summarizeMessageSource(source: string, authentication: MessageAuthenticationResponse | null): MessageSourceSummary {
 	const headers = readHeaders(source);
 	const date = firstHeader(headers, "date");
 	const parsedDate = date ? new Date(date) : null;
@@ -89,9 +73,9 @@ export function summarizeMessageSource(source: string): MessageSourceSummary {
 		from: firstHeader(headers, "from"),
 		to: firstHeader(headers, "to"),
 		subject: firstHeader(headers, "subject"),
-		spf: authResult(headers, "spf"),
-		dkim: authResult(headers, "dkim"),
-		dmarc: authResult(headers, "dmarc"),
+		spf: authentication?.available ? authentication.spf : null,
+		dkim: authentication?.available ? authentication.dkim : null,
+		dmarc: authentication?.available ? authentication.dmarc : null,
 	};
 }
 

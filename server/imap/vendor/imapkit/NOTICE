@@ -1,0 +1,15 @@
+Files in this directory are copied from imapkit 5.3.2 (https://github.com/postalsys/imapkit, dist/esm),
+which is published under the MIT licence:
+
+    mimeparser.js, bodystructure.js, envelope.js, addressparser.js and their .d.ts files
+
+Each file carries imapkit's copyright holder and the full MIT licence text at the top.
+
+mimeparser.js, addressparser.js and envelope.js (and the declarations that go with them) are modified by
+Mailflare contributors: limits on nesting, part count, embedded message parsing and header field sizes.
+bodystructure.js is unchanged apart from the notice.
+
+Several comments name WildDuck (https://github.com/nodemailer/wildduck) as the origin of the algorithms.
+imapkit's authors are the WildDuck authors and released imapkit under the MIT licence.
+
+types.d.ts is Mailflare's own, a two-type excerpt of imapkit's so the declarations resolve without the package.

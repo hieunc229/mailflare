@@ -828,6 +828,38 @@
         "ALTER TABLE `app_settings` ADD `auto_update_dispatched_version` text;",
         "ALTER TABLE `app_settings` ADD `auto_update_channel` text NOT NULL DEFAULT 'release';"
       ]
+    },
+    {
+      "name": "0094_app_password_usage.sql",
+      "statements": [
+        "ALTER TABLE `api_keys` ADD `last_used_protocol` text;",
+        "ALTER TABLE `api_keys` ADD `last_used_ip` text;"
+      ]
+    },
+    {
+      "name": "0106_imap_state.sql",
+      "statements": [
+        "CREATE TABLE `imap_mailbox_state` (\n\t`mailbox_id` text PRIMARY KEY NOT NULL,\n\t`jmap_seq` integer NOT NULL,\n\t`modseq` integer DEFAULT 1 NOT NULL,\n\t`updated_at` integer DEFAULT (unixepoch()) NOT NULL,\n\tFOREIGN KEY (`mailbox_id`) REFERENCES `mailboxes`(`id`) ON UPDATE no action ON DELETE cascade\n);",
+        "CREATE TABLE `imap_folder_state` (\n\t`id` text PRIMARY KEY NOT NULL,\n\t`mailbox_id` text NOT NULL,\n\t`folder_key` text NOT NULL,\n\t`uidvalidity` integer NOT NULL,\n\t`uid_next` integer DEFAULT 1 NOT NULL,\n\t`highest_modseq` integer DEFAULT 0 NOT NULL,\n\t`initialized_at` integer DEFAULT (unixepoch()) NOT NULL,\n\tFOREIGN KEY (`mailbox_id`) REFERENCES `mailboxes`(`id`) ON UPDATE no action ON DELETE cascade\n);",
+        "CREATE UNIQUE INDEX `imap_folder_state_folder_idx` ON `imap_folder_state` (`mailbox_id`,`folder_key`);",
+        "CREATE TABLE `imap_uids` (\n\t`mailbox_id` text NOT NULL,\n\t`folder_key` text NOT NULL,\n\t`uid` integer NOT NULL,\n\t`message_id` text NOT NULL,\n\t`modseq` integer NOT NULL,\n\t`content_hash` text\n);",
+        "CREATE UNIQUE INDEX `imap_uids_uid_idx` ON `imap_uids` (`mailbox_id`,`folder_key`,`uid`);",
+        "CREATE UNIQUE INDEX `imap_uids_message_idx` ON `imap_uids` (`mailbox_id`,`folder_key`,`message_id`);",
+        "CREATE INDEX `imap_uids_message_id_idx` ON `imap_uids` (`message_id`);",
+        "CREATE INDEX `imap_uids_modseq_idx` ON `imap_uids` (`mailbox_id`,`folder_key`,`modseq`);",
+        "CREATE TABLE `imap_message_flags` (\n\t`message_id` text PRIMARY KEY NOT NULL,\n\t`answered` integer DEFAULT false NOT NULL,\n\t`forwarded` integer DEFAULT false NOT NULL,\n\t`deleted` integer DEFAULT false NOT NULL,\n\t`keywords` text DEFAULT '[]' NOT NULL,\n\t`updated_at` integer DEFAULT (unixepoch()) NOT NULL,\n\tFOREIGN KEY (`message_id`) REFERENCES `messages`(`id`) ON UPDATE no action ON DELETE cascade\n);",
+        "CREATE TABLE `imap_expunged` (\n\t`mailbox_id` text NOT NULL,\n\t`folder_key` text NOT NULL,\n\t`uid` integer NOT NULL,\n\t`modseq` integer NOT NULL,\n\t`created_at` integer DEFAULT (unixepoch()) NOT NULL\n);",
+        "CREATE UNIQUE INDEX `imap_expunged_uid_idx` ON `imap_expunged` (`mailbox_id`,`folder_key`,`uid`);",
+        "CREATE INDEX `imap_expunged_modseq_idx` ON `imap_expunged` (`mailbox_id`,`folder_key`,`modseq`);",
+        "CREATE TABLE `imap_message_cache` (\n\t`message_id` text PRIMARY KEY NOT NULL,\n\t`size` integer NOT NULL,\n\t`synth_key` text,\n\t`envelope` text NOT NULL,\n\t`bodystructure` text NOT NULL,\n\t`header_size` integer NOT NULL,\n\t`created_at` integer DEFAULT (unixepoch()) NOT NULL,\n\tFOREIGN KEY (`message_id`) REFERENCES `messages`(`id`) ON UPDATE no action ON DELETE cascade\n);"
+      ]
+    },
+    {
+      "name": "0107_imap_expunged_floor.sql",
+      "statements": [
+        "ALTER TABLE `imap_folder_state` ADD `expunged_floor` integer DEFAULT 0 NOT NULL;",
+        "CREATE INDEX `imap_expunged_created_idx` ON `imap_expunged` (`created_at`,`mailbox_id`,`folder_key`,`modseq`);"
+      ]
     }
   ]
 }
