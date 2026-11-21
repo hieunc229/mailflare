@@ -1,0 +1,18 @@
+# Runs the prebuilt image from GHCR; nothing is built locally.
+#   cp .env.docker.example .env.docker
+#   docker compose -f docker-compose.image.yml up -d
+# Upgrade: docker compose -f docker-compose.image.yml pull && docker compose -f docker-compose.image.yml up -d
+# To build from source instead, use docker-compose.yml.
+services:
+  mailflare:
+    image: ghcr.io/hieunc229/mailflare:latest
+    restart: unless-stopped
+    ports:
+      - "3000:3000"   # web app and JMAP
+      - "25:25"       # inbound SMTP (point your domain's MX here)
+    env_file: .env.docker
+    volumes:
+      - mailflare-data:/data
+
+volumes:
+  mailflare-data:
