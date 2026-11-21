@@ -2,6 +2,7 @@ import { and, eq, exists, isNotNull } from "drizzle-orm";
 import type { SQL } from "drizzle-orm";
 import { getDb } from "@/db";
 import { messages, outboundJobs } from "@/db/schema";
+import { logMessageHidden } from "@/lib/email/draft-access";
 
 /** Matches outbound messages whose send job is still waiting for its scheduled time. */
 export function scheduledMessageCondition(db: ReturnType<typeof getDb>): SQL {
@@ -47,6 +48,9 @@ export async function cancelScheduledSend(db: ReturnType<typeof getDb>, messageI
 		.where(and(eq(outboundJobs.messageId, messageId), eq(outboundJobs.status, "queued"), isNotNull(outboundJobs.scheduledAt)))
 		.returning({ id: outboundJobs.id });
 	if (!deleted.length) return false;
-	await db.update(messages).set({ status: "draft" }).where(and(eq(messages.id, messageId), eq(messages.status, "queued")));
+	const [cancelled] = await db.update(messages).set({ status: "draft", privateDraft: true }).where(and(eq(messages.id, messageId), eq(messages.status, "queued")))
+		.returning({ mailboxId: messages.mailboxId, threadId: messages.threadId });
+	// Drafts are private to their author: tell the JMAP change feeds readers of a shared mailbox lose sight of it.
+	if (cancelled) await logMessageHidden(db, { id: messageId, ...cancelled });
 	return true;
 }

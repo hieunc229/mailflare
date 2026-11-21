@@ -6,6 +6,8 @@ import { intakeProviderMail } from "@/lib/email/provider-intake";
 import { getReceivedEmail } from "@/lib/email/resend-api";
 import { verifySvixSignature } from "@/lib/email/svix";
 import { getResendWebhookSecret } from "@/lib/domains/resend-receiving";
+import { RequestBodyTooLargeError } from "@/lib/http/errors";
+import { readRawBody } from "@/lib/http/request";
 
 export const dynamic = "force-dynamic";
 
@@ -20,7 +22,14 @@ export async function POST(request: Request) {
 	const env = getEnv();
 	const secret = await getResendWebhookSecret(env);
 	if (!secret) return NextResponse.json({ error: "Resend receiving is not set up" }, { status: 503 });
-	const body = await request.text();
+	// The webhook event only names the message; cap the body before the signature is checked.
+	let body: string;
+	try {
+		body = new TextDecoder().decode(await readRawBody(request, 256 * 1024));
+	} catch (error) {
+		if (error instanceof RequestBodyTooLargeError) return NextResponse.json({ error: "Request body is too large" }, { status: 413 });
+		throw error;
+	}
 	const valid = await verifySvixSignature(secret, {
 		id: request.headers.get("svix-id"),
 		timestamp: request.headers.get("svix-timestamp"),

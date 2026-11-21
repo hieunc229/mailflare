@@ -822,7 +822,36 @@
       ]
     },
     {
-      "name": "0089_calendar_invite_complete.sql",
+      "name": "0089_auto_update.sql",
+      "statements": [
+        "ALTER TABLE `app_settings` ADD `auto_update` integer DEFAULT 0 NOT NULL;",
+        "ALTER TABLE `app_settings` ADD `auto_update_dispatched_version` text;",
+        "ALTER TABLE `app_settings` ADD `auto_update_channel` text NOT NULL DEFAULT 'release';"
+      ]
+    },
+    {
+      "name": "0090_security_hardening.sql",
+      "statements": [
+        "ALTER TABLE `messages` ADD `private_draft` integer DEFAULT false NOT NULL;",
+        "UPDATE `messages` SET `private_draft` = 1\nWHERE `status` = 'draft'\n\tOR (`direction` = 'outbound'\n\t\tAND `status` IN ('trash', 'received', 'archived')\n\t\tAND NOT EXISTS (SELECT 1 FROM `outbound_jobs` WHERE `outbound_jobs`.`message_id` = `messages`.`id`));",
+        "DROP INDEX IF EXISTS `messages_nav_cover_idx`;",
+        "CREATE INDEX `messages_nav_cover_idx` ON `messages` (`mailbox_id`, `status`, `folder_id`, `created_at` DESC, `id` DESC, `direction`, `read`, `thread_id`, `snoozed_until`, `user_id`, `private_draft`);",
+        "DROP INDEX IF EXISTS `messages_counts_cover_idx`;",
+        "CREATE INDEX `messages_counts_cover_idx` ON `messages` (`mailbox_id`, `folder_id`, `direction`, `status`, `read`, `starred`, `snoozed_until`, `user_id`, `private_draft`);",
+        "ALTER TABLE `users` ADD `totp_last_step` integer;",
+        "UPDATE `jmap_change_floor` SET `seq` = max(seq, COALESCE((SELECT max(seq) FROM jmap_changes), 0)) WHERE `id` = 1;"
+      ]
+    },
+    {
+      "name": "0091_masked_aliases.sql",
+      "statements": [
+        "ALTER TABLE `mailbox_aliases` ADD `label` text;",
+        "ALTER TABLE `mailbox_aliases` ADD `enabled` integer DEFAULT true NOT NULL;",
+        "ALTER TABLE `mailbox_aliases` ADD `masked` integer DEFAULT false NOT NULL;"
+      ]
+    },
+    {
+      "name": "0092_calendar_invite_complete.sql",
       "statements": [
         "ALTER TABLE `calendar_events` ADD `repeat_interval` integer NOT NULL DEFAULT 1;",
         "ALTER TABLE `calendar_events` ADD `repeat_weekday` integer;",

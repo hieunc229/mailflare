@@ -1,4 +1,4 @@
-import { escapeIcsText, formatIcsUtc, ICS_ADDRESS, joinIcsLines } from "./ics";
+import { escapeIcsText, formatIcsUtc, isIcsAddress, joinIcsLines } from "./ics";
 
 type CalendarInvitationInput = {
 	title: string;
@@ -59,13 +59,13 @@ function invitationRecurrenceRule(input: CalendarInvitationInput): string | null
 }
 
 export function createCalendarInvitation(input: CalendarInvitationInput): ArrayBuffer {
-	const organizer = input.method !== "PUBLISH" && input.organizer && ICS_ADDRESS.test(input.organizer) ? input.organizer : null;
+	const organizer = input.method !== "PUBLISH" && input.organizer && isIcsAddress(input.organizer) ? input.organizer : null;
 	const sequence = Number.isSafeInteger(input.sequence) && (input.sequence as number) >= 0 ? (input.sequence as number) : 0;
 	const stamp = formatIcsUtc(new Date());
 	const rule = invitationRecurrenceRule(input);
 	const excluded = [...new Set((input.excludedOccurrences ?? []).filter((ms) => Number.isSafeInteger(ms) && ms >= 0))].sort((a, b) => a - b);
 	const organizerLine = organizer ? [`ORGANIZER:mailto:${organizer}`] : [];
-	const attendeeLines = organizer ? (input.attendees ?? []).filter((address) => ICS_ADDRESS.test(address)).map((address) => `ATTENDEE;ROLE=REQ-PARTICIPANT;PARTSTAT=NEEDS-ACTION;RSVP=TRUE:mailto:${address}`) : [];
+	const attendeeLines = organizer ? (input.attendees ?? []).filter((address) => isIcsAddress(address)).map((address) => `ATTENDEE;ROLE=REQ-PARTICIPANT;PARTSTAT=NEEDS-ACTION;RSVP=TRUE:mailto:${address}`) : [];
 	const lines = ["BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//Mailflare//Calendar//EN", "CALSCALE:GREGORIAN", `METHOD:${input.method ?? "REQUEST"}`, "BEGIN:VEVENT", `UID:${input.uid}@mailflare`, `DTSTAMP:${stamp}`, `SEQUENCE:${sequence}`, `DTSTART:${formatIcsUtc(input.startsAt)}`, `DTEND:${formatIcsUtc(input.endsAt)}`, `SUMMARY:${escapeIcsText(input.title)}`, `DESCRIPTION:${escapeIcsText(input.description)}`, `LOCATION:${escapeIcsText(input.location)}`,
 		...(organizerLine),
 		...attendeeLines,

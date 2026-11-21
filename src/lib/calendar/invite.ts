@@ -1,5 +1,5 @@
 import { dateFromZonedFields, normalizeTimeZone, zonedDateFields } from "../time/utils";
-import { escapeIcsText, formatIcsUtc, ICS_ADDRESS, joinIcsLines } from "./ics";
+import { escapeIcsText, formatIcsUtc, isIcsAddress, joinIcsLines, MAX_ICS_ADDRESS } from "./ics";
 import { normalizeReminderMinutes } from "./reminder-utils";
 
 export type ParsedInvite = {
@@ -339,7 +339,7 @@ export function inviteAttendeeAddresses(invite: Pick<ParsedInvite, "organizer" |
 	const list: string[] = [];
 	for (const raw of [invite.organizer, ...invite.attendees.map((attendee) => attendee.email)]) {
 		const address = raw?.trim().toLowerCase() ?? "";
-		if (!address || address.length > 254 || seen.has(address) || !ICS_ADDRESS.test(address)) continue;
+		if (!address || address.length > 254 || seen.has(address) || !isIcsAddress(address)) continue;
 		seen.add(address);
 		list.push(address);
 		if (list.length >= 100) break;
@@ -403,7 +403,9 @@ function readInvite(text: string, options: ParseInviteOptions): ParsedInvite | n
 	}
 	const rdates = rawRdates.map(({ property, value }) => parseIcsDate({ ...property, value }, localZone)).filter((date): date is ParsedDate => !!date);
 	const usedFallbackZone = start.fallback || !!end?.fallback || !!recurrence?.fallback || exdates.some((date) => date.fallback) || rdates.some((date) => date.fallback);
-	const organizer = find("ORGANIZER")?.value.trim().replace(/^mailto:/i, "") || null;
+	const rawOrganizer = find("ORGANIZER")?.value.trim().replace(/^mailto:/i, "") || null;
+	// A value longer than any mailbox is dropped, so later address checks never see hostile-length input.
+	const organizer = rawOrganizer && rawOrganizer.length <= MAX_ICS_ADDRESS ? rawOrganizer : null;
 	return {
 		uid, method, methodAbsent, startsAt, endsAt,
 		recipientZone: localZone,
@@ -420,7 +422,7 @@ function readInvite(text: string, options: ParseInviteOptions): ParsedInvite | n
 		alarmMinutes: parseAlarmTrigger(alarmTriggers[eventIndex >= 0 ? eventIndex : 0]),
 		excludedDates: exdates.map((date) => date.date),
 		rdateDates: rdates.map((date) => date.date),
-		attendees: event.filter((property) => property.name === "ATTENDEE").map((property) => ({ email: property.value.trim().replace(/^mailto:/i, "").toLowerCase(), status: (property.params.PARTSTAT ?? "NEEDS-ACTION").toUpperCase() })),
+		attendees: event.filter((property) => property.name === "ATTENDEE" && property.value.length <= MAX_ICS_ADDRESS + 16).map((property) => ({ email: property.value.trim().replace(/^mailto:/i, "").toLowerCase(), status: (property.params.PARTSTAT ?? "NEEDS-ACTION").toUpperCase() })),
 	};
 }
 
@@ -609,8 +611,8 @@ export function buildReplyIcs(invite: ParsedInvite, attendee: string, response: 
 		...(invite.recurrenceId ? [dateValue("RECURRENCE-ID", invite.recurrenceId)] : []),
 		`SEQUENCE:${invite.sequence}`,
 		`SUMMARY:${escapeIcsText(invite.title)}`,
-		...(invite.organizer && ICS_ADDRESS.test(invite.organizer) ? [`ORGANIZER:mailto:${invite.organizer}`] : []),
-		`ATTENDEE;PARTSTAT=${status}:mailto:${ICS_ADDRESS.test(attendee) ? attendee : "unknown@invalid"}`, "END:VEVENT", "END:VCALENDAR"];
+		...(invite.organizer && isIcsAddress(invite.organizer) ? [`ORGANIZER:mailto:${invite.organizer}`] : []),
+		`ATTENDEE;PARTSTAT=${status}:mailto:${isIcsAddress(attendee) ? attendee : "unknown@invalid"}`, "END:VEVENT", "END:VCALENDAR"];
 	return joinIcsLines(lines);
 }
 
@@ -640,8 +642,8 @@ export function buildCounterIcs(invite: ParsedInvite, attendee: string, proposal
 		...(invite.recurrenceId ? [dateValue("RECURRENCE-ID", invite.recurrenceId)] : []),
 		`SEQUENCE:${invite.sequence}`,
 		`SUMMARY:${escapeIcsText(invite.title)}`,
-		...(invite.organizer && ICS_ADDRESS.test(invite.organizer) ? [`ORGANIZER:mailto:${invite.organizer}`] : []),
-		`ATTENDEE;PARTSTAT=NEEDS-ACTION:mailto:${ICS_ADDRESS.test(attendee) ? attendee : "unknown@invalid"}`,
+		...(invite.organizer && isIcsAddress(invite.organizer) ? [`ORGANIZER:mailto:${invite.organizer}`] : []),
+		`ATTENDEE;PARTSTAT=NEEDS-ACTION:mailto:${isIcsAddress(attendee) ? attendee : "unknown@invalid"}`,
 		...(message ? [`DESCRIPTION:${escapeIcsText(message)}`] : []),
 		"END:VEVENT", "END:VCALENDAR"];
 	return joinIcsLines(lines);

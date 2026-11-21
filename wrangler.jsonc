@@ -68,7 +68,7 @@
 	"send_email": [
 		{
 			"name": "EMAIL",
-			"remote": false,
+			"remote": true,
 		},
 	],
 	"ai": { "binding": "AI", "remote": true },

@@ -67,6 +67,8 @@ const sqlite = new Database(":memory:");
 sqlite.exec(`
 	CREATE TABLE messages (
 		id text PRIMARY KEY NOT NULL,
+		user_id text,
+		private_draft integer NOT NULL DEFAULT 0,
 		mailbox_id text,
 		direction text NOT NULL,
 		status text NOT NULL,

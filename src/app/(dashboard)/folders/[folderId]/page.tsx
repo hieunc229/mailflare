@@ -1,12 +1,7 @@
-"use client";
-
-import { useParams } from "next/navigation";
-import { MessageFolderPage } from "@/components/messages/message-folder-page";
-import { useCustomFolderConfig } from "@/components/messages/use-custom-folder-config";
-
+/**
+ * The folder list is rendered by MessageSplitLayout, the shared parent of the
+ * folder and message routes, so opening a message never unmounts it.
+ */
 export default function CustomFolderPage() {
-	const params = useParams<{ folderId: string }>();
-	const config = useCustomFolderConfig(params.folderId);
-
-	return <MessageFolderPage config={config} />;
+	return null;
 }

@@ -121,6 +121,12 @@ export function getEmailAddressList(value: string | null | undefined): string[] 
 	return result;
 }
 
+/** True when `address` is exactly one of the addresses in the header `value` (case-insensitive, never a substring). */
+export function addressListIncludes(value: string | null | undefined, address: string): boolean {
+	const wanted = normalizeEmailAddress(address);
+	return Boolean(wanted) && getEmailAddressList(value).includes(wanted);
+}
+
 export function joinEmailAddressList(values: string[]): string {
 	return values.map((value) => value.trim()).filter(Boolean).join(", ");
 }

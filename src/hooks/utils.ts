@@ -9,6 +9,11 @@ import {
 	rememberMessageRows,
 	type ThreadUnreadTarget,
 } from "@/lib/messages/field-store";
+import {
+	applyMembershipToList,
+	clearMembershipState,
+	rememberMembershipRows,
+} from "@/lib/messages/membership-store";
 import { isReadOnlyChange, type MessageFieldPatch } from "@/lib/messages/change-events";
 import type { MessageFilterOptions, MessageFolder } from "./types";
 import type { MessageCounts, MessageListResponse } from "./types";
@@ -199,6 +204,7 @@ export function patchMessageFieldsInCaches(
 		const pendingMessages = applyPendingToMessages(messages);
 		messageListCache.set(key, { ...response, messages: pendingMessages });
 		rememberMessageRows(pendingMessages);
+		rememberMembershipRows(pendingMessages);
 	}
 	for (const [id, patch] of patches) patchCachedMessage(id, patch);
 	return targets;
@@ -224,6 +230,7 @@ export function clearMessageClientState() {
 	messageCountsRequests.clear();
 	messageListCache.clear();
 	messageListRequests.clear();
+	clearMembershipState();
 }
 
 export async function fetchMessageCounts(mailboxId?: string | null, force = false): Promise<MessageCounts | undefined> {
@@ -260,14 +267,16 @@ export async function fetchMessageCounts(mailboxId?: string | null, force = fals
 }
 
 export function peekMessageList(params: URLSearchParams): MessageListResponse | undefined {
-	const response = messageListCache.get(params.toString());
-	return response ? applyPendingToMessageList(response) : undefined;
+	const key = params.toString();
+	const response = messageListCache.get(key);
+	if (!response) return undefined;
+	return applyMembershipToList(applyPendingToMessageList(response), key);
 }
 
 export async function fetchMessageList(params: URLSearchParams, force = false): Promise<MessageListResponse> {
 	const key = params.toString();
 	if (!force && messageListCache.has(key)) {
-		return applyPendingToMessageList(messageListCache.get(key) ?? {});
+		return applyMembershipToList(applyPendingToMessageList(messageListCache.get(key) ?? {}), key);
 	}
 	if (!force && messageListRequests.has(key)) return messageListRequests.get(key) ?? {};
 	const requestGeneration = messageCacheGeneration;
@@ -281,14 +290,17 @@ export async function fetchMessageList(params: URLSearchParams, force = false): 
 			return res.json();
 		})
 		.then((data) => {
-			// Overlay before the response reaches state or cache, so a refresh that
-			// started while an undo is pending cannot repaint the server value.
+			// Overlay the read/star fields before caching, so a refresh that started
+			// while an undo is pending cannot repaint the server value. Membership is
+			// derived at read time because its totals depend on the current overlay
+			// and restored rows.
 			const response = applyPendingToMessageList(data as MessageListResponse);
 			if (requestGeneration === messageCacheGeneration) {
 				messageListCache.set(key, response);
 				rememberMessageRows(response.messages ?? []);
+				rememberMembershipRows(response.messages ?? []);
 			}
-			return response;
+			return applyMembershipToList(response, key);
 		})
 		.finally(() => {
 			if (requestGeneration === messageCacheGeneration) {

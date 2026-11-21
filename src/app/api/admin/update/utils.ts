@@ -8,6 +8,8 @@ import type {
   GitHubRepositoryResponse,
   GitHubWorkflowDispatchResponse,
   PackageMetadata,
+  GitHubCompareResponse,
+  UpdateChannel,
   UpdateConfigurationItem,
   UpdateDispatchConfig,
   UpdateStatus,
@@ -177,8 +179,28 @@ async function getTargetVersion(): Promise<string> {
   return packageJson.version;
 }
 
+async function getCommitStatus(env: CloudflareEnv) {
+  const config = getDispatchConfig(env);
+  const ref = await getDispatchRef(config);
+  const owner = config.repository.split("/")[0];
+  const { data: upstream } = await githubRequest<GitHubRepositoryResponse>(
+    `/repos/${UPDATE_SOURCE_REPOSITORY}`,
+  );
+  const branch = upstream?.default_branch ?? "main";
+  const { data, response } = await githubRequest<GitHubCompareResponse>(
+    `/repos/${UPDATE_SOURCE_REPOSITORY}/compare/${branch}...${owner}:${ref}`,
+  );
+  if (!response.ok || typeof data?.behind_by !== "number") {
+    throw new Error(
+      data?.message ?? "Could not compare this installation with the upstream repository",
+    );
+  }
+  return { behindBy: data.behind_by, sha: data.base_commit?.sha ?? branch };
+}
+
 export async function getUpdateStatus(
   env: CloudflareEnv,
+  channel: UpdateChannel = "release",
 ): Promise<UpdateStatus> {
   const currentVersion = packageMetadata.version;
 
@@ -198,10 +220,27 @@ export async function getUpdateStatus(
   }
 
   getDispatchConfig(env);
+
+  if (channel === "commit") {
+    const { behindBy, sha } = await getCommitStatus(env);
+    return {
+      available: behindBy > 0,
+      channel,
+      commitsBehind: behindBy,
+      configuration,
+      configured,
+      currentVersion,
+      repository: UPDATE_SOURCE_REPOSITORY,
+      targetVersion: sha.slice(0, 7),
+      targetCommit: sha,
+    };
+  }
+
   const targetVersion = await getTargetVersion();
 
   return {
     available: isNewerVersion(targetVersion, currentVersion),
+    channel,
     configuration,
     configured,
     currentVersion,

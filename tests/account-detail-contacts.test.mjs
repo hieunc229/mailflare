@@ -21,7 +21,7 @@ const mocks = {
 	"@/lib/licenses/service": "export async function getLicenseEntitlements(){return {canForwardEmail:true}}",
 	"@/lib/auth/session": "export async function deleteUserSessions(){}export function getSessionTokenFromRequestHeaders(){return null}",
 	"@/lib/auth/password": "export const hasPasswordHash=()=>true;",
-	"@/lib/auth/webauthn/grants": "export async function consumeStepUpGrant(){}",
+	"@/lib/auth/webauthn/grants": "export async function consumeStepUpGrant(){} export async function bumpSecurityVersion(){}",
 	"@/lib/mailboxes/audit": "export async function createAuditLog(){}",
 	"@/lib/http/auth-error": "export const authError=()=>new Response(null,{status:400});",
 };

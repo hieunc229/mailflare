@@ -9,6 +9,7 @@ import {
 } from "@/lib/backups/service";
 import { authorizeBackupAdmin } from "./admin";
 import { parseBackupSettingsInput } from "./utils";
+import { hasValidSessionMutationOrigin } from "@/lib/auth/origin";
 
 export async function GET(request: Request) {
 	const auth = await authorizeBackupAdmin(request);
@@ -32,6 +33,7 @@ export async function GET(request: Request) {
 export async function PUT(request: Request) {
 	const auth = await authorizeBackupAdmin(request);
 	if (auth.error) return auth.error;
+	if (!hasValidSessionMutationOrigin(request)) return NextResponse.json({ error: "Invalid origin" }, { status: 403 });
 	const body = await request.json().catch(() => null);
 	const input = parseBackupSettingsInput(body);
 	if (!input) return NextResponse.json({ error: "Invalid backup settings" }, { status: 400 });
@@ -47,6 +49,7 @@ export async function POST(request: Request) {
 	const auth = await authorizeBackupAdmin(request);
 	if (auth.error) return auth.error;
 	const { env, user } = auth;
+	if (!hasValidSessionMutationOrigin(request)) return NextResponse.json({ error: "Invalid origin" }, { status: 403 });
 	try {
 		const backupId = await createBackupRecord(env, "manual", user.id);
 		await runDatabaseBackup(env, backupId);

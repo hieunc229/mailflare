@@ -66,7 +66,7 @@ export async function runSingleMessageAction(
   }
 
   await throwIfDeleteSkipped(response, action);
-  dispatchMessagesChanged();
+  dispatchMessagesChanged({ kind: "removed", action: "delete", messageIds: [messageId] });
 }
 
 export function openUnsubscribeUrl(url: string) {

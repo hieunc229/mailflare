@@ -712,4 +712,26 @@ test("counter proposals need a valid range on a REQUEST invitation", () => {
 	assert.equal(parseInvite(mailflare).method, "REQUEST");
 	const reply = parseInvite(buildReplyIcs(parseInvite(mailflare), "guest@example.com", "accepted"));
 	assert.notEqual(reply.method, "REQUEST");
+test("a crafted ORGANIZER of repeated @ cannot exhaust the CPU (CWE-1333)", () => {
+	const huge = "@".repeat(64 * 1024);
+	// The value is dropped at parse time ...
+	const parsed = parseInvite(event("DTSTART:20261110T100000Z", `ORGANIZER:mailto:${huge}`, "SUMMARY:x"));
+	assert.equal(parsed.organizer, null);
+	// ... and the address check itself stays linear even for a value that bypasses the parser.
+	const invite = { ...parseInvite(event("DTSTART:20261110T100000Z", "SUMMARY:x")), organizer: huge };
+	const started = performance.now();
+	const reply = buildReplyIcs(invite, huge, "accepted");
+	assert.ok(performance.now() - started < 20, "finishes quickly");
+	assert.ok(!reply.includes("ORGANIZER"));
+	assert.ok(reply.includes("mailto:unknown@invalid"));
+	const outgoing = createCalendarInvitation({ title: "t", description: "", location: "", startsAt: new Date(0), endsAt: new Date(1), uid: "u", organizer: huge, attendees: [huge] });
+	assert.ok(!new TextDecoder().decode(outgoing).includes("ORGANIZER"));
+});
+
+test("ordinary addresses are still written to a reply", () => {
+	const invite = { ...parseInvite(event("DTSTART:20261110T100000Z", "ORGANIZER:mailto:o.rganizer+tag@example.com", "SUMMARY:x")) };
+	assert.equal(invite.organizer, "o.rganizer+tag@example.com");
+	const reply = buildReplyIcs(invite, "me@example.org", "declined");
+	assert.ok(reply.includes("ORGANIZER:mailto:o.rganizer+tag@example.com"));
+	assert.ok(reply.includes("PARTSTAT=DECLINED:mailto:me@example.org"));
 });

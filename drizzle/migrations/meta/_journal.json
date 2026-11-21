@@ -565,8 +565,29 @@
     {
       "idx": 81,
       "version": "6",
+      "when": 1794516479571,
+      "tag": "0089_auto_update",
+      "breakpoints": true
+    },
+    {
+      "idx": 82,
+      "version": "6",
+      "when": 1794516479572,
+      "tag": "0090_security_hardening",
+      "breakpoints": true
+    },
+    {
+      "idx": 83,
+      "version": "6",
+      "when": 1794516479575,
+      "tag": "0091_masked_aliases",
+      "breakpoints": true
+    },
+    {
+      "idx": 84,
+      "version": "6",
       "when": 1795027677014,
-      "tag": "0089_calendar_invite_complete",
+      "tag": "0092_calendar_invite_complete",
       "breakpoints": true
     }
   ]

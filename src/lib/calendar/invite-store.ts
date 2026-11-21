@@ -4,7 +4,7 @@ import { calendarEventOverrides, calendarEvents, calendarInviteTombstones, calen
 import { newId } from "@/lib/ids";
 import type { AttachmentContent } from "@/lib/email/attachment-types";
 import { inviteAttendeeAddresses, inviteRepeat, parseInvite, type ParsedInvite } from "./invite";
-import { ICS_ADDRESS } from "./ics";
+import { isIcsAddress } from "./ics";
 import { getEmailAddress } from "@/lib/email/address";
 import { findInviteAttachment, MAX_INVITE_BYTES } from "./invite-attachment";
 import { addExcludedOccurrence, chooseRecipientZone, inboundNeedsRecipientZone, inviteSenderMatches, mergeExcludedOccurrences, normalizeInviteSender, planInboundInvite } from "./invite-rules";
@@ -148,7 +148,7 @@ export async function registerInboundInvite(env: CloudflareEnv, input: { userId:
 			const organizerAddress = getEmailAddress(invite.organizer ?? "").trim().toLowerCase();
 			const senderAddress = getEmailAddress(input.senderAddress).trim().toLowerCase();
 			const domainOf = (address: string) => address.slice(address.indexOf("@") + 1);
-			if (!organizerAddress || !ICS_ADDRESS.test(organizerAddress) || !senderAddress || (organizerAddress !== senderAddress && domainOf(organizerAddress) !== domainOf(senderAddress))) return;
+			if (!organizerAddress || !isIcsAddress(organizerAddress) || !senderAddress || (organizerAddress !== senderAddress && domainOf(organizerAddress) !== domainOf(senderAddress))) return;
 		}
 		const id = await inviteEventId(input.userId, invite.uid);
 		const where = and(eq(calendarEvents.id, id), eq(calendarEvents.userId, input.userId));
