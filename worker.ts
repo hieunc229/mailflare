@@ -83,10 +83,12 @@ export default {
 			// Domain routing rules are resolved here rather than in the queue because reject and
 			// forward can only be actioned on the live ForwardableEmailMessage.
 			const alreadyForwarded = await isForwardedMarkerValid(env, message.headers.get(MAILFLARE_FORWARDED_HEADER));
+			const headerMap = Object.fromEntries(message.headers);
 			const decision = await resolveIncomingMail(env, message.from, message.to, {
 				subject: message.headers.get("subject"),
 				from: message.headers.get("from"),
 				alreadyForwarded,
+				all: headerMap,
 			});
 
 			if (decision?.action === "reject") {
@@ -118,7 +120,7 @@ export default {
 				from: message.from,
 				to: message.to,
 				rawR2Key,
-				headers: Object.fromEntries(message.headers),
+				headers: headerMap,
 			};
 			await env.INBOUND_QUEUE.send(payload);
 		} catch (err) {

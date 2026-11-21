@@ -6,6 +6,7 @@ import { resolveInboundAddress } from "@/lib/email/routing";
 import { sendEmail } from "@/lib/email/send";
 import { newId } from "@/lib/ids";
 import type { MailboxAutoReplyInput } from "./auto-reply-types";
+import { hasListOrBulkPrecedence } from "@/lib/email/bulk-mail";
 
 const autoReplyIntervalMs = 24 * 60 * 60 * 1000;
 
@@ -82,8 +83,8 @@ function shouldSkipAutoReply(recipient: string, headers?: Record<string, string>
 
 	const autoSubmitted = getHeader(headers, "auto-submitted").toLowerCase();
 	if (autoSubmitted && autoSubmitted !== "no") return true;
-	if (/^(bulk|junk|list)$/i.test(getHeader(headers, "precedence"))) return true;
-	return ["list-id", "x-autoreply", "x-autorespond", "x-auto-response-suppress"]
+	if (hasListOrBulkPrecedence(headers)) return true;
+	return ["x-autoreply", "x-autorespond", "x-auto-response-suppress"]
 		.some((name) => !!getHeader(headers, name));
 }
 

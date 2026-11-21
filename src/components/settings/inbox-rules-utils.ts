@@ -2,6 +2,7 @@ import { defaultTranslator, type Translator } from "@/lib/i18n/utils";
 import { authFetch } from "@/lib/auth/client";
 import { requestError } from "@/lib/http/client-error";
 import { getMailboxFolders } from "@/lib/folders/client";
+import { ruleErrorMessage } from "@/lib/email/mail-type-rule";
 import type { InboxRule, InboxRuleInput, InboxRulesResponse, RuleFoldersResponse } from "./inbox-rules-types";
 
 export async function fetchInboxRules(mailboxId: string): Promise<InboxRulesResponse> {
@@ -22,8 +23,8 @@ export async function createInboxRule(input: InboxRuleInput) {
 		headers: { "Content-Type": "application/json" },
 		body: JSON.stringify(input),
 	});
-	const data = (await response.json()) as { error?: string; code?: string };
-	if (!response.ok) throw requestError(data, "Failed to create rule");
+	const data = (await response.json()) as { error?: unknown; code?: string };
+	if (!response.ok) throw requestError({ error: ruleErrorMessage(data.error, "Failed to create rule"), code: data.code }, "Failed to create rule");
 	return data;
 }
 
@@ -34,8 +35,8 @@ export async function updateInboxRule(ruleId: string, input: InboxRuleInput) {
 		headers: { "Content-Type": "application/json" },
 		body: JSON.stringify(input),
 	});
-	const data = (await response.json()) as { error?: string; code?: string };
-	if (!response.ok) throw requestError(data, "Failed to update rule");
+	const data = (await response.json()) as { error?: unknown; code?: string };
+	if (!response.ok) throw requestError({ error: ruleErrorMessage(data.error, "Failed to update rule"), code: data.code }, "Failed to update rule");
 	return data;
 }
 
@@ -49,6 +50,7 @@ export async function deleteInboxRule(ruleId: string) {
 export function getRuleFieldLabel(field: string, t: Translator = defaultTranslator): string {
 	if (field === "content") return t("rules.field.content");
 	if (field === "title") return t("rules.field.title");
+	if (field === "mail_type") return t("rules.field.mailType");
 	return t("rules.field.email");
 }
 

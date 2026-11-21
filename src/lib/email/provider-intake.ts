@@ -27,7 +27,7 @@ export async function intakeProviderMail(
 	const verdicts = input.verdicts ?? trace.verdicts;
 	if (verdicts?.virus?.toUpperCase() === "FAIL") return { delivered: 0, dropped: "Message failed the virus scan" };
 
-	// Providers that give no header map (Resend) still get the plain headers read from the message.
+	// Providers that give no header map (Resend, or SES with a truncated list) still get the plain headers read from the message.
 	const headers = input.headers ?? readHeaderMap(input.raw);
 	const db = getDb(env);
 	let delivered = 0;
