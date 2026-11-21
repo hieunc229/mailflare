@@ -942,7 +942,7 @@ test("write commands that are not built yet are refused", async (t) => {
 	const client = await loggedIn(w, key);
 	t.after(() => client.end());
 	await client.cmd("SELECT INBOX");
-	for (const command of ["APPEND X", "CREATE X", "DELETE X", "RENAME X Y"]) {
+	for (const command of ["CREATE X", "DELETE X", "RENAME X Y"]) {
 		assert.equal((await client.cmd(command)).detail, "[CANNOT] This server is read-only for now", command);
 	}
 });

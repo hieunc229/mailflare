@@ -162,6 +162,7 @@ async function main() {
 					certificate: certificateFiles ? readCertificate(certificateFiles) : null,
 					allowPlaintext: imapConfig.allowPlaintext,
 					maxConnections: imapConfig.maxConnections,
+					maxMessageSize: imapConfig.maxMessageSize,
 					realtime: runtime.realtime,
 				});
 				const bound = await imapServer.start();
