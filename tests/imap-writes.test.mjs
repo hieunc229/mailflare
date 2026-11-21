@@ -5,6 +5,7 @@ import { dirname, join } from "node:path";
 import test, { after } from "node:test";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { build } from "esbuild";
+import { ImapFlow } from "imapflow";
 import { connectTlsClient } from "./helpers/imap-client.mjs";
 import { makeHelpers, seedWorld } from "./helpers/imap-world.mjs";
 
@@ -25,6 +26,7 @@ await build({
 			export { refusalKey } from "./src/lib/imap/fetch.ts";
 			export { SearchEvaluator, parseSearchCriteria, decoderFor, MAX_KEYS } from "./src/lib/imap/search.ts";
 			export { FolderView } from "./src/lib/imap/view.ts";
+			export { rememberSubmission, clearSubmissionMemory } from "./src/lib/imap/sent-dedupe.ts";
 			export { getDb } from "./src/db/index.ts";
 			export { messages } from "./src/db/schema/index.ts";
 			export { eq } from "drizzle-orm";
@@ -42,7 +44,7 @@ await build({
 	alias: { "cloudflare:workers": "./server/runtime/cloudflare-workers.ts" },
 	logLevel: "silent",
 });
-const { ImapServer, SearchEvaluator, parseSearchCriteria, decoderFor, MAX_KEYS, FolderView, refusalKey, getDb, messages, eq, generateAppPassword, clearApiKeyVerificationCache, clearLoginAuditMemory, SqliteDatabase, applyMigrations, openFileBucket, openRateLimiter } = await import(pathToFileURL(join(directory, "entry.mjs")).href);
+const { ImapServer, SearchEvaluator, parseSearchCriteria, decoderFor, MAX_KEYS, FolderView, rememberSubmission, clearSubmissionMemory, refusalKey, getDb, messages, eq, generateAppPassword, clearApiKeyVerificationCache, clearLoginAuditMemory, SqliteDatabase, applyMigrations, openFileBucket, openRateLimiter } = await import(pathToFileURL(join(directory, "entry.mjs")).href);
 
 // A throwaway certificate for 127.0.0.1 / localhost, made once for the file.
 const keyPath = join(directory, "key.pem");
@@ -506,4 +508,256 @@ test("a second session sees a MOVE and an EXPUNGE done by the first", async (t) 
 	await second.expect("* 2 EXPUNGE\r\n", 4000);
 	second.write("DONE\r\n");
 	await second.finish("i1");
+});
+
+// ---- APPEND ----
+
+const mail = ({ from = "me@example.test", to = "c@x.test", subject = "Appended", id = "<ap1@x.test>", extra = "", body = "appended body" } = {}) =>
+	`From: ${from}\r\nTo: ${to}\r\nSubject: ${subject}\r\nDate: Mon, 1 Jan 2024 10:00:00 +0000\r\nMessage-ID: ${id}\r\n${extra}\r\n${body}\r\n`;
+
+/** APPEND with a synchronising literal: wait for the continuation, send the bytes, finish. */
+async function append(client, folder, raw, { flags = "", date = "", plus = false } = {}) {
+	const bytes = Buffer.from(raw, "latin1");
+	const tag = `p${++client.counter}`;
+	client.write(`${tag} APPEND ${folder}${flags ? ` (${flags})` : ""}${date ? ` "${date}"` : ""} {${bytes.length}${plus ? "+" : ""}}\r\n`);
+	if (!plus) await client.expect("+ Ready\r\n", 4000);
+	client.write(`${raw}\r\n`);
+	return client.finish(tag, 8000);
+}
+const rowOf = (w, where) => w.sqlite.prepare(`SELECT * FROM messages WHERE ${where}`).get();
+
+test("the capability list carries APPENDLIMIT after login, not before", async (t) => {
+	const w = await world(t, { maxMessageSize: 123456 });
+	const key = await w.addKey({ id: "k1" });
+	const client = await w.open();
+	t.after(() => client.end());
+	await client.greeting();
+	assert.doesNotMatch((await client.cmd("CAPABILITY")).text, /APPENDLIMIT/);
+	await client.login("me@example.test", key.fullKey);
+	assert.match((await client.cmd("CAPABILITY")).text, /\bAPPENDLIMIT=123456\b/);
+});
+
+test("APPEND to INBOX stores the bytes as they came, with the flags and internal date, and answers APPENDUID", async (t) => {
+	const w = await world(t);
+	const key = await w.addKey({ id: "k1" });
+	const client = await loggedIn(w, key);
+	t.after(() => client.end());
+	const raw = mail({ from: "sender@x.test", subject: "Plain", id: "<one@x.test>", extra: "X-Odd: caf\xe9\r\n" });
+	const result = await append(client, "INBOX", raw, { flags: "\\Seen \\Flagged \\Answered Orders", date: " 2-Feb-2024 10:00:00 +0100" });
+	assert.match(result.detail, /^\[APPENDUID \d+ 1\] APPEND completed$/);
+	const row = rowOf(w, "subject = 'Plain'");
+	assert.deepEqual([row.status, row.folder_id, row.direction, row.read, row.starred, row.mailbox_id, row.user_id, row.provider_message_id, row.from_addr], ["received", null, "inbound", 1, 1, "m1", "u1", "<one@x.test>", "sender@x.test"]);
+	assert.equal(row.created_at, Date.UTC(2024, 1, 2, 9, 0, 0) / 1000, "the internal date wins over the Date header");
+	assert.equal(Buffer.from(await (await w.bucket.get(row.raw_r2_key)).arrayBuffer()).toString("latin1"), raw, "stored verbatim");
+	assert.deepEqual({ ...flagsOf(w, row.id) }, { answered: 1, forwarded: 0, deleted: 0, keywords: '["Orders"]' });
+	assert.equal(w.sqlite.prepare("SELECT count(*) AS n FROM imap_uids WHERE message_id = ? AND folder_key = 'inbox'").get(row.id).n, 1);
+	await client.cmd("SELECT INBOX");
+	assert.match((await client.cmd("FETCH 1 (FLAGS RFC822.SIZE)")).text, new RegExp(`FLAGS \\(\\\\Seen \\\\Flagged \\\\Answered Orders\\) RFC822.SIZE ${raw.length}\\)`));
+	const unread = await append(client, "INBOX", mail({ subject: "Unread", id: "<two@x.test>" }), { plus: true });
+	assert.match(unread.detail, /^\[APPENDUID \d+ 2\]/, "a non-synchronising literal works too");
+	assert.equal(rowOf(w, "subject = 'Unread'").read, 0);
+});
+
+test("APPEND picks the placement by folder: Archive, Junk, Trash, Sent and user folders; unknown folders are TRYCREATE", async (t) => {
+	const w = await world(t);
+	const key = await w.addKey({ id: "k1" });
+	addFolder(w, "f1", "Clients/Acme");
+	const client = await loggedIn(w, key);
+	t.after(() => client.end());
+	const placed = [["Archive", "archived", null, "inbound"], ["Junk", "spam", null, "inbound"], ["Trash", "trash", null, "inbound"], ["Sent", "sent", null, "outbound"], ['"Clients/Acme"', "received", "f1", "inbound"]];
+	for (const [index, [folder, status, folderId, direction]] of placed.entries()) {
+		const result = await append(client, folder, mail({ subject: `to ${index}`, id: `<p${index}@x.test>` }));
+		assert.equal(result.status, "OK", `${folder}: ${result.detail}`);
+		const row = rowOf(w, `subject = 'to ${index}'`);
+		assert.deepEqual([row.status, row.folder_id, row.direction], [status, folderId, direction], folder);
+	}
+	assert.equal(rowOf(w, "subject = 'to 3'").read, 1, "a sent copy is read");
+	const missing = await append(client, "Nowhere", mail());
+	assert.deepEqual([missing.status, missing.detail], ["NO", "[TRYCREATE] Mailbox does not exist"]);
+	assert.equal((await append(client, "Shared", mail())).detail, "[TRYCREATE] Mailbox does not exist");
+});
+
+test("APPEND to Drafts keeps the bytes under drafts/, makes a draft row, and needs a sender the login may use", async (t) => {
+	const w = await world(t);
+	const key = await w.addKey({ id: "k1" });
+	const client = await loggedIn(w, key);
+	t.after(() => client.end());
+	const raw = mail({ subject: "My draft", id: "<d1@x.test>", body: "draft body" });
+	const result = await append(client, "Drafts", raw, { flags: "\\Seen \\Draft" });
+	assert.match(result.detail, /^\[APPENDUID \d+ 1\]/);
+	const row = rowOf(w, "subject = 'My draft'");
+	assert.deepEqual([row.status, row.direction, row.mailbox_id, row.read, row.raw_r2_key, row.from_addr], ["draft", "outbound", "m1", 1, `drafts/${row.id}.eml`, '"One" <me@example.test>']);
+	assert.equal(Buffer.from(await (await w.bucket.get(row.raw_r2_key)).arrayBuffer()).toString("latin1"), raw);
+	await client.cmd("SELECT Drafts");
+	const fetched = await client.cmd("FETCH 1 BODY.PEEK[TEXT]");
+	assert.ok(fetched.text.includes(Buffer.from("draft body\r\n").toString("base64")), "a draft is served synthesized from its columns");
+	const foreign = await append(client, "Drafts", mail({ from: "someone@else.test", subject: "Foreign" }));
+	assert.deepEqual([foreign.status, foreign.detail.split("]")[0]], ["NO", "[NOPERM"]);
+	assert.equal(w.sqlite.prepare("SELECT count(*) AS n FROM messages WHERE subject = 'Foreign'").get().n, 0);
+});
+
+test("APPEND to Sent is not stored again when the submission service already sent that Message-ID", async (t) => {
+	clearSubmissionMemory();
+	const w = await world(t);
+	const key = await w.addKey({ id: "k1" });
+	w.addMessage({ id: "sent1", direction: "outbound", status: "sent", from_addr: "me@example.test" });
+	const client = await loggedIn(w, key);
+	t.after(() => { client.end(); clearSubmissionMemory(); });
+	await client.cmd("SELECT Sent");
+	rememberSubmission("u1", "<dup@x.test>", "sent1", "m1");
+	const result = await append(client, "Sent", mail({ id: "<dup@x.test>", subject: "Same" }));
+	assert.match(result.detail, /^\[APPENDUID \d+ 1\]/, "the UID of the row that is already there");
+	assert.equal(w.sqlite.prepare("SELECT count(*) AS n FROM messages WHERE mailbox_id = 'm1'").get().n, 1);
+	const other = await append(client, "Sent", mail({ id: "<other@x.test>", subject: "Different" }));
+	assert.match(other.detail, /^\[APPENDUID \d+ 2\]/);
+	assert.equal(w.sqlite.prepare("SELECT count(*) AS n FROM messages WHERE mailbox_id = 'm1'").get().n, 2);
+	// Another user's submission with the same Message-ID does not hide this user's copy.
+	rememberSubmission("u2", "<third@x.test>", "sent1", "m1");
+	assert.match((await append(client, "Sent", mail({ id: "<third@x.test>", subject: "Third" }))).detail, /^\[APPENDUID \d+ 3\]/);
+	// After the window the same id is stored again.
+	rememberSubmission("u1", "<old@x.test>", "sent1", "m1", Date.now() - 16 * 60 * 1000);
+	assert.match((await append(client, "Sent", mail({ id: "<old@x.test>", subject: "Late" }))).detail, /^\[APPENDUID \d+ 4\]/);
+});
+
+test("APPEND into a shared mailbox needs permission there, and the row belongs to that mailbox's owner", async (t) => {
+	const w = await world(t);
+	const key = await w.addKey({ id: "k1" });
+	const client = await loggedIn(w, key);
+	t.after(() => client.end());
+	const denied = await append(client, "Shared/team@other.test/INBOX", mail());
+	assert.deepEqual([denied.status, denied.detail], ["NO", "[NOPERM] The mailbox is read-only"]);
+	assert.equal(w.sqlite.prepare("SELECT count(*) AS n FROM messages").get().n, 0);
+	w.sqlite.prepare("UPDATE mailbox_access SET permission = 'send_as'").run();
+	const ok = await append(client, "Shared/team@other.test/INBOX", mail({ subject: "Team" }));
+	assert.equal(ok.status, "OK", ok.detail);
+	assert.deepEqual([rowOf(w, "subject = 'Team'").mailbox_id, rowOf(w, "subject = 'Team'").user_id], ["ms", "u2"]);
+	assert.equal((await append(client, "Shared/two@other.test/INBOX", mail())).detail, "[TRYCREATE] Mailbox does not exist", "another user's mailbox cannot be named");
+});
+
+test("APPEND checks its arguments and flags", async (t) => {
+	const w = await world(t);
+	const key = await w.addKey({ id: "k1" });
+	const client = await loggedIn(w, key);
+	t.after(() => client.end());
+	assert.equal((await client.cmd('APPEND INBOX "just a string"')).detail, "APPEND needs the message as a literal");
+	assert.equal((await append(client, "INBOX", mail(), { date: "31-Feb-2024 10:00:00 +0000" })).status, "BAD");
+	assert.equal((await append(client, "INBOX", mail(), { date: "yesterday" })).status, "BAD");
+	assert.equal((await append(client, "INBOX", mail(), { flags: '"a b"' })).status, "BAD");
+	const many = Array.from({ length: 51 }, (_, i) => `k${i}`).join(" ");
+	assert.deepEqual((({ status, detail }) => [status, detail])(await append(client, "INBOX", mail(), { flags: many })), ["NO", "[LIMIT] A message may have at most 50 keywords"]);
+	client.write("e1 APPEND INBOX {0+}\r\n\r\n");
+	assert.deepEqual((({ status, detail }) => [status, detail])(await client.finish("e1")), ["NO", "[CANNOT] The message is empty"]);
+	assert.equal(w.sqlite.prepare("SELECT count(*) AS n FROM messages").get().n, 0);
+	assert.equal((await client.cmd("NOOP")).status, "OK");
+});
+
+test("what a message says in its headers cannot start a new header in a stored column", async (t) => {
+	const w = await world(t);
+	const key = await w.addKey({ id: "k1" });
+	const client = await loggedIn(w, key);
+	t.after(() => client.end());
+	const evil = mail({ subject: "=?utf-8?q?hello=0D=0ABcc:_victim@x.test=0D=0AX-Evil:_1?=", extra: "Reply-To: =?utf-8?q?a@x.test=0D=0ABcc:_v@x.test?=\r\n" });
+	assert.equal((await append(client, "INBOX", evil)).status, "OK");
+	const row = rowOf(w, "mailbox_id = 'm1'");
+	for (const column of ["subject", "from_addr", "to_addr", "cc_addr", "bcc_addr", "reply_to", "provider_message_id", "in_reply_to", "references_header"]) {
+		assert.doesNotMatch(String(row[column] ?? ""), /[\r\n\0]/, column);
+	}
+	assert.equal(Buffer.from(await (await w.bucket.get(row.raw_r2_key)).arrayBuffer()).toString("latin1"), evil, "the stored bytes are exactly what was sent");
+});
+
+test("an APPEND bigger than the limit is refused with [TOOBIG]: before the continuation, or thrown away if it is already on its way", async (t) => {
+	const w = await world(t, { maxMessageSize: 2000 });
+	const key = await w.addKey({ id: "k1" });
+	const client = await loggedIn(w, key);
+	t.after(() => client.end());
+	client.write("a1 APPEND INBOX {2001}\r\n");
+	const refused = await client.finish("a1");
+	assert.deepEqual([refused.status, refused.detail], ["NO", "[TOOBIG] The message is larger than this server accepts"]);
+	assert.doesNotMatch(refused.text, /\+ Ready/);
+	const big = mail({ body: "x".repeat(300_000) });
+	client.write(`a2 APPEND INBOX {${big.length}+}\r\n${big}\r\n`);
+	assert.equal((await client.finish("a2")).detail, "[TOOBIG] The message is larger than this server accepts");
+	assert.equal((await client.cmd("NOOP")).status, "OK", "the bytes were discarded and the connection is in step");
+	assert.equal((await append(client, "INBOX", mail({ body: "x".repeat(1000) }))).status, "OK");
+	assert.equal(w.sqlite.prepare("SELECT count(*) AS n FROM messages").get().n, 1);
+	assert.equal(w.server.appendBytesInFlight, 0);
+});
+
+test("the process-wide budget of in-flight APPEND data refuses the next message as busy and is given back afterwards", async (t) => {
+	const w = await world(t, { maxMessageSize: 1000, appendBudget: 1500 });
+	const key = await w.addKey({ id: "k1" });
+	const first = await loggedIn(w, key);
+	const second = await loggedIn(w, key);
+	t.after(() => { first.end(); second.end(); });
+	first.write("a1 APPEND INBOX {1000}\r\n");
+	await first.expect("+ Ready\r\n");
+	assert.equal(w.server.appendBytesInFlight, 1000);
+	second.write("b1 APPEND INBOX {1000}\r\n");
+	const busy = await second.finish("b1");
+	assert.deepEqual([busy.status, busy.detail], ["NO", "[LIMIT] Server busy, try again"]);
+	const raw = mail({ body: "y".repeat(1000 - mail({ body: "" }).length) });
+	assert.equal(Buffer.byteLength(raw, "latin1"), 1000);
+	first.write(`${raw}\r\n`);
+	assert.equal((await first.finish("a1")).status, "OK");
+	assert.equal(w.server.appendBytesInFlight, 0);
+	assert.equal((await append(second, "INBOX", raw)).status, "OK", "the budget is free again");
+});
+
+test("a client that goes away in the middle of an APPEND gives its share of the budget back", async (t) => {
+	const w = await world(t, { maxMessageSize: 1000, appendBudget: 1500 });
+	const key = await w.addKey({ id: "k1" });
+	const client = await loggedIn(w, key);
+	client.write("a1 APPEND INBOX {1000}\r\n");
+	await client.expect("+ Ready\r\n");
+	client.write("partial");
+	assert.equal(w.server.appendBytesInFlight, 1000);
+	client.end();
+	for (let waited = 0; w.server.appendBytesInFlight !== 0 && waited < 3000; waited += 50) await new Promise((resolve) => setTimeout(resolve, 50));
+	assert.equal(w.server.appendBytesInFlight, 0);
+});
+
+test("a message appended to the open folder reaches a second session in IDLE as EXISTS", async (t) => {
+	const w = await world(t);
+	const key = await w.addKey({ id: "k1" });
+	const first = await loggedIn(w, key);
+	const second = await loggedIn(w, key);
+	t.after(() => { first.end(); second.end(); });
+	await second.cmd("SELECT INBOX");
+	second.write("i1 IDLE\r\n");
+	await second.expect("+ idling\r\n");
+	await append(first, "INBOX", mail());
+	await second.expect("* 1 EXISTS\r\n", 4000);
+	second.write("DONE\r\n");
+	await second.finish("i1");
+});
+
+test("imapflow can append, store, copy, move and expunge", async (t) => {
+	const w = await world(t);
+	const key = await w.addKey({ id: "k1" });
+	const flow = new ImapFlow({ host: "127.0.0.1", port: w.ports.tlsPort, secure: true, auth: { user: "me@example.test", pass: key.fullKey }, tls: { ca: certificate.cert, servername: "localhost" }, logger: false });
+	flow.on("error", () => {});
+	await flow.connect();
+	t.after(async () => { await flow.logout().catch(() => {}); });
+	const appended = await flow.append("INBOX", Buffer.from(mail({ subject: "Via imapflow" })), ["\\Seen"]);
+	assert.equal(appended.uid, 1);
+	const lock = await flow.getMailboxLock("INBOX");
+	try {
+		assert.equal(flow.mailbox.readOnly, false);
+		await flow.messageFlagsAdd("1", ["\\Flagged"]);
+		assert.equal(rowOf(w, "subject = 'Via imapflow'").starred, 1);
+		const copied = await flow.messageCopy("1", "Archive");
+		assert.equal(copied.uidMap.get(1), 1);
+		const moved = await flow.messageMove("1", "Junk");
+		assert.equal(moved.uidMap.get(1), 1);
+		assert.equal(w.sqlite.prepare("SELECT status FROM messages WHERE subject = 'Via imapflow' ORDER BY status").all().map((row) => row.status).join(), "archived,spam");
+	} finally {
+		lock.release();
+	}
+	const trash = await flow.getMailboxLock("Junk");
+	try {
+		await flow.messageDelete("1");
+	} finally {
+		trash.release();
+	}
+	assert.equal(w.sqlite.prepare("SELECT status FROM messages WHERE subject = 'Via imapflow' AND status = 'trash'").all().length, 1, "deleting outside Trash moves to Trash");
 });

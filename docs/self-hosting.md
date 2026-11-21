@@ -54,7 +54,7 @@ Optional: `SMTP_TLS_KEY` and `SMTP_TLS_CERT` (paths inside the container)
 enable STARTTLS with your own certificate. Without them STARTTLS is not
 offered, which is safe but means transport encryption depends on the sender.
 
-**IMAP (mail apps, read-only for now).** Set `IMAP_ENABLED=1`, give the container
+**IMAP (mail apps).** Set `IMAP_ENABLED=1`, give the container
 `SMTP_TLS_KEY` and `SMTP_TLS_CERT` for `MAIL_HOSTNAME`, and publish port 993
 (uncomment `"993:993"` in `docker-compose.yml`). Then create an app password with
 the IMAP protocol in Settings, App passwords, and add an IMAP account in your
@@ -65,6 +65,16 @@ that address out for the rest of the minute (the limit is shared with CalDAV and
 JMAP). Mailboxes shared with you appear under `Shared/<address>/`. Running more
 than one container against the same database with IMAP on is not supported.
 Workers installs cannot run IMAP: Cloudflare Workers cannot accept TCP connections.
+
+Mail apps can change mail, with the same permissions as the web app (a mailbox
+shared read-only stays read-only; the folder is selected `[READ-ONLY]`). Read,
+starred, answered and forwarded markers, moves, copies and folder changes show
+in the web app and the other way round. Deleting follows Mailflare's Trash: a
+message flagged `\Deleted` and expunged outside Trash goes to Trash, and one
+expunged from Trash or Drafts is removed for good. Moving a message into Junk
+is "Mark as spam" and moving it out of Junk into INBOX is "Not spam", so the
+spam filter learns from it. A message appended to Sent, Drafts or any folder is
+kept as it was sent; the largest one is `IMAP_MAX_MESSAGE_SIZE`.
 
 Every failed login writes one line to the container log (standard output), and
 nothing to the database:
@@ -139,11 +149,12 @@ and the DNS page shows what to set by hand.
 | `MAIL_HOSTNAME` | `mail.<domain>` | Host the MX record points at; SMTP banner |
 | `SMTP_MAX_SIZE` | 36 MiB | Largest raw inbound message; allows for encoding overhead on up to 25 MB of attachments. Oversized mail receives an SMTP rejection, which the sender's mail provider can report as a delivery failure. |
 | `SMTP_TLS_KEY`, `SMTP_TLS_CERT` | unset | Certificate for inbound SMTP STARTTLS and for IMAP. The files are checked every 10 minutes and a renewed certificate is used without a restart |
-| `IMAP_ENABLED` | unset (off) | `1` starts the IMAP listener (read-only for now); needs the certificate above. Adds the IMAP choice to Settings, App passwords. Docker and Node only |
+| `IMAP_ENABLED` | unset (off) | `1` starts the IMAP listener; needs the certificate above. Adds the IMAP choice to Settings, App passwords. Docker and Node only |
 | `IMAP_PORT` | `993` | IMAP over TLS; `0` disables it |
 | `IMAP_STARTTLS_PORT` | `0` (off) | A plain port that requires STARTTLS before login; usually `143` |
 | `IMAP_HOST` | every interface, IPv6 and IPv4 (`::`) | Address the IMAP listeners bind to. Without it the listener takes IPv6 and IPv4 together, and IPv4 only where the system has no IPv6 |
 | `IMAP_MAX_CONNECTIONS` | `500` | IMAP connections for the whole process; each address may hold 30 (an IPv6 client counts by its /64) and each account 20 |
+| `IMAP_MAX_MESSAGE_SIZE` | `SMTP_MAX_SIZE` (36 MiB) | The largest message a mail app may upload with APPEND (advertised as `APPENDLIMIT`); at most 512 MiB, which is also the most APPEND data the whole process holds at once |
 | `IMAP_ALLOW_PLAINTEXT` | unset | `1` allows login without TLS, only when `IMAP_HOST` is a loopback address (for local testing); ignored with a warning otherwise |
 | `SMTP_URL` | unset | Outbound relay |
 | `SMTP_TLS_REJECT_UNAUTHORIZED` | `true` | Trust self-signed relay certificates when `false` |

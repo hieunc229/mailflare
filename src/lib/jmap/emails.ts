@@ -358,15 +358,44 @@ async function importEmail(ctx: JmapContext, value: Record<string, unknown>, wri
 	if (!blob || blob.kind !== "up") return { error: { type: "blobNotFound", description: "blobId must name an upload from this account" } };
 	const upload = await readUpload(ctx, blob.id);
 	if (!upload) return { error: { type: "blobNotFound", description: "No such upload" } };
-	if (upload.content.byteLength === 0) return { error: { type: "invalidEmail", description: "The blob is empty" } };
-	if (upload.content.byteLength > LIMITS.maxSizeUpload) return { error: { type: "tooLarge", description: "The message exceeds maxSizeUpload" } };
+
+	const result = await importDraftFromBytes(ctx, upload.content, value, writable);
+	if ("error" in result) return result;
+	// The bytes belong to the message now, so release the upload.
+	try {
+		await deleteUpload(ctx, blob.id);
+	} catch (error) {
+		// The import is already complete. Failing it here would make a client retry
+		// and create a duplicate draft merely because temporary cleanup failed.
+		console.warn(`Failed to delete claimed JMAP upload ${blob.id}`, error);
+	}
+	return result;
+}
+
+/**
+ * The part of `Email/import` that starts from the message bytes, shared with IMAP APPEND to Drafts:
+ * parse, check the sender, insert the draft and keep the bytes verbatim. `prepare` may clean or bound the
+ * parsed message before it is stored (IMAP uses it to keep header values to one line).
+ */
+export async function importDraftFromBytes(
+	ctx: JmapContext,
+	content: ArrayBuffer,
+	value: Record<string, unknown>,
+	writable: Set<string>,
+	prepare?: (parsed: Awaited<ReturnType<typeof parseRawMime>>) => Awaited<ReturnType<typeof parseRawMime>>,
+): Promise<{ id: string } | { error: JmapSetError }> {
+	const target = resolveDraftsMailbox(value.mailboxIds, writable);
+	if ("error" in target) return target;
+	if (content.byteLength === 0) return { error: { type: "invalidEmail", description: "The blob is empty" } };
+	if (content.byteLength > LIMITS.maxSizeUpload) return { error: { type: "tooLarge", description: "The message exceeds maxSizeUpload" } };
 
 	let parsed: Awaited<ReturnType<typeof parseRawMime>>;
 	try {
-		parsed = await parseRawMime(upload.content);
+		parsed = await parseRawMime(content);
 	} catch (error) {
 		return { error: { type: "invalidEmail", description: error instanceof Error ? error.message : "The blob is not a MIME message" } };
 	}
+	if (prepare) parsed = prepare(parsed);
 	if (!parsed.fromAddr) return { error: { type: "invalidEmail", description: "The message has no From header" } };
 
 	let sender: { fromAddr: string; mailboxId: string };
@@ -404,7 +433,7 @@ async function importEmail(ctx: JmapContext, value: Record<string, unknown>, wri
 	// Nothing may be left half-imported, so the row and the bytes go together.
 	let rawR2Key: string | null = null;
 	try {
-		rawR2Key = await storeRawDraftMime(ctx, id, upload.content);
+		rawR2Key = await storeRawDraftMime(ctx, id, content);
 		await ctx.db.update(messages).set({ rawR2Key }).where(eq(messages.id, id));
 		if (parsed.attachments.length) await storeMessageAttachments(ctx.env, id, parsed.attachments);
 	} catch (error) {
@@ -414,14 +443,6 @@ async function importEmail(ctx: JmapContext, value: Record<string, unknown>, wri
 			console.error(`Failed to clean up rejected Email/import draft ${id}`, cleanupError);
 		}
 		return { error: { type: "tooLarge", description: error instanceof Error ? error.message : "Attachments rejected" } };
-	}
-	// The bytes belong to the message now, so release the upload.
-	try {
-		await deleteUpload(ctx, blob.id);
-	} catch (error) {
-		// The import is already complete. Failing it here would make a client retry
-		// and create a duplicate draft merely because temporary cleanup failed.
-		console.warn(`Failed to delete claimed JMAP upload ${blob.id}`, error);
 	}
 	return { id };
 }
