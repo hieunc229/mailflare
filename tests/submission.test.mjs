@@ -427,6 +427,22 @@ test("hourly limits: the cap is checked at MAIL FROM with a temporary error, per
 	assert.equal(w.sent.length, 2);
 });
 
+test("transactions per connection are rate limited: a client looping MAIL FROM and RSET is slowed down with a temporary error", async (t) => {
+	const w = await world(t, { maxTransactionsPerMinute: 3 });
+	const client = await w.session();
+	t.after(() => client.end());
+	for (let index = 0; index < 3; index += 1) {
+		assert.equal((await client.cmd("MAIL FROM:<me@example.test>")).code, 250);
+		assert.equal((await client.cmd("RSET")).code, 250);
+	}
+	const slowed = await client.cmd("MAIL FROM:<me@example.test>");
+	assert.equal(slowed.code, 450);
+	assert.match(slowed.text, /slow down/i);
+	const second = await w.session();
+	t.after(() => second.end());
+	assert.equal((await second.cmd("MAIL FROM:<me@example.test>")).code, 250, "the count is per connection");
+});
+
 test("a revoked key stops the session at once: deleted, scope removed or user disabled, before the next message and before the one being sent", async (t) => {
 	const w = await world(t);
 	const client = await w.session();

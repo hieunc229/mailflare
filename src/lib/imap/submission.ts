@@ -212,6 +212,9 @@ const contentIdOf = (value: string | null | undefined): string | null => {
 	return /^[^\s<>"]{1,255}$/.test(id) ? id : null;
 };
 
+/** A media type as the provider gets it: a plain `type/subtype`, anything else is a generic file. */
+const mediaTypeOf = (value: string | null | undefined): string => (value && /^[A-Za-z0-9!#$&^_.+-]{1,127}\/[A-Za-z0-9!#$&^_.+-]{1,127}$/.test(value.trim()) ? value.trim().toLowerCase() : "application/octet-stream");
+
 // Messages a re-composition would damage or send under a name that is not ours to vouch for: these send errors are final.
 const FINAL_SEND_ERRORS = /^(At least one recipient|A message can (have|include) at most|Sending is not set up|Attachments exceed|Subject exceeds|Headers exceed|.* exceeds the \d+ MB attachment limit)/;
 
@@ -288,7 +291,7 @@ export async function submitMessage(env: CloudflareEnv, identity: ImapIdentity, 
 			inReplyTo: parsed.inReplyTo && MESSAGE_ID.test(parsed.inReplyTo) ? parsed.inReplyTo : null,
 			references: cleanIds(parsed.references),
 			mailboxId,
-			attachments: parsed.attachments.map((attachment) => ({ ...attachment, filename: flatten(attachment.filename) || "attachment", contentId: contentIdOf(attachment.contentId) })),
+			attachments: parsed.attachments.map((attachment) => ({ ...attachment, filename: flatten(attachment.filename) || "attachment", type: mediaTypeOf(attachment.type), contentId: contentIdOf(attachment.contentId) })),
 			publicOrigin: env.APP_URL,
 		});
 	} catch (error) {
