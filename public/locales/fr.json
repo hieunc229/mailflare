@@ -2178,6 +2178,8 @@
 	"importPage.outlookTenantCommon": "Work and personal accounts",
 	"importPage.outlookTenantOrganizations": "Work or school only",
 	"importPage.outlookTenantConsumers": "Personal Outlook.com only",
+	"importPage.outlookTenantId": "Directory (tenant) ID",
+	"importPage.outlookTenantIdHint": "Paste this when the app allows only accounts in one organization. It is on the app registration Overview. Leave it empty to choose any Microsoft account at sign-in.",
 	"importPage.outlookRedirect": "Redirect URI to register",
 	"importPage.outlookCopy": "Copy",
 	"importPage.outlookStep1": "In Microsoft Entra, register an app that allows personal Microsoft accounts and work accounts.",

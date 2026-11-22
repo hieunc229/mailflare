@@ -2192,6 +2192,8 @@
 	"importPage.outlookTenantCommon": "Contas corporativas e pessoais",
 	"importPage.outlookTenantOrganizations": "Somente trabalho ou escola",
 	"importPage.outlookTenantConsumers": "Somente Outlook.com pessoal",
+	"importPage.outlookTenantId": "ID do diretório (locatário)",
+	"importPage.outlookTenantIdHint": "Cole aqui quando o aplicativo aceita só contas de uma organização. Está em Registros de aplicativo → Visão geral. Deixe vazio para escolher qualquer conta da Microsoft no login.",
 	"importPage.outlookRedirect": "URI de redirecionamento para registrar",
 	"importPage.outlookCopy": "Copiar",
 	"importPage.outlookStep1": "No Microsoft Entra, registre um aplicativo que aceite contas pessoais da Microsoft e contas corporativas.",

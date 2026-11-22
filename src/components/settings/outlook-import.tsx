@@ -39,6 +39,7 @@ export function OutlookImport({
 	const [clientId, setClientId] = useState("");
 	const [clientSecret, setClientSecret] = useState("");
 	const [tenant, setTenant] = useState("common");
+	const [tenantId, setTenantId] = useState("");
 	const [limit, setLimit] = useState("100");
 	const [importAll, setImportAll] = useState(true);
 	const [busy, setBusy] = useState(false);
@@ -66,7 +67,7 @@ export function OutlookImport({
 		setBusy(true);
 		setError(null);
 		try {
-			await startOutlookSignIn(session?.configured ? {} : { clientId, clientSecret, tenant });
+			await startOutlookSignIn(session?.configured ? {} : { clientId, clientSecret, tenant: tenantId.trim() || tenant });
 		} catch (cause) {
 			setError(cause instanceof Error ? cause.message : t("importPage.outlookFailed"));
 			setBusy(false);
@@ -169,11 +170,16 @@ export function OutlookImport({
 					</div>
 					<div className="space-y-2">
 						<Label htmlFor="outlook-tenant">{t("importPage.outlookTenant")}</Label>
-						<Select id="outlook-tenant" value={tenant} onChange={(event) => setTenant(event.target.value)}>
+						<Select id="outlook-tenant" value={tenant} onChange={(event) => setTenant(event.target.value)} disabled={tenantId.trim().length > 0}>
 							<option value="common">{t("importPage.outlookTenantCommon")}</option>
 							<option value="organizations">{t("importPage.outlookTenantOrganizations")}</option>
 							<option value="consumers">{t("importPage.outlookTenantConsumers")}</option>
 						</Select>
+					</div>
+					<div className="space-y-2">
+						<Label htmlFor="outlook-tenant-id">{t("importPage.outlookTenantId")}</Label>
+						<Input id="outlook-tenant-id" value={tenantId} onChange={(event) => setTenantId(event.target.value)} autoComplete="off" placeholder="00000000-0000-0000-0000-000000000000" spellCheck={false} />
+						<p className="text-xs text-neutral-500">{t("importPage.outlookTenantIdHint")}</p>
 					</div>
 				</>
 			)}
