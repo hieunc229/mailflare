@@ -2559,5 +2559,18 @@
 	"invite.calendarOnly": "Calendar only",
 	"invite.wasPrev": "(was {action})",
 	"invite.changeHint": "Send again to change your answer",
-	"invite.undo": "Undo"
+	"invite.undo": "Undo",
+	"navigation.labels": "Label",
+	"navigation.createLabel": "Cipta label",
+	"navigation.noLabels": "Belum ada label",
+	"label.description": "Label menandakan perbualan tanpa memindahkannya.",
+	"label.name": "Nama label",
+	"label.example": "Pesanan",
+	"label.createFailed": "Label tidak dapat dicipta.",
+	"label.changeFailed": "Label tidak dapat diubah.",
+	"label.delete": "Padam label",
+	"label.deleteConfirm": "Padam label {name}? Perbualannya kekal di tempatnya.",
+	"label.empty": "Tiada perbualan dengan label ini",
+	"apiKeys.labelsWrite.label": "Urus label",
+	"apiKeys.labelsWrite.description": "Pasang dan tanggalkan label pada perbualan melalui API. Membaca label hanya perlukan “Baca”."
 }

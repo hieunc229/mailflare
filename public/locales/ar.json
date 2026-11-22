@@ -2627,5 +2627,18 @@
 	"invite.calendarOnly": "Calendar only",
 	"invite.wasPrev": "(was {action})",
 	"invite.changeHint": "Send again to change your answer",
-	"invite.undo": "Undo"
+	"invite.undo": "Undo",
+	"navigation.labels": "التصنيفات",
+	"navigation.createLabel": "إنشاء تصنيف",
+	"navigation.noLabels": "لا توجد تصنيفات بعد",
+	"label.description": "تضع التصنيفات علامة على المحادثة دون نقلها.",
+	"label.name": "اسم التصنيف",
+	"label.example": "الطلبات",
+	"label.createFailed": "تعذّر إنشاء التصنيف.",
+	"label.changeFailed": "تعذّر تغيير التصنيف.",
+	"label.delete": "حذف التصنيف",
+	"label.deleteConfirm": "حذف التصنيف {name}؟ تبقى محادثاته في مكانها.",
+	"label.empty": "لا توجد محادثات بهذا التصنيف",
+	"apiKeys.labelsWrite.label": "إدارة التصنيفات",
+	"apiKeys.labelsWrite.description": "وضع التصنيفات على المحادثات وإزالتها عبر واجهة البرمجة. قراءة التصنيفات تحتاج إلى «قراءة» فقط."
 }

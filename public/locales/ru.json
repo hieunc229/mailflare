@@ -2595,5 +2595,18 @@
 	"invite.calendarOnly": "Calendar only",
 	"invite.wasPrev": "(was {action})",
 	"invite.changeHint": "Send again to change your answer",
-	"invite.undo": "Undo"
+	"invite.undo": "Undo",
+	"navigation.labels": "Метки",
+	"navigation.createLabel": "Создать метку",
+	"navigation.noLabels": "Меток пока нет",
+	"label.description": "Метки отмечают переписку, не перемещая её.",
+	"label.name": "Название метки",
+	"label.example": "Заказы",
+	"label.createFailed": "Не удалось создать метку.",
+	"label.changeFailed": "Не удалось изменить метку.",
+	"label.delete": "Удалить метку",
+	"label.deleteConfirm": "Удалить метку {name}? Переписки останутся на месте.",
+	"label.empty": "Нет переписок с этой меткой",
+	"apiKeys.labelsWrite.label": "Управление метками",
+	"apiKeys.labelsWrite.description": "Ставить и снимать метки с переписок через API. Для чтения меток достаточно «Чтения»."
 }

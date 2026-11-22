@@ -68,6 +68,7 @@ export function getMessageQueryParams(
 	}
 
 	if (folderId) params.set("folderId", folderId);
+	if (filters?.labelId) params.set("labelId", filters.labelId);
 	if (mailboxId) params.set("mailboxId", mailboxId);
 	const searchFilters = filters?.query ? parseMessageSearchQuery(filters.query) : null;
 	const parsedFilters = searchFilters

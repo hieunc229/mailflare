@@ -33,6 +33,8 @@ export type NoteConversation = {
 	messageId: string;
 	/** The user has full access to the mailbox, so they may delete anyone's note. */
 	canManage: boolean;
+	/** Any permission above read-only: what starring needs, and applying a label. */
+	canChange: boolean;
 };
 
 export type NoteChangeResult =

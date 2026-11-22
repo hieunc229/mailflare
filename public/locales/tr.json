@@ -2563,5 +2563,18 @@
 	"invite.calendarOnly": "Calendar only",
 	"invite.wasPrev": "(was {action})",
 	"invite.changeHint": "Send again to change your answer",
-	"invite.undo": "Undo"
+	"invite.undo": "Undo",
+	"navigation.labels": "Etiketler",
+	"navigation.createLabel": "Etiket oluştur",
+	"navigation.noLabels": "Henüz etiket yok",
+	"label.description": "Etiketler bir sohbeti taşımadan işaretler.",
+	"label.name": "Etiket adı",
+	"label.example": "Siparişler",
+	"label.createFailed": "Etiket oluşturulamadı.",
+	"label.changeFailed": "Etiket değiştirilemedi.",
+	"label.delete": "Etiketi sil",
+	"label.deleteConfirm": "{name} etiketi silinsin mi? Sohbetler oldukları yerde kalır.",
+	"label.empty": "Bu etikete sahip sohbet yok",
+	"apiKeys.labelsWrite.label": "Etiketleri yönet",
+	"apiKeys.labelsWrite.description": "API ile sohbetlere etiket ekleyin ve kaldırın. Etiketleri okumak için yalnızca “Okuma” yeterlidir."
 }

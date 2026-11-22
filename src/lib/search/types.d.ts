@@ -7,6 +7,8 @@ export type ParsedSearchQuery = {
 	hasAttachment?: boolean;
 	read?: "read" | "unread";
 	starred?: boolean;
+	/** A label name from `label:`; matched without regard to case. */
+	label?: string;
 	/** Inclusive lower bound on the message date, from `after:YYYY-MM-DD`. */
 	after?: Date;
 	/** Exclusive upper bound on the message date, from `before:YYYY-MM-DD`. */

@@ -2595,5 +2595,18 @@
 	"invite.calendarOnly": "Calendar only",
 	"invite.wasPrev": "(was {action})",
 	"invite.changeHint": "Send again to change your answer",
-	"invite.undo": "Undo"
+	"invite.undo": "Undo",
+	"navigation.labels": "Etykiety",
+	"navigation.createLabel": "Utwórz etykietę",
+	"navigation.noLabels": "Brak etykiet",
+	"label.description": "Etykiety oznaczają rozmowę bez przenoszenia jej.",
+	"label.name": "Nazwa etykiety",
+	"label.example": "Zamówienia",
+	"label.createFailed": "Nie udało się utworzyć etykiety.",
+	"label.changeFailed": "Nie udało się zmienić etykiety.",
+	"label.delete": "Usuń etykietę",
+	"label.deleteConfirm": "Usunąć etykietę {name}? Jej rozmowy pozostaną na miejscu.",
+	"label.empty": "Brak rozmów z tą etykietą",
+	"apiKeys.labelsWrite.label": "Zarządzanie etykietami",
+	"apiKeys.labelsWrite.description": "Dodawaj i usuwaj etykiety z rozmów przez API. Do odczytu etykiet wystarczy „Odczyt”."
 }

@@ -2563,5 +2563,18 @@
 	"invite.calendarOnly": "Calendar only",
 	"invite.wasPrev": "(was {action})",
 	"invite.changeHint": "Send again to change your answer",
-	"invite.undo": "Undo"
+	"invite.undo": "Undo",
+	"navigation.labels": "లేబుల్‌లు",
+	"navigation.createLabel": "లేబుల్‌ను సృష్టించండి",
+	"navigation.noLabels": "ఇంకా లేబుల్‌లు లేవు",
+	"label.description": "లేబుల్‌లు సంభాషణను తరలించకుండా గుర్తు పెడతాయి.",
+	"label.name": "లేబుల్ పేరు",
+	"label.example": "ఆర్డర్‌లు",
+	"label.createFailed": "లేబుల్‌ను సృష్టించడం సాధ్యం కాలేదు.",
+	"label.changeFailed": "లేబుల్‌ను మార్చడం సాధ్యం కాలేదు.",
+	"label.delete": "లేబుల్‌ను తొలగించండి",
+	"label.deleteConfirm": "{name} లేబుల్‌ను తొలగించాలా? దాని సంభాషణలు ఉన్నచోటే ఉంటాయి.",
+	"label.empty": "ఈ లేబుల్‌తో సంభాషణలు లేవు",
+	"apiKeys.labelsWrite.label": "లేబుల్‌లను నిర్వహించండి",
+	"apiKeys.labelsWrite.description": "API ద్వారా సంభాషణలపై లేబుల్‌లను పెట్టండి, తొలగించండి. లేబుల్‌లను చదవడానికి “చదవండి” మాత్రమే చాలు."
 }

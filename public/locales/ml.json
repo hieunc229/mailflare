@@ -2563,5 +2563,18 @@
 	"invite.calendarOnly": "Calendar only",
 	"invite.wasPrev": "(was {action})",
 	"invite.changeHint": "Send again to change your answer",
-	"invite.undo": "Undo"
+	"invite.undo": "Undo",
+	"navigation.labels": "ലേബലുകൾ",
+	"navigation.createLabel": "ലേബൽ സൃഷ്ടിക്കുക",
+	"navigation.noLabels": "ഇതുവരെ ലേബലുകളൊന്നുമില്ല",
+	"label.description": "ലേബലുകൾ സംഭാഷണം നീക്കാതെ അടയാളപ്പെടുത്തുന്നു.",
+	"label.name": "ലേബലിന്റെ പേര്",
+	"label.example": "ഓർഡറുകൾ",
+	"label.createFailed": "ലേബൽ സൃഷ്ടിക്കാനായില്ല.",
+	"label.changeFailed": "ലേബൽ മാറ്റാനായില്ല.",
+	"label.delete": "ലേബൽ ഇല്ലാതാക്കുക",
+	"label.deleteConfirm": "{name} ലേബൽ ഇല്ലാതാക്കണോ? അതിന്റെ സംഭാഷണങ്ങൾ ഉള്ളിടത്ത് തന്നെ തുടരും.",
+	"label.empty": "ഈ ലേബലുള്ള സംഭാഷണങ്ങളൊന്നുമില്ല",
+	"apiKeys.labelsWrite.label": "ലേബലുകൾ കൈകാര്യം ചെയ്യുക",
+	"apiKeys.labelsWrite.description": "API വഴി സംഭാഷണങ്ങളിൽ ലേബലുകൾ ചേർക്കുകയും നീക്കുകയും ചെയ്യുക. ലേബലുകൾ വായിക്കാൻ “വായിക്കുക” മാത്രം മതി."
 }

@@ -386,6 +386,19 @@
         "CREATE INDEX `calendar_invite_tombstones_user_idx` ON `calendar_invite_tombstones` (`user_id`);",
         "CREATE INDEX `calendar_occurrence_responses_event_idx` ON `calendar_occurrence_responses` (`event_id`);"
       ]
+    },
+    {
+      "name": "0017_conversation_labels.sql",
+      "statements": [
+        "CREATE TABLE `labels` (\n\t`id` varchar(191) NOT NULL,\n\t`mailbox_id` varchar(191) NOT NULL,\n\t`name` varchar(191) NOT NULL,\n\t`color` longtext NOT NULL DEFAULT ('#2563eb'),\n\t`created_at` bigint NOT NULL,\n\tCONSTRAINT `labels_id` PRIMARY KEY(`id`)\n);",
+        "CREATE TABLE `conversation_labels` (\n\t`id` varchar(191) NOT NULL,\n\t`label_id` varchar(191) NOT NULL,\n\t`mailbox_id` varchar(191) NOT NULL,\n\t`thread_key` varchar(512) NOT NULL,\n\t`created_at` bigint NOT NULL,\n\tCONSTRAINT `conversation_labels_id` PRIMARY KEY(`id`)\n);",
+        "ALTER TABLE `labels` ADD CONSTRAINT `labels_mailbox_id_mailboxes_id_fk` FOREIGN KEY (`mailbox_id`) REFERENCES `mailboxes`(`id`) ON DELETE cascade ON UPDATE no action;",
+        "ALTER TABLE `conversation_labels` ADD CONSTRAINT `conversation_labels_label_id_labels_id_fk` FOREIGN KEY (`label_id`) REFERENCES `labels`(`id`) ON DELETE cascade ON UPDATE no action;",
+        "ALTER TABLE `conversation_labels` ADD CONSTRAINT `conversation_labels_mailbox_id_mailboxes_id_fk` FOREIGN KEY (`mailbox_id`) REFERENCES `mailboxes`(`id`) ON DELETE cascade ON UPDATE no action;",
+        "CREATE UNIQUE INDEX `labels_mailbox_name_idx` ON `labels` (`mailbox_id`,`name`);",
+        "CREATE UNIQUE INDEX `conversation_labels_label_thread_idx` ON `conversation_labels` (`label_id`,`thread_key`);",
+        "CREATE INDEX `conversation_labels_mailbox_thread_idx` ON `conversation_labels` (`mailbox_id`,`thread_key`);"
+      ]
     }
   ]
 }

@@ -650,6 +650,35 @@ export const conversationNotes = sqliteTable(
 	],
 );
 
+/** A named, coloured mark a mailbox puts on conversations. Unlike a folder, applying one moves nothing. */
+export const labels = sqliteTable(
+	"labels",
+	{
+		id: text("id").primaryKey(),
+		mailboxId: text("mailbox_id").notNull().references(() => mailboxes.id, { onDelete: "cascade" }),
+		name: text("name").notNull(),
+		color: text("color").notNull().default("#2563eb"),
+		createdAt: timestamp("created_at").notNull().$defaultFn(() => new Date()),
+	},
+	(t) => [uniqueIndex("labels_mailbox_name_idx").on(t.mailboxId, t.name)],
+);
+
+/** A label on a conversation, keyed like `conversation_notes`: the thread id, or the lone message's id. */
+export const conversationLabels = sqliteTable(
+	"conversation_labels",
+	{
+		id: text("id").primaryKey(),
+		labelId: text("label_id").notNull().references(() => labels.id, { onDelete: "cascade" }),
+		mailboxId: text("mailbox_id").notNull().references(() => mailboxes.id, { onDelete: "cascade" }),
+		threadKey: text("thread_key").notNull(),
+		createdAt: timestamp("created_at").notNull().$defaultFn(() => new Date()),
+	},
+	(t) => [
+		uniqueIndex("conversation_labels_label_thread_idx").on(t.labelId, t.threadKey),
+		index("conversation_labels_mailbox_thread_idx").on(t.mailboxId, t.threadKey),
+	],
+);
+
 export const emailTemplates = sqliteTable(
 	"email_templates",
 	{

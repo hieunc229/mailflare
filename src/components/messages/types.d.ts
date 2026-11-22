@@ -13,6 +13,8 @@ export type MessageFolderConfig = {
 	emptyTextKey?: TranslationKey;
 	hrefPrefix: string;
 	folderId?: string;
+	/** A label view: the folder's list narrowed to conversations with this label. Nothing moved there. */
+	labelId?: string;
 	icon: LucideIcon;
 	headerIcons?: LucideIcon[];
 	badgeVariant?: "default" | "secondary" | "outline";

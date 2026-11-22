@@ -1,3 +1,5 @@
+import type { LabelChip } from "@/lib/labels/types";
+
 export type MessageStatus = "received" | "sent" | "draft" | "queued" | "failed" | "archived" | "trash" | "spam";
 
 export type MessageFolder = "inbox" | "starred" | "snoozed" | "sent" | "scheduled" | "drafts" | "archived" | "trash" | "spam";
@@ -39,6 +41,8 @@ export type Message = {
 	/** Notes on the conversation, with the text of the latest ones; absent when it has none. */
 	noteCount?: number;
 	notePreview?: string;
+	/** Labels on the conversation, by name; absent when it has none. */
+	labels?: LabelChip[];
 	threadId: string | null;
 	inReplyTo?: string | null;
 	references?: string | null;
@@ -86,6 +90,8 @@ export type MessageFilterOptions = {
 	offset?: number;
 	/** "thread" collapses each conversation to its newest matching message. */
 	group?: "thread";
+	/** Only conversations carrying this label. */
+	labelId?: string;
 };
 
 export type MessageListResponse = {

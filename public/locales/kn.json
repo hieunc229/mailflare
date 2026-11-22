@@ -2563,5 +2563,18 @@
 	"invite.calendarOnly": "Calendar only",
 	"invite.wasPrev": "(was {action})",
 	"invite.changeHint": "Send again to change your answer",
-	"invite.undo": "Undo"
+	"invite.undo": "Undo",
+	"navigation.labels": "ಲೇಬಲ್‌ಗಳು",
+	"navigation.createLabel": "ಲೇಬಲ್ ರಚಿಸಿ",
+	"navigation.noLabels": "ಇನ್ನೂ ಯಾವುದೇ ಲೇಬಲ್‌ಗಳಿಲ್ಲ",
+	"label.description": "ಲೇಬಲ್‌ಗಳು ಸಂಭಾಷಣೆಯನ್ನು ಸರಿಸದೆ ಗುರುತಿಸುತ್ತವೆ.",
+	"label.name": "ಲೇಬಲ್ ಹೆಸರು",
+	"label.example": "ಆರ್ಡರ್‌ಗಳು",
+	"label.createFailed": "ಲೇಬಲ್ ರಚಿಸಲು ಸಾಧ್ಯವಾಗಲಿಲ್ಲ.",
+	"label.changeFailed": "ಲೇಬಲ್ ಬದಲಾಯಿಸಲು ಸಾಧ್ಯವಾಗಲಿಲ್ಲ.",
+	"label.delete": "ಲೇಬಲ್ ಅಳಿಸಿ",
+	"label.deleteConfirm": "{name} ಲೇಬಲ್ ಅಳಿಸಬೇಕೆ? ಅದರ ಸಂಭಾಷಣೆಗಳು ಇದ್ದಲ್ಲೇ ಇರುತ್ತವೆ.",
+	"label.empty": "ಈ ಲೇಬಲ್ ಇರುವ ಯಾವುದೇ ಸಂಭಾಷಣೆಗಳಿಲ್ಲ",
+	"apiKeys.labelsWrite.label": "ಲೇಬಲ್‌ಗಳನ್ನು ನಿರ್ವಹಿಸಿ",
+	"apiKeys.labelsWrite.description": "API ಮೂಲಕ ಸಂಭಾಷಣೆಗಳಿಗೆ ಲೇಬಲ್ ಹಾಕಿ ಮತ್ತು ತೆಗೆಯಿರಿ. ಲೇಬಲ್‌ಗಳನ್ನು ಓದಲು “ಓದು” ಸಾಕು."
 }

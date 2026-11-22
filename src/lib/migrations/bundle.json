@@ -866,6 +866,16 @@
         "CREATE UNIQUE INDEX `calendar_occurrence_responses_event_occurrence_guest_idx` ON `calendar_occurrence_responses` (`event_id`,`occurrence_ms`,`guest`);",
         "CREATE INDEX `calendar_occurrence_responses_event_idx` ON `calendar_occurrence_responses` (`event_id`);"
       ]
+    },
+    {
+      "name": "0093_conversation_labels.sql",
+      "statements": [
+        "CREATE TABLE `labels` (\n\t`id` text PRIMARY KEY NOT NULL,\n\t`mailbox_id` text NOT NULL,\n\t`name` text NOT NULL,\n\t`color` text DEFAULT '#2563eb' NOT NULL,\n\t`created_at` integer NOT NULL,\n\tFOREIGN KEY (`mailbox_id`) REFERENCES `mailboxes`(`id`) ON UPDATE no action ON DELETE cascade\n);",
+        "CREATE UNIQUE INDEX `labels_mailbox_name_idx` ON `labels` (`mailbox_id`,`name`);",
+        "CREATE TABLE `conversation_labels` (\n\t`id` text PRIMARY KEY NOT NULL,\n\t`label_id` text NOT NULL,\n\t`mailbox_id` text NOT NULL,\n\t`thread_key` text NOT NULL,\n\t`created_at` integer NOT NULL,\n\tFOREIGN KEY (`label_id`) REFERENCES `labels`(`id`) ON UPDATE no action ON DELETE cascade,\n\tFOREIGN KEY (`mailbox_id`) REFERENCES `mailboxes`(`id`) ON UPDATE no action ON DELETE cascade\n);",
+        "CREATE UNIQUE INDEX `conversation_labels_label_thread_idx` ON `conversation_labels` (`label_id`,`thread_key`);",
+        "CREATE INDEX `conversation_labels_mailbox_thread_idx` ON `conversation_labels` (`mailbox_id`,`thread_key`);"
+      ]
     }
   ]
 }

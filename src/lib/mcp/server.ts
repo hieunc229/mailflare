@@ -9,6 +9,7 @@ import { editAgentDraft } from "@/lib/agent/edit-draft";
 import { requestAgentSend, getAgentSendRequest } from "@/lib/agent/approvals/utils";
 import { cancelScheduledSend, getScheduledTime } from "@/lib/email/scheduled";
 import { addConversationNote, conversationForUser, CONVERSATION_NOTE_MAX_LENGTH, deleteConversationNote, listConversationNotes, updateConversationNote } from "@/lib/notes/service";
+import { listConversationLabels, listLabels, setConversationLabel } from "@/lib/labels/service";
 import type { EmailToolName } from "@/lib/agent/types";
 import type { McpPrincipal } from "./types";
 import { registerAdminMcpTools } from "./admin-tools";
@@ -143,6 +144,29 @@ export function createMailflareMcpHandler(env: CloudflareEnv, principal: McpPrin
 				if (!found) return output({ error: "Email not found" }, true);
 				const result = await deleteConversationNote(found.db, found.conversation, principal.user.id, noteId);
 				return result.ok ? output({ messageId, noteId, deleted: true }) : output({ error: result.error === "forbidden" ? "Only the author or a mailbox manager can delete this note" : "Note not found" }, true);
+			}
+			catch (error) { return output({ error: error instanceof Error ? error.message : "Tool failed" }, true); }
+		});
+		server.registerTool("list_labels", { description: "List a mailbox's labels: named, coloured marks on conversations. A label never moves mail; set_conversation_label puts one on or takes it off. With messageId, list only the labels on that email's conversation.", inputSchema: z.object({ mailboxId: z.string(), messageId: z.string().optional() }), annotations: { readOnlyHint: true, openWorldHint: false } }, async ({ mailboxId, messageId }) => {
+			if (!principal.scopes.includes("mcp:read") || !principal.mailboxIds.includes(mailboxId)) return output({ error: "Permission denied" }, true);
+			audit(principal, "list_labels", mailboxId);
+			try {
+				if (!messageId) return output(untrusted({ mailboxId, labels: await listLabels(getDb(env), [mailboxId]) }));
+				const found = await noteConversation(mailboxId, messageId);
+				if (!found) return output({ error: "Email not found" }, true);
+				return output(untrusted({ messageId, labels: await listConversationLabels(found.db, found.conversation) }));
+			}
+			catch (error) { return output({ error: error instanceof Error ? error.message : "Tool failed" }, true); }
+		});
+		server.registerTool("set_conversation_label", { description: "Put one of the mailbox's labels on the conversation containing an email (applied: true) or take it off (applied: false). The mail stays where it is.", inputSchema: z.object({ mailboxId: z.string(), messageId: z.string(), labelId: z.string(), applied: z.boolean() }), annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false } }, async ({ mailboxId, messageId, labelId, applied }) => {
+			if (!principal.scopes.includes("mcp:organize") || !principal.mailboxIds.includes(mailboxId)) return output({ error: "Permission denied" }, true);
+			audit(principal, "set_conversation_label", mailboxId);
+			try {
+				const found = await noteConversation(mailboxId, messageId);
+				if (!found) return output({ error: "Email not found" }, true);
+				if (!found.conversation.canChange) return output({ error: "Permission denied" }, true);
+				if (!await setConversationLabel(found.db, found.conversation, labelId, applied)) return output({ error: "Label not found" }, true);
+				return output(untrusted({ messageId, labels: await listConversationLabels(found.db, found.conversation) }));
 			}
 			catch (error) { return output({ error: error instanceof Error ? error.message : "Tool failed" }, true); }
 		});

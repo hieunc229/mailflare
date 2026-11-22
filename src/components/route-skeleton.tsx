@@ -83,7 +83,7 @@ function GenericSkeleton() {
 	);
 }
 
-const MAIL_PREFIXES = ["/inbox", "/sent", "/drafts", "/starred", "/snoozed", "/scheduled", "/archived", "/spam", "/trash", "/folders", "/contacts"];
+const MAIL_PREFIXES = ["/inbox", "/sent", "/drafts", "/starred", "/snoozed", "/scheduled", "/archived", "/spam", "/trash", "/folders", "/labels", "/contacts"];
 
 /** Placeholder shown while auth resolves, shaped like the page being opened so the layout does not jump. */
 export function RouteSkeleton() {

@@ -2563,5 +2563,18 @@
 	"invite.calendarOnly": "Calendar only",
 	"invite.wasPrev": "(was {action})",
 	"invite.changeHint": "Send again to change your answer",
-	"invite.undo": "Undo"
+	"invite.undo": "Undo",
+	"navigation.labels": "लेबल",
+	"navigation.createLabel": "लेबल बनाएँ",
+	"navigation.noLabels": "अभी तक कोई लेबल नहीं",
+	"label.description": "लेबल बातचीत को हटाए बिना उस पर निशान लगाते हैं।",
+	"label.name": "लेबल का नाम",
+	"label.example": "ऑर्डर",
+	"label.createFailed": "लेबल नहीं बनाया जा सका।",
+	"label.changeFailed": "लेबल नहीं बदला जा सका।",
+	"label.delete": "लेबल हटाएँ",
+	"label.deleteConfirm": "{name} लेबल हटाएँ? इसकी बातचीत जहाँ हैं वहीं रहेंगी।",
+	"label.empty": "इस लेबल वाली कोई बातचीत नहीं",
+	"apiKeys.labelsWrite.label": "लेबल प्रबंधित करें",
+	"apiKeys.labelsWrite.description": "API से बातचीत पर लेबल लगाएँ और हटाएँ। लेबल देखने के लिए केवल “पढ़ें” चाहिए।"
 }

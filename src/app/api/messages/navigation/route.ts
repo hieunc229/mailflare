@@ -10,6 +10,7 @@ import { getCurrentUser } from "@/lib/auth/cookies";
 import { getEnv } from "@/lib/cloudflare";
 import { getMailboxAccessLevel, listAccessibleMailboxIds } from "@/lib/mailboxes/access";
 import type { MessageFolder } from "@/hooks/types";
+import { hasLabelId } from "@/lib/labels/conditions";
 import type { MessageNavigationEntry } from "./types";
 
 const folders: MessageFolder[] = ["inbox", "starred", "snoozed", "sent", "scheduled", "archived", "spam", "trash"];
@@ -67,6 +68,9 @@ export async function GET(request: Request) {
 		conditions.push(eq(messages.status, folder));
 	}
 	if (folderId) conditions.push(eq(messages.folderId, folderId));
+	// The access scope above already limits this to readable mailboxes; an unknown label matches nothing.
+	const labelId = params.get("labelId");
+	if (labelId) conditions.push(hasLabelId(labelId));
 
 	const { rows, hasNewer, hasOlder } = await loadNavigationRows(db, conditions, around, windowSize);
 

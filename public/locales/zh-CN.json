@@ -2545,5 +2545,18 @@
 	"invite.wasPrev": "(was {action})",
 	"invite.changeHint": "Send again to change your answer",
 	"invite.undo": "Undo",
-	"update.availableCommits.one": "{count} new change is available (latest {target})."
+	"update.availableCommits.one": "{count} new change is available (latest {target}).",
+	"navigation.labels": "标签",
+	"navigation.createLabel": "创建标签",
+	"navigation.noLabels": "暂无标签",
+	"label.description": "标签只标记会话，不会移动它。",
+	"label.name": "标签名称",
+	"label.example": "订单",
+	"label.createFailed": "无法创建标签。",
+	"label.changeFailed": "无法更改标签。",
+	"label.delete": "删除标签",
+	"label.deleteConfirm": "删除标签 {name}？其会话将保留在原处。",
+	"label.empty": "没有带此标签的会话",
+	"apiKeys.labelsWrite.label": "管理标签",
+	"apiKeys.labelsWrite.description": "通过 API 给会话添加或移除标签。仅查看标签只需“读取”权限。"
 }

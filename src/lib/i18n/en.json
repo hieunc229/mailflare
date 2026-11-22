@@ -2563,5 +2563,18 @@
 	"invite.calendarOnly": "Calendar only",
 	"invite.wasPrev": "(was {action})",
 	"invite.changeHint": "Send again to change your answer",
-	"invite.undo": "Undo"
+	"invite.undo": "Undo",
+	"navigation.labels": "Labels",
+	"navigation.createLabel": "Create label",
+	"navigation.noLabels": "No labels yet",
+	"label.description": "Labels mark a conversation without moving it.",
+	"label.name": "Label name",
+	"label.example": "Orders",
+	"label.createFailed": "Could not create the label.",
+	"label.changeFailed": "Could not change the label.",
+	"label.delete": "Delete label",
+	"label.deleteConfirm": "Delete the label {name}? Its conversations stay where they are.",
+	"label.empty": "No conversations with this label",
+	"apiKeys.labelsWrite.label": "Manage labels",
+	"apiKeys.labelsWrite.description": "Put labels on conversations and take them off through the API. Reading labels needs only Read."
 }

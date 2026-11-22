@@ -33,7 +33,7 @@ export function MessageDetailNavigationProvider({ children, config, currentMessa
 	const [conversationView] = useConversationView();
 	const grouped = conversationView && config.folder !== "drafts";
 	const mailboxId = selectedMailbox?.id;
-	const key = `${config.folder}:${config.folderId ?? ""}:${mailboxId ?? "all"}:${grouped}`;
+	const key = `${config.folder}:${config.folderId ?? ""}:${config.labelId ?? ""}:${mailboxId ?? "all"}:${grouped}`;
 	const [snapshot, setSnapshot] = useState<MessageDetailNavigationSnapshot>({ key: "", entries: [] });
 	const [openedUnread, setOpenedUnread] = useState<OpenedUnreadMessages>({ key: "", ids: new Set() });
 	const recordUnread = useCallback((messageId: string) => {
@@ -74,6 +74,7 @@ export function MessageDetailNavigationProvider({ children, config, currentMessa
 		let cancelled = false;
 		const params = new URLSearchParams({ folder: config.folder });
 		if (config.folderId) params.set("folderId", config.folderId);
+		if (config.labelId) params.set("labelId", config.labelId);
 		if (mailboxId) params.set("mailboxId", mailboxId);
 		if (grouped) params.set("group", "thread");
 		params.set("around", requestAnchor);
@@ -89,7 +90,7 @@ export function MessageDetailNavigationProvider({ children, config, currentMessa
 				if (!cancelled) setSnapshot({ key, entries: [] });
 			});
 		return () => { cancelled = true; };
-	}, [config.folder, config.folderId, grouped, key, mailboxId, mailboxesLoading, requestAnchor]);
+	}, [config.folder, config.folderId, config.labelId, grouped, key, mailboxId, mailboxesLoading, requestAnchor]);
 
 	const unreadIds = openedUnread.key === key ? openedUnread.ids : null;
 	const droppedIds = dropped.key === key ? dropped.ids : null;

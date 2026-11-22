@@ -36,7 +36,8 @@ function readMigrations(directory, split) {
 	return readdirSync(directory)
 		.filter((name) => name.endsWith(".sql"))
 		.sort()
-		.map((name) => ({ name, statements: split(readFileSync(new URL(name, directory), "utf8")) }));
+		// A Windows checkout (core.autocrlf) has CRLF files; the bundle stays LF either way.
+		.map((name) => ({ name, statements: split(readFileSync(new URL(name, directory), "utf8").replace(/\r\n/g, "\n")) }));
 }
 
 // PostgreSQL function bodies and MySQL trigger bodies contain semicolons, so those migrations are split only

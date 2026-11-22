@@ -8,7 +8,8 @@ export type MailboxPrefetchOptions = {
 
 export async function preloadMailboxPage(href: string, mailboxId?: string, options: MailboxPrefetchOptions = {}) {
 	const customFolderMatch = href.match(/^\/folders\/([^/]+)$/);
-	const folder = (customFolderMatch ? "inbox" : href.slice(1)) as MessageFolder;
+	const labelMatch = href.match(/^\/labels\/([^/]+)$/);
+	const folder = (customFolderMatch || labelMatch ? "inbox" : href.slice(1)) as MessageFolder;
 	const supportedFolders: MessageFolder[] = ["inbox", "starred", "snoozed", "sent", "scheduled", "drafts", "archived", "spam", "trash"];
 	if (!supportedFolders.includes(folder)) return;
 
@@ -21,6 +22,7 @@ export async function preloadMailboxPage(href: string, mailboxId?: string, optio
 			limit: 25,
 			offset: 0,
 			group: options.grouped && folder !== "drafts" ? "thread" : undefined,
+			labelId: labelMatch?.[1],
 		},
 		customFolderMatch?.[1],
 	);
