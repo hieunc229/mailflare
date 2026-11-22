@@ -5,7 +5,7 @@ import { getEmailAddress } from "@/lib/email/address";
 import { getMailboxDomainAddresses } from "@/lib/mailboxes/domain-addresses";
 import { isBulkMail, type MailHeaders } from "@/lib/email/bulk-mail";
 import { MAIL_TYPE_BULK } from "@/lib/email/mail-type-rule";
-import { normalizeRecipientLocalPart, parseRecipientAddress } from "@/lib/email/recipient-address";
+import { normalizeRecipientFullLocalPart, parseRecipientAddress } from "@/lib/email/recipient-address";
 
 export type ResolvedMailbox = {
 	mailboxId: string;
@@ -64,7 +64,9 @@ export type ResolveInboundOptions = {
  * Domain-scope rules are evaluated in three phases so that a broad catch-all can never
  * shadow a real mailbox:
  *   1. `reject` rules (block lists) — highest precedence, evaluated before delivery.
- *   2. exact mailbox, then multi-domain mailbox aliases.
+ *   2. exact mailbox, then multi-domain mailbox aliases. The full `local+tag`
+ *      address is tried first; a `+tag` with no claimant then falls back to the
+ *      `local` base mailbox or alias (plus-addressing).
  *   3. remaining `forward` / `store` rules — the catch-all fallback.
  * Within each phase rules run by descending priority, then oldest first.
  */
@@ -102,13 +104,15 @@ export async function resolveInboundAddress(
 		};
 	}
 
-	// Phase 2 — a real mailbox always wins over a catch-all.
+	// Phase 2 — a real mailbox always wins over a catch-all. The full address,
+	// tag included, is tried first so a literal `user+tag` mailbox or alias beats
+	// its `user` base.
 	const exactMailboxes = await db
 		.select()
 		.from(mailboxes)
 		.where(and(eq(mailboxes.domainId, domain.id), eq(mailboxes.disabled, false)));
 	const exactMailbox = exactMailboxes.find(
-		(mailbox) => normalizeRecipientLocalPart(mailbox.localPart) === parsed.localPart,
+		(mailbox) => normalizeRecipientFullLocalPart(mailbox.localPart) === parsed.localPart,
 	);
 	let mailbox = exactMailbox ?? await resolveMailboxAlias(db, domain.id, parsed.localPart);
 	// A disabled alias keeps owning its address: reject instead of letting a
@@ -117,6 +121,18 @@ export async function resolveInboundAddress(
 		return { action: "reject", rejectReason: "Mailbox unavailable" };
 	}
 	mailbox ??= await resolveMailboxDomainAlias(db, parsed.localPart, parsed.normalizedAddress);
+
+	// `user+tag` delivers to `user` when nothing claimed the tagged address
+	// itself. An empty tag (`user+`) does not split.
+	if (!mailbox && parsed.hasSubaddress) {
+		mailbox = exactMailboxes.find(
+			(mailbox) => normalizeRecipientFullLocalPart(mailbox.localPart) === parsed.baseLocalPart,
+		) ?? await resolveMailboxAlias(db, domain.id, parsed.baseLocalPart);
+		if (!mailbox && await findDisabledAlias(db, domain.id, parsed.baseLocalPart)) {
+			return { action: "reject", rejectReason: "Mailbox unavailable" };
+		}
+		mailbox ??= await resolveMailboxDomainAlias(db, parsed.baseLocalPart, parsed.normalizedBaseAddress);
+	}
 
 	if (mailbox) {
 		const resolved = toResolvedMailbox(mailbox, domain.id, domain.hostname);
@@ -282,7 +298,7 @@ async function resolveMailboxAlias(db: AppDatabase, domainId: string, localPart:
 			eq(mailboxes.disabled, false),
 		));
 	const row = rows.find(
-		(item) => normalizeRecipientLocalPart(item.aliasLocalPart) === localPart,
+		(item) => normalizeRecipientFullLocalPart(item.aliasLocalPart) === localPart,
 	);
 	return row?.mailbox ?? null;
 }
@@ -292,7 +308,7 @@ async function findDisabledAlias(db: AppDatabase, domainId: string, localPart: s
 		.select({ localPart: mailboxAliases.localPart })
 		.from(mailboxAliases)
 		.where(and(eq(mailboxAliases.domainId, domainId), eq(mailboxAliases.enabled, false)));
-	return rows.some((row) => normalizeRecipientLocalPart(row.localPart) === localPart);
+	return rows.some((row) => normalizeRecipientFullLocalPart(row.localPart) === localPart);
 }
 
 async function resolveMailboxDomainAlias(
@@ -306,7 +322,7 @@ async function resolveMailboxDomainAlias(
 		.where(and(eq(mailboxes.useAllDomains, true), eq(mailboxes.disabled, false)));
 
 	for (const mailbox of candidates) {
-		if (normalizeRecipientLocalPart(mailbox.localPart) !== localPart) continue;
+		if (normalizeRecipientFullLocalPart(mailbox.localPart) !== localPart) continue;
 		const addresses = await getMailboxDomainAddresses(db, mailbox);
 		if (addresses.some((address) => parseRecipientAddress(address)?.normalizedAddress === normalizedAddress)) {
 			return mailbox;
