@@ -279,6 +279,7 @@ export async function processInboundMessage(
 				userId: decision.mailbox.userId,
 				deliveredAddress,
 				fromAddress: fromAddr,
+				envelopeFrom: payload.from,
 				incomingMessageId: parsed.messageId,
 				headers: payload.headers,
 			});

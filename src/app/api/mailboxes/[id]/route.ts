@@ -61,7 +61,12 @@ export async function PATCH(request: Request, { params }: MailboxRouteParams) {
 		return NextResponse.json({ error: "Mailbox not found" }, { status: 404 });
 	}
 
-	const updateValues = getMailboxUpdateValues(parsed.data);
+	const updateValues = getMailboxUpdateValues(parsed.data, existing);
+	const autoReplyStartAt = "autoReplyStartAt" in updateValues ? updateValues.autoReplyStartAt : existing.autoReplyStartAt;
+	const autoReplyEndAt = "autoReplyEndAt" in updateValues ? updateValues.autoReplyEndAt : existing.autoReplyEndAt;
+	if (autoReplyStartAt && autoReplyEndAt && autoReplyStartAt >= autoReplyEndAt) {
+		return NextResponse.json({ error: "The auto-reply end must be after its start" }, { status: 400 });
+	}
 	// Only the primary mailbox carries the account name; renaming any other
 	// mailbox writes to that mailbox alone.
 	if (tracksAccountIdentity(existing, existing.ownerEmail) && "displayName" in parsed.data) {

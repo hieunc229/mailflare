@@ -36,6 +36,8 @@ export type MailboxOption = {
 	autoReplyEnabled?: boolean;
 	autoReplySubject?: string;
 	autoReplyBody?: string;
+	autoReplyStartAt?: string | null;
+	autoReplyEndAt?: string | null;
 	hasAvatar?: boolean;
 	type?: "personal" | "shared";
 	permission?: "read_only" | "send_as" | "send_on_behalf" | "full_access";

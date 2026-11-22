@@ -361,6 +361,8 @@ export const updateMailboxSchema = z.object({
 	autoReplyEnabled: z.boolean().optional(),
 	autoReplySubject: z.string().trim().max(200).optional(),
 	autoReplyBody: z.string().max(10_000).optional(),
+	autoReplyStartAt: z.string().datetime().nullable().optional(),
+	autoReplyEndAt: z.string().datetime().nullable().optional(),
 	useAllDomains: z.boolean().optional(),
 });
 
