@@ -13,10 +13,14 @@ export type ApproveSendOutcome =
 	| { ok: true; approvalId: string; status: string; messageId: string | null }
 	| { ok: false; error: string; code: ApproveSendRefusal; approvalId?: string; status?: string };
 
-/** `queued` while the outbound job still waits (a scheduled time or the undo window), `sent` once the provider accepted it. */
+/**
+ * `queued` while the outbound job still waits (a scheduled time or the undo window), `sent` once the
+ * provider accepted it. Anything else is the row's real state — a `failed` send or a cancellation back
+ * to `draft` is reported as itself, never as a fabricated `sent`; a gone row is `unknown`.
+ */
 async function deliveryStatus(env: CloudflareEnv, messageId: string) {
 	const [row] = await getDb(env).select({ status: messages.status }).from(messages).where(eq(messages.id, messageId)).limit(1);
-	return row?.status === "queued" ? "queued" : "sent";
+	return row?.status ?? "unknown";
 }
 
 /**
@@ -25,7 +29,7 @@ async function deliveryStatus(env: CloudflareEnv, messageId: string) {
  *
  * Only a key that has `canApproveOwnSends` may use it, and only on a review request that key
  * created itself (`agent_send_approvals.request_key_id`). The approving key id comes from the
- * authenticated key, never from the caller. Every release is written to the audit log.
+ * authenticated key, never from the caller. Every attempt, released or refused, is written to the audit log.
  */
 export async function approveAgentSend(
 	env: CloudflareEnv,
@@ -33,13 +37,32 @@ export async function approveAgentSend(
 	input: { mailboxId: string; approvalId: string },
 	publicOrigin?: string,
 ): Promise<ApproveSendOutcome> {
+	// Every outcome is audited, refusals included. `input.mailboxId` is the audited mailbox: below the
+	// not-found check it provably equals the approval's own mailbox, and before it, it is the mailbox
+	// the key attempted on.
+	const record = async (status: string, messageId: string | null) => createAuditLog(env, {
+		actorUserId: principal.user.id,
+		mailboxId: input.mailboxId,
+		messageId,
+		action: "email.approve_send",
+		metadata: { approvalId: input.approvalId, keyId: principal.keyId, origin: "mcp", status, messageId, at: new Date().toISOString() },
+	});
+
+	// A refusal writes one audit row carrying the input approval id, the key id and the refusal code as
+	// its status. The write is best-effort: a mailbox id that names no mailbox breaks the audit_logs
+	// foreign key, and that must never turn a refusal into a driver error.
+	const refused = async (code: ApproveSendRefusal, error: string): Promise<ApproveSendOutcome> => {
+		await record(code, null).catch((auditError) => console.error("approve_send audit write failed", auditError));
+		return { ok: false, error, code };
+	};
+
 	// 1. The key needs the send-review scope and this mailbox, as `request_send` does.
 	if (!principal.scopes.includes("mcp:request-send") || !principal.mailboxIds.includes(input.mailboxId)) {
-		return { ok: false, error: "Permission denied", code: "permission_denied" };
+		return refused("permission_denied", "Permission denied");
 	}
 	// 2. Per-key flag, off by default: holding a key alone never releases a send.
 	if (!principal.canApproveOwnSends) {
-		return { ok: false, error: "Permission denied: this key may not approve its own sends", code: "permission_denied" };
+		return refused("permission_denied", "Permission denied: this key may not approve its own sends");
 	}
 	// 3. Single-send is a database guarantee, and MySQL does not have it here. The other dialects create
 	// `agent_send_approvals_delivery_idx` as a partial UNIQUE index on (draft_id) where status in
@@ -53,7 +76,7 @@ export async function approveAgentSend(
 	// unique on (draft_id), or an explicit per-draft send lock table), which a baseline edit cannot give
 	// existing deployments anyway.
 	if (dialectOf(env.DB) === "mysql") {
-		return { ok: false, error: "approve_send is unavailable on MySQL: this deployment lacks the delivery uniqueness constraint that makes an approval single-send; use the web review page", code: "unsupported_dialect" };
+		return refused("unsupported_dialect", "approve_send is unavailable on MySQL: this deployment lacks the delivery uniqueness constraint that makes an approval single-send; use the web review page");
 	}
 	const [approval] = await getDb(env)
 		.select({
@@ -68,16 +91,8 @@ export async function approveAgentSend(
 	// in the web UI has no key on it, and another key's request names that key, so both are "not found"
 	// rather than being reported as existing.
 	if (!approval || approval.userId !== principal.user.id || approval.mailboxId !== input.mailboxId || approval.requestKeyId !== principal.keyId) {
-		return { ok: false, error: "Approval not found", code: "not_found" };
+		return refused("not_found", "Approval not found");
 	}
-
-	const record = async (status: string, messageId: string | null) => createAuditLog(env, {
-		actorUserId: principal.user.id,
-		mailboxId: approval.mailboxId,
-		messageId,
-		action: "email.approve_send",
-		metadata: { approvalId: input.approvalId, keyId: principal.keyId, origin: "mcp", status, messageId, at: new Date().toISOString() },
-	});
 
 	try {
 		// Idempotent: an approval that is no longer pending returns its current state instead of sending
