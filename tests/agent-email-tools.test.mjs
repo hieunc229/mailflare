@@ -284,10 +284,10 @@ test("agent message urls land on real routes for every status and folder", async
 	assert.equal(failed.url, "/sent/failed-1");
 	const foldered = await runEmailTool(context, "search_emails", { query: "Filed", limit: 20 });
 	assert.equal(foldered.emails.find((email) => email.id === "foldered-1").url, "/folders/folder-1/foldered-1");
-	// Templates have no message route: the link is omitted instead of pointing at one that 404s.
+	// Templates render in the generic message reader at /inbox.
 	const template = await runEmailTool(context, "get_email", { emailId: "template-1" });
 	assert.equal(template.status, "template");
-	assert.equal(template.url, null);
+	assert.equal(template.url, "/inbox/template-1");
 });
 
 test("move_email clears the custom folder everywhere and wakes a snooze on inbox", async (t) => {

@@ -69,21 +69,19 @@ export const EMAIL_TOOL_NAMES = Object.keys(emailToolSchemas) as EmailToolName[]
 function publicMessage(row: typeof messages.$inferSelect) {
 	// The link has to open in the app: message statuses and route folders do not
 	// always share a name (queued -> scheduled, failed -> sent). Templates surface
-	// here through search_emails/get_email but have no message route at all, so
-	// they carry no url rather than a dead one.
+	// here through search_emails/get_email and render in the generic reader.
 	const section =
-		row.status === "template" ? null
-		: row.status === "draft" ? "drafts"
+		row.status === "draft" ? "drafts"
 		: row.status === "queued" ? "scheduled"
 		: row.status === "failed" ? "sent"
 		: row.status === "received" && row.folderId ? `folders/${encodeURIComponent(row.folderId)}`
-		: row.status === "received" ? "inbox"
+		: row.status === "received" || row.status === "template" ? "inbox"
 		: row.status;
 	return {
 		id: row.id, mailboxId: row.mailboxId, from: row.fromAddr, to: row.toAddr,
 		cc: row.ccAddr, subject: row.subject, snippet: row.snippet, direction: row.direction,
 		status: row.status, read: row.read, starred: row.starred, threadId: row.threadId,
-		url: section ? `/${section}/${encodeURIComponent(row.id)}` : null,
+		url: `/${section}/${encodeURIComponent(row.id)}`,
 		createdAt: row.createdAt,
 	};
 }
