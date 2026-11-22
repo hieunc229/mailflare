@@ -10,6 +10,9 @@ import { buildSearchConditions } from "@/lib/search/conditions";
 import { draftsVisibleTo } from "@/lib/email/draft-access";
 import { getRequestTimeZone } from "@/lib/time/utils";
 import { parseLimit } from "@/lib/api/query-params";
+import { isMissingTableError } from "@/lib/database-errors";
+import { labelsForRows } from "@/lib/labels/service";
+import type { LabelChip } from "@/lib/labels/types";
 
 export async function GET(request: Request) {
 	const env = getEnv();
@@ -63,5 +66,10 @@ export async function GET(request: Request) {
 		.orderBy(desc(messages.createdAt))
 		.limit(limit);
 
-	return NextResponse.json({ messages: rows });
+	// Labels are optional: a database without the labels migration has none to show.
+	const rowLabels = await labelsForRows(db, rows).catch((error) => {
+		if (isMissingTableError(error)) return new Map<string, LabelChip[]>();
+		throw error;
+	});
+	return NextResponse.json({ messages: rows.map((row) => (rowLabels.has(row.id) ? { ...row, labels: rowLabels.get(row.id) } : row)) });
 }

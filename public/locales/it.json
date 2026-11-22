@@ -2590,5 +2590,7 @@
 	"label.changeFailed": "Impossibile modificare l’etichetta.",
 	"label.delete": "Elimina etichetta",
 	"label.deleteConfirm": "Eliminare l’etichetta {name}? Le sue conversazioni restano dove sono.",
-	"label.empty": "Nessuna conversazione con questa etichetta"
+	"label.empty": "Nessuna conversazione con questa etichetta",
+	"apiKeys.labelsWrite.label": "Gestisci etichette",
+	"apiKeys.labelsWrite.description": "Applica e rimuovi etichette dalle conversazioni tramite l’API. Per leggerle basta «Lettura»."
 }

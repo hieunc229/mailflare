@@ -2574,5 +2574,7 @@
 	"label.changeFailed": "Imeshindwa kubadilisha lebo.",
 	"label.delete": "Futa lebo",
 	"label.deleteConfirm": "Futa lebo {name}? Mazungumzo yake yatabaki yalipo.",
-	"label.empty": "Hakuna mazungumzo yenye lebo hii"
+	"label.empty": "Hakuna mazungumzo yenye lebo hii",
+	"apiKeys.labelsWrite.label": "Dhibiti lebo",
+	"apiKeys.labelsWrite.description": "Weka na ondoa lebo kwenye mazungumzo kupitia API. Kusoma lebo kunahitaji “Soma” pekee."
 }

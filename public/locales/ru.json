@@ -2606,5 +2606,7 @@
 	"label.changeFailed": "Не удалось изменить метку.",
 	"label.delete": "Удалить метку",
 	"label.deleteConfirm": "Удалить метку {name}? Переписки останутся на месте.",
-	"label.empty": "Нет переписок с этой меткой"
+	"label.empty": "Нет переписок с этой меткой",
+	"apiKeys.labelsWrite.label": "Управление метками",
+	"apiKeys.labelsWrite.description": "Ставить и снимать метки с переписок через API. Для чтения меток достаточно «Чтения»."
 }

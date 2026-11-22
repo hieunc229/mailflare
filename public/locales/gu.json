@@ -2574,5 +2574,7 @@
 	"label.changeFailed": "લેબલ બદલી શકાયું નહીં.",
 	"label.delete": "લેબલ કાઢી નાખો",
 	"label.deleteConfirm": "{name} લેબલ કાઢી નાખીએ? તેની વાતચીતો જ્યાં છે ત્યાં જ રહેશે.",
-	"label.empty": "આ લેબલ સાથે કોઈ વાતચીત નથી"
+	"label.empty": "આ લેબલ સાથે કોઈ વાતચીત નથી",
+	"apiKeys.labelsWrite.label": "લેબલ મેનેજ કરો",
+	"apiKeys.labelsWrite.description": "API દ્વારા વાતચીત પર લેબલ લગાવો અને દૂર કરો. લેબલ વાંચવા માટે ફક્ત “વાંચો” જ જોઈએ."
 }

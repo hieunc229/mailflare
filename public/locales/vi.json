@@ -2556,5 +2556,7 @@
 	"label.changeFailed": "Không thể thay đổi nhãn.",
 	"label.delete": "Xóa nhãn",
 	"label.deleteConfirm": "Xóa nhãn {name}? Các cuộc hội thoại vẫn ở nguyên chỗ cũ.",
-	"label.empty": "Không có cuộc hội thoại nào có nhãn này"
+	"label.empty": "Không có cuộc hội thoại nào có nhãn này",
+	"apiKeys.labelsWrite.label": "Quản lý nhãn",
+	"apiKeys.labelsWrite.description": "Gắn và gỡ nhãn trên cuộc hội thoại qua API. Chỉ cần quyền Đọc để xem nhãn."
 }

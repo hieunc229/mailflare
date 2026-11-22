@@ -2574,5 +2574,7 @@
 	"label.changeFailed": "লেবেল পরিবর্তন করা যায়নি।",
 	"label.delete": "লেবেল মুছুন",
 	"label.deleteConfirm": "{name} লেবেলটি মুছবেন? এর কথোপকথনগুলো যেখানে আছে সেখানেই থাকবে।",
-	"label.empty": "এই লেবেলে কোনো কথোপকথন নেই"
+	"label.empty": "এই লেবেলে কোনো কথোপকথন নেই",
+	"apiKeys.labelsWrite.label": "লেবেল পরিচালনা",
+	"apiKeys.labelsWrite.description": "API-এর মাধ্যমে কথোপকথনে লেবেল যোগ ও সরান। লেবেল দেখতে শুধু “পড়া” অনুমতি লাগে।"
 }

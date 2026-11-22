@@ -2574,5 +2574,7 @@
 	"label.changeFailed": "Etiket değiştirilemedi.",
 	"label.delete": "Etiketi sil",
 	"label.deleteConfirm": "{name} etiketi silinsin mi? Sohbetler oldukları yerde kalır.",
-	"label.empty": "Bu etikete sahip sohbet yok"
+	"label.empty": "Bu etikete sahip sohbet yok",
+	"apiKeys.labelsWrite.label": "Etiketleri yönet",
+	"apiKeys.labelsWrite.description": "API ile sohbetlere etiket ekleyin ve kaldırın. Etiketleri okumak için yalnızca “Okuma” yeterlidir."
 }

@@ -2574,5 +2574,7 @@
 	"label.changeFailed": "ਲੇਬਲ ਨਹੀਂ ਬਦਲਿਆ ਜਾ ਸਕਿਆ।",
 	"label.delete": "ਲੇਬਲ ਮਿਟਾਓ",
 	"label.deleteConfirm": "{name} ਲੇਬਲ ਮਿਟਾਉਣਾ ਹੈ? ਇਸ ਦੀਆਂ ਗੱਲਬਾਤਾਂ ਜਿੱਥੇ ਹਨ ਉੱਥੇ ਹੀ ਰਹਿਣਗੀਆਂ।",
-	"label.empty": "ਇਸ ਲੇਬਲ ਵਾਲੀ ਕੋਈ ਗੱਲਬਾਤ ਨਹੀਂ"
+	"label.empty": "ਇਸ ਲੇਬਲ ਵਾਲੀ ਕੋਈ ਗੱਲਬਾਤ ਨਹੀਂ",
+	"apiKeys.labelsWrite.label": "ਲੇਬਲ ਸੰਭਾਲੋ",
+	"apiKeys.labelsWrite.description": "API ਰਾਹੀਂ ਗੱਲਬਾਤ ’ਤੇ ਲੇਬਲ ਲਗਾਓ ਅਤੇ ਹਟਾਓ। ਲੇਬਲ ਦੇਖਣ ਲਈ ਸਿਰਫ਼ “ਪੜ੍ਹੋ” ਹੀ ਚਾਹੀਦਾ ਹੈ।"
 }

@@ -2606,5 +2606,7 @@
 	"label.changeFailed": "Nie udało się zmienić etykiety.",
 	"label.delete": "Usuń etykietę",
 	"label.deleteConfirm": "Usunąć etykietę {name}? Jej rozmowy pozostaną na miejscu.",
-	"label.empty": "Brak rozmów z tą etykietą"
+	"label.empty": "Brak rozmów z tą etykietą",
+	"apiKeys.labelsWrite.label": "Zarządzanie etykietami",
+	"apiKeys.labelsWrite.description": "Dodawaj i usuwaj etykiety z rozmów przez API. Do odczytu etykiet wystarczy „Odczyt”."
 }

@@ -2570,5 +2570,7 @@
 	"label.changeFailed": "라벨을 변경할 수 없습니다.",
 	"label.delete": "라벨 삭제",
 	"label.deleteConfirm": "{name} 라벨을 삭제할까요? 대화는 그대로 남습니다.",
-	"label.empty": "이 라벨이 붙은 대화가 없습니다"
+	"label.empty": "이 라벨이 붙은 대화가 없습니다",
+	"apiKeys.labelsWrite.label": "라벨 관리",
+	"apiKeys.labelsWrite.description": "API로 대화에 라벨을 붙이거나 뗍니다. 라벨 조회에는 읽기 권한만 필요합니다."
 }

@@ -2574,5 +2574,7 @@
 	"label.changeFailed": "Ba a iya canza lakabin ba.",
 	"label.delete": "Share lakabi",
 	"label.deleteConfirm": "A share lakabin {name}? Tattaunawarsa za su zauna inda suke.",
-	"label.empty": "Babu tattaunawa mai wannan lakabin"
+	"label.empty": "Babu tattaunawa mai wannan lakabin",
+	"apiKeys.labelsWrite.label": "Sarrafa lakabai",
+	"apiKeys.labelsWrite.description": "Saka lakabai a kan tattaunawa ko cire su ta API. Karanta lakabai yana buƙatar “Karanta” kawai."
 }

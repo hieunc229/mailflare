@@ -2590,5 +2590,7 @@
 	"label.changeFailed": "No se pudo cambiar la etiqueta.",
 	"label.delete": "Eliminar etiqueta",
 	"label.deleteConfirm": "¿Eliminar la etiqueta {name}? Sus conversaciones se quedan donde están.",
-	"label.empty": "No hay conversaciones con esta etiqueta"
+	"label.empty": "No hay conversaciones con esta etiqueta",
+	"apiKeys.labelsWrite.label": "Gestionar etiquetas",
+	"apiKeys.labelsWrite.description": "Poner y quitar etiquetas de las conversaciones mediante la API. Para leerlas basta con «Leer»."
 }

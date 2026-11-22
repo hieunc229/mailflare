@@ -2590,5 +2590,7 @@
 	"label.changeFailed": "Não foi possível alterar o marcador.",
 	"label.delete": "Excluir marcador",
 	"label.deleteConfirm": "Excluir o marcador {name}? As conversas continuam onde estão.",
-	"label.empty": "Nenhuma conversa com este marcador"
+	"label.empty": "Nenhuma conversa com este marcador",
+	"apiKeys.labelsWrite.label": "Gerenciar marcadores",
+	"apiKeys.labelsWrite.description": "Colocar e tirar marcadores das conversas pela API. Para ler os marcadores basta “Leitura”."
 }

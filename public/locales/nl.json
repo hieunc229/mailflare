@@ -2574,5 +2574,7 @@
 	"label.changeFailed": "Het label kon niet worden gewijzigd.",
 	"label.delete": "Label verwijderen",
 	"label.deleteConfirm": "Label {name} verwijderen? De gesprekken blijven waar ze zijn.",
-	"label.empty": "Geen gesprekken met dit label"
+	"label.empty": "Geen gesprekken met dit label",
+	"apiKeys.labelsWrite.label": "Labels beheren",
+	"apiKeys.labelsWrite.description": "Labels via de API op gesprekken zetten en weghalen. Om labels te lezen is alleen Lezen nodig."
 }

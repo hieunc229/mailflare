@@ -2606,5 +2606,7 @@
 	"label.changeFailed": "Не вдалося змінити мітку.",
 	"label.delete": "Видалити мітку",
 	"label.deleteConfirm": "Видалити мітку {name}? Розмови залишаться на місці.",
-	"label.empty": "Немає розмов із цією міткою"
+	"label.empty": "Немає розмов із цією міткою",
+	"apiKeys.labelsWrite.label": "Керування мітками",
+	"apiKeys.labelsWrite.description": "Ставити й знімати мітки з розмов через API. Для читання міток достатньо «Читання»."
 }

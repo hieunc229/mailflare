@@ -2574,5 +2574,7 @@
 	"label.changeFailed": "लेबल नहीं बदला जा सका।",
 	"label.delete": "लेबल हटाएँ",
 	"label.deleteConfirm": "{name} लेबल हटाएँ? इसकी बातचीत जहाँ हैं वहीं रहेंगी।",
-	"label.empty": "इस लेबल वाली कोई बातचीत नहीं"
+	"label.empty": "इस लेबल वाली कोई बातचीत नहीं",
+	"apiKeys.labelsWrite.label": "लेबल प्रबंधित करें",
+	"apiKeys.labelsWrite.description": "API से बातचीत पर लेबल लगाएँ और हटाएँ। लेबल देखने के लिए केवल “पढ़ें” चाहिए।"
 }

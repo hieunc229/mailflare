@@ -2556,5 +2556,7 @@
 	"label.changeFailed": "Label tidak dapat diubah.",
 	"label.delete": "Hapus label",
 	"label.deleteConfirm": "Hapus label {name}? Percakapannya tetap di tempatnya.",
-	"label.empty": "Tidak ada percakapan dengan label ini"
+	"label.empty": "Tidak ada percakapan dengan label ini",
+	"apiKeys.labelsWrite.label": "Kelola label",
+	"apiKeys.labelsWrite.description": "Pasang dan lepas label pada percakapan melalui API. Membaca label cukup dengan “Baca”."
 }

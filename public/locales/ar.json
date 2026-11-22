@@ -2638,5 +2638,7 @@
 	"label.changeFailed": "تعذّر تغيير التصنيف.",
 	"label.delete": "حذف التصنيف",
 	"label.deleteConfirm": "حذف التصنيف {name}؟ تبقى محادثاته في مكانها.",
-	"label.empty": "لا توجد محادثات بهذا التصنيف"
+	"label.empty": "لا توجد محادثات بهذا التصنيف",
+	"apiKeys.labelsWrite.label": "إدارة التصنيفات",
+	"apiKeys.labelsWrite.description": "وضع التصنيفات على المحادثات وإزالتها عبر واجهة البرمجة. قراءة التصنيفات تحتاج إلى «قراءة» فقط."
 }

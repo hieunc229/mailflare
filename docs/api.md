@@ -249,6 +249,19 @@ Removing the last passkey (`DELETE /api/settings/passkeys/:id`) is allowed when 
 
 Terms combine with AND. Admins can check or rebuild the index with `GET` / `POST /api/admin/search-index`; triggers keep it current, so a rebuild is only needed after restoring a backup made before the index existed.
 
+## Labels
+
+A label is a named, coloured mark a mailbox puts on conversations. It never moves mail. Applying one marks the whole conversation, whichever email you name. API keys use the same scopes as the rest of the API: `read` sees labels, and `labels:write` (**Manage labels** when creating the key in **Settings → API keys**) puts them on and takes them off. A key also needs a user with more than read-only access to the mailbox, the same as starring, and a key limited to some mailboxes sees nothing in the others. Creating, renaming and deleting labels is done in the web app and needs full access.
+
+| Route | Scope | Purpose |
+| --- | --- | --- |
+| `GET /api/v1/labels?mailboxId=` | `read` | The mailbox's labels (`{ labels: [{ id, mailboxId, name, color }] }`), or every mailbox the key covers when `mailboxId` is omitted |
+| `GET /api/v1/messages/[id]/labels` | `read` | The labels on the conversation an email belongs to |
+| `PUT /api/v1/messages/[id]/labels/[labelId]` | `labels:write` | Put the label on the conversation; applying twice is a no-op |
+| `DELETE /api/v1/messages/[id]/labels/[labelId]` | `labels:write` | Take it off |
+
+`PUT` and `DELETE` return the conversation's labels. `GET /api/v1/messages` adds a `labels` array to each message that has any, and `label:name` works in `q` (see [Searching](#searching)). A key without the needed scope gets `403`. Over MCP, `list_labels` (`mcp:read`) and `set_conversation_label` (`mcp:organize`) do the same.
+
 ## Real-time updates
 
 Mailflare uses a Durable Object WebSocket hub to notify connected users after an inbound message is stored. Mailbox owners, the domain administrator, and delegated users receive events for mailboxes they can access.

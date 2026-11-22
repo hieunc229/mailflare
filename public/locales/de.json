@@ -2574,5 +2574,7 @@
 	"label.changeFailed": "Das Label konnte nicht geändert werden.",
 	"label.delete": "Label löschen",
 	"label.deleteConfirm": "Label {name} löschen? Die Unterhaltungen bleiben, wo sie sind.",
-	"label.empty": "Keine Unterhaltungen mit diesem Label"
+	"label.empty": "Keine Unterhaltungen mit diesem Label",
+	"apiKeys.labelsWrite.label": "Labels verwalten",
+	"apiKeys.labelsWrite.description": "Labels über die API auf Unterhaltungen setzen und entfernen. Zum Lesen reicht „Lesen“."
 }

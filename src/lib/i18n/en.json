@@ -2574,5 +2574,7 @@
 	"label.changeFailed": "Could not change the label.",
 	"label.delete": "Delete label",
 	"label.deleteConfirm": "Delete the label {name}? Its conversations stay where they are.",
-	"label.empty": "No conversations with this label"
+	"label.empty": "No conversations with this label",
+	"apiKeys.labelsWrite.label": "Manage labels",
+	"apiKeys.labelsWrite.description": "Put labels on conversations and take them off through the API. Reading labels needs only Read."
 }

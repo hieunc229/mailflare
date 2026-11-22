@@ -2574,5 +2574,7 @@
 	"label.changeFailed": "لیبل تبدیل نہیں کیا جا سکا۔",
 	"label.delete": "لیبل حذف کریں",
 	"label.deleteConfirm": "لیبل {name} حذف کریں؟ اس کی گفتگوئیں اپنی جگہ پر رہیں گی۔",
-	"label.empty": "اس لیبل والی کوئی گفتگو نہیں"
+	"label.empty": "اس لیبل والی کوئی گفتگو نہیں",
+	"apiKeys.labelsWrite.label": "لیبل منظم کریں",
+	"apiKeys.labelsWrite.description": "API کے ذریعے گفتگو پر لیبل لگائیں اور ہٹائیں۔ لیبل دیکھنے کے لیے صرف “پڑھیں” کافی ہے۔"
 }

@@ -2574,5 +2574,7 @@
 	"label.changeFailed": "लेबल बदलता आले नाही.",
 	"label.delete": "लेबल हटवा",
 	"label.deleteConfirm": "{name} लेबल हटवायचे? त्याची संभाषणे जिथे आहेत तिथेच राहतील.",
-	"label.empty": "या लेबलचे कोणतेही संभाषण नाही"
+	"label.empty": "या लेबलचे कोणतेही संभाषण नाही",
+	"apiKeys.labelsWrite.label": "लेबल व्यवस्थापित करा",
+	"apiKeys.labelsWrite.description": "API द्वारे संभाषणांवर लेबल लावा आणि काढा. लेबल पाहण्यासाठी फक्त “वाचा” पुरेसे आहे."
 }

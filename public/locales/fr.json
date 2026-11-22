@@ -2590,5 +2590,7 @@
 	"label.changeFailed": "Impossible de modifier le libellé.",
 	"label.delete": "Supprimer le libellé",
 	"label.deleteConfirm": "Supprimer le libellé {name} ? Ses conversations restent où elles sont.",
-	"label.empty": "Aucune conversation avec ce libellé"
+	"label.empty": "Aucune conversation avec ce libellé",
+	"apiKeys.labelsWrite.label": "Gérer les libellés",
+	"apiKeys.labelsWrite.description": "Ajouter et retirer des libellés sur les conversations via l’API. Pour les lire, « Lecture » suffit."
 }

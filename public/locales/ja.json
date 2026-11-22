@@ -2556,5 +2556,7 @@
 	"label.changeFailed": "ラベルを変更できませんでした。",
 	"label.delete": "ラベルを削除",
 	"label.deleteConfirm": "ラベル「{name}」を削除しますか？スレッドはそのまま残ります。",
-	"label.empty": "このラベルの付いたスレッドはありません"
+	"label.empty": "このラベルの付いたスレッドはありません",
+	"apiKeys.labelsWrite.label": "ラベルの管理",
+	"apiKeys.labelsWrite.description": "APIでスレッドにラベルを付けたり外したりします。ラベルの閲覧には「読み取り」だけが必要です。"
 }
