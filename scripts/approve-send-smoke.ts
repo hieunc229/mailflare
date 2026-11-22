@@ -137,15 +137,41 @@ await db.update(agentSendApprovals).set({ status: "cancelled" }).where(eq(agentS
 const cancelled = await approveAgentSend(env, principal(ownKeyId), { mailboxId, approvalId: requestE.approvalId });
 check("a cancelled request returns its status, not an error", cancelled.ok && cancelled.status === "cancelled" && deliveries.length === 1);
 
-// 7. Audit: the approval, the key, a timestamp and the resulting message id.
+// 6c. Two pending approvals for one draft can coexist; the partial unique index lets only one be
+// claimed. With the first already in flight, approving the second is refused cleanly, never sent.
+const draftF = await agentDraft("f");
+const requestF1 = await requestAgentSend(env, user as never, draftF, 1, ownKeyId);
+const requestF2 = await requestAgentSend(env, user as never, draftF, 1, ownKeyId);
+await db.update(agentSendApprovals).set({ status: "claimed", claimedAt: new Date() }).where(eq(agentSendApprovals.id, requestF1.approvalId));
+const secondClaim = await approveAgentSend(env, principal(ownKeyId), { mailboxId, approvalId: requestF2.approvalId });
+check("a second approval's claim is refused while the first is in flight", !secondClaim.ok && /delivery already in progress/.test(secondClaim.error) && !/UNIQUE|Failed query/i.test(secondClaim.error));
+check("the refused approval stays pending", (await approvalRow(requestF2.approvalId)).status === "pending");
+check("the in-flight approval and deliveries are untouched", (await approvalRow(requestF1.approvalId)).status === "claimed" && deliveries.length === 1);
+
+// 7. Audit: every call, released or refused, writes who asked, on which approval, and the outcome.
 const auditRows = await db.select().from(auditLogs).where(eq(auditLogs.action, "email.approve_send"));
-const auditForA = auditRows.map((row) => ({ row, metadata: JSON.parse(row.metadata ?? "{}") as Record<string, unknown> }))
-	.filter(({ metadata }) => metadata.approvalId === requestA.approvalId);
+const audited = auditRows.map((row) => ({ row, metadata: JSON.parse(row.metadata ?? "{}") as Record<string, unknown> }));
+const auditForA = audited.filter(({ metadata }) => metadata.approvalId === requestA.approvalId);
+const sentAudits = auditForA.filter(({ metadata }) => metadata.status === "queued");
 check("approval is audited", auditForA.length >= 1);
 check("audit names the key id", auditForA.every(({ metadata }) => metadata.keyId === ownKeyId));
-check("audit names the message id", auditForA.every(({ metadata }) => metadata.messageId === approvedMessageId && metadata.status === "queued"));
-check("audit actor and timestamp", auditForA.every(({ row }) => row.actorUserId === userId && row.mailboxId === mailboxId && row.messageId === approvedMessageId && row.createdAt instanceof Date && Math.abs(row.createdAt.getTime() - Date.now()) < 120_000));
-check("expired attempt is audited", auditRows.some((row) => JSON.parse(row.metadata ?? "{}").approvalId === requestD.approvalId));
+check("audit names the message id", sentAudits.length >= 1 && sentAudits.every(({ metadata }) => metadata.messageId === approvedMessageId));
+check("audit actor and timestamp", sentAudits.every(({ row }) => row.actorUserId === userId && row.mailboxId === mailboxId && row.messageId === approvedMessageId && row.createdAt instanceof Date && Math.abs(row.createdAt.getTime() - Date.now()) < 120_000));
+const auditedStatus = (approvalId: string, status: string) => audited.some(({ metadata }) => metadata.approvalId === approvalId && metadata.status === status);
+check("flag-off refusal is audited", auditedStatus(requestA.approvalId, "permission_denied"));
+check("other-key refusal is audited", auditedStatus(requestB.approvalId, "not_found"));
+check("UI-request refusal is audited", auditedStatus(requestC.approvalId, "not_found"));
+check("expired attempt is audited", auditedStatus(requestD.approvalId, "expired"));
+check("refused second claim is audited", auditedStatus(requestF2.approvalId, "error"));
+
+// 8. Honest delivery status: a send that failed or was cancelled back to draft reports its real
+// state on the next call, never a fabricated `sent`.
+await db.update(messages).set({ status: "failed" }).where(eq(messages.id, approvedMessageId!));
+const failedStatus = await approveAgentSend(env, principal(ownKeyId), { mailboxId, approvalId: requestA.approvalId });
+check("a failed send reports failed, not sent", failedStatus.ok && failedStatus.status === "failed");
+await db.update(messages).set({ status: "draft" }).where(eq(messages.id, approvedMessageId!));
+const draftBack = await approveAgentSend(env, principal(ownKeyId), { mailboxId, approvalId: requestA.approvalId });
+check("a cancelled-back-to-draft send reports draft, not sent", draftBack.ok && draftBack.status === "draft");
 
 await external.sqlExecutor.close?.();
 const failed = checks.filter(([, ok]) => !ok);

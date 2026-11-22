@@ -116,7 +116,7 @@ async function setUp(t) {
 	return { env, sqlite, deliveries, queueGate, approvalId: request.approvalId };
 }
 
-test("a late expiry write cannot clobber a claim that won: one delivery, one message, one approval", async (t) => {
+test("a claim that lands past its deadline cannot take the request: expiry wins, nothing sends", async (t) => {
 	const { env, sqlite, deliveries, queueGate, approvalId } = await setUp(t);
 
 	// 1. A confirmation reads the still-pending request before its deadline, then stops before its claim.
@@ -136,36 +136,28 @@ test("a late expiry write cannot clobber a claim that won: one delivery, one mes
 	);
 	await globalThis.__approvalGates.expire.arrived;
 
-	// 4. The pre-deadline confirmation wins the claim and the send pipeline starts.
+	// 4. The pre-deadline claim now runs, but the claim itself carries the deadline: it cannot take an
+	//    expired request, so the early confirmation just reports the state it found.
 	globalThis.__approvalGates.claim.open();
-	await waitFor(() => approvalStatus(sqlite, approvalId)?.status === "claimed", "the claim");
-	await waitFor(() => queuedMessages(sqlite).length === 1, "the queued message");
+	const early = await preDeadline;
+	assert.equal(early.status, "pending");
+	assert.equal(approvalStatus(sqlite, approvalId).status, "pending");
 
-	// 5. The expiry write now runs against a claimed row: it must not touch it, and the late confirmation
-	//    must report the state it found instead of throwing or expiring the request.
+	// 5. The expiry write then lands and wins: the late confirmation throws the reason, the request is
+	//    expired, and nothing was ever queued or delivered.
 	globalThis.__approvalGates.expire.open();
 	const late = await postDeadline;
-	assert.equal(late.error, undefined, `late confirmation failed: ${late.error}`);
-	assert.equal(late.value.status, "claimed");
-	assert.equal(sqlite.prepare("SELECT status FROM agent_send_approvals WHERE id = ?").get(approvalId).status, "claimed");
-	// The draft is still held: no second approval can be minted while this send is in flight.
-	await assert.rejects(app.requestAgentSend(env, owner, "draft-1", 1), /delivery already in progress/);
+	assert.match(late.error?.message ?? `${late.error}`, /Approval expired/);
+	assert.equal(approvalStatus(sqlite, approvalId).status, "expired");
+	assert.equal(deliveries.length, 0);
+	assert.equal(queuedMessages(sqlite).length, 0);
 
-	// 6. The send finishes: exactly one delivery, exactly one message, one approval row.
+	// 6. `expired` never entered the delivery index, so the draft is released for a fresh request.
+	const next = await app.requestAgentSend(env, owner, "draft-1", 1);
+	assert.equal(next.status, "pending_approval");
+	assert.equal(sqlite.prepare("SELECT count(*) AS n FROM agent_send_approvals").get().n, 2);
 	queueGate.open();
-	const sent = await preDeadline;
-	assert.equal(sent.status, "sent");
-	assert.equal(deliveries.length, 1);
-	assert.equal(deliveries[0].messageId, sent.messageId);
-	const queued = queuedMessages(sqlite);
-	assert.equal(queued.length, 1);
-	assert.equal(queued[0].id, sent.messageId);
-	const decided = approvalStatus(sqlite, approvalId);
-	assert.equal(decided.status, "sent");
-	assert.equal(decided.message_id, sent.messageId);
-	assert.equal(sqlite.prepare("SELECT count(*) AS n FROM agent_send_approvals").get().n, 1);
-	// The draft left Drafts with the send, so a re-request cannot reach the delivery guard at all.
-	await assert.rejects(app.requestAgentSend(env, owner, "draft-1", 1), /Draft not found/);
+	assert.equal(deliveries.length, 0);
 });
 
 test("an unclaimed request past its deadline is still expired, never sent", async (t) => {
