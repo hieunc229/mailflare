@@ -1,6 +1,7 @@
-import { and, eq, inArray } from "drizzle-orm";
+import { and, eq, gte, inArray } from "drizzle-orm";
 import { getDb } from "@/db";
 import { agentDraftMetadata, agentSendApprovals, contacts, messageAttachments, messages } from "@/db/schema";
+import { isUniqueConstraintError } from "@/lib/database-errors";
 import { getEmailAddress, splitEmailAddressList } from "@/lib/email/address";
 import { getAuthorizedSenderAddress } from "@/lib/email/sender";
 import { loadMessageAttachmentContents } from "@/lib/email/attachments";
@@ -105,7 +106,18 @@ export async function confirmAgentSend(env: CloudflareEnv, user: SessionUser, ap
 	const current = await snapshot(env, draft, metadata.scheduledAt);
 	if (metadata.revision !== approval.revision || current.hash !== approval.payloadHash) throw new Error("Draft changed; review it again");
 	if (metadata.scheduledAt && metadata.scheduledAt.getTime() <= Date.now()) throw new Error("Scheduled time has passed; update the draft before confirming");
-	const claimed = await db.update(agentSendApprovals).set({ status: "claimed", claimedAt: new Date() }).where(and(eq(agentSendApprovals.id, approvalId), eq(agentSendApprovals.status, "pending"))).returning({ id: agentSendApprovals.id });
+	let claimed: { id: string }[];
+	try {
+		// The deadline rides the claim: an approval that expired between the read above and this write
+		// cannot be taken even when the maintenance job has not marked it `expired` yet.
+		claimed = await db.update(agentSendApprovals).set({ status: "claimed", claimedAt: new Date() }).where(and(eq(agentSendApprovals.id, approvalId), eq(agentSendApprovals.status, "pending"), gte(agentSendApprovals.expiresAt, new Date()))).returning({ id: agentSendApprovals.id });
+	} catch (error) {
+		// Two pending approvals for one draft can coexist; when the first is already in flight, this
+		// claim lands on the partial unique delivery index (agent_send_approvals_delivery_idx). Answer
+		// like the request path above, not with driver wording.
+		if (isUniqueConstraintError(error)) throw new Error("This draft has a delivery already in progress or awaiting reconciliation");
+		throw error;
+	}
 	if (!claimed.length) return getAgentSendRequest(env, user, approvalId);
 	try {
 		const result = await sendEmail(env, {
