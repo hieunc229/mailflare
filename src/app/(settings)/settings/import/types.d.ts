@@ -19,7 +19,16 @@ export type ImportSourceOption = {
 	system?: boolean;
 };
 
-export type ImportTab = "file" | "imap" | "takeout";
+export type ImportTab = "file" | "imap" | "outlook" | "takeout";
+
+export type OutlookSession = {
+	configured: boolean;
+	redirectUri: string;
+	tenant: string;
+	configError: string | null;
+	connected: boolean;
+	username: string | null;
+};
 
 export type ImportSourceItem = {
 	id: string;

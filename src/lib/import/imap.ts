@@ -1,5 +1,6 @@
 import type { ImportMessageInput } from "./types";
 import type { ImapImportInput } from "./imap-types";
+import { xoauth2InitialResponse } from "./outlook-utils";
 import {
 	assertSafeImapHost,
 	encodeImapMailboxName,
@@ -61,6 +62,29 @@ class ImapConnection {
 	async readGreeting(): Promise<void> {
 		const line = await this.readLine();
 		if (!line.startsWith("* OK")) throw new Error("IMAP server did not send an OK greeting");
+	}
+
+	/**
+	 * SASL XOAUTH2, the Outlook/Microsoft 365 IMAP login.
+	 * Microsoft's sample waits for the `+` challenge and then sends the bearer token.
+	 * A second `+` means the token was refused; an empty line asks for the tagged NO.
+	 */
+	async authenticateXoauth2(username: string, accessToken: string): Promise<void> {
+		const tag = this.nextTag();
+		await this.write(`${tag} AUTHENTICATE XOAUTH2\r\n`);
+		let sentToken = false;
+		while (true) {
+			const line = await this.readLine();
+			if (line.startsWith("+")) {
+				await this.write(sentToken ? "\r\n" : `${xoauth2InitialResponse(username, accessToken)}\r\n`);
+				sentToken = true;
+				continue;
+			}
+			if (isTaggedCompletion(line, tag)) {
+				if (!line.toUpperCase().includes(" OK")) throw new Error(`IMAP command failed: ${line}`);
+				return;
+			}
+		}
 	}
 
 	async command(command: string): Promise<string[]> {
@@ -206,6 +230,14 @@ export type ImapFetchResult = {
 	nextOffset: number | null;
 };
 
+async function login(imap: ImapConnection, input: { username: string; password: string; accessToken?: string }): Promise<void> {
+	if (input.accessToken) {
+		await imap.authenticateXoauth2(input.username, input.accessToken);
+		return;
+	}
+	await imap.command(`LOGIN ${quoteImapString(input.username)} ${quoteImapString(input.password)}`);
+}
+
 export async function fetchImapMessages(input: ImapImportInput): Promise<ImapFetchResult> {
 	assertSafeImapHost(input.host);
 	const connect = await getCloudflareSocketConnect();
@@ -216,7 +248,7 @@ export async function fetchImapMessages(input: ImapImportInput): Promise<ImapFet
 	const imap = new ImapConnection(socket);
 	try {
 		await imap.readGreeting();
-		await imap.command(`LOGIN ${quoteImapString(input.username)} ${quoteImapString(input.password)}`);
+		await login(imap, input);
 		await imap.command(`EXAMINE ${quoteImapString(encodeImapMailboxName(input.folder))}`);
 		const searchLines = await imap.command("UID SEARCH ALL");
 		const batch = selectImapUidBatch(searchLines.flatMap(parseSearchUids), input.limit, input.offset);
@@ -258,7 +290,7 @@ export async function listImapFolders(input: Omit<ImapImportInput, "folder" | "l
 	const imap = new ImapConnection(socket);
 	try {
 		await imap.readGreeting();
-		await imap.command(`LOGIN ${quoteImapString(input.username)} ${quoteImapString(input.password)}`);
+		await login(imap, input);
 		const lines = await imap.command('LIST "" "*"');
 		await imap.command("LOGOUT").catch(() => undefined);
 		return Array.from(new Set(lines.map((line, index) => parseListMailboxName(line, lines[index + 1])).filter((name): name is string => !!name)));

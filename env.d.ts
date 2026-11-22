@@ -82,6 +82,15 @@ interface CloudflareEnv {
 	CF_ACCOUNT_ID?: string;
 	/** Public origin of this install (https://mail.example.com) when it sits behind a proxy. */
 	APP_URL?: string;
+	/**
+	 * Entra app used to import Outlook mail with OAuth (IMAP XOAUTH2). Leave unset to paste the
+	 * client id on the import page. MICROSOFT_CLIENT_SECRET is required only for a Web platform;
+	 * a public client (Mobile and desktop redirect URI) leaves it empty. MICROSOFT_TENANT defaults
+	 * to "common" (work and personal accounts).
+	 */
+	MICROSOFT_CLIENT_ID?: string;
+	MICROSOFT_CLIENT_SECRET?: string;
+	MICROSOFT_TENANT?: string;
 	/** Node runtime only: set when a reverse proxy terminates TLS, so x-forwarded-proto is trusted. */
 	TRUST_PROXY?: string;
 	/** VAPID public key (uncompressed P-256 point, URL-safe base64) for Web Push. */

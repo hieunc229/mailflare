@@ -1,7 +1,7 @@
 "use client";
 
 import type { FormEvent } from "react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Folder, Server, Upload } from "@/components/icons";
 import { useLanguage } from "@/components/language-provider";
 import type { TranslationKey } from "@/lib/i18n/types";
@@ -20,6 +20,7 @@ import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
 import { ImportJobs } from "@/components/settings/import-jobs";
 import { importMessageFiles } from "@/components/settings/import-messages-utils";
+import { OutlookImport } from "@/components/settings/outlook-import";
 import { TakeoutImport } from "@/components/settings/takeout-import";
 import type {
   ImapFormState,
@@ -83,6 +84,7 @@ export default function SettingsImportPage() {
   const [imapError, setImapError] = useState<string | null>(null);
   const [imapLoading, setImapLoading] = useState(false);
   const [imapProgress, setImapProgress] = useState<ImportProgress | null>(null);
+  const [outlookNotice, setOutlookNotice] = useState<string | null>(null);
   const selectedSources = useMemo(
     () => getSelectedImportSources(selectedSections),
     [selectedSections],
@@ -92,6 +94,18 @@ export default function SettingsImportPage() {
     selectedSources.length > 0
       ? selectedSources.map(sourceLabel).join(", ")
       : t("importPage.selectSections");
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("source") !== "outlook" && !params.get("outlook")) return;
+    setActiveTab("outlook");
+    if (params.get("outlook") === "error") setOutlookNotice(params.get("detail"));
+    params.delete("outlook");
+    params.delete("detail");
+    params.delete("source");
+    const next = params.toString();
+    window.history.replaceState(null, "", next ? `${window.location.pathname}?${next}` : window.location.pathname);
+  }, []);
 
   function toggleSection(section: ImportSourceSection, checked: boolean) {
     setSelectedSections((current) => {
@@ -223,6 +237,7 @@ export default function SettingsImportPage() {
               >
                 <option value="file">{t("importPage.backupFile")}</option>
                 <option value="imap">{t("importPage.imap")}</option>
+                <option value="outlook">{t("importPage.outlook")}</option>
                 <option value="takeout">{t("importPage.takeout")}</option>
               </Select>
             </div>
@@ -332,6 +347,13 @@ export default function SettingsImportPage() {
                   )}
                 </form>
               </>
+            ) : activeTab === "outlook" ? (
+              <OutlookImport
+                mailboxId={selectedMailbox?.id}
+                selectedSources={selectedSources}
+                notice={outlookNotice}
+                onStarted={() => setJobsRefresh((count) => count + 1)}
+              />
             ) : (
               <>
                 <form onSubmit={onImapSubmit} className="space-y-4">

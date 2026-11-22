@@ -50,8 +50,9 @@ const { fetchImapMessages, parseFetchFlags } = await import(pathToFileURL(join(o
 
 const CHUNK = 16 * 1024;
 
-function startServer(messages, { deferFetchOks = false } = {}) {
+function startServer(messages, { deferFetchOks = false, xoauth = false } = {}) {
 	const commands = [];
+	let xoauthTag = null;
 	globalThis.__imapConnect = () => {
 		let controller;
 		const readable = new ReadableStream({
@@ -72,8 +73,18 @@ function startServer(messages, { deferFetchOks = false } = {}) {
 				const deferred = [];
 				for (const line of Buffer.from(chunk).toString().split("\r\n").filter(Boolean)) {
 					commands.push(line);
+					if (xoauthTag) {
+						send(`${xoauthTag} OK done\r\n`);
+						xoauthTag = null;
+						continue;
+					}
 					const [tag, ...rest] = line.split(" ");
 					const command = rest.join(" ");
+					if (xoauth && command === "AUTHENTICATE XOAUTH2") {
+						xoauthTag = tag;
+						send("+ \r\n");
+						continue;
+					}
 					if (command.startsWith("UID SEARCH")) send(`* SEARCH ${Object.keys(messages).join(" ")}\r\n`);
 					const sizes = command.match(/^UID FETCH ([\d,]+) \(RFC822\.SIZE\)/);
 					if (sizes) {
@@ -155,6 +166,15 @@ test("large messages arrive intact and a batch stops at the byte budget", async 
 	const second = await fetchImapMessages({ ...baseInput, offset: first.nextOffset });
 	assert.deepEqual(second.messages.map((item) => item.filename), ["INBOX-1.eml"]);
 	assert.equal(second.nextOffset, null);
+});
+
+test("outlook login sends the bearer token after the XOAUTH2 challenge", async () => {
+	const commands = startServer({ 1: { body: message(80, 65), flags: "\\Seen" } }, { xoauth: true });
+	const result = await fetchImapMessages({ ...baseInput, password: "", accessToken: "token" });
+	assert.equal(result.messages.length, 1);
+	assert.equal(result.messages[0].read, true);
+	assert.equal(commands[0], "A0001 AUTHENTICATE XOAUTH2");
+	assert.equal(commands[1], Buffer.from("user=u\u0001auth=Bearer token\u0001\u0001").toString("base64"));
 });
 
 test("pipelined fetch replies are matched by UID when the server answers out of step", async () => {
