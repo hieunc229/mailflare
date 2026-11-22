@@ -2545,5 +2545,16 @@
 	"invite.wasPrev": "(was {action})",
 	"invite.changeHint": "Send again to change your answer",
 	"invite.undo": "Undo",
-	"update.availableCommits.one": "{count} new change is available (latest {target})."
+	"update.availableCommits.one": "{count} new change is available (latest {target}).",
+	"navigation.labels": "Nhãn",
+	"navigation.createLabel": "Tạo nhãn",
+	"navigation.noLabels": "Chưa có nhãn nào",
+	"label.description": "Nhãn đánh dấu một cuộc hội thoại mà không di chuyển nó.",
+	"label.name": "Tên nhãn",
+	"label.example": "Đơn hàng",
+	"label.createFailed": "Không thể tạo nhãn.",
+	"label.changeFailed": "Không thể thay đổi nhãn.",
+	"label.delete": "Xóa nhãn",
+	"label.deleteConfirm": "Xóa nhãn {name}? Các cuộc hội thoại vẫn ở nguyên chỗ cũ.",
+	"label.empty": "Không có cuộc hội thoại nào có nhãn này"
 }

@@ -35,7 +35,7 @@ export async function conversationForUser(db: AppDatabase, user: SessionUser, me
 		.select({ id: messages.id })
 		.from(messages)
 		.where(and(eq(messages.mailboxId, message.mailboxId), eq(messages.threadId, threadKey)));
-	return { mailboxId: message.mailboxId, threadKey, threadKeys: [...new Set([threadKey, message.id, ...members.map((member) => member.id)])], messageId: message.id, canManage: access.canManage };
+	return { mailboxId: message.mailboxId, threadKey, threadKeys: [...new Set([threadKey, message.id, ...members.map((member) => member.id)])], messageId: message.id, canManage: access.canManage, canChange: access.canSendOnBehalf };
 }
 
 /** Every note of the conversation, oldest first. */

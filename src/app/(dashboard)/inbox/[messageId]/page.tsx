@@ -23,6 +23,7 @@ import { PreviousMessage } from "@/components/previous-message";
 import { ConversationThread } from "@/components/messages/conversation-thread";
 import { getConversationSender } from "@/components/messages/conversation-thread-utils";
 import { ConversationNotes } from "@/components/messages/conversation-notes";
+import { ConversationLabels } from "@/components/labels/conversation-labels";
 import { ConversationNotesProvider } from "@/components/messages/conversation-notes-context";
 import { MessageDetailNavigation } from "@/components/messages/message-detail-navigation";
 import { MessageReadingHeaderButton } from "@/components/messages/message-reading-header-button";
@@ -355,6 +356,8 @@ function MessageDetailContent({ messageId }: { messageId: string }) {
     <div ref={scrollRef} onScroll={handleScroll} className="h-full overflow-y-auto overscroll-contain scrollbar-gutter-stable flex-1 min-h-0">
       <h1 className={clsx("sm:pl-[78px] px-4 pb-2 pt-2 text-2xl text-neutral-900 sm:pr-6")} title={message.subject ?? t("list.noSubject")}>
         {message.subject ?? t("list.noSubject")}
+        {/* A label is a mark on the conversation, so it sits by the subject rather than in the notes. */}
+        <ConversationLabels messageId={message.id} className="ml-2 align-middle" />
       </h1>
       <MessageInviteCard key={message.id} messageId={message.id} hasCalendarAttachment={!!findInviteAttachment(attachments)} className={clsx("sm:ml-[78px] mx-4 mb-3 sm:mr-6")} />
       <ConversationNotes

@@ -2559,5 +2559,16 @@
 	"invite.calendarOnly": "Calendar only",
 	"invite.wasPrev": "(was {action})",
 	"invite.changeHint": "Send again to change your answer",
-	"invite.undo": "Undo"
+	"invite.undo": "Undo",
+	"navigation.labels": "ป้ายกำกับ",
+	"navigation.createLabel": "สร้างป้ายกำกับ",
+	"navigation.noLabels": "ยังไม่มีป้ายกำกับ",
+	"label.description": "ป้ายกำกับใช้ทำเครื่องหมายการสนทนาโดยไม่ย้ายที่",
+	"label.name": "ชื่อป้ายกำกับ",
+	"label.example": "คำสั่งซื้อ",
+	"label.createFailed": "สร้างป้ายกำกับไม่สำเร็จ",
+	"label.changeFailed": "เปลี่ยนป้ายกำกับไม่สำเร็จ",
+	"label.delete": "ลบป้ายกำกับ",
+	"label.deleteConfirm": "ลบป้ายกำกับ {name} หรือไม่ การสนทนาจะยังอยู่ที่เดิม",
+	"label.empty": "ไม่มีการสนทนาที่มีป้ายกำกับนี้"
 }

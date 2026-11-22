@@ -2563,5 +2563,16 @@
 	"invite.calendarOnly": "Calendar only",
 	"invite.wasPrev": "(was {action})",
 	"invite.changeHint": "Send again to change your answer",
-	"invite.undo": "Undo"
+	"invite.undo": "Undo",
+	"navigation.labels": "Labels",
+	"navigation.createLabel": "Label maken",
+	"navigation.noLabels": "Nog geen labels",
+	"label.description": "Labels markeren een gesprek zonder het te verplaatsen.",
+	"label.name": "Labelnaam",
+	"label.example": "Bestellingen",
+	"label.createFailed": "Het label kon niet worden gemaakt.",
+	"label.changeFailed": "Het label kon niet worden gewijzigd.",
+	"label.delete": "Label verwijderen",
+	"label.deleteConfirm": "Label {name} verwijderen? De gesprekken blijven waar ze zijn.",
+	"label.empty": "Geen gesprekken met dit label"
 }

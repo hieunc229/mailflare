@@ -2545,5 +2545,16 @@
 	"invite.wasPrev": "(was {action})",
 	"invite.changeHint": "Send again to change your answer",
 	"invite.undo": "Undo",
-	"update.availableCommits.one": "{count} new change is available (latest {target})."
+	"update.availableCommits.one": "{count} new change is available (latest {target}).",
+	"navigation.labels": "ラベル",
+	"navigation.createLabel": "ラベルを作成",
+	"navigation.noLabels": "ラベルはまだありません",
+	"label.description": "ラベルはスレッドを移動せずに目印を付けます。",
+	"label.name": "ラベル名",
+	"label.example": "注文",
+	"label.createFailed": "ラベルを作成できませんでした。",
+	"label.changeFailed": "ラベルを変更できませんでした。",
+	"label.delete": "ラベルを削除",
+	"label.deleteConfirm": "ラベル「{name}」を削除しますか？スレッドはそのまま残ります。",
+	"label.empty": "このラベルの付いたスレッドはありません"
 }

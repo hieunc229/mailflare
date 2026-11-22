@@ -2563,5 +2563,16 @@
 	"invite.calendarOnly": "Calendar only",
 	"invite.wasPrev": "(was {action})",
 	"invite.changeHint": "Send again to change your answer",
-	"invite.undo": "Undo"
+	"invite.undo": "Undo",
+	"navigation.labels": "લેબલ",
+	"navigation.createLabel": "લેબલ બનાવો",
+	"navigation.noLabels": "હજુ સુધી કોઈ લેબલ નથી",
+	"label.description": "લેબલ વાતચીતને ખસેડ્યા વિના ચિહ્નિત કરે છે.",
+	"label.name": "લેબલનું નામ",
+	"label.example": "ઓર્ડર",
+	"label.createFailed": "લેબલ બનાવી શકાયું નહીં.",
+	"label.changeFailed": "લેબલ બદલી શકાયું નહીં.",
+	"label.delete": "લેબલ કાઢી નાખો",
+	"label.deleteConfirm": "{name} લેબલ કાઢી નાખીએ? તેની વાતચીતો જ્યાં છે ત્યાં જ રહેશે.",
+	"label.empty": "આ લેબલ સાથે કોઈ વાતચીત નથી"
 }

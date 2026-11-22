@@ -2563,5 +2563,16 @@
 	"invite.calendarOnly": "Calendar only",
 	"invite.wasPrev": "(was {action})",
 	"invite.changeHint": "Send again to change your answer",
-	"invite.undo": "Undo"
+	"invite.undo": "Undo",
+	"navigation.labels": "Lebo",
+	"navigation.createLabel": "Unda lebo",
+	"navigation.noLabels": "Bado hakuna lebo",
+	"label.description": "Lebo huweka alama kwenye mazungumzo bila kuyahamisha.",
+	"label.name": "Jina la lebo",
+	"label.example": "Maagizo",
+	"label.createFailed": "Imeshindwa kuunda lebo.",
+	"label.changeFailed": "Imeshindwa kubadilisha lebo.",
+	"label.delete": "Futa lebo",
+	"label.deleteConfirm": "Futa lebo {name}? Mazungumzo yake yatabaki yalipo.",
+	"label.empty": "Hakuna mazungumzo yenye lebo hii"
 }

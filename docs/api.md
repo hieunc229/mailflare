@@ -244,6 +244,7 @@ Removing the last passkey (`DELETE /api/settings/passkeys/:id`) is allowed when 
 | `from:maya`, `to:sam`, `subject:report` | restrict a term to one field (`to:` covers Cc) |
 | `has:attachment` | at least one non-inline attachment |
 | `is:unread`, `is:read`, `is:starred` | flags |
+| `label:orders`, `label:"to do"` | conversations carrying the mailbox's label of that name (any case) |
 | `after:2026-09-01`, `before:2026-09-30` | date bounds (midnight in the account's time zone, or the `X-Time-Zone` header when none is saved; `before` exclusive) |
 
 Terms combine with AND. Admins can check or rebuild the index with `GET` / `POST /api/admin/search-index`; triggers keep it current, so a rebuild is only needed after restoring a backup made before the index existed.

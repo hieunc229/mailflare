@@ -50,6 +50,7 @@ import {
   moveMessagesToSystemFolder,
 } from "./dashboard-nav-utils";
 import { NavSectionHeader, useSectionOpen } from "./nav-section-header";
+import { NavLabels } from "./labels/nav-labels";
 import { ReorderableList } from "./reorderable-list";
 import { readStorage, writeStorage } from "./reorderable-list-utils";
 import { SidebarFooter } from "./sidebar-footer";
@@ -375,6 +376,7 @@ export function DashboardNav({ className }: { className?: string }) {
         }]}
       />}
       {foldersSectionOpen && foldersOverflow && <NavToggle expanded={foldersOpen} onClick={toggleFolders} />}
+      <NavLabels minimal={minimal} />
     </SidebarScaffold>
   );
 }

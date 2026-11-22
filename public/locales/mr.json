@@ -2563,5 +2563,16 @@
 	"invite.calendarOnly": "Calendar only",
 	"invite.wasPrev": "(was {action})",
 	"invite.changeHint": "Send again to change your answer",
-	"invite.undo": "Undo"
+	"invite.undo": "Undo",
+	"navigation.labels": "लेबल",
+	"navigation.createLabel": "लेबल तयार करा",
+	"navigation.noLabels": "अद्याप कोणतेही लेबल नाही",
+	"label.description": "लेबल संभाषण न हलवता त्यावर खूण करतात.",
+	"label.name": "लेबलचे नाव",
+	"label.example": "ऑर्डर",
+	"label.createFailed": "लेबल तयार करता आले नाही.",
+	"label.changeFailed": "लेबल बदलता आले नाही.",
+	"label.delete": "लेबल हटवा",
+	"label.deleteConfirm": "{name} लेबल हटवायचे? त्याची संभाषणे जिथे आहेत तिथेच राहतील.",
+	"label.empty": "या लेबलचे कोणतेही संभाषण नाही"
 }

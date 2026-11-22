@@ -2545,5 +2545,16 @@
 	"invite.wasPrev": "(was {action})",
 	"invite.changeHint": "Send again to change your answer",
 	"invite.undo": "Undo",
-	"update.availableCommits.one": "{count} new change is available (latest {target})."
+	"update.availableCommits.one": "{count} new change is available (latest {target}).",
+	"navigation.labels": "Label",
+	"navigation.createLabel": "Buat label",
+	"navigation.noLabels": "Belum ada label",
+	"label.description": "Label menandai percakapan tanpa memindahkannya.",
+	"label.name": "Nama label",
+	"label.example": "Pesanan",
+	"label.createFailed": "Label tidak dapat dibuat.",
+	"label.changeFailed": "Label tidak dapat diubah.",
+	"label.delete": "Hapus label",
+	"label.deleteConfirm": "Hapus label {name}? Percakapannya tetap di tempatnya.",
+	"label.empty": "Tidak ada percakapan dengan label ini"
 }

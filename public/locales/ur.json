@@ -2563,5 +2563,16 @@
 	"invite.calendarOnly": "Calendar only",
 	"invite.wasPrev": "(was {action})",
 	"invite.changeHint": "Send again to change your answer",
-	"invite.undo": "Undo"
+	"invite.undo": "Undo",
+	"navigation.labels": "لیبلز",
+	"navigation.createLabel": "لیبل بنائیں",
+	"navigation.noLabels": "ابھی تک کوئی لیبل نہیں",
+	"label.description": "لیبل گفتگو کو منتقل کیے بغیر اس پر نشان لگاتے ہیں۔",
+	"label.name": "لیبل کا نام",
+	"label.example": "آرڈرز",
+	"label.createFailed": "لیبل نہیں بنایا جا سکا۔",
+	"label.changeFailed": "لیبل تبدیل نہیں کیا جا سکا۔",
+	"label.delete": "لیبل حذف کریں",
+	"label.deleteConfirm": "لیبل {name} حذف کریں؟ اس کی گفتگوئیں اپنی جگہ پر رہیں گی۔",
+	"label.empty": "اس لیبل والی کوئی گفتگو نہیں"
 }

@@ -4,7 +4,8 @@ import { createElement, Fragment, useCallback, useLayoutEffect, useMemo, useRef,
 import { confirmDestructive } from "@/components/ui/confirm-dialog";
 import type { ReactNode } from "react";
 import { useRouter } from "next/navigation";
-import { Archive, ArchiveRestore, Ban, BellOff, Clock, FileCode2, Forward, Mail, MailOpen, MoreVertical, Note, Reply, ReplyAll, ShieldAlert, ShieldCheck, Trash2 } from "@/components/icons";
+import { Archive, ArchiveRestore, Ban, BellOff, Clock, FileCode2, Forward, Mail, MailOpen, MoreVertical, Note, Reply, ReplyAll, ShieldAlert, ShieldCheck, Tag, Trash2 } from "@/components/icons";
+import { MessageLabelsDialog } from "@/components/labels/message-labels-dialog";
 import { useLanguage } from "@/components/language-provider";
 import { useCompose } from "@/components/compose/compose-context";
 import { MessageSourceDialog } from "@/components/messages/message-source-dialog";
@@ -69,6 +70,7 @@ export function MessageActions({
 	const actionsRef = useRef<HTMLDivElement>(null);
 	const [sourceOpen, setSourceOpen] = useState(false);
 	const [snoozeOpen, setSnoozeOpen] = useState(false);
+	const [labelsOpen, setLabelsOpen] = useState(false);
 
 	const runAction = useCallback(async (action: BulkMessageAction, options: { undo?: boolean } = {}) => {
 		setPendingAction(action);
@@ -356,6 +358,15 @@ export function MessageActions({
 			group: "secondary",
 		});
 	}
+	if (mailboxId) {
+		inlineActions.push({
+			id: "labels",
+			label: t("navigation.labels"),
+			icon: <Tag size={iconSize} />,
+			onSelect: () => setLabelsOpen(true),
+			group: "secondary",
+		});
+	}
 	inlineActions.push({
 		id: "reply",
 		label: t("message.reply"),
@@ -507,6 +518,7 @@ export function MessageActions({
 
 			<MessageSourceDialog messageId={messageId} open={sourceOpen} onOpenChange={setSourceOpen} />
 			<MessageSnoozeDialog messageId={messageId} open={snoozeOpen} onOpenChange={setSnoozeOpen} />
+			{mailboxId && <MessageLabelsDialog messageId={messageId} mailboxId={mailboxId} open={labelsOpen} onOpenChange={setLabelsOpen} />}
 		</div>
 	);
 }

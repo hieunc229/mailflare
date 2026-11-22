@@ -2579,5 +2579,16 @@
 	"invite.calendarOnly": "Calendar only",
 	"invite.wasPrev": "(was {action})",
 	"invite.changeHint": "Send again to change your answer",
-	"invite.undo": "Undo"
+	"invite.undo": "Undo",
+	"navigation.labels": "Libellés",
+	"navigation.createLabel": "Créer un libellé",
+	"navigation.noLabels": "Aucun libellé pour l’instant",
+	"label.description": "Les libellés marquent une conversation sans la déplacer.",
+	"label.name": "Nom du libellé",
+	"label.example": "Commandes",
+	"label.createFailed": "Impossible de créer le libellé.",
+	"label.changeFailed": "Impossible de modifier le libellé.",
+	"label.delete": "Supprimer le libellé",
+	"label.deleteConfirm": "Supprimer le libellé {name} ? Ses conversations restent où elles sont.",
+	"label.empty": "Aucune conversation avec ce libellé"
 }

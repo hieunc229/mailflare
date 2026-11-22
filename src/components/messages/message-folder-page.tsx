@@ -32,6 +32,7 @@ import { rememberOpenedUnreadMessage } from "./message-detail-navigation-utils";
 import { useConversationView } from "./use-conversation-view";
 import { OpenedIndicator } from "./message-open-status";
 import { MessageNotesPopover, NoteBadge } from "./message-notes-popover";
+import { LabelChips } from "@/components/labels/label-chips";
 import type { MessageFolderConfig, MessageFolderPageProps, MessageListRowProps, RowMessageAction } from "./types";
 import {
 	formatMessageListTimestamp,
@@ -241,6 +242,7 @@ function MessageListRowComponent({
 						className={`mt-1 block truncate text-sm ${unread ? "font-semibold text-neutral-900" : "text-neutral-700"
 							}`}
 					>
+						<LabelChips labels={message.labels} className="mr-1.5" />
 						{message.subject ?? t("list.noSubject")}
 					</span>
 					<span className="mt-0.5 block truncate text-xs leading-5 text-neutral-500">
@@ -320,6 +322,7 @@ function MessageListRowComponent({
 				<span className="w-11 shrink-0">
 					{message.noteCount ? <MessageNotesPopover messageId={message.id} count={message.noteCount} preview={message.notePreview} /> : null}
 				</span>
+				<LabelChips labels={message.labels} className="mr-2 max-w-[50%] overflow-hidden" />
 				<Link
 					href={href}
 					onClick={config.folder === "drafts" ? undefined : onMessageNavigate}
@@ -453,12 +456,16 @@ export function MessageFolderPage({
 		offset,
 		read: unreadOnly ? "unread" : "all",
 		group: grouped ? "thread" : undefined,
+		labelId: config.labelId,
 	}, !mailboxesLoading, config.folderId);
 	const { counts } = useMessageCounts(selectedMailbox?.id, !mailboxesLoading);
 	usePageLoading(mailboxesLoading || isLoading, true);
 	const headerIcons = config.headerIcons ?? [];
 	const hasActiveFilters = !!query.trim();
-	const folderCount = config.folderId
+	// A label view lists only part of its folder, so the folder count would overstate it.
+	const folderCount = config.labelId
+		? undefined
+		: config.folderId
 		? counts.customFolders[config.folderId]
 		: counts.folders[config.folder];
 	const titleTotal = folderCount?.total ?? total;
@@ -488,7 +495,7 @@ export function MessageFolderPage({
 		if (usesSharedListState) return;
 		setOffset(0);
 		setSelectedMessages([]);
-	}, [usesSharedListState, query, selectedMailbox?.id, config.folder, config.folderId, unreadOnly, grouped, setOffset, setSelectedMessages]);
+	}, [usesSharedListState, query, selectedMailbox?.id, config.folder, config.folderId, config.labelId, unreadOnly, grouped, setOffset, setSelectedMessages]);
 
 	const previousOffset = useRef(offset);
 	useEffect(() => {
@@ -508,12 +515,12 @@ export function MessageFolderPage({
 		if (mailboxesLoading) return;
 		document.title = formatEmailPageTitle({
 			location: title,
-			inbox: config.folder === "inbox" && !config.folderId,
+			inbox: config.folder === "inbox" && !config.folderId && !config.labelId,
 			total: titleTotal,
 			unread: titleUnread,
 			emailAddress: mailboxAddress,
 		});
-	}, [title, config.folder, config.folderId, mailboxAddress, mailboxesLoading, titleTotal, titleUnread]);
+	}, [title, config.folder, config.folderId, config.labelId, mailboxAddress, mailboxesLoading, titleTotal, titleUnread]);
 
 	useEffect(() => {
 		if (isLoading) return;
@@ -775,7 +782,7 @@ export function MessageFolderPage({
 			)}
 
 			<div className="min-h-0 flex-1 overflow-y-auto overscroll-contain scrollbar-gutter-stable">
-				{config.folder === "inbox" && !config.folderId && offset === 0 && !mailboxesLoading && <DueFollowUps mailboxId={selectedMailbox?.id} />}
+				{config.folder === "inbox" && !config.folderId && !config.labelId && offset === 0 && !mailboxesLoading && <DueFollowUps mailboxId={selectedMailbox?.id} />}
 				<div role="list" aria-label={title} className="divide-y divide-neutral-100">
 					{messages.map((message) => (
 						<MessageListRow

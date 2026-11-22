@@ -5,11 +5,11 @@ import { dateFromZonedFields, normalizeTimeZone } from "@/lib/time/utils";
  * Gmail-style search grammar shared by the search box and the API:
  *
  *   from:maya to:"sam okoro" subject:invoice has:attachment is:unread
- *   is:starred after:2026-09-01 before:2026-09-30 "exact phrase" -excluded word
+ *   is:starred label:orders after:2026-09-01 before:2026-09-30 "exact phrase" -excluded word
  *
  * The older `title:` and bare `:unread` / `:read` forms keep working.
  */
-const OPERATOR_RE = /(?:^|\s)(from|to|subject|title|has|is|after|before|newer|older):(?:"([^"]*)"|(\S+))/gi;
+const OPERATOR_RE = /(?:^|\s)(from|to|subject|title|has|is|label|after|before|newer|older):(?:"([^"]*)"|(\S+))/gi;
 
 export function parseSearchQuery(raw: string, timeZone = "UTC"): ParsedSearchQuery {
 	const parsed: ParsedSearchQuery = { text: "", needsFullText: false };
@@ -35,6 +35,9 @@ export function parseSearchQuery(raw: string, timeZone = "UTC"): ParsedSearchQue
 				if (/^unread$/i.test(value)) parsed.read = "unread";
 				else if (/^read$/i.test(value)) parsed.read = "read";
 				else if (/^starred$/i.test(value)) parsed.starred = true;
+				break;
+			case "label":
+				if (value) parsed.label = value;
 				break;
 			case "after":
 			case "newer":

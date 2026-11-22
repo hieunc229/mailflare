@@ -18,6 +18,9 @@ import { getMessageListColumns, loadConversationPage } from "./utils";
 import type { ListMessage } from "./types";
 import { getOpenCounts } from "@/lib/tracking/open-tracking";
 import { summarizeNotesForRows } from "@/lib/notes/service";
+import { findLabel, labelsForRows } from "@/lib/labels/service";
+import { hasLabelId } from "@/lib/labels/conditions";
+import type { LabelChip } from "@/lib/labels/types";
 import { isMissingTableError } from "@/lib/database-errors";
 import { parseLimit, parseOffset } from "@/lib/api/query-params";
 import { draftsVisibleTo } from "@/lib/email/draft-access";
@@ -39,6 +42,7 @@ export async function GET(request: Request) {
 	const read = url.searchParams.get("read");
 	const starred = url.searchParams.get("starred");
 	const snoozed = url.searchParams.get("snoozed");
+	const labelId = url.searchParams.get("labelId");
 	const scheduled = url.searchParams.get("scheduled");
 	const limit = parseLimit(url.searchParams.get("limit"), 50, 100);
 	const offset = parseOffset(url.searchParams.get("offset"));
@@ -87,6 +91,17 @@ export async function GET(request: Request) {
 	}
 	if (starred === "true") {
 		conditions.push(eq(messages.starred, true));
+	}
+	if (labelId) {
+		// A label belongs to one mailbox; it filters that mailbox's list and moves nothing.
+		const label = await findLabel(db, labelId).catch((error) => {
+			if (isMissingTableError(error)) return null;
+			throw error;
+		});
+		if (!label || !accessibleMailboxIds.includes(label.mailboxId)) {
+			return NextResponse.json({ error: "Label not found" }, { status: 404 });
+		}
+		conditions.push(eq(messages.mailboxId, label.mailboxId), hasLabelId(label.id));
 	}
 	if (snoozed === "true") {
 		conditions.push(eq(messages.status, "received"));
@@ -169,7 +184,7 @@ export async function GET(request: Request) {
 			? inArray(messages.mailboxId, accessibleMailboxIds)
 			: eq(messages.userId, user.id);
 	// These enrichments depend only on the selected page, not on each other.
-	const [countRows, jobs, openCounts, noteSummaries, contactMaps] = await Promise.all([
+	const [countRows, jobs, openCounts, noteSummaries, rowLabels, contactMaps] = await Promise.all([
 		threadIds.length > 0
 			? selectInBatches(threadIds, (batch) => db
 				.select({
@@ -191,6 +206,11 @@ export async function GET(request: Request) {
 		// Optional: a database without the notes migration has no notes to show.
 		summarizeNotesForRows(db, rows).catch((error) => {
 			if (isMissingTableError(error)) return new Map<string, { count: number; preview: string }>();
+			throw error;
+		}),
+		// Optional: a database without the labels migration has no labels to show.
+		labelsForRows(db, rows).catch((error) => {
+			if (isMissingTableError(error)) return new Map<string, LabelChip[]>();
 			throw error;
 		}),
 		Promise.all(
@@ -238,6 +258,7 @@ export async function GET(request: Request) {
 			...(scheduledAtByMessageId.has(message.id) ? { scheduledAt: scheduledAtByMessageId.get(message.id) } : {}),
 			...(openCounts.has(message.id) ? { openCount: openCounts.get(message.id) } : {}),
 			...(noteSummaries.has(message.id) ? { noteCount: noteSummaries.get(message.id)!.count, notePreview: noteSummaries.get(message.id)!.preview } : {}),
+			...(rowLabels.has(message.id) ? { labels: rowLabels.get(message.id) } : {}),
 			fromContactName:
 				(message.direction === "outbound" ? accountName : null) ??
 				getPartyDisplayName(message.fromAddr, contactMap?.get(normalizeEmailAddress(message.fromAddr))),

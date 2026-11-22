@@ -2563,5 +2563,16 @@
 	"invite.calendarOnly": "Calendar only",
 	"invite.wasPrev": "(was {action})",
 	"invite.changeHint": "Send again to change your answer",
-	"invite.undo": "Undo"
+	"invite.undo": "Undo",
+	"navigation.labels": "ලේබල",
+	"navigation.createLabel": "ලේබලයක් සාදන්න",
+	"navigation.noLabels": "තවම ලේබල නැත",
+	"label.description": "ලේබල සංවාදයක් ගෙන නොයා එය සලකුණු කරයි.",
+	"label.name": "ලේබලයේ නම",
+	"label.example": "ඇණවුම්",
+	"label.createFailed": "ලේබලය සෑදිය නොහැකි විය.",
+	"label.changeFailed": "ලේබලය වෙනස් කළ නොහැකි විය.",
+	"label.delete": "ලේබලය මකන්න",
+	"label.deleteConfirm": "{name} ලේබලය මකන්නද? එහි සංවාද තිබෙන තැනම පවතී.",
+	"label.empty": "මෙම ලේබලය සහිත සංවාද නැත"
 }

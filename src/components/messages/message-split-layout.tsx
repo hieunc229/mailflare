@@ -63,9 +63,9 @@ export function MessageSplitLayout({
 	// resets the shared list here instead of from the page that happens to be
 	// mounted. Comparing keys keeps the initial mount from wiping a selection
 	// that the split view is about to show.
-	const viewKey = [query, selectedMailbox?.id ?? "", config.folder, config.folderId ?? "", grouped, unreadOnly].join("\u0000");
+	const viewKey = [query, selectedMailbox?.id ?? "", config.folder, config.folderId ?? "", config.labelId ?? "", grouped, unreadOnly].join("\u0000");
 	const previousViewKey = useRef(viewKey);
-	const folderKey = `${config.folder}\u0000${config.folderId ?? ""}`;
+	const folderKey = `${config.folder}\u0000${config.folderId ?? ""}\u0000${config.labelId ?? ""}`;
 	const previousFolderKey = useRef(folderKey);
 	const showBulkBar = selectedMessages.length > 0 && twoColumnReading && isDesktop;
 

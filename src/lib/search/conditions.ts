@@ -4,6 +4,7 @@ import { messageAttachments, messages } from "@/db/schema";
 import { schemaDialect } from "@/db/dialect";
 import { buildFtsMatch, parseSearchQuery, tokenizeSearchText } from "./query-utils";
 import type { ParsedSearchQuery } from "./types";
+import { hasLabelNamed } from "@/lib/labels/conditions";
 
 /** `!` is the escape character because it needs no escaping itself in either SQL string syntax. */
 const likePattern = (term: string) => `%${term.toLowerCase().replace(/[!%_]/g, "!$&")}%`;
@@ -67,6 +68,7 @@ export function buildSearchConditions(raw: string, timeZone = "UTC"): SQL[] {
 	if (parsed.read === "read") conditions.push(eq(messages.read, true));
 	if (parsed.read === "unread") conditions.push(eq(messages.read, false));
 	if (parsed.starred) conditions.push(eq(messages.starred, true));
+	if (parsed.label) conditions.push(hasLabelNamed(parsed.label));
 	if (parsed.after) conditions.push(gte(messages.createdAt, parsed.after));
 	if (parsed.before) conditions.push(lt(messages.createdAt, parsed.before));
 

@@ -2579,5 +2579,16 @@
 	"invite.calendarOnly": "Calendar only",
 	"invite.wasPrev": "(was {action})",
 	"invite.changeHint": "Send again to change your answer",
-	"invite.undo": "Undo"
+	"invite.undo": "Undo",
+	"navigation.labels": "Marcadores",
+	"navigation.createLabel": "Criar marcador",
+	"navigation.noLabels": "Nenhum marcador ainda",
+	"label.description": "Marcadores identificam uma conversa sem movê-la.",
+	"label.name": "Nome do marcador",
+	"label.example": "Pedidos",
+	"label.createFailed": "Não foi possível criar o marcador.",
+	"label.changeFailed": "Não foi possível alterar o marcador.",
+	"label.delete": "Excluir marcador",
+	"label.deleteConfirm": "Excluir o marcador {name}? As conversas continuam onde estão.",
+	"label.empty": "Nenhuma conversa com este marcador"
 }

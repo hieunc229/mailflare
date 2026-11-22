@@ -2595,5 +2595,16 @@
 	"invite.calendarOnly": "Calendar only",
 	"invite.wasPrev": "(was {action})",
 	"invite.changeHint": "Send again to change your answer",
-	"invite.undo": "Undo"
+	"invite.undo": "Undo",
+	"navigation.labels": "Мітки",
+	"navigation.createLabel": "Створити мітку",
+	"navigation.noLabels": "Міток ще немає",
+	"label.description": "Мітки позначають розмову, не переміщуючи її.",
+	"label.name": "Назва мітки",
+	"label.example": "Замовлення",
+	"label.createFailed": "Не вдалося створити мітку.",
+	"label.changeFailed": "Не вдалося змінити мітку.",
+	"label.delete": "Видалити мітку",
+	"label.deleteConfirm": "Видалити мітку {name}? Розмови залишаться на місці.",
+	"label.empty": "Немає розмов із цією міткою"
 }

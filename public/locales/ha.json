@@ -2563,5 +2563,16 @@
 	"invite.calendarOnly": "Calendar only",
 	"invite.wasPrev": "(was {action})",
 	"invite.changeHint": "Send again to change your answer",
-	"invite.undo": "Undo"
+	"invite.undo": "Undo",
+	"navigation.labels": "Lakabai",
+	"navigation.createLabel": "Ƙirƙiri lakabi",
+	"navigation.noLabels": "Babu lakabai tukuna",
+	"label.description": "Lakabai suna yi wa tattaunawa alama ba tare da motsa ta ba.",
+	"label.name": "Sunan lakabi",
+	"label.example": "Oda",
+	"label.createFailed": "Ba a iya ƙirƙirar lakabin ba.",
+	"label.changeFailed": "Ba a iya canza lakabin ba.",
+	"label.delete": "Share lakabi",
+	"label.deleteConfirm": "A share lakabin {name}? Tattaunawarsa za su zauna inda suke.",
+	"label.empty": "Babu tattaunawa mai wannan lakabin"
 }

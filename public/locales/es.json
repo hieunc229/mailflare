@@ -2579,5 +2579,16 @@
 	"invite.calendarOnly": "Calendar only",
 	"invite.wasPrev": "(was {action})",
 	"invite.changeHint": "Send again to change your answer",
-	"invite.undo": "Undo"
+	"invite.undo": "Undo",
+	"navigation.labels": "Etiquetas",
+	"navigation.createLabel": "Crear etiqueta",
+	"navigation.noLabels": "Aún no hay etiquetas",
+	"label.description": "Las etiquetas marcan una conversación sin moverla.",
+	"label.name": "Nombre de la etiqueta",
+	"label.example": "Pedidos",
+	"label.createFailed": "No se pudo crear la etiqueta.",
+	"label.changeFailed": "No se pudo cambiar la etiqueta.",
+	"label.delete": "Eliminar etiqueta",
+	"label.deleteConfirm": "¿Eliminar la etiqueta {name}? Sus conversaciones se quedan donde están.",
+	"label.empty": "No hay conversaciones con esta etiqueta"
 }

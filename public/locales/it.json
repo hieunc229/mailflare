@@ -2579,5 +2579,16 @@
 	"invite.calendarOnly": "Calendar only",
 	"invite.wasPrev": "(was {action})",
 	"invite.changeHint": "Send again to change your answer",
-	"invite.undo": "Undo"
+	"invite.undo": "Undo",
+	"navigation.labels": "Etichette",
+	"navigation.createLabel": "Crea etichetta",
+	"navigation.noLabels": "Ancora nessuna etichetta",
+	"label.description": "Le etichette contrassegnano una conversazione senza spostarla.",
+	"label.name": "Nome etichetta",
+	"label.example": "Ordini",
+	"label.createFailed": "Impossibile creare l’etichetta.",
+	"label.changeFailed": "Impossibile modificare l’etichetta.",
+	"label.delete": "Elimina etichetta",
+	"label.deleteConfirm": "Eliminare l’etichetta {name}? Le sue conversazioni restano dove sono.",
+	"label.empty": "Nessuna conversazione con questa etichetta"
 }

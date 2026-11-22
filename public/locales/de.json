@@ -2563,5 +2563,16 @@
 	"invite.calendarOnly": "Calendar only",
 	"invite.wasPrev": "(was {action})",
 	"invite.changeHint": "Send again to change your answer",
-	"invite.undo": "Undo"
+	"invite.undo": "Undo",
+	"navigation.labels": "Labels",
+	"navigation.createLabel": "Label erstellen",
+	"navigation.noLabels": "Noch keine Labels",
+	"label.description": "Labels markieren eine Unterhaltung, ohne sie zu verschieben.",
+	"label.name": "Labelname",
+	"label.example": "Bestellungen",
+	"label.createFailed": "Das Label konnte nicht erstellt werden.",
+	"label.changeFailed": "Das Label konnte nicht geändert werden.",
+	"label.delete": "Label löschen",
+	"label.deleteConfirm": "Label {name} löschen? Die Unterhaltungen bleiben, wo sie sind.",
+	"label.empty": "Keine Unterhaltungen mit diesem Label"
 }
