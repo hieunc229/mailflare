@@ -33,7 +33,9 @@ export async function scheduleAutoDraft(env: CloudflareEnv, input: { mailboxId: 
 	const [settings] = await db.select().from(mailboxAgentSettings).where(eq(mailboxAgentSettings.mailboxId, input.mailboxId)).limit(1);
 	const [mailbox] = await db.select().from(mailboxes).where(eq(mailboxes.id, input.mailboxId)).limit(1);
 	if (mailbox && (await getMailboxDomainAddresses(db, mailbox)).includes(normalizeEmailAddress(input.sender))) return;
-	if (!settings?.autoDraftEnabled || mailbox?.autoReplyEnabled) return;
+	// Auto-drafts pause only while the responder is actually answering mail:
+	// a scheduled or lapsed vacation window must not suppress them.
+	if (!settings?.autoDraftEnabled || (mailbox && isResponderActive(mailbox))) return;
 	const reviewerUserId = settings.reviewerUserId || input.ownerUserId;
 	const [reviewer] = await db.select().from(users).where(eq(users.id, reviewerUserId)).limit(1);
 	if (!reviewer || reviewer.disabled || !(await getMailboxAccessLevel(db, reviewer, input.mailboxId))?.canSendOnBehalf) return;
