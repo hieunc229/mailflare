@@ -190,6 +190,13 @@
       "when": 1795027668151,
       "tag": "0026_contact_details",
       "breakpoints": true
+    },
+    {
+      "idx": 27,
+      "version": "5",
+      "when": 1795369865790,
+      "tag": "0027_vacation_responder",
+      "breakpoints": true
     }
   ]
 }
