@@ -2,6 +2,7 @@ import { and, desc, eq, inArray, lte, sql } from "drizzle-orm";
 import { getDb } from "@/db";
 import { followUps, messages } from "@/db/schema";
 import { isMissingTableError } from "@/lib/database-errors";
+import { updateInBatches } from "@/lib/db-params";
 import { newId } from "@/lib/ids";
 import { followUpDueAt } from "./follow-up-utils";
 import type { DueFollowUp, MessageFollowUp } from "./types";
@@ -21,7 +22,8 @@ const hasReply = sql<number>`exists (
 
 async function markReplied(env: CloudflareEnv, ids: string[]): Promise<void> {
 	if (ids.length === 0) return;
-	await getDb(env).update(followUps).set({ status: "replied" }).where(inArray(followUps.id, ids));
+	const db = getDb(env);
+	await updateInBatches(ids, (batch) => db.update(followUps).set({ status: "replied" }).where(inArray(followUps.id, batch)));
 }
 
 /** Arms (or re-arms) the reminder on a sent message. */
@@ -47,7 +49,7 @@ export async function runFollowUpReminders(env: CloudflareEnv, now: Date): Promi
 			.limit(REMINDER_BATCH);
 		await markReplied(env, rows.filter((row) => row.replied).map((row) => row.id));
 		const due = rows.filter((row) => !row.replied).map((row) => row.id);
-		if (due.length) await db.update(followUps).set({ status: "due" }).where(inArray(followUps.id, due));
+		if (due.length) await updateInBatches(due, (batch) => db.update(followUps).set({ status: "due" }).where(inArray(followUps.id, batch)));
 	} catch (error) {
 		if (!isMissingTableError(error)) throw error;
 	}

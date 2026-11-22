@@ -2,6 +2,7 @@
 export const D1_MAX_BOUND_PARAMETERS = 100;
 
 type BatchQuery<Row> = PromiseLike<Row[]> & { toSQL(): { params: unknown[] } };
+type BatchStatement = PromiseLike<unknown> & { toSQL(): { params: unknown[] } };
 
 /**
  * Runs a query that filters on `inArray(column, batch)` once per batch of `ids`, so no statement
@@ -20,4 +21,17 @@ export async function selectInBatches<Row>(ids: readonly string[], build: (batch
 	const rows: Row[] = [];
 	for (let index = 0; index < unique.length; index += size) rows.push(...await build(unique.slice(index, index + size)));
 	return rows;
+}
+
+/**
+ * The write-side sibling of `selectInBatches`: an update or delete that filters on
+ * `inArray(column, batch)` runs once per batch, so it stays under the same D1 limit.
+ * Values written by `set` count as fixed parameters just like a select's conditions.
+ */
+export async function updateInBatches(ids: readonly string[], build: (batch: string[]) => BatchStatement): Promise<void> {
+	const unique = [...new Set(ids)];
+	if (unique.length === 0) return;
+	const fixedParameters = build(unique.slice(0, 1)).toSQL().params.length - 1;
+	const size = Math.max(1, D1_MAX_BOUND_PARAMETERS - fixedParameters);
+	for (let index = 0; index < unique.length; index += size) await build(unique.slice(index, index + size));
 }
