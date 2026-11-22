@@ -11,7 +11,7 @@ async function hmac(secret: string, raw: ArrayBuffer, from: string, to: string):
 	return hex(await crypto.subtle.sign("HMAC", key, data));
 }
 
-/** HMAC-SHA256 over `from\nto\n` + raw body, hex encoded. Signed by the relay Worker. */
+/** Legacy scheme: HMAC-SHA256 over `from\nto\n` + raw body, hex encoded. The relay signs v2 today; this stays for relays not yet upgraded. */
 export async function verifyInboundSignature(secret: string, signature: string, raw: ArrayBuffer, from: string, to: string): Promise<boolean> {
 	const expected = await hmac(secret, raw, from, to);
 	if (expected.length !== signature.length) return false;

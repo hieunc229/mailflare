@@ -6,8 +6,3 @@ export type ImportMessagesResult = {
 };
 
 export type ImportProgressHandler = (percentage: number) => void;
-
-export type ImportMessagesProps = {
-	destination: string;
-	sourceLabel: string;
-};
