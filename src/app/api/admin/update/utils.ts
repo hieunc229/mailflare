@@ -15,11 +15,11 @@ import type {
   UpdateStatus,
 } from "./types";
 import packageMetadata from "../../../../../package.json";
+import { shouldRetryGitHubAnonymously, UPDATE_SOURCE_REPOSITORY } from "./github-utils";
 
 const GITHUB_API_URL = "https://api.github.com";
 const GITHUB_API_VERSION = "2026-03-10";
 const UPDATE_WORKFLOW = "deploy-update.yml";
-const UPDATE_SOURCE_REPOSITORY = "hieunc229/mailflare";
 
 export async function authorizeAdminRequest(request: Request) {
   const env = getEnv();
@@ -75,36 +75,48 @@ function getUpdateConfiguration(env: CloudflareEnv): UpdateConfigurationItem[] {
   ];
 }
 
-async function githubRequest<T>(
+async function sendGitHub<T>(
   path: string,
-  init?: RequestInit,
+  init: RequestInit | undefined,
+  authenticated: boolean,
 ): Promise<{ data?: T; response: Response }> {
   const env = getEnv();
+  const token = env.GITHUB_UPDATE_TOKEN?.trim();
+  const headers = new Headers(init?.headers);
+  headers.set("Accept", "application/vnd.github+json");
+  headers.set("User-Agent", "mailflare");
+  headers.set("Content-Type", "application/json");
+  headers.set("X-GitHub-Api-Version", GITHUB_API_VERSION);
+  if (authenticated && token) headers.set("Authorization", `Bearer ${token}`);
+  else headers.delete("Authorization");
 
   const response = await fetch(`${GITHUB_API_URL}${path}`, {
     cache: "no-store",
     ...init,
-    headers: {
-      Accept: "application/vnd.github+json",
-      Authorization: `Bearer ${env.GITHUB_UPDATE_TOKEN || ""}`,
-      "User-Agent": "mailflare",
-      "Content-Type": "application/json",
-      "X-GitHub-Api-Version": GITHUB_API_VERSION,
-      ...init?.headers,
-    },
+    headers,
   });
 
   if (response.statusText === "Forbidden") {
-    return {
-      response,
-      data: { error: response.statusText } as T,
-    };
+    return { response, data: { error: response.statusText } as T };
   }
+  if (response.status === 204) return { response };
 
-  const data =
-    response.status === 204 ? undefined : ((await response.json()) as T);
+  const text = await response.text();
+  if (!text) return { response };
+  try {
+    return { response, data: JSON.parse(text) as T };
+  } catch {
+    throw new Error(`GitHub returned HTTP ${response.status}`);
+  }
+}
 
-  return { data, response };
+async function githubRequest<T>(
+  path: string,
+  init?: RequestInit,
+): Promise<{ data?: T; response: Response }> {
+  const authed = await sendGitHub<T>(path, init, true);
+  if (!shouldRetryGitHubAnonymously(path, authed.response.status)) return authed;
+  return sendGitHub<T>(path, init, false);
 }
 
 async function getDispatchRef(config: UpdateDispatchConfig): Promise<string> {
