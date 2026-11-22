@@ -22,7 +22,7 @@ If you use a legacy Global API Key, set `CF_EMAIL` and `CF_API_KEY` instead of p
 
 ## Cloudflare error 10000 on Email Routing
 
-Update the token so it can read the zone and manage its DNS, Email Routing settings, and Email Routing rules. The recommended scoped permissions are listed in the [deployment guide](deployment.md#required-configuration).
+Update the token so it can read the zone and manage its DNS, Email Routing settings, and Email Routing rules. The recommended scoped permissions are listed in the [deployment guide](deployment.md#step-1-setup-cf_token).
 
 ## Cloudflare error 2008 for existing MX records
 
