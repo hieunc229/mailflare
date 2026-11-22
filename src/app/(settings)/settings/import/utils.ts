@@ -70,29 +70,52 @@ export function getFileImportSource(sources: ImportSourceItem[]): ImportSourceIt
 	return sources.find((source) => source.id !== "system:others") ?? getSelectedImportSources(["inbox"])[0];
 }
 
+const FOLDER_NAME_MAX = 80;
+let folderListCache: { mailboxId: string; folders: ImportFolderSummary[] } | null = null;
+
+function importFolderName(name: string): string {
+	const trimmed = name.trim().replace(/[\u0000-\u001f]/g, "");
+	return trimmed.length <= FOLDER_NAME_MAX ? trimmed : trimmed.slice(0, FOLDER_NAME_MAX).trim();
+}
+
 export async function ensureImportDestination(
 	mailboxId: string,
 	source: ImportSourceItem,
 ): Promise<string> {
 	if (!source.folderName) return source.destination;
+	const name = importFolderName(source.folderName);
+	if (!name) throw new Error("Unable to create a folder with an empty name");
 	const folders = await fetchMailboxFolders(mailboxId);
-	const existing = folders.find((folder) => folder.name.toLowerCase() === source.folderName?.toLowerCase());
+	const existing = folders.find((folder) => folder.name.toLowerCase() === name.toLowerCase());
 	if (existing) return `folder:${existing.id}`;
 
 	const response = await authFetch("/api/folders", {
 		method: "POST",
 		headers: { "Content-Type": "application/json" },
-		body: JSON.stringify({ mailboxId, name: source.folderName }),
+		body: JSON.stringify({ mailboxId, name }),
 	});
-	const data = (await response.json()) as ImportFolderSummary & { error?: string };
-	if (!response.ok) throw new Error(data.error ?? `Unable to create folder ${source.folderName}`);
+	const data = await readImportJson<ImportFolderSummary & { error?: string }>(response);
+	if (response.status === 409) {
+		folderListCache = null;
+		invalidateFolderCache();
+		const again = await fetchMailboxFolders(mailboxId);
+		const found = again.find((folder) => folder.name.toLowerCase() === name.toLowerCase());
+		if (found) return `folder:${found.id}`;
+	}
+	if (!response.ok || !data.id) {
+		throw new Error(typeof data.error === "string" ? data.error : `Unable to create folder ${name}`);
+	}
+	folderListCache?.folders.push({ id: data.id, name });
 	invalidateFolderCache();
 	return `folder:${data.id}`;
 }
 
 async function fetchMailboxFolders(mailboxId: string): Promise<ImportFolderSummary[]> {
+	if (folderListCache?.mailboxId === mailboxId) return folderListCache.folders;
 	const data = await getMailboxFolders<{ folders?: ImportFolderSummary[] }>(mailboxId);
-	return data.folders ?? [];
+	const folders = data.folders ?? [];
+	folderListCache = { mailboxId, folders };
+	return folders;
 }
 
 export async function startImapImport(
