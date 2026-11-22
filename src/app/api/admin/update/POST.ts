@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { authorizeAdminRequest, dispatchUpdateWorkflow, getUpdateStatus } from "./utils";
+import { authorizeAdminRequest, dispatchUpdateWorkflow } from "./utils";
 import { isNodeRuntime } from "@/lib/runtime";
 import { hasValidSessionMutationOrigin } from "@/lib/auth/origin";
 

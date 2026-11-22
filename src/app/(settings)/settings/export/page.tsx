@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import { Download } from "@/components/icons";
 import { useLanguage } from "@/components/language-provider";
 import { useSelectedMailbox } from "@/components/mailbox-provider";
 import { Button } from "@/components/ui/button";

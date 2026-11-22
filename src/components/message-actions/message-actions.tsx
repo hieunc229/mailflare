@@ -4,7 +4,7 @@ import { createElement, Fragment, useCallback, useLayoutEffect, useMemo, useRef,
 import { confirmDestructive } from "@/components/ui/confirm-dialog";
 import type { ReactNode } from "react";
 import { usePathname, useRouter } from "next/navigation";
-import { Archive, ArchiveRestore, Ban, BellOff, Clock, FileCode2, Forward, Inbox, Mail, MailOpen, MoreVertical, Note, Reply, ReplyAll, ShieldAlert, ShieldCheck, Tag, Trash2 } from "@/components/icons";
+import { Archive, ArchiveRestore, Ban, BellOff, Clock, FileCode2, Forward, Inbox, MoreVertical, Note, Reply, ReplyAll, ShieldAlert, ShieldCheck, Tag, Trash2 } from "@/components/icons";
 import { useLanguage } from "@/components/language-provider";
 import { useSelectedMailbox } from "@/components/mailbox-provider";
 import { useMessageCounts } from "@/hooks/use-message-counts";

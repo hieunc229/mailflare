@@ -1,8 +1,6 @@
 "use client";
 
 import { SkipToContent } from "@/components/skip-to-content";
-import Link from "next/link";
-import { HelpCircle } from "@/components/icons";
 import { AuthGuard } from "@/components/auth/auth-guard";
 import { ComposeProvider } from "@/components/compose/compose-context";
 import { FloatingComposer } from "@/components/compose/floating-composer";

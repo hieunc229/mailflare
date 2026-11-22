@@ -2,7 +2,6 @@
 
 import Link from "next/link";
 import { useLanguage } from "@/components/language-provider";
-import { LanguageSelector } from "@/components/language-selector";
 import { Button } from "@/components/ui/button";
 import { getHomeActions } from "./utils";
 import { HomeAccountMenu } from "./home-account-menu";
