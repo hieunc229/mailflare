@@ -19,9 +19,10 @@ await build({
 			export { applyMigrations } from "./server/runtime/migrate.ts";
 			export { sendMailboxAutoReply, isResponderActive } from "./src/lib/email/auto-reply.ts";
 			export { getMailboxUpdateValues } from "./src/app/api/mailboxes/[id]/utils.ts";
-			export { scheduleAutoDraft } from "./src/lib/agent/jobs/utils.ts";
+			export { scheduleAutoDraft, processAgentDraftJob } from "./src/lib/agent/jobs/utils.ts";
 			export { createSession } from "./src/lib/auth/session.ts";
 			export * as detail from "./src/app/api/mailboxes/[id]/route.ts";
+			export * as v1Detail from "./src/app/api/v1/mailboxes/[id]/route.ts";
 		`,
 		resolveDir: root,
 		sourcefile: "auto-reply-test-entry.ts",
@@ -48,6 +49,16 @@ await build({
 					? `export class NextResponse extends Response { static json(data, init) { return Response.json(data, init); } }`
 					: `export async function cookies() { return { get() { return undefined; } }; }`,
 			}));
+			// The v1 PATCH test reaches the route as the mailbox owner through the
+			// admin API-key surface; the key check is stubbed like other route tests.
+			b.onResolve({ filter: /^@\/lib\/api\/admin-auth$/ }, () => ({ path: "@/lib/api/admin-auth", namespace: "admin-auth-stub" }));
+			b.onLoad({ filter: /.*/, namespace: "admin-auth-stub" }, () => ({
+				contents: `
+					export async function authenticateAdminApiKey() { return globalThis.__adminKeyAuth ?? null; }
+					export async function canShareAdminMailboxes() { return true; }
+					export async function canManageAdminAccounts() { return true; }
+				`,
+			}));
 			b.onResolve({ filter: /^@\/lib\/email\/send$/ }, () => ({ path: "@/lib/email/send", namespace: "auto-reply-send-stub" }));
 			b.onLoad({ filter: /.*/, namespace: "auto-reply-send-stub" }, () => ({
 				contents: `
@@ -69,8 +80,10 @@ const {
 	isResponderActive,
 	getMailboxUpdateValues,
 	scheduleAutoDraft,
+	processAgentDraftJob,
 	createSession,
 	detail,
+	v1Detail,
 } = await import(pathToFileURL(join(directory, "entry.mjs")).href);
 
 const SECOND = 1;
@@ -348,6 +361,36 @@ test("a job enqueued before the window opens is the process-time check's problem
 	assert.equal(queue.length, 1);
 });
 
+test("a job enqueued while inactive is skipped when it runs inside the window", async (t) => {
+	// The run-time predicate re-checks the window: the queue delay means a job
+	// scheduled before the vacation still lands inside it.
+	const { env, db, queue } = await draftSetup(t, { startAt: nowSeconds() + 3600, endAt: nowSeconds() + 4 * DAY });
+	await scheduleAutoDraft(env, draftInput);
+	assert.equal(queue.length, 1);
+	// The vacation starts while the job still sits in the queue.
+	db.prepare("UPDATE mailboxes SET auto_reply_start_at = ? WHERE id = 'm1'").run(nowSeconds() - 60);
+	const [{ id: jobId }] = db.prepare("SELECT id FROM agent_jobs WHERE mailbox_id = 'm1'").all();
+	await processAgentDraftJob(env, jobId);
+	const job = db.prepare("SELECT status, reason FROM agent_jobs WHERE id = ?").get(jobId);
+	assert.equal(job.status, "skipped");
+	assert.equal(job.reason, "Out-of-office reply is enabled");
+});
+
+test("a queued job still runs once the responder's window has expired", async (t) => {
+	// A job that entered the queue while the responder was active only has the
+	// run-time check left; by then the window has lapsed and drafting proceeds.
+	const { env, db } = await draftSetup(t, { startAt: nowSeconds() - DAY, endAt: nowSeconds() + DAY });
+	db.prepare("INSERT INTO agent_jobs (id, mailbox_id, source_message_id, reviewer_user_id, status, attempts, next_attempt_at, created_at) VALUES ('j1', 'm1', 'src1', 'u1', 'pending', 0, ?, ?)").run(nowSeconds() - 100, nowSeconds() - 100);
+	db.prepare("UPDATE mailboxes SET auto_reply_end_at = ? WHERE id = 'm1'").run(nowSeconds() - 1);
+	await processAgentDraftJob(env, "j1");
+	const job = db.prepare("SELECT status, attempts, reason FROM agent_jobs WHERE id = 'j1'").get();
+	// No AI provider is configured in this env, so the job cannot finish; the
+	// assertion is that it ran past the responder check instead of skipping.
+	assert.equal(job.attempts, 1);
+	assert.equal(job.status, "pending");
+	assert.equal(job.reason, "AI provider is not configured");
+});
+
 test("the mailbox PATCH stamps the activation when the responder turns on", async (t) => {
 	const { env, db } = await setup(t, { enabled: 0 });
 	globalThis.__mailflareNodeEnv = env;
@@ -366,11 +409,64 @@ test("the mailbox PATCH stamps the activation when the responder turns on", asyn
 	const first = stamp();
 	assert.ok(first >= before && first <= nowSeconds(), "the off->on transition stamps the activation");
 
+	// Seed a distinct stamp so a rewrite cannot hide inside the same second.
+	const old = nowSeconds() - 30 * DAY;
+	db.prepare("UPDATE mailboxes SET auto_reply_activated_at = ? WHERE id = 'm1'").run(old);
 	const savedAgain = await patch({ autoReplyEnabled: true });
 	assert.equal(savedAgain.status, 200);
-	assert.equal(stamp(), first, "re-saving an enabled responder keeps its stamp");
+	assert.equal(stamp(), old, "re-saving an enabled responder keeps its stamp");
 
 	const turnedOff = await patch({ autoReplyEnabled: false });
 	assert.equal(turnedOff.status, 200);
 	assert.equal(stamp(), null, "turning the responder off clears the stamp");
+});
+
+test("the v1 admin PATCH follows the same activation stamp rules", async (t) => {
+	const { env, db } = await setup(t, { enabled: 0 });
+	globalThis.__mailflareNodeEnv = env;
+	globalThis.__adminKeyAuth = { userId: "u1" };
+	t.after(() => { delete globalThis.__mailflareNodeEnv; delete globalThis.__adminKeyAuth; });
+	const patch = (body) => v1Detail.PATCH(new Request("https://mail.test/api/v1/mailboxes/m1", {
+		method: "PATCH",
+		headers: { Authorization: "Bearer admin-key", "Content-Type": "application/json" },
+		body: JSON.stringify(body),
+	}), { params: Promise.resolve({ id: "m1" }) });
+	const stamp = () => db.prepare("SELECT auto_reply_activated_at AS stamp FROM mailboxes WHERE id = 'm1'").get().stamp;
+
+	const before = nowSeconds();
+	assert.equal((await patch({ autoReplyEnabled: true })).status, 200);
+	const first = stamp();
+	assert.ok(first >= before && first <= nowSeconds(), "the off->on transition stamps the activation");
+
+	// The regression: without the mailbox's current state every enabled save
+	// restamped activation and reset the per-sender throttle.
+	const old = nowSeconds() - 30 * DAY;
+	db.prepare("UPDATE mailboxes SET auto_reply_activated_at = ? WHERE id = 'm1'").run(old);
+	assert.equal((await patch({ autoReplyEnabled: true })).status, 200);
+	assert.equal(stamp(), old, "re-saving an enabled responder keeps its stamp");
+
+	assert.equal((await patch({ autoReplyEnabled: false })).status, 200);
+	assert.equal(stamp(), null, "turning the responder off clears the stamp");
+});
+
+test("the v1 PATCH rejects an auto-reply window that ends before it starts", async (t) => {
+	const windowStart = nowSeconds() + DAY;
+	const { env, db } = await setup(t, { enabled: 0, startAt: windowStart });
+	globalThis.__mailflareNodeEnv = env;
+	globalThis.__adminKeyAuth = { userId: "u1" };
+	t.after(() => { delete globalThis.__mailflareNodeEnv; delete globalThis.__adminKeyAuth; });
+	const patch = (body) => v1Detail.PATCH(new Request("https://mail.test/api/v1/mailboxes/m1", {
+		method: "PATCH",
+		headers: { Authorization: "Bearer admin-key", "Content-Type": "application/json" },
+		body: JSON.stringify(body),
+	}), { params: Promise.resolve({ id: "m1" }) });
+	const startAt = () => db.prepare("SELECT auto_reply_start_at AS start FROM mailboxes WHERE id = 'm1'").get().start;
+	const iso = (seconds) => new Date(seconds * 1000).toISOString();
+
+	// A partial update is checked against the stored start, not just the body.
+	assert.equal((await patch({ autoReplyEndAt: iso(nowSeconds()) })).status, 400);
+	assert.equal((await patch({ autoReplyStartAt: iso(nowSeconds() + 5 * DAY), autoReplyEndAt: iso(nowSeconds() + DAY) })).status, 400);
+	assert.equal(startAt(), windowStart, "a rejected window leaves the stored one alone");
+
+	assert.equal((await patch({ autoReplyEndAt: iso(nowSeconds() + 6 * DAY) })).status, 200);
 });
