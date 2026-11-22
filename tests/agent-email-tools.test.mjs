@@ -258,7 +258,9 @@ async function folderSemanticsContext(t) {
 			('foldered-2', 'user-1', 'mailbox-1', 'inbound', 'sender@example.net', 'owner@example.com', 'Filed two', 'body', 'received', 'folder-1', NULL, 4),
 			('snoozed-1', 'user-1', 'mailbox-1', 'inbound', 'sender@example.net', 'owner@example.com', 'Snoozed', 'body', 'received', NULL, 4102444800, 5),
 			('sched-1', 'user-1', 'mailbox-1', 'outbound', 'owner@example.com', 'dest@example.net', 'Later', 'body', 'queued', NULL, NULL, 6),
-			('failed-1', 'user-1', 'mailbox-1', 'outbound', 'owner@example.com', 'dest@example.net', 'Broken', 'body', 'failed', NULL, NULL, 7);
+			('failed-1', 'user-1', 'mailbox-1', 'outbound', 'owner@example.com', 'dest@example.net', 'Broken', 'body', 'failed', NULL, NULL, 7),
+			('template-1', 'user-1', 'mailbox-1', 'outbound', 'owner@example.com', '', 'Saved template', 'body', 'template', NULL, NULL, 8),
+			('outbound-received', 'user-1', 'mailbox-1', 'outbound', 'owner@example.com', 'dest@example.net', 'Mistagged', 'body', 'received', NULL, NULL, 9);
 		INSERT INTO outbound_jobs (id, user_id, message_id, status, payload, scheduled_at, created_at, updated_at) VALUES ('job-1', 'user-1', 'sched-1', 'queued', '{}', 4102444800, 1, 1);
 	`);
 	return {
@@ -282,14 +284,20 @@ test("agent message urls land on real routes for every status and folder", async
 	assert.equal(failed.url, "/sent/failed-1");
 	const foldered = await runEmailTool(context, "search_emails", { query: "Filed", limit: 20 });
 	assert.equal(foldered.emails.find((email) => email.id === "foldered-1").url, "/folders/folder-1/foldered-1");
+	// Templates have no message route: the link is omitted instead of pointing at one that 404s.
+	const template = await runEmailTool(context, "get_email", { emailId: "template-1" });
+	assert.equal(template.status, "template");
+	assert.equal(template.url, null);
 });
 
 test("move_email clears the custom folder everywhere and wakes a snooze on inbox", async (t) => {
 	const { context, database } = await folderSemanticsContext(t);
 	const direct = { ...context, origin: "mcp" };
 	const state = (id) => database.db.prepare("SELECT status, folder_id, snoozed_until FROM messages WHERE id = ?").get(id);
+	database.db.exec("UPDATE messages SET snoozed_until = 4102444800 WHERE id = 'foldered-1'");
 	await runEmailTool(direct, "move_email", { emailId: "foldered-1", destination: "archived" });
-	assert.deepEqual(state("foldered-1"), { status: "archived", folder_id: null, snoozed_until: null });
+	// Snooze survives archive and trash, same as the app's move actions.
+	assert.deepEqual(state("foldered-1"), { status: "archived", folder_id: null, snoozed_until: 4102444800 });
 	await runEmailTool(direct, "move_email", { emailId: "foldered-2", destination: "trash" });
 	assert.deepEqual(state("foldered-2"), { status: "trash", folder_id: null, snoozed_until: null });
 	database.db.exec("UPDATE messages SET folder_id = 'folder-1', snoozed_until = 4102444800 WHERE id = 'inbox-1'");
@@ -303,4 +311,7 @@ test("move_email refuses a scheduled send instead of orphaning its job", async (
 	await assert.rejects(runEmailTool(direct, "move_email", { emailId: "sched-1", destination: "trash" }), /Cannot move this message/);
 	assert.equal(database.db.prepare("SELECT status FROM messages WHERE id = 'sched-1'").get().status, "queued");
 	assert.equal(database.db.prepare("SELECT status FROM outbound_jobs WHERE message_id = 'sched-1'").get().status, "queued");
+	// A queued member rejects the whole batch before anything moves.
+	await assert.rejects(runEmailTool(direct, "move_emails", { emailIds: ["inbox-1", "sched-1"], destination: "trash" }), /Cannot move this message/);
+	assert.equal(database.db.prepare("SELECT status FROM messages WHERE id = 'inbox-1'").get().status, "received");
 });

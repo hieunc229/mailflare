@@ -68,9 +68,12 @@ export const EMAIL_TOOL_NAMES = Object.keys(emailToolSchemas) as EmailToolName[]
 
 function publicMessage(row: typeof messages.$inferSelect) {
 	// The link has to open in the app: message statuses and route folders do not
-	// always share a name (queued -> scheduled, failed -> sent).
+	// always share a name (queued -> scheduled, failed -> sent). Templates surface
+	// here through search_emails/get_email but have no message route at all, so
+	// they carry no url rather than a dead one.
 	const section =
-		row.status === "draft" || row.status === "template" ? "drafts"
+		row.status === "template" ? null
+		: row.status === "draft" ? "drafts"
 		: row.status === "queued" ? "scheduled"
 		: row.status === "failed" ? "sent"
 		: row.status === "received" && row.folderId ? `folders/${encodeURIComponent(row.folderId)}`
@@ -80,7 +83,7 @@ function publicMessage(row: typeof messages.$inferSelect) {
 		id: row.id, mailboxId: row.mailboxId, from: row.fromAddr, to: row.toAddr,
 		cc: row.ccAddr, subject: row.subject, snippet: row.snippet, direction: row.direction,
 		status: row.status, read: row.read, starred: row.starred, threadId: row.threadId,
-		url: `/${section}/${encodeURIComponent(row.id)}`,
+		url: section ? `/${section}/${encodeURIComponent(row.id)}` : null,
 		createdAt: row.createdAt,
 	};
 }
@@ -191,7 +194,8 @@ export async function runEmailTool(context: AgentToolContext, name: EmailToolNam
 		const ids = name === "move_email" ? [input.emailId as string] : [...new Set(input.emailIds as string[])];
 		const rows = await Promise.all(ids.map((messageId) => ownMessage(context, messageId)));
 		// A queued message still has a live send job the queue claims by job row alone:
-		// moving it would file it away while the delivery still goes out.
+		// moving it would file it away while the delivery still goes out. Deliberately
+		// stricter than the UI, whose message actions allow the same bad move today.
 		if (rows.some((row) => row.status === "draft" || row.status === "sent" || row.status === "queued")) throw new Error("Cannot move this message");
 		const destination = input.destination as string;
 		if (context.origin === "chat") return { action: name, status: "pending_approval", emailIds: ids, destination, emails: rows.map(publicMessage) };
