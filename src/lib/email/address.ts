@@ -14,8 +14,53 @@ export function formatEmailAddress(address: string, name?: string | null): strin
 	return `${quoteDisplayName(normalizedName)} <${normalizedAddress}>`;
 }
 
+/**
+ * RFC 5322 comments (`(...)`, nestable) are whitespace outside a quoted string, so a From
+ * header may write `bob@example.com (Work)` or `Bob <bob@example.com> (via relay)`. Only
+ * balanced comments outside quotes are removed; anything else is left as written.
+ */
+function stripComments(value: string): string {
+	const spans: Array<[number, number]> = [];
+	let depth = 0;
+	let start = 0;
+	let inQuotes = false;
+	let escaped = false;
+	for (let index = 0; index < value.length; index += 1) {
+		const char = value[index];
+		if (escaped) {
+			escaped = false;
+			continue;
+		}
+		if (char === "\\" && inQuotes) {
+			escaped = true;
+			continue;
+		}
+		if (char === '"' && depth === 0) {
+			inQuotes = !inQuotes;
+			continue;
+		}
+		if (inQuotes) continue;
+		if (char === "(") {
+			if (depth === 0) start = index;
+			depth += 1;
+		} else if (char === ")" && depth > 0) {
+			depth -= 1;
+			if (depth === 0) spans.push([start, index + 1]);
+		}
+	}
+	if (depth !== 0) return value;
+
+	let result = "";
+	let cursor = 0;
+	for (const [from, to] of spans) {
+		result += `${value.slice(cursor, from)} `;
+		cursor = to;
+	}
+	return result + value.slice(cursor);
+}
+
 export function parseEmailAddressParts(value: string): EmailAddressParts {
-	const trimmed = value.trim();
+	const trimmed = stripComments(value).trim();
 	// A quoted display name may contain backslash-escaped quotes and
 	// backslashes, as written by formatEmailAddress (`"Maya \"MJ\" Chen"`).
 	// The name is optional: `<bob@example.com>` is a valid address on its own.
