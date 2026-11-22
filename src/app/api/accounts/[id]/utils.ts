@@ -1,4 +1,4 @@
-import { and, eq, ne } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import type { getDb } from "@/db";
 import { mailboxes, users } from "@/db/schema";
 import { hasPasswordHash, hashPassword } from "@/lib/auth/password";
@@ -24,15 +24,6 @@ type Db = ReturnType<typeof getDb>;
 export async function selectAccountById(db: Db, id: string) {
 	const [account] = await db.select().from(users).where(eq(users.id, id)).limit(1);
 	return account ?? null;
-}
-
-export async function emailBelongsToAnotherAccount(db: Db, accountId: string, email: string) {
-	const [account] = await db
-		.select({ id: users.id })
-		.from(users)
-		.where(and(eq(users.email, email), ne(users.id, accountId)))
-		.limit(1);
-	return !!account;
 }
 
 export async function updateAccountCredentials(

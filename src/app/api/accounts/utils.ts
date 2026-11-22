@@ -1,7 +1,7 @@
 import { and, desc, eq, inArray } from "drizzle-orm";
 import { NextResponse } from "next/server";
 import type { getDb } from "@/db";
-import { domains, mailboxes, users } from "@/db/schema";
+import { domains, users } from "@/db/schema";
 import { assertAdmin } from "@/lib/auth/admin";
 import { requireUser } from "@/lib/auth/cookies";
 import { getLicenseEntitlements } from "@/lib/licenses/service";
@@ -58,15 +58,6 @@ export async function getDomainForAdmin(db: Db, actor: DomainAdminActor, domainI
 		.where(and(eq(domains.id, domainId), inArray(domains.userId, domainOwnerIdsForAdmin(actor))))
 		.limit(1);
 	return domain ?? null;
-}
-
-export async function getExistingMailbox(db: Db, domainId: string, localPart: string) {
-	const [mailbox] = await db
-		.select()
-		.from(mailboxes)
-		.where(and(eq(mailboxes.domainId, domainId), eq(mailboxes.localPart, localPart)))
-		.limit(1);
-	return mailbox ?? null;
 }
 
 export function accountListItemFromUser(user: {

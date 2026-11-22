@@ -140,7 +140,7 @@ export class SqliteDatabase {
 		return buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength) as ArrayBuffer;
 	}
 
-	withSession(_constraintOrBookmark?: string) {
+	withSession() {
 		return this;
 	}
 

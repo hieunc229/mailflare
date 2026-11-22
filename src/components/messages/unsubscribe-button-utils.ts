@@ -14,10 +14,6 @@ export async function requestUnsubscribe(messageId: string, payload?: Unsubscrib
 	return data as UnsubscribeResult;
 }
 
-export function describeUnsubscribeTrashSender(count: number): string {
-	return `${count}`;
-}
-
 // Session-scoped so a remounted button (e.g. after the mailing-list banner is
 // dismissed) does not offer Unsubscribe again for a message already done.
 const unsubscribedMessageIds = new Set<string>();

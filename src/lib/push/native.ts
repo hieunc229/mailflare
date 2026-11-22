@@ -20,11 +20,6 @@ function apnsConfig(env: CloudflareEnv): ApnsConfig | null {
 	return keyId && teamId && privateKey ? { keyId, teamId, privateKey } : null;
 }
 
-/** Whether this server can deliver a push at all: with its own APNs key or through a relay. */
-export function isNativePushConfigured(env: CloudflareEnv): boolean {
-	return apnsConfig(env) !== null || relayBaseUrl(env) !== null;
-}
-
 /** Whether a registration with this token can be delivered: a relay handle needs the relay, an APNs token needs a key. */
 export function canDeliverTo(env: CloudflareEnv, token: string): boolean {
 	return isRelayHandle(token) ? relayBaseUrl(env) !== null : apnsConfig(env) !== null;
