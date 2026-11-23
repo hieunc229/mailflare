@@ -93,6 +93,9 @@ function conditionToSql(condition: FilterCondition, accessible: Set<string>, vie
 	}
 	if (condition.inMailboxOtherThan) {
 		for (const id of condition.inMailboxOtherThan) {
+			// A non-string id cannot decode to a mailbox; without this check it
+			// would be skipped like an unknown id and silently broaden the filter.
+			if (typeof id !== "string") throw invalidArguments("Filter condition inMailboxOtherThan must be an array of mailbox ids");
 			const ref = decodeMailboxRef(id);
 			if (ref && accessible.has(ref.mailboxId)) parts.push(not(mailboxRefCondition(ref)));
 		}

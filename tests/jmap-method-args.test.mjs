@@ -1,12 +1,12 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { loadApp } from "./helpers/real-db.mjs";
+import { loadApp, sharedMailboxSeed } from "./helpers/real-db.mjs";
 
 /**
  * Method-arg shape edges: an `args.*` value of the wrong JSON type used to
  * throw a TypeError inside the method, land in the per-call catch-all and come
  * back as `serverFail` (plus a console.error) — a client/protocol error labelled
- * as a server bug. RFC 8620 §5.3/§5.5 wants `invalidArguments` for arg-level
+ * as a server bug. RFC 8620 §3.6.2/§5.3 wants `invalidArguments` for arg-level
  * type violations, and per-record `invalidProperties`/`notFound` inside
  * create/update maps, because /set calls are built for partial failure.
  *
@@ -122,6 +122,18 @@ test("non-array inMailboxOtherThan is invalidArguments", async (t) => {
 		const error = await expectError(t, "Email/query", { filter: { inMailboxOtherThan } });
 		assert.equal(error.type, "invalidArguments", `inMailboxOtherThan=${JSON.stringify(inMailboxOtherThan)}`);
 	}
+});
+
+test("non-string inMailboxOtherThan ids are invalidArguments, not a silently broadened filter", async (t) => {
+	for (const inMailboxOtherThan of [[5], [[{}]], [null]]) {
+		const error = await expectError(t, "Email/query", { filter: { inMailboxOtherThan } });
+		assert.equal(error.type, "invalidArguments", `inMailboxOtherThan=${JSON.stringify(inMailboxOtherThan)}`);
+	}
+	// An unknown string id is still skipped, which is how an empty
+	// inMailboxOtherThan list matches everything.
+	const [responseName, result] = await single(t, "Email/query", { filter: { inMailboxOtherThan: ["mb-unknown"] } });
+	assert.equal(responseName, "Email/query", JSON.stringify(result));
+	assert.deepEqual(result.ids, ["m-1"]);
 });
 
 test("wrong-typed scalar filter fields are invalidArguments", async (t) => {
@@ -245,7 +257,7 @@ test("valid sort and nested filter operators still work", async (t) => {
 });
 
 test("absent and null args keep their current meaning", async (t) => {
-	// An empty filter condition still matches everything (RFC 8620 §4.4.1).
+	// An empty filter condition still matches everything (RFC 8621 §4.4.1).
 	const [queryName, query] = await single(t, "Email/query", { filter: {} });
 	assert.equal(queryName, "Email/query");
 	assert.deepEqual(query.ids, ["m-1"]);
@@ -253,4 +265,81 @@ test("absent and null args keep their current meaning", async (t) => {
 	const [setName, set] = await single(t, "Email/set", { create: null, update: null, destroy: null });
 	assert.equal(setName, "Email/set");
 	assert.deepEqual(set.destroyed, []);
+});
+
+// A method-level error must be answered before any write commits (RFC 8620
+// §3.6.2): arg validation runs before the create/update loops, so a rejected
+// call leaves no rows behind and records no #creation-id mappings.
+test("Mailbox/set invalidArguments commits no create before it", async (t) => {
+	for (const destroy of [5, "x"]) {
+		const { env, db, sqlite } = await newDatabase(t, SEED);
+		const response = await app.processRequest(context(db, env), {
+			using: ["urn:ietf:params:jmap:core", "urn:ietf:params:jmap:mail"],
+			methodCalls: [
+				["Mailbox/set", { create: { good: { name: "Projects", parentId: "mb1" } }, destroy }, "set"],
+				["Mailbox/get", { ids: ["#good"] }, "get"],
+				["Mailbox/query", { filter: { name: "Projects" } }, "query"],
+			],
+		});
+		const [[setName, setResult], [getName, get], [queryName, query]] = response.methodResponses;
+		assert.equal(setName, "error");
+		assert.equal(setResult.type, "invalidArguments", `destroy=${JSON.stringify(destroy)}`);
+		assert.equal(getName, "Mailbox/get");
+		assert.deepEqual(get.notFound, ["#good"], "the failed call must not record a #good creation id");
+		assert.equal(queryName, "Mailbox/query");
+		assert.deepEqual(query.ids, []);
+		assert.equal(sqlite.prepare("SELECT count(*) AS n FROM folders WHERE name = 'Projects'").get().n, 0);
+	}
+});
+
+test("Email/set invalidArguments commits no update before it", async (t) => {
+	const { env, db, sqlite } = await newDatabase(t, SEED);
+	const response = await app.processRequest(context(db, env), {
+		using: ["urn:ietf:params:jmap:core", "urn:ietf:params:jmap:mail"],
+		methodCalls: [
+			["Email/set", { update: { "m-1": { "keywords/$seen": true } }, destroy: 5 }, "set"],
+			["Email/get", { ids: ["m-1"], properties: ["keywords"] }, "get"],
+		],
+	});
+	const [[setName, setResult], [getName, get]] = response.methodResponses;
+	assert.equal(setName, "error");
+	assert.equal(setResult.type, "invalidArguments");
+	assert.equal(getName, "Email/get");
+	assert.deepEqual(get.list[0].keywords, {}, "the failed call must not have set $seen");
+	assert.equal(sqlite.prepare("SELECT read FROM messages WHERE id = 'm-1'").get().read, 0);
+});
+
+test("mixed destroy lists destroy the valid ids and report the malformed ones", async (t) => {
+	const [responseName, result] = await single(t, "Email/set", { destroy: ["m-1", {}, ["x"], 5, "m-missing"] });
+	assert.equal(responseName, "Email/set", JSON.stringify(result));
+	assert.deepEqual(result.destroyed, ["m-1"]);
+	for (const key of ["[object Object]", "x", "5", "m-missing"]) {
+		assert.equal(result.notDestroyed[key]?.type, "notFound", `notDestroyed[${key}]: ${JSON.stringify(result.notDestroyed)}`);
+	}
+});
+
+// Mailbox/set checks the update patch's shape before folder existence and
+// before the shared-mailbox ACL: the update path never SELECTs the folder (a
+// missing folder with a well-formed patch is a silent no-op update), and the
+// permission gate needs the patch's keys, so a null patch cannot be classified
+// against either. The documented answer is invalidProperties — the same as
+// Email/set reports for a bad patch on an existing row.
+test("Mailbox/set answers a malformed patch before existence or ACL checks", async (t) => {
+	const missing = await expectSetError(t, "Mailbox/set", { update: { "mb1~f~missing": null } }, "notUpdated", "mb1~f~missing");
+	assert.equal(missing.type, "invalidProperties");
+
+	const { env, db } = await newDatabase(t, `${sharedMailboxSeed("read_only")}
+		INSERT INTO folders (id, user_id, mailbox_id, name, created_at) VALUES ('fld-team', 'admin', 'mb-team', 'Theirs', 1);
+	`);
+	const delegate = {
+		env, db, accountId: "acct", origin: "http://localhost", createdIds: {}, memo: undefined,
+		auth: { userId: "delegate", user: { id: "delegate", email: "delegate@example.com", role: "user" }, scopes: ["jmap"], mailboxIds: null },
+	};
+	const response = await app.processRequest(delegate, {
+		using: ["urn:ietf:params:jmap:core", "urn:ietf:params:jmap:mail"],
+		methodCalls: [["Mailbox/set", { update: { "mb-team~f~fld-team": null } }, "c"]],
+	});
+	const [[responseName, result]] = response.methodResponses;
+	assert.equal(responseName, "Mailbox/set", JSON.stringify(result));
+	assert.equal(result.notUpdated["mb-team~f~fld-team"].type, "invalidProperties");
 });

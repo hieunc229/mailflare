@@ -300,6 +300,8 @@ async function createDraft(ctx: JmapContext, value: Record<string, unknown>, acc
 export const emailSet: JmapMethodHandler = async (ctx, args) => {
 	const oldState = await getEmailState(ctx);
 	if (args.ifInState && args.ifInState !== oldState) return { type: "stateMismatch" };
+	// Arg-level errors are answered before any write commits (RFC 8620 §3.6.2).
+	if (args.destroy !== undefined && args.destroy !== null && !Array.isArray(args.destroy)) throw invalidArguments("destroy must be an array of ids");
 	const accessible = await listAccessibleMailboxIdSet(ctx);
 	const mailboxRows = await listJmapMailboxes(ctx);
 	const writable = new Set(mailboxRows.filter((row) => row.permission !== "read_only").map((row) => row.id));
@@ -377,11 +379,16 @@ export const emailSet: JmapMethodHandler = async (ctx, args) => {
 
 	// JMAP destroy is permanent; Mailflare keeps a trash, so destroy moves there
 	// and a second destroy from Trash deletes the row.
-	if (args.destroy !== undefined && args.destroy !== null && !Array.isArray(args.destroy)) throw invalidArguments("destroy must be an array of ids");
-	const destroyIds = (args.destroy ?? []) as string[];
-	const destroyRows = await loadMessages(ctx, destroyIds);
+	const destroyIds = (args.destroy ?? []) as unknown[];
+	// Only strings may bind in the id lookup; anything else is a per-record
+	// notFound, the same answer an unknown string id gets.
+	const destroyRows = await loadMessages(ctx, destroyIds.filter((id): id is string => typeof id === "string"));
 	const destroyById = new Map(destroyRows.map((row) => [row.id, row]));
 	for (const id of destroyIds) {
+		if (typeof id !== "string") {
+			notDestroyed[String(id)] = { type: "notFound" };
+			continue;
+		}
 		const row = destroyById.get(id);
 		if (!row || !row.mailboxId) {
 			notDestroyed[id] = { type: "notFound" };

@@ -190,6 +190,8 @@ export const mailboxChanges: JmapMethodHandler = async (ctx, args) => mailboxCha
 export const mailboxSet: JmapMethodHandler = async (ctx, args) => {
 	const oldState = await getMailboxState(ctx);
 	if (args.ifInState && args.ifInState !== oldState) return { type: "stateMismatch" };
+	// Arg-level errors are answered before any write commits (RFC 8620 §3.6.2).
+	if (args.destroy !== undefined && args.destroy !== null && !Array.isArray(args.destroy)) throw invalidArguments("destroy must be an array of ids");
 	const accessible = await listJmapMailboxes(ctx);
 	const created: Record<string, unknown> = {};
 	const notCreated: Record<string, unknown> = {};
@@ -261,7 +263,6 @@ export const mailboxSet: JmapMethodHandler = async (ctx, args) => {
 		updated[id] = null;
 	}
 
-	if (args.destroy !== undefined && args.destroy !== null && !Array.isArray(args.destroy)) throw invalidArguments("destroy must be an array of ids");
 	for (const id of (args.destroy ?? []) as string[]) {
 		const ref = decodeMailboxRef(id);
 		const mailbox = ref && accessible.find((row) => row.id === ref.mailboxId);
