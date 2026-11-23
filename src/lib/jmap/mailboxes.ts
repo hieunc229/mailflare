@@ -4,7 +4,7 @@ import { folders, messages } from "@/db/schema";
 import { draftsVisibleTo } from "@/lib/email/draft-access";
 import { newId } from "@/lib/ids";
 import { invalidArguments, JmapError } from "./errors";
-import { numberArg, safeIdKey, stringArrayArg } from "./args";
+import { numberArg, safeIdKeys, stringArrayArg } from "./args";
 import { decodeMailboxRef, encodeMailboxRef, roleToStatus, SYSTEM_ROLES } from "./ids";
 import { getMailboxState } from "./state";
 import type { AccessibleMailbox, JmapContext, JmapMethodHandler, SystemRole } from "./types";
@@ -194,7 +194,8 @@ export const mailboxSet: JmapMethodHandler = async (ctx, args) => {
 	if (args.destroy !== undefined && args.destroy !== null && !Array.isArray(args.destroy)) throw invalidArguments("destroy must be an array of ids");
 	// Response keys are computed before any write: key coercion on a malformed
 	// id would otherwise throw inside the loop after earlier destroys committed.
-	const destroyItems = ((args.destroy ?? []) as unknown[]).map((id, index) => ({ id, key: safeIdKey(id, index) }));
+	const destroyKeys = safeIdKeys((args.destroy ?? []) as unknown[]);
+	const destroyItems = ((args.destroy ?? []) as unknown[]).map((id, index) => ({ id, key: destroyKeys[index] }));
 	const accessible = await listJmapMailboxes(ctx);
 	// Client-controlled keys: a null-prototype map keeps "__proto__" an own property.
 	const created: Record<string, unknown> = Object.create(null);

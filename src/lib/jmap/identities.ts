@@ -7,7 +7,7 @@ import { decodeIdentityId, identityId } from "./ids";
 import { listJmapMailboxes, listSendableAddresses } from "./access";
 import { getEmailState } from "./state";
 import { invalidArguments, JmapError } from "./errors";
-import { safeIdKey, stringArrayArg } from "./args";
+import { safeIdKeys, stringArrayArg } from "./args";
 import type { JmapContext, JmapMethodHandler } from "./types";
 
 /** One Identity per address the account may send from. */
@@ -52,7 +52,7 @@ export const identitySet: JmapMethodHandler = async (ctx, args) => {
 		destroyed: [],
 		notCreated: Object.fromEntries(Object.keys((args.create ?? {}) as object).map((id) => [id, { type: "forbidden" }])),
 		notUpdated: Object.fromEntries(Object.keys((args.update ?? {}) as object).map((id) => [id, { type: "forbidden" }])),
-		notDestroyed: Object.fromEntries(((args.destroy ?? []) as unknown[]).map((id, index) => [safeIdKey(id, index), { type: "forbidden" }])),
+		notDestroyed: Object.fromEntries(safeIdKeys((args.destroy ?? []) as unknown[]).map((key) => [key, { type: "forbidden" }])),
 	};
 };
 
@@ -72,7 +72,7 @@ export const emailSubmissionSet: JmapMethodHandler = async (ctx, args) => {
 	if (args.destroy !== undefined && args.destroy !== null && !Array.isArray(args.destroy)) throw invalidArguments("destroy must be an array of ids");
 	// Response keys are computed before any send: key coercion on a malformed id
 	// would otherwise throw after earlier submissions already went out.
-	const destroyKeys = ((args.destroy ?? []) as unknown[]).map((id, index) => safeIdKey(id, index));
+	const destroyKeys = safeIdKeys((args.destroy ?? []) as unknown[]);
 	for (const [creationId, value] of Object.entries((args.create ?? {}) as Record<string, Record<string, unknown>>)) {
 		if (!value || typeof value !== "object") {
 			notCreated[creationId] = { type: "invalidProperties", description: "The record must be an object" };

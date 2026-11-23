@@ -11,7 +11,7 @@ import { storeMessageAttachments } from "@/lib/email/attachments";
 import { deleteMessageWithObjects } from "@/lib/email/message-cleanup";
 import { LIMITS, KEYWORD_FLAGGED, KEYWORD_SEEN } from "./constants";
 import { JmapError, invalidArguments } from "./errors";
-import { numberArg, safeIdKey, stringArrayArg } from "./args";
+import { numberArg, safeIdKeys, stringArrayArg } from "./args";
 import { decodeBlobId, decodeMailboxRef, roleToStatus } from "./ids";
 import { buildEmailObject, loadAttachmentsByMessage, resolveHeaderProperty } from "./email-objects";
 import { importFlags, parseReceivedAt, resolveDraftsMailbox } from "./email-import-utils";
@@ -326,7 +326,8 @@ export const emailSet: JmapMethodHandler = async (ctx, args) => {
 	if (args.destroy !== undefined && args.destroy !== null && !Array.isArray(args.destroy)) throw invalidArguments("destroy must be an array of ids");
 	// Response keys are computed before any write: key coercion on a malformed
 	// id would otherwise throw inside the loop after earlier destroys committed.
-	const destroyItems = ((args.destroy ?? []) as unknown[]).map((id, index) => ({ id, key: safeIdKey(id, index) }));
+	const destroyKeys = safeIdKeys((args.destroy ?? []) as unknown[]);
+	const destroyItems = ((args.destroy ?? []) as unknown[]).map((id, index) => ({ id, key: destroyKeys[index] }));
 	const accessible = await listAccessibleMailboxIdSet(ctx);
 	const mailboxRows = await listJmapMailboxes(ctx);
 	const writable = new Set(mailboxRows.filter((row) => row.permission !== "read_only").map((row) => row.id));
