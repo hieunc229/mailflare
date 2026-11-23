@@ -4,7 +4,7 @@ import { folders, messages } from "@/db/schema";
 import { draftsVisibleTo } from "@/lib/email/draft-access";
 import { newId } from "@/lib/ids";
 import { invalidArguments, JmapError } from "./errors";
-import { stringArrayArg } from "./args";
+import { numberArg, safeIdKey, stringArrayArg } from "./args";
 import { decodeMailboxRef, encodeMailboxRef, roleToStatus, SYSTEM_ROLES } from "./ids";
 import { getMailboxState } from "./state";
 import type { AccessibleMailbox, JmapContext, JmapMethodHandler, SystemRole } from "./types";
@@ -172,8 +172,8 @@ export const mailboxQuery: JmapMethodHandler = async (ctx, args) => {
 	if (filter.role !== undefined) rows = rows.filter((item) => item.role === filter.role);
 	if (filter.hasAnyRole !== undefined) rows = rows.filter((item) => (item.role !== null) === filter.hasAnyRole);
 	rows = [...rows].sort((a, b) => Number(a.sortOrder) - Number(b.sortOrder));
-	const position = Math.max(Number(args.position ?? 0), 0);
-	const limit = args.limit == null ? rows.length : Math.max(Number(args.limit), 0);
+	const position = Math.max(numberArg(args.position ?? 0), 0);
+	const limit = args.limit == null ? rows.length : Math.max(numberArg(args.limit), 0);
 	return {
 		accountId: ctx.accountId,
 		queryState: await getMailboxState(ctx),
@@ -263,21 +263,24 @@ export const mailboxSet: JmapMethodHandler = async (ctx, args) => {
 		updated[id] = null;
 	}
 
-	for (const id of (args.destroy ?? []) as string[]) {
+	// Response keys are computed before any write: key coercion on a malformed
+	// id would otherwise throw inside the loop after earlier destroys committed.
+	const destroyItems = ((args.destroy ?? []) as unknown[]).map((id) => ({ id, key: safeIdKey(id) }));
+	for (const { id, key } of destroyItems) {
 		const ref = decodeMailboxRef(id);
 		const mailbox = ref && accessible.find((row) => row.id === ref.mailboxId);
 		if (!ref || !mailbox) {
-			notDestroyed[id] = { type: "notFound" };
+			notDestroyed[key] = { type: "notFound" };
 			continue;
 		}
 		if (ref.kind !== "folder" || mailbox.permission !== "full_access") {
-			notDestroyed[id] = { type: "forbidden" };
+			notDestroyed[key] = { type: "forbidden" };
 			continue;
 		}
 		// The folder id comes from the client: it must belong to the mailbox the permission was checked on.
 		const [folder] = await ctx.db.select({ id: folders.id }).from(folders).where(and(eq(folders.id, ref.folderId), eq(folders.mailboxId, mailbox.id))).limit(1);
 		if (!folder) {
-			notDestroyed[id] = { type: "notFound" };
+			notDestroyed[key] = { type: "notFound" };
 			continue;
 		}
 		if (args.onDestroyRemoveEmails) {
@@ -285,12 +288,12 @@ export const mailboxSet: JmapMethodHandler = async (ctx, args) => {
 		} else {
 			const [inUse] = await ctx.db.select({ n: count() }).from(messages).where(and(eq(messages.folderId, ref.folderId), eq(messages.mailboxId, mailbox.id), isNull(messages.snoozedUntil)));
 			if ((inUse?.n ?? 0) > 0) {
-				notDestroyed[id] = { type: "mailboxHasEmail" };
+				notDestroyed[key] = { type: "mailboxHasEmail" };
 				continue;
 			}
 		}
 		await ctx.db.delete(folders).where(and(eq(folders.id, ref.folderId), eq(folders.mailboxId, mailbox.id)));
-		destroyed.push(id);
+		destroyed.push(key);
 	}
 
 	return {

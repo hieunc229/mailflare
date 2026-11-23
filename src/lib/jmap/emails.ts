@@ -11,7 +11,7 @@ import { storeMessageAttachments } from "@/lib/email/attachments";
 import { deleteMessageWithObjects } from "@/lib/email/message-cleanup";
 import { LIMITS, KEYWORD_FLAGGED, KEYWORD_SEEN } from "./constants";
 import { JmapError, invalidArguments } from "./errors";
-import { stringArrayArg } from "./args";
+import { numberArg, safeIdKey, stringArrayArg } from "./args";
 import { decodeBlobId, decodeMailboxRef, roleToStatus } from "./ids";
 import { buildEmailObject, loadAttachmentsByMessage, resolveHeaderProperty } from "./email-objects";
 import { importFlags, parseReceivedAt, resolveDraftsMailbox } from "./email-import-utils";
@@ -103,7 +103,7 @@ export const emailGet: JmapMethodHandler = async (ctx, args) => {
 	if (ids.length > LIMITS.maxObjectsInGet) throw new JmapError("requestTooLarge");
 	const properties = stringArrayArg(args.properties, "properties");
 	const fetchBodies = !!(args.fetchTextBodyValues || args.fetchHTMLBodyValues || args.fetchAllBodyValues);
-	const maxBodyValueBytes = Number(args.maxBodyValueBytes ?? 0);
+	const maxBodyValueBytes = numberArg(args.maxBodyValueBytes ?? 0);
 
 	const rows = await loadMessages(ctx, ids);
 	const attachments = await loadAttachmentsByMessage(ctx, rows.map((row) => row.id));
@@ -133,8 +133,8 @@ export const emailQuery: JmapMethodHandler = async (ctx, args) => {
 	// that return equal rows in any order.
 	const order = [...sortToSql(args.sort as Comparator[] | null | undefined), asc(messages.id)];
 	const collapse = !!args.collapseThreads;
-	const limit = Math.min(Math.max(Number(args.limit ?? LIMITS.maxQueryLimit), 0), LIMITS.maxQueryLimit);
-	let position = Number(args.position ?? 0);
+	const limit = Math.min(Math.max(numberArg(args.limit ?? LIMITS.maxQueryLimit), 0), LIMITS.maxQueryLimit);
+	let position = numberArg(args.position ?? 0);
 
 	const threadKey = sql<string>`coalesce(${messages.threadId}, ${messages.id})`;
 	const countTotal = async () => {
@@ -165,10 +165,11 @@ export const emailQuery: JmapMethodHandler = async (ctx, args) => {
 			ordered = allRows.filter((row) => (seen.has(row.thread) ? false : (seen.add(row.thread), true))).map((row) => row.id);
 		}
 		if (args.anchor) {
-			const index = ordered.indexOf(String(args.anchor));
+			if (typeof args.anchor !== "string") throw invalidArguments("anchor must be a message id");
+			const index = ordered.indexOf(args.anchor);
 			if (index < 0) return { type: "anchorNotFound" };
 			// An offset that reaches before the first result clamps to 0 (RFC 8620 §5.5).
-			position = Math.max(index + Number(args.anchorOffset ?? 0), 0);
+			position = Math.max(index + numberArg(args.anchorOffset ?? 0), 0);
 		} else if (position < 0) position = Math.max(ordered.length + position, 0);
 		page = ordered.slice(position, position + limit);
 		if (args.calculateTotal) total = allRows.length < MATERIALISED_QUERY_LIMIT ? ordered.length : await countTotal();
@@ -246,6 +247,22 @@ async function createDraft(ctx: JmapContext, value: Record<string, unknown>, acc
 	if (value.attachments !== undefined && value.attachments !== null && !Array.isArray(value.attachments)) {
 		return { error: { type: "invalidProperties", properties: ["attachments"], description: "attachments must be an array" } };
 	}
+	// Recipient and reference fields feed string coercion or the insert
+	// directly; a malformed item must fail the record, not the whole call.
+	const badAddress = (["to", "cc", "bcc"] as const).find(
+		(field) =>
+			Array.isArray(value[field]) &&
+			(value[field] as unknown[]).some(
+				(item) => !item || typeof item !== "object" || typeof (item as Record<string, unknown>).email !== "string" || ((item as Record<string, unknown>).name !== undefined && typeof (item as Record<string, unknown>).name !== "string"),
+			),
+	);
+	if (badAddress) return { error: { type: "invalidProperties", properties: [badAddress] } };
+	if (Array.isArray(value.references) && value.references.some((item) => typeof item !== "string")) {
+		return { error: { type: "invalidProperties", properties: ["references"] } };
+	}
+	if (Array.isArray(value.inReplyTo) && value.inReplyTo.length > 0 && typeof value.inReplyTo[0] !== "string") {
+		return { error: { type: "invalidProperties", properties: ["inReplyTo"] } };
+	}
 	const target = resolveDraftsMailbox(value.mailboxIds, accessible);
 	if ("error" in target) return target;
 	const from = (value.from as EmailAddressObject[] | undefined)?.[0]?.email;
@@ -259,7 +276,11 @@ async function createDraft(ctx: JmapContext, value: Record<string, unknown>, acc
 	const addressList = (list: unknown) =>
 		Array.isArray(list) ? joinEmailAddressList((list as EmailAddressObject[]).map((item) => formatEmailAddress(item.email, item.name))) : "";
 	const bodyValues = (value.bodyValues ?? {}) as Record<string, { value: string }>;
-	const partText = (parts: unknown) => (Array.isArray(parts) && parts[0]?.partId ? bodyValues[parts[0].partId]?.value ?? "" : "");
+	const partText = (parts: unknown) => {
+		const partId = Array.isArray(parts) && parts[0] && typeof parts[0] === "object" ? (parts[0] as Record<string, unknown>).partId : null;
+		const body = typeof partId === "string" ? bodyValues[partId]?.value : null;
+		return typeof body === "string" ? body : "";
+	};
 	const text = partText(value.textBody);
 	const html = partText(value.htmlBody);
 	const references = Array.isArray(value.references) ? (value.references as string[]).join(" ") : null;
@@ -379,14 +400,16 @@ export const emailSet: JmapMethodHandler = async (ctx, args) => {
 
 	// JMAP destroy is permanent; Mailflare keeps a trash, so destroy moves there
 	// and a second destroy from Trash deletes the row.
-	const destroyIds = (args.destroy ?? []) as unknown[];
+	// Response keys are computed before any write: key coercion on a malformed
+	// id would otherwise throw inside the loop after earlier destroys committed.
+	const destroyItems = ((args.destroy ?? []) as unknown[]).map((id) => ({ id, key: safeIdKey(id) }));
 	// Only strings may bind in the id lookup; anything else is a per-record
 	// notFound, the same answer an unknown string id gets.
-	const destroyRows = await loadMessages(ctx, destroyIds.filter((id): id is string => typeof id === "string"));
+	const destroyRows = await loadMessages(ctx, destroyItems.map((item) => item.id).filter((id): id is string => typeof id === "string"));
 	const destroyById = new Map(destroyRows.map((row) => [row.id, row]));
-	for (const id of destroyIds) {
+	for (const { id, key } of destroyItems) {
 		if (typeof id !== "string") {
-			notDestroyed[String(id)] = { type: "notFound" };
+			notDestroyed[key] = { type: "notFound" };
 			continue;
 		}
 		const row = destroyById.get(id);

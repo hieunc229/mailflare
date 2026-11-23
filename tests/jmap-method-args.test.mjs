@@ -313,7 +313,8 @@ test("mixed destroy lists destroy the valid ids and report the malformed ones", 
 	const [responseName, result] = await single(t, "Email/set", { destroy: ["m-1", {}, ["x"], 5, "m-missing"] });
 	assert.equal(responseName, "Email/set", JSON.stringify(result));
 	assert.deepEqual(result.destroyed, ["m-1"]);
-	for (const key of ["[object Object]", "x", "5", "m-missing"]) {
+	// Malformed ids are keyed by their JSON echo, never by toString coercion.
+	for (const key of ["{}", '["x"]', "5", "m-missing"]) {
 		assert.equal(result.notDestroyed[key]?.type, "notFound", `notDestroyed[${key}]: ${JSON.stringify(result.notDestroyed)}`);
 	}
 });
@@ -342,4 +343,100 @@ test("Mailbox/set answers a malformed patch before existence or ACL checks", asy
 	const [[responseName, result]] = response.methodResponses;
 	assert.equal(responseName, "Mailbox/set", JSON.stringify(result));
 	assert.equal(result.notUpdated["mb-team~f~fld-team"].type, "invalidProperties");
+});
+
+// A destroy item like {"toString":5} broke record-key coercion inside the
+// notDestroyed map — a TypeError the per-call catch-all answered as
+// serverFail, and in a mixed list it landed AFTER the valid id was already
+// destroyed (RFC 8620 §3.6.2 again). Response keys are now normalised before
+// any write: strings stay themselves, everything else gets JSON.stringify.
+const HOSTILE = { toString: 5 };
+const HOSTILE_KEY = JSON.stringify(HOSTILE);
+
+test("a hostile destroy item answers a per-record error, not serverFail", async (t) => {
+	for (const name of ["Mailbox/set", "Email/set"]) {
+		const [responseName, result] = await single(t, name, { destroy: [HOSTILE] });
+		assert.equal(responseName, name, JSON.stringify(result));
+		assert.equal(result.notDestroyed[HOSTILE_KEY]?.type, "notFound", `${name}: ${JSON.stringify(result.notDestroyed)}`);
+	}
+	// Identity/set and EmailSubmission/set answer forbidden for every destroy
+	// id by design — the hostile key gets the same verdict, not a throw.
+	for (const name of ["Identity/set", "EmailSubmission/set"]) {
+		const [responseName, result] = await single(t, name, { destroy: [HOSTILE] });
+		assert.equal(responseName, name, JSON.stringify(result));
+		assert.equal(result.notDestroyed[HOSTILE_KEY]?.type, "forbidden", `${name}: ${JSON.stringify(result.notDestroyed)}`);
+	}
+});
+
+test("a hostile destroy item after a valid id cannot throw past the write", async (t) => {
+	const { env, db, sqlite } = await newDatabase(t, SEED);
+	const response = await app.processRequest(context(db, env), {
+		using: ["urn:ietf:params:jmap:core", "urn:ietf:params:jmap:mail"],
+		methodCalls: [["Email/set", { destroy: ["m-1", HOSTILE] }, "set"]],
+	});
+	const [[responseName, result]] = response.methodResponses;
+	assert.equal(responseName, "Email/set", JSON.stringify(result));
+	assert.deepEqual(result.destroyed, ["m-1"]);
+	assert.equal(result.notDestroyed[HOSTILE_KEY]?.type, "notFound");
+	assert.equal(sqlite.prepare("SELECT status FROM messages WHERE id = 'm-1'").get().status, "trash");
+});
+
+test("a hostile destroy item cannot throw past a committed Mailbox create", async (t) => {
+	const [responseName, result] = await single(t, "Mailbox/set", {
+		create: { good: { name: "Projects", parentId: "mb1" } },
+		destroy: [HOSTILE],
+	});
+	assert.equal(responseName, "Mailbox/set", JSON.stringify(result));
+	assert.ok(result.created.good, `the valid create should land: ${JSON.stringify(result)}`);
+	assert.equal(result.notDestroyed[HOSTILE_KEY]?.type, "notFound");
+});
+
+test("hostile values inside a create record are per-record errors", async (t) => {
+	// String(value.emailId) used to throw mid-loop in EmailSubmission/set.
+	const submission = await expectSetError(t, "EmailSubmission/set", { create: { x: { emailId: HOSTILE } } }, "notCreated", "x");
+	assert.equal(submission.type, "invalidProperties", JSON.stringify(submission));
+
+	// Recipient/reference fields in Email/set create map straight into
+	// insertDraft; a hostile item must not throw past earlier creations.
+	const base = { mailboxIds: { "mb1~drafts": true }, from: [{ email: "kevin@example.com" }] };
+	for (const [field, value] of [
+		["to", [HOSTILE]],
+		["to", [{ email: HOSTILE }]],
+		["to", [{ email: "a@b.c", name: HOSTILE }]],
+		["to", [null]],
+		["cc", [{ email: HOSTILE }]],
+		["bcc", [{ email: HOSTILE }]],
+		["references", [HOSTILE]],
+		["inReplyTo", [HOSTILE]],
+	]) {
+		const error = await expectSetError(t, "Email/set", { create: { x: { ...base, [field]: value } } }, "notCreated", "x");
+		assert.equal(error.type, "invalidProperties", `${field}=${JSON.stringify(value)}`);
+		assert.deepEqual(error.properties, [field]);
+	}
+});
+
+test("hostile numeric and anchor args cannot throw", async (t) => {
+	// NaN-path args degrade like any other unusable number: the call answers.
+	for (const args of [{ limit: HOSTILE }, { position: HOSTILE }, { anchor: "m-1", anchorOffset: HOSTILE }]) {
+		const [responseName, result] = await single(t, "Email/query", args);
+		assert.equal(responseName, "Email/query", `${JSON.stringify(args)} -> ${JSON.stringify(result)}`);
+	}
+	const [getName, get] = await single(t, "Email/get", { ids: ["m-1"], maxBodyValueBytes: HOSTILE });
+	assert.equal(getName, "Email/get");
+	assert.equal(get.list.length, 1);
+	const [queryName] = await single(t, "Mailbox/query", { limit: HOSTILE });
+	assert.equal(queryName, "Mailbox/query");
+	// A non-string anchor is a malformed Id, so it is invalidArguments.
+	const error = await expectError(t, "Email/query", { anchor: HOSTILE });
+	assert.equal(error.type, "invalidArguments");
+});
+
+test("hostile filter internals are invalidArguments, not serverFail", async (t) => {
+	for (const filter of [
+		{ header: ["references", HOSTILE] },
+		{ operator: HOSTILE, conditions: [{}] },
+	]) {
+		const error = await expectError(t, "Email/query", { filter });
+		assert.equal(error.type, "invalidArguments", `filter=${JSON.stringify(filter)}`);
+	}
 });

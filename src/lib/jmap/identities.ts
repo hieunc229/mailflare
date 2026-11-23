@@ -7,7 +7,7 @@ import { decodeIdentityId, identityId } from "./ids";
 import { listJmapMailboxes, listSendableAddresses } from "./access";
 import { getEmailState } from "./state";
 import { invalidArguments, JmapError } from "./errors";
-import { stringArrayArg } from "./args";
+import { safeIdKey, stringArrayArg } from "./args";
 import type { JmapContext, JmapMethodHandler } from "./types";
 
 /** One Identity per address the account may send from. */
@@ -52,7 +52,7 @@ export const identitySet: JmapMethodHandler = async (ctx, args) => {
 		destroyed: [],
 		notCreated: Object.fromEntries(Object.keys((args.create ?? {}) as object).map((id) => [id, { type: "forbidden" }])),
 		notUpdated: Object.fromEntries(Object.keys((args.update ?? {}) as object).map((id) => [id, { type: "forbidden" }])),
-		notDestroyed: Object.fromEntries(((args.destroy ?? []) as string[]).map((id) => [id, { type: "forbidden" }])),
+		notDestroyed: Object.fromEntries(((args.destroy ?? []) as unknown[]).map((id) => [safeIdKey(id), { type: "forbidden" }])),
 	};
 };
 
@@ -74,7 +74,10 @@ export const emailSubmissionSet: JmapMethodHandler = async (ctx, args) => {
 			notCreated[creationId] = { type: "invalidProperties", description: "The record must be an object" };
 			continue;
 		}
-		const emailId = ctx.createdIds[String(value.emailId).replace(/^#/, "")] ?? String(value.emailId ?? "");
+		// String() on a non-string id would invoke the value's own toString and
+		// can throw mid-loop; a malformed reference just cannot match a draft.
+		const emailIdRef = typeof value.emailId === "string" ? value.emailId : "";
+		const emailId = ctx.createdIds[emailIdRef.replace(/^#/, "")] ?? emailIdRef;
 		const identity = typeof value.identityId === "string" ? decodeIdentityId(value.identityId) : null;
 		const accessible = await listJmapMailboxes(ctx);
 		if (!identity || !accessible.some((mailbox) => mailbox.id === identity.mailboxId && mailbox.permission !== "read_only")) {
@@ -145,7 +148,7 @@ export const emailSubmissionSet: JmapMethodHandler = async (ctx, args) => {
 		destroyed: [],
 		notCreated,
 		notUpdated: Object.fromEntries(Object.keys((args.update ?? {}) as object).map((id) => [id, { type: "forbidden" }])),
-		notDestroyed: Object.fromEntries(((args.destroy ?? []) as string[]).map((id) => [id, { type: "forbidden" }])),
+		notDestroyed: Object.fromEntries(((args.destroy ?? []) as unknown[]).map((id) => [safeIdKey(id), { type: "forbidden" }])),
 		// Surfaced so the processor can append the implicit Email/set response.
 		__destroyedEmails: destroyedEmails,
 	};

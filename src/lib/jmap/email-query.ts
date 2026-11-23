@@ -53,11 +53,11 @@ function threadHasMessage(keyword: string, present: boolean, viewerId: string): 
  * inbound rows store them with and outbound rows without.
  */
 function headerCondition(header: string[]): SQL {
-	if (!Array.isArray(header) || header.length < 1 || header.length > 2 || typeof header[0] !== "string") {
+	if (!Array.isArray(header) || header.length < 1 || header.length > 2 || typeof header[0] !== "string" || (header.length === 2 && typeof header[1] !== "string")) {
 		throw invalidArguments("header must be [name] or [name, value]");
 	}
 	const name = header[0].trim().toLowerCase();
-	const value = header.length === 2 ? normalizeMessageId(String(header[1])) : null;
+	const value = header.length === 2 ? normalizeMessageId(header[1]) : null;
 	switch (name) {
 		case "message-id":
 			if (header.length === 1) return isNotNull(messages.providerMessageId);
@@ -156,7 +156,7 @@ export function filterToSql(filter: Filter | null | undefined, accessible: Set<s
 		if (filter.operator === "OR") return or(...children);
 		// RFC 8620 §5.5: NOT matches when none of its conditions match.
 		if (filter.operator === "NOT") return not(or(...children)!);
-		throw invalidArguments(`Unknown operator ${String(filter.operator)}`);
+		throw invalidArguments(`Unknown operator ${JSON.stringify(filter.operator)}`);
 	}
 	const parts = conditionToSql(filter, accessible, viewerId);
 	return parts.length ? and(...parts) : undefined;
