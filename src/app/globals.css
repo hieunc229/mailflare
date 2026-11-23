@@ -516,6 +516,16 @@ button {
 	}
 }
 
+/* iOS Safari zooms the page when a focused field's text is under 16px and keeps that zoom after blur, which clips every screen. Unlayered so it beats text-sm; pinch zoom stays available. */
+@media (pointer: coarse) {
+	input:not([type="checkbox"], [type="radio"], [type="range"], [type="file"], [type="color"], [type="hidden"]),
+	select,
+	textarea,
+	[contenteditable="true"] {
+		font-size: 16px;
+	}
+}
+
 /* Keeps a full-screen app shell clear of the notch, home indicator and landscape cut-outs in standalone iOS (viewport-fit=cover). */
 @utility safe-area {
 	padding-top: env(safe-area-inset-top);
