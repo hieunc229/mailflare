@@ -23,7 +23,12 @@ export async function POST(request: Request, { params }: AccountRouteParams) {
 	const { access, account } = await getManagedAccount(request, id);
 	if (access.error) return access.error;
 	if (!account) return NextResponse.json({ error: "Account not found" }, { status: 404 });
-	const form = await request.formData();
+	let form: FormData;
+	try {
+		form = await request.formData();
+	} catch {
+		return NextResponse.json({ error: "Expected multipart form data" }, { status: 400 });
+	}
 	const images = getOptimizedAvatarFiles(form);
 	if (!images) return NextResponse.json({ error: "A resized WebP image and preview are required" }, { status: 400 });
 	const key = avatarKeyFor(account.id);
