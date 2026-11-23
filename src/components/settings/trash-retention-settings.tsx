@@ -22,7 +22,7 @@ export function TrashRetentionSettings() {
 			})
 			.catch((nextError) => setError(nextError instanceof Error ? nextError.message : t("settings.trash.loadFailed")))
 			.finally(() => setLoading(false));
-	}, []);
+	}, [t]);
 
 	async function updateDays(nextDays: number | null) {
 		const previous = days;
