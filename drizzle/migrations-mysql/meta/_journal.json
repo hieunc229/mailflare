@@ -190,6 +190,13 @@
       "when": 1795027668151,
       "tag": "0026_contact_details",
       "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "5",
+      "when": 1795445064074,
+      "tag": "0020_contact_groups",
+      "breakpoints": true
     }
   ]
 }

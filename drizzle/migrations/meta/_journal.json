@@ -659,6 +659,13 @@
       "when": 1795027687014,
       "tag": "0102_contact_details",
       "breakpoints": true
+    },
+    {
+      "idx": 88,
+      "version": "6",
+      "when": 1795445064074,
+      "tag": "0096_contact_groups",
+      "breakpoints": true
     }
   ]
 }

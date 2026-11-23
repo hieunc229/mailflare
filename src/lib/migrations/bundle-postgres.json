@@ -553,6 +553,21 @@
         "CREATE TABLE \"contact_details\" (\n\t\"contact_id\" text PRIMARY KEY NOT NULL,\n\t\"details\" text DEFAULT '{}' NOT NULL,\n\t\"updated_at\" bigint NOT NULL\n);",
         "ALTER TABLE \"contact_details\" ADD CONSTRAINT \"contact_details_contact_id_contacts_id_fk\" FOREIGN KEY (\"contact_id\") REFERENCES \"public\".\"contacts\"(\"id\") ON DELETE cascade ON UPDATE no action;"
       ]
+    },
+    {
+      "name": "0020_contact_groups.sql",
+      "statements": [
+        "CREATE TABLE \"contact_groups\" (\n\t\"id\" text PRIMARY KEY NOT NULL,\n\t\"user_id\" text NOT NULL,\n\t\"name\" text NOT NULL,\n\t\"created_at\" bigint NOT NULL\n);",
+        "CREATE TABLE \"contact_group_members\" (\n\t\"id\" text PRIMARY KEY NOT NULL,\n\t\"group_id\" text NOT NULL,\n\t\"contact_id\" text NOT NULL,\n\t\"created_at\" bigint NOT NULL\n);",
+        "ALTER TABLE \"contact_groups\" ADD CONSTRAINT \"contact_groups_user_id_users_id_fk\" FOREIGN KEY (\"user_id\") REFERENCES \"public\".\"users\"(\"id\") ON DELETE cascade ON UPDATE no action;",
+        "ALTER TABLE \"contact_group_members\" ADD CONSTRAINT \"contact_group_members_group_id_contact_groups_id_fk\" FOREIGN KEY (\"group_id\") REFERENCES \"public\".\"contact_groups\"(\"id\") ON DELETE cascade ON UPDATE no action;",
+        "ALTER TABLE \"contact_group_members\" ADD CONSTRAINT \"contact_group_members_contact_id_contacts_id_fk\" FOREIGN KEY (\"contact_id\") REFERENCES \"public\".\"contacts\"(\"id\") ON DELETE cascade ON UPDATE no action;",
+        "CREATE UNIQUE INDEX \"contact_groups_user_name_idx\" ON \"contact_groups\" USING btree (\"user_id\",\"name\");",
+        "CREATE INDEX \"contact_groups_user_idx\" ON \"contact_groups\" USING btree (\"user_id\");",
+        "CREATE UNIQUE INDEX \"contact_group_members_group_contact_idx\" ON \"contact_group_members\" USING btree (\"group_id\",\"contact_id\");",
+        "CREATE INDEX \"contact_group_members_group_idx\" ON \"contact_group_members\" USING btree (\"group_id\");",
+        "CREATE INDEX \"contact_group_members_contact_idx\" ON \"contact_group_members\" USING btree (\"contact_id\");"
+      ]
     }
   ]
 }
