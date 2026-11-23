@@ -96,5 +96,9 @@ export function getSessionTokenFromRequestHeaders(request: Request): string | un
 	if (authorization?.startsWith("Bearer ")) return authorization.slice(7).trim() || undefined;
 	const cookie = request.headers.get("Cookie") ?? "";
 	const match = cookie.match(new RegExp(`(?:^|;\\s*)${SESSION_COOKIE}=([^;]+)`));
-	return match ? decodeURIComponent(match[1]) : undefined;
+	try {
+		return match ? decodeURIComponent(match[1]) : undefined;
+	} catch {
+		return undefined;
+	}
 }
