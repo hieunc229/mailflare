@@ -2582,5 +2582,19 @@
 	"invite.calendarOnly": "Calendar only",
 	"invite.wasPrev": "(was {action})",
 	"invite.changeHint": "Send again to change your answer",
-	"invite.undo": "Undo"
+	"invite.undo": "Undo",
+	"general.sharedFiles": "Archivos compartidos",
+	"general.sharedFilesDescribe": "Los archivos que no caben en el mensaje se envían como enlaces de descarga. Elige cómo llegan al destinatario.",
+	"general.sharedFilesEnable": "Enviar el mensaje introductorio encima de los archivos",
+	"general.sharedFilesText": "Tu propio mensaje (opcional)",
+	"general.sharedFilesTextPlaceholder": "Archivos compartidos contigo (los enlaces de descarga caducan después de {days} días):",
+	"general.sharedFilesTextHint": "Déjalo vacío para usar el texto traducido por defecto. {days} se sustituye por los días de abajo.",
+	"general.sharedFilesDays": "Los enlaces de descarga caducan después de (días)",
+	"general.sharedFilesDaysHint": "Entre 1 y 365 días. También es lo que indica el mensaje.",
+	"general.sharedFilesLocale": "Idioma del aviso",
+	"general.sharedFilesLocaleAuto": "Automático (el idioma del remitente)",
+	"general.sharedFilesStyle": "Cómo se muestran los archivos compartidos",
+	"general.sharedFilesStyleCard": "Tarjetas tipo adjunto (recomendado)",
+	"general.sharedFilesStyleLinks": "Lista simple de enlaces",
+	"attachment.sharedExpires": "Caduca en {days} días"
 }

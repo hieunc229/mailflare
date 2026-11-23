@@ -2548,5 +2548,19 @@
 	"invite.wasPrev": "(was {action})",
 	"invite.changeHint": "Send again to change your answer",
 	"invite.undo": "Undo",
-	"update.availableCommits.one": "{count} new change is available (latest {target})."
+	"update.availableCommits.one": "{count} new change is available (latest {target}).",
+	"general.sharedFiles": "Tệp chia sẻ",
+	"general.sharedFilesDescribe": "Tệp quá lớn được gửi dưới dạng liên kết tải xuống. Chọn cách hiển thị.",
+	"general.sharedFilesEnable": "Gửi lời nhắn giới thiệu trên các tệp",
+	"general.sharedFilesText": "Tin nhắn của bạn (tùy chọn)",
+	"general.sharedFilesTextPlaceholder": "Tệp được chia sẻ với bạn (liên kết hết hạn sau {days} ngày):",
+	"general.sharedFilesTextHint": "Để trống để dùng văn bản mặc định đã dịch. {days} là số ngày bên dưới.",
+	"general.sharedFilesDays": "Liên kết hết hạn sau (ngày)",
+	"general.sharedFilesDaysHint": "Từ 1 đến 365 ngày. Thông báo cũng ghi số ngày này.",
+	"general.sharedFilesLocale": "Ngôn ngữ thông báo",
+	"general.sharedFilesLocaleAuto": "Tự động (ngôn ngữ người gửi)",
+	"general.sharedFilesStyle": "Cách hiển thị tệp",
+	"general.sharedFilesStyleCard": "Thẻ như tệp đính kèm (khuyến nghị)",
+	"general.sharedFilesStyleLinks": "Danh sách liên kết",
+	"attachment.sharedExpires": "Hết hạn sau {days} ngày"
 }

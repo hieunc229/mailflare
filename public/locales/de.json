@@ -2566,5 +2566,19 @@
 	"invite.calendarOnly": "Calendar only",
 	"invite.wasPrev": "(was {action})",
 	"invite.changeHint": "Send again to change your answer",
-	"invite.undo": "Undo"
+	"invite.undo": "Undo",
+	"general.sharedFiles": "Geteilte Dateien",
+	"general.sharedFilesDescribe": "Zu große Dateien werden als Download-Links gesendet. Wählen Sie, wie sie beim Empfänger ankommen.",
+	"general.sharedFilesEnable": "Einleitungstext über den Dateien senden",
+	"general.sharedFilesText": "Eigene Nachricht (optional)",
+	"general.sharedFilesTextPlaceholder": "Für Sie freigegebene Dateien (Links laufen nach {days} Tagen ab):",
+	"general.sharedFilesTextHint": "Leer lassen für den übersetzten Standardtext. {days} wird durch die Tage unten ersetzt.",
+	"general.sharedFilesDays": "Download-Links laufen ab nach (Tagen)",
+	"general.sharedFilesDaysHint": "Zwischen 1 und 365 Tagen. Das steht auch in der Nachricht.",
+	"general.sharedFilesLocale": "Sprache des Hinweises",
+	"general.sharedFilesLocaleAuto": "Automatisch (Sprache des Absenders)",
+	"general.sharedFilesStyle": "Darstellung geteilter Dateien",
+	"general.sharedFilesStyleCard": "Karten wie Anhänge (empfohlen)",
+	"general.sharedFilesStyleLinks": "Einfache Linkliste",
+	"attachment.sharedExpires": "Läuft in {days} Tagen ab"
 }

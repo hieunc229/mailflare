@@ -43,8 +43,13 @@ for (const provider of ["resend", "ses"]) {
 		const out = await prepareOutboundAttachments(env, provider, [small, file("big.pdf", 30 * MB, "att_big")], message);
 		assert.deepEqual(out.attachments, [small]);
 		assert.deepEqual(env.linked, ["att_big"]);
-		assert.match(out.html, /^<p>Hi<\/p><div>.*big\.pdf \(30\.0 MB\): <a href="https:\/\/mail\.example\.com\/api\/shared-files\/link_att_big">/s);
-		assert.match(out.text, /^Hi\n\n.*big\.pdf \(30\.0 MB\): https:\/\/mail\.example\.com\/api\/shared-files\/link_att_big/s);
+		// One card: the whole box is the download anchor, name, type, size and expiry are inside it.
+		assert.ok(out.html.startsWith("<p>Hi</p>"));
+		assert.match(out.html, /<table role="presentation"/);
+		assert.match(out.html, /<a href="https:\/\/mail\.example\.com\/api\/shared-files\/link_att_big"[^>]*>/);
+		assert.ok(out.html.includes("big.pdf"));
+		assert.ok(out.html.includes("PDF · 30.0 MB"));
+		assert.match(out.text, /^Hi\n\n.*Files shared through Mailflare \(download links expire after 30 days\):\n\n.*big\.pdf \(PDF · 30\.0 MB\): https:\/\/mail\.example\.com\/api\/shared-files\/link_att_big/s);
 	});
 
 	test(`${provider}: an over-threshold file without a storageId is refused, not dropped`, async () => {
@@ -63,5 +68,64 @@ for (const provider of ["resend", "ses"]) {
 test("the notice follows the sender's locale", async () => {
 	const localized = await prepareOutboundAttachments(makeEnv(), "resend", [file("big.pdf", 30 * MB, "x")], { ...message, locale: "de" });
 	assert.ok(localized.text.includes(de["attachment.sharedIntro"].replace("{days}", "30")));
-	assert.ok(localized.html.includes(`>${de["attachment.sharedDownload"]}</a>`));
+	assert.ok(localized.html.includes(de["attachment.sharedDownload"]));
+	assert.ok(localized.html.includes(de["attachment.sharedIntro"].replace("{days}", "30")));
+});
+
+// The administrator's settings reach the message: the notice switch, a custom sentence, the lifetime and the style.
+// A D1-shaped binding whose only row answers the app_settings select drizzle emits. drizzle calls
+// env.DB.prepare(sql) and then .bind(...params) on the returned statement.
+const reflect = (settings) => {
+	const row = {
+		shared_files_notice_enabled: settings.enabled ?? true,
+		shared_files_notice_text: settings.text ?? null,
+		shared_files_link_days: settings.days ?? 30,
+		shared_files_notice_locale: settings.locale ?? null,
+		shared_files_card_style: settings.style ?? "card",
+	};
+	const statement = {
+		all: async () => ({ results: [row], success: true, meta: {} }),
+		raw: async () => [Object.values(row)],
+		run: async () => ({ results: [], success: true, meta: {} }),
+		bind: () => statement,
+	};
+	return { prepare: () => statement };
+};
+const broken = () => {
+	const statement = {
+		all: async () => { throw new Error("no such column"); },
+		raw: async () => { throw new Error("no such column"); },
+		run: async () => { throw new Error("no such column"); },
+		bind: () => statement,
+	};
+	return { prepare: () => statement };
+};
+
+test("the administrator can switch the notice off and the cards still go out", async () => {
+	const env = { ...makeEnv(), DB: reflect({ enabled: false }) };
+	const out = await prepareOutboundAttachments(env, "resend", [file("big.pdf", 30 * MB, "x")], message);
+	assert.match(out.html, /<a href="https:\/\/mail\.example\.com\/api\/shared-files\/link_x"/);
+	assert.doesNotMatch(out.text, /Files shared through Mailflare/);
+	assert.doesNotMatch(out.html, /Expires in/);
+});
+
+test("a custom sentence and a custom lifetime replace the defaults", async () => {
+	const env = { ...makeEnv(), DB: reflect({ text: "Te dejo los archivos, caducan en {days} días:", days: 7 }) };
+	const out = await prepareOutboundAttachments(env, "resend", [file("big.pdf", 30 * MB, "x")], message);
+	assert.ok(out.text.includes("Te dejo los archivos, caducan en 7 días:"));
+	assert.ok(out.text.includes("Expires in 7 days") || out.html.includes("Expires in 7 days"));
+});
+
+test("the plain-links presentation removes the cards", async () => {
+	const env = { ...makeEnv(), DB: reflect({ style: "links" }) };
+	const out = await prepareOutboundAttachments(env, "resend", [file("big.pdf", 30 * MB, "x")], message);
+	assert.doesNotMatch(out.html, /<table/);
+	assert.match(out.html, /<li>big\.pdf \(PDF · 30\.0 MB\): <a href="/);
+});
+
+test("an unreadable settings table falls back to the defaults instead of failing the send", async () => {
+	const env = { ...makeEnv(), DB: broken() };
+	const out = await prepareOutboundAttachments(env, "resend", [file("big.pdf", 30 * MB, "x")], message);
+	assert.match(out.html, /Files shared through Mailflare \(download links expire after 30 days\):/);
+	assert.match(out.html, /<table role="presentation"/);
 });

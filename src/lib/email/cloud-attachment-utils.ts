@@ -1,10 +1,11 @@
 import type { AttachmentContent } from "./attachment-types";
 import { planAttachmentDelivery } from "./attachment-limits";
 import type { SendingProvider } from "./outbound-provider-types";
-import { SHARED_ATTACHMENT_LINK_DAYS, getOrCreateSharedAttachmentUrl } from "./shared-attachments";
+import { getOrCreateSharedAttachmentUrl } from "./shared-attachments";
+import { getSharedFilesSettings } from "./attachment-policy";
 import { sharedFileNotice } from "./shared-file-notice";
 import type { SharedFileLink } from "./shared-file-notice";
-import { createTranslator, defaultTranslator, loadMessages, resolveLocale } from "@/lib/i18n/utils";
+import { createTranslator, loadMessages, resolveLocale } from "@/lib/i18n/utils";
 import type { Translator } from "@/lib/i18n/utils";
 
 const GENERAL_MESSAGE_LIMIT_BYTES = 5 * 1024 * 1024;
@@ -12,11 +13,16 @@ const MIME_SAFETY_MARGIN_BYTES = 256 * 1024;
 
 /** The sender's catalog through the static assets binding; English when it is unset or cannot be read. */
 async function senderTranslator(env: CloudflareEnv, value: string | undefined): Promise<Translator> {
+	return localeTranslator(env, resolveLocale(value));
+}
+
+/** One catalog by locale code; English when the code is unknown or the catalog cannot be read. */
+async function localeTranslator(env: CloudflareEnv, value: string): Promise<Translator> {
 	const locale = resolveLocale(value);
 	try {
 		return createTranslator(locale, await loadMessages(locale, (path) => env.ASSETS.fetch(new URL(path, "https://mailflare.local"))));
 	} catch {
-		return defaultTranslator;
+		return createTranslator(locale);
 	}
 }
 
@@ -32,6 +38,7 @@ export async function prepareOutboundAttachments(
 ): Promise<{ attachments: AttachmentContent[]; html?: string; text?: string }> {
 	const encoder = new TextEncoder();
 	const baseSize = encoder.encode(message.subject + (message.html ?? "") + (message.text ?? "") + JSON.stringify(message.headers)).byteLength + 8192;
+	const { sharedFilesNoticeEnabled, sharedFilesNoticeText, sharedFilesLinkDays, sharedFilesNoticeLocale, sharedFilesCardStyle } = await getSharedFilesSettings(env);
 	const plan = planAttachmentDelivery(provider, attachments.map((attachment) => attachment.content.byteLength), baseSize);
 	const direct: AttachmentContent[] = [];
 	const linked: SharedFileLink[] = [];
@@ -44,14 +51,23 @@ export async function prepareOutboundAttachments(
 			continue;
 		}
 		if (!attachment.storageId) throw new Error("Large attachment was not stored in object storage");
-		linked.push({ filename: attachment.filename, size, url: await getOrCreateSharedAttachmentUrl(env, attachment.storageId, message.publicOrigin) });
+		const url = await getOrCreateSharedAttachmentUrl(env, attachment.storageId, message.publicOrigin, sharedFilesLinkDays);
+		linked.push({ filename: attachment.filename, size, type: attachment.type, url, expiresAt: new Date(Date.now() + sharedFilesLinkDays * 24 * 60 * 60_000) });
 	}
 	const cloudflare = provider === "cloudflare";
 	if (!linked.length) {
 		if (cloudflare && estimatedSize > GENERAL_MESSAGE_LIMIT_BYTES - MIME_SAFETY_MARGIN_BYTES) throw new Error("Message exceeds Cloudflare's 5 MiB email size limit");
 		return { attachments: direct, html: message.html, text: message.text };
 	}
-	const notice = sharedFileNotice(linked, SHARED_ATTACHMENT_LINK_DAYS, await senderTranslator(env, message.locale));
+	// The administrator's fixed language wins; otherwise the sender's own.
+	const translator = sharedFilesNoticeLocale ? await localeTranslator(env, sharedFilesNoticeLocale) : await senderTranslator(env, message.locale);
+	const notice = sharedFileNotice(linked, {
+		enabled: sharedFilesNoticeEnabled,
+		text: sharedFilesNoticeText,
+		days: sharedFilesLinkDays,
+		style: sharedFilesCardStyle === "links" ? "links" : "card",
+		t: translator,
+	});
 	const text = notice.textBlock(message.text);
 	const html = `${message.html ?? ""}${notice.htmlBlock}`;
 	if (cloudflare && estimatedSize + encoder.encode(notice.text + notice.html + notice.intro + notice.intro).byteLength + 4096 > GENERAL_MESSAGE_LIMIT_BYTES - MIME_SAFETY_MARGIN_BYTES) {

@@ -2566,5 +2566,19 @@
 	"invite.calendarOnly": "Calendar only",
 	"invite.wasPrev": "(was {action})",
 	"invite.changeHint": "Send again to change your answer",
-	"invite.undo": "Undo"
+	"invite.undo": "Undo",
+	"general.sharedFiles": "Gedeelde bestanden",
+	"general.sharedFilesDescribe": "Te grote bestanden gaan als downloadlinks. Kies hoe ze aankomen.",
+	"general.sharedFilesEnable": "Inleidende tekst boven de bestanden sturen",
+	"general.sharedFilesText": "Eigen bericht (optioneel)",
+	"general.sharedFilesTextPlaceholder": "Bestanden met u gedeeld (links verlopen na {days} dagen):",
+	"general.sharedFilesTextHint": "Leeg laten gebruikt de vertaalde standaardtekst. {days} wordt het aantal dagen hieronder.",
+	"general.sharedFilesDays": "Links verlopen na (dagen)",
+	"general.sharedFilesDaysHint": "Tussen 1 en 365 dagen. Dat staat ook in het bericht.",
+	"general.sharedFilesLocale": "Taal van de melding",
+	"general.sharedFilesLocaleAuto": "Automatisch (taal van de afzender)",
+	"general.sharedFilesStyle": "Weergave van gedeelde bestanden",
+	"general.sharedFilesStyleCard": "Kaarten als bijlage (aanbevolen)",
+	"general.sharedFilesStyleLinks": "Eenvoudige lijst met links",
+	"attachment.sharedExpires": "Verloopt over {days} dagen"
 }

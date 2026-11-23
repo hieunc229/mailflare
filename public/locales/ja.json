@@ -2548,5 +2548,19 @@
 	"invite.wasPrev": "(was {action})",
 	"invite.changeHint": "Send again to change your answer",
 	"invite.undo": "Undo",
-	"update.availableCommits.one": "{count} new change is available (latest {target})."
+	"update.availableCommits.one": "{count} new change is available (latest {target}).",
+	"general.sharedFiles": "共有ファイル",
+	"general.sharedFilesDescribe": "大きすぎるファイルはダウンロードリンクとして送信されます。表示方法を選択してください。",
+	"general.sharedFilesEnable": "ファイルの上に説明文を送信する",
+	"general.sharedFilesText": "独自のメッセージ（任意）",
+	"general.sharedFilesTextPlaceholder": "共有ファイル（ダウンロードリンクは{days}日後に失効します）：",
+	"general.sharedFilesTextHint": "空欄の場合は翻訳済みの既定文を使用します。{days} は下の日数に置き換わります。",
+	"general.sharedFilesDays": "ダウンロードリンクの有効期限（日）",
+	"general.sharedFilesDaysHint": "1〜365日。メッセージにもこの日数が表示されます。",
+	"general.sharedFilesLocale": "通知の言語",
+	"general.sharedFilesLocaleAuto": "自動（送信者の言語）",
+	"general.sharedFilesStyle": "共有ファイルの表示",
+	"general.sharedFilesStyleCard": "添付ファイル風カード（推奨）",
+	"general.sharedFilesStyleLinks": "リンクの一覧",
+	"attachment.sharedExpires": "{days}日後に失効"
 }

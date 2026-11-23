@@ -9,6 +9,7 @@ export async function getOrCreateSharedAttachmentUrl(
 	env: CloudflareEnv,
 	attachmentId: string,
 	publicOrigin?: string,
+	days: number = SHARED_ATTACHMENT_LINK_DAYS,
 ): Promise<string> {
 	const origin = env.APP_URL?.trim() || publicOrigin;
 	if (!origin) throw new Error("Set APP_URL before sending large attachments as download links");
@@ -23,7 +24,7 @@ export async function getOrCreateSharedAttachmentUrl(
 	await db.insert(sharedAttachmentLinks).values({
 		id,
 		attachmentId,
-		expiresAt: new Date(now.getTime() + SHARED_ATTACHMENT_LINK_DAYS * 24 * 60 * 60_000),
+		expiresAt: new Date(now.getTime() + days * 24 * 60 * 60_000),
 	}).onConflictDoNothing();
 	const [link] = await db.select({ id: sharedAttachmentLinks.id }).from(sharedAttachmentLinks).where(eq(sharedAttachmentLinks.attachmentId, attachmentId)).limit(1);
 	if (!link) throw new Error("Could not create a large attachment link");

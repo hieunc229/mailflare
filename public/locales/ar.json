@@ -2630,5 +2630,19 @@
 	"invite.calendarOnly": "Calendar only",
 	"invite.wasPrev": "(was {action})",
 	"invite.changeHint": "Send again to change your answer",
-	"invite.undo": "Undo"
+	"invite.undo": "Undo",
+	"general.sharedFiles": "الملفات المشتركة",
+	"general.sharedFilesDescribe": "تُرسل الملفات الكبيرة كروابط تنزيل. اختر طريقة عرضها.",
+	"general.sharedFilesEnable": "إرسال رسالة تمهيدية فوق الملفات",
+	"general.sharedFilesText": "رسالتك الخاصة (اختياري)",
+	"general.sharedFilesTextPlaceholder": "ملفات تمت مشاركتها معك (تنتهي صلاحية الروابط بعد {days} يومًا):",
+	"general.sharedFilesTextHint": "اتركه فارغًا لاستخدام النص المترجم الافتراضي. يُستبدل {days} بعدد الأيام أدناه.",
+	"general.sharedFilesDays": "تنتهي صلاحية الروابط بعد (أيام)",
+	"general.sharedFilesDaysHint": "بين 1 و365 يومًا. تذكر الرسالة ذلك أيضًا.",
+	"general.sharedFilesLocale": "لغة الإشعار",
+	"general.sharedFilesLocaleAuto": "تلقائي (لغة المرسل)",
+	"general.sharedFilesStyle": "طريقة عرض الملفات",
+	"general.sharedFilesStyleCard": "بطاقات كالمرفقات (موصى به)",
+	"general.sharedFilesStyleLinks": "قائمة روابط بسيطة",
+	"attachment.sharedExpires": "تنتهي الصلاحية خلال {days} يومًا"
 }

@@ -2566,5 +2566,19 @@
 	"invite.calendarOnly": "Calendar only",
 	"invite.wasPrev": "(was {action})",
 	"invite.changeHint": "Send again to change your answer",
-	"invite.undo": "Undo"
+	"invite.undo": "Undo",
+	"general.sharedFiles": "साझा फ़ाइलें",
+	"general.sharedFilesDescribe": "बड़ी फ़ाइलें डाउनलोड लिंक के रूप में भेजी जाती हैं। प्रस्तुति चुनें।",
+	"general.sharedFilesEnable": "फ़ाइलों के ऊपर परिचय संदेश भेजें",
+	"general.sharedFilesText": "आपका संदेश (वैकल्पिक)",
+	"general.sharedFilesTextPlaceholder": "आपके साथ साझा की गई फ़ाइलें ({days} दिनों में लिंक समाप्त):",
+	"general.sharedFilesTextHint": "खाली छोड़ने पर अनुवादित डिफ़ॉल्ट टेक्स्ट उपयोग होगा। {days} नीचे के दिनों से बदलेगा।",
+	"general.sharedFilesDays": "डाउनलोड लिंक कितने दिनों में समाप्त",
+	"general.sharedFilesDaysHint": "1 से 365 दिन। संदेश में भी यही लिखा जाता है।",
+	"general.sharedFilesLocale": "सूचना की भाषा",
+	"general.sharedFilesLocaleAuto": "स्वचालित (प्रेषक की भाषा)",
+	"general.sharedFilesStyle": "फ़ाइलें कैसे दिखें",
+	"general.sharedFilesStyleCard": "अनुलग्नक जैसे कार्ड (अनुशंसित)",
+	"general.sharedFilesStyleLinks": "लिंक की सादी सूची",
+	"attachment.sharedExpires": "{days} दिनों में समाप्त"
 }

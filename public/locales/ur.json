@@ -2566,5 +2566,19 @@
 	"invite.calendarOnly": "Calendar only",
 	"invite.wasPrev": "(was {action})",
 	"invite.changeHint": "Send again to change your answer",
-	"invite.undo": "Undo"
+	"invite.undo": "Undo",
+	"general.sharedFiles": "مشترکہ فائلیں",
+	"general.sharedFilesDescribe": "بڑی فائلیں ڈاؤن لوڈ لنکس کے طور پر بھیجی جاتی ہیں۔ پیشکش منتخب کریں۔",
+	"general.sharedFilesEnable": "فائلوں کے اوپر تعارفی پیغام بھیجیں",
+	"general.sharedFilesText": "آپ کا اپنا پیغام (اختیاری)",
+	"general.sharedFilesTextPlaceholder": "آپ کے ساتھ شیئر کردہ فائلیں ({days} دنوں میں لنکس کی میعاد ختم):",
+	"general.sharedFilesTextHint": "خالی چھوڑنے پر ترجم شدہ ڈیفالٹ متن استعمال ہوگا۔ {days} نیچے کے دنوں سے بدلے گا۔",
+	"general.sharedFilesDays": "ڈاؤن لوڈ لنکس کتنے دنوں میں ختم",
+	"general.sharedFilesDaysHint": "1 سے 365 دن۔ پیغام میں بھی یہی لکھا جاتا ہے۔",
+	"general.sharedFilesLocale": "اطلاع کی زبان",
+	"general.sharedFilesLocaleAuto": "خودکار (بھیجنے والے کی زبان)",
+	"general.sharedFilesStyle": "فائلیں کیسے دکھیں",
+	"general.sharedFilesStyleCard": "منسلکہ طرز کارڈز (تجویز کردہ)",
+	"general.sharedFilesStyleLinks": "لنکس کی سادہ فہرست",
+	"attachment.sharedExpires": "{days} دنوں میں ختم ہوگا"
 }

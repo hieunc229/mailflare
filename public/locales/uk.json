@@ -2598,5 +2598,19 @@
 	"invite.calendarOnly": "Calendar only",
 	"invite.wasPrev": "(was {action})",
 	"invite.changeHint": "Send again to change your answer",
-	"invite.undo": "Undo"
+	"invite.undo": "Undo",
+	"general.sharedFiles": "Спільні файли",
+	"general.sharedFilesDescribe": "Завеликі файли надсилаються посиланнями. Виберіть вигляд.",
+	"general.sharedFilesEnable": "Надсилати вступний текст над файлами",
+	"general.sharedFilesText": "Власне повідомлення (необов'язково)",
+	"general.sharedFilesTextPlaceholder": "Файли, надані вам (посилання діють {days} дн.):",
+	"general.sharedFilesTextHint": "Залиште порожнім для перекладеного типового тексту. {days} замінюється кількістю днів нижче.",
+	"general.sharedFilesDays": "Посилання діють (днів)",
+	"general.sharedFilesDaysHint": "Від 1 до 365 днів. Це ж зазначається в повідомленні.",
+	"general.sharedFilesLocale": "Мова повідомлення",
+	"general.sharedFilesLocaleAuto": "Автоматично (мова відправника)",
+	"general.sharedFilesStyle": "Вигляд спільних файлів",
+	"general.sharedFilesStyleCard": "Картки як вкладення (рекомендовано)",
+	"general.sharedFilesStyleLinks": "Простий список посилань",
+	"attachment.sharedExpires": "Спливає через {days} дн."
 }

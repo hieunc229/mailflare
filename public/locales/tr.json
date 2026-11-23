@@ -2566,5 +2566,19 @@
 	"invite.calendarOnly": "Calendar only",
 	"invite.wasPrev": "(was {action})",
 	"invite.changeHint": "Send again to change your answer",
-	"invite.undo": "Undo"
+	"invite.undo": "Undo",
+	"general.sharedFiles": "Paylaşılan dosyalar",
+	"general.sharedFilesDescribe": "Büyük dosyalar indirme bağlantısı olarak gönderilir. Görünümü seçin.",
+	"general.sharedFilesEnable": "Dosyaların üstünde giriş mesajı gönder",
+	"general.sharedFilesText": "Kendi mesajınız (isteğe bağlı)",
+	"general.sharedFilesTextPlaceholder": "Sizinle paylaşılan dosyalar (bağlantılar {days} gün sonra sona erer):",
+	"general.sharedFilesTextHint": "Boş bırakırsanız çevrilmiş varsayılan metin kullanılır. {days} aşağıdaki gün sayısı olur.",
+	"general.sharedFilesDays": "Bağlantılar kaç gün sonra sona ersin",
+	"general.sharedFilesDaysHint": "1 ile 365 gün arası. Mesajda da bu yazar.",
+	"general.sharedFilesLocale": "Bildirim dili",
+	"general.sharedFilesLocaleAuto": "Otomatik (gönderenin dili)",
+	"general.sharedFilesStyle": "Paylaşılan dosyaların görünümü",
+	"general.sharedFilesStyleCard": "Ek tarzı kartlar (önerilir)",
+	"general.sharedFilesStyleLinks": "Basit bağlantı listesi",
+	"attachment.sharedExpires": "{days} gün içinde sona erer"
 }

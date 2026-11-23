@@ -2598,5 +2598,19 @@
 	"invite.calendarOnly": "Calendar only",
 	"invite.wasPrev": "(was {action})",
 	"invite.changeHint": "Send again to change your answer",
-	"invite.undo": "Undo"
+	"invite.undo": "Undo",
+	"general.sharedFiles": "Udostępnione pliki",
+	"general.sharedFilesDescribe": "Zbyt duże pliki są wysyłane jako linki do pobrania. Wybierz prezentację.",
+	"general.sharedFilesEnable": "Wysyłaj tekst wstępny nad plikami",
+	"general.sharedFilesText": "Własna wiadomość (opcjonalnie)",
+	"general.sharedFilesTextPlaceholder": "Pliki udostępnione Tobie (linki wygasają po {days} dniach):",
+	"general.sharedFilesTextHint": "Pozostaw puste, aby użyć domyślnego przetłumaczonego tekstu. {days} to liczba dni poniżej.",
+	"general.sharedFilesDays": "Linki wygasają po (dniach)",
+	"general.sharedFilesDaysHint": "Od 1 do 365 dni. To samo podaje wiadomość.",
+	"general.sharedFilesLocale": "Język komunikatu",
+	"general.sharedFilesLocaleAuto": "Automatycznie (język nadawcy)",
+	"general.sharedFilesStyle": "Wygląd udostępnionych plików",
+	"general.sharedFilesStyleCard": "Karty jak załączniki (zalecane)",
+	"general.sharedFilesStyleLinks": "Prosta lista linków",
+	"attachment.sharedExpires": "Wygasa za {days} dni"
 }

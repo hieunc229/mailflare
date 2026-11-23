@@ -2562,5 +2562,19 @@
 	"invite.calendarOnly": "Calendar only",
 	"invite.wasPrev": "(was {action})",
 	"invite.changeHint": "Send again to change your answer",
-	"invite.undo": "Undo"
+	"invite.undo": "Undo",
+	"general.sharedFiles": "Shared Files",
+	"general.sharedFilesDescribe": "Files too large for the message are sent as download links. Choose how those files reach the recipient.",
+	"general.sharedFilesEnable": "Send the introductory message above the files",
+	"general.sharedFilesText": "Your own message (optional)",
+	"general.sharedFilesTextPlaceholder": "Archivos compartidos contigo (los enlaces de descarga caducan después de {days} días):",
+	"general.sharedFilesTextHint": "Leave it empty to use the translated default. {days} becomes the number of days below.",
+	"general.sharedFilesDays": "Download links expire after (days)",
+	"general.sharedFilesDaysHint": "Between 1 and 365 days. This is also what the message states.",
+	"general.sharedFilesLocale": "Notice language",
+	"general.sharedFilesLocaleAuto": "Automatic (the sender's language)",
+	"general.sharedFilesStyle": "How Shared Files appear",
+	"general.sharedFilesStyleCard": "Attachment-style cards (recommended)",
+	"general.sharedFilesStyleLinks": "Plain list of links",
+	"attachment.sharedExpires": "Expires in {days} days"
 }

@@ -2582,5 +2582,19 @@
 	"invite.calendarOnly": "Calendar only",
 	"invite.wasPrev": "(was {action})",
 	"invite.changeHint": "Send again to change your answer",
-	"invite.undo": "Undo"
+	"invite.undo": "Undo",
+	"general.sharedFiles": "Arquivos compartilhados",
+	"general.sharedFilesDescribe": "Arquivos grandes demais são enviados como links de download. Escolha como chegam ao destinatário.",
+	"general.sharedFilesEnable": "Enviar a mensagem introdutória acima dos arquivos",
+	"general.sharedFilesText": "Sua própria mensagem (opcional)",
+	"general.sharedFilesTextPlaceholder": "Arquivos compartilhados com você (os links expiram em {days} dias):",
+	"general.sharedFilesTextHint": "Deixe vazio para usar o texto traduzido padrão. {days} vira o número de dias abaixo.",
+	"general.sharedFilesDays": "Os links expiram após (dias)",
+	"general.sharedFilesDaysHint": "Entre 1 e 365 dias. Também é o que a mensagem informa.",
+	"general.sharedFilesLocale": "Idioma do aviso",
+	"general.sharedFilesLocaleAuto": "Automático (idioma do remetente)",
+	"general.sharedFilesStyle": "Como os arquivos aparecem",
+	"general.sharedFilesStyleCard": "Cartões como anexo (recomendado)",
+	"general.sharedFilesStyleLinks": "Lista simples de links",
+	"attachment.sharedExpires": "Expira em {days} dias"
 }

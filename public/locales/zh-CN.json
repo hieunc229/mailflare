@@ -2548,5 +2548,19 @@
 	"invite.wasPrev": "(was {action})",
 	"invite.changeHint": "Send again to change your answer",
 	"invite.undo": "Undo",
-	"update.availableCommits.one": "{count} new change is available (latest {target})."
+	"update.availableCommits.one": "{count} new change is available (latest {target}).",
+	"general.sharedFiles": "共享文件",
+	"general.sharedFilesDescribe": "超出大小限制的文件将以下载链接发送。请选择接收者的显示方式。",
+	"general.sharedFilesEnable": "在文件上方发送说明文字",
+	"general.sharedFilesText": "自定义文案（可选）",
+	"general.sharedFilesTextPlaceholder": "与您共享的文件（下载链接 {days} 天后过期）：",
+	"general.sharedFilesTextHint": "留空则使用翻译后的默认文案。{days} 由下方天数替换。",
+	"general.sharedFilesDays": "下载链接有效期（天）",
+	"general.sharedFilesDaysHint": "1 至 365 天。邮件中也显示此数值。",
+	"general.sharedFilesLocale": "提示语言",
+	"general.sharedFilesLocaleAuto": "自动（发件人的语言）",
+	"general.sharedFilesStyle": "共享文件的显示方式",
+	"general.sharedFilesStyleCard": "附件样式卡片（推荐）",
+	"general.sharedFilesStyleLinks": "纯链接列表",
+	"attachment.sharedExpires": "{days} 天后过期"
 }

@@ -2598,5 +2598,19 @@
 	"invite.calendarOnly": "Calendar only",
 	"invite.wasPrev": "(was {action})",
 	"invite.changeHint": "Send again to change your answer",
-	"invite.undo": "Undo"
+	"invite.undo": "Undo",
+	"general.sharedFiles": "Общие файлы",
+	"general.sharedFilesDescribe": "Слишком большие файлы отправляются ссылками. Выберите, как их увидит получатель.",
+	"general.sharedFilesEnable": "Отправлять вступительный текст над файлами",
+	"general.sharedFilesText": "Своё сообщение (необязательно)",
+	"general.sharedFilesTextPlaceholder": "Файлы, открытые вам (ссылки действуют {days} дн.):",
+	"general.sharedFilesTextHint": "Оставьте пустым для переведённого текста по умолчанию. {days} заменяется числом дней ниже.",
+	"general.sharedFilesDays": "Ссылки действуют (дней)",
+	"general.sharedFilesDaysHint": "От 1 до 365 дней. Это же указывается в сообщении.",
+	"general.sharedFilesLocale": "Язык уведомления",
+	"general.sharedFilesLocaleAuto": "Автоматически (язык отправителя)",
+	"general.sharedFilesStyle": "Вид общих файлов",
+	"general.sharedFilesStyleCard": "Карточки как вложения (рекомендуется)",
+	"general.sharedFilesStyleLinks": "Простой список ссылок",
+	"attachment.sharedExpires": "Истекает через {days} дн."
 }

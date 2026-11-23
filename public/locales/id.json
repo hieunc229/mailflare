@@ -2548,5 +2548,19 @@
 	"invite.wasPrev": "(was {action})",
 	"invite.changeHint": "Send again to change your answer",
 	"invite.undo": "Undo",
-	"update.availableCommits.one": "{count} new change is available (latest {target})."
+	"update.availableCommits.one": "{count} new change is available (latest {target}).",
+	"general.sharedFiles": "File bersama",
+	"general.sharedFilesDescribe": "File yang terlalu besar dikirim sebagai tautan unduhan. Pilih tampilannya.",
+	"general.sharedFilesEnable": "Kirim pesan pengantar di atas file",
+	"general.sharedFilesText": "Pesan Anda (opsional)",
+	"general.sharedFilesTextPlaceholder": "File yang dibagikan kepada Anda (tautan kedaluwarsa dalam {days} hari):",
+	"general.sharedFilesTextHint": "Kosongkan untuk teks terjemahan bawaan. {days} diganti jumlah hari di bawah.",
+	"general.sharedFilesDays": "Tautan kedaluwarsa setelah (hari)",
+	"general.sharedFilesDaysHint": "Antara 1 dan 365 hari. Ini juga yang ditampilkan di pesan.",
+	"general.sharedFilesLocale": "Bahasa pemberitahuan",
+	"general.sharedFilesLocaleAuto": "Otomatis (bahasa pengirim)",
+	"general.sharedFilesStyle": "Tampilan file bersama",
+	"general.sharedFilesStyleCard": "Kartu seperti lampiran (disarankan)",
+	"general.sharedFilesStyleLinks": "Daftar tautan sederhana",
+	"attachment.sharedExpires": "Kedaluwarsa dalam {days} hari"
 }
