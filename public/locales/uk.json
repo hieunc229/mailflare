@@ -414,6 +414,8 @@
 	"contacts.loadFailed": "Unable to load contacts",
 	"contacts.saveFailed": "Unable to save contact",
 	"contacts.deleteFailed": "Unable to delete contact",
+	"contacts.export": "Експортувати .vcf",
+	"contacts.exportFailed": "Не вдалося експортувати контакти",
 	"avatar.change": "Змінити фото профілю: {name}",
 	"avatar.upload": "Завантажити фото профілю: {name}",
 	"avatar.title": "Фото профілю",

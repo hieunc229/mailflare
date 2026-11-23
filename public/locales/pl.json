@@ -414,6 +414,8 @@
 	"contacts.loadFailed": "Unable to load contacts",
 	"contacts.saveFailed": "Unable to save contact",
 	"contacts.deleteFailed": "Unable to delete contact",
+	"contacts.export": "Eksportuj .vcf",
+	"contacts.exportFailed": "Eksport kontaktów nie powiódł się",
 	"avatar.change": "Zmień zdjęcie profilowe: {name}",
 	"avatar.upload": "Prześlij zdjęcie profilowe: {name}",
 	"avatar.title": "Zdjęcie profilowe",

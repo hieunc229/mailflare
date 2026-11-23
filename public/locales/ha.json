@@ -404,6 +404,8 @@
 	"contacts.loadFailed": "Unable to load contacts",
 	"contacts.saveFailed": "Unable to save contact",
 	"contacts.deleteFailed": "Unable to delete contact",
+	"contacts.export": "Fitar da .vcf",
+	"contacts.exportFailed": "Fitar da abokan hulɗa ta gaza",
 	"avatar.change": "Canza hoton bayanan {name}",
 	"avatar.upload": "Ɗora hoton bayanan {name}",
 	"avatar.title": "Hoton bayanan mai amfani",

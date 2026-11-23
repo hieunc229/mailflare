@@ -404,6 +404,8 @@
 	"contacts.loadFailed": "Unable to load contacts",
 	"contacts.saveFailed": "Unable to save contact",
 	"contacts.deleteFailed": "Unable to delete contact",
+	"contacts.export": ".vcf ஏற்றுமதி செய்",
+	"contacts.exportFailed": "தொடர்புகளை ஏற்றுமதி செய்ய முடியவில்லை",
 	"avatar.change": "{name} இன் சுயவிவரப் படத்தை மாற்று",
 	"avatar.upload": "{name} இன் சுயவிவரப் படத்தைப் பதிவேற்று",
 	"avatar.title": "சுயவிவரப் படம்",

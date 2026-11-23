@@ -399,6 +399,8 @@
 	"contacts.loadFailed": "Unable to load contacts",
 	"contacts.saveFailed": "Unable to save contact",
 	"contacts.deleteFailed": "Unable to delete contact",
+	"contacts.export": "Xuất .vcf",
+	"contacts.exportFailed": "Không thể xuất liên hệ",
 	"avatar.change": "Đổi ảnh hồ sơ của {name}",
 	"avatar.upload": "Tải lên ảnh hồ sơ của {name}",
 	"avatar.title": "Ảnh hồ sơ",

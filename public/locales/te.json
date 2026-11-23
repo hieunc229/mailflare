@@ -404,6 +404,8 @@
 	"contacts.loadFailed": "Unable to load contacts",
 	"contacts.saveFailed": "Unable to save contact",
 	"contacts.deleteFailed": "Unable to delete contact",
+	"contacts.export": ".vcf ఎగుమతి చేయండి",
+	"contacts.exportFailed": "పరిచయాలను ఎగుమతి చేయలేకపోయాం",
 	"avatar.change": "{name} ప్రొఫైల్ చిత్రాన్ని మార్చండి",
 	"avatar.upload": "{name} ప్రొఫైల్ చిత్రాన్ని అప్‌లోడ్ చేయండి",
 	"avatar.title": "ప్రొఫైల్ చిత్రం",

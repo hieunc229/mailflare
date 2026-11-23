@@ -399,6 +399,8 @@
 	"contacts.loadFailed": "Unable to load contacts",
 	"contacts.saveFailed": "Unable to save contact",
 	"contacts.deleteFailed": "Unable to delete contact",
+	"contacts.export": ".vcf をエクスポート",
+	"contacts.exportFailed": "連絡先をエクスポートできません",
 	"avatar.change": "{name}のプロフィール画像を変更",
 	"avatar.upload": "{name}のプロフィール画像をアップロード",
 	"avatar.title": "プロフィール画像",
