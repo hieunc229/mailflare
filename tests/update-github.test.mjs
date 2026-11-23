@@ -9,7 +9,7 @@ test("a token 404 on the public upstream repository is read again without creden
 });
 
 test("the installation repository keeps the token when GitHub says it is missing", () => {
-	assert.equal(shouldRetryGitHubAnonymously("/repos/JoaoMarcosSampaio/mailflare", 404), false);
+	assert.equal(shouldRetryGitHubAnonymously("/repos/example/mailflare", 404), false);
 	assert.equal(shouldRetryGitHubAnonymously("/repos/hieunc229/mailflare/contents/package.json", 200), false);
 });
 
