@@ -15,6 +15,7 @@ import { decodeBlobId, decodeMailboxRef, roleToStatus } from "./ids";
 import { buildEmailObject, loadAttachmentsByMessage, resolveHeaderProperty } from "./email-objects";
 import { importFlags, parseReceivedAt, resolveDraftsMailbox } from "./email-import-utils";
 import { filterToSql, mailboxRefCondition, sortToSql } from "./email-query";
+import { setKey } from "./safe-map";
 import { getEmailState } from "./state";
 import { listAccessibleMailboxIdSet, listJmapMailboxes } from "./access";
 import { deleteUpload, readUpload, storeRawDraftMime } from "./blobs";
@@ -113,8 +114,9 @@ export const emailGet: JmapMethodHandler = async (ctx, args) => {
 		if (!properties) return full;
 		const picked: Record<string, unknown> = { id: row.id };
 		for (const key of properties) {
-			if (key.startsWith("header:")) picked[key] = resolveHeaderProperty(row, key);
-			else if (key in full) picked[key] = (full as Record<string, unknown>)[key];
+			// Inherited members like "constructor" or "__proto__" are not email properties.
+			if (key.startsWith("header:")) setKey(picked, key, resolveHeaderProperty(row, key));
+			else if (Object.prototype.hasOwnProperty.call(full, key)) setKey(picked, key, (full as Record<string, unknown>)[key]);
 		}
 		return picked;
 	});
@@ -300,12 +302,13 @@ export const emailSet: JmapMethodHandler = async (ctx, args) => {
 	const writable = new Set(mailboxRows.filter((row) => row.permission !== "read_only").map((row) => row.id));
 	// Moving or deleting mail needs full_access, as in the REST routes (canManage); delegates keep flags and drafts.
 	const manageable = new Set(mailboxRows.filter((row) => row.permission === "full_access").map((row) => row.id));
-	const created: Record<string, unknown> = {};
-	const notCreated: Record<string, unknown> = {};
-	const updated: Record<string, null> = {};
-	const notUpdated: Record<string, unknown> = {};
+	// Client-controlled keys: a null-prototype map keeps "__proto__" an own property.
+	const created: Record<string, unknown> = Object.create(null);
+	const notCreated: Record<string, unknown> = Object.create(null);
+	const updated: Record<string, null> = Object.create(null);
+	const notUpdated: Record<string, unknown> = Object.create(null);
 	const destroyed: string[] = [];
-	const notDestroyed: Record<string, unknown> = {};
+	const notDestroyed: Record<string, unknown> = Object.create(null);
 
 	for (const [creationId, value] of Object.entries((args.create ?? {}) as Record<string, Record<string, unknown>>)) {
 		const result = await createDraft(ctx, value, writable);
@@ -313,7 +316,8 @@ export const emailSet: JmapMethodHandler = async (ctx, args) => {
 			notCreated[creationId] = result.error;
 			continue;
 		}
-		ctx.createdIds[creationId] = result.id;
+		// A "__proto__" creation id is still a key the client may resolve later.
+		setKey(ctx.createdIds, creationId, result.id);
 		const [row] = await loadMessages(ctx, [result.id]);
 		created[creationId] = row ? buildEmailObject(row, [], { fetchBodies: false, maxBodyValueBytes: 0 }) : { id: result.id };
 	}
@@ -384,7 +388,9 @@ export const emailSet: JmapMethodHandler = async (ctx, args) => {
 		destroyed.push(id);
 	}
 
-	return { accountId: ctx.accountId, oldState, newState: await getEmailState(ctx), created, updated, destroyed, notCreated, notUpdated, notDestroyed };
+	// Spread back to a plain object so a "__proto__" id survives as an own
+	// property without changing the response's object shape for callers.
+	return { accountId: ctx.accountId, oldState, newState: await getEmailState(ctx), created: { ...created }, updated: { ...updated }, destroyed, notCreated: { ...notCreated }, notUpdated: { ...notUpdated }, notDestroyed: { ...notDestroyed } };
 };
 
 /**
@@ -477,8 +483,9 @@ export const emailImport: JmapMethodHandler = async (ctx, args) => {
 	const emails = (args.emails ?? {}) as Record<string, Record<string, unknown>>;
 	if (Object.keys(emails).length > LIMITS.maxObjectsInSet) throw new JmapError("requestTooLarge");
 	const writable = new Set((await listJmapMailboxes(ctx)).filter((row) => row.permission !== "read_only").map((row) => row.id));
-	const created: Record<string, unknown> = {};
-	const notCreated: Record<string, unknown> = {};
+	// Client-controlled keys: a null-prototype map keeps "__proto__" an own property.
+	const created: Record<string, unknown> = Object.create(null);
+	const notCreated: Record<string, unknown> = Object.create(null);
 
 	for (const [creationId, value] of Object.entries(emails)) {
 		const result = await importEmail(ctx, value ?? {}, writable);
@@ -486,7 +493,8 @@ export const emailImport: JmapMethodHandler = async (ctx, args) => {
 			notCreated[creationId] = result.error;
 			continue;
 		}
-		ctx.createdIds[creationId] = result.id;
+		// A "__proto__" creation id is still a key the client may resolve later.
+		setKey(ctx.createdIds, creationId, result.id);
 		const [row] = await loadMessages(ctx, [result.id]);
 		if (!row) {
 			notCreated[creationId] = { type: "serverFail", description: "The imported message could not be read back" };
@@ -497,7 +505,7 @@ export const emailImport: JmapMethodHandler = async (ctx, args) => {
 		created[creationId] = { id: object.id, blobId: object.blobId, threadId: object.threadId, size: object.size };
 	}
 
-	return { accountId: ctx.accountId, oldState, newState: await getEmailState(ctx), created, notCreated };
+	return { accountId: ctx.accountId, oldState, newState: await getEmailState(ctx), created: { ...created }, notCreated: { ...notCreated } };
 };
 
 export const emailUnsupported = (method: string): JmapMethodHandler => async () => ({ type: "unknownMethod", description: `${method} is not supported` });

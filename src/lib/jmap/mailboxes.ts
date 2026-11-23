@@ -5,6 +5,7 @@ import { draftsVisibleTo } from "@/lib/email/draft-access";
 import { newId } from "@/lib/ids";
 import { JmapError } from "./errors";
 import { decodeMailboxRef, encodeMailboxRef, roleToStatus, SYSTEM_ROLES } from "./ids";
+import { setKey } from "./safe-map";
 import { getMailboxState } from "./state";
 import type { AccessibleMailbox, JmapContext, JmapMethodHandler, SystemRole } from "./types";
 import { listFoldersByMailbox, listJmapMailboxes } from "./access";
@@ -185,12 +186,13 @@ export const mailboxSet: JmapMethodHandler = async (ctx, args) => {
 	const oldState = await getMailboxState(ctx);
 	if (args.ifInState && args.ifInState !== oldState) return { type: "stateMismatch" };
 	const accessible = await listJmapMailboxes(ctx);
-	const created: Record<string, unknown> = {};
-	const notCreated: Record<string, unknown> = {};
-	const updated: Record<string, null> = {};
-	const notUpdated: Record<string, unknown> = {};
+	// Client-controlled keys: a null-prototype map keeps "__proto__" an own property.
+	const created: Record<string, unknown> = Object.create(null);
+	const notCreated: Record<string, unknown> = Object.create(null);
+	const updated: Record<string, null> = Object.create(null);
+	const notUpdated: Record<string, unknown> = Object.create(null);
 	const destroyed: string[] = [];
-	const notDestroyed: Record<string, unknown> = {};
+	const notDestroyed: Record<string, unknown> = Object.create(null);
 
 	for (const [creationId, value] of Object.entries((args.create ?? {}) as Record<string, Record<string, unknown>>)) {
 		const parent = typeof value.parentId === "string" ? decodeMailboxRef(value.parentId) : null;
@@ -212,7 +214,8 @@ export const mailboxSet: JmapMethodHandler = async (ctx, args) => {
 			continue;
 		}
 		const jmapId = encodeMailboxRef({ kind: "folder", mailboxId: mailbox.id, folderId: id });
-		ctx.createdIds[creationId] = jmapId;
+		// A "__proto__" creation id is still a key the client may resolve later.
+		setKey(ctx.createdIds, creationId, jmapId);
 		created[creationId] = { id: jmapId, role: null, sortOrder: 0, totalEmails: 0, unreadEmails: 0, totalThreads: 0, unreadThreads: 0, isSubscribed: true };
 	}
 
@@ -281,19 +284,22 @@ export const mailboxSet: JmapMethodHandler = async (ctx, args) => {
 		accountId: ctx.accountId,
 		oldState,
 		newState: await getMailboxState(ctx),
-		created,
-		updated,
+		// Spread back to a plain object so a "__proto__" id survives as an own
+		// property without changing the response's object shape for callers.
+		created: { ...created },
+		updated: { ...updated },
 		destroyed,
-		notCreated,
-		notUpdated,
-		notDestroyed,
+		notCreated: { ...notCreated },
+		notUpdated: { ...notUpdated },
+		notDestroyed: { ...notDestroyed },
 	};
 };
 
 export function pick(item: Record<string, unknown>, properties: string[] | null | undefined): Record<string, unknown> {
 	if (!properties) return item;
 	const result: Record<string, unknown> = { id: item.id };
-	for (const key of properties) if (key in item) result[key] = item[key];
+	// Inherited members like "constructor" or "__proto__" are not mailbox properties.
+	for (const key of properties) if (Object.prototype.hasOwnProperty.call(item, key)) setKey(result, key, item[key]);
 	return result;
 }
 
