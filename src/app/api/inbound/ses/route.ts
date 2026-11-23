@@ -25,11 +25,13 @@ export async function POST(request: Request) {
 
 	let envelope: SnsEnvelope;
 	try { envelope = JSON.parse(await request.text()) as SnsEnvelope; } catch { return NextResponse.json({ error: "Invalid body" }, { status: 400 }); }
+	if (!envelope || typeof envelope !== "object" || Array.isArray(envelope)) return NextResponse.json({ error: "Invalid body" }, { status: 400 });
 	if (envelope.TopicArn !== state.topicArn) return NextResponse.json({ error: "Unknown topic" }, { status: 403 });
 	if (!await verifySnsSignature(envelope)) return NextResponse.json({ error: "Invalid signature" }, { status: 403 });
 
 	if (envelope.Type === "SubscriptionConfirmation") {
-		const url = envelope.SubscribeURL ? new URL(envelope.SubscribeURL) : null;
+		let url: URL | null = null;
+		try { url = envelope.SubscribeURL ? new URL(envelope.SubscribeURL) : null; } catch { /* A non-string or malformed URL is just invalid. */ }
 		if (!url || url.protocol !== "https:" || !/^sns\.[a-z0-9-]+\.amazonaws\.com$/.test(url.hostname)) {
 			return NextResponse.json({ error: "Invalid subscription URL" }, { status: 400 });
 		}

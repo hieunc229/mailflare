@@ -52,7 +52,7 @@ export class RealtimeHub extends DurableObject<CloudflareEnv> {
 		} catch {
 			return;
 		}
-		if (ping.type !== "ping") return;
+		if (!ping || typeof ping !== "object" || ping.type !== "ping") return;
 		const userId = socket.deserializeAttachment() as { userId?: string } | null;
 		if (!userId?.userId) return;
 		try {
