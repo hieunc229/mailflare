@@ -25,7 +25,6 @@ async function bundle(entry, outfile) {
 }
 
 const { DEFAULT_OUTBOUND_ATTACHMENT_MAX_MB, outboundAttachmentCeilingMb, clampOutboundAttachmentMb, outgoingSizeError, requestBodyLimit, planAttachmentDelivery } = await bundle("src/lib/email/attachment-limits.ts", "limits.mjs");
-const { sharedFileNotice } = await bundle("src/lib/email/shared-file-notice.ts", "notice.mjs");
 
 const MB = 1_000_000;
 
