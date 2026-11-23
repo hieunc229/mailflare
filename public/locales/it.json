@@ -778,6 +778,7 @@
 	"rules.matchLabel": "Corrispondenza",
 	"rules.valueLabel": "Valore",
 	"rules.valuePlaceholderEmail": "mittente@example.com",
+	"rules.valuePlaceholderTag": "ricevute",
 	"rules.valuePlaceholderOther": "Fattura",
 	"rules.destination": "Destinazione",
 	"rules.selectDestination": "Seleziona destinazione",

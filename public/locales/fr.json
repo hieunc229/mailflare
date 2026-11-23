@@ -778,6 +778,7 @@
 	"rules.matchLabel": "Correspondance",
 	"rules.valueLabel": "Valeur",
 	"rules.valuePlaceholderEmail": "expediteur@exemple.com",
+	"rules.valuePlaceholderTag": "reçus",
 	"rules.valuePlaceholderOther": "Facture",
 	"rules.destination": "Destination",
 	"rules.selectDestination": "Sélectionnez une destination",

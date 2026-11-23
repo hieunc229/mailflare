@@ -784,6 +784,7 @@
 	"rules.matchLabel": "Совпадение",
 	"rules.valueLabel": "Значение",
 	"rules.valuePlaceholderEmail": "sender@example.com",
+	"rules.valuePlaceholderTag": "чеки",
 	"rules.valuePlaceholderOther": "Счёт",
 	"rules.destination": "Назначение",
 	"rules.selectDestination": "Выберите назначение",

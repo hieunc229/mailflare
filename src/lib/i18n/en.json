@@ -779,6 +779,7 @@
 	"rules.matchLabel": "Match",
 	"rules.valueLabel": "Value",
 	"rules.valuePlaceholderEmail": "sender@example.com",
+	"rules.valuePlaceholderTag": "receipts",
 	"rules.valuePlaceholderOther": "Invoice",
 	"rules.destination": "Destination",
 	"rules.selectDestination": "Select destination",

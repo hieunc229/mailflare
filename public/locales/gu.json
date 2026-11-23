@@ -772,6 +772,7 @@
 	"rules.matchLabel": "મેળ",
 	"rules.valueLabel": "મૂલ્ય",
 	"rules.valuePlaceholderEmail": "sender@example.com",
+	"rules.valuePlaceholderTag": "રસીદો",
 	"rules.valuePlaceholderOther": "ઇન્વૉઇસ",
 	"rules.destination": "ગંતવ્ય",
 	"rules.selectDestination": "ગંતવ્ય પસંદ કરો",

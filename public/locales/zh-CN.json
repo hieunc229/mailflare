@@ -766,6 +766,7 @@
 	"rules.matchLabel": "匹配",
 	"rules.valueLabel": "值",
 	"rules.valuePlaceholderEmail": "sender@example.com",
+	"rules.valuePlaceholderTag": "收据",
 	"rules.valuePlaceholderOther": "发票",
 	"rules.destination": "目标位置",
 	"rules.selectDestination": "选择目标位置",

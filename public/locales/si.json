@@ -772,6 +772,7 @@
 	"rules.matchLabel": "ගැළපීම",
 	"rules.valueLabel": "අගය",
 	"rules.valuePlaceholderEmail": "sender@example.com",
+	"rules.valuePlaceholderTag": "රිසිත්",
 	"rules.valuePlaceholderOther": "ඉන්වොයිසිය",
 	"rules.destination": "ගමනාන්තය",
 	"rules.selectDestination": "ගමනාන්තය තෝරන්න",

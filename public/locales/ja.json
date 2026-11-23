@@ -766,6 +766,7 @@
 	"rules.matchLabel": "照合方法",
 	"rules.valueLabel": "値",
 	"rules.valuePlaceholderEmail": "sender@example.com",
+	"rules.valuePlaceholderTag": "領収書",
 	"rules.valuePlaceholderOther": "請求書",
 	"rules.destination": "移動先",
 	"rules.selectDestination": "移動先を選択",

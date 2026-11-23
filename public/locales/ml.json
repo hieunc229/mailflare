@@ -772,6 +772,7 @@
 	"rules.matchLabel": "പൊരുത്തം",
 	"rules.valueLabel": "മൂല്യം",
 	"rules.valuePlaceholderEmail": "sender@example.com",
+	"rules.valuePlaceholderTag": "രസീദികൾ",
 	"rules.valuePlaceholderOther": "ഇൻവോയ്സ്",
 	"rules.destination": "ലക്ഷ്യസ്ഥാനം",
 	"rules.selectDestination": "ലക്ഷ്യസ്ഥാനം തിരഞ്ഞെടുക്കുക",

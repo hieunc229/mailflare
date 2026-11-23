@@ -772,6 +772,7 @@
 	"rules.matchLabel": "Overeenkomst",
 	"rules.valueLabel": "Waarde",
 	"rules.valuePlaceholderEmail": "sender@example.com",
+	"rules.valuePlaceholderTag": "bonnen",
 	"rules.valuePlaceholderOther": "Factuur",
 	"rules.destination": "Bestemming",
 	"rules.selectDestination": "Selecteer bestemming",

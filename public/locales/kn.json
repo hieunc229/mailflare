@@ -772,6 +772,7 @@
 	"rules.matchLabel": "ಹೊಂದಾಣಿಕೆ",
 	"rules.valueLabel": "ಮೌಲ್ಯ",
 	"rules.valuePlaceholderEmail": "sender@example.com",
+	"rules.valuePlaceholderTag": "ರಸೀದಿಗಳು",
 	"rules.valuePlaceholderOther": "ಇನ್‌ವಾಯ್ಸ್",
 	"rules.destination": "ಗಮ್ಯಸ್ಥಾನ",
 	"rules.selectDestination": "ಗಮ್ಯಸ್ಥಾನ ಆಯ್ಕೆಮಾಡಿ",

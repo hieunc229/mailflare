@@ -772,6 +772,7 @@
 	"rules.matchLabel": "ਮੇਲ",
 	"rules.valueLabel": "ਮੁੱਲ",
 	"rules.valuePlaceholderEmail": "sender@example.com",
+	"rules.valuePlaceholderTag": "ਰਸੀਦਾਂ",
 	"rules.valuePlaceholderOther": "ਇਨਵੌਇਸ",
 	"rules.destination": "ਮੰਜ਼ਿਲ",
 	"rules.selectDestination": "ਮੰਜ਼ਿਲ ਚੁਣੋ",

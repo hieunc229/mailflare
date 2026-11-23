@@ -770,6 +770,7 @@
 	"rules.matchLabel": "जुळणी",
 	"rules.valueLabel": "मूल्य",
 	"rules.valuePlaceholderEmail": "sender@example.com",
+	"rules.valuePlaceholderTag": "पावत्या",
 	"rules.valuePlaceholderOther": "बीजक",
 	"rules.destination": "गंतव्य",
 	"rules.selectDestination": "गंतव्य निवडा",

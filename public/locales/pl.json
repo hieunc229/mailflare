@@ -784,6 +784,7 @@
 	"rules.matchLabel": "Dopasowanie",
 	"rules.valueLabel": "Wartość",
 	"rules.valuePlaceholderEmail": "sender@example.com",
+	"rules.valuePlaceholderTag": "paragony",
 	"rules.valuePlaceholderOther": "Faktura",
 	"rules.destination": "Miejsce docelowe",
 	"rules.selectDestination": "Wybierz miejsce docelowe",

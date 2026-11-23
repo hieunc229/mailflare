@@ -770,6 +770,7 @@
 	"rules.matchLabel": "মিল",
 	"rules.valueLabel": "মান",
 	"rules.valuePlaceholderEmail": "sender@example.com",
+	"rules.valuePlaceholderTag": "রসিদ",
 	"rules.valuePlaceholderOther": "চালান",
 	"rules.destination": "গন্তব্য",
 	"rules.selectDestination": "গন্তব্য নির্বাচন করুন",

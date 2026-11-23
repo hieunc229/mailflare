@@ -766,6 +766,7 @@
 	"rules.matchLabel": "Pencocokan",
 	"rules.valueLabel": "Nilai",
 	"rules.valuePlaceholderEmail": "pengirim@example.com",
+	"rules.valuePlaceholderTag": "kwitansi",
 	"rules.valuePlaceholderOther": "Faktur",
 	"rules.destination": "Tujuan",
 	"rules.selectDestination": "Pilih tujuan",

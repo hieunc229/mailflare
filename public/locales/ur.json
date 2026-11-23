@@ -770,6 +770,7 @@
 	"rules.matchLabel": "مطابقت",
 	"rules.valueLabel": "قدر",
 	"rules.valuePlaceholderEmail": "sender@example.com",
+	"rules.valuePlaceholderTag": "رسیدیں",
 	"rules.valuePlaceholderOther": "انوائس",
 	"rules.destination": "منزل",
 	"rules.selectDestination": "منزل منتخب کریں",

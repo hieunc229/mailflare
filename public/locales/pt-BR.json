@@ -778,6 +778,7 @@
 	"rules.matchLabel": "Correspondência",
 	"rules.valueLabel": "Valor",
 	"rules.valuePlaceholderEmail": "remetente@exemplo.com",
+	"rules.valuePlaceholderTag": "recibos",
 	"rules.valuePlaceholderOther": "Fatura",
 	"rules.destination": "Destino",
 	"rules.selectDestination": "Selecionar destino",

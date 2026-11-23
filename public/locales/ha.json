@@ -772,6 +772,7 @@
 	"rules.matchLabel": "Daidaituwa",
 	"rules.valueLabel": "Ƙima",
 	"rules.valuePlaceholderEmail": "sender@example.com",
+	"rules.valuePlaceholderTag": "rasit",
 	"rules.valuePlaceholderOther": "Lissafin kuɗi",
 	"rules.destination": "Makoma",
 	"rules.selectDestination": "Zaɓi makoma",

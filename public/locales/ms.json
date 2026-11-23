@@ -771,6 +771,7 @@
 	"rules.matchLabel": "Padanan",
 	"rules.valueLabel": "Nilai",
 	"rules.valuePlaceholderEmail": "sender@example.com",
+	"rules.valuePlaceholderTag": "resit",
 	"rules.valuePlaceholderOther": "Invois",
 	"rules.destination": "Destinasi",
 	"rules.selectDestination": "Pilih destinasi",

@@ -770,6 +770,7 @@
 	"rules.matchLabel": "సరిపోలిక",
 	"rules.valueLabel": "విలువ",
 	"rules.valuePlaceholderEmail": "sender@example.com",
+	"rules.valuePlaceholderTag": "రసీదులు",
 	"rules.valuePlaceholderOther": "ఇన్వాయిస్",
 	"rules.destination": "గమ్యస్థానం",
 	"rules.selectDestination": "గమ్యస్థానాన్ని ఎంచుకోండి",

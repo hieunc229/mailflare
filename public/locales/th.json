@@ -771,6 +771,7 @@
 	"rules.matchLabel": "การจับคู่",
 	"rules.valueLabel": "ค่า",
 	"rules.valuePlaceholderEmail": "sender@example.com",
+	"rules.valuePlaceholderTag": "ใบเสร็จ",
 	"rules.valuePlaceholderOther": "ใบแจ้งหนี้",
 	"rules.destination": "ปลายทาง",
 	"rules.selectDestination": "เลือกปลายทาง",

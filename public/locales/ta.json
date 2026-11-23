@@ -772,6 +772,7 @@
 	"rules.matchLabel": "பொருத்தம்",
 	"rules.valueLabel": "மதிப்பு",
 	"rules.valuePlaceholderEmail": "sender@example.com",
+	"rules.valuePlaceholderTag": "ரசீதுகள்",
 	"rules.valuePlaceholderOther": "விலைப்பட்டியல்",
 	"rules.destination": "சேருமிடம்",
 	"rules.selectDestination": "சேருமிடத்தைத் தேர்ந்தெடுக்கவும்",

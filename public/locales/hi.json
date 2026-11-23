@@ -772,6 +772,7 @@
 	"rules.matchLabel": "मिलान",
 	"rules.valueLabel": "मान",
 	"rules.valuePlaceholderEmail": "sender@example.com",
+	"rules.valuePlaceholderTag": "रसीदें",
 	"rules.valuePlaceholderOther": "चालान",
 	"rules.destination": "गंतव्य",
 	"rules.selectDestination": "गंतव्य चुनें",

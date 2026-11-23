@@ -92,6 +92,26 @@ test("a leading + in the rule value is tolerated", () => {
 	assert.equal(matchesRule(tagRule("++odd", "exact"), input("user++odd@one.test")), true);
 });
 
+test("a wildcard tag rule means 'has a tag', not catch-all", () => {
+	for (const matchOperator of ["exact", "contains", "starts_with", "ends_with", "regex"]) {
+		assert.equal(matchesRule(tagRule("*", matchOperator), input("user+receipts@one.test")), true, matchOperator);
+		assert.equal(matchesRule(tagRule("*", matchOperator), input("user@one.test")), false, matchOperator);
+		assert.equal(matchesRule(tagRule("*", matchOperator), input("user+@one.test")), false, matchOperator);
+	}
+	// "+*" is the same wildcard after the leading-+ strip.
+	for (const toAddress of ["user+receipts@one.test", "user@one.test", "user+@one.test"]) {
+		assert.equal(matchesRule(tagRule("+*"), input(toAddress)), matchesRule(tagRule("*"), input(toAddress)), toAddress);
+	}
+});
+
+test("a wildcard on other fields still catches everything", () => {
+	for (const matchField of ["email", "content", "title", "sender", "recipient"]) {
+		const rule = { pattern: "*", matchField, matchOperator: "exact", matchValue: "*" };
+		assert.equal(matchesRule(rule, input("user@one.test")), true, matchField);
+		assert.equal(matchesRule(rule, input("user+receipts@one.test")), true, matchField);
+	}
+});
+
 test("a tag rule reads the To address, never the sender", () => {
 	assert.equal(
 		matchesRule(tagRule("receipts"), input("user@one.test", { fromAddress: "news+receipts@other.test" })),
@@ -180,4 +200,12 @@ test("a tag rule can route the message to spam", async (t) => {
 	const db = await fixture(t, { matchValue: "junk", action: "spam" });
 	const decision = await resolveInboxRuleDestination(db, { mailboxId: "box", toAddress: "me+junk@one.test" });
 	assert.deepEqual(decision, { status: "spam", folderId: null });
+});
+
+test("a wildcard tag rule files tagged mail only", async (t) => {
+	const db = await fixture(t, { matchValue: "*", action: "store", folderId: "alerts" });
+	const tagged = await resolveInboxRuleDestination(db, { mailboxId: "box", toAddress: "me+receipts@one.test" });
+	assert.deepEqual(tagged, { status: "received", folderId: "alerts" });
+	const untagged = await resolveInboxRuleDestination(db, { mailboxId: "box", toAddress: "me@one.test" });
+	assert.deepEqual(untagged, { status: "received", folderId: null });
 });

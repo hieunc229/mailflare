@@ -385,15 +385,21 @@ export function matchesRule(rule: MatchableRule, input: RuleMatchInput): boolean
 		return (rule.matchValue || rule.pattern).trim().toLowerCase() === MAIL_TYPE_BULK && isBulkMail(input.headers).bulk;
 	}
 	let rawValue = (rule.matchValue || rule.pattern).trim();
-	// "*" is the catch-all pattern used by catch-all and block-everything rules.
-	if (rawValue === "*") return true;
 	// `+tag` and `tag` name the same tag: the `+` belongs to the address, so one
 	// leading `+` in the rule value is dropped for every operator, regex included.
 	if (rule.matchField === "tag" && rawValue.startsWith("+")) rawValue = rawValue.slice(1).trim();
+
+	const values = getRuleFieldValues(rule.matchField, input);
+	// "*" is the catch-all pattern used by catch-all and block-everything rules.
+	// A tag rule has no catch-all: its wildcard means "the message carries a tag",
+	// so untagged mail — including an empty `user+` — still never matches.
+	if (rawValue === "*") {
+		if (rule.matchField === "tag") return values.some(Boolean);
+		return true;
+	}
 	const normalizedRuleValue = normalizeRuleComparisonValue(rule.matchField, rawValue);
 	if (!normalizedRuleValue) return false;
 
-	const values = getRuleFieldValues(rule.matchField, input);
 	return values.some((value) => {
 		if (!value) return false;
 		const normalizedValue = normalizeRuleComparisonValue(rule.matchField, value);

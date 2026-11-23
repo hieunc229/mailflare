@@ -772,6 +772,7 @@
 	"rules.matchLabel": "تطابق",
 	"rules.valueLabel": "مقدار",
 	"rules.valuePlaceholderEmail": "sender@example.com",
+	"rules.valuePlaceholderTag": "رسیدها",
 	"rules.valuePlaceholderOther": "فاکتور",
 	"rules.destination": "مقصد",
 	"rules.selectDestination": "انتخاب مقصد",

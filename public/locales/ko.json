@@ -771,6 +771,7 @@
 	"rules.matchLabel": "일치 방식",
 	"rules.valueLabel": "값",
 	"rules.valuePlaceholderEmail": "sender@example.com",
+	"rules.valuePlaceholderTag": "영수증",
 	"rules.valuePlaceholderOther": "청구서",
 	"rules.destination": "대상",
 	"rules.selectDestination": "대상 선택",

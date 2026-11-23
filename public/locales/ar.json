@@ -796,6 +796,7 @@
 	"rules.matchLabel": "المطابقة",
 	"rules.valueLabel": "القيمة",
 	"rules.valuePlaceholderEmail": "sender@example.com",
+	"rules.valuePlaceholderTag": "إيصالات",
 	"rules.valuePlaceholderOther": "فاتورة",
 	"rules.destination": "الوجهة",
 	"rules.selectDestination": "اختر الوجهة",

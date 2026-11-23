@@ -772,6 +772,7 @@
 	"rules.matchLabel": "Ulinganisho",
 	"rules.valueLabel": "Thamani",
 	"rules.valuePlaceholderEmail": "sender@example.com",
+	"rules.valuePlaceholderTag": "risiti",
 	"rules.valuePlaceholderOther": "Ankara",
 	"rules.destination": "Mahali pa kwenda",
 	"rules.selectDestination": "Chagua mahali pa kwenda",

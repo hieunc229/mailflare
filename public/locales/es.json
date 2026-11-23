@@ -778,6 +778,7 @@
 	"rules.matchLabel": "Coincidencia",
 	"rules.valueLabel": "Valor",
 	"rules.valuePlaceholderEmail": "remitente@ejemplo.com",
+	"rules.valuePlaceholderTag": "recibos",
 	"rules.valuePlaceholderOther": "Factura",
 	"rules.destination": "Destino",
 	"rules.selectDestination": "Selecciona un destino",

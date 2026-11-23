@@ -784,6 +784,7 @@
 	"rules.matchLabel": "Збіг",
 	"rules.valueLabel": "Значення",
 	"rules.valuePlaceholderEmail": "sender@example.com",
+	"rules.valuePlaceholderTag": "чеки",
 	"rules.valuePlaceholderOther": "Рахунок",
 	"rules.destination": "Призначення",
 	"rules.selectDestination": "Виберіть призначення",

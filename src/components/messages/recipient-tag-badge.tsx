@@ -5,8 +5,10 @@ import { getRecipientTagFromList } from "@/lib/email/recipient-tag";
 import { cn } from "@/lib/utils";
 
 /**
- * The `+tag` a message arrived on, shown as a chip where a recipient or subject
- * line already renders. Nothing renders when no recipient carries a tag.
+ * The `+tag` in the message's To header, shown as a chip where a recipient or
+ * subject line already renders. The header can differ from the SMTP envelope
+ * recipient (e.g. Bcc, lists), so this labels the address, not the delivery.
+ * Nothing renders when no recipient carries a tag.
  */
 export function RecipientTagBadge({ toAddr, className }: { toAddr: string; className?: string }) {
 	const { t } = useLanguage();
