@@ -14,6 +14,11 @@ import { loadApp, sharedMailboxSeed } from "./helpers/real-db.mjs";
  * database, so the assertions observe the exact error type a JMAP client gets.
  */
 const { app, newDatabase } = await loadApp("jmap-method-args", `export { processRequest } from "./src/lib/jmap/processor.ts";`);
+// A second bundle with the real send path replaced, so the EmailSubmission/set
+// tests can observe a successful submission next to a malformed record.
+const { app: sendApp, newDatabase: newSendDb } = await loadApp("jmap-method-args-send", `export { processRequest } from "./src/lib/jmap/processor.ts";`, {
+	mocks: { "@/lib/email/send": `export async function sendEmail() { return { messageId: "sent-x" }; }` },
+});
 
 const SEED = `
 	INSERT INTO users (id, email, name, password_hash, role, created_at) VALUES ('u1', 'kevin@example.com', 'Kevin', 'x', 'admin', 0);
@@ -512,4 +517,45 @@ test("a null recipient name still creates the draft", async (t) => {
 test("a hostile comparator property is invalidArguments, not serverFail", async (t) => {
 	const error = await expectError(t, "Email/query", { sort: [{ property: HOSTILE, isAscending: true }] });
 	assert.equal(error.type, "invalidArguments");
+});
+
+// A "#ref" must resolve to an id this request actually created: reading
+// ctx.createdIds off the prototype chain used to substitute Object.prototype
+// .constructor — a Function — into the draft lookup, which threw a bind error
+// after the first submission's send and draft delete had already committed.
+test("an emailId of 'constructor' is a per-record error, not a post-send serverFail", async (t) => {
+	const { env, db, sqlite } = await newSendDb(t, `${SEED}
+		INSERT INTO messages (id, user_id, mailbox_id, direction, from_addr, to_addr, subject, status, read, private_draft, created_at) VALUES
+			('draft-1', 'u1', 'mb1', 'outbound', 'kevin@example.com', 'a@x.test', 'Draft', 'draft', 1, 0, 2);
+	`);
+	const response = await sendApp.processRequest(context(db, env), {
+		using: ["urn:ietf:params:jmap:core", "urn:ietf:params:jmap:mail", "urn:ietf:params:jmap:submission"],
+		methodCalls: [["EmailSubmission/set", {
+			create: {
+				good: { emailId: "draft-1", identityId: "mb1~kevin@example.com" },
+				bad: { emailId: "constructor", identityId: "mb1~kevin@example.com" },
+			},
+		}, "set"]],
+	});
+	const [[responseName, result]] = response.methodResponses;
+	assert.equal(responseName, "EmailSubmission/set", JSON.stringify(result));
+	assert.equal(result.created?.good?.id, "sent-x", `the first submission must succeed: ${JSON.stringify(result)}`);
+	assert.equal(result.notCreated?.bad?.type, "invalidProperties", `expected a per-record error: ${JSON.stringify(result)}`);
+	assert.equal(sqlite.prepare("SELECT count(*) AS n FROM messages WHERE id = 'draft-1'").get().n, 0, "the submitted draft stays deleted");
+});
+
+// The allocator reserves literals first, then walks a monotonic cursor: a
+// long literal run reserving the sequential prefix must not rescind earlier
+// items or rescind the pass into quadratic probing.
+test("the surrogate allocator stays linear on an adversarial reserved prefix", async (t) => {
+	const k = 40;
+	const destroy = [...Array.from({ length: k }, (_, index) => index), ...Array.from({ length: k }, (_, index) => malformedKey(index))];
+	const [responseName, result] = await single(t, "Email/set", { destroy });
+	assert.equal(responseName, "Email/set", JSON.stringify(result).slice(0, 400));
+	assert.strictEqual(Object.keys(result.notDestroyed ?? {}).length, destroy.length);
+	// Items 0..k-1 are malformed and the literals reserved malformed#0..k-1,
+	// so the malformed items must land on malformed#k..malformed#(2k-1).
+	for (let index = 0; index < k; index += 1) {
+		assert.equal(result.notDestroyed[malformedKey(k + index)]?.type, "notFound", `item ${index} -> ${malformedKey(k + index)}`);
+	}
 });

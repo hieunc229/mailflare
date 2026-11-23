@@ -22,14 +22,16 @@ export function stringArrayArg(value: unknown, name: string): string[] | null | 
  */
 export function safeIdKeys(ids: unknown[]): string[] {
 	const reserved = new Set(ids.filter((id): id is string => typeof id === "string"));
-	const allocated = new Set<string>();
+	// Monotonic cursor: every allocated key sits below `next`, so a candidate at
+	// or above it can only collide with a reserved literal — one forward pass,
+	// no rescan even when a long literal run reserves the sequential prefix.
+	let next = 0;
 	return ids.map((id, index) => {
 		if (typeof id === "string") return id;
-		let candidate = index;
-		let key = `malformed#${candidate}`;
-		while (reserved.has(key) || allocated.has(key)) key = `malformed#${++candidate}`;
-		allocated.add(key);
-		return key;
+		let candidate = Math.max(index, next);
+		while (reserved.has(`malformed#${candidate}`)) candidate += 1;
+		next = candidate + 1;
+		return `malformed#${candidate}`;
 	});
 }
 

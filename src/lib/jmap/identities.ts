@@ -81,7 +81,12 @@ export const emailSubmissionSet: JmapMethodHandler = async (ctx, args) => {
 		// String() on a non-string id would invoke the value's own toString and
 		// can throw mid-loop; a malformed reference just cannot match a draft.
 		const emailIdRef = typeof value.emailId === "string" ? value.emailId : "";
-		const emailId = ctx.createdIds[emailIdRef.replace(/^#/, "")] ?? emailIdRef;
+		const ref = emailIdRef.replace(/^#/, "");
+		// An inherited property like "constructor" is not a creation id: reading
+		// it as a map would substitute a Function into the draft lookup and throw
+		// a bind error after earlier submissions already went out.
+		const mapped = Object.prototype.hasOwnProperty.call(ctx.createdIds, ref) ? ctx.createdIds[ref] : undefined;
+		const emailId = typeof mapped === "string" ? mapped : emailIdRef;
 		const identity = typeof value.identityId === "string" ? decodeIdentityId(value.identityId) : null;
 		const accessible = await listJmapMailboxes(ctx);
 		if (!identity || !accessible.some((mailbox) => mailbox.id === identity.mailboxId && mailbox.permission !== "read_only")) {
