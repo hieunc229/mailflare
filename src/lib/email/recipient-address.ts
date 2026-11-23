@@ -23,7 +23,10 @@ export function parseRecipientAddress(address: string): ParsedRecipientAddress |
 
 	const localPart = normalizeRecipientFullLocalPart(parsed.local);
 	// The subaddress splits at the first "+". An empty tag (`user+@…`) does not
-	// split, and a missing base (`+tag@…`) is not a deliverable address.
+	// split for routing: `localPart` stays literal and `hasSubaddress` is false.
+	// The base fields still strip it (`user`), because the base-vs-base
+	// comparisons in domain-addresses.ts and aliases/route.ts read that form.
+	// A missing base (`+tag@…`) is not a deliverable address.
 	const separator = localPart.indexOf("+");
 	const hasSubaddress = separator > -1 && separator < localPart.length - 1;
 	const baseLocalPart = separator === -1 ? localPart : localPart.slice(0, separator);
