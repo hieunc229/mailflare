@@ -167,6 +167,8 @@ export function sortToSql(sort: Comparator[] | null | undefined): SQL[] {
 	const comparators = sort && sort.length ? sort : [{ property: "receivedAt", isAscending: false }];
 	return comparators.map((item) => {
 		if (!item || typeof item !== "object") throw invalidArguments("sort comparators must be objects");
+		// A non-string property would coerce inside the error text below.
+		if (typeof item.property !== "string") throw invalidArguments("sort comparators need a string property");
 		// RFC 8620 §5.5: isAscending defaults to true when omitted.
 		const direction = item.isAscending === false ? desc : asc;
 		switch (item.property) {

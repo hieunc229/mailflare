@@ -249,11 +249,12 @@ async function createDraft(ctx: JmapContext, value: Record<string, unknown>, acc
 	}
 	// Recipient and reference fields feed string coercion or the insert
 	// directly; a malformed item must fail the record, not the whole call.
+	// `name` is String|null per RFC 8621 §4.1.2.3 — the formatter handles null.
 	const badAddress = (["to", "cc", "bcc"] as const).find(
 		(field) =>
 			Array.isArray(value[field]) &&
 			(value[field] as unknown[]).some(
-				(item) => !item || typeof item !== "object" || typeof (item as Record<string, unknown>).email !== "string" || ((item as Record<string, unknown>).name !== undefined && typeof (item as Record<string, unknown>).name !== "string"),
+				(item) => !item || typeof item !== "object" || typeof (item as Record<string, unknown>).email !== "string" || ((item as Record<string, unknown>).name != null && typeof (item as Record<string, unknown>).name !== "string"),
 			),
 	);
 	if (badAddress) return { error: { type: "invalidProperties", properties: [badAddress] } };
@@ -323,17 +324,21 @@ export const emailSet: JmapMethodHandler = async (ctx, args) => {
 	if (args.ifInState && args.ifInState !== oldState) return { type: "stateMismatch" };
 	// Arg-level errors are answered before any write commits (RFC 8620 §3.6.2).
 	if (args.destroy !== undefined && args.destroy !== null && !Array.isArray(args.destroy)) throw invalidArguments("destroy must be an array of ids");
+	// Response keys are computed before any write: key coercion on a malformed
+	// id would otherwise throw inside the loop after earlier destroys committed.
+	const destroyItems = ((args.destroy ?? []) as unknown[]).map((id, index) => ({ id, key: safeIdKey(id, index) }));
 	const accessible = await listAccessibleMailboxIdSet(ctx);
 	const mailboxRows = await listJmapMailboxes(ctx);
 	const writable = new Set(mailboxRows.filter((row) => row.permission !== "read_only").map((row) => row.id));
 	// Moving or deleting mail needs full_access, as in the REST routes (canManage); delegates keep flags and drafts.
 	const manageable = new Set(mailboxRows.filter((row) => row.permission === "full_access").map((row) => row.id));
-	const created: Record<string, unknown> = {};
-	const notCreated: Record<string, unknown> = {};
-	const updated: Record<string, null> = {};
-	const notUpdated: Record<string, unknown> = {};
+	// Client-controlled keys: a null-prototype map keeps "__proto__" an own property.
+	const created: Record<string, unknown> = Object.create(null);
+	const notCreated: Record<string, unknown> = Object.create(null);
+	const updated: Record<string, null> = Object.create(null);
+	const notUpdated: Record<string, unknown> = Object.create(null);
 	const destroyed: string[] = [];
-	const notDestroyed: Record<string, unknown> = {};
+	const notDestroyed: Record<string, unknown> = Object.create(null);
 
 	for (const [creationId, value] of Object.entries((args.create ?? {}) as Record<string, Record<string, unknown>>)) {
 		if (!value || typeof value !== "object") {
@@ -400,9 +405,6 @@ export const emailSet: JmapMethodHandler = async (ctx, args) => {
 
 	// JMAP destroy is permanent; Mailflare keeps a trash, so destroy moves there
 	// and a second destroy from Trash deletes the row.
-	// Response keys are computed before any write: key coercion on a malformed
-	// id would otherwise throw inside the loop after earlier destroys committed.
-	const destroyItems = ((args.destroy ?? []) as unknown[]).map((id) => ({ id, key: safeIdKey(id) }));
 	// Only strings may bind in the id lookup; anything else is a per-record
 	// notFound, the same answer an unknown string id gets.
 	const destroyRows = await loadMessages(ctx, destroyItems.map((item) => item.id).filter((id): id is string => typeof id === "string"));
@@ -428,7 +430,9 @@ export const emailSet: JmapMethodHandler = async (ctx, args) => {
 		destroyed.push(id);
 	}
 
-	return { accountId: ctx.accountId, oldState, newState: await getEmailState(ctx), created, updated, destroyed, notCreated, notUpdated, notDestroyed };
+	// Spread back to a plain object so a "__proto__" id survives as an own
+	// property without changing the response's object shape for callers.
+	return { accountId: ctx.accountId, oldState, newState: await getEmailState(ctx), created: { ...created }, updated: { ...updated }, destroyed, notCreated: { ...notCreated }, notUpdated: { ...notUpdated }, notDestroyed: { ...notDestroyed } };
 };
 
 /**
@@ -521,8 +525,9 @@ export const emailImport: JmapMethodHandler = async (ctx, args) => {
 	const emails = (args.emails ?? {}) as Record<string, Record<string, unknown>>;
 	if (Object.keys(emails).length > LIMITS.maxObjectsInSet) throw new JmapError("requestTooLarge");
 	const writable = new Set((await listJmapMailboxes(ctx)).filter((row) => row.permission !== "read_only").map((row) => row.id));
-	const created: Record<string, unknown> = {};
-	const notCreated: Record<string, unknown> = {};
+	// Client-controlled keys: a null-prototype map keeps "__proto__" an own property.
+	const created: Record<string, unknown> = Object.create(null);
+	const notCreated: Record<string, unknown> = Object.create(null);
 
 	for (const [creationId, value] of Object.entries(emails)) {
 		const result = await importEmail(ctx, value ?? {}, writable);
@@ -541,7 +546,7 @@ export const emailImport: JmapMethodHandler = async (ctx, args) => {
 		created[creationId] = { id: object.id, blobId: object.blobId, threadId: object.threadId, size: object.size };
 	}
 
-	return { accountId: ctx.accountId, oldState, newState: await getEmailState(ctx), created, notCreated };
+	return { accountId: ctx.accountId, oldState, newState: await getEmailState(ctx), created: { ...created }, notCreated: { ...notCreated } };
 };
 
 export const emailUnsupported = (method: string): JmapMethodHandler => async () => ({ type: "unknownMethod", description: `${method} is not supported` });

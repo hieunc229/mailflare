@@ -192,13 +192,17 @@ export const mailboxSet: JmapMethodHandler = async (ctx, args) => {
 	if (args.ifInState && args.ifInState !== oldState) return { type: "stateMismatch" };
 	// Arg-level errors are answered before any write commits (RFC 8620 §3.6.2).
 	if (args.destroy !== undefined && args.destroy !== null && !Array.isArray(args.destroy)) throw invalidArguments("destroy must be an array of ids");
+	// Response keys are computed before any write: key coercion on a malformed
+	// id would otherwise throw inside the loop after earlier destroys committed.
+	const destroyItems = ((args.destroy ?? []) as unknown[]).map((id, index) => ({ id, key: safeIdKey(id, index) }));
 	const accessible = await listJmapMailboxes(ctx);
-	const created: Record<string, unknown> = {};
-	const notCreated: Record<string, unknown> = {};
-	const updated: Record<string, null> = {};
-	const notUpdated: Record<string, unknown> = {};
+	// Client-controlled keys: a null-prototype map keeps "__proto__" an own property.
+	const created: Record<string, unknown> = Object.create(null);
+	const notCreated: Record<string, unknown> = Object.create(null);
+	const updated: Record<string, null> = Object.create(null);
+	const notUpdated: Record<string, unknown> = Object.create(null);
 	const destroyed: string[] = [];
-	const notDestroyed: Record<string, unknown> = {};
+	const notDestroyed: Record<string, unknown> = Object.create(null);
 
 	for (const [creationId, value] of Object.entries((args.create ?? {}) as Record<string, Record<string, unknown>>)) {
 		if (!value || typeof value !== "object") {
@@ -263,9 +267,6 @@ export const mailboxSet: JmapMethodHandler = async (ctx, args) => {
 		updated[id] = null;
 	}
 
-	// Response keys are computed before any write: key coercion on a malformed
-	// id would otherwise throw inside the loop after earlier destroys committed.
-	const destroyItems = ((args.destroy ?? []) as unknown[]).map((id) => ({ id, key: safeIdKey(id) }));
 	for (const { id, key } of destroyItems) {
 		const ref = decodeMailboxRef(id);
 		const mailbox = ref && accessible.find((row) => row.id === ref.mailboxId);
@@ -300,12 +301,14 @@ export const mailboxSet: JmapMethodHandler = async (ctx, args) => {
 		accountId: ctx.accountId,
 		oldState,
 		newState: await getMailboxState(ctx),
-		created,
-		updated,
+		// Spread back to a plain object so a "__proto__" id survives as an own
+		// property without changing the response's object shape for callers.
+		created: { ...created },
+		updated: { ...updated },
 		destroyed,
-		notCreated,
-		notUpdated,
-		notDestroyed,
+		notCreated: { ...notCreated },
+		notUpdated: { ...notUpdated },
+		notDestroyed: { ...notDestroyed },
 	};
 };
 

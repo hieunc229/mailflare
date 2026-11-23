@@ -90,8 +90,8 @@ test("a null update patch is a per-record invalidProperties, not serverFail", as
 test("non-string ids in a destroy list resolve to per-record notFound", async (t) => {
 	const [responseName, result] = await single(t, "Mailbox/set", { destroy: [5, null, "mb1~inbox"] });
 	assert.equal(responseName, "Mailbox/set", JSON.stringify(result));
-	assert.equal(result.notDestroyed["5"]?.type, "notFound");
-	assert.equal(result.notDestroyed["null"]?.type, "notFound");
+	assert.equal(result.notDestroyed[malformedKey(0, 5)]?.type, "notFound");
+	assert.equal(result.notDestroyed[malformedKey(1, null)]?.type, "notFound");
 	// The system inbox is real but cannot be destroyed.
 	assert.equal(result.notDestroyed["mb1~inbox"]?.type, "forbidden");
 });
@@ -313,8 +313,8 @@ test("mixed destroy lists destroy the valid ids and report the malformed ones", 
 	const [responseName, result] = await single(t, "Email/set", { destroy: ["m-1", {}, ["x"], 5, "m-missing"] });
 	assert.equal(responseName, "Email/set", JSON.stringify(result));
 	assert.deepEqual(result.destroyed, ["m-1"]);
-	// Malformed ids are keyed by their JSON echo, never by toString coercion.
-	for (const key of ["{}", '["x"]', "5", "m-missing"]) {
+	// Malformed ids are keyed by a position surrogate, never by toString coercion.
+	for (const key of [malformedKey(1, {}), malformedKey(2, ["x"]), malformedKey(3, 5), "m-missing"]) {
 		assert.equal(result.notDestroyed[key]?.type, "notFound", `notDestroyed[${key}]: ${JSON.stringify(result.notDestroyed)}`);
 	}
 });
@@ -349,22 +349,39 @@ test("Mailbox/set answers a malformed patch before existence or ACL checks", asy
 // notDestroyed map — a TypeError the per-call catch-all answered as
 // serverFail, and in a mixed list it landed AFTER the valid id was already
 // destroyed (RFC 8620 §3.6.2 again). Response keys are now normalised before
-// any write: strings stay themselves, everything else gets JSON.stringify.
+// any write: strings keep themselves, malformed items get a position surrogate
+// so no two inputs (5 vs "5", [5] vs "[5]") can collide on one entry.
 const HOSTILE = { toString: 5 };
-const HOSTILE_KEY = JSON.stringify(HOSTILE);
+const malformedKey = (index, value) => `malformed#${index}=${JSON.stringify(value)}`;
 
 test("a hostile destroy item answers a per-record error, not serverFail", async (t) => {
 	for (const name of ["Mailbox/set", "Email/set"]) {
 		const [responseName, result] = await single(t, name, { destroy: [HOSTILE] });
 		assert.equal(responseName, name, JSON.stringify(result));
-		assert.equal(result.notDestroyed[HOSTILE_KEY]?.type, "notFound", `${name}: ${JSON.stringify(result.notDestroyed)}`);
+		assert.equal(result.notDestroyed[malformedKey(0, HOSTILE)]?.type, "notFound", `${name}: ${JSON.stringify(result.notDestroyed)}`);
 	}
 	// Identity/set and EmailSubmission/set answer forbidden for every destroy
 	// id by design — the hostile key gets the same verdict, not a throw.
 	for (const name of ["Identity/set", "EmailSubmission/set"]) {
 		const [responseName, result] = await single(t, name, { destroy: [HOSTILE] });
 		assert.equal(responseName, name, JSON.stringify(result));
-		assert.equal(result.notDestroyed[HOSTILE_KEY]?.type, "forbidden", `${name}: ${JSON.stringify(result.notDestroyed)}`);
+		assert.equal(result.notDestroyed[malformedKey(0, HOSTILE)]?.type, "forbidden", `${name}: ${JSON.stringify(result.notDestroyed)}`);
+	}
+});
+
+test("destroy items can never collide on a notDestroyed key", async (t) => {
+	const destroy = [5, "5", ["5"], '["5"]', { a: 1 }, '{"a":1}', null, "null", "__proto__", "constructor"];
+	const [responseName, result] = await single(t, "Email/set", { destroy });
+	assert.equal(responseName, "Email/set", JSON.stringify(result));
+	const keys = Object.keys(result.notDestroyed ?? {});
+	// Every item lands its own entry: literals stay themselves, malformed items
+	// get surrogates, and __proto__/constructor survive as own properties.
+	assert.strictEqual(keys.length, destroy.length, `expected ${destroy.length} keys, got ${JSON.stringify(keys)}`);
+	for (const literal of ["5", '["5"]', '{"a":1}', "null", "__proto__", "constructor"]) {
+		assert.equal(result.notDestroyed[literal]?.type, "notFound", `literal ${literal}: ${JSON.stringify(result.notDestroyed)}`);
+	}
+	for (const [index, value] of [[0, 5], [2, ["5"]], [4, { a: 1 }], [6, null]]) {
+		assert.equal(result.notDestroyed[malformedKey(index, value)]?.type, "notFound", `surrogate ${index}`);
 	}
 });
 
@@ -377,7 +394,7 @@ test("a hostile destroy item after a valid id cannot throw past the write", asyn
 	const [[responseName, result]] = response.methodResponses;
 	assert.equal(responseName, "Email/set", JSON.stringify(result));
 	assert.deepEqual(result.destroyed, ["m-1"]);
-	assert.equal(result.notDestroyed[HOSTILE_KEY]?.type, "notFound");
+	assert.equal(result.notDestroyed[malformedKey(1, HOSTILE)]?.type, "notFound");
 	assert.equal(sqlite.prepare("SELECT status FROM messages WHERE id = 'm-1'").get().status, "trash");
 });
 
@@ -388,7 +405,7 @@ test("a hostile destroy item cannot throw past a committed Mailbox create", asyn
 	});
 	assert.equal(responseName, "Mailbox/set", JSON.stringify(result));
 	assert.ok(result.created.good, `the valid create should land: ${JSON.stringify(result)}`);
-	assert.equal(result.notDestroyed[HOSTILE_KEY]?.type, "notFound");
+	assert.equal(result.notDestroyed[malformedKey(0, HOSTILE)]?.type, "notFound");
 });
 
 test("hostile values inside a create record are per-record errors", async (t) => {
@@ -439,4 +456,37 @@ test("hostile filter internals are invalidArguments, not serverFail", async (t) 
 		const error = await expectError(t, "Email/query", { filter });
 		assert.equal(error.type, "invalidArguments", `filter=${JSON.stringify(filter)}`);
 	}
+});
+
+// EmailAddress.name is String|null per RFC 8621 §4.1.2.3 — the shape guard must
+// not reject a null that the formatter already handles.
+test("a null recipient name still creates the draft", async (t) => {
+	const { env, db, sqlite } = await newDatabase(t, SEED);
+	const response = await app.processRequest(context(db, env), {
+		using: ["urn:ietf:params:jmap:core", "urn:ietf:params:jmap:mail"],
+		methodCalls: [
+			["Email/set", {
+				create: {
+					x: {
+						mailboxIds: { "mb1~drafts": true },
+						from: [{ email: "kevin@example.com", name: null }],
+						to: [{ email: "a@x.test", name: null }],
+						cc: [{ email: "b@x.test", name: null }],
+						bcc: [{ email: "c@x.test", name: null }],
+						subject: "null names",
+					},
+				},
+			}, "set"],
+		],
+	});
+	const [[responseName, result]] = response.methodResponses;
+	assert.equal(responseName, "Email/set", JSON.stringify(result));
+	assert.ok(result.created?.x, `expected the draft to be created: ${JSON.stringify(result)}`);
+	const row = sqlite.prepare("SELECT to_addr, cc_addr, bcc_addr FROM messages WHERE subject = 'null names'").get();
+	assert.deepEqual(row, { to_addr: "a@x.test", cc_addr: "b@x.test", bcc_addr: "c@x.test" });
+});
+
+test("a hostile comparator property is invalidArguments, not serverFail", async (t) => {
+	const error = await expectError(t, "Email/query", { sort: [{ property: HOSTILE, isAscending: true }] });
+	assert.equal(error.type, "invalidArguments");
 });

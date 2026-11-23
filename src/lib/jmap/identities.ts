@@ -52,7 +52,7 @@ export const identitySet: JmapMethodHandler = async (ctx, args) => {
 		destroyed: [],
 		notCreated: Object.fromEntries(Object.keys((args.create ?? {}) as object).map((id) => [id, { type: "forbidden" }])),
 		notUpdated: Object.fromEntries(Object.keys((args.update ?? {}) as object).map((id) => [id, { type: "forbidden" }])),
-		notDestroyed: Object.fromEntries(((args.destroy ?? []) as unknown[]).map((id) => [safeIdKey(id), { type: "forbidden" }])),
+		notDestroyed: Object.fromEntries(((args.destroy ?? []) as unknown[]).map((id, index) => [safeIdKey(id, index), { type: "forbidden" }])),
 	};
 };
 
@@ -64,11 +64,15 @@ export const identitySet: JmapMethodHandler = async (ctx, args) => {
  */
 export const emailSubmissionSet: JmapMethodHandler = async (ctx, args) => {
 	const oldState = await getEmailState(ctx);
-	const created: Record<string, unknown> = {};
-	const notCreated: Record<string, unknown> = {};
+	// Client-controlled keys: a null-prototype map keeps "__proto__" an own property.
+	const created: Record<string, unknown> = Object.create(null);
+	const notCreated: Record<string, unknown> = Object.create(null);
 	const destroyedEmails: string[] = [];
 
 	if (args.destroy !== undefined && args.destroy !== null && !Array.isArray(args.destroy)) throw invalidArguments("destroy must be an array of ids");
+	// Response keys are computed before any send: key coercion on a malformed id
+	// would otherwise throw after earlier submissions already went out.
+	const destroyKeys = ((args.destroy ?? []) as unknown[]).map((id, index) => safeIdKey(id, index));
 	for (const [creationId, value] of Object.entries((args.create ?? {}) as Record<string, Record<string, unknown>>)) {
 		if (!value || typeof value !== "object") {
 			notCreated[creationId] = { type: "invalidProperties", description: "The record must be an object" };
@@ -143,12 +147,14 @@ export const emailSubmissionSet: JmapMethodHandler = async (ctx, args) => {
 		accountId: ctx.accountId,
 		oldState,
 		newState: await getEmailState(ctx),
-		created,
+		// Spread back to a plain object so a "__proto__" id survives as an own
+		// property without changing the response's object shape for callers.
+		created: { ...created },
 		updated: {},
 		destroyed: [],
-		notCreated,
+		notCreated: { ...notCreated },
 		notUpdated: Object.fromEntries(Object.keys((args.update ?? {}) as object).map((id) => [id, { type: "forbidden" }])),
-		notDestroyed: Object.fromEntries(((args.destroy ?? []) as unknown[]).map((id) => [safeIdKey(id), { type: "forbidden" }])),
+		notDestroyed: Object.fromEntries(destroyKeys.map((key) => [key, { type: "forbidden" }])),
 		// Surfaced so the processor can append the implicit Email/set response.
 		__destroyedEmails: destroyedEmails,
 	};
