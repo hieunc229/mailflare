@@ -14,7 +14,8 @@ export function encodeMailboxRef(ref: MailboxRef): string {
 	return `${ref.mailboxId}${SEP}f${SEP}${ref.folderId}`;
 }
 
-export function decodeMailboxRef(id: string): MailboxRef | null {
+export function decodeMailboxRef(id: unknown): MailboxRef | null {
+	if (typeof id !== "string") return null;
 	const parts = id.split(SEP);
 	if (parts.length === 1 && parts[0]) return { kind: "account", mailboxId: parts[0] };
 	if (parts.length === 2 && (SYSTEM_ROLES as string[]).includes(parts[1])) {
@@ -34,7 +35,8 @@ export function messageBlobId(messageId: string): string {
 export function uploadBlobId(uploadId: string): string {
 	return `up${SEP}${uploadId}`;
 }
-export function decodeBlobId(blobId: string): { kind: "att" | "msg" | "up"; id: string } | null {
+export function decodeBlobId(blobId: unknown): { kind: "att" | "msg" | "up"; id: string } | null {
+	if (typeof blobId !== "string") return null;
 	const index = blobId.indexOf(SEP);
 	if (index < 0) return null;
 	const kind = blobId.slice(0, index);
@@ -46,7 +48,8 @@ export function decodeBlobId(blobId: string): { kind: "att" | "msg" | "up"; id: 
 export function identityId(mailboxId: string, address: string): string {
 	return `${mailboxId}${SEP}${address.toLowerCase()}`;
 }
-export function decodeIdentityId(id: string): { mailboxId: string; address: string } | null {
+export function decodeIdentityId(id: unknown): { mailboxId: string; address: string } | null {
+	if (typeof id !== "string") return null;
 	const index = id.indexOf(SEP);
 	if (index < 0) return null;
 	return { mailboxId: id.slice(0, index), address: id.slice(index + 1) };

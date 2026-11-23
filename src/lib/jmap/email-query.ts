@@ -76,10 +76,20 @@ function headerCondition(header: string[]): SQL {
 
 function conditionToSql(condition: FilterCondition, accessible: Set<string>, viewerId: string): SQL[] {
 	const parts: SQL[] = [];
+	for (const field of ["inMailbox", "before", "after", "hasKeyword", "notKeyword", "allInThreadHaveKeyword", "someInThreadHaveKeyword", "noneInThreadHaveKeyword", "text", "from", "to", "cc", "bcc", "subject", "body"] as const) {
+		if (condition[field] !== undefined && typeof condition[field] !== "string") throw invalidArguments(`Filter condition ${field} must be a string`);
+	}
+	for (const field of ["minSize", "maxSize"] as const) {
+		if (condition[field] !== undefined && typeof condition[field] !== "number") throw invalidArguments(`Filter condition ${field} must be a number`);
+	}
+	if (condition.hasAttachment !== undefined && typeof condition.hasAttachment !== "boolean") throw invalidArguments("Filter condition hasAttachment must be a boolean");
 	if (condition.inMailbox !== undefined) {
 		const ref = decodeMailboxRef(condition.inMailbox);
 		if (!ref || !accessible.has(ref.mailboxId)) throw invalidArguments(`Unknown mailbox ${condition.inMailbox}`);
 		parts.push(mailboxRefCondition(ref));
+	}
+	if (condition.inMailboxOtherThan !== undefined && !Array.isArray(condition.inMailboxOtherThan)) {
+		throw invalidArguments("Filter condition inMailboxOtherThan must be an array of mailbox ids");
 	}
 	if (condition.inMailboxOtherThan) {
 		for (const id of condition.inMailboxOtherThan) {
@@ -87,6 +97,8 @@ function conditionToSql(condition: FilterCondition, accessible: Set<string>, vie
 			if (ref && accessible.has(ref.mailboxId)) parts.push(not(mailboxRefCondition(ref)));
 		}
 	}
+	if (condition.before !== undefined && Number.isNaN(new Date(condition.before).getTime())) throw invalidArguments("Filter condition before must be a date");
+	if (condition.after !== undefined && Number.isNaN(new Date(condition.after).getTime())) throw invalidArguments("Filter condition after must be a date");
 	if (condition.before) parts.push(lt(messages.createdAt, new Date(condition.before)));
 	if (condition.after) parts.push(gte(messages.createdAt, new Date(condition.after)));
 	if (condition.hasKeyword) parts.push(keywordCondition(condition.hasKeyword, true));
@@ -128,8 +140,12 @@ function conditionToSql(condition: FilterCondition, accessible: Set<string>, vie
 
 /** FilterOperator trees become nested AND/OR/NOT; a bare condition is an AND of its fields. */
 export function filterToSql(filter: Filter | null | undefined, accessible: Set<string>, viewerId: string): SQL | undefined {
-	if (!filter) return undefined;
+	if (filter === null || filter === undefined) return undefined;
+	if (typeof filter !== "object") throw invalidArguments("filter must be a condition or an operator object");
 	if ("operator" in filter) {
+		if (filter.conditions != null && !Array.isArray(filter.conditions)) {
+			throw invalidArguments("Filter operator conditions must be an array");
+		}
 		// An empty condition (`{}`) matches every email, so it stays a child instead of being dropped (RFC 8621 4.4.1).
 		const children = (filter.conditions ?? []).map((child) => filterToSql(child, accessible, viewerId) ?? matchEverything);
 		if (children.length === 0) return undefined;
@@ -144,8 +160,10 @@ export function filterToSql(filter: Filter | null | undefined, accessible: Set<s
 }
 
 export function sortToSql(sort: Comparator[] | null | undefined): SQL[] {
+	if (sort !== null && sort !== undefined && !Array.isArray(sort)) throw invalidArguments("sort must be an array of comparators");
 	const comparators = sort && sort.length ? sort : [{ property: "receivedAt", isAscending: false }];
 	return comparators.map((item) => {
+		if (!item || typeof item !== "object") throw invalidArguments("sort comparators must be objects");
 		// RFC 8620 §5.5: isAscending defaults to true when omitted.
 		const direction = item.isAscending === false ? desc : asc;
 		switch (item.property) {

@@ -3,7 +3,8 @@ import { mailboxChangesSince } from "./changes";
 import { folders, messages } from "@/db/schema";
 import { draftsVisibleTo } from "@/lib/email/draft-access";
 import { newId } from "@/lib/ids";
-import { JmapError } from "./errors";
+import { invalidArguments, JmapError } from "./errors";
+import { stringArrayArg } from "./args";
 import { decodeMailboxRef, encodeMailboxRef, roleToStatus, SYSTEM_ROLES } from "./ids";
 import { getMailboxState } from "./state";
 import type { AccessibleMailbox, JmapContext, JmapMethodHandler, SystemRole } from "./types";
@@ -145,8 +146,8 @@ export async function buildAllMailboxes(ctx: JmapContext) {
 
 export const mailboxGet: JmapMethodHandler = async (ctx, args) => {
 	const all = await buildAllMailboxes(ctx);
-	const ids = args.ids as string[] | null | undefined;
-	const properties = args.properties as string[] | null | undefined;
+	const ids = stringArrayArg(args.ids, "ids");
+	const properties = stringArrayArg(args.properties, "properties");
 	const wanted = ids ? all.filter((item) => ids.includes(item.id as string)) : all;
 	const found = new Set(wanted.map((item) => item.id as string));
 	return {
@@ -159,7 +160,12 @@ export const mailboxGet: JmapMethodHandler = async (ctx, args) => {
 
 export const mailboxQuery: JmapMethodHandler = async (ctx, args) => {
 	const all = await buildAllMailboxes(ctx);
+	if (args.filter !== undefined && args.filter !== null && typeof args.filter !== "object") throw invalidArguments("filter must be an object");
 	const filter = (args.filter ?? {}) as { parentId?: string | null; name?: string; role?: string | null; hasAnyRole?: boolean };
+	if (filter.parentId !== undefined && filter.parentId !== null && typeof filter.parentId !== "string") throw invalidArguments("filter.parentId must be a mailbox id");
+	if (filter.name !== undefined && typeof filter.name !== "string") throw invalidArguments("filter.name must be a string");
+	if (filter.role !== undefined && filter.role !== null && typeof filter.role !== "string") throw invalidArguments("filter.role must be a role");
+	if (filter.hasAnyRole !== undefined && typeof filter.hasAnyRole !== "boolean") throw invalidArguments("filter.hasAnyRole must be a boolean");
 	let rows = all;
 	if (filter.parentId !== undefined) rows = rows.filter((item) => item.parentId === filter.parentId);
 	if (filter.name) rows = rows.filter((item) => String(item.name).toLowerCase().includes(filter.name!.toLowerCase()));
@@ -193,6 +199,10 @@ export const mailboxSet: JmapMethodHandler = async (ctx, args) => {
 	const notDestroyed: Record<string, unknown> = {};
 
 	for (const [creationId, value] of Object.entries((args.create ?? {}) as Record<string, Record<string, unknown>>)) {
+		if (!value || typeof value !== "object") {
+			notCreated[creationId] = { type: "invalidProperties", description: "The record must be an object" };
+			continue;
+		}
 		const parent = typeof value.parentId === "string" ? decodeMailboxRef(value.parentId) : null;
 		const name = typeof value.name === "string" ? value.name.trim() : "";
 		const mailbox = parent && accessible.find((row) => row.id === parent.mailboxId);
@@ -223,6 +233,10 @@ export const mailboxSet: JmapMethodHandler = async (ctx, args) => {
 			notUpdated[id] = { type: "notFound" };
 			continue;
 		}
+		if (!patch || typeof patch !== "object") {
+			notUpdated[id] = { type: "invalidProperties", description: "The patch must be an object" };
+			continue;
+		}
 		const keys = Object.keys(patch).filter((key) => key !== "isSubscribed" && key !== "sortOrder");
 		if (ref.kind !== "folder") {
 			notUpdated[id] = keys.length ? { type: "forbidden", description: "System mailboxes cannot be changed" } : undefined!;
@@ -247,6 +261,7 @@ export const mailboxSet: JmapMethodHandler = async (ctx, args) => {
 		updated[id] = null;
 	}
 
+	if (args.destroy !== undefined && args.destroy !== null && !Array.isArray(args.destroy)) throw invalidArguments("destroy must be an array of ids");
 	for (const id of (args.destroy ?? []) as string[]) {
 		const ref = decodeMailboxRef(id);
 		const mailbox = ref && accessible.find((row) => row.id === ref.mailboxId);

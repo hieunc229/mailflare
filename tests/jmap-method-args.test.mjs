@@ -1,0 +1,256 @@
+import assert from "node:assert/strict";
+import test from "node:test";
+import { loadApp } from "./helpers/real-db.mjs";
+
+/**
+ * Method-arg shape edges: an `args.*` value of the wrong JSON type used to
+ * throw a TypeError inside the method, land in the per-call catch-all and come
+ * back as `serverFail` (plus a console.error) — a client/protocol error labelled
+ * as a server bug. RFC 8620 §5.3/§5.5 wants `invalidArguments` for arg-level
+ * type violations, and per-record `invalidProperties`/`notFound` inside
+ * create/update maps, because /set calls are built for partial failure.
+ *
+ * Everything runs through `processRequest` against a real migrated SQLite
+ * database, so the assertions observe the exact error type a JMAP client gets.
+ */
+const { app, newDatabase } = await loadApp("jmap-method-args", `export { processRequest } from "./src/lib/jmap/processor.ts";`);
+
+const SEED = `
+	INSERT INTO users (id, email, name, password_hash, role, created_at) VALUES ('u1', 'kevin@example.com', 'Kevin', 'x', 'admin', 0);
+	INSERT INTO domains (id, user_id, hostname, zone_id, created_at) VALUES ('d1', 'u1', 'example.com', 'zone', 0);
+	INSERT INTO mailboxes (id, user_id, domain_id, local_part, created_at) VALUES ('mb1', 'u1', 'd1', 'kevin', 0);
+	INSERT INTO messages (id, user_id, mailbox_id, direction, from_addr, to_addr, subject, status, read, private_draft, created_at) VALUES
+		('m-1', 'u1', 'mb1', 'inbound', 'a@x.test', 'kevin@example.com', 'Hi', 'received', 0, 0, 1);
+	INSERT INTO folders (id, user_id, mailbox_id, name, created_at) VALUES ('fld1', 'u1', 'mb1', 'Old', 0);
+`;
+
+const context = (db, env) => ({
+	env,
+	db,
+	accountId: "u1",
+	origin: "http://test",
+	createdIds: {},
+	memo: undefined,
+	auth: { userId: "u1", user: { id: "u1", email: "kevin@example.com", role: "admin" }, scopes: ["jmap"], mailboxIds: null },
+});
+
+async function invoke(t, calls, seed = SEED) {
+	const { env, db } = await newDatabase(t, seed);
+	const response = await app.processRequest(context(db, env), {
+		using: ["urn:ietf:params:jmap:core", "urn:ietf:params:jmap:mail", "urn:ietf:params:jmap:submission"],
+		methodCalls: calls,
+	});
+	return response.methodResponses;
+}
+
+async function single(t, name, args, seed) {
+	const [[responseName, result]] = await invoke(t, [[name, args, "c"]], seed);
+	return [responseName, result];
+}
+
+const expectError = async (t, name, args, seed) => {
+	const [responseName, result] = await single(t, name, args, seed);
+	assert.equal(responseName, "error", `${name} ${JSON.stringify(args)} should answer a method error, got ${JSON.stringify(result)}`);
+	return result;
+};
+
+const expectSetError = async (t, name, args, bucket, key, seed) => {
+	const [responseName, result] = await single(t, name, args, seed);
+	assert.equal(responseName, name, `${name} ${JSON.stringify(args)} should not fail the whole call, got ${JSON.stringify(result)}`);
+	assert.ok(result[bucket][key], `${name} should report ${key} in ${bucket}: ${JSON.stringify(result)}`);
+	return result[bucket][key];
+};
+
+test("a non-array destroy is invalidArguments, not serverFail", async (t) => {
+	for (const name of ["Mailbox/set", "Email/set", "Identity/set", "EmailSubmission/set"]) {
+		for (const destroy of [5, {}, "x"]) {
+			const error = await expectError(t, name, { destroy }, undefined);
+			assert.equal(error.type, "invalidArguments", `${name} destroy=${JSON.stringify(destroy)}`);
+		}
+	}
+});
+
+test("a null create record is a per-record invalidProperties, not serverFail", async (t) => {
+	for (const name of ["Mailbox/set", "Email/set", "EmailSubmission/set"]) {
+		const error = await expectSetError(t, name, { create: { x: null } }, "notCreated", "x");
+		assert.equal(error.type, "invalidProperties", name);
+	}
+	// Identity/set already rejects every create per record.
+	const forbidden = await expectSetError(t, "Identity/set", { create: { x: null } }, "notCreated", "x");
+	assert.equal(forbidden.type, "forbidden");
+});
+
+test("a null update patch is a per-record invalidProperties, not serverFail", async (t) => {
+	const mailbox = await expectSetError(t, "Mailbox/set", { update: { mb1: null } }, "notUpdated", "mb1");
+	assert.equal(mailbox.type, "invalidProperties");
+	const email = await expectSetError(t, "Email/set", { update: { "m-1": null } }, "notUpdated", "m-1");
+	assert.equal(email.type, "invalidProperties");
+});
+
+test("non-string ids in a destroy list resolve to per-record notFound", async (t) => {
+	const [responseName, result] = await single(t, "Mailbox/set", { destroy: [5, null, "mb1~inbox"] });
+	assert.equal(responseName, "Mailbox/set", JSON.stringify(result));
+	assert.equal(result.notDestroyed["5"]?.type, "notFound");
+	assert.equal(result.notDestroyed["null"]?.type, "notFound");
+	// The system inbox is real but cannot be destroyed.
+	assert.equal(result.notDestroyed["mb1~inbox"]?.type, "forbidden");
+});
+
+test("non-array sort on Email/query is invalidArguments", async (t) => {
+	for (const sort of ["x", { length: 1 }, 5, [null], [5]]) {
+		const error = await expectError(t, "Email/query", { sort });
+		assert.equal(error.type, "invalidArguments", `sort=${JSON.stringify(sort)}`);
+	}
+});
+
+test("non-object filter on Email/query is invalidArguments", async (t) => {
+	for (const filter of ["x", 5, true]) {
+		const error = await expectError(t, "Email/query", { filter });
+		assert.equal(error.type, "invalidArguments", `filter=${JSON.stringify(filter)}`);
+	}
+});
+
+test("non-array filter conditions are invalidArguments", async (t) => {
+	for (const conditions of ["x", 5, {}, [5], ["x"]]) {
+		const error = await expectError(t, "Email/query", { filter: { operator: "AND", conditions } });
+		assert.equal(error.type, "invalidArguments", `conditions=${JSON.stringify(conditions)}`);
+	}
+});
+
+test("non-array inMailboxOtherThan is invalidArguments", async (t) => {
+	for (const inMailboxOtherThan of [5, {}, "x"]) {
+		const error = await expectError(t, "Email/query", { filter: { inMailboxOtherThan } });
+		assert.equal(error.type, "invalidArguments", `inMailboxOtherThan=${JSON.stringify(inMailboxOtherThan)}`);
+	}
+});
+
+test("wrong-typed scalar filter fields are invalidArguments", async (t) => {
+	for (const filter of [
+		{ inMailbox: 5 },
+		{ inMailbox: {} },
+		{ from: 5 },
+		{ from: {} },
+		{ text: 5 },
+		{ subject: {} },
+		{ before: {} },
+		{ before: "not a date" },
+		{ minSize: "x" },
+		{ minSize: {} },
+		{ hasAttachment: "yes" },
+		{ hasKeyword: 5 },
+	]) {
+		const error = await expectError(t, "Email/query", { filter });
+		assert.equal(error.type, "invalidArguments", `filter=${JSON.stringify(filter)}`);
+	}
+});
+
+test("non-array ids and properties on /get calls are invalidArguments", async (t) => {
+	for (const [name, args] of [
+		["Email/get", { ids: 5 }],
+		["Email/get", { ids: { a: 1 } }],
+		["Email/get", { ids: ["m-1"], properties: 5 }],
+		["Email/get", { ids: ["m-1"], properties: [5] }],
+		["Thread/get", { ids: 5 }],
+		["Thread/get", { ids: { a: 1 } }],
+		["Mailbox/get", { ids: 5 }],
+		["Mailbox/get", { properties: { a: 1 } }],
+		["Identity/get", { ids: "x" }],
+		["SearchSnippet/get", { emailIds: 5 }],
+		["SearchSnippet/get", { emailIds: { a: 1 } }],
+	]) {
+		const error = await expectError(t, name, args);
+		assert.equal(error.type, "invalidArguments", `${name} ${JSON.stringify(args)}`);
+	}
+});
+
+test("wrong-typed Mailbox/query filter fields are invalidArguments", async (t) => {
+	for (const filter of [{ name: 5 }, { name: {} }, 5, "x", { parentId: {} }, { hasAnyRole: "yes" }]) {
+		const error = await expectError(t, "Mailbox/query", { filter });
+		assert.equal(error.type, "invalidArguments", `filter=${JSON.stringify(filter)}`);
+	}
+});
+
+test("a wrong-typed SearchSnippet filter is invalidArguments", async (t) => {
+	for (const filter of [{ text: 5 }, { text: {} }, 5, "x"]) {
+		const error = await expectError(t, "SearchSnippet/get", { filter });
+		assert.equal(error.type, "invalidArguments", `filter=${JSON.stringify(filter)}`);
+	}
+});
+
+test("non-array attachments on an Email/set create are a per-record invalidProperties", async (t) => {
+	const create = {
+		mailboxIds: { "mb1~drafts": true },
+		from: [{ email: "kevin@example.com" }],
+	};
+	for (const attachments of [5, {}, "x"]) {
+		const error = await expectSetError(t, "Email/set", { create: { x: { ...create, attachments } } }, "notCreated", "x");
+		assert.equal(error.type, "invalidProperties", `attachments=${JSON.stringify(attachments)}`);
+		assert.deepEqual(error.properties, ["attachments"]);
+	}
+	// Malformed parts inside the list are skipped like an unreadable blobId.
+	const [responseName, result] = await single(t, "Email/set", { create: { x: { ...create, attachments: [null, 5, { blobId: 5 }] } } });
+	assert.equal(responseName, "Email/set", JSON.stringify(result));
+	assert.ok(result.created.x, `the draft should be created, got ${JSON.stringify(result)}`);
+});
+
+test("one bad call does not poison a good call in the same request", async (t) => {
+	const [[errorName, error], [getName, get]] = await invoke(t, [
+		["Email/query", { sort: "x" }, "bad"],
+		["Mailbox/get", {}, "good"],
+	]);
+	assert.equal(errorName, "error");
+	assert.equal(error.type, "invalidArguments");
+	assert.equal(getName, "Mailbox/get");
+	assert.ok(Array.isArray(get.list));
+});
+
+test("a bad create record does not stop a good one in the same call", async (t) => {
+	const [responseName, result] = await single(t, "Mailbox/set", {
+		create: { bad: null, good: { name: "Projects", parentId: "mb1" } },
+	});
+	assert.equal(responseName, "Mailbox/set", JSON.stringify(result));
+	assert.equal(result.notCreated.bad.type, "invalidProperties");
+	assert.ok(result.created.good, `good record should be created: ${JSON.stringify(result)}`);
+});
+
+test("valid create, update and destroy still work", async (t) => {
+	const { env, db } = await newDatabase(t, SEED);
+	const ctx = context(db, env);
+	const response = await app.processRequest(ctx, {
+		using: ["urn:ietf:params:jmap:core", "urn:ietf:params:jmap:mail"],
+		methodCalls: [
+			["Mailbox/set", { create: { f1: { name: "Projects", parentId: "mb1" } } }, "c1"],
+			["Mailbox/set", { update: { "mb1~f~fld1": { name: "Renamed" } }, destroy: ["mb1~f~fld1"] }, "c2"],
+			["Email/set", { update: { "m-1": { "keywords/$seen": true } }, destroy: [] }, "c3"],
+		],
+	});
+	const [[, created], [, updated], [, email]] = response.methodResponses;
+	assert.ok(created.created.f1, JSON.stringify(created));
+	assert.deepEqual(updated.updated, { "mb1~f~fld1": null });
+	assert.deepEqual(updated.destroyed, ["mb1~f~fld1"]);
+	assert.deepEqual(email.updated, { "m-1": null });
+	assert.deepEqual(email.destroyed, []);
+});
+
+test("valid sort and nested filter operators still work", async (t) => {
+	const [responseName, result] = await single(t, "Email/query", {
+		sort: [{ property: "receivedAt", isAscending: true }, { property: "subject" }],
+		filter: {
+			operator: "AND",
+			conditions: [{ inMailbox: "mb1~inbox" }, { operator: "OR", conditions: [{ from: "a@x.test" }, { subject: "nope" }] }],
+		},
+	});
+	assert.equal(responseName, "Email/query", JSON.stringify(result));
+	assert.deepEqual(result.ids, ["m-1"]);
+});
+
+test("absent and null args keep their current meaning", async (t) => {
+	// An empty filter condition still matches everything (RFC 8620 §4.4.1).
+	const [queryName, query] = await single(t, "Email/query", { filter: {} });
+	assert.equal(queryName, "Email/query");
+	assert.deepEqual(query.ids, ["m-1"]);
+	// A null destroy list and null create/update maps are legal no-ops.
+	const [setName, set] = await single(t, "Email/set", { create: null, update: null, destroy: null });
+	assert.equal(setName, "Email/set");
+	assert.deepEqual(set.destroyed, []);
+});

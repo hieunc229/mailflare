@@ -11,6 +11,7 @@ import { storeMessageAttachments } from "@/lib/email/attachments";
 import { deleteMessageWithObjects } from "@/lib/email/message-cleanup";
 import { LIMITS, KEYWORD_FLAGGED, KEYWORD_SEEN } from "./constants";
 import { JmapError, invalidArguments } from "./errors";
+import { stringArrayArg } from "./args";
 import { decodeBlobId, decodeMailboxRef, roleToStatus } from "./ids";
 import { buildEmailObject, loadAttachmentsByMessage, resolveHeaderProperty } from "./email-objects";
 import { importFlags, parseReceivedAt, resolveDraftsMailbox } from "./email-import-utils";
@@ -97,10 +98,10 @@ export async function loadMessages(ctx: JmapContext, ids: string[]): Promise<Mes
 }
 
 export const emailGet: JmapMethodHandler = async (ctx, args) => {
-	const ids = args.ids as string[] | null | undefined;
+	const ids = stringArrayArg(args.ids, "ids");
 	if (!ids) throw new JmapError("requestTooLarge", "Email/get needs an explicit list of ids");
 	if (ids.length > LIMITS.maxObjectsInGet) throw new JmapError("requestTooLarge");
-	const properties = args.properties as string[] | null | undefined;
+	const properties = stringArrayArg(args.properties, "properties");
 	const fetchBodies = !!(args.fetchTextBodyValues || args.fetchHTMLBodyValues || args.fetchAllBodyValues);
 	const maxBodyValueBytes = Number(args.maxBodyValueBytes ?? 0);
 
@@ -242,6 +243,9 @@ function keywordsFromPatch(patch: Record<string, unknown>): { read?: boolean; st
 
 /** Drafts are the only thing a client creates; everything else is a flag or a move. */
 async function createDraft(ctx: JmapContext, value: Record<string, unknown>, accessible: Set<string>) {
+	if (value.attachments !== undefined && value.attachments !== null && !Array.isArray(value.attachments)) {
+		return { error: { type: "invalidProperties", properties: ["attachments"], description: "attachments must be an array" } };
+	}
 	const target = resolveDraftsMailbox(value.mailboxIds, accessible);
 	if ("error" in target) return target;
 	const from = (value.from as EmailAddressObject[] | undefined)?.[0]?.email;
@@ -275,6 +279,7 @@ async function createDraft(ctx: JmapContext, value: Record<string, unknown>, acc
 
 	const uploads: AttachmentContent[] = [];
 	for (const part of (value.attachments as Array<{ blobId?: string; name?: string; type?: string; disposition?: string; cid?: string }> | undefined) ?? []) {
+		if (!part || typeof part !== "object") continue;
 		const blob = part.blobId ? decodeBlobId(part.blobId) : null;
 		if (!blob || blob.kind !== "up") continue;
 		const upload = await readUpload(ctx, blob.id);
@@ -308,6 +313,10 @@ export const emailSet: JmapMethodHandler = async (ctx, args) => {
 	const notDestroyed: Record<string, unknown> = {};
 
 	for (const [creationId, value] of Object.entries((args.create ?? {}) as Record<string, Record<string, unknown>>)) {
+		if (!value || typeof value !== "object") {
+			notCreated[creationId] = { type: "invalidProperties", description: "The record must be an object" };
+			continue;
+		}
 		const result = await createDraft(ctx, value, writable);
 		if ("error" in result) {
 			notCreated[creationId] = result.error;
@@ -329,6 +338,10 @@ export const emailSet: JmapMethodHandler = async (ctx, args) => {
 		}
 		if (!writable.has(row.mailboxId)) {
 			notUpdated[id] = { type: "forbidden" };
+			continue;
+		}
+		if (!patch || typeof patch !== "object") {
+			notUpdated[id] = { type: "invalidProperties", description: "The patch must be an object" };
 			continue;
 		}
 		const move = targetFromMailboxIds(row, patch, accessible);
@@ -364,6 +377,7 @@ export const emailSet: JmapMethodHandler = async (ctx, args) => {
 
 	// JMAP destroy is permanent; Mailflare keeps a trash, so destroy moves there
 	// and a second destroy from Trash deletes the row.
+	if (args.destroy !== undefined && args.destroy !== null && !Array.isArray(args.destroy)) throw invalidArguments("destroy must be an array of ids");
 	const destroyIds = (args.destroy ?? []) as string[];
 	const destroyRows = await loadMessages(ctx, destroyIds);
 	const destroyById = new Map(destroyRows.map((row) => [row.id, row]));
@@ -504,7 +518,7 @@ export const emailUnsupported = (method: string): JmapMethodHandler => async () 
 
 /** Thread/get: every message sharing a thread key, oldest first. */
 export const threadGet: JmapMethodHandler = async (ctx, args) => {
-	const ids = args.ids as string[] | null | undefined;
+	const ids = stringArrayArg(args.ids, "ids");
 	if (!ids) throw new JmapError("requestTooLarge", "Thread/get needs an explicit list of ids");
 	const { ids: accessible, condition } = await scope(ctx);
 	const threadKey = sql<string>`coalesce(${messages.threadId}, ${messages.id})`;
@@ -536,9 +550,12 @@ export const threadChanges: JmapMethodHandler = async (ctx, args) => threadChang
 
 /** SearchSnippet/get: the subject and a body excerpt around the first match, with <mark> tags. */
 export const searchSnippetGet: JmapMethodHandler = async (ctx, args) => {
-	const ids = (args.emailIds as string[]) ?? [];
+	const ids = stringArrayArg(args.emailIds, "emailIds") ?? [];
+	if (args.filter !== undefined && args.filter !== null && typeof args.filter !== "object") throw invalidArguments("filter must be an object");
 	const filter = (args.filter ?? {}) as { text?: string; subject?: string; body?: string };
-	const term = (filter.text ?? filter.body ?? filter.subject ?? "").trim();
+	const termValue = filter.text ?? filter.body ?? filter.subject ?? "";
+	if (typeof termValue !== "string") throw invalidArguments("SearchSnippet filter fields must be strings");
+	const term = termValue.trim();
 	const rows = await loadMessages(ctx, ids);
 	const found = new Set<string>();
 	const escape = (value: string) => value.replace(/[&<>]/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" })[char]!);
