@@ -1216,6 +1216,11 @@ export const appSettings = sqliteTable("app_settings", {
 	/** "release": update on a new package.json version; "commit": update on any new upstream commit. */
 	autoUpdateChannel: text("auto_update_channel", { enum: ["release", "commit"] }).notNull().default("release"),
 	autoUpdateDispatchedVersion: text("auto_update_dispatched_version"),
+	sharedFilesNoticeEnabled: bool("shared_files_notice_enabled").notNull().default(true),
+	sharedFilesNoticeText: text("shared_files_notice_text"),
+	sharedFilesLinkDays: integer("shared_files_link_days").notNull().default(30),
+	sharedFilesNoticeLocale: text("shared_files_notice_locale"),
+	sharedFilesCardStyle: text("shared_files_card_style").notNull().default("card"),
 	updatedAt: timestamp("updated_at")
 		.notNull()
 		.$defaultFn(() => new Date()),

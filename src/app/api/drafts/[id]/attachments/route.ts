@@ -5,6 +5,7 @@ import { agentDraftMetadata, messages } from "@/db/schema";
 import { getCurrentUser } from "@/lib/auth/cookies";
 import { hasValidSessionMutationOrigin } from "@/lib/auth/origin";
 import { MAX_ATTACHMENT_COUNT, listMessageAttachments, storeMessageAttachments } from "@/lib/email/attachments";
+import { outgoingSizeError, requestBodyLimit } from "@/lib/email/attachment-limits";
 import { getOutboundAttachmentMaxMb } from "@/lib/email/attachment-policy";
 import { readFormDataBody } from "@/lib/http/request";
 import { RequestBodyTooLargeError } from "@/lib/http/errors";
@@ -20,16 +21,16 @@ export async function POST(request: Request, { params }: DraftAttachmentUploadPa
 	const db = getDb(env);
 	const [draft] = await db.select().from(messages).where(eq(messages.id, id)).limit(1);
 	if (!userOwnsDraft(draft, user.id)) return Response.json({ error: "Draft not found" }, { status: 404 });
+	const maxMb = await getOutboundAttachmentMaxMb(env);
 	let form: FormData;
-	try { form = await readFormDataBody(request, 30 * 1024 * 1024); }
+	try { form = await readFormDataBody(request, requestBodyLimit(maxMb)); }
 	catch (error) { return Response.json({ error: "Invalid attachment request" }, { status: error instanceof RequestBodyTooLargeError ? 413 : 400 }); }
 	const files = form.getAll("attachments").filter((value): value is File => value instanceof File && value.size > 0);
 	if (!files.length) return Response.json({ error: "No attachments provided" }, { status: 400 });
 	const existing = await listMessageAttachments(env, id);
-	const maxBytes = (await getOutboundAttachmentMaxMb(env)) * 1_000_000;
-	if (existing.length + files.length > MAX_ATTACHMENT_COUNT || files.some((file) => file.size > maxBytes) || existing.reduce((total, file) => total + file.size, 0) + files.reduce((total, file) => total + file.size, 0) > maxBytes) return Response.json({ error: "Draft attachments exceed the allowed count or outgoing size limit" }, { status: 400 });
+	if (existing.length + files.length > MAX_ATTACHMENT_COUNT || outgoingSizeError([...existing, ...files].map((file) => file.size), maxMb)) return Response.json({ error: "Draft attachments exceed the allowed count or outgoing size limit" }, { status: 400 });
 	try {
-		const attachments = await storeMessageAttachments(env, id, await Promise.all(files.map(async (file) => ({ filename: file.name, type: file.type || "application/octet-stream", content: await file.arrayBuffer(), disposition: "attachment" as const }))));
+		const attachments = await storeMessageAttachments(env, id, await Promise.all(files.map(async (file) => ({ filename: file.name, type: file.type || "application/octet-stream", content: await file.arrayBuffer(), disposition: "attachment" as const }))), { validate: false });
 		await db.update(agentDraftMetadata).set({ revision: sql`${agentDraftMetadata.revision} + 1`, humanEditedAt: new Date() }).where(eq(agentDraftMetadata.draftId, id));
 		return Response.json({ attachments });
 	} catch (error) {

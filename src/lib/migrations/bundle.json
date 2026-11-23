@@ -866,6 +866,16 @@
         "CREATE UNIQUE INDEX `calendar_occurrence_responses_event_occurrence_guest_idx` ON `calendar_occurrence_responses` (`event_id`,`occurrence_ms`,`guest`);",
         "CREATE INDEX `calendar_occurrence_responses_event_idx` ON `calendar_occurrence_responses` (`event_id`);"
       ]
+    },
+    {
+      "name": "0093_shared_files_settings.sql",
+      "statements": [
+        "ALTER TABLE `app_settings` ADD `shared_files_notice_enabled` integer NOT NULL DEFAULT 1;",
+        "ALTER TABLE `app_settings` ADD `shared_files_notice_text` text;",
+        "ALTER TABLE `app_settings` ADD `shared_files_link_days` integer NOT NULL DEFAULT 30;",
+        "ALTER TABLE `app_settings` ADD `shared_files_notice_locale` text;",
+        "ALTER TABLE `app_settings` ADD `shared_files_card_style` text NOT NULL DEFAULT 'card';"
+      ]
     }
   ]
 }
