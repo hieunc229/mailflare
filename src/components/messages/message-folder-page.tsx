@@ -35,6 +35,7 @@ import { rememberOpenedUnreadMessage } from "./message-detail-navigation-utils";
 import { useConversationView } from "./use-conversation-view";
 import { OpenedIndicator } from "./message-open-status";
 import { MessageNotesPopover, NoteBadge } from "./message-notes-popover";
+import { RecipientTagBadge } from "./recipient-tag-badge";
 import type { MessageFolderConfig, MessageFolderPageProps, MessageListRowProps, RowMessageAction } from "./types";
 import {
 	formatMessageListTimestamp,
@@ -258,10 +259,11 @@ function MessageListRowComponent({
 						</span>
 					</span>
 					<span
-						className={`mt-1 block truncate text-sm ${unread ? "font-semibold text-neutral-900" : "text-neutral-700"
+						className={`mt-1 flex items-center gap-1.5 text-sm ${unread ? "font-semibold text-neutral-900" : "text-neutral-700"
 							}`}
 					>
-						{message.subject ?? t("list.noSubject")}
+						<span className="truncate">{message.subject ?? t("list.noSubject")}</span>
+						<RecipientTagBadge toAddr={message.toAddr} />
 					</span>
 					<span className="mt-0.5 block truncate text-xs leading-5 text-neutral-500">
 						{preview}
@@ -358,6 +360,7 @@ function MessageListRowComponent({
 					<span className="text-neutral-500"> - {getMessagePreview(rowMessage, config.folder, t)}</span>
 				</Link>
 				{promotionChip}
+				<RecipientTagBadge toAddr={message.toAddr} className="ml-2" />
 			</span>
 			<time
 				dateTime={message.createdAt}

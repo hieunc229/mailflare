@@ -458,7 +458,7 @@ export const routingRuleSchema = z.object({
 	...recoveryProofFields,
 	domainId: z.string().optional(),
 	pattern: z.string().trim().min(1).max(200).optional(),
-	matchField: z.enum(["email", "content", "title", "mail_type"]).default("email"),
+	matchField: z.enum(["email", "content", "title", "mail_type", "tag"]).default("email"),
 	matchOperator: z.enum(["contains", "exact"]).default("contains"),
 	matchValue: z.string().trim().min(1).max(500),
 	action: z.enum(["store", "forward", "reject", "spam", "trash"]).optional(),

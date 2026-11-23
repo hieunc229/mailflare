@@ -6,6 +6,7 @@ import { getMailboxDomainAddresses } from "@/lib/mailboxes/domain-addresses";
 import { isBulkMail, type MailHeaders } from "@/lib/email/bulk-mail";
 import { MAIL_TYPE_BULK } from "@/lib/email/mail-type-rule";
 import { normalizeRecipientFullLocalPart, parseRecipientAddress } from "@/lib/email/recipient-address";
+import { getRecipientTag } from "@/lib/email/recipient-tag";
 
 export type ResolvedMailbox = {
 	mailboxId: string;
@@ -383,9 +384,12 @@ export function matchesRule(rule: MatchableRule, input: RuleMatchInput): boolean
 	if (rule.matchField === "mail_type") {
 		return (rule.matchValue || rule.pattern).trim().toLowerCase() === MAIL_TYPE_BULK && isBulkMail(input.headers).bulk;
 	}
-	const rawValue = (rule.matchValue || rule.pattern).trim();
+	let rawValue = (rule.matchValue || rule.pattern).trim();
 	// "*" is the catch-all pattern used by catch-all and block-everything rules.
 	if (rawValue === "*") return true;
+	// `+tag` and `tag` name the same tag: the `+` belongs to the address, so one
+	// leading `+` in the rule value is dropped for every operator, regex included.
+	if (rule.matchField === "tag" && rawValue.startsWith("+")) rawValue = rawValue.slice(1).trim();
 	const normalizedRuleValue = normalizeRuleComparisonValue(rule.matchField, rawValue);
 	if (!normalizedRuleValue) return false;
 
@@ -443,6 +447,9 @@ function getRuleFieldValues(field: string | null | undefined, input: RuleMatchIn
 	if (field === "title") return [input.subject];
 	if (field === "sender") return [input.fromAddress];
 	if (field === "recipient") return [input.toAddress];
+	// The tag compares against the `+tag` of the To address only; an untagged
+	// message yields "" and can never satisfy a tag rule.
+	if (field === "tag") return [getRecipientTag(input.toAddress)];
 	return [input.fromAddress, input.toAddress];
 }
 

@@ -69,7 +69,9 @@ export async function POST(request: Request) {
 		domainId: mailbox.domainId,
 		scope: "mailbox",
 		pattern: parsed.data.matchValue.trim(),
-		matchField: parsed.data.matchField,
+		// `match_field` is a free text column; its drizzle enum predates "tag" (schema
+		// edits are gated to another slice), so the new field stores through a cast here.
+		matchField: parsed.data.matchField as unknown as typeof routingRules.$inferInsert.matchField,
 		matchOperator: parsed.data.matchOperator,
 		matchValue: parsed.data.matchValue.trim(),
 		action: target.action,

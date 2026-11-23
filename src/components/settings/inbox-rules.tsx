@@ -259,6 +259,7 @@ export function InboxRules() {
                   <option value="content">{t("rules.field.content")}</option>
                   <option value="title">{t("rules.field.title")}</option>
                   <option value="mail_type">{t("rules.field.mailType")}</option>
+                  <option value="tag">{t("rules.field.tag")}</option>
                 </RoutingRuleSelect>
               </div>
               {isMailType ? (
@@ -288,7 +289,7 @@ export function InboxRules() {
                   value={matchValue}
                   onChange={(event) => setMatchValue(event.target.value)}
                   placeholder={
-                    matchField === "email" ? t("rules.valuePlaceholderEmail") : t("rules.valuePlaceholderOther")
+                    matchField === "email" ? t("rules.valuePlaceholderEmail") : matchField === "tag" ? t("rules.valuePlaceholderTag") : t("rules.valuePlaceholderOther")
                   }
                 />
               </div>
