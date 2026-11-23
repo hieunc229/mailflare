@@ -71,7 +71,7 @@ export async function PATCH(request: Request, { params }: AccountRouteParams) {
 	if (!canManageUserAccount(actor, account)) {
 		return NextResponse.json({ error: "Only the primary admin can manage admin accounts" }, { status: 403 });
 	}
-	const parsed = updateManagedAccountSchema.safeParse(await request.json());
+	const parsed = updateManagedAccountSchema.safeParse(await request.json().catch(() => null));
 	if (!parsed.success) return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
 	if (!actorIsPrimary && parsed.data.role !== account.role) {
 		return NextResponse.json({ error: "Only the primary admin can change roles" }, { status: 403 });

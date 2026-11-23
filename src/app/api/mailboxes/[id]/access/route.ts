@@ -41,7 +41,7 @@ export async function GET(request: Request, { params }: MailboxAccessRouteParams
 export async function POST(request: Request, { params }: MailboxAccessRouteParams) {
 	const access = await requireTeamSharingAdmin(request);
 	if (access.error) return access.error;
-	const parsed = mailboxAccessSchema.safeParse(await request.json());
+	const parsed = mailboxAccessSchema.safeParse(await request.json().catch(() => null));
 	if (!parsed.success) return NextResponse.json({ error: "Choose a valid account" }, { status: 400 });
 	const { id } = await params;
 	const db = getDb(access.env);
