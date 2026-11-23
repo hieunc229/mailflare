@@ -364,6 +364,29 @@ export const updateMailboxSchema = z.object({
 	useAllDomains: z.boolean().optional(),
 });
 
+// Group names surface in display contexts and reject control/format characters.
+const safeDisplayNameSchema = z.string().trim().min(1).max(100).regex(/^[^\p{Cc}\p{Cf}]*$/u);
+
+export const contactGroupSchema = z.object({
+	mailboxId: z.string().min(1),
+	name: safeDisplayNameSchema,
+});
+
+export const updateContactGroupSchema = z.object({
+	mailboxId: z.string().min(1),
+	name: safeDisplayNameSchema.optional(),
+});
+
+/** Members are identified by a contact id or email address. */
+export const contactGroupMemberSchema = z
+	.object({
+		mailboxId: z.string().min(1),
+		contactId: z.string().min(1).optional(),
+		email: z.string().trim().toLowerCase().email().optional(),
+	})
+	.refine((value) => !!value.contactId !== !!value.email, {
+		message: "Exactly one of contactId or email is required",
+	});
 export const folderSchema = z.object({
 	mailboxId: z.string().min(1),
 	name: z.string().trim().min(1).max(80),
