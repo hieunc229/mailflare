@@ -152,12 +152,12 @@ function unfold(text: string): string[] {
 	return text.replace(/\r?\n[ \t]/g, "").split(/\r?\n/);
 }
 
-function unescapeText(value: string): string {
+export function unescapeText(value: string): string {
 	// One pass, so an escaped backslash followed by "n" (`C:\\new`) is not read as a line break.
 	return value.replace(/\\([nN,;\\])/g, (_, char: string) => (char === "n" || char === "N" ? "\n" : char));
 }
 
-type Property = { name: string; params: Record<string, string>; value: string };
+export type Property = { name: string; params: Record<string, string>; value: string };
 
 /** Splits on `separator` wherever it is outside a double-quoted parameter value. */
 function splitOutsideQuotes(text: string, separator: string): string[] {
@@ -176,7 +176,7 @@ function splitOutsideQuotes(text: string, separator: string): string[] {
 	return parts;
 }
 
-function parseProperty(line: string): Property | null {
+export function parseProperty(line: string): Property | null {
 	// The value starts at the first colon outside quotes, so a parameter such as CN="Doe: J" stays a parameter.
 	let quoted = false;
 	let colon = -1;
@@ -242,7 +242,7 @@ export function parseIcsDate(property: Property, localZone = "UTC"): ParsedDate 
 }
 
 /** Adds whole days on the wall clock of `zone`, so a day stays a day across daylight saving changes. */
-function addZonedDays(value: Date, days: number, zone: string): Date {
+export function addZonedDays(value: Date, days: number, zone: string): Date {
 	if (!days) return value;
 	const fields = zonedDateFields(value, zone);
 	fields.setUTCDate(fields.getUTCDate() + days);
