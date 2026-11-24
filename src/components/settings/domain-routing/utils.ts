@@ -2,6 +2,7 @@ import { requestError } from "@/lib/http/client-error";
 import type { TranslationKey } from "@/lib/i18n/types";
 import { defaultTranslator, type Translator } from "@/lib/i18n/utils";
 import { authFetch } from "@/lib/auth/client";
+import { ruleErrorMessage } from "@/lib/email/mail-type-rule";
 import { formatUserDate } from "@/lib/time/utils";
 import type {
 	DomainRule,
@@ -16,6 +17,7 @@ export const MATCH_FIELD_LABELS: Record<DomainRuleField, TranslationKey> = {
 	sender: "routing.field.sender",
 	title: "routing.field.title",
 	content: "routing.field.content",
+	mail_type: "rules.field.mailType",
 };
 
 export const MATCH_OPERATOR_LABELS: Record<DomainRuleOperator, TranslationKey> = {
@@ -35,7 +37,7 @@ export const ACTION_LABELS = {
 async function readJson<T>(res: Response): Promise<T> {
 	const json = (await res.json()) as T & { error?: unknown; code?: unknown };
 	if (!res.ok) {
-		throw requestError(json, defaultTranslator("routing.requestFailed"));
+		throw requestError({ error: ruleErrorMessage(json.error, defaultTranslator("routing.requestFailed")), code: json.code }, defaultTranslator("routing.requestFailed"));
 	}
 	return json;
 }
@@ -89,7 +91,9 @@ export async function deleteDomainRule(id: string, mailboxId?: string) {
 
 export function describeRule(rule: DomainRule, mailboxes: DomainRuleMailbox[], hostname: string, t: Translator = defaultTranslator): string {
 	const condition =
-		rule.matchValue === "*"
+		rule.matchField === "mail_type"
+			? t("rules.field.mailType")
+			: rule.matchValue === "*"
 			? t("routing.anyMessage")
 			: `${t(MATCH_FIELD_LABELS[rule.matchField])} ${t(MATCH_OPERATOR_LABELS[rule.matchOperator])} "${rule.matchValue}"`;
 

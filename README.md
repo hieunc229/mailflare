@@ -29,7 +29,7 @@ Self-host it on Cloudflare or Docker. **Or try [Mailflare Cloud](https://cloud.m
 ### Apps
 
 - **Email**: Custom domain mailboxes, personal or shared, with access you control. Send and receive with Cloudflare Email, Resend or Amazon SES.
-- **Routing rules**: Store, forward, reject or sort incoming mail.
+- **Routing rules**: Store, forward, reject or sort incoming mail, including a one-rule filter for newsletters and promotions.
 - **Calendar**: Repeating events with time zones. Attendees get email invitations.
 - **Booking**: Share a public link so anyone can book a free time on your calendar.
 - **Drive**: Store and share files.

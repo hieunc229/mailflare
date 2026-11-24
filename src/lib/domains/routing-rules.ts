@@ -9,7 +9,7 @@ export type DomainRuleInput = {
 	domainId: string;
 	name?: string | null;
 	enabled: boolean;
-	matchField: "recipient" | "sender" | "title" | "content";
+	matchField: "recipient" | "sender" | "title" | "content" | "mail_type";
 	matchOperator: "contains" | "exact" | "starts_with" | "ends_with" | "regex";
 	matchValue: string;
 	action: "store" | "forward" | "reject";
