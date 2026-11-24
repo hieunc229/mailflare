@@ -15,7 +15,7 @@ await build({
 	outdir: dir, outExtension: { ".js": ".mjs" }, bundle: true, platform: "node", format: "esm", logLevel: "silent",
 	alias: { "@": join(root, "src") },
 });
-const { scanTakeoutCalendars, readCalendarSource, MAX_TEXT_SOURCE_BYTES } = await import(pathToFileURL(join(dir, "t.mjs")).href);
+const { scanTakeoutData, readTakeoutSource, MAX_TEXT_SOURCE_BYTES } = await import(pathToFileURL(join(dir, "t.mjs")).href);
 
 function buildZip(entries) {
 	const locals = [];
@@ -69,22 +69,63 @@ test("calendars are found by extension, whatever the folder is called", async ()
 		{ name: "Takeout/Calendar/link.ics", data: Buffer.from("/etc/passwd"), mode: 0o120777 },
 		{ name: "../evil.ics", data: Buffer.from(ics) },
 	]);
-	const scan = await scanTakeoutCalendars([file("takeout-001.zip", zip), file("Direct.ics", ics), file("contacts.vcf", "x"), file("notazip.zip", "nope")]);
+	const scan = await scanTakeoutData([file("takeout-001.zip", zip), file("Direct.ics", ics), file("notes.txt", "x"), file("notazip.zip", "nope")]);
 	assert.deepEqual(scan.calendars.map((source) => source.label).sort(), ["Direct", "Work", "a@gmail.com", "evil"]);
-	assert.deepEqual(scan.ignored, ["contacts.vcf"]);
+	assert.deepEqual(scan.ignored, ["notes.txt"]);
 	assert.deepEqual(scan.unreadable, ["notazip.zip"]);
 	assert.equal(new Set(scan.calendars.map((source) => source.id)).size, 4);
 });
 
 test("oversized sources are reported and not offered", async () => {
 	const zip = buildZip([{ name: "Takeout/Calendar/big.ics", data: Buffer.from("x"), declared: MAX_TEXT_SOURCE_BYTES + 1 }]);
-	const scan = await scanTakeoutCalendars([file("t.zip", zip)]);
+	const scan = await scanTakeoutData([file("t.zip", zip)]);
 	assert.deepEqual(scan.calendars, []);
 	assert.deepEqual(scan.tooLarge, ["big.ics"]);
 });
 
 test("a source reads back its bytes from a zip entry and from a plain file", async () => {
 	const zip = buildZip([{ name: "Takeout/Calendar/a.ics", data: Buffer.from(ics) }]);
-	const scan = await scanTakeoutCalendars([file("t.zip", zip), file("b.ics", ics)]);
-	for (const source of scan.calendars) assert.equal(Buffer.from(await readCalendarSource(source)).toString(), ics);
+	const scan = await scanTakeoutData([file("t.zip", zip), file("b.ics", ics)]);
+	for (const source of scan.calendars) assert.equal(Buffer.from(await readTakeoutSource(source)).toString(), ics);
+});
+
+const HEADER = "First Name,Last Name,E-mail 1 - Label,E-mail 1 - Value\r\n";
+const vcf = "BEGIN:VCARD\r\nFN:A\r\nEMAIL:a@b.co\r\nEND:VCARD\r\n";
+
+test("contacts are found by extension and, for CSV, by the Google header", async () => {
+	const zip = buildZip([
+		{ name: "Takeout/Kontakte/Alle Kontakte/Alle Kontakte.vcf", data: Buffer.from(vcf) },
+		{ name: "Takeout/Contacts/Friends/Friends.VCF", data: Buffer.from(vcf) },
+		{ name: "Takeout/Contacts/contacts.csv", data: Buffer.from(HEADER + "A,B,Home,a@b.co\r\n") },
+		{ name: "Takeout/Contacts/legacy.csv", data: Buffer.concat([Buffer.from([0xff, 0xfe]), Buffer.from("Name,E-mail 1 - Value\r\n", "utf16le")]), method: 0 },
+		{ name: "Takeout/Drive/budget.csv", data: Buffer.from("date,amount\r\n1,2\r\n") },
+		{ name: "Takeout/Contacts/.hidden.vcf", data: Buffer.from(vcf) },
+		{ name: "Takeout/Contacts/link.vcf", data: Buffer.from("/etc/passwd"), mode: 0o120777 },
+		{ name: "Takeout/Calendar/a.ics", data: Buffer.from(ics) },
+	]);
+	const scan = await scanTakeoutData([file("t.zip", zip), file("Direct.vcf", vcf), file("people.csv", HEADER), file("budget.csv", "date,amount\n"), file("notes.txt", "x")]);
+	assert.deepEqual(scan.contacts.map((source) => [source.label, source.kind]).sort(), [["Alle Kontakte", "vcard"], ["Direct", "vcard"], ["Friends", "vcard"], ["contacts", "csv"], ["legacy", "csv"], ["people", "csv"]]);
+	assert.equal(new Set(scan.contacts.map((source) => source.id)).size, 6);
+	assert.deepEqual(scan.calendars.map((source) => source.label), ["a"]);
+	assert.deepEqual(scan.ignored.sort(), ["budget.csv", "notes.txt"]);
+});
+
+test("an oversized contacts file is reported and not offered", async () => {
+	const zip = buildZip([{ name: "Takeout/Contacts/big.vcf", data: Buffer.from("x"), declared: MAX_TEXT_SOURCE_BYTES + 1 }]);
+	const scan = await scanTakeoutData([file("t.zip", zip)]);
+	assert.deepEqual(scan.contacts, []);
+	assert.deepEqual(scan.tooLarge, ["big.vcf"]);
+});
+
+test("a CSV whose header cannot be read is skipped without failing the scan", async () => {
+	const zip = buildZip([{ name: "Takeout/Contacts/odd.csv", data: Buffer.from("x"), method: 99 }, { name: "Takeout/Contacts/ok.vcf", data: Buffer.from(vcf) }]);
+	const scan = await scanTakeoutData([file("t.zip", zip)]);
+	assert.deepEqual(scan.contacts.map((source) => source.label), ["ok"]);
+});
+
+test("a contacts source reads back its bytes from a zip entry and from a plain file", async () => {
+	const zip = buildZip([{ name: "Takeout/Contacts/a.vcf", data: Buffer.from(vcf) }]);
+	const scan = await scanTakeoutData([file("t.zip", zip), file("b.vcf", vcf)]);
+	assert.equal(scan.contacts.length, 2);
+	for (const source of scan.contacts) assert.equal(Buffer.from(await readTakeoutSource(source)).toString(), vcf);
 });

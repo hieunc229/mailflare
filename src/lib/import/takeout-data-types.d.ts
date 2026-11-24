@@ -1,19 +1,25 @@
 import type { ZipEntry } from "./zip-types";
 
-export type CalendarSource = {
+/** One file of a Takeout export that holds importable data: a calendar (.ics) or a contacts file (.vcf, or a Google CSV). */
+export type TakeoutSource = {
 	/** Unique within one scan. */
 	id: string;
 	/** The file stem; for a primary calendar that is the Google address. */
 	label: string;
 	size: number;
 	file: File;
-	/** The entry inside a zip, or null for a plain .ics file. */
+	/** The entry inside a zip, or null for a plain file. */
 	entry: ZipEntry | null;
 };
 
-export type TakeoutCalendarScan = {
+export type CalendarSource = TakeoutSource;
+
+export type ContactSource = TakeoutSource & { kind: "vcard" | "csv" };
+
+export type TakeoutScan = {
 	calendars: CalendarSource[];
-	/** Names of calendars over the size cap. */
+	contacts: ContactSource[];
+	/** Names of files over the size cap. */
 	tooLarge: string[];
 	/** Picked files this importer does not read. */
 	ignored: string[];

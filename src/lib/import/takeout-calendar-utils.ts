@@ -11,7 +11,7 @@ const RATE_LIMIT_TRIES = 5;
 const RATE_LIMIT_BACKOFF_MS = 2000;
 const encoder = new TextEncoder();
 const bodyBytes = (body: unknown) => encoder.encode(JSON.stringify(body)).length;
-const sleepFor = (ms: number, signal?: AbortSignal) => new Promise<void>((resolve) => {
+export const sleepFor = (ms: number, signal?: AbortSignal) => new Promise<void>((resolve) => {
 	if (signal?.aborted) return resolve();
 	const done = () => { clearTimeout(timer); signal?.removeEventListener("abort", done); resolve(); };
 	const timer = setTimeout(done, ms);
