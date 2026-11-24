@@ -9,11 +9,12 @@ import { useSelectedMailbox } from "@/components/mailbox-provider";
 import { uploadContactAvatar } from "@/components/contacts/contact-avatar-form-utils";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
+import { useCurrentUser } from "@/hooks/use-current-user";
 import { authFetch } from "@/lib/auth/client";
 import { ContactsFileError, importContactsBytes, parseRetryAfter, previewContactsBytes } from "@/lib/import/takeout-contacts-utils";
 import type { ContactPost, ContactPostResult } from "@/lib/import/takeout-contacts-types";
 import { readTakeoutSource } from "@/lib/import/takeout-data-utils";
-import { contactsTone } from "./takeout-contacts-card-utils";
+import { contactsTone, isAddressBookOwner } from "./takeout-contacts-card-utils";
 import type { ContactRunProgress, ContactRunResult, TakeoutContactsCardProps } from "./takeout-contacts-card-types";
 
 const post: ContactPost = async (body, signal) => {
@@ -31,6 +32,9 @@ const TONE_CLASSES = {
 export function TakeoutContactsCard({ sources }: TakeoutContactsCardProps) {
 	const { t } = useLanguage();
 	const { selectedMailbox } = useSelectedMailbox();
+	const user = useCurrentUser();
+	// A delegate of a shared mailbox gets 404 from the import route, so the buttons are off for them.
+	const ownsBook = isAddressBookOwner(selectedMailbox, user?.id);
 	const mailbox = selectedMailbox ? `${selectedMailbox.localPart}@${selectedMailbox.hostname}` : null;
 	// The parent remounts this card for every scan, so every file starts included.
 	const [included, setIncluded] = useState<Record<string, boolean>>(() => Object.fromEntries(sources.map((source) => [source.id, true])));
@@ -54,7 +58,7 @@ export function TakeoutContactsCard({ sources }: TakeoutContactsCardProps) {
 	useEffect(() => () => controllerRef.current?.abort(), []);
 
 	const chosen = sources.filter((source) => included[source.id]);
-	const canStart = chosen.length > 0 && !running && !!selectedMailbox;
+	const canStart = chosen.length > 0 && !running && !!selectedMailbox && ownsBook;
 	const hasVcard = sources.some((source) => source.kind === "vcard");
 
 	async function start(mode: "import" | "preview") {
@@ -112,7 +116,9 @@ export function TakeoutContactsCard({ sources }: TakeoutContactsCardProps) {
 						</li>
 					))}
 				</ul>
-				{mailbox
+				{mailbox && !ownsBook
+					? <p role="status" className="rounded-lg border border-amber-100 bg-amber-50 px-4 py-3 text-sm text-amber-700">{t("importPage.takeoutDataContactsOwnerOnly", { mailbox })}</p>
+					: mailbox
 					? <p className="text-xs leading-5 text-neutral-500">{t("importPage.takeoutDataContactsTo", { mailbox })}</p>
 					: <p role="status" className="rounded-lg border border-amber-100 bg-amber-50 px-4 py-3 text-sm text-amber-700">{t("importPage.selectMailboxFirst")}</p>}
 				<p className="text-xs leading-5 text-neutral-500">{t("importPage.takeoutDataContactsNote")}</p>

@@ -12,3 +12,11 @@ export function contactsTone(results: ContactRunResult[]): "success" | "partial"
 	if (!problem) return "success";
 	return worked === 0 ? "failed" : "partial";
 }
+
+/**
+ * Only the owner of an address book may import into it: the server answers 404 to a delegate of a shared mailbox, even
+ * with full access. When the owner or the user is not known yet the import is left open and the server decides.
+ */
+export function isAddressBookOwner(mailbox: { userId?: string } | null, userId: string | undefined): boolean {
+	return !mailbox?.userId || !userId || mailbox.userId === userId;
+}
