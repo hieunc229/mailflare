@@ -3,9 +3,13 @@
 import { createElement, Fragment, useCallback, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { confirmDestructive } from "@/components/ui/confirm-dialog";
 import type { ReactNode } from "react";
-import { useRouter } from "next/navigation";
-import { Archive, ArchiveRestore, Ban, BellOff, Clock, FileCode2, Forward, Mail, MailOpen, MoreVertical, Note, Reply, ReplyAll, ShieldAlert, ShieldCheck, Trash2 } from "@/components/icons";
+import { usePathname, useRouter } from "next/navigation";
+import { Archive, ArchiveRestore, Ban, BellOff, Clock, FileCode2, Forward, Inbox, Mail, MailOpen, MoreVertical, Note, Reply, ReplyAll, ShieldAlert, ShieldCheck, Tag, Trash2 } from "@/components/icons";
 import { useLanguage } from "@/components/language-provider";
+import { useSelectedMailbox } from "@/components/mailbox-provider";
+import { useMessageCounts } from "@/hooks/use-message-counts";
+import { moveMessagesToCategory } from "@/lib/promotions/move-client";
+import { canMoveCategory, moveLeavesFolder, moveTargetFor, readerFolderOf } from "@/lib/promotions/move-utils";
 import { useCompose } from "@/components/compose/compose-context";
 import { MessageSourceDialog } from "@/components/messages/message-source-dialog";
 import { useMessageListVisibility } from "@/components/messages/message-list-visibility";
@@ -56,6 +60,8 @@ export function MessageActions({
 	message,
 	messageMeta,
 	bodyHtml,
+	category,
+	senderKey,
 }: MessageActionsProps) {
 	const { t } = useLanguage();
 	const router = useRouter();
@@ -64,8 +70,11 @@ export function MessageActions({
 	const { shortcutsEnabled } = useShortcuts();
 	const autoAdvance = useAutoAdvance(messageId);
 	const notes = useConversationNotes();
+	const pathname = usePathname();
+	const { selectedMailbox, mailboxes } = useSelectedMailbox();
+	const { counts } = useMessageCounts(selectedMailbox?.id);
 	const [pendingAction, setPendingAction] = useState<
-		BulkMessageAction | "unsubscribe" | ReplyMode | "forward" | "block" | null
+		BulkMessageAction | "unsubscribe" | ReplyMode | "forward" | "block" | "category" | null
 	>(null);
 	const [error, setError] = useState<string | null>(null);
 	const [visibleCount, setVisibleCount] = useState(0);
@@ -313,6 +322,29 @@ export function MessageActions({
 		}
 	}
 
+	// "Move to Promotions / Inbox" exists only where Promotions is on and the user has full access; off mailboxes see no change.
+	const promotionMode = mailboxId ? counts.promotionModes?.[mailboxId] : undefined;
+	const readerFolder = readerFolderOf(pathname);
+	const canMoveToCategory = !!mailboxId && readerFolder !== "other" && canMoveCategory({
+		mode: promotionMode,
+		permission: mailboxes.find((mailbox) => mailbox.id === mailboxId)?.permission,
+		direction,
+		status,
+	});
+	const categoryTarget = moveTargetFor(category);
+	async function onMoveCategory() {
+		setPendingAction("category");
+		setError(null);
+		try {
+			const summary = await moveMessagesToCategory({ messageIds: [messageId], target: categoryTarget, mailboxId, senderAddress: senderKey });
+			if (summary.moved === 0) return;
+			if (moveLeavesFolder(readerFolder, categoryTarget, promotionMode)) router.push(autoAdvance() ?? listHref);
+			router.refresh();
+		} finally {
+			setPendingAction(null);
+		}
+	}
+
 	const disabled = pendingAction !== null;
 	const markAction: BulkMessageAction = read ? "unread" : "read";
 	const moveActions = getMoveMessageActions(status, direction);
@@ -487,6 +519,14 @@ export function MessageActions({
 					{direction === "inbound" && status === "received" && (
 						<MessageActionMenuItem icon={<Clock size={iconSize} />} onSelect={() => setSnoozeOpen(true)}>
 							{t("common.snooze")}
+						</MessageActionMenuItem>
+					)}
+					{canMoveToCategory && (
+						<MessageActionMenuItem
+							icon={categoryTarget === "inbox" ? <Inbox size={iconSize} /> : <Tag size={iconSize} />}
+							onSelect={() => void onMoveCategory()}
+						>
+							{categoryTarget === "inbox" ? t("promotions.move.toInbox") : t("promotions.move.toPromotions")}
 						</MessageActionMenuItem>
 					)}
 					{direction === "inbound" && (

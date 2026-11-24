@@ -1,7 +1,8 @@
-import { inArray, isNull, ne, notInArray, or } from "drizzle-orm";
+import { and, eq, inArray, isNull, ne, notInArray, or } from "drizzle-orm";
 import type { SQL } from "drizzle-orm";
 import type { getDb } from "@/db";
 import { mailboxPromotionSettings, messages } from "@/db/schema";
+import { matchNothing } from "@/db/sql";
 import { isMissingTableError } from "@/lib/database-errors";
 
 type Db = ReturnType<typeof getDb>;
@@ -29,4 +30,22 @@ export function inboxVisibleCondition(separateIds: string[], otherIds: string[])
 	if (separateIds.length === 0) return undefined;
 	const inScope = separateIds.length <= otherIds.length ? notInArray(messages.mailboxId, separateIds) : inArray(messages.mailboxId, otherIds);
 	return or(isNull(messages.category), ne(messages.category, "promotions"), inScope);
+}
+
+/** Promotions rows of the given mailboxes (those whose mode is not off). Matches nothing when all of them are off. The shorter list is bound. */
+export function promotionsVisibleCondition(onIds: string[], offIds: string[]): SQL {
+	if (onIds.length === 0) return matchNothing;
+	const inScope = onIds.length <= offIds.length ? inArray(messages.mailboxId, onIds) : notInArray(messages.mailboxId, offIds);
+	return and(eq(messages.category, "promotions"), inScope)!;
+}
+
+/**
+ * The category predicate of a received-mail list, shared by the list route and reader navigation so both always agree:
+ * `promotions` lists the promotions of mailboxes whose mode is not off, `inbox` hides the promotions of `separate`
+ * mailboxes (undefined when none is). `scope` is the mailboxes the request can see.
+ */
+export async function categoryScopeCondition(db: Db, scope: string[], view: "promotions" | "inbox"): Promise<SQL | undefined> {
+	const modes = await loadPromotionModes(db, scope);
+	if (view === "promotions") return promotionsVisibleCondition(scope.filter((id) => (modes.get(id) ?? "off") !== "off"), scope.filter((id) => (modes.get(id) ?? "off") === "off"));
+	return inboxVisibleCondition(scope.filter((id) => modes.get(id) === "separate"), scope.filter((id) => modes.get(id) !== "separate"));
 }

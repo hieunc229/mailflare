@@ -3,6 +3,7 @@ import type { MessageCounts, MessageCountsDelta } from "./types";
 import { hasPendingOverlay, subscribePendingOverlay } from "@/lib/messages/field-store";
 import { registerMessageRefresh } from "./message-refresh";
 import { hasMembershipOverlay, subscribeMembership } from "@/lib/messages/membership-store";
+import { applyCountsDelta } from "./counts-delta-utils";
 import { clearMessageCountsCache, fetchMessageCounts } from "./utils";
 
 const REFRESH_DEBOUNCE_MS = 150;
@@ -75,17 +76,8 @@ export function useMessageCounts(mailboxId?: string | null, enabled = true) {
 		}
 		function onMessageCountsDelta(event: Event) {
 			const detail = (event as CustomEvent<MessageCountsDelta>).detail;
-			if (!detail?.inboxUnreadDelta) return;
-			setCounts((current) => ({
-				...current,
-				folders: {
-					...current.folders,
-					inbox: {
-						...current.folders.inbox,
-						unread: Math.max(0, current.folders.inbox.unread + (detail.inboxUnreadDelta ?? 0)),
-					},
-				},
-			}));
+			if (!detail) return;
+			setCounts((current) => applyCountsDelta(current, detail));
 		}
 		function onPendingChange() {
 			// Invalidate a load that started before the overlay changed so its

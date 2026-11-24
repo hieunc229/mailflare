@@ -1,4 +1,5 @@
 import type { NewMessageEvent } from "./message-realtime-types";
+import type { MessageCountsDelta } from "./types";
 import { hasActivePushSubscription } from "@/lib/push/client";
 import { formatSenderLabel } from "@/lib/email/sender-label";
 
@@ -47,10 +48,16 @@ export function parseNewMessageEvent(value: string): NewMessageEvent | null {
 			from: payload.from,
 			fromName: typeof payload.fromName === "string" ? payload.fromName : null,
 			subject: typeof payload.subject === "string" ? payload.subject : null,
+			...(payload.category === "promotions" ? { category: "promotions" as const } : {}),
 		};
 	} catch {
 		return null;
 	}
+}
+
+/** A promotion raises the Promotions unread count and nothing else; other mail keeps relying on the counts refetch the event triggers. */
+export function countsDeltaForNewMessage(event: NewMessageEvent): MessageCountsDelta | null {
+	return event.category === "promotions" ? { promotionsUnreadDelta: 1 } : null;
 }
 
 export async function showBrowserNewMessageNotification(event: NewMessageEvent): Promise<void> {

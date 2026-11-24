@@ -2,7 +2,8 @@ import { and, inArray, isNull } from "drizzle-orm";
 import { messageAttachments, messages } from "@/db/schema";
 import { parseEmailAddressParts, splitEmailAddressList } from "@/lib/email/address";
 import { htmlToReadableText } from "@/lib/email/reply-content-utils";
-import { KEYWORD_DRAFT, KEYWORD_FLAGGED, KEYWORD_SEEN } from "./constants";
+import type { PromotionMode } from "@/lib/promotions/settings";
+import { KEYWORD_DRAFT, KEYWORD_FLAGGED, KEYWORD_PROMOTION, KEYWORD_SEEN } from "./constants";
 import { attachmentBlobId, encodeMailboxRef, messageBlobId, statusToRole } from "./ids";
 import type { EmailAddressObject, EmailBodyPart, JmapContext } from "./types";
 
@@ -25,11 +26,13 @@ export function mailboxIdsFor(row: MessageRow): Record<string, boolean> {
 	return role ? { [encodeMailboxRef({ kind: "role", mailboxId: row.mailboxId, role })]: true } : {};
 }
 
-export function keywordsFor(row: MessageRow): Record<string, boolean> {
+/** `$promotion` appears only where the mailbox's Promotions mode is not off; `modes` is `loadPromotionModes` for the rows' mailboxes. */
+export function keywordsFor(row: MessageRow, modes?: ReadonlyMap<string, PromotionMode>): Record<string, boolean> {
 	const keywords: Record<string, boolean> = {};
 	if (row.read || row.direction === "outbound") keywords[KEYWORD_SEEN] = true;
 	if (row.starred) keywords[KEYWORD_FLAGGED] = true;
 	if (row.status === "draft") keywords[KEYWORD_DRAFT] = true;
+	if (row.category === "promotions" && row.mailboxId && (modes?.get(row.mailboxId) ?? "off") !== "off") keywords[KEYWORD_PROMOTION] = true;
 	return keywords;
 }
 
@@ -67,7 +70,7 @@ function attachmentPart(attachment: AttachmentRow): EmailBodyPart {
  * text and HTML Mailflare keeps; attachments become parts with blob ids the
  * download endpoint understands. Property filtering happens in the caller.
  */
-export function buildEmailObject(row: MessageRow, attachments: AttachmentRow[], options: { fetchBodies: boolean; maxBodyValueBytes: number }) {
+export function buildEmailObject(row: MessageRow, attachments: AttachmentRow[], options: { fetchBodies: boolean; maxBodyValueBytes: number; promotionModes?: ReadonlyMap<string, PromotionMode> }) {
 	const text = row.textBody ?? "";
 	const html = row.htmlBody ?? "";
 	const textSize = new TextEncoder().encode(text).length;
@@ -111,7 +114,7 @@ export function buildEmailObject(row: MessageRow, attachments: AttachmentRow[], 
 		blobId: messageBlobId(row.id),
 		threadId: threadIdFor(row),
 		mailboxIds: mailboxIdsFor(row),
-		keywords: keywordsFor(row),
+		keywords: keywordsFor(row, options.promotionModes),
 		size,
 		receivedAt: sentAt,
 		messageId: stripBrackets(row.providerMessageId) ? [stripBrackets(row.providerMessageId)!] : null,

@@ -21,6 +21,10 @@ export type MessageActionsProps = {
 	/** Needed by Forward, which quotes the original header block. */
 	messageMeta?: Pick<Message, "id" | "subject" | "createdAt">;
 	bodyHtml?: string | null;
+	/** `promotions` / `primary` / null, from the message row. */
+	category?: string | null;
+	/** The normalised sender address the "Always for ..." rule is stored under; null on rows from before promotions. */
+	senderKey?: string | null;
 };
 
 export type MessageSnoozeDialogProps = {

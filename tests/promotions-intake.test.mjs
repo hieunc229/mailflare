@@ -58,7 +58,10 @@ async function fixture(t) {
 		await m.processInboundMessage(env, { from: "bounce@x.test", to: "me@one.test", rawR2Key: key, headers: payloadHeaders });
 		return database.db.prepare("SELECT category, sender_address FROM messages WHERE raw_r2_key = ?").get(key);
 	};
-	return { deliver, raw: database.db };
+	// Realtime hub stand-in: every body POSTed to a user's hub, in order.
+	const sent = [];
+	env.REALTIME = { getByName: (user) => ({ fetch: async (_url, init) => { sent.push({ user, body: JSON.parse(init.body) }); return new Response(null, { status: 204 }); } }) };
+	return { deliver, raw: database.db, sent };
 }
 
 test("intake stores the category and sender address of bulk mail", async (t) => {
@@ -88,4 +91,45 @@ test("a sender override and a correspondent contact keep mail in Inbox", async (
 	assert.equal((await deliver("vip@acme.com", "List-Unsubscribe: <https://acme.com/u>\r\n")).category, null);
 	raw.exec("INSERT INTO contacts (id, user_id, email, source, created_at) VALUES ('c', 'admin', 'pal@acme.com', 'outbound', 1)");
 	assert.equal((await deliver("pal@acme.com", "List-Unsubscribe: <https://acme.com/u>\r\n")).category, null);
+});
+
+const PROMO = "List-Unsubscribe: <https://acme.com/u>\r\n";
+
+test("a promotion in a separate mailbox is not announced, but open sessions are told to refresh", async (t) => {
+	const { deliver, raw, sent } = await fixture(t);
+	const quiet = console.info; console.info = () => {};
+	t.after(() => { console.info = quiet; });
+	raw.exec("INSERT INTO mailbox_promotion_settings (mailbox_id, mode, updated_at) VALUES ('box', 'separate', 1)");
+	await deliver("News <n@acme.com>", PROMO);
+	assert.deepEqual(sent.map((entry) => [entry.user, entry.body.type, entry.body.changed]), [["admin", "revision", true]]);
+	assert.equal(typeof sent[0].body.revision, "string");
+	sent.length = 0;
+	await deliver("Friend <f@x.test>");
+	assert.deepEqual(sent.map((entry) => entry.body.type), ["new_message"]);
+	assert.equal("category" in sent[0].body, false);
+});
+
+test("a promotion is announced in show mode, in off mode and before the settings table exists, carrying its category", async (t) => {
+	const { deliver, raw, sent } = await fixture(t);
+	const quiet = console.info; console.info = () => {};
+	t.after(() => { console.info = quiet; });
+	await deliver("News <n@acme.com>", PROMO);
+	raw.exec("INSERT INTO mailbox_promotion_settings (mailbox_id, mode, updated_at) VALUES ('box', 'show', 1)");
+	await deliver("News <n@acme.com>", PROMO);
+	raw.exec("DROP TABLE mailbox_promotion_settings");
+	await deliver("News <n@acme.com>", PROMO);
+	assert.deepEqual(sent.map((entry) => [entry.body.type, entry.body.category]), [["new_message", "promotions"], ["new_message", "promotions"], ["new_message", "promotions"]]);
+});
+
+test("the message.inbound webhook carries the category", async (t) => {
+	const { deliver, raw } = await fixture(t);
+	const quiet = console.info; console.info = () => {};
+	t.after(() => { console.info = quiet; });
+	const error = console.error; console.error = () => {};
+	t.after(() => { console.error = error; });
+	raw.exec("INSERT INTO webhooks (id, user_id, url, secret, events, enabled, created_at) VALUES ('w', 'admin', 'https://hooks.invalid/x', 's', '[\"message.inbound\"]', 1, 1)");
+	await deliver("News <n@acme.com>", PROMO);
+	await deliver("Friend <f@x.test>");
+	const payloads = raw.prepare("SELECT payload FROM webhook_deliveries ORDER BY rowid").all().map((row) => JSON.parse(row.payload).data);
+	assert.deepEqual(payloads.map((data) => data.category), ["promotions", null]);
 });

@@ -76,13 +76,19 @@ test("with every mode off, Inbox lists everything and counts have no promotions"
 	assert.deepEqual(counts.folders.inbox, { total: 5, unread: 4 });
 });
 
-test("category=promotions lists only promotions and needs status=received", async (t) => {
-	await fixture(t, {});
+test("category=promotions lists only promotions of mailboxes that turned it on, and needs status=received", async (t) => {
+	await fixture(t, { a: "show", b: "show" });
 	assert.deepEqual(ids(await list(`${INBOX}&category=promotions`)), ["a-promo", "a-promo-read", "b-promo"]);
 	assert.deepEqual(ids(await list(`${INBOX}&category=promotions&mailboxId=b`)), ["b-promo"]);
 	assert.equal((await list("direction=inbound&category=promotions")).status, 400);
 	assert.equal((await list(`${INBOX}&category=social`)).status, 400);
 	assert.equal((await list(`${INBOX}&category=promotions&folderId=f`)).status, 400);
+});
+
+test("category=promotions is empty for mailboxes whose mode is off", async (t) => {
+	await fixture(t, { b: "show" });
+	assert.deepEqual(ids(await list(`${INBOX}&category=promotions`)), ["b-promo"]);
+	assert.deepEqual(ids(await list(`${INBOX}&category=promotions&mailboxId=a`)), []);
 });
 
 test("a separate mailbox hides promotions from Inbox; show and off mailboxes do not", async (t) => {
@@ -121,4 +127,14 @@ test("the promotions count is answered from a covering index", async (t) => {
 	assert.equal(captured.length, 1);
 	const plan = database.db.prepare(`EXPLAIN QUERY PLAN ${captured[0].sql}`).all(...captured[0].values).map((row) => row.detail).join("\n");
 	assert.match(plan, /USING COVERING INDEX messages_category_count_idx/);
+});
+
+test("a row marked primary (manual Move to Inbox) behaves like uncategorised: in Inbox, not in Promotions, counted in Inbox", async (t) => {
+	await fixture(t, { a: "separate" });
+	globalThis.__mailflareNodeEnv.DB.db.prepare("UPDATE messages SET category = 'primary' WHERE id = 'a-promo'").run();
+	assert.deepEqual(ids(await list(`${INBOX}&mailboxId=a`)), ["a-plain", "a-promo"]);
+	assert.deepEqual(ids(await list(`${INBOX}&category=promotions&mailboxId=a`)), ["a-promo-read"]);
+	const { counts } = await (await m.counts.GET(new Request("https://mail.test/api/messages/counts"))).json();
+	assert.equal(counts.mailboxes.find((box) => box.mailboxId === "a").inbox, 2);
+	assert.deepEqual(counts.folders.promotions, { total: 1, unread: 0 });
 });
