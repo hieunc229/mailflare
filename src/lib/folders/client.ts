@@ -62,8 +62,16 @@ export async function getMailboxFolders<T extends FolderListResponse = FolderLis
 			request = (async () => {
 				const params = new URLSearchParams({ mailboxId });
 				const response = await authFetch(`/api/folders?${params.toString()}`, { cache: "no-store" });
-				const data = (await response.json()) as FolderListResponse;
-				if (!response.ok) throw new Error(data.error ?? "Unable to load folders");
+				const text = await response.text();
+				let data: FolderListResponse = {};
+				if (text) {
+					try {
+						data = JSON.parse(text) as FolderListResponse;
+					} catch {
+						throw new Error("Unable to load folders");
+					}
+				}
+				if (!response.ok || !text) throw new Error(data.error ?? "Unable to load folders");
 				if (requestEpoch !== epoch || sessionEpoch !== requestSessionEpoch ||
 					sessionToken !== getClientSessionToken() || requests.get(key) !== request) {
 					throw new Error("Folder request was invalidated");

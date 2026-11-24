@@ -46,12 +46,12 @@ export function growImapChunkSize(base: number, size: number): number {
 
 /** Errors a smaller batch cannot fix: bad credentials, lost settings. */
 export function isPermanentImapError(message: string): boolean {
-	return /login|auth|credential|not allowed|unreadable|no longer exists/i.test(message);
+	return /login|auth|credential|not allowed|unreadable|no longer exists|sign-in expired/i.test(message);
 }
 
 /** The server refused or dropped the connection, as opposed to failing on the messages themselves. */
 export function isImapConnectionError(message: string): boolean {
-	return /stream was cancelled|connection closed unexpectedly|did not send an OK greeting|connection (?:reset|refused)|timed? ?out/i.test(message);
+	return /stream was cancelled|connection closed unexpectedly|did not send an OK greeting|connection (?:reset|refused)|timed? ?out|token endpoint unavailable/i.test(message);
 }
 
 /** Connection failures tolerated at the same batch size before it shrinks too: a throttled host needs time, a batch that is too heavy needs to be smaller. */

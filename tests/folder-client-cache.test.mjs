@@ -26,7 +26,11 @@ let dom;
 let now;
 let originalNow;
 
-function response(folders = []) { return { ok: true, json: async () => ({ folders }) }; }
+function response(folders = [], ok = true, body) {
+	const payload = body ?? { folders };
+	const text = JSON.stringify(payload);
+	return { ok, status: ok ? 200 : 500, text: async () => text, json: async () => payload };
+}
 async function setup() {
 	dom = new JSDOM("<!doctype html>");
 	globalThis.window = dom.window;
@@ -188,14 +192,13 @@ test("continuous invalidation has a bounded retry count", async () => {
 	await setup();
 	try {
 		let calls = 0;
-		globalThis.folderFetch = async () => ({
-			ok: true,
-			json: async () => {
-				calls++;
-				window.dispatchEvent(new window.Event("mailflare:messages-changed"));
-				return { folders: [{ id: String(calls) }] };
-			},
-		});
+		globalThis.folderFetch = async () => response([{ id: String(++calls) }]);
+		const original = globalThis.folderFetch;
+		globalThis.folderFetch = async () => {
+			const result = await original();
+			window.dispatchEvent(new window.Event("mailflare:messages-changed"));
+			return result;
+		};
 		await assert.rejects(client.getMailboxFolders("mb1"), /invalidated/);
 		assert.equal(calls, 9);
 	} finally { cleanup(); }
@@ -205,7 +208,7 @@ test("failed responses are not cached and explicit mutation invalidation clears 
 	await setup();
 	try {
 		let calls = 0;
-		globalThis.folderFetch = async () => { calls++; return calls === 1 ? { ok: false, json: async () => ({ error: "failed" }) } : response(); };
+		globalThis.folderFetch = async () => { calls++; return calls === 1 ? response([], false, { error: "failed" }) : response(); };
 		await assert.rejects(client.getMailboxFolders("mb1"), /failed/);
 		await client.getMailboxFolders("mb1");
 		assert.equal(calls, 2);

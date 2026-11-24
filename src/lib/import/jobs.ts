@@ -5,6 +5,9 @@ import { getMailboxAccessLevel } from "@/lib/mailboxes/access";
 import { newId } from "@/lib/ids";
 import { getImportMessageUserId, parseImportDestination } from "./destination";
 import { fetchImapMessages } from "./imap";
+import { refreshOutlookAccessToken } from "./outlook";
+import { readMicrosoftOAuthConfig } from "./outlook-utils";
+import type { OutlookGrant } from "./outlook-types";
 import { getImapChunkSize, growImapChunkSize, isImapConnectionError, isMissingImapFolderError, isPermanentImapError, keepsImapChunkSize } from "./imap-utils";
 import { deleteStagedImport, importBatchKey, stageImportMessages, unpackImportMessages } from "./staging";
 import { importMessagesToMailbox } from "./service";
@@ -73,10 +76,16 @@ export function toImportJobSummary(row: JobRow): ImportJobSummary {
 		errorCount: row.errorCount,
 		error: row.error,
 		currentSource,
+		auth: imapAuth(row),
 		createdAt: row.createdAt.toISOString(),
 		startedAt: row.startedAt?.toISOString() ?? null,
 		finishedAt: row.finishedAt?.toISOString() ?? null,
 	};
+}
+
+function imapAuth(row: JobRow): ImportJobSummary["auth"] {
+	if (row.kind !== "imap") return null;
+	return parseJson<ImapImportSpec | null>(row.spec, null)?.auth === "xoauth2" ? "xoauth2" : "password";
 }
 
 export async function listImportJobs(env: CloudflareEnv, userId: string, limit = 20): Promise<ImportJobSummary[]> {
@@ -126,13 +135,17 @@ export async function createImapImportJob(
 	input: {
 		userId: string;
 		mailboxId: string;
-		password: string;
+		password?: string;
+		outlook?: OutlookGrant;
 		spec: ImapImportSpec;
 	},
 ): Promise<ImportJobSummary> {
 	const db = getDb(env);
 	const id = newId("imp");
 	const cursor: ImapImportCursor = { source: 0, done: 0, counted: false };
+	const outlook = input.spec.auth === "xoauth2";
+	if (outlook && !input.outlook) throw new Error("Microsoft sign-in expired; connect Outlook again");
+	if (!outlook && !input.password) throw new Error("IMAP username and password are required");
 	try {
 		const [row] = await db
 			.insert(importJobs)
@@ -146,12 +159,23 @@ export async function createImapImportJob(
 				cursor: JSON.stringify(cursor),
 			})
 			.returning();
-		await enqueue(env, { kind: "import.run", jobId: id, imapPassword: input.password });
+		await enqueue(env, outlook ? outlookMessage(id, input.outlook!) : { kind: "import.run", jobId: id, imapPassword: input.password });
 		return toImportJobSummary(row);
 	} catch (error) {
 		await db.delete(importJobs).where(eq(importJobs.id, id));
 		throw error;
 	}
+}
+
+function outlookMessage(jobId: string, grant: OutlookGrant): ImportJobMessage {
+	return {
+		kind: "import.run",
+		jobId,
+		outlookRefreshToken: grant.refreshToken,
+		outlookClientId: grant.clientId,
+		outlookTenant: grant.tenant,
+		...(grant.clientSecret ? { outlookClientSecret: grant.clientSecret } : {}),
+	};
 }
 
 async function cleanupJob(env: CloudflareEnv, row: JobRow): Promise<void> {
@@ -213,6 +237,7 @@ export async function resumeImportJob(
 	userId: string,
 	jobId: string,
 	password?: string,
+	outlook?: OutlookGrant | null,
 ): Promise<ResumeImportResult> {
 	const db = getDb(env);
 	const [row] = await db
@@ -225,8 +250,19 @@ export async function resumeImportJob(
 	if (!(await ownerMayImport(env, row))) return { ok: false, status: 409, error: ACCESS_LOST };
 
 	let cursor = row.cursor;
+	let resumeMessage: ImportJobMessage = { kind: "import.run", jobId: row.id };
 	if (row.kind === "imap") {
-		if (!password) return { ok: false, status: 400, error: "Enter the IMAP password to resume" };
+		const spec = parseJson<ImapImportSpec | null>(row.spec, null);
+		if (spec?.auth === "xoauth2") {
+			if (!outlook || outlook.username.toLowerCase() !== spec.username.toLowerCase()) {
+				return { ok: false, status: 400, error: "Microsoft sign-in expired; connect Outlook again" };
+			}
+			resumeMessage = outlookMessage(row.id, outlook);
+		} else if (!password) {
+			return { ok: false, status: 400, error: "Enter the IMAP password to resume" };
+		} else {
+			resumeMessage = { kind: "import.run", jobId: row.id, imapPassword: password };
+		}
 		const parsed = parseJson<ImapImportCursor>(row.cursor, { source: 0, done: 0, counted: false });
 		cursor = JSON.stringify({ ...parsed, failures: undefined });
 	} else {
@@ -243,7 +279,7 @@ export async function resumeImportJob(
 		.where(and(eq(importJobs.id, row.id), eq(importJobs.status, "failed")))
 		.returning();
 	if (!claimed) return { ok: false, status: 409, error: "Only a failed import can be resumed" };
-	await enqueue(env, { kind: "import.run", jobId: row.id, ...(row.kind === "imap" ? { imapPassword: password } : {}) });
+	await enqueue(env, resumeMessage);
 	return { ok: true, job: toImportJobSummary(claimed) };
 }
 
@@ -271,7 +307,7 @@ export async function processImportJob(env: CloudflareEnv, delivered: ImportJobM
 
 	let chunk: Chunk;
 	try {
-		chunk = job.kind === "file" ? await runFileChunk(env, job) : await runImapChunk(env, job, message.imapPassword, attempt);
+		chunk = job.kind === "file" ? await runFileChunk(env, job) : await runImapChunk(env, job, message, attempt);
 	} catch (error) {
 		const reason = error instanceof Error ? error.message : "Import failed";
 		if (job.kind === "imap" && (await retryImapChunkSmaller(env, job, message, reason))) return;
@@ -373,13 +409,36 @@ async function runFileChunk(env: CloudflareEnv, job: JobRow): Promise<Chunk> {
 	return { result, cursor: { batch: next }, totalDelta: 0, done: next >= spec.batches, consumedKey: key };
 }
 
+async function credentialsForImapChunk(
+	env: CloudflareEnv,
+	spec: ImapImportSpec,
+	message: ImportJobMessage,
+): Promise<{ password: string; accessToken?: string }> {
+	if (spec.auth !== "xoauth2") {
+		if (!message.imapPassword) throw new Error("IMAP credentials were lost; start the import again");
+		return { password: message.imapPassword };
+	}
+	const fromEnv = readMicrosoftOAuthConfig(env);
+	const clientId = message.outlookClientId || fromEnv?.clientId;
+	const tenant = message.outlookTenant || fromEnv?.tenant;
+	const refreshToken = message.outlookRefreshToken;
+	if (!clientId || !tenant || !refreshToken) throw new Error("Microsoft sign-in expired; connect Outlook again");
+	const refreshed = await refreshOutlookAccessToken({
+		clientId,
+		tenant,
+		clientSecret: message.outlookClientSecret ?? fromEnv?.clientSecret ?? null,
+		refreshToken,
+	});
+	message.outlookRefreshToken = refreshed.refreshToken;
+	return { password: "", accessToken: refreshed.accessToken };
+}
+
 async function runImapChunk(
 	env: CloudflareEnv,
 	job: JobRow,
-	password: string | undefined,
+	message: ImportJobMessage,
 	attempt?: number,
 ): Promise<Chunk> {
-	if (!password) throw new Error("IMAP credentials were lost; start the import again");
 	const spec = parseJson<ImapImportSpec | null>(job.spec, null);
 	if (!spec) throw new Error("Import settings are unreadable");
 	const cursor = parseJson<ImapImportCursor>(job.cursor, { source: 0, done: 0, counted: false });
@@ -391,13 +450,15 @@ async function runImapChunk(
 	const batchSize = base > 0 ? getImapChunkSize(base, cursor.size, attempt) : 0;
 	let fetched: Awaited<ReturnType<typeof fetchImapMessages>> = { messages: [], total: 0, nextOffset: null };
 	if (batchSize > 0) {
+		const credentials = await credentialsForImapChunk(env, spec, message);
 		try {
 			fetched = await fetchImapMessages({
 				host: spec.host,
 				port: spec.port,
 				secure: spec.secure,
 				username: spec.username,
-				password,
+				password: credentials.password,
+				accessToken: credentials.accessToken,
 				folder: source.folder,
 				limit: batchSize,
 				offset: cursor.done,

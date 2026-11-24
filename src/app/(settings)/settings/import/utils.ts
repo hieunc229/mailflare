@@ -7,6 +7,7 @@ import type {
 	ImportSourceItem,
 	ImportSourceOption,
 	ImportSourceSection,
+	OutlookSession,
 } from "./types";
 
 export const importSourceOptions: ImportSourceOption[] = [
@@ -69,29 +70,52 @@ export function getFileImportSource(sources: ImportSourceItem[]): ImportSourceIt
 	return sources.find((source) => source.id !== "system:others") ?? getSelectedImportSources(["inbox"])[0];
 }
 
+const FOLDER_NAME_MAX = 80;
+let folderListCache: { mailboxId: string; folders: ImportFolderSummary[] } | null = null;
+
+function importFolderName(name: string): string {
+	const trimmed = name.trim().replace(/[\u0000-\u001f]/g, "");
+	return trimmed.length <= FOLDER_NAME_MAX ? trimmed : trimmed.slice(0, FOLDER_NAME_MAX).trim();
+}
+
 export async function ensureImportDestination(
 	mailboxId: string,
 	source: ImportSourceItem,
 ): Promise<string> {
 	if (!source.folderName) return source.destination;
+	const name = importFolderName(source.folderName);
+	if (!name) throw new Error("Unable to create a folder with an empty name");
 	const folders = await fetchMailboxFolders(mailboxId);
-	const existing = folders.find((folder) => folder.name.toLowerCase() === source.folderName?.toLowerCase());
+	const existing = folders.find((folder) => folder.name.toLowerCase() === name.toLowerCase());
 	if (existing) return `folder:${existing.id}`;
 
 	const response = await authFetch("/api/folders", {
 		method: "POST",
 		headers: { "Content-Type": "application/json" },
-		body: JSON.stringify({ mailboxId, name: source.folderName }),
+		body: JSON.stringify({ mailboxId, name }),
 	});
-	const data = (await response.json()) as ImportFolderSummary & { error?: string };
-	if (!response.ok) throw new Error(data.error ?? `Unable to create folder ${source.folderName}`);
+	const data = await readImportJson<ImportFolderSummary & { error?: string }>(response);
+	if (response.status === 409) {
+		folderListCache = null;
+		invalidateFolderCache();
+		const again = await fetchMailboxFolders(mailboxId);
+		const found = again.find((folder) => folder.name.toLowerCase() === name.toLowerCase());
+		if (found) return `folder:${found.id}`;
+	}
+	if (!response.ok || !data.id) {
+		throw new Error(typeof data.error === "string" ? data.error : `Unable to create folder ${name}`);
+	}
+	folderListCache?.folders.push({ id: data.id, name });
 	invalidateFolderCache();
 	return `folder:${data.id}`;
 }
 
 async function fetchMailboxFolders(mailboxId: string): Promise<ImportFolderSummary[]> {
+	if (folderListCache?.mailboxId === mailboxId) return folderListCache.folders;
 	const data = await getMailboxFolders<{ folders?: ImportFolderSummary[] }>(mailboxId);
-	return data.folders ?? [];
+	const folders = data.folders ?? [];
+	folderListCache = { mailboxId, folders };
+	return folders;
 }
 
 export async function startImapImport(
@@ -154,6 +178,51 @@ async function readImportJson<T extends object>(response: Response): Promise<T> 
 	}
 }
 
+export async function fetchOutlookSession(): Promise<OutlookSession> {
+	const response = await authFetch("/api/import/outlook/session");
+	const data = await readImportJson<OutlookSession & { error?: string }>(response);
+	if (!response.ok) throw new Error(data.error ?? "Unable to load Outlook sign-in");
+	return data;
+}
+
+export async function startOutlookSignIn(input: { clientId?: string; clientSecret?: string; tenant?: string }): Promise<void> {
+	const response = await authFetch("/api/import/outlook/start", {
+		method: "POST",
+		headers: { "Content-Type": "application/json" },
+		body: JSON.stringify(input),
+	});
+	const data = await readImportJson<{ authorizationUrl?: string; error?: string }>(response);
+	if (!response.ok || !data.authorizationUrl) throw new Error(data.error ?? "Microsoft sign-in failed");
+	window.location.assign(data.authorizationUrl);
+}
+
+export async function disconnectOutlook(): Promise<void> {
+	const response = await authFetch("/api/import/outlook/session", { method: "DELETE" });
+	if (!response.ok) throw new Error("Unable to disconnect Outlook");
+}
+
+export async function fetchOutlookFolders(): Promise<string[]> {
+	const response = await authFetch("/api/import/outlook/folders", { method: "POST" });
+	const data = await readImportJson<{ folders?: string[]; error?: string }>(response);
+	if (!response.ok) throw new Error(data.error ?? "Unable to list Outlook folders");
+	return data.folders ?? [];
+}
+
+export async function startOutlookImport(
+	mailboxId: string,
+	input: { limit: number; importAll: boolean },
+	sources: { folder: string; destination: string }[],
+): Promise<ImportJobSummary> {
+	const response = await authFetch("/api/import/outlook", {
+		method: "POST",
+		headers: { "Content-Type": "application/json" },
+		body: JSON.stringify({ mailboxId, sources, limit: input.limit, importAll: input.importAll }),
+	});
+	const data = await readImportJson<{ job?: ImportJobSummary; error?: string }>(response);
+	if (!response.ok || !data.job) throw new Error(data.error ?? "Outlook import failed");
+	return data.job;
+}
+
 export async function fetchImapFolders(form: ImapFormState): Promise<string[]> {
 	const response = await authFetch("/api/import/imap/folders", {
 		method: "POST",
@@ -178,11 +247,11 @@ function findFolderMatch(folders: string[], aliases: string[]): string | null {
 
 function getFolderAliases(section: ImportSourceSection): string[] {
 	if (section === "inbox") return ["INBOX", "Inbox"];
-	if (section === "sent") return ["Sent", "Sent Mail", "[Gmail]/Sent Mail", "Sent Items", "Sent Messages"];
-	if (section === "drafts") return ["Drafts", "[Gmail]/Drafts"];
-	if (section === "archived") return ["Archive", "Archived", "[Gmail]/All Mail"];
-	if (section === "spam") return ["Spam", "Junk", "Junk Email", "[Gmail]/Spam"];
-	if (section === "trash") return ["Trash", "Deleted", "Deleted Items", "Deleted Messages", "[Gmail]/Trash", "[Gmail]/Bin"];
+	if (section === "sent") return ["Sent", "Sent Mail", "[Gmail]/Sent Mail", "Sent Items", "Sent Messages", "Itens Enviados"];
+	if (section === "drafts") return ["Drafts", "[Gmail]/Drafts", "Rascunhos"];
+	if (section === "archived") return ["Archive", "Archived", "[Gmail]/All Mail", "Arquivo", "Arquivo Morto"];
+	if (section === "spam") return ["Spam", "Junk", "Junk Email", "[Gmail]/Spam", "Lixo Eletrônico"];
+	if (section === "trash") return ["Trash", "Deleted", "Deleted Items", "Deleted Messages", "[Gmail]/Trash", "[Gmail]/Bin", "Itens Excluídos"];
 	return [];
 }
 

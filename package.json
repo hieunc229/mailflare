@@ -58,6 +58,15 @@
       },
       "CF_API_KEY": {
         "description": "Legacy Global API Key auth only. Prefer `CF_TOKEN` for new deployments."
+      },
+      "MICROSOFT_CLIENT_ID": {
+        "description": "Entra application (client) ID for Outlook import. The app needs the delegated Office 365 Exchange Online permission IMAP.AccessAsUser.All. Register the redirect URI {origin}/api/import/outlook/callback under Mobile and desktop applications, or under Web if you also set MICROSOFT_CLIENT_SECRET. Leave unset to paste the client ID on the import page."
+      },
+      "MICROSOFT_CLIENT_SECRET": {
+        "description": "Client secret for the Outlook import app, only when the redirect URI is registered on a Web platform. Leave empty for a public client."
+      },
+      "MICROSOFT_TENANT": {
+        "description": "Entra directory for Outlook sign-in: common (work and personal), organizations, consumers, or a tenant id. Defaults to common."
       }
     }
   },

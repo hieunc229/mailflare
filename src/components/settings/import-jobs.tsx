@@ -69,7 +69,7 @@ export function ImportJobs({ refreshKey }: { refreshKey: number }) {
 	}
 
 	async function onResume(job: ImportJobSummary) {
-		if (job.kind === "imap" && resuming !== job.id) {
+		if (job.kind === "imap" && job.auth !== "xoauth2" && resuming !== job.id) {
 			setResuming(job.id);
 			setPassword("");
 			setResumeError(null);
@@ -108,7 +108,7 @@ export function ImportJobs({ refreshKey }: { refreshKey: number }) {
 								<div className="min-w-0">
 									<p className="truncate text-sm font-medium text-neutral-900">{job.label}</p>
 									<p className="text-xs text-neutral-500">
-										{job.kind === "imap" ? t("importPage.imap") : t("importPage.backupFile")} ·{" "}
+										{job.auth === "xoauth2" ? t("importPage.outlook") : job.kind === "imap" ? t("importPage.imap") : t("importPage.backupFile")} ·{" "}
 										{new Date(job.createdAt).toLocaleString()}
 									</p>
 								</div>

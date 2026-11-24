@@ -1,10 +1,11 @@
+
 name: Dashboard Update
 
 on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   update:
@@ -28,42 +29,66 @@ jobs:
           fetch-depth: 0
           token: ${{ secrets.MAILFLARE_UPDATE_TOKEN }}
 
-      - name: Replace repository with upstream source
+      - name: Fetch upstream and preserve installation configuration
         run: |
           set -euo pipefail
+
           git config user.name "mailflare-update"
           git config user.email "mailflare-update@users.noreply.github.com"
 
+          # Save installation-specific files before updating the source tree.
+          backup_dir="$(mktemp -d)"
+          trap 'rm -rf "$backup_dir"' EXIT
+
+          cp wrangler.jsonc "$backup_dir/wrangler.jsonc"
+          cp .github/workflows/deploy-update.yml "$backup_dir/deploy-update.yml"
+
           upstream_url="https://github.com/${UPDATE_SOURCE_REPOSITORY}.git"
+
           if git remote get-url upstream >/dev/null 2>&1; then
             git remote set-url upstream "${upstream_url}"
           else
             git remote add upstream "${upstream_url}"
           fi
+
           git fetch --no-tags upstream
 
           upstream_branch="$(git remote show upstream | sed -n 's/.*HEAD branch: //p')"
+
           if [ -z "${upstream_branch}" ]; then
             echo "::error::Could not resolve the default branch of ${UPDATE_SOURCE_REPOSITORY}."
             exit 1
           fi
-          upstream_ref="upstream/${upstream_branch}"
-          echo "Replacing ${GITHUB_REF_NAME} with ${upstream_ref}."
 
-          # Keep the installation repository's commit history while replacing
-          # its complete tracked tree with the current upstream tree.
+          upstream_ref="upstream/${upstream_branch}"
+          echo "Updating source from ${UPDATE_SOURCE_REPOSITORY}@${upstream_branch}."
+
+          # Replace the tracked source tree with the official upstream version.
           git read-tree --reset -u "${upstream_ref}"
+
+          # Restore installation-specific configuration and this workflow.
+          cp "$backup_dir/wrangler.jsonc" wrangler.jsonc
+          mkdir -p .github/workflows
+          cp "$backup_dir/deploy-update.yml" .github/workflows/deploy-update.yml
+
+          git add -A
+
           if git diff --cached --quiet; then
             echo "Repository is already up to date."
             exit 0
           fi
+
           git commit -m "Update Mailflare from ${UPDATE_SOURCE_REPOSITORY}@${upstream_branch}"
 
       - name: Push update
         run: |
           set -euo pipefail
+
+          git fetch origin "${GITHUB_REF_NAME}"
+
           if [ -z "$(git log "origin/${GITHUB_REF_NAME}..HEAD" --oneline)" ]; then
             echo "Repository is already up to date."
             exit 0
           fi
+
           git push origin "HEAD:${GITHUB_REF_NAME}"

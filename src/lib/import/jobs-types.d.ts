@@ -20,6 +20,8 @@ export type ImportJobSummary = {
 	error: string | null;
 	/** The IMAP folder being read right now. */
 	currentSource: string | null;
+	/** How an IMAP job signs in. File jobs leave this empty. */
+	auth: "password" | "xoauth2" | null;
 	createdAt: string;
 	startedAt: string | null;
 	finishedAt: string | null;
@@ -35,7 +37,7 @@ export type FileImportCursor = { batch: number };
 
 export type ImapImportSource = { folder: string; destination: string };
 
-/** The IMAP password is deliberately not part of the spec: it only travels in queue messages. */
+/** The IMAP password and the Outlook refresh token are deliberately not part of the spec: they only travel in queue messages. */
 export type ImapImportSpec = {
 	host: string;
 	port: number;
@@ -44,6 +46,8 @@ export type ImapImportSpec = {
 	limit: number;
 	importAll: boolean;
 	sources: ImapImportSource[];
+	/** Absent on jobs created before Outlook OAuth; those sign in with a password. */
+	auth?: "password" | "xoauth2";
 };
 
 export type ImapImportCursor = {
@@ -62,6 +66,11 @@ export type ImportJobMessage = {
 	kind: "import.run";
 	jobId: string;
 	imapPassword?: string;
+	/** Outlook OAuth. The refresh token is rotated in place when Microsoft issues a new one. */
+	outlookRefreshToken?: string;
+	outlookClientId?: string;
+	outlookClientSecret?: string;
+	outlookTenant?: string;
 	/** Delivery count from the queue; set by the consumer, never stored. */
 	attempt?: number;
 };

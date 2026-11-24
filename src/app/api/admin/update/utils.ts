@@ -8,18 +8,17 @@ import type {
   GitHubRepositoryResponse,
   GitHubWorkflowDispatchResponse,
   PackageMetadata,
-  GitHubCompareResponse,
   UpdateChannel,
   UpdateConfigurationItem,
   UpdateDispatchConfig,
   UpdateStatus,
 } from "./types";
 import packageMetadata from "../../../../../package.json";
+import { commitsBehind, shouldRetryGitHubAnonymously, UPDATE_SOURCE_REPOSITORY } from "./github-utils";
 
 const GITHUB_API_URL = "https://api.github.com";
 const GITHUB_API_VERSION = "2026-03-10";
 const UPDATE_WORKFLOW = "deploy-update.yml";
-const UPDATE_SOURCE_REPOSITORY = "hieunc229/mailflare";
 
 export async function authorizeAdminRequest(request: Request) {
   const env = getEnv();
@@ -75,36 +74,48 @@ function getUpdateConfiguration(env: CloudflareEnv): UpdateConfigurationItem[] {
   ];
 }
 
-async function githubRequest<T>(
+async function sendGitHub<T>(
   path: string,
-  init?: RequestInit,
+  init: RequestInit | undefined,
+  authenticated: boolean,
 ): Promise<{ data?: T; response: Response }> {
   const env = getEnv();
+  const token = env.GITHUB_UPDATE_TOKEN?.trim();
+  const headers = new Headers(init?.headers);
+  headers.set("Accept", "application/vnd.github+json");
+  headers.set("User-Agent", "mailflare");
+  headers.set("Content-Type", "application/json");
+  headers.set("X-GitHub-Api-Version", GITHUB_API_VERSION);
+  if (authenticated && token) headers.set("Authorization", `Bearer ${token}`);
+  else headers.delete("Authorization");
 
   const response = await fetch(`${GITHUB_API_URL}${path}`, {
     cache: "no-store",
     ...init,
-    headers: {
-      Accept: "application/vnd.github+json",
-      Authorization: `Bearer ${env.GITHUB_UPDATE_TOKEN || ""}`,
-      "User-Agent": "mailflare",
-      "Content-Type": "application/json",
-      "X-GitHub-Api-Version": GITHUB_API_VERSION,
-      ...init?.headers,
-    },
+    headers,
   });
 
   if (response.statusText === "Forbidden") {
-    return {
-      response,
-      data: { error: response.statusText } as T,
-    };
+    return { response, data: { error: response.statusText } as T };
   }
+  if (response.status === 204) return { response };
 
-  const data =
-    response.status === 204 ? undefined : ((await response.json()) as T);
+  const text = await response.text();
+  if (!text) return { response };
+  try {
+    return { response, data: JSON.parse(text) as T };
+  } catch {
+    throw new Error(`GitHub returned HTTP ${response.status}`);
+  }
+}
 
-  return { data, response };
+async function githubRequest<T>(
+  path: string,
+  init?: RequestInit,
+): Promise<{ data?: T; response: Response }> {
+  const authed = await sendGitHub<T>(path, init, true);
+  if (!shouldRetryGitHubAnonymously(path, authed.response.status)) return authed;
+  return sendGitHub<T>(path, init, false);
 }
 
 async function getDispatchRef(config: UpdateDispatchConfig): Promise<string> {
@@ -179,23 +190,50 @@ async function getTargetVersion(): Promise<string> {
   return packageJson.version;
 }
 
+async function listCommitShas(repository: string, ref: string): Promise<string[]> {
+  const shas: string[] = [];
+  for (let page = 1; page <= 5; page += 1) {
+    const { data, response } = await githubRequest<
+      { sha?: string }[] | { message?: string }
+    >(
+      `/repos/${repository}/commits?sha=${encodeURIComponent(ref)}&per_page=100&page=${page}`,
+    );
+    if (!response.ok || !Array.isArray(data)) {
+      const message = data && !Array.isArray(data) ? data.message : undefined;
+      throw new Error(message ?? `Could not read commits from ${repository}`);
+    }
+    for (const commit of data) {
+      if (commit.sha) shas.push(commit.sha);
+    }
+    if (data.length < 100) break;
+  }
+  return shas;
+}
+
 async function getCommitStatus(env: CloudflareEnv) {
   const config = getDispatchConfig(env);
   const ref = await getDispatchRef(config);
-  const owner = config.repository.split("/")[0];
-  const { data: upstream } = await githubRequest<GitHubRepositoryResponse>(
-    `/repos/${UPDATE_SOURCE_REPOSITORY}`,
-  );
-  const branch = upstream?.default_branch ?? "main";
-  const { data, response } = await githubRequest<GitHubCompareResponse>(
-    `/repos/${UPDATE_SOURCE_REPOSITORY}/compare/${branch}...${owner}:${ref}`,
-  );
-  if (!response.ok || typeof data?.behind_by !== "number") {
+  const { data: upstream, response: upstreamResponse } =
+    await githubRequest<GitHubRepositoryResponse>(
+      `/repos/${UPDATE_SOURCE_REPOSITORY}`,
+    );
+  if (!upstreamResponse.ok) {
     throw new Error(
-      data?.message ?? "Could not compare this installation with the upstream repository",
+      upstream?.message ?? "Could not read the upstream repository",
     );
   }
-  return { behindBy: data.behind_by, sha: data.base_commit?.sha ?? branch };
+  const branch = upstream?.default_branch ?? "main";
+  const [installationShas, upstreamShas] = await Promise.all([
+    listCommitShas(config.repository, ref),
+    listCommitShas(UPDATE_SOURCE_REPOSITORY, branch),
+  ]);
+  const behindBy = commitsBehind(upstreamShas, new Set(installationShas));
+  if (behindBy === null || !upstreamShas[0]) {
+    throw new Error(
+      "Could not find a shared commit with the upstream repository",
+    );
+  }
+  return { behindBy, sha: upstreamShas[0] };
 }
 
 export async function getUpdateStatus(

@@ -33,7 +33,7 @@ export async function POST(request: Request) {
 	const user = await requireUser(env, request);
 	const parsed = folderSchema.safeParse(await readJsonObject(request));
 	if (!parsed.success) {
-		return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
+		return NextResponse.json({ error: "Folder name must be 1 to 80 characters" }, { status: 400 });
 	}
 
 	const db = getDb(env);
@@ -53,13 +53,18 @@ export async function POST(request: Request) {
 	}
 
 	const id = newId("fld");
-	await db.insert(folders).values({
-		id,
-		userId: access.mailboxUserId,
-		mailboxId: parsed.data.mailboxId,
-		name,
-		color: parsed.data.color,
-	});
+	try {
+		await db.insert(folders).values({
+			id,
+			userId: access.mailboxUserId,
+			mailboxId: parsed.data.mailboxId,
+			name,
+			color: parsed.data.color,
+		});
+	} catch (cause) {
+		const message = cause instanceof Error ? cause.message : "Unable to create folder";
+		return NextResponse.json({ error: message }, { status: 500 });
+	}
 
 	return NextResponse.json({ id, mailboxId: parsed.data.mailboxId, name, color: parsed.data.color });
 }
