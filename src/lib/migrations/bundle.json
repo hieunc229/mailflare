@@ -911,7 +911,7 @@
       ]
     },
     {
-      "name": "0102_dav_storage.sql",
+      "name": "0098_dav_storage.sql",
       "statements": [
         "CREATE TABLE `dav_collections` (\n\t`id` text PRIMARY KEY NOT NULL,\n\t`user_id` text NOT NULL,\n\t`kind` text NOT NULL,\n\t`display_name` text,\n\t`color` text,\n\t`description` text,\n\t`sort_order` integer,\n\t`dead_props` text DEFAULT '{}' NOT NULL,\n\t`seeded_at` integer,\n\t`created_at` integer NOT NULL,\n\t`updated_at` integer NOT NULL,\n\tFOREIGN KEY (`user_id`) REFERENCES `users`(`id`) ON UPDATE no action ON DELETE cascade\n);",
         "CREATE INDEX `dav_collections_user_idx` ON `dav_collections` (`user_id`);",

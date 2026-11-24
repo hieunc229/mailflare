@@ -465,7 +465,7 @@
       ]
     },
     {
-      "name": "0026_dav_storage.sql",
+      "name": "0022_dav_storage.sql",
       "statements": [
         "CREATE TABLE \"dav_calendar_objects\" (\n\t\"id\" text PRIMARY KEY NOT NULL,\n\t\"user_id\" text NOT NULL,\n\t\"collection_id\" text NOT NULL,\n\t\"name\" text NOT NULL,\n\t\"uid\" text NOT NULL,\n\t\"body\" text,\n\t\"rows_hash\" text,\n\t\"size\" bigint NOT NULL,\n\t\"created_at\" bigint NOT NULL,\n\t\"updated_at\" bigint NOT NULL\n);",
         "CREATE TABLE \"dav_cards\" (\n\t\"id\" text PRIMARY KEY NOT NULL,\n\t\"user_id\" text NOT NULL,\n\t\"collection_id\" text NOT NULL,\n\t\"name\" text NOT NULL,\n\t\"uid\" text NOT NULL,\n\t\"body\" text NOT NULL,\n\t\"version\" text NOT NULL,\n\t\"fn\" text DEFAULT '' NOT NULL,\n\t\"emails\" text DEFAULT '[]' NOT NULL,\n\t\"size\" bigint NOT NULL,\n\t\"created_at\" bigint NOT NULL,\n\t\"updated_at\" bigint NOT NULL\n);",
