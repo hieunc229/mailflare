@@ -21,7 +21,7 @@ export type CalendarImportRow = {
 	location: string;
 	attendees: string;
 	color: string;
-	repeat: "none" | "daily" | "weekly" | "monthly" | "weekdays";
+	repeat: "none" | "daily" | "weekly" | "monthly" | "weekdays" | "yearly";
 	repeatDays: string;
 	repeatAnchorDay: number | null;
 	repeatUntil: Date | null;
