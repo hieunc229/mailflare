@@ -1278,6 +1278,8 @@ export const appSettings = sqliteTable("app_settings", {
 	/** "release": update on a new package.json version; "commit": update on any new upstream commit. */
 	autoUpdateChannel: text("auto_update_channel", { enum: ["release", "commit"] }).notNull().default("release"),
 	autoUpdateDispatchedVersion: text("auto_update_dispatched_version"),
+	/** CalDAV/CardDAV endpoints (/dav/*) answer only when an administrator turns this on. */
+	davEnabled: bool("dav_enabled").notNull().default(false),
 	updatedAt: timestamp("updated_at")
 		.notNull()
 		.$defaultFn(() => new Date()),

@@ -10,10 +10,12 @@ import { processAgentDraftJob } from "@/lib/agent/jobs/utils";
 import { processOutboundQueue, type OutboundQueueMessage } from "@/lib/email/send";
 import { processWebhookRetry, type WebhookRetryMessage } from "@/lib/email/webhooks";
 import { processImportJob } from "@/lib/import/jobs";
+import { handleDavRequest, isDavPath } from "@/lib/dav/handler";
 import { applyPendingMigrations } from "@/lib/migrations/service";
 import { isImportJobMessage, isInboundQueueMessage, isWebhookRetryMessage } from "../worker-utils";
 import { createNodeRuntime } from "./runtime/env";
 import { isRealtimeOriginAllowed } from "./runtime/realtime-origin";
+import { serveFetch } from "./runtime/fetch-adapter";
 import { applyMigrations } from "./runtime/migrate";
 import { startScheduler } from "./runtime/scheduler";
 import { startSmtpListener } from "./runtime/smtp";
@@ -72,7 +74,10 @@ async function main() {
 		delete request.headers["x-forwarded-for"];
 		delete request.headers["x-mailflare-client-ip"];
 		if (clientIp) request.headers["x-mailflare-client-ip"] = clientIp;
-		void handle(request, response, parse(request.url ?? "/", true));
+		const parsedUrl = parse(request.url ?? "/", true);
+		// CalDAV/CardDAV: PROPFIND and REPORT cannot be Next route handlers, so they are served before Next.
+		if (isDavPath(parsedUrl.pathname ?? "")) return void serveFetch(handleDavRequest, request, response, env);
+		void handle(request, response, parsedUrl);
 	});
 
 	const wss = new WebSocketServer({ noServer: true });

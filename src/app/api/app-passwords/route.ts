@@ -40,7 +40,7 @@ export async function GET(request: Request) {
 	const appPasswords = rows
 		.filter(isListedAsAppPassword)
 		.map(({ kind, scopes, ...row }) => ({ ...row, legacy: kind !== "app", protocols: parseScopes(scopes) }));
-	return NextResponse.json({ appPasswords, availableProtocols: availableAppPasswordProtocols() }, { headers: NO_STORE });
+	return NextResponse.json({ appPasswords, availableProtocols: await availableAppPasswordProtocols(env) }, { headers: NO_STORE });
 }
 
 /**
@@ -57,7 +57,7 @@ export async function POST(request: Request) {
 	if (!parsed.success) return authError("invalid_request", 400);
 	const { name, stepUpToken } = parsed.data;
 	const protocols = [...new Set(parsed.data.protocols)];
-	const available = availableAppPasswordProtocols();
+	const available = await availableAppPasswordProtocols(env);
 	if (protocols.some((protocol) => !available.includes(protocol))) return authError("invalid_request", 400);
 
 	const db = getDb(env);

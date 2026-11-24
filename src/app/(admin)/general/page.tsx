@@ -20,11 +20,14 @@ export default function GeneralSettingsPage() {
 	const [limitGb, setLimitGb] = useState(10);
 	const [driveSaving, setDriveSaving] = useState(false);
 	const [driveStatus, setDriveStatus] = useState("");
+	const [davEnabled, setDavEnabled] = useState(false);
+	const [davSaving, setDavSaving] = useState(false);
+	const [davStatus, setDavStatus] = useState("");
 
 	useEffect(() => {
 		let active = true;
 		void loadGeneralSettings().then((settings) => {
-			if (active) { setMaxMb(settings.outboundAttachmentMaxMb); setCeilingMb(settings.outboundAttachmentCeilingMb); setUnlimited(settings.driveStorageLimitGb === null); if (settings.driveStorageLimitGb !== null) setLimitGb(settings.driveStorageLimitGb); setLoaded(true); }
+			if (active) { setMaxMb(settings.outboundAttachmentMaxMb); setCeilingMb(settings.outboundAttachmentCeilingMb); setUnlimited(settings.driveStorageLimitGb === null); if (settings.driveStorageLimitGb !== null) setLimitGb(settings.driveStorageLimitGb); setDavEnabled(settings.davEnabled); setLoaded(true); }
 		}).catch((error) => { if (active) setStatus(error instanceof Error ? error.message : t("general.loadFailed")); });
 		return () => { active = false; };
 	}, [t]);
@@ -56,6 +59,19 @@ export default function GeneralSettingsPage() {
 		} finally { setDriveSaving(false); }
 	}
 
+	async function saveDav(event: React.FormEvent<HTMLFormElement>) {
+		event.preventDefault();
+		setDavSaving(true);
+		setDavStatus("");
+		try {
+			const settings = await saveGeneralSettings({ davEnabled });
+			setDavEnabled(settings.davEnabled);
+			setDavStatus(t("general.davSaved"));
+		} catch (error) {
+			setDavStatus(error instanceof Error ? error.message : t("general.saveFailed"));
+		} finally { setDavSaving(false); }
+	}
+
 	return <div className="space-y-6">
 		<div><h1 className="text-2xl md:text-3xl font-medium text-neutral-900">{t("general.title")}</h1><p className="mt-2 text-sm text-neutral-500">{t("general.description")}</p></div>
 		<Card className="rounded-3xl border-0 bg-white p-6">
@@ -75,6 +91,15 @@ export default function GeneralSettingsPage() {
 				<p className="text-sm text-neutral-500">{t("general.driveHint")}</p>
 				{driveStatus && <p role="status" className="text-sm text-neutral-700">{driveStatus}</p>}
 				<Button type="submit" disabled={!loaded || driveSaving || (!unlimited && !(limitGb > 0))}>{driveSaving ? t("common.saving") : t("general.save")}</Button>
+			</form></CardContent>
+		</Card>
+		<Card className="rounded-3xl border-0 bg-white p-6">
+			<CardHeader className="py-0"><CardTitle>{t("general.dav")}</CardTitle></CardHeader>
+			<CardContent className="pt-6"><form onSubmit={saveDav} className="space-y-4">
+				<div className="flex items-center gap-3"><Switch id="dav-enabled" checked={davEnabled} onCheckedChange={setDavEnabled} disabled={!loaded || davSaving} /><Label htmlFor="dav-enabled">{t("general.davEnabled")}</Label></div>
+				<p className="text-sm text-neutral-500">{t("general.davHint")}</p>
+				{davStatus && <p role="status" className="text-sm text-neutral-700">{davStatus}</p>}
+				<Button type="submit" disabled={!loaded || davSaving}>{davSaving ? t("common.saving") : t("general.save")}</Button>
 			</form></CardContent>
 		</Card>
 	</div>;
