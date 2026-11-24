@@ -7,6 +7,8 @@ export type ParsedSearchQuery = {
 	hasAttachment?: boolean;
 	read?: "read" | "unread";
 	starred?: boolean;
+	/** From `category:promotions` (or `promotion`) and `category:primary` (or `inbox`, everything else). */
+	category?: "promotions" | "primary";
 	/** Inclusive lower bound on the message date, from `after:YYYY-MM-DD`. */
 	after?: Date;
 	/** Exclusive upper bound on the message date, from `before:YYYY-MM-DD`. */

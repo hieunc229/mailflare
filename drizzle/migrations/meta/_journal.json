@@ -596,6 +596,13 @@
       "when": 1795027678014,
       "tag": "0093_spam_strictness",
       "breakpoints": true
+    },
+    {
+      "idx": 86,
+      "version": "6",
+      "when": 1795027679014,
+      "tag": "0094_promotions",
+      "breakpoints": true
     }
   ]
 }

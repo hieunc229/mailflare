@@ -5,7 +5,10 @@ import type { MessageStateSnapshot } from "./actions/types";
 export type MessageMembershipFields = Pick<
 	MessageStateSnapshot,
 	"status" | "folderId" | "snoozedUntil" | "starred"
->;
+> & {
+	/** Optional: rows from servers or caches that predate promotions have none. */
+	category?: string | null;
+};
 
 function snoozedAt(value: string | null | undefined, now: number): boolean {
 	if (!value) return false;
@@ -34,6 +37,15 @@ export function messageMatchesFolder(
 			&& state.folderId == null
 			&& !snoozedAt(state.snoozedUntil, now);
 	}
+	// Inbox membership above ignores the category on purpose: the mailbox's promotions mode is not known
+	// here, so a promotion restored to Inbox in a "separate" mailbox may show in a cached Inbox list until
+	// the next refetch.
+	if (folder === "promotions") {
+		return state.status === "received"
+			&& state.folderId == null
+			&& !snoozedAt(state.snoozedUntil, now)
+			&& state.category === "promotions";
+	}
 	if (folder === "snoozed") {
 		return state.status === "received"
 			&& state.folderId == null
@@ -60,6 +72,7 @@ export function getListMembershipContext(
 	if (search.get("scheduled") === "true") return { folder: "scheduled" };
 	const status = search.get("status");
 	const direction = search.get("direction");
+	if (direction === "inbound" && status === "received" && search.get("category") === "promotions") return { folder: "promotions" };
 	if (direction === "inbound" && status === "received") return { folder: "inbox" };
 	if (direction === "outbound" && status === "sent") return { folder: "sent" };
 	if (direction === "outbound" && status === "draft") return { folder: "drafts" };

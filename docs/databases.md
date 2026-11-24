@@ -82,7 +82,7 @@ Also kept on every dialect: foreign keys and cascades, the JMAP change log and m
 | Message search | FTS5 index, prefix and column matching | `ILIKE`-style substring scan of subject, addresses and body; accelerated by `pg_trgm` indexes when the extension can be created | Substring `LIKE` scan |
 | Search index page (Admin) | Rebuild available | Not applicable (always "indexed") | Not applicable |
 | `agent_send_approvals` duplicate-delivery guard | Partial unique index | Partial unique index | Plain index (MySQL has no partial indexes); the status claim still prevents double sends |
-| Wide covering indexes on `messages` | Full | Full | Trimmed to fit InnoDB's 3072-byte key limit; expression keys (`coalesce(thread_id, id)`) dropped. Conversation view is slower on very large mailboxes |
+| Wide covering indexes on `messages` | Full | Full | Trimmed to fit InnoDB's 3072-byte key limit; expression keys (`coalesce(thread_id, id)`) dropped; the trailing `id` tie-breaker of `messages_category_page_idx` is dropped too. Conversation view is slower on very large mailboxes |
 | One agent job per mailbox | Atomic in the claim statement | Atomic | Checked just before the claim (small race window) |
 | `batch` atomicity | Atomic | Atomic | Atomic for DML; MySQL commits DDL implicitly, so a failed migration can leave earlier statements applied |
 | `neon` (HTTP) | n/a | Batches run as separate statements (the HTTP protocol has no interactive transaction); use `node-postgres` for atomic batches | n/a |

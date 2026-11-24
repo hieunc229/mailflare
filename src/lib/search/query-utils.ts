@@ -9,13 +9,13 @@ import { dateFromZonedFields, normalizeTimeZone } from "@/lib/time/utils";
  *
  * The older `title:` and bare `:unread` / `:read` forms keep working.
  */
-const OPERATOR_RE = /(?:^|\s)(from|to|subject|title|has|is|after|before|newer|older):(?:"([^"]*)"|(\S+))/gi;
+const OPERATOR_RE = /(?:^|\s)(from|to|subject|title|has|is|after|before|newer|older|category):(?:"([^"]*)"|(\S+))/gi;
 
 export function parseSearchQuery(raw: string, timeZone = "UTC"): ParsedSearchQuery {
 	const parsed: ParsedSearchQuery = { text: "", needsFullText: false };
 	let rest = raw ?? "";
 
-	rest = rest.replace(OPERATOR_RE, (_match, key: string, quoted: string | undefined, bare: string | undefined) => {
+	rest = rest.replace(OPERATOR_RE, (match, key: string, quoted: string | undefined, bare: string | undefined) => {
 		const value = (quoted ?? bare ?? "").trim();
 		switch (key.toLowerCase()) {
 			case "from":
@@ -35,6 +35,11 @@ export function parseSearchQuery(raw: string, timeZone = "UTC"): ParsedSearchQue
 				if (/^unread$/i.test(value)) parsed.read = "unread";
 				else if (/^read$/i.test(value)) parsed.read = "read";
 				else if (/^starred$/i.test(value)) parsed.starred = true;
+				break;
+			case "category":
+				if (/^promotions?$/i.test(value)) parsed.category = "promotions";
+				else if (/^(primary|inbox)$/i.test(value)) parsed.category = "primary";
+				else return match; // an unknown value stays free text
 				break;
 			case "after":
 			case "newer":

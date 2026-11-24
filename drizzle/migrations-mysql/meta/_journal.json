@@ -127,6 +127,13 @@
       "when": 1795027659151,
       "tag": "0017_spam_strictness",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "5",
+      "when": 1795027660151,
+      "tag": "0018_promotions",
+      "breakpoints": true
     }
   ]
 }
