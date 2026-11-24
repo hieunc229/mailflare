@@ -31,10 +31,10 @@ async function fixture(t, { mode = "show", ...options } = {}) {
 }
 
 test("blockContact files a Trash rule, so the Subscriptions Block button means Trash and not rejection", () => {
-	assert.match(readFileSync(new URL("../src/lib/contacts/service.ts", import.meta.url), "utf8"), /matchOperator: "exact",[\s\S]*?action: "trash",\s*priority: 100/);
+	assert.match(readFileSync(new URL("../src/lib/contacts/service.ts", import.meta.url), "utf8"), /matchOperator: "exact" as const,[\s\S]*?action: "trash" as const[\s\S]*?priority: 100/);
 });
 
-test("senderSweepCondition matches the exact sender only; the legacy substring condition is kept as it was", async (t) => {
+test("senderSweepCondition matches the exact sender only", async (t) => {
 	const { database, add } = await fixture(t);
 	add("exact", { category: null });
 	add("other", { sender: "othernews@acme.com", from: "othernews@acme.com", category: null });
@@ -311,12 +311,12 @@ test("recording the unsubscribe never fails it: a missing table is tolerated, so
 	assert.deepEqual([result.status, result.body.method], [200, "mailto"]);
 });
 
-test("unsubscribe_and_trash keeps its behaviour: it still sweeps by substring and reports trashedCount", async (t) => {
+test("unsubscribe_and_trash sweeps the exact sender only (not a look-alike address) and reports trashedCount", async (t) => {
 	const { database, add } = await unsubscribeFixture(t, mailtoRaw);
 	add("sibling", { category: null });
 	add("lookalike", { sender: "othernews@acme.com", from: "othernews@acme.com", category: null });
 	const result = await unsubscribe("msg", { action: "unsubscribe_and_trash" });
-	assert.equal(result.body.trashedCount, 3);
-	assert.equal(count(database, "status = 'trash'"), 3);
+	assert.equal(result.body.trashedCount, 2);
+	assert.equal(count(database, "status = 'trash'"), 2);
 	assert.equal(unsubscribedRows(database).length, 1);
 });

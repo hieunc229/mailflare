@@ -59,7 +59,9 @@ function d1(sqlite) {
 function database(beforePromotions = false, stopBefore = null) {
 	const sqlite = new Database(":memory:");
 	sqlite.pragma("foreign_keys = ON");
-	for (const migration of migrations.filter((m) => (!beforePromotions || m.name < "0091") && (!stopBefore || m.name < stopBefore))) {
+	// Leave out only the promotion migrations: every other column of a newer backup must exist in the target.
+	const skipped = new Set([...(beforePromotions ? ["0094_promotions.sql", "0095_promotion_sender_backfill.sql"] : []), ...(stopBefore ? [stopBefore] : [])]);
+	for (const migration of migrations.filter((m) => !skipped.has(m.name))) {
 		for (const statement of migration.statements) sqlite.exec(statement);
 	}
 	return sqlite;
@@ -75,7 +77,7 @@ function seed(sqlite) {
 const toBuffer = (backup) => backup.buffer.slice(backup.byteOffset, backup.byteOffset + backup.byteLength);
 const count = (sqlite, table) => sqlite.prepare(`select count(*) as n from ${table}`).get().n;
 
-test("backup and restore work on a database migrated only to 0089", async () => {
+test("backup and restore work on a database migrated up to just before promotions", async () => {
 	const sqlite = database(true);
 	seed(sqlite);
 	const backup = await exportDatabaseRecords(d1(sqlite));
@@ -84,7 +86,7 @@ test("backup and restore work on a database migrated only to 0089", async () => 
 	assert.equal(count(sqlite, "messages"), 1);
 });
 
-test("a backup written after the promotions migration restores into a 0089 database without losing mail", async () => {
+test("a backup written after the promotions migration restores into a database without the promotion migrations without losing mail", async () => {
 	const source = database();
 	seed(source);
 	source.exec("update messages set category = 'promotions', sender_address = 'a@b.test'");
@@ -96,7 +98,7 @@ test("a backup written after the promotions migration restores into a 0089 datab
 	assert.equal(count(target, "messages"), 1);
 });
 
-test("restoring promotion rows into a 0089 database fails before anything is deleted", async () => {
+test("restoring promotion rows into a database without the promotion migrations fails before anything is deleted", async () => {
 	const source = database();
 	seed(source);
 	source.exec("insert into mailbox_promotion_settings (mailbox_id, mode, updated_at) values ('m','show',1)");
@@ -108,12 +110,12 @@ test("restoring promotion rows into a 0089 database fails before anything is del
 	assert.equal(count(target, "messages"), 1);
 });
 
-test("a backup written after 0096 restores into a database that has the promotion tables but not 0096: its new columns are dropped, nothing fails after the delete", async () => {
+test("a backup written after the backfill migration restores into a database that has the promotion tables but not the backfill migration: its new columns are dropped, nothing fails after the delete", async () => {
 	const source = database();
 	seed(source);
 	source.exec("insert into mailbox_promotion_settings (mailbox_id, mode, backfill_status, backfill_stalls, backfill_error, backfill_day, backfill_day_rows, updated_at) values ('m','show','failed',3,'boom',20000,5,1)");
 	const backup = await exportDatabaseRecords(d1(source));
-	const target = database(false, "0096");
+	const target = database(false, "0095_promotion_sender_backfill.sql");
 	seed(target);
 	assert.ok(!target.prepare("pragma table_info(mailbox_promotion_settings)").all().some((column) => column.name === "backfill_stalls"));
 	await restoreDatabaseRecords(d1(target), toBuffer(backup));
