@@ -224,3 +224,12 @@ test("reporters with history rank by distinct report days, and new reporters fil
 	const [alert] = f.q("SELECT detail FROM deliverability_alerts WHERE kind = 'spoofing'");
 	assert.deepEqual(JSON.parse(alert.detail).sources.map((entry) => entry.reporter), ["new4.example"]);
 });
+
+test("retention also deletes TLS-RPT aggregates older than 180 days", async (t) => {
+	const f = await fixture(t, { enabled: false });
+	const insert = f.raw.prepare("INSERT INTO tls_daily_stats (domain_id, day, row_key, reporter_org, policy_type, result_type, success_count, failure_count) VALUES ('d1', ?, ?, 'google.com', 'sts', '', 1, 0)");
+	for (let i = 0; i < 700; i += 1) insert.run(dayOf(181), `old${i}`);
+	insert.run(dayOf(10), "new");
+	await runDeliverabilityDaily(f.env, NOW, { sendMail: f.sendMail });
+	assert.deepEqual(f.q("SELECT row_key FROM tls_daily_stats").map((row) => row.row_key), ["new"]);
+});

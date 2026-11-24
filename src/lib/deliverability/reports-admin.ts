@@ -3,6 +3,7 @@ import { getDb } from "@/db";
 import { domainDeliverability, mailboxAliases, mailboxes } from "@/db/schema";
 import { deleteEmailRoutingRuleForAddress, ensureEmailRoutingRuleToWorker } from "@/lib/cloudflare-api";
 import { createDnsRecord, deleteDnsRecord, listDnsRecords, updateDnsRecord } from "@/lib/cloudflare-dns";
+import { isCloudflareZoneUnavailable } from "@/lib/cloudflare-api-error";
 import { queryDns } from "@/lib/dns-query";
 import { withoutRuaUri, withRuaUri } from "./dmarc-record";
 import { organisationalDomain } from "./org-domain";
@@ -29,7 +30,7 @@ export type ReportsDeps = {
 	deleteRoute(env: CloudflareEnv, zoneId: string, address: string): Promise<unknown>;
 };
 
-const realDeps: ReportsDeps = {
+export const reportsDeps: ReportsDeps = {
 	listTxt: (env, zoneId, name) => listDnsRecords(env, zoneId, { type: "TXT", name }),
 	queryTxt: (name) => queryDns(name, "TXT"),
 	createTxt: (env, zoneId, name, content) => createDnsRecord(env, zoneId, { type: "TXT", name, content, ttl: 3600 }),
@@ -40,28 +41,36 @@ const realDeps: ReportsDeps = {
 };
 
 const fail = (status: number, code: string, message: string): ReportsResult => ({ kind: "error", status, code, message });
-const isManual = (domain: Domain) => domain.zoneId === "manual";
+export const isManual = (domain: Pick<Domain, "zoneId">) => domain.zoneId === "manual";
 /** Cloudflare may return TXT content wrapped in quotes (and split in chunks). */
-const unquote = (content: string) => content.replace(/^"([\s\S]*)"$/, "$1").replace(/"\s*"/g, "");
+export const unquote = (content: string) => content.replace(/^"([\s\S]*)"$/, "$1").replace(/"\s*"/g, "");
 const isDmarc = (content: string) => /^\s*v=DMARC1\s*(?:;|$)/i.test(content);
 
-class DnsReadError extends Error {}
-class MultipleRecordsError extends Error {}
+export class DnsReadError extends Error {
+	constructor(message: string, readonly zoneUnavailable = false) {
+		super(message);
+	}
+}
+/** Cloudflare says the zone is gone or off limits (404, 403). Turning a feature off then works as in a manual zone: the record is left to the admin. */
+export const isZoneUnavailable = (error: unknown) => (error instanceof DnsReadError && error.zoneUnavailable) || isCloudflareZoneUnavailable(error);
+export class MultipleRecordsError extends Error {}
 
-async function readDmarc(env: CloudflareEnv, domain: Domain, deps: ReportsDeps): Promise<{ id: string | null; content: string } | null> {
-	const name = `_dmarc.${domain.hostname}`;
+/** The single TXT record at `name` that `matches`, read from Cloudflare (or DNS-over-HTTPS for a manual zone). More than one throws. */
+export async function readTxtRecord(env: CloudflareEnv, domain: Pick<Domain, "zoneId">, name: string, matches: (content: string) => boolean, deps: ReportsDeps): Promise<{ id: string | null; content: string } | null> {
 	let records: { id: string | null; content: string }[];
 	try {
 		records = isManual(domain)
 			? (await deps.queryTxt(name)).map((content) => ({ id: null, content: unquote(content) }))
 			: (await deps.listTxt(env, domain.zoneId, name)).map((record) => ({ id: record.id ?? null, content: unquote(record.content ?? "") }));
 	} catch (error) {
-		throw new DnsReadError(error instanceof Error ? error.message : "DNS lookup failed");
+		throw new DnsReadError(error instanceof Error ? error.message : "DNS lookup failed", isCloudflareZoneUnavailable(error));
 	}
-	const dmarc = records.filter((record) => isDmarc(record.content));
-	if (dmarc.length > 1) throw new MultipleRecordsError();
-	return dmarc[0] ?? null;
+	const found = records.filter((record) => matches(record.content));
+	if (found.length > 1) throw new MultipleRecordsError();
+	return found[0] ?? null;
 }
+
+const readDmarc = (env: CloudflareEnv, domain: Domain, deps: ReportsDeps) => readTxtRecord(env, domain, `_dmarc.${domain.hostname}`, isDmarc, deps);
 
 const TAG = (record: string, name: string) => new RegExp(`(?:^|;)\\s*${name}\\s*=\\s*([^;]*?)\\s*(?=;|$)`, "i").exec(record)?.[1];
 const POLICIES = ["none", "quarantine", "reject"];
@@ -102,7 +111,7 @@ async function inheritedRecord(domain: Domain, address: string, deps: ReportsDep
  * it (`createdRecord`) and it still reads exactly as we wrote it; anything else only loses our address from `rua`.
  * A removal is `after: null` with `changed: true`.
  */
-export async function planDmarcChange(env: CloudflareEnv, domain: Domain, enable: boolean, deps: ReportsDeps = realDeps, createdRecord: string | null = null): Promise<DmarcPlan & { recordId: string | null }> {
+export async function planDmarcChange(env: CloudflareEnv, domain: Domain, enable: boolean, deps: ReportsDeps = reportsDeps, createdRecord: string | null = null): Promise<DmarcPlan & { recordId: string | null }> {
 	const address = reportAddress(domain.hostname);
 	const current = await readDmarc(env, domain, deps);
 	const before = current?.content ?? null;
@@ -141,7 +150,7 @@ async function addressTaken(env: CloudflareEnv, domainId: string): Promise<boole
  * rua address), so it answers with a before/after preview until the caller confirms. Reporting stays off unless
  * every step succeeded; a stored report is kept when it is turned off.
  */
-export async function updateReports(env: CloudflareEnv, domain: Domain, body: unknown, deps: ReportsDeps = realDeps): Promise<ReportsResult> {
+export async function updateReports(env: CloudflareEnv, domain: Domain, body: unknown, deps: ReportsDeps = reportsDeps): Promise<ReportsResult> {
 	const input = body && typeof body === "object" && !Array.isArray(body) ? (body as Record<string, unknown>) : null;
 	const enabled = input?.enabled;
 	const alertEmail = input?.alertEmail;
@@ -161,7 +170,9 @@ export async function updateReports(env: CloudflareEnv, domain: Domain, body: un
 			if (domain.receivingProvider === "none") return fail(409, "RECEIVING_REQUIRED", "Turn on receiving for this domain first");
 			if (await addressTaken(env, domain.id)) return fail(409, "ADDRESS_TAKEN", `A mailbox or alias already uses ${REPORT_ADDRESS_LOCAL_PART}`);
 		}
-		const [stored] = await getDb(env).select({ created: domainDeliverability.dmarcCreatedRecord }).from(domainDeliverability).where(eq(domainDeliverability.domainId, domain.id)).limit(1);
+		const [stored] = await getDb(env).select({ created: domainDeliverability.dmarcCreatedRecord, tlsRpt: domainDeliverability.tlsRptEnabled }).from(domainDeliverability).where(eq(domainDeliverability.domainId, domain.id)).limit(1);
+		// TLS reports arrive at this address and use its routing rule, so they must be turned off first.
+		if (!enabled && stored?.tlsRpt) return fail(409, "TLS_RPT_ON", "Turn off TLS reports first; they arrive at the same address");
 		try {
 			plan = await planDmarcChange(env, domain, enabled, deps, stored?.created ?? null);
 		} catch (error) {

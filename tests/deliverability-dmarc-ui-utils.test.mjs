@@ -44,6 +44,7 @@ test("known error codes map to a translation key, unknown ones do not", () => {
 	assert.equal(errorKey("ADDRESS_TAKEN"), "dmarc.error.ADDRESS_TAKEN");
 	assert.equal(errorKey("MIGRATION_REQUIRED"), "dmarc.error.MIGRATION_REQUIRED");
 	assert.equal(errorKey("DMARC_CHANGED"), "dmarc.error.DMARC_CHANGED");
+	assert.equal(errorKey("TLS_RPT_ON"), "dmarc.error.TLS_RPT_ON");
 	assert.equal(errorKey("SOMETHING_ELSE"), null);
 	assert.equal(errorKey(undefined), null);
 });

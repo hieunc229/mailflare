@@ -2,7 +2,7 @@ import { reverseName } from "@/lib/dns-query";
 import { listZipEntries, openZipEntry, sliceChunks } from "@/lib/import/zip-utils";
 
 /**
- * Pure, bounded parsing of DMARC aggregate (rua) reports. Report mail is attacker-controlled, so every
+ * Pure, bounded parsing of DMARC aggregate (rua) and TLS-RPT (RFC 8460) reports. Report mail is attacker-controlled, so every
  * stage has a cap: compressed size, decompressed size and expansion ratio, zip entry count, record count,
  * distinct rows and field lengths. Nothing here fetches a URL or expands an XML entity.
  */
@@ -84,7 +84,7 @@ async function readCapped(stream: ReadableStream<Uint8Array>, limit: number): Pr
 
 const startsWith = (bytes: Uint8Array, ...prefix: number[]) => prefix.every((byte, index) => bytes[index] === byte);
 
-/** Turns a report attachment (zip, gzip or plain XML, detected by content) into XML text, within the limits. */
+/** Turns a report attachment (zip, gzip, plain XML or plain JSON, detected by content) into text, within the limits. A zip may only hold an .xml file. */
 export async function extractReportXml(bytes: Uint8Array): Promise<string> {
 	if (bytes.length > REPORT_LIMITS.compressedBytes) throw new ReportError("rejected", "Attachment exceeds the size limit");
 	const allowed = Math.min(REPORT_LIMITS.decompressedBytes, Math.max(REPORT_LIMITS.ratioFloorBytes, bytes.length * REPORT_LIMITS.maxExpansionRatio));
@@ -106,7 +106,7 @@ export async function extractReportXml(bytes: Uint8Array): Promise<string> {
 			raw = await readCapped(await openZipEntry(blob, entry, { maxInputBytes: REPORT_LIMITS.inputSliceBytes }), allowed);
 		} else {
 			const head = new TextDecoder().decode(bytes.subarray(0, 64)).replace(/^﻿/, "").trimStart();
-			if (!head.startsWith("<")) throw new ReportError("rejected", "The attachment is not a report");
+			if (!head.startsWith("<") && !head.startsWith("{")) throw new ReportError("rejected", "The attachment is not a report");
 			raw = bytes;
 		}
 		return new TextDecoder().decode(raw).replace(/^﻿/, "");
@@ -218,6 +218,13 @@ function owns(hostname: string, policy: string) {
 	return policy === hostname || policy.endsWith(`.${hostname}`);
 }
 
+/** A report may start from 180 days ago to a day ahead and cover at most 7 days, so one report cannot be spread over a long period. Seconds since the epoch. */
+function assertWindow(begin: number, end: number, now: Date) {
+	const nowSeconds = Math.floor(now.getTime() / 1000);
+	if (begin > nowSeconds + REPORT_LIMITS.maxFutureSeconds || begin < nowSeconds - REPORT_LIMITS.maxAgeSeconds) throw new ReportError("rejected", "Report date is outside the accepted window");
+	if (end - begin > REPORT_LIMITS.maxRangeSeconds) throw new ReportError("rejected", "The report date range is longer than 7 days");
+}
+
 export function parseDmarcAggregateXml(source: string, options: { hostname: string; now: Date }): DmarcReport {
 	if (/<!DOCTYPE|<!ENTITY/i.test(source)) throw new ReportError("rejected", "DOCTYPE and ENTITY declarations are not accepted");
 	const xml = stripComments(source);
@@ -231,10 +238,8 @@ export function parseDmarcAggregateXml(source: string, options: { hostname: stri
 	const range = readTag(metadata, "date_range")?.inner ?? "";
 	const begin = strictInt(text(range, "begin", 20), 4_102_444_800);
 	if (begin === null) throw new ReportError("failed", "Missing or invalid date_range");
-	const nowSeconds = Math.floor(options.now.getTime() / 1000);
-	if (begin > nowSeconds + REPORT_LIMITS.maxFutureSeconds || begin < nowSeconds - REPORT_LIMITS.maxAgeSeconds) throw new ReportError("rejected", "Report date is outside the accepted window");
 	const end = strictInt(text(range, "end", 20), 4_102_444_800) ?? begin;
-	if (end - begin > REPORT_LIMITS.maxRangeSeconds) throw new ReportError("rejected", "The report date range is longer than 7 days");
+	assertWindow(begin, end, options.now);
 
 	const policy = readTag(xml, "policy_published")?.inner ?? "";
 	const policyDomain = hostOf(text(policy, "domain", REPORT_LIMITS.domain));
@@ -293,6 +298,163 @@ export function parseDmarcAggregateXml(source: string, options: { hostname: stri
 	};
 }
 
+// ---- TLS-RPT (JSON) ---------------------------------------------------------------
+
+export type TlsRow = { policyType: "sts" | "tlsa" | "no-policy-found"; mxHost: string | null; resultType: string; success: number; failure: number };
+
+export type TlsReport = {
+	reporterOrg: string;
+	/** The report's `contact-info`, used only to check the reporter against the mail's sender. */
+	reporterEmail: string | null;
+	reportId: string;
+	dateBegin: Date;
+	dateEnd: Date;
+	day: string;
+	/** Policies of this domain that produced rows. */
+	recordCount: number;
+	/** Sessions counted in the rows, before the row cap. */
+	messageCount: number;
+	rows: TlsRow[];
+	truncated: boolean;
+};
+
+export const TLS_LIMITS = Object.freeze({ policies: 1000, failureDetails: 100, depth: 8, resultType: 64 });
+
+/** Deepest nesting of `[`/`{` outside strings, one linear pass, so a hostile document is refused before `JSON.parse` sees it. */
+function jsonDepthWithin(source: string, limit: number): boolean {
+	let depth = 0;
+	let inString = false;
+	for (let index = 0; index < source.length; index += 1) {
+		const code = source.charCodeAt(index);
+		if (inString) {
+			if (code === 92) index += 1;
+			else if (code === 34) inString = false;
+		} else if (code === 34) inString = true;
+		else if (code === 91 || code === 123) {
+			depth += 1;
+			if (depth > limit) return false;
+		} else if (code === 93 || code === 125) depth -= 1;
+	}
+	return true;
+}
+
+const isObject = (value: unknown): value is Record<string, unknown> => typeof value === "object" && value !== null && !Array.isArray(value);
+
+function jsonText(value: unknown, max: number): string {
+	// eslint-disable-next-line no-control-regex
+	return typeof value === "string" ? value.replace(/[\u0000-\u001f\u007f]/g, "").trim().slice(0, max) : "";
+}
+
+function sessionCount(value: unknown): number {
+	if (value === undefined) return 0;
+	if (typeof value !== "number" || !Number.isInteger(value) || value < 0 || value > REPORT_LIMITS.maxCount) throw new ReportError("rejected", "A session count is not a whole number from 0 to 10,000,000");
+	return value;
+}
+
+const RFC3339 = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,9})?(?:Z|[+-]\d{2}:\d{2})$/i;
+
+function reportSeconds(value: unknown): number {
+	const text = jsonText(value, 40);
+	const milliseconds = RFC3339.test(text) ? Date.parse(text) : Number.NaN;
+	if (!Number.isFinite(milliseconds)) throw new ReportError("failed", "Missing or invalid date-range");
+	return Math.floor(milliseconds / 1000);
+}
+
+const POLICY_TYPES = ["sts", "tlsa", "no-policy-found"] as const;
+
+/** The first well-formed MX host pattern of a policy (`*.mail.example` is valid), or null. */
+function mxHostOf(value: unknown): string | null {
+	const entries = Array.isArray(value) ? value.slice(0, 20) : [value];
+	for (const entry of entries) {
+		const host = jsonText(entry, REPORT_LIMITS.domain).toLowerCase().replace(/\.$/, "");
+		if (/^[a-z0-9*._-]+$/.test(host)) return host;
+	}
+	return null;
+}
+
+/**
+ * Parses an RFC 8460 TLS-RPT report. The text is size-capped by `extractReportXml` already; here the nesting depth,
+ * the number of policies and failure details, every count and the dates are bounded before anything is kept. Policies
+ * about other domains and unknown policy types are ignored; a report with none of this domain's is rejected.
+ */
+export function parseTlsRptJson(source: string, options: { hostname: string; now: Date }): TlsReport {
+	if (!jsonDepthWithin(source, TLS_LIMITS.depth)) throw new ReportError("rejected", "The report is nested too deeply");
+	let root: unknown;
+	try {
+		root = JSON.parse(source);
+	} catch {
+		throw new ReportError("rejected", "Not a TLS-RPT report");
+	}
+	if (!isObject(root) || !Array.isArray(root.policies)) throw new ReportError("rejected", "Not a TLS-RPT report");
+	if (root.policies.length > TLS_LIMITS.policies) throw new ReportError("rejected", `More than ${TLS_LIMITS.policies} policies`);
+
+	const reporterOrg = jsonText(root["organization-name"], REPORT_LIMITS.org);
+	const reportId = jsonText(root["report-id"], REPORT_LIMITS.reportId);
+	if (!reporterOrg || !reportId) throw new ReportError("failed", "Missing organization-name or report-id");
+	const range = isObject(root["date-range"]) ? root["date-range"] : {};
+	const begin = reportSeconds(range["start-datetime"]);
+	const end = reportSeconds(range["end-datetime"]);
+	assertWindow(begin, end, options.now);
+
+	const hostname = hostOf(options.hostname);
+	const merged = new Map<string, TlsRow>();
+	let owned = 0;
+	let recordCount = 0;
+	let messageCount = 0;
+	for (const item of root.policies) {
+		const policy = isObject(item) && isObject(item.policy) ? item.policy : null;
+		if (!policy || !owns(hostname, hostOf(jsonText(policy["policy-domain"], REPORT_LIMITS.domain)))) continue;
+		owned += 1;
+		const policyType = POLICY_TYPES.find((type) => type === policy["policy-type"]);
+		if (!policyType) continue;
+		const summary = isObject(item.summary) ? item.summary : {};
+		const details = item["failure-details"];
+		if (details !== undefined && (!Array.isArray(details) || details.length > TLS_LIMITS.failureDetails)) throw new ReportError("rejected", `More than ${TLS_LIMITS.failureDetails} failure details in a policy`);
+		const mxHost = mxHostOf(policy["mx-host"]);
+		let produced = false;
+		// A failure names the host that failed when the reporter says which (a well-formed one); successes and the rest only know the policy's pattern.
+		const add = (resultType: string, success: number, failure: number, host: string | null = mxHost) => {
+			if (success === 0 && failure === 0) return;
+			produced = true;
+			messageCount += success + failure;
+			const key = `${policyType}|${host ?? ""}|${resultType}`;
+			const existing = merged.get(key);
+			if (existing) {
+				existing.success += success;
+				existing.failure += failure;
+			} else merged.set(key, { policyType, mxHost: host, resultType, success, failure });
+		};
+		add("", sessionCount(summary["total-successful-session-count"]), 0);
+		let detailed = 0;
+		for (const detail of (details ?? []) as unknown[]) {
+			if (!isObject(detail)) continue;
+			const count = sessionCount(detail["failed-session-count"]);
+			const type = jsonText(detail["result-type"], TLS_LIMITS.resultType).toLowerCase();
+			detailed += count;
+			add(/^[a-z0-9-]{1,64}$/.test(type) ? type : "other", 0, count, mxHostOf(detail["receiving-mx-hostname"]) ?? mxHost);
+		}
+		// Failures the summary counts but no detail names stay visible instead of vanishing.
+		add("unspecified", 0, Math.max(0, sessionCount(summary["total-failure-session-count"]) - detailed));
+		if (produced) recordCount += 1;
+	}
+	if (owned === 0 && root.policies.length > 0) throw new ReportError("rejected", "Domain mismatch");
+	if (merged.size === 0) throw new ReportError("failed", "The report has no usable policies");
+
+	const sorted = [...merged.values()].sort((a, b) => b.success + b.failure - (a.success + a.failure));
+	return {
+		reporterOrg,
+		reporterEmail: jsonText(root["contact-info"], REPORT_LIMITS.email) || null,
+		reportId,
+		dateBegin: new Date(begin * 1000),
+		dateEnd: new Date(Math.max(end, begin) * 1000),
+		day: new Date(begin * 1000).toISOString().slice(0, 10),
+		recordCount,
+		messageCount,
+		rows: sorted.slice(0, REPORT_LIMITS.rows),
+		truncated: sorted.length > REPORT_LIMITS.rows,
+	};
+}
+
 // ---- keys -----------------------------------------------------------------------
 
 async function sha256Hex(parts: string[]): Promise<string> {
@@ -308,8 +470,11 @@ export const rawReportKey = (rawR2Key: string) => sha256Hex(["dmarc-raw", rawR2K
  * reporter's organisational domain, or the report's own org name when it is unverified, and whether it was verified
  * is part of the key: an unverified (forgeable) report can never take over a verified report's key.
  */
-export const reportKey = (reporter: string, reportId: string, verified: boolean) => sha256Hex(["dmarc", verified ? "verified" : "unverified", reporter, reportId]);
+export const reportKey = (reporter: string, reportId: string, verified: boolean, kind: "dmarc" | "tlsrpt" = "dmarc") => sha256Hex([kind, verified ? "verified" : "unverified", reporter, reportId]);
 
 /** Identifies one aggregate row within a day. Only verified reporters write rows, so `reporter` is the verified organisational domain and rows of different reporters never merge. */
 export const rowKey = (reporter: string, row: Pick<DmarcRow, "sourceIp" | "headerFrom" | "disposition" | "dkimAligned" | "spfAligned">) =>
 	sha256Hex([row.sourceIp, reporter, row.headerFrom, row.disposition, String(row.dkimAligned), String(row.spfAligned)]);
+
+/** Identifies one TLS-RPT row within a day; `reporter` is the verified organisational domain, as for `rowKey`. */
+export const tlsRowKey = (reporter: string, row: Pick<TlsRow, "policyType" | "mxHost" | "resultType">) => sha256Hex(["tls", row.policyType, reporter, row.mxHost ?? "", row.resultType]);

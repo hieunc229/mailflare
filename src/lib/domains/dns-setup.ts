@@ -14,6 +14,7 @@ import type { CfDnsRecord } from "@/lib/cloudflare-api.types";
 import { ensureSendingSubdomain } from "@/lib/domains/sending-subdomain";
 import type { DomainRow } from "@/lib/domains/types";
 import { isZoneApex } from "@/lib/domains/utils";
+import { assertMxChangeAllowed, republishMtaStsAfterMxChange } from "@/lib/deliverability/mta-sts-guard";
 
 /**
  * Provisions the DNS a single authentication check is missing, reusing the same
@@ -33,6 +34,20 @@ export async function setupDomainDnsRecord(
 		throw new Error("DNS for this domain is managed manually");
 	}
 
+	// These change the domain's MX records: enforce refuses first, a testing policy is republished afterwards.
+	// DKIM only touches them when asked to replace another service's MX.
+	const changesMx = record === "mx" || record === "spf" || (record === "dkim" && options.replaceMx === true);
+	if (changesMx) await assertMxChangeAllowed(env, domain);
+	await applyDomainDnsRecord(env, domain, record, options);
+	if (changesMx) await republishMtaStsAfterMxChange(env, domain);
+}
+
+async function applyDomainDnsRecord(
+	env: CloudflareEnv,
+	domain: DomainRow,
+	record: DnsAuthRecord,
+	options: { replaceMx?: boolean },
+): Promise<void> {
 	switch (record) {
 		case "mx":
 		case "spf": {

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getEnv } from "@/lib/cloudflare";
 import { authenticateAdminApiKey } from "@/lib/api/admin-auth";
 import { getDomainForUser, removeDomainForUser } from "@/lib/domains/service";
+import { mtaStsBlockedResponse } from "@/lib/deliverability/mta-sts-block-response";
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -28,9 +29,14 @@ export async function DELETE(request: Request, { params }: Params) {
 
 	const { id } = await params;
 	try {
-		await removeDomainForUser(getEnv(), auth.userId, id);
-		return NextResponse.json({ ok: true });
+		// `{ force: true, confirm: "<host name>" }` skips the MTA-STS checks; the answer lists the DNS records left to remove by hand.
+		const body = (await request.json().catch(() => null)) as { force?: unknown; confirm?: unknown } | null;
+		const force = body?.force === true ? { confirm: body.confirm } : undefined;
+		const result = await removeDomainForUser(getEnv(), auth.userId, id, force);
+		return NextResponse.json(force ? { ok: true, ...result } : { ok: true });
 	} catch (err) {
+		const blocked = await mtaStsBlockedResponse(err);
+		if (blocked) return blocked;
 		const message = err instanceof Error ? err.message : "Failed to remove domain";
 		return NextResponse.json({ error: message }, { status: 400 });
 	}
