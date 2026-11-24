@@ -7,7 +7,6 @@ import { getCurrentUser } from "@/lib/auth/cookies";
 import { getEnv } from "@/lib/cloudflare";
 import { scheduledMessageCondition } from "@/lib/email/scheduled";
 import { draftsVisibleTo } from "@/lib/email/draft-access";
-import { buildMessageCounts } from "./utils";
 import { applyPromotionCounts, buildMessageCounts } from "./utils";
 import { loadPromotionModes } from "@/lib/promotions/settings";
 import { getMailboxAccessLevel, listAccessibleMailboxIds } from "@/lib/mailboxes/access";
