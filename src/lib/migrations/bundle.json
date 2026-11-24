@@ -947,6 +947,22 @@
         "CREATE UNIQUE INDEX `email_suppressions_domain_email_idx` ON `email_suppressions` (`domain_id`,`email`);",
         "CREATE INDEX `email_suppressions_created_by_idx` ON `email_suppressions` (`created_by_user_id`);"
       ]
+    },
+    {
+      "name": "0100_dmarc_reports.sql",
+      "statements": [
+        "CREATE TABLE `domain_deliverability` (\n\t`domain_id` text PRIMARY KEY NOT NULL,\n\t`reports_enabled` integer DEFAULT false NOT NULL,\n\t`reports_enabled_at` integer,\n\t`alert_email` integer DEFAULT false NOT NULL,\n\t`last_report_at` integer,\n\t`updated_at` integer NOT NULL,\n\t`dmarc_created_record` text,\n\tFOREIGN KEY (`domain_id`) REFERENCES `domains`(`id`) ON UPDATE no action ON DELETE cascade\n);",
+        "CREATE TABLE `deliverability_reports` (\n\t`id` text PRIMARY KEY NOT NULL,\n\t`domain_id` text NOT NULL,\n\t`report_key` text NOT NULL,\n\t`reporter_org` text,\n\t`reporter_email` text,\n\t`external_report_id` text,\n\t`date_begin` integer,\n\t`date_end` integer,\n\t`policy_p` text,\n\t`policy_pct` integer,\n\t`record_count` integer DEFAULT 0 NOT NULL,\n\t`message_count` integer DEFAULT 0 NOT NULL,\n\t`authenticated` integer DEFAULT false NOT NULL,\n\t`sender_domain` text,\n\t`verified_reporter` integer DEFAULT false NOT NULL,\n\t`stats_rows` integer DEFAULT 0 NOT NULL,\n\t`status` text DEFAULT 'processing' NOT NULL,\n\t`error` text,\n\t`received_at` integer NOT NULL,\n\tFOREIGN KEY (`domain_id`) REFERENCES `domains`(`id`) ON UPDATE no action ON DELETE cascade\n);",
+        "CREATE UNIQUE INDEX `deliverability_reports_domain_key_idx` ON `deliverability_reports` (`domain_id`,`report_key`);",
+        "CREATE INDEX `deliverability_reports_domain_received_idx` ON `deliverability_reports` (`domain_id`,`received_at`);",
+        "CREATE INDEX `deliverability_reports_received_idx` ON `deliverability_reports` (`received_at`);",
+        "CREATE TABLE `dmarc_daily_stats` (\n\t`id` integer PRIMARY KEY AUTOINCREMENT NOT NULL,\n\t`domain_id` text NOT NULL,\n\t`day` text NOT NULL,\n\t`row_key` text NOT NULL,\n\t`source_ip` text NOT NULL,\n\t`source_host` text,\n\t`reporter_org` text NOT NULL,\n\t`header_from` text NOT NULL,\n\t`disposition` text NOT NULL,\n\t`dkim_aligned` integer NOT NULL,\n\t`spf_aligned` integer NOT NULL,\n\t`message_count` integer DEFAULT 0 NOT NULL,\n\tFOREIGN KEY (`domain_id`) REFERENCES `domains`(`id`) ON UPDATE no action ON DELETE cascade\n);",
+        "CREATE UNIQUE INDEX `dmarc_daily_stats_domain_day_key_idx` ON `dmarc_daily_stats` (`domain_id`,`day`,`row_key`);",
+        "CREATE INDEX `dmarc_daily_stats_day_idx` ON `dmarc_daily_stats` (`day`);",
+        "CREATE TABLE `deliverability_alerts` (\n\t`id` text PRIMARY KEY NOT NULL,\n\t`domain_id` text NOT NULL,\n\t`kind` text NOT NULL,\n\t`day` text NOT NULL,\n\t`detail` text NOT NULL,\n\t`created_at` integer NOT NULL,\n\t`acknowledged_at` integer,\n\t`acknowledged_by_user_id` text,\n\tFOREIGN KEY (`domain_id`) REFERENCES `domains`(`id`) ON UPDATE no action ON DELETE cascade,\n\tFOREIGN KEY (`acknowledged_by_user_id`) REFERENCES `users`(`id`) ON UPDATE no action ON DELETE set null\n);",
+        "CREATE UNIQUE INDEX `deliverability_alerts_domain_kind_day_idx` ON `deliverability_alerts` (`domain_id`,`kind`,`day`);",
+        "CREATE INDEX `deliverability_alerts_ack_user_idx` ON `deliverability_alerts` (`acknowledged_by_user_id`);"
+      ]
     }
   ]
 }

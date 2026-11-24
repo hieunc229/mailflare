@@ -22,6 +22,7 @@ import { pruneExpiredMessageActionUndoClaims } from "./src/lib/messages/actions/
 import { processImportJob, sweepImportJobs } from "./src/lib/import/jobs";
 import { processWebhookRetry, type WebhookRetryMessage } from "./src/lib/email/webhooks";
 import { resolveIncomingMail, forwardMessage } from "./src/lib/email/incoming";
+import { createBatchBudget } from "./src/lib/deliverability/ingest";
 import { getUserFromSession } from "./src/lib/auth/session";
 import { getSessionTokenFromRequest } from "./src/lib/realtime/utils";
 import { inboundAttachmentLimitReasonFromRaw } from "./src/lib/email/inbound-attachments";
@@ -44,6 +45,7 @@ import { runFollowUpReminders } from "./src/lib/follow-ups/service";
 import { runPromotionsBackfill } from "@/lib/promotions/backfill";
 import { runCalendarReminders } from "./src/lib/calendar/reminders";
 import { handleDavRequest, isDavPath } from "./src/lib/dav/handler";
+import { runDeliverabilityDaily } from "./src/lib/deliverability/daily";
 export { RealtimeHub } from "./src/lib/realtime/hub";
 
 export default {
@@ -117,7 +119,8 @@ export default {
 				if (forwarded && !decision.keepCopy) return;
 			}
 
-			if (!alreadyForwarded) {
+			// Report mail is never forwarded, by a rule or by the account's forwarding address.
+			if (!alreadyForwarded && decision?.action !== "report") {
 				const forwardingDestination = await getAccountForwardingDestination(env, message.to);
 				if (forwardingDestination) {
 					await forwardMessage(env, message, forwardingDestination);
@@ -140,10 +143,12 @@ export default {
 
 	async queue(batch: MessageBatch, rawEnv: CloudflareEnv): Promise<void> {
 		const env = withDatabase(withStorage(rawEnv));
+		// One budget per batch, so the reverse lookups of every DMARC report in it stay within the invocation's subrequests.
+		const reportBudget = createBatchBudget();
 		for (const msg of batch.messages) {
 			try {
 				if (isInboundQueueMessage(msg.body)) {
-					await processInboundMessage(env, msg.body);
+					await processInboundMessage(env, msg.body, { reportBudget });
 				} else if (typeof msg.body === "object" && msg.body !== null && (msg.body as { kind?: unknown }).kind === "agent.draft" && typeof (msg.body as { jobId?: unknown }).jobId === "string") {
 					await processAgentDraftJob(env, (msg.body as { jobId: string }).jobId);
 				} else if (isWebhookRetryMessage(msg.body)) {
@@ -187,6 +192,7 @@ export default {
 		// Drive trash is emptied once a day, with the 02:00 UTC cron; the 5-minute cron is for queue-like upkeep.
 		if (controller.cron === "0 2 * * *") ctx.waitUntil(runDriveTrashRetention(env, new Date(controller.scheduledTime)));
 		if (controller.cron === "0 2 * * *") ctx.waitUntil(runJmapChangeRetention(env, new Date(controller.scheduledTime)));
+		if (controller.cron === "0 2 * * *") ctx.waitUntil(runDeliverabilityDaily(env, new Date(controller.scheduledTime)).catch((error) => console.error("Deliverability daily job failed", error)));
 		if (controller.cron === "0 2 * * *") ctx.waitUntil(sweepOrphanedRawMail(env, new Date(controller.scheduledTime)).catch((error) => console.error("Raw mail sweep failed", error)));
 	},
 } satisfies ExportedHandler<CloudflareEnv>;

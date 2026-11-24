@@ -3,6 +3,9 @@ import { getDb } from "@/db";
 import { messages, outboundJobs, users } from "@/db/schema";
 import { newId } from "@/lib/ids";
 import { buildSnippet, parseRawMime } from "@/lib/email/parse";
+import { matchReportAddress } from "@/lib/deliverability/report-address";
+import { ingestReportMail, type BatchBudget } from "@/lib/deliverability/ingest";
+import { readTrustedDmarcResult } from "@/lib/spam/analyzers/authentication";
 import { boundParsedEmail } from "@/lib/email/inbound-limits";
 import { resolveInboundAddress, resolveInboxRuleDestination } from "@/lib/email/routing";
 import { dispatchWebhooks } from "@/lib/email/webhooks";
@@ -50,8 +53,17 @@ export type InboundQueueMessage = {
 export async function processInboundMessage(
 	env: CloudflareEnv,
 	payload: InboundQueueMessage,
+	options: { reportBudget?: BatchBudget } = {},
 ): Promise<void> {
 	const db = getDb(env);
+	// DMARC aggregate reports bypass mailboxes entirely (see report-address.ts); they are parsed into stats and discarded.
+	const reportTarget = await matchReportAddress(env, payload.to);
+	if (reportTarget) {
+		// The From header, not the envelope sender: it is what the DMARC verdict aligned to.
+		const from = Object.entries(payload.headers ?? {}).find(([name]) => name.toLowerCase() === "from")?.[1] ?? null;
+		await ingestReportMail(env, reportTarget, { rawR2Key: payload.rawR2Key, authenticated: readTrustedDmarcResult(payload.headers, payload.verdicts) === "pass", from }, { batchBudget: options.reportBudget });
+		return;
+	}
 	// The sender is passed so that sender-based block rules resolve the same way here as they
 	// do in the Worker email handler.
 	const decision = await resolveInboundAddress(db, payload.to, payload.from, { headers: payload.headers });

@@ -1,6 +1,10 @@
 import { getDb } from "@/db";
 import { recordRuleMatch, resolveInboundAddress, type RoutingDecision } from "@/lib/email/routing";
+import { matchReportAddress } from "@/lib/deliverability/report-address";
 import { forwardedMarker, MAILFLARE_FORWARDED_HEADER } from "@/lib/email/account-forwarding";
+
+/** A routing decision, or `report`: DMARC report mail, which only the report queue consumer may touch. */
+export type IncomingDecision = RoutingDecision | { action: "report" };
 
 /**
  * Resolves the routing decision for a live inbound message. Used by the Worker `email`
@@ -13,9 +17,12 @@ export async function resolveIncomingMail(
 	from: string,
 	to: string,
 	headers?: { subject?: string | null; from?: string | null; alreadyForwarded?: boolean; all?: Record<string, string> },
-): Promise<RoutingDecision | null> {
+): Promise<IncomingDecision | null> {
 	try {
 		const db = getDb(env);
+		// A DMARC report address is never a mailbox: no reject or forward rule (a catch-all included), and no account
+		// forwarding, may apply to it. Callers store it and queue it for the report consumer, nothing else.
+		if (await matchReportAddress(env, to)) return { action: "report" };
 		const decision = await resolveInboundAddress(db, to, from, {
 			headers: headers?.all,
 			// A message that already went through a forward is never forwarded again by a

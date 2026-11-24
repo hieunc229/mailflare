@@ -1,12 +1,12 @@
 import { authFetch } from "@/lib/auth/client";
 import { formatUserDate } from "@/lib/time/utils";
-import type { DeliverabilitySettings, DomainOption, SuppressionMode, SuppressionPage } from "./types";
+import type { DeliverabilitySettings, DmarcOverview, DmarcRange, DmarcStats, DomainOption, ReportsResponse, SuppressionMode, SuppressionPage } from "./types";
 
 export const PAGE_SIZE = 50;
 
 async function json<T>(response: Response): Promise<T> {
-	const body = (await response.json().catch(() => ({}))) as T & { error?: string };
-	if (!response.ok) throw new Error(body.error ?? `Request failed (${response.status})`);
+	const body = (await response.json().catch(() => ({}))) as T & { error?: string; code?: string };
+	if (!response.ok) throw Object.assign(new Error(body.error ?? `Request failed (${response.status})`), { code: body.code });
 	return body;
 }
 
@@ -43,3 +43,21 @@ export async function confirmSuppression(domainId: string, id: string): Promise<
 }
 
 export const formatEventDate = (value: string) => formatUserDate(value, { dateStyle: "medium", timeStyle: "short" });
+
+const base = (domainId: string) => `/api/deliverability/${encodeURIComponent(domainId)}`;
+
+export async function fetchOverview(domainId: string): Promise<DmarcOverview> {
+	return json(await authFetch(base(domainId), { cache: "no-store" }));
+}
+
+export async function fetchDmarc(domainId: string, days: DmarcRange): Promise<DmarcStats> {
+	return json(await authFetch(`${base(domainId)}/dmarc?days=${days}`, { cache: "no-store" }));
+}
+
+export async function putReports(domainId: string, body: { enabled?: boolean; alertEmail?: boolean; confirm?: boolean; previewed?: { before: string | null; after: string | null } }): Promise<ReportsResponse> {
+	return json(await authFetch(`${base(domainId)}/reports`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }));
+}
+
+export async function acknowledgeAlert(domainId: string, alertId: string): Promise<void> {
+	await json(await authFetch(`${base(domainId)}/alerts/${encodeURIComponent(alertId)}`, { method: "PATCH" }));
+}

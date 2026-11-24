@@ -9,6 +9,7 @@ import { rollbackEmailRoutingRuleChanges } from "@/lib/cloudflare-api";
 import type { CfEmailRoutingRuleChange } from "@/lib/cloudflare-api.types";
 import { normalizeRecipientLocalPart } from "@/lib/email/recipient-address";
 import { newId } from "@/lib/ids";
+import { isReportAddressReserved } from "@/lib/deliverability/report-address";
 import { getAccountSeatError } from "@/lib/licenses/seats";
 import { ensureMailboxDomainRouting } from "@/lib/mailboxes/domain-addresses";
 import type { CreateUserAccountInput } from "./types";
@@ -42,6 +43,9 @@ export async function createAccountResponse(env: CloudflareEnv, actor: AccountAd
 		}
 		const localPart = normalizeRecipientLocalPart(address.localPart);
 		if (!localPart) return NextResponse.json({ error: "Enter a valid address username" }, { status: 400 });
+		if (await isReportAddressReserved(env, domain.id, localPart)) {
+			return NextResponse.json({ error: "This address is reserved for DMARC reports" }, { status: 409 });
+		}
 		const key = `${localPart}@${domain.id}`;
 		if (seen.has(key)) {
 			return NextResponse.json({ error: "Each alias must be distinct from the primary address and other aliases" }, { status: 400 });

@@ -97,14 +97,29 @@ export async function listZipEntries(blob: Blob): Promise<ZipEntry[]> {
 }
 
 /** Streams the uncompressed bytes of one entry. */
-export async function openZipEntry(blob: Blob, entry: ZipEntry): Promise<ReadableStream<Uint8Array>> {
+/**
+ * Splits whatever chunking a stream has into slices of at most `size` bytes. Fed to a decompressor, it bounds how
+ * much output one write can produce, so a byte counter on the output works the same on every runtime.
+ */
+export function sliceChunks(size: number): TransformStream<Uint8Array, Uint8Array> {
+	return new TransformStream<Uint8Array, Uint8Array>({
+		transform(chunk, controller) {
+			for (let offset = 0; offset < chunk.length; offset += size) controller.enqueue(chunk.subarray(offset, offset + size));
+		},
+	});
+}
+
+/** `maxInputBytes` re-slices the compressed bytes before they reach the inflater (see `sliceChunks`). */
+export async function openZipEntry(blob: Blob, entry: ZipEntry, options: { maxInputBytes?: number } = {}): Promise<ReadableStream<Uint8Array>> {
 	if (entry.encrypted) throw new Error(`${entry.name} is encrypted`);
 	if (entry.method !== 0 && entry.method !== 8) throw new Error(`${entry.name} uses an unsupported compression method`);
 	const header = await readView(blob, entry.localHeaderOffset, entry.localHeaderOffset + 30);
 	if (header.getUint32(0, true) !== LOCAL_SIGNATURE) throw new Error("Corrupt zip entry");
 	const start = entry.localHeaderOffset + 30 + header.getUint16(26, true) + header.getUint16(28, true);
 	const data = blob.slice(start, start + entry.compressedSize).stream() as ReadableStream<Uint8Array>;
-	return entry.method === 0 ? data : data.pipeThrough(new DecompressionStream("deflate-raw") as unknown as TransformStream<Uint8Array, Uint8Array>);
+	if (entry.method === 0) return data;
+	const input = options.maxInputBytes ? data.pipeThrough(sliceChunks(options.maxInputBytes)) : data;
+	return input.pipeThrough(new DecompressionStream("deflate-raw") as unknown as TransformStream<Uint8Array, Uint8Array>);
 }
 
 /** Iterates a ReadableStream; Safari has no async iteration for streams. */
