@@ -68,7 +68,7 @@ test("a backup from a newer database restores onto one that has not applied the 
 	newer.prepare("INSERT INTO domain_deliverability (domain_id, updated_at, mta_sts_mode) VALUES ('d1', 1, 'none')").run();
 	newer.prepare("INSERT INTO deliverability_reports (id, domain_id, kind, report_key, received_at) VALUES ('r1', 'd1', 'dmarc', 'k', 1)").run();
 	const document = JSON.parse(new TextDecoder().decode(await exportDatabaseRecords(d1(newer))));
-	const older = database(migrations.findIndex((migration) => migration.name.startsWith("0100_")));
+	const older = database(migrations.findIndex((migration) => migration.name.startsWith("0101_")));
 	assert.equal(older.prepare("SELECT count(*) AS n FROM pragma_table_info('domain_deliverability') WHERE name = 'mta_sts_mode'").get().n, 0);
 	await restoreDatabaseRecords(d1(older), buffer(new TextEncoder().encode(JSON.stringify(document))));
 	assert.equal(older.prepare("SELECT count(*) AS n FROM domain_deliverability").get().n, 1);
