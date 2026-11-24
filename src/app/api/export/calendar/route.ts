@@ -1,4 +1,4 @@
-import { and, eq, gte, inArray, lt, ne, or, type SQL } from "drizzle-orm";
+import { eq, inArray } from "drizzle-orm";
 import { getDb } from "@/db";
 import { calendarEventOverrides, calendarEvents } from "@/db/schema";
 import { getEnv } from "@/lib/cloudflare";
@@ -12,6 +12,7 @@ import { chunkIds } from "@/lib/calendar/chunks";
  * file keeps what a feed hides: guests, their RSVP states and the reminder (download mode in the builder).
  * Optional start/end bound which events export the same way the events list does: an event qualifies
  * when it overlaps the range, and a series always exports whole, its rule is never clipped to the range.
+ * A series whose master falls outside the range still qualifies when an exception or extra lands inside it.
  */
 export async function GET(request: Request) {
 	const env = getEnv();
@@ -20,11 +21,10 @@ export async function GET(request: Request) {
 	const url = new URL(request.url);
 	const start = new Date(url.searchParams.get("start") ?? "");
 	const end = new Date(url.searchParams.get("end") ?? "");
-	const where: (SQL | undefined)[] = [eq(calendarEvents.userId, user.id)];
-	if (!Number.isNaN(end.getTime())) where.push(lt(calendarEvents.startsAt, end));
-	if (!Number.isNaN(start.getTime())) where.push(or(gte(calendarEvents.endsAt, start), ne(calendarEvents.repeat, "none")));
+	const hasStart = !Number.isNaN(start.getTime());
+	const hasEnd = !Number.isNaN(end.getTime());
 	const db = getDb(env);
-	const events = await db.select().from(calendarEvents).where(and(...where)).orderBy(calendarEvents.startsAt);
+	const events = await db.select().from(calendarEvents).where(eq(calendarEvents.userId, user.id)).orderBy(calendarEvents.startsAt);
 	// Invitations still waiting for an answer are not on the calendar yet, so they do not export either.
 	const visible = events.filter((event) => event.responseStatus !== "needs-action");
 	const overrides = new Map<string, FeedOccurrenceOverride[]>();
@@ -37,6 +37,12 @@ export async function GET(request: Request) {
 			}
 		}
 	}
-	const body = buildCalendarFeed(visible, { name: "Mailflare", download: true }, overrides);
+	// A master matches the events-list rule — overlaps, or is a series that can still recur — and a series
+	// outside the range is kept when any of its exceptions or extra occurrences land inside it.
+	const overlaps = (startsAt: Date, endsAt: Date) => (!hasEnd || startsAt < end) && (!hasStart || endsAt >= start);
+	const selected = hasStart || hasEnd
+		? visible.filter((event) => overlaps(event.startsAt, event.endsAt) || (hasStart && event.repeat !== "none" && (!hasEnd || event.startsAt < end)) || (overrides.get(event.id) ?? []).some((override) => overlaps(override.startsAt, override.endsAt)))
+		: visible;
+	const body = buildCalendarFeed(selected, { name: "Mailflare", download: true }, overrides);
 	return new Response(body, { headers: { "Content-Type": "text/calendar; charset=utf-8", "Content-Disposition": 'attachment; filename="mailflare-calendar.ics"', "Cache-Control": "no-store" } });
 }

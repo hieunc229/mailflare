@@ -4,6 +4,18 @@ import type { calendarEvents } from "@/db/schema";
 
 type EventRow = typeof calendarEvents.$inferSelect;
 
+/** The fields a recurrence check needs; full rows and the feed builder's leaner event type both satisfy it. */
+type RecurrenceFields = {
+	repeat: string;
+	repeatInterval?: number | null;
+	repeatWeekday?: number | null;
+	repeatWeek?: number | null;
+	repeatAnchorDay?: number | null;
+	timeZone?: string | null;
+	repeatUntil?: Date | null;
+	startsAt: Date;
+};
+
 /** One edited occurrence (RECURRENCE-ID): replaces the rule occurrence at `occurrenceMs`, or adds an extra one when no rule occurrence has that start. */
 export type ToolOccurrenceOverride = { occurrenceMs: number; startsAt: Date; endsAt: Date };
 
@@ -27,14 +39,14 @@ function nthWeekdayDate(year: number, month: number, weekday: number, week: numb
 	return date;
 }
 
-function nthWeekday(event: EventRow): { weekday: number; week: number } | null {
+function nthWeekday(event: RecurrenceFields): { weekday: number; week: number } | null {
 	return event.repeat === "monthly" && Number.isInteger(event.repeatWeekday) && (event.repeatWeekday as number) >= 0 && (event.repeatWeekday as number) <= 6
 		&& Number.isInteger(event.repeatWeek) && (((event.repeatWeek as number) >= 1 && (event.repeatWeek as number) <= 5) || event.repeatWeek === -1)
 		? { weekday: event.repeatWeekday as number, week: event.repeatWeek as number }
 		: null;
 }
 
-function occurrenceStart(event: EventRow, index: number): Date {
+function occurrenceStart(event: RecurrenceFields, index: number): Date {
 	if (index === 0) return event.startsAt;
 	// A listed-days repeat steps day by day and filters by weekday, so its interval is always 1.
 	const interval = event.repeat === "weekdays" ? 1 : validInterval(event.repeatInterval);
@@ -61,6 +73,21 @@ function occurrenceStart(event: EventRow, index: number): Date {
 		fields.setUTCDate(Math.min(day, daysInMonth(fields.getUTCFullYear(), month)));
 	} else fields.setUTCDate(fields.getUTCDate() + index * interval * (event.repeat === "weekly" ? 7 : 1));
 	return dateFromZonedFields(fields, zone);
+}
+
+/**
+ * Whether ms is a start the series rule itself yields. An override there is an exception to that
+ * occurrence (RECURRENCE-ID); anywhere else it is an extra occurrence (RDATE). Far-future checks hit
+ * the scan cap and read as extras — the occurrence still exports through RDATE, just without exception metadata.
+ */
+export function isSeriesOccurrence(event: RecurrenceFields, ms: number): boolean {
+	if (event.repeat === "none") return false;
+	for (let index = 0; index < 20_000; index++) {
+		const at = occurrenceStart(event, index);
+		if (at.getTime() > ms || (event.repeatUntil && at >= event.repeatUntil)) return false;
+		if (at.getTime() === ms) return true;
+	}
+	return false;
 }
 
 export function expandToolEvents(events: EventRow[], start: Date, end: Date, max = 500, overrides?: Map<string, ToolOccurrenceOverride[]>) {

@@ -26,10 +26,15 @@ const seed = `
 		('evt-monthly', 'user-1', 'Monthly', '', '', '[]', 'monthly', '[]', 15, NULL, 1, NULL, NULL, '[]', NULL, NULL, NULL, NULL, ${monday}, ${monday + 1800}, 1, 1),
 		('evt-monthly31', 'user-1', 'End of month', '', '', '[]', 'monthly', '[]', 31, NULL, 1, NULL, NULL, '[]', NULL, NULL, NULL, NULL, ${monday}, ${monday + 1800}, 1, 1),
 		('evt-nth', 'user-1', 'Second Tuesday', '', '', '[]', 'monthly', '[]', NULL, NULL, 1, 2, 2, '[]', NULL, NULL, NULL, NULL, ${monday}, ${monday + 1800}, 1, 1),
+		('evt-fifth', 'user-1', 'Fifth Monday', '', '', '[]', 'monthly', '[]', NULL, NULL, 1, 1, 5, '[]', NULL, NULL, NULL, NULL, ${sec("2026-03-30T17:00:00Z")}, ${sec("2026-03-30T17:30:00Z")}, 1, 1),
+		('evt-leap', 'user-1', 'Leap day', '', '', '[]', 'yearly', '[]', NULL, NULL, 1, NULL, NULL, '[]', NULL, NULL, NULL, NULL, ${sec("2024-02-29T17:00:00Z")}, ${sec("2024-02-29T17:30:00Z")}, 1, 1),
 		('evt-yearly', 'user-1', 'Yearly', '', '', '[]', 'yearly', '[]', NULL, NULL, 1, NULL, NULL, '[]', NULL, NULL, 'tentative', NULL, ${monday}, ${monday + 1800}, 1, 1),
+		('evt-future', 'user-1', 'December weekly', '', '', '[]', 'weekly', '[]', NULL, NULL, 1, NULL, NULL, '[]', NULL, NULL, NULL, NULL, ${sec("2026-12-01T09:00:00Z")}, ${sec("2026-12-01T10:00:00Z")}, 1, 1),
 		('evt-pending', 'user-1', 'Pending invite', '', '', '[]', 'none', '[]', NULL, NULL, 1, NULL, NULL, '[]', NULL, NULL, 'needs-action', NULL, ${monday}, ${monday + 1800}, 1, 1);
 	INSERT INTO calendar_event_overrides (id, event_id, occurrence_ms, starts_at, ends_at, title, description, location, created_at, updated_at) VALUES
-		('ov-1', 'evt-weekly', ${Date.parse("2026-11-16T17:00:00Z")}, ${sec("2026-11-16T19:00:00Z")}, ${sec("2026-11-16T20:00:00Z")}, 'Moved sync', NULL, 'Video', 1, 1);
+		('ov-1', 'evt-weekly', ${Date.parse("2026-11-16T17:00:00Z")}, ${sec("2026-11-16T19:00:00Z")}, ${sec("2026-11-16T20:00:00Z")}, 'Moved sync', NULL, 'Video', 1, 1),
+		('ov-2', 'evt-weekly', ${Date.parse("2026-11-12T17:00:00Z")}, ${sec("2026-11-12T17:00:00Z")}, ${sec("2026-11-12T17:30:00Z")}, NULL, NULL, NULL, 1, 1),
+		('ov-3', 'evt-future', ${Date.parse("2026-12-08T09:00:00Z")}, ${sec("2026-11-03T09:00:00Z")}, ${sec("2026-11-03T10:00:00Z")}, NULL, NULL, NULL, 1, 1);
 `;
 
 const sessionUser = { id: "user-1", calendarEnabled: true };
@@ -59,7 +64,9 @@ test("the session owner gets the calendar as a downloadable attachment", async (
 	assert.match(ics, /^BEGIN:VCALENDAR\r\n/);
 	assert.match(ics, /\r\nVERSION:2\.0\r\n/);
 	assert.match(ics, /\r\nPRODID:-\/\/Mailflare\/\/Calendar\/\/EN\r\n/);
-	assert.match(ics, /\r\nMETHOD:PUBLISH\r\n/);
+	// A saved snapshot is a neutral transfer, not a published feed: no METHOD, since PUBLISH would
+	// require ORGANIZER next to every ATTENDEE (RFC 5546 3.2.1).
+	assert.doesNotMatch(ics, /\r\nMETHOD:/);
 	assert.ok(ics.endsWith("END:VCALENDAR\r\n"));
 	// A snapshot is not polled, so it carries no subscription refresh hints.
 	assert.doesNotMatch(ics, /REFRESH-INTERVAL|X-PUBLISHED-TTL/);
@@ -80,7 +87,7 @@ test("no session and no key is a 401", async (t) => {
 test("every event becomes a VEVENT with its rule, exclusions and alarm", async (t) => {
 	const ics = await (await download(t)).text();
 	const masters = ics.split("BEGIN:VEVENT").length - 1;
-	assert.equal(masters, 9); // Eight series plus the moved occurrence; the pending invite stays out.
+	assert.equal(masters, 13); // Eleven events plus two moved occurrences; the bare extra is an RDATE and the pending invite stays out.
 	assert.doesNotMatch(ics, /Pending invite/);
 	assert.match(ics, /UID:evt-one@mailflare\r\n/);
 	assert.match(ics, /DTSTART:20261103T170000Z\r\n/);
@@ -95,9 +102,27 @@ test("every event becomes a VEVENT with its rule, exclusions and alarm", async (
 	assert.match(ics, /RRULE:FREQ=MONTHLY;BYDAY=2TU\r\n/);
 	assert.match(ics, /RRULE:FREQ=YEARLY\r\n/);
 	assert.match(ics, /STATUS:TENTATIVE\r\n/);
+	// The app's clamps are written, not stock rules: fifth-Monday becomes last-Monday (2026-03-30 ->
+	// 2026-04-27 under BYDAY=5MO would skip April's four weeks) and Feb 29 lists the last day of
+	// February (a bare YEARLY would skip 2025, BYMONTHDAY=29 alone would roll to Mar 1) — both verified
+	// to expand to the app's occurrences under ical.js.
+	assert.match(ics, /RRULE:FREQ=MONTHLY;BYDAY=-1MO\r\n/);
+	assert.match(ics, /RRULE:FREQ=YEARLY;BYMONTH=2;BYMONTHDAY=28,29;BYSETPOS=-1\r\n/);
 	// A zoned series keeps local times and writes its exclusions with the same TZID.
 	assert.match(ics, /DTSTART;TZID=America\/Los_Angeles:20261102T090000\r\n/);
 	assert.match(ics, /EXDATE;TZID=America\/Los_Angeles:20261109T090000\r\n/);
+});
+
+test("every cited TZID gets a VTIMEZONE, and an extra occurrence exports as RDATE", async (t) => {
+	const ics = await (await download(t)).text();
+	// Without this block a stock parser resolves TZID times as floating and shifts the series.
+	assert.match(ics, /BEGIN:VTIMEZONE\r\nTZID:America\/Los_Angeles\r\n/);
+	assert.match(ics, /BEGIN:STANDARD\r\nDTSTART:\d{8}T020000\r\nTZOFFSETFROM:-0700\r\nTZOFFSETTO:-0800\r\nRRULE:FREQ=YEARLY;BYMONTH=11;BYDAY=1SU\r\nEND:STANDARD\r\n/);
+	assert.match(ics, /BEGIN:DAYLIGHT\r\nDTSTART:\d{8}T020000\r\nTZOFFSETFROM:-0800\r\nTZOFFSETTO:-0700\r\nRRULE:FREQ=YEARLY;BYMONTH=3;BYDAY=2SU\r\nEND:DAYLIGHT\r\n/);
+	// ov-2 sits on a Thursday where the Monday rule has no occurrence: it is an extra, declared as an
+	// RDATE on the master instead of a detached VEVENT a parser could not attach anywhere.
+	const weekly = ics.slice(ics.indexOf("UID:evt-weekly"), ics.indexOf("END:VEVENT", ics.indexOf("UID:evt-weekly")));
+	assert.match(weekly, /RDATE;TZID=America\/Los_Angeles:20261112T090000\r\n/);
 });
 
 test("a download carries guests with their RSVP state and the reminder", async (t) => {
@@ -145,4 +170,14 @@ test("a range bounds one-offs but a series always exports whole", async (t) => {
 	assert.doesNotMatch(ics, /UID:evt-one@mailflare/);
 	assert.match(ics, /UID:evt-weekly@mailflare\r\n/);
 	assert.match(ics, /RRULE:FREQ=WEEKLY\r\n/); // The full series rule, never clipped to the range.
+});
+
+test("a range keeps a series whose only overlap is a moved occurrence", async (t) => {
+	// evt-future's master starts in December, outside the window, but ov-3 moved one Tuesday into it.
+	const res = await download(t, req("/api/export/calendar?start=2026-11-03T00:00:00Z&end=2026-11-04T00:00:00Z"));
+	const ics = await res.text();
+	assert.match(ics, /UID:evt-future@mailflare\r\n/);
+	assert.match(ics, /RECURRENCE-ID:20261208T090000Z\r\n/);
+	assert.match(ics, /DTSTART:20261103T090000Z\r\n/);
+	assert.match(ics, /UID:evt-one@mailflare\r\n/); // The one-off inside the window still comes along.
 });

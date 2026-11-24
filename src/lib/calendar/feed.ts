@@ -1,5 +1,7 @@
 import { escapeIcsText, foldIcsLine, formatIcsUtc, isIcsAddress, joinIcsLines } from "./ics";
 import { parseCalendarRepeatDays, parseExcludedOccurrences } from "./recurrence";
+import { isSeriesOccurrence } from "./tool-occurrences";
+import { vtimezoneLines } from "./vtimezone";
 
 export { escapeIcsText, foldIcsLine };
 
@@ -59,15 +61,26 @@ function monthDayRule(day: number): string {
 	return `BYMONTHDAY=${Array.from({ length: day - 27 }, (_, index) => 28 + index).join(",")};BYSETPOS=-1`;
 }
 
-function recurrenceRule(event: FeedEvent): string | null {
+function recurrenceRule(event: FeedEvent, download: boolean): string | null {
 	if (event.repeat === "none") return null;
 	const parts: string[] = [];
 	if (event.repeat === "daily") parts.push("FREQ=DAILY");
 	else if (event.repeat === "weekly") parts.push("FREQ=WEEKLY");
-	else if (event.repeat === "yearly") parts.push("FREQ=YEARLY");
-	else if (event.repeat === "monthly") {
+	else if (event.repeat === "yearly") {
+		parts.push("FREQ=YEARLY");
+		// The app clamps a Feb-29 yearly to Feb 28 in common years; the download says so explicitly,
+		// since a bare YEARLY recurs only on leap days and a plain BYMONTHDAY=29 rolls to March 1.
+		if (download) {
+			const zone = validTimeZone(event.timeZone);
+			if ((zone ? local(event.startsAt, zone) : utc(event.startsAt)).slice(4, 8) === "0229") parts.push("BYMONTH=2", monthDayRule(29));
+		}
+	} else if (event.repeat === "monthly") {
 		parts.push("FREQ=MONTHLY");
-		if (event.repeatWeekday != null && event.repeatWeek != null) parts.push(`BYDAY=${event.repeatWeek}${BYDAY[event.repeatWeekday]}`);
+		if (event.repeatWeekday != null && event.repeatWeek != null) {
+			// The app's fifth-weekday repeat clamps to the last matching day of shorter months — BYDAY=-1 is that rule.
+			const week = download && event.repeatWeek === 5 ? -1 : event.repeatWeek;
+			parts.push(`BYDAY=${week}${BYDAY[event.repeatWeekday]}`);
+		}
 		else {
 			const zone = validTimeZone(event.timeZone);
 			const day = event.repeatAnchorDay || Number((zone ? local(event.startsAt, zone) : utc(event.startsAt)).slice(6, 8));
@@ -109,51 +122,87 @@ function attendeeLines(event: FeedEvent): string[] {
 
 /**
  * Writes the events as one VCALENDAR. `download` is a file the owner saves: it carries the guests a
- * polled feed hides, their RSVP states and the reminder, and drops the subscription refresh hints.
+ * polled feed hides, their RSVP states, the reminder, extra occurrences as RDATE and a VTIMEZONE for
+ * every TZID it cites, and drops the subscription refresh hints.
  */
 export function buildCalendarFeed(events: FeedEvent[], options: { name: string; now?: Date; download?: boolean }, overrides?: Map<string, FeedOccurrenceOverride[]>): string {
-	const stamp = utc(options.now ?? new Date());
-	const lines = ["BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//Mailflare//Calendar//EN", "CALSCALE:GREGORIAN", "METHOD:PUBLISH", `X-WR-CALNAME:${escapeIcsText(options.name)}`];
+	const now = options.now ?? new Date();
+	const stamp = utc(now);
+	const lines = ["BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//Mailflare//Calendar//EN", "CALSCALE:GREGORIAN"];
+	// A feed is published, so METHOD:PUBLISH fits it. A download is a neutral snapshot and stays
+	// METHOD-free: PUBLISH requires ORGANIZER wherever ATTENDEE lines appear (RFC 5546 3.2.1).
+	if (!options.download) lines.push("METHOD:PUBLISH");
+	lines.push(`X-WR-CALNAME:${escapeIcsText(options.name)}`);
 	if (!options.download) lines.push("REFRESH-INTERVAL;VALUE=DURATION:PT1H", "X-PUBLISHED-TTL:PT1H");
+	const eventLines: string[] = [];
+	// Zone -> the instants events cite it for; each VTIMEZONE must cover them so a parser resolves every TZID.
+	const zones = new Map<string, { earliest: number; latest: number }>();
+	const noteInstant = (zone: string | null, ms: number) => {
+		if (!zone) return;
+		const span = zones.get(zone);
+		if (span) { span.earliest = Math.min(span.earliest, ms); span.latest = Math.max(span.latest, ms); } else zones.set(zone, { earliest: ms, latest: ms });
+	};
 	for (const event of events) {
-		const rule = recurrenceRule(event);
+		const rule = recurrenceRule(event, options.download === true);
 		// Recurring events keep their local clock time across daylight saving changes only when they carry a zone.
 		const zone = rule ? validTimeZone(event.timeZone) : null;
-		lines.push("BEGIN:VEVENT", `UID:${event.id}@mailflare`, `DTSTAMP:${stamp}`,
-			dateProperty("DTSTART", event.startsAt, zone), dateProperty("DTEND", event.endsAt, zone),
-			`SUMMARY:${escapeIcsText(event.title)}`);
-		if (event.description) lines.push(`DESCRIPTION:${escapeIcsText(event.description)}`);
-		if (event.location) lines.push(`LOCATION:${escapeIcsText(event.location)}`);
-		if (rule) {
-			lines.push(rule);
-			for (const excluded of parseExcludedOccurrences(event.excludedOccurrences)) lines.push(dateProperty("EXDATE", new Date(excluded), zone));
-		}
-		if (event.responseStatus === "tentative") lines.push("STATUS:TENTATIVE");
-		if (event.updatedAt) lines.push(`LAST-MODIFIED:${utc(event.updatedAt)}`);
-		if (options.download) {
-			for (const attendee of attendeeLines(event)) lines.push(attendee);
-			// -PTnM is always a valid DURATION, so a large reminder stays in minutes.
-			if (Number.isInteger(event.reminderMinutes) && (event.reminderMinutes as number) >= 0) lines.push("BEGIN:VALARM", "ACTION:DISPLAY", `DESCRIPTION:${escapeIcsText(event.title)}`, `TRIGGER:-PT${event.reminderMinutes}M`, "END:VALARM");
-		}
-		lines.push("END:VEVENT");
 		const excluded = new Set(parseExcludedOccurrences(event.excludedOccurrences));
+		const masterMs = event.endsAt.getTime() - event.startsAt.getTime();
+		// An override at a start the rule itself yields is an exception (RECURRENCE-ID); anywhere else
+		// it is an extra occurrence the download declares as RDATE on the master. A feed has no extras.
+		const extras: FeedOccurrenceOverride[] = [];
+		const exceptions: FeedOccurrenceOverride[] = [];
 		for (const override of overrides?.get(event.id) ?? []) {
 			if (excluded.has(override.occurrenceMs)) continue;
-			lines.push("BEGIN:VEVENT", `UID:${event.id}@mailflare`, `DTSTAMP:${stamp}`,
-				// The same TZID form as the master's DTSTART, so the RECURRENCE-ID pairs with its rule occurrence.
+			if (options.download && !isSeriesOccurrence(event, override.occurrenceMs)) extras.push(override); else exceptions.push(override);
+		}
+		noteInstant(zone, event.startsAt.getTime());
+		eventLines.push("BEGIN:VEVENT", `UID:${event.id}@mailflare`, `DTSTAMP:${stamp}`,
+			dateProperty("DTSTART", event.startsAt, zone), dateProperty("DTEND", event.endsAt, zone),
+			`SUMMARY:${escapeIcsText(event.title)}`);
+		if (event.description) eventLines.push(`DESCRIPTION:${escapeIcsText(event.description)}`);
+		if (event.location) eventLines.push(`LOCATION:${escapeIcsText(event.location)}`);
+		if (rule) {
+			eventLines.push(rule);
+			for (const ms of excluded) { noteInstant(zone, ms); eventLines.push(dateProperty("EXDATE", new Date(ms), zone)); }
+		}
+		for (const extra of extras) { noteInstant(zone, extra.occurrenceMs); eventLines.push(dateProperty("RDATE", new Date(extra.occurrenceMs), zone)); }
+		if (event.responseStatus === "tentative") eventLines.push("STATUS:TENTATIVE");
+		if (event.updatedAt) eventLines.push(`LAST-MODIFIED:${utc(event.updatedAt)}`);
+		if (options.download) {
+			for (const attendee of attendeeLines(event)) eventLines.push(attendee);
+			// -PTnM is always a valid DURATION, so a large reminder stays in minutes.
+			if (Number.isInteger(event.reminderMinutes) && (event.reminderMinutes as number) >= 0) eventLines.push("BEGIN:VALARM", "ACTION:DISPLAY", `DESCRIPTION:${escapeIcsText(event.title)}`, `TRIGGER:-PT${event.reminderMinutes}M`, "END:VALARM");
+		}
+		eventLines.push("END:VEVENT");
+		// An extra whose start, length and text all match its RDATE needs no detached VEVENT; exceptions always do.
+		const detached = [...exceptions, ...extras.filter((extra) => extra.startsAt.getTime() !== extra.occurrenceMs || extra.endsAt.getTime() - extra.startsAt.getTime() !== masterMs
+			|| extra.title != null || extra.description != null || extra.location != null)];
+		for (const override of detached) {
+			noteInstant(zone, override.startsAt.getTime());
+			eventLines.push("BEGIN:VEVENT", `UID:${event.id}@mailflare`, `DTSTAMP:${stamp}`,
+				// The same TZID form as the master's DTSTART, so the RECURRENCE-ID pairs with its rule or RDATE occurrence.
 				dateProperty("RECURRENCE-ID", new Date(override.occurrenceMs), zone),
 				dateProperty("DTSTART", override.startsAt, zone), dateProperty("DTEND", override.endsAt, zone),
-				`SUMMARY:${escapeIcsText(override.title ?? event.title)}`);
+				`SUMMARY:${escapeIcsText(options.download ? (override.title ?? event.title) : event.title)}`);
 			// A download restates the effective text: importers treat the exception as a full replacement.
 			if (options.download) {
 				const description = override.description ?? event.description;
 				const location = override.location ?? event.location;
-				if (description) lines.push(`DESCRIPTION:${escapeIcsText(description)}`);
-				if (location) lines.push(`LOCATION:${escapeIcsText(location)}`);
+				if (description) eventLines.push(`DESCRIPTION:${escapeIcsText(description)}`);
+				if (location) eventLines.push(`LOCATION:${escapeIcsText(location)}`);
 			}
-			lines.push("END:VEVENT");
+			eventLines.push("END:VEVENT");
 		}
 	}
-	lines.push("END:VCALENDAR");
+	if (options.download) {
+		for (const zone of [...zones.keys()].sort()) {
+			const span = zones.get(zone) as { earliest: number; latest: number };
+			// Padding keeps instants near the edges under the right observance, and ~15 years ahead lets
+			// an open-ended series expand; an irregular zone's one-offs stop there and hold the last offset.
+			lines.push(...vtimezoneLines(zone, span.earliest - 400 * 86_400_000, Math.max(now.getTime() + 15 * 365 * 86_400_000, span.latest + 400 * 86_400_000)));
+		}
+	}
+	lines.push(...eventLines, "END:VCALENDAR");
 	return joinIcsLines(lines);
 }
