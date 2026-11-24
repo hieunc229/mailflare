@@ -1,10 +1,10 @@
-import { escapeIcsText, foldIcsLine, formatIcsUtc, joinIcsLines } from "./ics";
+import { escapeIcsText, foldIcsLine, formatIcsUtc, isIcsAddress, joinIcsLines } from "./ics";
 import { parseCalendarRepeatDays, parseExcludedOccurrences } from "./recurrence";
 
 export { escapeIcsText, foldIcsLine };
 
-/** One edited occurrence (RECURRENCE-ID): replaces the rule occurrence at `occurrenceMs`, or adds an extra one when no rule occurrence has that start. */
-export type FeedOccurrenceOverride = { occurrenceMs: number; startsAt: Date; endsAt: Date };
+/** One edited occurrence (RECURRENCE-ID): replaces the rule occurrence at `occurrenceMs`, or adds an extra one when no rule occurrence has that start. Null text fields inherit the series value. */
+export type FeedOccurrenceOverride = { occurrenceMs: number; startsAt: Date; endsAt: Date; title?: string | null; description?: string | null; location?: string | null };
 
 export type FeedEvent = {
 	id: string;
@@ -25,6 +25,10 @@ export type FeedEvent = {
 	excludedOccurrences: string;
 	timeZone: string | null;
 	attendees: string;
+	/** JSON map of guest address to accepted, tentative or declined; a download writes it as ATTENDEE PARTSTAT. */
+	attendeeResponses?: string | null;
+	/** Minutes before an occurrence's start to remind; a download writes it as a VALARM. */
+	reminderMinutes?: number | null;
 	updatedAt?: Date | null;
 	responseStatus?: string | null;
 };
@@ -82,10 +86,35 @@ function recurrenceRule(event: FeedEvent): string | null {
 	return `RRULE:${parts.join(";")}`;
 }
 
-export function buildCalendarFeed(events: FeedEvent[], options: { name: string; now?: Date }, overrides?: Map<string, FeedOccurrenceOverride[]>): string {
+/** ATTENDEE lines for a download: every listed guest, with the RSVP state the invite replies recorded. */
+function attendeeLines(event: FeedEvent): string[] {
+	let guests: unknown;
+	try { guests = JSON.parse(event.attendees || "[]"); } catch { return []; }
+	if (!Array.isArray(guests)) return [];
+	let responses: Record<string, string> = {};
+	try {
+		const parsed: unknown = JSON.parse(event.attendeeResponses || "{}");
+		if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) responses = parsed as Record<string, string>;
+	} catch { /* A bad map leaves every guest at the RFC default. */ }
+	return guests
+		.filter((guest): guest is string => typeof guest === "string")
+		.map((guest) => guest.trim())
+		.filter((guest) => isIcsAddress(guest))
+		.map((guest) => {
+			const status = responses[guest.toLowerCase()];
+			const partstat = status === "accepted" || status === "tentative" || status === "declined" ? status.toUpperCase() : "NEEDS-ACTION";
+			return `ATTENDEE;PARTSTAT=${partstat}:mailto:${guest}`;
+		});
+}
+
+/**
+ * Writes the events as one VCALENDAR. `download` is a file the owner saves: it carries the guests a
+ * polled feed hides, their RSVP states and the reminder, and drops the subscription refresh hints.
+ */
+export function buildCalendarFeed(events: FeedEvent[], options: { name: string; now?: Date; download?: boolean }, overrides?: Map<string, FeedOccurrenceOverride[]>): string {
 	const stamp = utc(options.now ?? new Date());
-	const lines = ["BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//Mailflare//Calendar//EN", "CALSCALE:GREGORIAN", "METHOD:PUBLISH",
-		`X-WR-CALNAME:${escapeIcsText(options.name)}`, "REFRESH-INTERVAL;VALUE=DURATION:PT1H", "X-PUBLISHED-TTL:PT1H"];
+	const lines = ["BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//Mailflare//Calendar//EN", "CALSCALE:GREGORIAN", "METHOD:PUBLISH", `X-WR-CALNAME:${escapeIcsText(options.name)}`];
+	if (!options.download) lines.push("REFRESH-INTERVAL;VALUE=DURATION:PT1H", "X-PUBLISHED-TTL:PT1H");
 	for (const event of events) {
 		const rule = recurrenceRule(event);
 		// Recurring events keep their local clock time across daylight saving changes only when they carry a zone.
@@ -101,8 +130,12 @@ export function buildCalendarFeed(events: FeedEvent[], options: { name: string; 
 		}
 		if (event.responseStatus === "tentative") lines.push("STATUS:TENTATIVE");
 		if (event.updatedAt) lines.push(`LAST-MODIFIED:${utc(event.updatedAt)}`);
+		if (options.download) {
+			for (const attendee of attendeeLines(event)) lines.push(attendee);
+			// -PTnM is always a valid DURATION, so a large reminder stays in minutes.
+			if (Number.isInteger(event.reminderMinutes) && (event.reminderMinutes as number) >= 0) lines.push("BEGIN:VALARM", "ACTION:DISPLAY", `DESCRIPTION:${escapeIcsText(event.title)}`, `TRIGGER:-PT${event.reminderMinutes}M`, "END:VALARM");
+		}
 		lines.push("END:VEVENT");
-		// PUBLISH stays VALARM-free and attendee-free: overrides carry only the replacement time.
 		const excluded = new Set(parseExcludedOccurrences(event.excludedOccurrences));
 		for (const override of overrides?.get(event.id) ?? []) {
 			if (excluded.has(override.occurrenceMs)) continue;
@@ -110,7 +143,15 @@ export function buildCalendarFeed(events: FeedEvent[], options: { name: string; 
 				// The same TZID form as the master's DTSTART, so the RECURRENCE-ID pairs with its rule occurrence.
 				dateProperty("RECURRENCE-ID", new Date(override.occurrenceMs), zone),
 				dateProperty("DTSTART", override.startsAt, zone), dateProperty("DTEND", override.endsAt, zone),
-				`SUMMARY:${escapeIcsText(event.title)}`, "END:VEVENT");
+				`SUMMARY:${escapeIcsText(override.title ?? event.title)}`);
+			// A download restates the effective text: importers treat the exception as a full replacement.
+			if (options.download) {
+				const description = override.description ?? event.description;
+				const location = override.location ?? event.location;
+				if (description) lines.push(`DESCRIPTION:${escapeIcsText(description)}`);
+				if (location) lines.push(`LOCATION:${escapeIcsText(location)}`);
+			}
+			lines.push("END:VEVENT");
 		}
 	}
 	lines.push("END:VCALENDAR");

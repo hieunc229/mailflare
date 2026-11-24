@@ -1,0 +1,148 @@
+import assert from "node:assert/strict";
+import test from "node:test";
+import { loadApp } from "./helpers/real-db.mjs";
+
+// GET /api/export/calendar downloads the whole calendar as an .ics attachment.
+const mocks = {
+	"@/lib/cloudflare": `export function getEnv(){return globalThis.calExportEnv}`,
+	"@/lib/auth/cookies": `export async function getCurrentUser(){return globalThis.calExportUser}`,
+	"@/lib/api/key-auth": `export async function authenticateApiRequest(){return globalThis.calExportKey} export async function authenticateApiKeyValue(){return null} export function hasScope(scopes,required){return scopes.includes(required)||scopes.includes("*")}`,
+};
+const { app, newDatabase } = await loadApp("cal-export", `export * as route from "./src/app/api/export/calendar/route.ts";`, { mocks });
+
+const sec = (iso) => Math.floor(Date.parse(iso) / 1000);
+const monday = sec("2026-11-02T17:00:00Z"); // 09:00 in America/Los_Angeles
+const longText = "Long description with é and more text ".repeat(4).trim();
+const controlChars = new RegExp("[\\u0000-\\u0008\\u000b\\u000c\\u000e-\\u001f\\u007f]");
+const seed = `
+	INSERT INTO users (id, email, password_hash, name, role, created_at) VALUES
+		('user-1', 'u@example.com', 'hash', 'User', 'user', 1),
+		('user-2', 'empty@example.com', 'hash', 'Empty', 'user', 1);
+	INSERT INTO calendar_events (id, user_id, title, description, location, attendees, repeat, repeat_days, repeat_anchor_day, repeat_until, repeat_interval, repeat_weekday, repeat_week, excluded_occurrences, time_zone, reminder_minutes, response_status, attendee_responses, starts_at, ends_at, created_at, updated_at) VALUES
+		('evt-one', 'user-1', 'One, off; "quoted"', '${longText}', 'Room, 2', '["Guest@Example.com ","other@example.com","not-an-email"]', 'none', '[]', NULL, NULL, 1, NULL, NULL, '[]', NULL, 15, NULL, '{"guest@example.com":"accepted","other@example.com":"declined"}', ${sec("2026-11-03T17:00:00Z")}, ${sec("2026-11-03T18:00:00Z")}, 1, 1),
+		('evt-daily', 'user-1', 'Every other day', '', '', '[]', 'daily', '[]', NULL, ${sec("2026-11-10T17:00:00Z")}, 2, NULL, NULL, '[]', NULL, NULL, NULL, NULL, ${monday}, ${monday + 1800}, 1, 1),
+		('evt-weekly', 'user-1', 'Weekly sync', 'Weekly notes', '', '[]', 'weekly', '[]', NULL, NULL, 1, NULL, NULL, '[${Date.parse("2026-11-09T17:00:00Z")}]', 'America/Los_Angeles', NULL, NULL, NULL, ${monday}, ${monday + 1800}, 1, 1),
+		('evt-weekdays', 'user-1', 'Mon Wed Fri', '', '', '[]', 'weekdays', '[1,3,5]', NULL, NULL, 1, NULL, NULL, '[]', NULL, NULL, NULL, NULL, ${monday}, ${monday + 1800}, 1, 1),
+		('evt-monthly', 'user-1', 'Monthly', '', '', '[]', 'monthly', '[]', 15, NULL, 1, NULL, NULL, '[]', NULL, NULL, NULL, NULL, ${monday}, ${monday + 1800}, 1, 1),
+		('evt-monthly31', 'user-1', 'End of month', '', '', '[]', 'monthly', '[]', 31, NULL, 1, NULL, NULL, '[]', NULL, NULL, NULL, NULL, ${monday}, ${monday + 1800}, 1, 1),
+		('evt-nth', 'user-1', 'Second Tuesday', '', '', '[]', 'monthly', '[]', NULL, NULL, 1, 2, 2, '[]', NULL, NULL, NULL, NULL, ${monday}, ${monday + 1800}, 1, 1),
+		('evt-yearly', 'user-1', 'Yearly', '', '', '[]', 'yearly', '[]', NULL, NULL, 1, NULL, NULL, '[]', NULL, NULL, 'tentative', NULL, ${monday}, ${monday + 1800}, 1, 1),
+		('evt-pending', 'user-1', 'Pending invite', '', '', '[]', 'none', '[]', NULL, NULL, 1, NULL, NULL, '[]', NULL, NULL, 'needs-action', NULL, ${monday}, ${monday + 1800}, 1, 1);
+	INSERT INTO calendar_event_overrides (id, event_id, occurrence_ms, starts_at, ends_at, title, description, location, created_at, updated_at) VALUES
+		('ov-1', 'evt-weekly', ${Date.parse("2026-11-16T17:00:00Z")}, ${sec("2026-11-16T19:00:00Z")}, ${sec("2026-11-16T20:00:00Z")}, 'Moved sync', NULL, 'Video', 1, 1);
+`;
+
+const sessionUser = { id: "user-1", calendarEnabled: true };
+const keyWith = (scopes) => ({ keyId: "k1", userId: "user-1", scopes, mailboxIds: null, user: sessionUser });
+const req = (path = "/api/export/calendar", headers = {}) => new Request(`http://localhost${path}`, { headers });
+
+async function setup(t, { user = sessionUser, key = null } = {}) {
+	const { env } = await newDatabase(t, seed);
+	globalThis.calExportEnv = env;
+	globalThis.calExportUser = user;
+	globalThis.calExportKey = key;
+}
+
+async function download(t, request = req()) {
+	await setup(t);
+	const res = await app.route.GET(request);
+	assert.equal(res.status, 200);
+	return res;
+}
+
+test("the session owner gets the calendar as a downloadable attachment", async (t) => {
+	const res = await download(t);
+	assert.equal(res.headers.get("content-type"), "text/calendar; charset=utf-8");
+	assert.equal(res.headers.get("content-disposition"), 'attachment; filename="mailflare-calendar.ics"');
+	assert.equal(res.headers.get("cache-control"), "no-store");
+	const ics = await res.text();
+	assert.match(ics, /^BEGIN:VCALENDAR\r\n/);
+	assert.match(ics, /\r\nVERSION:2\.0\r\n/);
+	assert.match(ics, /\r\nPRODID:-\/\/Mailflare\/\/Calendar\/\/EN\r\n/);
+	assert.match(ics, /\r\nMETHOD:PUBLISH\r\n/);
+	assert.ok(ics.endsWith("END:VCALENDAR\r\n"));
+	// A snapshot is not polled, so it carries no subscription refresh hints.
+	assert.doesNotMatch(ics, /REFRESH-INTERVAL|X-PUBLISHED-TTL/);
+});
+
+test("a Bearer key needs the calendar:read scope", async (t) => {
+	await setup(t, { user: null, key: keyWith(["jmap"]) });
+	assert.equal((await app.route.GET(req("/api/export/calendar", { authorization: "Bearer ep_k" }))).status, 403);
+	await setup(t, { user: null, key: keyWith(["calendar:read"]) });
+	assert.equal((await app.route.GET(req("/api/export/calendar", { authorization: "Bearer ep_k" }))).status, 200);
+});
+
+test("no session and no key is a 401", async (t) => {
+	await setup(t, { user: null });
+	assert.equal((await app.route.GET(req())).status, 401);
+});
+
+test("every event becomes a VEVENT with its rule, exclusions and alarm", async (t) => {
+	const ics = await (await download(t)).text();
+	const masters = ics.split("BEGIN:VEVENT").length - 1;
+	assert.equal(masters, 9); // Eight series plus the moved occurrence; the pending invite stays out.
+	assert.doesNotMatch(ics, /Pending invite/);
+	assert.match(ics, /UID:evt-one@mailflare\r\n/);
+	assert.match(ics, /DTSTART:20261103T170000Z\r\n/);
+	// none -> no RRULE on evt-one.
+	const one = ics.slice(ics.indexOf("UID:evt-one"), ics.indexOf("END:VEVENT", ics.indexOf("UID:evt-one")));
+	assert.doesNotMatch(one, /RRULE/);
+	assert.match(ics, /RRULE:FREQ=DAILY;INTERVAL=2;UNTIL=20261110T165959Z\r\n/);
+	assert.match(ics, /RRULE:FREQ=WEEKLY\r\n/);
+	assert.match(ics, /RRULE:FREQ=WEEKLY;BYDAY=MO,WE,FR\r\n/);
+	assert.match(ics, /RRULE:FREQ=MONTHLY;BYMONTHDAY=15\r\n/);
+	assert.match(ics, /RRULE:FREQ=MONTHLY;BYMONTHDAY=28,29,30,31;BYSETPOS=-1\r\n/);
+	assert.match(ics, /RRULE:FREQ=MONTHLY;BYDAY=2TU\r\n/);
+	assert.match(ics, /RRULE:FREQ=YEARLY\r\n/);
+	assert.match(ics, /STATUS:TENTATIVE\r\n/);
+	// A zoned series keeps local times and writes its exclusions with the same TZID.
+	assert.match(ics, /DTSTART;TZID=America\/Los_Angeles:20261102T090000\r\n/);
+	assert.match(ics, /EXDATE;TZID=America\/Los_Angeles:20261109T090000\r\n/);
+});
+
+test("a download carries guests with their RSVP state and the reminder", async (t) => {
+	const ics = await (await download(t)).text();
+	assert.match(ics, /ATTENDEE;PARTSTAT=ACCEPTED:mailto:Guest@Example.com\r\n/);
+	assert.match(ics, /ATTENDEE;PARTSTAT=DECLINED:mailto:other@example.com\r\n/);
+	// An address that is not a plain mailbox never reaches the file.
+	assert.doesNotMatch(ics, /not-an-email/);
+	assert.match(ics, /BEGIN:VALARM\r\nACTION:DISPLAY\r\nDESCRIPTION:One\\, off\\; "quoted"\r\nTRIGGER:-PT15M\r\nEND:VALARM\r\n/);
+});
+
+test("the moved occurrence re-specifies its time and effective text", async (t) => {
+	const ics = await (await download(t)).text();
+	assert.match(ics, /RECURRENCE-ID;TZID=America\/Los_Angeles:20261116T090000\r\n/);
+	const moved = ics.slice(ics.indexOf("RECURRENCE-ID"), ics.indexOf("END:VEVENT", ics.indexOf("RECURRENCE-ID")));
+	assert.match(moved, /DTSTART;TZID=America\/Los_Angeles:20261116T110000/);
+	assert.match(moved, /SUMMARY:Moved sync/);
+	assert.match(moved, /DESCRIPTION:Weekly notes/); // A null override field inherits the series text.
+	assert.match(moved, /LOCATION:Video/);
+});
+
+test("text escapes and every line folds under 75 octets", async (t) => {
+	const ics = await (await download(t)).text();
+	assert.match(ics, /SUMMARY:One\\, off\\; "quoted"\r\n/);
+	assert.match(ics, /LOCATION:Room\\, 2\r\n/);
+	for (const line of ics.split("\r\n")) {
+		assert.ok(new TextEncoder().encode(line).length <= 75, line);
+		assert.doesNotMatch(line, controlChars);
+	}
+});
+
+test("an empty calendar still exports a valid file", async (t) => {
+	await setup(t, { user: { id: "user-2", calendarEnabled: true } });
+	const res = await app.route.GET(req());
+	assert.equal(res.status, 200);
+	const ics = await res.text();
+	assert.match(ics, /^BEGIN:VCALENDAR\r\n/);
+	assert.ok(ics.endsWith("END:VCALENDAR\r\n"));
+	assert.doesNotMatch(ics, /BEGIN:VEVENT/);
+});
+
+test("a range bounds one-offs but a series always exports whole", async (t) => {
+	const res = await download(t, req("/api/export/calendar?start=2026-12-01T00:00:00Z"));
+	const ics = await res.text();
+	assert.doesNotMatch(ics, /UID:evt-one@mailflare/);
+	assert.match(ics, /UID:evt-weekly@mailflare\r\n/);
+	assert.match(ics, /RRULE:FREQ=WEEKLY\r\n/); // The full series rule, never clipped to the range.
+});
