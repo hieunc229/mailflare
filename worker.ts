@@ -39,6 +39,7 @@ import { runDriveTrashRetention } from "./src/lib/drive/retention";
 import { runAccountRetention } from "./src/lib/accounts/deletion";
 import { purgeExpiredAuthRows } from "./src/lib/auth/purge";
 import { runJmapChangeRetention } from "./src/lib/jmap/changes";
+import { runDavChangeRetention } from "./src/lib/dav/changes";
 import { runFollowUpReminders } from "./src/lib/follow-ups/service";
 import { runPromotionsBackfill } from "@/lib/promotions/backfill";
 import { runCalendarReminders } from "./src/lib/calendar/reminders";
@@ -179,6 +180,8 @@ export default {
 		ctx.waitUntil(runPromotionsBackfill(env, new Date(controller.scheduledTime)).catch((error) => console.error("Promotions backfill failed", error)));
 		ctx.waitUntil(sweepImportJobs(env, new Date(controller.scheduledTime)));
 		ctx.waitUntil(pruneExpiredMessageActionUndoClaims(env, new Date(controller.scheduledTime)));
+		// DAV log retention takes a small slice per run (one collection, 90 rows, 3 queries), so it runs on every cron tick.
+		ctx.waitUntil(runDavChangeRetention(env, new Date(controller.scheduledTime)).catch((error) => console.error("DAV change retention failed", error)));
 		if (controller.cron === "0 2 * * *") ctx.waitUntil(runAccountRetention(env, new Date(controller.scheduledTime)));
 		if (controller.cron === "0 2 * * *") ctx.waitUntil(purgeExpiredAuthRows(env, new Date(controller.scheduledTime)));
 		// Drive trash is emptied once a day, with the 02:00 UTC cron; the 5-minute cron is for queue-like upkeep.

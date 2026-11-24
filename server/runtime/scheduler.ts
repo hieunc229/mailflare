@@ -5,6 +5,7 @@ import { runDriveTrashRetention } from "@/lib/drive/retention";
 import { runAccountRetention } from "@/lib/accounts/deletion";
 import { purgeExpiredAuthRows } from "@/lib/auth/purge";
 import { runJmapChangeRetention } from "@/lib/jmap/changes";
+import { runDavChangeRetention } from "@/lib/dav/changes";
 import { runFollowUpReminders } from "@/lib/follow-ups/service";
 import { runCalendarReminders } from "@/lib/calendar/reminders";
 import { runPromotionsBackfill } from "@/lib/promotions/backfill";
@@ -31,6 +32,7 @@ export function startScheduler(env: CloudflareEnv) {
 			lastBackfillAt = now.getTime();
 			runPromotionsBackfill(env, now).catch((error) => console.error("Promotions backfill failed", error));
 		}
+		runDavChangeRetention(env, now).catch((error) => console.error("DAV change retention failed", error));
 		const day = now.toISOString().slice(0, 10);
 		if (now.getUTCHours() !== 2 || lastRunDay === day) return;
 		lastRunDay = day;
