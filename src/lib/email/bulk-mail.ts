@@ -16,7 +16,7 @@ const BULK_PRECEDENCE = /^(bulk|list|junk)$/;
  * `X-Mailer`), is deliberately left out, so a password reset or order receipt that passes
  * through the same provider as a newsletter is not caught.
  */
-const CAMPAIGN_HEADERS = ["x-campaign", "x-campaignid"];
+const CAMPAIGN_HEADERS = ["x-campaign", "x-campaign-id", "x-campaignid"];
 
 export function getMailHeader(headers: MailHeaders | undefined | null, name: string): string {
 	if (!headers) return "";

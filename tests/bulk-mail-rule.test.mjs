@@ -44,6 +44,7 @@ test("each bulk header marks mail as bulk, whatever its case", () => {
 	assert.deepEqual(m.isBulkMail({ "Feedback-ID": "1:camp:news:esp", "List-Unsubscribe": "<x>" }), { bulk: true, reasons: ["list-unsubscribe", "feedback-id"] });
 	assert.deepEqual(m.isBulkMail({ "X-Campaign": "spring" }).reasons, ["x-campaign"]);
 	assert.deepEqual(m.isBulkMail({ "x-campaignid": "42" }).reasons, ["x-campaignid"]);
+	assert.deepEqual(m.isBulkMail({ "X-Campaign-ID": "42" }).reasons, ["x-campaign-id"]);
 	assert.deepEqual(m.isBulkMail({ "list-id": "a", "list-unsubscribe": "b", precedence: "bulk" }).reasons, ["list-unsubscribe", "list-id", "precedence: bulk"]);
 });
 
