@@ -28,3 +28,19 @@ test("historical sub-minute offsets export their VTIMEZONE without hanging", { t
 	assert.ok(lines.includes("TZOFFSETFROM:+051932"), child.stdout);
 	assert.ok(lines.includes("TZOFFSETTO:+0530"), child.stdout);
 });
+
+const { vtimezoneLines } = await import(moduleUrl);
+
+test("a zone that abolished DST gets explicit observances, not an invented rule", () => {
+	// Mexico ended DST after 2022-10-30: an RRULE tail inferred from the last streak would keep
+	// predicting an April transition into -0500 forever, mis-timing every post-abolition instant.
+	const lines = vtimezoneLines("America/Mexico_City", Date.parse("2018-01-01T00:00:00Z"), Date.parse("2041-01-01T00:00:00Z"));
+	assert.equal(lines.some((line) => line.startsWith("RRULE")), false, lines.join("\n"));
+	assert.equal(lines.findLast((line) => line.startsWith("TZOFFSETTO")), "TZOFFSETTO:-0600", lines.join("\n")); // Permanent standard time wins past the last observance.
+});
+
+test("a stable zone still collapses to a yearly rule", () => {
+	const lines = vtimezoneLines("America/Los_Angeles", Date.parse("2026-01-01T00:00:00Z"), Date.parse("2041-01-01T00:00:00Z"));
+	assert.ok(lines.some((line) => line === "RRULE:FREQ=YEARLY;BYMONTH=3;BYDAY=2SU"), lines.join("\n"));
+	assert.ok(lines.some((line) => line === "RRULE:FREQ=YEARLY;BYMONTH=11;BYDAY=1SU"), lines.join("\n"));
+});

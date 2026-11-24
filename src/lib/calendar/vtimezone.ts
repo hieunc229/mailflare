@@ -7,8 +7,10 @@ import { zonedDateFields } from "@/lib/time/utils";
  * and anything else — zones that change offset irregularly, or a rule adopted mid-window — is written
  * as one-off observances, which stay exact within the window. Coverage limits: offsets are read from
  * the runtime's tz data (a stale OS/Workers image exports stale rules) and keep second precision —
- * historical zones like Asia/Colombo need the sub-minute form RFC 5545 permits — and an irregular
- * zone's one-offs stop at the window end, so an open-ended series there holds the last offset beyond it.
+ * historical zones like Asia/Colombo need the sub-minute form RFC 5545 permits; a parser that
+ * truncates TZOFFSET seconds (ical.js UtcOffset does) drifts by under a minute, which is its bug, not
+ * this file's — and an irregular zone's one-offs stop at the window end, so an open-ended series
+ * there holds the last offset beyond it.
  */
 
 const DAY = 86_400_000;
@@ -80,16 +82,32 @@ function matchesRule(localMs: number, rule: YearlyRule): boolean {
 	return rule.ordinal === -1 ? fields.last : fields.ordinal === rule.ordinal;
 }
 
+/** The local instant (fake-UTC ms) the rule predicts for `year`; a 5th weekday may not exist that year. */
+function predictedLocal(year: number, rule: YearlyRule): number | null {
+	const dim = daysInMonth(year, rule.month);
+	let date: number;
+	if (rule.ordinal === -1) {
+		const lastDow = new Date(Date.UTC(year, rule.month, dim)).getUTCDay();
+		date = dim - ((lastDow - rule.weekday + 7) % 7);
+	} else {
+		const firstDow = new Date(Date.UTC(year, rule.month, 1)).getUTCDay();
+		date = 1 + ((rule.weekday - firstDow + 7) % 7) + (rule.ordinal - 1) * 7;
+		if (date > dim) return null;
+	}
+	return Date.UTC(year, rule.month, date, rule.hour, rule.minute, rule.second);
+}
+
 /**
  * The yearly rule the tail of `transitions` proves, with its anchor index. The last three decide the
  * candidates — same month, weekday and wall time, plus either a shared ordinal or every date being the
  * last such weekday of its month (a 4th-that-is-also-last streak prefers -1: last-weekday rules
- * dominate real zones, and a wrong 4SU silently mis-times 5-Sunday years). A candidate is only
- * accepted when the contiguous tail matching it also observes a transition in every year it spans —
- * a streak is evidence, not proof, so zones whose rule actually changed or that fire irregularly fall
- * back to explicit observances.
+ * dominate real zones, and a wrong 4SU silently mis-times 5-Sunday years). The emitted tail is the
+ * contiguous run matching the rule AND sharing the last transition's offsets — one RRULE can only
+ * describe one from/to pair. A candidate is then rejected unless every instant it predicts inside
+ * the scanned window was actually observed: a zone that abolished or changed its rule (Mexico stopped
+ * DST in 2022) would otherwise keep inventing transitions past its last real one.
  */
-function yearlyRule(transitions: Transition[]): { rule: YearlyRule; anchorIndex: number } | null {
+function yearlyRule(transitions: Transition[], endMs: number): { rule: YearlyRule; anchorIndex: number } | null {
 	if (transitions.length < 3) return null;
 	const tail = transitions.slice(-3).map((transition) => ruleFields(transition.at + transition.from));
 	const [last] = tail;
@@ -98,12 +116,17 @@ function yearlyRule(transitions: Transition[]): { rule: YearlyRule; anchorIndex:
 	const candidates: YearlyRule[] = [];
 	if (tail.every((fields) => fields.last)) candidates.push({ ...base, ordinal: -1 });
 	if (tail.every((fields) => fields.ordinal === last.ordinal)) candidates.push({ ...base, ordinal: last.ordinal });
+	const { from, to } = transitions[transitions.length - 1];
 	for (const rule of candidates) {
 		let anchorIndex = transitions.length;
-		while (anchorIndex > 0 && matchesRule(transitions[anchorIndex - 1].at + transitions[anchorIndex - 1].from, rule)) anchorIndex--;
+		while (anchorIndex > 0 && matchesRule(transitions[anchorIndex - 1].at + transitions[anchorIndex - 1].from, rule)
+			&& transitions[anchorIndex - 1].from === from && transitions[anchorIndex - 1].to === to) anchorIndex--;
 		const years = new Set(transitions.slice(anchorIndex).map((transition) => new Date(transition.at + transition.from).getUTCFullYear()));
 		let verified = true;
-		for (let year = new Date(transitions[anchorIndex].at + transitions[anchorIndex].from).getUTCFullYear(); year <= new Date(transitions[transitions.length - 1].at + transitions[transitions.length - 1].from).getUTCFullYear(); year++) {
+		for (let year = new Date(transitions[anchorIndex].at + transitions[anchorIndex].from).getUTCFullYear(); ; year++) {
+			const predicted = predictedLocal(year, rule);
+			if (predicted === null) continue; // No such weekday that year: the rule legitimately skips it.
+			if (predicted - from > endMs) break; // Predictions past the window need no observation.
 			if (!years.has(year)) { verified = false; break; }
 		}
 		if (verified) return { rule, anchorIndex };
@@ -137,7 +160,7 @@ export function vtimezoneLines(zone: string, startMs: number, endMs: number): st
 	for (const type of ["STANDARD", "DAYLIGHT"] as const) {
 		const group = transitions.filter((transition) => (transition.to > transition.from) === (type === "DAYLIGHT"));
 		if (!group.length) continue;
-		const inferred = yearlyRule(group);
+		const inferred = yearlyRule(group, endMs);
 		// Only the verified tail matching the inferred rule carries the RRULE (one block anchored on its
 		// first match); every earlier transition of the kind is written as an explicit observance.
 		const anchorIndex = inferred?.anchorIndex ?? group.length;
