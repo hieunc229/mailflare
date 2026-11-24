@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { authFetch } from "@/lib/auth/client";
-import { ICS_ADDRESS } from "@/lib/calendar/ics";
+import { isIcsAddress } from "@/lib/calendar/ics";
 import { FOLDER_COLOR_OPTIONS, FOLDER_COLOR_VALUES } from "@/lib/folders/colors";
 import { folderColorKeys } from "@/lib/folders/color-keys";
 import { importCalendarBytes, parseRetryAfter, previewCalendarBytes } from "@/lib/import/takeout-calendar-utils";
@@ -38,7 +38,7 @@ export function TakeoutCalendarCard({ sources }: TakeoutCalendarCardProps) {
 	const [rows, setRows] = useState<Record<string, CalendarRowState>>(() => Object.fromEntries(sources.map((source, index) => [source.id, {
 		included: true,
 		color: FOLDER_COLOR_VALUES[index % FOLDER_COLOR_VALUES.length],
-		googleAddress: ICS_ADDRESS.test(source.label) ? source.label : "",
+		googleAddress: isIcsAddress(source.label) ? source.label : "",
 	}])));
 	const [reminders, setReminders] = useState(true);
 	const [skipDeclined, setSkipDeclined] = useState(true);

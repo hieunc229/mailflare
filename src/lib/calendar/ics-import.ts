@@ -1,5 +1,5 @@
 import { normalizeTimeZone, zonedDateFields } from "../time/utils";
-import { ICS_ADDRESS } from "./ics";
+import { isIcsAddress } from "./ics";
 import type { ImportEvent, ImportGroup, ImportOptions, SplitIcsResult } from "./ics-import-types";
 import { addZonedDays, inviteRepeat, parseIcsDate, parseIcsDuration, parseProperty, unescapeText, type InviteRepeat, type Property } from "./invite";
 import { normalizeReminderMinutes } from "./reminder-utils";
@@ -210,7 +210,7 @@ function addressOf(property: Property): string | null {
 	const value = property.value.trim().replace(/^mailto:/i, "");
 	if (!value || value.length > 254) return null;
 	const address = value.toLowerCase();
-	return ICS_ADDRESS.test(address) ? address : null;
+	return isIcsAddress(address) ? address : null;
 }
 
 /** The smallest relative reminder before the start, from DISPLAY alarms first, else any alarm. */
@@ -271,7 +271,7 @@ type Outcome =
 	| { kind: "skipped"; occurrence?: Date }
 	| { kind: "failed"; reason: string; occurrence?: Date };
 
-const NO_REPEAT: InviteRepeat = { repeat: "none", repeatDays: [], repeatAnchorDay: null, repeatUntil: null };
+const NO_REPEAT: InviteRepeat = { repeat: "none", repeatDays: [], repeatAnchorDay: null, repeatUntil: null, repeatInterval: 1, repeatWeekday: null, repeatWeek: null };
 
 function readEvent(raw: RawEvent, options: ImportOptions, own: Set<string>): Outcome {
 	const { props, alarms } = raw;

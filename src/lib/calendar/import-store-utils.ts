@@ -1,4 +1,4 @@
-import { ICS_ADDRESS } from "./ics";
+import { isIcsAddress } from "./ics";
 import type { ImportEvent, ImportGroup } from "./ics-import-types";
 import type { CalendarImportPlan, CalendarImportRow, ImportGroupIds, PlannedGroup } from "./import-store-types";
 import { inviteEventId } from "./invite-store";
@@ -105,7 +105,7 @@ export function readCalendarImportBody(body: unknown): { value: CalendarImportBo
 		value: {
 			name: source.name,
 			color: typeof source.color === "string" ? source.color : undefined,
-			googleAddress: address.length <= 254 && ICS_ADDRESS.test(address) ? address : undefined,
+			googleAddress: address.length <= 254 && isIcsAddress(address) ? address : undefined,
 			reminders: options.reminders !== false,
 			skipDeclined: options.skipDeclined !== false,
 			groups: groups as string[],
