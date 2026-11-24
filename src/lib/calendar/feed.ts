@@ -157,6 +157,10 @@ export function buildCalendarFeed(events: FeedEvent[], options: { name: string; 
 			if (options.download && !isSeriesOccurrence(event, override.occurrenceMs)) extras.push(override); else exceptions.push(override);
 		}
 		noteInstant(zone, event.startsAt.getTime());
+		noteInstant(zone, event.endsAt.getTime());
+		// The coverage window must run to the series' own end so the inferred DST rule is checked against
+		// every year the series lives, not a shorter guess.
+		if (event.repeatUntil) noteInstant(zone, event.repeatUntil.getTime());
 		eventLines.push("BEGIN:VEVENT", `UID:${event.id}@mailflare`, `DTSTAMP:${stamp}`,
 			dateProperty("DTSTART", event.startsAt, zone), dateProperty("DTEND", event.endsAt, zone),
 			`SUMMARY:${escapeIcsText(event.title)}`);
@@ -179,7 +183,9 @@ export function buildCalendarFeed(events: FeedEvent[], options: { name: string; 
 		const detached = [...exceptions, ...extras.filter((extra) => extra.startsAt.getTime() !== extra.occurrenceMs || extra.endsAt.getTime() - extra.startsAt.getTime() !== masterMs
 			|| extra.title != null || extra.description != null || extra.location != null)];
 		for (const override of detached) {
+			noteInstant(zone, override.occurrenceMs);
 			noteInstant(zone, override.startsAt.getTime());
+			noteInstant(zone, override.endsAt.getTime());
 			eventLines.push("BEGIN:VEVENT", `UID:${event.id}@mailflare`, `DTSTAMP:${stamp}`,
 				// The same TZID form as the master's DTSTART, so the RECURRENCE-ID pairs with its rule or RDATE occurrence.
 				dateProperty("RECURRENCE-ID", new Date(override.occurrenceMs), zone),

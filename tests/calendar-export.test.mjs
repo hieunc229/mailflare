@@ -30,11 +30,15 @@ const seed = `
 		('evt-leap', 'user-1', 'Leap day', '', '', '[]', 'yearly', '[]', NULL, NULL, 1, NULL, NULL, '[]', NULL, NULL, NULL, NULL, ${sec("2024-02-29T17:00:00Z")}, ${sec("2024-02-29T17:30:00Z")}, 1, 1),
 		('evt-yearly', 'user-1', 'Yearly', '', '', '[]', 'yearly', '[]', NULL, NULL, 1, NULL, NULL, '[]', NULL, NULL, 'tentative', NULL, ${monday}, ${monday + 1800}, 1, 1),
 		('evt-future', 'user-1', 'December weekly', '', '', '[]', 'weekly', '[]', NULL, NULL, 1, NULL, NULL, '[]', NULL, NULL, NULL, NULL, ${sec("2026-12-01T09:00:00Z")}, ${sec("2026-12-01T10:00:00Z")}, 1, 1),
+		('evt-old', 'user-1', 'Since 1970', '', '', '[]', 'daily', '[]', NULL, NULL, 1, NULL, NULL, '[]', NULL, NULL, NULL, NULL, ${sec("1970-01-01T17:00:00Z")}, ${sec("1970-01-01T18:00:00Z")}, 1, 1),
+		('evt-london', 'user-1', 'London weekly', '', '', '[]', 'weekly', '[]', NULL, ${sec("2042-01-01T00:00:00Z")}, 1, NULL, NULL, '[]', 'Europe/London', NULL, NULL, NULL, ${sec("2026-03-02T09:00:00Z")}, ${sec("2026-03-02T10:00:00Z")}, 1, 1),
 		('evt-pending', 'user-1', 'Pending invite', '', '', '[]', 'none', '[]', NULL, NULL, 1, NULL, NULL, '[]', NULL, NULL, 'needs-action', NULL, ${monday}, ${monday + 1800}, 1, 1);
 	INSERT INTO calendar_event_overrides (id, event_id, occurrence_ms, starts_at, ends_at, title, description, location, created_at, updated_at) VALUES
 		('ov-1', 'evt-weekly', ${Date.parse("2026-11-16T17:00:00Z")}, ${sec("2026-11-16T19:00:00Z")}, ${sec("2026-11-16T20:00:00Z")}, 'Moved sync', NULL, 'Video', 1, 1),
 		('ov-2', 'evt-weekly', ${Date.parse("2026-11-12T17:00:00Z")}, ${sec("2026-11-12T17:00:00Z")}, ${sec("2026-11-12T17:30:00Z")}, NULL, NULL, NULL, 1, 1),
-		('ov-3', 'evt-future', ${Date.parse("2026-12-08T09:00:00Z")}, ${sec("2026-11-03T09:00:00Z")}, ${sec("2026-11-03T10:00:00Z")}, NULL, NULL, NULL, 1, 1);
+		('ov-3', 'evt-future', ${Date.parse("2026-12-08T09:00:00Z")}, ${sec("2026-11-03T09:00:00Z")}, ${sec("2026-11-03T10:00:00Z")}, NULL, NULL, NULL, 1, 1),
+		('ov-4', 'evt-weekdays', ${Date.parse("2026-11-05T17:00:00Z")}, ${sec("2026-11-05T17:00:00Z")}, ${sec("2026-11-05T17:30:00Z")}, NULL, NULL, NULL, 1, 1),
+		('ov-5', 'evt-old', ${Date.parse("1970-01-01T17:00:00Z") + 20000 * 86400000}, ${sec("2024-10-04T19:00:00Z")}, ${sec("2024-10-04T20:00:00Z")}, 'Still edited', NULL, NULL, 1, 1);
 `;
 
 const sessionUser = { id: "user-1", calendarEnabled: true };
@@ -87,7 +91,7 @@ test("no session and no key is a 401", async (t) => {
 test("every event becomes a VEVENT with its rule, exclusions and alarm", async (t) => {
 	const ics = await (await download(t)).text();
 	const masters = ics.split("BEGIN:VEVENT").length - 1;
-	assert.equal(masters, 13); // Eleven events plus two moved occurrences; the bare extra is an RDATE and the pending invite stays out.
+	assert.equal(masters, 16); // Thirteen events plus three moved occurrences; the bare extras are RDATEs and the pending invite stays out.
 	assert.doesNotMatch(ics, /Pending invite/);
 	assert.match(ics, /UID:evt-one@mailflare\r\n/);
 	assert.match(ics, /DTSTART:20261103T170000Z\r\n/);
@@ -123,6 +127,23 @@ test("every cited TZID gets a VTIMEZONE, and an extra occurrence exports as RDAT
 	// RDATE on the master instead of a detached VEVENT a parser could not attach anywhere.
 	const weekly = ics.slice(ics.indexOf("UID:evt-weekly"), ics.indexOf("END:VEVENT", ics.indexOf("UID:evt-weekly")));
 	assert.match(weekly, /RDATE;TZID=America\/Los_Angeles:20261112T090000\r\n/);
+	// The London VTIMEZONE must last the series' own lifetime: inferred to the verified -1SU rule,
+	// never a fourth-Sunday guess that would shift 2041's five-Sunday March by an hour.
+	assert.match(ics, /BEGIN:VTIMEZONE\r\nTZID:Europe\/London\r\n/);
+	assert.match(ics, /BYMONTH=3;BYDAY=-1SU/);
+	assert.doesNotMatch(ics, /BYDAY=4SU/);
+});
+
+test("a weekday the repeat filters out takes the extra as RDATE, far slots stay exceptions", async (t) => {
+	const ics = await (await download(t)).text();
+	// ov-4 is Thursday on the M/W/F weekdays repeat: not a rule occurrence, so an RDATE extra.
+	const weekdays = ics.slice(ics.indexOf("UID:evt-weekdays"), ics.indexOf("END:VEVENT", ics.indexOf("UID:evt-weekdays")));
+	assert.match(weekdays, /RDATE:20261105T170000Z\r\n/);
+	// ov-5 sits on the daily rule's 20000th slot: an exception with RECURRENCE-ID and no RDATE, or a
+	// parser would import the occurrence twice — the classifier computes the slot, it does not scan.
+	const old = ics.slice(ics.indexOf("UID:evt-old"), ics.indexOf("END:VEVENT", ics.indexOf("UID:evt-old")));
+	assert.doesNotMatch(old, /RDATE/);
+	assert.match(ics, /RECURRENCE-ID:20241004T170000Z\r\nDTSTART:20241004T190000Z\r\n/);
 });
 
 test("a download carries guests with their RSVP state and the reminder", async (t) => {
@@ -137,7 +158,8 @@ test("a download carries guests with their RSVP state and the reminder", async (
 test("the moved occurrence re-specifies its time and effective text", async (t) => {
 	const ics = await (await download(t)).text();
 	assert.match(ics, /RECURRENCE-ID;TZID=America\/Los_Angeles:20261116T090000\r\n/);
-	const moved = ics.slice(ics.indexOf("RECURRENCE-ID"), ics.indexOf("END:VEVENT", ics.indexOf("RECURRENCE-ID")));
+	const at = ics.indexOf("RECURRENCE-ID;TZID=America/Los_Angeles");
+	const moved = ics.slice(at, ics.indexOf("END:VEVENT", at));
 	assert.match(moved, /DTSTART;TZID=America\/Los_Angeles:20261116T110000/);
 	assert.match(moved, /SUMMARY:Moved sync/);
 	assert.match(moved, /DESCRIPTION:Weekly notes/); // A null override field inherits the series text.

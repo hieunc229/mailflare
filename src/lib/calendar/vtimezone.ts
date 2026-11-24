@@ -6,12 +6,11 @@ import { zonedDateFields } from "@/lib/time/utils";
  * found by scanning, a stable yearly pattern (2nd-Sunday-in-March style) becomes an RRULE observance,
  * and anything else — zones that change offset irregularly, or a rule adopted mid-window — is written
  * as one-off observances, which stay exact within the window. Coverage limits: offsets are read from
- * the runtime's tz data (a stale OS/Workers image exports stale rules), sub-minute historical offsets
- * are rounded to the minute, and an irregular zone's one-offs stop at the window end, so an open-ended
- * series in such a zone resolves with the last observed offset beyond it.
+ * the runtime's tz data (a stale OS/Workers image exports stale rules) and keep second precision —
+ * historical zones like Asia/Colombo need the sub-minute form RFC 5545 permits — and an irregular
+ * zone's one-offs stop at the window end, so an open-ended series there holds the last offset beyond it.
  */
 
-const MINUTE = 60_000;
 const DAY = 86_400_000;
 const SCAN_STEP = 7 * DAY;
 
@@ -24,13 +23,13 @@ function offsetMs(zone: string, at: number): number {
 	return zonedDateFields(new Date(at), zone).getTime() - at;
 }
 
-/** First instant in (lo, hi] where the offset stops being `from`; transitions are minute-aligned. */
+/** First instant in (lo, hi] where the offset stops being `from`, found to the millisecond; tzdata transitions are second-aligned. */
 function findTransition(zone: string, lo: number, hi: number, from: number): number {
-	while (hi - lo > 1000) {
-		const mid = Math.floor((lo + hi) / 2000) * 1000;
+	while (hi - lo > 1) {
+		const mid = Math.floor((lo + hi) / 2);
 		if (offsetMs(zone, mid) === from) lo = mid; else hi = mid;
 	}
-	return Math.round(hi / MINUTE) * MINUTE;
+	return hi;
 }
 
 function scanTransitions(zone: string, startMs: number, endMs: number): Transition[] {
@@ -41,7 +40,9 @@ function scanTransitions(zone: string, startMs: number, endMs: number): Transiti
 		const next = Math.min(at + SCAN_STEP, endMs);
 		const nextOffset = offsetMs(zone, next);
 		if (nextOffset === offset) { at = next; continue; }
+		// The precise instant is the next cursor too: rounding it could keep the old offset and rescan forever.
 		const when = findTransition(zone, at, next, offset);
+		if (when <= at) throw new Error(`timezone scan for ${zone} did not advance past ${new Date(at).toISOString()}`);
 		transitions.push({ at: when, from: offset, to: offsetMs(zone, when) });
 		offset = offsetMs(zone, when);
 		at = when;
@@ -49,10 +50,11 @@ function scanTransitions(zone: string, startMs: number, endMs: number): Transiti
 	return transitions;
 }
 
-/** ±HHMM for a TZOFFSET value; every post-war transition is minute-aligned. */
+/** ±HHMM for a TZOFFSET value, with optional SS — RFC 5545 permits it and historical zones need it. */
 function tzOffset(ms: number): string {
-	const minutes = Math.round(Math.abs(ms) / MINUTE);
-	return `${ms < 0 ? "-" : "+"}${String(Math.floor(minutes / 60)).padStart(2, "0")}${String(minutes % 60).padStart(2, "0")}`;
+	const seconds = Math.round(Math.abs(ms) / 1000);
+	const base = `${ms < 0 ? "-" : "+"}${String(Math.floor(seconds / 3600)).padStart(2, "0")}${String(Math.floor(seconds / 60) % 60).padStart(2, "0")}`;
+	return seconds % 60 ? `${base}${String(seconds % 60).padStart(2, "0")}` : base;
 }
 
 /** A fake-UTC instant rendered as a local DATE-TIME (no Z). */
@@ -79,16 +81,33 @@ function matchesRule(localMs: number, rule: YearlyRule): boolean {
 }
 
 /**
- * The yearly rule the last three transitions of one kind share — same month, weekday, wall time and
- * nth-position (a fifth-weekday-that-is-last reads as -1). Null when fewer than three exist or they disagree.
+ * The yearly rule the tail of `transitions` proves, with its anchor index. The last three decide the
+ * candidates — same month, weekday and wall time, plus either a shared ordinal or every date being the
+ * last such weekday of its month (a 4th-that-is-also-last streak prefers -1: last-weekday rules
+ * dominate real zones, and a wrong 4SU silently mis-times 5-Sunday years). A candidate is only
+ * accepted when the contiguous tail matching it also observes a transition in every year it spans —
+ * a streak is evidence, not proof, so zones whose rule actually changed or that fire irregularly fall
+ * back to explicit observances.
  */
-function yearlyRule(transitions: Transition[]): YearlyRule | null {
+function yearlyRule(transitions: Transition[]): { rule: YearlyRule; anchorIndex: number } | null {
 	if (transitions.length < 3) return null;
-	const recent = transitions.slice(-3).map((transition) => ruleFields(transition.at + transition.from));
-	const [first] = recent;
-	if (!recent.every((fields) => fields.month === first.month && fields.weekday === first.weekday && fields.hour === first.hour && fields.minute === first.minute && fields.second === first.second)) return null;
-	if (recent.every((fields) => fields.ordinal === first.ordinal)) return { month: first.month, weekday: first.weekday, ordinal: first.ordinal, hour: first.hour, minute: first.minute, second: first.second };
-	if (recent.every((fields) => fields.last)) return { month: first.month, weekday: first.weekday, ordinal: -1, hour: first.hour, minute: first.minute, second: first.second };
+	const tail = transitions.slice(-3).map((transition) => ruleFields(transition.at + transition.from));
+	const [last] = tail;
+	if (!tail.every((fields) => fields.month === last.month && fields.weekday === last.weekday && fields.hour === last.hour && fields.minute === last.minute && fields.second === last.second)) return null;
+	const base = { month: last.month, weekday: last.weekday, hour: last.hour, minute: last.minute, second: last.second };
+	const candidates: YearlyRule[] = [];
+	if (tail.every((fields) => fields.last)) candidates.push({ ...base, ordinal: -1 });
+	if (tail.every((fields) => fields.ordinal === last.ordinal)) candidates.push({ ...base, ordinal: last.ordinal });
+	for (const rule of candidates) {
+		let anchorIndex = transitions.length;
+		while (anchorIndex > 0 && matchesRule(transitions[anchorIndex - 1].at + transitions[anchorIndex - 1].from, rule)) anchorIndex--;
+		const years = new Set(transitions.slice(anchorIndex).map((transition) => new Date(transition.at + transition.from).getUTCFullYear()));
+		let verified = true;
+		for (let year = new Date(transitions[anchorIndex].at + transitions[anchorIndex].from).getUTCFullYear(); year <= new Date(transitions[transitions.length - 1].at + transitions[transitions.length - 1].from).getUTCFullYear(); year++) {
+			if (!years.has(year)) { verified = false; break; }
+		}
+		if (verified) return { rule, anchorIndex };
+	}
 	return null;
 }
 
@@ -118,15 +137,14 @@ export function vtimezoneLines(zone: string, startMs: number, endMs: number): st
 	for (const type of ["STANDARD", "DAYLIGHT"] as const) {
 		const group = transitions.filter((transition) => (transition.to > transition.from) === (type === "DAYLIGHT"));
 		if (!group.length) continue;
-		const rule = yearlyRule(group);
-		// Only the contiguous tail matching the detected rule carries the RRULE (one block anchored on
-		// its first match); every earlier transition of the kind is a one-off.
-		let firstRuleIndex = group.length;
-		if (rule) while (firstRuleIndex > 0 && matchesRule(group[firstRuleIndex - 1].at + group[firstRuleIndex - 1].from, rule)) firstRuleIndex--;
-		group.slice(0, firstRuleIndex).forEach((transition) => oneOffs.push({ at: transition.at, block: observance(type, localAt(transition.at + transition.from), transition.from, transition.to, null) }));
-		if (rule && firstRuleIndex < group.length) {
-			const anchor = group[firstRuleIndex];
-			rules.push({ at: anchor.at, block: observance(type, localAt(anchor.at + anchor.from), anchor.from, anchor.to, rule) });
+		const inferred = yearlyRule(group);
+		// Only the verified tail matching the inferred rule carries the RRULE (one block anchored on its
+		// first match); every earlier transition of the kind is written as an explicit observance.
+		const anchorIndex = inferred?.anchorIndex ?? group.length;
+		group.slice(0, anchorIndex).forEach((transition) => oneOffs.push({ at: transition.at, block: observance(type, localAt(transition.at + transition.from), transition.from, transition.to, null) }));
+		if (inferred) {
+			const anchor = group[anchorIndex];
+			rules.push({ at: anchor.at, block: observance(type, localAt(anchor.at + anchor.from), anchor.from, anchor.to, inferred.rule) });
 		}
 	}
 	oneOffs.sort((a, b) => a.at - b.at);

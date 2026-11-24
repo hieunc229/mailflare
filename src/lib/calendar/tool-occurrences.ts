@@ -7,6 +7,7 @@ type EventRow = typeof calendarEvents.$inferSelect;
 /** The fields a recurrence check needs; full rows and the feed builder's leaner event type both satisfy it. */
 type RecurrenceFields = {
 	repeat: string;
+	repeatDays?: string;
 	repeatInterval?: number | null;
 	repeatWeekday?: number | null;
 	repeatWeek?: number | null;
@@ -76,16 +77,31 @@ function occurrenceStart(event: RecurrenceFields, index: number): Date {
 }
 
 /**
- * Whether ms is a start the series rule itself yields. An override there is an exception to that
- * occurrence (RECURRENCE-ID); anywhere else it is an extra occurrence (RDATE). Far-future checks hit
- * the scan cap and read as extras — the occurrence still exports through RDATE, just without exception metadata.
+ * Whether ms is a start the series rule itself yields: an override there is an exception to that
+ * occurrence (RECURRENCE-ID), anywhere else an extra occurrence (RDATE). The candidate index is
+ * estimated the same way the expander jumps to a window — wall-clock fields in the event's zone,
+ * then a few adjacent candidates — so any slot is classified, not just the first 20k. A candidate on
+ * a weekday the repeat's listed days exclude is not an occurrence, so an override there is an extra.
  */
 export function isSeriesOccurrence(event: RecurrenceFields, ms: number): boolean {
 	if (event.repeat === "none") return false;
-	for (let index = 0; index < 20_000; index++) {
+	const zone = normalizeTimeZone(event.timeZone);
+	const first = zonedDateFields(event.startsAt, zone);
+	const target = zonedDateFields(new Date(ms), zone);
+	const interval = event.repeat === "weekdays" ? 1 : validInterval(event.repeatInterval);
+	const step = (event.repeat === "weekly" ? 7 : 1) * interval;
+	const initial = event.repeat === "monthly" || event.repeat === "yearly"
+		? Math.max(0, event.repeat === "monthly"
+			? Math.floor(((target.getUTCFullYear() - first.getUTCFullYear()) * 12 + target.getUTCMonth() - first.getUTCMonth() - 1) / interval)
+			: Math.floor((target.getUTCFullYear() - first.getUTCFullYear() - 1) / interval))
+		: Math.max(0, Math.floor((target.getTime() - first.getTime()) / (86_400_000 * step)) - 1);
+	// The estimate is a lower bound by construction; a handful of adjacent candidates covers the rest.
+	for (let index = initial; index <= initial + 3; index++) {
 		const at = occurrenceStart(event, index);
-		if (at.getTime() > ms || (event.repeatUntil && at >= event.repeatUntil)) return false;
-		if (at.getTime() === ms) return true;
+		if (at.getTime() !== ms) continue;
+		if (event.repeatUntil && at >= event.repeatUntil) return false;
+		if (event.repeat === "weekdays" && !parseCalendarRepeatDays(event.repeatDays).includes(zonedDateFields(at, zone).getUTCDay())) return false;
+		return true;
 	}
 	return false;
 }
