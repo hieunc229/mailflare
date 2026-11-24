@@ -386,6 +386,12 @@
         "CREATE INDEX `calendar_invite_tombstones_user_idx` ON `calendar_invite_tombstones` (`user_id`);",
         "CREATE INDEX `calendar_occurrence_responses_event_idx` ON `calendar_occurrence_responses` (`event_id`);"
       ]
+    },
+    {
+      "name": "0017_spam_strictness.sql",
+      "statements": [
+        "ALTER TABLE `users` ADD `spam_strictness` varchar(64) NOT NULL DEFAULT 'strict';"
+      ]
     }
   ]
 }

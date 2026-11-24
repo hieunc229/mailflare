@@ -7,12 +7,14 @@ import { analyzeAuthentication } from "./analyzers/authentication";
 import { analyzeImpersonation } from "./analyzers/impersonation";
 import { extractSenderIp } from "./domain-utils";
 import { getReputationKeys } from "./analyzers/reputation";
+import { findHeader } from "./analyzers/utils";
+import { analyzeSolicitation } from "./analyzers/solicitation";
 import { analyzeStructure } from "./analyzers/structure";
 import { analyzeUrls } from "./analyzers/urls";
 import { classifyTokens } from "./classifier";
 import { buildFingerprint, getDomain, prepareSpamContent, tokenizeMessage } from "./tokenizer";
 import type { SpamAnalysisInput, SpamAnalysisResult, SpamSignal } from "./types";
-import { SPAM_THRESHOLDS, SPAM_WEIGHTS } from "./weights";
+import { SPAM_STRICTNESS_THRESHOLDS, SPAM_THRESHOLDS, SPAM_WEIGHTS } from "./weights";
 import { LocalSpamIntelligenceProvider } from "./providers/local";
 
 const MAX_KNOWN_DOMAINS = 2000;
@@ -32,6 +34,7 @@ async function listKnownDomains(db: AppDatabase, userId: string): Promise<string
 }
 
 export async function analyzeSpam(db: AppDatabase, input: SpamAnalysisInput): Promise<SpamAnalysisResult> {
+	const spamThreshold = SPAM_STRICTNESS_THRESHOLDS[input.strictness ?? "normal"] ?? SPAM_THRESHOLDS.spam;
 	const prepared = prepareSpamContent(input.message);
 	const fingerprint = buildFingerprint(input.message, prepared);
 	const sender = getEmailAddress(input.message.fromAddr ?? input.envelopeFrom).toLowerCase();
@@ -97,6 +100,12 @@ export async function analyzeSpam(db: AppDatabase, input: SpamAnalysisInput): Pr
 			}
 		}
 	}
+	// The exact address only: a shared domain (a freemail provider, a large vendor) has been seen for others, which says nothing about this sender.
+	const seenBefore = reputationRecords.some(({ identity, record }) => identity.type === "email" && (record?.messagesSeen ?? 0) > 0);
+	signals.push(...analyzeSolicitation(input.message, prepared, {
+		firstContact: !contact && !seenBefore,
+		hasUnsubscribe: !!findHeader(input.headers, "list-unsubscribe"),
+	}));
 	const strongestReputation = reputationSignals.sort((a, b) => Math.abs(b.score) - Math.abs(a.score))[0];
 	if (strongestReputation) signals.push(strongestReputation);
 
@@ -109,7 +118,7 @@ export async function analyzeSpam(db: AppDatabase, input: SpamAnalysisInput): Pr
 	});
 
 	const scoreBeforePolicy = signals.reduce((total, signal) => total + signal.score, 0);
-	if (authPolicyReason && scoreBeforePolicy < SPAM_THRESHOLDS.spam) signals.push({ id: "auth_policy", score: SPAM_THRESHOLDS.spam - scoreBeforePolicy, reason: `${authPolicyReason}; filed as spam by authentication policy` });
+	if (authPolicyReason && scoreBeforePolicy < spamThreshold) signals.push({ id: "auth_policy", score: spamThreshold - scoreBeforePolicy, reason: `${authPolicyReason}; filed as spam by authentication policy` });
 
 	const rawScore = signals.reduce((total, signal) => total + signal.score, 0);
 	const score = Math.max(0, Math.min(100, rawScore));
@@ -118,6 +127,6 @@ export async function analyzeSpam(db: AppDatabase, input: SpamAnalysisInput): Pr
 		score: score - rawScore,
 		reason: rawScore > 100 ? "Score is capped at 100" : "Score cannot be lower than 0",
 	});
-	const verdict = score >= SPAM_THRESHOLDS.spam ? "spam" : score >= SPAM_THRESHOLDS.suspicious ? "suspicious" : "inbox";
+	const verdict = score >= spamThreshold ? "spam" : score >= SPAM_THRESHOLDS.suspicious ? "suspicious" : "inbox";
 	return { score, verdict, signals: signals.filter((signal) => Math.abs(signal.score) >= 2 || signal.id === "score_boundary"), contentProbability: bayesian.probability, fingerprint };
 }

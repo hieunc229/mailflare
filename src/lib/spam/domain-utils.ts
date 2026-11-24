@@ -26,6 +26,25 @@ export function registrableDomain(host: string): string {
 	return MULTI_PART_SUFFIXES.has(lastTwo) ? labels.slice(-3).join(".") : lastTwo;
 }
 
+/** True for a name that is itself a registry suffix such as `co.uk`, which no one owns. */
+export function isMultiPartSuffix(host: string): boolean {
+	return MULTI_PART_SUFFIXES.has(host.toLowerCase().replace(/\.$/, ""));
+}
+
+/** Registrable domains that are one provider's mailboxes for the general public. */
+const SHARED_MAIL_DOMAINS = new Set([
+	"gmail.com", "googlemail.com", "outlook.com", "live.com", "msn.com", "icloud.com", "me.com", "mac.com", "aol.com",
+	"proton.me", "protonmail.com", "mail.ru", "zoho.com", "fastmail.com",
+]);
+/** Providers that run the same service under many country domains (yahoo.fr, hotmail.co.uk, gmx.de, yandex.ru). */
+const SHARED_MAIL_LABELS = new Set(["yahoo", "hotmail", "gmx", "yandex"]);
+
+/** True when anyone can hold an address on the domain, so it says nothing about who a sender is. */
+export function isSharedMailDomain(host: string): boolean {
+	const domain = registrableDomain(host);
+	return SHARED_MAIL_DOMAINS.has(domain) || SHARED_MAIL_LABELS.has(domain.split(".")[0] ?? "");
+}
+
 /** The label that identifies the owner, e.g. `paypal` for `mail.paypal.co.uk`. */
 export function domainOwnerLabel(host: string): string {
 	return registrableDomain(host).split(".")[0] ?? "";
