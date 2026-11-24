@@ -32,6 +32,7 @@ const seed = `
 		('evt-future', 'user-1', 'December weekly', '', '', '[]', 'weekly', '[]', NULL, NULL, 1, NULL, NULL, '[]', NULL, NULL, NULL, NULL, ${sec("2026-12-01T09:00:00Z")}, ${sec("2026-12-01T10:00:00Z")}, 1, 1),
 		('evt-old', 'user-1', 'Since 1970', '', '', '[]', 'daily', '[]', NULL, NULL, 1, NULL, NULL, '[]', NULL, NULL, NULL, NULL, ${sec("1970-01-01T17:00:00Z")}, ${sec("1970-01-01T18:00:00Z")}, 1, 1),
 		('evt-london', 'user-1', 'London weekly', '', '', '[]', 'weekly', '[]', NULL, ${sec("2042-01-01T00:00:00Z")}, 1, NULL, NULL, '[]', 'Europe/London', NULL, NULL, NULL, ${sec("2026-03-02T09:00:00Z")}, ${sec("2026-03-02T10:00:00Z")}, 1, 1),
+		('evt-eon', 'user-1', 'Deep future weekly', '', '', '[]', 'weekly', '[]', NULL, ${sec("9998-11-02T00:00:00Z")}, 1, NULL, NULL, '[]', 'America/Los_Angeles', NULL, NULL, NULL, ${monday}, ${monday + 1800}, 1, 1),
 		('evt-pending', 'user-1', 'Pending invite', '', '', '[]', 'none', '[]', NULL, NULL, 1, NULL, NULL, '[]', NULL, NULL, 'needs-action', NULL, ${monday}, ${monday + 1800}, 1, 1);
 	INSERT INTO calendar_event_overrides (id, event_id, occurrence_ms, starts_at, ends_at, title, description, location, created_at, updated_at) VALUES
 		('ov-1', 'evt-weekly', ${Date.parse("2026-11-16T17:00:00Z")}, ${sec("2026-11-16T19:00:00Z")}, ${sec("2026-11-16T20:00:00Z")}, 'Moved sync', NULL, 'Video', 1, 1),
@@ -91,7 +92,7 @@ test("no session and no key is a 401", async (t) => {
 test("every event becomes a VEVENT with its rule, exclusions and alarm", async (t) => {
 	const ics = await (await download(t)).text();
 	const masters = ics.split("BEGIN:VEVENT").length - 1;
-	assert.equal(masters, 16); // Thirteen events plus three moved occurrences; the bare extras are RDATEs and the pending invite stays out.
+	assert.equal(masters, 17); // Fourteen events plus three moved occurrences; the bare extras are RDATEs and the pending invite stays out.
 	assert.doesNotMatch(ics, /Pending invite/);
 	assert.match(ics, /UID:evt-one@mailflare\r\n/);
 	assert.match(ics, /DTSTART:20261103T170000Z\r\n/);
@@ -121,8 +122,8 @@ test("every cited TZID gets a VTIMEZONE, and an extra occurrence exports as RDAT
 	const ics = await (await download(t)).text();
 	// Without this block a stock parser resolves TZID times as floating and shifts the series.
 	assert.match(ics, /BEGIN:VTIMEZONE\r\nTZID:America\/Los_Angeles\r\n/);
-	assert.match(ics, /BEGIN:STANDARD\r\nDTSTART:\d{8}T020000\r\nTZOFFSETFROM:-0700\r\nTZOFFSETTO:-0800\r\nRRULE:FREQ=YEARLY;BYMONTH=11;BYDAY=1SU\r\nEND:STANDARD\r\n/);
-	assert.match(ics, /BEGIN:DAYLIGHT\r\nDTSTART:\d{8}T020000\r\nTZOFFSETFROM:-0800\r\nTZOFFSETTO:-0700\r\nRRULE:FREQ=YEARLY;BYMONTH=3;BYDAY=2SU\r\nEND:DAYLIGHT\r\n/);
+	assert.match(ics, /BEGIN:STANDARD\r\nDTSTART:\d{8}T020000\r\nTZOFFSETFROM:-0700\r\nTZOFFSETTO:-0800\r\nRRULE:FREQ=YEARLY;BYMONTH=11;BYDAY=1SU;UNTIL=\d{8}T\d{6}\r\nEND:STANDARD\r\n/);
+	assert.match(ics, /BEGIN:DAYLIGHT\r\nDTSTART:\d{8}T020000\r\nTZOFFSETFROM:-0800\r\nTZOFFSETTO:-0700\r\nRRULE:FREQ=YEARLY;BYMONTH=3;BYDAY=2SU;UNTIL=\d{8}T\d{6}\r\nEND:DAYLIGHT\r\n/);
 	// ov-2 sits on a Thursday where the Monday rule has no occurrence: it is an extra, declared as an
 	// RDATE on the master instead of a detached VEVENT a parser could not attach anywhere.
 	const weekly = ics.slice(ics.indexOf("UID:evt-weekly"), ics.indexOf("END:VEVENT", ics.indexOf("UID:evt-weekly")));
@@ -132,6 +133,19 @@ test("every cited TZID gets a VTIMEZONE, and an extra occurrence exports as RDAT
 	assert.match(ics, /BEGIN:VTIMEZONE\r\nTZID:Europe\/London\r\n/);
 	assert.match(ics, /BYMONTH=3;BYDAY=-1SU/);
 	assert.doesNotMatch(ics, /BYDAY=4SU/);
+});
+
+test("a series past the probe budget degrades to UTC instead of scanning millennia", async (t) => {
+	const ics = await (await download(t)).text();
+	// evt-eon cites instants to 9998 — ~2.9M daily probes — so its window is dropped and the series
+	// exports with Z-forms: instants stay exact, only the TZID is lost. evt-weekly's ordinary window
+	// still fits the budget and keeps its TZID + VTIMEZONE.
+	const eon = ics.slice(ics.indexOf("UID:evt-eon"), ics.indexOf("END:VEVENT", ics.indexOf("UID:evt-eon")));
+	assert.match(eon, /DTSTART:20261102T170000Z\r\n/);
+	assert.doesNotMatch(eon, /TZID=/);
+	const weekly = ics.slice(ics.indexOf("UID:evt-weekly"), ics.indexOf("END:VEVENT", ics.indexOf("UID:evt-weekly")));
+	assert.match(weekly, /DTSTART;TZID=America\/Los_Angeles:/);
+	assert.match(ics, /BEGIN:VTIMEZONE\r\nTZID:America\/Los_Angeles\r\n/);
 });
 
 test("a weekday the repeat filters out takes the extra as RDATE, far slots stay exceptions", async (t) => {

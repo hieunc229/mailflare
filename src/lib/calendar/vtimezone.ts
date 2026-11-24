@@ -23,6 +23,13 @@ const SCAN_STEP = DAY;
 
 const WEEKDAYS = ["SU", "MO", "TU", "WE", "TH", "FR", "SA"];
 
+// Zones that never change offset; scanning them would only burn the probe budget. IANA's Etc/*
+// entries are all fixed (Etc/GMT+N means UTC-N), plus the UTC aliases apps actually store.
+const FIXED_ZONE = /^(UTC|Etc\/(UTC|Universal|Zulu|Greenwich|GMT[+-]\d+)|Etc\/GMT|GMT|Greenwich|Universal|Zulu)$/;
+export function isFixedZone(zone: string): boolean {
+	return FIXED_ZONE.test(zone);
+}
+
 type Transition = { at: number; from: number; to: number };
 
 /** Wall-clock offset from UTC in ms for `zone` at `at` (epoch ms). */
@@ -139,27 +146,24 @@ function yearlyRule(transitions: Transition[], endMs: number): { rule: YearlyRul
 	return null;
 }
 
-function observance(type: "STANDARD" | "DAYLIGHT", dtstart: string, from: number, to: number, rule: YearlyRule | null): string[] {
+function observance(type: "STANDARD" | "DAYLIGHT", dtstart: string, from: number, to: number, rule: YearlyRule | null, until: string | null): string[] {
 	const lines = [`BEGIN:${type}`, `DTSTART:${dtstart}`, `TZOFFSETFROM:${tzOffset(from)}`, `TZOFFSETTO:${tzOffset(to)}`];
-	if (rule) lines.push(`RRULE:FREQ=YEARLY;BYMONTH=${rule.month + 1};BYDAY=${rule.ordinal}${WEEKDAYS[rule.weekday]}`);
+	if (rule) lines.push(`RRULE:FREQ=YEARLY;BYMONTH=${rule.month + 1};BYDAY=${rule.ordinal}${WEEKDAYS[rule.weekday]}${until ? `;UNTIL=${until}` : ""}`);
 	lines.push(`END:${type}`);
 	return lines;
 }
 
-/** The VTIMEZONE subcomponent lines for `zone`, covering every transition inside [startMs, endMs]. */
-export function vtimezoneLines(zone: string, startMs: number, endMs: number): string[] {
-	const lines = ["BEGIN:VTIMEZONE", `TZID:${zone}`];
+/** The observance blocks a single coverage window contributes, tagged by the instant each takes effect. */
+function windowObservances(zone: string, startMs: number, endMs: number): { at: number; block: string[] }[] {
 	const transitions = scanTransitions(zone, startMs, endMs);
 	if (!transitions.length) {
 		const offset = offsetMs(zone, startMs);
-		lines.push(...observance("STANDARD", localAt(startMs), offset, offset, null), "END:VTIMEZONE");
-		return lines;
+		return [{ at: startMs, block: observance("STANDARD", localAt(startMs), offset, offset, null, null) }];
 	}
 	// The period before the first observed transition takes its FROM offset, so instants at or after
 	// the window start always resolve. Each observance below is of the kind it switches into.
 	const first = transitions[0];
-	const preamble = first.to > first.from ? "STANDARD" : "DAYLIGHT";
-	lines.push(...observance(preamble, localAt(startMs + first.from), first.from, first.from, null));
+	const blocks = [{ at: startMs, block: observance(first.to > first.from ? "STANDARD" : "DAYLIGHT", localAt(startMs + first.from), first.from, first.from, null, null) }];
 	const oneOffs: { at: number; block: string[] }[] = [];
 	const rules: { at: number; block: string[] }[] = [];
 	for (const type of ["STANDARD", "DAYLIGHT"] as const) {
@@ -169,15 +173,34 @@ export function vtimezoneLines(zone: string, startMs: number, endMs: number): st
 		// Only the verified tail matching the inferred rule carries the RRULE (one block anchored on its
 		// first match); every earlier transition of the kind is written as an explicit observance.
 		const anchorIndex = inferred?.anchorIndex ?? group.length;
-		group.slice(0, anchorIndex).forEach((transition) => oneOffs.push({ at: transition.at, block: observance(type, localAt(transition.at + transition.from), transition.from, transition.to, null) }));
+		group.slice(0, anchorIndex).forEach((transition) => oneOffs.push({ at: transition.at, block: observance(type, localAt(transition.at + transition.from), transition.from, transition.to, null, null) }));
 		if (inferred) {
 			const anchor = group[anchorIndex];
-			rules.push({ at: anchor.at, block: observance(type, localAt(anchor.at + anchor.from), anchor.from, anchor.to, inferred.rule) });
+			// The rule was only verified inside this window — UNTIL keeps it from predicting over a
+			// later window's explicit observances (or the uncovered gap between them).
+			rules.push({ at: anchor.at, block: observance(type, localAt(anchor.at + anchor.from), anchor.from, anchor.to, inferred.rule, localAt(endMs + anchor.from)) });
 		}
 	}
 	oneOffs.sort((a, b) => a.at - b.at);
 	rules.sort((a, b) => a.at - b.at);
-	for (const { block } of [...oneOffs, ...rules]) lines.push(...block);
+	return [...blocks, ...oneOffs, ...rules];
+}
+
+/**
+ * The VTIMEZONE subcomponent lines for `zone`, covering `windows` — the disjoint instants ranges the
+ * calendar cites, each {startMs, endMs} sorted ascending. Uncited gaps between windows get no
+ * observances (nothing resolves there), which is what keeps a repeatUntil-9998 series beside a 2026
+ * one from probing millennia.
+ */
+export function vtimezoneLines(zone: string, windows: { startMs: number; endMs: number }[]): string[] {
+	const lines = ["BEGIN:VTIMEZONE", `TZID:${zone}`];
+	if (isFixedZone(zone)) {
+		lines.push(...observance("STANDARD", localAt(windows[0].startMs), 0, 0, null, null), "END:VTIMEZONE");
+		return lines;
+	}
+	const blocks = windows.flatMap(({ startMs, endMs }) => windowObservances(zone, startMs, endMs));
+	blocks.sort((a, b) => a.at - b.at);
+	for (const { block } of blocks) lines.push(...block);
 	lines.push("END:VTIMEZONE");
 	return lines;
 }

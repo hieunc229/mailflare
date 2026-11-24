@@ -1,7 +1,7 @@
 import { escapeIcsText, foldIcsLine, formatIcsUtc, isIcsAddress, joinIcsLines } from "./ics";
 import { parseCalendarRepeatDays, parseExcludedOccurrences } from "./recurrence";
 import { isSeriesOccurrence } from "./tool-occurrences";
-import { vtimezoneLines } from "./vtimezone";
+import { isFixedZone, vtimezoneLines } from "./vtimezone";
 
 export { escapeIcsText, foldIcsLine };
 
@@ -135,17 +135,15 @@ export function buildCalendarFeed(events: FeedEvent[], options: { name: string; 
 	lines.push(`X-WR-CALNAME:${escapeIcsText(options.name)}`);
 	if (!options.download) lines.push("REFRESH-INTERVAL;VALUE=DURATION:PT1H", "X-PUBLISHED-TTL:PT1H");
 	const eventLines: string[] = [];
-	// Zone -> the instants events cite it for; each VTIMEZONE must cover them so a parser resolves every TZID.
-	const zones = new Map<string, { earliest: number; latest: number }>();
-	const noteInstant = (zone: string | null, ms: number) => {
-		if (!zone) return;
-		const span = zones.get(zone);
-		if (span) { span.earliest = Math.min(span.earliest, ms); span.latest = Math.max(span.latest, ms); } else zones.set(zone, { earliest: ms, latest: ms });
-	};
+	// Zone -> the coverage windows events cite it for. Each event contributes one range [earliest,
+	// latest] over the instants it emits; overlapping ranges merge into one window. A global union
+	// per zone would let a single repeatUntil-9998 series inflate the scan to millennia of idle days.
+	const DAY = 86_400_000;
+	const PAD = 400 * DAY;
+	const zones = new Map<string, { start: number; end: number; event: FeedEvent }[]>();
+	const splits = new Map<FeedEvent, { rule: string | null; zone: string | null; excluded: Set<number>; extras: FeedOccurrenceOverride[]; detached: FeedOccurrenceOverride[] }>();
 	for (const event of events) {
 		const rule = recurrenceRule(event, options.download === true);
-		// Recurring events keep their local clock time across daylight saving changes only when they carry a zone.
-		const zone = rule ? validTimeZone(event.timeZone) : null;
 		const excluded = new Set(parseExcludedOccurrences(event.excludedOccurrences));
 		const masterMs = event.endsAt.getTime() - event.startsAt.getTime();
 		// An override at a start the rule itself yields is an exception (RECURRENCE-ID); anywhere else
@@ -156,11 +154,50 @@ export function buildCalendarFeed(events: FeedEvent[], options: { name: string; 
 			if (excluded.has(override.occurrenceMs)) continue;
 			if (options.download && !isSeriesOccurrence(event, override.occurrenceMs)) extras.push(override); else exceptions.push(override);
 		}
-		noteInstant(zone, event.startsAt.getTime());
-		noteInstant(zone, event.endsAt.getTime());
-		// The coverage window must run to the series' own end so the inferred DST rule is checked against
-		// every year the series lives, not a shorter guess.
-		if (event.repeatUntil) noteInstant(zone, event.repeatUntil.getTime());
+		// An extra whose start, length and text all match its RDATE needs no detached VEVENT; exceptions always do.
+		const detached = [...exceptions, ...extras.filter((extra) => extra.startsAt.getTime() !== extra.occurrenceMs || extra.endsAt.getTime() - extra.startsAt.getTime() !== masterMs
+			|| extra.title != null || extra.description != null || extra.location != null)];
+		// Recurring events keep their local clock time across daylight saving changes only when they carry a zone.
+		const zone = rule ? validTimeZone(event.timeZone) : null;
+		splits.set(event, { rule, zone, excluded, extras, detached });
+		if (zone) {
+			const instants = [event.startsAt.getTime(), event.endsAt.getTime()];
+			// The coverage window must run to the series' own end so the inferred DST rule is checked
+			// against every year the series lives, not a shorter guess.
+			if (event.repeatUntil) instants.push(event.repeatUntil.getTime());
+			for (const ms of excluded) instants.push(ms);
+			for (const extra of extras) instants.push(extra.occurrenceMs);
+			for (const override of detached) instants.push(override.occurrenceMs, override.startsAt.getTime(), override.endsAt.getTime());
+			// Padding keeps instants near the edges under the right observance; an open-ended series
+			// (no repeatUntil) gets ~15 years ahead so it can expand — one-offs hold the last offset beyond.
+			const end = event.repeatUntil ? Math.max(...instants) + PAD : Math.max(now.getTime() + 15 * 365 * DAY, Math.max(...instants) + PAD);
+			const range = { start: Math.min(...instants) - PAD, end, event };
+			const list = zones.get(zone);
+			if (list) list.push(range); else zones.set(zone, [range]);
+		}
+	}
+	// Coverage windows are merged per zone in start order against one export-wide probe budget (the
+	// daily scan costs ~3-7us a probe; refinement adds ~30 more per transition found). Each range pays
+	// only the span it adds to the merged windows, so the series that overspends — a repeatUntil-9998
+	// event — exports in UTC Z-forms (exact, just without its TZID) while its neighbors keep theirs.
+	// Nothing is clipped silently.
+	const MAX_VTIMEZONE_PROBES = 50_000;
+	let remaining = MAX_VTIMEZONE_PROBES;
+	const zoneWindows = new Map<string, { startMs: number; endMs: number }[]>();
+	for (const zone of [...zones.keys()].sort()) {
+		const windows: { startMs: number; endMs: number }[] = [];
+		for (const range of (zones.get(zone) as { start: number; end: number; event: FeedEvent }[]).sort((a, b) => a.start - b.start)) {
+			const last = windows[windows.length - 1];
+			const merges = last !== undefined && range.start <= last.endMs;
+			const cost = isFixedZone(zone) ? 0 : Math.ceil(((merges ? Math.max(0, range.end - last.endMs) : range.end - range.start)) / DAY);
+			if (cost > remaining) { (splits.get(range.event) as { zone: string | null }).zone = null; continue; }
+			remaining -= cost;
+			if (merges) last.endMs = Math.max(last.endMs, range.end); else windows.push({ startMs: range.start, endMs: range.end });
+		}
+		if (windows.length) zoneWindows.set(zone, windows);
+	}
+	for (const event of events) {
+		const { rule, zone, excluded, extras, detached } = splits.get(event) as { rule: string | null; zone: string | null; excluded: Set<number>; extras: FeedOccurrenceOverride[]; detached: FeedOccurrenceOverride[] };
 		eventLines.push("BEGIN:VEVENT", `UID:${event.id}@mailflare`, `DTSTAMP:${stamp}`,
 			dateProperty("DTSTART", event.startsAt, zone), dateProperty("DTEND", event.endsAt, zone),
 			`SUMMARY:${escapeIcsText(event.title)}`);
@@ -168,9 +205,9 @@ export function buildCalendarFeed(events: FeedEvent[], options: { name: string; 
 		if (event.location) eventLines.push(`LOCATION:${escapeIcsText(event.location)}`);
 		if (rule) {
 			eventLines.push(rule);
-			for (const ms of excluded) { noteInstant(zone, ms); eventLines.push(dateProperty("EXDATE", new Date(ms), zone)); }
+			for (const ms of excluded) eventLines.push(dateProperty("EXDATE", new Date(ms), zone));
 		}
-		for (const extra of extras) { noteInstant(zone, extra.occurrenceMs); eventLines.push(dateProperty("RDATE", new Date(extra.occurrenceMs), zone)); }
+		for (const extra of extras) eventLines.push(dateProperty("RDATE", new Date(extra.occurrenceMs), zone));
 		if (event.responseStatus === "tentative") eventLines.push("STATUS:TENTATIVE");
 		if (event.updatedAt) eventLines.push(`LAST-MODIFIED:${utc(event.updatedAt)}`);
 		if (options.download) {
@@ -179,13 +216,7 @@ export function buildCalendarFeed(events: FeedEvent[], options: { name: string; 
 			if (Number.isInteger(event.reminderMinutes) && (event.reminderMinutes as number) >= 0) eventLines.push("BEGIN:VALARM", "ACTION:DISPLAY", `DESCRIPTION:${escapeIcsText(event.title)}`, `TRIGGER:-PT${event.reminderMinutes}M`, "END:VALARM");
 		}
 		eventLines.push("END:VEVENT");
-		// An extra whose start, length and text all match its RDATE needs no detached VEVENT; exceptions always do.
-		const detached = [...exceptions, ...extras.filter((extra) => extra.startsAt.getTime() !== extra.occurrenceMs || extra.endsAt.getTime() - extra.startsAt.getTime() !== masterMs
-			|| extra.title != null || extra.description != null || extra.location != null)];
 		for (const override of detached) {
-			noteInstant(zone, override.occurrenceMs);
-			noteInstant(zone, override.startsAt.getTime());
-			noteInstant(zone, override.endsAt.getTime());
 			eventLines.push("BEGIN:VEVENT", `UID:${event.id}@mailflare`, `DTSTAMP:${stamp}`,
 				// The same TZID form as the master's DTSTART, so the RECURRENCE-ID pairs with its rule or RDATE occurrence.
 				dateProperty("RECURRENCE-ID", new Date(override.occurrenceMs), zone),
@@ -202,11 +233,8 @@ export function buildCalendarFeed(events: FeedEvent[], options: { name: string; 
 		}
 	}
 	if (options.download) {
-		for (const zone of [...zones.keys()].sort()) {
-			const span = zones.get(zone) as { earliest: number; latest: number };
-			// Padding keeps instants near the edges under the right observance, and ~15 years ahead lets
-			// an open-ended series expand; an irregular zone's one-offs stop there and hold the last offset.
-			lines.push(...vtimezoneLines(zone, span.earliest - 400 * 86_400_000, Math.max(now.getTime() + 15 * 365 * 86_400_000, span.latest + 400 * 86_400_000)));
+		for (const zone of zoneWindows.keys()) {
+			lines.push(...vtimezoneLines(zone, zoneWindows.get(zone) as { startMs: number; endMs: number }[]));
 		}
 	}
 	lines.push(...eventLines, "END:VCALENDAR");
