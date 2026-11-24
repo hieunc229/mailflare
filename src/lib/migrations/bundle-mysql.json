@@ -456,6 +456,19 @@
         "CREATE TRIGGER dav_changes_cards_ad AFTER DELETE ON dav_cards FOR EACH ROW\nBEGIN\n\tINSERT INTO dav_changes (collection_id, object_key, change_type) VALUES (OLD.collection_id, OLD.id, 'destroyed');\nEND;",
         "INSERT INTO dav_changes (collection_id, object_key, change_type)\nSELECT CONCAT('cal:', user_id), id, 'created' FROM calendar_events ORDER BY created_at, id;"
       ]
+    },
+    {
+      "name": "0023_email_suppressions.sql",
+      "statements": [
+        "ALTER TABLE `app_settings` ADD `suppression_mode` varchar(64) NOT NULL DEFAULT 'off';",
+        "ALTER TABLE `app_settings` ADD `resend_events_webhook_id` longtext;",
+        "ALTER TABLE `app_settings` ADD `resend_events_webhook_secret` longtext;",
+        "ALTER TABLE `app_settings` ADD `ses_feedback` longtext;",
+        "CREATE TABLE `email_suppressions` (\n\t`id` varchar(191) NOT NULL,\n\t`domain_id` varchar(191) NOT NULL,\n\t`email` varchar(320) NOT NULL,\n\t`reason` varchar(64) NOT NULL,\n\t`source` varchar(64) NOT NULL,\n\t`detail` longtext,\n\t`confirmed` boolean NOT NULL DEFAULT true,\n\t`evidence_ref` longtext,\n\t`event_count` bigint NOT NULL DEFAULT 1,\n\t`first_event_at` bigint NOT NULL,\n\t`last_event_at` bigint NOT NULL,\n\t`created_by_user_id` varchar(191),\n\tCONSTRAINT `email_suppressions_id` PRIMARY KEY(`id`),\n\tCONSTRAINT `email_suppressions_domain_email_idx` UNIQUE(`domain_id`,`email`)\n);",
+        "ALTER TABLE `email_suppressions` ADD CONSTRAINT `email_suppressions_domain_id_domains_id_fk` FOREIGN KEY (`domain_id`) REFERENCES `domains`(`id`) ON DELETE cascade ON UPDATE no action;",
+        "ALTER TABLE `email_suppressions` ADD CONSTRAINT `email_suppressions_created_by_user_id_users_id_fk` FOREIGN KEY (`created_by_user_id`) REFERENCES `users`(`id`) ON DELETE set null ON UPDATE no action;",
+        "CREATE INDEX `email_suppressions_created_by_idx` ON `email_suppressions` (`created_by_user_id`);"
+      ]
     }
   ]
 }

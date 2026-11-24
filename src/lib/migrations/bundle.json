@@ -935,6 +935,18 @@
         "CREATE TRIGGER `dav_changes_cards_ad` AFTER DELETE ON `dav_cards` BEGIN\n\tINSERT INTO dav_changes (collection_id, object_key, change_type) VALUES (OLD.collection_id, OLD.id, 'destroyed');\nEND;",
         "INSERT INTO dav_changes (collection_id, object_key, change_type)\nSELECT 'cal:' || user_id, id, 'created' FROM calendar_events ORDER BY created_at, id;"
       ]
+    },
+    {
+      "name": "0099_email_suppressions.sql",
+      "statements": [
+        "ALTER TABLE `app_settings` ADD `suppression_mode` text DEFAULT 'off' NOT NULL;",
+        "ALTER TABLE `app_settings` ADD `resend_events_webhook_id` text;",
+        "ALTER TABLE `app_settings` ADD `resend_events_webhook_secret` text;",
+        "ALTER TABLE `app_settings` ADD `ses_feedback` text;",
+        "CREATE TABLE `email_suppressions` (\n\t`id` text PRIMARY KEY NOT NULL,\n\t`domain_id` text NOT NULL,\n\t`email` text NOT NULL,\n\t`reason` text NOT NULL,\n\t`source` text NOT NULL,\n\t`detail` text,\n\t`confirmed` integer DEFAULT true NOT NULL,\n\t`evidence_ref` text,\n\t`event_count` integer DEFAULT 1 NOT NULL,\n\t`first_event_at` integer NOT NULL,\n\t`last_event_at` integer NOT NULL,\n\t`created_by_user_id` text,\n\tFOREIGN KEY (`domain_id`) REFERENCES `domains`(`id`) ON UPDATE no action ON DELETE cascade,\n\tFOREIGN KEY (`created_by_user_id`) REFERENCES `users`(`id`) ON UPDATE no action ON DELETE set null\n);",
+        "CREATE UNIQUE INDEX `email_suppressions_domain_email_idx` ON `email_suppressions` (`domain_id`,`email`);",
+        "CREATE INDEX `email_suppressions_created_by_idx` ON `email_suppressions` (`created_by_user_id`);"
+      ]
     }
   ]
 }

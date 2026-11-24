@@ -493,6 +493,20 @@
         "CREATE TRIGGER dav_changes_cards_au AFTER UPDATE ON dav_cards\nFOR EACH ROW WHEN ((OLD.collection_id, OLD.name, OLD.uid, OLD.body, OLD.version, OLD.fn, OLD.emails, OLD.size, OLD.updated_at) IS DISTINCT FROM (NEW.collection_id, NEW.name, NEW.uid, NEW.body, NEW.version, NEW.fn, NEW.emails, NEW.size, NEW.updated_at)) EXECUTE FUNCTION mailflare_dav_card_changed();",
         "INSERT INTO dav_changes (collection_id, object_key, change_type)\nSELECT 'cal:' || user_id, id, 'created' FROM calendar_events ORDER BY created_at, id;"
       ]
+    },
+    {
+      "name": "0023_email_suppressions.sql",
+      "statements": [
+        "ALTER TABLE \"app_settings\" ADD COLUMN \"suppression_mode\" text DEFAULT 'off' NOT NULL;",
+        "ALTER TABLE \"app_settings\" ADD COLUMN \"resend_events_webhook_id\" text;",
+        "ALTER TABLE \"app_settings\" ADD COLUMN \"resend_events_webhook_secret\" text;",
+        "ALTER TABLE \"app_settings\" ADD COLUMN \"ses_feedback\" text;",
+        "CREATE TABLE \"email_suppressions\" (\n\t\"id\" text PRIMARY KEY NOT NULL,\n\t\"domain_id\" text NOT NULL,\n\t\"email\" text NOT NULL,\n\t\"reason\" text NOT NULL,\n\t\"source\" text NOT NULL,\n\t\"detail\" text,\n\t\"confirmed\" boolean DEFAULT true NOT NULL,\n\t\"evidence_ref\" text,\n\t\"event_count\" bigint DEFAULT 1 NOT NULL,\n\t\"first_event_at\" bigint NOT NULL,\n\t\"last_event_at\" bigint NOT NULL,\n\t\"created_by_user_id\" text\n);",
+        "ALTER TABLE \"email_suppressions\" ADD CONSTRAINT \"email_suppressions_domain_id_domains_id_fk\" FOREIGN KEY (\"domain_id\") REFERENCES \"public\".\"domains\"(\"id\") ON DELETE cascade ON UPDATE no action;",
+        "ALTER TABLE \"email_suppressions\" ADD CONSTRAINT \"email_suppressions_created_by_user_id_users_id_fk\" FOREIGN KEY (\"created_by_user_id\") REFERENCES \"public\".\"users\"(\"id\") ON DELETE set null ON UPDATE no action;",
+        "CREATE UNIQUE INDEX \"email_suppressions_domain_email_idx\" ON \"email_suppressions\" USING btree (\"domain_id\",\"email\");",
+        "CREATE INDEX \"email_suppressions_created_by_idx\" ON \"email_suppressions\" USING btree (\"created_by_user_id\");"
+      ]
     }
   ]
 }
