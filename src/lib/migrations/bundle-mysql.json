@@ -410,7 +410,7 @@
       ]
     },
     {
-      "name": "0020_promotion_sender_backfill.sql",
+      "name": "0019_promotion_sender_backfill.sql",
       "statements": [
         "ALTER TABLE `mailbox_promotion_settings` ADD `backfill_stalls` int DEFAULT 0 NOT NULL;",
         "ALTER TABLE `mailbox_promotion_settings` ADD `backfill_error` longtext;",

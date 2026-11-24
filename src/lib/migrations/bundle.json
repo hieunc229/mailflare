@@ -888,7 +888,7 @@
       ]
     },
     {
-      "name": "0096_promotion_sender_backfill.sql",
+      "name": "0095_promotion_sender_backfill.sql",
       "statements": [
         "CREATE INDEX `messages_sender_idx` ON `messages` (`mailbox_id`,`sender_address`,`created_at`);",
         "ALTER TABLE `mailbox_promotion_settings` ADD `backfill_stalls` integer DEFAULT 0 NOT NULL;",
