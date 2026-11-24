@@ -1,1 +1,1 @@
-ALTER TABLE "users" ADD COLUMN "spam_strictness" text DEFAULT 'normal' NOT NULL;
+ALTER TABLE "users" ADD COLUMN "spam_strictness" text DEFAULT 'strict' NOT NULL;

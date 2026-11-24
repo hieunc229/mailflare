@@ -870,7 +870,7 @@
     {
       "name": "0093_spam_strictness.sql",
       "statements": [
-        "ALTER TABLE `users` ADD `spam_strictness` text DEFAULT 'normal' NOT NULL;"
+        "ALTER TABLE `users` ADD `spam_strictness` text DEFAULT 'strict' NOT NULL;"
       ]
     }
   ]

@@ -1,6 +1,6 @@
 export const SPAM_THRESHOLDS = { suspicious: 40, spam: 70 } as const;
 
-/** Per-user strictness: the score at which a message moves to Spam. "normal" is the default and equals SPAM_THRESHOLDS.spam. */
+/** Per-user strictness: the score at which a message moves to Spam. "normal" equals SPAM_THRESHOLDS.spam; the database default is "strict". */
 export const SPAM_STRICTNESS_THRESHOLDS = { relaxed: 85, normal: SPAM_THRESHOLDS.spam, strict: 55 } as const;
 export const SPAM_STRICTNESS_LEVELS = ["relaxed", "normal", "strict"] as const;
 

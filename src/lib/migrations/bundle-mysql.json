@@ -390,7 +390,7 @@
     {
       "name": "0017_spam_strictness.sql",
       "statements": [
-        "ALTER TABLE `users` ADD `spam_strictness` varchar(64) NOT NULL DEFAULT 'normal';"
+        "ALTER TABLE `users` ADD `spam_strictness` varchar(64) NOT NULL DEFAULT 'strict';"
       ]
     }
   ]

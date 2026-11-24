@@ -30,7 +30,7 @@ export type SpamAnalysisInput = {
 	senderIp?: string;
 	/** Brands added in the admin spam filter settings, checked alongside the built-in list. */
 	brands?: SpamBrand[];
-	/** How readily mail moves to Spam for this user; defaults to "normal" (score 70). */
+	/** How readily mail moves to Spam for this user; an omitted value uses "normal" (score 70); the column default is "strict". */
 	strictness?: SpamStrictness;
 	message: ParsedEmail;
 	intelligenceProvider?: SpamIntelligenceProvider;

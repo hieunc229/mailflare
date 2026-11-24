@@ -421,7 +421,7 @@
     {
       "name": "0017_spam_strictness.sql",
       "statements": [
-        "ALTER TABLE \"users\" ADD COLUMN \"spam_strictness\" text DEFAULT 'normal' NOT NULL;"
+        "ALTER TABLE \"users\" ADD COLUMN \"spam_strictness\" text DEFAULT 'strict' NOT NULL;"
       ]
     }
   ]

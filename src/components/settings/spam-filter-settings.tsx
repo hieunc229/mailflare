@@ -17,7 +17,7 @@ const STRICTNESS_OPTIONS = [
 export function SpamFilterSettings() {
 	const { t } = useLanguage();
 	const [enabled, setEnabled] = useState(true);
-	const [strictness, setStrictness] = useState<Strictness>("normal");
+	const [strictness, setStrictness] = useState<Strictness>("strict");
 	const [loading, setLoading] = useState(true);
 	const [error, setError] = useState<string | null>(null);
 
@@ -27,7 +27,7 @@ export function SpamFilterSettings() {
 				const data = await response.json() as SpamSettings;
 				if (!response.ok) throw new Error(data.error ?? t("settings.spam.loadFailed"));
 				setEnabled(data.enabled !== false);
-				setStrictness(data.strictness ?? "normal");
+				setStrictness(data.strictness ?? "strict");
 			})
 			.catch((nextError) => setError(nextError instanceof Error ? nextError.message : t("settings.spam.loadFailed")))
 			.finally(() => setLoading(false));
