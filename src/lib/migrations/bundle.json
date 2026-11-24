@@ -896,6 +896,13 @@
         "ALTER TABLE `mailbox_promotion_settings` ADD `backfill_day` integer DEFAULT 0 NOT NULL;",
         "ALTER TABLE `mailbox_promotion_settings` ADD `backfill_day_rows` integer DEFAULT 0 NOT NULL;"
       ]
+    },
+    {
+      "name": "0096_app_password_usage.sql",
+      "statements": [
+        "ALTER TABLE `api_keys` ADD `last_used_protocol` text;",
+        "ALTER TABLE `api_keys` ADD `last_used_ip` text;"
+      ]
     }
   ]
 }

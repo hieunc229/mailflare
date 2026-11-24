@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { APP_PASSWORD_PROTOCOLS } from "@/lib/api/scopes";
 import { isPublicHttpsUrl, PUBLIC_HTTPS_URL_MESSAGE } from "@/lib/security/public-url";
 import { isValidHostname, normalizeHostname } from "@/lib/domains/utils";
 import { getEmailAddress, splitEmailAddressList } from "@/lib/email/address";
@@ -155,7 +156,15 @@ export const stepUpActionSchema = z.enum([
 	"profile.recovery_email",
 	"routing.forward",
 	"webhook.change",
+	"app_password.create",
 ]);
+
+export const appPasswordCreateSchema = z.object({
+	name: z.string().trim().min(1).max(100),
+	protocols: z.array(z.enum(APP_PASSWORD_PROTOCOLS)).min(1).max(APP_PASSWORD_PROTOCOLS.length),
+	mailboxIds: z.array(z.string().min(1).max(191)).max(30),
+	stepUpToken: z.string().min(8).max(200).optional(),
+});
 
 export const passkeyRegistrationSchema = passkeyCeremonySchema.extend({
 	name: z.string().trim().max(100).optional().default(""),
