@@ -16,13 +16,17 @@ export function conversationKey(mailboxId: string | null, threadKey: string): st
 	return `${mailboxId ?? ""}\u0000${threadKey}`;
 }
 
+// An expression, not the bare column: grouping or partitioning by `mailbox_id` makes SQLite pick
+// messages_counts_cover_idx, which lacks thread_id, over the covering messages_nav_cover_idx.
+const mailboxGroup = sql`coalesce(${messages.mailboxId}, '')`;
+
 /** Per-mailbox `count(distinct …)`, summed: a distinct (mailbox, thread) subquery leaves the covering index. */
 async function countConversations({ db, where }: Pick<ConversationPageInput, "db" | "where">): Promise<number> {
 	const perMailbox = db
 		.select({ conversations: countDistinct(sql`coalesce(${messages.threadId}, ${messages.id})`).as("conversations") })
 		.from(messages)
 		.where(where)
-		.groupBy(messages.mailboxId)
+		.groupBy(mailboxGroup)
 		.as("mailbox_conversations");
 	const [totals] = await db.select({ total: sum(perMailbox.conversations) }).from(perMailbox);
 	return Number(totals?.total ?? 0);
@@ -88,7 +92,7 @@ async function loadConversationPageWindowed({ db, where, offset, limit }: Conver
 		.select({
 			id: messages.id,
 			createdAt: messages.createdAt,
-			position: sql<number>`row_number() over (partition by ${messages.mailboxId}, ${threadKey} order by ${messages.createdAt} desc, ${messages.id} desc)`.as("position"),
+			position: sql<number>`row_number() over (partition by ${mailboxGroup}, ${threadKey} order by ${messages.createdAt} desc, ${messages.id} desc)`.as("position"),
 		})
 		.from(messages)
 		.where(where)
