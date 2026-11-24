@@ -1,9 +1,10 @@
+import { NextResponse } from "next/server";
 import { eq, inArray } from "drizzle-orm";
 import { getDb } from "@/db";
 import { calendarEventOverrides, calendarEvents } from "@/db/schema";
 import { getEnv } from "@/lib/cloudflare";
 import { authorizeCalendarRequest } from "@/lib/calendar/api-auth";
-import { buildCalendarFeed, type FeedOccurrenceOverride } from "@/lib/calendar/feed";
+import { buildCalendarFeed, ExportLimitError, type FeedOccurrenceOverride } from "@/lib/calendar/feed";
 import { chunkIds } from "@/lib/calendar/chunks";
 
 /**
@@ -43,6 +44,13 @@ export async function GET(request: Request) {
 	const selected = hasStart || hasEnd
 		? visible.filter((event) => overlaps(event.startsAt, event.endsAt) || (hasStart && event.repeat !== "none" && (!hasEnd || event.startsAt < end)) || (overrides.get(event.id) ?? []).some((override) => overlaps(override.startsAt, override.endsAt)))
 		: visible;
-	const body = buildCalendarFeed(selected, { name: "Mailflare", download: true }, overrides);
-	return new Response(body, { headers: { "Content-Type": "text/calendar; charset=utf-8", "Content-Disposition": 'attachment; filename="mailflare-calendar.ics"', "Cache-Control": "no-store" } });
+	// Exporting every VTIMEZONE a pathological calendar needs can exceed the probe budget; that fails
+	// explicitly (never a degraded file) unless ?full=1 opts into the unbounded scan.
+	try {
+		const body = buildCalendarFeed(selected, { name: "Mailflare", download: true, full: url.searchParams.get("full") === "1" }, overrides);
+		return new Response(body, { headers: { "Content-Type": "text/calendar; charset=utf-8", "Content-Disposition": 'attachment; filename="mailflare-calendar.ics"', "Cache-Control": "no-store" } });
+	} catch (error) {
+		if (error instanceof ExportLimitError) return NextResponse.json({ error: "EXPORT_LIMIT_EXCEEDED", detail: error.message }, { status: 413 });
+		throw error;
+	}
 }

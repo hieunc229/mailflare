@@ -1,4 +1,5 @@
 import { zonedDateFields } from "@/lib/time/utils";
+import { formatIcsUtc } from "./ics";
 
 /**
  * Generates VTIMEZONE blocks from the host Intl (ICU) tz database instead of shipping tzdata.
@@ -25,7 +26,7 @@ const WEEKDAYS = ["SU", "MO", "TU", "WE", "TH", "FR", "SA"];
 
 // Zones that never change offset; scanning them would only burn the probe budget. IANA's Etc/*
 // entries are all fixed (Etc/GMT+N means UTC-N), plus the UTC aliases apps actually store.
-const FIXED_ZONE = /^(UTC|Etc\/(UTC|Universal|Zulu|Greenwich|GMT[+-]\d+)|Etc\/GMT|GMT|Greenwich|Universal|Zulu)$/;
+const FIXED_ZONE = /^(UTC|Etc\/(UTC|UCT|Universal|Zulu|Greenwich|GMT[+-]?\d*)|GMT[+-]?\d*|Greenwich|Universal|Zulu|UCT)$/;
 export function isFixedZone(zone: string): boolean {
 	return FIXED_ZONE.test(zone);
 }
@@ -154,11 +155,11 @@ function observance(type: "STANDARD" | "DAYLIGHT", dtstart: string, from: number
 }
 
 /** The observance blocks a single coverage window contributes, tagged by the instant each takes effect. */
-function windowObservances(zone: string, startMs: number, endMs: number): { at: number; block: string[] }[] {
+function windowObservances(zone: string, startMs: number, endMs: number, open: boolean): { at: number; block: string[] }[] {
 	const transitions = scanTransitions(zone, startMs, endMs);
 	if (!transitions.length) {
 		const offset = offsetMs(zone, startMs);
-		return [{ at: startMs, block: observance("STANDARD", localAt(startMs), offset, offset, null, null) }];
+		return [{ at: startMs, block: observance("STANDARD", localAt(startMs + offset), offset, offset, null, null) }];
 	}
 	// The period before the first observed transition takes its FROM offset, so instants at or after
 	// the window start always resolve. Each observance below is of the kind it switches into.
@@ -176,9 +177,11 @@ function windowObservances(zone: string, startMs: number, endMs: number): { at: 
 		group.slice(0, anchorIndex).forEach((transition) => oneOffs.push({ at: transition.at, block: observance(type, localAt(transition.at + transition.from), transition.from, transition.to, null, null) }));
 		if (inferred) {
 			const anchor = group[anchorIndex];
-			// The rule was only verified inside this window — UNTIL keeps it from predicting over a
-			// later window's explicit observances (or the uncovered gap between them).
-			rules.push({ at: anchor.at, block: observance(type, localAt(anchor.at + anchor.from), anchor.from, anchor.to, inferred.rule, localAt(endMs + anchor.from)) });
+			// A bounded window caps its rule at the verified edge in UTC (RFC 5545 UNTIL): the tail
+			// cannot predict over a later window's observances or the gap between them. An open window —
+			// one an unbounded series cites — keeps the tail unbounded instead, so its occurrences past
+			// the horizon still follow the zone's rules (best answer short of shipping tzdata).
+			rules.push({ at: anchor.at, block: observance(type, localAt(anchor.at + anchor.from), anchor.from, anchor.to, inferred.rule, open ? null : formatIcsUtc(new Date(endMs))) });
 		}
 	}
 	oneOffs.sort((a, b) => a.at - b.at);
@@ -192,13 +195,15 @@ function windowObservances(zone: string, startMs: number, endMs: number): { at: 
  * observances (nothing resolves there), which is what keeps a repeatUntil-9998 series beside a 2026
  * one from probing millennia.
  */
-export function vtimezoneLines(zone: string, windows: { startMs: number; endMs: number }[]): string[] {
+export function vtimezoneLines(zone: string, windows: { startMs: number; endMs: number; open: boolean }[]): string[] {
 	const lines = ["BEGIN:VTIMEZONE", `TZID:${zone}`];
 	if (isFixedZone(zone)) {
-		lines.push(...observance("STANDARD", localAt(windows[0].startMs), 0, 0, null, null), "END:VTIMEZONE");
+		// One offset read, not a scan: Etc zones are fixed but nonzero (Etc/GMT+5 is UTC-05:00).
+		const offset = offsetMs(zone, windows[0].startMs);
+		lines.push(...observance("STANDARD", localAt(windows[0].startMs + offset), offset, offset, null, null), "END:VTIMEZONE");
 		return lines;
 	}
-	const blocks = windows.flatMap(({ startMs, endMs }) => windowObservances(zone, startMs, endMs));
+	const blocks = windows.flatMap(({ startMs, endMs, open }) => windowObservances(zone, startMs, endMs, open));
 	blocks.sort((a, b) => a.at - b.at);
 	for (const { block } of blocks) lines.push(...block);
 	lines.push("END:VTIMEZONE");

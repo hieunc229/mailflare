@@ -121,11 +121,18 @@ function attendeeLines(event: FeedEvent): string[] {
 }
 
 /**
+ * Thrown when a download would need more VTIMEZONE coverage than the probe budget allows: the scan
+ * is what makes TZID references valid, so rather than silently degrade a series the export fails
+ * and says why. `?full=1` on the export route opts into the unbounded scan.
+ */
+export class ExportLimitError extends Error {}
+
+/**
  * Writes the events as one VCALENDAR. `download` is a file the owner saves: it carries the guests a
  * polled feed hides, their RSVP states, the reminder, extra occurrences as RDATE and a VTIMEZONE for
  * every TZID it cites, and drops the subscription refresh hints.
  */
-export function buildCalendarFeed(events: FeedEvent[], options: { name: string; now?: Date; download?: boolean }, overrides?: Map<string, FeedOccurrenceOverride[]>): string {
+export function buildCalendarFeed(events: FeedEvent[], options: { name: string; now?: Date; download?: boolean; full?: boolean }, overrides?: Map<string, FeedOccurrenceOverride[]>): string {
 	const now = options.now ?? new Date();
 	const stamp = utc(now);
 	const lines = ["BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//Mailflare//Calendar//EN", "CALSCALE:GREGORIAN"];
@@ -135,12 +142,6 @@ export function buildCalendarFeed(events: FeedEvent[], options: { name: string; 
 	lines.push(`X-WR-CALNAME:${escapeIcsText(options.name)}`);
 	if (!options.download) lines.push("REFRESH-INTERVAL;VALUE=DURATION:PT1H", "X-PUBLISHED-TTL:PT1H");
 	const eventLines: string[] = [];
-	// Zone -> the coverage windows events cite it for. Each event contributes one range [earliest,
-	// latest] over the instants it emits; overlapping ranges merge into one window. A global union
-	// per zone would let a single repeatUntil-9998 series inflate the scan to millennia of idle days.
-	const DAY = 86_400_000;
-	const PAD = 400 * DAY;
-	const zones = new Map<string, { start: number; end: number; event: FeedEvent }[]>();
 	const splits = new Map<FeedEvent, { rule: string | null; zone: string | null; excluded: Set<number>; extras: FeedOccurrenceOverride[]; detached: FeedOccurrenceOverride[] }>();
 	for (const event of events) {
 		const rule = recurrenceRule(event, options.download === true);
@@ -160,41 +161,55 @@ export function buildCalendarFeed(events: FeedEvent[], options: { name: string; 
 		// Recurring events keep their local clock time across daylight saving changes only when they carry a zone.
 		const zone = rule ? validTimeZone(event.timeZone) : null;
 		splits.set(event, { rule, zone, excluded, extras, detached });
-		if (zone) {
+	}
+	// Download only: zone -> the coverage windows events cite it for. Each event contributes one
+	// range [earliest, latest] over the instants it emits; overlapping ranges merge into one window.
+	// A global union per zone would let a single repeatUntil-9998 series inflate the scan to
+	// millennia of idle days. None of this runs for a feed — its bytes must stay identical
+	// unconditionally, and it emits no VTIMEZONE to cover.
+	const zoneWindows = new Map<string, { startMs: number; endMs: number; open: boolean }[]>();
+	if (options.download) {
+		const DAY = 86_400_000;
+		const PAD = 400 * DAY;
+		const zones = new Map<string, { start: number; end: number; open: boolean; event: FeedEvent }[]>();
+		for (const event of events) {
+			const split = splits.get(event) as { zone: string | null; excluded: Set<number>; extras: FeedOccurrenceOverride[]; detached: FeedOccurrenceOverride[] };
+			if (!split.zone) continue;
 			const instants = [event.startsAt.getTime(), event.endsAt.getTime()];
 			// The coverage window must run to the series' own end so the inferred DST rule is checked
 			// against every year the series lives, not a shorter guess.
 			if (event.repeatUntil) instants.push(event.repeatUntil.getTime());
-			for (const ms of excluded) instants.push(ms);
-			for (const extra of extras) instants.push(extra.occurrenceMs);
-			for (const override of detached) instants.push(override.occurrenceMs, override.startsAt.getTime(), override.endsAt.getTime());
+			for (const ms of split.excluded) instants.push(ms);
+			for (const extra of split.extras) instants.push(extra.occurrenceMs);
+			for (const override of split.detached) instants.push(override.occurrenceMs, override.startsAt.getTime(), override.endsAt.getTime());
 			// Padding keeps instants near the edges under the right observance; an open-ended series
-			// (no repeatUntil) gets ~15 years ahead so it can expand — one-offs hold the last offset beyond.
+			// (no repeatUntil) gets ~15 years ahead so it can expand — its inferred rule tail stays
+			// unbounded so occurrences past that still follow the zone's rules.
 			const end = event.repeatUntil ? Math.max(...instants) + PAD : Math.max(now.getTime() + 15 * 365 * DAY, Math.max(...instants) + PAD);
-			const range = { start: Math.min(...instants) - PAD, end, event };
-			const list = zones.get(zone);
-			if (list) list.push(range); else zones.set(zone, [range]);
+			const range = { start: Math.min(...instants) - PAD, end, open: !event.repeatUntil, event };
+			const list = zones.get(split.zone);
+			if (list) list.push(range); else zones.set(split.zone, [range]);
 		}
-	}
-	// Coverage windows are merged per zone in start order against one export-wide probe budget (the
-	// daily scan costs ~3-7us a probe; refinement adds ~30 more per transition found). Each range pays
-	// only the span it adds to the merged windows, so the series that overspends — a repeatUntil-9998
-	// event — exports in UTC Z-forms (exact, just without its TZID) while its neighbors keep theirs.
-	// Nothing is clipped silently.
-	const MAX_VTIMEZONE_PROBES = 50_000;
-	let remaining = MAX_VTIMEZONE_PROBES;
-	const zoneWindows = new Map<string, { startMs: number; endMs: number }[]>();
-	for (const zone of [...zones.keys()].sort()) {
-		const windows: { startMs: number; endMs: number }[] = [];
-		for (const range of (zones.get(zone) as { start: number; end: number; event: FeedEvent }[]).sort((a, b) => a.start - b.start)) {
-			const last = windows[windows.length - 1];
-			const merges = last !== undefined && range.start <= last.endMs;
-			const cost = isFixedZone(zone) ? 0 : Math.ceil(((merges ? Math.max(0, range.end - last.endMs) : range.end - range.start)) / DAY);
-			if (cost > remaining) { (splits.get(range.event) as { zone: string | null }).zone = null; continue; }
-			remaining -= cost;
-			if (merges) last.endMs = Math.max(last.endMs, range.end); else windows.push({ startMs: range.start, endMs: range.end });
+		// Coverage windows are merged per zone in start order against one export-wide probe budget.
+		// The unit is daily grid slots; measured Intl offset calls run ~15% above it once transition
+		// refinement is counted (57,296 real calls at the 50,000 mark), each ~3-7us of cached-formatter
+		// work, so the cap lands around 0.4s of CPU. Each range pays only the span it adds to the
+		// merged windows; a series that would overspend makes the whole export fail explicitly
+		// (ExportLimitError) — never a half-covered file. `full` opts out of the cap.
+		const MAX_VTIMEZONE_PROBES = 50_000;
+		let remaining = options.full ? Number.POSITIVE_INFINITY : MAX_VTIMEZONE_PROBES;
+		for (const zone of [...zones.keys()].sort()) {
+			const windows: { startMs: number; endMs: number; open: boolean }[] = [];
+			for (const range of (zones.get(zone) as { start: number; end: number; open: boolean; event: FeedEvent }[]).sort((a, b) => a.start - b.start)) {
+				const last = windows[windows.length - 1];
+				const merges = last !== undefined && range.start <= last.endMs;
+				const cost = isFixedZone(zone) ? 0 : Math.ceil(((merges ? Math.max(0, range.end - last.endMs) : range.end - range.start)) / DAY);
+				if (cost > remaining) throw new ExportLimitError(`calendar export probe budget exceeded by event ${range.event.id} (${zone}); retry with ?full=1 for complete coverage`);
+				remaining -= cost;
+				if (merges) { last.endMs = Math.max(last.endMs, range.end); last.open ||= range.open; } else windows.push({ startMs: range.start, endMs: range.end, open: range.open });
+			}
+			if (windows.length) zoneWindows.set(zone, windows);
 		}
-		if (windows.length) zoneWindows.set(zone, windows);
 	}
 	for (const event of events) {
 		const { rule, zone, excluded, extras, detached } = splits.get(event) as { rule: string | null; zone: string | null; excluded: Set<number>; extras: FeedOccurrenceOverride[]; detached: FeedOccurrenceOverride[] };
@@ -234,7 +249,7 @@ export function buildCalendarFeed(events: FeedEvent[], options: { name: string; 
 	}
 	if (options.download) {
 		for (const zone of zoneWindows.keys()) {
-			lines.push(...vtimezoneLines(zone, zoneWindows.get(zone) as { startMs: number; endMs: number }[]));
+			lines.push(...vtimezoneLines(zone, zoneWindows.get(zone) as { startMs: number; endMs: number; open: boolean }[]));
 		}
 	}
 	lines.push(...eventLines, "END:VCALENDAR");
