@@ -45,6 +45,17 @@ export function concatText(...parts: Array<SQL | string>): SQL {
 	return dialect === "mysql" ? sql`concat(${sql.join(list, sql`, `)})` : sql.join(list, sql` || `);
 }
 
+/**
+ * Length of a text value in stored bytes, not characters. MySQL's `length()` already counts
+ * bytes and PostgreSQL spells it `octet_length`; SQLite's `length()` counts characters on
+ * text, so the value is cast to a blob there.
+ */
+export function byteLength(column: AnyColumn | SQL): SQL {
+	if (dialect === "postgres") return sql`octet_length(${column})`;
+	if (dialect === "mysql") return sql`length(${column})`;
+	return sql`length(cast(${column} as blob))`;
+}
+
 /** Boolean literals for `WHERE`: PostgreSQL rejects a bare `0` or `1` there. */
 export const matchNothing: SQL = sql`1 = 0`;
 export const matchEverything: SQL = sql`1 = 1`;
