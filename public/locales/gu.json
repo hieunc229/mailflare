@@ -1,6 +1,7 @@
 {
 	"navigation.compose": "લખો",
 	"navigation.inbox": "ઇનબૉક્સ",
+	"navigation.allInboxes": "બધા ઇનબૉક્સ",
 	"navigation.starred": "તારાંકિત",
 	"navigation.snoozed": "સ્થગિત",
 	"navigation.sent": "મોકલેલા",

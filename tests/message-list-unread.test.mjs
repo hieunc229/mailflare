@@ -10,8 +10,9 @@ const bundleDirectory = mkdtempSync(join(root, "node_modules", "mailflare-unread
 await build({
 	stdin: {
 		contents: `
-			export { getUnreadFlipCount } from "./src/components/messages/utils.ts";
+			export { getInboxUnreadDeltas, getUnreadFlipCount } from "./src/components/messages/utils.ts";
 			export { PartialDeleteError, throwIfDeleteSkipped } from "./src/lib/messages/permanent-delete-utils.ts";
+			export { deltaAppliesToMailbox } from "./src/hooks/message-counts-delta.ts";
 		`,
 		resolveDir: root,
 		sourcefile: "unread-test-entry.ts",
@@ -26,7 +27,7 @@ await build({
 	alias: { "cloudflare:workers": "./server/runtime/cloudflare-workers.ts" },
 	logLevel: "silent",
 });
-const { getUnreadFlipCount, PartialDeleteError, throwIfDeleteSkipped } = await import(pathToFileURL(join(bundleDirectory, "entry.mjs")).href);
+const { deltaAppliesToMailbox, getInboxUnreadDeltas, getUnreadFlipCount, PartialDeleteError, throwIfDeleteSkipped } = await import(pathToFileURL(join(bundleDirectory, "entry.mjs")).href);
 rmSync(bundleDirectory, { recursive: true, force: true });
 
 const single = (read, direction = "inbound") => ({ direction, read });
@@ -73,4 +74,32 @@ test("a skipped permanent delete is reported after the list is told to refresh",
 	} finally {
 		delete globalThis.window;
 	}
+});
+
+test("read and unread deltas are split by mailbox", () => {
+	const rows = [
+		{ mailboxId: "support", ...single(false) },
+		{ mailboxId: "billing", ...single(false) },
+		{ mailboxId: "support", ...grouped(2, 3) },
+		{ mailboxId: "billing", ...single(true) },
+	];
+	assert.deepEqual(getInboxUnreadDeltas(rows, true), [
+		{ mailboxId: "support", inboxUnreadDelta: -3 },
+		{ mailboxId: "billing", inboxUnreadDelta: -1 },
+	]);
+	assert.deepEqual(getInboxUnreadDeltas(rows, false), [
+		{ mailboxId: "support", inboxUnreadDelta: 1 },
+		{ mailboxId: "billing", inboxUnreadDelta: 1 },
+	]);
+	assert.deepEqual(getInboxUnreadDeltas([{ mailboxId: "support", ...single(true) }], true), [], "no change, no delta");
+});
+
+test("a count delta reaches only the counts that include its mailbox", () => {
+	const billing = { inboxUnreadDelta: -1, mailboxId: "billing" };
+	assert.equal(deltaAppliesToMailbox(billing, "billing"), true);
+	assert.equal(deltaAppliesToMailbox(billing, "support"), false);
+	assert.equal(deltaAppliesToMailbox(billing, null), true, "all-mailbox counts include every mailbox");
+	assert.equal(deltaAppliesToMailbox(billing, undefined), true);
+	assert.equal(deltaAppliesToMailbox({ inboxUnreadDelta: -1 }, "support"), true, "a delta without a mailbox applies everywhere, as before");
+	assert.equal(deltaAppliesToMailbox({ inboxUnreadDelta: -1, mailboxId: null }, "support"), true);
 });

@@ -1,6 +1,7 @@
 {
 	"navigation.compose": "作成",
 	"navigation.inbox": "受信トレイ",
+	"navigation.allInboxes": "すべての受信トレイ",
 	"navigation.starred": "スター付き",
 	"navigation.snoozed": "スヌーズ中",
 	"navigation.sent": "送信済み",

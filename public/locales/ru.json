@@ -1,6 +1,7 @@
 {
 	"navigation.compose": "Написать",
 	"navigation.inbox": "Входящие",
+	"navigation.allInboxes": "Все входящие",
 	"navigation.starred": "Помеченные",
 	"navigation.snoozed": "Отложенные",
 	"navigation.sent": "Отправленные",

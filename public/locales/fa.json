@@ -1,6 +1,7 @@
 {
 	"navigation.compose": "نوشتن",
 	"navigation.inbox": "صندوق ورودی",
+	"navigation.allInboxes": "همه صندوق‌های ورودی",
 	"navigation.starred": "ستاره‌دار",
 	"navigation.snoozed": "معوق",
 	"navigation.sent": "ارسال‌شده",

@@ -63,7 +63,8 @@ export function MessageSplitLayout({
 	// resets the shared list here instead of from the page that happens to be
 	// mounted. Comparing keys keeps the initial mount from wiping a selection
 	// that the split view is about to show.
-	const viewKey = [query, selectedMailbox?.id ?? "", config.folder, config.folderId ?? "", grouped, unreadOnly].join("\u0000");
+	const listMailboxId = config.allMailboxes ? null : selectedMailbox?.id;
+	const viewKey = [query, listMailboxId ?? "", config.folder, config.folderId ?? "", grouped, unreadOnly].join("\u0000");
 	const previousViewKey = useRef(viewKey);
 	const folderKey = `${config.folder}\u0000${config.folderId ?? ""}`;
 	const previousFolderKey = useRef(folderKey);
@@ -169,6 +170,7 @@ export function MessageSplitLayout({
 								{showBulkBar && (
 									<BulkMessageActionBar
 										folder={config.folderId ? undefined : config.folder}
+										hideCustomFolders={config.allMailboxes}
 										selectedMessages={selectedMessages}
 										onClearSelection={() => setSelectedMessages([])}
 									/>

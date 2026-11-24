@@ -90,3 +90,11 @@ export const trashFolderConfig: MessageFolderConfig = {
 	icon: Trash2,
 	badgeVariant: "outline",
 };
+
+export const allInboxesFolderConfig: MessageFolderConfig = {
+	...inboxFolderConfig,
+	title: "All inboxes",
+	titleKey: "navigation.allInboxes",
+	hrefPrefix: "/all-inboxes",
+	allMailboxes: true,
+};

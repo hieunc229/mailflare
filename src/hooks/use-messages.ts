@@ -63,9 +63,10 @@ type MessageListAction =
 	| { type: "removed"; ids: Set<string> }
 	| { type: "restored"; rows: RestoredRow[] };
 
-function identityOf(message: Pick<Message, "id" | "threadId" | "threadMessageIds">): string {
-	// Ungrouped lists can show several messages from one thread as separate rows.
-	return message.threadMessageIds?.length && message.threadId ? `thread:${message.threadId}` : `id:${message.id}`;
+function identityOf(message: Pick<Message, "id" | "mailboxId" | "threadId" | "threadMessageIds">): string {
+	// Ungrouped lists can show several messages from one thread as separate rows,
+	// and an all-mailbox list shows each mailbox's copy of a thread separately.
+	return message.threadMessageIds?.length && message.threadId ? `thread:${message.mailboxId ?? ""}\u0000${message.threadId}` : `id:${message.id}`;
 }
 
 /**

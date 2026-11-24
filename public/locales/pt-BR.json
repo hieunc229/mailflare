@@ -1,6 +1,7 @@
 {
 	"navigation.compose": "Escrever",
 	"navigation.inbox": "Entrada",
+	"navigation.allInboxes": "Todas as caixas de entrada",
 	"navigation.starred": "Com estrela",
 	"navigation.snoozed": "Adiados",
 	"navigation.sent": "Enviados",

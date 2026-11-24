@@ -1,6 +1,7 @@
 {
 	"navigation.compose": "எழுது",
 	"navigation.inbox": "இன்பாக்ஸ்",
+	"navigation.allInboxes": "அனைத்து இன்பாக்ஸ்களும்",
 	"navigation.starred": "நட்சத்திரம்",
 	"navigation.snoozed": "ஒத்திவைத்தவை",
 	"navigation.sent": "அனுப்பியவை",

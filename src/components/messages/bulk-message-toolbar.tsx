@@ -23,6 +23,7 @@ export function BulkMessageToolbar({
 	onClearSelection,
 	pending,
 	folder,
+	hideCustomFolders = false,
 }: BulkMessageToolbarProps) {
 	const { t } = useLanguage();
 	// In archived, spam and trash the usual button would be a no-op, so it becomes the way back to the inbox.
@@ -44,7 +45,7 @@ export function BulkMessageToolbar({
 		{ value: "trash", label: t("navigation.trash"), Icon: Trash2, hidden: folder === "trash" },
 	].filter((option) => !option.hidden);
 	const { selectedMailbox } = useSelectedMailbox();
-	const folders = useMailboxFolders(selectedMailbox?.id);
+	const folders = useMailboxFolders(hideCustomFolders ? undefined : selectedMailbox?.id);
 	return (
 		<div className="flex min-w-0 items-center gap-2 text-neutral-600 w-full">
 			{!hideSelectedCount && (
@@ -102,7 +103,7 @@ export function BulkMessageToolbar({
 						{moveOptions.map(({ value, label, Icon }) => (
 							<DropdownMenu.Item key={value} className={menuItemClass} onSelect={() => onAction(value as BulkMessageAction)}><Icon className="h-4 w-4" />{label}</DropdownMenu.Item>
 						))}
-						{folders.length > 0 && (
+						{!hideCustomFolders && folders.length > 0 && (
 							<>
 								<DropdownMenu.Separator className="my-1 h-px bg-neutral-100" />
 								<DropdownMenu.Label className={menuLabelClass}>{t("navigation.folders")}</DropdownMenu.Label>

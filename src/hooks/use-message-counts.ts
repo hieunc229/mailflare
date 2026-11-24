@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import type { MessageCounts, MessageCountsDelta } from "./types";
+import { deltaAppliesToMailbox } from "./message-counts-delta";
 import { hasPendingOverlay, subscribePendingOverlay } from "@/lib/messages/field-store";
 import { registerMessageRefresh } from "./message-refresh";
 import { hasMembershipOverlay, subscribeMembership } from "@/lib/messages/membership-store";
@@ -74,7 +75,7 @@ export function useMessageCounts(mailboxId?: string | null, enabled = true) {
 		}
 		function onMessageCountsDelta(event: Event) {
 			const detail = (event as CustomEvent<MessageCountsDelta>).detail;
-			if (!detail?.inboxUnreadDelta) return;
+			if (!detail?.inboxUnreadDelta || !deltaAppliesToMailbox(detail, mailboxId)) return;
 			setCounts((current) => ({
 				...current,
 				folders: {

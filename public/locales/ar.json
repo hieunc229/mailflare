@@ -1,6 +1,7 @@
 {
 	"navigation.compose": "إنشاء",
 	"navigation.inbox": "الوارد",
+	"navigation.allInboxes": "جميع صناديق الوارد",
 	"navigation.starred": "المميزة",
 	"navigation.snoozed": "المؤجّلة",
 	"navigation.sent": "المُرسَلة",

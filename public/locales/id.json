@@ -1,6 +1,7 @@
 {
 	"navigation.compose": "Tulis",
 	"navigation.inbox": "Kotak Masuk",
+	"navigation.allInboxes": "Semua Kotak Masuk",
 	"navigation.starred": "Berbintang",
 	"navigation.snoozed": "Ditunda",
 	"navigation.sent": "Terkirim",

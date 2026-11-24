@@ -15,6 +15,7 @@ import { runBulkMessageAction } from "./utils";
  */
 export function BulkMessageActionBar({
 	folder,
+	hideCustomFolders,
 	selectedMessages,
 	onClearSelection,
 }: BulkMessageActionBarProps) {
@@ -58,6 +59,7 @@ export function BulkMessageActionBar({
 					onClearSelection={onClearSelection}
 					pending={pending}
 					folder={folder}
+					hideCustomFolders={hideCustomFolders}
 				/>
 			</div>
 			{error && <p role="alert" className="mt-1 text-sm font-medium text-red-700">{error}</p>}

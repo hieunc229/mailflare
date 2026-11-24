@@ -1,6 +1,7 @@
 {
 	"navigation.compose": "Написати",
 	"navigation.inbox": "Вхідні",
+	"navigation.allInboxes": "Усі вхідні",
 	"navigation.starred": "З зірочкою",
 	"navigation.snoozed": "Відкладені",
 	"navigation.sent": "Надіслані",

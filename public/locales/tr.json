@@ -1,6 +1,7 @@
 {
 	"navigation.compose": "Yaz",
 	"navigation.inbox": "Gelen kutusu",
+	"navigation.allInboxes": "Tüm gelen kutuları",
 	"navigation.starred": "Yıldızlı",
 	"navigation.snoozed": "Ertelenenler",
 	"navigation.sent": "Gönderilenler",

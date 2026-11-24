@@ -115,4 +115,6 @@ export type MessageCounts = {
 
 export type MessageCountsDelta = {
 	inboxUnreadDelta?: number;
+	/** Mailbox of the changed messages. Without one, every count applies the delta. */
+	mailboxId?: string | null;
 };

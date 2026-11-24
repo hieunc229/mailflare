@@ -1,4 +1,4 @@
-import { countDistinct, desc, eq, getTableColumns, sql } from "drizzle-orm";
+import { countDistinct, desc, eq, getTableColumns, sql, sum } from "drizzle-orm";
 import { messages } from "@/db/schema";
 import type { ConversationPage, ConversationPageInput, MessageListColumns } from "./types";
 
@@ -6,6 +6,30 @@ export function getMessageListColumns(): MessageListColumns {
 	return Object.fromEntries(
 		Object.entries(getTableColumns(messages)).filter(([name]) => name !== "textBody" && name !== "htmlBody"),
 	) as MessageListColumns;
+}
+
+/**
+ * One thread per mailbox: mail delivered to two mailboxes is stored twice with the same thread id.
+ * Mailbox ids never contain `\0`, so the key stays unambiguous.
+ */
+export function conversationKey(mailboxId: string | null, threadKey: string): string {
+	return `${mailboxId ?? ""}\u0000${threadKey}`;
+}
+
+// An expression, not the bare column: grouping or partitioning by `mailbox_id` makes SQLite pick
+// messages_counts_cover_idx, which lacks thread_id, over the covering messages_nav_cover_idx.
+const mailboxGroup = sql`coalesce(${messages.mailboxId}, '')`;
+
+/** Per-mailbox `count(distinct …)`, summed: a distinct (mailbox, thread) subquery leaves the covering index. */
+async function countConversations({ db, where }: Pick<ConversationPageInput, "db" | "where">): Promise<number> {
+	const perMailbox = db
+		.select({ conversations: countDistinct(sql`coalesce(${messages.threadId}, ${messages.id})`).as("conversations") })
+		.from(messages)
+		.where(where)
+		.groupBy(mailboxGroup)
+		.as("mailbox_conversations");
+	const [totals] = await db.select({ total: sum(perMailbox.conversations) }).from(perMailbox);
+	return Number(totals?.total ?? 0);
 }
 
 /** Select one newest matching message per thread before applying pagination. */
@@ -33,7 +57,7 @@ export async function loadConversationPage({ db, where, offset, limit }: Convers
 	while (headIds.length < needed && !exhausted && fetched < SCAN_CAP) {
 		const batch = Math.min(1000, Math.max(200, needed * 4));
 		const rows = await db
-			.select({ id: messages.id, key: threadKey })
+			.select({ id: messages.id, mailboxId: messages.mailboxId, key: threadKey })
 			.from(messages)
 			.where(where)
 			.orderBy(desc(messages.createdAt), desc(messages.id))
@@ -42,8 +66,9 @@ export async function loadConversationPage({ db, where, offset, limit }: Convers
 		fetched += rows.length;
 		if (rows.length < batch) exhausted = true;
 		for (const row of rows) {
-			if (seen.has(row.key)) continue;
-			seen.add(row.key);
+			const key = conversationKey(row.mailboxId, row.key);
+			if (seen.has(key)) continue;
+			seen.add(key);
 			headIds.push(row.id);
 		}
 		// Threads averaging more than ~10 messages per head make the scan pay
@@ -58,8 +83,7 @@ export async function loadConversationPage({ db, where, offset, limit }: Convers
 	if (!exhausted && headIds.length < needed) {
 		return loadConversationPageWindowed({ db, where, offset, limit });
 	}
-	const [totals] = await db.select({ total: countDistinct(threadKey) }).from(messages).where(where);
-	return { ids: headIds.slice(offset, offset + limit), total: totals?.total ?? 0 };
+	return { ids: headIds.slice(offset, offset + limit), total: await countConversations({ db, where }) };
 }
 
 async function loadConversationPageWindowed({ db, where, offset, limit }: ConversationPageInput): Promise<ConversationPage> {
@@ -68,15 +92,15 @@ async function loadConversationPageWindowed({ db, where, offset, limit }: Conver
 		.select({
 			id: messages.id,
 			createdAt: messages.createdAt,
-			position: sql<number>`row_number() over (partition by ${threadKey} order by ${messages.createdAt} desc, ${messages.id} desc)`.as("position"),
+			position: sql<number>`row_number() over (partition by ${mailboxGroup}, ${threadKey} order by ${messages.createdAt} desc, ${messages.id} desc)`.as("position"),
 		})
 		.from(messages)
 		.where(where)
 		.as("conversation_heads");
 
 	// Always two queries, even for deep pages or threads with many messages.
-	const [totals, heads] = await Promise.all([
-		db.select({ total: countDistinct(threadKey) }).from(messages).where(where),
+	const [total, heads] = await Promise.all([
+		countConversations({ db, where }),
 		db
 			.select({ id: ranked.id })
 			.from(ranked)
@@ -86,5 +110,5 @@ async function loadConversationPageWindowed({ db, where, offset, limit }: Conver
 			.offset(offset),
 	]);
 
-	return { ids: heads.map((head) => head.id), total: totals[0]?.total ?? 0 };
+	return { ids: heads.map((head) => head.id), total };
 }

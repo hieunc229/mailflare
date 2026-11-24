@@ -1,6 +1,7 @@
 {
 	"navigation.compose": "ලියන්න",
 	"navigation.inbox": "එන ලිපි",
+	"navigation.allInboxes": "සියලු එන ලිපි",
 	"navigation.starred": "තරු ලකුණු කළ",
 	"navigation.snoozed": "කල් දැමූ",
 	"navigation.sent": "යැවූ",
