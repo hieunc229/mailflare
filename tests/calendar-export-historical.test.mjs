@@ -44,3 +44,15 @@ test("a stable zone still collapses to a yearly rule", () => {
 	assert.ok(lines.some((line) => line === "RRULE:FREQ=YEARLY;BYMONTH=3;BYDAY=2SU"), lines.join("\n"));
 	assert.ok(lines.some((line) => line === "RRULE:FREQ=YEARLY;BYMONTH=11;BYDAY=1SU"), lines.join("\n"));
 });
+
+test("offset excursions shorter than the probe step still enter observations", () => {
+	// Gaza 2040 resumes DST for a week after Ramadan (+03:00 Oct 20 00:00Z -> Oct 26 23:00Z) and
+	// Recife's 2000 summer time ran one week (-02:00 Oct 8 03:00Z -> Oct 15 02:00Z): a 7-day scan
+	// reads the same offset at both bracketing probes and emits neither transition.
+	const gaza = vtimezoneLines("Asia/Gaza", Date.parse("2040-09-01T00:00:00Z"), Date.parse("2040-12-01T00:00:00Z"));
+	assert.ok(gaza.includes("DTSTART:20401020T020000"), gaza.join("\n")); // +02 -> +03 in the FROM frame.
+	assert.ok(gaza.includes("TZOFFSETTO:+0300"), gaza.join("\n"));
+	const recife = vtimezoneLines("America/Recife", Date.parse("2000-10-01T00:00:00Z"), Date.parse("2000-11-01T00:00:00Z"));
+	assert.ok(recife.includes("DTSTART:20001008T000000"), recife.join("\n")); // -03 -> -02 in the FROM frame.
+	assert.ok(recife.includes("DTSTART:20001015T000000"), recife.join("\n")); // -02 -> -03.
+});

@@ -9,12 +9,17 @@ import { zonedDateFields } from "@/lib/time/utils";
  * the runtime's tz data (a stale OS/Workers image exports stale rules) and keep second precision —
  * historical zones like Asia/Colombo need the sub-minute form RFC 5545 permits; a parser that
  * truncates TZOFFSET seconds (ical.js UtcOffset does) drifts by under a minute, which is its bug, not
- * this file's — and an irregular zone's one-offs stop at the window end, so an open-ended series
+ * this file's — sub-day offset excursions are not detected (the scan step is a day; none exist in
+ * current tzdata) — and an irregular zone's one-offs stop at the window end, so an open-ended series
  * there holds the last offset beyond it.
  */
 
 const DAY = 86_400_000;
-const SCAN_STEP = 7 * DAY;
+// Daily probes: a change that reverts inside a coarser gap (Gaza's week-long post-Ramadan DST
+// resumption, Recife's 7-day 2000 window) shows identical offsets at both ends and is missed.
+// Excursions shorter than a day are still unsupported — none are known in current tzdata (the
+// shortest, Palestine's resumed-DST tail, is just under a week).
+const SCAN_STEP = DAY;
 
 const WEEKDAYS = ["SU", "MO", "TU", "WE", "TH", "FR", "SA"];
 
