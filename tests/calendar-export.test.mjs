@@ -121,19 +121,23 @@ test("every cited TZID gets a VTIMEZONE, and an extra occurrence exports as RDAT
 	const ics = await (await download(t)).text();
 	// Without this block a stock parser resolves TZID times as floating and shifts the series.
 	assert.match(ics, /BEGIN:VTIMEZONE\r\nTZID:America\/Los_Angeles\r\n/);
-	// evt-weekly is open-ended, so its LA window is open and the rule tail stays unbounded —
-	// occurrences past the horizon still follow the zone's rules instead of freezing at one offset.
-	assert.match(ics, /BEGIN:STANDARD\r\nDTSTART:\d{8}T020000\r\nTZOFFSETFROM:-0700\r\nTZOFFSETTO:-0800\r\nRRULE:FREQ=YEARLY;BYMONTH=11;BYDAY=1SU\r\nEND:STANDARD\r\n/);
-	assert.match(ics, /BEGIN:DAYLIGHT\r\nDTSTART:\d{8}T020000\r\nTZOFFSETFROM:-0800\r\nTZOFFSETTO:-0700\r\nRRULE:FREQ=YEARLY;BYMONTH=3;BYDAY=2SU\r\nEND:DAYLIGHT\r\n/);
+	// Every observance is an ICU-observed transition — explicit blocks only, no inferred RRULE (an
+	// invented tail mis-times abolished and colliding windows). X-MAILFLARE-COVERAGE-END documents
+	// where generated coverage stops and the last observance starts holding its offset forever.
+	const zones = ics.slice(ics.indexOf("BEGIN:VTIMEZONE"), ics.lastIndexOf("END:VTIMEZONE"));
+	assert.doesNotMatch(zones, /RRULE|UNTIL/);
+	assert.match(zones, /BEGIN:DAYLIGHT\r\nDTSTART:\d{8}T020000\r\nTZOFFSETFROM:-0800\r\nTZOFFSETTO:-0700\r\nEND:DAYLIGHT\r\n/);
+	assert.match(zones, /BEGIN:STANDARD\r\nDTSTART:\d{8}T020000\r\nTZOFFSETFROM:-0700\r\nTZOFFSETTO:-0800\r\nEND:STANDARD\r\n/);
+	assert.match(zones, /X-MAILFLARE-COVERAGE-END:\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z/);
 	// ov-2 sits on a Thursday where the Monday rule has no occurrence: it is an extra, declared as an
 	// RDATE on the master instead of a detached VEVENT a parser could not attach anywhere.
 	const weekly = ics.slice(ics.indexOf("UID:evt-weekly"), ics.indexOf("END:VEVENT", ics.indexOf("UID:evt-weekly")));
 	assert.match(weekly, /RDATE;TZID=America\/Los_Angeles:20261112T090000\r\n/);
-	// The London VTIMEZONE must last the series' own lifetime: inferred to the verified -1SU rule,
-	// never a fourth-Sunday guess that would shift 2041's five-Sunday March by an hour.
-	assert.match(ics, /BEGIN:VTIMEZONE\r\nTZID:Europe\/London\r\n/);
-	assert.match(ics, /BYMONTH=3;BYDAY=-1SU/);
-	assert.doesNotMatch(ics, /BYDAY=4SU/);
+	// The London VTIMEZONE covers the series' own lifetime with explicit observances — including
+	// 2041's five-Sunday March, which a guessed rule could mis-time by an hour.
+	const london = ics.slice(ics.indexOf("TZID:Europe/London"), ics.indexOf("END:VTIMEZONE", ics.indexOf("TZID:Europe/London")));
+	assert.match(london, /DTSTART:20410331T010000\r\nTZOFFSETFROM:\+0000\r\nTZOFFSETTO:\+0100/);
+	assert.match(london, /DTSTART:20411027T020000\r\nTZOFFSETFROM:\+0100\r\nTZOFFSETTO:\+0000/);
 });
 
 const eventRow = (id, until, startsSec, zone = "America/Los_Angeles") => `INSERT INTO calendar_events (id, user_id, title, description, location, attendees, repeat, repeat_days, repeat_anchor_day, repeat_until, repeat_interval, repeat_weekday, repeat_week, excluded_occurrences, time_zone, reminder_minutes, response_status, attendee_responses, starts_at, ends_at, created_at, updated_at) VALUES ('${id}', 'user-1', 'Seeded series', '', '', '[]', 'weekly', '[]', NULL, ${until}, 1, NULL, NULL, '[]', '${zone}', NULL, NULL, NULL, ${startsSec}, ${startsSec + 1800}, 1, 1);`;

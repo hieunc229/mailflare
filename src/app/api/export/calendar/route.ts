@@ -50,7 +50,7 @@ export async function GET(request: Request) {
 		const body = buildCalendarFeed(selected, { name: "Mailflare", download: true, full: url.searchParams.get("full") === "1" }, overrides);
 		return new Response(body, { headers: { "Content-Type": "text/calendar; charset=utf-8", "Content-Disposition": 'attachment; filename="mailflare-calendar.ics"', "Cache-Control": "no-store" } });
 	} catch (error) {
-		if (error instanceof ExportLimitError) return NextResponse.json({ error: "EXPORT_LIMIT_EXCEEDED", detail: error.message }, { status: 413 });
+		if (error instanceof ExportLimitError) return NextResponse.json({ error: "EXPORT_LIMIT_EXCEEDED", detail: error.message }, { status: 413, headers: { "Cache-Control": "no-store" } });
 		throw error;
 	}
 }

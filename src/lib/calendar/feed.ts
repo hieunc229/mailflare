@@ -167,28 +167,41 @@ export function buildCalendarFeed(events: FeedEvent[], options: { name: string; 
 	// A global union per zone would let a single repeatUntil-9998 series inflate the scan to
 	// millennia of idle days. None of this runs for a feed — its bytes must stay identical
 	// unconditionally, and it emits no VTIMEZONE to cover.
-	const zoneWindows = new Map<string, { startMs: number; endMs: number; open: boolean }[]>();
+	const zoneWindows = new Map<string, { startMs: number; endMs: number }[]>();
 	if (options.download) {
 		const DAY = 86_400_000;
 		const PAD = 400 * DAY;
-		const zones = new Map<string, { start: number; end: number; open: boolean; event: FeedEvent }[]>();
+		// Pass 1: the instant bounds each zoned event cites, and the latest instant cited per zone —
+		// an open-ended series' horizon reaches that plus a year (below).
+		const bounds = new Map<FeedEvent, { earliest: number; latest: number; zone: string }>();
+		const zoneMaxCited = new Map<string, number>();
 		for (const event of events) {
 			const split = splits.get(event) as { zone: string | null; excluded: Set<number>; extras: FeedOccurrenceOverride[]; detached: FeedOccurrenceOverride[] };
 			if (!split.zone) continue;
 			const instants = [event.startsAt.getTime(), event.endsAt.getTime()];
-			// The coverage window must run to the series' own end so the inferred DST rule is checked
-			// against every year the series lives, not a shorter guess.
 			if (event.repeatUntil) instants.push(event.repeatUntil.getTime());
 			for (const ms of split.excluded) instants.push(ms);
 			for (const extra of split.extras) instants.push(extra.occurrenceMs);
 			for (const override of split.detached) instants.push(override.occurrenceMs, override.startsAt.getTime(), override.endsAt.getTime());
-			// Padding keeps instants near the edges under the right observance; an open-ended series
-			// (no repeatUntil) gets ~15 years ahead so it can expand — its inferred rule tail stays
-			// unbounded so occurrences past that still follow the zone's rules.
-			const end = event.repeatUntil ? Math.max(...instants) + PAD : Math.max(now.getTime() + 15 * 365 * DAY, Math.max(...instants) + PAD);
-			const range = { start: Math.min(...instants) - PAD, end, open: !event.repeatUntil, event };
-			const list = zones.get(split.zone);
-			if (list) list.push(range); else zones.set(split.zone, [range]);
+			const bound = { earliest: Math.min(...instants), latest: Math.max(...instants), zone: split.zone };
+			bounds.set(event, bound);
+			zoneMaxCited.set(split.zone, Math.max(zoneMaxCited.get(split.zone) ?? 0, bound.latest));
+		}
+		const zones = new Map<string, { start: number; end: number; event: FeedEvent }[]>();
+		for (const event of events) {
+			const bound = bounds.get(event);
+			if (!bound) continue;
+			// Padding keeps instants near the edges under the right observance. An open-ended series
+			// (no repeatUntil) recurs forever, so its horizon carries forward to the latest instant
+			// ANY event cites the zone for, plus a year: that pulls a later disjoint window for the
+			// same TZID into one continuous fact list rather than leaving a gap where the series'
+			// own occurrences would freeze at the last observed offset (an open LA series plus a
+			// 2050-bounded one must still resolve July 2045 correctly). Past the horizon the last
+			// observance persists — the documented limit of a finite file.
+			const end = event.repeatUntil ? bound.latest + PAD : Math.max(now.getTime() + 15 * 365 * DAY, bound.latest + PAD, (zoneMaxCited.get(bound.zone) as number) + 365 * DAY);
+			const range = { start: bound.earliest - PAD, end, event };
+			const list = zones.get(bound.zone);
+			if (list) list.push(range); else zones.set(bound.zone, [range]);
 		}
 		// Coverage windows are merged per zone in start order against one export-wide probe budget.
 		// The unit is daily grid slots; measured Intl offset calls run ~15% above it once transition
@@ -199,14 +212,14 @@ export function buildCalendarFeed(events: FeedEvent[], options: { name: string; 
 		const MAX_VTIMEZONE_PROBES = 50_000;
 		let remaining = options.full ? Number.POSITIVE_INFINITY : MAX_VTIMEZONE_PROBES;
 		for (const zone of [...zones.keys()].sort()) {
-			const windows: { startMs: number; endMs: number; open: boolean }[] = [];
-			for (const range of (zones.get(zone) as { start: number; end: number; open: boolean; event: FeedEvent }[]).sort((a, b) => a.start - b.start)) {
+			const windows: { startMs: number; endMs: number }[] = [];
+			for (const range of (zones.get(zone) as { start: number; end: number; event: FeedEvent }[]).sort((a, b) => a.start - b.start)) {
 				const last = windows[windows.length - 1];
 				const merges = last !== undefined && range.start <= last.endMs;
 				const cost = isFixedZone(zone) ? 0 : Math.ceil(((merges ? Math.max(0, range.end - last.endMs) : range.end - range.start)) / DAY);
 				if (cost > remaining) throw new ExportLimitError(`calendar export probe budget exceeded by event ${range.event.id} (${zone}); retry with ?full=1 for complete coverage`);
 				remaining -= cost;
-				if (merges) { last.endMs = Math.max(last.endMs, range.end); last.open ||= range.open; } else windows.push({ startMs: range.start, endMs: range.end, open: range.open });
+				if (merges) last.endMs = Math.max(last.endMs, range.end); else windows.push({ startMs: range.start, endMs: range.end });
 			}
 			if (windows.length) zoneWindows.set(zone, windows);
 		}
@@ -249,7 +262,7 @@ export function buildCalendarFeed(events: FeedEvent[], options: { name: string; 
 	}
 	if (options.download) {
 		for (const zone of zoneWindows.keys()) {
-			lines.push(...vtimezoneLines(zone, zoneWindows.get(zone) as { startMs: number; endMs: number; open: boolean }[]));
+			lines.push(...vtimezoneLines(zone, zoneWindows.get(zone) as { startMs: number; endMs: number }[]));
 		}
 	}
 	lines.push(...eventLines, "END:VCALENDAR");

@@ -1,18 +1,18 @@
 import { zonedDateFields } from "@/lib/time/utils";
-import { formatIcsUtc } from "./ics";
 
 /**
  * Generates VTIMEZONE blocks from the host Intl (ICU) tz database instead of shipping tzdata.
- * The window only needs to cover the instants the calendar file emits: transitions inside it are
- * found by scanning, a stable yearly pattern (2nd-Sunday-in-March style) becomes an RRULE observance,
- * and anything else — zones that change offset irregularly, or a rule adopted mid-window — is written
- * as one-off observances, which stay exact within the window. Coverage limits: offsets are read from
- * the runtime's tz data (a stale OS/Workers image exports stale rules) and keep second precision —
- * historical zones like Asia/Colombo need the sub-minute form RFC 5545 permits; a parser that
- * truncates TZOFFSET seconds (ical.js UtcOffset does) drifts by under a minute, which is its bug, not
- * this file's — sub-day offset excursions are not detected (the scan step is a day; none exist in
- * current tzdata) — and an irregular zone's one-offs stop at the window end, so an open-ended series
- * there holds the last offset beyond it.
+ * Every emitted observance is an observed transition inside a coverage window — explicit blocks
+ * only, no RRULE inference (an inferred tail can invent transitions a zone later abolished, and an
+ * earlier window's tail can contradict a later window's verified observances; explicit facts cannot
+ * collide). Coverage limits: offsets are read from the runtime's tz data (a stale OS/Workers image
+ * exports stale offsets) and keep second precision — historical zones like Asia/Colombo need the
+ * sub-minute form RFC 5545 permits; a parser that truncates TZOFFSET seconds (ical.js UtcOffset
+ * does) drifts by under a minute, which is its bug, not this file's — sub-day offset excursions are
+ * not detected (the scan step is a day; none exist in current tzdata) — and past the last coverage
+ * window's end the final observance's offset persists forever, so occurrences beyond the horizon
+ * feed.ts chooses (see its comment) may drift an hour seasonally. That is the documented limit of a
+ * finite file describing an open-ended series.
  */
 
 const DAY = 86_400_000;
@@ -21,8 +21,6 @@ const DAY = 86_400_000;
 // Excursions shorter than a day are still unsupported — none are known in current tzdata (the
 // shortest, Palestine's resumed-DST tail, is just under a week).
 const SCAN_STEP = DAY;
-
-const WEEKDAYS = ["SU", "MO", "TU", "WE", "TH", "FR", "SA"];
 
 // Zones that never change offset; scanning them would only burn the probe budget. IANA's Etc/*
 // entries are all fixed (Etc/GMT+N means UTC-N), plus the UTC aliases apps actually store.
@@ -77,135 +75,51 @@ function localAt(ms: number): string {
 	return new Date(ms).toISOString().replace(/[-:]/g, "").replace(/\.\d{3}Z$/, "");
 }
 
-function daysInMonth(year: number, month: number): number {
-	return new Date(Date.UTC(year, month + 1, 0)).getUTCDate();
-}
-
-type YearlyRule = { month: number; weekday: number; ordinal: number; hour: number; minute: number; second: number };
-
-function ruleFields(localMs: number): { month: number; weekday: number; ordinal: number; last: boolean; hour: number; minute: number; second: number } {
-	const date = new Date(localMs);
-	const dim = daysInMonth(date.getUTCFullYear(), date.getUTCMonth());
-	return { month: date.getUTCMonth(), weekday: date.getUTCDay(), ordinal: Math.ceil(date.getUTCDate() / 7), last: date.getUTCDate() + 7 > dim, hour: date.getUTCHours(), minute: date.getUTCMinutes(), second: date.getUTCSeconds() };
-}
-
-function matchesRule(localMs: number, rule: YearlyRule): boolean {
-	const fields = ruleFields(localMs);
-	if (fields.month !== rule.month || fields.weekday !== rule.weekday || fields.hour !== rule.hour || fields.minute !== rule.minute || fields.second !== rule.second) return false;
-	return rule.ordinal === -1 ? fields.last : fields.ordinal === rule.ordinal;
-}
-
-/** The local instant (fake-UTC ms) the rule predicts for `year`; a 5th weekday may not exist that year. */
-function predictedLocal(year: number, rule: YearlyRule): number | null {
-	const dim = daysInMonth(year, rule.month);
-	let date: number;
-	if (rule.ordinal === -1) {
-		const lastDow = new Date(Date.UTC(year, rule.month, dim)).getUTCDay();
-		date = dim - ((lastDow - rule.weekday + 7) % 7);
-	} else {
-		const firstDow = new Date(Date.UTC(year, rule.month, 1)).getUTCDay();
-		date = 1 + ((rule.weekday - firstDow + 7) % 7) + (rule.ordinal - 1) * 7;
-		if (date > dim) return null;
-	}
-	return Date.UTC(year, rule.month, date, rule.hour, rule.minute, rule.second);
-}
-
-/**
- * The yearly rule the tail of `transitions` proves, with its anchor index. The last three decide the
- * candidates — same month, weekday and wall time, plus either a shared ordinal or every date being the
- * last such weekday of its month (a 4th-that-is-also-last streak prefers -1: last-weekday rules
- * dominate real zones, and a wrong 4SU silently mis-times 5-Sunday years). The emitted tail is the
- * contiguous run matching the rule AND sharing the last transition's offsets — one RRULE can only
- * describe one from/to pair. A candidate is then rejected unless every instant it predicts inside
- * the scanned window was actually observed: a zone that abolished or changed its rule (Mexico stopped
- * DST in 2022) would otherwise keep inventing transitions past its last real one.
- */
-function yearlyRule(transitions: Transition[], endMs: number): { rule: YearlyRule; anchorIndex: number } | null {
-	if (transitions.length < 3) return null;
-	const tail = transitions.slice(-3).map((transition) => ruleFields(transition.at + transition.from));
-	const [last] = tail;
-	if (!tail.every((fields) => fields.month === last.month && fields.weekday === last.weekday && fields.hour === last.hour && fields.minute === last.minute && fields.second === last.second)) return null;
-	const base = { month: last.month, weekday: last.weekday, hour: last.hour, minute: last.minute, second: last.second };
-	const candidates: YearlyRule[] = [];
-	if (tail.every((fields) => fields.last)) candidates.push({ ...base, ordinal: -1 });
-	if (tail.every((fields) => fields.ordinal === last.ordinal)) candidates.push({ ...base, ordinal: last.ordinal });
-	const { from, to } = transitions[transitions.length - 1];
-	for (const rule of candidates) {
-		let anchorIndex = transitions.length;
-		while (anchorIndex > 0 && matchesRule(transitions[anchorIndex - 1].at + transitions[anchorIndex - 1].from, rule)
-			&& transitions[anchorIndex - 1].from === from && transitions[anchorIndex - 1].to === to) anchorIndex--;
-		const years = new Set(transitions.slice(anchorIndex).map((transition) => new Date(transition.at + transition.from).getUTCFullYear()));
-		let verified = true;
-		for (let year = new Date(transitions[anchorIndex].at + transitions[anchorIndex].from).getUTCFullYear(); ; year++) {
-			const predicted = predictedLocal(year, rule);
-			if (predicted === null) continue; // No such weekday that year: the rule legitimately skips it.
-			if (predicted - from > endMs) break; // Predictions past the window need no observation.
-			if (!years.has(year)) { verified = false; break; }
-		}
-		if (verified) return { rule, anchorIndex };
-	}
-	return null;
-}
-
-function observance(type: "STANDARD" | "DAYLIGHT", dtstart: string, from: number, to: number, rule: YearlyRule | null, until: string | null): string[] {
-	const lines = [`BEGIN:${type}`, `DTSTART:${dtstart}`, `TZOFFSETFROM:${tzOffset(from)}`, `TZOFFSETTO:${tzOffset(to)}`];
-	if (rule) lines.push(`RRULE:FREQ=YEARLY;BYMONTH=${rule.month + 1};BYDAY=${rule.ordinal}${WEEKDAYS[rule.weekday]}${until ? `;UNTIL=${until}` : ""}`);
-	lines.push(`END:${type}`);
-	return lines;
+function observance(type: "STANDARD" | "DAYLIGHT", dtstart: string, from: number, to: number): string[] {
+	return [`BEGIN:${type}`, `DTSTART:${dtstart}`, `TZOFFSETFROM:${tzOffset(from)}`, `TZOFFSETTO:${tzOffset(to)}`, `END:${type}`];
 }
 
 /** The observance blocks a single coverage window contributes, tagged by the instant each takes effect. */
-function windowObservances(zone: string, startMs: number, endMs: number, open: boolean): { at: number; block: string[] }[] {
+function windowObservances(zone: string, startMs: number, endMs: number): { at: number; block: string[] }[] {
 	const transitions = scanTransitions(zone, startMs, endMs);
 	if (!transitions.length) {
 		const offset = offsetMs(zone, startMs);
-		return [{ at: startMs, block: observance("STANDARD", localAt(startMs + offset), offset, offset, null, null) }];
+		return [{ at: startMs, block: observance("STANDARD", localAt(startMs + offset), offset, offset) }];
 	}
 	// The period before the first observed transition takes its FROM offset, so instants at or after
-	// the window start always resolve. Each observance below is of the kind it switches into.
+	// the window start always resolve. Every other block names the kind it switches into.
 	const first = transitions[0];
-	const blocks = [{ at: startMs, block: observance(first.to > first.from ? "STANDARD" : "DAYLIGHT", localAt(startMs + first.from), first.from, first.from, null, null) }];
-	const oneOffs: { at: number; block: string[] }[] = [];
-	const rules: { at: number; block: string[] }[] = [];
-	for (const type of ["STANDARD", "DAYLIGHT"] as const) {
-		const group = transitions.filter((transition) => (transition.to > transition.from) === (type === "DAYLIGHT"));
-		if (!group.length) continue;
-		const inferred = yearlyRule(group, endMs);
-		// Only the verified tail matching the inferred rule carries the RRULE (one block anchored on its
-		// first match); every earlier transition of the kind is written as an explicit observance.
-		const anchorIndex = inferred?.anchorIndex ?? group.length;
-		group.slice(0, anchorIndex).forEach((transition) => oneOffs.push({ at: transition.at, block: observance(type, localAt(transition.at + transition.from), transition.from, transition.to, null, null) }));
-		if (inferred) {
-			const anchor = group[anchorIndex];
-			// A bounded window caps its rule at the verified edge in UTC (RFC 5545 UNTIL): the tail
-			// cannot predict over a later window's observances or the gap between them. An open window —
-			// one an unbounded series cites — keeps the tail unbounded instead, so its occurrences past
-			// the horizon still follow the zone's rules (best answer short of shipping tzdata).
-			rules.push({ at: anchor.at, block: observance(type, localAt(anchor.at + anchor.from), anchor.from, anchor.to, inferred.rule, open ? null : formatIcsUtc(new Date(endMs))) });
-		}
-	}
-	oneOffs.sort((a, b) => a.at - b.at);
-	rules.sort((a, b) => a.at - b.at);
-	return [...blocks, ...oneOffs, ...rules];
+	const blocks = [{ at: startMs, block: observance(first.to > first.from ? "STANDARD" : "DAYLIGHT", localAt(startMs + first.from), first.from, first.from) }];
+	for (const transition of transitions) blocks.push({ at: transition.at, block: observance(transition.to > transition.from ? "DAYLIGHT" : "STANDARD", localAt(transition.at + transition.from), transition.from, transition.to) });
+	return blocks;
 }
 
 /**
- * The VTIMEZONE subcomponent lines for `zone`, covering `windows` — the disjoint instants ranges the
+ * The VTIMEZONE subcomponent lines for `zone`, covering `windows` — the disjoint instant ranges the
  * calendar cites, each {startMs, endMs} sorted ascending. Uncited gaps between windows get no
  * observances (nothing resolves there), which is what keeps a repeatUntil-9998 series beside a 2026
- * one from probing millennia.
+ * one from probing millennia. All blocks across the windows merge into one sorted list: every block
+ * is an ICU-observed fact, so two windows' contributions can never contradict.
  */
-export function vtimezoneLines(zone: string, windows: { startMs: number; endMs: number; open: boolean }[]): string[] {
+export function vtimezoneLines(zone: string, windows: { startMs: number; endMs: number }[]): string[] {
 	const lines = ["BEGIN:VTIMEZONE", `TZID:${zone}`];
 	if (isFixedZone(zone)) {
 		// One offset read, not a scan: Etc zones are fixed but nonzero (Etc/GMT+5 is UTC-05:00).
 		const offset = offsetMs(zone, windows[0].startMs);
-		lines.push(...observance("STANDARD", localAt(windows[0].startMs + offset), offset, offset, null, null), "END:VTIMEZONE");
+		lines.push(...observance("STANDARD", localAt(windows[0].startMs + offset), offset, offset), "END:VTIMEZONE");
 		return lines;
 	}
-	const blocks = windows.flatMap(({ startMs, endMs, open }) => windowObservances(zone, startMs, endMs, open));
+	const blocks = windows.flatMap(({ startMs, endMs }) => windowObservances(zone, startMs, endMs));
 	blocks.sort((a, b) => a.at - b.at);
-	for (const { block } of blocks) lines.push(...block);
-	lines.push("END:VTIMEZONE");
+	let previous = -1;
+	for (const { at, block } of blocks) {
+		if (at === previous) continue;
+		previous = at;
+		lines.push(...block);
+	}
+	// Loud documentation: this block was generated to cover the instants the file cites; past the
+	// last coverage boundary the final observance's offset persists (RFC 5545) rather than the
+	// zone's real future rules.
+	lines.push(`X-MAILFLARE-COVERAGE-END:${new Date(windows[windows.length - 1].endMs).toISOString()}`, "END:VTIMEZONE");
 	return lines;
 }
