@@ -10,7 +10,7 @@ const outDir = mkdtempSync(join(root, "tests", ".tmp-cloudflare-api-"));
 const realFetch = globalThis.fetch;
 after(() => { rmSync(outDir, { recursive: true, force: true }); globalThis.fetch = realFetch; });
 await build({
-	stdin: { contents: "export * from './src/lib/cloudflare-api';export { CloudflareApiError } from './src/lib/cloudflare-api-error';", resolveDir: root, loader: "ts" },
+	stdin: { contents: "export * from './src/lib/cloudflare-api';export { updateDnsRecord } from './src/lib/cloudflare-dns';export { CloudflareApiError } from './src/lib/cloudflare-api-error';", resolveDir: root, loader: "ts" },
 	outfile: join(outDir, "api.mjs"),
 	bundle: true,
 	platform: "node",
@@ -61,4 +61,18 @@ test("a list longer than the page cap throws instead of returning a partial list
 		return reply({ success: true, errors: [], result: [{ id: `rule${page}` }], result_info: { page, per_page: 50, total_pages: 1000 } });
 	};
 	await assert.rejects(api.listEmailRoutingRules(env, "zone"), /more than \d+ pages/);
+});
+
+test("updateDnsRecord PATCHes only content and ttl", async () => {
+	let request;
+	globalThis.fetch = async (url, init) => {
+		request = { url: String(url), method: init.method, body: JSON.parse(init.body) };
+		return reply({ success: true, errors: [], result: { id: "rec1", type: "TXT", name: "_dmarc.example.com", content: "v=DMARC1; p=none; rua=mailto:a@example.com" } });
+	};
+	await api.updateDnsRecord(env, "zone1", "rec1", { content: "v=DMARC1; p=none; rua=mailto:a@example.com" });
+	assert.equal(request.method, "PATCH");
+	assert.match(request.url, /\/zones\/zone1\/dns_records\/rec1$/);
+	assert.deepEqual(request.body, { content: "v=DMARC1; p=none; rua=mailto:a@example.com" });
+	await api.updateDnsRecord(env, "zone1", "rec1", { content: "x", ttl: 300, type: "A", name: "evil" });
+	assert.deepEqual(request.body, { content: "x", ttl: 300 });
 });

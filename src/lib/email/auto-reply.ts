@@ -4,8 +4,10 @@ import { autoReplyDeliveries, mailboxes } from "@/db/schema";
 import { formatEmailAddress, normalizeEmailAddress } from "@/lib/email/address";
 import { resolveInboundAddress } from "@/lib/email/routing";
 import { sendEmail } from "@/lib/email/send";
+import { SuppressedRecipientError } from "@/lib/deliverability/suppression-utils";
 import { newId } from "@/lib/ids";
 import type { MailboxAutoReplyInput } from "./auto-reply-types";
+import { hasListOrBulkPrecedence } from "@/lib/email/bulk-mail";
 
 const autoReplyIntervalMs = 24 * 60 * 60 * 1000;
 
@@ -52,15 +54,21 @@ export async function sendMailboxAutoReply(
 		headers.References = input.incomingMessageId;
 	}
 
-	await sendEmail(env, {
-		userId: input.userId,
-		mailboxId: input.mailboxId,
-		from: formatEmailAddress(deliveredAddress, mailbox.displayName),
-		to: recipient,
-		subject: mailbox.autoReplySubject.trim() || "Out of office",
-		text: mailbox.autoReplyBody.trim(),
-		headers,
-	});
+	try {
+		await sendEmail(env, {
+			userId: input.userId,
+			mailboxId: input.mailboxId,
+			from: formatEmailAddress(deliveredAddress, mailbox.displayName),
+			to: recipient,
+			subject: mailbox.autoReplySubject.trim() || "Out of office",
+			text: mailbox.autoReplyBody.trim(),
+			headers,
+		});
+	} catch (error) {
+		// The sender bounced or complained before: an out-of-office reply is not worth another bounce.
+		if (error instanceof SuppressedRecipientError) return;
+		throw error;
+	}
 
 	await db
 		.insert(autoReplyDeliveries)
@@ -82,8 +90,8 @@ function shouldSkipAutoReply(recipient: string, headers?: Record<string, string>
 
 	const autoSubmitted = getHeader(headers, "auto-submitted").toLowerCase();
 	if (autoSubmitted && autoSubmitted !== "no") return true;
-	if (/^(bulk|junk|list)$/i.test(getHeader(headers, "precedence"))) return true;
-	return ["list-id", "x-autoreply", "x-autorespond", "x-auto-response-suppress"]
+	if (hasListOrBulkPrecedence(headers)) return true;
+	return ["x-autoreply", "x-autorespond", "x-auto-response-suppress"]
 		.some((name) => !!getHeader(headers, name));
 }
 

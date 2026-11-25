@@ -117,6 +117,11 @@ export async function sendSesEmail(config: AwsConfig, input: SesSendInput): Prom
 const query = (config: AwsConfig, action: string, params: Record<string, string> = {}) =>
 	awsQuery(config, "email", "2010-12-01", action, params, { host: `email.${config.region}.amazonaws.com`, signingService: "ses" });
 
+/** SES v1: routes Bounce or Complaint notifications of an identity to an SNS topic; a null topic detaches it. */
+export async function setIdentityNotificationTopic(config: AwsConfig, identity: string, type: "Bounce" | "Complaint", topicArn: string | null): Promise<void> {
+	await query(config, "SetIdentityNotificationTopic", { Identity: identity, NotificationType: type, ...(topicArn ? { SnsTopic: topicArn } : {}) });
+}
+
 export async function describeActiveRuleSet(config: AwsConfig): Promise<{ name: string | null; rules: string[] }> {
 	const xml = await query(config, "DescribeActiveReceiptRuleSet");
 	const metadata = xmlBlocks(xml, "Metadata")[0] ?? "";

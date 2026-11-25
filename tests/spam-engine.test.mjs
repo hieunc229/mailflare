@@ -48,8 +48,8 @@ async function createFixture(t) {
 	const addReputation = (type, key, spamCount, hamCount, seen = spamCount + hamCount) => database.db.prepare(
 		"INSERT INTO spam_reputation (mailbox_id, type, key, messages_seen, spam_count, ham_count, first_seen_at, last_seen_at) VALUES ('mb1', ?, ?, ?, ?, ?, ?, ?)",
 	).run(type, key, seen, spamCount, hamCount, now, now);
-	const analyze = (from, overrides = {}, verdicts = PASS, intelligenceProvider) => analyzeSpam(createDb(database), {
-		mailboxId: "mb1", userId: "u1", envelopeFrom: from, verdicts, intelligenceProvider,
+	const analyze = (from, overrides = {}, verdicts = PASS, intelligenceProvider, headers, strictness) => analyzeSpam(createDb(database), {
+		mailboxId: "mb1", userId: "u1", envelopeFrom: from, verdicts, intelligenceProvider, headers, strictness,
 		message: {
 			subject: "Hello", text: "Plain note.", html: null, messageId: null, fromAddr: from, toAddr: "kevin@example.com",
 			ccAddr: null, bccAddr: null, replyTo: null, inReplyTo: null, references: [], date: null, attachments: [],
@@ -134,4 +134,79 @@ test("a first-contact receipt with a brand-new sending domain is filed in the In
 	// 10 (link) + 25 (young domain) = 35, minus half the pass credit (7) = 28. Stays in the Inbox.
 	assert.equal(result.score, 28);
 	assert.equal(result.verdict, "inbox");
+});
+
+const seoPitch = {
+	subject: "Submit example.org to Search Engines",
+	text: "Hello, we can submit example.org to search engines and improve your rankings on Google with quality backlinks.",
+};
+
+test("an unsolicited SEO pitch naming the recipient's own domain is flagged on first contact", async (t) => {
+	const { analyze } = await createFixture(t);
+	const result = await analyze("promo@throwaway-seo.example", { ...seoPitch, toAddr: "kevin@example.org" });
+	assert.ok(ids(result).includes("unsolicited_solicitation"), ids(result).join());
+	assert.equal(result.signals.find((signal) => signal.id === "unsolicited_solicitation").score, 45);
+	const subjectOnly = await analyze("promo@throwaway-seo.example", { subject: "Submit example.org to Search Engines", text: "Our SEO services start today.", toAddr: "kevin@example.org" });
+	assert.ok(ids(subjectOnly).includes("unsolicited_solicitation"), ids(subjectOnly).join());
+});
+
+test("the solicitation signal needs every condition: no unsubscribe link, a prior relationship or a reply thread each clear it", async (t) => {
+	const { addContact, addReputation, analyze } = await createFixture(t);
+	const to = { ...seoPitch, toAddr: "kevin@example.org" };
+	const flagged = async (from, overrides = {}, headers) => ids(await analyze(from, { ...to, ...overrides }, PASS, undefined, headers)).includes("unsolicited_solicitation");
+	assert.equal(await flagged("a@bulk.example", {}, { "List-Unsubscribe": "<mailto:u@bulk.example>" }), false);
+	assert.equal(await flagged("a@bulk.example", { inReplyTo: "<abc@example.org>" }), false);
+	assert.equal(await flagged("a@bulk.example", { subject: "Hello", text: "We help with search engines and backlinks." }), false, "no recipient domain");
+	assert.equal(await flagged("a@bulk.example", { subject: "About example.org", text: "Your site example.org looks great, call me." }), false, "no pitch phrases");
+	assert.equal(await flagged("a@bulk.example", { subject: "About example.org", text: "Cheap backlinks." }), false, "one pitch phrase is not enough");
+	addContact("known@vendor.example", "inbound");
+	assert.equal(await flagged("known@vendor.example"), false, "an existing contact is not a first contact");
+	addReputation("email", "a@seen.example", 0, 1);
+	assert.equal(await flagged("a@seen.example"), false, "an address seen before is not a first contact");
+	addReputation("domain", "gmail.com", 0, 40);
+	assert.equal(await flagged("stranger@gmail.com"), true, "mail from a busy shared domain is still a first contact");
+	addReputation("domain", "busy.example", 0, 40);
+	assert.equal(await flagged("new-person@busy.example"), true, "a new address on a known domain is a first contact");
+});
+
+test("the recipient's own address in a footer does not count as naming their domain", async (t) => {
+	const { analyze } = await createFixture(t);
+	const onboarding = {
+		subject: "Welcome to RankBoost",
+		text: "Boost your traffic with our SEO audit and quality backlinks, and see where you rank on Google.\n\nThis email was sent to kevin@example.org.",
+		toAddr: "kevin@example.org",
+	};
+	assert.equal(ids(await analyze("hello@rankboost.example", onboarding)).includes("unsolicited_solicitation"), false);
+	const named = { ...onboarding, text: `${onboarding.text}\nWe checked example.org for you.` };
+	assert.equal(ids(await analyze("hello@rankboost.example", named)).includes("unsolicited_solicitation"), true);
+});
+
+test("a transactional message that mentions the recipient's domain is not flagged", async (t) => {
+	const { analyze } = await createFixture(t);
+	const result = await analyze("noreply@search.example.com", {
+		subject: "Search Console: example.org was added", toAddr: "kevin@example.org",
+		text: "A new owner was added to example.org in Search Console.",
+	});
+	assert.equal(ids(result).includes("unsolicited_solicitation"), false);
+});
+
+test("strictness moves the spam threshold; normal stays at 70", async (t) => {
+	const { analyze } = await createFixture(t);
+	const provider = (score) => ({ check: async () => [{ id: "listed", score, reason: "Listed" }] });
+	const verdict = async (score, strictness) => (await analyze("a@b.example", {}, {}, provider(score), undefined, strictness)).verdict;
+	assert.equal(await verdict(60, undefined), "suspicious");
+	assert.equal(await verdict(60, "normal"), "suspicious");
+	assert.equal(await verdict(70, "normal"), "spam");
+	assert.equal(await verdict(60, "strict"), "spam");
+	assert.equal(await verdict(54, "strict"), "suspicious");
+	assert.equal(await verdict(75, "relaxed"), "suspicious");
+	assert.equal(await verdict(85, "relaxed"), "spam");
+});
+
+test("a failed DMARC is still filed as spam at every strictness", async (t) => {
+	const { analyze } = await createFixture(t);
+	for (const strictness of ["relaxed", "normal", "strict"]) {
+		const result = await analyze("a@b.example", {}, { dmarc: "fail" }, undefined, undefined, strictness);
+		assert.equal(result.verdict, "spam", strictness);
+	}
 });

@@ -1,0 +1,6 @@
+<?xml version="1.0"?>
+<feedback xmlns="http://dmarc.org/dmarc-xml/0.1">
+<report_metadata><org_name>Outlook.com</org_name><email>dmarcreport@microsoft.com</email><report_id>3d7e1c0a8b2f4e9d9a6c1f0b5e7a2c41</report_id><date_range><begin>1763424000</begin><end>1763510400</end></date_range></report_metadata>
+<policy_published><domain>example.com</domain><adkim>s</adkim><aspf>s</aspf><p>quarantine</p><sp>quarantine</sp><pct>50</pct><fo>0</fo></policy_published>
+<record><row><source_ip>192.0.2.10</source_ip><count>7</count><policy_evaluated><disposition>none</disposition><dkim>pass</dkim><spf>fail</spf><reason><type>local_policy</type><comment>a &amp; b</comment></reason></policy_evaluated></row><identifiers><envelope_from>bounce.example.com</envelope_from><header_from>Example.COM</header_from></identifiers><auth_results><dkim><domain>example.com</domain><result>pass</result></dkim></auth_results></record>
+</feedback>

@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { isReportAddressReserved } from "@/lib/deliverability/report-address";
 import { and, eq, or } from "drizzle-orm";
 import { getEnv } from "@/lib/cloudflare";
 import { getDb } from "@/db";
@@ -40,6 +41,7 @@ export async function POST(request: Request) {
 	const [domain] = await db.select().from(domains).where(and(eq(domains.id, parsed.data.domainId), eq(domains.userId, auth.userId))).limit(1);
 	if (!domain) return NextResponse.json({ error: "Domain not found" }, { status: 404 });
 	const localPart = parsed.data.localPart.toLowerCase();
+	if (await isReportAddressReserved(env, domain.id, localPart)) return NextResponse.json({ error: "This address is reserved for DMARC reports" }, { status: 409 });
 	// Inbound routing resolves normalized local parts, so conflicts must too.
 	const [domainMailboxes, domainAliases] = await Promise.all([
 		db.select({ localPart: mailboxes.localPart }).from(mailboxes).where(eq(mailboxes.domainId, domain.id)),

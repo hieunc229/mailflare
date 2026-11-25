@@ -14,6 +14,7 @@ import {
   KeyRound,
   Bot,
   ShieldCheck,
+  ShieldAlert,
 } from "@/components/icons";
 import { cn } from "@/lib/utils";
 import { useLanguage } from "./language-provider";
@@ -48,6 +49,7 @@ const sections: { id?: string; labelKey?: TranslationKey; links: AdminNavLink[] 
     links: [
       { href: "/mailboxes", labelKey: "admin.nav.mailboxes", icon: Mail },
       { href: "/domains", labelKey: "admin.nav.domains", icon: Globe2, permission: "domains" },
+      { href: "/deliverability", labelKey: "admin.nav.deliverability", icon: ShieldAlert, permission: "domains" },
       { href: "/routing", labelKey: "admin.nav.routing", icon: Route, permission: "domains" },
       { href: "/webhooks", labelKey: "admin.nav.webhooks", icon: Webhook, permission: "primary" },
       { href: "/spam-filter", labelKey: "admin.nav.spamFilter", icon: ShieldCheck, permission: "primary" },

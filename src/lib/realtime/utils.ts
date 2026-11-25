@@ -2,7 +2,8 @@ import { eq } from "drizzle-orm";
 import { getDb } from "@/db";
 import { domains, mailboxAccess, mailboxes } from "@/db/schema";
 import { isTeamMailboxSharingEnabled } from "@/lib/mailboxes/access-utils";
-import type { NewMessageNotification, AgentDraftNotification } from "./types";
+import { getUserMailRevision } from "./revision";
+import type { NewMessageNotification, AgentDraftNotification, RevisionNotification } from "./types";
 import { sendPushNotifications } from "@/lib/push/server";
 import { sendNativePush } from "@/lib/push/native";
 
@@ -54,9 +55,11 @@ export async function notifyUsersOfNewMessage(
 	env: CloudflareEnv,
 	userIds: string[],
 	payload: NewMessageNotification | AgentDraftNotification,
+	options: { silent?: boolean } = {},
 ): Promise<void> {
 	// Next dev uses a bindings-only proxy; realtime delivery runs in worker.ts.
 	if (!env.REALTIME) return;
+	if (options.silent) return refreshUsersSilently(env, userIds);
 	const results = await Promise.allSettled([
 		...userIds.map((userId) => {
 			const hub = env.REALTIME.getByName(userId);
@@ -70,5 +73,20 @@ export async function notifyUsersOfNewMessage(
 	]);
 	for (const result of results) {
 		if (result.status === "rejected") console.error("New-message notification failed", result.reason);
+	}
+}
+
+/** No popup and no push: tells open sessions their lists changed through the same revision message the heartbeat uses. */
+async function refreshUsersSilently(env: CloudflareEnv, userIds: string[]): Promise<void> {
+	const results = await Promise.allSettled(userIds.map(async (userId) => {
+		const notification: RevisionNotification = { type: "revision", revision: await getUserMailRevision(env, userId), changed: true };
+		await env.REALTIME.getByName(userId).fetch("https://mailflare-realtime/notify", {
+			method: "POST",
+			headers: { "Content-Type": "application/json" },
+			body: JSON.stringify(notification),
+		});
+	}));
+	for (const result of results) {
+		if (result.status === "rejected") console.error("Silent refresh notification failed", result.reason);
 	}
 }

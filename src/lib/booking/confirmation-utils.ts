@@ -70,8 +70,8 @@ export function formatBookingWhen(startsAt: Date, endsAt: Date, timeZone: string
  * Replaces known {placeholders}; anything else in braces is left as written. A line whose placeholders all come out
  * empty is dropped, so "Where: {location}" disappears for an event without a location.
  */
-export function renderBookingTemplate(template: string, values: Record<BookingTemplatePlaceholder, string>): string {
-	const known = (name: string): name is BookingTemplatePlaceholder => Object.hasOwn(values, name);
+export function renderBookingTemplate<K extends string = BookingTemplatePlaceholder>(template: string, values: Record<K, string>): string {
+	const known = (name: string): name is K => Object.hasOwn(values, name);
 	return template
 		.split("\n")
 		.filter((line) => {

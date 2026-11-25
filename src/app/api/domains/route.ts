@@ -8,6 +8,7 @@ import { domainListOwnerIds } from "@/lib/domains/utils";
 import type { DnsStatusSummary } from "@/lib/dns-status";
 import { summariseDomainDns } from "@/lib/domains/dns-view";
 import { getDomainProvisioningError } from "@/lib/domains/errors";
+import { mtaStsBlockedResponse } from "@/lib/deliverability/mta-sts-block-response";
 import { hasValidSessionMutationOrigin } from "@/lib/auth/origin";
 
 export async function GET(request: NextRequest) {
@@ -63,6 +64,8 @@ export async function POST(request: Request) {
 		});
 		return NextResponse.json(result);
 	} catch (err) {
+		const blocked = await mtaStsBlockedResponse(err);
+		if (blocked) return blocked;
 		const failure = getDomainProvisioningError(err, "Failed to add domain");
 		return NextResponse.json(
 			{ error: failure.message, code: failure.code },

@@ -180,7 +180,7 @@ test("a mutation without a bookmark starts the session on the primary", () => {
 });
 
 test("sign-in, setup and public write endpoints never use a replica session", () => {
-	for (const path of ["/api/auth/login", "/api/auth/password-reset", "/api/setup/prepare", "/api/inbound/resend", "/api/i/abc.gif"]) {
+	for (const path of ["/api/auth/login", "/api/auth/password-reset", "/api/setup/prepare", "/api/inbound/resend", "/api/provider-events/resend", "/api/provider-events/ses", "/api/i/abc.gif"]) {
 		assert.equal(shouldUseD1Session(new Request(`https://mail.example.com${path}`)), false, path);
 		const { db } = fakeD1();
 		assert.equal(withD1ReadSession({ DB: db }, new Request(`https://mail.example.com${path}`)), null);

@@ -13,12 +13,13 @@ import { loadMessageAttachmentContents, storeMessageAttachments, validateAttachm
 import type { AttachmentContent } from "@/lib/email/attachment-types";
 import { getOutboundAttachmentMaxMb } from "@/lib/email/attachment-policy";
 import { getOutboundProviderConfig, sendThroughProvider } from "@/lib/email/outbound-provider";
-import { prepareCloudflareAttachments } from "@/lib/email/cloud-attachment-utils";
+import { prepareOutboundAttachments } from "@/lib/email/cloud-attachment-utils";
 import { ensureTrackingToken, getTrackingHostForSender } from "@/lib/tracking/open-tracking";
 import { setFollowUp } from "@/lib/follow-ups/service";
 import { buildTrackingPixelUrl, injectTrackingPixel, resolveTrackingOrigin } from "@/lib/tracking/open-tracking-utils";
 import { getComposePreferences } from "@/lib/compose/preferences";
 import { getMailboxDomainAddresses } from "@/lib/mailboxes/domain-addresses";
+import { assertNoSuppressedRecipients, dropSuppressedRecipients } from "@/lib/deliverability/suppression";
 
 export type SendEmailInput = {
 	userId: string;
@@ -39,6 +40,8 @@ export type SendEmailInput = {
 	threadId?: string | null;
 	mailboxId: string;
 	attachments?: AttachmentContent[];
+	/** The sender's interface language, for text Mailflare adds to the message (such as the large-file note). */
+	locale?: string;
 	/** Future delivery time. Values at or before the current time send immediately. */
 	scheduledAt?: string | Date;
 	/** Hold the send for the user's undo window (via the scheduled queue) so they can cancel it. */
@@ -87,13 +90,8 @@ export async function sendEmail(
 	const db = getDb(env);
 	const sender = await getAuthorizedSenderAddress(env, input);
 	const attachments = input.attachments ?? [];
-	validateAttachments(attachments);
 	const maxAttachmentMb = await getOutboundAttachmentMaxMb(env);
-	const maxAttachmentBytes = maxAttachmentMb * 1_000_000;
-	if (attachments.some((attachment) => attachment.content.byteLength > maxAttachmentBytes) ||
-		attachments.reduce((total, attachment) => total + attachment.content.byteLength, 0) > maxAttachmentBytes) {
-		throw new Error(`Attachments exceed the administrator's ${maxAttachmentMb} MB outgoing limit`);
-	}
+	validateAttachments(attachments, maxAttachmentMb);
 	if (input.subject.length > 998) throw new Error("Subject exceeds Cloudflare's 998-character limit");
 
 	const to = toRecipientList(input.to);
@@ -103,6 +101,8 @@ export async function sendEmail(
 	if (to.length + cc.length + bcc.length > MAX_RECIPIENTS) {
 		throw new Error(`A message can have at most ${MAX_RECIPIENTS} recipients`);
 	}
+	// Before anything is stored: a refused send leaves no draft, contact or job behind.
+	await assertNoSuppressedRecipients(env, sender.fromAddr, [...to, ...cc, ...bcc]);
 	await upsertContactsFromAddresses(env, input.userId, [...to, ...cc, ...bcc], "outbound");
 
 	const inReplyTo = normalizeMessageId(input.inReplyTo);
@@ -147,7 +147,7 @@ export async function sendEmail(
 		references: references.length ? references.join(" ") : null,
 	});
 	try {
-		const stored = await storeMessageAttachments(env, messageId, attachments);
+		const stored = await storeMessageAttachments(env, messageId, attachments, { validate: false });
 		stored.forEach((attachment, index) => { attachments[index].storageId = attachment.id; });
 	} catch (error) {
 		await db.delete(messages).where(eq(messages.id, messageId));
@@ -203,9 +203,9 @@ export async function sendEmail(
 }
 
 async function deliverEmail(env: CloudflareEnv, delivery: PreparedDelivery): Promise<void> {
-	const { input, messageId, jobId, from, mailboxId, to, cc, bcc, headers, attachments } = delivery;
+	const { input, messageId, jobId, from, mailboxId, headers, attachments } = delivery;
 	const db = getDb(env);
-	const toAddr = joinEmailAddressList(to);
+	let { to, cc, bcc } = delivery;
 	let accepted = false;
 	try {
 		// The sender address was validated at queue time; recheck that the mailbox
@@ -226,18 +226,31 @@ async function deliverEmail(env: CloudflareEnv, delivery: PreparedDelivery): Pro
 		if (!mailbox || mailbox.disabled || !(await getMailboxDomainAddresses(db, mailbox)).includes(fromAddress)) {
 			throw new Error("The sender address is no longer available for this mailbox");
 		}
+		// Queued sends can outlive the check in sendEmail: an address may have bounced since.
+		const kept = await dropSuppressedRecipients(env, from, { to, cc, bcc });
+		if (kept.dropped.length) {
+			({ to, cc, bcc } = kept);
+			await createAuditLog(env, {
+				actorUserId: input.userId,
+				mailboxId,
+				messageId,
+				action: "email.suppressed_recipients_dropped",
+				metadata: { dropped: kept.dropped.join(", ") },
+			});
+			if (to.length === 0) throw new Error("All recipients are on the suppression list");
+		}
+		const toAddr = joinEmailAddressList(to);
 		const provider = await getOutboundProviderConfig(env, from);
-		// Cloudflare's 5 MiB cap forces big files into download links; Resend takes
-		// the attachments directly (the admin's outgoing limit still applies).
-		const prepared = provider.provider === "cloudflare"
-			? await prepareCloudflareAttachments(env, attachments, {
-				subject: input.subject,
-				html: input.html,
-				text: input.text,
-				headers,
-				publicOrigin: input.publicOrigin,
-			})
-			: { attachments, html: input.html, text: input.text };
+		// Files the provider cannot carry (Cloudflare's 5 MiB cap, or past 25 MB on Resend/SES)
+		// go out as download links; the admin's outgoing limit still applies.
+		const prepared = await prepareOutboundAttachments(env, provider.provider, attachments, {
+			subject: input.subject,
+			html: input.html,
+			text: input.text,
+			headers,
+			publicOrigin: input.publicOrigin,
+			locale: input.locale,
+		});
 		if (prepared.text !== input.text || prepared.html !== input.html) {
 			await db.update(messages).set({ textBody: prepared.text ?? null, htmlBody: prepared.html ?? null }).where(eq(messages.id, messageId));
 		}

@@ -57,7 +57,7 @@ export async function validateAwsConfig(config: AwsConfig): Promise<AwsCapabilit
 export const AWS_IAM_POLICY = {
 	Version: "2012-10-17",
 	Statement: [
-		{ Effect: "Allow", Action: ["sts:GetCallerIdentity", "ses:GetAccount", "ses:SendEmail", "ses:CreateEmailIdentity", "ses:GetEmailIdentity", "ses:DeleteEmailIdentity"], Resource: "*" },
+		{ Effect: "Allow", Action: ["sts:GetCallerIdentity", "ses:GetAccount", "ses:SendEmail", "ses:CreateEmailIdentity", "ses:GetEmailIdentity", "ses:DeleteEmailIdentity", "ses:SetIdentityNotificationTopic"], Resource: "*" },
 		{ Effect: "Allow", Action: ["ses:DescribeActiveReceiptRuleSet", "ses:CreateReceiptRuleSet", "ses:SetActiveReceiptRuleSet", "ses:CreateReceiptRule", "ses:UpdateReceiptRule", "ses:DescribeReceiptRule", "ses:DeleteReceiptRule"], Resource: "*" },
 		{ Effect: "Allow", Action: ["sns:ListTopics", "sns:CreateTopic", "sns:SetTopicAttributes", "sns:Subscribe", "sns:ListSubscriptionsByTopic"], Resource: "*" },
 		{ Effect: "Allow", Action: ["s3:ListAllMyBuckets", "s3:CreateBucket", "s3:PutBucketPolicy", "s3:PutLifecycleConfiguration", "s3:ListBucket", "s3:GetObject", "s3:DeleteObject"], Resource: "*" },

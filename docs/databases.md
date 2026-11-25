@@ -7,7 +7,7 @@ Set `DATABASE_URL` to use another database instead. Every database [Drizzle ORM]
 | Dialect | Drivers (`DATABASE_DRIVER`) | Typical services |
 | --- | --- | --- |
 | SQLite | `d1` (default), `libsql`, `better-sqlite3`, `bun-sqlite` | Cloudflare D1, Turso / libSQL, a local file |
-| PostgreSQL | `node-postgres`, `postgres-js`, `neon`, `pglite` | Supabase, Neon, Vercel Postgres, RDS, Cloud SQL, self-hosted, embedded PGlite |
+| PostgreSQL | `node-postgres`, `postgres-js`, `neon`, `pglite` | Supabase, Neon, Vercel Postgres, Prisma Postgres, RDS, Cloud SQL, self-hosted, embedded PGlite |
 | MySQL | `mysql2`, `planetscale` | MySQL 8, MariaDB 11, TiDB, PlanetScale, Aurora |
 
 The driver is inferred from the URL. Set `DATABASE_DRIVER` only to override it. Names such as `pg`, `postgres`, `supabase`, `vercel`, `turso`, `mysql`, `tidb` and `mariadb` are accepted as aliases.
@@ -33,6 +33,7 @@ On Cloudflare Workers set them as Worker variables or secrets (`npx wrangler sec
 | PostgreSQL | `postgres://user:pass@host:5432/db` | node-postgres. Add `?sslmode=require` where TLS is required. |
 | Supabase | the pooler or direct URL from the dashboard | node-postgres. Use the transaction pooler on Workers. |
 | Neon / Vercel Postgres | `postgres://…neon.tech/db?sslmode=require` | Detected from the hostname; uses Neon's HTTP driver (works on Workers). `DATABASE_DRIVER=node-postgres` selects TCP instead. |
+| Prisma Postgres | `postgres://…@db.prisma.io:5432/postgres?sslmode=require` | node-postgres. `pg_trgm` is available, so search gets its indexes. On Workers swap the host for the pooled one, `pooled.db.prisma.io`: with a connection per query the direct host runs out of connection slots under concurrent requests. |
 | postgres.js | any `postgres://` URL + `DATABASE_DRIVER=postgres-js` | |
 | PGlite | `pglite://./data/pg` or `pglite://memory` | Embedded Postgres, Node only; useful for development and tests. |
 | MySQL / MariaDB / TiDB | `mysql://user:pass@host:3306/db` | mysql2. TiDB Cloud hosts get TLS automatically; `?ssl=true` forces it elsewhere. |
@@ -72,7 +73,7 @@ npm run db:bundle          # rebuild the bundles the Worker applies
 
 The application code is written once. `getDb(env)` and `env.DB` work as before: on other databases `env.DB` is an adapter with the D1 interface (`prepare`, `bind`, `batch`) over the configured driver, and the Drizzle instance is built for the right dialect. Stored values are identical across dialects: timestamps are whole seconds in a `bigint`, booleans are booleans (`tinyint(1)` on MySQL), so SQL fragments and **backups are portable**: a backup taken on D1 restores onto PostgreSQL or MySQL and back.
 
-Also kept on every dialect: foreign keys and cascades, the JMAP change log and mailbox revisions (via triggers), automatic `trashed_at` tracking, and seed rows.
+Also kept on every dialect: foreign keys and cascades, the JMAP change log, mailbox revisions and the CalDAV/CardDAV change log (via triggers), automatic `trashed_at` tracking, and seed rows. TiDB and PlanetScale do not support triggers, so the trigger-based items (both change logs, `trashed_at` tracking) are not available there; CalDAV/CardDAV sync needs MySQL, MariaDB or PostgreSQL.
 
 ## What differs
 
@@ -81,7 +82,7 @@ Also kept on every dialect: foreign keys and cascades, the JMAP change log and m
 | Message search | FTS5 index, prefix and column matching | `ILIKE`-style substring scan of subject, addresses and body; accelerated by `pg_trgm` indexes when the extension can be created | Substring `LIKE` scan |
 | Search index page (Admin) | Rebuild available | Not applicable (always "indexed") | Not applicable |
 | `agent_send_approvals` duplicate-delivery guard | Partial unique index | Partial unique index | Plain index (MySQL has no partial indexes); the status claim still prevents double sends |
-| Wide covering indexes on `messages` | Full | Full | Trimmed to fit InnoDB's 3072-byte key limit; expression keys (`coalesce(thread_id, id)`) dropped. Conversation view is slower on very large mailboxes |
+| Wide covering indexes on `messages` | Full | Full | Trimmed to fit InnoDB's 3072-byte key limit; expression keys (`coalesce(thread_id, id)`) dropped; the trailing `id` tie-breaker of `messages_category_page_idx` is dropped too. Conversation view is slower on very large mailboxes |
 | One agent job per mailbox | Atomic in the claim statement | Atomic | Checked just before the claim (small race window) |
 | `batch` atomicity | Atomic | Atomic | Atomic for DML; MySQL commits DDL implicitly, so a failed migration can leave earlier statements applied |
 | `neon` (HTTP) | n/a | Batches run as separate statements (the HTTP protocol has no interactive transaction); use `node-postgres` for atomic batches | n/a |
