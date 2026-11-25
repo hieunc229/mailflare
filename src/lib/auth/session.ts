@@ -40,12 +40,18 @@ export async function getUserFromSession(
 	env: CloudflareEnv,
 	token: string | undefined,
 ): Promise<typeof users.$inferSelect | null> {
-	const session = await getSessionFromToken(env, token);
-	if (!session) return null;
-	// Same reason as below: `disabled` must be seen as soon as another admin writes it.
+	if (!token) return null;
+	// One joined read on the primary: `disabled` must be seen as soon as another admin writes it,
+	// and a revoked session must not be honoured by a lagging replica (see getSessionFromToken).
 	const db = getDb({ DB: env.DB_PRIMARY ?? env.DB });
-	const [user] = await db.select().from(users).where(eq(users.id, session.userId)).limit(1);
-	return user ?? null;
+	const tokenHash = await hashSessionToken(token);
+	const [row] = await db
+		.select({ user: users })
+		.from(sessions)
+		.innerJoin(users, eq(sessions.userId, users.id))
+		.where(and(eq(sessions.tokenHash, tokenHash), gt(sessions.expiresAt, new Date())))
+		.limit(1);
+	return row?.user ?? null;
 }
 
 export async function getSessionFromToken(
