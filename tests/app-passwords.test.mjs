@@ -17,6 +17,7 @@ await build({
 			export { authenticateApiRequest } from "./src/lib/api/key-auth.ts";
 			export { authenticateAppPassword, authenticateAppPasswordRequest, availableAppPasswordProtocols, isSecureAppPasswordTransport, revokeAllAppPasswords } from "./src/lib/auth/app-passwords.ts";
 			export { handleJmapRequest } from "./src/lib/jmap/handler.ts";
+			export { clearImapEnabledCache } from "./src/lib/imap/settings.ts";
 			export { appPasswordGuessKey } from "./src/lib/auth/app-passwords.ts";
 			export { deleteUserSessions } from "./src/lib/auth/session.ts";
 			export { API_KEY_SCOPES, APP_PASSWORD_PROTOCOLS } from "./src/lib/api/scopes.ts";
@@ -45,6 +46,7 @@ const {
 	authenticateAppPassword,
 	authenticateAppPasswordRequest,
 	availableAppPasswordProtocols,
+	clearImapEnabledCache,
 	isSecureAppPasswordTransport,
 	revokeAllAppPasswords,
 	deleteUserSessions,
@@ -85,9 +87,12 @@ test("the app protocols are separate from the general API key scopes", () => {
 	for (const protocol of ["dav", "imap", "submission"]) assert.equal(API_KEY_SCOPES.includes(protocol), false);
 });
 
-test("only protocols the server can serve are offered", async (t) => {
-	const { env } = await fixture(t);
+test("only protocols enabled by the administrator are offered", async (t) => {
+	const { database, env } = await fixture(t);
 	assert.deepEqual(await availableAppPasswordProtocols(env), ["jmap"]);
+	database.db.prepare("UPDATE app_settings SET imap_enabled = 1 WHERE id = 'default'").run();
+	clearImapEnabledCache();
+	assert.deepEqual(await availableAppPasswordProtocols(env), ["jmap", "imap"]);
 });
 
 test("an app password works for its protocol only, never for another", async (t) => {

@@ -659,6 +659,13 @@
       "when": 1795027687014,
       "tag": "0102_contact_details",
       "breakpoints": true
+    },
+    {
+      "idx": 95,
+      "version": "6",
+      "when": 1795577159778,
+      "tag": "0104_imap_enabled",
+      "breakpoints": true
     }
   ]
 }

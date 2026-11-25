@@ -20,6 +20,7 @@ import { serveFetch } from "./runtime/fetch-adapter";
 import { applyMigrations } from "./runtime/migrate";
 import { startScheduler } from "./runtime/scheduler";
 import { startSmtpListener } from "./runtime/smtp";
+import { startImapListener } from "./runtime/imap";
 
 /**
  * The self-hosted entrypoint: one Node process serving the Next app, the
@@ -139,6 +140,9 @@ async function main() {
 			tls: process.env.SMTP_TLS_KEY && process.env.SMTP_TLS_CERT ? { keyPath: process.env.SMTP_TLS_KEY, certPath: process.env.SMTP_TLS_CERT } : null,
 		});
 	}
+	const imapTls = process.env.IMAP_TLS_KEY && process.env.IMAP_TLS_CERT ? { keyPath: process.env.IMAP_TLS_KEY, certPath: process.env.IMAP_TLS_CERT } : null;
+	const imapPort = Number(process.env.IMAP_PORT ?? (imapTls ? 993 : 143));
+	if (imapPort > 0) startImapListener(env, { port: imapPort, host: process.env.IMAP_HOST, tls: imapTls });
 	const stopScheduler = startScheduler(env);
 
 	const shutdown = () => {

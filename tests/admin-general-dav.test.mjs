@@ -42,6 +42,16 @@ test("calendar and contacts sync is off until an administrator turns it on", asy
 	assert.equal(enabled(), 0);
 });
 
+test("IMAP app-password authentication is off until an administrator enables it", async () => {
+	setup();
+	assert.equal((await (await GET(new Request("https://mail.test/api/admin/general"))).json()).imapEnabled, false);
+	const on = await put({ imapEnabled: true });
+	assert.equal(on.status, 200);
+	assert.equal((await on.json()).imapEnabled, true);
+	assert.equal(sqlite.prepare("SELECT imap_enabled FROM app_settings WHERE id = 'default'").get().imap_enabled, 1);
+	assert.equal((await (await put({ imapEnabled: false })).json()).imapEnabled, false);
+});
+
 test("only the primary administrator can change it, and the value must be a boolean", async () => {
 	setup({ id: "u", admin: false });
 	assert.equal((await put({ davEnabled: true })).status, 403);
