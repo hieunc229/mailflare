@@ -97,6 +97,8 @@ test("the screen shows the switch only for keys that may request a send, and rev
 		"@/components/mailbox-provider": mailbox,
 		"@/lib/auth/client": authClient,
 		"@/components/ui/confirm-dialog": `export async function confirmDestructive() { return false; }`,
+		"./security-status-store": `export function useSecurityStatus() { return { status: null }; }`,
+		"./step-up-dialog": `export function StepUpDialog() { return null; }`,
 		"@/components/settings/mcp-agent-instructions": `export function McpAgentInstructions() { return null; }`,
 	});
 	const container = document.createElement("div");

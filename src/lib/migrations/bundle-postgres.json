@@ -553,6 +553,12 @@
         "CREATE TABLE \"contact_details\" (\n\t\"contact_id\" text PRIMARY KEY NOT NULL,\n\t\"details\" text DEFAULT '{}' NOT NULL,\n\t\"updated_at\" bigint NOT NULL\n);",
         "ALTER TABLE \"contact_details\" ADD CONSTRAINT \"contact_details_contact_id_contacts_id_fk\" FOREIGN KEY (\"contact_id\") REFERENCES \"public\".\"contacts\"(\"id\") ON DELETE cascade ON UPDATE no action;"
       ]
+    },
+    {
+      "name": "0027_approve_own_sends.sql",
+      "statements": [
+        "ALTER TABLE \"api_keys\" ADD COLUMN \"can_approve_own_sends\" boolean DEFAULT false NOT NULL;"
+      ]
     }
   ]
 }
