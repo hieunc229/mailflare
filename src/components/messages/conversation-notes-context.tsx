@@ -2,6 +2,7 @@
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { authFetch } from "@/lib/auth/client";
+import { createLatestRequestGate } from "@/lib/client/latest-request";
 import type { ConversationNote } from "@/lib/notes/types";
 import type { ConversationNotesProviderProps, ConversationNotesState } from "./conversation-notes-types";
 
@@ -21,6 +22,9 @@ export function ConversationNotesProvider({ messageId, emails, children }: Conve
 	const [editDrafts, setEditDrafts] = useState<Record<string, string>>({});
 	const [focusRequest, setFocusRequest] = useState(0);
 	const mounted = useRef(true);
+	// A notes refresh started by an earlier change must not repaint a note that
+	// was added, edited or deleted while it was on the wire.
+	const gate = useMemo(() => createLatestRequestGate(), []);
 
 	useEffect(() => {
 		mounted.current = true;
@@ -33,10 +37,11 @@ export function ConversationNotesProvider({ messageId, emails, children }: Conve
 		let cancelled = false;
 		let refreshTimer: number | null = null;
 		async function load() {
+			const token = gate.begin();
 			try {
 				const response = await authFetch(`/api/messages/${messageId}/notes`);
 				const data = (await response.json().catch(() => null)) as { notes?: ConversationNote[] } | null;
-				if (!cancelled && response.ok) setNotes(data?.notes ?? []);
+				if (!cancelled && gate.isCurrent(token) && response.ok) setNotes(data?.notes ?? []);
 			} catch {
 				// Keep what is on screen; the next change event tries again.
 			} finally {
@@ -58,7 +63,7 @@ export function ConversationNotesProvider({ messageId, emails, children }: Conve
 			window.removeEventListener("mailflare:messages-changed", scheduleLoad);
 			if (refreshTimer) window.clearTimeout(refreshTimer);
 		};
-	}, [messageId]);
+	}, [messageId, gate]);
 
 	const startNote = useCallback((target?: string) => {
 		setAttachTo(target ?? null);
@@ -83,27 +88,30 @@ export function ConversationNotesProvider({ messageId, emails, children }: Conve
 			const note = await sendNote(`/api/messages/${attachTo ?? messageId}/notes`, "POST", { html, attachToMessage: attachTo !== null });
 			if (!mounted.current) return;
 			setNotes((current) => [...current, note]);
+			gate.invalidate();
 			setAttachTo(null);
 			setDraft("");
 		} finally {
 			if (mounted.current) setAdding(false);
 		}
-	}, [attachTo, messageId]);
+	}, [attachTo, messageId, gate]);
 
 	const update = useCallback(async (noteId: string, html: string) => {
 		const note = await sendNote(`/api/messages/${messageId}/notes/${noteId}`, "PATCH", { html });
 		if (!mounted.current) return;
 		setNotes((current) => current.map((item) => (item.id === noteId ? note : item)));
+		gate.invalidate();
 		setEditDraft(noteId, null);
-	}, [messageId, setEditDraft]);
+	}, [messageId, setEditDraft, gate]);
 
 	const remove = useCallback(async (noteId: string) => {
 		const response = await authFetch(`/api/messages/${messageId}/notes/${noteId}`, { method: "DELETE" });
 		if (!response.ok && response.status !== 404) throw new Error("Note delete failed");
 		if (!mounted.current) return;
 		setNotes((current) => current.filter((item) => item.id !== noteId));
+		gate.invalidate();
 		setEditDraft(noteId, null);
-	}, [messageId, setEditDraft]);
+	}, [messageId, setEditDraft, gate]);
 
 	const emailById = useMemo(() => new Map(emails.map((item) => [item.id, item])), [emails]);
 	const email = useCallback((id: string) => emailById.get(id), [emailById]);

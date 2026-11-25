@@ -14,6 +14,7 @@ import { Input } from "@/components/ui/input";
 import { PoweredBy } from "@/components/sidebar-footer";
 import { useSidebar } from "@/components/sidebar-state";
 import { authFetch } from "@/lib/auth/client";
+import { createLatestRequestGate } from "@/lib/client/latest-request";
 import { formatDriveSize } from "@/lib/drive/utils";
 import { DRIVE_FOLDERS_EVENT, DRIVE_NEW_FOLDER_EVENT, DRIVE_REFRESH_EVENT, DRIVE_STORAGE_EVENT, DRIVE_UPLOAD_EVENT } from "./drive-events";
 import type { DriveStorageDetail } from "./drive-events";
@@ -55,6 +56,7 @@ export function DriveNav({ onNavigate }: { onNavigate?: () => void }) {
 		try { return localStorage.getItem(FOLDERS_OPEN_KEY) === "1"; } catch { /* storage unavailable */ return false; }
 	});
 	const [folders, setFolders] = useState<FolderNode[]>([]);
+	const gate = useMemo(() => createLatestRequestGate(), []);
 	const compact = minimal && !mobile;
 	const [creating, setCreating] = useState(false);
 	const [folderName, setFolderName] = useState("");
@@ -68,9 +70,18 @@ export function DriveNav({ onNavigate }: { onNavigate?: () => void }) {
 		return () => window.removeEventListener(DRIVE_STORAGE_EVENT, onStorage);
 	}, []);
 
-	const loadFolders = useCallback(() => authFetch("/api/drive/folders", { redirectOnUnauthorized: false })
-		.then(async (response) => { if (response.ok) setFolders((await response.json() as { folders: FolderNode[] }).folders); })
-		.catch(() => { /* the list stays as it was */ }), []);
+	const loadFolders = useCallback(() => {
+		// Every listing and every change asks for the tree, so overlapping reads
+		// are normal: only the newest one may replace it.
+		const token = gate.begin();
+		return authFetch("/api/drive/folders", { redirectOnUnauthorized: false })
+			.then(async (response) => {
+				if (!response.ok) return;
+				const next = (await response.json() as { folders: FolderNode[] }).folders;
+				if (gate.isCurrent(token)) setFolders(next);
+			})
+			.catch(() => { /* the list stays as it was */ });
+	}, [gate]);
 
 	useEffect(() => {
 		if (!foldersOpen) return;

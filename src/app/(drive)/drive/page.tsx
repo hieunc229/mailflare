@@ -15,6 +15,7 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { authFetch } from "@/lib/auth/client";
+import { createLatestRequestGate } from "@/lib/client/latest-request";
 import { canEditDrive, DRIVE_MAX_FILE_BYTES, formatDriveSize } from "@/lib/drive/utils";
 import type { DriveItemDto } from "@/lib/drive/types";
 import { DRIVE_FOLDERS_EVENT, DRIVE_NEW_FOLDER_EVENT, DRIVE_REFRESH_EVENT, DRIVE_STORAGE_EVENT, DRIVE_UPLOAD_EVENT } from "../drive-events";
@@ -86,9 +87,13 @@ export default function DrivePage() {
 	// The key of the listing the page currently wants, so a slow response for a folder we already left is dropped.
 	const requestRef = useRef(requestKey);
 	useEffect(() => { requestRef.current = requestKey; }, [requestKey]);
+	// A reload after a change shares its key with the load it replaces, so only the
+	// newest request may write the listing (and the cached copy of it).
+	const gate = useMemo(() => createLatestRequestGate(), []);
 
 	const load = useCallback(() => {
 		const key = requestKey;
+		const token = gate.begin();
 		const search = new URLSearchParams({ view });
 		if (folder) search.set("parent", folder);
 		if (query) search.set("q", query);
@@ -96,15 +101,16 @@ export default function DrivePage() {
 		return authFetch(`/api/drive/items?${search}`).then(async (response) => {
 			if (!response.ok) throw new Error();
 			const data = await response.json() as DriveListing;
+			if (!gate.isCurrent(token)) return;
 			saveDriveListing(key, data);
 			if (key !== requestRef.current) return;
 			setListing({ key, data }); setFailedKey(null);
 			window.dispatchEvent(new CustomEvent(DRIVE_STORAGE_EVENT, { detail: { used: data.storageUsed, limit: data.storageLimit } }));
 			window.dispatchEvent(new Event(DRIVE_FOLDERS_EVENT));
 		}).catch(() => {
-			if (key === requestRef.current) setFailedKey(key);
+			if (key === requestRef.current && gate.isCurrent(token)) setFailedKey(key);
 		});
-	}, [view, folder, query, typesParam, requestKey]);
+	}, [view, folder, query, typesParam, requestKey, gate]);
 	// Reload after a change; other cached listings may be stale now, so they are dropped.
 	const refresh = useCallback(() => { clearDriveListings(); return load(); }, [load]);
 
