@@ -2917,6 +2917,7 @@
 	"tls.error.MIGRATION_REQUIRED": "ابتدا مهاجرت‌های معلق پایگاه داده را اعمال کنید.",
 	"tls.daily.title": "نشست‌ها در هر روز",
 	"tls.daily.empty": "هنوز گزارش TLS در این بازه نیست.",
+	"tls.policies.empty": "هنوز نتیجه‌ای برای سیاست‌ها در این بازه وجود ندارد.",
 	"tls.col.success": "نشست‌های موفق",
 	"tls.col.failure": "نشست‌های ناموفق",
 	"tls.reporters.title": "بر اساس گزارش‌دهنده",

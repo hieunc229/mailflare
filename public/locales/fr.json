@@ -2938,6 +2938,7 @@
 	"tls.error.MIGRATION_REQUIRED": "Appliquez d'abord les migrations de base de données en attente.",
 	"tls.daily.title": "Sessions par jour",
 	"tls.daily.empty": "Aucun rapport TLS sur cette période pour le moment.",
+	"tls.policies.empty": "Aucun résultat de politique sur cette période pour le moment.",
 	"tls.col.success": "Sessions réussies",
 	"tls.col.failure": "Sessions échouées",
 	"tls.reporters.title": "Par rapporteur",

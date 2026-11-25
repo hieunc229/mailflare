@@ -2917,6 +2917,7 @@
 	"tls.error.MIGRATION_REQUIRED": "پہلے زیرِ التوا ڈیٹابیس مائیگریشنز لاگو کریں۔",
 	"tls.daily.title": "روزانہ سیشنز",
 	"tls.daily.empty": "اس مدت میں ابھی کوئی TLS رپورٹ نہیں ہے۔",
+	"tls.policies.empty": "اس مدت میں ابھی تک پالیسی کے نتائج نہیں ہیں۔",
 	"tls.col.success": "کامیاب سیشنز",
 	"tls.col.failure": "ناکام سیشنز",
 	"tls.reporters.title": "رپورٹر کے مطابق",

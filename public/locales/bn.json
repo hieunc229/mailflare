@@ -2917,6 +2917,7 @@
 	"tls.error.MIGRATION_REQUIRED": "আগে মুলতুবি ডেটাবেস মাইগ্রেশন প্রয়োগ করুন।",
 	"tls.daily.title": "প্রতিদিনের সেশন",
 	"tls.daily.empty": "এই সময়সীমায় এখনও কোনো TLS রিপোর্ট নেই।",
+	"tls.policies.empty": "এই সময়সীমায় এখনও কোনো নীতির ফলাফল নেই।",
 	"tls.col.success": "সফল সেশন",
 	"tls.col.failure": "ব্যর্থ সেশন",
 	"tls.reporters.title": "রিপোর্টার অনুযায়ী",

@@ -2894,6 +2894,7 @@
 	"tls.error.MIGRATION_REQUIRED": "Hãy áp dụng các bản di chuyển cơ sở dữ liệu đang chờ trước.",
 	"tls.daily.title": "Số phiên mỗi ngày",
 	"tls.daily.empty": "Chưa có báo cáo TLS trong khoảng này.",
+	"tls.policies.empty": "Chưa có kết quả chính sách nào trong khoảng này.",
 	"tls.col.success": "Phiên thành công",
 	"tls.col.failure": "Phiên thất bại",
 	"tls.reporters.title": "Theo bên báo cáo",

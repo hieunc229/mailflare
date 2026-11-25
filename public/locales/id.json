@@ -2894,6 +2894,7 @@
 	"tls.error.MIGRATION_REQUIRED": "Terapkan migrasi database yang tertunda terlebih dahulu.",
 	"tls.daily.title": "Sesi per hari",
 	"tls.daily.empty": "Belum ada laporan TLS dalam rentang ini.",
+	"tls.policies.empty": "Belum ada hasil kebijakan dalam rentang ini.",
 	"tls.col.success": "Sesi berhasil",
 	"tls.col.failure": "Sesi gagal",
 	"tls.reporters.title": "Menurut pelapor",

@@ -2908,6 +2908,7 @@
 	"tls.error.MIGRATION_REQUIRED": "Gunakan migrasi pangkalan data yang belum selesai dahulu.",
 	"tls.daily.title": "Sesi setiap hari",
 	"tls.daily.empty": "Belum ada laporan TLS dalam julat ini.",
+	"tls.policies.empty": "Belum ada keputusan dasar dalam julat ini.",
 	"tls.col.success": "Sesi berjaya",
 	"tls.col.failure": "Sesi gagal",
 	"tls.reporters.title": "Mengikut pelapor",

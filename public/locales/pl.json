@@ -2959,6 +2959,7 @@
 	"tls.error.MIGRATION_REQUIRED": "Najpierw zastosuj oczekujące migracje bazy danych.",
 	"tls.daily.title": "Sesje dziennie",
 	"tls.daily.empty": "Brak raportów TLS w tym okresie.",
+	"tls.policies.empty": "Brak wyników zasad w tym zakresie.",
 	"tls.col.success": "Udane sesje",
 	"tls.col.failure": "Nieudane sesje",
 	"tls.reporters.title": "Według zgłaszającego",

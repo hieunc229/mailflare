@@ -2917,6 +2917,7 @@
 	"tls.error.MIGRATION_REQUIRED": "पहले लंबित डेटाबेस माइग्रेशन लागू करें।",
 	"tls.daily.title": "प्रतिदिन सत्र",
 	"tls.daily.empty": "इस अवधि में अभी कोई TLS रिपोर्ट नहीं है।",
+	"tls.policies.empty": "इस अवधि में अभी तक कोई नीति परिणाम नहीं हैं।",
 	"tls.col.success": "सफल सत्र",
 	"tls.col.failure": "विफल सत्र",
 	"tls.reporters.title": "रिपोर्टर के अनुसार",

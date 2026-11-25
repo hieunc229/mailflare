@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useLanguage } from "@/components/language-provider";
 import { Button } from "@/components/ui/button";
 import { confirmDestructive } from "@/components/ui/confirm-dialog";
@@ -17,12 +17,16 @@ export function SuppressionList({ domainId }: { domainId: string }) {
 	const [page, setPage] = useState<SuppressionPage | null>(null);
 	const [error, setError] = useState<string | null>(null);
 
+	const requestId = useRef(0);
+
 	const load = useCallback(async (search: string) => {
+		const id = ++requestId.current;
 		setError(null);
 		try {
-			setPage(await fetchSuppressions(domainId, { q: search, reason, offset }));
+			const next = await fetchSuppressions(domainId, { q: search, reason, offset });
+			if (requestId.current === id) setPage(next);
 		} catch (cause) {
-			setError(cause instanceof Error ? cause.message : t("deliverability.loadFailed"));
+			if (requestId.current === id) setError(cause instanceof Error ? cause.message : t("deliverability.loadFailed"));
 		}
 	}, [domainId, reason, offset, t]);
 
@@ -75,7 +79,7 @@ export function SuppressionList({ domainId }: { domainId: string }) {
 						<th scope="col" className="px-4 py-3">{t("deliverability.col.source")}</th>
 						<th scope="col" className="px-4 py-3 text-right">{t("deliverability.col.events")}</th>
 						<th scope="col" className="px-4 py-3">{t("deliverability.col.lastEvent")}</th>
-						<th scope="col" className="px-4 py-3"><span className="sr-only">{t("deliverability.remove")}</span></th>
+						<th scope="col" className="sticky end-0 bg-neutral-50 px-4 py-3"><span className="sr-only">{t("deliverability.remove")}</span></th>
 					</tr>
 				</thead>
 				<tbody className="divide-y divide-neutral-100">
@@ -85,14 +89,14 @@ export function SuppressionList({ domainId }: { domainId: string }) {
 						<td className="px-4 py-3">{t(`deliverability.source.${row.source}`)}</td>
 						<td className="px-4 py-3 text-right tabular-nums">{row.eventCount}</td>
 						<td className="whitespace-nowrap px-4 py-3 text-neutral-600">{formatEventDate(row.lastEventAt)}</td>
-						<td className="space-x-2 whitespace-nowrap px-4 py-3 text-right">{!row.confirmed && <Button type="button" variant="outline" size="sm" aria-label={`${t("deliverability.confirm")} ${row.email}`} onClick={() => void confirm(row.id)}>{t("deliverability.confirm")}</Button>}<Button type="button" variant="outline" size="sm" aria-label={`${t("deliverability.remove")} ${row.email}`} onClick={() => void remove(row.id, row.email)}>{t("deliverability.remove")}</Button></td>
+						<td className="sticky end-0 space-x-2 whitespace-nowrap bg-white px-4 py-3 text-right shadow-[-8px_0_8px_-8px_rgba(0,0,0,0.12)]">{!row.confirmed && <Button type="button" variant="outline" size="sm" aria-label={`${t("deliverability.confirm")} ${row.email}`} onClick={() => void confirm(row.id)}>{t("deliverability.confirm")}</Button>}<Button type="button" variant="outline" size="sm" aria-label={`${t("deliverability.remove")} ${row.email}`} onClick={() => void remove(row.id, row.email)}>{t("deliverability.remove")}</Button></td>
 					</tr>)}
 					{page && page.items.length === 0 && <tr><td colSpan={6} className="px-4 py-8 text-center text-neutral-500">{t("deliverability.empty")}</td></tr>}
 					{!page && !error && <tr><td colSpan={6} className="px-4 py-8 text-center text-neutral-500">{t("deliverability.loading")}</td></tr>}
 				</tbody>
 			</table>
 		</div>
-		{page && total > PAGE_SIZE && <div className="flex items-center justify-end gap-3 text-sm text-neutral-600">
+		{page && total > PAGE_SIZE && <div className="flex flex-wrap items-center justify-end gap-3 text-sm text-neutral-600">
 			<span>{t("deliverability.showing", { from: first, to: last, total })}</span>
 			<Button type="button" variant="outline" size="sm" disabled={offset === 0} onClick={() => setOffset(Math.max(0, offset - PAGE_SIZE))}>{t("deliverability.previous")}</Button>
 			<Button type="button" variant="outline" size="sm" disabled={offset + PAGE_SIZE >= total} onClick={() => setOffset(offset + PAGE_SIZE)}>{t("deliverability.next")}</Button>

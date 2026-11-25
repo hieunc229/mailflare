@@ -2917,6 +2917,7 @@
 	"tls.error.MIGRATION_REQUIRED": "ಮೊದಲು ಬಾಕಿ ಇರುವ ಡೇಟಾಬೇಸ್ ಮೈಗ್ರೇಶನ್‌ಗಳನ್ನು ಅನ್ವಯಿಸಿ.",
 	"tls.daily.title": "ದಿನಕ್ಕೆ ಸೆಶನ್‌ಗಳು",
 	"tls.daily.empty": "ಈ ಅವಧಿಯಲ್ಲಿ ಇನ್ನೂ TLS ವರದಿಗಳಿಲ್ಲ.",
+	"tls.policies.empty": "ಈ ಅವಧಿಯಲ್ಲಿ ಇನ್ನೂ ಯಾವುದೇ ನೀತಿ ಫಲಿತಾಂಶಗಳಿಲ್ಲ.",
 	"tls.col.success": "ಯಶಸ್ವಿ ಸೆಶನ್‌ಗಳು",
 	"tls.col.failure": "ವಿಫಲ ಸೆಶನ್‌ಗಳು",
 	"tls.reporters.title": "ವರದಿಗಾರರ ಪ್ರಕಾರ",

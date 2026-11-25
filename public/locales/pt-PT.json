@@ -2938,6 +2938,7 @@
 	"tls.error.MIGRATION_REQUIRED": "Aplique primeiro as migrações pendentes da base de dados.",
 	"tls.daily.title": "Sessões por dia",
 	"tls.daily.empty": "Ainda sem relatórios TLS neste período.",
+	"tls.policies.empty": "Ainda não há resultados de políticas neste período.",
 	"tls.col.success": "Sessões com êxito",
 	"tls.col.failure": "Sessões falhadas",
 	"tls.reporters.title": "Por remetente de relatórios",

@@ -2908,6 +2908,7 @@
 	"tls.error.MIGRATION_REQUIRED": "ใช้ไมเกรชันฐานข้อมูลที่ค้างอยู่ก่อน",
 	"tls.daily.title": "เซสชันต่อวัน",
 	"tls.daily.empty": "ยังไม่มีรายงาน TLS ในช่วงนี้",
+	"tls.policies.empty": "ยังไม่มีผลลัพธ์นโยบายในช่วงนี้",
 	"tls.col.success": "เซสชันที่สำเร็จ",
 	"tls.col.failure": "เซสชันที่ล้มเหลว",
 	"tls.reporters.title": "ตามผู้รายงาน",

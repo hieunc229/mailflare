@@ -2917,6 +2917,7 @@
 	"tls.error.MIGRATION_REQUIRED": "Voer eerst de openstaande databasemigraties uit.",
 	"tls.daily.title": "Sessies per dag",
 	"tls.daily.empty": "Nog geen TLS-rapporten in deze periode.",
+	"tls.policies.empty": "Nog geen beleidsresultaten in dit bereik.",
 	"tls.col.success": "Geslaagde sessies",
 	"tls.col.failure": "Mislukte sessies",
 	"tls.reporters.title": "Per rapporteur",

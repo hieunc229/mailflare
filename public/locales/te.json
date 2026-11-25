@@ -2917,6 +2917,7 @@
 	"tls.error.MIGRATION_REQUIRED": "ముందుగా పెండింగ్‌లో ఉన్న డేటాబేస్ మైగ్రేషన్‌లను వర్తింపజేయండి.",
 	"tls.daily.title": "రోజువారీ సెషన్‌లు",
 	"tls.daily.empty": "ఈ కాలంలో ఇంకా TLS నివేదికలు లేవు.",
+	"tls.policies.empty": "ఈ పరిధిలో ఇంకా పాలసీ ఫలితాలు లేవు.",
 	"tls.col.success": "విజయవంతమైన సెషన్‌లు",
 	"tls.col.failure": "విఫలమైన సెషన్‌లు",
 	"tls.reporters.title": "రిపోర్టర్ వారీగా",

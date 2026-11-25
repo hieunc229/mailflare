@@ -2938,6 +2938,7 @@
 	"tls.error.MIGRATION_REQUIRED": "Applica prima le migrazioni del database in sospeso.",
 	"tls.daily.title": "Sessioni al giorno",
 	"tls.daily.empty": "Ancora nessun report TLS in questo periodo.",
+	"tls.policies.empty": "Nessun risultato di policy in questo intervallo.",
 	"tls.col.success": "Sessioni riuscite",
 	"tls.col.failure": "Sessioni fallite",
 	"tls.reporters.title": "Per segnalatore",
