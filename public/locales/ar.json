@@ -2999,6 +2999,7 @@
 	"tls.error.MIGRATION_REQUIRED": "طبّق ترحيلات قاعدة البيانات المعلّقة أولًا.",
 	"tls.daily.title": "الجلسات في اليوم",
 	"tls.daily.empty": "لا توجد تقارير TLS في هذا النطاق الزمني بعد.",
+	"tls.policies.empty": "لا توجد نتائج للسياسات في هذا النطاق الزمني بعد.",
 	"tls.col.success": "الجلسات الناجحة",
 	"tls.col.failure": "الجلسات الفاشلة",
 	"tls.reporters.title": "حسب المُبلِّغ",

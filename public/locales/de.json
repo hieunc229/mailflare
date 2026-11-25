@@ -2915,6 +2915,7 @@
 	"tls.error.MIGRATION_REQUIRED": "Wende zuerst die ausstehenden Datenbankmigrationen an.",
 	"tls.daily.title": "Sitzungen pro Tag",
 	"tls.daily.empty": "In diesem Zeitraum noch keine TLS-Berichte.",
+	"tls.policies.empty": "In diesem Zeitraum noch keine Richtlinienergebnisse.",
 	"tls.col.success": "Erfolgreiche Sitzungen",
 	"tls.col.failure": "Fehlgeschlagene Sitzungen",
 	"tls.reporters.title": "Nach Berichtendem",

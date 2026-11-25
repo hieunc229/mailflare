@@ -2957,6 +2957,7 @@
 	"tls.error.MIGRATION_REQUIRED": "Спочатку застосуйте міграції бази даних, що очікують.",
 	"tls.daily.title": "Сесії за день",
 	"tls.daily.empty": "За цей період звітів TLS ще немає.",
+	"tls.policies.empty": "За цей період результатів щодо політик поки немає.",
 	"tls.col.success": "Успішні сесії",
 	"tls.col.failure": "Невдалі сесії",
 	"tls.reporters.title": "За відправником звіту",

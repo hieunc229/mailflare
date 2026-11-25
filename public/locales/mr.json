@@ -2915,6 +2915,7 @@
 	"tls.error.MIGRATION_REQUIRED": "आधी प्रलंबित डेटाबेस मायग्रेशन लागू करा.",
 	"tls.daily.title": "दररोजची सत्रे",
 	"tls.daily.empty": "या कालावधीत अद्याप TLS अहवाल नाहीत.",
+	"tls.policies.empty": "या कालावधीत अद्याप कोणतेही धोरण निकाल नाहीत.",
 	"tls.col.success": "यशस्वी सत्रे",
 	"tls.col.failure": "अयशस्वी सत्रे",
 	"tls.reporters.title": "रिपोर्टरनुसार",

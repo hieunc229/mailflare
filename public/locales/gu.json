@@ -2915,6 +2915,7 @@
 	"tls.error.MIGRATION_REQUIRED": "પહેલા બાકી ડેટાબેઝ માઇગ્રેશન લાગુ કરો.",
 	"tls.daily.title": "દરરોજના સત્રો",
 	"tls.daily.empty": "આ સમયગાળામાં હજી કોઈ TLS રિપોર્ટ નથી.",
+	"tls.policies.empty": "આ શ્રેણીમાં હજી સુધી કોઈ નીતિ પરિણામો નથી.",
 	"tls.col.success": "સફળ સત્રો",
 	"tls.col.failure": "નિષ્ફળ સત્રો",
 	"tls.reporters.title": "રિપોર્ટર મુજબ",

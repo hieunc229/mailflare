@@ -2915,6 +2915,7 @@
 	"tls.error.MIGRATION_REQUIRED": "ਪਹਿਲਾਂ ਬਕਾਇਆ ਡੇਟਾਬੇਸ ਮਾਈਗ੍ਰੇਸ਼ਨ ਲਾਗੂ ਕਰੋ।",
 	"tls.daily.title": "ਰੋਜ਼ਾਨਾ ਸੈਸ਼ਨ",
 	"tls.daily.empty": "ਇਸ ਮਿਆਦ ਵਿੱਚ ਹਾਲੇ ਕੋਈ TLS ਰਿਪੋਰਟ ਨਹੀਂ ਹੈ।",
+	"tls.policies.empty": "ਇਸ ਸੀਮਾ ਵਿੱਚ ਅਜੇ ਤੱਕ ਕੋਈ ਨੀਤੀ ਨਤੀਜੇ ਨਹੀਂ ਹਨ।",
 	"tls.col.success": "ਸਫਲ ਸੈਸ਼ਨ",
 	"tls.col.failure": "ਅਸਫਲ ਸੈਸ਼ਨ",
 	"tls.reporters.title": "ਰਿਪੋਰਟਰ ਅਨੁਸਾਰ",

@@ -2915,6 +2915,7 @@
 	"tls.error.MIGRATION_REQUIRED": "Aiwatar da canja wurin bayanai da ke jira tukuna.",
 	"tls.daily.title": "Zama a kowace rana",
 	"tls.daily.empty": "Babu rahotannin TLS a wannan lokaci tukuna.",
+	"tls.policies.empty": "Babu sakamakon manufofi a wannan lokacin tukuna.",
 	"tls.col.success": "Zaman da suka yi nasara",
 	"tls.col.failure": "Zaman da suka gaza",
 	"tls.reporters.title": "Bisa mai rahoto",

@@ -2915,6 +2915,7 @@
 	"tls.error.MIGRATION_REQUIRED": "Apply pending database migrations first.",
 	"tls.daily.title": "Sessions per day",
 	"tls.daily.empty": "No TLS reports in this range yet.",
+	"tls.policies.empty": "No policy results in this range yet.",
 	"tls.col.success": "Successful sessions",
 	"tls.col.failure": "Failed sessions",
 	"tls.reporters.title": "By reporter",

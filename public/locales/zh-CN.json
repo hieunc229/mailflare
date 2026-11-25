@@ -2892,6 +2892,7 @@
 	"tls.error.MIGRATION_REQUIRED": "请先应用待处理的数据库迁移。",
 	"tls.daily.title": "每日会话数",
 	"tls.daily.empty": "此时间范围内暂无 TLS 报告。",
+	"tls.policies.empty": "此时间范围内暂无策略结果。",
 	"tls.col.success": "成功的会话",
 	"tls.col.failure": "失败的会话",
 	"tls.reporters.title": "按报告方",

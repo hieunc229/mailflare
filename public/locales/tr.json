@@ -2915,6 +2915,7 @@
 	"tls.error.MIGRATION_REQUIRED": "Önce bekleyen veritabanı geçişlerini uygula.",
 	"tls.daily.title": "Günlük oturumlar",
 	"tls.daily.empty": "Bu aralıkta henüz TLS raporu yok.",
+	"tls.policies.empty": "Bu aralıkta henüz ilke sonucu yok.",
 	"tls.col.success": "Başarılı oturumlar",
 	"tls.col.failure": "Başarısız oturumlar",
 	"tls.reporters.title": "Raporlayana göre",

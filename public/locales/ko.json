@@ -2906,6 +2906,7 @@
 	"tls.error.MIGRATION_REQUIRED": "먼저 보류 중인 데이터베이스 마이그레이션을 적용하세요.",
 	"tls.daily.title": "일별 세션",
 	"tls.daily.empty": "이 기간에는 아직 TLS 보고서가 없습니다.",
+	"tls.policies.empty": "이 기간에는 아직 정책 결과가 없습니다.",
 	"tls.col.success": "성공한 세션",
 	"tls.col.failure": "실패한 세션",
 	"tls.reporters.title": "보고자별",

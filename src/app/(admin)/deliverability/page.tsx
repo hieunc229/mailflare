@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useLanguage } from "@/components/language-provider";
+import { Button } from "@/components/ui/button";
 import { Select } from "@/components/ui/select";
 import { DmarcTab } from "./DmarcTab";
 import { MtaStsTab } from "./MtaStsTab";
@@ -19,24 +20,36 @@ export default function DeliverabilityPage() {
 	const [domains, setDomains] = useState<DomainOption[] | null>(null);
 	const [domainId, setDomainId] = useState("");
 	const [settings, setSettings] = useState<DeliverabilitySettings | null>(null);
-	const [error, setError] = useState<string | null>(null);
+	const [domainsFailed, setDomainsFailed] = useState(false);
+	const [settingsFailed, setSettingsFailed] = useState(false);
+	const [attempt, setAttempt] = useState(0);
 	const [tab, setTab] = useState<Tab>("reports");
 
+	// Domains and settings load independently: a failing settings endpoint must not hide the domain tabs.
 	useEffect(() => {
 		let active = true;
-		void Promise.all([fetchDomains(), fetchSettings()]).then(([list, loaded]) => {
+		void Promise.allSettled([fetchDomains(), fetchSettings()]).then(([list, loaded]) => {
 			if (!active) return;
-			setDomains(list);
-			setDomainId((current) => current || list[0]?.id || "");
-			setSettings(loaded);
-		}).catch((cause) => { if (active) setError(cause instanceof Error ? cause.message : t("deliverability.loadFailed")); });
+			if (list.status === "fulfilled") {
+				setDomainsFailed(false);
+				setDomains(list.value);
+				setDomainId((current) => current || list.value[0]?.id || "");
+			} else setDomainsFailed(true);
+			setSettingsFailed(loaded.status === "rejected");
+			if (loaded.status === "fulfilled") setSettings(loaded.value);
+		});
 		return () => { active = false; };
-	}, [t]);
+	}, [attempt]);
+
+	const retry = () => { setDomainsFailed(false); setSettingsFailed(false); setAttempt((value) => value + 1); };
 
 	return <div className="space-y-6">
 		<h1 className="text-2xl font-medium text-neutral-900 md:text-3xl">{t("deliverability.title")}</h1>
-		{error && <p role="alert" className="text-sm text-red-700">{error}</p>}
-		{!domains && !error && <p className="text-sm text-neutral-500">{t("deliverability.loading")}</p>}
+		{domainsFailed && <div role="alert" className="flex flex-wrap items-center gap-3 text-sm text-red-700">
+			<p>{t("accounts.domainsFailed")}</p>
+			<Button type="button" variant="outline" size="sm" onClick={retry}>{t("webhooks.retry")}</Button>
+		</div>}
+		{!domains && !domainsFailed && <p role="status" className="text-sm text-neutral-500">{t("deliverability.loading")}</p>}
 		{domains?.length === 0 && <p className="text-sm text-neutral-500">{t("deliverability.noDomains")}</p>}
 		{domains && domains.length > 0 && <>
 			<div className="space-y-2">
@@ -59,6 +72,10 @@ export default function DeliverabilityPage() {
 			{tab === "suppressions" && domainId && <div role="tabpanel" id="deliverability-panel-suppressions" aria-labelledby="deliverability-tab-suppressions" className="space-y-6">
 				<p className="text-sm text-neutral-500">{t("deliverability.description")}</p>
 				{settings && <SettingsPanel settings={settings} onChange={setSettings} />}
+				{!settings && settingsFailed && <div role="alert" className="flex flex-wrap items-center gap-3 text-sm text-red-700">
+					<p>{t("general.loadFailed")}</p>
+					<Button type="button" variant="outline" size="sm" onClick={retry}>{t("webhooks.retry")}</Button>
+				</div>}
 				<SuppressionList key={domainId} domainId={domainId} />
 			</div>}
 		</>}

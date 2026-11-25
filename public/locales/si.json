@@ -2915,6 +2915,7 @@
 	"tls.error.MIGRATION_REQUIRED": "පළමුව අපේක්ෂිත දත්ත සමුදා සංක්‍රමණ යොදන්න.",
 	"tls.daily.title": "දිනපතා සැසි",
 	"tls.daily.empty": "මෙම කාල සීමාවේ තවම TLS වාර්තා නැත.",
+	"tls.policies.empty": "මෙම කාල පරාසයේ ප්‍රතිපත්ති ප්‍රතිඵල තවම නැත.",
 	"tls.col.success": "සාර්ථක සැසි",
 	"tls.col.failure": "අසාර්ථක සැසි",
 	"tls.reporters.title": "වාර්තාකරු අනුව",

@@ -2915,6 +2915,7 @@
 	"tls.error.MIGRATION_REQUIRED": "Tumia uhamishaji wa hifadhidata unaosubiri kwanza.",
 	"tls.daily.title": "Vipindi kwa siku",
 	"tls.daily.empty": "Hakuna ripoti za TLS katika kipindi hiki bado.",
+	"tls.policies.empty": "Bado hakuna matokeo ya sera katika kipindi hiki.",
 	"tls.col.success": "Vipindi vilivyofanikiwa",
 	"tls.col.failure": "Vipindi vilivyoshindwa",
 	"tls.reporters.title": "Kwa mwaripoti",

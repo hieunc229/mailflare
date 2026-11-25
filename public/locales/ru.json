@@ -2957,6 +2957,7 @@
 	"tls.error.MIGRATION_REQUIRED": "Сначала примените ожидающие миграции базы данных.",
 	"tls.daily.title": "Сессии по дням",
 	"tls.daily.empty": "За этот период отчётов TLS пока нет.",
+	"tls.policies.empty": "За этот период результатов по политикам пока нет.",
 	"tls.col.success": "Успешные сессии",
 	"tls.col.failure": "Неудачные сессии",
 	"tls.reporters.title": "По отправителям отчётов",

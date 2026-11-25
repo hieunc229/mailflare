@@ -2892,6 +2892,7 @@
 	"tls.error.MIGRATION_REQUIRED": "先に保留中のデータベースマイグレーションを適用してください。",
 	"tls.daily.title": "1 日あたりのセッション数",
 	"tls.daily.empty": "この期間の TLS レポートはまだありません。",
+	"tls.policies.empty": "この期間のポリシー結果はまだありません。",
 	"tls.col.success": "成功したセッション",
 	"tls.col.failure": "失敗したセッション",
 	"tls.reporters.title": "報告元別",
