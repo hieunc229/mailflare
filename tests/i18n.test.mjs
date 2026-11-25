@@ -130,6 +130,19 @@ test("existing locale-specific plural translations remain available", async () =
 	assert.equal(i18n.createTranslator("pl", catalog)("thread.attachmentCount", { count: 3 }), "3 załączniki");
 });
 
+test("plural fallback selects English categories with English rules", () => {
+	const key = "thread.attachmentCount";
+	const english = { [`${key}.one`]: "{count} event", [`${key}.other`]: "{count} events" };
+	assert.equal(i18n.createTranslator("ru", {})(key, { count: 21 }), "21 attachments");
+	assert.equal(i18n.createTranslator("ru", { [`${key}.other`]: "RU_OTHER" })(key, { count: 21 }), "RU_OTHER");
+	assert.equal(i18n.createTranslator("ru", { [`${key}.one`]: "RU_ONE" })(key, { count: 21 }), "RU_ONE");
+	assert.equal(i18n.createTranslator("en", english)(key, { count: 1 }), "1 event");
+	assert.equal(i18n.createTranslator("en", english)(key, { count: 2 }), "2 events");
+	assert.equal(i18n.createTranslator("ar", {})(key, { count: 0 }), "0 attachments");
+	assert.equal(i18n.createTranslator("ja", {})(key, { count: 21 }), "21 attachments");
+	assert.equal(i18n.createTranslator("zh-CN", {})(key, { count: 21 }), "21 attachments");
+});
+
 test("preference cookie persists for a year, covers every path and is Secure on HTTPS", () => {
 	assert.equal(i18n.serializeLocaleCookie("pt-BR", true), "mailflare-locale=pt-BR; Path=/; Max-Age=31536000; SameSite=Lax; Secure");
 	assert.equal(i18n.serializeLocaleCookie("en", false), "mailflare-locale=en; Path=/; Max-Age=31536000; SameSite=Lax");
