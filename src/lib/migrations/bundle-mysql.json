@@ -513,7 +513,7 @@
       ]
     },
     {
-      "name": "0020_contact_groups.sql",
+      "name": "0027_contact_groups.sql",
       "statements": [
         "CREATE TABLE `contact_groups` (\n\t`id` varchar(191) NOT NULL,\n\t`user_id` varchar(191) NOT NULL,\n\t`name` varchar(255) NOT NULL,\n\t`created_at` bigint NOT NULL,\n\tCONSTRAINT `contact_groups_id` PRIMARY KEY(`id`),\n\tCONSTRAINT `contact_groups_user_name_idx` UNIQUE(`user_id`,`name`)\n);",
         "CREATE TABLE `contact_group_members` (\n\t`id` varchar(191) NOT NULL,\n\t`group_id` varchar(191) NOT NULL,\n\t`contact_id` varchar(191) NOT NULL,\n\t`created_at` bigint NOT NULL,\n\tCONSTRAINT `contact_group_members_id` PRIMARY KEY(`id`),\n\tCONSTRAINT `contact_group_members_group_contact_idx` UNIQUE(`group_id`,`contact_id`)\n);",

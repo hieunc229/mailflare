@@ -416,255 +416,255 @@
       "breakpoints": true
     },
     {
-      "idx": 60,
+      "idx": 59,
       "version": "6",
       "when": 1792830000000,
       "tag": "0068_add_message_tracking",
       "breakpoints": true
     },
     {
-      "idx": 61,
+      "idx": 60,
       "version": "6",
       "when": 1792833600000,
       "tag": "0069_add_domain_tracking_hosts",
       "breakpoints": true
     },
     {
-      "idx": 62,
+      "idx": 61,
       "version": "6",
       "when": 1792836000000,
       "tag": "0070_add_spam_intelligence_settings",
       "breakpoints": true
     },
     {
-      "idx": 63,
+      "idx": 62,
       "version": "6",
       "when": 1792837200000,
       "tag": "0071_add_follow_ups",
       "breakpoints": true
     },
     {
-      "idx": 64,
+      "idx": 63,
       "version": "6",
       "when": 1792840800000,
       "tag": "0072_add_user_compose_preferences",
       "breakpoints": true
     },
     {
-      "idx": 65,
+      "idx": 64,
       "version": "6",
       "when": 1792844400000,
       "tag": "0073_add_undo_send_seconds",
       "breakpoints": true
     },
     {
-      "idx": 66,
+      "idx": 65,
       "version": "6",
       "when": 1792844400001,
       "tag": "0074_add_counts_conversation_indexes",
       "breakpoints": true
     },
     {
-      "idx": 67,
+      "idx": 66,
       "version": "6",
       "when": 1792848000000,
       "tag": "0075_index_fk_columns",
       "breakpoints": true
     },
     {
-      "idx": 68,
+      "idx": 67,
       "version": "6",
       "when": 1792851600000,
       "tag": "0076_add_navigation_cover_index",
       "breakpoints": true
     },
     {
-      "idx": 69,
+      "idx": 68,
       "version": "6",
       "when": 1792855200000,
       "tag": "0077_add_import_jobs",
       "breakpoints": true
     },
     {
-      "idx": 70,
+      "idx": 69,
       "version": "6",
       "when": 1792858800000,
       "tag": "0078_add_calendar_reminders",
       "breakpoints": true
     },
     {
-      "idx": 71,
+      "idx": 70,
       "version": "6",
       "when": 1793260800000,
       "tag": "0079_remote_content_ask",
       "breakpoints": true
     },
     {
-      "idx": 72,
+      "idx": 71,
       "version": "6",
       "when": 1793280375889,
       "tag": "0080_passkeys_and_step_up_grants",
       "breakpoints": true
     },
     {
-      "idx": 73,
+      "idx": 72,
       "version": "6",
       "when": 1793280376889,
       "tag": "0081_add_feature_access",
       "breakpoints": true
     },
     {
-      "idx": 74,
+      "idx": 73,
       "version": "6",
       "when": 1793280377889,
       "tag": "0082_add_api_key_sha256",
       "breakpoints": true
     },
     {
-      "idx": 75,
+      "idx": 74,
       "version": "6",
       "when": 1793280378889,
       "tag": "0083_add_message_has_unsubscribe",
       "breakpoints": true
     },
     {
-      "idx": 76,
+      "idx": 75,
       "version": "6",
       "when": 1793280379889,
       "tag": "0084_add_conversation_notes",
       "breakpoints": true
     },
     {
-      "idx": 77,
+      "idx": 76,
       "version": "6",
       "when": 1793280380889,
       "tag": "0085_calendar_invitations",
       "breakpoints": true
     },
     {
-      "idx": 78,
+      "idx": 77,
       "version": "6",
       "when": 1793280381889,
       "tag": "0086_booking_confirmation_templates",
       "breakpoints": true
     },
     {
-      "idx": 79,
+      "idx": 78,
       "version": "6",
       "when": 1793280382889,
       "tag": "0087_message_invite_response",
       "breakpoints": true
     },
     {
-      "idx": 80,
+      "idx": 79,
       "version": "6",
       "when": 1794516478571,
       "tag": "0088_message_action_undo_claims",
       "breakpoints": true
     },
     {
-      "idx": 81,
+      "idx": 80,
       "version": "6",
       "when": 1794516479571,
       "tag": "0089_auto_update",
       "breakpoints": true
     },
     {
-      "idx": 82,
+      "idx": 81,
       "version": "6",
       "when": 1794516479572,
       "tag": "0090_security_hardening",
       "breakpoints": true
     },
     {
-      "idx": 83,
+      "idx": 82,
       "version": "6",
       "when": 1794516479575,
       "tag": "0091_masked_aliases",
       "breakpoints": true
     },
     {
-      "idx": 84,
+      "idx": 83,
       "version": "6",
       "when": 1795027677014,
       "tag": "0092_calendar_invite_complete",
       "breakpoints": true
     },
     {
-      "idx": 85,
+      "idx": 84,
       "version": "6",
       "when": 1795027678014,
       "tag": "0093_spam_strictness",
       "breakpoints": true
     },
     {
-      "idx": 86,
+      "idx": 85,
       "version": "6",
       "when": 1795027679014,
       "tag": "0094_promotions",
       "breakpoints": true
     },
     {
-      "idx": 87,
+      "idx": 86,
       "version": "6",
       "when": 1795027680014,
       "tag": "0095_promotion_sender_backfill",
       "breakpoints": true
     },
     {
-      "idx": 88,
+      "idx": 87,
       "version": "6",
       "when": 1795027681014,
       "tag": "0096_app_password_usage",
       "breakpoints": true
     },
     {
-      "idx": 89,
+      "idx": 88,
       "version": "6",
       "when": 1795027682014,
       "tag": "0097_dav_enabled",
       "breakpoints": true
     },
     {
-      "idx": 90,
+      "idx": 89,
       "version": "6",
       "when": 1795027683014,
       "tag": "0098_dav_storage",
       "breakpoints": true
     },
     {
-      "idx": 91,
+      "idx": 90,
       "version": "6",
       "when": 1795027684014,
       "tag": "0099_email_suppressions",
       "breakpoints": true
     },
     {
-      "idx": 92,
+      "idx": 91,
       "version": "6",
       "when": 1795027685014,
       "tag": "0100_dmarc_reports",
       "breakpoints": true
     },
     {
-      "idx": 93,
+      "idx": 92,
       "version": "6",
       "when": 1795027686014,
       "tag": "0101_mta_sts_tls_rpt",
       "breakpoints": true
     },
     {
-      "idx": 94,
+      "idx": 93,
       "version": "6",
       "when": 1795027687014,
       "tag": "0102_contact_details",
       "breakpoints": true
     },
     {
-      "idx": 88,
+      "idx": 94,
       "version": "6",
       "when": 1795445064074,
-      "tag": "0096_contact_groups",
+      "tag": "0103_contact_groups",
       "breakpoints": true
     }
   ]

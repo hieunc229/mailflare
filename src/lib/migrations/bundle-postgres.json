@@ -555,7 +555,7 @@
       ]
     },
     {
-      "name": "0020_contact_groups.sql",
+      "name": "0027_contact_groups.sql",
       "statements": [
         "CREATE TABLE \"contact_groups\" (\n\t\"id\" text PRIMARY KEY NOT NULL,\n\t\"user_id\" text NOT NULL,\n\t\"name\" text NOT NULL,\n\t\"created_at\" bigint NOT NULL\n);",
         "CREATE TABLE \"contact_group_members\" (\n\t\"id\" text PRIMARY KEY NOT NULL,\n\t\"group_id\" text NOT NULL,\n\t\"contact_id\" text NOT NULL,\n\t\"created_at\" bigint NOT NULL\n);",

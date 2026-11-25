@@ -988,7 +988,7 @@
       ]
     },
     {
-      "name": "0096_contact_groups.sql",
+      "name": "0103_contact_groups.sql",
       "statements": [
         "CREATE TABLE `contact_groups` (\n\t`id` text PRIMARY KEY NOT NULL,\n\t`user_id` text NOT NULL,\n\t`name` text NOT NULL,\n\t`created_at` integer NOT NULL,\n\tFOREIGN KEY (`user_id`) REFERENCES `users`(`id`) ON UPDATE no action ON DELETE cascade\n);",
         "CREATE TABLE `contact_group_members` (\n\t`id` text PRIMARY KEY NOT NULL,\n\t`group_id` text NOT NULL,\n\t`contact_id` text NOT NULL,\n\t`created_at` integer NOT NULL,\n\tFOREIGN KEY (`group_id`) REFERENCES `contact_groups`(`id`) ON UPDATE no action ON DELETE cascade,\n\tFOREIGN KEY (`contact_id`) REFERENCES `contacts`(`id`) ON UPDATE no action ON DELETE cascade\n);",
