@@ -405,8 +405,9 @@ export const messages = sqliteTable(
 			.$defaultFn(() => new Date()),
 	},
 	(t) => [
+		// No standalone mailbox_id or (mailbox_id, status, folder_id, created_at, id) index: every index below leads
+		// with mailbox_id, and messages_nav_cover_idx starts with the latter, so they only cost writes.
 		index("messages_user_created_idx").on(t.userId, t.createdAt),
-		index("messages_mailbox_idx").on(t.mailboxId),
 		index("messages_folder_idx").on(t.folderId),
 		index("messages_thread_idx").on(t.mailboxId, t.threadId),
 		index("messages_provider_message_idx").on(t.mailboxId, t.providerMessageId),
@@ -424,13 +425,6 @@ export const messages = sqliteTable(
 		index("messages_category_count_idx").on(t.mailboxId, t.category, t.folderId, t.direction, t.status, t.read, t.snoozedUntil),
 		// Serves the bounded sender re-file (one sender, newest first) and the Subscriptions sender grouping.
 		index("messages_sender_idx").on(t.mailboxId, t.senderAddress, t.createdAt),
-		index("messages_inbox_page_idx").on(
-			t.mailboxId,
-			t.status,
-			t.folderId,
-			desc(t.createdAt),
-			desc(t.id),
-		),
 		index("messages_thread_key_idx").on(
 			t.mailboxId,
 			t.status,
