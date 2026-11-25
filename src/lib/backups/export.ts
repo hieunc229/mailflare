@@ -96,26 +96,181 @@ export async function assertBackupTablesCoverDatabase(db: D1Database): Promise<S
 	return new Set(names);
 }
 
-export async function exportDatabaseRecords(db: D1Database, excludedGroups: BackupTableGroupId[] = []): Promise<Uint8Array> {
+/** Rows per query for ordinary tables. */
+const EXPORT_PAGE_ROWS = 500;
+/**
+ * Every D1/SQLite table with a text or blob column is read by bytes, not rows: a message body runs to 1.3 MB, a
+ * sent mail's payload in outbound_jobs holds its whole HTML, a vCard or calendar object up to 128K characters, and a
+ * fixed 500-row page of those would not fit the isolate's memory. D1 also allows only 1000 queries per invocation, so
+ * small rows must not get small pages either. Row sizes come from a cheap index query (`EXPORT_INDEX_ROWS` rows per
+ * page, summing the length of every text/blob column), then rowid ranges of about `EXPORT_PAGE_BYTES` are read.
+ * The column list comes from the live schema, so a table or column added later is covered without a code change.
+ * Queries: 1 (schema) + per table one index query and one range read per index page, plus bytes / 4 MiB for
+ * oversize ranges; about 2 * tables + 2 * rows / 2000 + bytes / 4 MiB.
+ */
+const EXPORT_INDEX_ROWS = 2000;
+const EXPORT_PAGE_BYTES = 4 * 1024 * 1024;
+const TEXT_TYPE = /TEXT|CHAR|CLOB|BLOB|^$/i;
+/** Text and blob columns of every table, in one query; PRAGMA table_info per table if the table-valued form is refused. */
+async function textColumnsByTable(db: D1Database, tables: string[]): Promise<Map<string, string[]>> {
+	const columns = new Map<string, string[]>();
+	const add = (table: string, column: string, type: string) => {
+		if (TEXT_TYPE.test(type)) columns.set(table, [...(columns.get(table) ?? []), column]);
+	};
+	try {
+		const rows = (await db.prepare("SELECT m.name AS tbl, p.name AS col, p.type AS type FROM sqlite_master m JOIN pragma_table_info(m.name) p WHERE m.type = 'table'").all<{ tbl: string; col: string; type: string }>()).results;
+		for (const row of rows) add(row.tbl, row.col, row.type ?? "");
+	} catch {
+		for (const table of tables) for (const row of (await db.prepare(`PRAGMA table_info(${table})`).all<{ name: string; type: string }>()).results) add(table, row.name, row.type ?? "");
+	}
+	return columns;
+}
+type BackupPaging = { pageSize?: number; pageBytes?: number; indexRows?: number };
+/** R2 multipart parts must all be the same size (5 MiB minimum) except the last. */
+const UPLOAD_PART_BYTES = 8 * 1024 * 1024;
+
+/**
+ * Yields the backup document as JSON text in pieces, one table page at a time, so the whole database never sits in
+ * memory. D1/SQLite is read by `rowid` keyset pages; PostgreSQL and MySQL (self-hosted, with ordinary memory) read
+ * one table per query and emit it in pieces.
+ */
+async function* backupDocumentPieces(db: D1Database, excludedGroups: BackupTableGroupId[], paging: BackupPaging = {}): AsyncGenerator<string> {
 	const dialect = dialectOf(db);
 	const databaseTables = await assertBackupTablesCoverDatabase(db);
 	const selected = getSelectedBackupTables(excludedGroups);
 	const includedTables = BACKUP_TABLES.filter((table) => selected.has(table));
 	if (!includedTables.length) throw new Error("Select at least one backup table group");
-	const tables: DatabaseBackupDocument["tables"] = {};
+	yield `{"format":"mailflare-database-backup","version":2,"createdAt":${JSON.stringify(new Date().toISOString())},"includedTables":${JSON.stringify(includedTables)},"tables":{`;
+	const textColumns = dialect === "sqlite" ? await textColumnsByTable(db, includedTables) : new Map<string, string[]>();
+	let firstTable = true;
 	for (const table of includedTables) {
+		yield `${firstTable ? "" : ","}${JSON.stringify(table)}:[`;
+		firstTable = false;
 		if ((table === "shared_attachment_links" || table === "booking_events" || table === "passkey_credentials" || table.startsWith("drive_") || LATER_MIGRATION_TABLES.includes(table)) && !databaseTables.has(table)) {
-			tables[table] = [];
+			yield "]";
 			continue;
 		}
-		const result = await db.prepare(`SELECT * FROM ${table}`).all<DatabaseRecord>();
-		// Backups hold SQLite-style values whichever database wrote them, so they restore anywhere.
-		const rows = dialect === "sqlite" ? result.results : result.results.map(toPortableRecord);
 		const omitted = OMITTED_COLUMNS[table];
-		tables[table] = omitted ? rows.map((row) => Object.fromEntries(Object.entries(row).filter(([column]) => !omitted.includes(column)))) : rows;
+		const limit = paging.pageSize ?? EXPORT_PAGE_ROWS;
+		// Backups hold SQLite-style values whichever database wrote them, so they restore anywhere.
+		const toRow = (record: DatabaseRecord) => {
+			const row = dialect === "sqlite" ? record : toPortableRecord(record);
+			return omitted ? Object.fromEntries(Object.entries(row).filter(([column]) => !omitted.includes(column))) : row;
+		};
+		let first = true;
+		const emit = (rows: DatabaseRecord[]) => {
+			const text = rows.map((row) => JSON.stringify(toRow(row))).join(",");
+			const piece = text && !first ? `,${text}` : text;
+			if (text) first = false;
+			return piece;
+		};
+		const sizeColumns = textColumns.get(table);
+		if (sizeColumns?.length) {
+			const rowBytesSql = sizeColumns.map((column) => `COALESCE(LENGTH(CAST(${quoteIdentifier(dialect, column)} AS BLOB)), 0)`).join(" + ");
+			const pageBytes = paging.pageBytes ?? EXPORT_PAGE_BYTES;
+			const indexRows = paging.indexRows ?? EXPORT_INDEX_ROWS;
+			let after = Number.MIN_SAFE_INTEGER;
+			for (;;) {
+				const index = (await db.prepare(`SELECT rowid AS r, ${rowBytesSql} AS bytes FROM ${table} WHERE rowid > ? ORDER BY rowid LIMIT ?`).bind(after, indexRows).all<{ r: number; bytes: number }>()).results;
+				if (!index.length) break;
+				// Cut the index page into rowid ranges of about pageBytes; a single larger message is its own range.
+				let rangeStart = after;
+				let rangeBytes = 0;
+				for (let position = 0; position < index.length; position += 1) {
+					rangeBytes += Number(index[position].bytes);
+					if (rangeBytes < pageBytes && position < index.length - 1) continue;
+					const rangeEnd = Number(index[position].r);
+					const rows = (await db.prepare(`SELECT rowid AS __rowid, * FROM ${table} WHERE rowid > ? AND rowid <= ? ORDER BY rowid`).bind(rangeStart, rangeEnd).all<DatabaseRecord & { __rowid: number }>()).results;
+					const piece = emit(rows.map(({ __rowid, ...row }) => row));
+					if (piece) yield piece;
+					rangeStart = rangeEnd;
+					rangeBytes = 0;
+				}
+				after = Number(index[index.length - 1].r);
+				if (index.length < indexRows) break;
+			}
+		} else if (dialect === "sqlite") {
+			let after = Number.MIN_SAFE_INTEGER;
+			for (;;) {
+				const result = await db.prepare(`SELECT rowid AS __rowid, * FROM ${table} WHERE rowid > ? ORDER BY rowid LIMIT ?`).bind(after, limit).all<DatabaseRecord & { __rowid: number }>();
+				if (!result.results.length) break;
+				after = Number(result.results[result.results.length - 1].__rowid);
+				const piece = emit(result.results.map(({ __rowid, ...row }) => row));
+				if (piece) yield piece;
+				if (result.results.length < limit) break;
+			}
+		} else {
+			const rows = (await db.prepare(`SELECT * FROM ${table}`).all<DatabaseRecord>()).results;
+			for (let index = 0; index < rows.length; index += limit) {
+				const piece = emit(rows.slice(index, index + limit));
+				if (piece) yield piece;
+			}
+		}
+		yield "]";
 	}
-	const document: DatabaseBackupDocument = { format: "mailflare-database-backup", version: 2, createdAt: new Date().toISOString(), includedTables, tables };
-	return new TextEncoder().encode(JSON.stringify(document));
+	yield "}}";
+}
+
+export async function exportDatabaseRecords(db: D1Database, excludedGroups: BackupTableGroupId[] = []): Promise<Uint8Array> {
+	const encoder = new TextEncoder();
+	let text = "";
+	for await (const piece of backupDocumentPieces(db, excludedGroups)) text += piece;
+	return encoder.encode(text);
+}
+
+/**
+ * Writes the backup document to `key` without holding it whole: pieces are cut into equal parts of a multipart
+ * upload, so memory stays near one part plus one page of rows. A document smaller than one part is a plain put.
+ * Returns the stored size.
+ */
+export async function writeDatabaseBackup(
+	db: D1Database,
+	bucket: R2Bucket,
+	key: string,
+	excludedGroups: BackupTableGroupId[],
+	options: { customMetadata?: Record<string, string>; partSize?: number } & BackupPaging = {},
+): Promise<number> {
+	const partSize = options.partSize ?? UPLOAD_PART_BYTES;
+	const encoder = new TextEncoder();
+	const putOptions = { httpMetadata: { contentType: "application/json" }, customMetadata: options.customMetadata };
+	let pending: Uint8Array[] = [];
+	let pendingBytes = 0;
+	let upload: R2MultipartUpload | null = null;
+	const parts: R2UploadedPart[] = [];
+	// Takes exactly `size` bytes off the front of the pending chunks.
+	const take = (size: number) => {
+		const out = new Uint8Array(size);
+		let offset = 0;
+		while (offset < size) {
+			const chunk = pending[0];
+			const used = Math.min(chunk.length, size - offset);
+			out.set(chunk.subarray(0, used), offset);
+			offset += used;
+			if (used === chunk.length) pending.shift();
+			else pending[0] = chunk.subarray(used);
+		}
+		pendingBytes -= size;
+		return out.buffer as ArrayBuffer;
+	};
+	try {
+		for await (const piece of backupDocumentPieces(db, excludedGroups, options)) {
+			const bytes = encoder.encode(piece);
+			pending.push(bytes);
+			pendingBytes += bytes.length;
+			while (pendingBytes >= partSize) {
+				upload ??= await bucket.createMultipartUpload(key, putOptions);
+				parts.push(await upload.uploadPart(parts.length + 1, take(partSize)));
+			}
+		}
+		if (!upload) return (await bucket.put(key, take(pendingBytes), putOptions)).size;
+		if (pendingBytes) parts.push(await upload.uploadPart(parts.length + 1, take(pendingBytes)));
+		return (await upload.complete(parts)).size;
+	} catch (error) {
+		await upload?.abort().catch(() => undefined);
+		throw error;
+	} finally {
+		pending = [];
+	}
 }
 
 export async function restoreDatabaseRecords(db: D1Database, content: ArrayBuffer): Promise<void> {
