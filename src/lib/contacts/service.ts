@@ -147,19 +147,6 @@ export async function getContactDisplayNameMap(env: CloudflareEnv, userId: strin
 	return new Map(entries);
 }
 
-export async function getContactAvatarMap(env: CloudflareEnv, userId: string, addresses: string[]) {
-	const emails = Array.from(new Set(addresses.map(normalizeEmailAddress).filter(Boolean)));
-	if (emails.length === 0) return new Map<string, boolean>();
-
-	const db = getDb(env);
-	const rows = await db
-		.select({ email: contacts.email, avatarKey: contacts.avatarKey })
-		.from(contacts)
-		.where(and(eq(contacts.userId, userId), inArray(contacts.email, emails)));
-
-	return new Map(rows.map((contact) => [contact.email, !!contact.avatarKey]));
-}
-
 const CONTACT_EMAIL_CHUNK = 90;
 
 export async function getContactCardMap(env: CloudflareEnv, userId: string, addresses: string[]) {

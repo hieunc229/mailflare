@@ -136,12 +136,19 @@ and the DNS page shows what to set by hand.
 | Variable | Default | Purpose |
 |---|---|---|
 | `PORT` | `3000` | HTTP port |
+| `HOST` | `0.0.0.0` | Interface the HTTP server binds to; set `127.0.0.1` when a reverse proxy on the same machine is the only entry point |
 | `DATA_DIR` | `/data` | SQLite database, blobs and backups |
 | `DATABASE_URL` | unset | Use PostgreSQL, MySQL or libSQL instead of the SQLite file in `DATA_DIR`; see [Databases](databases.md). Migrations are applied on start. |
 | `DATABASE_DRIVER` | inferred | Only to override the driver inferred from `DATABASE_URL` |
+| `MIGRATIONS_DIR` | `./drizzle/migrations` | Directory of SQL migrations applied at start to the built-in SQLite database, relative to the working directory. Only needed when the migrations are not shipped next to the server; ignored with `DATABASE_URL` |
+| `SQLITE_CACHE_KB` | unset | SQLite page cache size in KiB (`cache_size`); unset keeps the SQLite default. For large mailboxes |
+| `SQLITE_MMAP_BYTES` | unset | SQLite `mmap_size` in bytes, so reads come straight from the OS page cache; unset keeps the default (off) |
+| `SQLITE_SYNCHRONOUS` | unset | `NORMAL` or `OFF` sets `synchronous` (any other value is ignored). Under WAL `NORMAL` cannot corrupt the database, but a power loss can roll back the last committed transactions |
+| `SQLITE_TEMP_STORE` | unset | `memory` keeps temporary tables and sort spills in memory instead of temp files |
 | `APP_URL` | request origin | Public URL behind a proxy. Browser requests that change data must come from this origin. Required for password reset on the self-hosted server: reset links are never built from the `Host` header, so without it no reset email is sent. |
 | `TRUST_PROXY` | unset | Set to `1` when a reverse proxy terminates TLS in front of the container: its `X-Forwarded-For` client IP and `X-Forwarded-Proto` scheme are then trusted (without `APP_URL`, the same-origin check uses `Host` plus that scheme). Leave unset when exposed directly. |
 | `SMTP_INBOUND_PORT` | `25` | Inbound SMTP; `0` disables |
+| `SMTP_INBOUND_HOST` | `0.0.0.0` | Interface the inbound SMTP listener binds to |
 | `MAIL_HOSTNAME` | `mail.<domain>` | Host the MX record points at; SMTP banner |
 | `SMTP_MAX_SIZE` | 36 MiB | Largest raw inbound message; allows for encoding overhead on up to 25 MB of attachments. Oversized mail receives an SMTP rejection, which the sender's mail provider can report as a delivery failure. |
 | `SMTP_TLS_KEY`, `SMTP_TLS_CERT` | unset | STARTTLS certificate for the listener |
