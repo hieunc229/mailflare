@@ -60,7 +60,8 @@ export async function listMailboxSenders(db: AppDatabase, mailbox: Pick<MailboxA
 }
 
 export async function listAccessibleMailboxes(db: AppDatabase, user: Pick<SessionUser, "id" | "email" | "role">) {
-	const ownedRows = await db
+	// The license read overlaps the owned query; it never rejects, see access-utils.
+	const [ownedRows, teamSharingEnabled] = await Promise.all([db
 		.select({
 			id: mailboxes.id,
 			userId: mailboxes.userId,
@@ -84,7 +85,8 @@ export async function listAccessibleMailboxes(db: AppDatabase, user: Pick<Sessio
 		.from(mailboxes)
 		.innerJoin(domains, eq(mailboxes.domainId, domains.id))
 		.leftJoin(users, eq(mailboxes.userId, users.id))
-		.where(and(eq(mailboxes.userId, user.id), eq(mailboxes.disabled, false)));
+		.where(and(eq(mailboxes.userId, user.id), eq(mailboxes.disabled, false))),
+	isTeamMailboxSharingEnabled(db)]);
 	const owned = ownedRows
 		.map((row) => {
 			const { avatarKey, ownerLastSignInAt, ownerDisabled, ownerDeletedAt, ...mailbox } = row;
@@ -98,7 +100,7 @@ export async function listAccessibleMailboxes(db: AppDatabase, user: Pick<Sessio
 			};
 		});
 
-	if (!(await isTeamMailboxSharingEnabled(db))) return owned;
+	if (!teamSharingEnabled) return owned;
 	const sharedRows = await db
 		.select({
 			id: mailboxes.id,
