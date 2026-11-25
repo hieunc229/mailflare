@@ -2596,6 +2596,8 @@
 	"undo.hidePending": "Sembunyikan notifikasi (urungkan tetap berjalan)",
 	"undo.failed.expired": "Pembatalan ini telah kedaluwarsa.",
 	"undo.failed.unavailable": "Pesan itu tidak lagi tersedia untuk dibatalkan.",
+	"sharedFile.unavailable.title": "Tautan unduhan ini sudah tidak tersedia",
+	"sharedFile.unavailable.body": "Tautan mungkin sudah kedaluwarsa atau dinonaktifkan. Minta pengirim untuk membagikan berkasnya lagi.",
 	"undo.failed.stale": "Perubahan itu tidak dapat dibatalkan lagi karena pesannya telah berubah.",
 	"undo.failed.network": "Pembatalan gagal. Periksa koneksi Anda dan coba lagi.",
 	"undo.failed.server": "Pembatalan gagal. Silakan coba lagi.",

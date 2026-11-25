@@ -2611,6 +2611,8 @@
 	"undo.hidePending": "Sembunyikan pemberitahuan (buat asal diteruskan)",
 	"undo.failed.expired": "Pembatalan ini telah tamat tempoh.",
 	"undo.failed.unavailable": "Mesej itu tidak lagi tersedia untuk dibatalkan.",
+	"sharedFile.unavailable.title": "Pautan muat turun ini tidak lagi tersedia",
+	"sharedFile.unavailable.body": "Pautan mungkin telah tamat tempoh atau dimatikan. Minta penghantar berkongsi fail itu semula.",
 	"undo.failed.stale": "Perubahan itu tidak boleh dibatalkan lagi kerana mesej telah berubah.",
 	"undo.failed.network": "Pembatalan gagal. Semak sambungan anda dan cuba lagi.",
 	"undo.failed.server": "Pembatalan gagal. Sila cuba lagi.",

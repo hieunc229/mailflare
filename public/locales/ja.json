@@ -2596,6 +2596,8 @@
 	"undo.hidePending": "通知を隠す（元に戻す処理は続行中）",
 	"undo.failed.expired": "この元に戻す操作は期限切れです。",
 	"undo.failed.unavailable": "そのメッセージは元に戻せなくなりました。",
+	"sharedFile.unavailable.title": "このダウンロードリンクは利用できなくなりました",
+	"sharedFile.unavailable.body": "リンクの有効期限が切れたか、無効になった可能性があります。送信者にファイルをもう一度共有するよう依頼してください。",
 	"undo.failed.stale": "メッセージが変更されたため、この変更は元に戻せません。",
 	"undo.failed.network": "元に戻せませんでした。接続を確認して再試行してください。",
 	"undo.failed.server": "元に戻せませんでした。もう一度お試しください。",

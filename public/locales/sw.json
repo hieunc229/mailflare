@@ -2615,6 +2615,8 @@
 	"undo.hidePending": "Ficha arifa (utenduzi unaendelea)",
 	"undo.failed.expired": "Utenduzi huu umeisha muda.",
 	"undo.failed.unavailable": "Ujumbe huo haupatikani tena ili utenduliwe.",
+	"sharedFile.unavailable.title": "Kiungo hiki cha kupakua hakipatikani tena",
+	"sharedFile.unavailable.body": "Huenda kiungo kimeisha muda au kimezimwa. Mwombe mtumaji ashiriki faili tena.",
 	"undo.failed.stale": "Badiliko hili haliwezi kutenduliwa tena kwa sababu ujumbe umebadilika.",
 	"undo.failed.network": "Utenduzi umeshindwa. Angalia muunganisho wako na ujaribu tena.",
 	"undo.failed.server": "Utenduzi umeshindwa. Tafadhali jaribu tena.",

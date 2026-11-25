@@ -2631,6 +2631,8 @@
 	"undo.hidePending": "Masquer la notification (l’annulation continue)",
 	"undo.failed.expired": "Cette annulation a expiré.",
 	"undo.failed.unavailable": "Ce message n’est plus disponible pour l’annulation.",
+	"sharedFile.unavailable.title": "Ce lien de téléchargement n’est plus disponible",
+	"sharedFile.unavailable.body": "Le lien a peut-être expiré ou été désactivé. Demandez à l’expéditeur de partager à nouveau le fichier.",
 	"undo.failed.stale": "Cette modification ne peut plus être annulée car le message a changé.",
 	"undo.failed.network": "L’annulation a échoué. Vérifiez votre connexion et réessayez.",
 	"undo.failed.server": "L’annulation a échoué. Veuillez réessayer.",

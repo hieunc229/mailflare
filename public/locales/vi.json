@@ -2596,6 +2596,8 @@
 	"undo.hidePending": "Ẩn thông báo (hoàn tác vẫn tiếp tục)",
 	"undo.failed.expired": "Thao tác hoàn tác này đã hết hạn.",
 	"undo.failed.unavailable": "Tin nhắn đó không còn khả dụng để hoàn tác.",
+	"sharedFile.unavailable.title": "Liên kết tải xuống này không còn khả dụng",
+	"sharedFile.unavailable.body": "Liên kết có thể đã hết hạn hoặc bị tắt. Hãy nhờ người gửi chia sẻ lại tệp.",
 	"undo.failed.stale": "Không thể hoàn tác thay đổi này nữa vì tin nhắn đã thay đổi.",
 	"undo.failed.network": "Hoàn tác không thành công. Kiểm tra kết nối và thử lại.",
 	"undo.failed.server": "Hoàn tác không thành công. Vui lòng thử lại.",

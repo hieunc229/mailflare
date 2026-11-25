@@ -2596,6 +2596,8 @@
 	"undo.hidePending": "隐藏通知（撤销仍在继续）",
 	"undo.failed.expired": "此撤销已过期。",
 	"undo.failed.unavailable": "该邮件已无法撤销。",
+	"sharedFile.unavailable.title": "此下载链接已不可用",
+	"sharedFile.unavailable.body": "链接可能已过期或已被关闭。请让发送者重新分享该文件。",
 	"undo.failed.stale": "邮件已更改，因此此更改无法再撤销。",
 	"undo.failed.network": "撤销失败。请检查网络连接并重试。",
 	"undo.failed.server": "撤销失败。请重试。",
