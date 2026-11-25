@@ -697,6 +697,7 @@
 	"appPasswords.createdTitle": "ઍપ પાસવર્ડ બનાવાયો",
 	"appPasswords.shownOnce": "આ પાસવર્ડ હમણાં જ કૉપિ કરો. તે ફક્ત એક જ વાર બતાવાય છે, અને તમે તેને નીચેની યાદીમાંથી રદ કરી શકો છો.",
 	"appPasswords.jmapDiscovery": "JMAP સત્ર શોધ {url} પર છે.",
+	"appPasswords.jmapSessionUrl": "JMAP સત્ર URL",
 	"appPasswords.listTitle": "તમારા ઍપ પાસવર્ડ",
 	"appPasswords.empty": "હજી સુધી કોઈ ઍપ પાસવર્ડ નથી.",
 	"appPasswords.loadFailed": "ઍપ પાસવર્ડ લોડ થઈ શક્યા નથી",

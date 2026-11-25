@@ -696,6 +696,7 @@
 	"appPasswords.createdTitle": "앱 비밀번호를 만들었습니다",
 	"appPasswords.shownOnce": "지금 이 비밀번호를 복사하세요. 한 번만 표시되며, 아래 목록에서 해지할 수 있습니다.",
 	"appPasswords.jmapDiscovery": "JMAP 세션 검색 주소는 {url}입니다.",
+	"appPasswords.jmapSessionUrl": "JMAP 세션 URL",
 	"appPasswords.listTitle": "내 앱 비밀번호",
 	"appPasswords.empty": "아직 앱 비밀번호가 없습니다.",
 	"appPasswords.loadFailed": "앱 비밀번호를 불러올 수 없습니다",

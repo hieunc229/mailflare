@@ -697,6 +697,7 @@
 	"appPasswords.createdTitle": "ആപ്പ് പാസ്‌വേഡ് സൃഷ്ടിച്ചു",
 	"appPasswords.shownOnce": "ഈ പാസ്‌വേഡ് ഇപ്പോൾ പകർത്തുക. ഇത് ഒരു തവണ മാത്രമേ കാണിക്കൂ, താഴെയുള്ള പട്ടികയിൽ നിന്ന് നിങ്ങൾക്കത് അസാധുവാക്കാം.",
 	"appPasswords.jmapDiscovery": "JMAP സെഷൻ കണ്ടെത്തൽ {url} ൽ ആണ്.",
+	"appPasswords.jmapSessionUrl": "JMAP സെഷൻ URL",
 	"appPasswords.listTitle": "നിങ്ങളുടെ ആപ്പ് പാസ്‌വേഡുകൾ",
 	"appPasswords.empty": "ആപ്പ് പാസ്‌വേഡുകൾ ഇതുവരെ ഇല്ല.",
 	"appPasswords.loadFailed": "ആപ്പ് പാസ്‌വേഡുകൾ ലോഡ് ചെയ്യാൻ കഴിഞ്ഞില്ല",

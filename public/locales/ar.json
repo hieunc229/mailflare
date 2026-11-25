@@ -717,6 +717,7 @@
 	"appPasswords.createdTitle": "تم إنشاء كلمة مرور التطبيق",
 	"appPasswords.shownOnce": "انسخ كلمة المرور هذه الآن. تظهر مرة واحدة فقط، ويمكنك إلغاء صلاحيتها من القائمة أدناه.",
 	"appPasswords.jmapDiscovery": "اكتشاف جلسة JMAP على {url}.",
+	"appPasswords.jmapSessionUrl": "عنوان URL لجلسة JMAP",
 	"appPasswords.listTitle": "كلمات مرور تطبيقاتك",
 	"appPasswords.empty": "لا توجد كلمات مرور تطبيقات بعد.",
 	"appPasswords.loadFailed": "تعذّر تحميل كلمات مرور التطبيقات",

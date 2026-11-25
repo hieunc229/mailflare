@@ -697,6 +697,7 @@
 	"appPasswords.createdTitle": "An ƙirƙiri kalmar sirri ta manhaja",
 	"appPasswords.shownOnce": "Kwafi wannan kalmar sirri yanzu. Ana nuna ta sau ɗaya kawai, kuma za ka iya soke ta daga jerin da ke ƙasa.",
 	"appPasswords.jmapDiscovery": "Gano zaman JMAP yana a {url}.",
+	"appPasswords.jmapSessionUrl": "URL na zaman JMAP",
 	"appPasswords.listTitle": "Kalmomin sirri na manhajojinka",
 	"appPasswords.empty": "Babu kalmomin sirri na manhaja tukuna.",
 	"appPasswords.loadFailed": "An kasa loda kalmomin sirri na manhaja",

@@ -692,6 +692,7 @@
 	"appPasswords.createdTitle": "应用专用密码已创建",
 	"appPasswords.shownOnce": "请立即复制此密码。它只显示一次，你可以在下方列表中撤销它。",
 	"appPasswords.jmapDiscovery": "JMAP 会话发现地址为 {url}。",
+	"appPasswords.jmapSessionUrl": "JMAP 会话 URL",
 	"appPasswords.listTitle": "你的应用专用密码",
 	"appPasswords.empty": "还没有应用专用密码。",
 	"appPasswords.loadFailed": "无法加载应用专用密码",

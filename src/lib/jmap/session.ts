@@ -1,6 +1,16 @@
 import { CAPABILITY_CORE, CAPABILITY_MAIL, CAPABILITY_SUBMISSION, LIMITS } from "./constants";
 import type { JmapContext } from "./types";
 
+/** Origin clients should use for JMAP: the configured APP_URL, else the origin the request arrived on. */
+export function jmapOrigin(env: Pick<CloudflareEnv, "APP_URL">, request: Request): string {
+	return env.APP_URL?.trim() || new URL(request.url).origin;
+}
+
+/** The full session URL a client without /.well-known discovery needs. */
+export function jmapSessionUrl(env: Pick<CloudflareEnv, "APP_URL">, request: Request): string {
+	return `${jmapOrigin(env, request)}/jmap/session`;
+}
+
 /** The Session object (RFC 8620 §2). One account per API key: the key's user. */
 export function buildSession(ctx: JmapContext, sessionState: string) {
 	const base = `${ctx.origin}/jmap`;

@@ -692,6 +692,7 @@
 	"appPasswords.createdTitle": "Đã tạo mật khẩu ứng dụng",
 	"appPasswords.shownOnce": "Hãy sao chép mật khẩu này ngay. Mật khẩu chỉ hiển thị một lần, và bạn có thể thu hồi nó trong danh sách bên dưới.",
 	"appPasswords.jmapDiscovery": "Địa chỉ khám phá phiên JMAP là {url}.",
+	"appPasswords.jmapSessionUrl": "URL phiên JMAP",
 	"appPasswords.listTitle": "Mật khẩu ứng dụng của bạn",
 	"appPasswords.empty": "Chưa có mật khẩu ứng dụng nào.",
 	"appPasswords.loadFailed": "Không thể tải mật khẩu ứng dụng",

@@ -697,6 +697,7 @@
 	"appPasswords.createdTitle": "යෙදුම් මුරපදය සාදන ලදී",
 	"appPasswords.shownOnce": "මෙම මුරපදය දැන්ම පිටපත් කරන්න. එය පෙන්වන්නේ එක් වරක් පමණි, එය අහෝසි කිරීම පහත ලැයිස්තුවෙන් කළ හැක.",
 	"appPasswords.jmapDiscovery": "JMAP සැසි සොයාගැනීම {url} හි ඇත.",
+	"appPasswords.jmapSessionUrl": "JMAP සැසි URL",
 	"appPasswords.listTitle": "ඔබගේ යෙදුම් මුරපද",
 	"appPasswords.empty": "තවම යෙදුම් මුරපද නැත.",
 	"appPasswords.loadFailed": "යෙදුම් මුරපද පූරණය කිරීමට නොහැකි විය",

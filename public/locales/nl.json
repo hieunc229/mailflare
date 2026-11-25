@@ -697,6 +697,7 @@
 	"appPasswords.createdTitle": "App-wachtwoord gemaakt",
 	"appPasswords.shownOnce": "Kopieer dit wachtwoord nu. Het wordt maar één keer getoond en je kunt het intrekken via de lijst hieronder.",
 	"appPasswords.jmapDiscovery": "JMAP-sessie-ontdekking staat op {url}.",
+	"appPasswords.jmapSessionUrl": "JMAP-sessie-URL",
 	"appPasswords.listTitle": "Je app-wachtwoorden",
 	"appPasswords.empty": "Nog geen app-wachtwoorden.",
 	"appPasswords.loadFailed": "App-wachtwoorden laden mislukt",

@@ -707,6 +707,7 @@
 	"appPasswords.createdTitle": "Пароль застосунку створено",
 	"appPasswords.shownOnce": "Скопіюйте цей пароль зараз. Він показується лише раз, а відкликати його можна в списку нижче.",
 	"appPasswords.jmapDiscovery": "Виявлення сеансу JMAP: {url}.",
+	"appPasswords.jmapSessionUrl": "URL-адреса сеансу JMAP",
 	"appPasswords.listTitle": "Ваші паролі застосунків",
 	"appPasswords.empty": "Паролів застосунків поки немає.",
 	"appPasswords.loadFailed": "Не вдалося завантажити паролі застосунків",

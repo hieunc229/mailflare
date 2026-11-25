@@ -697,6 +697,7 @@
 	"appPasswords.createdTitle": "App-Passwort erstellt",
 	"appPasswords.shownOnce": "Kopieren Sie dieses Passwort jetzt. Es wird nur einmal angezeigt, und Sie können es in der Liste unten widerrufen.",
 	"appPasswords.jmapDiscovery": "Die JMAP-Sitzungserkennung finden Sie unter {url}.",
+	"appPasswords.jmapSessionUrl": "JMAP-Sitzungs-URL",
 	"appPasswords.listTitle": "Ihre App-Passwörter",
 	"appPasswords.empty": "Noch keine App-Passwörter.",
 	"appPasswords.loadFailed": "App-Passwörter konnten nicht geladen werden",

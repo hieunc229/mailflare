@@ -707,6 +707,7 @@
 	"appPasswords.createdTitle": "Utworzono hasło aplikacji",
 	"appPasswords.shownOnce": "Skopiuj to hasło teraz. Jest wyświetlane tylko raz, a odwołać je możesz z listy poniżej.",
 	"appPasswords.jmapDiscovery": "Wykrywanie sesji JMAP jest pod adresem {url}.",
+	"appPasswords.jmapSessionUrl": "Adres URL sesji JMAP",
 	"appPasswords.listTitle": "Twoje hasła aplikacji",
 	"appPasswords.empty": "Brak haseł aplikacji.",
 	"appPasswords.loadFailed": "Nie można załadować haseł aplikacji",

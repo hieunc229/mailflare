@@ -692,6 +692,7 @@
 	"appPasswords.createdTitle": "Kata sandi aplikasi dibuat",
 	"appPasswords.shownOnce": "Salin kata sandi ini sekarang. Kata sandi ini hanya ditampilkan sekali, dan Anda dapat mencabutnya dari daftar di bawah.",
 	"appPasswords.jmapDiscovery": "Penemuan sesi JMAP ada di {url}.",
+	"appPasswords.jmapSessionUrl": "URL sesi JMAP",
 	"appPasswords.listTitle": "Kata sandi aplikasi Anda",
 	"appPasswords.empty": "Belum ada kata sandi aplikasi.",
 	"appPasswords.loadFailed": "Tidak dapat memuat kata sandi aplikasi",
