@@ -2602,7 +2602,6 @@
 	"undo.partialRestored": "已恢复 {total} 封邮件中的 {restored} 封。其余邮件无法撤销。",
 	"undo.successAnnouncement": "撤销完成：{action}。",
 	"undo.partial": "已更新 {applied}/{total} 封邮件",
-	"undo.bulk.one": "{action} · {count} 封邮件",
 	"undo.bulk.other": "{action} · {count} 封邮件",
 	"undo.label.archive": "已归档",
 	"undo.label.trash": "已移至垃圾箱",

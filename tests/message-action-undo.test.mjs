@@ -473,9 +473,17 @@ test("every catalog carries the undo keys with identical placeholders", () => {
 	const undoKeys = Object.keys(en).filter((key) => key.startsWith("undo."));
 	assert.ok(undoKeys.length >= 17);
 	const placeholders = (text) => [...new Set([...text.matchAll(/\{(\w+)\}/g)].map((match) => match[1]))].sort();
+	const categories = ["zero", "one", "two", "few", "many", "other"];
+	const categoryOf = (key) => categories.find((category) => key.endsWith(`.${category}`));
+	const pluralBases = new Set(Object.keys(en).filter((key) => key.endsWith(".other")).map((key) => key.slice(0, key.lastIndexOf("."))));
+	const isPluralKey = (key) => categoryOf(key) && pluralBases.has(key.slice(0, key.lastIndexOf(".")));
 	for (const file of readdirSync(join(root, "public", "locales")).filter((name) => name.endsWith(".json"))) {
 		const catalog = JSON.parse(readFileSync(join(root, "public", "locales", file), "utf8"));
-		for (const key of undoKeys) {
+		// A plural variant is only required where the locale's own CLDR rules can select it: Korean,
+		// Malay, Thai and the other "other"-only locales never select `.one`.
+		const reachable = new Intl.PluralRules(file.replace(/\.json$/, "")).resolvedOptions().pluralCategories;
+		const required = undoKeys.filter((key) => !isPluralKey(key) || reachable.includes(categoryOf(key)));
+		for (const key of required) {
 			assert.ok(typeof catalog[key] === "string" && catalog[key].trim().length > 0, `${file}: ${key} is missing`);
 			assert.deepEqual(placeholders(catalog[key]), placeholders(en[key]), `${file}: ${key} placeholders`);
 		}

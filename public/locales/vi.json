@@ -2602,7 +2602,6 @@
 	"undo.partialRestored": "Đã khôi phục {restored} trên {total} tin nhắn. Phần còn lại không thể hoàn tác.",
 	"undo.successAnnouncement": "Hoàn tác hoàn tất: {action}.",
 	"undo.partial": "Đã cập nhật {applied} trên {total} tin nhắn",
-	"undo.bulk.one": "{action} · {count} tin nhắn",
 	"undo.bulk.other": "{action} · {count} tin nhắn",
 	"undo.label.archive": "Đã lưu trữ",
 	"undo.label.trash": "Đã chuyển vào Thùng rác",

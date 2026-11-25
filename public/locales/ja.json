@@ -2602,7 +2602,6 @@
 	"undo.partialRestored": "{total} 件中 {restored} 件のメッセージを復元しました。残りは元に戻せませんでした。",
 	"undo.successAnnouncement": "元に戻しました: {action}。",
 	"undo.partial": "{total} 件中 {applied} 件のメッセージを更新しました",
-	"undo.bulk.one": "{action} · {count} 件のメッセージ",
 	"undo.bulk.other": "{action} · {count} 件のメッセージ",
 	"undo.label.archive": "アーカイブ済み",
 	"undo.label.trash": "ゴミ箱に移動しました",

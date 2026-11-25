@@ -2602,7 +2602,6 @@
 	"undo.partialRestored": "{restored} dari {total} pesan dipulihkan. Sisanya tidak dapat dibatalkan.",
 	"undo.successAnnouncement": "Pembatalan selesai: {action}.",
 	"undo.partial": "{applied} dari {total} pesan diperbarui",
-	"undo.bulk.one": "{action} · {count} pesan",
 	"undo.bulk.other": "{action} · {count} pesan",
 	"undo.label.archive": "Diarsipkan",
 	"undo.label.trash": "Dipindahkan ke Sampah",
