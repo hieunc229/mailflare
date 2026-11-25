@@ -59,8 +59,8 @@ test("a template fills known placeholders, leaves others as written and drops li
 test("the event's subject and body replace the default, each on its own", () => {
 	const guest = { ...content, eventName: "Beratung", guestName: "Ana\nBcc: x@evil.test", location: "Telefon", notes: "Preise" };
 	const custom = buildBookingConfirmation(guest, "de", { subject: "Termin am {when} für {guestName}", body: "Hallo {guestName},\nwir sehen uns {when} ({location}).\n{notes}" });
-	assert.equal(custom.subject, "Termin am Dienstag, 17. November 2026, 14:00–14:30 (Europe/Berlin) für Ana Bcc: x@evil.test");
-	assert.equal(custom.text, "Hallo Ana Bcc: x@evil.test,\nwir sehen uns Dienstag, 17. November 2026, 14:00–14:30 (Europe/Berlin) (Telefon).\nPreise");
+	assert.equal(custom.subject, "Termin am Dienstag, 17. November 2026, 14:00–14:30 (Europe/Berlin) für Ana");
+	assert.equal(custom.text, "Hallo Ana,\nwir sehen uns Dienstag, 17. November 2026, 14:00–14:30 (Europe/Berlin) (Telefon).\nPreise");
 	const subjectOnly = buildBookingConfirmation(guest, "de", { subject: "Ihr Termin", body: "" });
 	assert.equal(subjectOnly.subject, "Ihr Termin");
 	assert.match(subjectOnly.text, /^Hi Ana/);
@@ -86,4 +86,17 @@ test("the calendar file is a plain event to add, not a meeting request", () => {
 	assert.match(ics, /\r\nMETHOD:PUBLISH\r\n/);
 	assert.match(ics, /\r\nDTSTART:20261117T130000Z\r\nDTEND:20261117T133000Z\r\n/);
 	assert.doesNotMatch(ics, /ORGANIZER|ATTENDEE|RSVP/);
+});
+
+test("the anonymous booker's name cannot carry links, addresses or a long message into host-signed mail", () => {
+	const mail = buildBookingConfirmation({ ...content, guestName: "Ana https://evil.example/pay pay@evil.example www.evil.example <b>x</b>" });
+	assert.match(mail.text, /^Hi Ana,/);
+	for (const part of [mail.subject, mail.text]) assert.doesNotMatch(part, /evil|@|<|https?:/i);
+	const long = buildBookingConfirmation({ ...content, guestName: "A".repeat(120) });
+	assert.ok(long.text.split("\n")[0].length <= "Hi ,".length + 60);
+	assert.match(buildBookingConfirmation({ ...content, guestName: "https://evil.example" }).text, /^Hi guest,/);
+});
+
+test("ordinary names are kept as typed", () => {
+	for (const name of ["Ana María O'Neil-Jr.", "Dr. Smith", "李 小龍", "J. R. R. Tolkien"]) assert.match(buildBookingConfirmation({ ...content, guestName: name }).text, new RegExp(`^Hi ${name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")},`));
 });
