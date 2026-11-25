@@ -24,7 +24,10 @@ const BASE_STYLE = `
 	:host { filter:none !important; contain:none !important; overflow:visible !important; }
 	:host(.mf-dark) { filter:none !important; }
 	:host(.mf-dark) img, :host(.mf-dark) video, :host(.mf-dark) picture { filter:none !important; }
-	.email-quote-toggle { display:none !important; }
+	/* Only the ••• toggle affordance hides: the attribution and blockquote
+	   live inside the details (quote-collapse-utils.ts), so an expanded
+	   quote must keep printing its content. */
+	.email-quote-toggle > summary { display:none !important; }
 	img, video { max-width:100% !important; }
 	a { text-decoration:underline !important; }
 }

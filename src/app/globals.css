@@ -138,19 +138,26 @@ pre {
 }
 
 @media print {
-	@page {
+	/* Named reader page: the 16mm margin applies only to pages that opt in
+	   via page: reader (html:has below). Every other route — booking,
+	   calendar, admin — keeps the browser's default print page. */
+	@page reader {
 		margin: 16mm;
 	}
 
-	html,
-	body {
-		background: #fff !important;
-		color: #111 !important;
-		min-height: 0 !important;
-		height: auto !important;
+	/* The page property on the root element applies to the whole document,
+	   so every reader-route page uses the reader page type. */
+	html:has([data-message-id]) {
+		page: reader;
 	}
 
-	body {
+	/* Root resets are gated on the reader marker: non-reader print output
+	   keeps its own background, colors and font size. */
+	body:has([data-message-id]) {
+		background: #fff !important;
+		color: #111 !important;
+		height: auto !important;
+		min-height: 0 !important;
 		font-size: 11pt;
 	}
 
@@ -286,6 +293,14 @@ pre {
 	/* Attachment previews print as a compact text list without thumbnails,
 	   and the "load remote content" affordance is screen-only. */
 	body:has([data-message-id]) :is(.mf-print-thumb, .email-html-remote) {
+		display: none !important;
+	}
+
+	/* Quoted-history toggles (light DOM): only the ••• summary hides. An
+	   expanded quote keeps printing its attribution + blockquote, a collapsed
+	   one prints nothing (details semantics). The shadow-DOM toggles get the
+	   same rule inside email-html-renderer.tsx. */
+	body:has([data-message-id]) .email-quote-toggle > summary {
 		display: none !important;
 	}
 
