@@ -478,6 +478,22 @@ export const messages = sqliteTable(
 	],
 );
 
+/** List-Unsubscribe data derived from a message's raw headers, so opening a message needs no R2 read. A row means "computed"
+ *  (a null `url` is "computed: no header"); no row means not computed yet and the reader derives it from R2 and stores it.
+ *  Kept out of `messages`: any UPDATE there fires the JMAP change-log triggers, and deploys run before migrations. */
+export const messageUnsubscribe = sqliteTable("message_unsubscribe", {
+	messageId: text("message_id")
+		.primaryKey()
+		.references(() => messages.id, { onDelete: "cascade" }),
+	url: text("url"),
+	oneClick: bool("one_click").notNull().default(false),
+	mailto: text("mailto"),
+	dkimCovers: bool("dkim_covers").notNull().default(false),
+	checkedAt: timestamp("checked_at")
+		.notNull()
+		.$defaultFn(() => new Date()),
+});
+
 export const spamTokenStats = sqliteTable(
 	"spam_token_stats",
 	{
@@ -1788,6 +1804,7 @@ export const schema = {
 	folders,
 	apiKeys,
 	messages,
+	messageUnsubscribe,
 	spamTokenStats,
 	spamReputation,
 	spamFeedback,

@@ -194,8 +194,15 @@
     {
       "idx": 27,
       "version": "5",
-      "when": 1795027669151,
-      "tag": "0027_drop_redundant_message_indexes",
+      "when": 1795200469151,
+      "tag": "0029_drop_redundant_message_indexes",
+      "breakpoints": true
+    },
+    {
+      "idx": 28,
+      "version": "5",
+      "when": 1795200470151,
+      "tag": "0030_message_unsubscribe",
       "breakpoints": true
     }
   ]

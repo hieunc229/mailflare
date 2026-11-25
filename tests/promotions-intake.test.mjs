@@ -133,3 +133,15 @@ test("the message.inbound webhook carries the category", async (t) => {
 	const payloads = raw.prepare("SELECT payload FROM webhook_deliveries ORDER BY rowid").all().map((row) => JSON.parse(row.payload).data);
 	assert.deepEqual(payloads.map((data) => data.category), ["promotions", null]);
 });
+
+test("intake stores the List-Unsubscribe fields so opening needs no R2 read", async (t) => {
+	const { deliver, raw } = await fixture(t);
+	const quiet = console.info; console.info = () => {};
+	t.after(() => { console.info = quiet; });
+	await deliver("News <n@acme.com>", "List-Unsubscribe: <https://acme.com/u>, <mailto:u@acme.com>\r\nList-Unsubscribe-Post: List-Unsubscribe=One-Click\r\nDKIM-Signature: v=1; d=acme.com; h=from:list-unsubscribe; b=x\r\n");
+	await deliver("Friend <f@x.test>");
+	const rows = raw.prepare("SELECT m.sender_address AS from_addr, u.url, u.one_click, u.mailto, u.dkim_covers FROM message_unsubscribe u JOIN messages m ON m.id = u.message_id ORDER BY m.sender_address").all();
+	assert.equal(rows.length, 2);
+	assert.deepEqual(rows[0], { from_addr: "f@x.test", url: null, one_click: 0, mailto: null, dkim_covers: 0 });
+	assert.deepEqual(rows[1], { from_addr: "n@acme.com", url: "https://acme.com/u", one_click: 1, mailto: "mailto:u@acme.com", dkim_covers: 1 });
+});
