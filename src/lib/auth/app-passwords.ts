@@ -6,6 +6,7 @@ import { authenticateApiKeyValue } from "@/lib/api/key-auth";
 import type { ApiAuthResult } from "@/lib/api/key-auth-types";
 import type { AppPasswordScope } from "@/lib/api/scopes";
 import { apiKeyLookupPrefix } from "@/lib/api-keys";
+import { chunkIds } from "@/lib/calendar/chunks";
 import { isListedAsAppPassword } from "@/lib/auth/app-password-utils";
 import { getClientIp } from "@/lib/auth/client-ip";
 import { isDavEnabled } from "@/lib/dav/settings";
@@ -168,5 +169,6 @@ export async function revokeAllAppPasswords(env: CloudflareEnv, userId: string):
 		.from(apiKeys)
 		.where(and(eq(apiKeys.userId, userId), or(eq(apiKeys.kind, "app"), and(eq(apiKeys.kind, "legacy"), like(apiKeys.scopes, '%"jmap"%')))));
 	const ids = candidates.filter(isListedAsAppPassword).map((key) => key.id);
-	if (ids.length) await db.delete(apiKeys).where(and(eq(apiKeys.userId, userId), inArray(apiKeys.id, ids)));
+	// D1 allows 100 bound parameters per statement and a user can hold any number of app passwords.
+	for (const chunk of chunkIds(ids)) await db.delete(apiKeys).where(and(eq(apiKeys.userId, userId), inArray(apiKeys.id, chunk)));
 }
