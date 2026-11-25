@@ -30,7 +30,9 @@ export async function inboundAttachmentLimitReasonFromRaw(raw: ArrayBuffer): Pro
 		return inboundAttachmentLimitReason(parsed.attachments);
 	} catch (error) {
 		if (error instanceof MimeLimitError) return error.message;
+		// Anything else (a memory or runtime fault) says nothing about the message. Callers treat a throw as a
+		// temporary failure, so the sender or provider retries instead of getting a permanent bounce.
 		console.warn("Inbound MIME parse failed", error);
-		return "Message rejected: the message could not be parsed.";
+		throw error;
 	}
 }
