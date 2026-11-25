@@ -2982,5 +2982,9 @@
 	"domains.forceRemoveConfirm": "{reason}\n\nต้องการลบ {host} แบบบังคับต่อไปหรือไม่ Mailflare จะพยายามลบเรกคอร์ด DNS _mta-sts และ _smtp._tls จากนั้นจะลบโดเมน กล่องจดหมายทั้งหมดในโดเมน และข้อความทั้งหมดในกล่องเหล่านั้น แม้การลบเรกคอร์ดจะล้มเหลวก็ตาม เซิร์ฟเวอร์อีเมลอาจยังคงใช้นโยบาย MTA-STS ที่แคชไว้อีกระยะหนึ่ง หลังจากนั้นคุณจะได้รับรายการเรกคอร์ด DNS ที่ต้องลบเอง\n\nพิมพ์ {host} เพื่อยืนยัน",
 	"domains.forceRemoved": "ลบ {host} แล้ว",
 	"domains.forceRemovedRecords": "โปรดลบเรกคอร์ด DNS เหล่านี้ด้วยตนเอง:",
-	"domains.forceRemovedCache": "เซิร์ฟเวอร์อีเมลอาจยังคงใช้นโยบาย MTA-STS เดิมจนถึง {date}"
+	"domains.forceRemovedCache": "เซิร์ฟเวอร์อีเมลอาจยังคงใช้นโยบาย MTA-STS เดิมจนถึง {date}",
+	"commandPalette.calendar": "Open Calendar",
+	"commandPalette.contacts": "Open Contacts",
+	"commandPalette.drive": "Open Drive",
+	"commandPalette.focusSearch": "Focus mail search"
 }

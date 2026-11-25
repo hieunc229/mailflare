@@ -14,6 +14,10 @@ import {
   MailPlus,
   Settings,
   HelpCircle,
+  CalendarDays,
+  Users,
+  HardDrive,
+  Search,
 } from "@/components/icons";
 import { useLanguage } from "@/components/language-provider";
 import { useCompose } from "@/components/compose/compose-context";
@@ -287,6 +291,40 @@ export function ShortcutsProvider({
         category: "Settings",
         icon: Settings,
         perform: () => router.push("/settings/account"),
+      },
+      {
+        id: "nav-calendar",
+        title: t("commandPalette.calendar"),
+        category: "Navigation",
+        icon: CalendarDays,
+        perform: () => router.push("/calendar"),
+      },
+      {
+        id: "nav-contacts",
+        title: t("commandPalette.contacts"),
+        category: "Navigation",
+        icon: Users,
+        perform: () => router.push("/contacts"),
+      },
+      {
+        id: "nav-drive",
+        title: t("commandPalette.drive"),
+        category: "Navigation",
+        icon: HardDrive,
+        perform: () => router.push("/drive"),
+      },
+      {
+        id: "focus-search",
+        title: t("commandPalette.focusSearch"),
+        category: "Actions",
+        icon: Search,
+        perform: () => {
+          const searchInput = document.querySelector<HTMLInputElement>('input[data-mail-search-input]');
+          if (searchInput) {
+            searchInput.focus();
+            searchInput.select();
+          }
+        },
       },
       {
         id: "show-help",

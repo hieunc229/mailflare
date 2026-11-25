@@ -3033,5 +3033,9 @@
 	"domains.forceRemoveConfirm": "{reason}\n\nВсе одно видалити {host} примусово? Mailflare спробує видалити DNS-записи _mta-sts і _smtp._tls, а потім видалить домен, усі його поштові скриньки та всі листи в них, навіть якщо записи видалити не вдасться. Поштові сервери ще деякий час можуть застосовувати кешовану політику MTA-STS. Після цього ви отримаєте список DNS-записів, які потрібно видалити вручну.\n\nВведіть {host} для підтвердження.",
 	"domains.forceRemoved": "{host} видалено",
 	"domains.forceRemovedRecords": "Видаліть ці DNS-записи самостійно:",
-	"domains.forceRemovedCache": "Поштові сервери можуть застосовувати стару політику MTA-STS до {date}."
+	"domains.forceRemovedCache": "Поштові сервери можуть застосовувати стару політику MTA-STS до {date}.",
+	"commandPalette.calendar": "Open Calendar",
+	"commandPalette.contacts": "Open Contacts",
+	"commandPalette.drive": "Open Drive",
+	"commandPalette.focusSearch": "Focus mail search"
 }

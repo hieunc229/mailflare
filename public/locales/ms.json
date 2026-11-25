@@ -2982,5 +2982,9 @@
 	"domains.forceRemoveConfirm": "{reason}\n\nTetap mahu alih keluar {host} secara paksa? Mailflare akan cuba mengalih keluar rekod DNS _mta-sts dan _smtp._tls, kemudian memadam domain, semua peti mel di dalamnya dan semua mesejnya, walaupun pengalihan rekod gagal. Pelayan mel mungkin terus menggunakan dasar MTA-STS yang disimpan dalam cache untuk seketika. Selepas itu anda akan menerima senarai rekod DNS yang perlu dialih keluar secara manual.\n\nTaip {host} untuk mengesahkan.",
 	"domains.forceRemoved": "{host} telah dialih keluar",
 	"domains.forceRemovedRecords": "Alih keluar sendiri rekod DNS ini:",
-	"domains.forceRemovedCache": "Pelayan mel mungkin terus menggunakan dasar MTA-STS lama sehingga {date}."
+	"domains.forceRemovedCache": "Pelayan mel mungkin terus menggunakan dasar MTA-STS lama sehingga {date}.",
+	"commandPalette.calendar": "Open Calendar",
+	"commandPalette.contacts": "Open Contacts",
+	"commandPalette.drive": "Open Drive",
+	"commandPalette.focusSearch": "Focus mail search"
 }
