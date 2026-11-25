@@ -97,3 +97,14 @@ test("Tailwind emits the pointer-coarse variants inside a coarse media query", a
 	assert.match(css, /@media \(pointer: coarse\)/);
 	assert.match(css, /min-height/);
 });
+
+test("compose attach/remove buttons and takeout colour swatches use the shared hit area", async () => {
+	const { readFileSync } = await import("node:fs");
+	const compose = readFileSync(join(root, "src/components/compose/compose-form.tsx"), "utf8");
+	assert.equal(compose.match(/touchTarget\)\}/g)?.length, 3, "paperclip plus two remove-attachment buttons");
+	const takeout = readFileSync(join(root, "src/components/settings/takeout-calendar-card.tsx"), "utf8");
+	assert.match(takeout, /clsx\(touchTarget, "relative h-7 w-7/);
+	assert.match(takeout, /gap-1\.5 pointer-coarse:gap-2 /);
+	const editor = readFileSync(join(root, "src/components/compose/rich-text-editor.tsx"), "utf8");
+	assert.match(editor, /gap-0\.5 pointer-coarse:gap-2 /);
+});

@@ -5,6 +5,7 @@ import type { FormEvent, KeyboardEvent } from "react";
 import { useEffect, useRef, useState } from "react";
 import { Upload } from "@/components/icons";
 import { useLanguage } from "@/components/language-provider";
+import { touchTarget } from "@/lib/touch-target";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
@@ -131,7 +132,7 @@ export function TakeoutCalendarCard({ sources }: TakeoutCalendarCardProps) {
 										<Checkbox checked={row.included} onChange={(event) => update(source.id, { included: event.target.checked })} />
 										<span className="break-all">{source.label}</span>
 									</label>
-									<div role="radiogroup" aria-label={t("importPage.takeoutDataColorFor", { name: source.label })} onKeyDown={(event) => onColorKeys(event, source.id)} className="flex flex-wrap items-center gap-1.5 pl-6">
+									<div role="radiogroup" aria-label={t("importPage.takeoutDataColorFor", { name: source.label })} onKeyDown={(event) => onColorKeys(event, source.id)} className="flex flex-wrap items-center gap-1.5 pointer-coarse:gap-2 pl-6">
 										{FOLDER_COLOR_OPTIONS.map((option) => (
 											<button
 												key={option.value}
@@ -142,7 +143,7 @@ export function TakeoutCalendarCard({ sources }: TakeoutCalendarCardProps) {
 												aria-checked={row.color === option.value}
 												tabIndex={row.color === option.value ? 0 : -1}
 												onClick={() => update(source.id, { color: option.value })}
-												className={clsx("h-7 w-7 rounded-full border-2 transition-transform hover:scale-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 focus-visible:ring-offset-2 motion-reduce:transition-none motion-reduce:hover:scale-100", row.color === option.value ? "border-neutral-900 ring-2 ring-neutral-300 ring-offset-2" : "border-transparent")}
+												className={clsx(touchTarget, "relative h-7 w-7 rounded-full border-2 transition-transform hover:scale-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 focus-visible:ring-offset-2 motion-reduce:transition-none motion-reduce:hover:scale-100", row.color === option.value ? "border-neutral-900 ring-2 ring-neutral-300 ring-offset-2" : "border-transparent")}
 												style={{ backgroundColor: option.value }}
 											/>
 										))}
