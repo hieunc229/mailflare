@@ -99,11 +99,24 @@ export function parseConfirmationTemplateInput(value: unknown): BookingConfirmat
 	return { subject: cleanSubject, body: cleanBody };
 }
 
+const GUEST_NAME_MAX = 60;
+
+/**
+ * The booker is anonymous and the confirmation goes out in the host's name, so only the plain words of a name are
+ * used: words that look like a link, an address or markup are dropped, and the rest is cut to a short length.
+ */
+export function safeGuestName(name: string): string {
+	const words = name
+		.split(/\s+/)
+		.filter((word) => word && !/[@:/\\<>]/.test(word) && !/\p{L}\.\p{L}/u.test(word) && !/^www\./i.test(word));
+	return Array.from(words.join(" ")).slice(0, GUEST_NAME_MAX).join("").trim() || "guest";
+}
+
 /** The guest confirmation: the event's own subject and body where set, the default template otherwise. */
 export function buildBookingConfirmation(content: BookingConfirmationContent, locale = FALLBACK_LOCALE, template?: BookingConfirmationTemplate | null): { subject: string; text: string } {
 	// The booker is anonymous: keep their name on one line so it cannot add lines to the message or subject.
 	const values = {
-		guestName: content.guestName.replace(/\s+/g, " ").trim(),
+		guestName: safeGuestName(content.guestName),
 		eventName: content.eventName,
 		hostName: content.hostName,
 		when: formatBookingWhen(content.startsAt, content.endsAt, content.timeZone, locale),
