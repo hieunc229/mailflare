@@ -4,6 +4,7 @@ import { messages } from "@/db/schema";
 import { INBOUND_SIGNATURE_MAX_AGE_SECONDS } from "@/lib/email/intake-signature";
 import { SNS_MAX_AGE_MS } from "@/lib/aws/sns-signature";
 import { UPLOAD_PREFIX } from "@/lib/jmap/blobs";
+import { RESEND_EVENT_MARKER_PREFIX } from "@/lib/deliverability/provider-events";
 import { sweepStaleObjects } from "@/lib/email/stale-objects";
 import { REQUEST_UPLOAD_PREFIX } from "@/lib/uploads/constants";
 
@@ -17,9 +18,12 @@ const MAX_PAGES = 20;
  * hour of margin.
  */
 const HOUR_MS = 60 * 60 * 1000;
+const RESEND_MARKER_MAX_AGE_MS = 3 * 24 * HOUR_MS;
 const STALE_PREFIXES: Array<{ prefix: string; maxAgeMs: number }> = [
 	{ prefix: "relay-seen/", maxAgeMs: 2 * INBOUND_SIGNATURE_MAX_AGE_SECONDS * 1000 + HOUR_MS },
 	{ prefix: "sns-seen/", maxAgeMs: 2 * SNS_MAX_AGE_MS + HOUR_MS },
+	// Resend markers also dedupe Svix retries of the same event id (about 27 hours of backoff), not just replays, so keep them 3 days.
+	{ prefix: RESEND_EVENT_MARKER_PREFIX, maxAgeMs: RESEND_MARKER_MAX_AGE_MS },
 	// JMAP uploads an Email/set create has claimed are copied into the draft; unclaimed ones are abandoned.
 	{ prefix: `${UPLOAD_PREFIX}/`, maxAgeMs: 7 * 24 * HOUR_MS },
 	// Direct uploads (Vercel) are deleted once their request reads them; the rest were abandoned.
@@ -32,7 +36,7 @@ const LOOKUP_BATCH = 50;
  * Deletes raw MIME under `inbound/` that no stored message refers to and that is old enough
  * that its queue message is long finished. This catches what the early-return cleanup in
  * `processInboundMessage` cannot: messages dropped after their final failed retry and
- * mail accepted for addresses that never resolved to a mailbox. Afterwards it removes stale relay/SNS dedupe objects and old JMAP uploads.
+ * mail accepted for addresses that never resolved to a mailbox. Afterwards it removes stale relay/SNS/Resend dedupe objects and old JMAP uploads.
  */
 export async function sweepOrphanedRawMail(env: CloudflareEnv, now = new Date()): Promise<number> {
 	const db = getDb(env);

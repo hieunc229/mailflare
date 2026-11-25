@@ -84,7 +84,7 @@ export async function runCalendarReminders(env: CloudflareEnv, now: Date): Promi
 			cursor = rows[rows.length - 1].event.id;
 		}
 	} catch (error) {
-		// Before migrations 0078/0080 the reminder and calendar_enabled columns do not exist; nothing to remind about yet.
+		// Before migrations 0078/0081 the reminder and calendar_enabled columns do not exist; nothing to remind about yet.
 		if (!isMissingColumnError(error)) throw error;
 	}
 }
