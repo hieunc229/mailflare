@@ -21,6 +21,7 @@ import { Label } from "@/components/ui/label";
 import { ClientRequestError } from "@/lib/http/client-error";
 import { useSecurityStatus } from "./security-status-store";
 import { StepUpDialog } from "./step-up-dialog";
+import { MAIL_TYPE_UNSAFE_ACTION } from "@/lib/email/mail-type-rule";
 import { RoutingRuleSelect } from "./domain-routing/routing-rule-select";
 import type { InboxRule, InboxRuleInput } from "./inbox-rules-types";
 import {
@@ -40,7 +41,7 @@ export function InboxRules() {
   const { selectedMailbox } = useSelectedMailbox();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingRule, setEditingRule] = useState<InboxRule | null>(null);
-  const [matchField, setMatchField] = useState<"email" | "content" | "title">(
+  const [matchField, setMatchField] = useState<InboxRule["matchField"]>(
     "email",
   );
   const [matchOperator, setMatchOperator] = useState<"contains" | "exact">(
@@ -53,6 +54,7 @@ export function InboxRules() {
   const [confirmingForward, setConfirmingForward] = useState(false);
   const { status: securityStatus } = useSecurityStatus();
   const isForward = destination === "forward";
+  const isMailType = matchField === "mail_type";
   const mailboxId = selectedMailbox?.id ?? "";
 
   const folders = useQuery({
@@ -74,7 +76,7 @@ export function InboxRules() {
         matchOperator,
         matchValue,
         destination,
-        ...(isForward ? { forwardTo: forwardTo.trim(), keepCopy } : {}),
+        ...(isForward ? { forwardTo: forwardTo.trim(), keepCopy: keepCopy || isMailType } : {}),
         priority: editingRule?.priority ?? 10,
         ...(stepUpToken ? { stepUpToken } : {}),
       };
@@ -191,9 +193,13 @@ export function InboxRules() {
                 </div>
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-sm font-medium text-neutral-900">
-                    {getRuleFieldLabel(rule.matchField, t)}{" "}
-                    {getRuleOperatorLabel(rule.matchOperator, t)}{" "}
-                    {rule.matchValue || rule.pattern}
+                    {rule.matchField === "mail_type" ? getRuleFieldLabel(rule.matchField, t) : (
+                      <>
+                        {getRuleFieldLabel(rule.matchField, t)}{" "}
+                        {getRuleOperatorLabel(rule.matchOperator, t)}{" "}
+                        {rule.matchValue || rule.pattern}
+                      </>
+                    )}
                   </p>
                   <p className="truncate text-xs text-neutral-500">
                     {getRuleDestinationLabel(rule)}
@@ -234,8 +240,17 @@ export function InboxRules() {
                   id="matchField"
                   value={matchField}
                   onChange={(event) => {
-                    const next = event.target.value as "email" | "content" | "title";
+                    const next = event.target.value as InboxRule["matchField"];
                     setMatchField(next);
+                    // "Newsletter or promotional mail" is a yes/no condition: no text to enter.
+                    if (next === "mail_type") {
+                      setMatchOperator("contains");
+                      setMatchValue("bulk");
+                      // Forwarding newsletters must keep a copy, or a misjudged message is lost.
+                      if (isForward) setKeepCopy(true);
+                    } else if (matchField === "mail_type") {
+                      setMatchValue("");
+                    }
                     // Forwarding happens before the body is read, so it cannot match on content.
                     if (next === "content" && isForward) setDestination("");
                   }}
@@ -243,8 +258,12 @@ export function InboxRules() {
                   <option value="email">{t("rules.field.email")}</option>
                   <option value="content">{t("rules.field.content")}</option>
                   <option value="title">{t("rules.field.title")}</option>
+                  <option value="mail_type">{t("rules.field.mailType")}</option>
                 </RoutingRuleSelect>
               </div>
+              {isMailType ? (
+                <p className="text-xs leading-5 text-neutral-500">{t("rules.mailTypeHint")}</p>
+              ) : (
               <div className="grid min-w-0 gap-2">
                 <Label htmlFor="matchOperator">{t("rules.matchLabel")}</Label>
                 <RoutingRuleSelect
@@ -258,8 +277,10 @@ export function InboxRules() {
                   <option value="exact">{t("rules.operatorOption.exact")}</option>
                 </RoutingRuleSelect>
               </div>
+              )}
             </div>
             <div className="grid grid-cols-1 items-end gap-4 sm:grid-cols-2">
+              {!isMailType && (
               <div className="grid min-w-0 gap-2">
                 <Label htmlFor="matchValue">{t("rules.valueLabel")}</Label>
                 <Input
@@ -271,12 +292,16 @@ export function InboxRules() {
                   }
                 />
               </div>
+              )}
               <div className="grid min-w-0 gap-2">
                 <Label htmlFor="destination">{t("rules.destination")}</Label>
                 <RoutingRuleSelect
                   id="destination"
                   value={destination}
-                  onChange={(event) => setDestination(event.target.value)}
+                  onChange={(event) => {
+                    setDestination(event.target.value);
+                    if (event.target.value === "forward" && isMailType) setKeepCopy(true);
+                  }}
                 >
                   <option value="">{t("rules.selectDestination")}</option>
                   {matchField !== "content" && (
@@ -308,7 +333,8 @@ export function InboxRules() {
                 </div>
                 <label className="flex items-center gap-2 text-sm text-neutral-700">
                   <Checkbox
-                    checked={keepCopy}
+                    checked={keepCopy || isMailType}
+                    disabled={isMailType}
                     onChange={(event) => setKeepCopy(event.target.checked)}
                   />
                   {t("rules.forwardKeepCopy")}
@@ -316,7 +342,7 @@ export function InboxRules() {
               </div>
             )}
             {save.isError && !confirmingForward && (
-              <p role="alert" className="text-sm text-red-600">{save.error.message}</p>
+              <p role="alert" className="text-sm text-red-600">{save.error.message === MAIL_TYPE_UNSAFE_ACTION ? t("rules.mailTypeUnsafeAction") : save.error.message}</p>
             )}
             <div className="flex justify-end gap-2 border-t border-neutral-200 pt-4">
               <Button

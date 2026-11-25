@@ -36,6 +36,8 @@ export const users = sqliteTable("users", {
 	driveEnabled: bool("drive_enabled").notNull().default(true),
 	keyboardShortcutsEnabled: bool("keyboard_shortcuts_enabled").notNull().default(true),
 	spamProtectionEnabled: bool("spam_protection_enabled").notNull().default(true),
+	// Score at which incoming mail moves to Spam: relaxed 85, normal 70, strict 55 (SPAM_STRICTNESS_THRESHOLDS).
+	spamStrictness: text("spam_strictness", { enum: ["relaxed", "normal", "strict"] }).notNull().default("strict"),
 	/** Days a message may stay in Trash or Spam before the scheduled purge deletes it; null keeps it forever. */
 	trashRetentionDays: integer("trash_retention_days"),
 	// Off shows the mailbox only. On shows Name <mailbox> on To, Cc, and Bcc.
@@ -215,7 +217,7 @@ export const contacts = sqliteTable(
 		email: text("email").notNull(),
 		displayName: text("display_name"),
 		avatarKey: text("avatar_key"),
-		source: text("source", { enum: ["manual", "inbound", "outbound"] })
+		source: text("source", { enum: ["manual", "inbound", "outbound", "import"] })
 			.notNull()
 			.default("inbound"),
 		blocked: bool("blocked").notNull().default(false),
@@ -231,6 +233,18 @@ export const contacts = sqliteTable(
 		index("contacts_user_idx").on(t.userId),
 	],
 );
+
+/** Address-book fields an import brought in (phones, addresses, organization...), JSON. Kept out of `contacts`,
+ *  which inbound mail selects whole, so a deploy before this migration cannot break delivery. */
+export const contactDetails = sqliteTable("contact_details", {
+	contactId: text("contact_id")
+		.primaryKey()
+		.references(() => contacts.id, { onDelete: "cascade" }),
+	details: text("details").notNull().default("{}"),
+	updatedAt: timestamp("updated_at")
+		.notNull()
+		.$defaultFn(() => new Date()),
+});
 
 export const folders = sqliteTable(
 	"folders",
@@ -305,8 +319,11 @@ export const messageActionUndoClaims = sqliteTable(
 
 export const apiKeys = sqliteTable("api_keys", {
 	id: text("id").primaryKey(),
-	/** `device` keys come from a mobile sign-in (`/api/auth/device`) and are listed under Devices. */
-	kind: text("kind", { enum: ["legacy", "mcp", "device"] }).notNull().default("legacy"),
+	/**
+	 * `device` keys come from a mobile sign-in (`/api/auth/device`) and are listed under Devices.
+	 * `app` keys are per-protocol app passwords (`/api/app-passwords`).
+	 */
+	kind: text("kind", { enum: ["legacy", "mcp", "device", "app"] }).notNull().default("legacy"),
 	userId: text("user_id")
 		.notNull()
 		.references(() => users.id, { onDelete: "cascade" }),
@@ -329,6 +346,9 @@ export const apiKeys = sqliteTable("api_keys", {
 		.notNull()
 		.$defaultFn(() => new Date()),
 	lastUsedAt: timestamp("last_used_at"),
+	/** Protocol (`jmap`, `caldav`, `carddav`, `imap`, `submission`) and client IP of the last use, written with `lastUsedAt`. */
+	lastUsedProtocol: text("last_used_protocol"),
+	lastUsedIp: text("last_used_ip"),
 }, (t) => [index("api_keys_user_idx").on(t.userId), uniqueIndex("api_keys_key_sha256_idx").on(t.keySha256)]);
 
 export const messages = sqliteTable(
@@ -376,6 +396,10 @@ export const messages = sqliteTable(
 		spamAnalysisError: text("spam_analysis_error"),
 		/** When the message last entered Trash or Spam; maintained by triggers (migration 0053). */
 		trashedAt: timestamp("trashed_at"),
+		/** `promotions` from bulk-mail headers or a manual move. `primary` is an explicit "not promotions" marker (Move to Inbox) that the backfill must not reclassify. Null is a normal message or one not classified yet; every reader treats `primary` like null. */
+		category: text("category", { enum: ["promotions", "primary"] }),
+		/** Lower-cased bare From address, grouped on by Subscriptions. Null when longer than 191 characters (MySQL index limit), never truncated. */
+		senderAddress: text("sender_address"),
 		createdAt: timestamp("created_at")
 			.notNull()
 			.$defaultFn(() => new Date()),
@@ -388,6 +412,18 @@ export const messages = sqliteTable(
 		index("messages_provider_message_idx").on(t.mailboxId, t.providerMessageId),
 		index("messages_raw_r2_key_idx").on(t.rawR2Key),
 		index("messages_trashed_at_idx").on(t.trashedAt),
+		index("messages_category_page_idx").on(
+			t.mailboxId,
+			t.category,
+			t.status,
+			t.folderId,
+			desc(t.createdAt),
+			desc(t.id),
+		),
+		// Covers the Promotions count (equality columns first, then the grouped and filtered `read` and `snoozed_until`).
+		index("messages_category_count_idx").on(t.mailboxId, t.category, t.folderId, t.direction, t.status, t.read, t.snoozedUntil),
+		// Serves the bounded sender re-file (one sender, newest first) and the Subscriptions sender grouping.
+		index("messages_sender_idx").on(t.mailboxId, t.senderAddress, t.createdAt),
 		index("messages_inbox_page_idx").on(
 			t.mailboxId,
 			t.status,
@@ -578,6 +614,161 @@ export const domainTrackingHosts = sqliteTable(
 	(t) => [uniqueIndex("domain_tracking_hosts_hostname_idx").on(t.hostname)],
 );
 
+/** Recipients that bounced or complained, per sending domain. Whether it is enforced is `app_settings.suppression_mode`. */
+export const emailSuppressions = sqliteTable(
+	"email_suppressions",
+	{
+		id: text("id").primaryKey(),
+		domainId: text("domain_id").notNull().references(() => domains.id, { onDelete: "cascade" }),
+		email: text("email").notNull(),
+		reason: text("reason", { enum: ["hard_bounce", "complaint", "manual"] }).notNull(),
+		source: text("source", { enum: ["resend", "ses", "dsn", "admin"] }).notNull(),
+		detail: text("detail"),
+		/** Only confirmed entries are enforced. A single returned message (DSN) can be forged by a co-recipient, so it is stored unconfirmed. */
+		confirmed: bool("confirmed").notNull().default(true),
+		/** Message-ID of the first message a DSN named; a DSN about a different message corroborates the entry. */
+		evidenceRef: text("evidence_ref"),
+		eventCount: integer("event_count").notNull().default(1),
+		firstEventAt: timestamp("first_event_at").notNull().$defaultFn(() => new Date()),
+		lastEventAt: timestamp("last_event_at").notNull().$defaultFn(() => new Date()),
+		createdByUserId: text("created_by_user_id").references(() => users.id, { onDelete: "set null" }),
+	},
+	(t) => [
+		uniqueIndex("email_suppressions_domain_email_idx").on(t.domainId, t.email),
+		index("email_suppressions_created_by_idx").on(t.createdByUserId),
+	],
+);
+
+/** DMARC reporting per sending domain. No row means off. */
+export const domainDeliverability = sqliteTable("domain_deliverability", {
+	domainId: text("domain_id").primaryKey().references(() => domains.id, { onDelete: "cascade" }),
+	reportsEnabled: bool("reports_enabled").notNull().default(false),
+	reportsEnabledAt: timestamp("reports_enabled_at"),
+	alertEmail: bool("alert_email").notNull().default(false),
+	lastReportAt: timestamp("last_report_at"),
+	updatedAt: timestamp("updated_at").notNull().$defaultFn(() => new Date()),
+	/** The `_dmarc` record text Mailflare created because none existed, so turning reports off can remove it again (only while it is unchanged). */
+	dmarcCreatedRecord: text("dmarc_created_record"),
+	/** TLS-RPT reporting (`_smtp._tls`) shares the DMARC report address, so it needs `reportsEnabled`. */
+	tlsRptEnabled: bool("tls_rpt_enabled").notNull().default(false),
+	/** The MTA-STS policy this domain publishes. `none` with a policy id means the removal period is running; no policy id means off. */
+	mtaStsMode: text("mta_sts_mode", { enum: ["none", "testing", "enforce"] }).notNull().default("none"),
+	/** The `id` of the `_mta-sts` TXT record; it changes whenever the policy changes. */
+	mtaStsPolicyId: text("mta_sts_policy_id"),
+	/** JSON array of the MX host names listed in the policy. */
+	mtaStsMx: text("mta_sts_mx"),
+	mtaStsMaxAge: integer("mta_sts_max_age").notNull().default(604800),
+	/** The longest max_age any policy served since this one was first published: the removal period waits that long so no sender still caches an older policy. */
+	mtaStsServedMaxAge: integer("mta_sts_served_max_age"),
+	/** When the admin last confirmed from the browser that the policy host serves the expected policy. */
+	mtaStsVerifiedAt: timestamp("mta_sts_verified_at"),
+	/** While the removal policy (`mode: none`) is served: when the `_mta-sts` record may be deleted. */
+	mtaStsRetireAfter: timestamp("mta_sts_retire_after"),
+});
+
+/** One row per aggregate report mail. The raw XML is never stored. */
+export const deliverabilityReports = sqliteTable(
+	"deliverability_reports",
+	{
+		id: text("id").primaryKey(),
+		domainId: text("domain_id").notNull().references(() => domains.id, { onDelete: "cascade" }),
+		kind: text("kind", { enum: ["dmarc", "tlsrpt"] }).notNull().default("dmarc"),
+		/** sha256 of reporter org and report id; the same report arriving twice conflicts here. */
+		reportKey: text("report_key").notNull(),
+		reporterOrg: text("reporter_org"),
+		reporterEmail: text("reporter_email"),
+		externalReportId: text("external_report_id"),
+		dateBegin: timestamp("date_begin"),
+		dateEnd: timestamp("date_end"),
+		policyP: text("policy_p"),
+		policyPct: integer("policy_pct"),
+		recordCount: integer("record_count").notNull().default(0),
+		messageCount: integer("message_count").notNull().default(0),
+		/** The report mail itself passed DMARC by the trusted-verdict rules. */
+		authenticated: bool("authenticated").notNull().default(false),
+		/** Organisational domain of the mail's From header; only meaningful when `authenticated`. */
+		senderDomain: text("sender_domain"),
+		/** Authenticated AND the From organisation equals the organisation of the report's own contact email. Only these write aggregates. */
+		verifiedReporter: bool("verified_reporter").notNull().default(false),
+		/** Aggregate rows this report was allowed to write; the daily budgets are sums of it. */
+		statsRows: integer("stats_rows").notNull().default(0),
+		status: text("status", { enum: ["processing", "ok", "rejected", "failed", "unverified", "over_budget"] }).notNull().default("processing"),
+		error: text("error"),
+		receivedAt: timestamp("received_at").notNull().$defaultFn(() => new Date()),
+	},
+	(t) => [
+		uniqueIndex("deliverability_reports_domain_key_idx").on(t.domainId, t.reportKey),
+		index("deliverability_reports_domain_received_idx").on(t.domainId, t.receivedAt),
+		index("deliverability_reports_received_idx").on(t.receivedAt),
+	],
+);
+
+/** Daily DMARC aggregates from verified reporters only, one row per (day, source, result). `day` is the UTC day the report window began; `reporterOrg` is the verified reporter's organisational domain. */
+export const dmarcDailyStats = sqliteTable(
+	"dmarc_daily_stats",
+	{
+		id: autoId("id"),
+		domainId: text("domain_id").notNull().references(() => domains.id, { onDelete: "cascade" }),
+		day: text("day").notNull(),
+		rowKey: text("row_key").notNull(),
+		sourceIp: text("source_ip").notNull(),
+		sourceHost: text("source_host"),
+		reporterOrg: text("reporter_org").notNull(),
+		headerFrom: text("header_from").notNull(),
+		disposition: text("disposition", { enum: ["none", "quarantine", "reject"] }).notNull(),
+		dkimAligned: bool("dkim_aligned").notNull(),
+		spfAligned: bool("spf_aligned").notNull(),
+		messageCount: integer("message_count").notNull().default(0),
+	},
+	(t) => [
+		uniqueIndex("dmarc_daily_stats_domain_day_key_idx").on(t.domainId, t.day, t.rowKey),
+		index("dmarc_daily_stats_day_idx").on(t.day),
+	],
+);
+
+/**
+ * Daily TLS-RPT (RFC 8460) totals from verified reporters only. One row per (day, reporter, policy, result): the
+ * summary success count sits on the row with an empty `resultType`, each failure type on its own row, so an upsert
+ * only ever adds integers and needs no JSON merge on any dialect.
+ */
+export const tlsDailyStats = sqliteTable(
+	"tls_daily_stats",
+	{
+		id: autoId("id"),
+		domainId: text("domain_id").notNull().references(() => domains.id, { onDelete: "cascade" }),
+		day: text("day").notNull(),
+		rowKey: text("row_key").notNull(),
+		reporterOrg: text("reporter_org").notNull(),
+		policyType: text("policy_type").notNull(),
+		mxHost: text("mx_host"),
+		resultType: text("result_type").notNull(),
+		successCount: integer("success_count").notNull().default(0),
+		failureCount: integer("failure_count").notNull().default(0),
+	},
+	(t) => [
+		uniqueIndex("tls_daily_stats_domain_day_key_idx").on(t.domainId, t.day, t.rowKey),
+		index("tls_daily_stats_day_idx").on(t.day),
+	],
+);
+
+export const deliverabilityAlerts = sqliteTable(
+	"deliverability_alerts",
+	{
+		id: text("id").primaryKey(),
+		domainId: text("domain_id").notNull().references(() => domains.id, { onDelete: "cascade" }),
+		kind: text("kind", { enum: ["spoofing", "auth_regression", "no_reports"] }).notNull(),
+		day: text("day").notNull(),
+		detail: text("detail").notNull(),
+		createdAt: timestamp("created_at").notNull().$defaultFn(() => new Date()),
+		acknowledgedAt: timestamp("acknowledged_at"),
+		acknowledgedByUserId: text("acknowledged_by_user_id").references(() => users.id, { onDelete: "set null" }),
+	},
+	(t) => [
+		uniqueIndex("deliverability_alerts_domain_kind_day_idx").on(t.domainId, t.kind, t.day),
+		index("deliverability_alerts_ack_user_idx").on(t.acknowledgedByUserId),
+	],
+);
+
 export const messageOpens = sqliteTable(
 	"message_opens",
 	{
@@ -647,6 +838,44 @@ export const conversationNotes = sqliteTable(
 		index("conversation_notes_mailbox_thread_idx").on(t.mailboxId, t.threadKey, t.createdAt),
 		index("conversation_notes_message_idx").on(t.messageId),
 		index("conversation_notes_author_idx").on(t.authorUserId),
+	],
+);
+
+/** Per-mailbox Promotions mode. A missing row means `off`; mail delivery never depends on this table. */
+export const mailboxPromotionSettings = sqliteTable(
+	"mailbox_promotion_settings",
+	{
+		mailboxId: text("mailbox_id").primaryKey().references(() => mailboxes.id, { onDelete: "cascade" }),
+		mode: text("mode", { enum: ["off", "show", "separate"] }).notNull().default("off"),
+		backfillStatus: text("backfill_status", { enum: ["idle", "pending", "running", "done", "failed"] }).notNull().default("idle"),
+		backfillCursor: text("backfill_cursor"),
+		/** Consecutive backfill takeovers that made no progress; the job is marked failed after 3. */
+		backfillStalls: integer("backfill_stalls").notNull().default(0),
+		backfillError: text("backfill_error"),
+		/** UTC day number (`floor(ms / 86_400_000)`) that `backfill_day_rows` counts rows for; the installation-wide daily cap sums the rows of today. */
+		backfillDay: integer("backfill_day").notNull().default(0),
+		backfillDayRows: integer("backfill_day_rows").notNull().default(0),
+		backfillScanned: integer("backfill_scanned").notNull().default(0),
+		updatedAt: timestamp("updated_at").notNull().$defaultFn(() => new Date()),
+	},
+	(t) => [index("mailbox_promotion_settings_backfill_idx").on(t.backfillStatus)],
+);
+
+/** Per-sender override ("always Inbox" / "always Promotions") and unsubscribe record, keyed on the exact sender address. */
+export const mailboxSenderPreferences = sqliteTable(
+	"mailbox_sender_preferences",
+	{
+		id: text("id").primaryKey(),
+		mailboxId: text("mailbox_id").notNull().references(() => mailboxes.id, { onDelete: "cascade" }),
+		senderAddress: text("sender_address").notNull(),
+		categoryOverride: text("category_override", { enum: ["inbox", "promotions"] }),
+		unsubscribedAt: timestamp("unsubscribed_at"),
+		updatedByUserId: text("updated_by_user_id").references((): AnySQLiteColumn => users.id, { onDelete: "set null" }),
+		updatedAt: timestamp("updated_at").notNull().$defaultFn(() => new Date()),
+	},
+	(t) => [
+		uniqueIndex("mailbox_sender_preferences_mailbox_sender_idx").on(t.mailboxId, t.senderAddress),
+		index("mailbox_sender_preferences_updated_by_idx").on(t.updatedByUserId),
 	],
 );
 
@@ -789,6 +1018,114 @@ export const calendarOccurrenceResponses = sqliteTable(
 	],
 );
 
+/**
+ * CalDAV/CardDAV storage (spec F6-3). One calendar and one address book per user:
+ * the id is derived from the user (`cal:<userId>`, `card:<userId>`), which is also
+ * the collection id the `dav_changes` triggers write.
+ */
+export const davCollections = sqliteTable(
+	"dav_collections",
+	{
+		id: text("id").primaryKey(),
+		userId: text("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+		kind: text("kind", { enum: ["calendar", "addressbook"] }).notNull(),
+		displayName: text("display_name"),
+		/** `#RRGGBBAA` as Apple clients send it. */
+		color: text("color"),
+		description: text("description"),
+		sortOrder: integer("sort_order"),
+		/** JSON object of properties a client stored that Mailflare does not model, capped at 16 KiB by the writer. */
+		deadProps: text("dead_props").notNull().default("{}"),
+		/** Address book only: when the user's manual contacts were copied in as cards. */
+		seededAt: timestamp("seeded_at"),
+		createdAt: timestamp("created_at").notNull().$defaultFn(() => new Date()),
+		updatedAt: timestamp("updated_at").notNull().$defaultFn(() => new Date()),
+	},
+	(t) => [index("dav_collections_user_idx").on(t.userId)],
+);
+
+/** The stored iCalendar text of a calendar event (the DAV resource), keyed by the master event row. */
+export const davCalendarObjects = sqliteTable(
+	"dav_calendar_objects",
+	{
+		id: text("id").primaryKey().references(() => calendarEvents.id, { onDelete: "cascade" }),
+		userId: text("user_id").notNull(),
+		collectionId: text("collection_id").notNull(),
+		name: text("name").notNull(),
+		uid: text("uid").notNull(),
+		/** The iCalendar text last written (client PUT or regeneration); null until first rendered. */
+		body: text("body"),
+		/** SHA-256 of the projected row fields when `body` was written. */
+		rowsHash: text("rows_hash"),
+		size: integer("size").notNull(),
+		createdAt: timestamp("created_at").notNull().$defaultFn(() => new Date()),
+		updatedAt: timestamp("updated_at").notNull().$defaultFn(() => new Date()),
+	},
+	(t) => [
+		uniqueIndex("dav_calendar_objects_name_idx").on(t.collectionId, t.name),
+		uniqueIndex("dav_calendar_objects_uid_idx").on(t.collectionId, t.uid),
+		index("dav_calendar_objects_user_idx").on(t.userId),
+	],
+);
+
+export const davCards = sqliteTable(
+	"dav_cards",
+	{
+		id: text("id").primaryKey(),
+		userId: text("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+		collectionId: text("collection_id").notNull(),
+		name: text("name").notNull(),
+		uid: text("uid").notNull(),
+		/** The vCard text exactly as stored. */
+		body: text("body").notNull(),
+		version: text("version", { enum: ["3.0", "4.0"] }).notNull(),
+		fn: text("fn").notNull().default(""),
+		/** JSON array of normalized addresses, at most 20. */
+		emails: text("emails").notNull().default("[]"),
+		size: integer("size").notNull(),
+		createdAt: timestamp("created_at").notNull().$defaultFn(() => new Date()),
+		updatedAt: timestamp("updated_at").notNull().$defaultFn(() => new Date()),
+	},
+	(t) => [
+		uniqueIndex("dav_cards_name_idx").on(t.collectionId, t.name),
+		uniqueIndex("dav_cards_uid_idx").on(t.collectionId, t.uid),
+		index("dav_cards_user_idx").on(t.userId),
+	],
+);
+
+/**
+ * Change log of the DAV collections, written only by the `dav_changes_*` triggers
+ * (never from application code). A resource's ETag is the newest `seq` for its
+ * `(collection_id, object_key)`; a collection's sync token embeds the newest `seq`.
+ * Derived data, excluded from backups.
+ */
+export const davChanges = sqliteTable(
+	"dav_changes",
+	{
+		seq: autoId("seq"),
+		collectionId: text("collection_id").notNull(),
+		objectKey: text("object_key").notNull(),
+		changeType: text("change_type", { enum: ["created", "updated", "destroyed"] }).notNull(),
+		createdAt: integer("created_at").notNull().default(nowSeconds),
+	},
+	(t) => [
+		index("dav_changes_collection_seq_idx").on(t.collectionId, t.seq),
+		index("dav_changes_object_idx").on(t.collectionId, t.objectKey, t.seq),
+	],
+);
+
+/**
+ * Per-collection sync epoch and pruning floor. Separate from `dav_collections`
+ * (which is backed up) so that after a restore the epoch is regenerated and every
+ * token handed out by the old database is refused.
+ */
+export const davSyncState = sqliteTable("dav_sync_state", {
+	collectionId: text("collection_id").primaryKey(),
+	epoch: text("epoch").notNull(),
+	/** Highest pruned `dav_changes.seq`. */
+	floor: integer("floor").notNull().default(0),
+});
+
 export const bookingEvents = sqliteTable(
 	"booking_events",
 	{
@@ -841,7 +1178,7 @@ export const routingRules = sqliteTable(
 		enabled: bool("enabled").notNull().default(true),
 		pattern: text("pattern").notNull(),
 		matchField: text("match_field", {
-			enum: ["email", "content", "title", "sender", "recipient"],
+			enum: ["email", "content", "title", "sender", "recipient", "mail_type"],
 		})
 			.notNull()
 			.default("email"),
@@ -1216,6 +1553,15 @@ export const appSettings = sqliteTable("app_settings", {
 	/** "release": update on a new package.json version; "commit": update on any new upstream commit. */
 	autoUpdateChannel: text("auto_update_channel", { enum: ["release", "commit"] }).notNull().default("release"),
 	autoUpdateDispatchedVersion: text("auto_update_dispatched_version"),
+	/** CalDAV/CardDAV endpoints (/dav/*) answer only when an administrator turns this on. */
+	davEnabled: bool("dav_enabled").notNull().default(false),
+	/** "off" ignores bounce and complaint events, "record" stores them, "enforce" also refuses to send to those recipients. */
+	suppressionMode: text("suppression_mode", { enum: ["off", "record", "enforce"] }).notNull().default("off"),
+	/** Resend webhook for email.bounced and email.complained; separate from the receiving webhook above. */
+	resendEventsWebhookId: text("resend_events_webhook_id"),
+	resendEventsWebhookSecret: text("resend_events_webhook_secret"),
+	/** JSON: the SNS topic, URL token and SES identities that feed bounces and complaints (see src/lib/deliverability/ses-feed.ts). */
+	sesFeedback: text("ses_feedback"),
 	updatedAt: timestamp("updated_at")
 		.notNull()
 		.$defaultFn(() => new Date()),
@@ -1444,6 +1790,7 @@ export const schema = {
 	autoReplyDeliveries,
 	mailboxAccess,
 	contacts,
+	contactDetails,
 	folders,
 	apiKeys,
 	messages,

@@ -17,6 +17,7 @@ import { removeSesSending } from "@/lib/aws/ses-sending";
 import { getResendDomainStatus, removeResendConfig } from "@/lib/domains/resend-domain";
 import { setupDomainDnsRecord } from "@/lib/domains/dns-setup";
 import { MxConflictError } from "@/lib/domains/receiving-dns";
+import { mtaStsBlockedResponse } from "@/lib/deliverability/mta-sts-block-response";
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -56,6 +57,8 @@ export async function PUT(request: Request, { params }: Params) {
 		// choice is kept so the setup buttons on the domain page can finish the job.
 		try { await setupDomainDnsRecord(env, { ...domain, sendingProvider: provider }, "dkim", { replaceMx }); }
 		catch (error) {
+			const blocked = await mtaStsBlockedResponse(error);
+			if (blocked) return blocked;
 			if (error instanceof MxConflictError) return NextResponse.json({ error: error.message, code: error.code, records: error.records }, { status: 409 });
 			warning = error instanceof Error ? error.message : "Could not enable Cloudflare sending";
 		}

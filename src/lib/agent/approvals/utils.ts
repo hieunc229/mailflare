@@ -58,10 +58,10 @@ export async function requestAgentSend(env: CloudflareEnv, user: SessionUser, dr
 }
 
 /** Recipients the user has never written to or saved: where an injected instruction would send private text. */
-async function unfamiliarRecipients(env: CloudflareEnv, userId: string, snapshot: AgentSendSnapshot): Promise<string[]> {
+export async function unfamiliarRecipients(env: CloudflareEnv, userId: string, snapshot: AgentSendSnapshot): Promise<string[]> {
 	const addresses = [...new Set([snapshot.to, snapshot.cc, snapshot.bcc].flatMap((list) => splitEmailAddressList(list)).map((entry) => (getEmailAddress(entry) || entry).toLowerCase()).filter(Boolean))];
 	if (!addresses.length) return [];
-	const known = await getDb(env).select({ email: contacts.email }).from(contacts).where(and(eq(contacts.userId, userId), inArray(contacts.email, addresses), inArray(contacts.source, ["outbound", "manual"])));
+	const known = await getDb(env).select({ email: contacts.email }).from(contacts).where(and(eq(contacts.userId, userId), inArray(contacts.email, addresses), inArray(contacts.source, ["outbound", "manual", "import"])));
 	const familiar = new Set(known.map((row) => row.email));
 	return addresses.filter((address) => !familiar.has(address));
 }

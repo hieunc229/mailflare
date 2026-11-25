@@ -1,8 +1,9 @@
 import { and, asc, eq, gt, inArray, not, sql } from "drizzle-orm";
 import { getDb, type AppDatabase } from "@/db";
-import { jmapChangeFloor, jmapChanges, messages } from "@/db/schema";
+import { jmapChangeFloor, jmapChanges, mailboxPromotionSettings, messages } from "@/db/schema";
 import { greatest } from "@/db/sql";
 import { DRAFT_FILTER_PARAMS, draftsVisibleTo } from "@/lib/email/draft-access";
+import { isMissingTableError } from "@/lib/database-errors";
 import { listFoldersByMailbox, listJmapMailboxes } from "./access";
 import { encodeMailboxRef, SYSTEM_ROLES } from "./ids";
 import type { AccessibleMailbox, JmapContext } from "./types";
@@ -11,13 +12,27 @@ import { coalesceChanges, formatState, parseState } from "./changes-utils";
 /**
  * States are `c1:<seq>:<access>`: the newest change-log sequence among the
  * account's mailboxes, plus a fingerprint of which mailboxes it can see and
- * how. A sharing change alters the fingerprint, so a `Foo/changes` call from an older
- * state answers `cannotCalculateChanges` and the client resyncs.
+ * how, and which of them show `$promotion` (Promotions mode not off). A sharing
+ * change or a mode flip alters the fingerprint, so a `Foo/changes` call from an older
+ * state answers `cannotCalculateChanges` and the client resyncs. A mode flip writes no
+ * change-log row, so the fingerprint is the only way clients learn the keyword moved.
  */
-async function accessFingerprint(mailboxes: AccessibleMailbox[]): Promise<string> {
-	const material = JSON.stringify(mailboxes.map((m) => [m.id, m.permission]).sort((a, b) => String(a[0]).localeCompare(String(b[0]))));
+async function accessFingerprint(ctx: JmapContext, mailboxes: AccessibleMailbox[]): Promise<string> {
+	const promoting = await promotingMailboxIds(ctx, new Set(mailboxes.map((m) => m.id)));
+	const material = JSON.stringify([mailboxes.map((m) => [m.id, m.permission]).sort((a, b) => String(a[0]).localeCompare(String(b[0]))), promoting]);
 	const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(material));
 	return Array.from(new Uint8Array(digest).slice(0, 8), (b) => b.toString(16).padStart(2, "0")).join("");
+}
+
+/** Sorted ids, among `accessible`, whose Promotions mode is not off. One unbound query: the table holds a row per mailbox at most. */
+async function promotingMailboxIds(ctx: JmapContext, accessible: Set<string>): Promise<string[]> {
+	try {
+		const rows = await ctx.db.select({ id: mailboxPromotionSettings.mailboxId }).from(mailboxPromotionSettings).where(sql`${mailboxPromotionSettings.mode} <> 'off'`);
+		return rows.map((row) => row.id).filter((id) => accessible.has(id)).sort();
+	} catch (error) {
+		if (isMissingTableError(error)) return [];
+		throw error;
+	}
 }
 
 async function floorSeq(ctx: JmapContext): Promise<number> {
@@ -62,7 +77,7 @@ export function currentChangeScope(ctx: JmapContext): Promise<ChangeScope> {
 
 async function loadChangeScope(ctx: JmapContext): Promise<ChangeScope> {
 	const mailboxes = await listJmapMailboxes(ctx);
-	const [seq, fingerprint, floor] = await Promise.all([latestSeq(ctx, mailboxes.map((m) => m.id)), accessFingerprint(mailboxes), floorSeq(ctx)]);
+	const [seq, fingerprint, floor] = await Promise.all([latestSeq(ctx, mailboxes.map((m) => m.id)), accessFingerprint(ctx, mailboxes), floorSeq(ctx)]);
 	const effective = Math.max(seq, floor);
 	return { mailboxes, seq: effective, fingerprint, state: formatState(effective, fingerprint) };
 }

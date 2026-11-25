@@ -16,7 +16,8 @@ export type StepUpAction =
 	| "admin.forwarding_email"
 	| "profile.recovery_email"
 	| "routing.forward"
-	| "webhook.change";
+	| "webhook.change"
+	| "app_password.create";
 
 export type StepUpGrantInput = {
 	token: string;

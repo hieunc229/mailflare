@@ -1,4 +1,5 @@
 import type { MessageCounts, MessageFolder } from "@/hooks/types";
+import type { PromotionMode } from "@/lib/promotions/settings";
 import type { CountableFolder, MessageCountRow } from "./types";
 
 export function getMessageFolder(row: MessageCountRow): CountableFolder {
@@ -15,6 +16,7 @@ export function getMessageFolder(row: MessageCountRow): CountableFolder {
 export function createEmptyFolderCounts(): MessageCounts["folders"] {
 	return {
 		inbox: { total: 0, unread: 0 },
+		promotions: { total: 0, unread: 0 },
 		starred: { total: 0, unread: 0 },
 		snoozed: { total: 0, unread: 0 },
 		sent: { total: 0, unread: 0 },
@@ -72,6 +74,34 @@ export function buildMessageCounts(rows: MessageCountRow[]): MessageCounts {
 	};
 }
 
+/**
+ * Adds the promotions folder from its own grouped rows (received, unfiled, unsnoozed, category promotions, only
+ * for mailboxes whose mode is `show` or `separate`). Mailboxes in `separate` mode lose those rows from Inbox.
+ */
+export function applyPromotionCounts(
+	counts: MessageCounts,
+	rows: { mailboxId: string | null; read: boolean; total: number }[],
+	separateIds: ReadonlySet<string>,
+): void {
+	for (const row of rows) {
+		const weight = Number(row.total) || 0;
+		counts.folders.promotions.total += weight;
+		if (!row.read) counts.folders.promotions.unread += weight;
+		if (!row.mailboxId || !separateIds.has(row.mailboxId)) continue;
+		counts.folders.inbox.total -= weight;
+		if (!row.read) counts.folders.inbox.unread -= weight;
+		const mailbox = counts.mailboxes.find((entry) => entry.mailboxId === row.mailboxId);
+		if (mailbox) mailbox.inbox -= weight;
+	}
+}
+
 export function getFolderLabelCount(folder: MessageFolder, counts: MessageCounts["folders"]) {
 	return counts[folder].unread;
+}
+
+/** The mailboxes with Promotions turned on, with their mode. The client builds its nav entry and row actions from this, so off mailboxes stay out. */
+export function activePromotionModes(modes: ReadonlyMap<string, PromotionMode>): Record<string, Exclude<PromotionMode, "off">> {
+	const active: Record<string, Exclude<PromotionMode, "off">> = {};
+	for (const [mailboxId, mode] of modes) if (mode !== "off") active[mailboxId] = mode;
+	return active;
 }

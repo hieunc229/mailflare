@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { getDb } from "@/db";
 import { requireUser } from "@/lib/auth/cookies";
 import { getEnv } from "@/lib/cloudflare";
-import { blockContact } from "@/lib/contacts/service";
+import { BlockDomainError, blockContact, blockSenderDomain } from "@/lib/contacts/service";
 import { getMailboxAccessLevel } from "@/lib/mailboxes/access";
 import type { BlockContactRequest } from "./types";
 import { readJsonObject } from "@/lib/http/request";
@@ -21,11 +21,20 @@ export async function POST(request: Request) {
 		return NextResponse.json({ error: "Mailbox not found" }, { status: 404 });
 	}
 
-	const contact = await blockContact(env, {
+	const target = {
 		userId: access.mailbox.userId,
 		mailboxId: access.mailbox.id,
 		domainId: access.mailbox.domainId,
 		address: body.address,
-	});
+	};
+	if (body.scope === "domain") {
+		try {
+			return NextResponse.json({ domain: await blockSenderDomain(env, target) });
+		} catch (error) {
+			if (error instanceof BlockDomainError) return NextResponse.json({ error: "Could not block domain", code: error.code }, { status: 400 });
+			throw error;
+		}
+	}
+	const contact = await blockContact(env, target);
 	return NextResponse.json({ contact });
 }

@@ -98,7 +98,7 @@ export type DomainItemCardProps = {
 	dnsLoading?: boolean;
 	dnsError?: string | null;
 	expanded?: boolean;
-	remove: { mutate: (id: string) => void; isPending: boolean };
+	remove: { mutate: (domain: { id: string; hostname: string }) => void; isPending: boolean };
 	onToggleDns: (id: string) => void;
 	onSetup?: (record: DnsAuthRecord) => void;
 	setupRecord?: DnsAuthRecord | null;

@@ -99,3 +99,20 @@ test("an emptied page waits for backfill unless it is out of range", () => {
 	assert.equal(getEmptyPageOffset(75, 75, 25), 50);
 	assert.equal(getEmptyPageOffset(50, 0, 25), 0);
 });
+
+test("promotions holds received, unfiled, unsnoozed mail whose category is promotions", () => {
+	const promo = state({ category: "promotions" });
+	assert.equal(messageMatchesFolder(promo, "promotions", null, NOW), true);
+	assert.equal(messageMatchesFolder(state(), "promotions", null, NOW), false);
+	assert.equal(messageMatchesFolder(state({ category: null }), "promotions", null, NOW), false);
+	assert.equal(messageMatchesFolder({ ...promo, folderId: "f1" }, "promotions", null, NOW), false);
+	assert.equal(messageMatchesFolder({ ...promo, status: "trash" }, "promotions", null, NOW), false);
+	assert.equal(messageMatchesFolder({ ...promo, snoozedUntil: "2026-11-14T13:00:00.000Z" }, "promotions", null, NOW), false);
+	// Inbox membership does not depend on the category (the mailbox mode is unknown here).
+	assert.equal(messageMatchesFolder(promo, "inbox", null, NOW), true);
+});
+
+test("a promotions list request maps back to the promotions folder", () => {
+	assert.deepEqual(getListMembershipContext("direction=inbound&status=received&category=promotions"), { folder: "promotions" });
+	assert.deepEqual(getListMembershipContext("direction=inbound&status=received"), { folder: "inbox" });
+});

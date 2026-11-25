@@ -5,6 +5,7 @@ import { verifyInboundSignature, verifyInboundSignatureV2 } from "@/lib/email/in
 import { inboundAttachmentLimitReasonFromRaw } from "@/lib/email/inbound-attachments";
 import { RequestBodyTooLargeError } from "@/lib/http/errors";
 import { readRawBody } from "@/lib/http/request";
+import { readHeaderMap } from "@/lib/email/provider-trace";
 
 export const dynamic = "force-dynamic";
 
@@ -55,6 +56,8 @@ export async function POST(request: Request) {
 	} catch {
 		// The header map is advisory; the raw message is authoritative.
 	}
+	// A relay that sends no map (`{}` or no header) still gets the plain headers read from the message.
+	if (!headers || Object.keys(headers).length === 0) headers = readHeaderMap(raw);
 
 	// A keep-copy forward rule and account forwarding can both ask for a forward.
 	const forwardToAll: string[] = [];

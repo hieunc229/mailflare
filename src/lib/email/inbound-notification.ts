@@ -8,6 +8,7 @@ type NewMessageNotificationInput = {
 	fromAddr: string;
 	contact: ContactNameSource | null;
 	subject: string | null;
+	category?: "promotions" | null;
 };
 
 /**
@@ -23,5 +24,6 @@ export function buildNewMessageNotification(input: NewMessageNotificationInput):
 		from: input.fromAddr,
 		fromName: getPartyDisplayName(input.fromAddr, input.contact),
 		subject: input.subject,
+		...(input.category ? { category: input.category } : {}),
 	};
 }

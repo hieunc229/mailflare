@@ -9,6 +9,7 @@ import { getDomainDnsView } from "@/lib/domains/dns-view";
 import type { DnsAuthRecord } from "@/lib/domains/dns-audit";
 import { setupDomainDnsRecord } from "@/lib/domains/dns-setup";
 import { MxConflictError } from "@/lib/domains/receiving-dns";
+import { mtaStsBlockedResponse } from "@/lib/deliverability/mta-sts-block-response";
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -44,6 +45,8 @@ export async function POST(request: Request, { params }: Params) {
 			dns,
 		});
 	} catch (err) {
+		const blocked = await mtaStsBlockedResponse(err);
+		if (blocked) return blocked;
 		// 409 MX_CONFLICT asks the caller to confirm and retry with replaceMx.
 		if (err instanceof MxConflictError) return NextResponse.json({ error: err.message, code: err.code, records: err.records }, { status: 409 });
 		const message = err instanceof Error ? err.message : "Failed to set up DNS record";

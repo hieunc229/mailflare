@@ -196,7 +196,7 @@ export default function DomainItemCard({
                 // and disables Email Routing on the zone, so require the hostname.
                 const confirmed = await confirmDestructive({ message: t("domains.removeConfirm", { host: item.hostname }), requireText: item.hostname });
                 if (!confirmed) return;
-                remove.mutate(item.id);
+                remove.mutate({ id: item.id, hostname: item.hostname });
               }}
               className="flex cursor-pointer items-center gap-2 rounded-md px-3 py-2 text-red-600 outline-none hover:bg-red-50 focus:bg-red-50 data-[disabled]:pointer-events-none data-[disabled]:opacity-50"
             >

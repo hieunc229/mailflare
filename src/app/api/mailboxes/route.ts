@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { isReportAddressReserved } from "@/lib/deliverability/report-address";
 import { and, eq } from "drizzle-orm";
 import { getEnv } from "@/lib/cloudflare";
 import { getDb } from "@/db";
@@ -72,6 +73,7 @@ export async function POST(request: Request) {
 	}
 
 	const localPart = parsed.data.localPart.toLowerCase();
+	if (await isReportAddressReserved(env, domain.id, localPart)) return NextResponse.json({ error: "This address is reserved for DMARC reports" }, { status: 409 });
 	// Inbound routing resolves normalized local parts, so a mailbox that only
 	// differs by dots or a +tag would shadow the existing address either way.
 	const [domainMailboxes, domainAliases] = await Promise.all([

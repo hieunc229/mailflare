@@ -348,6 +348,8 @@ function MessageDetailContent({ messageId }: { messageId: string }) {
         message={message}
         messageMeta={message}
         bodyHtml={body?.htmlBody}
+        category={message.category}
+        senderKey={message.senderAddress}
       />
       <MessageDetailNavigation messageId={message.id} unread={message.direction === "inbound" && !message.read} />
     </div>

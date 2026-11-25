@@ -5,6 +5,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRef, useState } from "react";
 import { useLanguage } from "@/components/language-provider";
 import { Button } from "@/components/ui/button";
+import { alertDialog, confirmDestructive } from "@/components/ui/confirm-dialog";
 import {
   Dialog,
   DialogContent,
@@ -98,12 +99,45 @@ export default function DomainsPage() {
     },
   });
 
+  // A policy or TLS reports still published for the domain make the server answer 409; an admin can then force the
+  // delete by typing the host name. The answer lists the DNS records that are left to remove by hand.
   const remove = useMutation({
-    mutationFn: async (id: string) => {
-      const res = await authFetch(`/api/domains/${id}`, { method: "DELETE" });
-      if (!res.ok) throw new Error(t("domains.removeFailed"));
+    mutationFn: async (domain: { id: string; hostname: string }) => {
+      const send = (force: boolean) =>
+        authFetch(`/api/domains/${domain.id}`, {
+          method: "DELETE",
+          headers: { "Content-Type": "application/json" },
+          body: force ? JSON.stringify({ force: true, confirm: domain.hostname }) : undefined,
+        });
+      let res = await send(false);
+      let json = (await res.json().catch(() => null)) as { error?: string; code?: string; leftovers?: { name: string; type: string }[]; cachedUntil?: string | null } | null;
+      if (res.status === 409 && (json?.code === "MTA_STS_PUBLISHED" || json?.code === "TLS_RPT_ENABLED")) {
+        const forced = await confirmDestructive({
+          title: t("domains.forceRemove"),
+          message: t("domains.forceRemoveConfirm", { reason: json.error ?? "", host: domain.hostname }),
+          requireText: domain.hostname,
+          confirmLabel: t("domains.forceRemove"),
+        });
+        if (!forced) return null;
+        res = await send(true);
+        json = (await res.json().catch(() => null)) as typeof json;
+      }
+      if (!res.ok) throw new Error(json?.error ?? t("domains.removeFailed"));
+      return { hostname: domain.hostname, leftovers: json?.leftovers ?? [], cachedUntil: json?.cachedUntil ?? null };
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["domains"] }),
+    onSuccess: async (result) => {
+      qc.invalidateQueries({ queryKey: ["domains"] });
+      if (!result || (result.leftovers.length === 0 && !result.cachedUntil)) return;
+      const lines = result.leftovers.map((record) => `${record.type} ${record.name}`);
+      await alertDialog({
+        title: t("domains.forceRemoved", { host: result.hostname }),
+        message: [
+          lines.length > 0 ? `${t("domains.forceRemovedRecords")}\n${lines.join("\n")}` : "",
+          result.cachedUntil ? t("domains.forceRemovedCache", { date: new Date(result.cachedUntil).toLocaleDateString() }) : "",
+        ].filter(Boolean).join("\n\n"),
+      });
+    },
+    onError: (error) => void alertDialog(error.message),
   });
 
   const loadDns = async (id: string) => {

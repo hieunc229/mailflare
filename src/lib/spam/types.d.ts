@@ -1,5 +1,6 @@
 import type { ParsedEmail } from "@/lib/email/parse";
 
+export type SpamStrictness = "relaxed" | "normal" | "strict";
 export type SpamVerdict = "inbox" | "suspicious" | "spam";
 export type SpamClassification = "spam" | "ham";
 
@@ -29,6 +30,8 @@ export type SpamAnalysisInput = {
 	senderIp?: string;
 	/** Brands added in the admin spam filter settings, checked alongside the built-in list. */
 	brands?: SpamBrand[];
+	/** How readily mail moves to Spam for this user; an omitted value uses "normal" (score 70); the column default is "strict". */
+	strictness?: SpamStrictness;
 	message: ParsedEmail;
 	intelligenceProvider?: SpamIntelligenceProvider;
 };
