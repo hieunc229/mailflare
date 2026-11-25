@@ -88,7 +88,7 @@ RFC 8461 asks for a removal period: "Turn off MTA-STS" publishes a policy with `
 
 Columns on `domain_deliverability` (`tls_rpt_enabled`, `mta_sts_mode`, `mta_sts_policy_id`, `mta_sts_mx`, `mta_sts_max_age`, `mta_sts_served_max_age`, `mta_sts_verified_at`, `mta_sts_retire_after`), a `kind` column on `deliverability_reports` (`dmarc` or `tlsrpt`) and the table `tls_daily_stats` (migration sqlite `0100`, PostgreSQL and MySQL `0024`). `tls_daily_stats` has one row per day, verified reporter, policy type, mail server and result type, with integer counts, and is backed up without its serial `id` like `dmarc_daily_stats`. Retention is 180 days. Backups from a migrated database restore onto a database that has not applied the migration yet (the unknown columns are dropped).
 
-Before the migration is applied, report mail is dropped with a log line (providers send reports again), the policy host answers 404 and the routes answer 409 `MIGRATION_REQUIRED`.
+Before the migration is applied, report mail is kept and retried by the inbound queue every 5 minutes (for about an hour, so apply the migration within that window), the policy host answers 404 and the routes answer 409 `MIGRATION_REQUIRED`.
 
 ## Known limitations
 
