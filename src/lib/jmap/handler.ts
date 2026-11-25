@@ -129,6 +129,10 @@ function eventSource(ctx: JmapContext, url: URL): Response {
 	const stream = new ReadableStream<Uint8Array>({
 		async start(controller) {
 			const emit = async () => {
+				// The memo only lives for one request, and this stream outlives many: without this
+				// reset every tick would reuse the mailbox list and change scope the first tick
+				// cached, so the state would never move.
+				ctx.memo = undefined;
 				const email = await getEmailState(ctx);
 				const mailbox = await getMailboxState(ctx, email);
 				if (stopped) return;
