@@ -5,6 +5,9 @@ import test, { after } from "node:test";
 import { build } from "esbuild";
 import { JSDOM } from "jsdom";
 import { fileURLToPath, pathToFileURL } from "node:url";
+import { loadComponent } from "./helpers/dom-component.mjs";
+import { createElement, act } from "react";
+import { createRoot } from "react-dom/client";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 const directory = mkdtempSync(join(root, "node_modules", "mailflare-keyboard-"));
@@ -62,4 +65,29 @@ test("sequence dispatch buffers g then s and resolves the sent binding", () => {
 	assert.equal(matchSequence(state, ref.current), undefined);
 	assert.equal(recordKey(state, {}, "s"), true);
 	assert.equal(matchSequence(state, ref.current), sent);
+});
+
+test("Enter on a native button leaves activation to the browser", async (t) => {
+	const { useHotkeys } = await loadComponent("src/components/shortcuts/use-hotkeys.ts");
+	const container = document.body.appendChild(document.createElement("div")), root = createRoot(container), dispatches = [];
+	const listener = () => dispatches.push(true);
+	window.addEventListener("mailflare:message-list-shortcut", listener);
+	t.after(async () => { await act(async () => root.unmount()); container.remove(); window.removeEventListener("mailflare:message-list-shortcut", listener); });
+	function App() { useHotkeys([{ key: "enter", label: "Open", category: "Navigation", action: () => window.dispatchEvent(new window.CustomEvent("mailflare:message-list-shortcut")) }]); return createElement("button"); }
+	await act(async () => root.render(createElement(App)));
+	const event = new window.KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true });
+	container.querySelector("button").dispatchEvent(event);
+	assert.equal(event.defaultPrevented, false);
+	assert.deepEqual(dispatches, []);
+});
+
+test("Escape back does not navigate from a non-message route", async (t) => {
+	globalThis.__keyboardPushes = [];
+	const { useMessageListShortcuts } = await loadComponent("src/components/messages/use-message-list-shortcuts.ts", { "next/navigation": `export const usePathname=()=>"/agent/review/123"; export const useRouter=()=>({push:path=>globalThis.__keyboardPushes.push(path)});` });
+	const container = document.body.appendChild(document.createElement("div")), root = createRoot(container);
+	t.after(async () => { await act(async () => root.unmount()); container.remove(); delete globalThis.__keyboardPushes; });
+	function App() { useMessageListShortcuts(); return null; }
+	await act(async () => root.render(createElement(App)));
+	window.dispatchEvent(new window.CustomEvent("mailflare:message-list-shortcut", { detail: "back" }));
+	assert.deepEqual(globalThis.__keyboardPushes, []);
 });

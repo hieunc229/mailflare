@@ -5,6 +5,11 @@ import { usePathname, useRouter } from "next/navigation";
 
 export type MessageListShortcut = "next" | "previous" | "open" | "back";
 
+function isMessageRoute(pathname: string): boolean {
+	return /^\/(inbox|sent|drafts|archived|starred|promotions|scheduled|snoozed|spam|trash)(\/|$)/.test(pathname)
+		|| pathname.startsWith("/folders/");
+}
+
 export function useMessageListShortcuts() {
 	const pathname = usePathname();
 	const segments = pathname.split("/").filter(Boolean);
@@ -35,6 +40,7 @@ export function useMessageListShortcuts() {
 			const currentIndex = focusedIndex >= 0 ? focusedIndex : activeIndex;
 
 			if (action === "back") {
+				if (!isMessageRoute(pathname)) return;
 				if (pathname.startsWith(`${hrefPrefix}/`)) {
 					router.push(hrefPrefix);
 					return;

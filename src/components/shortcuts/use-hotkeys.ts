@@ -98,7 +98,7 @@ export function useHotkeys(
 
       const sequenceMatch = matchSequence(sequenceState, shortcutsRef.current);
 
-      if (sequenceMatch) {
+      if (sequenceMatch?.key.includes(" ")) {
         e.preventDefault();
         consumeEvent(sequenceState, e);
         sequenceMatch.action();
@@ -115,6 +115,7 @@ export function useHotkeys(
       });
 
       if (singleMatch) {
+        if (key === "enter" && (e.target as HTMLElement | null)?.closest?.('a[href], button, select, summary, [role="button"], [role="link"]')) return;
         e.preventDefault();
         consumeEvent(sequenceState, e);
         singleMatch.action();
