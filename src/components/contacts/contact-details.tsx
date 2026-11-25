@@ -94,7 +94,8 @@ export function ContactDetailsTrigger({
 			<button
 				type="button"
 				onClick={() => handleOpenChange(true)}
-				className={`${className ?? ""} rounded-sm text-left hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-200`}
+				// mf-print-text: the print stylesheet renders this trigger as plain text.
+				className={`${className ?? ""} mf-print-text rounded-sm text-left hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-200`}
 			>
 				{shownName}
 			</button>

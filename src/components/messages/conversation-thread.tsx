@@ -214,7 +214,8 @@ export function ConversationMessageCard({
 							void runSingleMessageAction(message.id, "read", { undo: false }).catch(() => setLocallyRead(false));
 						}}
 						aria-expanded={expanded}
-						className="flex min-w-0 flex-1 items-center gap-3 text-left cursor-pointer"
+						// mf-print-card: the print stylesheet keeps this header as a plain row.
+						className="mf-print-card flex min-w-0 flex-1 items-center gap-3 text-left cursor-pointer"
 					>
 						<ContactAvatar
 							mailboxId={mailboxId}
