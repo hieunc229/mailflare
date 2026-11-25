@@ -94,7 +94,7 @@
     "dayjs": "^1.11.20",
     "dompurify": "^3.4.17",
     "drizzle-orm": "^0.45.2",
-    "mailauth": "^4.13.3",
+    "mailauth": "^8.1.0",
     "mimetext": "^3.0.28",
     "mysql2": "^3.24.6",
     "nanoid": "^5.1.16",
