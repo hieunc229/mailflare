@@ -63,6 +63,8 @@ export type Message = {
 export type ThreadMessage = Message & {
 	textBody: string | null;
 	htmlBody: string | null;
+	/** Set when the thread was requested without bodies; open the message to fetch them. */
+	bodyOmitted?: boolean;
 	attachments: Array<{
 		contentId: string | null;
 		disposition: "attachment" | "inline";

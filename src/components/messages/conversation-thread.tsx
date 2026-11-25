@@ -10,6 +10,7 @@ import { EmailHtmlRenderer } from "./email-html-renderer";
 import { useRemoteContent } from "./use-remote-content";
 import { getMessageBodyDisplay, resolveInlineAttachmentUrls } from "@/app/(dashboard)/inbox/[messageId]/utils";
 
+import { fetchMessageBody, getCachedMessageBody, type LoadedMessageBody } from "./message-body-cache";
 import { useLanguage } from "@/components/language-provider";
 import { cn } from "@/lib/utils";
 import type { ConversationMessageCardProps, ConversationThreadProps } from "./conversation-thread-types";
@@ -140,7 +141,7 @@ export function ConversationThread({
 }
 
 export function ConversationMessageCard({
-	message,
+	message: threadMessage,
 	mailboxId,
 	currentAccountName,
 	ownAddress,
@@ -150,9 +151,28 @@ export function ConversationMessageCard({
 }: ConversationMessageCardProps) {
 	const { t } = useLanguage();
 	const [locallyExpanded, setLocallyExpanded] = useState(defaultExpanded);
+	const expanded = locallyExpanded;
+	const [loadedBody, setLoadedBody] = useState<LoadedMessageBody | undefined>(() => getCachedMessageBody(threadMessage.id));
+	const [bodyError, setBodyError] = useState(false);
+	const [bodyAttempt, setBodyAttempt] = useState(0);
+	// A thread fetched without bodies is completed here, once the reader opens the message.
+	const needsBody = !!threadMessage.bodyOmitted;
+	const bodyPending = needsBody && !loadedBody;
+	const message = useMemo(
+		() => (needsBody && loadedBody ? { ...threadMessage, ...loadedBody, bodyOmitted: false } : threadMessage),
+		[needsBody, loadedBody, threadMessage],
+	);
+	useEffect(() => {
+		if (!expanded || !bodyPending) return;
+		let cancelled = false;
+		fetchMessageBody(threadMessage.id).then(
+			(body) => { if (!cancelled) setLoadedBody(body); },
+			() => { if (!cancelled) setBodyError(true); },
+		);
+		return () => { cancelled = true; };
+	}, [expanded, bodyPending, threadMessage.id, bodyAttempt]);
 	const [locallyRead, setLocallyRead] = useState(message.read);
 	const [detailsOpen, setDetailsOpen] = useState(false);
-	const expanded = locallyExpanded;
 	const sender = getConversationSender(message, currentAccountName);
 	const senderEmail = getConversationSenderEmail(message);
 	const remote = useRemoteContent(senderEmail, message.status === "spam");
@@ -237,7 +257,7 @@ export function ConversationMessageCard({
 						mailboxId={mailboxId}
 						ownAddress={ownAddress}
 						ownAddresses={ownAddresses}
-						starOnly={!expanded}
+						starOnly={!expanded || bodyPending}
 						detailsOpen={detailsOpen}
 						onToggleDetails={() => setDetailsOpen((open) => !open)}
 					/>
@@ -259,7 +279,14 @@ export function ConversationMessageCard({
 						<MessageDetailsPanel message={message} onClose={() => setDetailsOpen(false)} />
 					</div>
 				)}
-				{expanded && body && (
+				{expanded && bodyPending && (
+					<div className="pb-4 pt-2 text-sm text-neutral-500 sm:pl-[78px]" role={bodyError ? "alert" : "status"}>
+						{bodyError ? (
+							<button type="button" className="underline" onClick={() => { setBodyError(false); setBodyAttempt((n) => n + 1); }}>{t("auth.forgot.error")}</button>
+						) : t("common.loading")}
+					</div>
+				)}
+				{expanded && body && !bodyPending && (
 					<div className="pb-4 pt-2 sm:pl-[78px]">
 						{outbound && <MessageOpenStatus messageId={message.id} />}
 						{outbound && message.status !== "draft" && <MessageFollowUpStatus messageId={message.id} />}
