@@ -12,7 +12,7 @@ import {
 	isImportJobMessage,
 	isInboundQueueMessage,
 	isWebhookRetryMessage,
-	settleFailedInboundMessage,
+	settleInboundFailure,
 	withD1BookmarkCookie,
 	withD1ReadSession,
 } from "./worker-utils";
@@ -174,7 +174,7 @@ export default {
 					attempts: msg.attempts,
 					error: err,
 				});
-				if (isInboundQueueMessage(msg.body)) settleFailedInboundMessage(msg, err);
+				if (isInboundQueueMessage(msg.body)) await settleInboundFailure({ attempts: msg.attempts, body: msg.body, ack: () => msg.ack(), retry: (o) => msg.retry(o) }, env, err);
 				else msg.retry({ delaySeconds: 10 });
 			}
 		}
