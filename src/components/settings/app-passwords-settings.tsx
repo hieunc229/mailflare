@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import QRCode from "qrcode";
 import { Copy, KeyRound } from "@/components/icons";
 import { useLanguage } from "@/components/language-provider";
@@ -10,6 +10,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { confirmDestructive } from "@/components/ui/confirm-dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { copyText } from "@/lib/clipboard";
 import { ClientRequestError } from "@/lib/http/client-error";
 import { formatUserDate } from "@/lib/time/utils";
 import type { AppPasswordList, AppPasswordSummary, CreatedAppPassword } from "./app-passwords-types";
@@ -99,8 +100,10 @@ export function AppPasswordsSettings() {
 		}
 	}
 
-	function copy(label: string, value: string) {
-		void navigator.clipboard.writeText(value).then(() => setCopied(label));
+	async function copy(label: string, value: string) {
+		const ok = await copyText(value);
+		setCopied(ok ? label : null);
+		return ok;
 	}
 
 	function toggle<T>(current: T[], value: T, on: boolean) {
@@ -232,16 +235,27 @@ export function AppPasswordsSettings() {
 	);
 }
 
-function Field({ label, value, copyValue, onCopy, copied, mono }: { label: string; value: string; copyValue?: string; onCopy: (label: string, value: string) => void; copied: string | null; mono?: boolean }) {
+function Field({ label, value, copyValue, onCopy, copied, mono }: { label: string; value: string; copyValue?: string; onCopy: (label: string, value: string) => Promise<boolean>; copied: string | null; mono?: boolean }) {
 	const { t } = useLanguage();
+	const valueRef = useRef<HTMLElement>(null);
+	const [failed, setFailed] = useState(false);
+
+	async function copy() {
+		const ok = await onCopy(label, copyValue ?? value);
+		setFailed(!ok);
+		// A shown-once value must stay recoverable: leave it selected so Ctrl+C or long-press works.
+		if (!ok && valueRef.current) window.getSelection()?.selectAllChildren(valueRef.current);
+	}
+
 	return (
-		<div className="flex items-center gap-3">
+		<div className="flex flex-wrap items-center gap-x-3 gap-y-1">
 			<span className="w-36 shrink-0 text-xs font-medium uppercase tracking-wide text-neutral-500">{label}</span>
-			<code className={`min-w-0 flex-1 truncate rounded-md bg-white px-2 py-1 text-sm ${mono ? "font-mono" : "font-sans"}`}>{value}</code>
-			<Button type="button" variant="ghost" size="sm" onClick={() => onCopy(label, copyValue ?? value)} aria-label={t("common.copyLabel", { label })}>
+			<code ref={valueRef} className={`min-w-0 flex-1 basis-40 break-all select-all rounded-md bg-white px-2 py-1 text-sm ${mono ? "font-mono" : "font-sans"}`}>{value}</code>
+			<Button type="button" variant="ghost" size="sm" onClick={() => void copy()} aria-label={t("common.copyLabel", { label })}>
 				<Copy className="h-4 w-4" />
 				{copied === label ? t("common.copied") : t("common.copy")}
 			</Button>
+			{failed && <span role="alert" className="basis-full text-xs text-red-600">{t("source.couldNotCopy")}</span>}
 		</div>
 	);
 }
