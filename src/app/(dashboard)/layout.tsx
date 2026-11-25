@@ -21,6 +21,7 @@ import { SidebarProvider } from "@/components/sidebar-state";
 import { SidebarAside, MobileMenuButton } from "@/components/sidebar-aside";
 import { SidebarResizeBoundary } from "@/components/sidebar-resize-boundary";
 import { ShortcutsProvider } from "@/components/shortcuts";
+import { useMessageListShortcuts } from "@/components/messages/use-message-list-shortcuts";
 import clsx from "clsx";
 import { usePathname } from "next/navigation";
 import { useDashboardState } from "./dashboard-state";
@@ -38,6 +39,7 @@ export default function DashboardLayout({
 }) {
   const { t } = useLanguage();
   const pathname = usePathname();
+  useMessageListShortcuts();
   // Contacts is a list page like Mailboxes: gray page, white rows, no white panel.
   const listPage = pathname === "/contacts" || pathname.startsWith("/contacts/");
   const { assistantOpen, setAssistantOpen, assistantFullSize, setAssistantFullSize } = useDashboardState();
