@@ -137,6 +137,97 @@ pre {
 	animation: route-loading-bar 1.1s ease-in-out infinite;
 }
 
+@media print {
+	@page {
+		margin: 16mm;
+	}
+
+	html,
+	body {
+		background: #fff !important;
+		color: #111 !important;
+		min-height: 0 !important;
+		height: auto !important;
+	}
+
+	body {
+		font-size: 11pt;
+	}
+
+	/* Keep the message reader, remove dashboard navigation and surrounding UI. */
+	aside,
+	nav,
+	[data-sidebar],
+	[data-mobile-menu],
+	body > div > div > div > div > header,
+	[role="toolbar"],
+	[role="alert"],
+	[role="status"],
+	[data-sonner-toaster],
+	[data-message-id] > div > div > div:nth-child(3),
+	[data-message-id] > div > div > button:not(:first-child),
+	[role="dialog"] {
+		display: none !important;
+	}
+
+	body > div,
+	body > div > div,
+	body > div > div > div,
+	main,
+	main > *,
+	[data-message-id],
+	[data-message-id] > div {
+		width: 100% !important;
+		max-width: none !important;
+		min-height: 0 !important;
+		height: auto !important;
+		overflow: visible !important;
+		background: #fff !important;
+		color: #111 !important;
+		box-shadow: none !important;
+		border-radius: 0 !important;
+	}
+
+	main {
+		position: static !important;
+		padding: 0 !important;
+	}
+
+	[data-message-id] {
+		break-inside: avoid-page;
+		page-break-inside: avoid;
+		border: 0 !important;
+		padding: 0 0 1rem !important;
+	}
+
+	[data-message-id] + [data-message-id],
+	li:has(> [data-message-id]) {
+		break-before: page;
+		page-break-before: always;
+	}
+
+	.email-body,
+	.email-body * {
+		color: #111 !important;
+		box-shadow: none !important;
+	}
+
+	.email-body img,
+	img {
+		max-width: 100% !important;
+		max-height: 180mm !important;
+		object-fit: contain !important;
+	}
+
+	/* Avoid splitting attachment cards and email metadata across pages. */
+	[data-message-id] a[href*="attachment"],
+	[data-message-id] a[href*="attachments"],
+	[data-message-id] [class*="attachment"] {
+		break-inside: avoid-page;
+		page-break-inside: avoid;
+	}
+}
+
 @media (prefers-reduced-motion: reduce) {
 	.dialog-overlay,
 	.dialog-content {
