@@ -7,7 +7,7 @@ Operational checklist for self-hosted Mailflare. For initial installation and pr
 - [ ] Keep a tested copy of the database **and** object storage. Mailflare's JSON backup covers database records; it does not copy raw mail, attachments, Drive files or other bucket objects.
 - [ ] Confirm the database and storage are reachable, have free capacity, and are included in your independent infrastructure backup.
 - [ ] Confirm public HTTPS, DNS, MX and provider credentials are current. See [domain and provider setup](providers.md).
-- [ ] On Workers, check that `MAILFLARE_RUNTIME=cloudflare` is paired with the `global_fetch_strictly_public` compatibility flag as described in the [deployment guide](deployment.md). Keep the deployment-managed variable and flag pairing intact.
+- [ ] On Workers, verify the deployed compatibility flags in `wrangler.jsonc`; for other Worker configuration, use the [deployment guide](deployment.md).
 - [ ] Restrict runtime tokens and bucket/database credentials; do not put secrets in Git or command-line arguments.
 - [ ] Record the deployed release/commit, database dialect, last successful backup, and a tested restore procedure.
 
@@ -25,7 +25,9 @@ Operational checklist for self-hosted Mailflare. For initial installation and pr
 
 - [ ] Restore a recent backup into a disposable, empty Mailflare instance on a schedule. Validate account access, mail, calendar/Drive records, and that objects load from the corresponding object storage.
 - [ ] Before a production restore, stop writes or put the service into maintenance; a restore replaces current database records and may sign users out.
-- [ ] For the app's JSON backup, sign in as the primary admin, open **Admin → Backups → Restore from backup**, select the file and confirm. Restore requires a full backup containing every table group; a partial-group backup cannot be restored.
+- [ ] Before a recovery, enable every table group in **Admin → Backups**; manual exports honor excluded groups. Restore requires every group known to that backup format: version 1 backups predate the Drive group and validate only the groups then known, while version 2 backups with `includedTables` require every selected group. A partial-group version 2 backup is not a full recovery backup.
+- [ ] For the app's JSON backup, sign in as the primary admin, open **Admin → Backups → Restore from backup**, select the file and confirm. Restore replaces records and is not atomic across the entire operation; maintain the maintenance window and preserve a pre-restore copy.
+- [ ] The `backups` table in the JSON contains backup-history metadata, not the previous JSON backup files; preserve/download the actual backup file and separately preserve matching object storage.
 - [ ] Keep the database schema migrated to at least the version that created the backup's tables. Restore handles older backup formats and known later-added columns, but does not create missing schema.
 - [ ] Restore or preserve the matching object storage separately. Restoring database rows alone does not restore object contents. A database move between dialects uses the same backup/restore flow; see [databases](databases.md#what-is-the-same-everywhere).
 - [ ] After recovery, verify admin login and representative mail bodies, attachments, Drive files, and scheduled jobs. Re-register push clients if needed; push registrations are intentionally not included in backups.
@@ -51,7 +53,7 @@ Operational checklist for self-hosted Mailflare. For initial installation and pr
 ### Self-update on Cloudflare
 
 - [ ] To automate upgrades, configure the GitHub token/repository settings and enable automatic updates in the admin update card; choose the release or commit channel there. The cron checks for updates, applies known pending migrations, and dispatches the update workflow once per target version. See [deployment: Updating Mailflare](deployment.md#updating-mailflare) for the exact permissions and variables.
-- [ ] Before using **Update Mailflare**, commit or otherwise preserve installation-specific repository changes: the updater replaces the tracked tree with upstream source. It does not migrate the database or deploy by itself.
+- [ ] Before using **Update Mailflare**, save installation-specific changes separately if they need to be reapplied. A commit preserves a change in Git history (so it can be recovered), but the updater replaces the live tracked tree with upstream source; it does not preserve that change in the live tree. The update does not migrate the database or deploy by itself.
 - [ ] Wait for the connected Cloudflare Git integration to finish deploying. Then open **Admin settings**, apply pending migrations, and verify the app and mail flows.
 - [ ] For Docker, follow the image update and rollback procedure in [self-hosting](self-hosting.md#prebuilt-image-no-build). The in-app self-update button is disabled on Node.
 
@@ -62,7 +64,7 @@ Operational checklist for self-hosted Mailflare. For initial installation and pr
 - [ ] Identify the receive path: Cloudflare Email Routing, Resend/SES, built-in SMTP, or the Cloudflare relay.
 - [ ] Verify public DNS/MX, provider status and webhook/SNS delivery; in Mailflare, check the domain's receiving setup and mailbox routing rule.
 - [ ] Check Worker or container logs for inbound queue, SMTP intake, webhook, and database errors. Confirm database migrations are current and the inbound queue is active.
-- [ ] On Cloudflare, inbound work retries database/schema failures every five minutes, up to 12 attempts (about one hour). Apply migrations immediately after deployment; see [deployment](deployment.md#updating-mailflare).
+- [ ] On Cloudflare, only missing-column/table failures use the five-minute inbound retry delay; other queue failures retry after about 10 seconds. The configured 12 is a retry cap, not a total-attempt count. Apply migrations promptly after deployment; see [deployment](deployment.md#updating-mailflare).
 - [ ] For SMTP/DNS and provider checks, use [troubleshooting](troubleshooting.md) and [providers](providers.md).
 
 ### Outbound mail failing
@@ -76,8 +78,9 @@ Operational checklist for self-hosted Mailflare. For initial installation and pr
 
 - [ ] On Workers, confirm both cron expressions in `wrangler.jsonc` are deployed: `0 2 * * *` (daily, UTC) and `*/5 * * * *` (every five minutes). Changes to triggers require deploying the complete Worker with `npm run deploy`.
 - [ ] Confirm **Admin → Backups** has automatic backup enabled, and that the deployed Worker has its `DB` and `BUCKET` bindings.
-- [ ] Check Worker invocation logs for `Scheduled backup failed` or maintenance-job errors. For Docker, confirm the container is running; the Node scheduler runs in-process and is not a separate service.
-- [ ] Both cron ticks run the recurring work: automatic update checks/migrations, agent maintenance, import-job sweeping, follow-up and calendar reminders, promotion backfill, and DAV change retention. The 02:00 UTC tick also runs backups, account/auth/Drive/JMAP retention and purges, deliverability aggregation, and orphaned raw-mail cleanup. A sleeping/stopped Node container cannot run these jobs.
+- [ ] **Workers:** both cron ticks run agent maintenance, trash retention, follow-up/calendar reminders, promotion backfill, import-job sweeping, undo-claim pruning, and DAV change retention. Automatic update checks and migrations also run on each tick, but only when automatic updates are enabled. The 02:00 UTC tick additionally runs scheduled backups, account/auth/Drive/JMAP retention and purges, deliverability aggregation, and orphaned raw-mail cleanup.
+- [ ] **Node/Docker:** the in-process scheduler ticks every minute; calendar reminders and other recurring checks run on those ticks, while promotion backfill is rate-limited to once per five minutes. Scheduled backups and daily maintenance run once per process per day, on its first scheduler tick during the 02:00 UTC hour. A sleeping/stopped container cannot run these jobs.
+- [ ] `Scheduled backup failed` is a Node-only log message. On Workers, inspect `npx wrangler tail` and the backup history's recorded status/error instead; inspect container logs for Node scheduler errors.
 - [ ] See [scheduled-backup troubleshooting](troubleshooting.md#scheduled-backups-are-not-running).
 
 ### Storage full or objects missing
