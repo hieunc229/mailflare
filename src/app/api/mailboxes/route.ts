@@ -34,7 +34,8 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
 	const env = getEnv();
 	const user = await requireUser(env, request);
-	const parsed = mailboxSchema.safeParse(await request.json());
+	// A malformed or empty body is a 400, not a thrown parse error behind a 500.
+	const parsed = mailboxSchema.safeParse(await request.json().catch(() => null));
 	if (!parsed.success) {
 		return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
 	}

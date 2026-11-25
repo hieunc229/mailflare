@@ -48,7 +48,8 @@ export async function POST(request: Request) {
 	const user = await requireUser(env, request);
 	if (!canManageDomains(user)) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 	if (!hasValidSessionMutationOrigin(request)) return NextResponse.json({ error: "Invalid origin" }, { status: 403 });
-	const parsed = addDomainSchema.safeParse(await request.json());
+	// A malformed or empty body is a 400, not a thrown parse error behind a 500.
+	const parsed = addDomainSchema.safeParse(await request.json().catch(() => null));
 	if (!parsed.success) {
 		return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
 	}
