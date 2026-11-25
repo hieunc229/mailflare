@@ -27,7 +27,10 @@ export function useMessageListShortcuts() {
 		if (!previous.startsWith(`${hrefPrefix}/`) || pathname !== hrefPrefix) return;
 		const links = Array.from(document.querySelectorAll<HTMLAnchorElement>("a[href]"))
 			.filter((link) => new URL(link.href).pathname.startsWith(`${hrefPrefix}/`));
-		(links.find((link) => link.getAttribute("aria-current") === "true") ?? links[0])?.focus();
+		const target = links.find((link) => new URL(link.href).pathname === previous)
+			?? links.find((link) => link.getAttribute("aria-current") === "true")
+			?? links[0];
+		target?.focus();
 	}, [hrefPrefix, pathname]);
 
 	useEffect(() => {

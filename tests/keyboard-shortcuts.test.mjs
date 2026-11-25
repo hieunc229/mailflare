@@ -91,3 +91,17 @@ test("Escape back does not navigate from a non-message route", async (t) => {
 	window.dispatchEvent(new window.CustomEvent("mailflare:message-list-shortcut", { detail: "back" }));
 	assert.deepEqual(globalThis.__keyboardPushes, []);
 });
+
+test("escaping a message detail restores focus to the row that was open", async (t) => {
+	globalThis.__keyboardPathname = "/inbox/2";
+	const { useMessageListShortcuts } = await loadComponent("src/components/messages/use-message-list-shortcuts.ts", { "next/navigation": `export const usePathname=()=>globalThis.__keyboardPathname; export const useRouter=()=>({push() {}});` });
+	const container = document.body.appendChild(document.createElement("div")), rows = document.body.appendChild(document.createElement("div")), root = createRoot(container);
+	rows.innerHTML = '<a href="/inbox/1">one</a><a href="/inbox/2">two</a>';
+	t.after(async () => { await act(async () => root.unmount()); container.remove(); rows.remove(); delete globalThis.__keyboardPathname; });
+	function App() { useMessageListShortcuts(); return null; }
+	await act(async () => root.render(createElement(App)));
+	assert.equal(document.activeElement, document.body);
+	globalThis.__keyboardPathname = "/inbox";
+	await act(async () => root.render(createElement(App)));
+	assert.equal(document.activeElement, rows.querySelector('a[href="/inbox/2"]'));
+});
