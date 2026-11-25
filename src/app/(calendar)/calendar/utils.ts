@@ -3,7 +3,7 @@ import type { CalendarEvent, CalendarEventTimes, EventGroup, EventResizeEdge } f
 import type { FolderColor } from "@/lib/folders/types";
 import type { CalendarRepeat } from "@/lib/calendar/types";
 import { parseCalendarRepeatDays, parseExcludedOccurrences } from "@/lib/calendar/recurrence";
-import { dateFromZonedFields, formatUserDate, getDisplayLocale, formatUserDateTimeLocal, getUserTimeZone, parseUserDateTimeLocal, zonedDateFields } from "@/lib/time/utils";
+import { dateFromZonedFields, formatUserDate, getDisplayLocale, formatUserDateTimeLocal, getUserTimeZone, normalizeTimeZone, parseUserDateTimeLocal, zonedDateFields } from "@/lib/time/utils";
 
 export const CALENDAR_START_HOUR = 0;
 export const CALENDAR_END_HOUR = 24;
@@ -136,8 +136,9 @@ export function isPendingInvite(event: { responseStatus?: string | null; inviteM
   return event.responseStatus === "needs-action" && !!event.inviteMessageId;
 }
 
-export function calendarTimeZone(_event?: CalendarEvent | null): string {
-  return getUserTimeZone();
+/** The zone an event's wall clock belongs to: the authored zone when one was recorded, else the viewer's. */
+export function calendarTimeZone(event?: CalendarEvent | null): string {
+  return event?.timeZone ? normalizeTimeZone(event.timeZone) : getUserTimeZone();
 }
 
 export function calendarAnchorDay(event: CalendarEvent | null, value: Date): number {
