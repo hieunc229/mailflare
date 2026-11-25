@@ -14,6 +14,7 @@ import { getEnv } from "@/lib/cloudflare";
 import { authError } from "@/lib/http/auth-error";
 import { readJsonBody } from "@/lib/http/request";
 import { newId } from "@/lib/ids";
+import { jmapSessionUrl } from "@/lib/jmap/session";
 import { getMailboxAccessLevel } from "@/lib/mailboxes/access";
 import { appPasswordCreateSchema } from "@/lib/validators";
 
@@ -40,7 +41,7 @@ export async function GET(request: Request) {
 	const appPasswords = rows
 		.filter(isListedAsAppPassword)
 		.map(({ kind, scopes, ...row }) => ({ ...row, legacy: kind !== "app", protocols: parseScopes(scopes) }));
-	return NextResponse.json({ appPasswords, availableProtocols: await availableAppPasswordProtocols(env) }, { headers: NO_STORE });
+	return NextResponse.json({ appPasswords, availableProtocols: await availableAppPasswordProtocols(env), jmapSessionUrl: jmapSessionUrl(env, request) }, { headers: NO_STORE });
 }
 
 /**

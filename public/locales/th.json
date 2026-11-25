@@ -696,6 +696,7 @@
 	"appPasswords.createdTitle": "สร้างรหัสผ่านแอปแล้ว",
 	"appPasswords.shownOnce": "คัดลอกรหัสผ่านนี้ตอนนี้ จะแสดงเพียงครั้งเดียว และคุณสามารถเพิกถอนได้จากรายการด้านล่าง",
 	"appPasswords.jmapDiscovery": "การค้นหาเซสชัน JMAP อยู่ที่ {url}",
+	"appPasswords.jmapSessionUrl": "URL เซสชัน JMAP",
 	"appPasswords.listTitle": "รหัสผ่านแอปของคุณ",
 	"appPasswords.empty": "ยังไม่มีรหัสผ่านแอป",
 	"appPasswords.loadFailed": "ไม่สามารถโหลดรหัสผ่านแอปได้",

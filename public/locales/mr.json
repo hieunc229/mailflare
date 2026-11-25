@@ -695,6 +695,7 @@
 	"appPasswords.createdTitle": "अ‍ॅप पासवर्ड तयार झाला",
 	"appPasswords.shownOnce": "हा पासवर्ड आताच कॉपी करा. तो फक्त एकदाच दाखवला जातो आणि तुम्ही तो खालील यादीतून रद्द करू शकता.",
 	"appPasswords.jmapDiscovery": "JMAP सत्र शोध {url} वर आहे.",
+	"appPasswords.jmapSessionUrl": "JMAP सत्र URL",
 	"appPasswords.listTitle": "तुमचे अ‍ॅप पासवर्ड",
 	"appPasswords.empty": "अद्याप अ‍ॅप पासवर्ड नाहीत.",
 	"appPasswords.loadFailed": "अ‍ॅप पासवर्ड लोड करता आले नाहीत",

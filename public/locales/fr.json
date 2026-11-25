@@ -702,6 +702,7 @@
 	"appPasswords.createdTitle": "Mot de passe d'application créé",
 	"appPasswords.shownOnce": "Copiez ce mot de passe maintenant. Il n'est affiché qu'une seule fois, et vous pouvez le révoquer depuis la liste ci-dessous.",
 	"appPasswords.jmapDiscovery": "La découverte de session JMAP se trouve à {url}.",
+	"appPasswords.jmapSessionUrl": "URL de session JMAP",
 	"appPasswords.listTitle": "Vos mots de passe d'application",
 	"appPasswords.empty": "Aucun mot de passe d'application pour le moment.",
 	"appPasswords.loadFailed": "Impossible de charger les mots de passe d'application",

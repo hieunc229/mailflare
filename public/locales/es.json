@@ -702,6 +702,7 @@
 	"appPasswords.createdTitle": "Contraseña de aplicación creada",
 	"appPasswords.shownOnce": "Copia esta contraseña ahora. Solo se muestra una vez y puedes revocarla desde la lista de abajo.",
 	"appPasswords.jmapDiscovery": "La detección de sesión JMAP está en {url}.",
+	"appPasswords.jmapSessionUrl": "URL de sesión JMAP",
 	"appPasswords.listTitle": "Tus contraseñas de aplicación",
 	"appPasswords.empty": "Aún no hay contraseñas de aplicación.",
 	"appPasswords.loadFailed": "No se pudieron cargar las contraseñas de aplicación",

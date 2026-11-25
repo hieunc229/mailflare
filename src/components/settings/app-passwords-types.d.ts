@@ -14,6 +14,8 @@ export type AppPasswordList = {
 	appPasswords: AppPasswordSummary[];
 	/** The scopes this server can serve, in the order to offer them. */
 	availableProtocols: string[];
+	/** Full `/jmap/session` URL from APP_URL or the request origin, for apps that do not do /.well-known discovery. */
+	jmapSessionUrl?: string;
 };
 
 export type NewAppPassword = {

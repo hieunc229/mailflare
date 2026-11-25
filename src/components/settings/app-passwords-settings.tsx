@@ -126,6 +126,7 @@ export function AppPasswordsSettings() {
 				<div className="space-y-3 rounded-2xl bg-neutral-50 p-4">
 					<h2 className="text-sm font-semibold text-neutral-900">{t("appPasswords.createdTitle")}</h2>
 					<Field label={t("emailClients.server")} value={server} onCopy={copy} copied={copied} />
+					{created.protocols.includes("jmap") && <Field label={t("appPasswords.jmapSessionUrl")} value={list?.jmapSessionUrl ?? `${server}/jmap/session`} onCopy={copy} copied={copied} />}
 					<Field label={t("emailClients.username")} value={created.username || t("emailClients.anyValue")} onCopy={copy} copied={copied} />
 					<Field label={t("emailClients.passwordApiKey")} value={groupAppPassword(created.key)} copyValue={created.key} onCopy={copy} copied={copied} mono />
 					{qr && createdKey && (

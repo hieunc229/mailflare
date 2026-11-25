@@ -697,6 +697,7 @@
 	"appPasswords.createdTitle": "ಆ್ಯಪ್ ಪಾಸ್‌ವರ್ಡ್ ರಚಿಸಲಾಗಿದೆ",
 	"appPasswords.shownOnce": "ಈ ಪಾಸ್‌ವರ್ಡ್ ಅನ್ನು ಈಗಲೇ ನಕಲಿಸಿ. ಇದನ್ನು ಒಮ್ಮೆ ಮಾತ್ರ ತೋರಿಸಲಾಗುತ್ತದೆ, ಮತ್ತು ಕೆಳಗಿನ ಪಟ್ಟಿಯಿಂದ ಅದನ್ನು ಹಿಂಪಡೆಯಬಹುದು.",
 	"appPasswords.jmapDiscovery": "JMAP ಸೆಷನ್ ಅನ್ವೇಷಣೆ {url} ನಲ್ಲಿದೆ.",
+	"appPasswords.jmapSessionUrl": "JMAP ಸೆಷನ್ URL",
 	"appPasswords.listTitle": "ನಿಮ್ಮ ಆ್ಯಪ್ ಪಾಸ್‌ವರ್ಡ್‌ಗಳು",
 	"appPasswords.empty": "ಇನ್ನೂ ಯಾವುದೇ ಆ್ಯಪ್ ಪಾಸ್‌ವರ್ಡ್‌ಗಳಿಲ್ಲ.",
 	"appPasswords.loadFailed": "ಆ್ಯಪ್ ಪಾಸ್‌ವರ್ಡ್‌ಗಳನ್ನು ಲೋಡ್ ಮಾಡಲು ಸಾಧ್ಯವಾಗಲಿಲ್ಲ",

@@ -695,6 +695,7 @@
 	"appPasswords.createdTitle": "অ্যাপ পাসওয়ার্ড তৈরি হয়েছে",
 	"appPasswords.shownOnce": "এখনই এই পাসওয়ার্ড কপি করুন। এটি একবারই দেখানো হয়, এবং নিচের তালিকা থেকে আপনি এটি প্রত্যাহার করতে পারবেন।",
 	"appPasswords.jmapDiscovery": "JMAP সেশন ডিসকভারি {url}-এ।",
+	"appPasswords.jmapSessionUrl": "JMAP সেশন URL",
 	"appPasswords.listTitle": "আপনার অ্যাপ পাসওয়ার্ড",
 	"appPasswords.empty": "এখনও কোনো অ্যাপ পাসওয়ার্ড নেই।",
 	"appPasswords.loadFailed": "অ্যাপ পাসওয়ার্ড লোড করা যায়নি",

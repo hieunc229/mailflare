@@ -697,6 +697,7 @@
 	"appPasswords.createdTitle": "گذرواژه برنامه ایجاد شد",
 	"appPasswords.shownOnce": "همین حالا این گذرواژه را کپی کنید. فقط یک بار نمایش داده می‌شود و می‌توانید آن را از فهرست زیر باطل کنید.",
 	"appPasswords.jmapDiscovery": "کشف نشست JMAP در {url} است.",
+	"appPasswords.jmapSessionUrl": "نشانی URL نشست JMAP",
 	"appPasswords.listTitle": "گذرواژه‌های برنامه شما",
 	"appPasswords.empty": "هنوز گذرواژه برنامه‌ای وجود ندارد.",
 	"appPasswords.loadFailed": "بارگذاری گذرواژه‌های برنامه ممکن نشد",

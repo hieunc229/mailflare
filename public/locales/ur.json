@@ -695,6 +695,7 @@
 	"appPasswords.createdTitle": "ایپ پاس ورڈ بن گیا",
 	"appPasswords.shownOnce": "یہ پاس ورڈ ابھی کاپی کر لیں۔ یہ صرف ایک بار دکھایا جاتا ہے، اور آپ اسے نیچے دی گئی فہرست سے منسوخ کر سکتے ہیں۔",
 	"appPasswords.jmapDiscovery": "JMAP سیشن ڈسکوری {url} پر ہے۔",
+	"appPasswords.jmapSessionUrl": "JMAP سیشن URL",
 	"appPasswords.listTitle": "آپ کے ایپ پاس ورڈز",
 	"appPasswords.empty": "ابھی تک کوئی ایپ پاس ورڈ نہیں ہے۔",
 	"appPasswords.loadFailed": "ایپ پاس ورڈز لوڈ نہیں ہو سکے",

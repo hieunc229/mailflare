@@ -6,7 +6,7 @@ import { corsHeaders, JmapError, problemResponse } from "./errors";
 import { readBlob, storeUpload } from "./blobs";
 import { parsePingSeconds, tryDecodeURIComponent } from "./request-utils";
 import { processRequest, sessionState, validateRequest } from "./processor";
-import { buildSession } from "./session";
+import { buildSession, jmapOrigin } from "./session";
 import { getEmailState, getMailboxState } from "./state";
 import type { JmapContext } from "./types";
 
@@ -24,8 +24,10 @@ export async function handleJmapRequest(request: Request, env: CloudflareEnv): P
 	if (path === "/.well-known/jmap") {
 		// Answer in place when credentials are present: iOS (CFNetwork) drops the Authorization header when
 		// following a redirect, so a 301 to /jmap/session reaches us unauthenticated and the client sees 401.
-		if (!request.headers.get("Authorization")) return Response.redirect(`${url.origin}/jmap/session`, 301);
-		path = "/jmap/session";
+		// Clients that were handed this URL as their server address may also POST API requests to it.
+		const hasCredentials = !!request.headers.get("Authorization");
+		if (request.method === "GET" && !hasCredentials) return Response.redirect(`${url.origin}/jmap/session`, 301);
+		path = request.method === "POST" ? "/jmap/api" : "/jmap/session";
 	}
 	if (!path.startsWith("/jmap/")) return null;
 
@@ -45,7 +47,7 @@ export async function handleJmapRequest(request: Request, env: CloudflareEnv): P
 	if (!hasScope(auth.scopes, "jmap")) {
 		return new Response(JSON.stringify({ error: "This API key does not have the jmap scope" }), { status: 403, headers: JSON_HEADERS });
 	}
-	const ctx: JmapContext = { env, db: getDb(env), auth, accountId: auth.userId, origin: env.APP_URL?.trim() || url.origin, createdIds: {} };
+	const ctx: JmapContext = { env, db: getDb(env), auth, accountId: auth.userId, origin: jmapOrigin(env, request), createdIds: {} };
 
 	if (path === "/jmap/session" && request.method === "GET") {
 		return new Response(JSON.stringify(buildSession(ctx, await sessionState(ctx))), { headers: JSON_HEADERS });

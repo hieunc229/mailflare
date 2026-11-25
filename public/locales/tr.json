@@ -688,6 +688,7 @@
 	"appPasswords.createdTitle": "Uygulama parolası oluşturuldu",
 	"appPasswords.shownOnce": "Bu parolayı şimdi kopyalayın. Yalnızca bir kez gösterilir ve aşağıdaki listeden iptal edebilirsiniz.",
 	"appPasswords.jmapDiscovery": "JMAP oturum keşfi {url} adresindedir.",
+	"appPasswords.jmapSessionUrl": "JMAP oturum URL'si",
 	"appPasswords.listTitle": "Uygulama parolalarınız",
 	"appPasswords.empty": "Henüz uygulama parolası yok.",
 	"appPasswords.loadFailed": "Uygulama parolaları yüklenemedi",

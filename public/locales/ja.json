@@ -692,6 +692,7 @@
 	"appPasswords.createdTitle": "アプリパスワードを作成しました",
 	"appPasswords.shownOnce": "このパスワードを今すぐコピーしてください。表示されるのは一度だけです。下の一覧から取り消すこともできます。",
 	"appPasswords.jmapDiscovery": "JMAP セッション検出は {url} です。",
+	"appPasswords.jmapSessionUrl": "JMAP セッション URL",
 	"appPasswords.listTitle": "あなたのアプリパスワード",
 	"appPasswords.empty": "アプリパスワードはまだありません。",
 	"appPasswords.loadFailed": "アプリパスワードを読み込めませんでした",
