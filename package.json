@@ -131,6 +131,7 @@
     "@electric-sql/pglite-socket": "^0.2.14",
     "@next/eslint-plugin-next": "16.4.6",
     "@playwright/test": "^1.64.1",
+    "@tailwindcss/node": "^4",
     "@tailwindcss/postcss": "^4",
     "@types/bcryptjs": "^2.4.6",
     "@types/better-sqlite3": "^9.6.0",
