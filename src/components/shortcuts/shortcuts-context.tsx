@@ -319,11 +319,13 @@ export function ShortcutsProvider({
         category: "Actions",
         icon: Search,
         perform: () => {
-          const searchInput = document.querySelector<HTMLInputElement>('input[data-mail-search-input]');
-          if (searchInput) {
-            searchInput.focus();
-            searchInput.select();
-          }
+          setTimeout(() => {
+            const searchInput = document.querySelector<HTMLInputElement>('input[data-mail-search-input]');
+            if (searchInput) {
+              searchInput.focus();
+              searchInput.select();
+            }
+          }, 0);
         },
       },
       {
