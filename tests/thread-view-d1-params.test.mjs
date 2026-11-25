@@ -52,3 +52,40 @@ test("a 120-message thread opens without binding more than 100 parameters in one
 	assert.ok(Math.max(...counts) <= 100, `a statement bound ${Math.max(...counts)} parameters`);
 	assert.equal(result.messages?.length ?? result.length, 120);
 });
+
+test("bodies none leaves bodies out of the query and the result; default keeps them", async (t) => {
+	const database = new SqliteDatabase(":memory:");
+	t.after(() => database.db.close());
+	await applyMigrations(database, join(root, "drizzle/migrations"));
+	database.db.pragma("foreign_keys = OFF");
+	const db = getDb({ DB: database });
+	await db.insert(schema.mailboxes).values({ id: "mb1", userId: "u1", domainId: "d1", localPart: "a", address: "a@x.test" });
+	const base = { userId: "u1", mailboxId: "mb1", direction: "inbound", toAddr: "a@x.test", subject: "Re: build", threadId: "t1" };
+	await db.insert(schema.messages).values([
+		{ ...base, id: "a", fromAddr: "p@y.test", textBody: "BODY-A", htmlBody: "<p>BODY-A</p>", createdAt: new Date(1_700_000_000_000) },
+		{ ...base, id: "b", fromAddr: "q@y.test", textBody: "BODY-B", htmlBody: "<p>BODY-B</p>", createdAt: new Date(1_700_000_001_000) },
+	]);
+	const sql = [];
+	const prepare = database.prepare.bind(database);
+	database.prepare = (text) => { sql.push(text); return prepare(text); };
+	const user = { id: "u1", role: "admin" };
+
+	const lean = await getMessageThreadForUser({ DB: database }, user, "a", { bodies: "none" });
+	assert.equal(lean.messages.length, 2);
+	for (const message of lean.messages) {
+		assert.equal(message.textBody, null);
+		assert.equal(message.htmlBody, null);
+		assert.equal(message.bodyOmitted, true);
+		assert.equal("rawR2Key" in message, false);
+		assert.equal(message.subject, "Re: build");
+	}
+	const threadSelect = sql.filter((text) => /from "messages"/i.test(text) && /order by/i.test(text));
+	assert.ok(threadSelect.length > 0);
+	for (const text of threadSelect) assert.doesNotMatch(text, /"text_body"|"html_body"/);
+
+	const full = await getMessageThreadForUser({ DB: database }, user, "a");
+	assert.equal(full.messages.find((m) => m.id === "b").textBody, "BODY-B");
+	assert.equal(full.messages.find((m) => m.id === "b").bodyOmitted, undefined);
+	// Same access check: a user without mailbox access gets nothing either way.
+	assert.equal(await getMessageThreadForUser({ DB: database }, { id: "u2", role: "user" }, "a", { bodies: "none" }), null);
+});
