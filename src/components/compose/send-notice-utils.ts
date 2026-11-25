@@ -16,6 +16,8 @@ export type SendNoticePlan =
 export const SCHEDULED_NOTICE_MS = 8000;
 /** Confirmation toasts carry a link, so leave enough time to notice and click it. */
 export const SENT_NOTICE_MS = 8000;
+/** Plain compose toasts: a confirmation is glanced at, an error has to be read and acted on (WCAG 2.2.1), as in the promotions toast. */
+export const composeToastDurationMs = (type: "success" | "error") => (type === "error" ? 15_000 : 3200);
 /** How long the toast waits for the queue to report a delivered or failed message. */
 export const DELIVERY_WAIT_MS = 30_000;
 
