@@ -79,6 +79,8 @@ export async function runCalendarTool(context: CalendarToolContext, name: Calend
 	if (!context.user.calendarEnabled) throw new Error("Calendar is disabled for this account");
 	const input = calendarToolSchemas[name].parse(rawInput) as Record<string, unknown>;
 	const db = getDb(context.env);
+	// An event with no zone of its own expands on the viewer's wall clock, the same zone the calendar UI shows it in.
+	const defaultZone = context.timeZone ?? context.user.timeZone;
 	// Editing or deleting events is only proposed by an assistant; the user approves it in the app.
 	if (CONFIRMED_CALENDAR_TOOLS.has(name) && !context.confirmed) {
 		const token = await createCalendarConfirmation(context.env, context.user.id, name, rawInput);
@@ -94,7 +96,7 @@ export async function runCalendarTool(context: CalendarToolContext, name: Calend
 	if (name === "get_schedule" || name === "search_events" || name === "find_free_time") {
 		const { from, to } = dates(input.start as string, input.end as string);
 		const rows = await eventsInRange(context, from, to);
-		const events = expandToolEvents(rows, from, to, 500, await overridesForEvents(db, rows.map((row) => row.id)));
+		const events = expandToolEvents(rows, from, to, 500, await overridesForEvents(db, rows.map((row) => row.id)), defaultZone);
 		if (name === "get_schedule") return { events, truncated: events.length >= 500 };
 		if (name === "search_events") {
 			const query = (input.query as string).toLocaleLowerCase();
@@ -119,7 +121,7 @@ export async function runCalendarTool(context: CalendarToolContext, name: Calend
 		if (!occurrence) return { event };
 		const stored = await listEventOverrides(db, event.id);
 		const overrides = stored.length ? new Map([[event.id, stored.map((row) => ({ occurrenceMs: row.occurrenceMs, startsAt: row.startsAt, endsAt: row.endsAt }))]]) : undefined;
-		const found = expandToolEvents([event], occurrence.startsAt, new Date(occurrence.startsAt.getTime() + 1), 500, overrides).find((item) => item.id === input.eventId);
+		const found = expandToolEvents([event], occurrence.startsAt, new Date(occurrence.startsAt.getTime() + 1), 500, overrides, defaultZone).find((item) => item.id === input.eventId);
 		if (!found) throw new Error("Occurrence not found");
 		return { event: found };
 	}
