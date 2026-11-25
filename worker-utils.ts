@@ -1,6 +1,7 @@
 import { getDatabaseConfig } from "./src/db/with-database";
 import { withD1Session } from "./src/lib/d1-session-context";
 import { isMissingColumnError, isMissingTableError } from "./src/lib/database-errors";
+import { deadLetterInboundMail } from "./src/lib/email/dead-letter";
 import type { InboundQueueMessage } from "./src/lib/email/inbound";
 import type { WebhookRetryMessage } from "./src/lib/email/webhooks";
 import type { ImportJobMessage } from "./src/lib/import/jobs-types";
@@ -126,15 +127,49 @@ export function withD1BookmarkCookie(request: Request, response: Response, sessi
 /** Retries inbound mail waits this long when the schema is behind the code; see docs/deployment.md. */
 export const INBOUND_SCHEMA_RETRY_DELAY_SECONDS = 300;
 
+/** Must match `max_retries` on the mailflare-inbound consumer in wrangler.jsonc. */
+export const INBOUND_MAX_RETRIES = 12;
+
+/** Backoff for other failures: 10 s doubling to a 1 h cap, so 12 retries span about 4 hours. */
+export function inboundRetryDelaySeconds(attempts: number): number {
+	return Math.min(10 * 2 ** Math.max(0, attempts - 1), 3600);
+}
+
+/** True when the queue will drop the message if this attempt fails too (`attempts` counts from 1). */
+export function isFinalInboundAttempt(attempts: number): boolean {
+	return attempts > INBOUND_MAX_RETRIES;
+}
+
 /**
  * After a failed inbound delivery: a missing column or table means the new code is live but its
  * migration is not applied yet, so retry slowly (the queue's max_retries then spans about an
- * hour, long enough for the 5-minute auto-update cron or an admin) instead of burning quick
- * retries and dropping the mail. Any other error retries every 10 s until the queue's
- * max_retries gives up; that is safe because inbound processing skips an already-stored
- * `rawR2Key`, so a retry never duplicates mail.
+ * hour, long enough for the 5-minute auto-update cron or an admin). Any other error backs off
+ * from 10 s to 1 h; that is safe because inbound processing skips an already-stored
+ * `rawR2Key`, so a retry never duplicates mail. The caller moves the raw mail aside on the
+ * final attempt (`deadLetterInboundMail`) instead of calling this.
  */
-export function settleFailedInboundMessage(msg: { retry(options: { delaySeconds: number }): void }, error: unknown): void {
+export function settleFailedInboundMessage(msg: { attempts?: number; retry(options: { delaySeconds: number }): void }, error: unknown): void {
 	if (isMissingColumnError(error) || isMissingTableError(error)) msg.retry({ delaySeconds: INBOUND_SCHEMA_RETRY_DELAY_SECONDS });
-	else msg.retry({ delaySeconds: 10 });
+	else msg.retry({ delaySeconds: inboundRetryDelaySeconds(msg.attempts ?? 1) });
+}
+
+/**
+ * Queue handler step for a failed inbound message. On the final attempt (the queue drops the message after
+ * it, and the sweeper deletes unreferenced raw mail) the raw object is moved to `dead/` and the message
+ * acked. If that move fails, fall back to a normal retry; the queue then drops the message and the mail is lost.
+ */
+export async function settleInboundFailure(
+	msg: { attempts: number; body: InboundQueueMessage; ack(): void; retry(options: { delaySeconds: number }): void },
+	env: Pick<CloudflareEnv, "BUCKET">,
+	error: unknown,
+): Promise<void> {
+	if (!isFinalInboundAttempt(msg.attempts)) return settleFailedInboundMessage(msg, error);
+	try {
+		const key = await deadLetterInboundMail(env, msg.body, error);
+		console.error("Inbound mail dead-lettered", { rawR2Key: msg.body.rawR2Key, deadKey: key, recipient: msg.body.to });
+		msg.ack();
+	} catch (deadError) {
+		console.error("Inbound dead-letter failed, mail will be lost when the queue drops this message", { rawR2Key: msg.body.rawR2Key, error: deadError });
+		settleFailedInboundMessage(msg, error);
+	}
 }
