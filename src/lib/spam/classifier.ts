@@ -16,13 +16,13 @@ export async function classifyTokens(db: AppDatabase, mailboxId: string, tokens:
 		return { probability: 0.5, contribution: 0, trainedMessages, strongestTokens: [] };
 	}
 
-	const rows: Array<typeof spamTokenStats.$inferSelect> = [];
-	for (let index = 0; index < tokens.length; index += 90) {
-		rows.push(...await db.select().from(spamTokenStats).where(and(
-			eq(spamTokenStats.mailboxId, mailboxId),
-			inArray(spamTokenStats.token, tokens.slice(index, index + 90)),
-		)));
-	}
+	const chunks: string[][] = [];
+	for (let index = 0; index < tokens.length; index += 90) chunks.push(tokens.slice(index, index + 90));
+	// Chunks are independent reads; Promise.all keeps chunk order, so ties sort exactly as before.
+	const rows: Array<typeof spamTokenStats.$inferSelect> = (await Promise.all(chunks.map((chunk) => db.select().from(spamTokenStats).where(and(
+		eq(spamTokenStats.mailboxId, mailboxId),
+		inArray(spamTokenStats.token, chunk),
+	))))).flat();
 	const strongestTokens = rows.map((row) => {
 		const spamRate = (row.spamCount + 1) / (spamTotal + 2);
 		const hamRate = (row.hamCount + 1) / (hamTotal + 2);
