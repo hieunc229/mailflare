@@ -5,6 +5,7 @@ import type { DragEvent } from "react";
 import { BellRing, ChevronUp, Eye, EyeOff, FileText, Forward, Maximize2, Minimize2, Minus, Paperclip, Reply, Trash2, X } from "@/components/icons";
 import { useRouter } from "next/navigation";
 import { useLanguage } from "@/components/language-provider";
+import { touchTarget } from "@/lib/touch-target";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -746,7 +747,7 @@ export function ComposeForm({
 					<button
 						type="button"
 						onClick={() => void removeStoredAttachment(attachment.id)}
-						className="rounded-full p-1 text-neutral-500 hover:bg-neutral-200 hover:text-neutral-700"
+						className={cn("relative rounded-full p-1 text-neutral-500 hover:bg-neutral-200 hover:text-neutral-700", touchTarget)}
 					>
 						<X className="h-3.5 w-3.5" />
 						<span className="sr-only">{t("compose.removeAttachment")}</span>
@@ -770,7 +771,7 @@ export function ComposeForm({
 								current.filter((item) => item.id !== attachment.id),
 							)
 						}
-						className="rounded-full p-1 text-neutral-500 hover:bg-neutral-200 hover:text-neutral-700"
+						className={cn("relative rounded-full p-1 text-neutral-500 hover:bg-neutral-200 hover:text-neutral-700", touchTarget)}
 					>
 						<X className="h-3.5 w-3.5" />
 						<span className="sr-only">{t("compose.removeAttachment")}</span>
@@ -976,7 +977,7 @@ export function ComposeForm({
 									aria-label={t("compose.attachFiles")}
 									onClick={() => attachmentInput.current?.click()}
 									disabled={loading || loadingDraft}
-									className="rounded-md p-1.5 text-neutral-500 hover:bg-neutral-100 hover:text-neutral-900 disabled:pointer-events-none disabled:opacity-50 max-md:px-2"
+									className={cn("relative rounded-md p-1.5 text-neutral-500 hover:bg-neutral-100 hover:text-neutral-900 disabled:pointer-events-none disabled:opacity-50 max-md:px-2", touchTarget)}
 								>
 									<Paperclip className="h-4 w-4" />
 								</button>
