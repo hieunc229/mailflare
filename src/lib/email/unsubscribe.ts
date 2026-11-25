@@ -87,6 +87,20 @@ export function extractUnsubscribeUrlFromRaw(raw: ArrayBuffer): UnsubscribeUrl {
 	return { url, oneClick: hasOneClickPost(headers), mailto, dkimCoversUnsubscribe: dkimCoveredHeaders(headers).has("list-unsubscribe") };
 }
 
+export type StoredUnsubscribe = { url: string | null; oneClick: boolean; mailto: string | null; dkimCovers: boolean };
+
+/** The columns persisted for a derived candidate; no header (null) becomes an all-empty "computed: none". */
+export function toStoredUnsubscribe(candidate: UnsubscribeUrl): StoredUnsubscribe {
+	if (!candidate) return { url: null, oneClick: false, mailto: null, dkimCovers: false };
+	return { url: candidate.url, oneClick: candidate.oneClick, mailto: candidate.mailto, dkimCovers: candidate.dkimCoversUnsubscribe };
+}
+
+/** Inverse of `toStoredUnsubscribe`; the safety flags come back exactly as derived. */
+export function fromStoredUnsubscribe(stored: StoredUnsubscribe): UnsubscribeUrl {
+	if (!stored.url) return null;
+	return { url: stored.url, oneClick: stored.oneClick, mailto: stored.mailto, dkimCoversUnsubscribe: stored.dkimCovers };
+}
+
 export async function getUnsubscribeUrlFromRawR2Key(env: CloudflareEnv, rawR2Key: string | null): Promise<UnsubscribeUrl> {
 	if (!rawR2Key) return null;
 	const raw = await env.BUCKET.get(rawR2Key, { range: { offset: 0, length: maxHeaderBytes } });

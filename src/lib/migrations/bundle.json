@@ -986,6 +986,12 @@
       "statements": [
         "CREATE TABLE `contact_details` (\n\t`contact_id` text PRIMARY KEY NOT NULL,\n\t`details` text DEFAULT '{}' NOT NULL,\n\t`updated_at` integer NOT NULL,\n\tFOREIGN KEY (`contact_id`) REFERENCES `contacts`(`id`) ON UPDATE no action ON DELETE cascade\n);"
       ]
+    },
+    {
+      "name": "0103_message_unsubscribe.sql",
+      "statements": [
+        "CREATE TABLE `message_unsubscribe` (\n\t`message_id` text PRIMARY KEY NOT NULL,\n\t`url` text,\n\t`one_click` integer DEFAULT false NOT NULL,\n\t`mailto` text,\n\t`dkim_covers` integer DEFAULT false NOT NULL,\n\t`checked_at` integer NOT NULL,\n\tFOREIGN KEY (`message_id`) REFERENCES `messages`(`id`) ON UPDATE no action ON DELETE cascade\n);"
+      ]
     }
   ]
 }

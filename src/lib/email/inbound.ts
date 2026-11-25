@@ -20,6 +20,7 @@ import { registerInboundInvite } from "@/lib/calendar/invite-store";
 import { inboundAttachmentLimitReason } from "@/lib/email/inbound-attachments";
 import { inboundMessageId } from "@/lib/email/inbound-id";
 import { extractUnsubscribeLinkFromBody, extractUnsubscribeUrlFromRaw, getUnsubscribeUrlFromRawR2Key } from "@/lib/email/unsubscribe";
+import { recordUnsubscribe, resolveUnsubscribe } from "@/lib/email/unsubscribe-store";
 import { resolveThreadId } from "@/lib/email/threading";
 import { normalizeMessageId } from "@/lib/email/thread-lookup";
 import type { SessionUser } from "@/lib/auth/types";
@@ -209,6 +210,7 @@ export async function processInboundMessage(
 		threadId = normalizeMessageId(parsed.messageId) ?? newId("thr");
 	}
 
+	const unsubscribe = extractUnsubscribeUrlFromRaw(buffer);
 	try {
 		const inserted = await db.insert(messages).values({
 			id: messageId,
@@ -232,7 +234,7 @@ export async function processInboundMessage(
 			threadId,
 			inReplyTo: parsed.inReplyTo,
 			references: parsed.references.length ? parsed.references.join(" ") : null,
-			hasUnsubscribe: !!extractUnsubscribeUrlFromRaw(buffer) || !!extractUnsubscribeLinkFromBody(parsed.html, parsed.text),
+			hasUnsubscribe: !!unsubscribe || !!extractUnsubscribeLinkFromBody(parsed.html, parsed.text),
 			category,
 			senderAddress,
 			spamScore: spamAnalysis?.score ?? null,
@@ -242,6 +244,7 @@ export async function processInboundMessage(
 			spamAnalysisError,
 		}).onConflictDoNothing().returning({ id: messages.id });
 		if (!inserted.length) return;
+		await recordUnsubscribe(env, messageId, unsubscribe);
 
 		await storeMessageAttachments(env, messageId, parsed.attachments);
 		if (status !== "spam" && status !== "trash") {
@@ -385,7 +388,7 @@ export async function getMessageWithBodyForUser(env: CloudflareEnv, user: Sessio
 			: Promise.resolve([]),
 		getMessageContactNames(env, message.userId, message.fromAddr, message.toAddr),
 		listMessageAttachments(env, messageId),
-		getUnsubscribeUrlFromRawR2Key(env, message.rawR2Key),
+		resolveUnsubscribe(env, messageId, message.rawR2Key),
 	]);
 	const { rawR2Key, textBody, htmlBody, ...header } = message;
 	void rawR2Key;
@@ -411,7 +414,7 @@ export async function getMessageMetadataForUser(env: CloudflareEnv, user: Sessio
 	if (!access?.canRead) return null;
 	const [attachments, unsubscribe] = await Promise.all([
 		listMessageAttachments(env, messageId),
-		getUnsubscribeUrlFromRawR2Key(env, message.rawR2Key),
+		resolveUnsubscribe(env, messageId, message.rawR2Key),
 	]);
 	return {
 		attachments,
