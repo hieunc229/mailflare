@@ -9,7 +9,8 @@ import { scheduledMessageCondition } from "@/lib/email/scheduled";
 import { draftsVisibleTo } from "@/lib/email/draft-access";
 import { activePromotionModes, applyPromotionCounts, buildMessageCounts } from "./utils";
 import { loadPromotionModes } from "@/lib/promotions/settings";
-import { getMailboxAccessLevel, listAccessibleMailboxIds } from "@/lib/mailboxes/access";
+import { canReadMailbox, listAccessibleMailboxIds } from "@/lib/mailboxes/access";
+import { parseMailboxIdList } from "@/lib/api/query-params";
 
 export async function GET(request: Request) {
 	const env = getEnv();
@@ -20,17 +21,35 @@ export async function GET(request: Request) {
 
 	const url = new URL(request.url);
 	const mailboxId = url.searchParams.get("mailboxId");
+	// `mailboxIds` counts a subset of the accessible mailboxes; the breakdown below
+	// then reports only that subset.
+	const mailboxIdList = parseMailboxIdList(url.searchParams.get("mailboxIds"));
+	if (mailboxIdList.error) {
+		return NextResponse.json({ error: mailboxIdList.error }, { status: 400 });
+	}
+	if (mailboxId && mailboxIdList.ids) {
+		return NextResponse.json({ error: "mailboxId and mailboxIds are mutually exclusive" }, { status: 400 });
+	}
 	const db = getDb(env);
 	const conditions: SQL[] = [];
 	let mailboxIds: string[] = [];
 
 	if (mailboxId) {
-		const access = await getMailboxAccessLevel(db, user, mailboxId);
-		if (!access?.canRead) {
+		if (!(await canReadMailbox(db, user, mailboxId))) {
 			return NextResponse.json({ error: "Mailbox not found" }, { status: 404 });
 		}
 		conditions.push(eq(messages.mailboxId, mailboxId));
 		mailboxIds = [mailboxId];
+	} else if (mailboxIdList.ids) {
+		// Unknown and forbidden ids share the single-mailbox 404 so the response never
+		// reveals which ids exist.
+		for (const id of mailboxIdList.ids) {
+			if (!(await canReadMailbox(db, user, id))) {
+				return NextResponse.json({ error: "Mailbox not found" }, { status: 404 });
+			}
+		}
+		conditions.push(inArray(messages.mailboxId, mailboxIdList.ids));
+		mailboxIds = mailboxIdList.ids;
 	} else {
 		const accessibleMailboxIds = await listAccessibleMailboxIds(db, user);
 		mailboxIds = accessibleMailboxIds;

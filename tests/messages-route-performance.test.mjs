@@ -21,6 +21,7 @@ const mocks = {
 await build({
 	entryPoints: {
 		route: join(root, "src/app/api/messages/route.ts"),
+		counts: join(root, "src/app/api/messages/counts/route.ts"),
 		database: join(root, "server/runtime/sqlite-database.ts"),
 		migrate: join(root, "server/runtime/migrate.ts"),
 	},
@@ -42,6 +43,7 @@ await build({
 	}],
 });
 const { GET } = await import(pathToFileURL(join(outDir, "route.mjs")).href);
+const { GET: getCounts } = await import(pathToFileURL(join(outDir, "counts.mjs")).href);
 const { SqliteDatabase } = await import(pathToFileURL(join(outDir, "database.mjs")).href);
 const { applyMigrations } = await import(pathToFileURL(join(outDir, "migrate.mjs")).href);
 const request = (query = "") => new Request(`https://mail.example/api/messages?${query}`);
@@ -268,6 +270,105 @@ test("a shared recipient address keeps each outbound message's own display name"
 	f.contacts = async () => new Map([["no-reply@ashbyhq.com", { displayName: "Ashby Recruiting", source: "manual" }]]);
 	const manual = await (await GET(request("mailboxId=mine&direction=outbound"))).json();
 	assert.deepEqual(manual.messages.map((row) => row.toContactName), ["Ashby Recruiting", "Ashby Recruiting"]);
+});
+
+test("a mailboxIds subset lists only the chosen mailboxes and labels each row's account", async (t) => {
+	const f = await fixture(t);
+	f.message("own", { mailbox: "mine", time: 1 });
+	f.message("delegated", { mailbox: "shared", user: "other", time: 2 });
+	f.message("private", { mailbox: "private", user: "other", time: 3 });
+	const body = await (await GET(request("mailboxIds=mine,shared"))).json();
+	assert.deepEqual(body.messages.map((row) => [row.id, row.mailboxId]), [["delegated", "shared"], ["own", "mine"]]);
+	assert.equal(body.total, 2);
+	// The same list without the subset still reads the shared mailbox and nothing private.
+	const unified = await (await GET(request())).json();
+	assert.deepEqual(unified.messages.map((row) => row.id), ["delegated", "own"]);
+});
+
+test("the subset composes with the unified inbox filter", async (t) => {
+	const f = await fixture(t);
+	f.message("own-in", { mailbox: "mine", time: 1 });
+	f.message("shared-in", { mailbox: "shared", user: "other", time: 2 });
+	f.message("own-archived", { mailbox: "mine", status: "archived", time: 3 });
+	f.message("private-in", { mailbox: "private", user: "other", time: 4 });
+	const body = await (await GET(request("mailboxIds=mine,shared&status=received"))).json();
+	assert.deepEqual(body.messages.map((row) => row.id), ["shared-in", "own-in"]);
+	assert.equal(body.total, 2);
+	// The subset also scopes the grouped conversation view.
+	const grouped = await (await GET(request("mailboxIds=shared&status=received&group=thread"))).json();
+	assert.equal(grouped.grouped, true);
+	assert.deepEqual(grouped.messages.map((row) => row.id), ["shared-in"]);
+});
+
+test("an inaccessible or unknown id in the subset is the single-mailbox 404", async (t) => {
+	const f = await fixture(t);
+	f.message("own");
+	assert.equal((await GET(request("mailboxIds=shared,mine"))).status, 200);
+	for (const list of ["mine,private", "mine,missing", "private", "mine,disabled", "missing"]) {
+		const response = await GET(request(`mailboxIds=${list}`));
+		assert.equal(response.status, 404, list);
+		// Every denied id, real or not, gets the same body so nothing is leaked.
+		assert.deepEqual(await response.json(), { error: "Mailbox not found" });
+	}
+	// A grant that is revoked or invalid still answers 404 rather than an empty list.
+	f.database.db.exec("UPDATE mailbox_access SET permission = 'invalid'");
+	assert.equal((await GET(request("mailboxIds=mine,shared"))).status, 404);
+	f.database.db.exec("UPDATE mailbox_access SET permission = 'read_only'; UPDATE license_settings SET state = 'inactive'");
+	assert.equal((await GET(request("mailboxIds=mine,shared"))).status, 404);
+});
+
+test("a subset keeps the access fallback for orphaned mailboxes", async (t) => {
+	const f = await fixture(t);
+	f.database.db.pragma("foreign_keys = OFF");
+	f.database.db.exec("UPDATE mailboxes SET domain_id = 'missing' WHERE id = 'mine'");
+	f.database.db.pragma("foreign_keys = ON");
+	f.message("orphan");
+	const response = await GET(request("mailboxIds=mine"));
+	assert.equal(response.status, 200);
+	assert.deepEqual((await response.json()).messages.map((row) => row.id), ["orphan"]);
+});
+
+test("mailboxId and mailboxIds together are refused", async (t) => {
+	const f = await fixture(t);
+	f.message("own");
+	for (const query of ["mailboxId=mine&mailboxIds=mine", "mailboxId=mine&mailboxIds=shared,mine"]) {
+		const response = await GET(request(query));
+		assert.equal(response.status, 400, query);
+		assert.deepEqual(await response.json(), { error: "mailboxId and mailboxIds are mutually exclusive" });
+	}
+	assert.equal(f.started.length, 0, "a refused request never loads mail");
+});
+
+test("empty mailboxIds elements are refused", async (t) => {
+	const f = await fixture(t);
+	f.message("own");
+	for (const query of ["mailboxIds=", "mailboxIds=mine,,shared", "mailboxIds=mine,", "mailboxIds=,mine"]) {
+		const response = await GET(request(query));
+		assert.equal(response.status, 400, query);
+		assert.deepEqual(await response.json(), { error: "mailboxIds contains an empty mailbox id" });
+	}
+	assert.equal(f.started.length, 0, "a refused request never loads mail");
+	// Surrounding spaces are not an empty id, and the duplicate collapses.
+	const spaced = await GET(request("mailboxIds=%20mine%20,mine"));
+	assert.equal(spaced.status, 200);
+	assert.deepEqual((await spaced.json()).messages.map((row) => row.id), ["own"]);
+});
+
+test("counts narrow the totals and the per-mailbox breakdown to the subset", async (t) => {
+	const f = await fixture(t);
+	f.message("own-in", { mailbox: "mine", time: 1 });
+	f.message("own-in-2", { mailbox: "mine", time: 2 });
+	f.message("shared-in", { mailbox: "shared", user: "other", time: 3 });
+	f.message("private-in", { mailbox: "private", user: "other", time: 4 });
+	const one = await (await getCounts(request("mailboxIds=mine"))).json();
+	assert.deepEqual(one.counts.mailboxes.map((row) => row.mailboxId), ["mine"]);
+	assert.equal(one.counts.folders.inbox.total, 2);
+	const both = await (await getCounts(request("mailboxIds=mine,shared"))).json();
+	assert.deepEqual(both.counts.mailboxes.map((row) => row.mailboxId).sort(), ["mine", "shared"]);
+	assert.equal(both.counts.folders.inbox.total, 3);
+	assert.equal((await getCounts(request("mailboxIds=mine,private"))).status, 404);
+	assert.equal((await getCounts(request("mailboxId=mine&mailboxIds=mine"))).status, 400);
+	assert.equal((await getCounts(request("mailboxIds=mine,"))).status, 400);
 });
 
 test("empty pages preserve total and skip unnecessary thread and scheduled reads", async (t) => {
