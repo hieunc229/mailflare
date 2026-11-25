@@ -511,6 +511,13 @@
         "CREATE TABLE `contact_details` (\n\t`contact_id` varchar(191) NOT NULL,\n\t`details` longtext NOT NULL DEFAULT ('{}'),\n\t`updated_at` bigint NOT NULL,\n\tCONSTRAINT `contact_details_contact_id` PRIMARY KEY(`contact_id`)\n);",
         "ALTER TABLE `contact_details` ADD CONSTRAINT `contact_details_contact_id_contacts_id_fk` FOREIGN KEY (`contact_id`) REFERENCES `contacts`(`id`) ON DELETE cascade ON UPDATE no action;"
       ]
+    },
+    {
+      "name": "0027_drop_redundant_message_indexes.sql",
+      "statements": [
+        "DROP INDEX `messages_mailbox_idx` ON `messages`;",
+        "DROP INDEX `messages_inbox_page_idx` ON `messages`;"
+      ]
     }
   ]
 }

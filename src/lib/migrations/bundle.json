@@ -986,6 +986,13 @@
       "statements": [
         "CREATE TABLE `contact_details` (\n\t`contact_id` text PRIMARY KEY NOT NULL,\n\t`details` text DEFAULT '{}' NOT NULL,\n\t`updated_at` integer NOT NULL,\n\tFOREIGN KEY (`contact_id`) REFERENCES `contacts`(`id`) ON UPDATE no action ON DELETE cascade\n);"
       ]
+    },
+    {
+      "name": "0103_drop_redundant_message_indexes.sql",
+      "statements": [
+        "DROP INDEX IF EXISTS `messages_mailbox_idx`;",
+        "DROP INDEX IF EXISTS `messages_inbox_page_idx`;"
+      ]
     }
   ]
 }
