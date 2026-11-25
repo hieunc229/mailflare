@@ -2,7 +2,7 @@ import { and, eq, inArray, lt } from "drizzle-orm";
 import { getDb } from "@/db";
 import { backups } from "@/db/schema";
 import { exportDatabaseRecords } from "./export";
-import { createScheduledBackupIfDue, getBackupSettings } from "./service";
+import { createScheduledBackupIfDue, failStuckBackups, getBackupSettings } from "./service";
 import { BACKUP_PREFIX, createBackupFilename } from "./utils";
 
 export async function runDatabaseBackup(env: CloudflareEnv, backupId: string): Promise<void> {
@@ -45,6 +45,7 @@ export async function runDatabaseBackup(env: CloudflareEnv, backupId: string): P
 }
 
 export async function runScheduledDatabaseBackup(env: CloudflareEnv, now: Date): Promise<void> {
+	await failStuckBackups(env, now);
 	const backupId = await createScheduledBackupIfDue(env, now);
 	if (backupId) {
 		await runDatabaseBackup(env, backupId);

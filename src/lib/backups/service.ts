@@ -16,7 +16,22 @@ export async function getBackupSettings(env: CloudflareEnv) {
 	return settings ? { ...settings, excludedTableGroups: parseExcludedBackupTableGroups(settings.excludedTableGroups) } : undefined;
 }
 
+/** A backup normally finishes in minutes; one still queued or running after this was killed with its Worker. */
+const STUCK_BACKUP_MS = 30 * 60_000;
+
+/**
+ * Marks backups that never finished as failed. A run killed mid-way (memory, deploy, timeout) cannot record its own
+ * failure, and a `running` row is never reaped by retention nor deletable, so it would stay in progress forever.
+ */
+export async function failStuckBackups(env: CloudflareEnv, now = new Date()): Promise<void> {
+	await getDb(env)
+		.update(backups)
+		.set({ status: "failed", error: "The backup did not finish (the run was stopped before it could report).", completedAt: now })
+		.where(and(inArray(backups.status, ["queued", "running"]), lt(backups.createdAt, new Date(now.getTime() - STUCK_BACKUP_MS))));
+}
+
 export async function listBackups(env: CloudflareEnv) {
+	await failStuckBackups(env);
 	return getDb(env).select().from(backups).orderBy(desc(backups.createdAt)).limit(100);
 }
 
@@ -76,6 +91,7 @@ export async function updateBackupSettings(
 
 export async function deleteBackup(env: CloudflareEnv, id: string): Promise<boolean> {
 	const db = getDb(env);
+	await failStuckBackups(env);
 	const [backup] = await db.select().from(backups).where(eq(backups.id, id)).limit(1);
 	if (!backup) return false;
 	if (backup.status === "queued" || backup.status === "running") {
