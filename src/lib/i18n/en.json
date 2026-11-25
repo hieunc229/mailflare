@@ -2620,6 +2620,8 @@
 	"undo.failed": "Could not undo that change",
 	"undo.failed.expired": "This undo has expired.",
 	"undo.failed.unavailable": "That message is no longer available to undo.",
+	"sharedFile.unavailable.title": "This download link is no longer available",
+	"sharedFile.unavailable.body": "The link may have expired or been turned off. Ask the sender to share the file again.",
 	"undo.failed.stale": "That change can no longer be undone because the message changed.",
 	"undo.failed.network": "Undo failed. Check your connection and try again.",
 	"undo.failed.server": "Undo failed. Please try again.",

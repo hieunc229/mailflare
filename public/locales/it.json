@@ -2631,6 +2631,8 @@
 	"undo.hidePending": "Nascondi notifica (l’annullamento continua)",
 	"undo.failed.expired": "Questo annullamento è scaduto.",
 	"undo.failed.unavailable": "Quel messaggio non è più disponibile per l’annullamento.",
+	"sharedFile.unavailable.title": "Questo link di download non è più disponibile",
+	"sharedFile.unavailable.body": "Il link potrebbe essere scaduto o disattivato. Chiedi al mittente di condividere di nuovo il file.",
 	"undo.failed.stale": "Questa modifica non può più essere annullata perché il messaggio è cambiato.",
 	"undo.failed.network": "Annullamento non riuscito. Controlla la connessione e riprova.",
 	"undo.failed.server": "Annullamento non riuscito. Riprova.",

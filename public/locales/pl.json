@@ -2647,6 +2647,8 @@
 	"undo.hidePending": "Ukryj powiadomienie (cofanie jest kontynuowane)",
 	"undo.failed.expired": "To cofnięcie wygasło.",
 	"undo.failed.unavailable": "Ta wiadomość nie jest już dostępna do cofnięcia.",
+	"sharedFile.unavailable.title": "Ten link do pobrania jest już niedostępny",
+	"sharedFile.unavailable.body": "Link mógł wygasnąć lub zostać wyłączony. Poproś nadawcę o ponowne udostępnienie pliku.",
 	"undo.failed.stale": "Tej zmiany nie można już cofnąć, ponieważ wiadomość została zmieniona.",
 	"undo.failed.network": "Cofnięcie nie powiodło się. Sprawdź połączenie i spróbuj ponownie.",
 	"undo.failed.server": "Cofnięcie nie powiodło się. Spróbuj ponownie.",

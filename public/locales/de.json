@@ -2615,6 +2615,8 @@
 	"undo.hidePending": "Benachrichtigung ausblenden (Rückgängigmachen läuft weiter)",
 	"undo.failed.expired": "Dieses Rückgängigmachen ist abgelaufen.",
 	"undo.failed.unavailable": "Diese Nachricht kann nicht mehr rückgängig gemacht werden.",
+	"sharedFile.unavailable.title": "Dieser Download-Link ist nicht mehr verfügbar",
+	"sharedFile.unavailable.body": "Der Link ist möglicherweise abgelaufen oder wurde deaktiviert. Bitten Sie den Absender, die Datei erneut zu teilen.",
 	"undo.failed.stale": "Diese Änderung kann nicht mehr rückgängig gemacht werden, da sich die Nachricht geändert hat.",
 	"undo.failed.network": "Rückgängig machen fehlgeschlagen. Prüfen Sie Ihre Verbindung und versuchen Sie es erneut.",
 	"undo.failed.server": "Rückgängig machen fehlgeschlagen. Bitte versuchen Sie es erneut.",

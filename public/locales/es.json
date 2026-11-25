@@ -2631,6 +2631,8 @@
 	"undo.hidePending": "Ocultar notificación (la acción de deshacer continúa)",
 	"undo.failed.expired": "Esta acción ya no se puede deshacer.",
 	"undo.failed.unavailable": "Ese mensaje ya no está disponible para deshacer.",
+	"sharedFile.unavailable.title": "Este enlace de descarga ya no está disponible",
+	"sharedFile.unavailable.body": "Es posible que el enlace haya caducado o se haya desactivado. Pide al remitente que vuelva a compartir el archivo.",
 	"undo.failed.stale": "Ese cambio ya no se puede deshacer porque el mensaje ha cambiado.",
 	"undo.failed.network": "No se pudo deshacer. Comprueba tu conexión e inténtalo de nuevo.",
 	"undo.failed.server": "No se pudo deshacer. Inténtalo de nuevo.",

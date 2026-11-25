@@ -2631,6 +2631,8 @@
 	"undo.hidePending": "Ocultar notificação (a anulação continua)",
 	"undo.failed.expired": "Esta anulação expirou.",
 	"undo.failed.unavailable": "Essa mensagem já não está disponível para anular.",
+	"sharedFile.unavailable.title": "Esta ligação de transferência já não está disponível",
+	"sharedFile.unavailable.body": "A ligação pode ter expirado ou ter sido desativada. Peça ao remetente que partilhe o ficheiro novamente.",
 	"undo.failed.stale": "Essa alteração já não pode ser anulada porque a mensagem foi alterada.",
 	"undo.failed.network": "Falha ao anular. Verifique a ligação e tente novamente.",
 	"undo.failed.server": "Falha ao anular. Tente novamente.",

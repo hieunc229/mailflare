@@ -2615,6 +2615,8 @@
 	"undo.hidePending": "Melding verbergen (ongedaan maken gaat door)",
 	"undo.failed.expired": "Deze undo is verlopen.",
 	"undo.failed.unavailable": "Dat bericht is niet meer beschikbaar om ongedaan te maken.",
+	"sharedFile.unavailable.title": "Deze downloadlink is niet meer beschikbaar",
+	"sharedFile.unavailable.body": "De link is mogelijk verlopen of uitgeschakeld. Vraag de afzender het bestand opnieuw te delen.",
 	"undo.failed.stale": "Die wijziging kan niet meer ongedaan worden gemaakt omdat het bericht is gewijzigd.",
 	"undo.failed.network": "Ongedaan maken mislukt. Controleer je verbinding en probeer het opnieuw.",
 	"undo.failed.server": "Ongedaan maken mislukt. Probeer het opnieuw.",

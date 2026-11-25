@@ -3,9 +3,17 @@ import { getDb } from "@/db";
 import { mailboxes, messageAttachments, messages, sharedAttachmentLinks } from "@/db/schema";
 import { getEnv } from "@/lib/cloudflare";
 import { getAttachmentContentDisposition } from "@/app/api/messages/[messageId]/attachments/[attachmentId]/utils";
+import { loadServerMessages } from "@/lib/i18n/server";
+import { pickPageLocale, sharedFileUnavailable } from "@/lib/email/shared-file-unavailable";
 import type { SharedFileParams } from "./types";
 
-export async function GET(_request: Request, { params }: SharedFileParams) {
+/** The same translated page for every dead link, so nothing says which kind it was. */
+async function unavailable(request: Request) {
+	const locale = pickPageLocale(request.headers.get("cookie"), request.headers.get("accept-language"));
+	return sharedFileUnavailable(locale, await loadServerMessages(locale));
+}
+
+export async function GET(request: Request, { params }: SharedFileParams) {
 	const { id } = await params;
 	const env = getEnv();
 	const [file] = await getDb(env)
@@ -17,9 +25,9 @@ export async function GET(_request: Request, { params }: SharedFileParams) {
 		// A link dies with the message going to trash or spam, or the mailbox being disabled.
 		.where(and(eq(sharedAttachmentLinks.id, id), gt(sharedAttachmentLinks.expiresAt, new Date()), ne(messages.status, "trash"), ne(messages.status, "spam"), eq(mailboxes.disabled, false)))
 		.limit(1);
-	if (!file) return new Response("Link expired or not found", { status: 404 });
+	if (!file) return unavailable(request);
 	const object = await env.BUCKET.get(file.r2Key);
-	if (!object) return new Response("File not found", { status: 404 });
+	if (!object) return unavailable(request);
 	const headers = new Headers();
 	// Always a download of opaque bytes: the sender picked the declared type.
 	headers.set("Content-Type", "application/octet-stream");

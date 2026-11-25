@@ -2631,6 +2631,8 @@
 	"undo.hidePending": "Ocultar notificação (o desfazer continua)",
 	"undo.failed.expired": "Este desfazer expirou.",
 	"undo.failed.unavailable": "Essa mensagem não está mais disponível para desfazer.",
+	"sharedFile.unavailable.title": "Este link de download não está mais disponível",
+	"sharedFile.unavailable.body": "O link pode ter expirado ou sido desativado. Peça ao remetente para compartilhar o arquivo novamente.",
 	"undo.failed.stale": "Essa alteração não pode mais ser desfeita porque a mensagem foi alterada.",
 	"undo.failed.network": "Falha ao desfazer. Verifique sua conexão e tente novamente.",
 	"undo.failed.server": "Falha ao desfazer. Tente novamente.",
