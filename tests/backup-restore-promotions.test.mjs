@@ -4,6 +4,7 @@ import { dirname, join } from "node:path";
 import test from "node:test";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { build } from "esbuild";
+import { memoryBucket } from "./helpers/memory-bucket.mjs";
 import Database from "better-sqlite3";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
@@ -25,6 +26,7 @@ await build({
 	banner: { js: 'import { createRequire } from "node:module"; const require = createRequire(import.meta.url);' },
 });
 const { exportDatabaseRecords, restoreDatabaseRecords } = await import(pathToFileURL(outfile).href);
+const restoreWithBucket = (db, content) => restoreDatabaseRecords(db, content, { bucket: memoryBucket() });
 const { migrations } = JSON.parse(readFileSync(join(root, "src/lib/migrations/bundle.json"), "utf8"));
 
 function d1(sqlite) {
@@ -81,7 +83,7 @@ test("backup and restore work on a database migrated up to just before promotion
 	const sqlite = database(true);
 	seed(sqlite);
 	const backup = await exportDatabaseRecords(d1(sqlite));
-	await restoreDatabaseRecords(d1(sqlite), toBuffer(backup));
+	await restoreWithBucket(d1(sqlite), toBuffer(backup));
 	assert.equal(count(sqlite, "users"), 1);
 	assert.equal(count(sqlite, "messages"), 1);
 });
@@ -93,7 +95,7 @@ test("a backup written after the promotions migration restores into a database w
 	const backup = await exportDatabaseRecords(d1(source));
 	const target = database(true);
 	seed(target);
-	await restoreDatabaseRecords(d1(target), toBuffer(backup));
+	await restoreWithBucket(d1(target), toBuffer(backup));
 	assert.equal(count(target, "users"), 1);
 	assert.equal(count(target, "messages"), 1);
 });
@@ -105,7 +107,7 @@ test("restoring promotion rows into a database without the promotion migrations 
 	const backup = await exportDatabaseRecords(d1(source));
 	const target = database(true);
 	seed(target);
-	await assert.rejects(restoreDatabaseRecords(d1(target), toBuffer(backup)), /Apply pending database migrations before restoring mailbox_promotion_settings/);
+	await assert.rejects(restoreWithBucket(d1(target), toBuffer(backup)), /Apply pending database migrations before restoring mailbox_promotion_settings/);
 	assert.equal(count(target, "users"), 1);
 	assert.equal(count(target, "messages"), 1);
 });
@@ -118,7 +120,7 @@ test("a backup written after the backfill migration restores into a database tha
 	const target = database(false, "0095_promotion_sender_backfill.sql");
 	seed(target);
 	assert.ok(!target.prepare("pragma table_info(mailbox_promotion_settings)").all().some((column) => column.name === "backfill_stalls"));
-	await restoreDatabaseRecords(d1(target), toBuffer(backup));
+	await restoreWithBucket(d1(target), toBuffer(backup));
 	assert.deepEqual({ ...target.prepare("select mailbox_id, mode, backfill_status from mailbox_promotion_settings").get() }, { mailbox_id: "m", mode: "show", backfill_status: "failed" });
 	assert.equal(count(target, "messages"), 1);
 });
