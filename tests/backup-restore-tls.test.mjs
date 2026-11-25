@@ -4,6 +4,7 @@ import { dirname, join } from "node:path";
 import test, { after } from "node:test";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { build } from "esbuild";
+import { memoryBucket } from "./helpers/memory-bucket.mjs";
 import Database from "better-sqlite3";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
@@ -21,6 +22,7 @@ await build({
 	banner: { js: 'import { createRequire } from "node:module"; const require = createRequire(import.meta.url);' },
 });
 const { exportDatabaseRecords, restoreDatabaseRecords } = await import(pathToFileURL(join(outDir, "backup.mjs")).href);
+const restoreWithBucket = (db, content) => restoreDatabaseRecords(db, content, { bucket: memoryBucket() });
 const { migrations } = JSON.parse(readFileSync(join(root, "src/lib/migrations/bundle.json"), "utf8"));
 
 function d1(sqlite) {
@@ -57,7 +59,7 @@ test("MTA-STS settings, report kind and tls_daily_stats round-trip, the serial i
 	assert.equal(document.tables.tls_daily_stats.length, 1);
 	assert.equal("id" in document.tables.tls_daily_stats[0], false);
 	assert.deepEqual(document.includedTables.includes("tls_daily_stats"), true);
-	await restoreDatabaseRecords(d1(sqlite), buffer(new TextEncoder().encode(JSON.stringify(document))));
+	await restoreWithBucket(d1(sqlite), buffer(new TextEncoder().encode(JSON.stringify(document))));
 	assert.equal(sqlite.prepare("SELECT success_count FROM tls_daily_stats").get().success_count, 5);
 	assert.equal(sqlite.prepare("SELECT mta_sts_policy_id FROM domain_deliverability").get().mta_sts_policy_id, "20251118000000");
 	assert.equal(sqlite.prepare("SELECT kind FROM deliverability_reports").get().kind, "tlsrpt");
@@ -70,7 +72,7 @@ test("a backup from a newer database restores onto one that has not applied the 
 	const document = JSON.parse(new TextDecoder().decode(await exportDatabaseRecords(d1(newer))));
 	const older = database(migrations.findIndex((migration) => migration.name.startsWith("0101_")));
 	assert.equal(older.prepare("SELECT count(*) AS n FROM pragma_table_info('domain_deliverability') WHERE name = 'mta_sts_mode'").get().n, 0);
-	await restoreDatabaseRecords(d1(older), buffer(new TextEncoder().encode(JSON.stringify(document))));
+	await restoreWithBucket(d1(older), buffer(new TextEncoder().encode(JSON.stringify(document))));
 	assert.equal(older.prepare("SELECT count(*) AS n FROM domain_deliverability").get().n, 1);
 	assert.equal(older.prepare("SELECT count(*) AS n FROM deliverability_reports").get().n, 1);
 });

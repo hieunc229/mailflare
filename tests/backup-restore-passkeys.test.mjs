@@ -4,6 +4,7 @@ import { dirname, join } from "node:path";
 import test from "node:test";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { build } from "esbuild";
+import { memoryBucket } from "./helpers/memory-bucket.mjs";
 import Database from "better-sqlite3";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
@@ -25,6 +26,7 @@ await build({
 	banner: { js: 'import { createRequire } from "node:module"; const require = createRequire(import.meta.url);' },
 });
 const { exportDatabaseRecords, restoreDatabaseRecords } = await import(pathToFileURL(outfile).href);
+const restoreWithBucket = (db, content) => restoreDatabaseRecords(db, content, { bucket: memoryBucket() });
 const { migrations } = JSON.parse(readFileSync(join(root, "src/lib/migrations/bundle.json"), "utf8"));
 
 function d1(sqlite) {
@@ -86,7 +88,7 @@ test("a backup with a passwordless passkey restores without tripping the last-me
 	const backup = await exportDatabaseRecords(databaseHandle);
 	assert.equal(sqlite.prepare("SELECT passkey_count FROM users WHERE id = 'u1'").get().passkey_count, 1);
 
-	await restoreDatabaseRecords(databaseHandle, backup.buffer.slice(backup.byteOffset, backup.byteOffset + backup.byteLength));
+	await restoreWithBucket(databaseHandle, backup.buffer.slice(backup.byteOffset, backup.byteOffset + backup.byteLength));
 	assert.equal(sqlite.prepare("SELECT COUNT(*) AS count FROM users").get().count, 1);
 	assert.equal(sqlite.prepare("SELECT COUNT(*) AS count FROM passkey_credentials").get().count, 1);
 	assert.equal(sqlite.prepare("SELECT passkey_count FROM users WHERE id = 'u1'").get().passkey_count, 1);
@@ -101,7 +103,7 @@ test("a newer backup restores into a database that has the passkey table but not
 	// Simulates an installation whose passkey table predates the aaguid column.
 	const target = database();
 	target.exec("ALTER TABLE passkey_credentials DROP COLUMN aaguid");
-	await restoreDatabaseRecords(d1(target), backup.buffer.slice(backup.byteOffset, backup.byteOffset + backup.byteLength));
+	await restoreWithBucket(d1(target), backup.buffer.slice(backup.byteOffset, backup.byteOffset + backup.byteLength));
 	assert.equal(target.prepare("SELECT COUNT(*) AS count FROM passkey_credentials").get().count, 1);
 	assert.equal(target.prepare("PRAGMA table_info(passkey_credentials)").all().some((column) => column.name === "aaguid"), false);
 });
@@ -125,7 +127,7 @@ test("a backup from before private_draft restores drafts as private, derived lik
 	const old = new TextEncoder().encode(JSON.stringify(document));
 
 	const target = database();
-	await restoreDatabaseRecords(d1(target), old.buffer.slice(old.byteOffset, old.byteOffset + old.byteLength));
+	await restoreWithBucket(d1(target), old.buffer.slice(old.byteOffset, old.byteOffset + old.byteLength));
 	const flags = Object.fromEntries(target.prepare("SELECT id, private_draft AS p FROM messages").all().map((row) => [row.id, row.p]));
 	assert.deepEqual(flags, { draft: 1, moved: 1, "sent-trashed": 0, sent: 0, inbound: 0 });
 });
@@ -138,7 +140,7 @@ test("a restore clears the DAV change log and sync state so clients resync from 
 	sqlite.prepare("INSERT INTO dav_changes (collection_id, object_key, change_type) VALUES ('cal:u1', 'ghost', 'updated')").run();
 	const databaseHandle = d1(sqlite);
 	const backup = await exportDatabaseRecords(databaseHandle);
-	await restoreDatabaseRecords(databaseHandle, backup.buffer.slice(backup.byteOffset, backup.byteOffset + backup.byteLength));
+	await restoreWithBucket(databaseHandle, backup.buffer.slice(backup.byteOffset, backup.byteOffset + backup.byteLength));
 	assert.equal(sqlite.prepare("SELECT COUNT(*) AS count FROM dav_sync_state").get().count, 0);
 	assert.deepEqual(sqlite.prepare("SELECT object_key AS k, change_type AS t FROM dav_changes ORDER BY seq").all(), [{ k: "e1", t: "created" }]);
 });
