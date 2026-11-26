@@ -35,6 +35,7 @@ import { CalendarList } from "./calendar-list";
 import { calendarLabel, canWriteEvents, eventErrorKey, movesSeries, visibleCalendarEvents, writableCalendars } from "./calendar-list-utils";
 import { EventViewDialog } from "./event-view-dialog";
 import { AvailabilityPanel } from "./availability-panel";
+import { useCurrentUser } from "@/hooks/use-current-user";
 import { useCalendarState } from "./calendar-state";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import type { CalendarEvent, CalendarView, EventDragPreview, EventResizeEdge, EventResizeSession } from "./types";
@@ -119,6 +120,7 @@ export default function CalendarPage() {
   const router = useRouter();
   const eventFromUrl = useSearchParams().get("event");
   const { selectedMailbox } = useSelectedMailbox();
+  const currentUser = useCurrentUser();
   const { minimal: sidebarMinimal, mobile } = useSidebar();
   const minimal = sidebarMinimal || mobile;
 
@@ -744,7 +746,7 @@ export default function CalendarPage() {
               </div>}
               {!delegate && <div className="grid grid-cols-[24px_minmax(0,1fr)] items-start gap-3">
                 <div />
-                <AvailabilityPanel guests={guests} excludeEventId={editing?.id} startsAt={startsAt} endsAt={endsAt} onPick={(start, end) => { setStartsAt(formatLocalDateTime(start)); setEndsAt(formatLocalDateTime(end)); }} />
+                <AvailabilityPanel guests={guests} excludeEventId={editing?.id} selfAddress={currentUser?.email} startsAt={startsAt} endsAt={endsAt} onPick={(start, end) => { setStartsAt(formatLocalDateTime(start)); setEndsAt(formatLocalDateTime(end)); }} />
               </div>}
               <div className="grid grid-cols-[24px_minmax(0,1fr)] items-center gap-3">
                 <MapPin aria-hidden="true" className="h-5 w-5 text-neutral-600" />
