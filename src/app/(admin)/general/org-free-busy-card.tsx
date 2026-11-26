@@ -5,7 +5,19 @@ import { useLanguage } from "@/components/language-provider";
 import { authFetch } from "@/lib/auth/client";
 import { OrgFreeBusyView } from "./org-free-busy-view";
 
-type Settings = { available: boolean; enabled: boolean; error?: string };
+type Settings = { available: boolean; enabled: boolean };
+
+/** The answer as settings, or null for any failure: a refusal, a body that is not JSON, a network error. The status is checked before the body is read. */
+async function request(init?: RequestInit): Promise<Settings | null> {
+	try {
+		const response = await authFetch("/api/admin/calendar-free-busy", init);
+		if (!response.ok) return null;
+		const data = (await response.json()) as Partial<Settings>;
+		return typeof data.enabled === "boolean" && typeof data.available === "boolean" ? { available: data.available, enabled: data.enabled } : null;
+	} catch {
+		return null;
+	}
+}
 
 /** The organisation-wide free/busy switch (spec F9 D-10): shown only to Team installations, saved the moment it is flipped. */
 export function OrgFreeBusyCard() {
@@ -19,30 +31,23 @@ export function OrgFreeBusyCard() {
 
 	useEffect(() => {
 		let active = true;
-		void authFetch("/api/admin/calendar-free-busy", { cache: "no-store" }).then(async (response) => {
-			const data = (await response.json()) as Settings;
+		void request({ cache: "no-store" }).then((data) => {
 			if (!active) return;
-			if (!response.ok) { setState("error"); return; }
+			if (!data) { setState("error"); return; }
 			setEnabled(data.enabled);
 			setAvailable(data.available);
 			setState(data.available || data.enabled ? "ready" : "unavailable");
-		}).catch(() => { if (active) setState("error"); });
+		});
 		return () => { active = false; };
 	}, [attempt]);
 
 	const change = useCallback(async (next: boolean) => {
 		setSaving(true);
 		setStatus("");
-		try {
-			const response = await authFetch("/api/admin/calendar-free-busy", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ enabled: next }) });
-			const data = (await response.json()) as Settings;
-			if (!response.ok) throw new Error(data.error ?? t("general.saveFailed"));
-			setEnabled(data.enabled);
-			setAvailable(data.available);
-			setStatus(t("general.orgFreeBusySaved"));
-		} catch (error) {
-			setStatus(error instanceof Error ? error.message : t("general.saveFailed"));
-		} finally { setSaving(false); }
+		const data = await request({ method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ enabled: next }) });
+		if (data) { setEnabled(data.enabled); setAvailable(data.available); }
+		setStatus(data ? t("general.orgFreeBusySaved") : t("general.orgFreeBusySaveFailed"));
+		setSaving(false);
 	}, [t]);
 
 	return <OrgFreeBusyView state={state} enabled={enabled} available={available} saving={saving} status={status} onChange={(next) => void change(next)} onRetry={() => { setState("loading"); setAttempt((value) => value + 1); }} />;
