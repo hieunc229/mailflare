@@ -207,6 +207,63 @@ export const mailboxAccess = sqliteTable(
 	],
 );
 
+export const mailGroups = sqliteTable(
+	"mail_groups",
+	{
+		id: text("id").primaryKey(),
+		domainId: text("domain_id")
+			.notNull()
+			.references(() => domains.id, { onDelete: "cascade" }),
+		localPart: text("local_part").notNull(),
+		name: text("name").notNull(),
+		description: text("description"),
+		whoCanPost: text("who_can_post", { enum: ["anyone", "org", "members"] }).notNull().default("anyone"),
+		replyTo: text("reply_to", { enum: ["sender", "group"] }).notNull().default("sender"),
+		disabled: bool("disabled").notNull().default(false),
+		createdByUserId: text("created_by_user_id").references(() => users.id, { onDelete: "set null" }),
+		createdAt: timestamp("created_at")
+			.notNull()
+			.$defaultFn(() => new Date()),
+		updatedAt: timestamp("updated_at")
+			.notNull()
+			.$defaultFn(() => new Date()),
+	},
+	(t) => [
+		uniqueIndex("mail_groups_address_idx").on(t.domainId, t.localPart),
+		index("mail_groups_created_by_idx").on(t.createdByUserId),
+	],
+);
+
+// Exactly one of userId, mailboxId and email is set, matching `kind`. That is checked
+// in application code: the kit has no portable CHECK. NULLs are distinct in unique
+// indexes on all three dialects, so the three uniques below need no `.where()`.
+export const mailGroupMembers = sqliteTable(
+	"mail_group_members",
+	{
+		id: text("id").primaryKey(),
+		groupId: text("group_id")
+			.notNull()
+			.references(() => mailGroups.id, { onDelete: "cascade" }),
+		kind: text("kind", { enum: ["user", "mailbox", "external"] }).notNull(),
+		userId: text("user_id").references(() => users.id, { onDelete: "cascade" }),
+		mailboxId: text("mailbox_id").references(() => mailboxes.id, { onDelete: "cascade" }),
+		email: text("email"),
+		canSendAs: bool("can_send_as").notNull().default(false),
+		createdByUserId: text("created_by_user_id").references(() => users.id, { onDelete: "set null" }),
+		createdAt: timestamp("created_at")
+			.notNull()
+			.$defaultFn(() => new Date()),
+	},
+	(t) => [
+		uniqueIndex("mail_group_members_group_user_idx").on(t.groupId, t.userId),
+		uniqueIndex("mail_group_members_group_mailbox_idx").on(t.groupId, t.mailboxId),
+		uniqueIndex("mail_group_members_group_email_idx").on(t.groupId, t.email),
+		index("mail_group_members_user_idx").on(t.userId),
+		index("mail_group_members_mailbox_idx").on(t.mailboxId),
+		index("mail_group_members_created_by_idx").on(t.createdByUserId),
+	],
+);
+
 export const contacts = sqliteTable(
 	"contacts",
 	{
@@ -1789,6 +1846,8 @@ export const schema = {
 	mailboxAliases,
 	autoReplyDeliveries,
 	mailboxAccess,
+	mailGroups,
+	mailGroupMembers,
 	contacts,
 	contactDetails,
 	folders,

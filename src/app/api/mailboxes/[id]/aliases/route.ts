@@ -134,7 +134,7 @@ export async function POST(request: Request, { params }: MailboxRouteParams) {
 
 	let createdId: string | null = null;
 	let createdLocalPart: string | null = null;
-	let conflict: "mailbox" | "alias" | null = null;
+	let conflict: "mailbox" | "alias" | "group" | null = null;
 	for (const localPart of candidates) {
 		const taken = await aliasAddressTaken(localPart);
 		if (taken) {
@@ -165,7 +165,9 @@ export async function POST(request: Request, { params }: MailboxRouteParams) {
 			? "Could not allocate an address, please try again"
 			: conflict === "mailbox"
 				? "A mailbox already uses this address"
-				: "An alias already uses this address";
+				: conflict === "group"
+					? "A group already uses this address"
+					: "An alias already uses this address";
 		return NextResponse.json({ error }, { status: 409 });
 	}
 

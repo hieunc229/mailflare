@@ -56,9 +56,9 @@ export async function createAccountResponse(env: CloudflareEnv, actor: AccountAd
 	const [registered] = await db.select({ id: users.id }).from(users).where(eq(users.email, email)).limit(1);
 	if (registered) return NextResponse.json({ error: "Email already registered" }, { status: 409 });
 	for (const address of requested) {
-		if (await findAddressOwner(db, address.domainId, address.localPart)) {
-			return NextResponse.json({ error: "An email address is already assigned to a mailbox or alias" }, { status: 409 });
-		}
+		const owner = await findAddressOwner(db, address.domainId, address.localPart);
+		if (owner === "group") return NextResponse.json({ error: "A group already uses this address" }, { status: 409 });
+		if (owner) return NextResponse.json({ error: "An email address is already assigned to a mailbox or alias" }, { status: 409 });
 	}
 
 	const userId = newId("usr");
