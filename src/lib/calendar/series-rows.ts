@@ -36,6 +36,10 @@ export async function shiftOverrides(db: Db, userId: string, masterId: string, s
  * (null is the owner's default). One statement: the change log keys an override under its parent's collection, so moving the
  * master first would log the overrides against the collection the parent just left.
  */
+export function moveSeriesStatement(db: Db, userId: string, masterId: string, calendarId: string | null) {
+	return db.update(calendarEvents).set({ calendarId }).where(and(eq(calendarEvents.userId, userId), or(eq(calendarEvents.id, masterId), eq(calendarEvents.davObjectId, masterId))));
+}
+
 export async function moveSeriesToCalendar(db: Db, userId: string, masterId: string, calendarId: string | null): Promise<void> {
-	await db.update(calendarEvents).set({ calendarId }).where(and(eq(calendarEvents.userId, userId), or(eq(calendarEvents.id, masterId), eq(calendarEvents.davObjectId, masterId))));
+	await moveSeriesStatement(db, userId, masterId, calendarId);
 }

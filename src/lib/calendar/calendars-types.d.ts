@@ -8,6 +8,8 @@ export type CalendarSummary = {
 	isDefault: boolean;
 	/** CS-2 lists only the user's own calendars; sharing adds the other roles. */
 	role: "owner";
+	/** Events in this calendar, for the delete confirmation. */
+	eventCount: number;
 };
 
 export type CalendarInput = { name?: unknown; color?: unknown; description?: unknown };

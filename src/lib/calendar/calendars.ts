@@ -1,6 +1,6 @@
-import { and, asc, count, eq, inArray, isNull, ne, or, type SQL } from "drizzle-orm";
+import { and, asc, count, eq, inArray, isNull, ne, or, sql, type SQL } from "drizzle-orm";
 import type { getDb } from "@/db";
-import { calendarEvents, calendarShares, davCollections } from "@/db/schema";
+import { calendarEvents, calendarShares, davChanges, davCollections } from "@/db/schema";
 import { matchNothing } from "@/db/sql";
 import { calendarCollectionId } from "@/lib/dav/changes";
 import { DEFAULT_FOLDER_COLOR, FOLDER_COLOR_VALUES } from "@/lib/folders/colors";
@@ -14,6 +14,8 @@ export const MAX_CALENDARS = 50;
 export const MAX_CALENDAR_NAME = 100;
 export const MAX_CALENDAR_DESCRIPTION = 500;
 const CHUNK = 50;
+/** Ids per statement when deleting by id list: under D1's 100 bound parameters with the other conditions. */
+const DELETE_CHUNK = 90;
 
 const fail = (status: CalendarFailure["status"], error: string): CalendarFailure => ({ ok: false, status, error });
 
@@ -23,15 +25,19 @@ function paletteColor(value: string | null): string {
 	return FOLDER_COLOR_VALUES.find((color) => color === six) ?? DEFAULT_FOLDER_COLOR;
 }
 
-function summarize(userId: string, row: typeof davCollections.$inferSelect | undefined, id = row?.id ?? calendarCollectionId(userId)): CalendarSummary {
-	return { id, name: row?.displayName ?? null, color: paletteColor(row?.color ?? null), description: row?.description ?? "", isDefault: id === calendarCollectionId(userId), role: "owner" };
+function summarize(userId: string, row: typeof davCollections.$inferSelect | undefined, eventCount = 0, id = row?.id ?? calendarCollectionId(userId)): CalendarSummary {
+	return { id, name: row?.displayName ?? null, color: paletteColor(row?.color ?? null), description: row?.description ?? "", isDefault: id === calendarCollectionId(userId), role: "owner", eventCount };
 }
 
 /** The default calendar first (synthesised until it has a row), then the others oldest first. */
 export async function listOwnCalendars(db: Db, userId: string): Promise<CalendarSummary[]> {
 	const rows = await db.select().from(davCollections).where(and(eq(davCollections.userId, userId), eq(davCollections.kind, "calendar"))).orderBy(asc(davCollections.createdAt), asc(davCollections.id));
 	const defaultId = calendarCollectionId(userId);
-	return [summarize(userId, rows.find((row) => row.id === defaultId)), ...rows.filter((row) => row.id !== defaultId).map((row) => summarize(userId, row))];
+	const counts = await db.select({ calendarId: calendarEvents.calendarId, events: count() }).from(calendarEvents).where(eq(calendarEvents.userId, userId)).groupBy(calendarEvents.calendarId);
+	const known = new Set(rows.map((row) => row.id).concat(defaultId));
+	// Events with no calendar, or one whose row is gone, are in the default calendar (spec 8.10).
+	const eventsIn = (id: string) => counts.filter((entry) => (id === defaultId ? !entry.calendarId || entry.calendarId === id || !known.has(entry.calendarId) : entry.calendarId === id)).reduce((total, entry) => total + Number(entry.events), 0);
+	return [summarize(userId, rows.find((row) => row.id === defaultId), eventsIn(defaultId)), ...rows.filter((row) => row.id !== defaultId).map((row) => summarize(userId, row, eventsIn(row.id)))];
 }
 
 type Parsed = { name?: string; color?: string; description?: string };
@@ -67,6 +73,12 @@ export async function createCalendar(db: Db, userId: string, input: CalendarInpu
 	const now = new Date();
 	const row = { id, userId, kind: "calendar" as const, displayName: parsed.name!, color: parsed.color ?? DEFAULT_FOLDER_COLOR, description: parsed.description ?? "", sortOrder: null, deadProps: "{}", seededAt: null, createdAt: now, updatedAt: now };
 	await db.insert(davCollections).values(row);
+	// The count above and this insert are not one step; a concurrent create may have taken the last place, so count again and give the place back.
+	const [{ after }] = await db.select({ after: count() }).from(davCollections).where(and(eq(davCollections.userId, userId), eq(davCollections.kind, "calendar"), ne(davCollections.id, calendarCollectionId(userId))));
+	if (Number(after) + 1 > MAX_CALENDARS) {
+		await db.delete(davCollections).where(eq(davCollections.id, id));
+		return fail(409, `You can have up to ${MAX_CALENDARS} calendars`);
+	}
 	return { ok: true, calendar: summarize(userId, row) };
 }
 
@@ -84,21 +96,32 @@ export async function updateCalendar(db: Db, userId: string, calendarId: string,
 		return { ok: true, calendar: summarize(userId, { ...existing, ...patch }) };
 	}
 	const row = { id: calendarId, userId, kind: "calendar" as const, displayName: null, color: null, description: null, sortOrder: null, deadProps: "{}", seededAt: null, createdAt: now, updatedAt: now, ...patch };
-	await db.insert(davCollections).values(row).onConflictDoNothing();
+	await db.insert(davCollections).values(row).onConflictDoUpdate({ target: davCollections.id, set: { ...patch, updatedAt: now } });
 	return { ok: true, calendar: summarize(userId, row) };
 }
 
 /**
- * Deletes a calendar and its events. The events go first, by statement, so the change log writes a destroyed entry for each
- * (a foreign-key cascade would not fire the triggers on MySQL); the collection row then cascades its grants.
+ * Deletes a calendar and its events, in one batch. The events go first, by statement, so the change log writes a destroyed entry
+ * for each (a foreign-key cascade would not fire the triggers on MySQL); a series goes with its override rows even when one lost
+ * its calendar id (deleted by master id, in chunks, never by a subquery on the same table). The log rows written under the
+ * calendar are then filed under the user's default calendar, which is what a phone sees as `default/` until CalDAV serves each
+ * calendar itself, so the phone still learns of the deletions. The collection row cascades its grants.
  */
 export async function deleteCalendar(db: Db, userId: string, calendarId: string): Promise<CalendarDeleteResult> {
-	if (calendarId === calendarCollectionId(userId)) return fail(409, "The default calendar cannot be deleted");
+	const defaultId = calendarCollectionId(userId);
+	if (calendarId === defaultId) return fail(409, "The default calendar cannot be deleted");
 	const [existing] = await db.select().from(davCollections).where(and(eq(davCollections.id, calendarId), eq(davCollections.userId, userId), eq(davCollections.kind, "calendar"))).limit(1);
 	if (!existing) return fail(404, "Calendar not found");
 	const [{ events }] = await db.select({ events: count() }).from(calendarEvents).where(and(eq(calendarEvents.calendarId, calendarId), eq(calendarEvents.userId, userId)));
-	await db.delete(calendarEvents).where(and(eq(calendarEvents.calendarId, calendarId), eq(calendarEvents.userId, userId)));
-	await db.delete(davCollections).where(and(eq(davCollections.id, calendarId), eq(davCollections.userId, userId)));
+	const masters = (await db.select({ id: calendarEvents.id }).from(calendarEvents).where(and(eq(calendarEvents.calendarId, calendarId), eq(calendarEvents.userId, userId), eq(calendarEvents.davObjectId, calendarEvents.id)))).map((row) => row.id);
+	const statements: unknown[] = [];
+	for (let index = 0; index < masters.length; index += DELETE_CHUNK) statements.push(db.delete(calendarEvents).where(and(eq(calendarEvents.userId, userId), inArray(calendarEvents.davObjectId, masters.slice(index, index + DELETE_CHUNK)))));
+	statements.push(
+		db.delete(calendarEvents).where(and(eq(calendarEvents.calendarId, calendarId), eq(calendarEvents.userId, userId))),
+		db.update(davChanges).set({ collectionId: defaultId }).where(eq(davChanges.collectionId, calendarId)),
+		db.delete(davCollections).where(and(eq(davCollections.id, calendarId), eq(davCollections.userId, userId))),
+	);
+	await db.batch(statements as never);
 	return { ok: true, name: existing.displayName, eventCount: Number(events) };
 }
 
@@ -106,16 +129,22 @@ export async function deleteCalendar(db: Db, userId: string, calendarId: string)
  * Turns the calendar an event write names into what `calendar_events.calendar_id` stores: undefined (not sent, keep),
  * null (the default calendar, however it was spelled) or the id of a calendar the user owns.
  */
-export async function resolveEventCalendar(db: Db, userId: string, requested: unknown): Promise<EventCalendarResult> {
+export async function resolveEventCalendar(db: Db, userId: string, requested: unknown, current?: string | null): Promise<EventCalendarResult> {
 	if (requested === undefined) return { ok: true, calendarId: undefined };
+	// Naming the calendar the event already has changes nothing, so an event whose calendar row is gone stays editable.
+	if (typeof requested === "string" && current && requested === current) return { ok: true, calendarId: undefined };
 	if (requested === null || requested === calendarCollectionId(userId)) return { ok: true, calendarId: null };
-	if (typeof requested !== "string") return fail(404, "Calendar not found");
+	if (typeof requested !== "string") return fail(400, "Invalid calendar");
 	const [row] = await db.select({ id: davCollections.id }).from(davCollections).where(and(eq(davCollections.id, requested), eq(davCollections.userId, userId), eq(davCollections.kind, "calendar"))).limit(1);
 	return row ? { ok: true, calendarId: row.id } : fail(404, "Calendar not found");
 }
 
 /** The calendar an event row lives in (D-1: one helper, never inline). */
-export const eventCalendarId = (event: { calendarId: string | null; userId: string }) => event.calendarId ?? calendarCollectionId(event.userId);
+export function eventCalendarId(event: { calendarId: string | null; userId: string }, known?: Set<string>): string {
+	const defaultId = calendarCollectionId(event.userId);
+	// A calendar whose row is missing (a partial restore) shows its events in the default calendar, never loses them.
+	return event.calendarId && (!known || known.has(event.calendarId)) ? event.calendarId : defaultId;
+}
 
 /** Events of the user's own calendars among `calendarIds` (at most CHUNK ids, so well under D1's 100 bound parameters). */
 export function calendarFilter(userId: string, calendarIds: string[]): SQL {
@@ -123,7 +152,7 @@ export function calendarFilter(userId: string, calendarIds: string[]): SQL {
 	const named = [...new Set(calendarIds)].filter((id) => id !== defaultId).slice(0, CHUNK);
 	const wantsDefault = calendarIds.includes(defaultId);
 	const parts: SQL[] = [];
-	if (wantsDefault) parts.push(or(isNull(calendarEvents.calendarId), eq(calendarEvents.calendarId, defaultId))!);
+	if (wantsDefault) parts.push(or(isNull(calendarEvents.calendarId), eq(calendarEvents.calendarId, defaultId), sql`${calendarEvents.calendarId} not in (select ${davCollections.id} from ${davCollections} where ${davCollections.userId} = ${userId} and ${davCollections.kind} = 'calendar')`)!);
 	if (named.length) parts.push(inArray(calendarEvents.calendarId, named));
 	return parts.length ? and(eq(calendarEvents.userId, userId), or(...parts))! : matchNothing;
 }

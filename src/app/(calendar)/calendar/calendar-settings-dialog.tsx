@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import toast from "react-hot-toast";
 import { Loader2, Trash2 } from "@/components/icons";
 import { useLanguage } from "@/components/language-provider";
@@ -13,10 +13,36 @@ import { authFetch } from "@/lib/auth/client";
 import { DEFAULT_FOLDER_COLOR, FOLDER_COLOR_OPTIONS } from "@/lib/folders/colors";
 import { folderColorKeys } from "@/lib/folders/color-keys";
 import type { CalendarSummary } from "@/lib/calendar/calendars-types";
-import type { CalendarSettingsDialogProps } from "./calendar-list-types";
+import { calendarErrorKey, nextColor } from "./calendar-list-utils";
+import { calendarChanged, closeCalendarSettings, useCalendarState } from "./calendar-state";
+
+const COLOR_VALUES = FOLDER_COLOR_OPTIONS.map((option) => option.value);
+
+/** One tab stop for the group; arrow keys, Home and End move the choice and the focus, as for any radio group. */
+function ColorChoice({ value, onChange, label }: { value: string; onChange: (value: string) => void; label: string }) {
+	const { t } = useLanguage();
+	const refs = useRef(new Map<string, HTMLButtonElement>());
+	const selected = COLOR_VALUES.includes(value as never) ? value : COLOR_VALUES[0];
+	return (
+		<div role="radiogroup" aria-label={label} className="flex flex-wrap items-center gap-2"
+			onKeyDown={(event) => {
+				const next = nextColor(COLOR_VALUES, selected, event.key);
+				if (!next) return;
+				event.preventDefault();
+				onChange(next);
+				refs.current.get(next)?.focus();
+			}}>
+			{FOLDER_COLOR_OPTIONS.map((option) => (
+				<button key={option.value} ref={(node) => { if (node) refs.current.set(option.value, node); }} type="button" role="radio" tabIndex={selected === option.value ? 0 : -1} aria-checked={value === option.value} aria-label={t(folderColorKeys[option.value])} title={t(folderColorKeys[option.value])} onClick={() => onChange(option.value)}
+					className={`h-8 w-8 rounded-full border-2 transition-transform hover:scale-110 motion-reduce:transition-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600 [@media(pointer:coarse)]:h-11 [@media(pointer:coarse)]:w-11 ${value === option.value ? "border-neutral-900 ring-2 ring-neutral-300 ring-offset-2" : "border-transparent"}`}
+					style={{ backgroundColor: option.value }} />
+			))}
+		</div>
+	);
+}
 
 /** Remounted per target (keyed by the caller), so its fields start from the calendar being edited. */
-function SettingsForm({ target, onClose, onChanged }: CalendarSettingsDialogProps & { target: CalendarSummary | "new" }) {
+function SettingsForm({ target }: { target: CalendarSummary | "new" }) {
 	const { t } = useLanguage();
 	const calendar = target === "new" ? null : target;
 	const [name, setName] = useState(calendar?.name ?? "");
@@ -28,37 +54,40 @@ function SettingsForm({ target, onClose, onChanged }: CalendarSettingsDialogProp
 	const nameOptional = calendar?.isDefault === true && !calendar.name;
 	const canSave = (name.trim().length > 0 || nameOptional) && pending === null;
 
-	async function request(url: string, init: RequestInit, fallback: string): Promise<Record<string, unknown> | null> {
+	async function request(url: string, init: RequestInit, action: "save" | "delete"): Promise<Record<string, unknown> | null> {
 		try {
 			const response = await authFetch(url, init);
 			const body = await response.json().catch(() => ({})) as Record<string, unknown>;
 			if (response.ok) return body;
-			setError(typeof body.error === "string" ? body.error : fallback);
-		} catch { setError(fallback); }
+			setError(t(calendarErrorKey(action, response.status) as never));
+		} catch { setError(t(calendarErrorKey(action, 0) as never)); }
 		return null;
 	}
 
 	async function save() {
 		setPending("save");
 		setError("");
-		const payload = { ...(name.trim() ? { name: name.trim() } : {}), color, description };
-		const body = await request(calendar ? `/api/calendar/calendars/${encodeURIComponent(calendar.id)}` : "/api/calendar/calendars", { method: calendar ? "PATCH" : "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) }, t("calendar.calendars.saveFailed"));
+		// Only what changed is sent, so saving never overwrites a colour a phone set that is not in this palette.
+		const payload = calendar
+			? { ...(name.trim() && name.trim() !== (calendar.name ?? "") ? { name: name.trim() } : {}), ...(color !== calendar.color ? { color } : {}), ...(description.trim() !== calendar.description ? { description } : {}) }
+			: { name: name.trim(), color, description };
+		const body = await request(calendar ? `/api/calendar/calendars/${encodeURIComponent(calendar.id)}` : "/api/calendar/calendars", { method: calendar ? "PATCH" : "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) }, "save");
 		setPending(null);
 		if (!body) return;
 		toast.success(t(calendar ? "calendar.calendars.saved" : "calendar.calendars.created"));
-		onChanged(calendar ? "updated" : "created", (body.calendar as CalendarSummary).id);
+		calendarChanged(calendar ? "updated" : "created", (body.calendar as CalendarSummary).id);
 	}
 
 	async function remove() {
 		if (!calendar || calendar.isDefault) return;
-		if (!await confirmDestructive(t("calendar.calendars.deleteConfirm", { name: calendar.name ?? "" }))) return;
+		if (!await confirmDestructive(t("calendar.calendars.deleteConfirm", { name: calendar.name ?? "", count: calendar.eventCount }))) return;
 		setPending("delete");
 		setError("");
-		const body = await request(`/api/calendar/calendars/${encodeURIComponent(calendar.id)}`, { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ confirm: true }) }, t("calendar.calendars.deleteFailed"));
+		const body = await request(`/api/calendar/calendars/${encodeURIComponent(calendar.id)}`, { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ confirm: true }) }, "delete");
 		setPending(null);
 		if (!body) return;
 		toast.success(t("calendar.calendars.deleted"));
-		onChanged("deleted", calendar.id);
+		calendarChanged("deleted", calendar.id);
 	}
 
 	return (
@@ -67,13 +96,7 @@ function SettingsForm({ target, onClose, onChanged }: CalendarSettingsDialogProp
 				<label htmlFor="calendar-name" className="mb-1 block font-medium text-neutral-800">{t("calendar.calendars.name")}</label>
 				<Input id="calendar-name" value={name} maxLength={100} autoFocus onChange={(event) => setName(event.target.value)} placeholder={nameOptional ? t("calendar.defaultName") : t("calendar.calendars.namePlaceholder")} />
 			</div>
-			<div role="radiogroup" aria-label={t("calendar.calendars.color")} className="flex flex-wrap items-center gap-2">
-				{FOLDER_COLOR_OPTIONS.map((option) => (
-					<button key={option.value} type="button" role="radio" aria-checked={color === option.value} aria-label={t(folderColorKeys[option.value])} title={t(folderColorKeys[option.value])} onClick={() => setColor(option.value)}
-						className={`h-8 w-8 rounded-full border-2 transition-transform hover:scale-110 motion-reduce:transition-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600 [@media(pointer:coarse)]:h-11 [@media(pointer:coarse)]:w-11 ${color === option.value ? "border-neutral-900 ring-2 ring-neutral-300 ring-offset-2" : "border-transparent"}`}
-						style={{ backgroundColor: option.value }} />
-				))}
-			</div>
+			<ColorChoice value={color} onChange={setColor} label={t("calendar.calendars.color")} />
 			<div>
 				<label htmlFor="calendar-description" className="mb-1 block font-medium text-neutral-800">{t("calendar.calendars.description")}</label>
 				<Textarea id="calendar-description" value={description} maxLength={500} rows={3} onChange={(event) => setDescription(event.target.value)} />
@@ -88,7 +111,7 @@ function SettingsForm({ target, onClose, onChanged }: CalendarSettingsDialogProp
 					)}
 				</div>
 				<div className="flex gap-2">
-					<Button type="button" variant="ghost" disabled={pending !== null} onClick={onClose} className="[@media(pointer:coarse)]:min-h-11">{t("common.cancel")}</Button>
+					<Button type="button" variant="ghost" disabled={pending !== null} onClick={closeCalendarSettings} className="[@media(pointer:coarse)]:min-h-11">{t("common.cancel")}</Button>
 					<Button type="submit" disabled={!canSave} className="[@media(pointer:coarse)]:min-h-11">{pending === "save" ? t("common.saving") : t("common.save")}</Button>
 				</div>
 			</div>
@@ -96,16 +119,18 @@ function SettingsForm({ target, onClose, onChanged }: CalendarSettingsDialogProp
 	);
 }
 
-export function CalendarSettingsDialog({ target, onClose, onChanged }: CalendarSettingsDialogProps) {
+/** Mounted once in the calendar layout; every list and menu opens it through the shared store. */
+export function CalendarSettingsDialog() {
 	const { t } = useLanguage();
+	const { settings: target } = useCalendarState();
 	return (
-		<Dialog open={target !== null} onOpenChange={(open) => { if (!open) onClose(); }}>
+		<Dialog open={target !== null} onOpenChange={(open) => { if (!open) closeCalendarSettings(); }}>
 			<DialogContent className="max-h-[calc(100vh-4rem)] w-[min(480px,calc(100vw-32px))] overflow-y-auto">
 				<DialogHeader>
 					<DialogTitle>{target === "new" ? t("calendar.calendars.new") : t("calendar.calendars.settingsTitle")}</DialogTitle>
 					<DialogDescription className="sr-only">{t("calendar.calendars.settingsDescription")}</DialogDescription>
 				</DialogHeader>
-				{target !== null && <SettingsForm key={target === "new" ? "new" : target.id} target={target} onClose={onClose} onChanged={onChanged} />}
+				{target !== null && <SettingsForm key={target === "new" ? "new" : target.id} target={target} />}
 			</DialogContent>
 		</Dialog>
 	);

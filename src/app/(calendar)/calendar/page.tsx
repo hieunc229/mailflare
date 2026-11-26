@@ -32,10 +32,9 @@ import { MonthGrid } from "./month-grid";
 import { CalendarSubscribeDialog } from "./subscribe-dialog";
 import { InviteResponseDialog } from "./invite-response-dialog";
 import { CalendarList } from "./calendar-list";
-import { CalendarSettingsDialog } from "./calendar-settings-dialog";
-import type { CalendarListState } from "./calendar-list-types";
-import { readHiddenCalendars, toggleHidden, visibleCalendarEvents, writeHiddenCalendars } from "./calendar-list-utils";
-import type { CalendarSummary } from "@/lib/calendar/calendars-types";
+import { visibleCalendarEvents } from "./calendar-list-utils";
+import { useCalendarState } from "./calendar-state";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import type { CalendarEvent, CalendarView, EventDragPreview, EventResizeEdge, EventResizeSession } from "./types";
 import {
   addDays, addMonths, calendarAnchorDay, CALENDAR_END_HOUR, CALENDAR_HOUR_HEIGHT, CALENDAR_START_HOUR,
@@ -68,11 +67,8 @@ export default function CalendarPage() {
     } catch { /* storage can be blocked; the default view is fine */ }
     return "week";
   });
-  const [calendars, setCalendars] = useState<CalendarSummary[]>([]);
-  const [calendarsState, setCalendarsState] = useState<CalendarListState>("loading");
-  const [calendarsVersion, setCalendarsVersion] = useState(0);
-  const [hiddenCalendars, setHiddenCalendars] = useState<string[]>(readHiddenCalendars);
-  const [calendarSettings, setCalendarSettings] = useState<CalendarSummary | "new" | null>(null);
+  const { calendars, hidden: hiddenCalendars, revision: calendarsRevision } = useCalendarState();
+  const [calendarsOpen, setCalendarsOpen] = useState(false);
   const [calendarId, setCalendarId] = useState("");
   const defaultCalendar = calendars.find((calendar) => calendar.isDefault);
   const [pendingInvite, setPendingInvite] = useState<CalendarEvent | null>(null);
@@ -165,9 +161,10 @@ export default function CalendarPage() {
   }, [monthPickerOpen]);
 
   // Every refetch shows the loading bar until it settles.
-  const [loadingFor, setLoadingFor] = useState({ today, visibleDate, view, eventsVersion, t });
-  if (loadingFor.today !== today || loadingFor.visibleDate !== visibleDate || loadingFor.view !== view || loadingFor.eventsVersion !== eventsVersion || loadingFor.t !== t) {
-    setLoadingFor({ today, visibleDate, view, eventsVersion, t });
+  const fetchVersion = eventsVersion + calendarsRevision;
+  const [loadingFor, setLoadingFor] = useState({ today, visibleDate, view, eventsVersion: fetchVersion, t });
+  if (loadingFor.today !== today || loadingFor.visibleDate !== visibleDate || loadingFor.view !== view || loadingFor.eventsVersion !== fetchVersion || loadingFor.t !== t) {
+    setLoadingFor({ today, visibleDate, view, eventsVersion: fetchVersion, t });
     setLoading(true);
   }
 
@@ -185,40 +182,9 @@ export default function CalendarPage() {
       .catch(() => { if (active) toast.error(t("calendar.loadFailed")); })
       .finally(() => { if (active) setLoading(false); });
     return () => { active = false; };
-  }, [today, visibleDate, weekStart, view, eventsVersion, t]);
-
-  useEffect(() => {
-    let active = true;
-    void authFetch("/api/calendar/calendars")
-      .then((response) => {
-        if (!response.ok) throw new Error();
-        return response.json() as Promise<{ calendars?: CalendarSummary[] }>;
-      })
-      .then((data) => { if (active) { setCalendars(data.calendars ?? []); setCalendarsState("ready"); } })
-      .catch(() => { if (active) setCalendarsState("error"); });
-    return () => { active = false; };
-  }, [calendarsVersion]);
+  }, [today, visibleDate, weekStart, view, fetchVersion, t]);
 
   const shownEvents = useMemo(() => visibleCalendarEvents(events, hiddenCalendars, defaultCalendar?.id), [events, hiddenCalendars, defaultCalendar?.id]);
-
-  function toggleCalendar(id: string) {
-    const next = toggleHidden(hiddenCalendars, id);
-    setHiddenCalendars(next);
-    writeHiddenCalendars(next);
-  }
-
-  function calendarChanged(change: "created" | "updated" | "deleted", id: string) {
-    setCalendarSettings(null);
-    setCalendarsState("loading");
-    setCalendarsVersion((version) => version + 1);
-    // Events of a deleted calendar are gone, and a new one starts visible; both need a fresh event list.
-    setEventsVersion((version) => version + 1);
-    if (change === "deleted") {
-      const next = hiddenCalendars.filter((item) => item !== id);
-      setHiddenCalendars(next);
-      writeHiddenCalendars(next);
-    }
-  }
 
   useEffect(() => {
     if (!eventFromUrl) { openedEventFromUrl.current = null; return; }
@@ -559,6 +525,7 @@ export default function CalendarPage() {
                 <DropdownMenu.Portal>
                   <DropdownMenu.Content align="end" sideOffset={4} className="z-[130] min-w-48 rounded-xl border border-neutral-200 bg-white p-1 text-sm shadow-xl">
                     <DropdownMenu.Item onSelect={() => setVisibleDate(new Date())} className="cursor-pointer rounded-lg px-3 py-2 text-neutral-700 outline-none data-[highlighted]:bg-neutral-100 md:hidden">{t("calendar.today")}</DropdownMenu.Item>
+                    <DropdownMenu.Item onSelect={() => setCalendarsOpen(true)} className="cursor-pointer rounded-lg px-3 py-2 text-neutral-700 outline-none data-[highlighted]:bg-neutral-100 [@media(pointer:coarse)]:py-3">{t("calendar.calendars.manage")}</DropdownMenu.Item>
                     <DropdownMenu.Item onSelect={() => setSubscribeOpen(true)} className="cursor-pointer rounded-lg px-3 py-2 text-neutral-700 outline-none data-[highlighted]:bg-neutral-100">{t("calendar.subscribe")}</DropdownMenu.Item>
                     <DropdownMenu.Separator className="my-1 h-px bg-neutral-100" />
                     <DropdownMenu.Label className="px-3 pb-1 pt-2 text-xs font-medium text-neutral-500">{t("calendar.view")}</DropdownMenu.Label>
@@ -571,10 +538,7 @@ export default function CalendarPage() {
         </div>,
         headerTarget,
       )}
-      <UpcomingSidebar events={shownEvents} onSelect={editEvent} header={
-        <CalendarList calendars={calendars} state={calendarsState} hidden={hiddenCalendars} onToggle={toggleCalendar} onSettings={setCalendarSettings} onAdd={() => setCalendarSettings("new")}
-          onRetry={() => { setCalendarsState("loading"); setCalendarsVersion((version) => version + 1); }} />
-      } />
+      <UpcomingSidebar events={events} onSelect={editEvent} />
 
       <section aria-busy={loading} className="min-h-0 min-w-0 flex-1 rounded-t-3xl bg-white flex flex-col overflow-hidden">
         <div className="min-h-0 min-w-0 flex-1 overflow-auto overscroll-contain">
@@ -644,7 +608,15 @@ export default function CalendarPage() {
       </section>
 
       <CalendarSubscribeDialog open={subscribeOpen} onOpenChange={setSubscribeOpen} />
-      <CalendarSettingsDialog target={calendarSettings} onClose={() => setCalendarSettings(null)} onChanged={calendarChanged} />
+      <Dialog open={calendarsOpen} onOpenChange={setCalendarsOpen}>
+        <DialogContent className="max-h-[calc(100vh-4rem)] w-[min(420px,calc(100vw-32px))] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>{t("calendar.calendars.title")}</DialogTitle>
+            <DialogDescription className="sr-only">{t("calendar.calendars.manageDescription")}</DialogDescription>
+          </DialogHeader>
+          <CalendarList />
+        </DialogContent>
+      </Dialog>
       <InviteResponseDialog event={pendingInvite} onClose={() => setPendingInvite(null)} onAnswered={() => setEventsVersion((version) => version + 1)} />
 
       {adding && createPortal(
@@ -775,6 +747,7 @@ export default function CalendarPage() {
                       {calendars.map((calendar) => <option key={calendar.id} value={calendar.id}>{calendar.name ?? t("calendar.defaultName")}</option>)}
                     </Select>
                   </div>
+                  {editing && editing.repeat !== "none" && calendarId !== (editing.calendarId ?? defaultCalendar?.id) && <p className="col-start-2 -mt-1 px-5 text-xs text-neutral-600">{t("calendar.calendars.seriesMoves")}</p>}
                 </div>
               )}
               <div className="grid grid-cols-[24px_minmax(0,1fr)] items-center gap-3">

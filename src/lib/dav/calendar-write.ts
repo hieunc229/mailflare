@@ -10,7 +10,7 @@ import { rowsHash } from "./calendar-merge";
 import { parseCalendarObject, type EventFields } from "./calendar-parse";
 import { calendarBytes, findCalendarByName, findUidConflict } from "./calendar-store";
 import type { EventRow } from "./calendar-render";
-import { calendarCollectionId, etagFromSeq, etagSeqs } from "./changes";
+import { calendarCollectionId, collectionScope, etagFromSeq, etagSeqs } from "./changes";
 import { BASE_HEADERS, precondition, text, XML_HEADERS } from "./common";
 import { collectionPath, type DavContext } from "./collections";
 import { escapeXml } from "./xml-writer";
@@ -102,6 +102,8 @@ export async function putCalendarResource(ctx: DavContext, name: string, request
 		responseStatus: fields.responseStatus,
 		recurrenceId: fields.recurrenceId,
 		davObjectId: id,
+		// An override lives in its master's calendar, or a series with a moved master would be split across calendars.
+		calendarId: old?.calendarId ?? null,
 		createdAt: now,
 	}));
 	// The rows as they will be read back, for the hash the stored body is valid against.
@@ -118,7 +120,7 @@ export async function putCalendarResource(ctx: DavContext, name: string, request
 	// A native event written for the first time has no stored resource yet.
 	const hasObject = (await db.select({ id: davCalendarObjects.id }).from(davCalendarObjects).where(eq(davCalendarObjects.id, id)).limit(1)).length > 0;
 	statements.push(hasObject ? db.update(davCalendarObjects).set(objectValues).where(eq(davCalendarObjects.id, id)) : db.insert(davCalendarObjects).values({ ...objectValues, id, userId, collectionId: cid, createdAt: now }));
-	statements.push(db.select({ seq: sql<number | null>`max(${davChanges.seq})` }).from(davChanges).where(and(eq(davChanges.collectionId, cid), eq(davChanges.objectKey, id))));
+	statements.push(db.select({ seq: sql<number | null>`max(${davChanges.seq})` }).from(davChanges).where(and(collectionScope(davChanges.collectionId, cid), eq(davChanges.objectKey, id))));
 	let results: unknown[];
 	try {
 		results = (await db.batch(statements as never)) as unknown[];

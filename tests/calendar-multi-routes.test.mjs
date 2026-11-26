@@ -28,6 +28,11 @@ after(() => { sqlite?.close(); delete globalThis.calMulti; for (const fixture of
 function setup() {
 	sqlite?.close();
 	sqlite = installSqlite("calMulti", { schema, extra: { user: { id: "u1", timeZone: "UTC", calendarEnabled: true }, audit: [] } });
+	// The sqlite-proxy driver has no batch(); D1 runs a batch in one transaction, so this does the same.
+	globalThis.calMulti.db.batch = async (statements) => {
+		sqlite.exec("BEGIN");
+		try { for (const statement of statements) await statement; sqlite.exec("COMMIT"); } catch (error) { sqlite.exec("ROLLBACK"); throw error; }
+	};
 	for (const id of ["u1", "u2"]) sqlite.exec(`INSERT INTO users (id, email, name, password_hash, role, created_at) VALUES ('${id}', '${id}@one.test', 'U', 'x', 'user', 1)`);
 	sqlite.exec("INSERT INTO dav_collections (id, user_id, kind, display_name, created_at, updated_at) VALUES ('cal:theirs', 'u2', 'calendar', 'Theirs', 1, 1)");
 }
@@ -101,7 +106,7 @@ test("POST event takes calendarId: stored for a named calendar, null for the def
 	assert.equal((await post({ calendarId: "cal:u1" })).status, 200);
 	assert.equal((await post({})).status, 200);
 	assert.equal((await post({ calendarId: "cal:theirs" })).status, 404);
-	assert.equal((await post({ calendarId: 5 })).status, 404);
+	assert.equal((await post({ calendarId: 5 })).status, 400);
 	assert.deepEqual(sqlite.prepare("SELECT calendar_id FROM calendar_events ORDER BY rowid").all().map((row) => row.calendar_id), [calendar.id, null, null]);
 });
 

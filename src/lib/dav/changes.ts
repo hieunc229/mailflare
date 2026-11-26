@@ -1,6 +1,6 @@
-import { and, asc, eq, gt, inArray, sql, type AnyColumn } from "drizzle-orm";
+import { and, asc, eq, gt, inArray, sql, type AnyColumn, type SQL } from "drizzle-orm";
 import { getDb } from "@/db";
-import { davChanges, davSyncState } from "@/db/schema";
+import { davChanges, davCollections, davSyncState } from "@/db/schema";
 import { excluded, greatest } from "@/db/sql";
 import { isMissingTableError } from "@/lib/database-errors";
 
@@ -12,6 +12,18 @@ import { isMissingTableError } from "@/lib/database-errors";
 
 export const calendarCollectionId = (userId: string) => `cal:${userId}`;
 export const addressBookCollectionId = (userId: string) => `card:${userId}`;
+
+/**
+ * The rows of a collection in the change log or the sync state. The default calendar `cal:<user>` is what a phone sees as
+ * `default/` and lists every event of the user, so its log covers all of the user's calendar collections (events in other
+ * calendars are logged under their own collection ids by the triggers). Sequence numbers are global, so one token and one
+ * ETag order changes across them. This holds until CalDAV serves each calendar as its own collection (CS-4).
+ */
+export function collectionScope(column: AnyColumn, collectionId: string): SQL {
+	if (!collectionId.startsWith("cal:")) return eq(column, collectionId);
+	const userId = collectionId.slice(4);
+	return sql`(${column} = ${collectionId} or ${column} in (select ${davCollections.id} from ${davCollections} where ${davCollections.userId} = ${userId} and ${davCollections.kind} = 'calendar'))`;
+}
 
 /** Rows older than this are pruned (the newest row of each live object is kept). Older sync tokens force a resync. */
 export const CHANGE_RETENTION_DAYS = 30;
@@ -53,7 +65,9 @@ export function parseSyncToken(token: string): SyncToken | null {
 /** The collection's sync epoch and pruning floor; the epoch is generated on first use and never changes after. */
 export async function ensureSyncState(env: Pick<CloudflareEnv, "DB">, collectionId: string): Promise<{ epoch: string; floor: number }> {
 	const db = getDb(env);
-	const read = async () => (await db.select({ epoch: davSyncState.epoch, floor: davSyncState.floor }).from(davSyncState).where(eq(davSyncState.collectionId, collectionId)).limit(1))[0];
+	// The default calendar's floor is the highest among the user's calendars (see collectionScope), read in the same statement.
+	const floor = collectionId.startsWith("cal:") ? sql<number>`coalesce((select max(${davSyncState.floor}) from ${davSyncState} where ${collectionScope(davSyncState.collectionId, collectionId)}), 0)` : davSyncState.floor;
+	const read = async () => (await db.select({ epoch: davSyncState.epoch, floor }).from(davSyncState).where(eq(davSyncState.collectionId, collectionId)).limit(1))[0];
 	const existing = await read();
 	if (existing) return existing;
 	await db.insert(davSyncState).values({ collectionId, epoch: crypto.randomUUID(), floor: 0 }).onConflictDoNothing();
@@ -61,7 +75,7 @@ export async function ensureSyncState(env: Pick<CloudflareEnv, "DB">, collection
 }
 
 async function newestSeq(env: Pick<CloudflareEnv, "DB">, collectionId: string, floor: number): Promise<number> {
-	const [row] = await getDb(env).select({ seq: sql<number | null>`max(${davChanges.seq})` }).from(davChanges).where(eq(davChanges.collectionId, collectionId));
+	const [row] = await getDb(env).select({ seq: sql<number | null>`max(${davChanges.seq})` }).from(davChanges).where(collectionScope(davChanges.collectionId, collectionId));
 	// After a prune an empty log still has a position: the floor, so the token handed out is never already stale.
 	return Math.max(Number(row?.seq ?? 0), floor);
 }
@@ -69,7 +83,7 @@ async function newestSeq(env: Pick<CloudflareEnv, "DB">, collectionId: string, f
 /** Position to put in the collection's sync token / CTag right now. */
 export async function currentSeq(env: Pick<CloudflareEnv, "DB">, collectionId: string): Promise<number> {
 	const { floor } = await ensureSyncState(env, collectionId);
-	return newestSeq(env, collectionId, floor);
+	return newestSeq(env, collectionId, Number(floor));
 }
 
 /** `name` is what a destroyed resource was served under (null for a native event, whose name is derived from its id). */
@@ -87,14 +101,15 @@ export async function changesSince(env: Pick<CloudflareEnv, "DB">, collectionId:
 	const parsed = parseSyncToken(token);
 	if (!parsed || parsed.collectionId !== collectionId) return "invalid";
 	const state = await ensureSyncState(env, collectionId);
-	if (parsed.epoch !== state.epoch || parsed.seq < state.floor) return "invalid";
+	const floor = Number(state.floor);
+	if (parsed.epoch !== state.epoch || parsed.seq < floor) return "invalid";
 	const rows = await getDb(env)
 		.select({ seq: davChanges.seq, objectKey: davChanges.objectKey, type: davChanges.changeType, name: davChanges.resourceName })
 		.from(davChanges)
-		.where(and(eq(davChanges.collectionId, collectionId), gt(davChanges.seq, parsed.seq)))
+		.where(and(collectionScope(davChanges.collectionId, collectionId), gt(davChanges.seq, parsed.seq)))
 		.orderBy(asc(davChanges.seq))
 		.limit(MAX_SYNC_CHANGES + 1);
-	if (!rows.length && parsed.seq > (await newestSeq(env, collectionId, state.floor))) return "invalid";
+	if (!rows.length && parsed.seq > (await newestSeq(env, collectionId, floor))) return "invalid";
 	const hasMore = rows.length > MAX_SYNC_CHANGES;
 	const page = hasMore ? rows.slice(0, MAX_SYNC_CHANGES) : rows;
 	const latest = new Map<string, DavChange>();
@@ -114,7 +129,7 @@ export async function etagSeqs(env: Pick<CloudflareEnv, "DB">, collectionId: str
 		const rows = await db
 			.select({ key: davChanges.objectKey, seq: sql<number>`max(${davChanges.seq})` })
 			.from(davChanges)
-			.where(and(eq(davChanges.collectionId, collectionId), inArray(davChanges.objectKey, objectKeys.slice(i, i + DELETE_CHUNK))))
+			.where(and(collectionScope(davChanges.collectionId, collectionId), inArray(davChanges.objectKey, objectKeys.slice(i, i + DELETE_CHUNK))))
 			.groupBy(davChanges.objectKey);
 		for (const row of rows) result.set(row.key, Number(row.seq));
 	}
@@ -126,7 +141,7 @@ export const etagFromSeq = (seq: number | null | undefined, updatedAt: Date) => 
 
 /** The newest change seq of the object with this key, as a column: lets a listing carry ETags without a second query. */
 export const newestSeqOf = (collectionId: string, key: AnyColumn) =>
-	sql<number | null>`(select max(${davChanges.seq}) from ${davChanges} where ${davChanges.collectionId} = ${collectionId} and ${davChanges.objectKey} = ${key})`;
+	sql<number | null>`(select max(${davChanges.seq}) from ${davChanges} where ${collectionScope(davChanges.collectionId, collectionId)} and ${davChanges.objectKey} = ${key})`;
 
 /**
  * Prune, run by the 5-minute cron. Removes rows older than 30 days except the newest row of each object

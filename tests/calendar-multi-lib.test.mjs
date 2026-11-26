@@ -29,6 +29,8 @@ function setup() {
 	for (const id of ["u1", "u2"]) sqlite.prepare("INSERT INTO users (id, email, name, password_hash, role, created_at) VALUES (?, ?, 'U', 'x', 'user', 1)").run(id, `${id}@one.test`);
 	const statements = [];
 	const orm = drizzle(sqlite, { logger: { logQuery: (query) => statements.push(query) } });
+	// drizzle over better-sqlite3 has no batch(); this runs the statements in a transaction like D1 does.
+	orm.batch = async (list) => { sqlite.exec("BEGIN"); try { for (const statement of list) await statement; sqlite.exec("COMMIT"); } catch (error) { sqlite.exec("ROLLBACK"); throw error; } };
 	const event = (id, user = "u1", calendarId = null, dav = null, recurrence = null) =>
 		sqlite.prepare("INSERT INTO calendar_events (id, user_id, calendar_id, title, starts_at, ends_at, created_at, updated_at, dav_object_id, recurrence_id) VALUES (?, ?, ?, 'E', 1000, 2000, 1, 1, ?, ?)").run(id, user, calendarId, dav, recurrence);
 	const calendarOf = (id) => sqlite.prepare("SELECT calendar_id FROM calendar_events WHERE id = ?").get(id).calendar_id;
@@ -81,7 +83,7 @@ test("a native event with no overrides moves alone", async () => {
 
 test("the default calendar is listed first and synthesised when it has no row", async () => {
 	const { orm, sqlite } = setup();
-	assert.deepEqual(await lib.listOwnCalendars(orm, "u1"), [{ id: "cal:u1", name: null, color: "#2563eb", description: "", isDefault: true, role: "owner" }]);
+	assert.deepEqual(await lib.listOwnCalendars(orm, "u1"), [{ id: "cal:u1", name: null, color: "#2563eb", description: "", isDefault: true, role: "owner", eventCount: 0 }]);
 	assert.equal(sqlite.prepare("SELECT count(*) AS n FROM dav_collections").get().n, 0);
 });
 
@@ -91,7 +93,7 @@ test("creating a calendar stores a dav_collections row with its own id, colour a
 	assert.equal(result.ok, true);
 	assert.match(result.calendar.id, /^cal:.+/);
 	assert.notEqual(result.calendar.id, "cal:u1");
-	assert.deepEqual({ ...result.calendar, id: undefined }, { id: undefined, name: "Work", color: "#7c3aed", description: "Team stuff", isDefault: false, role: "owner" });
+	assert.deepEqual({ ...result.calendar, id: undefined }, { id: undefined, name: "Work", color: "#7c3aed", description: "Team stuff", isDefault: false, role: "owner", eventCount: 0 });
 	const row = sqlite.prepare("SELECT user_id, kind, display_name, color FROM dav_collections WHERE id = ?").get(result.calendar.id);
 	assert.deepEqual({ ...row }, { user_id: "u1", kind: "calendar", display_name: "Work", color: "#7c3aed" });
 	assert.deepEqual((await lib.listOwnCalendars(orm, "u1")).map((calendar) => calendar.name), [null, "Work"]);
@@ -138,7 +140,7 @@ test("updating changes only the fields sent and refuses calendars the user does 
 	assert.deepEqual((await lib.updateCalendar(orm, "u1", calendar.id, { name: "" })).status, 400);
 });
 
-test("deleting a calendar deletes its events first so the phone sees them destroyed, then the calendar and its grants", async () => {
+test("deleting a calendar deletes its events first so the phone sees them destroyed (filed under the default calendar), then the calendar and its grants", async () => {
 	const { orm, sqlite, event, log } = setup();
 	const { calendar } = await lib.createCalendar(orm, "u1", { name: "Work" });
 	event("e1", "u1", calendar.id);
@@ -150,7 +152,7 @@ test("deleting a calendar deletes its events first so the phone sees them destro
 	assert.deepEqual(sqlite.prepare("SELECT id FROM calendar_events").all().map((row) => row.id), ["keep"]);
 	assert.equal(sqlite.prepare("SELECT count(*) AS n FROM dav_collections").get().n, 0);
 	assert.equal(sqlite.prepare("SELECT count(*) AS n FROM calendar_shares").get().n, 0);
-	assert.deepEqual(log().filter((entry) => entry.t === "destroyed" && entry.c === calendar.id).map((entry) => entry.k), ["e1", "e2"]);
+	assert.deepEqual(log().filter((entry) => entry.t === "destroyed" && entry.c === "cal:u1").map((entry) => entry.k), ["e1", "e2"]);
 });
 
 test("the default calendar cannot be deleted (409), nor another user's calendar (404)", async () => {

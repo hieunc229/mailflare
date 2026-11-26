@@ -14,7 +14,7 @@ import type { CalendarEventInput } from "./types";
 import { getRequestTimeZone, normalizeTimeZone } from "@/lib/time/utils";
 import { authorizeCalendarRequest, calendarKeyCanSendInvitations } from "@/lib/calendar/api-auth";
 import { readJsonObject } from "@/lib/http/request";
-import { calendarFilter, eventCalendarId, resolveEventCalendar } from "@/lib/calendar/calendars";
+import { calendarFilter, eventCalendarId, listOwnCalendars, resolveEventCalendar } from "@/lib/calendar/calendars";
 
 export async function GET(request: Request) {
 	const env = getEnv();
@@ -26,7 +26,8 @@ export async function GET(request: Request) {
 	const requested = url.searchParams.getAll("calendarIds").flatMap((value) => value.split(",")).map((value) => value.trim()).filter(Boolean);
 	const scope = requested.length ? calendarFilter(user.id, requested) : eq(calendarEvents.userId, user.id);
 	const rows = await getDb(env).select().from(calendarEvents).where(and(scope, lt(calendarEvents.startsAt, end), or(gte(calendarEvents.endsAt, start), ne(calendarEvents.repeat, "none")))).orderBy(calendarEvents.startsAt);
-	const events = rows.map((row) => ({ ...row, calendarId: eventCalendarId(row) }));
+	const known = new Set((await listOwnCalendars(getDb(env), user.id)).map((calendar) => calendar.id));
+	const events = rows.map((row) => ({ ...row, calendarId: eventCalendarId(row, known) }));
 	return NextResponse.json({ events });
 }
 
