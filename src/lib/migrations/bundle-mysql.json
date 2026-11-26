@@ -516,7 +516,7 @@
       "name": "0032_attachment_extraction.sql",
       "statements": [
         "ALTER TABLE `message_attachments` ADD `extracted_text` longtext;",
-        "ALTER TABLE `message_attachments` ADD `extract_status` varchar(191) NOT NULL DEFAULT 'none';",
+        "ALTER TABLE `message_attachments` ADD `extract_status` varchar(64) NOT NULL DEFAULT 'none';",
         "ALTER TABLE `message_attachments` ADD `extracted_at` bigint;"
       ]
     }

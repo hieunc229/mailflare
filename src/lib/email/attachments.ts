@@ -68,7 +68,7 @@ export async function storeMessageAttachments(
 	env: CloudflareEnv,
 	messageId: string,
 	attachments: AttachmentContent[],
-	options?: { validate?: boolean },
+	options?: { validate?: boolean; extractText?: boolean },
 ): Promise<StoredAttachment[]> {
 	if (options?.validate !== false) validateAttachments(attachments, await getOutboundAttachmentMaxMb(env));
 	const db = getDb(env);
@@ -105,9 +105,11 @@ export async function storeMessageAttachments(
 				contentId: attachment.contentId ?? null,
 				r2Key,
 			});
-			// Best effort by design (see attachment-text.ts): a text or PDF attachment
-			// is searchable without a later backfill, and a failure never fails the ingest.
-			await extractStoredAttachmentText(env, { id, contentType: attachment.type, content: attachment.content });
+			// Off the request path by default: a parse is unbounded CPU, and a request
+			// caller (send, drafts, JMAP, direct import) has 10 ms-30 s of it. Queue
+			// consumers pass `extractText` and enrich here instead of leaving it to the
+			// first read. Best effort either way: a failure never fails the ingest.
+			if (options?.extractText) await extractStoredAttachmentText(env, { id, contentType: attachment.type, content: attachment.content });
 		}
 	} catch (error) {
 		await Promise.all(stored.map((attachment) => env.BUCKET.delete(attachment.r2Key)));
