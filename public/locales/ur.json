@@ -3021,7 +3021,7 @@
 	"groups.post.orgHint": "صرف آپ کے اپنے ڈومینز سے بھیجنے والے۔",
 	"groups.post.members": "صرف گروپ کے اراکین",
 	"groups.post.membersHint": "صرف وہ پتے جو کسی رکن کے ہیں۔",
-	"groups.post.dmarcNote": "بھیجنے والے کے ڈومین کو DMARC پاس کرنا لازمی ہے۔ ناکام ہونے والی میل بائونس کے ساتھ مسترد کر دی جاتی ہے۔",
+	"groups.post.dmarcNote": "بھیجنے والے کے ڈومین کو DMARC پاس کرنا لازمی ہے۔ ناکام ہونے والی میل بائونس کے ساتھ مسترد کر دی جاتی ہے، یا اگر آپ کا ڈومین Resend یا Amazon SES کے ذریعے میل وصول کرتا ہے تو خاموشی سے ضائع کر دی جاتی ہے۔",
 	"groups.back": "گروپس پر واپس جائیں",
 	"groups.notFound": "یہ گروپ اب موجود نہیں۔",
 	"groups.settings": "ترتیبات",
@@ -3052,5 +3052,6 @@
 	"groups.delete": "گروپ حذف کریں",
 	"groups.deleteTitle": "یہ گروپ حذف کریں؟",
 	"groups.deleteConfirm": "{address} پر بھیجی گئی میل اس کے بعد بائونس ہو جائے گی۔ اسے واپس نہیں کیا جا سکتا۔",
-	"groups.deleteFailed": "گروپ حذف نہیں ہو سکا"
+	"groups.deleteFailed": "گروپ حذف نہیں ہو سکا",
+	"groups.localPartHint": "صرف حروف، اعداد اور . _ % + -"
 }

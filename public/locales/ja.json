@@ -2998,7 +2998,7 @@
 	"groups.post.orgHint": "自分のドメインの送信者のみ。",
 	"groups.post.members": "グループのメンバーのみ",
 	"groups.post.membersHint": "メンバーに属するアドレスのみ。",
-	"groups.post.dmarcNote": "送信者のドメインが DMARC に合格する必要があります。不合格のメールはバウンスとして拒否されます。",
+	"groups.post.dmarcNote": "送信者のドメインが DMARC に合格する必要があります。不合格のメールはバウンスとして拒否されます。ドメインが Resend または Amazon SES 経由で受信する場合は、通知なく破棄されます。",
 	"groups.back": "グループに戻る",
 	"groups.notFound": "このグループは存在しません。",
 	"groups.settings": "設定",
@@ -3029,5 +3029,6 @@
 	"groups.delete": "グループを削除",
 	"groups.deleteTitle": "このグループを削除しますか？",
 	"groups.deleteConfirm": "この後、{address} 宛てのメールはバウンスされます。この操作は元に戻せません。",
-	"groups.deleteFailed": "グループを削除できません"
+	"groups.deleteFailed": "グループを削除できません",
+	"groups.localPartHint": "使用できるのは英字、数字、および . _ % + - のみです。"
 }

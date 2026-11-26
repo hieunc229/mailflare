@@ -2998,7 +2998,7 @@
 	"groups.post.orgHint": "Hanya pengirim dari domain Anda sendiri.",
 	"groups.post.members": "Hanya anggota grup",
 	"groups.post.membersHint": "Hanya alamat milik anggota.",
-	"groups.post.dmarcNote": "Domain pengirim harus lolos DMARC. Email yang gagal ditolak dengan pesan pental.",
+	"groups.post.dmarcNote": "Domain pengirim harus lolos DMARC. Email yang gagal ditolak dengan pesan pental, atau dibuang tanpa pemberitahuan jika domain Anda menerima melalui Resend atau Amazon SES.",
 	"groups.back": "Kembali ke grup",
 	"groups.notFound": "Grup ini sudah tidak ada.",
 	"groups.settings": "Pengaturan",
@@ -3029,5 +3029,6 @@
 	"groups.delete": "Hapus grup",
 	"groups.deleteTitle": "Hapus grup ini?",
 	"groups.deleteConfirm": "Email yang dikirim ke {address} akan terpental setelah ini. Tindakan ini tidak dapat dibatalkan.",
-	"groups.deleteFailed": "Tidak dapat menghapus grup"
+	"groups.deleteFailed": "Tidak dapat menghapus grup",
+	"groups.localPartHint": "Hanya huruf, angka, dan . _ % + -"
 }

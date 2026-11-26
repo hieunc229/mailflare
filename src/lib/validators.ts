@@ -546,10 +546,10 @@ export const webhookUpdateSchema = z.object({
 	rotateSecret: z.literal(true).optional(),
 });
 
-const groupLocalPart = z.string().trim().min(1).max(64).regex(/^[a-zA-Z0-9._%+-]+$/).refine((value) => normalizeRecipientLocalPart(value).length > 0, { message: "Address is empty" });
+const groupLocalPart = z.string().trim().min(1, "Enter the part before the @").max(64, "The part before the @ can have at most 64 characters").regex(/^[a-zA-Z0-9._%+-]+$/, "Use only letters, numbers and . _ % + - before the @").refine((value) => normalizeRecipientLocalPart(value).length > 0, { message: "The address needs at least one letter or number" });
 const groupSettings = {
-	name: z.string().trim().min(1).max(100),
-	description: z.string().trim().max(500).nullable().optional(),
+	name: z.string().trim().min(1, "Enter a name").max(100, "The name can have at most 100 characters"),
+	description: z.string().trim().max(500, "The description can have at most 500 characters").nullable().optional(),
 	whoCanPost: z.enum(["anyone", "org", "members"]),
 	replyTo: z.enum(["sender", "group"]),
 };

@@ -3021,7 +3021,7 @@
 	"groups.post.orgHint": "Yalnızca kendi alan adlarınızdan gönderenler.",
 	"groups.post.members": "Yalnızca grup üyeleri",
 	"groups.post.membersHint": "Yalnızca bir üyeye ait adresler.",
-	"groups.post.dmarcNote": "Gönderenin alan adı DMARC doğrulamasını geçmelidir. Geçemeyen iletiler geri çevrilir ve geri döner.",
+	"groups.post.dmarcNote": "Gönderenin alan adı DMARC doğrulamasını geçmelidir. Geçemeyen iletiler geri çevrilir ve geri döner; alan adınız iletileri Resend veya Amazon SES üzerinden alıyorsa sessizce silinir.",
 	"groups.back": "Gruplara dön",
 	"groups.notFound": "Bu grup artık mevcut değil.",
 	"groups.settings": "Ayarlar",
@@ -3052,5 +3052,6 @@
 	"groups.delete": "Grubu sil",
 	"groups.deleteTitle": "Bu grup silinsin mi?",
 	"groups.deleteConfirm": "{address} adresine gönderilen iletiler bundan sonra geri dönecek. Bu işlem geri alınamaz.",
-	"groups.deleteFailed": "Grup silinemedi"
+	"groups.deleteFailed": "Grup silinemedi",
+	"groups.localPartHint": "Yalnızca harf, rakam ve . _ % + - kullanılabilir."
 }

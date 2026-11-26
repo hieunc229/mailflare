@@ -2998,7 +2998,7 @@
 	"groups.post.orgHint": "Chỉ người gửi từ các tên miền của bạn.",
 	"groups.post.members": "Chỉ thành viên nhóm",
 	"groups.post.membersHint": "Chỉ các địa chỉ thuộc về một thành viên.",
-	"groups.post.dmarcNote": "Tên miền của người gửi phải vượt qua DMARC. Thư không đạt sẽ bị từ chối và trả lại.",
+	"groups.post.dmarcNote": "Tên miền của người gửi phải vượt qua DMARC. Thư không đạt sẽ bị từ chối và trả lại, hoặc bị bỏ âm thầm nếu tên miền của bạn nhận thư qua Resend hoặc Amazon SES.",
 	"groups.back": "Quay lại nhóm",
 	"groups.notFound": "Nhóm này không còn tồn tại.",
 	"groups.settings": "Cài đặt",
@@ -3029,5 +3029,6 @@
 	"groups.delete": "Xóa nhóm",
 	"groups.deleteTitle": "Xóa nhóm này?",
 	"groups.deleteConfirm": "Thư gửi đến {address} sẽ bị trả lại sau đó. Không thể hoàn tác.",
-	"groups.deleteFailed": "Không thể xóa nhóm"
+	"groups.deleteFailed": "Không thể xóa nhóm",
+	"groups.localPartHint": "Chỉ gồm chữ cái, số và . _ % + -"
 }

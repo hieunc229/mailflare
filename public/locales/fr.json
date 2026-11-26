@@ -3042,7 +3042,7 @@
 	"groups.post.orgHint": "Uniquement les expéditeurs de vos propres domaines.",
 	"groups.post.members": "Membres du groupe uniquement",
 	"groups.post.membersHint": "Uniquement les adresses appartenant à un membre.",
-	"groups.post.dmarcNote": "Le domaine de l'expéditeur doit réussir la vérification DMARC. Les messages qui échouent sont refusés avec un rejet.",
+	"groups.post.dmarcNote": "Le domaine de l'expéditeur doit réussir la vérification DMARC. Les messages qui échouent sont refusés avec un rejet, ou abandonnés silencieusement lorsque votre domaine reçoit via Resend ou Amazon SES.",
 	"groups.back": "Retour aux groupes",
 	"groups.notFound": "Ce groupe n'existe plus.",
 	"groups.settings": "Paramètres",
@@ -3073,5 +3073,6 @@
 	"groups.delete": "Supprimer le groupe",
 	"groups.deleteTitle": "Supprimer ce groupe ?",
 	"groups.deleteConfirm": "Les messages envoyés à {address} seront rejetés après cette action. Elle est irréversible.",
-	"groups.deleteFailed": "Impossible de supprimer le groupe"
+	"groups.deleteFailed": "Impossible de supprimer le groupe",
+	"groups.localPartHint": "Lettres, chiffres et . _ % + - uniquement."
 }
