@@ -15,8 +15,12 @@ export const feedRow = (row: EventRow, excluded?: Set<number>): FeedEvent => ({
 
 const seconds = (date: Date | null) => (date ? Math.floor(date.getTime() / 1000) : null);
 
-/** The row fields a DAV body is generated from, in one canonical form (timestamps in whole seconds, as the database keeps them). */
-const project = (row: EventRow) => [row.title, row.description, row.location, row.attendees, row.attendeeResponses ?? "", row.repeat, row.rrule ?? "", row.repeatDays, row.repeatAnchorDay, seconds(row.repeatUntil), row.excludedOccurrences, row.timeZone ?? "", seconds(row.startsAt), seconds(row.endsAt), row.allDay, row.reminderMinutes ?? null, row.responseStatus ?? "", seconds(row.recurrenceId)];
+/**
+ * The row fields a DAV body is generated from, in one canonical form (timestamps in whole seconds, as the database keeps them). The two
+ * flags (CLASS, TRANSP) are added only when set, so the hash of an event that has neither is what it was before they were mapped and no
+ * stored body of an ordinary event is treated as edited.
+ */
+const project = (row: EventRow) => [row.title, row.description, row.location, row.attendees, row.attendeeResponses ?? "", row.repeat, row.rrule ?? "", row.repeatDays, row.repeatAnchorDay, seconds(row.repeatUntil), row.excludedOccurrences, row.timeZone ?? "", seconds(row.startsAt), seconds(row.endsAt), row.allDay, row.reminderMinutes ?? null, row.responseStatus ?? "", seconds(row.recurrenceId), ...(row.isPrivate ? ["private"] : []), ...(row.transparent ? ["free"] : [])];
 
 /**
  * SHA-256 of the projected fields of a resource's rows. Stored beside the body a client PUT: while the rows still hash to
@@ -30,7 +34,7 @@ export async function rowsHash(master: EventRow, overrides: EventRow[]): Promise
 }
 
 /** The properties the rows own. Everything else a client sent is kept as it was. */
-const MAPPED = new Set(["UID", "DTSTAMP", "LAST-MODIFIED", "SEQUENCE", "SUMMARY", "DESCRIPTION", "LOCATION", "DTSTART", "DTEND", "DURATION", "RRULE", "EXDATE", "STATUS", "ATTENDEE"]);
+const MAPPED = new Set(["UID", "DTSTAMP", "LAST-MODIFIED", "SEQUENCE", "SUMMARY", "DESCRIPTION", "LOCATION", "DTSTART", "DTEND", "DURATION", "RRULE", "EXDATE", "STATUS", "ATTENDEE", "CLASS", "TRANSP"]);
 
 const serialize = (component: Component): string[] => [`BEGIN:${component.name}`, ...component.props.map((property) => property.raw), ...component.children.flatMap(serialize), `END:${component.name}`];
 const nameOf = (line: string) => parseProperty(line)?.name ?? "";

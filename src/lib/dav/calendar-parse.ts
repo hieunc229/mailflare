@@ -30,6 +30,10 @@ export type EventFields = {
 	/** From the body; null when the body says nothing (the writer then keeps what an invitation set). */
 	responseStatus: "cancelled" | "tentative" | "accepted" | "declined" | "needs-action" | null;
 	inviteSender: string | null;
+	/** CLASS:PRIVATE or CONFIDENTIAL (spec F9 D-6). */
+	isPrivate: boolean;
+	/** TRANSP:TRANSPARENT: shown as free. */
+	transparent: boolean;
 };
 export type MasterFields = EventFields & { repeat: "none" | "daily" | "weekly" | "monthly" | "weekdays" | "custom"; repeatDays: string; repeatAnchorDay: number | null; repeatUntil: Date | null; rrule: string | null; excludedOccurrences: number[] };
 export type OverrideFields = EventFields & { recurrenceId: Date };
@@ -91,6 +95,8 @@ function mapEvent(event: Component, userZone: string, addresses: Set<string>): E
 		timeZone: start.timeZone ?? (start.fallback ? start.zone : null),
 		responseStatus,
 		inviteSender: external ? organizer : null,
+		isPrivate: ["PRIVATE", "CONFIDENTIAL"].includes(text(event, "CLASS").toUpperCase()),
+		transparent: text(event, "TRANSP").toUpperCase() === "TRANSPARENT",
 	};
 }
 

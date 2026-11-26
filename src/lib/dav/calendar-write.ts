@@ -31,6 +31,8 @@ const columns = (fields: EventFields, now: Date) => ({
 	endsAt: fields.endsAt,
 	allDay: fields.allDay,
 	timeZone: fields.timeZone,
+	isPrivate: fields.isPrivate,
+	transparent: fields.transparent,
 	updatedAt: now,
 });
 
