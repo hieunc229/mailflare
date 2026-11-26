@@ -986,6 +986,14 @@
       "statements": [
         "CREATE TABLE `contact_details` (\n\t`contact_id` text PRIMARY KEY NOT NULL,\n\t`details` text DEFAULT '{}' NOT NULL,\n\t`updated_at` integer NOT NULL,\n\tFOREIGN KEY (`contact_id`) REFERENCES `contacts`(`id`) ON UPDATE no action ON DELETE cascade\n);"
       ]
+    },
+    {
+      "name": "0108_attachment_extraction.sql",
+      "statements": [
+        "ALTER TABLE `message_attachments` ADD `extracted_text` text;",
+        "ALTER TABLE `message_attachments` ADD `extract_status` text DEFAULT 'none' NOT NULL;",
+        "ALTER TABLE `message_attachments` ADD `extracted_at` integer;"
+      ]
     }
   ]
 }

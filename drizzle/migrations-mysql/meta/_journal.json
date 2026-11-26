@@ -190,6 +190,13 @@
       "when": 1795027668151,
       "tag": "0026_contact_details",
       "breakpoints": true
+    },
+    {
+      "idx": 27,
+      "version": "5",
+      "when": 1795677354871,
+      "tag": "0032_attachment_extraction",
+      "breakpoints": true
     }
   ]
 }

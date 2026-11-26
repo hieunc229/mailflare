@@ -15,6 +15,7 @@ import type {
 import { DEFAULT_OUTBOUND_ATTACHMENT_MAX_MB, outgoingSizeError } from "./attachment-limits";
 import { getOutboundAttachmentMaxMb } from "./attachment-policy";
 import { deleteUnreferencedObjects } from "@/lib/drive/shared-objects";
+import { extractStoredAttachmentText } from "@/lib/email/attachment-text";
 
 export const MAX_ATTACHMENT_SIZE = 25_000_000;
 export const MAX_TOTAL_ATTACHMENT_SIZE = 25_000_000;
@@ -104,6 +105,9 @@ export async function storeMessageAttachments(
 				contentId: attachment.contentId ?? null,
 				r2Key,
 			});
+			// Best effort by design (see attachment-text.ts): a text or PDF attachment
+			// is searchable without a later backfill, and a failure never fails the ingest.
+			await extractStoredAttachmentText(env, { id, contentType: attachment.type, content: attachment.content });
 		}
 	} catch (error) {
 		await Promise.all(stored.map((attachment) => env.BUCKET.delete(attachment.r2Key)));
@@ -144,6 +148,10 @@ export async function copyMessageAttachments(
 			disposition: row.disposition,
 			contentId: row.contentId,
 			r2Key,
+			// The copy holds the same bytes, so its text comes along instead of being parsed again.
+			extractedText: row.extractedText,
+			extractStatus: row.extractStatus,
+			extractedAt: row.extractedAt,
 		});
 		copied.push({
 			id,
