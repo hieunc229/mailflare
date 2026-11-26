@@ -6,7 +6,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import type { DragEvent, PointerEvent as ReactPointerEvent } from "react";
 import { createPortal } from "react-dom";
 import toast, { Toaster } from "react-hot-toast";
-import { AlignLeft, CalendarClock, CalendarPlus2, Check, ChevronDown, ChevronLeft, ChevronRight, Clock3, LockKeyhole, MapPin, Palette, Bell, Plus, Repeat2, Trash2, UsersRound, X } from "@/components/icons";
+import { AlignLeft, CalendarClock, CalendarDays, CalendarPlus2, Check, ChevronDown, ChevronLeft, ChevronRight, Clock3, LockKeyhole, MapPin, Palette, Bell, Plus, Repeat2, Trash2, UsersRound, X } from "@/components/icons";
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -31,6 +31,11 @@ import { DayEvents } from "./day-events";
 import { MonthGrid } from "./month-grid";
 import { CalendarSubscribeDialog } from "./subscribe-dialog";
 import { InviteResponseDialog } from "./invite-response-dialog";
+import { CalendarList } from "./calendar-list";
+import { CalendarSettingsDialog } from "./calendar-settings-dialog";
+import type { CalendarListState } from "./calendar-list-types";
+import { readHiddenCalendars, toggleHidden, visibleCalendarEvents, writeHiddenCalendars } from "./calendar-list-utils";
+import type { CalendarSummary } from "@/lib/calendar/calendars-types";
 import type { CalendarEvent, CalendarView, EventDragPreview, EventResizeEdge, EventResizeSession } from "./types";
 import {
   addDays, addMonths, calendarAnchorDay, CALENDAR_END_HOUR, CALENDAR_HOUR_HEIGHT, CALENDAR_START_HOUR,
@@ -63,6 +68,13 @@ export default function CalendarPage() {
     } catch { /* storage can be blocked; the default view is fine */ }
     return "week";
   });
+  const [calendars, setCalendars] = useState<CalendarSummary[]>([]);
+  const [calendarsState, setCalendarsState] = useState<CalendarListState>("loading");
+  const [calendarsVersion, setCalendarsVersion] = useState(0);
+  const [hiddenCalendars, setHiddenCalendars] = useState<string[]>(readHiddenCalendars);
+  const [calendarSettings, setCalendarSettings] = useState<CalendarSummary | "new" | null>(null);
+  const [calendarId, setCalendarId] = useState("");
+  const defaultCalendar = calendars.find((calendar) => calendar.isDefault);
   const [pendingInvite, setPendingInvite] = useState<CalendarEvent | null>(null);
   function chooseView(next: CalendarView) {
     setView(next);
@@ -176,6 +188,39 @@ export default function CalendarPage() {
   }, [today, visibleDate, weekStart, view, eventsVersion, t]);
 
   useEffect(() => {
+    let active = true;
+    void authFetch("/api/calendar/calendars")
+      .then((response) => {
+        if (!response.ok) throw new Error();
+        return response.json() as Promise<{ calendars?: CalendarSummary[] }>;
+      })
+      .then((data) => { if (active) { setCalendars(data.calendars ?? []); setCalendarsState("ready"); } })
+      .catch(() => { if (active) setCalendarsState("error"); });
+    return () => { active = false; };
+  }, [calendarsVersion]);
+
+  const shownEvents = useMemo(() => visibleCalendarEvents(events, hiddenCalendars, defaultCalendar?.id), [events, hiddenCalendars, defaultCalendar?.id]);
+
+  function toggleCalendar(id: string) {
+    const next = toggleHidden(hiddenCalendars, id);
+    setHiddenCalendars(next);
+    writeHiddenCalendars(next);
+  }
+
+  function calendarChanged(change: "created" | "updated" | "deleted", id: string) {
+    setCalendarSettings(null);
+    setCalendarsState("loading");
+    setCalendarsVersion((version) => version + 1);
+    // Events of a deleted calendar are gone, and a new one starts visible; both need a fresh event list.
+    setEventsVersion((version) => version + 1);
+    if (change === "deleted") {
+      const next = hiddenCalendars.filter((item) => item !== id);
+      setHiddenCalendars(next);
+      writeHiddenCalendars(next);
+    }
+  }
+
+  useEffect(() => {
     if (!eventFromUrl) { openedEventFromUrl.current = null; return; }
     if (openedEventFromUrl.current === eventFromUrl) return;
     const event = events.find((item) => item.id === eventFromUrl);
@@ -196,6 +241,7 @@ export default function CalendarPage() {
     setReminderMinutes(null);
     setIsPrivate(false);
     setTransparent(false);
+    setCalendarId(defaultCalendar?.id ?? "");
     setGuests("");
     setLocation("");
     setDescription("");
@@ -238,7 +284,7 @@ export default function CalendarPage() {
         method: editing ? "PATCH" : "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          title, startsAt: savedStart.toISOString(), endsAt: savedEnd.toISOString(), color, repeat, repeatDays, repeatAnchorDay, reminderMinutes, isPrivate, transparent, effectiveFrom: effectiveFrom?.toISOString(), moveOccurrenceToPast: movingToPast, attendees: guests.split(","),
+          title, startsAt: savedStart.toISOString(), endsAt: savedEnd.toISOString(), color, repeat, repeatDays, repeatAnchorDay, reminderMinutes, isPrivate, transparent, ...(calendarId ? { calendarId } : {}), effectiveFrom: effectiveFrom?.toISOString(), moveOccurrenceToPast: movingToPast, attendees: guests.split(","),
           timeZone: getUserTimeZone(),
           description,
           location,
@@ -289,6 +335,7 @@ export default function CalendarPage() {
     setColor(normalizeCalendarColor(event.color));
     setRepeat(event.repeat);
     setReminderMinutes(event.reminderMinutes ?? null);
+    setCalendarId(event.calendarId ?? defaultCalendar?.id ?? "");
     setIsPrivate(event.isPrivate ?? false);
     setTransparent(event.transparent ?? false);
     setRepeatDays(event.repeat === "weekdays" ? parseCalendarRepeatDays(event.repeatDays) : DEFAULT_REPEAT_DAYS);
@@ -524,12 +571,15 @@ export default function CalendarPage() {
         </div>,
         headerTarget,
       )}
-      <UpcomingSidebar events={events} onSelect={editEvent} />
+      <UpcomingSidebar events={shownEvents} onSelect={editEvent} header={
+        <CalendarList calendars={calendars} state={calendarsState} hidden={hiddenCalendars} onToggle={toggleCalendar} onSettings={setCalendarSettings} onAdd={() => setCalendarSettings("new")}
+          onRetry={() => { setCalendarsState("loading"); setCalendarsVersion((version) => version + 1); }} />
+      } />
 
       <section aria-busy={loading} className="min-h-0 min-w-0 flex-1 rounded-t-3xl bg-white flex flex-col overflow-hidden">
         <div className="min-h-0 min-w-0 flex-1 overflow-auto overscroll-contain">
           {view === "month" ? (
-            <MonthGrid month={visibleDate} today={today} events={events} currentTime={currentTime}
+            <MonthGrid month={visibleDate} today={today} events={shownEvents} currentTime={currentTime}
               onSelectDay={(day) => openNewEvent(day)} onOpenDay={(day) => { setVisibleDate(day); setView("day"); }} onEdit={onEditEvent} />
           ) : (
           <div className={clsx("w-full", view === "week" ? "min-w-190" : "min-w-90")}>
@@ -567,7 +617,7 @@ export default function CalendarPage() {
                 }}
                 style={{ backgroundImage: "linear-gradient(to bottom, transparent calc(100% - 1px), var(--color-neutral-100) calc(100% - 1px))", backgroundSize: `100% ${CALENDAR_HOUR_HEIGHT}px` }}>
                 <button type="button" aria-label={t("calendar.addEventOn", { date: formatUserDate(day, { dateStyle: "short" }) })} onClick={(event) => openNewEvent(day, dropStartForPosition(day, event.nativeEvent.offsetY))} className="absolute inset-0 z-0 cursor-crosshair" />
-                <DayEvents day={day} events={events} currentTime={currentTime} busy={busy} activeEventId={activeEventId}
+                <DayEvents day={day} events={shownEvents} currentTime={currentTime} busy={busy} activeEventId={activeEventId}
                   onEdit={onEditEvent} onDragStart={onEventDragStart} onDragEnd={onEventDragEnd}
                   onResizeStart={onResizeStart} onResizeMove={onResizeMove} onResizeEnd={onResizeEnd} onResizeCancel={onResizeCancel} />
                 {dragPreview && previewEvent && previewPosition && dateKey(dragPreview.day) === dateKey(day) && (
@@ -594,6 +644,7 @@ export default function CalendarPage() {
       </section>
 
       <CalendarSubscribeDialog open={subscribeOpen} onOpenChange={setSubscribeOpen} />
+      <CalendarSettingsDialog target={calendarSettings} onClose={() => setCalendarSettings(null)} onChanged={calendarChanged} />
       <InviteResponseDialog event={pendingInvite} onClose={() => setPendingInvite(null)} onAnswered={() => setEventsVersion((version) => version + 1)} />
 
       {adding && createPortal(
@@ -708,6 +759,24 @@ export default function CalendarPage() {
                 <AlignLeft aria-hidden="true" className="mt-2 h-5 w-5 text-neutral-600" />
                 <Textarea value={description} onChange={(event) => setDescription(event.target.value)} placeholder={t("calendar.addDescription")} aria-label={t("calendar.description")} rows={Math.max(1, description.split("\n").length)} className={clsx("min-h-9 border-transparent bg-transparent px-2 py-2 shadow-none hover:bg-white/60 focus:min-h-24 focus:resize-y focus:border-blue-600 focus:bg-white focus-visible:ring-0", description ? "min-h-24 resize-y" : "resize-none")} />
               </div>
+              {calendars.length > 1 && (
+                <div className="grid grid-cols-[24px_minmax(0,1fr)] items-center gap-3">
+                  <CalendarDays aria-hidden="true" className="h-5 w-5 text-neutral-600" />
+                  <div className="flex items-center gap-2">
+                    <span aria-hidden="true" className="h-3 w-3 shrink-0 rounded-full" style={{ backgroundColor: calendars.find((calendar) => calendar.id === calendarId)?.color }} />
+                    <Select value={calendarId} containerClassName="contents" disabled={pendingAction === "save"} aria-label={t("calendar.calendars.pick")}
+                      onChange={(event) => {
+                        const next = calendars.find((calendar) => calendar.id === event.target.value);
+                        setCalendarId(event.target.value);
+                        // A new event takes its calendar's colour until the colour is chosen by hand.
+                        if (!editing && next) setColor(normalizeCalendarColor(next.color));
+                      }}
+                      className="h-9 min-w-0 rounded-md border border-transparent pl-2 pr-2 text-sm text-neutral-700 hover:bg-neutral-50 focus-visible:border-blue-600 focus-visible:bg-white [@media(pointer:coarse)]:h-11">
+                      {calendars.map((calendar) => <option key={calendar.id} value={calendar.id}>{calendar.name ?? t("calendar.defaultName")}</option>)}
+                    </Select>
+                  </div>
+                </div>
+              )}
               <div className="grid grid-cols-[24px_minmax(0,1fr)] items-center gap-3">
                 <Palette aria-hidden="true" className="h-5 w-5 text-neutral-600" />
                 <div role="radiogroup" aria-label={t("calendar.eventColor")} className="flex flex-wrap items-center gap-1.5 px-2">

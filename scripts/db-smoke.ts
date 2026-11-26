@@ -141,6 +141,17 @@ check("dav trigger moves an event between calendars", (await davLog(calId, calEv
 await db.update(calendarEvents).set({ calendarId: calId }).where(eq(calendarEvents.id, calEventId));
 await db.delete(calendarEvents).where(eq(calendarEvents.calendarId, calId));
 check("dav trigger logs a calendar's events deleted by statement", (await davLog(calId, calEventId)).endsWith(",destroyed"));
+// CS-2: a master and its override rows move together in one statement; the old collection sees the master destroyed once, the new one created once.
+const moveCalId = `cal:cal_move_${stamp}`;
+const moveMasterId = `evt_mv_${stamp}`;
+await db.insert(davCollections).values({ id: moveCalId, userId, kind: "calendar" } as never);
+const moveTimes = { startsAt: new Date(Date.now() + 3_600_000), endsAt: new Date(Date.now() + 7_200_000) };
+await db.insert(calendarEvents).values({ id: moveMasterId, userId, title: "Series", davObjectId: moveMasterId, ...moveTimes } as never);
+await db.insert(calendarEvents).values({ id: `${moveMasterId}_o`, userId, title: "Moved occurrence", davObjectId: moveMasterId, recurrenceId: moveTimes.startsAt, ...moveTimes } as never);
+await db.update(calendarEvents).set({ calendarId: moveCalId }).where(and(eq(calendarEvents.userId, userId), sql`(${calendarEvents.id} = ${moveMasterId} OR ${calendarEvents.davObjectId} = ${moveMasterId})`));
+check("moving a master and its overrides in one statement logs one move", (await davLog(moveCalId, moveMasterId)).split(",").sort().join(",") === "created,updated" && (await davLog(`cal:${userId}`, moveMasterId)).endsWith(",destroyed") && (await davLog(`cal:${userId}`, moveMasterId)).split("destroyed").length === 2);
+await db.delete(calendarEvents).where(eq(calendarEvents.calendarId, moveCalId));
+await db.delete(davCollections).where(eq(davCollections.id, moveCalId));
 const shareId = `csh_${stamp}`;
 await db.insert(calendarShares).values({ id: shareId, calendarId: calId, granteeUserId: userId, role: "read" } as never);
 await db.insert(calendarResources).values({ id: `res_${stamp}`, name: `Room ${stamp}` } as never);
