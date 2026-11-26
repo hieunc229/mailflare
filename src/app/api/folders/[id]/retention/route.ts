@@ -15,6 +15,14 @@ type Params = { params: Promise<{ id: string }> };
  * Per-folder retention settings. Reading needs access to the folder's mailbox; changing it needs the same
  * "manage" right folder creation does. The scheduled purge (src/lib/email/trash-retention.ts) only reads
  * folders.retentionDays, so this route is the one place the rule is written.
+ *
+ * What setting `days` does: the scheduled purge deletes `received` and `archived` messages in this folder
+ * whose message date (`messages.createdAt`) is older than `days`. It never deletes drafts, mail a live
+ * outbound job still owns, `sent` mail, Trash/Spam (those follow the owner's Trash retention) or any status
+ * outside that list. The message date is the `Date` header on imported mail, not the import time, so
+ * importing an old mailbox makes that mail eligible on the next scheduled run — there is no grace period,
+ * by design (retention is about the age of the mail, not when it arrived here). `null` removes the rule and
+ * the folder falls back to the owner's Trash/Spam retention.
  */
 export async function GET(request: Request, { params }: Params) {
 	const { id } = await params;

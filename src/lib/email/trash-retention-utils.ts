@@ -8,10 +8,19 @@ export const MAX_TRASH_RETENTION_DAYS = 365;
 export const TRASH_RETENTION_BATCH_SIZE = 200;
 
 /**
- * Statuses a per-folder rule never purges, however old the message is: an unsent draft is the user's work
- * and mail the sending pipeline owns (queued, failed) may still be delivered.
+ * Message statuses a per-folder rule may delete. Positive list on purpose: `messages.status` is free text, so
+ * an unknown value must mean "keep". `received` and `archived` are the two normal filing statuses; `draft`,
+ * `queued` and `failed` are unsent or still sending, `sent` is the user's sent record (JMAP files sent mail
+ * into folders as literal `sent`), and Trash/Spam belong to the owner's Trash retention rule.
  */
-export const FOLDER_RETENTION_PROTECTED_STATUSES: readonly string[] = ["draft", "queued", "failed"];
+export const FOLDER_RETENTION_ELIGIBLE_STATUSES: readonly string[] = ["received", "archived"];
+
+/**
+ * `outbound_jobs.status` values that mean the send is still in flight; `sent` and `failed` are terminal. A
+ * message a live job owns is never purged: the FK is ON DELETE SET NULL, so deleting the row would leave the
+ * job sending with nothing to send.
+ */
+export const NON_TERMINAL_OUTBOUND_JOB_STATUSES = ["queued", "sending"] as const;
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 

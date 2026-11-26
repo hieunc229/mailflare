@@ -261,7 +261,10 @@ export const folders = sqliteTable(
 		/**
 		 * Days mail may stay in this folder before the scheduled purge deletes it; null means no folder rule, so
 		 * only the owner's Trash/Spam retention (`users.trashRetentionDays`) applies. A folder rule is the only
-		 * thing that expires mail outside Trash and Spam, and it ages mail by `messages.createdAt`.
+		 * thing that expires mail outside Trash and Spam: it deletes `received` and `archived` messages whose
+		 * `messages.createdAt` is past the window, and never drafts, mail a live outbound job owns, or any status
+		 * outside that short list. Imported mail carries its own `Date` header as `createdAt`, so an import of old
+		 * mail is eligible immediately.
 		 */
 		retentionDays: integer("retention_days"),
 		createdAt: timestamp("created_at")
