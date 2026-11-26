@@ -32,7 +32,7 @@ import { MonthGrid } from "./month-grid";
 import { CalendarSubscribeDialog } from "./subscribe-dialog";
 import { InviteResponseDialog } from "./invite-response-dialog";
 import { CalendarList } from "./calendar-list";
-import { calendarLabel, canWriteEvents, eventErrorKey, visibleCalendarEvents, writableCalendars } from "./calendar-list-utils";
+import { calendarLabel, canWriteEvents, eventErrorKey, movesSeries, visibleCalendarEvents, writableCalendars } from "./calendar-list-utils";
 import { EventViewDialog } from "./event-view-dialog";
 import { useCalendarState } from "./calendar-state";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -872,7 +872,7 @@ export default function CalendarPage() {
                       {calendarChoices.map((calendar) => <option key={calendar.id} value={calendar.id}>{calendarLabel(calendar, t as never)}{calendar.role !== "owner" ? ` (${calendar.ownerName ?? ""})` : ""}</option>)}
                     </Select>
                   </div>
-                  {editing && editing.repeat !== "none" && calendarId !== (editing.calendarId ?? defaultCalendar?.id) && <p className="col-start-2 -mt-1 px-5 text-xs text-neutral-600">{t("calendar.calendars.seriesMoves")}</p>}
+                  {editing && movesSeries(editing) && calendarId !== (editing.calendarId ?? defaultCalendar?.id) && <p className="col-start-2 -mt-1 px-5 text-xs text-neutral-600">{t("calendar.calendars.seriesMoves")}</p>}
                 </div>
               )}
               <div className="grid grid-cols-[24px_minmax(0,1fr)] items-center gap-3">

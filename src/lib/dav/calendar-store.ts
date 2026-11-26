@@ -71,7 +71,8 @@ export async function calendarBytes(env: Env, userId: string): Promise<number> {
 export const isDavMaster = (resource: CalendarResource) => resource.master.davObjectId === resource.id;
 
 /** Attach override rows. Only masters made by a DAV client can have any (`dav_object_id = id`), so native events cost no query. */
-export async function withOverrides(env: Env, userId: string, resources: CalendarResource[]): Promise<CalendarResource[]> {
+export async function withOverrides(env: Env, calendar: CalendarScope | string, resources: CalendarResource[]): Promise<CalendarResource[]> {
+	const scope = scopeOf(calendar);
 	const ids = resources.filter(isDavMaster).map((resource) => resource.id);
 	if (!ids.length) return resources;
 	const byId = new Map(resources.map((resource) => [resource.id, resource]));
@@ -79,7 +80,7 @@ export async function withOverrides(env: Env, userId: string, resources: Calenda
 		const rows = await getDb(env)
 			.select()
 			.from(calendarEvents)
-			.where(and(eq(calendarEvents.userId, userId), isNotNull(calendarEvents.davObjectId), ne(calendarEvents.davObjectId, calendarEvents.id), inArray(calendarEvents.davObjectId, ids.slice(i, i + OVERRIDE_CHUNK))))
+			.where(and(inCalendar(scope), isNotNull(calendarEvents.davObjectId), ne(calendarEvents.davObjectId, calendarEvents.id), inArray(calendarEvents.davObjectId, ids.slice(i, i + OVERRIDE_CHUNK))))
 			.orderBy(asc(calendarEvents.startsAt));
 		for (const row of rows) byId.get(row.davObjectId as string)?.overrides.push(row);
 	}
@@ -120,7 +121,7 @@ export async function loadCalendarByNames(env: Env, calendar: CalendarScope | st
 	const rows = await joined(env)
 		.where(and(inCalendar(scope), isMaster, visible, or(inArray(calendarEvents.id, names.map((name) => name.replace(/\.ics$/, ""))), inArray(davCalendarObjects.name, names))))
 		.orderBy(asc(calendarEvents.id));
-	const resources = await withOverrides(env, scope.ownerId, rows.map(toResource(scope)).filter((resource) => wanted.has(resource.name)));
+	const resources = await withOverrides(env, scope, rows.map(toResource(scope)).filter((resource) => wanted.has(resource.name)));
 	return bodies ? withStored(env, scope.ownerId, resources) : resources;
 }
 

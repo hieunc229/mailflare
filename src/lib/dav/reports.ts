@@ -215,7 +215,7 @@ async function calendarQuery(ctx: DavContext, root: DavElement, wanted: DavEleme
 	let verdicts = range ? candidates.map((resource) => occursInRange(resource, range.start, range.end)) : [];
 	if (range) {
 		const undecided = candidates.filter((resource, i) => !verdicts[i].match && !verdicts[i].exhausted && isDavMaster(resource));
-		await withOverrides(ctx.env, calendarOf(ctx).ownerId, undecided);
+		await withOverrides(ctx.env, calendarOf(ctx), undecided);
 		for (const resource of undecided) loaded.add(resource.id);
 		verdicts = candidates.map((resource, i) => (loaded.has(resource.id) ? occursInRange(resource, range.start, range.end) : verdicts[i]));
 	}
@@ -234,7 +234,7 @@ async function calendarQuery(ctx: DavContext, root: DavElement, wanted: DavEleme
 		}
 		matched.push(resource);
 	}
-	await withOverrides(ctx.env, calendarOf(ctx).ownerId, matched.filter((resource) => !loaded.has(resource.id)));
+	await withOverrides(ctx.env, calendarOf(ctx), matched.filter((resource) => !loaded.has(resource.id)));
 	const seqs = await etagSeqs(ctx.env, calendarOf(ctx).id, matched.map((resource) => resource.id));
 	return streamMultistatus(respondCalendar(ctx, matched, seqs, wanted), { href, trailer: () => (truncated ? [{ href, status: 507, error: "<D:number-of-matches-within-limits/>" }] : []) });
 }

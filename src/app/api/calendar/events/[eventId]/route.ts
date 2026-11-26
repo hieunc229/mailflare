@@ -76,10 +76,14 @@ export async function PATCH(request: Request, { params }: CalendarEventRoutePara
 	// A delegate (an editor or manager acting on someone else's calendar) writes the owner's rows, never their own (D-2).
 	const ownerId = existing.userId;
 	const delegate = ownerId !== user.id;
-	const calendar = await resolveCalendarForWrite(db, user, input.calendarId, { ownerId, calendarId: existing.calendarId });
+	// A moved occurrence is a row of its own but part of its series: a move is the series' move, by the master's id, from the master's calendar.
+	const seriesId = existing.davObjectId && existing.davObjectId !== existing.id ? existing.davObjectId : existing.id;
+	const head = seriesId === existing.id ? existing : (await db.select().from(calendarEvents).where(eq(calendarEvents.id, seriesId)).limit(1))[0] ?? existing;
+	if (head !== existing && !roleAtLeast(await getEventAccess(db, user, head), "edit")) return NextResponse.json({ error: "You can only view this calendar" }, { status: 403 });
+	const calendar = await resolveCalendarForWrite(db, user, input.calendarId, { ownerId, calendarId: head.calendarId });
 	if (!calendar.ok) return NextResponse.json({ error: calendar.error }, { status: calendar.status });
 	// Undefined keeps the calendar; otherwise the whole series moves, so compare against where it is now.
-	const moveTo = calendar.calendarId !== undefined && calendar.calendarId !== (existing.calendarId ?? null) ? calendar.calendarId : undefined;
+	const moveTo = calendar.calendarId !== undefined && calendar.calendarId !== (head.calendarId ?? null) ? calendar.calendarId : undefined;
 	// Writes that put rows into another calendar run as one batch that first checks the calendar still exists (a competing delete refuses it with 409).
 	const guard = typeof moveTo === "string" ? calendarExistsGuard(db, ownerId, moveTo) : [];
 	const batched = async (statements: unknown[]): Promise<NextResponse | null> => {
@@ -123,7 +127,7 @@ export async function PATCH(request: Request, { params }: CalendarEventRoutePara
 		const insertMoved = db.insert(calendarEvents).values(moved);
 		const excludeOriginal = db.update(calendarEvents).set({ excludedOccurrences: JSON.stringify(newExcluded), eventSequence: seriesSequence, updatedAt: now }).where(eq(calendarEvents.id, existing.id));
 		if (moveTo !== undefined) {
-			const refused = await batched([insertMoved, excludeOriginal, ...moveSeriesStatements(db, ownerId, existing.id, moveTo)]);
+			const refused = await batched([insertMoved, excludeOriginal, ...moveSeriesStatements(db, ownerId, head.id, moveTo)]);
 			if (refused) return refused;
 		} else { await insertMoved; await excludeOriginal; }
 		if (attendees.length && existing.mailboxId && input.from && !isInboundInvite) {
@@ -166,7 +170,7 @@ export async function PATCH(request: Request, { params }: CalendarEventRoutePara
 		const fresh = { ...event, id: forkId, eventSequence: 0, davObjectId: null, recurrenceId: null, ...(moveTo !== undefined ? { calendarId: moveTo } : {}), createdAt: now, updatedAt: now };
 		const endPatch = existing.rrule ? { rrule: limitRrule(existing.rrule, splitAt, existing.startsAt, existing.timeZone, existing.allDay), eventSequence: nextSequence, updatedAt: now } : { repeatUntil: splitAt, eventSequence: nextSequence, updatedAt: now };
 		if (moveTo !== undefined) {
-			const refused = await batched([...splitSeriesStatements(db, ownerId, existing, splitAt, fresh, endPatch), ...moveSeriesStatements(db, ownerId, existing.id, moveTo)]);
+			const refused = await batched([...splitSeriesStatements(db, ownerId, existing, splitAt, fresh, endPatch), ...moveSeriesStatements(db, ownerId, head.id, moveTo)]);
 			if (refused) return refused;
 		} else await splitSeriesRows(db, ownerId, existing, splitAt, fresh, endPatch);
 		// Overrides at or after the split belong to the fork; earlier ones stay on the truncated original.
@@ -212,7 +216,7 @@ export async function PATCH(request: Request, { params }: CalendarEventRoutePara
 		? [db.update(calendarEvents).set({ isPrivate: flags.isPrivate }).where(and(eq(calendarEvents.userId, ownerId), eq(calendarEvents.davObjectId, existing.id), ne(calendarEvents.id, existing.id)))]
 		: [];
 	if (moveTo !== undefined || propagate.length) {
-		const refused = await batched([edit, ...propagate, ...(moveTo !== undefined ? moveSeriesStatements(db, ownerId, existing.id, moveTo) : [])]);
+		const refused = await batched([edit, ...propagate, ...(moveTo !== undefined ? moveSeriesStatements(db, ownerId, head.id, moveTo) : [])]);
 		if (refused) return refused;
 	} else await edit;
 	if (shifted?.moved) await shiftOverrides(db, ownerId, existing.id, shifted.shift);
