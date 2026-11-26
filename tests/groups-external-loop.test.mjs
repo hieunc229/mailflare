@@ -20,11 +20,15 @@ const seed = `
 `;
 const incoming = (env, to, from, headers) => app.resolveIncomingMail(env, from, to, { all: headers, from: headers.from });
 
-test("automated mail is Auto-Submitted other than no, or Precedence auto_reply", () => {
+test("automated mail is Auto-Submitted other than no, a Precedence of auto_reply, bulk or junk, or an autoreply header", () => {
 	const automated = app.loop.isAutomatedMail;
 	assert.equal(automated({ "Auto-Submitted": "auto-generated" }), true);
 	assert.equal(automated({ "auto-submitted": "auto-replied" }), true);
 	assert.equal(automated({ precedence: "auto_reply" }), true);
+	assert.equal(automated({ "x-autoreply": "yes" }), true);
+	assert.equal(automated({ "X-Autorespond": "1" }), true);
+	assert.equal(automated({ precedence: "bulk" }), true);
+	assert.equal(automated({ precedence: "junk" }), true);
 	assert.equal(automated({ "Auto-Submitted": "no" }), false);
 	assert.equal(automated({ precedence: "list" }), false);
 	assert.equal(automated({}), false);

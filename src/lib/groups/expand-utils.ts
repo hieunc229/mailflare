@@ -72,7 +72,7 @@ export async function groupCopyKey(digest: string, mailboxId: string): Promise<s
 }
 
 /** Subrequests one chunk can use at most: its copies (or relay messages) plus the queries, relay copy, queue sends and cleanup around them. */
-export const EXPANSION_CHUNK_COST = GROUP_EXPANSION_CHUNK + 15;
+export const EXPANSION_CHUNK_COST = GROUP_EXPANSION_CHUNK + 20;
 /** What expansion may spend in one queue batch: under the 50 subrequests of an invocation on the Free plan. */
 export const EXPANSION_SUBREQUEST_BUDGET = 45;
 
