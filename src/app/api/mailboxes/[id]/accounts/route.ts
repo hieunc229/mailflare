@@ -5,12 +5,18 @@ import { externalAccounts } from "@/db/schema";
 import { requireUser } from "@/lib/auth/cookies";
 import { hasValidSessionMutationOrigin } from "@/lib/auth/origin";
 import { getEnv } from "@/lib/cloudflare";
-import { isUniqueConstraintError } from "@/lib/database-errors";
 import { encryptSecret } from "@/lib/external-accounts/crypto";
 import { newId } from "@/lib/ids";
 import { externalAccountSchema } from "@/lib/validators";
 import type { MailboxAccountsRouteParams } from "./types";
-import { encryptionErrorResponse, externalAccountColumns, externalAccountView, requireManagedMailbox } from "./utils";
+import {
+	credentialWriteErrorResponse,
+	encryptionErrorResponse,
+	externalAccountColumns,
+	externalAccountView,
+	requireManagedMailbox,
+	writeCredential,
+} from "./utils";
 
 /**
  * External IMAP/POP3 accounts a mailbox pulls from. F36 stores credentials and creates the seam; the pollers
@@ -48,7 +54,7 @@ export async function POST(request: Request, { params }: MailboxAccountsRoutePar
 	try {
 		passwordEncrypted = await encryptSecret(env, parsed.data.password);
 	} catch (error) {
-		// A missing or too-short MAILFLARE_ENCRYPTION_KEY: refuse rather than ever store the password as-is.
+		// A missing or placeholder MAILFLARE_ENCRYPTION_KEY: refuse rather than ever store the password as-is.
 		const response = encryptionErrorResponse(error);
 		if (response) return response;
 		throw error;
@@ -68,11 +74,11 @@ export async function POST(request: Request, { params }: MailboxAccountsRoutePar
 		enabled: parsed.data.enabled,
 	};
 	try {
-		await db.insert(externalAccounts).values(row);
+		// The statement binds the sealed credential, so a driver rejection must not escape with it.
+		await writeCredential(() => db.insert(externalAccounts).values(row));
 	} catch (error) {
-		if (isUniqueConstraintError(error)) {
-			return NextResponse.json({ error: "This mailbox already fetches that account" }, { status: 409 });
-		}
+		const response = credentialWriteErrorResponse(error);
+		if (response) return response;
 		throw error;
 	}
 

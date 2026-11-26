@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { assertPrimaryAdmin } from "@/lib/auth/admin";
 import { requireUser } from "@/lib/auth/cookies";
-import { restoreDatabaseRecords } from "@/lib/backups/export";
+import { BackupRestoreError, restoreDatabaseRecords } from "@/lib/backups/export";
 import { getEnv } from "@/lib/cloudflare";
 import { hasValidSessionMutationOrigin } from "@/lib/auth/origin";
 import { MAX_UPLOAD_BYTES, resolveUploadedRequest } from "@/lib/uploads/direct";
@@ -18,7 +18,10 @@ export async function POST(request: Request) {
 		await restoreDatabaseRecords(env.DB, await file.arrayBuffer());
 		return NextResponse.json({ ok: true });
 	} catch (error) {
-		const message = error instanceof Error ? error.message : "Failed to restore backup";
+		// Only a refusal we wrote ourselves is safe to repeat: it names a table, column or migration. Anything
+		// else — a driver error on an insert, whose message repeats the statement and its bound parameters — could
+		// carry row values, and `external_accounts` rows hold sealed credentials, so it stays out of the response.
+		const message = error instanceof BackupRestoreError ? error.message : "The backup could not be restored. Check the server log.";
 		return NextResponse.json({ error: message }, { status: 400 });
 	}
 }

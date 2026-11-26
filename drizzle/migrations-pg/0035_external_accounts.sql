@@ -18,8 +18,6 @@ CREATE TABLE "external_accounts" (
 --> statement-breakpoint
 ALTER TABLE "external_accounts" ADD CONSTRAINT "external_accounts_mailbox_id_mailboxes_id_fk" FOREIGN KEY ("mailbox_id") REFERENCES "public"."mailboxes"("id") ON DELETE cascade ON UPDATE no action;
 --> statement-breakpoint
-ALTER TABLE "external_accounts" ADD CONSTRAINT "external_accounts_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;
---> statement-breakpoint
 CREATE UNIQUE INDEX "external_accounts_mailbox_host_user_idx" ON "external_accounts" USING btree ("mailbox_id","host","username");
 --> statement-breakpoint
 CREATE INDEX "external_accounts_poll_idx" ON "external_accounts" USING btree ("enabled","last_synced_at");

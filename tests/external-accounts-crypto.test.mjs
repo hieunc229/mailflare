@@ -8,7 +8,7 @@ import { loadFixture } from "./helpers/fixtures.mjs";
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 
 const fixture = await loadFixture({ name: "external-accounts-crypto", entryPoint: "src/lib/external-accounts/crypto.ts", mocks: {} });
-const { encryptSecret, decryptSecret, isEncryptionConfigured, isExternalAccountCryptoError, ENCRYPTION_KEY_ENV, EXTERNAL_ACCOUNT_HKDF_INFO } =
+const { encryptSecret, decryptSecret, isEncryptionConfigured, isExternalAccountCryptoError, isSealedSecretFormat, ENCRYPTION_KEY_ENV, EXTERNAL_ACCOUNT_HKDF_INFO } =
 	await fixture.import();
 after(() => fixture.dispose());
 
@@ -88,6 +88,61 @@ test("a placeholder key is refused rather than stretched into a key", async () =
 test("the derived key is purpose-scoped by HKDF info", () => {
 	assert.equal(EXTERNAL_ACCOUNT_HKDF_INFO, "mailflare-external-accounts-v1");
 	assert.equal(ENCRYPTION_KEY_ENV, "MAILFLARE_ENCRYPTION_KEY");
+});
+
+test("a leading BOM survives the round trip and a lone surrogate is refused, not mangled", async () => {
+	// A plain TextDecoder drops a leading U+FEFF, which would silently change an accepted password.
+	const withBom = "\uFEFF" + PASSWORD;
+	const stored = await encryptSecret(env(key("one")), withBom);
+	assert.equal(await decryptSecret(env(key("one")), stored), withBom);
+	assert.equal((await decryptSecret(env(key("one")), stored)).length, withBom.length);
+
+	// An unpaired surrogate cannot be encoded as UTF-8 (it would become U+FFFD), so it is refused up front.
+	for (const value of ["\uD800" + PASSWORD, PASSWORD + "\uDC00", "\uD83D"]) {
+		await assert.rejects(encryptSecret(env(key("one")), value), (error) => {
+			assert.equal(error.code, "secret_not_encodable");
+			assert.match(error.message, /invalid Unicode/);
+			return true;
+		});
+	}
+	// A well-formed surrogate pair (an emoji) is fine and round-trips.
+	const emoji = "p\u00e4ss\u{1F512}-word";
+	assert.equal(await decryptSecret(env(key("one")), await encryptSecret(env(key("one")), emoji)), emoji);
+});
+
+test("an empty secret is refused by the helper, not sealed and rejected by the reader", async () => {
+	await assert.rejects(encryptSecret(env(key("one")), ""), (error) => {
+		assert.equal(error.code, "secret_empty");
+		return true;
+	});
+});
+
+test("the envelope format check accepts real output and refuses plaintext", async () => {
+	const stored = await encryptSecret(env(key("one")), PASSWORD);
+	assert.equal(isSealedSecretFormat(stored), true);
+	// Truncation of the tag keeps the shape (only decrypting notices), so the format check looks at shape alone.
+	for (const value of [PASSWORD, "", "not base64 at all!", Buffer.alloc(20).toString("base64"), `${stored}AAAA`]) {
+		assert.equal(isSealedSecretFormat(value), false, value);
+	}
+	assert.equal(isSealedSecretFormat(undefined), false);
+	assert.equal(isSealedSecretFormat(42), false);
+	// Format only: an envelope sealed under another key is still a well-formed envelope, which is what lets a
+	// wrong-key backup restore.
+	assert.equal(isSealedSecretFormat(await encryptSecret(env(key("two")), PASSWORD)), true);
+});
+
+test("a placeholder key is refused even when it is long enough", async () => {
+	for (const placeholder of ["change-me-before-use-".repeat(2), "CHANGE-ME-" + "x".repeat(40), "replace-me-" + "y".repeat(40), "placeholder-" + "z".repeat(40)]) {
+		await assert.rejects(encryptSecret(env(placeholder), PASSWORD), (error) => {
+			assert.equal(error.code, "encryption_key_invalid");
+			assert.ok(!error.message.includes(placeholder));
+			return true;
+		});
+	}
+	// Anything else of sufficient length is used verbatim, whatever its shape.
+	for (const accepted of [key("one"), "a".repeat(64), "k#".repeat(16)]) {
+		assert.equal(await decryptSecret(env(` ${accepted}\n`), await encryptSecret(env(accepted), PASSWORD)), PASSWORD);
+	}
 });
 
 test("no dialect migration is needed for the sync state F37 and F38 will write", () => {

@@ -5,11 +5,17 @@ import { externalAccounts } from "@/db/schema";
 import { requireUser } from "@/lib/auth/cookies";
 import { hasValidSessionMutationOrigin } from "@/lib/auth/origin";
 import { getEnv } from "@/lib/cloudflare";
-import { isUniqueConstraintError } from "@/lib/database-errors";
 import { encryptSecret } from "@/lib/external-accounts/crypto";
 import { updateExternalAccountSchema } from "@/lib/validators";
 import type { MailboxAccountRouteParams } from "./types";
-import { encryptionErrorResponse, externalAccountColumns, externalAccountView, requireManagedMailbox } from "../utils";
+import {
+	credentialWriteErrorResponse,
+	encryptionErrorResponse,
+	externalAccountColumns,
+	externalAccountView,
+	requireManagedMailbox,
+	writeCredential,
+} from "../utils";
 
 export async function PATCH(request: Request, { params }: MailboxAccountRouteParams) {
 	const { id, accountId } = await params;
@@ -44,14 +50,17 @@ export async function PATCH(request: Request, { params }: MailboxAccountRoutePar
 	}
 
 	try {
-		await db
-			.update(externalAccounts)
-			.set(values)
-			.where(and(eq(externalAccounts.id, accountId), eq(externalAccounts.mailboxId, id)));
+		// The update binds the sealed credential when the body carries a password, so a driver rejection must not
+		// escape with it.
+		await writeCredential(() =>
+			db
+				.update(externalAccounts)
+				.set(values)
+				.where(and(eq(externalAccounts.id, accountId), eq(externalAccounts.mailboxId, id))),
+		);
 	} catch (error) {
-		if (isUniqueConstraintError(error)) {
-			return NextResponse.json({ error: "This mailbox already fetches that account" }, { status: 409 });
-		}
+		const response = credentialWriteErrorResponse(error);
+		if (response) return response;
 		throw error;
 	}
 

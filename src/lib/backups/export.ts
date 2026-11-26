@@ -1,8 +1,22 @@
 import { dialectOf, listColumnNames, listTableNames, quoteIdentifier } from "@/db/introspect";
 import type { DatabaseDialect } from "@/db/dialect";
+import { isSyncCursorFormat, SYNC_CURSOR_MAX_BYTES } from "@/lib/external-accounts/cursor";
+import { isSealedSecretFormat } from "@/lib/external-accounts/crypto";
 import type { BackupTableGroupId, DatabaseBackupDocument, DatabaseBackupTable, DatabaseRecord } from "./types";
 import { mergeLegacyMessageBodies } from "./utils";
 import { BACKUP_TABLE_GROUPS, getSelectedBackupTables } from "./table-groups";
+
+/**
+ * A restore refusal whose message is safe to show the primary admin: it names a table, a column or a migration,
+ * never a row value. The restore route returns this text and hides everything else, because a driver error on
+ * an insert repeats the statement with its bound parameters — which for `external_accounts` means ciphertext.
+ */
+export class BackupRestoreError extends Error {
+	constructor(message: string) {
+		super(message);
+		this.name = "BackupRestoreError";
+	}
+}
 
 export const BACKUP_TABLES: DatabaseBackupTable[] = ["users", "user_compose_preferences", "domains", "domain_tracking_hosts", "email_suppressions", "domain_deliverability", "mailboxes", "mailbox_access", "contacts", "contact_details", "dav_collections", "dav_cards", "folders", "mailbox_promotion_settings", "mailbox_sender_preferences", "api_keys", "messages", "message_attachments", "shared_attachment_links", "outbound_jobs", "message_tracking", "message_opens", "follow_ups", "conversation_notes", "routing_rules", "webhooks", "webhook_deliveries", "sessions", "audit_logs", "backup_settings", "backups", "app_settings", "deliverability_reports", "dmarc_daily_stats", "tls_daily_stats", "deliverability_alerts", "license_settings", "email_templates", "calendar_events", "dav_calendar_objects", "calendar_event_overrides", "calendar_occurrence_responses", "calendar_invite_tombstones", "booking_events", "booking_confirmation_templates", "auto_reply_deliveries", "spam_token_stats", "spam_reputation", "spam_feedback", "mailbox_aliases", "password_reset_tokens", "mfa_recovery_codes", "login_challenges", "passkey_credentials", "mailbox_agent_settings", "agent_conversations", "agent_chat_messages", "agent_jobs", "agent_draft_metadata", "agent_send_approvals", "mcp_key_mailboxes", "ai_usage", "drive_items", "drive_upload_parts", "drive_shares", "external_accounts"];
 /**
@@ -124,24 +138,24 @@ export async function restoreDatabaseRecords(db: D1Database, content: ArrayBuffe
 	const document = parseDatabaseBackup(content);
 	// Format 1 predates the drive group, so its writers could not have named its
 	// tables in includedTables; only format 2 documents must cover every group.
-	if (document.includedTables && !groupsForDocumentVersion(document.version).every((group) => group.tables.some((table) => document.includedTables?.includes(table)))) throw new Error("This backup contains selected table groups only. Restore requires a backup that includes every table group.");
+	if (document.includedTables && !groupsForDocumentVersion(document.version).every((group) => group.tables.some((table) => document.includedTables?.includes(table)))) throw new BackupRestoreError("This backup contains selected table groups only. Restore requires a backup that includes every table group.");
 	mergeLegacyMessageBodies(document);
 	fillMissingBackupTables(document);
 	validateDatabaseBackup(document);
 	const dialect = dialectOf(db);
 	const existing = await listTableNames(db);
 	const sharedLinksTable = existing.has("shared_attachment_links");
-	if (!sharedLinksTable && document.tables.shared_attachment_links?.length) throw new Error("Apply pending database migrations before restoring shared attachment links.");
+	if (!sharedLinksTable && document.tables.shared_attachment_links?.length) throw new BackupRestoreError("Apply pending database migrations before restoring shared attachment links.");
 	const bookingTable = existing.has("booking_events");
-	if (!bookingTable && document.tables.booking_events?.length) throw new Error("Apply pending database migrations before restoring booking events.");
+	if (!bookingTable && document.tables.booking_events?.length) throw new BackupRestoreError("Apply pending database migrations before restoring booking events.");
 	const passkeyTable = existing.has("passkey_credentials");
-	if (!passkeyTable && document.tables.passkey_credentials?.length) throw new Error("Apply pending database migrations before restoring passkeys.");
+	if (!passkeyTable && document.tables.passkey_credentials?.length) throw new BackupRestoreError("Apply pending database migrations before restoring passkeys.");
 	// Drive migrations ship later than the backup format, so an installation can have a database without them yet.
 	const driveTableNames = ["drive_items", "drive_upload_parts", "drive_shares"].filter((table) => existing.has(table));
-	if (["drive_items", "drive_upload_parts", "drive_shares"].some((table) => document.tables[table]?.length) && driveTableNames.length !== 3) throw new Error("Apply pending database migrations before restoring the Drive tables.");
+	if (["drive_items", "drive_upload_parts", "drive_shares"].some((table) => document.tables[table]?.length) && driveTableNames.length !== 3) throw new BackupRestoreError("Apply pending database migrations before restoring the Drive tables.");
 	const laterTableNames = LATER_MIGRATION_TABLES.filter((table) => existing.has(table));
 	const unmigrated = LATER_MIGRATION_TABLES.filter((table) => document.tables[table]?.length && !laterTableNames.includes(table));
-	if (unmigrated.length) throw new Error(`Apply pending database migrations before restoring ${unmigrated.join(", ")}.`);
+	if (unmigrated.length) throw new BackupRestoreError(`Apply pending database migrations before restoring ${unmigrated.join(", ")}.`);
 	const restoreTables = BACKUP_TABLES.filter((table) => (table !== "shared_attachment_links" || sharedLinksTable) && (table !== "booking_events" || bookingTable) && (table !== "passkey_credentials" || passkeyTable) && (!table.startsWith("drive_") || driveTableNames.includes(table)) && (!LATER_MIGRATION_TABLES.includes(table) || laterTableNames.includes(table)));
 	const userColumns = await listColumnNames(db, "users");
 	const bookingColumns = bookingTable ? await listColumnNames(db, "booking_events") : null;
@@ -192,8 +206,8 @@ export async function restoreDatabaseRecords(db: D1Database, content: ArrayBuffe
 
 function parseDatabaseBackup(content: ArrayBuffer): DatabaseBackupDocument {
 	let value: unknown;
-	try { value = JSON.parse(new TextDecoder().decode(content)); } catch { throw new Error("The selected file is not a valid Mailflare backup"); }
-	if (!isDatabaseBackupDocument(value)) throw new Error("The selected file is not a valid Mailflare backup");
+	try { value = JSON.parse(new TextDecoder().decode(content)); } catch { throw new BackupRestoreError("The selected file is not a valid Mailflare backup"); }
+	if (!isDatabaseBackupDocument(value)) throw new BackupRestoreError("The selected file is not a valid Mailflare backup");
 	return value;
 }
 
@@ -214,7 +228,7 @@ function isDatabaseBackupDocument(value: unknown): value is DatabaseBackupDocume
 function createInsertStatement(db: D1Database, dialect: DatabaseDialect, table: DatabaseBackupTable, row: DatabaseRecord, availableColumns: Set<string> | null = null) {
 	const omitted = OMITTED_COLUMNS[table] ?? [];
 	const columns = Object.keys(row).filter((column) => !omitted.includes(column) && (!availableColumns || availableColumns.has(column)));
-	if (columns.length === 0) throw new Error(`Backup contains an invalid ${table} record`);
+	if (columns.length === 0) throw new BackupRestoreError(`Backup contains an invalid ${table} record`);
 	const placeholders = columns.map(() => "?").join(", ");
 	const identifiers = columns.map((column) => quoteIdentifier(dialect, column)).join(", ");
 	return db.prepare(`INSERT INTO ${table} (${identifiers}) VALUES (${placeholders})`).bind(...columns.map((column) => row[column]));
@@ -254,10 +268,50 @@ function validateDatabaseBackup(document: DatabaseBackupDocument): void {
 	for (const table of BACKUP_TABLES) {
 		for (const row of document.tables[table] ?? []) {
 			if (!row || typeof row !== "object" || Array.isArray(row)) {
-				throw new Error(`Backup contains an invalid ${table} record`);
+				throw new BackupRestoreError(`Backup contains an invalid ${table} record`);
 			}
 		}
 	}
+	validateExternalAccountRows(document.tables.external_accounts ?? []);
+}
+
+const isIntegerInRange = (value: unknown, min: number, max: number) => typeof value === "number" && Number.isInteger(value) && value >= min && value <= max;
+const isOptionalInteger = (value: unknown) => value === null || value === undefined || isIntegerInRange(value, 0, Number.MAX_SAFE_INTEGER);
+/** Backups hold `0`/`1`; a hand-written document may use booleans. */
+const isFlag = (value: unknown) => value === 0 || value === 1 || value === true || value === false;
+const isIdentityText = (value: unknown) => typeof value === "string" && value.length > 0 && value.length <= 191;
+
+/**
+ * A restore writes whatever the document holds, so this is the one path that could plant a value the API would
+ * never produce: a plaintext password in `password_encrypted`, a non-JSON cursor, an out-of-range port. The
+ * check runs before the teardown and is **format only**: the sealed envelope is never decrypted and never
+ * re-encrypted, because a backup made under another MAILFLARE_ENCRYPTION_KEY must still restore — its rows
+ * simply need the passwords entered again on this install. The message names the row and column only.
+ */
+function validateExternalAccountRows(rows: DatabaseRecord[]): void {
+	const tlsModes = new Set(["implicit-tls", "starttls", "none"]);
+	rows.forEach((row, index) => {
+		const invalid = (column: string) => {
+			throw new BackupRestoreError(`Backup contains an invalid external account record (row ${index + 1}, ${column})`);
+		};
+		if (!isIdentityText(row.id)) invalid("id");
+		if (!isIdentityText(row.mailbox_id)) invalid("mailbox_id");
+		if (!isIdentityText(row.user_id)) invalid("user_id");
+		if (row.protocol !== "imap" && row.protocol !== "pop3") invalid("protocol");
+		if (!isIdentityText(row.host)) invalid("host");
+		if (!isIdentityText(row.username)) invalid("username");
+		if (!isIntegerInRange(row.port, 1, 65535)) invalid("port");
+		if (row.tls_mode !== undefined && row.tls_mode !== null && !tlsModes.has(String(row.tls_mode))) invalid("tls_mode");
+		// Only the envelope shape: base64 nonce + ciphertext + tag, no plaintext and no truncated value.
+		if (!isSealedSecretFormat(row.password_encrypted)) invalid("password_encrypted");
+		if (row.enabled !== undefined && row.enabled !== null && !isFlag(row.enabled)) invalid("enabled");
+		if (!isOptionalInteger(row.last_synced_at)) invalid("last_synced_at");
+		if (row.last_error !== null && row.last_error !== undefined && (typeof row.last_error !== "string" || row.last_error.length > 4096)) invalid("last_error");
+		if (!isSyncCursorFormat(row.sync_cursor) || (typeof row.sync_cursor === "string" && row.sync_cursor.length > SYNC_CURSOR_MAX_BYTES)) invalid("sync_cursor");
+		// NOT NULL with no database default: an omitted value would fail the insert after the teardown.
+		if (!isIntegerInRange(row.created_at, 0, Number.MAX_SAFE_INTEGER)) invalid("created_at");
+		if (!isIntegerInRange(row.updated_at, 0, Number.MAX_SAFE_INTEGER)) invalid("updated_at");
+	});
 }
 
 function toPortableRecord(row: DatabaseRecord): DatabaseRecord {

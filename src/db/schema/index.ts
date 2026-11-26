@@ -884,28 +884,44 @@ export const mailboxSenderPreferences = sqliteTable(
  * slices; this table only holds the credentials and the state a poller needs.
  *
  * `password_encrypted` is the output of `encryptSecret` (src/lib/external-accounts/crypto.ts): base64 of a
- * 96-bit nonce, the AES-256-GCM ciphertext and its 16-byte tag. Nothing in the app ever reads it back into a
- * response, a log or an export; only the future poller decrypts it, in memory.
+ * 96-bit nonce, the AES-256-GCM ciphertext and its 16-byte tag. No API response and no log line carries it.
+ * The admin backup export does include it on purpose: the blob is portable, so a restore onto an install that
+ * holds the same MAILFLARE_ENCRYPTION_KEY keeps working, and a restore onto a different key only leaves rows
+ * whose passwords must be entered again. The restore validates the envelope format (never decrypting) so a
+ * hand-edited backup cannot plant plaintext here.
  */
 export const externalAccounts = sqliteTable(
 	"external_accounts",
 	{
 		id: text("id").primaryKey(),
-		// The account dies with the mailbox it fetches into, and with the user who owns that mailbox.
+		// The account dies with the mailbox it fetches into. This is the only ownership link that cascades.
 		mailboxId: text("mailbox_id")
 			.notNull()
 			.references(() => mailboxes.id, { onDelete: "cascade" }),
-		/** Redundant (the mailbox already has an owner) but indexed, like mailboxes.userId, so a poller can scope by owner. */
-		userId: text("user_id")
-			.notNull()
-			.references(() => users.id, { onDelete: "cascade" }),
+		/**
+		 * Denormalised copy of `mailboxes.userId` at create time, indexed so a poller can scope by owner without a
+		 * join. Deliberately **not** a foreign key: `mailbox_id` above already owns the row, and a users FK would
+		 * let a mailbox transfer (`mailboxes.user_id` changes) leave a stale owner here whose later deletion
+		 * cascades away credentials that now belong to someone else's mailbox. Read the mailbox for authority;
+		 * this column is a hint, as with `dav_calendar_objects.userId`.
+		 */
+		userId: text("user_id").notNull(),
 		protocol: text("protocol", { enum: ["imap", "pop3"] }).notNull(),
+		/**
+		 * Lowercased by the route validator, so `IMAP.example.com` and `imap.example.com` are one account on every
+		 * dialect. At most 191 characters, matching the MySQL `varchar(191)` identity column and its index.
+		 */
 		host: text("host").notNull(),
 		port: integer("port").notNull(),
 		/** implicit-tls (993/995) and starttls upgrade the connection; none is plaintext and only for localhost-style hosts. */
 		tlsMode: text("tls_mode", { enum: ["implicit-tls", "starttls", "none"] })
 			.notNull()
 			.default("implicit-tls"),
+		/**
+		 * Case-preserved and compared exactly — the MySQL column of the unique tuple uses a binary collation, as
+		 * SQLite and PostgreSQL text comparison already did — because an external login can be case-sensitive.
+		 * At most 191 characters, like the host.
+		 */
 		username: text("username").notNull(),
 		/** AES-256-GCM, see the table comment. Never selected into a response. */
 		passwordEncrypted: text("password_encrypted").notNull(),
@@ -913,22 +929,28 @@ export const externalAccounts = sqliteTable(
 		enabled: bool("enabled").notNull().default(true),
 		/** Last completed sync; null means never fetched. */
 		lastSyncedAt: timestamp("last_synced_at"),
-		/** The last fetch failure, shown to the user and cleared on the next success. Never holds a credential. */
+		/**
+		 * The last fetch failure. This API returns it to the mailbox owner as stored, so F37/F38 must sanitise it
+		 * before writing: no credentials, hostnames are fine, server banners are not (they echo the login).
+		 */
 		lastError: text("last_error"),
 		/**
-		 * Protocol cursor as JSON, so a poller can keep whatever it needs without a migration:
-		 * IMAP `{"uidValidity":123,"lastUid":456}`, POP3 `{"uidls":["…"],"lastCheckedAt":"…"}` (a capped,
-		 * hashed list of already-imported UIDLs). Null until the first sync.
+		 * Protocol cursor as JSON, so a poller can keep whatever it needs without a migration. Bounds and formats
+		 * live in src/lib/external-accounts/cursor.ts: IMAP `{"uidValidity":123,"lastUid":456}`, POP3
+		 * `{"uidls":["<hash>", …]}` under 64 KiB, written through a capped codec (F37/F38). Null until the first
+		 * sync; the backup restore accepts only null or valid JSON within the same bound.
 		 */
 		syncCursor: text("sync_cursor"),
 		createdAt: timestamp("created_at").notNull().$defaultFn(() => new Date()),
 		updatedAt: timestamp("updated_at").notNull().$defaultFn(() => new Date()),
 	},
 	(t) => [
-		// The same host and user cannot be fetched twice into one mailbox.
+		// The same host and login cannot be fetched twice into one mailbox. Case-sensitive on every dialect: MySQL
+		// gets a binary collation from migration 0035, SQLite and PostgreSQL compare text exactly.
 		uniqueIndex("external_accounts_mailbox_host_user_idx").on(t.mailboxId, t.host, t.username),
 		// The future poller scan: enabled accounts, least recently synced first.
 		index("external_accounts_poll_idx").on(t.enabled, t.lastSyncedAt),
+		// Owner hint only; see the userId comment above (no foreign key on purpose).
 		index("external_accounts_user_idx").on(t.userId),
 	],
 );

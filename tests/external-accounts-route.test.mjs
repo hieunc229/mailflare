@@ -19,7 +19,7 @@ await build({
 			export { createSession } from "./src/lib/auth/session.ts";
 			export { decryptSecret } from "./src/lib/external-accounts/crypto.ts";
 			export * as accounts from "./src/app/api/mailboxes/[id]/accounts/route.ts";
-			export * as account from "./src/app/api/mailboxes/[id]/accounts/[accountId]/route.ts";
+			export * as account from "./src/app/api/mailboxes/[id]/accounts/[accountId]/route.ts";\n\t\t\texport * as accountsUtils from "./src/app/api/mailboxes/[id]/accounts/utils.ts";
 		`,
 		resolveDir: root,
 		sourcefile: "external-accounts-route-test-entry.ts",
@@ -34,7 +34,7 @@ await build({
 	alias: { "next/headers": "next/headers.js", "next/server": "next/server.js", "cloudflare:workers": "./server/runtime/cloudflare-workers.ts" },
 	logLevel: "silent",
 });
-const { SqliteDatabase, applyMigrations, getDb, createSession, decryptSecret, accounts, account } = await import(
+const { SqliteDatabase, applyMigrations, getDb, createSession, decryptSecret, accounts, account, accountsUtils } = await import(
 	pathToFileURL(join(directory, "entry.mjs")).href
 );
 
@@ -267,6 +267,70 @@ test("an account deleted with its mailbox leaves no credential behind", async (t
 	const f = await fixture(t);
 	assert.equal((await f.create("owner", "m-personal", valid())).status, 201);
 	f.sql.exec("DELETE FROM mailboxes WHERE id = 'm-personal'");
+	assert.equal(f.rows().length, 0);
+});
+
+test("host and username are capped at what MySQL can index, and case is part of the identity", async (t) => {
+	const f = await fixture(t);
+	// 191 characters is the MySQL varchar width of both identity columns; longer would reach the database on
+	// MySQL and fail there, so the route refuses it on every dialect.
+	assert.equal((await f.create("owner", "m-personal", valid({ username: "u".repeat(191) }))).status, 201);
+	assert.equal((await f.create("owner", "m-personal", valid({ username: "u".repeat(192), host: "a.example.com" }))).status, 400);
+	const longHost = `${"a".repeat(60)}.${"b".repeat(60)}.${"c".repeat(60)}.example.com`;
+	assert.ok(longHost.length > 191);
+	assert.equal((await f.create("owner", "m-personal", valid({ host: longHost }))).status, 400);
+	// An external login can be case-sensitive: the second case variant is a different account, matching the
+	// binary collation MySQL gets from migration 0035 and the exact text comparison of SQLite/PostgreSQL.
+	assert.equal((await f.create("owner", "m-personal", valid({ username: "User@example.com" }))).status, 201);
+	assert.equal((await f.create("owner", "m-personal", valid({ username: "user@example.com" }))).status, 201);
+	// The host is normalised to lowercase first, so only the username decides case here.
+	assert.equal((await f.create("owner", "m-personal", valid({ host: "IMAP.Example.com.", username: "User@example.com" }))).status, 409);
+});
+
+test("a password that cannot be encoded as UTF-8 is refused before it is encrypted", async (t) => {
+	const f = await fixture(t);
+	for (const password of ["\uD800secret", "secret\uDC00", "\uD83D"]) {
+		const response = await f.create("owner", "m-personal", valid({ password }));
+		assert.equal(response.status, 400, JSON.stringify(password));
+		const body = await response.json();
+		assert.match(JSON.stringify(body), /invalid Unicode/i);
+	}
+	assert.equal(f.rows().length, 0);
+	// A well-formed pair (an emoji) is not affected.
+	assert.equal((await f.create("owner", "m-personal", valid({ password: "p\u00e4ss\u{1F512}" }))).status, 201);
+	assert.equal(await decryptSecret({ MAILFLARE_ENCRYPTION_KEY: f.encryptionKey }, f.rows()[0].password_encrypted), "p\u00e4ss\u{1F512}");
+});
+
+test("a credential-bearing database error is reduced to a code, never rethrown with its payload", async (t) => {
+	const f = await fixture(t);
+	// The shape Drizzle hands up: the statement and its bound parameters (the sealed password among them).
+	const sealed = "c2VhbGVkLWVudmVsb3BlLXBsYWNlaG9sZGVyLXZhbHVl";
+	const leaky = Object.assign(new Error(`Failed query: insert into \`external_accounts\` ... params: ${sealed}`), {
+		params: [sealed],
+		cause: Object.assign(new Error("insert failed"), { code: "ER_DATA_TOO_LONG" }),
+	});
+	await assert.rejects(accountsUtils.writeCredential(async () => { throw leaky; }), (error) => {
+		assert.equal(error.name, "ExternalAccountWriteError");
+		assert.equal(error.kind, "rejected");
+		assert.equal(error.driverCode, "ER_DATA_TOO_LONG");
+		assert.ok(!error.message.includes(sealed));
+		assert.ok(!String(error.cause ?? "").includes(sealed));
+		assert.equal(error.params, undefined);
+		return true;
+	});
+	// A unique violation keeps its own classification for a 409.
+	const duplicate = Object.assign(new Error("Failed query: insert into external_accounts params: x"), { cause: new Error("UNIQUE constraint failed: external_accounts.mailbox_id") });
+	await assert.rejects(accountsUtils.writeCredential(async () => { throw duplicate; }), (error) => error.kind === "duplicate");
+
+	// End to end: a real driver rejection on the insert must not surface the ciphertext anywhere.
+	f.sql.exec(`CREATE TRIGGER f36_reject BEFORE INSERT ON external_accounts WHEN NEW.username = 'rejected-by-db'
+		BEGIN SELECT RAISE(ABORT, 'injected write failure'); END`);
+	const response = await f.create("owner", "m-personal", valid({ username: "rejected-by-db" }));
+	assert.equal(response.status, 500);
+	const text = JSON.stringify(await response.json());
+	assert.match(text, /WRITE_FAILED/);
+	assert.ok(!text.includes(PASSWORD));
+	assert.ok(!text.includes(sealed));
 	assert.equal(f.rows().length, 0);
 });
 
