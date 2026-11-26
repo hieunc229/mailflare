@@ -110,7 +110,7 @@ test("Find a time asks once for the next 14 days, offers three slots of the even
 	const { body } = globalThis.panelT.calls[0];
 	assert.ok(Math.abs(new Date(body.start).getTime() - now) < 5000, "from now");
 	assert.ok(Math.abs(new Date(body.end).getTime() - now - 14 * DAY) <= 2 * DAY + 5000, "about 14 days on");
-	const suggestions = [...container.querySelectorAll('[role="group"] button')];
+	const suggestions = [...container.querySelectorAll('ul[aria-labelledby] button')];
 	assert.equal(suggestions.length, 3);
 	await act(async () => { suggestions[1].click(); });
 	assert.equal(view.picks.length, 1);
@@ -209,7 +209,8 @@ test("changing the guests keeps the rows already shown until the new answer arri
 	await ticks(400);
 	assert.match(text(), /ann@one\.test/, "the row stays while the next answer is awaited");
 	assert.doesNotMatch(text(), /bob@one\.test/, "a new address has no row until it is answered");
-	assert.equal(container.querySelectorAll('[role="status"]').length, 0, "no new announcement");
+	assert.equal(container.querySelectorAll('[role="status"]').length, 1, "one persistent status");
+	assert.equal(container.querySelector('[role="status"]').textContent, "Updating availability...");
 	assert.equal(container.querySelector("ul")?.getAttribute("aria-busy"), "true");
 	await act(async () => { release(); await Promise.resolve(); });
 	await ticks(0);
