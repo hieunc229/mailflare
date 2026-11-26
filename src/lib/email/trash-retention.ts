@@ -263,11 +263,18 @@ function openDatabase(env: CloudflareEnv): AppDatabase | null {
  *
  * The window that remains is after step 2 and before the object deletes: if the process dies or storage
  * fails in between, the row is gone and some objects are orphaned. That direction is deliberate — an orphaned
- * object costs storage until it is swept, while the reverse (objects deleted for a message that survived)
- * destroys mail the user still has. Cleanup is therefore idempotent and only ever follows a successful claim.
- * The daily `sweepOrphanedRawMail` reaps the leftovers: unreferenced raw MIME under `inbound/` and `imports/`
- * and unreferenced `attachments/` objects that no message, attachment row or Drive item points at, once they
- * are a day old. That is the durable cleanup for this window — there is no per-message retry queue.
+ * object costs storage, while the reverse (objects deleted for a message that survived) destroys mail the user
+ * still has. Cleanup is therefore idempotent and only ever follows a successful claim, and a storage failure
+ * gets one immediate retry for this run's own claimed keys (`permanent-delete.ts`).
+ *
+ * ACCEPTED LIMITATION: if that retry also fails, or the process dies in the window, the objects are
+ * **retained indefinitely**. There is no reaper for them in this change, by design: reclaiming them safely
+ * means serializing reference creation (an attachment being saved to Drive) against object deletion, which
+ * needs writer coordination — a GC claim table that both the save-to-Drive path and the deleter honour in one
+ * transaction. That is a design slice of its own; a bucket-wide sweep without it can delete bytes of a live
+ * Drive file (the reference lookup and the save are not serialized). The volume is bounded by the crash or
+ * storage-failure window rather than by mailbox size, and it is storage cost only — no message row is
+ * resurrected or lost by leaving these objects in place.
  *
  * One unit of the shared budget is reserved before each claim, and a claim that matches nothing gives it back
  * because nothing was destroyed. A failed claim keeps its unit, so a flaky database still bounds the work a

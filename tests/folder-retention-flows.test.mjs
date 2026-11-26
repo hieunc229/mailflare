@@ -26,7 +26,6 @@ await build({
 		contents: `
 			export * from './server/runtime/sqlite-database';
 			export * from './server/runtime/file-bucket';
-			export * from './src/lib/email/raw-sweeper';
 			export * from './src/lib/email/send';
 			export * from './src/lib/email/trash-retention';
 			export * from './src/lib/import/service';
@@ -56,7 +55,7 @@ await build({
 });
 
 const m = await import(pathToFileURL(join(outDir, "bundle.mjs")).href);
-const { runTrashRetention, sweepOrphanedRawMail, sendEmail, sendScheduledMessageNow, importMessagesToMailbox, createSession, retentionRoute, bulkRoute, trashSettingsRoute, SqliteDatabase, openFileBucket } = m;
+const { runTrashRetention, sendEmail, sendScheduledMessageNow, importMessagesToMailbox, createSession, retentionRoute, bulkRoute, trashSettingsRoute, SqliteDatabase, openFileBucket } = m;
 
 const DAY = 86_400_000;
 const NOW = new Date();
@@ -537,22 +536,32 @@ test("a mailbox that changed owner mid-run defers its ruled mail to the next run
 	assert.equal(f.db.prepare("SELECT count(*) AS n FROM messages").get().n, 2, "nothing is deleted under a stale owner");
 });
 
-test("the raw sweeper reaps retention orphans and keeps referenced objects", async (t) => {
+test("objects left by a failed cleanup are retained, not reaped, and a transient failure is retried once", async (t) => {
 	const f = await fixture(t);
-	// Objects a retention claim left behind after its row was deleted (crashed or storage failed).
-	await f.bucket.put("imports/msg-orphan.eml", "raw");
-	await f.bucket.put("attachments/msg-orphan/att-1/file.txt", "attachment");
-	// Still referenced: a live message's raw MIME and an attachment row.
-	await f.bucket.put("imports/msg-live.eml", "raw");
-	f.message("live", { rawR2Key: "imports/msg-live.eml" });
-	await f.bucket.put("attachments/msg-live/att-2/keep.txt", "kept");
-	f.run("INSERT INTO message_attachments (id, message_id, filename, content_type, size, disposition, r2_key, created_at) VALUES ('att-2', 'live', 'keep.txt', 'text/plain', 4, 'attachment', 'attachments/msg-live/att-2/keep.txt', ?)", daysAgo(1));
+	// The object of a claimed row survives a first-attempt storage failure only because the cleanup retries
+	// once inside the same run; there is no cross-run reaper in this PR (see the retention module comment).
+	f.message("flaky", { folderId: "news", rawR2Key: "imports/flaky.eml" });
+	await f.bucket.put("imports/flaky.eml", "raw");
+	let attempts = 0;
+	const flaky = {
+		...f.bucket,
+		delete: async (key) => {
+			attempts += 1;
+			if (attempts === 1) throw new Error("injected transient storage failure");
+			return f.bucket.delete(key);
+		},
+	};
 
-	const tomorrow = new Date(Date.now() + 2 * DAY);
-	await sweepOrphanedRawMail(f.env, tomorrow);
+	assert.equal(await runTrashRetention({ ...f.env, BUCKET: flaky }, NOW), 1);
+	assert.equal(f.messageRow("flaky"), undefined, "the row was claimed");
+	assert.equal(attempts, 2, "the same-run retry ran");
+	assert.equal(await f.bucket.head("imports/flaky.eml"), null, "and it recovered the object");
 
-	assert.equal(await f.bucket.head("imports/msg-orphan.eml"), null, "the orphaned raw MIME is reaped");
-	assert.equal(await f.bucket.head("attachments/msg-orphan/att-1/file.txt"), null, "the orphaned attachment object is reaped");
-	assert.ok(await f.bucket.head("imports/msg-live.eml"), "a referenced raw MIME survives");
-	assert.ok(await f.bucket.head("attachments/msg-live/att-2/keep.txt"), "a referenced attachment survives");
+	f.message("stuck", { folderId: "news", rawR2Key: "imports/stuck.eml" });
+	await f.bucket.put("imports/stuck.eml", "raw");
+	const broken = { ...f.bucket, delete: async () => { throw new Error("injected persistent storage failure"); } };
+	assert.equal(await runTrashRetention({ ...f.env, BUCKET: broken }, NOW), 1);
+	assert.equal(f.messageRow("stuck"), undefined);
+	assert.ok(await f.bucket.head("imports/stuck.eml"), "documented acceptance: the orphan is retained indefinitely");
+	assert.equal((await f.db.prepare("SELECT count(*) AS n FROM audit_logs WHERE action = 'email.delete' AND metadata LIKE '%\"messageId\":\"stuck\"%'").get()).n, 1, "one audit row despite two attempts");
 });
