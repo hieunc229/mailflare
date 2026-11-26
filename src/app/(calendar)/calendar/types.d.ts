@@ -24,6 +24,8 @@ export type CalendarEvent = {
   transparent?: boolean;
   /** The calendar the event is in (the default calendar's id when it has none of its own). */
   calendarId?: string;
+  /** The CalDAV series this row belongs to: its own id for a series made by a CalDAV client, the master's for a moved occurrence. */
+  davObjectId?: string | null;
   /** The owner of the calendar the event is in: the viewer's own id for their own events. */
   userId?: string;
   /** What the viewer may do with it: "owner" for their own events, else the role they were granted on its calendar. */

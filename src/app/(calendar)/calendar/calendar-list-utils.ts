@@ -26,6 +26,11 @@ export function visibleCalendarEvents(events: CalendarEvent[], hidden: string[],
 	return events.filter((event) => !set.has(event.calendarId ?? defaultId ?? ""));
 }
 
+/** Whether saving this event in another calendar moves a whole series: a repeating event, or a moved occurrence of a CalDAV series (an override row). */
+export function movesSeries(event: { id: string; repeat: string; davObjectId?: string | null }): boolean {
+	return event.repeat !== "none" || (!!event.davObjectId && event.davObjectId !== event.id);
+}
+
 /** The translation key for a failed save or delete, chosen by the response status so the server's English text is never shown. */
 export function calendarErrorKey(action: "save" | "delete", status: number): string {
 	if (status === 404) return "calendar.calendars.error.notFound";

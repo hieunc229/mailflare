@@ -103,7 +103,7 @@ export async function putCalendarResource(ctx: DavContext, name: string, request
 	// The UID is held by a hidden (cancelled, declined) resource, which a client cannot see or name: the new name takes it over.
 	const existing = atName ?? other;
 	const seq = existing === atName ? atNameSeq : existing ? (await etagSeqs(env, cid, [existing.id])).get(existing.id) : undefined;
-	if (delegate && existing) await withOverrides(env, userId, [existing]);
+	if (delegate && existing) await withOverrides(env, calendar, [existing]);
 	const storedOverride = (at: Date) => existing?.overrides.find((row) => row.recurrenceId?.getTime() === at.getTime());
 	// The guest list is the owner's. A body with no guests is what a phone sends for an event it was served without them (a delegate's body is generated
 	// without ATTENDEE lines), so it keeps the stored list; a body that names guests must name exactly the stored ones. An occurrence the delegate moves

@@ -338,3 +338,12 @@ test("a delegate's text is never stored as the owner's body: the owner's phone k
 	assert.match(seen, /TRIGGER:-PT10M/, "the owner's alarm");
 	assert.doesNotMatch(seen, /PT1H|ORGANIZER|X-DELEGATE/);
 });
+
+test("an override row that is not in its master's calendar is not served with it (defence in depth for a stray row)", async (t) => {
+	const { env, keys, sql } = await fixture(t);
+	sql.prepare("INSERT INTO calendar_events (id, user_id, calendar_id, title, starts_at, ends_at, repeat, dav_object_id, created_at, updated_at) VALUES ('m1', 'u1', 'cal:work', 'Series', 1793000000, 1793003600, 'weekly', 'm1', 1, 1)").run();
+	sql.prepare("INSERT INTO calendar_events (id, user_id, calendar_id, title, starts_at, ends_at, dav_object_id, recurrence_id, created_at, updated_at) VALUES ('o1', 'u1', NULL, 'Stray occurrence', 1793090000, 1793093600, 'm1', 1793086400, 1, 1)").run();
+	const text = (await get(env, `${SHARED()}m1.ics`, keys.u2)).text;
+	assert.match(text, /SUMMARY:Series/);
+	assert.doesNotMatch(text, /Stray occurrence/);
+});
