@@ -1,6 +1,7 @@
 import { and, eq, exists, inArray, sql } from "drizzle-orm";
 import type { getDb } from "@/db";
 import { calendarEvents, davCards, davChanges, davSyncState } from "@/db/schema";
+import { collectionScope } from "./changes";
 import { readBodyText } from "./body";
 import { BASE_HEADERS, etagListed, etagMatches, text } from "./common";
 
@@ -61,7 +62,7 @@ export function staleGuard(db: Db, table: typeof calendarEvents | typeof davCard
 	const token = crypto.randomUUID();
 	const [first, second] = [`guard:${token}:a`, `guard:${token}:b`];
 	const there = exists(db.select({ one: sql`1` }).from(table).where(and(eq(table.id, id), eq(table.userId, userId), seen.seq === null ? eq(table.updatedAt, seen.updatedAt) : undefined)));
-	const newest = sql`coalesce((select max(${davChanges.seq}) from ${davChanges} where ${and(eq(davChanges.collectionId, collectionId), eq(davChanges.objectKey, id))}), -1)`;
+	const newest = sql`coalesce((select max(${davChanges.seq}) from ${davChanges} where ${and(collectionScope(davChanges.collectionId, collectionId), eq(davChanges.objectKey, id))}), -1)`;
 	const stale = sql`not (${there} and ${newest} = ${seen.seq ?? -1})`;
 	return [
 		db.update(table).set({ updatedAt: sql`${table.updatedAt}` } as never).where(and(eq(table.id, id), eq(table.userId, userId))),

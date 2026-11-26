@@ -14,7 +14,7 @@ import { EVENT_FLAGS_ERROR, resolveEventFlags } from "@/lib/calendar/event-flags
 import { normalizeRepeatInterval, normalizeRepeatWeek, normalizeRepeatWeekday, parseCalendarOccurrenceId, parseCalendarRepeatDays, parseExcludedOccurrences } from "@/lib/calendar/recurrence";
 import { CUSTOM_DAY_LOCKED, editedTimeZone, endLegacySeries, resolveRepeat, shiftCustomSeries } from "@/lib/calendar/repeat-fields";
 import { limitRrule, rruleEndedBefore } from "@/lib/calendar/rrule";
-import { deleteOverridesFrom, deleteSeriesRows, moveSeriesToCalendar, shiftOverrides, splitSeriesRows } from "@/lib/calendar/series-rows";
+import { deleteOverridesFrom, deleteSeriesRows, moveSeriesStatement, moveSeriesToCalendar, shiftOverrides, splitSeriesRows } from "@/lib/calendar/series-rows";
 import { newId } from "@/lib/ids";
 import { getRequestTimeZone } from "@/lib/time/utils";
 import { authorizeCalendarRequest, calendarKeyCanSendInvitations } from "@/lib/calendar/api-auth";
@@ -38,7 +38,8 @@ export async function PATCH(request: Request, { params }: CalendarEventRoutePara
 	const db = getDb(env);
 	const [existing] = await db.select().from(calendarEvents).where(and(eq(calendarEvents.id, occurrence?.seriesId ?? eventId), eq(calendarEvents.userId, user.id))).limit(1);
 	if (!existing) return NextResponse.json({ error: "Event not found" }, { status: 404 });
-	const calendar = await resolveEventCalendar(db, user.id, input.calendarId);
+	const calendar = await resolveEventCalendar(db, user.id, input.calendarId, existing.calendarId);
+	let movedWithEdit = false;
 	if (!calendar.ok) return NextResponse.json({ error: calendar.error }, { status: calendar.status });
 	// Undefined keeps the calendar; otherwise the whole series moves, so compare against where it is now.
 	const moveTo = calendar.calendarId !== undefined && calendar.calendarId !== (existing.calendarId ?? null) ? calendar.calendarId : undefined;
@@ -140,10 +141,12 @@ export async function PATCH(request: Request, { params }: CalendarEventRoutePara
 		}
 		return NextResponse.json(inviteErrors.length ? { ok: true, inviteErrors: [...new Set(inviteErrors)] } : { ok: true });
 	}
-	await db.update(calendarEvents).set({ title: event.title, description: event.description, location: event.location, attendees: event.attendees, color: event.color, repeat: event.repeat, repeatDays: event.repeatDays, repeatAnchorDay: event.repeatAnchorDay, repeatInterval: event.repeatInterval, repeatWeekday: event.repeatWeekday, repeatWeek: event.repeatWeek, repeatUntil: event.repeatUntil, rrule: event.rrule, ...(shifted ? { excludedOccurrences: shifted.excludedOccurrences } : {}), eventSequence: nextSequence, reminderMinutes: event.reminderMinutes, isPrivate: event.isPrivate, transparent: event.transparent, lastRemindedStart: null, timeZone, startsAt, endsAt, updatedAt: new Date() }).where(eq(calendarEvents.id, existing.id));
+	const edit = db.update(calendarEvents).set({ title: event.title, description: event.description, location: event.location, attendees: event.attendees, color: event.color, repeat: event.repeat, repeatDays: event.repeatDays, repeatAnchorDay: event.repeatAnchorDay, repeatInterval: event.repeatInterval, repeatWeekday: event.repeatWeekday, repeatWeek: event.repeatWeek, repeatUntil: event.repeatUntil, rrule: event.rrule, ...(shifted ? { excludedOccurrences: shifted.excludedOccurrences } : {}), eventSequence: nextSequence, reminderMinutes: event.reminderMinutes, isPrivate: event.isPrivate, transparent: event.transparent, lastRemindedStart: null, timeZone, startsAt, endsAt, updatedAt: new Date() }).where(eq(calendarEvents.id, existing.id));
+	// The edit and the move to another calendar succeed or fail together.
+	if (moveTo !== undefined) { await db.batch([edit, moveSeriesStatement(db, user.id, existing.id, moveTo)] as never); movedWithEdit = true; } else await edit;
 	if (shifted?.moved) await shiftOverrides(db, user.id, existing.id, shifted.shift);
 	// After the edit above, so the event is written in one place and then the master and its overrides move together.
-	if (moveTo !== undefined) await moveSeriesToCalendar(db, user.id, existing.id, moveTo);
+	if (moveTo !== undefined && !movedWithEdit) await moveSeriesToCalendar(db, user.id, existing.id, moveTo);
 	if (attendees.length && existing.mailboxId && input.from && !isInboundInvite) {
 		const overrides = (await db.select().from(calendarEventOverrides).where(eq(calendarEventOverrides.eventId, existing.id))).map((override) => ({ recurrenceId: new Date(override.occurrenceMs), startsAt: override.startsAt, endsAt: override.endsAt }));
 		const file = createCalendarInvitation({ isPrivate: event.isPrivate, transparent: event.transparent, title: event.title, description: event.description, location: event.location, startsAt: event.startsAt, endsAt: event.endsAt, uid: existing.id, organizer: input.from, attendees, sequence: nextSequence, reminderMinutes: event.reminderMinutes, repeat: event.repeat, rrule: event.rrule, repeatDays, repeatAnchorDay: event.repeatAnchorDay, repeatUntil: event.repeatUntil, repeatInterval: event.repeatInterval, repeatWeekday: event.repeatWeekday, repeatWeek: event.repeatWeek, excludedOccurrences: parseExcludedOccurrences(event.excludedOccurrences), overrides });

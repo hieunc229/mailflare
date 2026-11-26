@@ -1,4 +1,3 @@
-import type { ReactNode } from "react";
 import type { CalendarEvent } from "./calendar/types";
 
 export type UpcomingSidebarProps = {
@@ -8,6 +7,4 @@ export type UpcomingSidebarProps = {
 	drawer?: boolean;
 	/** Refetch (keeping the current list on screen) when this value changes. */
 	refreshKey?: unknown;
-	/** Rendered above the list, inside its scroll area (the calendar list). */
-	header?: ReactNode;
 };
