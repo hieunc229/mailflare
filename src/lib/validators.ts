@@ -544,3 +544,45 @@ export const webhookUpdateSchema = z.object({
 	maxAttempts: z.number().int().min(1).max(10).optional(),
 	rotateSecret: z.literal(true).optional(),
 });
+
+const groupLocalPart = z.string().trim().min(1).max(64).regex(/^[a-zA-Z0-9._%+-]+$/).refine((value) => normalizeRecipientLocalPart(value).length > 0, { message: "Address is empty" });
+const groupSettings = {
+	name: z.string().trim().min(1).max(100),
+	description: z.string().trim().max(500).nullable().optional(),
+	whoCanPost: z.enum(["anyone", "org", "members"]),
+	replyTo: z.enum(["sender", "group"]),
+};
+
+export const createGroupSchema = z.object({
+	domainId: z.string().min(1),
+	localPart: groupLocalPart,
+	name: groupSettings.name,
+	description: groupSettings.description,
+	whoCanPost: groupSettings.whoCanPost.default("anyone"),
+	replyTo: groupSettings.replyTo.default("sender"),
+});
+
+export const updateGroupSchema = z.object({
+	domainId: z.string().min(1).optional(),
+	localPart: groupLocalPart.optional(),
+	name: groupSettings.name.optional(),
+	description: groupSettings.description,
+	whoCanPost: groupSettings.whoCanPost.optional(),
+	replyTo: groupSettings.replyTo.optional(),
+	disabled: z.boolean().optional(),
+});
+
+const groupMemberSchema = z.object({
+	kind: z.enum(["user", "mailbox", "external"]),
+	userId: z.string().min(1).optional(),
+	mailboxId: z.string().min(1).optional(),
+	email: z.string().max(320).optional(),
+	canSendAs: z.boolean().optional(),
+});
+
+export const addGroupMembersSchema = z.union([
+	z.object({ members: z.array(groupMemberSchema).min(1).max(50) }),
+	groupMemberSchema.transform((member) => ({ members: [member] })),
+]);
+
+export const updateGroupMemberSchema = z.object({ canSendAs: z.boolean() });
