@@ -40,11 +40,12 @@ function toTenant(row: Row | null): TenantInfo | null {
 }
 
 async function lookup(env: CloudflareEnv, key: string, column: "host" | "id" | "label"): Promise<TenantInfo | null> {
-	const cached = cache.get(`${column}:${key}`);
+	// Tenant host ownership can change immediately (workspace moves/deletions); never route a hostname from a stale cache entry.
+	const cached = column === "host" ? undefined : cache.get(`${column}:${key}`);
 	if (cached && cached.until > Date.now()) return cached.tenant;
 	const row = await env.CONTROL!.prepare(column === "label" ? `SELECT ${COLUMNS} FROM tenants WHERE host LIKE ? ESCAPE '\\' ORDER BY length(host) LIMIT 1` : `SELECT ${COLUMNS} FROM tenants WHERE ${column} = ?`).bind(column === "label" ? `${key.replace(/[\\%_]/g, "\\$&")}.%` : key).first<Row>();
 	const tenant = toTenant(row);
-	cache.set(`${column}:${key}`, { until: Date.now() + TTL_MS, tenant });
+	if (column !== "host") cache.set(`${column}:${key}`, { until: Date.now() + TTL_MS, tenant });
 	return tenant;
 }
 
