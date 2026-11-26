@@ -180,7 +180,7 @@ test("a card update that leaves every watched value unchanged writes nothing", (
 test("every calendar_events column is watched by the triggers of all three migrations", () => {
 	const unwatched = new Set(["id", "created_at", "last_reminded_start"]);
 	const columns = database().prepare("PRAGMA table_info(calendar_events)").all().map((c) => c.name).filter((name) => !unwatched.has(name)).sort();
-	for (const file of ["migrations/0103_calendar_event_rrule.sql", "migrations-pg/0027_calendar_event_rrule.sql", "migrations-mysql/0027_calendar_event_rrule.sql"]) {
+	for (const file of ["migrations/0105_calendar_columns.sql", "migrations-pg/0029_calendar_columns.sql", "migrations-mysql/0029_calendar_columns.sql"]) {
 		const sql = readFileSync(new URL(`../drizzle/${file}`, import.meta.url), "utf8");
 		const start = sql.search(/dav_calendar_changed|dav_changes_calendar_events_ai/);
 		const end = sql.slice(start).search(/dav_card_changed|dav_changes_cards_ai|$/);

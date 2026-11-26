@@ -84,7 +84,7 @@ BEGIN
 			INSERT INTO dav_changes (collection_id, object_key, change_type, resource_name) VALUES (COALESCE(OLD.calendar_id, CONCAT('cal:', OLD.user_id)), OLD.id, 'destroyed', (SELECT name FROM dav_calendar_objects WHERE id = OLD.id));
 		END IF;
 		INSERT INTO dav_changes (collection_id, object_key, change_type) VALUES (COALESCE(NEW.calendar_id, CONCAT('cal:', NEW.user_id)), COALESCE(NEW.dav_object_id, NEW.id), CASE WHEN NOT (CAST(COALESCE(OLD.calendar_id, CONCAT('cal:', OLD.user_id)) AS BINARY) <=> CAST(COALESCE(NEW.calendar_id, CONCAT('cal:', NEW.user_id)) AS BINARY)) AND (NEW.dav_object_id IS NULL OR CAST(NEW.dav_object_id AS BINARY) = CAST(NEW.id AS BINARY)) THEN 'created' ELSE 'updated' END);
-		IF (CAST(COALESCE(OLD.calendar_id, CONCAT('cal:', OLD.user_id)) AS BINARY) <=> CAST(COALESCE(NEW.calendar_id, CONCAT('cal:', NEW.user_id)) AS BINARY) AND NOT (CAST(COALESCE(OLD.dav_object_id, OLD.id) AS BINARY) <=> CAST(COALESCE(NEW.dav_object_id, NEW.id) AS BINARY))) OR (NOT (CAST(COALESCE(OLD.calendar_id, CONCAT('cal:', OLD.user_id)) AS BINARY) <=> CAST(COALESCE(NEW.calendar_id, CONCAT('cal:', NEW.user_id)) AS BINARY)) AND OLD.dav_object_id IS NOT NULL AND CAST(OLD.dav_object_id AS BINARY) <> CAST(OLD.id AS BINARY)) THEN
+		IF CAST(COALESCE(OLD.calendar_id, CONCAT('cal:', OLD.user_id)) AS BINARY) <=> CAST(COALESCE(NEW.calendar_id, CONCAT('cal:', NEW.user_id)) AS BINARY) AND NOT (CAST(COALESCE(OLD.dav_object_id, OLD.id) AS BINARY) <=> CAST(COALESCE(NEW.dav_object_id, NEW.id) AS BINARY)) THEN
 			INSERT INTO dav_changes (collection_id, object_key, change_type) VALUES (COALESCE(OLD.calendar_id, CONCAT('cal:', OLD.user_id)), COALESCE(OLD.dav_object_id, OLD.id), 'updated');
 		END IF;
 	END IF;
