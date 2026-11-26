@@ -302,8 +302,7 @@ test("invalid members are refused as a whole and nothing is stored", async (t) =
 	await attempt({ kind: "mailbox", mailboxId: "m-alice" }, 422, /shared/i);
 	await attempt({ kind: "mailbox", mailboxId: "m-xshared" }, 422, /mailbox/i);
 	await attempt({ kind: "user", userId: "alice", mailboxId: "m-support" }, 400);
-	await attempt({ kind: "mailbox", mailboxId: "m-support", canSendAs: true }, 422, /not available yet/i);
-	await attempt({ kind: "user", userId: "bob", canSendAs: true }, 422, /not available yet/i);
+	await attempt({ kind: "mailbox", mailboxId: "m-support", canSendAs: true }, 422, /only account members/i);
 	await attempt({ kind: "user" }, 400);
 	assert.equal(sqlite.prepare("SELECT count(*) AS n FROM mail_group_members").get().n, 0);
 });
@@ -340,7 +339,7 @@ test("member updates only toggle send-as on user members", async (t) => {
 	const body = await (await app.members.POST(req("POST", { members: [{ kind: "user", userId: "alice" }, { kind: "mailbox", mailboxId: "m-support" }] }), ids(group.id))).json();
 	const user = body.added.find((m) => m.kind === "user");
 	const mailbox = body.added.find((m) => m.kind === "mailbox");
-	assert.equal((await app.member.PATCH(req("PATCH", { canSendAs: true }), ids(group.id, user.id))).status, 422, "send-as arrives with a later change");
+	assert.equal((await app.member.PATCH(req("PATCH", { canSendAs: true }), ids(group.id, user.id))).status, 200);
 	assert.equal((await app.member.PATCH(req("PATCH", { canSendAs: false }), ids(group.id, user.id))).status, 200);
 	assert.deepEqual(audit(sqlite).at(-1), { action: "group.member_updated", actor_user_id: "admin", target_user_id: "alice", mailbox_id: null, metadata: { groupId: group.id, address: "team@example.com", kind: "user", canSendAs: false } });
 	assert.equal((await app.member.PATCH(req("PATCH", { canSendAs: false }), ids(group.id, mailbox.id))).status, 422);

@@ -15,7 +15,7 @@ import { createAuditLog, createAuditLogs } from "@/lib/mailboxes/audit";
 import { findAddressOwner } from "@/lib/mailboxes/address-owner";
 import type { AuditLogInput } from "@/lib/mailboxes/types";
 import {
-	CAN_SEND_AS_UNAVAILABLE,
+	CAN_SEND_AS_USERS_ONLY,
 	MAX_EXTERNAL_MEMBERS,
 	MAX_GROUPS_PER_DOMAIN,
 	MAX_GROUP_MEMBERS,
@@ -509,7 +509,7 @@ export async function addMembers(env: CloudflareEnv, db: AppDatabase, actor: Gro
 		targetUserId: row.userId,
 		mailboxId: row.mailboxId,
 		action: "group.member_added",
-		metadata: { groupId: id, address, kind: row.kind, ...(row.email ? { email: row.email } : {}) },
+		metadata: { groupId: id, address, kind: row.kind, ...(row.email ? { email: row.email } : {}), ...(row.canSendAs ? { canSendAs: true } : {}) },
 	})));
 	return ok({ added, skipped, warnings });
 }
@@ -524,8 +524,7 @@ async function loadMember(db: AppDatabase, actor: GroupActor, id: string, member
 export async function updateMember(env: CloudflareEnv, db: AppDatabase, actor: GroupActor, id: string, memberId: string, input: { canSendAs: boolean }) {
 	const found = await loadMember(db, actor, id, memberId);
 	if (!found) return fail(404, "Member not found");
-	if (input.canSendAs) return fail(422, CAN_SEND_AS_UNAVAILABLE);
-	if (found.member.kind !== "user") return fail(422, "Only account members can be allowed to send as the group");
+	if (found.member.kind !== "user") return fail(422, CAN_SEND_AS_USERS_ONLY);
 	await db.update(mailGroupMembers).set({ canSendAs: input.canSendAs }).where(eq(mailGroupMembers.id, memberId));
 	await createAuditLog(env, {
 		actorUserId: actor.id,

@@ -131,7 +131,7 @@ test("members: add, refuse an own-domain external and canSendAs with 422, remove
 	const memberId = body.added[0].id;
 	const external = await app.members.POST(req("POST", { members: [{ kind: "external", email: "x@example.com" }] }), ctxId(group.id));
 	assert.equal(external.status, 422);
-	const sendAs = await app.members.POST(req("POST", { members: [{ kind: "user", userId: "alice", canSendAs: true }] }), ctxId(group.id));
+	const sendAs = await app.members.POST(req("POST", { members: [{ kind: "external", email: "x@ext.com", canSendAs: true }] }), ctxId(group.id));
 	assert.equal(sendAs.status, 422);
 	assert.equal((await app.members.DELETE(req("DELETE"), ctxId(group.id))).status, 400, "memberId is required");
 	assert.equal((await app.members.DELETE(req("DELETE", undefined, "good", `?memberId=${memberId}`), ctxId(group.id))).status, 200);
