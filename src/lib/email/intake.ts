@@ -21,6 +21,7 @@ export async function intakeIncomingMail(env: CloudflareEnv, input: IntakeInput,
 		all: input.headers,
 		verdicts: input.verdicts,
 		receivedHops: countReceivedHeaders(input.raw),
+		loadRaw: async () => input.raw,
 	});
 
 	if (decision?.action === "drop") return { action: "drop" };

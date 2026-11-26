@@ -5,6 +5,7 @@ import { forwardedMarker, MAILFLARE_FORWARDED_HEADER } from "@/lib/email/account
 import { getEmailAddress, splitEmailAddressList } from "@/lib/email/address";
 import { groupListIdentifier, groupDropReason, isAutomatedMail } from "@/lib/groups/loop-utils";
 import { groupsAllowed } from "@/lib/groups/license";
+import { answersRelayedCopy, recordRelayBounce } from "@/lib/groups/relay-bounces";
 import { findMemberSenderAddress, isExternalMember, loadOrgHostnames } from "@/lib/groups/policy";
 import { canPost, GROUP_POST_REJECT_REASON } from "@/lib/groups/policy-utils";
 import { readTrustedDmarcResult } from "@/lib/spam/analyzers/authentication";
@@ -36,6 +37,8 @@ export async function resolveIncomingMail(
 		verdicts?: ProviderVerdicts;
 		/** How many `Received` headers the message carries, for the group loop guard. */
 		receivedHops?: number;
+		/** Reads the raw message; only called for a bounce to a group, to trace it to the relayed copy it names. */
+		loadRaw?: () => Promise<ArrayBuffer>;
 	},
 ): Promise<IncomingDecision | null> {
 	let decision: RoutingDecision | null;
@@ -67,7 +70,7 @@ export async function resolveIncomingMail(
 export async function admitGroupMail(
 	env: CloudflareEnv,
 	decision: RoutingDecision,
-	input: { all?: Record<string, string>; verdicts?: ProviderVerdicts; receivedHops?: number; from?: string | null; envelopeFrom?: string } = {},
+	input: { all?: Record<string, string>; verdicts?: ProviderVerdicts; receivedHops?: number; from?: string | null; envelopeFrom?: string; loadRaw?: () => Promise<ArrayBuffer> } = {},
 ): Promise<IncomingDecision> {
 	const group = decision.group;
 	if (!group) return decision;
@@ -81,6 +84,14 @@ export async function admitGroupMail(
 		envelopeFrom: input.envelopeFrom,
 	});
 	if (dropReason) {
+		// A bounce of a relayed copy is how a bad external address is learned: trace it before it is discarded.
+		if (input.loadRaw && ["null sender", "null return path", "delivery report"].includes(dropReason)) {
+			try {
+				await recordRelayBounce(env, group, await input.loadRaw());
+			} catch (error) {
+				console.error(`Tracing a bounce to group ${group.address} failed`, error);
+			}
+		}
 		console.warn(`Dropped mail to group ${group.address}: ${dropReason}`);
 		return { action: "drop" };
 	}
@@ -91,6 +102,11 @@ export async function admitGroupMail(
 		const senders = [input.envelopeFrom, ...splitEmailAddressList(input.from ?? headers.from).map((entry) => getEmailAddress(entry))].filter((value): value is string => !!value);
 		if (await isExternalMember(db, group.groupId, senders)) {
 			console.warn(`Dropped mail to group ${group.address}: automated mail from an external member`);
+			return { action: "drop" };
+		}
+		// An auto-ack from some other address (a ticket system's) still names the relayed copy it answers.
+		if (await answersRelayedCopy(env, group.groupId, headers)) {
+			console.warn(`Dropped mail to group ${group.address}: automated answer to a relayed copy`);
 			return { action: "drop" };
 		}
 	}

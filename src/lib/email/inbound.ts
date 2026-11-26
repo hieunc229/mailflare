@@ -113,6 +113,7 @@ export async function processInboundMessage(
 			// The header map has no Received headers (they are untrusted and stripped), so count them in the raw message.
 			receivedHops: countReceivedHeaders(await raw.arrayBuffer()),
 			envelopeFrom: payload.from,
+			loadRaw: async () => (await env.BUCKET.get(payload.rawR2Key))!.arrayBuffer(),
 		});
 		if (admitted.action !== "group") {
 			// The queued key may be shared with other recipients of the message, so leave it to the raw sweeper.

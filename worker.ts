@@ -98,6 +98,8 @@ export default {
 				alreadyForwarded,
 				all: headerMap,
 				receivedHops: countReceivedInJoinedValue(headerMap.received),
+				// Read only for a bounce to a group, which is dropped afterwards, so the one-shot stream is not needed again.
+				loadRaw: () => new Response(message.raw).arrayBuffer(),
 			});
 
 			// Group mail that would loop is accepted and discarded: a bounce would feed the loop.
