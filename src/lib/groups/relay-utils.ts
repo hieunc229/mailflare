@@ -106,11 +106,16 @@ export function reserveRelay(budget: RelayBudget): boolean {
 }
 
 /**
- * Messages one group may relay to its external members per hour. Every relay is a billed send under our
- * domain's name, and the receiving side only authenticates the sender, it does not judge the content: this
- * is the circuit breaker for a spam run into an `anyone` group and for any loop the other guards miss.
+ * Sends (messages x external members) allowed per hour and per day, for one group and for the whole installation.
+ * Every send is billed on Resend, SES and metered Cloudflare sending, goes out under our domain's name, and the
+ * receiving side only authenticates the sender: these are the circuit breakers for a spam run, a loop the other
+ * guards miss, and a surprise bill. Low on purpose; an admin who needs more raises the constants.
  */
-export const GROUP_RELAY_MESSAGES_PER_HOUR = 120;
+export const GROUP_SENDS_PER_HOUR = 200;
+export const GROUP_SENDS_PER_DAY = 500;
+export const INSTALL_SENDS_PER_HOUR = 800;
+export const INSTALL_SENDS_PER_DAY = 2000;
+
 /** Relays per second a chunk releases, so up to 100 of them do not meet a provider's rate limit together. */
 export const GROUP_RELAY_PER_SECOND = 2;
 
@@ -125,8 +130,41 @@ async function sha256Hex(value: string): Promise<string> {
 	return Array.from(new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(value))), (byte) => byte.toString(16).padStart(2, "0")).join("");
 }
 
-/** Marks a message as counted against the group's hourly relay allowance; the same message counts once. */
-export const relayRatePrefix = (groupId: string, hour: number): string => `${GROUP_RELAY_PREFIX}rate/${groupId}/${hour}/`;
+export type RateFlag = "ok" | "skip";
+export type RateEntry = { day: number; hour: number; groupId: string; digest: string; sends: number; flag: RateFlag };
+
+export const RELAY_RATE_PREFIX = `${GROUP_RELAY_PREFIX}rate/`;
+export const relayRateDayPrefix = (day: number): string => `${RELAY_RATE_PREFIX}${day}/`;
+
+/**
+ * One marker per message and group: `group-relay/rate/<day>/<hour>/<group>/<digest>-<sends>-<ok|skip>`. The key
+ * says everything (no object body to read), so one listing of the day's prefix yields every counter, and the flag
+ * keeps the spam verdict for the message's later chunks. A message counts once however many chunks it has.
+ */
+export function relayRateKey(input: { groupId: string; digest: string; sends: number; flag: RateFlag; now?: Date }): string {
+	const hour = Math.floor((input.now ?? new Date()).getTime() / 3_600_000);
+	return `${RELAY_RATE_PREFIX}${Math.floor(hour / 24)}/${hour}/${input.groupId}/${input.digest}-${input.sends}-${input.flag}`;
+}
+
+export function parseRateKey(key: string): RateEntry | null {
+	const match = /^group-relay\/rate\/(\d+)\/(\d+)\/([^/]+)\/([0-9a-f]{64})-(\d+)-(ok|skip)$/.exec(key);
+	return match ? { day: Number(match[1]), hour: Number(match[2]), groupId: match[3], digest: match[4], sends: Number(match[5]), flag: match[6] as RateFlag } : null;
+}
+
+export type RelayAllowance = { ok: true } | { ok: false; scope: "group" | "installation"; period: "hour" | "day"; limit: number };
+
+/** Whether `sends` more fit, given the day's markers (all of one UTC day): group hour, group day, installation hour, installation day. */
+export function planRelayAllowance(entries: RateEntry[], now: { groupId: string; hour: number; day: number; sends: number }): RelayAllowance {
+	const total = (filter: (entry: RateEntry) => boolean) => entries.filter(filter).reduce((sum, entry) => sum + entry.sends, 0);
+	const checks = [
+		{ scope: "group", period: "hour", limit: GROUP_SENDS_PER_HOUR, used: total((e) => e.groupId === now.groupId && e.hour === now.hour) },
+		{ scope: "group", period: "day", limit: GROUP_SENDS_PER_DAY, used: total((e) => e.groupId === now.groupId) },
+		{ scope: "installation", period: "hour", limit: INSTALL_SENDS_PER_HOUR, used: total((e) => e.hour === now.hour) },
+		{ scope: "installation", period: "day", limit: INSTALL_SENDS_PER_DAY, used: total(() => true) },
+	] as const;
+	const tripped = checks.find((check) => check.used + now.sends > check.limit);
+	return tripped ? { ok: false, scope: tripped.scope, period: tripped.period, limit: tripped.limit } : { ok: true };
+}
 
 /** Written once a chunk's relays are queued, so a redelivered chunk does not queue (and bill) them again. */
 export async function relayChunkKey(groupId: string, digest: string, cursor: string | undefined): Promise<string> {

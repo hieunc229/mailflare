@@ -8,15 +8,7 @@ import { resolveMailboxForAddress, toResolvedMailbox, type ResolvedMailbox } fro
 import { readTrustedDmarcResult } from "@/lib/spam/analyzers/authentication";
 import { isMissingTableError } from "@/lib/database-errors";
 import { groupsAllowed } from "@/lib/groups/license";
-import {
-	GROUP_RELAY_MESSAGES_PER_HOUR,
-	relayBlockedByVerdicts,
-	relayChunkKey,
-	relayDelaySeconds,
-	relayRatePrefix,
-	relayStorageKey,
-} from "@/lib/groups/relay-utils";
-import { domainCanSend } from "@/lib/groups/sending";
+import { queueRelays } from "@/lib/groups/relay-queue";
 import { singleSenderAddress } from "@/lib/groups/policy-utils";
 import {
 	EXPANSION_DEFER_SECONDS,
@@ -100,52 +92,6 @@ export async function resolveGroupDelivery(
 		isTarget = !!account && isAccountPrimaryAddress(mailbox.localPart, domain.hostname, account.email);
 	}
 	return isTarget ? toResolvedMailbox(mailbox, mailbox.domainId, domain.hostname) : null;
-}
-
-/**
- * Queues one `group.relay` message per external member of a chunk (spec D-7) and returns how many. Skipped, with a
- * warning, when the sender was not authenticated, the receiver flagged the message, the domain cannot send, or the
- * group used up its hourly allowance. Redelivery of the same chunk finds its marker and queues nothing.
- */
-async function queueRelays(
-	env: CloudflareEnv,
-	db: AppDatabase,
-	group: { id: string; domainId: string },
-	payload: InboundQueueMessage,
-	memberIds: string[],
-	context: { dmarcPass: boolean; cursor: string | undefined; loadBytes: () => Promise<ArrayBuffer | null> },
-): Promise<number> {
-	const skip = (reason: string) => {
-		console.warn(`Group ${group.id}: ${reason}`);
-		return 0;
-	};
-	if (!context.dmarcPass) return skip("mail without a DMARC pass goes to internal members only");
-	if (relayBlockedByVerdicts(payload.verdicts)) return skip("mail the receiver flagged goes to internal members only");
-	const [domain] = await db.select().from(domains).where(eq(domains.id, group.domainId)).limit(1);
-	if (!domain || !domainCanSend(domain)) return skip(`${domain?.hostname ?? "its domain"} cannot send, so external members are skipped`);
-	const content = await context.loadBytes();
-	if (!content) {
-		console.error(`Missing R2 object for group mail: ${payload.rawR2Key}`);
-		return 0;
-	}
-	const digest = await contentDigest(content);
-
-	const chunkKey = await relayChunkKey(group.id, digest, context.cursor);
-	if (await env.BUCKET.get(chunkKey)) return 0;
-	const prefix = relayRatePrefix(group.id, Math.floor(Date.now() / 3_600_000));
-	const rateKey = `${prefix}${digest}`;
-	const counted = await env.BUCKET.list({ prefix, limit: GROUP_RELAY_MESSAGES_PER_HOUR + 1 });
-	if (!counted.objects.some((object) => object.key === rateKey)) {
-		if (counted.objects.length >= GROUP_RELAY_MESSAGES_PER_HOUR) return skip(`${GROUP_RELAY_MESSAGES_PER_HOUR} messages were relayed this hour already; external members are skipped`);
-		await env.BUCKET.put(rateKey, new ArrayBuffer(0));
-	}
-	// One shared copy per message, keyed by group and content so a retried chunk writes the same object.
-	const rawR2Key = await relayStorageKey(group.id, digest);
-	await env.BUCKET.put(rawR2Key, content, { httpMetadata: { contentType: "message/rfc822" }, customMetadata: { from: payload.from, to: payload.to } });
-	const relays = memberIds.map((memberId, index) => ({ body: { kind: "group.relay" as const, groupId: group.id, memberId, rawR2Key }, delaySeconds: relayDelaySeconds(index) }));
-	for (const batch of planQueueBatches(relays)) await env.OUTBOUND_QUEUE.sendBatch(batch);
-	await env.BUCKET.put(chunkKey, new ArrayBuffer(0));
-	return relays.length;
 }
 
 /**
