@@ -5,7 +5,7 @@
  */
 import { and, eq, sql } from "drizzle-orm";
 import { createDb } from "@/db";
-import { users, domains, mailboxes, messages, calendarEvents, calendarShares, calendarResources, calendarResourceBookings, contacts, contactDetails, davCalendarObjects, davCards, davCollections, folders, jmapChanges, appSettings, webhooks, spamTokenStats, spamReputation, mailboxPromotionSettings, emailSuppressions, domainDeliverability } from "@/db/schema";
+import { users, domains, mailboxes, messages, calendarEvents, calendarShares, davChanges, calendarResources, calendarResourceBookings, contacts, contactDetails, davCalendarObjects, davCards, davCollections, folders, jmapChanges, appSettings, webhooks, spamTokenStats, spamReputation, mailboxPromotionSettings, emailSuppressions, domainDeliverability } from "@/db/schema";
 import { getDatabaseConfig } from "@/db/with-database";
 import { openExternalDatabase } from "@/db/external";
 import { staleGuard } from "@/lib/dav/writes";
@@ -189,6 +189,9 @@ const [{ guardrows }] = await db.all<{ guardrows: number }>(sql`SELECT count(*) 
 check("the calendar guard lets a write into an existing calendar through and leaves no guard rows", Number(guardrows) === 0 && (await davLog(guardCalId, `evt_g2_${stamp}`)) === "created");
 await db.delete(calendarEvents).where(eq(calendarEvents.calendarId, guardCalId));
 await db.delete(davCollections).where(eq(davCollections.id, guardCalId));
+// The sync report orders by `seq + 0` (not the rowid order) so the collection index serves it; the expression must be valid and ordered on every dialect.
+const orderedSeqs = (await db.select({ seq: davChanges.seq }).from(davChanges).orderBy(sql`${davChanges.seq} + 0`).limit(20)).map((row) => Number(row.seq));
+check("the change log can be ordered by seq + 0", orderedSeqs.length > 1 && orderedSeqs.every((seq, index) => index === 0 || seq > orderedSeqs[index - 1]));
 const shareId = `csh_${stamp}`;
 await db.insert(calendarShares).values({ id: shareId, calendarId: calId, granteeUserId: userId, role: "read" } as never);
 await db.insert(calendarResources).values({ id: `res_${stamp}`, name: `Room ${stamp}` } as never);
