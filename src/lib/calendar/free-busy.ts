@@ -12,6 +12,12 @@ export const MAX_FREE_BUSY_DAYS = 62;
 const USER_CHUNK = 40;
 /** Occurrences read per series in one window; a daily series needs 63. */
 const MAX_OCCURRENCES = 2000;
+/**
+ * Work one request may spend expanding series, counted as one per series plus one per occurrence found (50 people over 62 days of
+ * a few daily events fit many times over). Once it is spent, whoever is read next gets their whole window as busy, not free: a
+ * request that cannot be answered exactly never answers "free".
+ */
+export const MAX_EXPANSION_BUDGET = 20_000;
 const DAY = 86_400_000;
 
 export type BusyInterval = [startMs: number, endMs: number];
@@ -58,6 +64,7 @@ export async function busyIntervals(env: CloudflareEnv, targets: FreeBusyTargets
 		excluded.add(targets.excludeEventId);
 		for (const id of ids) excluded.add(await inviteEventId(id, uid));
 	}
+	let spent = 0;
 	const collected = new Map<string, BusyInterval[]>(ids.map((id) => [id, []]));
 	for (let index = 0; index < ids.length; index += USER_CHUNK) {
 		const rows = await db.select({
@@ -70,7 +77,9 @@ export async function busyIntervals(env: CloudflareEnv, targets: FreeBusyTargets
 			const duration = row.endsAt.getTime() - row.startsAt.getTime();
 			if (duration <= 0) continue;
 			const list = collected.get(row.userId)!;
+			if (spent > MAX_EXPANSION_BUDGET) { list.push([from, to]); continue; }
 			const { starts, exhausted } = expandEvent(row, new Date(from - duration), end, MAX_OCCURRENCES);
+			spent += 1 + starts.length;
 			if (exhausted) { list.push([from, to]); continue; }
 			for (const at of starts) {
 				const occurrenceEnd = at.getTime() + duration;
