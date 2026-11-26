@@ -264,3 +264,16 @@ test("calendarScopes: the shared-calendar query is answered from the calendar an
 	assert.match(plan, /calendar_events_user_starts_idx/);
 	assert.doesNotMatch(plan, /SCAN calendar_events\b(?! USING)/);
 });
+
+test("an owner with Calendar turned off closes their calendars to grantees everywhere, like having no role", async () => {
+	const { sqlite, orm, calendar, grant, event } = setup();
+	calendar("cal:work"); grant("g1", "cal:work", "u2", "edit"); event("e1", "u1", "cal:work");
+	assert.equal(await shares.getCalendarRole(orm, u("u2"), "cal:work"), "edit");
+	sqlite.prepare("UPDATE users SET calendar_enabled = 0 WHERE id = 'u1'").run();
+	assert.equal(await shares.getCalendarRole(orm, u("u2"), "cal:work"), null);
+	assert.deepEqual((await shares.listVisibleCalendars(orm, u("u2"))).map((entry) => entry.id), ["cal:u2"]);
+	assert.deepEqual(await shares.grantedCalendars(orm, "u2"), []);
+	assert.equal((await shares.getEventAccess(orm, u("u2"), { userId: "u1", calendarId: "cal:work" })), null);
+	sqlite.prepare("UPDATE users SET calendar_enabled = 1 WHERE id = 'u1'").run();
+	assert.equal(await shares.getCalendarRole(orm, u("u2"), "cal:work"), "edit");
+});

@@ -33,17 +33,17 @@ type Access = { role: CalendarRole; ownerId: string };
 
 /**
  * The one answer to "what may this user do in this calendar" (D-4): owner, a granted role, or null (no such calendar and no
- * grant look the same, so ids cannot be probed). A disabled or deleted owner closes the calendar to everyone else.
+ * grant look the same, so ids cannot be probed). A disabled or deleted owner, or one with Calendar turned off, closes the calendar to everyone else.
  */
 export async function getCalendarAccess(db: Db, user: Actor, calendarId: string): Promise<Access | null> {
 	// The default calendar's row is lazy, so it is the user's own by its id alone.
 	if (calendarId === calendarCollectionId(user.id)) return { role: "owner", ownerId: user.id };
-	const [row] = await db.select({ ownerId: davCollections.userId, disabled: users.disabled }).from(davCollections)
+	const [row] = await db.select({ ownerId: davCollections.userId, disabled: users.disabled, calendarEnabled: users.calendarEnabled }).from(davCollections)
 		.innerJoin(users, eq(users.id, davCollections.userId))
 		.where(and(eq(davCollections.id, calendarId), eq(davCollections.kind, "calendar"))).limit(1);
 	if (!row) return null;
 	if (row.ownerId === user.id) return { role: "owner", ownerId: row.ownerId };
-	if (row.disabled) return null;
+	if (row.disabled || !row.calendarEnabled) return null;
 	const [grant] = await db.select({ role: calendarShares.role }).from(calendarShares).where(and(eq(calendarShares.calendarId, calendarId), eq(calendarShares.granteeUserId, user.id))).limit(1);
 	return grant ? { role: grant.role, ownerId: row.ownerId } : null;
 }
@@ -67,7 +67,7 @@ export async function grantedCalendars(db: Db, userId: string): Promise<GrantedC
 	const rows = await db.select({ id: calendarShares.calendarId, role: calendarShares.role, ownerId: davCollections.userId }).from(calendarShares)
 		.innerJoin(davCollections, eq(davCollections.id, calendarShares.calendarId))
 		.innerJoin(users, eq(users.id, davCollections.userId))
-		.where(and(eq(calendarShares.granteeUserId, userId), eq(davCollections.kind, "calendar"), eq(users.disabled, false)))
+		.where(and(eq(calendarShares.granteeUserId, userId), eq(davCollections.kind, "calendar"), eq(users.disabled, false), eq(users.calendarEnabled, true)))
 		.limit(MAX_GRANTS_READ);
 	return rows;
 }
@@ -78,7 +78,7 @@ export async function listVisibleCalendars(db: Db, user: Actor): Promise<Calenda
 	const rows = await db.select({ id: davCollections.id, name: davCollections.displayName, color: davCollections.color, description: davCollections.description, role: calendarShares.role, ownerId: users.id, ownerName: users.name, ownerEmail: users.email }).from(calendarShares)
 		.innerJoin(davCollections, eq(davCollections.id, calendarShares.calendarId))
 		.innerJoin(users, eq(users.id, davCollections.userId))
-		.where(and(eq(calendarShares.granteeUserId, user.id), inArray(calendarShares.role, ["read", "edit", "manage"]), eq(davCollections.kind, "calendar"), eq(users.disabled, false)))
+		.where(and(eq(calendarShares.granteeUserId, user.id), inArray(calendarShares.role, ["read", "edit", "manage"]), eq(davCollections.kind, "calendar"), eq(users.disabled, false), eq(users.calendarEnabled, true)))
 		.orderBy(asc(davCollections.createdAt), asc(davCollections.id)).limit(MAX_GRANTS_READ);
 	const shared: CalendarSummary[] = rows.map((row) => ({ id: row.id, name: row.name, color: paletteColor(row.color), description: row.description ?? "", isDefault: false, role: row.role, ownerId: row.ownerId, ownerName: row.ownerName || row.ownerEmail, eventCount: 0 }));
 	return [...own, ...shared];
