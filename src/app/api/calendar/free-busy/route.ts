@@ -16,12 +16,12 @@ const NO_STORE = { "Cache-Control": "no-store" };
  * The event the caller is editing, only when they may edit it (an occurrence id names its series). Anything else, a missing event
  * included, gives null and no sign of why, so the field cannot be used to probe events or calendars.
  */
-async function editableEventId(env: CloudflareEnv, user: { id: string }, requested: string | null): Promise<string | null> {
+async function editableEvent(env: CloudflareEnv, user: { id: string }, requested: string | null): Promise<{ id: string; owner: boolean } | null> {
 	if (!requested) return null;
 	const id = parseCalendarOccurrenceId(requested)?.seriesId ?? requested;
 	const db = getDb(env);
 	const [event] = await db.select({ userId: calendarEvents.userId, calendarId: calendarEvents.calendarId }).from(calendarEvents).where(eq(calendarEvents.id, id)).limit(1);
-	return event && roleAtLeast(await getEventAccess(db, user, event), "edit") ? id : null;
+	return event && roleAtLeast(await getEventAccess(db, user, event), "edit") ? { id, owner: event.userId === user.id } : null;
 }
 
 const iso = ([from, to]: BusyInterval) => [new Date(from).toISOString(), new Date(to).toISOString()];
@@ -38,9 +38,10 @@ export async function POST(request: Request) {
 	const body = await readJsonObject(request);
 	const parsed = body ? parseFreeBusyRequest(body) : "Invalid JSON body";
 	if (typeof parsed === "string") return NextResponse.json({ error: parsed }, { status: 400, headers: NO_STORE });
+	const editing = await editableEvent(env, user, parsed.excludeEventId);
 	const accounts = await resolveFreeBusyAddresses(env, parsed.addresses);
 	const visible = await viewableFreeBusyUsers(env, user.id, [...new Set(accounts.values())]);
-	const busy = visible.size ? await busyIntervals(env, { userIds: [...visible], excludeEventId: (await editableEventId(env, user, parsed.excludeEventId)) ?? undefined }, parsed.start, parsed.end) : new Map<string, BusyInterval[]>();
+	const busy = visible.size ? await busyIntervals(env, { userIds: [...visible], excludeEventId: editing?.id, excludeStoredUid: editing?.owner }, parsed.start, parsed.end) : new Map<string, BusyInterval[]>();
 	const results: Record<string, { status: "ok"; busy: string[][] } | { status: "unknown" }> = {};
 	for (const address of parsed.addresses) {
 		const id = accounts.get(address);
