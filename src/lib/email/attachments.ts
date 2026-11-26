@@ -15,7 +15,7 @@ import type {
 import { DEFAULT_OUTBOUND_ATTACHMENT_MAX_MB, outgoingSizeError } from "./attachment-limits";
 import { getOutboundAttachmentMaxMb } from "./attachment-policy";
 import { deleteUnreferencedObjects } from "@/lib/drive/shared-objects";
-import { extractStoredAttachmentText } from "@/lib/email/attachment-text";
+import { extractInlineAttachmentText } from "@/lib/email/attachment-text";
 
 export const MAX_ATTACHMENT_SIZE = 25_000_000;
 export const MAX_TOTAL_ATTACHMENT_SIZE = 25_000_000;
@@ -105,11 +105,11 @@ export async function storeMessageAttachments(
 				contentId: attachment.contentId ?? null,
 				r2Key,
 			});
-			// Off the request path by default: a parse is unbounded CPU, and a request
-			// caller (send, drafts, JMAP, direct import) has 10 ms-30 s of it. Queue
-			// consumers pass `extractText` and enrich here instead of leaving it to the
-			// first read. Best effort either way: a failure never fails the ingest.
-			if (options?.extractText) await extractStoredAttachmentText(env, { id, contentType: attachment.type, content: attachment.content });
+			// Only text/* is decoded here, and only for a queue consumer that passes
+			// `extractText`: a PDF parse is unbounded CPU and delivery must not wait on
+			// it, so those rows stay "none" for getAttachmentText. Best effort: a
+			// failure never fails the ingest.
+			if (options?.extractText) await extractInlineAttachmentText(env, { id, contentType: attachment.type, content: attachment.content });
 		}
 	} catch (error) {
 		await Promise.all(stored.map((attachment) => env.BUCKET.delete(attachment.r2Key)));

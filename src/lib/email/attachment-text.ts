@@ -6,13 +6,19 @@ import { truncateUtf8 } from "@/lib/email/inbound-limits";
 /**
  * Text pulled out of attachments so search can index it later (F52).
  *
- * Where extraction runs is deliberate. Parsing a PDF is unbounded CPU (the source
- * cap and page cap do not bound decompression), and a Worker request path has as
- * little as 10 ms of CPU on Free, so nothing on a request path parses inline:
- * `storeMessageAttachments` leaves rows at "none" and `getAttachmentText` fills
- * one in when its text is first asked for. Queue consumers — the inbound mail
- * consumer and import jobs, which have 30 s and up — pass `extractText: true`
- * and enrich the row as it is stored.
+ * PDF extraction is lazy only — it never runs inline, not on a request and not
+ * in a queue consumer. Parsing a PDF is unbounded CPU (the source cap and page
+ * cap do not bound decompression), and a runtime CPU or memory kill cannot be
+ * caught: in the delivery queue, a kill between the message insert and its
+ * attachment writes leaves partial state that the retry skips, so mail delivery
+ * must never wait on a parser. PDF rows therefore stay at "none" until
+ * `getAttachmentText` runs.
+ *
+ * The same holds for whoever consumes `getAttachmentText` (F52): that call can
+ * parse a PDF, so it must not be made from a request path. Give it an
+ * enrichment job or another bounded context for PDF rows. The only work done
+ * inline is a text/* decode — a bounded, allocation-only operation — and only
+ * when a queue consumer asks for it (`storeMessageAttachments(..., { extractText: true })`).
  */
 
 /** Bytes of source file we are willing to parse. Larger files are skipped unread. */
@@ -39,12 +45,12 @@ export interface AttachmentExtraction {
 
 export interface AttachmentTextResult extends AttachmentExtraction {
 	/**
-	 * Whether `message_attachments` now holds a decided status for this
-	 * attachment. When false the row is still "none" — the write failed — so a
-	 * later `getAttachmentText` extracts again. Extraction itself can still have
-	 * succeeded: `status` and `text` describe the bytes, `persisted` describes the
-	 * row. A lost race (another reader recorded first) counts as persisted: the
-	 * row is decided and `getAttachmentText` returns the stored value.
+	 * Whether this call could confirm that `message_attachments` holds a decided
+	 * status for the attachment. `false` only means no decision was confirmed by
+	 * this call — the write failed, the row may have been deleted, or another
+	 * writer's value now stands — so it does not promise the row is still "none".
+	 * Extraction itself can still have succeeded: `status` and `text` describe the
+	 * bytes this call parsed, `persisted` describes what could be confirmed.
 	 */
 	persisted: boolean;
 }
@@ -52,25 +58,19 @@ export interface AttachmentTextResult extends AttachmentExtraction {
 const utf8 = new TextDecoder("utf-8", { fatal: false });
 const charsetPattern = /charset\s*=\s*"?([\w.:-]+)/i;
 
-const ascii = (text: string): Uint8Array => {
-	const bytes = new Uint8Array(text.length);
-	for (let index = 0; index < text.length; index += 1) bytes[index] = text.charCodeAt(index);
-	return bytes;
-};
-const STREAM_KEYWORD = ascii("stream");
-const ENDSTREAM_KEYWORD = ascii("endstream");
-const LENGTH_KEYWORD = ascii("/Length");
-const WHITESPACE = new Set([0x00, 0x09, 0x0a, 0x0c, 0x0d, 0x20]);
-
 /** The MIME type without its parameters, lowercased ("text/plain; charset=x" → "text/plain"). */
 export function attachmentMimeType(contentType: string): string {
 	return (contentType.split(";")[0] ?? "").trim().toLowerCase();
 }
 
+/** Whether the type is text, which is the only kind this module ever parses inline. */
+export function isTextAttachment(contentType: string): boolean {
+	return attachmentMimeType(contentType).startsWith("text/");
+}
+
 /** Whether extraction handles this content type at all: text/* or PDF. */
 export function isExtractableContentType(contentType: string): boolean {
-	const type = attachmentMimeType(contentType);
-	return type === "application/pdf" || type.startsWith("text/");
+	return isTextAttachment(contentType) || attachmentMimeType(contentType) === "application/pdf";
 }
 
 /**
@@ -98,94 +98,17 @@ function normalizeText(text: string): string {
 	return text.replace(/\r\n?/g, "\n").replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/g, "");
 }
 
-/** Index of `needle` at or after `from`, or -1. Native `indexOf` skips to each candidate first byte. */
-function findBytes(haystack: Uint8Array, needle: Uint8Array, from: number): number {
-	const last = haystack.length - needle.length;
-	let index = from;
-	while (index <= last) {
-		index = haystack.indexOf(needle[0], index);
-		if (index < 0 || index > last) return -1;
-		let offset = 1;
-		while (offset < needle.length && haystack[index + offset] === needle[offset]) offset += 1;
-		if (offset === needle.length) return index;
-		index += 1;
-	}
-	return -1;
-}
-
-/** A direct `/Length` value in the dictionary that precedes a stream, or null when absent or indirect. */
-function declaredStreamLength(bytes: Uint8Array, stream: number): number | null {
-	let marker = findBytes(bytes, LENGTH_KEYWORD, Math.max(0, stream - 256));
-	if (marker < 0) return null;
-	// The dictionary's own /Length is the last one written before the keyword.
-	for (let next = findBytes(bytes, LENGTH_KEYWORD, marker + LENGTH_KEYWORD.length); next >= 0 && next < stream; next = findBytes(bytes, LENGTH_KEYWORD, next + LENGTH_KEYWORD.length)) marker = next;
-	let index = marker + LENGTH_KEYWORD.length;
-	while (index < stream && WHITESPACE.has(bytes[index])) index += 1;
-	let digits = "";
-	while (index < stream && bytes[index] >= 0x30 && bytes[index] <= 0x39) {
-		digits += String.fromCharCode(bytes[index]);
-		index += 1;
-	}
-	if (!digits) return null;
-	while (index < stream && WHITESPACE.has(bytes[index])) index += 1;
-	// `/Length 12 0 R` points at another object; only a direct number can be checked here.
-	if (index < stream && bytes[index] >= 0x30 && bytes[index] <= 0x39) return null;
-	const value = Number(digits);
-	return Number.isSafeInteger(value) ? value : null;
-}
-
-/** Whether the last byte before the keyword's line closes a dictionary (`>>`), as a real stream does. */
-function followsDictionary(bytes: Uint8Array, stream: number): boolean {
-	let index = stream - 1;
-	while (index > 0 && WHITESPACE.has(bytes[index])) index -= 1;
-	return index >= 1 && bytes[index] === 0x3e && bytes[index - 1] === 0x3e;
-}
-
-/**
- * Whether the file carries a stream shorter than its declared /Length, which is
- * what truncation leaves behind. pdf.js recovers from a content stream that
- * stops mid-way instead of failing, so without this check a truncated PDF is
- * stored as "done" with no text and never retried. Only a stream with a direct
- * /Length is judged: an indirect reference, an absent one, or a file that cannot
- * be scanned is left to pdf.js, so a false failure cannot cost a healthy
- * document its text. A stream that is longer than declared is not reported
- * either — that is a stale count, not lost data.
- */
-function hasTruncatedStream(bytes: Uint8Array): boolean {
-	let cursor = 0;
-	while (true) {
-		const stream = findBytes(bytes, STREAM_KEYWORD, cursor);
-		if (stream < 0) return false;
-		cursor = stream + STREAM_KEYWORD.length;
-		// Page text and binary data can contain the word, so only a keyword that
-		// closes a dictionary and starts the stream data is treated as one.
-		if (!followsDictionary(bytes, stream)) continue;
-		const after = bytes[stream + STREAM_KEYWORD.length];
-		if (after !== 0x0a && after !== 0x0d) continue;
-		const length = declaredStreamLength(bytes, stream);
-		if (length === null) continue;
-		const contentStart = stream + STREAM_KEYWORD.length + (after === 0x0d && bytes[stream + STREAM_KEYWORD.length + 1] === 0x0a ? 2 : 1);
-		const end = findBytes(bytes, ENDSTREAM_KEYWORD, contentStart);
-		// A declared length with no terminator at all: the file stops inside the stream.
-		if (end < 0) return true;
-		let actual = end - contentStart;
-		// The EOL before `endstream` is not part of the data.
-		while (actual > 0 && (bytes[contentStart + actual - 1] === 0x0a || bytes[contentStart + actual - 1] === 0x0d)) actual -= 1;
-		// A couple of bytes of slack covers producers that miscount the EOL; a
-		// stream that stops well short of its own length was cut off.
-		if (actual + 2 < length) return true;
-	}
-}
-
 /** Read a PDF's text page by page, stopping at the page cap. */
 async function extractPdfText(bytes: Uint8Array): Promise<string> {
 	// Loaded on demand: the parser is the largest dependency of this path and most attachments are not PDFs.
 	const { getDocumentProxy } = await import("unpdf");
-	// pdf.js takes ownership of the bytes it is handed and detaches the buffer, so
-	// it gets a copy: the caller may still need its own (an outbound send reuses
-	// the attachment array it stored). `stopAtErrors` makes it throw on data it
-	// cannot parse instead of quietly returning whatever it could recover.
-	const document = await getDocumentProxy(bytes.slice(), { stopAtErrors: true });
+	// pdf.js takes ownership of the buffer it is handed and detaches it, and the
+	// caller may still need its own (an outbound send reuses the attachment array
+	// it stored). `new Uint8Array` is the copy that holds for every accepted
+	// input: a Node Buffer's slice() returns a view, not a copy. `stopAtErrors`
+	// makes the parser throw on data it cannot parse instead of quietly returning
+	// whatever it could recover.
+	const document = await getDocumentProxy(new Uint8Array(bytes), { stopAtErrors: true });
 	try {
 		const pageCount = Math.min(document.numPages, MAX_EXTRACTION_PDF_PAGES);
 		const pages: string[] = [];
@@ -210,16 +133,19 @@ async function extractPdfText(bytes: Uint8Array): Promise<string> {
 /**
  * Extract the text of one attachment from its bytes. Pure and bounded: it reads
  * nothing else, never throws, and reports the outcome the caller should store.
+ *
+ * Corruption is judged by the parser alone. pdf.js recovers what it can from a
+ * damaged stream, so a file whose structure still parses comes back "done" with
+ * whatever text survived (possibly none) — it is not marked "failed" on a guess
+ * about bytes that look wrong. A file it cannot parse at all is "failed".
  */
 export async function extractAttachmentText(contentType: string, bytes: Uint8Array): Promise<AttachmentExtraction> {
 	if (!isExtractableContentType(contentType)) return { status: "skipped", text: null };
 	if (bytes.byteLength > MAX_EXTRACTION_SOURCE_BYTES) return { status: "skipped", text: null };
+	// An empty file holds no text and is not damage.
+	if (bytes.byteLength === 0) return { status: "done", text: null };
 	const type = attachmentMimeType(contentType);
 	try {
-		if (type === "application/pdf" && hasTruncatedStream(bytes)) {
-			console.warn("Attachment PDF has a truncated stream");
-			return { status: "failed", text: null };
-		}
 		const text = truncateUtf8(normalizeText(type === "application/pdf" ? await extractPdfText(bytes) : decodeText(bytes, contentType)), MAX_EXTRACTED_TEXT_BYTES);
 		// Whitespace-only text (an empty page, a PDF that is only images) is stored as done with no text.
 		return { status: "done", text: text.trim() ? text : null };
@@ -252,41 +178,55 @@ async function persistExtraction(env: CloudflareEnv, attachmentId: string, extra
 	try {
 		return await recordExtraction(env, attachmentId, extraction);
 	} catch (error) {
-		// The row stays "none" and the next read extracts again: nothing is lost but the work.
-		console.warn(`Storing extracted attachment text failed for ${attachmentId}; the row stays none`, error);
+		// Nothing was confirmed: the row may still be "none" (and read again), or gone.
+		console.warn(`Storing extracted attachment text failed for ${attachmentId}`, error);
 		return "not-recorded";
 	}
 }
 
 /**
- * Extract and record text for an attachment that is being stored by a queue
- * consumer (inbound mail, import jobs). It never throws: a parser or database
- * failure is recorded where it can be, and a row left at "none" is retried by
- * the next read rather than losing the attachment.
+ * Enrich an attachment while a queue consumer stores it. Only text/* is read
+ * here — a decode with no parser — so a consumer's budget cannot be spent on
+ * unbounded work; anything else is left at "none" for `getAttachmentText`
+ * (see the module comment on why PDF must not run inline). Never throws.
+ *
+ * Returns null when the attachment was deliberately left for the lazy path.
  */
-export async function extractStoredAttachmentText(
+export async function extractInlineAttachmentText(
 	env: CloudflareEnv,
 	attachment: { id: string; contentType: string; content: ArrayBuffer | Uint8Array },
-): Promise<AttachmentTextResult> {
+): Promise<AttachmentTextResult | null> {
+	if (!isTextAttachment(attachment.contentType)) return null;
 	let extraction: AttachmentExtraction;
 	try {
-		// Constructing the view throws on a buffer that is already detached.
+		// A view, not a copy: decoding never takes ownership of the bytes.
 		const bytes = attachment.content instanceof Uint8Array ? attachment.content : new Uint8Array(attachment.content);
 		extraction = await extractAttachmentText(attachment.contentType, bytes);
 	} catch (error) {
+		// Constructing the view throws on a buffer that is already detached.
 		console.warn(`Attachment text extraction threw for ${attachment.id}`, error);
 		extraction = { status: "failed", text: null };
 	}
 	return { ...extraction, persisted: (await persistExtraction(env, attachment.id, extraction)) !== "not-recorded" };
 }
 
+/** Object metadata when a ranged read failed, so an empty file is not mistaken for damage. */
+async function headQuietly(env: CloudflareEnv, r2Key: string) {
+	try {
+		return await env.BUCKET.head(r2Key);
+	} catch {
+		return null;
+	}
+}
+
 /**
- * The text of an attachment, extracting it on first use: rows stored by a
- * request path (left at "none" on purpose) and rows written before extraction
- * existed. Returns null when the attachment does not exist.
+ * The text of an attachment, extracting it on first use: PDFs (which are never
+ * extracted inline) and rows written before extraction existed.
  *
- * A database failure propagates rather than being reported as "no text"; this is
- * not on any ingest path, so a caller that cannot read the row learns of it.
+ * This can parse a PDF, so it must not be called from a request path — see the
+ * module comment. A database failure propagates rather than being reported as
+ * "no text": a caller that cannot read the row should learn of it. Returns null
+ * when the attachment does not exist.
  */
 export async function getAttachmentText(env: CloudflareEnv, attachmentId: string): Promise<AttachmentTextResult | null> {
 	const db = getDb(env);
@@ -320,8 +260,15 @@ export async function getAttachmentText(env: CloudflareEnv, attachmentId: string
 				extraction = await extractAttachmentText(row.contentType, new Uint8Array(await object.arrayBuffer()));
 			}
 		} catch (error) {
-			console.warn(`Attachment text extraction threw for ${attachmentId}`, error);
-			extraction = { status: "failed", text: null };
+			// Some runtimes refuse a range read of an empty object. Confirm the size
+			// before calling a healthy empty file damaged — without a second, unbounded read.
+			const head = await headQuietly(env, row.r2Key);
+			if (head && head.size === 0) {
+				extraction = { status: "done", text: null };
+			} else {
+				console.warn(`Attachment text extraction threw for ${attachmentId}`, error);
+				extraction = { status: "failed", text: null };
+			}
 		}
 	}
 

@@ -20,9 +20,10 @@ export async function importMessagesToMailbox(
 		destination: ImportDestination;
 		messages: ImportMessageInput[];
 		/**
-		 * Extract attachment text as each message is stored. Queue consumers pass
-		 * true (they have seconds of CPU); a direct request leaves it off and the text
-		 * is extracted when it is first read.
+		 * Decode text/* attachment bodies as each message is stored. Queue consumers
+		 * pass true (they have a CPU budget to spare for a decode); a direct request
+		 * leaves it off. PDF is never parsed here — those rows stay at "none" for
+		 * getAttachmentText.
 		 */
 		extractText?: boolean;
 	},

@@ -18,9 +18,10 @@ await build({
 				MAX_EXTRACTION_PDF_PAGES,
 				MAX_EXTRACTION_SOURCE_BYTES,
 				extractAttachmentText,
-				extractStoredAttachmentText,
+				extractInlineAttachmentText,
 				getAttachmentText,
 				isExtractableContentType,
+				isTextAttachment,
 			} from "./src/lib/email/attachment-text";
 			export { storeMessageAttachments } from "./src/lib/email/attachments";
 			export { prepareOutboundAttachments } from "./src/lib/email/cloud-attachment-utils";
@@ -59,9 +60,10 @@ const {
 	MAX_EXTRACTION_PDF_PAGES,
 	MAX_EXTRACTION_SOURCE_BYTES,
 	extractAttachmentText,
-	extractStoredAttachmentText,
+	extractInlineAttachmentText,
 	getAttachmentText,
 	isExtractableContentType,
+	isTextAttachment,
 	storeMessageAttachments,
 	prepareOutboundAttachments,
 } = await load("attachment-text");
@@ -72,8 +74,8 @@ const encoder = new TextEncoder();
 
 /**
  * A minimal but valid PDF: one Helvetica text line per page.
- * `declaredLength` overrides a page stream's /Length (a stream cut short keeps
- * its original length, which is what a truncated PDF looks like), and
+ * `declaredLength` overrides a page stream's /Length (a stream that stops short
+ * keeps its written length, while the rest of the file still parses), and
  * `indirectLength` writes /Length as a reference to another object.
  */
 function pdf(pages, { declaredLength, indirectLength = false } = {}) {
@@ -109,12 +111,19 @@ function pdf(pages, { declaredLength, indirectLength = false } = {}) {
 	return encoder.encode(out);
 }
 
+/** Cut a PDF off inside its first page's content stream, as an interrupted write would. */
+function truncatedPdf() {
+	const text = new TextDecoder().decode(pdf(["a page that never finishes"]));
+	const cut = text.indexOf("stream\n") + "stream\n".length + 6;
+	return encoder.encode(text.slice(0, cut));
+}
+
 function latin1(text) {
 	const bytes = Buffer.from(text, "latin1");
 	return new Uint8Array(bytes);
 }
 
-/** A BUCKET stub that counts reads, so the lazy path can be checked for a second fetch. */
+/** A BUCKET stub that counts reads and records the options each read used. */
 function bucket(objects, { onGet } = {}) {
 	let gets = 0;
 	const reads = [];
@@ -122,6 +131,7 @@ function bucket(objects, { onGet } = {}) {
 		gets: () => gets,
 		reads,
 		put: async () => {},
+		head: async (key) => (key in objects ? { size: objects[key].byteLength } : null),
 		get: async (key, options) => {
 			gets += 1;
 			reads.push({ key, options });
@@ -151,6 +161,10 @@ test("text, PDF and nothing else are extractable", () => {
 	assert.equal(isExtractableContentType("application/octet-stream"), false);
 	assert.equal(isExtractableContentType("applications/pdf"), false);
 	assert.equal(isExtractableContentType(""), false);
+	// Only text is ever parsed inline.
+	assert.equal(isTextAttachment("text/plain"), true);
+	assert.equal(isTextAttachment("application/pdf"), false);
+	assert.equal(isTextAttachment("image/png"), false);
 });
 
 test("text attachments decode as UTF-8", async () => {
@@ -191,6 +205,11 @@ test("oversize sources are skipped and long text is truncated to the cap", async
 	assert.ok(!split.text.endsWith("\uFFFD"), "no replacement character at the cut");
 });
 
+test("an empty file holds no text and is not damage", async () => {
+	assert.deepEqual(await extractAttachmentText("application/pdf", new Uint8Array(0)), { status: "done", text: null });
+	assert.deepEqual(await extractAttachmentText("text/plain", new Uint8Array(0)), { status: "done", text: null });
+});
+
 test("a PDF's text is extracted page by page", async () => {
 	const result = await extractAttachmentText("application/pdf", pdf(["Invoice total 42 EUR", "Thanks for your business"]));
 	assert.equal(result.status, "done");
@@ -208,32 +227,29 @@ test("pages past the cap are not read", async () => {
 
 test("a PDF whose /Length is an indirect reference still extracts", async () => {
 	const result = await extractAttachmentText("application/pdf", pdf(["indirect length"], { indirectLength: true }));
-	assert.equal(result.status, "done", "an uncheckable stream must not be reported as truncated");
+	assert.equal(result.status, "done");
 	assert.match(result.text, /indirect length/);
 });
 
-test("a truncated page stream fails instead of being stored as done with no text", async () => {
-	// The stream is cut short but keeps the /Length its producer wrote: pdf.js
-	// recovers silently, so the damage has to be seen before it is handed over.
-	const result = await extractAttachmentText("application/pdf", pdf(["invoice cut off mid-stream"], { declaredLength: 200 }));
+test("page text containing the words stream and endstream is never failed", async () => {
+	// Byte occurrences in text are not structure: no scanner may turn this into a
+	// failure. How much text the parser recovers around the literal is its call.
+	const result = await extractAttachmentText("application/pdf", pdf(["stream and endstream in prose"]));
+	assert.equal(result.status, "done", "a healthy PDF must never be recorded as failed");
+	assert.match(result.text, /stream and end/);
+});
+
+test("a file cut off inside a page stream fails", async () => {
+	const result = await extractAttachmentText("application/pdf", truncatedPdf());
 	assert.deepEqual(result, { status: "failed", text: null });
 });
 
-test("the word stream inside page text does not look like a cut", async () => {
-	// Page text with real newlines around the keyword: the scanner must not take it
-	// for a stream that stops short, and the page must still extract.
-	const result = await extractAttachmentText("application/pdf", pdf(["before\nstream\nafter"]));
+test("a stream whose declared length is too large is left to the parser", async () => {
+	// The declared /Length disagrees with the bytes, but the page still reads: the
+	// parser's result is the verdict, not a guess from the numbers in the file.
+	const result = await extractAttachmentText("application/pdf", pdf(["page with a stale length"], { declaredLength: 400 }));
 	assert.equal(result.status, "done");
-	assert.match(result.text ?? "", /before/);
-});
-
-test("a file cut off inside a declared stream fails", async () => {
-	const bytes = pdf(["whole page here"]);
-	// Everything from the middle of the page's content stream onward is gone.
-	const decoder = new TextDecoder();
-	const text = decoder.decode(bytes);
-	const cut = bytes.subarray(0, text.indexOf("stream\n") + "stream\n".length + 6);
-	assert.deepEqual(await extractAttachmentText("application/pdf", cut), { status: "failed", text: null });
+	assert.match(result.text ?? "", /page with a stale length|^$/);
 });
 
 test("bytes that are not a PDF fail without throwing", async () => {
@@ -245,6 +261,18 @@ test("a PDF with no text at all is done with no stored text", async () => {
 	const result = await extractAttachmentText("application/pdf", pdf([""]));
 	assert.equal(result.status, "done");
 	assert.equal(result.text, null);
+});
+
+test("a Node Buffer input is not detached by the parser", async () => {
+	// Buffer#slice returns a view, so a copy that trusts slice() would hand the
+	// caller's bytes to pdf.js to detach.
+	const source = Buffer.from(pdf(["buffer backed document"]));
+	const length = source.byteLength;
+	const result = await extractAttachmentText("application/pdf", source);
+	assert.equal(result.status, "done");
+	assert.match(result.text, /buffer backed document/);
+	assert.equal(source.byteLength, length, "the caller's Buffer keeps its bytes");
+	assert.match(source.subarray(0, 5).toString("latin1"), /^%PDF-/);
 });
 
 async function fixture(t, { contentType = "text/plain", bytes = encoder.encode("draft body"), r2Key = "attachments/m1/a1/a.txt", status, size } = {}) {
@@ -263,44 +291,41 @@ async function fixture(t, { contentType = "text/plain", bytes = encoder.encode("
 	);
 	if (status) run("UPDATE message_attachments SET extract_status = ? WHERE id = 'a1'", status);
 	const row = () => database.db.prepare("SELECT extract_status AS status, extracted_text AS text, extracted_at AS at FROM message_attachments WHERE id = 'a1'").get();
+	const findByFilename = (filename) => database.db.prepare("SELECT extract_status AS status, extracted_text AS text FROM message_attachments WHERE filename = ?").get(filename);
 	const env = (objects = { [r2Key]: bytes }, options) => ({ DB: database, BUCKET: bucket(objects, options) });
-	return { database, row, env };
+	return { database, row, findByFilename, env };
 }
 
-test("the shared writer parses only when a queue consumer asks it to", async (t) => {
-	const { env } = await fixture(t);
-	const bytes = encoder.encode("queue body");
+test("the shared writer decodes text inline only, and leaves PDF to the lazy path", async (t) => {
+	const { env, findByFilename } = await fixture(t);
 	const state = env();
 
 	// A request-path caller stores the attachment and leaves the row at "none".
-	await storeMessageAttachments(state, "m1", [{ filename: "a.txt", type: "text/plain", content: bytes.buffer.slice(0) }], { validate: false });
-	const storedFirst = state.DB.db.prepare("SELECT extract_status AS status, extracted_text AS text FROM message_attachments WHERE filename = 'a.txt'").get();
-	assert.deepEqual({ ...storedFirst }, { status: "none", text: null }, "a request path must not pay for a parse");
+	await storeMessageAttachments(state, "m1", [{ filename: "a.txt", type: "text/plain", content: encoder.encode("request body").buffer.slice(0) }], { validate: false });
+	assert.deepEqual({ ...findByFilename("a.txt") }, { status: "none", text: null }, "a request path must not pay for extraction");
 
-	// A queue consumer asks for the enrichment inline.
-	await storeMessageAttachments(state, "m1", [{ filename: "b.txt", type: "text/plain", content: encoder.encode("second").buffer.slice(0) }], { validate: false, extractText: true });
-	const enriched = state.DB.db.prepare("SELECT extract_status AS status, extracted_text AS text FROM message_attachments WHERE filename = 'b.txt'").get();
-	assert.deepEqual({ ...enriched }, { status: "done", text: "second" });
+	// A queue consumer decodes text attachments inline.
+	await storeMessageAttachments(state, "m1", [{ filename: "b.txt", type: "text/plain", content: encoder.encode("queue body").buffer.slice(0) }], { validate: false, extractText: true });
+	assert.deepEqual({ ...findByFilename("b.txt") }, { status: "done", text: "queue body" });
+
+	// A PDF is never parsed inline, not even for a queue consumer: delivery must
+	// not wait on a parser whose CPU a platform kill can cut off.
+	await storeMessageAttachments(state, "m1", [{ filename: "c.pdf", type: "application/pdf", content: pdf(["queue pdf"]).buffer.slice(0) }], { validate: false, extractText: true });
+	assert.deepEqual({ ...findByFilename("c.pdf") }, { status: "none", text: null }, "PDF stays for getAttachmentText");
 });
 
 test("the shared writer leaves the caller's bytes intact for an immediate send", async (t) => {
-	const { env } = await fixture(t, { contentType: "application/pdf" });
-	// The outbound path keeps using the array it passed in (send.ts:150,185,246),
-	// and pdf.js detaches whatever buffer it is handed, so the writer must not give
-	// it the caller's.
+	const { env, findByFilename } = await fixture(t, { contentType: "application/pdf" });
+	// The outbound path keeps using the array it passed in (send.ts:150,185,246).
 	const source = pdf(["outbound invoice 42"]);
 	const content = source.buffer.slice(source.byteOffset, source.byteOffset + source.byteLength);
 	const original = source.slice();
-	assert.equal(content.byteLength, original.byteLength);
 
-	const state = env();
 	const attachments = [{ filename: "invoice.pdf", type: "application/pdf", content, disposition: "attachment" }];
-	await storeMessageAttachments(state, "m1", attachments, { validate: false, extractText: true });
-	const storedRow = state.DB.db.prepare("SELECT extract_status AS status FROM message_attachments WHERE filename = 'invoice.pdf'").get();
-	assert.equal(storedRow.status, "done", "the queue-side parse still happened");
+	await storeMessageAttachments(env(), "m1", attachments, { validate: false, extractText: true });
+	assert.equal(findByFilename("invoice.pdf").status, "none", "a PDF is not parsed by the writer");
 
 	assert.doesNotThrow(() => new Uint8Array(content), "the caller's buffer must not be detached");
-	assert.equal(content.byteLength, original.byteLength, "the caller's buffer keeps its bytes");
 	assert.deepEqual(new Uint8Array(content), original, "byte identity after the shared writer");
 
 	// The immediate send reads the same array, then base64s it for the provider.
@@ -310,18 +335,16 @@ test("the shared writer leaves the caller's bytes intact for an immediate send",
 	assert.deepEqual(new Uint8Array(sent.attachments[0].content), original, "the sent bytes are the stored bytes");
 });
 
-test("the ingest hook records text on the row and never throws", async (t) => {
+test("the inline helper decodes text and defers everything else", async (t) => {
 	const { row, env } = await fixture(t);
-	const result = await extractStoredAttachmentText(env(), { id: "a1", contentType: "text/plain", content: encoder.encode("hello") });
+	const result = await extractInlineAttachmentText(env(), { id: "a1", contentType: "text/plain", content: encoder.encode("hello") });
 	assert.deepEqual(result, { status: "done", text: "hello", persisted: true });
-	const stored = row();
-	assert.equal(stored.status, "done");
-	assert.equal(stored.text, "hello");
-	assert.ok(stored.at);
+	assert.equal(row().status, "done");
+	assert.ok(row().at);
 
-	const failed = await assertNotThrown(() => extractStoredAttachmentText(env(), { id: "a1", contentType: "application/pdf", content: encoder.encode("broken") }));
-	assert.deepEqual(failed, { status: "failed", text: null, persisted: true }, "the row is already decided, so nothing is rewritten");
-	assert.equal(row().status, "done", "a decided row keeps its first result");
+	const deferred = await extractInlineAttachmentText(env(), { id: "a1", contentType: "application/pdf", content: pdf(["deferred"]) });
+	assert.equal(deferred, null, "PDF is never parsed inline");
+	assert.equal(row().status, "done", "the existing decision is untouched");
 });
 
 test("a detached caller buffer is recorded as failed, not thrown", async (t) => {
@@ -329,19 +352,18 @@ test("a detached caller buffer is recorded as failed, not thrown", async (t) => 
 	const content = encoder.encode("hello").buffer.slice(0);
 	// Detaching it stands for any caller that reuses its own buffer elsewhere.
 	content.transfer();
-	const result = await assertNotThrown(() => extractStoredAttachmentText(env(), { id: "a1", contentType: "text/plain", content }));
+	const result = await assertNotThrown(() => extractInlineAttachmentText(env(), { id: "a1", contentType: "text/plain", content }));
 	assert.deepEqual(result, { status: "failed", text: null, persisted: true });
 	assert.equal(row().status, "failed");
 });
 
-test("a row that cannot be written keeps its text result and stays retryable", async (t) => {
-	const { row, env } = await fixture(t);
+test("a row that cannot be written reports no confirmed decision", async (t) => {
+	const { env } = await fixture(t);
 	const state = env();
 	// Closing the database makes the UPDATE throw while the parse still succeeds.
 	state.DB.db.close();
-	const result = await assertNotThrown(() => extractStoredAttachmentText(state, { id: "a1", contentType: "text/plain", content: encoder.encode("hello") }));
-	assert.deepEqual(result, { status: "done", text: "hello", persisted: false }, "extraction is reported, persistence is not");
-	void row;
+	const result = await assertNotThrown(() => extractInlineAttachmentText(state, { id: "a1", contentType: "text/plain", content: encoder.encode("hello") }));
+	assert.deepEqual(result, { status: "done", text: "hello", persisted: false }, "the parse is reported, no decision is confirmed");
 });
 
 test("a row written before extraction existed is extracted on first use, then read from the column", async (t) => {
@@ -389,6 +411,37 @@ test("the lazy path caps the read so stale size metadata cannot bypass the bound
 	assert.deepEqual(state.BUCKET.reads[0].options, { range: { offset: 0, length: MAX_EXTRACTION_SOURCE_BYTES + 1 } }, "the read is bounded, not a whole-object buffer");
 });
 
+test("an empty object is done, even where a ranged read of it fails", async (t) => {
+	// A runtime may refuse a range read of an empty object; its head still says it is empty.
+	const empty = await fixture(t, { bytes: new Uint8Array(0), contentType: "application/pdf" });
+	const readable = empty.env();
+	assert.deepEqual(await getAttachmentText(readable, "a1"), { status: "done", text: null, persisted: true });
+	assert.equal(empty.row().status, "done");
+
+	const refusing = await fixture(t, { bytes: new Uint8Array(0), contentType: "application/pdf" });
+	const state = refusing.env();
+	const failingBucket = {
+		get: async () => {
+			throw new Error("range read of an empty object failed");
+		},
+		head: async () => ({ size: 0 }),
+	};
+	assert.deepEqual(await getAttachmentText({ ...state, BUCKET: failingBucket }, "a1"), { status: "done", text: null, persisted: true });
+	assert.equal(refusing.row().status, "done", "a healthy empty file is not damage");
+
+	// The same failure with a non-empty object is a real read failure.
+	const broken = await fixture(t);
+	const brokenState = broken.env();
+	const brokenBucket = {
+		get: async () => {
+			throw new Error("read failed");
+		},
+		head: async () => ({ size: 12 }),
+	};
+	assert.deepEqual(await getAttachmentText({ ...brokenState, BUCKET: brokenBucket }, "a1"), { status: "failed", text: null, persisted: true });
+	assert.equal(broken.row().status, "failed");
+});
+
 test("a skipped row stays skipped and a missing object fails without throwing", async (t) => {
 	const skipped = await fixture(t, { contentType: "image/png", bytes: encoder.encode("png") });
 	assert.deepEqual(await getAttachmentText(skipped.env(), "a1"), { status: "skipped", text: null, persisted: true });
@@ -411,6 +464,7 @@ test("concurrent first readers do not overwrite each other's result", async (t) 
 		DB: env().DB,
 		BUCKET: {
 			put: async () => {},
+			head: async () => null,
 			get: async () => {
 				calls += 1;
 				const bytes = calls === 1 ? first : second;
@@ -435,10 +489,10 @@ test("concurrent first readers do not overwrite each other's result", async (t) 
 test("re-extracting a decided row reports it as already recorded", async (t) => {
 	const { row, env } = await fixture(t);
 	const state = env();
-	const first = await extractStoredAttachmentText(state, { id: "a1", contentType: "text/plain", content: encoder.encode("same bytes") });
+	const first = await extractInlineAttachmentText(state, { id: "a1", contentType: "text/plain", content: encoder.encode("same bytes") });
 	const firstAt = row().at;
 	assert.deepEqual(first, { status: "done", text: "same bytes", persisted: true });
-	const second = await extractStoredAttachmentText(state, { id: "a1", contentType: "text/plain", content: encoder.encode("same bytes") });
+	const second = await extractInlineAttachmentText(state, { id: "a1", contentType: "text/plain", content: encoder.encode("same bytes") });
 	assert.deepEqual(second, { status: "done", text: "same bytes", persisted: true });
 	assert.equal(row().text, "same bytes");
 	assert.equal(row().at, firstAt, "a decided row is not written a second time");

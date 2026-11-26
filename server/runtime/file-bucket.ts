@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { createReadStream, createWriteStream } from "node:fs";
-import { mkdir, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { mkdir, open, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { dirname, join, resolve, sep } from "node:path";
 import { Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
@@ -59,6 +59,8 @@ class FileObject {
 		return this.meta.etag;
 	}
 	get body(): ReadableStream<Uint8Array> {
+		// A zero-length range is an empty stream; createReadStream would read to EOF.
+		if (this.range?.length === 0) return new ReadableStream({ start: (controller) => controller.close() });
 		const options = this.range ? { start: this.range.offset, end: this.range.offset + this.range.length - 1 } : undefined;
 		return Readable.toWeb(createReadStream(this.path, options)) as ReadableStream<Uint8Array>;
 	}
@@ -66,9 +68,27 @@ class FileObject {
 		return false;
 	}
 	async arrayBuffer(): Promise<ArrayBuffer> {
-		const buffer = await readFile(this.path);
-		const slice = this.range ? buffer.subarray(this.range.offset, this.range.offset + this.range.length) : buffer;
-		return slice.buffer.slice(slice.byteOffset, slice.byteOffset + slice.byteLength) as ArrayBuffer;
+		// A ranged read must not read the whole file: callers bound memory (and I/O)
+		// with the range, so only those bytes are read.
+		if (!this.range) {
+			const buffer = await readFile(this.path);
+			return buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength) as ArrayBuffer;
+		}
+		const { offset, length } = this.range;
+		if (length === 0) return new ArrayBuffer(0);
+		const handle = await open(this.path, "r");
+		try {
+			const buffer = Buffer.alloc(length);
+			let read = 0;
+			while (read < length) {
+				const { bytesRead } = await handle.read(buffer, read, length - read, offset + read);
+				if (bytesRead === 0) break;
+				read += bytesRead;
+			}
+			return buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + read) as ArrayBuffer;
+		} finally {
+			await handle.close();
+		}
 	}
 	async text(): Promise<string> {
 		return Buffer.from(await this.arrayBuffer()).toString("utf8");
