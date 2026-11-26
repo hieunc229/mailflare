@@ -20,6 +20,7 @@ import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
 import { ImportJobs } from "@/components/settings/import-jobs";
 import { importMessageFiles } from "@/components/settings/import-messages-utils";
+import { TakeoutDataImport } from "@/components/settings/takeout-data-import";
 import { TakeoutImport } from "@/components/settings/takeout-import";
 import type {
   ImapFormState,
@@ -224,10 +225,13 @@ export default function SettingsImportPage() {
                 <option value="file">{t("importPage.backupFile")}</option>
                 <option value="imap">{t("importPage.imap")}</option>
                 <option value="takeout">{t("importPage.takeout")}</option>
+                <option value="takeoutData">{t("importPage.takeoutData")}</option>
               </Select>
             </div>
             {activeTab === "takeout" ? (
               <TakeoutImport />
+            ) : activeTab === "takeoutData" ? (
+              <TakeoutDataImport />
             ) : (
             <>
             <div className="space-y-2">

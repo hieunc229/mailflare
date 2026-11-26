@@ -5,6 +5,7 @@ import {
 	useCallback,
 	useContext,
 	useEffect,
+	useRef,
 	useState,
 } from "react";
 import type { ReactNode } from "react";
@@ -20,10 +21,13 @@ import {
 } from "@/lib/auth/client";
 import { PROFILE_NAME_CHANGED_EVENT } from "@/lib/profile/name-client";
 import { PROFILE_AVATAR_CHANGED_EVENT } from "@/lib/profile/avatar-client";
+import type { AuthSessionChangedDetail } from "@/lib/auth/client-types";
 import type { ProfileNameChangedDetail } from "@/lib/profile/types";
 
 export type MailboxOption = {
 	id: string;
+	/** The owner of the mailbox, which is not the signed-in user for a shared mailbox they were given access to. */
+	userId?: string;
 	domainId: string;
 	localPart: string;
 	hostname: string;
@@ -59,13 +63,16 @@ export function MailboxProvider({ children }: { children: ReactNode }) {
 	const [selectedMailbox, setSelectedMailboxState] = useState<MailboxOption | null>(null);
 	const [isLoading, setIsLoading] = useState(true);
 
-	useEffect(() => {
-		let cancelled = false;
+	const loadId = useRef(0);
+
+	const loadMailboxes = useCallback(() => {
+		const id = ++loadId.current;
 		const sessionToken = getClientSessionToken();
+		const isCurrent = () => id === loadId.current && sessionToken === getClientSessionToken();
 
 		fetchMailboxOptions()
 			.then((items) => {
-				if (cancelled || sessionToken !== getClientSessionToken()) return;
+				if (!isCurrent()) return;
 				setMailboxes(items);
 
 				const storedId = localStorage.getItem(SELECTED_MAILBOX_STORAGE_KEY);
@@ -85,24 +92,32 @@ export function MailboxProvider({ children }: { children: ReactNode }) {
 			})
 			.catch(() => {})
 			.finally(() => {
-				if (!cancelled && sessionToken === getClientSessionToken()) setIsLoading(false);
+				if (isCurrent()) setIsLoading(false);
 			});
-
-		return () => {
-			cancelled = true;
-		};
 	}, []);
 
 	useEffect(() => {
-		function resetMailboxState() {
+		loadMailboxes();
+		return () => {
+			// Invalidate any request still in flight.
+			loadId.current += 1;
+		};
+	}, [loadMailboxes]);
+
+	useEffect(() => {
+		function resetMailboxState(event: Event) {
 			setMailboxes([]);
 			setSelectedMailboxState(null);
 			setIsLoading(true);
+			// Signing out has no mailboxes to load.
+			if ((event as CustomEvent<AuthSessionChangedDetail>).detail?.authenticated === false) return;
+			// The provider outlives an account switch, so load the new account's mailboxes.
+			loadMailboxes();
 		}
 
 		window.addEventListener(AUTH_SESSION_CHANGED_EVENT, resetMailboxState);
 		return () => window.removeEventListener(AUTH_SESSION_CHANGED_EVENT, resetMailboxState);
-	}, []);
+	}, [loadMailboxes]);
 
 	useEffect(() => {
 		function updatePersonalMailboxNames(event: Event) {

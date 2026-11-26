@@ -10,9 +10,13 @@ import { processAgentDraftJob } from "@/lib/agent/jobs/utils";
 import { processOutboundQueue, type OutboundQueueMessage } from "@/lib/email/send";
 import { processWebhookRetry, type WebhookRetryMessage } from "@/lib/email/webhooks";
 import { processImportJob } from "@/lib/import/jobs";
+import { handleDavRequest, isDavPath } from "@/lib/dav/handler";
+import { guardMtaStsHost, hostnameOf, isMtaStsHost } from "@/lib/deliverability/mta-sts";
 import { applyPendingMigrations } from "@/lib/migrations/service";
 import { isImportJobMessage, isInboundQueueMessage, isWebhookRetryMessage } from "../worker-utils";
 import { createNodeRuntime } from "./runtime/env";
+import { isRealtimeOriginAllowed } from "./runtime/realtime-origin";
+import { serveFetch } from "./runtime/fetch-adapter";
 import { applyMigrations } from "./runtime/migrate";
 import { startScheduler } from "./runtime/scheduler";
 import { startSmtpListener } from "./runtime/smtp";
@@ -57,6 +61,15 @@ async function main() {
 	const trustProxy = ["1", "true", "yes"].includes((process.env.TRUST_PROXY ?? "").toLowerCase());
 
 	const server = createServer((request, response) => {
+		// An mta-sts.<domain> host serves the policy file and nothing else of the app.
+		const blocked = guardMtaStsHost({ hostname: hostnameOf(request.headers.host ?? ""), pathname: parse(request.url ?? "/").pathname ?? "/", method: request.method ?? "GET" });
+		if (blocked) {
+			void blocked.text().then((body) => {
+				response.writeHead(blocked.status, Object.fromEntries(blocked.headers));
+				response.end(request.method === "HEAD" ? undefined : body);
+			});
+			return;
+		}
 		// The only client IP that cannot be forged is the socket's. Next sees
 		// re-serialized headers, so stamp the resolved IP into a private header
 		// after removing every client-supplied forwarding header — otherwise a
@@ -71,16 +84,28 @@ async function main() {
 		delete request.headers["x-forwarded-for"];
 		delete request.headers["x-mailflare-client-ip"];
 		if (clientIp) request.headers["x-mailflare-client-ip"] = clientIp;
-		void handle(request, response, parse(request.url ?? "/", true));
+		const parsedUrl = parse(request.url ?? "/", true);
+		// CalDAV/CardDAV: PROPFIND and REPORT cannot be Next route handlers, so they are served before Next.
+		if (isDavPath(parsedUrl.pathname ?? "")) return void serveFetch(handleDavRequest, request, response, env);
+		void handle(request, response, parsedUrl);
 	});
 
 	const wss = new WebSocketServer({ noServer: true });
 	server.on("upgrade", (request, socket, head) => {
+		if (isMtaStsHost(hostnameOf(request.headers.host ?? ""))) {
+			socket.destroy();
+			return;
+		}
 		const { pathname } = parse(request.url ?? "/");
 		if (pathname !== "/api/realtime") {
 			// Next's own dev-mode HMR socket, or anything else, is not ours.
 			if (dev) app.getUpgradeHandler()(request, socket, head);
 			else socket.destroy();
+			return;
+		}
+		if (!isRealtimeOriginAllowed(request.headers, { appUrl: env.APP_URL, trustProxy })) {
+			socket.write("HTTP/1.1 403 Forbidden\r\n\r\n");
+			socket.destroy();
 			return;
 		}
 		const cookie = request.headers.cookie ?? "";
@@ -92,6 +117,11 @@ async function main() {
 				return;
 			}
 			wss.handleUpgrade(request, socket, head, (ws) => runtime.realtime.attach(user.id, ws));
+		}).catch((error) => {
+			// A failed session lookup must not leave the socket hanging.
+			console.error("Realtime session lookup failed", error);
+			socket.write("HTTP/1.1 500 Internal Server Error\r\n\r\n");
+			socket.destroy();
 		});
 	});
 

@@ -5,28 +5,35 @@ import { parseScopes } from "@/lib/api-keys";
 import { findApiKeyForSecret } from "@/lib/api/find-api-key";
 import type { ApiAuthResult } from "@/lib/api/key-auth-types";
 import { ADMIN_API_KEY_SCOPES } from "@/lib/api/scopes";
+import { getClientIp } from "@/lib/auth/client-ip";
 
 const LAST_USED_WRITE_INTERVAL_MS = 60_000;
 const ADMIN_SCOPES = new Set<string>(ADMIN_API_KEY_SCOPES);
 
+export type ApiKeyUsage = { protocol: string; ip: string | null };
+
 /**
  * Resolve an API key to its user and scopes. Framework-free so it can run in
  * `worker.ts` as well as route handlers. `lastUsedAt` is refreshed at most
- * once a minute per key, since protocol clients make many small calls.
+ * once a minute per key, since protocol clients make many small calls; `usage`
+ * is stored with it. `kind` and `scope` narrow what counts as a match, and a
+ * key refused for them is not recorded as used.
  */
-export async function authenticateApiKeyValue(env: CloudflareEnv, key: string): Promise<ApiAuthResult | null> {
+export async function authenticateApiKeyValue(env: CloudflareEnv, key: string, options?: { kind?: ApiAuthResult["keyKind"]; scope?: string; usage?: ApiKeyUsage }): Promise<ApiAuthResult | null> {
 	const trimmed = key.trim();
 	if (!trimmed) return null;
-	const db = getDb(env);
-	const candidate = await findApiKeyForSecret(db, trimmed);
+	// Authentication reads the primary: a lagging read replica could still honour a key that was just revoked.
+	const db = getDb({ DB: env.DB_PRIMARY ?? env.DB });
+	const candidate = await findApiKeyForSecret(db, trimmed, { kind: options?.kind });
 	if (!candidate) return null;
+	if (options?.scope && !parseScopes(candidate.scopes).includes(options.scope)) return null;
 	const [user] = await db.select().from(users).where(eq(users.id, candidate.userId)).limit(1);
 	if (!user || user.disabled) return null;
 
 	const stale = new Date(Date.now() - LAST_USED_WRITE_INTERVAL_MS);
 	await db
 		.update(apiKeys)
-		.set({ lastUsedAt: new Date() })
+		.set({ lastUsedAt: new Date(), ...(options?.usage ? { lastUsedProtocol: options.usage.protocol, lastUsedIp: options.usage.ip } : {}) })
 		.where(and(eq(apiKeys.id, candidate.id), or(isNull(apiKeys.lastUsedAt), lt(apiKeys.lastUsedAt, stale))));
 
 	const scopes = parseScopes(candidate.scopes);
@@ -39,10 +46,12 @@ export async function authenticateApiKeyValue(env: CloudflareEnv, key: string): 
 /**
  * JMAP clients send the key either as a Bearer token or as the password of
  * HTTP Basic auth (the username is ignored; the key identifies the account).
+ * Pass `protocol` to record how the key was used (see `ApiKeyUsage`).
  */
-export async function authenticateApiRequest(env: CloudflareEnv, request: Request): Promise<ApiAuthResult | null> {
+export async function authenticateApiRequest(env: CloudflareEnv, request: Request, protocol?: string): Promise<ApiAuthResult | null> {
 	const authorization = request.headers.get("Authorization") ?? "";
-	if (authorization.startsWith("Bearer ")) return authenticateApiKeyValue(env, authorization.slice(7));
+	const options = protocol ? { usage: { protocol, ip: getClientIp(request) } } : undefined;
+	if (authorization.startsWith("Bearer ")) return authenticateApiKeyValue(env, authorization.slice(7), options);
 	if (authorization.startsWith("Basic ")) {
 		let decoded = "";
 		try {
@@ -51,7 +60,7 @@ export async function authenticateApiRequest(env: CloudflareEnv, request: Reques
 			return null;
 		}
 		const separator = decoded.indexOf(":");
-		return authenticateApiKeyValue(env, separator >= 0 ? decoded.slice(separator + 1) : decoded);
+		return authenticateApiKeyValue(env, separator >= 0 ? decoded.slice(separator + 1) : decoded, options);
 	}
 	return null;
 }

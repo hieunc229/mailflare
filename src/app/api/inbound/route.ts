@@ -3,6 +3,9 @@ import { getEnv } from "@/lib/cloudflare";
 import { intakeIncomingMail } from "@/lib/email/intake";
 import { verifyInboundSignature, verifyInboundSignatureV2 } from "@/lib/email/intake-signature";
 import { inboundAttachmentLimitReasonFromRaw } from "@/lib/email/inbound-attachments";
+import { RequestBodyTooLargeError } from "@/lib/http/errors";
+import { readRawBody } from "@/lib/http/request";
+import { readHeaderMap } from "@/lib/email/provider-trace";
 
 export const dynamic = "force-dynamic";
 
@@ -17,8 +20,15 @@ export async function POST(request: Request) {
 	const secret = env.INBOUND_WEBHOOK_SECRET?.trim();
 	if (!secret) return NextResponse.json({ error: "INBOUND_WEBHOOK_SECRET is not configured" }, { status: 503 });
 
-	const raw = await request.arrayBuffer();
-	if (raw.byteLength > 25 * 1024 * 1024) return NextResponse.json({ error: "Message exceeds the 25 MiB receiving limit" }, { status: 413 });
+	// Unsigned requests are refused before the body is read; the body is then read with a hard cap.
+	if (!request.headers.get("x-mailflare-signature")) return NextResponse.json({ error: "Invalid signature" }, { status: 401 });
+	let raw: ArrayBuffer;
+	try {
+		raw = await readRawBody(request, 25 * 1024 * 1024);
+	} catch (error) {
+		if (error instanceof RequestBodyTooLargeError) return NextResponse.json({ error: "Message exceeds the 25 MiB receiving limit" }, { status: 413 });
+		throw error;
+	}
 	const from = request.headers.get("x-mailflare-from") ?? "";
 	const to = request.headers.get("x-mailflare-to") ?? "";
 	const signature = request.headers.get("x-mailflare-signature") ?? "";
@@ -46,8 +56,11 @@ export async function POST(request: Request) {
 	} catch {
 		// The header map is advisory; the raw message is authoritative.
 	}
+	// A relay that sends no map (`{}` or no header) still gets the plain headers read from the message.
+	if (!headers || Object.keys(headers).length === 0) headers = readHeaderMap(raw);
 
-	let forwardTo: string | null = null;
+	// A keep-copy forward rule and account forwarding can both ask for a forward.
+	const forwardToAll: string[] = [];
 	let forwardHeaders: Record<string, string> = {};
 	const result = await intakeIncomingMail(
 		env,
@@ -55,11 +68,13 @@ export async function POST(request: Request) {
 		{
 			// The relay performs the forward on the live message; report it as done so keep-copy applies.
 			forward: async (destination, extra) => {
-				forwardTo = destination;
+				forwardToAll.push(destination);
 				forwardHeaders = extra;
 				return true;
 			},
 		},
 	);
-	return NextResponse.json({ ...result, forwardTo, forwardHeaders });
+	// Relays deployed before forwardToAll only read forwardTo, which keeps its old value (the last one).
+	const forwardTo = forwardToAll.at(-1) ?? null;
+	return NextResponse.json({ ...result, forwardTo, forwardToAll, forwardHeaders });
 }

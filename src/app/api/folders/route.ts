@@ -7,6 +7,7 @@ import { getEnv } from "@/lib/cloudflare";
 import { newId } from "@/lib/ids";
 import { folderSchema } from "@/lib/validators";
 import { getMailboxFolderAccess, listFoldersForMailbox } from "./utils";
+import { readJsonObject } from "@/lib/http/request";
 
 export async function GET(request: Request) {
 	const env = getEnv();
@@ -30,7 +31,7 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
 	const env = getEnv();
 	const user = await requireUser(env, request);
-	const parsed = folderSchema.safeParse(await request.json());
+	const parsed = folderSchema.safeParse(await readJsonObject(request));
 	if (!parsed.success) {
 		return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
 	}

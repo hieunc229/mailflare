@@ -1,3 +1,4 @@
+import { normalizeHostname } from "@/lib/domains/utils";
 import { findZoneByHostname } from "@/lib/cloudflare-api";
 import { MANUAL_ZONE_ID } from "@/lib/domains/provision";
 import type { DomainPreflightResult } from "@/lib/domains/types";
@@ -7,7 +8,7 @@ export async function preflightDomain(
 	env: CloudflareEnv,
 	hostname: string,
 ): Promise<DomainPreflightResult> {
-	const normalized = hostname.toLowerCase().trim();
+	const normalized = normalizeHostname(hostname);
 	const zone = await findZoneByHostname(env, normalized);
 	if (!zone) {
 		throw new Error(
@@ -20,7 +21,7 @@ export async function preflightDomain(
 
 /** A domain this install will not manage on Cloudflare. Same zone id provisionDomainOnCloudflare records. */
 export function manualDomainPreflight(hostname: string): DomainPreflightResult {
-	const normalized = hostname.toLowerCase().trim();
+	const normalized = normalizeHostname(hostname);
 	return { hostname: normalized, zone: { id: MANUAL_ZONE_ID, name: normalized } };
 }
 

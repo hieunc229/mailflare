@@ -35,3 +35,15 @@ export async function applyDatabaseMigrations(): Promise<MigrationStatusResponse
 	if (!response.ok) throw new Error(data.error ?? "Could not apply database migrations");
 	return data;
 }
+
+export async function saveUpdateSettings(values: { autoUpdate?: boolean; channel?: "release" | "commit" }): Promise<void> {
+	const response = await fetch("/api/admin/update", {
+		method: "PATCH",
+		headers: { "Content-Type": "application/json" },
+		body: JSON.stringify(values),
+	});
+	if (!response.ok) {
+		const data = (await response.json().catch(() => ({}))) as { error?: string };
+		throw new Error(data.error ?? "Could not save the update settings");
+	}
+}

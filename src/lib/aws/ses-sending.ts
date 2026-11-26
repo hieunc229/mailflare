@@ -1,6 +1,7 @@
 import { createDnsRecord, deleteDnsRecord, listDnsRecords } from "@/lib/cloudflare-dns";
 import { isManualZone } from "@/lib/domains/provision";
 import { requireAwsConfig } from "@/lib/aws/config";
+import { attachSesFeedToIdentity } from "@/lib/deliverability/ses-feed";
 import { createSesIdentity, deleteSesIdentity, getSesAccount, getSesIdentity } from "@/lib/aws/ses";
 import type { DomainRow } from "@/lib/domains/types";
 import type { SesSendingView } from "@/lib/aws/ses-sending-types";
@@ -49,6 +50,8 @@ export async function setupSesSending(env: CloudflareEnv, domain: DomainRow): Pr
 			await createDnsRecord(env, domain.zoneId, { type: "CNAME", name: record.name, content: record.value, ttl: 3600, proxied: false });
 		}
 	}
+	// Bounce and complaint feed, when enabled: best effort, sending works without it.
+	await attachSesFeedToIdentity(env, domain.hostname);
 	return view(env, domain);
 }
 

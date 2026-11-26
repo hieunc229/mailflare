@@ -26,7 +26,10 @@ function loadTurnstileScript(): Promise<void> {
 	if (existing) {
 		return existing.dataset.loaded === "true"
 			? Promise.resolve()
-			: new Promise((resolve) => existing.addEventListener("load", () => resolve(), { once: true }));
+			: new Promise((resolve, reject) => {
+				existing.addEventListener("load", () => resolve(), { once: true });
+				existing.addEventListener("error", () => reject(new Error("Turnstile failed to load")), { once: true });
+			});
 	}
 
 	return new Promise((resolve, reject) => {
@@ -39,7 +42,11 @@ function loadTurnstileScript(): Promise<void> {
 			script.dataset.loaded = "true";
 			resolve();
 		});
-		script.addEventListener("error", () => reject(new Error("Turnstile failed to load")));
+		script.addEventListener("error", () => {
+			// Leave no dead script behind, or later mounts would wait on it forever.
+			script.remove();
+			reject(new Error("Turnstile failed to load"));
+		});
 		document.head.appendChild(script);
 	});
 }
@@ -69,6 +76,8 @@ export function TurnstileField({
 				"expired-callback": () => setToken(""),
 				"error-callback": () => setToken(""),
 			});
+		}).catch(() => {
+			// The widget stays empty; a later mount retries the load.
 		});
 
 		return () => {

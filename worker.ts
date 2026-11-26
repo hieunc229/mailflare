@@ -1,3 +1,4 @@
+import { runAutoUpdate } from "@/lib/update/auto-update";
 import { withDatabase } from "./src/db/with-database";
 import { withStorage } from "./src/lib/storage";
 import vinextHandler from "vinext/server/fetch-handler";
@@ -11,14 +12,17 @@ import {
 	isImportJobMessage,
 	isInboundQueueMessage,
 	isWebhookRetryMessage,
+	settleFailedInboundMessage,
 	withD1BookmarkCookie,
 	withD1ReadSession,
 } from "./worker-utils";
 import { runWithD1Session } from "./src/lib/d1-session-context";
 import { sweepOrphanedRawMail } from "./src/lib/email/raw-sweeper";
+import { pruneExpiredMessageActionUndoClaims } from "./src/lib/messages/actions/claims";
 import { processImportJob, sweepImportJobs } from "./src/lib/import/jobs";
 import { processWebhookRetry, type WebhookRetryMessage } from "./src/lib/email/webhooks";
 import { resolveIncomingMail, forwardMessage } from "./src/lib/email/incoming";
+import { createBatchBudget } from "./src/lib/deliverability/ingest";
 import { getUserFromSession } from "./src/lib/auth/session";
 import { getSessionTokenFromRequest } from "./src/lib/realtime/utils";
 import { inboundAttachmentLimitReasonFromRaw } from "./src/lib/email/inbound-attachments";
@@ -34,18 +38,34 @@ import { runAgentMaintenance } from "./src/lib/agent/maintenance";
 import { runTrashRetention } from "./src/lib/email/trash-retention";
 import { runDriveTrashRetention } from "./src/lib/drive/retention";
 import { runAccountRetention } from "./src/lib/accounts/deletion";
+import { purgeExpiredAuthRows } from "./src/lib/auth/purge";
 import { runJmapChangeRetention } from "./src/lib/jmap/changes";
+import { runDavChangeRetention } from "./src/lib/dav/changes";
 import { runFollowUpReminders } from "./src/lib/follow-ups/service";
+import { runPromotionsBackfill } from "@/lib/promotions/backfill";
 import { runCalendarReminders } from "./src/lib/calendar/reminders";
+import { handleDavRequest, isDavPath } from "./src/lib/dav/handler";
+import { runDeliverabilityDaily } from "./src/lib/deliverability/daily";
+import { guardMtaStsHost, isMtaStsHost } from "./src/lib/deliverability/mta-sts";
 export { RealtimeHub } from "./src/lib/realtime/hub";
 
 export default {
 	async fetch(request: Request, rawEnv: CloudflareEnv, ctx: ExecutionContext) {
+		// An mta-sts.<domain> host serves the policy file and nothing else of the app.
+		const requestUrl = new URL(request.url);
+		const blocked = guardMtaStsHost({ hostname: requestUrl.hostname, pathname: requestUrl.pathname, method: request.method });
+		if (blocked) return blocked;
+		// CalDAV/CardDAV use methods Next route handlers cannot express (PROPFIND, REPORT). They skip the D1 read
+		// session on purpose: a client that writes and then asks for changes must read its own writes.
+		if (isDavPath(requestUrl.pathname)) {
+			return (await handleDavRequest(request, withDatabase(withStorage(rawEnv)))) ?? new Response("Not found", { status: 404 });
+		}
 		// Reads go through a D1 session anchored at the client's bookmark cookie so D1 can serve
 		// them from read replicas; email/queue/scheduled below keep primary reads on purpose.
-		const d1Session = withD1ReadSession(rawEnv, request);
+		// The policy answer stays cookie free, so it opens no read session (which would add a bookmark cookie).
+		const d1Session = isMtaStsHost(requestUrl.hostname) ? null : withD1ReadSession(rawEnv, request);
 		const env = withDatabase(withStorage(d1Session?.env ?? rawEnv));
-		const url = new URL(request.url);
+		const url = requestUrl;
 		if (url.pathname === "/api/realtime") {
 			if (request.headers.get("Upgrade")?.toLowerCase() !== "websocket") {
 				return new Response("Expected WebSocket upgrade", { status: 426 });
@@ -79,9 +99,12 @@ export default {
 			// Domain routing rules are resolved here rather than in the queue because reject and
 			// forward can only be actioned on the live ForwardableEmailMessage.
 			const alreadyForwarded = await isForwardedMarkerValid(env, message.headers.get(MAILFLARE_FORWARDED_HEADER));
+			const headerMap = Object.fromEntries(message.headers);
 			const decision = await resolveIncomingMail(env, message.from, message.to, {
 				subject: message.headers.get("subject"),
+				from: message.headers.get("from"),
 				alreadyForwarded,
+				all: headerMap,
 			});
 
 			if (decision?.action === "reject") {
@@ -102,7 +125,8 @@ export default {
 				if (forwarded && !decision.keepCopy) return;
 			}
 
-			if (!alreadyForwarded) {
+			// Report mail is never forwarded, by a rule or by the account's forwarding address.
+			if (!alreadyForwarded && decision?.action !== "report") {
 				const forwardingDestination = await getAccountForwardingDestination(env, message.to);
 				if (forwardingDestination) {
 					await forwardMessage(env, message, forwardingDestination);
@@ -113,7 +137,7 @@ export default {
 				from: message.from,
 				to: message.to,
 				rawR2Key,
-				headers: Object.fromEntries(message.headers),
+				headers: headerMap,
 			};
 			await env.INBOUND_QUEUE.send(payload);
 		} catch (err) {
@@ -125,10 +149,12 @@ export default {
 
 	async queue(batch: MessageBatch, rawEnv: CloudflareEnv): Promise<void> {
 		const env = withDatabase(withStorage(rawEnv));
+		// One budget per batch, so the reverse lookups of every DMARC report in it stay within the invocation's subrequests.
+		const reportBudget = createBatchBudget();
 		for (const msg of batch.messages) {
 			try {
 				if (isInboundQueueMessage(msg.body)) {
-					await processInboundMessage(env, msg.body);
+					await processInboundMessage(env, msg.body, { reportBudget });
 				} else if (typeof msg.body === "object" && msg.body !== null && (msg.body as { kind?: unknown }).kind === "agent.draft" && typeof (msg.body as { jobId?: unknown }).jobId === "string") {
 					await processAgentDraftJob(env, (msg.body as { jobId: string }).jobId);
 				} else if (isWebhookRetryMessage(msg.body)) {
@@ -148,7 +174,8 @@ export default {
 					attempts: msg.attempts,
 					error: err,
 				});
-				msg.retry({ delaySeconds: 10 });
+				if (isInboundQueueMessage(msg.body)) settleFailedInboundMessage(msg, err);
+				else msg.retry({ delaySeconds: 10 });
 			}
 		}
 	},
@@ -157,14 +184,21 @@ export default {
 		const env = withDatabase(withStorage(rawEnv));
 		if (controller.cron === "0 2 * * *") ctx.waitUntil(runScheduledDatabaseBackup(env, new Date(controller.scheduledTime)));
 		ctx.waitUntil(runAgentMaintenance(env));
+		ctx.waitUntil(runAutoUpdate(env));
 		ctx.waitUntil(runTrashRetention(env, new Date(controller.scheduledTime)));
 		ctx.waitUntil(runFollowUpReminders(env, new Date(controller.scheduledTime)));
 		ctx.waitUntil(runCalendarReminders(env, new Date(controller.scheduledTime)));
+		ctx.waitUntil(runPromotionsBackfill(env, new Date(controller.scheduledTime)).catch((error) => console.error("Promotions backfill failed", error)));
 		ctx.waitUntil(sweepImportJobs(env, new Date(controller.scheduledTime)));
+		ctx.waitUntil(pruneExpiredMessageActionUndoClaims(env, new Date(controller.scheduledTime)));
+		// DAV log retention takes a small slice per run (one collection, 90 rows, 3 queries), so it runs on every cron tick.
+		ctx.waitUntil(runDavChangeRetention(env, new Date(controller.scheduledTime)).catch((error) => console.error("DAV change retention failed", error)));
 		if (controller.cron === "0 2 * * *") ctx.waitUntil(runAccountRetention(env, new Date(controller.scheduledTime)));
+		if (controller.cron === "0 2 * * *") ctx.waitUntil(purgeExpiredAuthRows(env, new Date(controller.scheduledTime)));
 		// Drive trash is emptied once a day, with the 02:00 UTC cron; the 5-minute cron is for queue-like upkeep.
 		if (controller.cron === "0 2 * * *") ctx.waitUntil(runDriveTrashRetention(env, new Date(controller.scheduledTime)));
 		if (controller.cron === "0 2 * * *") ctx.waitUntil(runJmapChangeRetention(env, new Date(controller.scheduledTime)));
+		if (controller.cron === "0 2 * * *") ctx.waitUntil(runDeliverabilityDaily(env, new Date(controller.scheduledTime)).catch((error) => console.error("Deliverability daily job failed", error)));
 		if (controller.cron === "0 2 * * *") ctx.waitUntil(sweepOrphanedRawMail(env, new Date(controller.scheduledTime)).catch((error) => console.error("Raw mail sweep failed", error)));
 	},
 } satisfies ExportedHandler<CloudflareEnv>;

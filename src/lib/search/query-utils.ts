@@ -9,13 +9,13 @@ import { dateFromZonedFields, normalizeTimeZone } from "@/lib/time/utils";
  *
  * The older `title:` and bare `:unread` / `:read` forms keep working.
  */
-const OPERATOR_RE = /(?:^|\s)(from|to|subject|title|has|is|after|before|newer|older):(?:"([^"]*)"|(\S+))/gi;
+const OPERATOR_RE = /(?:^|\s)(from|to|subject|title|has|is|after|before|newer|older|category):(?:"([^"]*)"|(\S+))/gi;
 
 export function parseSearchQuery(raw: string, timeZone = "UTC"): ParsedSearchQuery {
 	const parsed: ParsedSearchQuery = { text: "", needsFullText: false };
 	let rest = raw ?? "";
 
-	rest = rest.replace(OPERATOR_RE, (_match, key: string, quoted: string | undefined, bare: string | undefined) => {
+	rest = rest.replace(OPERATOR_RE, (match, key: string, quoted: string | undefined, bare: string | undefined) => {
 		const value = (quoted ?? bare ?? "").trim();
 		switch (key.toLowerCase()) {
 			case "from":
@@ -35,6 +35,11 @@ export function parseSearchQuery(raw: string, timeZone = "UTC"): ParsedSearchQue
 				if (/^unread$/i.test(value)) parsed.read = "unread";
 				else if (/^read$/i.test(value)) parsed.read = "read";
 				else if (/^starred$/i.test(value)) parsed.starred = true;
+				break;
+			case "category":
+				if (/^promotions?$/i.test(value)) parsed.category = "promotions";
+				else if (/^(primary|inbox)$/i.test(value)) parsed.category = "primary";
+				else return match; // an unknown value stays free text
 				break;
 			case "after":
 			case "newer":
@@ -109,11 +114,15 @@ function ftsTerm(term: string, phrase: boolean): string {
 }
 
 /**
- * Build the FTS5 MATCH expression. Column filters restrict a term to one
- * column; free text is ANDed across the whole row. Returns null when there is
+ * Build the FTS5 expressions for a search. Column filters restrict a term to
+ * one column; free text is ANDed across the whole row. `match` holds the
+ * positive terms (with any negations folded in as FTS5's binary NOT) and
+ * `exclude` holds negations when there is no positive term, because FTS5 has no
+ * unary NOT and a MATCH made only of negations is a syntax error: callers
+ * select every row except those matching `exclude`. Both are null when there is
  * nothing to match, so callers skip the index entirely.
  */
-export function buildFtsMatch(parsed: ParsedSearchQuery): string | null {
+export function buildFtsMatch(parsed: ParsedSearchQuery): { match: string | null; exclude: string | null } {
 	const parts: string[] = [];
 
 	for (const token of tokenizeSearchText(parsed.text)) {
@@ -133,11 +142,10 @@ export function buildFtsMatch(parsed: ParsedSearchQuery): string | null {
 	column("from_addr", parsed.from);
 	column("{to_addr cc_addr}", parsed.to);
 
-	if (parts.length === 0) return null;
-	// FTS5 has no unary NOT: "a NOT b" is binary. A leading negation is turned
-	// into "match anything" minus the term.
 	const positives = parts.filter((part) => !part.startsWith("NOT "));
 	const negatives = parts.filter((part) => part.startsWith("NOT ")).map((part) => part.slice(4));
-	const base = positives.length > 0 ? positives.join(" AND ") : `${ftsString("")}*`;
-	return negatives.length > 0 ? `(${base}) NOT (${negatives.join(" OR ")})` : base;
+	const exclude = negatives.length > 0 ? negatives.join(" OR ") : null;
+	if (positives.length === 0) return { match: null, exclude };
+	const base = positives.join(" AND ");
+	return { match: exclude ? `(${base}) NOT (${exclude})` : base, exclude: null };
 }

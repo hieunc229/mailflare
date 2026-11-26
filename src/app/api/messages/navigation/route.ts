@@ -3,15 +3,17 @@ import { and, asc, desc, eq, gt, inArray, isNull, lt, lte, or } from "drizzle-or
 import type { SQL } from "drizzle-orm";
 import type { AppDatabase } from "@/db";
 import { scheduledMessageCondition } from "@/lib/email/scheduled";
+import { draftsVisibleTo } from "@/lib/email/draft-access";
 import { getDb } from "@/db";
 import { messages } from "@/db/schema";
 import { getCurrentUser } from "@/lib/auth/cookies";
 import { getEnv } from "@/lib/cloudflare";
+import { categoryScopeCondition } from "@/lib/promotions/settings";
 import { getMailboxAccessLevel, listAccessibleMailboxIds } from "@/lib/mailboxes/access";
 import type { MessageFolder } from "@/hooks/types";
 import type { MessageNavigationEntry } from "./types";
 
-const folders: MessageFolder[] = ["inbox", "starred", "snoozed", "sent", "scheduled", "archived", "spam", "trash"];
+const folders: MessageFolder[] = ["inbox", "promotions", "starred", "snoozed", "sent", "scheduled", "archived", "spam", "trash"];
 
 export async function GET(request: Request) {
 	const env = getEnv();
@@ -29,18 +31,25 @@ export async function GET(request: Request) {
 	const grouped = params.get("group") === "thread";
 	const around = params.get("around");
 	const windowSize = Math.min(Math.max(Number(params.get("limit") ?? 250) || 250, 25), 1000);
+	if (folder === "promotions" && folderId) return NextResponse.json({ error: "Invalid folder" }, { status: 400 });
 	const db = getDb(env);
 	const conditions: SQL[] = [];
+	// The mailboxes the request can see: the promotions modes below are looked up for exactly these.
+	let scope: string[] = [];
 	if (mailboxId) {
 		const access = await getMailboxAccessLevel(db, user, mailboxId);
 		if (!access?.canRead) return NextResponse.json({ error: "Mailbox not found" }, { status: 404 });
 		conditions.push(eq(messages.mailboxId, mailboxId));
+		scope = [mailboxId];
 	} else {
 		const accessibleIds = await listAccessibleMailboxIds(db, user);
+		scope = accessibleIds;
 		conditions.push(accessibleIds.length > 0
 			? inArray(messages.mailboxId, accessibleIds)
 			: eq(messages.userId, user.id));
 	}
+
+	conditions.push(draftsVisibleTo(user.id));
 
 	if (folder === "inbox") {
 		conditions.push(eq(messages.direction, "inbound"));
@@ -48,7 +57,15 @@ export async function GET(request: Request) {
 		if (!folderId) {
 			conditions.push(isNull(messages.folderId));
 			conditions.push(or(isNull(messages.snoozedUntil), lte(messages.snoozedUntil, new Date()))!);
+			// Same predicate as the list, so reader prev/next never steps onto a row the list hides.
+			const hidden = await categoryScopeCondition(db, scope, "inbox");
+			if (hidden) conditions.push(hidden);
 		}
+	} else if (folder === "promotions") {
+		conditions.push(eq(messages.status, "received"));
+		conditions.push(isNull(messages.folderId));
+		conditions.push(or(isNull(messages.snoozedUntil), lte(messages.snoozedUntil, new Date()))!);
+		conditions.push((await categoryScopeCondition(db, scope, "promotions"))!);
 	} else if (folder === "starred") {
 		conditions.push(eq(messages.starred, true));
 	} else if (folder === "snoozed") {

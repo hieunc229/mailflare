@@ -1,0 +1,30 @@
+name: Checks
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  checks:
+    # Update Mailflare copies .github/workflows into every installation
+    # repository; this keeps the checks from running (and using Actions
+    # minutes) there.
+    if: github.repository == 'hieunc229/mailflare'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      # Lint, the type check and one test read the generated migration bundle.
+      - run: npm run db:bundle
+      - run: npm run lint
+      - run: npx tsc --noEmit
+      - run: node --test tests/*.test.mjs
+      - run: npm run build

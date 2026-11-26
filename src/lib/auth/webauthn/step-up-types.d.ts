@@ -12,7 +12,12 @@ export type StepUpAction =
 	| "mfa.codes"
 	| "second_factor.toggle"
 	| "admin.password_reset"
-	| "admin.recovery_link";
+	| "admin.recovery_link"
+	| "admin.forwarding_email"
+	| "profile.recovery_email"
+	| "routing.forward"
+	| "webhook.change"
+	| "app_password.create";
 
 export type StepUpGrantInput = {
 	token: string;

@@ -15,7 +15,9 @@ export async function intakeIncomingMail(env: CloudflareEnv, input: IntakeInput,
 	const marker = { [MAILFLARE_FORWARDED_HEADER]: await forwardedMarker(env) };
 	const decision = await resolveIncomingMail(env, input.from, input.to, {
 		subject: input.headers.subject,
+		from: input.headers.from,
 		alreadyForwarded,
+		all: input.headers,
 	});
 
 	if (decision?.action === "reject") {
@@ -31,14 +33,15 @@ export async function intakeIncomingMail(env: CloudflareEnv, input: IntakeInput,
 		if (forwarded && !decision.keepCopy) return { action: "forward", forwardedTo };
 	}
 
-	if (!alreadyForwarded) {
+	// Report mail is never forwarded, by a rule or by the account's forwarding address.
+	if (!alreadyForwarded && decision?.action !== "report") {
 		const destination = await getAccountForwardingDestination(env, input.to);
 		if (destination) await actions.forward?.(destination, marker);
 	}
 
 	// A relay retry replays the same bytes, so key the object on a content hash
 	// (scoped by mailbox): the consumer dedupes by `(mailboxId, rawR2Key)`.
-	const rawR2Key = await inboundStorageKey(input.raw, decision?.mailbox?.mailboxId);
+	const rawR2Key = await inboundStorageKey(input.raw, decision && decision.action !== "report" ? decision.mailbox?.mailboxId : undefined);
 	await env.BUCKET.put(rawR2Key, input.raw, {
 		httpMetadata: { contentType: "message/rfc822" },
 		customMetadata: { from: input.from, to: input.to },

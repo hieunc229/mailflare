@@ -12,7 +12,7 @@ export async function GET(request: Request) {
 	const env = getEnv();
 	const auth = await requireSessionUser(env, request);
 	if (auth.error) return auth.error;
-	return NextResponse.json({ enabled: auth.user.spamProtectionEnabled });
+	return NextResponse.json({ enabled: auth.user.spamProtectionEnabled, strictness: auth.user.spamStrictness });
 }
 
 export async function PATCH(request: Request) {
@@ -25,6 +25,9 @@ export async function PATCH(request: Request) {
 	} catch (error) {
 		return NextResponse.json({ error: error instanceof ZodError ? error.flatten() : "Invalid request" }, { status: 400 });
 	}
-	await getDb(env).update(users).set({ spamProtectionEnabled: input.enabled }).where(eq(users.id, auth.user.id));
-	return NextResponse.json({ enabled: input.enabled });
+	const changes: Partial<typeof users.$inferInsert> = {};
+	if (input.enabled !== undefined) changes.spamProtectionEnabled = input.enabled;
+	if (input.strictness !== undefined) changes.spamStrictness = input.strictness;
+	await getDb(env).update(users).set(changes).where(eq(users.id, auth.user.id));
+	return NextResponse.json({ enabled: input.enabled ?? auth.user.spamProtectionEnabled, strictness: input.strictness ?? auth.user.spamStrictness });
 }

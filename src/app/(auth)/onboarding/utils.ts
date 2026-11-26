@@ -1,3 +1,4 @@
+import { readResponseJson } from "@/lib/http/response";
 import { authFetch } from "@/lib/auth/client";
 import type {
 	DomainCreateResult,
@@ -8,7 +9,7 @@ import type {
 
 export async function getDomains(): Promise<DomainListResult> {
 	const res = await authFetch("/api/domains");
-	return (await res.json()) as DomainListResult;
+	return (await readResponseJson(res)) as DomainListResult;
 }
 
 export async function checkDomain(hostname: string): Promise<DomainPreflightResponse> {
@@ -17,7 +18,7 @@ export async function checkDomain(hostname: string): Promise<DomainPreflightResp
 		headers: { "Content-Type": "application/json" },
 		body: JSON.stringify({ hostname }),
 	});
-	const data = (await res.json()) as Omit<DomainPreflightResponse, "ok">;
+	const data = (await readResponseJson(res)) as Omit<DomainPreflightResponse, "ok">;
 	return { ok: res.ok, ...data };
 }
 
@@ -35,7 +36,7 @@ export async function createDomain(
 
 	return {
 		ok: res.ok,
-		data: (await res.json()) as DomainCreateResult,
+		data: (await readResponseJson(res)) as DomainCreateResult,
 	};
 }
 
@@ -51,6 +52,6 @@ export async function createMailbox(
 
 	return {
 		ok: res.ok,
-		data: (await res.json()) as MailboxCreateResult,
+		data: (await readResponseJson(res)) as MailboxCreateResult,
 	};
 }

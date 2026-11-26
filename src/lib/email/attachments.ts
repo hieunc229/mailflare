@@ -4,6 +4,7 @@ import { messageAttachments, messages } from "@/db/schema";
 import { newId } from "@/lib/ids";
 import { assessAttachmentRisk, inspectZipDirectory, locateZipDirectory, mergeRisks, type AttachmentRisk } from "@/lib/email/attachment-risk";
 import { truncateUtf8 } from "@/lib/email/inbound-limits";
+import { isOthersDraft } from "@/lib/email/draft-access";
 import { getMailboxAccessLevel } from "@/lib/mailboxes/access";
 import type { SessionUser } from "@/lib/auth/types";
 import type {
@@ -11,6 +12,8 @@ import type {
 	AttachmentMetadata,
 	StoredAttachment,
 } from "./attachment-types";
+import { DEFAULT_OUTBOUND_ATTACHMENT_MAX_MB, outgoingSizeError } from "./attachment-limits";
+import { getOutboundAttachmentMaxMb } from "./attachment-policy";
 import { deleteUnreferencedObjects } from "@/lib/drive/shared-objects";
 
 export const MAX_ATTACHMENT_SIZE = 25_000_000;
@@ -51,23 +54,13 @@ export function sanitizeFilename(filename: string): string {
 	return `${truncateUtf8(normalized.slice(0, normalized.length - extension.length), MAX_FILENAME_BYTES - extension.length)}${extension}`;
 }
 
-export function validateAttachments(attachments: AttachmentContent[]): void {
+/** Count and size checks for outgoing files against the administrator's limit (the 25 MB default when not given). */
+export function validateAttachments(attachments: AttachmentContent[], maxMb = DEFAULT_OUTBOUND_ATTACHMENT_MAX_MB): void {
 	if (attachments.length > MAX_ATTACHMENT_COUNT) {
 		throw new Error(`A message can include at most ${MAX_ATTACHMENT_COUNT} attachments`);
 	}
-
-	let totalSize = 0;
-	for (const attachment of attachments) {
-		const size = attachment.content.byteLength;
-		if (size > MAX_ATTACHMENT_SIZE) {
-			throw new Error(`${attachment.filename} exceeds the 25 MB attachment limit`);
-		}
-		totalSize += size;
-	}
-
-	if (totalSize > MAX_TOTAL_ATTACHMENT_SIZE) {
-		throw new Error("Attachments exceed the 25 MB total limit");
-	}
+	const error = outgoingSizeError(attachments.map((attachment) => attachment.content.byteLength), maxMb);
+	if (error) throw new Error(error);
 }
 
 export async function storeMessageAttachments(
@@ -76,7 +69,7 @@ export async function storeMessageAttachments(
 	attachments: AttachmentContent[],
 	options?: { validate?: boolean },
 ): Promise<StoredAttachment[]> {
-	if (options?.validate !== false) validateAttachments(attachments);
+	if (options?.validate !== false) validateAttachments(attachments, await getOutboundAttachmentMaxMb(env));
 	const db = getDb(env);
 	const stored: StoredAttachment[] = [];
 
@@ -202,7 +195,8 @@ export async function deleteMessageAttachment(
 		.limit(1);
 	if (!row) return false;
 	await db.delete(messageAttachments).where(eq(messageAttachments.id, attachmentId));
-	await env.BUCKET.delete(row.r2Key);
+	// A Drive item saved from this attachment keeps the object alive.
+	await deleteUnreferencedObjects(env, db, [row.r2Key], { attachmentIds: [attachmentId] });
 	return true;
 }
 
@@ -246,7 +240,7 @@ export async function getAttachmentForUser(
 ) {
 	const db = getDb(env);
 	const [message] = await db.select().from(messages).where(eq(messages.id, messageId)).limit(1);
-	if (!message) return null;
+	if (!message || isOthersDraft(message, user.id)) return null;
 
 	if (message.mailboxId) {
 		const access = await getMailboxAccessLevel(db, user, message.mailboxId);

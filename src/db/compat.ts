@@ -1,4 +1,4 @@
-import { getTableColumns, inArray, sql, type SQL } from "drizzle-orm";
+import { and, eq, getTableColumns, inArray, or, sql, type SQL } from "drizzle-orm";
 import type { DatabaseDialect } from "./dialect";
 import type { RowMode, SqlExecutor } from "./drivers/types";
 
@@ -130,7 +130,7 @@ async function selectByKeys(db: MysqlDb, table: AnyTable, fields: unknown, keys:
 
 class MysqlInsertShim implements PromiseLike<unknown> {
 	private rows: Row[] = [];
-	private conflict: { set?: Row } | null = null;
+	private conflict: { set?: Row; target?: unknown } | null = null;
 	private returningFields: unknown;
 	private wantsReturning = false;
 
@@ -149,8 +149,8 @@ class MysqlInsertShim implements PromiseLike<unknown> {
 		return this;
 	}
 
-	onConflictDoUpdate(config: { set: Row }) {
-		this.conflict = { set: config.set };
+	onConflictDoUpdate(config: { set: Row; target?: unknown }) {
+		this.conflict = { set: config.set, target: config.target };
 		return this;
 	}
 
@@ -175,8 +175,21 @@ class MysqlInsertShim implements PromiseLike<unknown> {
 			result = await statement;
 		}
 		if (!key) return result;
+		// An update through a unique column other than the key keeps the existing row's key, not the new one.
+		const byTarget = this.conflict?.set && this.targetCondition(key);
+		if (byTarget) return (this.returningFields ? this.db.select(this.returningFields) : this.db.select()).from(this.table).where(byTarget);
 		const keys = this.keysOf(key, result).filter((value) => !existing.has(value));
 		return selectByKeys(this.db, this.table, this.returningFields, keys);
+	}
+
+	/** Matches the written rows by the conflict target, or null when the target is the primary key (or absent). */
+	private targetCondition(key: ReturnType<typeof primaryKey>): SQL | null {
+		const target = this.conflict?.target;
+		const targets = (Array.isArray(target) ? target : target ? [target] : []) as unknown[];
+		if (targets.length === 0 || (targets.length === 1 && targets[0] === key.column)) return null;
+		const properties = targets.map((column) => Object.entries(getTableColumns(this.table)).find(([, candidate]) => candidate === column)?.[0]);
+		if (properties.some((property) => !property)) return null;
+		return or(...this.rows.map((row) => and(...targets.map((column, i) => eq(column as never, row[properties[i]!])))))!;
 	}
 
 	private keysOf(key: ReturnType<typeof primaryKey>, result: unknown): unknown[] {

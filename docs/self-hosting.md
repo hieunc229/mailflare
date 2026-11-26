@@ -19,8 +19,51 @@ container): the SQLite database, raw messages, attachments and backups.
 
 Behind a reverse proxy, set `APP_URL=https://mail.example.com` so links in
 password-reset mail and the JMAP session point at the public address, and
-forward WebSocket upgrades for `/api/realtime`. Passkeys also bind to this
+forward WebSocket upgrades for `/api/realtime`. Also set `TRUST_PROXY=1`:
+without it every request appears to come from the proxy's address, so login
+rate limits are shared by all users. Leave it unset when the container is
+exposed directly. Passkeys also bind to this
 origin, so they need `APP_URL` (or a direct HTTPS connection) to work.
+
+### Prebuilt image (no build)
+
+Every push to `main` publishes a multi-arch (`linux/amd64`, `linux/arm64`)
+image to `ghcr.io/hieunc229/mailflare`. Use it instead of building from source:
+
+```bash
+cp .env.docker.example .env.docker      # edit: how to receive and send mail
+docker compose -f docker-compose.image.yml up -d
+```
+
+`docker-compose.image.yml` only needs that file and `.env.docker`; no source
+checkout. `docker-compose.yml` still builds from source.
+
+| Tag | Meaning |
+| --- | --- |
+| `latest` | Newest build of `main`. |
+| `0.5.5` (the `package.json` version) | Newest build of `main` with that version. It moves while the version stays the same. |
+| `sha-abc1234` | One exact commit. Never moves; pin this to roll back or hold a version. |
+
+**Upgrade (NAS or server).**
+
+1. Back up: copy the `mailflare-data` volume, or download a backup from the
+   admin Backups page.
+2. Pull the image and recreate the container: `docker compose -f
+   docker-compose.image.yml pull && docker compose -f docker-compose.image.yml up -d`.
+   On a NAS UI, pull the image and recreate the container the same way.
+3. Keep the volume and `.env.docker` as they are; they hold your data and
+   settings.
+
+Pending migrations run when the container starts, before it serves requests. A
+failed migration stops the start (the container exits with an error in
+`docker compose logs`). Migrations only move forward: to go back to an older
+image after one has been applied, pin an older `sha-` tag and restore the
+volume or backup taken in step 1.
+
+Turnstile is not in the prebuilt image: its site key is fixed at build time.
+To use it, build from source with
+`docker build --build-arg NEXT_PUBLIC_TURNSTILE_SITE_KEY=<key> .` (or set the
+arg under `build:` in `docker-compose.yml`) and set `TURNSTILE_SECRET_KEY`.
 
 ### PWA and push notifications
 
@@ -96,17 +139,22 @@ and the DNS page shows what to set by hand.
 | `DATA_DIR` | `/data` | SQLite database, blobs and backups |
 | `DATABASE_URL` | unset | Use PostgreSQL, MySQL or libSQL instead of the SQLite file in `DATA_DIR`; see [Databases](databases.md). Migrations are applied on start. |
 | `DATABASE_DRIVER` | inferred | Only to override the driver inferred from `DATABASE_URL` |
-| `APP_URL` | request origin | Public URL behind a proxy |
+| `APP_URL` | request origin | Public URL behind a proxy. Browser requests that change data must come from this origin. Required for password reset on the self-hosted server: reset links are never built from the `Host` header, so without it no reset email is sent. |
+| `TRUST_PROXY` | unset | Set to `1` when a reverse proxy terminates TLS in front of the container: its `X-Forwarded-For` client IP and `X-Forwarded-Proto` scheme are then trusted (without `APP_URL`, the same-origin check uses `Host` plus that scheme). Leave unset when exposed directly. |
 | `SMTP_INBOUND_PORT` | `25` | Inbound SMTP; `0` disables |
 | `MAIL_HOSTNAME` | `mail.<domain>` | Host the MX record points at; SMTP banner |
 | `SMTP_MAX_SIZE` | 36 MiB | Largest raw inbound message; allows for encoding overhead on up to 25 MB of attachments. Oversized mail receives an SMTP rejection, which the sender's mail provider can report as a delivery failure. |
 | `SMTP_TLS_KEY`, `SMTP_TLS_CERT` | unset | STARTTLS certificate for the listener |
 | `SMTP_URL` | unset | Outbound relay |
 | `SMTP_TLS_REJECT_UNAUTHORIZED` | `true` | Trust self-signed relay certificates when `false` |
+| `CF_EMAIL_WORKER_NAME` | `mailflare` | Worker name that Email Routing rules created through the Cloudflare API target. If you change it on an install whose rules already target `mailflare`, recreate those rules; the old ones are no longer recognised |
 | `CF_ACCOUNT_ID`, `CF_TOKEN` | unset | Cloudflare Email Sending, and zone management if the token allows |
 | `B2_KEY_ID`, `B2_APPLICATION_KEY`, `B2_BUCKET`, `B2_ENDPOINT` | unset | Store blobs in Backblaze B2 (all four required) instead of files under `/data/blobs`; see [Deployment](deployment.md#object-storage-r2-or-backblaze-b2) |
 | `S3_BUCKET`, `S3_REGION`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY` | unset | Store blobs in AWS S3; the keys fall back to `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY`. Backblaze wins if both are set |
 | `RESEND_API_KEY` | unset | Resend key, used when none is saved in the app |
+| `RESEND_BASE_URL` | `https://api.resend.com` | Base URL of the Resend API; set it to use a Resend-compatible service |
+| `RESEND_CUSTOM_MESSAGE_ID` | `true` | Set to `false` for a Resend-compatible service that refuses a custom `Message-ID` header |
+| `RESEND_OMIT_HEADERS` | empty | Comma-separated headers left out of Resend sends, for a compatible service that refuses them (e.g. `Auto-Submitted`) |
 | `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_REGION` | unset | Amazon SES credentials, used when none are saved in the app |
 | `INBOUND_WEBHOOK_SECRET` | unset | Enables `/api/inbound` for the relay Worker |
 | `INBOUND_REQUIRE_SIGNED_HEADERS` | unset | Set to `1` once the relay Worker is updated: refuses relays that do not sign the header map with a timestamp (older relays stay accepted without it, and their requests can be replayed) |
@@ -124,11 +172,14 @@ and the DNS page shows what to set by hand.
   unchanged; files land under `/data/blobs/backups`. Back up the whole volume
   for a full copy.
 - **Updates.** Pull the new image and recreate the container; migrations run
-  at start. The in-app update button is disabled on self-hosted installs.
+  at start (see [Prebuilt image](#prebuilt-image-no-build)). The in-app update button is disabled on self-hosted installs.
 - **Logs.** `docker compose logs -f mailflare`.
-- **Queues.** Jobs are held in memory. Inbound mail is written to the volume
-  before it is queued, so a restart never loses a message; at worst one
-  stays unparsed until it is re-imported.
+- **Queues.** Jobs are held in memory and are not re-queued after a restart.
+  Inbound mail is written to the volume before it is queued, but a message
+  whose job is lost stays unparsed, and the nightly clean-up removes raw
+  inbound files that no message references after 24 hours. Scheduled and
+  undo-send mail that has not been sent when the container restarts is not
+  sent automatically.
 
 ## Email assistant and MCP
 

@@ -107,6 +107,13 @@ export function accountListItemFromUser(user: {
 	};
 }
 
+/** Recovery addresses are personal; the list shows them only to an admin who manages users. */
+export function withoutAccountContacts<T extends { resetEmail?: string | null }>(item: T): Omit<T, "resetEmail"> {
+	const rest = { ...item };
+	delete rest.resetEmail;
+	return rest;
+}
+
 /** Admin session on an installation licensed for Team-only mailbox sharing. */
 export async function requireTeamSharingAdmin(request: Request) {
 	const access = await requireTeamAdmin(request);

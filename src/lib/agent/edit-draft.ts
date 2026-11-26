@@ -1,11 +1,13 @@
 import { and, eq, sql } from "drizzle-orm";
+import { isOthersDraft } from "@/lib/email/draft-access";
 import { getDb } from "@/db";
 import { agentDraftMetadata, messageAttachments, messages } from "@/db/schema";
 import { buildSnippet } from "@/lib/email/parse";
 import { getAuthorizedSenderAddress } from "@/lib/email/sender";
 import { getEmailAddress, splitEmailAddressList } from "@/lib/email/address";
 import { getMailboxAccessLevel } from "@/lib/mailboxes/access";
-import { deleteMessageAttachment, getAttachmentForUser, MAX_ATTACHMENT_COUNT, MAX_TOTAL_ATTACHMENT_SIZE, storeMessageAttachments } from "@/lib/email/attachments";
+import { getOutboundAttachmentMaxMb } from "@/lib/email/attachment-policy";
+import { deleteMessageAttachment, getAttachmentForUser, MAX_ATTACHMENT_COUNT, storeMessageAttachments } from "@/lib/email/attachments";
 import type { AttachmentContent } from "@/lib/email/attachment-types";
 import type { AgentDraftEditInput, AgentToolContext } from "./types";
 import { formatAgentDraftBody } from "./draft-format";
@@ -41,13 +43,13 @@ export async function editAgentDraft(context: AgentToolContext, input: AgentDraf
 	const remaining = existing.filter((attachment) => !removeIds.has(attachment.id));
 	const additions: AttachmentContent[] = [];
 	for (const attachment of input.addAttachments ?? []) {
-		const [source] = await db.select({ id: messages.id, userId: messages.userId, status: messages.status }).from(messages).where(and(eq(messages.id, attachment.sourceEmailId), eq(messages.mailboxId, context.mailboxId))).limit(1);
-		if (!source || (source.status === "draft" && source.userId !== context.user.id)) throw new Error("Attachment source email not found in the selected mailbox");
+		const [source] = await db.select({ id: messages.id, userId: messages.userId, status: messages.status, privateDraft: messages.privateDraft }).from(messages).where(and(eq(messages.id, attachment.sourceEmailId), eq(messages.mailboxId, context.mailboxId))).limit(1);
+		if (!source || isOthersDraft(source, context.user.id)) throw new Error("Attachment source email not found in the selected mailbox");
 		const found = await getAttachmentForUser(context.env, context.user, source.id, attachment.attachmentId);
 		if (!found || found.attachment.disposition !== "attachment") throw new Error("Attachment not found on the source email");
 		additions.push({ filename: found.attachment.filename, type: found.attachment.contentType, content: await found.object.arrayBuffer() });
 	}
-	if (remaining.length + additions.length > MAX_ATTACHMENT_COUNT || remaining.reduce((total, attachment) => total + attachment.size, 0) + additions.reduce((total, attachment) => total + attachment.content.byteLength, 0) > MAX_TOTAL_ATTACHMENT_SIZE) throw new Error("Draft attachments exceed the allowed count or total size");
+	if (remaining.length + additions.length > MAX_ATTACHMENT_COUNT || remaining.reduce((total, attachment) => total + attachment.size, 0) + additions.reduce((total, attachment) => total + attachment.content.byteLength, 0) > (await getOutboundAttachmentMaxMb(context.env)) * 1_000_000) throw new Error("Draft attachments exceed the allowed count or total size");
 	const [updated] = await db.update(agentDraftMetadata).set({ revision: sql`${agentDraftMetadata.revision} + 1`, ...(scheduledAt !== undefined ? { scheduledAt } : {}) }).where(and(eq(agentDraftMetadata.draftId, draft.id), eq(agentDraftMetadata.revision, input.expectedRevision))).returning({ revision: agentDraftMetadata.revision, scheduledAt: agentDraftMetadata.scheduledAt });
 	if (!updated) throw new Error("Draft changed; read it again before editing");
 	if (additions.length) await storeMessageAttachments(context.env, draft.id, additions);

@@ -9,11 +9,35 @@ import { normalizeEmailAddress } from "./address";
 const ORIGINAL_MESSAGE_RE = /^-{2,}\s*Original Message\s*-{2,}$/i;
 const UNDERSCORE_SEPARATOR_RE = /^_{8,}$/;
 const WROTE_RE = /^On\s+(.+?)\s+wrote:\s*$/i;
+const MAX_WROTE_LINE_LENGTH = 400;
+const MAX_QUOTE_DEPTH = 8;
 const HEADER_RE = /^(From|To|Cc|Subject|Date|Sent):\s*(.*)$/i;
+
+// Quoted content is split recursively; the counter bounds nesting so hostile input cannot overflow the stack.
+// The split is synchronous, so a module-level counter is safe.
+let quoteDepth = 0;
+
+function isWroteLine(line: string): boolean {
+	const trimmed = line.trim();
+	return trimmed.length <= MAX_WROTE_LINE_LENGTH && WROTE_RE.test(trimmed);
+}
 
 export function splitRepliedEmailContent(
 	content: string | null | undefined,
 	options: SplitReplyContentOptions = {},
+): ReplyContentParts {
+	if (quoteDepth >= MAX_QUOTE_DEPTH) return { latestContent: normalizeContent(content).trim(), quotedContent: [] };
+	quoteDepth += 1;
+	try {
+		return splitReplied(content, options);
+	} finally {
+		quoteDepth -= 1;
+	}
+}
+
+function splitReplied(
+	content: string | null | undefined,
+	options: SplitReplyContentOptions,
 ): ReplyContentParts {
 	const lines = normalizeContent(content).split("\n");
 	const originalMessageIndex = lines.findIndex((line) => ORIGINAL_MESSAGE_RE.test(line.trim()));
@@ -26,7 +50,7 @@ export function splitRepliedEmailContent(
 		return splitSeparatorQuotedContent(lines, underscoreSeparatorIndex, options);
 	}
 
-	const wroteIndex = lines.findIndex((line) => WROTE_RE.test(line.trim()));
+	const wroteIndex = lines.findIndex(isWroteLine);
 	if (wroteIndex >= 0) {
 		const markerLine = lines[wroteIndex]?.trim() ?? "";
 		const quotedLines = stripSingleQuotePrefix(lines.slice(wroteIndex + 1));
@@ -88,17 +112,29 @@ function stripBlocks(html: string, names: string[]): string {
 	return out + html.slice(cursor);
 }
 
-export function htmlToReadableText(html: string | null | undefined): string {
+/**
+ * `decodeAllEntities` is only set for list snippets; the other callers (spam tokenizer, agent context,
+ * reply splitter) keep the original small named-entity set so their output does not change.
+ */
+export function htmlToReadableText(html: string | null | undefined, decodeAllEntities = false): string {
 	return stripBlocks((html ?? "").slice(0, MAX_READABLE_HTML), ["style", "script", "head"])
 		.replace(/<br\s*\/?>/gi, "\n")
 		.replace(/<\/(p|div|li|tr|blockquote|h[1-6])>/gi, "\n")
 		.replace(/<[^<>]*>/g, " ")
-		.replace(/&nbsp;/g, " ")
-		.replace(/&amp;/g, "&")
-		.replace(/&lt;/g, "<")
-		.replace(/&gt;/g, ">")
-		.replace(/&quot;/g, "\"")
-		.replace(/&#39;/g, "'");
+		.replace(decodeAllEntities ? /&(?:#(\d{1,7})|#x([0-9a-f]{1,6})|([a-z][a-z0-9]*));/gi : /&(?:#(\d{1,7})|#x([0-9a-f]{1,6})|(nbsp|amp|lt|gt|quot|apos));/gi, decodeEntity);
+}
+
+const NAMED_ENTITIES: Record<string, string> = {
+	nbsp: " ", amp: "&", lt: "<", gt: ">", quot: "\"", apos: "'",
+	hellip: "\u2026", mdash: "\u2014", ndash: "\u2013", lsquo: "\u2018", rsquo: "\u2019", ldquo: "\u201c", rdquo: "\u201d",
+	copy: "\u00a9", reg: "\u00ae", trade: "\u2122", bull: "\u2022", middot: "\u00b7", euro: "\u20ac", laquo: "\u00ab", raquo: "\u00bb",
+};
+
+/** Decodes each reference once, so `&amp;lt;` stays the text `&lt;`; invalid code points are left as written. */
+function decodeEntity(match: string, decimal: string | undefined, hex: string | undefined, name: string | undefined): string {
+	if (name) return NAMED_ENTITIES[name.toLowerCase()] ?? match;
+	const code = decimal ? Number(decimal) : Number.parseInt(hex ?? "", 16);
+	return code > 0 && code <= 0x10ffff && (code < 0xd800 || code > 0xdfff) ? String.fromCodePoint(code) : match;
 }
 
 function splitOriginalMessage(

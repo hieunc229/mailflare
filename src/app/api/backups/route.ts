@@ -1,6 +1,4 @@
 import { NextResponse } from "next/server";
-import { assertPrimaryAdmin } from "@/lib/auth/admin";
-import { requireUser } from "@/lib/auth/cookies";
 import { getBackupConfigurationStatus } from "@/lib/backups/export";
 import { runDatabaseBackup } from "@/lib/backups/runner";
 import {
@@ -9,19 +7,15 @@ import {
 	listBackups,
 	updateBackupSettings,
 } from "@/lib/backups/service";
-import { getEnv } from "@/lib/cloudflare";
+import { authorizeBackupAdmin } from "./admin";
 import { parseBackupSettingsInput } from "./utils";
-
-async function requireAdmin(request: Request) {
-	const env = getEnv();
-	const user = await requireUser(env, request);
-	assertPrimaryAdmin(user);
-	return { env, user };
-}
+import { hasValidSessionMutationOrigin } from "@/lib/auth/origin";
 
 export async function GET(request: Request) {
+	const auth = await authorizeBackupAdmin(request);
+	if (auth.error) return auth.error;
+	const { env } = auth;
 	try {
-		const { env } = await requireAdmin(request);
 		const [settings, backupList] = await Promise.all([
 			getBackupSettings(env),
 			listBackups(env),
@@ -32,25 +26,31 @@ export async function GET(request: Request) {
 			configuration: getBackupConfigurationStatus(env),
 		});
 	} catch {
-		return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+		return NextResponse.json({ error: "Could not load backups" }, { status: 500 });
 	}
 }
 
 export async function PUT(request: Request) {
+	const auth = await authorizeBackupAdmin(request);
+	if (auth.error) return auth.error;
+	if (!hasValidSessionMutationOrigin(request)) return NextResponse.json({ error: "Invalid origin" }, { status: 403 });
+	const body = await request.json().catch(() => null);
+	const input = parseBackupSettingsInput(body);
+	if (!input) return NextResponse.json({ error: "Invalid backup settings" }, { status: 400 });
 	try {
-		const { env } = await requireAdmin(request);
-		const input = parseBackupSettingsInput(await request.json());
-		if (!input) return NextResponse.json({ error: "Invalid backup settings" }, { status: 400 });
-		await updateBackupSettings(env, input);
+		await updateBackupSettings(auth.env, input);
 		return NextResponse.json({ ok: true });
 	} catch {
-		return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+		return NextResponse.json({ error: "Could not save backup settings" }, { status: 500 });
 	}
 }
 
 export async function POST(request: Request) {
+	const auth = await authorizeBackupAdmin(request);
+	if (auth.error) return auth.error;
+	const { env, user } = auth;
+	if (!hasValidSessionMutationOrigin(request)) return NextResponse.json({ error: "Invalid origin" }, { status: 403 });
 	try {
-		const { env, user } = await requireAdmin(request);
 		const backupId = await createBackupRecord(env, "manual", user.id);
 		await runDatabaseBackup(env, backupId);
 		return NextResponse.json({ backupId });

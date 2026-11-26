@@ -1,8 +1,9 @@
-import { desc, eq } from "drizzle-orm";
+import { and, desc, eq } from "drizzle-orm";
 import { NextResponse } from "next/server";
 import { webhookDeliveries } from "@/db/schema";
 import { loadOwnedWebhook } from "../utils";
 import type { WebhookRouteParams } from "../types";
+import { parseLimit } from "@/lib/api/query-params";
 
 const MAX_PAYLOAD_PREVIEW = 2000;
 
@@ -12,20 +13,18 @@ export async function GET(request: Request, { params }: WebhookRouteParams) {
 	if (loaded.error) return loaded.error;
 
 	const url = new URL(request.url);
-	const limit = Math.min(Number(url.searchParams.get("limit") ?? 25), 100);
+	const limit = parseLimit(url.searchParams.get("limit"), 25, 100);
 	const status = url.searchParams.get("status");
 
 	const rows = await loaded.db
 		.select()
 		.from(webhookDeliveries)
-		.where(eq(webhookDeliveries.webhookId, id))
+		.where(status ? and(eq(webhookDeliveries.webhookId, id), eq(webhookDeliveries.status, status)) : eq(webhookDeliveries.webhookId, id))
 		.orderBy(desc(webhookDeliveries.createdAt))
-		.limit(Number.isFinite(limit) && limit > 0 ? limit : 25);
-
-	const filtered = status ? rows.filter((row) => row.status === status) : rows;
+		.limit(limit);
 
 	return NextResponse.json({
-		deliveries: filtered.map((row) => ({
+		deliveries: rows.map((row) => ({
 			id: row.id,
 			eventType: row.eventType,
 			status: row.status,

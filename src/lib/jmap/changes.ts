@@ -1,7 +1,9 @@
-import { and, asc, eq, gt, inArray, sql } from "drizzle-orm";
+import { and, asc, eq, gt, inArray, not, sql } from "drizzle-orm";
 import { getDb, type AppDatabase } from "@/db";
-import { jmapChangeFloor, jmapChanges, messages } from "@/db/schema";
+import { jmapChangeFloor, jmapChanges, mailboxPromotionSettings, messages } from "@/db/schema";
 import { greatest } from "@/db/sql";
+import { DRAFT_FILTER_PARAMS, draftsVisibleTo } from "@/lib/email/draft-access";
+import { isMissingTableError } from "@/lib/database-errors";
 import { listFoldersByMailbox, listJmapMailboxes } from "./access";
 import { encodeMailboxRef, SYSTEM_ROLES } from "./ids";
 import type { AccessibleMailbox, JmapContext } from "./types";
@@ -10,13 +12,27 @@ import { coalesceChanges, formatState, parseState } from "./changes-utils";
 /**
  * States are `c1:<seq>:<access>`: the newest change-log sequence among the
  * account's mailboxes, plus a fingerprint of which mailboxes it can see and
- * how. A sharing change alters the fingerprint, so a `Foo/changes` call from an older
- * state answers `cannotCalculateChanges` and the client resyncs.
+ * how, and which of them show `$promotion` (Promotions mode not off). A sharing
+ * change or a mode flip alters the fingerprint, so a `Foo/changes` call from an older
+ * state answers `cannotCalculateChanges` and the client resyncs. A mode flip writes no
+ * change-log row, so the fingerprint is the only way clients learn the keyword moved.
  */
-async function accessFingerprint(mailboxes: AccessibleMailbox[]): Promise<string> {
-	const material = JSON.stringify(mailboxes.map((m) => [m.id, m.permission]).sort((a, b) => String(a[0]).localeCompare(String(b[0]))));
+async function accessFingerprint(ctx: JmapContext, mailboxes: AccessibleMailbox[]): Promise<string> {
+	const promoting = await promotingMailboxIds(ctx, new Set(mailboxes.map((m) => m.id)));
+	const material = JSON.stringify([mailboxes.map((m) => [m.id, m.permission]).sort((a, b) => String(a[0]).localeCompare(String(b[0]))), promoting]);
 	const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(material));
 	return Array.from(new Uint8Array(digest).slice(0, 8), (b) => b.toString(16).padStart(2, "0")).join("");
+}
+
+/** Sorted ids, among `accessible`, whose Promotions mode is not off. One unbound query: the table holds a row per mailbox at most. */
+async function promotingMailboxIds(ctx: JmapContext, accessible: Set<string>): Promise<string[]> {
+	try {
+		const rows = await ctx.db.select({ id: mailboxPromotionSettings.mailboxId }).from(mailboxPromotionSettings).where(sql`${mailboxPromotionSettings.mode} <> 'off'`);
+		return rows.map((row) => row.id).filter((id) => accessible.has(id)).sort();
+	} catch (error) {
+		if (isMissingTableError(error)) return [];
+		throw error;
+	}
 }
 
 async function floorSeq(ctx: JmapContext): Promise<number> {
@@ -24,16 +40,19 @@ async function floorSeq(ctx: JmapContext): Promise<number> {
 	return row?.seq ?? 0;
 }
 
-/** Newest sequence per mailbox, one indexed MAX per mailbox. D1 allows at most 5 terms in a compound SELECT. */
+/**
+ * Newest sequence per mailbox, one indexed MAX per mailbox. D1 allows at most 5 terms in a
+ * compound SELECT, so the chunks run concurrently: one after another costs a round trip each.
+ */
 async function latestSeq(ctx: JmapContext, mailboxIds: string[]): Promise<number> {
-	let latest = 0;
-	for (let offset = 0; offset < mailboxIds.length; offset += 5) {
-		const chunk = mailboxIds.slice(offset, offset + 5);
-		const parts = chunk.map((id) => sql`SELECT (SELECT max(seq) FROM jmap_changes WHERE mailbox_id = ${id}) AS seq`);
-		const rows = await ctx.db.all<{ seq: number | null }>(sql.join(parts, sql` UNION ALL `));
-		for (const row of rows) latest = Math.max(latest, row.seq ?? 0);
-	}
-	return latest;
+	const chunks: string[][] = [];
+	for (let offset = 0; offset < mailboxIds.length; offset += 5) chunks.push(mailboxIds.slice(offset, offset + 5));
+	const results = await Promise.all(
+		chunks.map((chunk) =>
+			ctx.db.all<{ seq: number | null }>(sql.join(chunk.map((id) => sql`SELECT (SELECT max(seq) FROM jmap_changes WHERE mailbox_id = ${id}) AS seq`), sql` UNION ALL `)),
+		),
+	);
+	return Math.max(0, ...results.flat().map((row) => row.seq ?? 0));
 }
 
 export type ChangeScope = {
@@ -58,7 +77,7 @@ export function currentChangeScope(ctx: JmapContext): Promise<ChangeScope> {
 
 async function loadChangeScope(ctx: JmapContext): Promise<ChangeScope> {
 	const mailboxes = await listJmapMailboxes(ctx);
-	const [seq, fingerprint, floor] = await Promise.all([latestSeq(ctx, mailboxes.map((m) => m.id)), accessFingerprint(mailboxes), floorSeq(ctx)]);
+	const [seq, fingerprint, floor] = await Promise.all([latestSeq(ctx, mailboxes.map((m) => m.id)), accessFingerprint(ctx, mailboxes), floorSeq(ctx)]);
 	const effective = Math.max(seq, floor);
 	return { mailboxes, seq: effective, fingerprint, state: formatState(effective, fingerprint) };
 }
@@ -74,13 +93,13 @@ async function rowsSince(
 	sinceState: unknown,
 	objectType: "email" | "mailbox" | null,
 	limit: number,
-): Promise<{ scope: ChangeScope; rows: ChangeRow[]; hasMore: boolean } | null> {
+): Promise<{ scope: ChangeScope; rows: ChangeRow[]; hasMore: boolean; lastSeq: number } | null> {
 	const since = parseState(sinceState);
 	const scope = await currentChangeScope(ctx);
 	if (!since || since.fingerprint !== scope.fingerprint || since.seq > scope.seq) return null;
 	if (since.seq < (await floorSeq(ctx))) return null;
 	const ids = scope.mailboxes.map((m) => m.id);
-	if (ids.length === 0) return { scope, rows: [], hasMore: false };
+	if (ids.length === 0) return { scope, rows: [], hasMore: false, lastSeq: scope.seq };
 	const conditions = [inArray(jmapChanges.mailboxId, ids), gt(jmapChanges.seq, since.seq)];
 	if (objectType) conditions.push(eq(jmapChanges.objectType, objectType));
 	const rows = await ctx.db
@@ -97,7 +116,41 @@ async function rowsSince(
 		.orderBy(asc(jmapChanges.seq))
 		.limit(limit + 1);
 	const hasMore = rows.length > limit;
-	return { scope, rows: hasMore ? rows.slice(0, limit) : rows, hasMore };
+	const page = hasMore ? rows.slice(0, limit) : rows;
+	// Paging continues from the last logged change, whether or not this account may see it.
+	const lastSeq = page.length ? page[page.length - 1].seq : scope.seq;
+	return { scope, rows: await withoutOthersDrafts(ctx, page), hasMore, lastSeq };
+}
+
+/**
+ * Other users' drafts in a shared mailbox are private, so their ids stay out of the email feeds and
+ * their activity does not mark the mailbox as changed. Two cases need care:
+ *  - a message that was visible and became a draft (a scheduled send cancelled back to Drafts, a
+ *    status change or a JMAP move into Drafts) is logged with a "hidden" marker (logMessageHidden): readers who can no longer see it are told it was destroyed,
+ *    its author just sees an update;
+ *  - a draft that has since been deleted can no longer be told apart; its (random) id is still
+ *    reported as destroyed.
+ */
+async function withoutOthersDrafts(ctx: JmapContext, rows: ChangeRow[]): Promise<ChangeRow[]> {
+	const ids = [...new Set(rows.filter((row) => row.objectType === "email").map((row) => row.objectId))];
+	if (ids.length === 0) return rows;
+	const hidden = new Set<string>();
+	// D1 allows 100 bound parameters per statement; the draft filter takes some of them.
+	const batch = 100 - DRAFT_FILTER_PARAMS;
+	for (let offset = 0; offset < ids.length; offset += batch) {
+		const found = await ctx.db
+			.select({ id: messages.id })
+			.from(messages)
+			.where(and(inArray(messages.id, ids.slice(offset, offset + batch)), not(draftsVisibleTo(ctx.auth.userId))));
+		for (const row of found) hidden.add(row.id);
+	}
+	const result: ChangeRow[] = [];
+	for (const row of rows) {
+		if (row.objectType !== "email") result.push(row);
+		else if (row.change === "hidden") result.push({ ...row, change: hidden.has(row.objectId) ? "destroyed" : "updated" });
+		else if (!hidden.has(row.objectId)) result.push(row);
+	}
+	return result;
 }
 
 function maxChangesOf(args: Record<string, unknown>): number {
@@ -114,7 +167,7 @@ export async function emailChangesSince(ctx: JmapContext, args: Record<string, u
 	const result = await rowsSince(ctx, args.sinceState, "email", limit);
 	if (!result) return cannot();
 	const { created, updated, destroyed } = coalesceChanges(result.rows.map((row) => ({ id: row.objectId, change: row.change })));
-	const newState = result.hasMore ? formatState(result.rows[result.rows.length - 1].seq, result.scope.fingerprint) : result.scope.state;
+	const newState = result.hasMore ? formatState(result.lastSeq, result.scope.fingerprint) : result.scope.state;
 	return { accountId: ctx.accountId, oldState: args.sinceState, newState, hasMoreChanges: result.hasMore, created, updated, destroyed };
 }
 
@@ -135,12 +188,14 @@ export async function threadChangesSince(ctx: JmapContext, args: Record<string, 
 	const ids = result.scope.mailboxes.map((m) => m.id);
 	const threadKey = sql<string>`coalesce(${messages.threadId}, ${messages.id})`;
 	const alive = new Set<string>();
-	for (let offset = 0; offset < threads.length; offset += 100) {
-		const chunk = threads.slice(offset, offset + 100);
+	// D1 allows 100 bound parameters per statement: the mailbox ids and the draft filter share them with the thread ids.
+	const threadChunk = Math.max(1, 100 - ids.length - DRAFT_FILTER_PARAMS);
+	for (let offset = 0; offset < threads.length; offset += threadChunk) {
+		const chunk = threads.slice(offset, offset + threadChunk);
 		const rows = await ctx.db
 			.selectDistinct({ thread: threadKey })
 			.from(messages)
-			.where(and(inArray(threadKey, chunk), inArray(messages.mailboxId, ids)));
+			.where(and(inArray(threadKey, chunk), inArray(messages.mailboxId, ids), draftsVisibleTo(ctx.auth.userId)));
 		for (const row of rows) alive.add(row.thread);
 	}
 	const created: string[] = [];
@@ -151,7 +206,7 @@ export async function threadChangesSince(ctx: JmapContext, args: Record<string, 
 		else if (first === "created" && result.rows.every((row) => (row.threadId ?? row.objectId) !== thread || row.change === "created")) created.push(thread);
 		else updated.push(thread);
 	}
-	const newState = result.hasMore ? formatState(result.rows[result.rows.length - 1].seq, result.scope.fingerprint) : result.scope.state;
+	const newState = result.hasMore ? formatState(result.lastSeq, result.scope.fingerprint) : result.scope.state;
 	return { accountId: ctx.accountId, oldState: args.sinceState, newState, hasMoreChanges: result.hasMore, created, updated, destroyed };
 }
 
@@ -188,7 +243,7 @@ export async function mailboxChangesSince(ctx: JmapContext, args: Record<string,
 			}
 		}
 	}
-	const newState = result.hasMore ? formatState(result.rows[result.rows.length - 1].seq, result.scope.fingerprint) : result.scope.state;
+	const newState = result.hasMore ? formatState(result.lastSeq, result.scope.fingerprint) : result.scope.state;
 	return { accountId: ctx.accountId, oldState: args.sinceState, newState, hasMoreChanges: result.hasMore, updatedProperties: null, created, updated, destroyed };
 }
 

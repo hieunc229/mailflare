@@ -4,6 +4,7 @@ import { messageAttachments, messages } from "@/db/schema";
 import { getCurrentUser } from "@/lib/auth/cookies";
 import { getEnv } from "@/lib/cloudflare";
 import { getMailboxAccessLevel } from "@/lib/mailboxes/access";
+import { isOthersDraft } from "@/lib/email/draft-access";
 import { createZipStream } from "@/lib/zip";
 import { assessStoredAttachment } from "@/lib/email/attachments";
 import { getAttachmentContentDisposition } from "../attachments/[attachmentId]/utils";
@@ -19,11 +20,11 @@ export async function GET(request: Request, { params }: AttachmentsZipRouteParam
 	const { messageId } = await params;
 	const db = getDb(env);
 	const [message] = await db
-		.select({ mailboxId: messages.mailboxId, userId: messages.userId, subject: messages.subject })
+		.select({ mailboxId: messages.mailboxId, userId: messages.userId, status: messages.status, privateDraft: messages.privateDraft, subject: messages.subject })
 		.from(messages)
 		.where(eq(messages.id, messageId))
 		.limit(1);
-	if (!message) return new Response("Not found", { status: 404 });
+	if (!message || isOthersDraft(message, user.id)) return new Response("Not found", { status: 404 });
 	if (message.mailboxId) {
 		const access = await getMailboxAccessLevel(db, user, message.mailboxId);
 		if (!access?.canRead) return new Response("Not found", { status: 404 });

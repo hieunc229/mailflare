@@ -66,6 +66,17 @@ export async function syncPersonalIdentity(
 	}
 }
 
+/** Every address of the user's personal mailboxes: the ones getPersonalIdentityForAddress matches. */
+export async function getPersonalAddresses(db: AppDatabase, userId: string): Promise<Set<string>> {
+	const personalMailboxes = await db
+		.select()
+		.from(mailboxes)
+		.where(and(eq(mailboxes.userId, userId), eq(mailboxes.type, "personal")));
+	const found = new Set<string>();
+	for (const mailbox of personalMailboxes) for (const address of await getMailboxDomainAddresses(db, mailbox)) found.add(address);
+	return found;
+}
+
 export async function getPersonalIdentityForAddress(
 	db: AppDatabase,
 	userId: string,

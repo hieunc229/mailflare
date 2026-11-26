@@ -5,6 +5,7 @@ import { messages } from "@/db/schema";
 import { getCurrentUser } from "@/lib/auth/cookies";
 import { getEnv } from "@/lib/cloudflare";
 import { getEmailAddress } from "@/lib/email/address";
+import { isOthersDraft } from "@/lib/email/draft-access";
 import { readSesAuthentication } from "@/lib/email/provider-trace";
 import { getMailboxAccessLevel } from "@/lib/mailboxes/access";
 import type { MessageAuthenticationResponse } from "@/lib/email/authentication-types";
@@ -23,14 +24,17 @@ export async function GET(request: Request, { params }: MessageAuthenticationRou
 	const [message] = await db
 		.select({
 			mailboxId: messages.mailboxId,
+			userId: messages.userId,
+			status: messages.status,
 			direction: messages.direction,
+			privateDraft: messages.privateDraft,
 			fromAddr: messages.fromAddr,
 			rawR2Key: messages.rawR2Key,
 		})
 		.from(messages)
 		.where(eq(messages.id, messageId))
 		.limit(1);
-	if (!message?.mailboxId) return NextResponse.json({ error: "Not found" }, { status: 404 });
+	if (!message?.mailboxId || isOthersDraft(message, user.id)) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
 	const access = await getMailboxAccessLevel(db, user, message.mailboxId);
 	if (!access?.canRead) return NextResponse.json({ error: "Not found" }, { status: 404 });

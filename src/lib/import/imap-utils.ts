@@ -49,6 +49,19 @@ export function isPermanentImapError(message: string): boolean {
 	return /login|auth|credential|not allowed|unreadable|no longer exists/i.test(message);
 }
 
+/** The server refused or dropped the connection, as opposed to failing on the messages themselves. */
+export function isImapConnectionError(message: string): boolean {
+	return /stream was cancelled|connection closed unexpectedly|did not send an OK greeting|connection (?:reset|refused)|timed? ?out/i.test(message);
+}
+
+/** Connection failures tolerated at the same batch size before it shrinks too: a throttled host needs time, a batch that is too heavy needs to be smaller. */
+export const IMAP_CONNECTION_KEEP_SIZE_FAILURES = 3;
+
+/** Whether a connection failure should retry at the same batch size, given how many failed in a row. */
+export function keepsImapChunkSize(failures: number): boolean {
+	return failures <= IMAP_CONNECTION_KEEP_SIZE_FAILURES;
+}
+
 /** A folder the server says does not exist or cannot be selected, such as Gmail's `[Gmail]` parent. */
 export function isMissingImapFolderError(message: string): boolean {
 	return /NONEXISTENT|unknown mailbox|mailbox (?:does not|doesn't) exist|nonexistent namespace|NOSELECT/i.test(message);
@@ -110,14 +123,46 @@ export function isTaggedCompletion(line: string, tag: string): boolean {
 	return line.toUpperCase().startsWith(`${tag.toUpperCase()} `);
 }
 
-export function parseListMailboxName(line: string): string | null {
+/** Mailbox name from modified UTF-7 (RFC 3501 5.1.3), e.g. "Entw&APw-rfe" to "Entwürfe". */
+export function decodeImapMailboxName(value: string): string {
+	return value.replace(/&([A-Za-z0-9+,]*)-/g, (match, encoded: string) => {
+		if (!encoded) return "&";
+		let binary: string;
+		try {
+			binary = atob(encoded.replace(/,/g, "/"));
+		} catch {
+			return match;
+		}
+		// The bytes are UTF-16BE; a trailing odd byte is padding.
+		let text = "";
+		for (let index = 0; index + 1 < binary.length; index += 2) text += String.fromCharCode((binary.charCodeAt(index) << 8) | binary.charCodeAt(index + 1));
+		return text;
+	});
+}
+
+/** Mailbox name to modified UTF-7, as SELECT and EXAMINE expect it. */
+export function encodeImapMailboxName(value: string): string {
+	return value.replace(/&|[^\x20-\x7e]+/g, (run) => {
+		if (run === "&") return "&-";
+		const bytes = new Uint8Array(run.length * 2);
+		for (let index = 0; index < run.length; index++) {
+			bytes[index * 2] = run.charCodeAt(index) >> 8;
+			bytes[index * 2 + 1] = run.charCodeAt(index) & 0xff;
+		}
+		return `&${btoa(String.fromCharCode(...bytes)).replace(/=+$/, "").replace(/\//g, ",")}-`;
+	});
+}
+
+export function parseListMailboxName(line: string, literal?: string): string | null {
 	const match = line.match(/^\* LIST\s+\([^\)]*\)\s+(?:"[^"]*"|NIL)\s+(.+)$/i);
 	if (!match?.[1]) return null;
 	const value = match[1].trim();
+	// A name sent as a literal ({n}) arrives on the next line.
+	if (getLiteralLength(value) !== null) return literal ? decodeImapMailboxName(literal) : null;
 	if (value.startsWith('"') && value.endsWith('"')) {
-		return value.slice(1, -1).replace(/\\"/g, '"').replace(/\\\\/g, "\\");
+		return decodeImapMailboxName(value.slice(1, -1).replace(/\\"/g, '"').replace(/\\\\/g, "\\"));
 	}
-	return value || null;
+	return value ? decodeImapMailboxName(value) : null;
 }
 
 export function assertSafeImapHost(host: string): void {

@@ -1,7 +1,7 @@
 import { readFormDataBody } from "@/lib/http/request";
 import { DEFAULT_IMPORT_DESTINATION, parseImportDestination } from "@/lib/import/destination";
 import type { ImportDestination } from "@/lib/import/destination-types";
-import { splitMboxMessages } from "@/lib/import/mbox";
+import { splitMboxBytes } from "@/lib/import/mbox";
 import type { ImportMessageInput } from "@/lib/import/types";
 
 const MAX_IMPORT_REQUEST_SIZE = 25 * 1024 * 1024;
@@ -17,11 +17,6 @@ function isMboxFile(filename: string, type: string): boolean {
 function isEmlFile(filename: string, type: string): boolean {
 	const name = filename.toLowerCase();
 	return name.endsWith(".eml") || type === "message/rfc822";
-}
-
-function stringToArrayBuffer(value: string): ArrayBuffer {
-	const bytes = new TextEncoder().encode(value);
-	return bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer;
 }
 
 type ImportFileFlags = Record<string, { read?: unknown; starred?: unknown }>;
@@ -52,6 +47,8 @@ export async function parseImportForm(request: Request): Promise<{
 	/** Queue the import as a job instead of importing before responding. */
 	background: boolean;
 	messages: ImportMessageInput[];
+	/** How many messages beyond the per-request limit were left out. */
+	truncated: number;
 }> {
 	const form = await readFormDataBody(request, MAX_IMPORT_REQUEST_SIZE);
 	const mailboxId = String(form.get("mailboxId") ?? "");
@@ -64,10 +61,10 @@ export async function parseImportForm(request: Request): Promise<{
 
 	for (const file of files) {
 		if (isMboxFile(file.name, file.type)) {
-			const content = await file.text();
-			for (const [index, raw] of splitMboxMessages(content).entries()) {
+			// Split the bytes, not decoded text, so 8-bit bodies reach the parser as they were written.
+			for (const [index, raw] of splitMboxBytes(await file.arrayBuffer()).entries()) {
 				const filename = `${file.name}#${index + 1}`;
-				messages.push({ filename, raw: stringToArrayBuffer(raw), ...getMessageFlags(flags, filename) });
+				messages.push({ filename, raw, ...getMessageFlags(flags, filename) });
 			}
 			continue;
 		}
@@ -77,12 +74,14 @@ export async function parseImportForm(request: Request): Promise<{
 		}
 	}
 
+	const limit = background ? MAX_BACKGROUND_IMPORT_MESSAGES : MAX_INLINE_IMPORT_MESSAGES;
 	return {
 		mailboxId,
 		destination,
 		destinationValue,
 		filenames: files.map((file) => file.name),
 		background,
-		messages: messages.slice(0, background ? MAX_BACKGROUND_IMPORT_MESSAGES : MAX_INLINE_IMPORT_MESSAGES),
+		messages: messages.slice(0, limit),
+		truncated: Math.max(0, messages.length - limit),
 	};
 }

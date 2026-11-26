@@ -22,10 +22,10 @@ test("one-off event is UTC with escaped text", () => {
 });
 
 test("weekday series uses BYDAY, zone and EXDATE", () => {
-	const ics = buildCalendarFeed([{ ...base, repeat: "weekdays", repeatDays: "[1,3,5]", timeZone: "America/Vancouver", excludedOccurrences: `[${Date.parse("2026-11-04T17:00:00Z")}]` }], { name: "M" });
-	assert.match(ics, /DTSTART;TZID=America\/Vancouver:20261102T090000\r\n/);
+	const ics = buildCalendarFeed([{ ...base, repeat: "weekdays", repeatDays: "[1,3,5]", timeZone: "America/Los_Angeles", excludedOccurrences: `[${Date.parse("2026-11-04T17:00:00Z")}]` }], { name: "M" });
+	assert.match(ics, /DTSTART;TZID=America\/Los_Angeles:20261102T090000\r\n/);
 	assert.match(ics, /RRULE:FREQ=WEEKLY;BYDAY=MO,WE,FR\r\n/);
-	assert.match(ics, /EXDATE;TZID=America\/Vancouver:20261104T090000\r\n/);
+	assert.match(ics, /EXDATE;TZID=America\/Los_Angeles:20261104T090000\r\n/);
 });
 
 test("event text cannot start a new property line", () => {
@@ -41,4 +41,9 @@ test("long lines fold at 75 octets", () => {
 	const folded = foldIcsLine(`DESCRIPTION:${"é".repeat(100)}`);
 	for (const line of folded.split("\r\n")) assert.ok(new TextEncoder().encode(line).length <= 75);
 	assert.equal(folded.replace(/\r\n /g, ""), `DESCRIPTION:${"é".repeat(100)}`);
+});
+
+test("UNTIL stops before the exclusive repeatUntil so a deleted occurrence is not shown", () => {
+	const ics = buildCalendarFeed([{ ...base, repeat: "weekly", timeZone: "UTC", repeatUntil: new Date("2026-11-09T17:00:00Z") }], { name: "M" });
+	assert.match(ics, /RRULE:FREQ=WEEKLY;UNTIL=20261109T165959Z\r\n/);
 });

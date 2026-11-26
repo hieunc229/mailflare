@@ -1,5 +1,5 @@
 export type DomainRuleAction = "store" | "forward" | "reject";
-export type DomainRuleField = "recipient" | "sender" | "title" | "content";
+export type DomainRuleField = "recipient" | "sender" | "title" | "content" | "mail_type";
 export type DomainRuleOperator = "contains" | "exact" | "starts_with" | "ends_with" | "regex";
 
 export type DomainRule = {
@@ -29,6 +29,8 @@ export type DomainRuleMailbox = {
 
 export type DomainRuleInput = {
 	domainId: string;
+	/** Step-up grant, sent when the server asks to confirm a forward to an outside address. */
+	stepUpToken?: string;
 	name?: string;
 	enabled: boolean;
 	matchField: DomainRuleField;

@@ -48,6 +48,11 @@ function forget(digest: string, kind: ApiKeyKind | undefined): void {
 	verifiedByDigest.delete(cacheKey(digest, kind));
 }
 
+/** Whether this isolate already verified the secret recently, so presenting it again is not a guess. */
+export async function isApiKeyVerificationCached(secret: string, kind?: ApiKeyKind): Promise<boolean> {
+	return recall(await hashApiKey(secret.trim()), kind) !== null;
+}
+
 function whereMatch(match: SQL, kind: ApiKeyKind | undefined) {
 	return kind ? and(match, eq(apiKeys.kind, kind)) : match;
 }

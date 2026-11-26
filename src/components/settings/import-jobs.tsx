@@ -25,6 +25,7 @@ export function ImportJobs({ refreshKey }: { refreshKey: number }) {
 	const [resuming, setResuming] = useState<string | null>(null);
 	const [password, setPassword] = useState("");
 	const [resumeError, setResumeError] = useState<string | null>(null);
+	const [removeError, setRemoveError] = useState<string | null>(null);
 	const previous = useRef<Map<string, ImportJobSummary["status"]>>(new Map());
 
 	const load = useCallback(() => fetchImportJobs()
@@ -57,8 +58,11 @@ export function ImportJobs({ refreshKey }: { refreshKey: number }) {
 	}, [hasActive, load]);
 
 	async function onRemove(job: ImportJobSummary) {
+		setRemoveError(null);
 		try {
 			await removeImportJob(job.id);
+		} catch (error) {
+			setRemoveError(error instanceof Error ? error.message : null);
 		} finally {
 			await load();
 		}
@@ -93,6 +97,7 @@ export function ImportJobs({ refreshKey }: { refreshKey: number }) {
 					{t("importJobs.running")}
 				</p>
 			)}
+			{removeError && <p role="alert" className="text-sm text-red-700">{removeError}</p>}
 			<ul className="space-y-3">
 				{jobs.map((job) => {
 					const percent = getImportJobPercent(job);

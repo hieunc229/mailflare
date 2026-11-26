@@ -49,6 +49,7 @@ export function MessageSplitLayout({
 		? pathname.slice(detailPrefix.length).split("/")[0]
 		: undefined;
 	const renderedListWidth = Math.max(250, Math.min(listWidth, (containerWidth || 1000) - 280));
+	const hasSelectedMessage = Boolean(selectedMessageId);
 	const grouped = conversationView && config.folder !== "drafts";
 	const listState = useMemo<MessageListStateControl>(() => ({
 		selectedMessages,
@@ -112,53 +113,71 @@ export function MessageSplitLayout({
 
 	useEffect(() => () => setForcedMinimal(false), [setForcedMinimal]);
 
-	if (!selectedMessageId) {
-		return (
-			<MessageListStateContext.Provider value={listState}>
-				{children}
-			</MessageListStateContext.Provider>
-		);
-	}
+	// The list lives in the layout, not in a route page, so opening and closing a
+	// message never unmounts it. That keeps its state (and its paint) intact when
+	// an action sends the reader back to the folder.
+	const sidebarList = hasSelectedMessage && twoColumnReading;
+	const listHidden = hasSelectedMessage && (!twoColumnReading || !listVisible);
+	const gridTemplateColumns = hasSelectedMessage
+		? twoColumnReading
+			? `${listVisible ? renderedListWidth : 0}px minmax(0,1fr)`
+			: "minmax(0,1fr)"
+		: "minmax(0,1fr)";
 
 	return (
 		<MessageListStateContext.Provider value={listState}>
-			<div ref={containerRef} className="h-full min-h-0 overflow-hidden lg:grid lg:transition-[grid-template-columns] lg:ease-in-out motion-reduce:transition-none" style={{ gridTemplateColumns: twoColumnReading ? `${listVisible ? renderedListWidth : 0}px minmax(0,1fr)` : "minmax(0,1fr)", transitionDuration: widthReady ? "300ms" : "0ms" }}>
-				{twoColumnReading && (
-				<aside className={`relative hidden min-h-0 min-w-0 overflow-hidden bg-white lg:block ${listVisible ? "border-r border-neutral-200" : "pointer-events-none"}`} aria-hidden={!listVisible} inert={!listVisible}>
-					<div className={`h-full overflow-hidden transition-transform duration-300 ease-in-out motion-reduce:transition-none ${listVisible ? "translate-x-0" : "-translate-x-full"}`} style={{ width: renderedListWidth }}>
-					<MessageFolderPage
-						config={config}
-						compact
-						selectedMessageId={selectedMessageId}
-					/>
+			<div ref={containerRef} className="h-full min-h-0 overflow-hidden lg:grid lg:transition-[grid-template-columns] lg:ease-in-out motion-reduce:transition-none" style={{ gridTemplateColumns, transitionDuration: widthReady ? "300ms" : "0ms" }}>
+				<div
+					className={`relative h-full min-h-0 min-w-0 overflow-hidden bg-white ${
+						!hasSelectedMessage
+							? "block"
+							: sidebarList
+								? `hidden lg:block ${listVisible ? "border-r border-neutral-200" : "pointer-events-none"}`
+								: "hidden"
+					}`}
+					aria-hidden={listHidden || undefined}
+					inert={listHidden || undefined}
+				>
+					<div
+						className={`h-full overflow-hidden transition-transform duration-300 ease-in-out motion-reduce:transition-none ${sidebarList ? (listVisible ? "translate-x-0" : "-translate-x-full") : "translate-x-0"}`}
+						style={{ width: sidebarList ? renderedListWidth : "100%" }}
+					>
+						<MessageFolderPage
+							config={config}
+							compact={sidebarList}
+							selectedMessageId={selectedMessageId}
+						/>
 					</div>
-					<ResizeHandle
-						label={t("list.resize")}
-						onResizeStart={() => { startWidth.current = listWidth; resizedWidth.current = listWidth; }}
-						onResize={(delta) => {
-							const requestedWidth = startWidth.current + delta;
-							setForcedMinimal(requestedWidth < 250);
-							resizedWidth.current = Math.max(250, Math.min(requestedWidth, Math.max(250, (containerRef.current?.clientWidth ?? 1000) - 280)));
-							setListWidth(resizedWidth.current);
-						}}
-						onResizeEnd={() => saveColumnWidth(userId, "message-list", resizedWidth.current)}
-					/>
-				</aside>
-				)}
-				<MessageListVisibilityContext.Provider value={{ visible: listVisible, toggle: () => { const visible = !manualListVisible; setManualListVisible(visible); saveMessageListVisible(visible); }, singleColumn: !twoColumnReading, backHref: config.hrefPrefix, backLabel: config.titleKey ? t(config.titleKey) : config.title }}>
-				<MessageDetailNavigationProvider config={config} currentMessageId={selectedMessageId}>
-				<section className="min-h-0 min-w-0 overflow-hidden bg-white flex flex-col h-full">
-					{showBulkBar && (
-						<BulkMessageActionBar
-							folder={config.folderId ? undefined : config.folder}
-							selectedMessages={selectedMessages}
-							onClearSelection={() => setSelectedMessages([])}
+					{sidebarList && listVisible && (
+						<ResizeHandle
+							label={t("list.resize")}
+							onResizeStart={() => { startWidth.current = listWidth; resizedWidth.current = listWidth; }}
+							onResize={(delta) => {
+								const requestedWidth = startWidth.current + delta;
+								setForcedMinimal(requestedWidth < 250);
+								resizedWidth.current = Math.max(250, Math.min(requestedWidth, Math.max(250, (containerRef.current?.clientWidth ?? 1000) - 280)));
+								setListWidth(resizedWidth.current);
+							}}
+							onResizeEnd={() => saveColumnWidth(userId, "message-list", resizedWidth.current)}
 						/>
 					)}
-					{children}
-				</section>
-				</MessageDetailNavigationProvider>
-				</MessageListVisibilityContext.Provider>
+				</div>
+				{selectedMessageId && (
+					<MessageListVisibilityContext.Provider value={{ visible: listVisible, toggle: () => { const visible = !manualListVisible; setManualListVisible(visible); saveMessageListVisible(visible); }, singleColumn: !twoColumnReading, backHref: config.hrefPrefix, backLabel: config.titleKey ? t(config.titleKey) : config.title }}>
+						<MessageDetailNavigationProvider config={config} currentMessageId={selectedMessageId}>
+							<section className="min-h-0 min-w-0 overflow-hidden bg-white flex flex-col h-full">
+								{showBulkBar && (
+									<BulkMessageActionBar
+										folder={config.folderId ? undefined : config.folder}
+										selectedMessages={selectedMessages}
+										onClearSelection={() => setSelectedMessages([])}
+									/>
+								)}
+								{children}
+							</section>
+						</MessageDetailNavigationProvider>
+					</MessageListVisibilityContext.Provider>
+				)}
 			</div>
 		</MessageListStateContext.Provider>
 	);

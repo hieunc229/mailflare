@@ -10,6 +10,7 @@ import { getDomainForUser } from "@/lib/domains/service";
 import { setupReceiving } from "@/lib/domains/receiving";
 import { MxConflictError } from "@/lib/domains/receiving-dns";
 import { getResendReceivingView } from "@/lib/domains/resend-receiving";
+import { mtaStsBlockedResponse } from "@/lib/deliverability/mta-sts-block-response";
 
 type Params = { params: Promise<{ id: string; provider: string }> };
 const noStore = { "Cache-Control": "no-store" };
@@ -53,6 +54,8 @@ export async function POST(request: Request, { params }: Params) {
 		await setupReceiving(env, domain, provider.data, originOf(env, request), { replaceMx: body.replaceMx === true });
 		return NextResponse.json({ ok: true }, { headers: noStore });
 	} catch (error) {
+		const blocked = await mtaStsBlockedResponse(error);
+		if (blocked) return blocked;
 		if (error instanceof MxConflictError) return NextResponse.json({ error: error.message, code: error.code, records: error.records }, { status: 409 });
 		return NextResponse.json({ error: error instanceof Error ? error.message : "Setup failed" }, { status: 502 });
 	}

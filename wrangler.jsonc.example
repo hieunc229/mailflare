@@ -33,6 +33,16 @@
 			},
 		},
 		{
+			"name": "DEVICE_LOGIN_RATE_LIMIT",
+			"namespace_id": "1003",
+			"simple": { "limit": 10, "period": 60 },
+		},
+		{
+			"name": "DAV_RATE_LIMIT",
+			"namespace_id": "1004",
+			"simple": { "limit": 600, "period": 60 },
+		},
+		{
 			"name": "AGENT_RATE_LIMIT",
 			"namespace_id": "1002",
 			"simple": { "limit": 120, "period": 60 },
@@ -83,7 +93,8 @@
 				"max_batch_size": 5,
 				// New mail should reach the inbox at once; do not wait up to 5 s for a batch to fill.
 				"max_batch_timeout": 1,
-				"max_retries": 3,
+				// Mail waits out a database that is behind the code (300 s per retry, about an hour); see docs/deployment.md.
+				"max_retries": 12,
 			},
 			{
 				"queue": "mailflare-outbound",

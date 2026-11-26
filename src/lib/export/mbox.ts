@@ -1,20 +1,24 @@
-import { asc, eq } from "drizzle-orm";
+import { and, asc, eq } from "drizzle-orm";
 import { getDb } from "@/db";
 import { messages } from "@/db/schema";
+import { draftsVisibleTo } from "@/lib/email/draft-access";
 
 function escapeHeader(value: string | null): string {
 	return (value ?? "").replace(/\r?\n/g, " ").trim();
 }
 
 function escapeMboxBody(value: string): string {
-	return value.replace(/\nFrom /g, "\n>From ");
+	// mboxrd: quote ">*From " lines so a reader can strip exactly one ">" back off.
+	// The body follows a blank line, so its first line would start a new message too.
+	return value.replace(/(^|\n)(>*From )/g, "$1>$2");
 }
 
 function getMboxFromLine(date: Date): string {
 	return `From MAILER-DAEMON ${date.toUTCString()}`;
 }
 
-export async function exportMailboxToMbox(env: CloudflareEnv, mailboxId: string): Promise<string> {
+/** `userId` is the exporting user: other users' drafts in a shared mailbox are left out. */
+export async function exportMailboxToMbox(env: CloudflareEnv, mailboxId: string, userId: string): Promise<string> {
 	const db = getDb(env);
 	const rows = await db
 		.select({
@@ -33,7 +37,7 @@ export async function exportMailboxToMbox(env: CloudflareEnv, mailboxId: string)
 			htmlBody: messages.htmlBody,
 		})
 		.from(messages)
-		.where(eq(messages.mailboxId, mailboxId))
+		.where(and(eq(messages.mailboxId, mailboxId), draftsVisibleTo(userId)))
 		.orderBy(asc(messages.createdAt));
 
 	return rows.map((message) => {

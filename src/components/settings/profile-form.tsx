@@ -9,12 +9,13 @@ import { Label } from "@/components/ui/label";
 import { authFetch } from "@/lib/auth/client";
 import { dispatchProfileNameChanged } from "@/lib/profile/name-client";
 import { InboxSwitcher } from "./inbox-switcher";
+import { useSecurityStatus } from "./security-status-store";
+import { StepUpDialog } from "./step-up-dialog";
 import { ProfileAvatarForm } from "./profile-avatar-form";
 import type { ProfileFormProps, ProfileFormResponse } from "./types";
 import { getMailboxAddress, updateCurrentMailboxName } from "./utils";
 
 export function ProfileForm({
-  accountName,
   initialResetEmail,
 }: ProfileFormProps) {
   const { t } = useLanguage();
@@ -27,6 +28,8 @@ export function ProfileForm({
   const [recoveryStatus, setRecoveryStatus] = useState<string | null>(null);
   const [savingProfile, setSavingProfile] = useState(false);
   const [savingRecovery, setSavingRecovery] = useState(false);
+  const [confirmingRecovery, setConfirmingRecovery] = useState(false);
+  const { status: securityStatus } = useSecurityStatus();
 
   const [syncedMailbox, setSyncedMailbox] = useState({ id: selectedMailbox?.id, displayName: selectedMailbox?.displayName });
 
@@ -42,12 +45,14 @@ export function ProfileForm({
   // account itself, so the recovery email applies to it alone.
   const isPrimary = !!selectedMailbox?.isPrimary && selectedMailbox.type === "personal";
 
-  async function saveProfile(nextName: string, nextResetEmail: string) {
+  async function saveProfile(nextResetEmail: string, stepUpToken?: string) {
     try {
       const res = await authFetch("/api/settings/profile", {
         method: "PATCH",
+        // With a proof attached, a 401 means the proof was refused, not that the session ended.
+        redirectOnUnauthorized: !stepUpToken,
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: nextName, resetEmail: nextResetEmail }),
+        body: JSON.stringify({ resetEmail: nextResetEmail, stepUpToken }),
       });
       const data = (await res.json()) as ProfileFormResponse;
 
@@ -91,12 +96,18 @@ export function ProfileForm({
     }
   }
 
-  async function onRecoverySubmit(event: React.FormEvent<HTMLFormElement>) {
+  // Changing where password-reset mail goes asks for the password or a passkey first.
+  function onRecoverySubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    setRecoveryStatus(null);
+    setConfirmingRecovery(true);
+  }
+
+  async function saveRecovery(stepUpToken: string) {
     setSavingRecovery(true);
     setRecoveryStatus(null);
     try {
-      await saveProfile(accountName, resetEmail);
+      await saveProfile(resetEmail, stepUpToken);
       setRecoveryStatus(t("common.saved"));
     } catch (error) {
       setRecoveryStatus(
@@ -216,6 +227,16 @@ export function ProfileForm({
           )}
         </div>
       </form>}
+      <StepUpDialog
+        open={confirmingRecovery}
+        hasPassword={securityStatus?.passwordSet ?? true}
+        hasPasskey={(securityStatus?.passkeys.length ?? 0) > 0}
+        requireSecondFactor={securityStatus?.requireSecondFactor ?? false}
+        totpEnabled={securityStatus?.totpEnabled ?? false}
+        action="profile.recovery_email"
+        onOpenChange={setConfirmingRecovery}
+        onAuthorized={saveRecovery}
+      />
     </>
   );
 }

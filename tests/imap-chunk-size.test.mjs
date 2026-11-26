@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { getImapChunkSize, planImapFetchGroups, growImapChunkSize, isPermanentImapError, isMissingImapFolderError } from "../src/lib/import/imap-utils.ts";
+import { getImapChunkSize, planImapFetchGroups, growImapChunkSize, isPermanentImapError, isMissingImapFolderError, isImapConnectionError, keepsImapChunkSize } from "../src/lib/import/imap-utils.ts";
 
 test("chunk size defaults to the base and never exceeds it", () => {
 	assert.equal(getImapChunkSize(50, undefined), 50);
@@ -39,4 +39,17 @@ test("fetch groups pipeline small mail, split big mail and drop the tail past th
 test("a folder the server cannot open is detected so the import can skip it", () => {
 	assert.equal(isMissingImapFolderError("IMAP command failed: A0002 NO [NONEXISTENT] Unknown Mailbox: [Gmail] (Failure)"), true);
 	assert.equal(isMissingImapFolderError("IMAP connection closed unexpectedly"), false);
+});
+
+test("connection refusals are told apart from batch failures", () => {
+	assert.equal(isImapConnectionError("Stream was cancelled."), true);
+	assert.equal(isImapConnectionError("IMAP connection closed unexpectedly"), true);
+	assert.equal(isImapConnectionError("IMAP fetch failed: A0005 NO [SERVERBUG]"), false);
+	assert.equal(isImapConnectionError("IMAP command failed: A0001 NO [AUTHENTICATIONFAILED]"), false);
+});
+
+test("connection failures keep the batch size only for the first few attempts", () => {
+	assert.equal(keepsImapChunkSize(1), true);
+	assert.equal(keepsImapChunkSize(3), true);
+	assert.equal(keepsImapChunkSize(4), false);
 });

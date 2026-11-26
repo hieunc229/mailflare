@@ -45,6 +45,10 @@ export function WebhookDeliveries({ webhookId }: { webhookId: string }) {
 		return <p className="text-sm text-neutral-500">{t("webhooks.loadingDeliveries")}</p>;
 	}
 
+	if (deliveries.isError && !deliveries.data) {
+		return <p role="alert" className="text-sm text-red-600">{deliveries.error.message}</p>;
+	}
+
 	if (!deliveries.data?.length) {
 		return <p className="text-sm text-neutral-500">{t("webhooks.noDeliveries")}</p>;
 	}

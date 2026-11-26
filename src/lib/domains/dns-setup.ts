@@ -9,9 +9,12 @@ import {
 	isManualZone,
 	shouldBindEmailCatchAllToWorker,
 } from "@/lib/domains/provision";
+import { restoreMxRecordsAfterFailure } from "@/lib/domains/mx-records";
+import type { CfDnsRecord } from "@/lib/cloudflare-api.types";
 import { ensureSendingSubdomain } from "@/lib/domains/sending-subdomain";
 import type { DomainRow } from "@/lib/domains/types";
 import { isZoneApex } from "@/lib/domains/utils";
+import { assertMxChangeAllowed, republishMtaStsAfterMxChange } from "@/lib/deliverability/mta-sts-guard";
 
 /**
  * Provisions the DNS a single authentication check is missing, reusing the same
@@ -31,6 +34,20 @@ export async function setupDomainDnsRecord(
 		throw new Error("DNS for this domain is managed manually");
 	}
 
+	// These change the domain's MX records: enforce refuses first, a testing policy is republished afterwards.
+	// DKIM only touches them when asked to replace another service's MX.
+	const changesMx = record === "mx" || record === "spf" || (record === "dkim" && options.replaceMx === true);
+	if (changesMx) await assertMxChangeAllowed(env, domain);
+	await applyDomainDnsRecord(env, domain, record, options);
+	if (changesMx) await republishMtaStsAfterMxChange(env, domain);
+}
+
+async function applyDomainDnsRecord(
+	env: CloudflareEnv,
+	domain: DomainRow,
+	record: DnsAuthRecord,
+	options: { replaceMx?: boolean },
+): Promise<void> {
 	switch (record) {
 		case "mx":
 		case "spf": {
@@ -58,9 +75,18 @@ export async function setupDomainDnsRecord(
 			// The stored tag can be stale or empty even though the subdomain exists
 			// on Cloudflare, so reuse what is there instead of creating a duplicate
 			// (which Cloudflare rejects with "Subdomain already exists").
-			const { subdomain } = await ensureSendingSubdomain(env, domain.zoneId, domain.hostname, {
-				replaceMx: options.replaceMx,
-			});
+			const deletedMx: CfDnsRecord[] = [];
+			let subdomain;
+			try {
+				({ subdomain } = await ensureSendingSubdomain(env, domain.zoneId, domain.hostname, {
+					replaceMx: options.replaceMx,
+					deletedMx,
+				}));
+			} catch (error) {
+				// Replaced MX records come back if the sending subdomain still could not be created;
+				// if they cannot, that is reported rather than logged.
+				return restoreMxRecordsAfterFailure(env, domain.zoneId, deletedMx, error);
+			}
 			await getDb(env)
 				.update(domains)
 				.set({

@@ -1,4 +1,4 @@
-import { Archive, Clock, CalendarClock, MailOpen, Send, ShieldAlert, Star, Trash2 } from "@/components/icons";
+import { Archive, Clock, CalendarClock, MailOpen, Send, ShieldAlert, Star, Tag, Trash2 } from "@/components/icons";
 import type { MessageFolderConfig } from "./types";
 
 export const inboxFolderConfig: MessageFolderConfig = {
@@ -11,6 +11,17 @@ export const inboxFolderConfig: MessageFolderConfig = {
 	icon: Star,
 	// headerIcons: [MailOpen, Clock],
 	showRowBadge: false,
+};
+
+export const promotionsFolderConfig: MessageFolderConfig = {
+	folder: "promotions",
+	title: "Promotions",
+	titleKey: "navigation.promotions",
+	emptyTextKey: "folder.empty.promotions",
+	emptyText: "No promotions",
+	hrefPrefix: "/promotions",
+	icon: Tag,
+	badgeVariant: "outline",
 };
 
 export const starredFolderConfig: MessageFolderConfig = {

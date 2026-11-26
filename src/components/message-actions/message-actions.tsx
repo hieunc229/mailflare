@@ -3,9 +3,13 @@
 import { createElement, Fragment, useCallback, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { confirmDestructive } from "@/components/ui/confirm-dialog";
 import type { ReactNode } from "react";
-import { useRouter } from "next/navigation";
-import { Archive, ArchiveRestore, Ban, BellOff, Clock, FileCode2, Forward, Mail, MailOpen, MoreVertical, Note, Reply, ReplyAll, ShieldAlert, ShieldCheck, Trash2 } from "@/components/icons";
+import { usePathname, useRouter } from "next/navigation";
+import { Archive, ArchiveRestore, Ban, BellOff, Clock, FileCode2, Forward, Inbox, Mail, MailOpen, MoreVertical, Note, Reply, ReplyAll, ShieldAlert, ShieldCheck, Tag, Trash2 } from "@/components/icons";
 import { useLanguage } from "@/components/language-provider";
+import { useSelectedMailbox } from "@/components/mailbox-provider";
+import { useMessageCounts } from "@/hooks/use-message-counts";
+import { moveMessagesToCategory } from "@/lib/promotions/move-client";
+import { canMoveCategory, moveLeavesFolder, moveTargetFor, readerFolderOf } from "@/lib/promotions/move-utils";
 import { useCompose } from "@/components/compose/compose-context";
 import { MessageSourceDialog } from "@/components/messages/message-source-dialog";
 import { useMessageListVisibility } from "@/components/messages/message-list-visibility";
@@ -25,6 +29,9 @@ import { getPermanentDeleteConfirmText, PartialDeleteError, supportsPermanentDel
 import {
 	confirmTrashWithoutUnsubscribe,
 	blockMessageContact,
+	canBlockSenderDomain,
+	getBlockErrorKey,
+	getSenderDomain,
 	createForwardDraft,
 	createReplyDraft,
 	createTrashSenderRule,
@@ -53,6 +60,8 @@ export function MessageActions({
 	message,
 	messageMeta,
 	bodyHtml,
+	category,
+	senderKey,
 }: MessageActionsProps) {
 	const { t } = useLanguage();
 	const router = useRouter();
@@ -61,8 +70,11 @@ export function MessageActions({
 	const { shortcutsEnabled } = useShortcuts();
 	const autoAdvance = useAutoAdvance(messageId);
 	const notes = useConversationNotes();
+	const pathname = usePathname();
+	const { selectedMailbox, mailboxes } = useSelectedMailbox();
+	const { counts } = useMessageCounts(selectedMailbox?.id);
 	const [pendingAction, setPendingAction] = useState<
-		BulkMessageAction | "unsubscribe" | ReplyMode | "forward" | "block" | null
+		BulkMessageAction | "unsubscribe" | ReplyMode | "forward" | "block" | "category" | null
 	>(null);
 	const [error, setError] = useState<string | null>(null);
 	const [visibleCount, setVisibleCount] = useState(0);
@@ -70,11 +82,11 @@ export function MessageActions({
 	const [sourceOpen, setSourceOpen] = useState(false);
 	const [snoozeOpen, setSnoozeOpen] = useState(false);
 
-	const runAction = useCallback(async (action: BulkMessageAction) => {
+	const runAction = useCallback(async (action: BulkMessageAction, options: { undo?: boolean } = {}) => {
 		setPendingAction(action);
 		setError(null);
 		try {
-			await runSingleMessageAction(messageId, action);
+			await runSingleMessageAction(messageId, action, options);
 			const redirect = getMessageActionRedirect(action, listHref);
 			if (redirect) router.push(autoAdvance() ?? redirect);
 			router.refresh();
@@ -224,7 +236,7 @@ export function MessageActions({
 
 		try {
 			await createTrashSenderRule({ mailboxId, senderAddress });
-			await runAction("trash");
+			await runAction("trash", { undo: false });
 		} catch {
 			setError(t("actions.error.trashRule"));
 			setPendingAction(null);
@@ -260,11 +272,33 @@ export function MessageActions({
 		setPendingAction("block");
 		try {
 			await blockMessageContact({ mailboxId, senderAddress });
-			await runSingleMessageAction(messageId, "trash");
+			await runSingleMessageAction(messageId, "trash", { undo: false });
 			router.push(autoAdvance() ?? listHref);
 			router.refresh();
 		} catch (blockError) {
 			setError(blockError instanceof Error ? blockError.message : t("message.error.block"));
+		} finally {
+			setPendingAction(null);
+		}
+	}
+
+	async function onBlockDomain() {
+		setError(null);
+		const domain = getSenderDomain(senderAddress);
+		if (!mailboxId || !domain) {
+			setError(t("message.error.block"));
+			return;
+		}
+		if (!await confirmDestructive(t("message.blockDomainConfirm", { domain }))) return;
+
+		setPendingAction("block");
+		try {
+			await blockMessageContact({ mailboxId, senderAddress, scope: "domain" });
+			await runSingleMessageAction(messageId, "trash", { undo: false });
+			router.push(autoAdvance() ?? listHref);
+			router.refresh();
+		} catch (blockError) {
+			setError(t(getBlockErrorKey(blockError)));
 		} finally {
 			setPendingAction(null);
 		}
@@ -283,6 +317,29 @@ export function MessageActions({
 			router.refresh();
 		} catch {
 			setError(t("actions.unsubscribeFailed"));
+		} finally {
+			setPendingAction(null);
+		}
+	}
+
+	// "Move to Promotions / Inbox" exists only where Promotions is on and the user has full access; off mailboxes see no change.
+	const promotionMode = mailboxId ? counts.promotionModes?.[mailboxId] : undefined;
+	const readerFolder = readerFolderOf(pathname);
+	const canMoveToCategory = !!mailboxId && readerFolder !== "other" && canMoveCategory({
+		mode: promotionMode,
+		permission: mailboxes.find((mailbox) => mailbox.id === mailboxId)?.permission,
+		direction,
+		status,
+	});
+	const categoryTarget = moveTargetFor(category);
+	async function onMoveCategory() {
+		setPendingAction("category");
+		setError(null);
+		try {
+			const summary = await moveMessagesToCategory({ messageIds: [messageId], target: categoryTarget, mailboxId, senderAddress: senderKey });
+			if (summary.moved === 0) return;
+			if (moveLeavesFolder(readerFolder, categoryTarget, promotionMode)) router.push(autoAdvance() ?? listHref);
+			router.refresh();
 		} finally {
 			setPendingAction(null);
 		}
@@ -464,6 +521,14 @@ export function MessageActions({
 							{t("common.snooze")}
 						</MessageActionMenuItem>
 					)}
+					{canMoveToCategory && (
+						<MessageActionMenuItem
+							icon={categoryTarget === "inbox" ? <Inbox size={iconSize} /> : <Tag size={iconSize} />}
+							onSelect={() => void onMoveCategory()}
+						>
+							{categoryTarget === "inbox" ? t("promotions.move.toInbox") : t("promotions.move.toPromotions")}
+						</MessageActionMenuItem>
+					)}
 					{direction === "inbound" && (
 						<>
 							<MessageActionMenuItem
@@ -485,6 +550,11 @@ export function MessageActions({
 							<MessageActionMenuItem icon={<Ban size={iconSize} />} onSelect={() => void onBlockContact()}>
 								{t("message.blockContact")}
 							</MessageActionMenuItem>
+							{canBlockSenderDomain(senderAddress) && (
+								<MessageActionMenuItem icon={<Ban size={iconSize} />} onSelect={() => void onBlockDomain()}>
+									{t("message.blockDomain")}
+								</MessageActionMenuItem>
+							)}
 							<MessageActionMenuSeparator />
 						</>
 					)}

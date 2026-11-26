@@ -85,13 +85,13 @@ export function EmailHtmlRenderer({ html, className, dense = false, preserveLead
 		return () => root.removeEventListener("click", navigate);
 	}, [html, allowRemote, preserveLeadingQuote, quoteToggleLabel, preview]);
 	return <div className={`min-w-0 max-w-full ${className ?? ""}`}>
-		{hasRemote && !preview && <div className="mb-2 flex justify-end">
+		{hasRemote && !preview && !allowRemote && <div className="mb-2 flex justify-end">
 			<button type="button" aria-pressed={allowRemote} className="rounded px-2 py-1 text-xs text-blue-600 hover:bg-blue-50"
 				onClick={() => {
 					if (!allowRemote) onAllowRemote?.();
 					setChoice({ source: html, allow: !allowRemote });
 				}}>
-				{allowRemote ? null : t("message.allowRemote")}
+				{t("message.allowRemote")}
 			</button>
 		</div>}
 		<div className={`max-w-full ${preview ? "mf-preview" : "overflow-x-auto"}${dense ? " mf-dense" : ""}`} ref={host} />

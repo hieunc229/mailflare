@@ -13,6 +13,7 @@ const outDir = mkdtempSync(join(root, "tests", ".tmp-domain-receiving-status-"))
 after(() => rmSync(outDir, { recursive: true, force: true }));
 
 const mocks = {
+	"@/lib/deliverability/mta-sts-guard": "export const assertMxChangeAllowed=async()=>{};export const republishMtaStsAfterMxChange=async()=>{};export const assertDomainRemovable=async()=>{};",
 	"drizzle-orm": "export const eq=(c,v)=>({eq:[c,v]});export const and=(...a)=>({and:a});export const or=(...a)=>({or:a});export const ne=(c,v)=>({ne:[c,v]});",
 	"@/db/schema": "export const domains={id:'domains.id',userId:'domains.userId',zoneId:'domains.zoneId'};export const mailboxes={id:'m.id',domainId:'m.domainId',localPart:'m.localPart',useAllDomains:'m.useAllDomains'};",
 	"@/db": "const rows={from(){return rows;},innerJoin(){return rows;},where(){return Promise.resolve([]);}};export function getDb(){return {select(){return rows;},update(){return {set(values){return {where(){globalThis.__updates.push(values);}}}}}}}",
@@ -22,7 +23,7 @@ const mocks = {
 	"@/lib/domains/provision": "export const isManualZone=(z)=>z==='manual';export const shouldBindEmailCatchAllToWorker=()=>false;",
 	"@/lib/domains/sending-subdomain": "export async function ensureSendingSubdomain(){return {subdomain:globalThis.__subdomain};}",
 	"@/lib/domains/cloudflare-cleanup": "export async function deleteEmailRoutingRulesForDomain(){}",
-	"@/lib/domains/mx-records": "export async function removeMxRecords(){}",
+	"@/lib/domains/mx-records": "export async function removeMxRecords(){}export async function restoreMxRecords(){}export async function restoreMxRecordsAfterFailure(){}",
 	"@/lib/domains/adopt-zone": "export async function adoptCloudflareZone(env,d){return d;}",
 	"@/lib/domains/receiving-dns": "export async function listDomainMx(){return [];}export class MxConflictError extends Error{}",
 	"@/lib/domains/resend-receiving": "export async function setupResendReceiving(){}export async function removeResendReceiving(){}export async function hasResendReceivingConfig(){return false;}",

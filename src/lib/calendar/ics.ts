@@ -1,7 +1,15 @@
 /** Shared iCalendar (RFC 5545) writing helpers for the feed, outgoing invitations and invitation replies. */
 
-/** A calendar address must be one plain mailbox; anything with whitespace or separators is left out of the file. */
-export const ICS_ADDRESS = /^[^\s<>",;:]+@[^\s<>",;:]+$/;
+/** Longest mailbox allowed by RFC 5321 (254 in practice); anything longer is never tested or written. */
+export const MAX_ICS_ADDRESS = 320;
+
+/**
+ * A calendar address must be one plain mailbox; anything with whitespace or separators is left out of the file.
+ * The local part excludes @ so a long run of @ cannot backtrack quadratically, and the length is capped before the test.
+ */
+export function isIcsAddress(value: string): boolean {
+	return value.length <= MAX_ICS_ADDRESS && /^[^\s<>",;:@]+@[^\s<>",;:@]+$/.test(value);
+}
 
 export function escapeIcsText(value: string): string {
 	// Control characters other than tab and line breaks are dropped, and every line-break form (CRLF, CR, LF) becomes

@@ -3,8 +3,10 @@ import { confirmDestructive } from "@/components/ui/confirm-dialog";
 import { authFetch } from "@/lib/auth/client";
 import { throwIfDeleteSkipped } from "@/lib/messages/permanent-delete-utils";
 import { dispatchMessagesChanged } from "@/lib/messages/change-events";
-import { markMessagesReadInCaches } from "@/hooks/utils";
+import { performMessageAction } from "@/lib/messages/actions/client";
+import { isReversibleMessageAction } from "@/lib/messages/actions/definitions";
 import { getEmailAddress, normalizeEmailAddress, splitEmailAddressList } from "@/lib/email/address";
+import { isSharedMailDomain } from "@/lib/spam/domain-utils";
 import { getLatestEmailContent } from "@/lib/email/reply-content-utils";
 import { formatUserDate } from "@/lib/time/utils";
 import { sanitizeEmailHtml } from "@/app/(dashboard)/inbox/[messageId]/email-html-sanitizer";
@@ -43,7 +45,17 @@ export function getMessageBackHref(
 export async function runSingleMessageAction(
   messageId: string,
   action: BulkMessageAction,
+  options: { undo?: boolean; notify?: boolean } = {},
 ) {
+  if (isReversibleMessageAction(action)) {
+    await performMessageAction(
+      { action, messageIds: [messageId] },
+      { undo: options.undo !== false, notify: options.notify !== false },
+    );
+    return;
+  }
+  if (action !== "delete") throw new Error("Unable to update message");
+
   const response = await authFetch("/api/messages/bulk", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -55,10 +67,7 @@ export async function runSingleMessageAction(
   }
 
   await throwIfDeleteSkipped(response, action);
-  const readChanged = action === "read" || action === "unread";
-  if (readChanged) markMessagesReadInCaches([messageId], action === "read");
-  if (readChanged) dispatchMessagesChanged({ kind: "read", messageIds: [messageId], read: action === "read" });
-  else dispatchMessagesChanged();
+  dispatchMessagesChanged({ kind: "removed", action: "delete", messageIds: [messageId] });
 }
 
 export function openUnsubscribeUrl(url: string) {
@@ -98,14 +107,41 @@ export async function createTrashSenderRule({
 export async function blockMessageContact({
   mailboxId,
   senderAddress,
+  scope,
 }: BlockMessageContactInput) {
   const response = await authFetch("/api/contacts/block", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ mailboxId, address: senderAddress }),
+    body: JSON.stringify({ mailboxId, address: senderAddress, scope }),
   });
-  const data = (await response.json()) as { error?: string };
-  if (!response.ok) throw new Error(data.error ?? "Unable to block contact");
+  const data = (await response.json()) as { error?: string; code?: string };
+  if (!response.ok) throw new BlockContactError(data.error ?? "Unable to block contact", data.code);
+}
+
+/** A failed block request; `code` is an API value such as OWN_DOMAIN that the UI maps to a translated message. */
+export class BlockContactError extends Error {
+  constructor(message: string, readonly code?: string) {
+    super(message);
+  }
+}
+
+/** The translation key for a failed block request, falling back to the generic message. */
+export function getBlockErrorKey(error: unknown): "message.error.blockDomainOwn" | "message.error.blockDomainShared" | "message.error.block" {
+  const code = error instanceof BlockContactError ? error.code : undefined;
+  if (code === "OWN_DOMAIN") return "message.error.blockDomainOwn";
+  if (code === "SHARED_PROVIDER") return "message.error.blockDomainShared";
+  return "message.error.block";
+}
+
+/** False for addresses whose whole domain must not be blocked (no domain, or a shared mailbox provider). */
+export function canBlockSenderDomain(senderAddress: string): boolean {
+  const domain = getSenderDomain(senderAddress);
+  return !!domain && domain.includes(".") && !isSharedMailDomain(domain);
+}
+
+export function getSenderDomain(senderAddress: string): string {
+  const address = getEmailAddress(senderAddress).trim().toLowerCase();
+  return address.includes("@") ? address.slice(address.lastIndexOf("@") + 1) : "";
 }
 
 export function getMoveMessageActions(

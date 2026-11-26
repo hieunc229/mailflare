@@ -18,7 +18,7 @@ function HeaderBar({ tabs = 0 }: { tabs?: number }) {
 /** Calendar: left upcoming panel and a week grid under the toolbar. */
 function CalendarSkeleton() {
 	return (
-		<div className="flex h-dvh flex-col bg-[#f6f8fc]">
+		<div className="safe-area flex h-dvh flex-col bg-[#f6f8fc]">
 			<div className="flex h-16 items-center gap-3 px-4">
 				<Skeleton className="h-10 w-10 shrink-0 rounded-full" />
 				<Skeleton className="hidden h-6 w-28 md:block" />
@@ -58,7 +58,7 @@ function CalendarSkeleton() {
 /** Mail folders and message pages: folder rail plus a list of rows. */
 function MailSkeleton() {
 	return (
-		<div className="flex h-dvh flex-col bg-[#f6f8fc]">
+		<div className="safe-area flex h-dvh flex-col bg-[#f6f8fc]">
 			<HeaderBar />
 			<div className="flex min-h-0 flex-1 gap-3 pl-3 max-md:pl-0">
 				<div className="hidden w-60 shrink-0 space-y-2 md:block">
@@ -73,7 +73,7 @@ function MailSkeleton() {
 
 function GenericSkeleton() {
 	return (
-		<div className="flex h-dvh flex-col bg-[#f6f8fc]">
+		<div className="safe-area flex h-dvh flex-col bg-[#f6f8fc]">
 			<HeaderBar />
 			<div className="min-h-0 flex-1 overflow-hidden px-4">
 				<Skeleton className="mb-4 h-8 w-56" />
@@ -83,7 +83,7 @@ function GenericSkeleton() {
 	);
 }
 
-const MAIL_PREFIXES = ["/inbox", "/sent", "/drafts", "/starred", "/snoozed", "/scheduled", "/archived", "/spam", "/trash", "/folders", "/contacts"];
+const MAIL_PREFIXES = ["/inbox", "/promotions", "/sent", "/drafts", "/starred", "/snoozed", "/scheduled", "/archived", "/spam", "/trash", "/folders", "/contacts"];
 
 /** Placeholder shown while auth resolves, shaped like the page being opened so the layout does not jump. */
 export function RouteSkeleton() {

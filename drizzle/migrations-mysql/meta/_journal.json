@@ -85,6 +85,111 @@
       "when": 1793280382891,
       "tag": "0011_message_invite_response",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "5",
+      "when": 1794516478573,
+      "tag": "0012_message_action_undo_claims",
+      "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "5",
+      "when": 1794516479573,
+      "tag": "0013_auto_update",
+      "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "5",
+      "when": 1794516479574,
+      "tag": "0014_security_hardening",
+      "breakpoints": true
+    },
+    {
+      "idx": 15,
+      "version": "5",
+      "when": 1794516479577,
+      "tag": "0015_masked_aliases",
+      "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "5",
+      "when": 1795027658151,
+      "tag": "0016_calendar_invite_complete",
+      "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "5",
+      "when": 1795027659151,
+      "tag": "0017_spam_strictness",
+      "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "5",
+      "when": 1795027660151,
+      "tag": "0018_promotions",
+      "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "5",
+      "when": 1795027661151,
+      "tag": "0019_promotion_sender_backfill",
+      "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "5",
+      "when": 1795027662151,
+      "tag": "0020_app_password_usage",
+      "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "5",
+      "when": 1795027663151,
+      "tag": "0021_dav_enabled",
+      "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "5",
+      "when": 1795027664151,
+      "tag": "0022_dav_storage",
+      "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "5",
+      "when": 1795027665151,
+      "tag": "0023_email_suppressions",
+      "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "5",
+      "when": 1795027666151,
+      "tag": "0024_dmarc_reports",
+      "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "5",
+      "when": 1795027667151,
+      "tag": "0025_mta_sts_tls_rpt",
+      "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "5",
+      "when": 1795027668151,
+      "tag": "0026_contact_details",
+      "breakpoints": true
     }
   ]
 }

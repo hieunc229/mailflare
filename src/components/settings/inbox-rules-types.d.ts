@@ -6,7 +6,7 @@ export type RuleFolder = {
 export type InboxRule = {
 	id: string;
 	pattern: string;
-	matchField: "email" | "content" | "title";
+	matchField: "email" | "content" | "title" | "mail_type";
 	matchOperator: "contains" | "exact";
 	matchValue: string;
 	action: "store" | "forward" | "reject" | "spam" | "trash";
@@ -18,13 +18,15 @@ export type InboxRule = {
 
 export type InboxRuleInput = {
 	mailboxId: string;
-	matchField: "email" | "content" | "title";
+	matchField: "email" | "content" | "title" | "mail_type";
 	matchOperator: "contains" | "exact";
 	matchValue: string;
 	destination: string;
 	forwardTo?: string;
 	keepCopy?: boolean;
 	priority: number;
+	/** Step-up grant, sent when the server asks to confirm a forward to an outside address. */
+	stepUpToken?: string;
 };
 
 export type InboxRulesResponse = {

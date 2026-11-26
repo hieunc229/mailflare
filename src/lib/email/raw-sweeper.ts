@@ -1,11 +1,27 @@
 import { inArray } from "drizzle-orm";
 import { getDb } from "@/db";
 import { messages } from "@/db/schema";
+import { INBOUND_SIGNATURE_MAX_AGE_SECONDS } from "@/lib/email/intake-signature";
+import { SNS_MAX_AGE_MS } from "@/lib/aws/sns-signature";
+import { UPLOAD_PREFIX } from "@/lib/jmap/blobs";
+import { sweepStaleObjects } from "@/lib/email/stale-objects";
 
 const PREFIX = "inbound/";
 const MIN_AGE_MS = 24 * 60 * 60 * 1000;
 const PAGE = 100;
 const MAX_PAGES = 20;
+/**
+ * Prefixes that only need an age-based sweep. The relay and SNS intake routes write one dedupe object per request
+ * and accept timestamps up to their window in the past or future, so those are kept for twice the window plus an
+ * hour of margin.
+ */
+const HOUR_MS = 60 * 60 * 1000;
+const STALE_PREFIXES: Array<{ prefix: string; maxAgeMs: number }> = [
+	{ prefix: "relay-seen/", maxAgeMs: 2 * INBOUND_SIGNATURE_MAX_AGE_SECONDS * 1000 + HOUR_MS },
+	{ prefix: "sns-seen/", maxAgeMs: 2 * SNS_MAX_AGE_MS + HOUR_MS },
+	// JMAP uploads an Email/set create has claimed are copied into the draft; unclaimed ones are abandoned.
+	{ prefix: `${UPLOAD_PREFIX}/`, maxAgeMs: 7 * 24 * HOUR_MS },
+];
 /** D1 allows 100 bound parameters per statement. */
 const LOOKUP_BATCH = 50;
 
@@ -13,7 +29,7 @@ const LOOKUP_BATCH = 50;
  * Deletes raw MIME under `inbound/` that no stored message refers to and that is old enough
  * that its queue message is long finished. This catches what the early-return cleanup in
  * `processInboundMessage` cannot: messages dropped after their final failed retry and
- * mail accepted for addresses that never resolved to a mailbox.
+ * mail accepted for addresses that never resolved to a mailbox. Afterwards it removes stale relay/SNS dedupe objects and old JMAP uploads.
  */
 export async function sweepOrphanedRawMail(env: CloudflareEnv, now = new Date()): Promise<number> {
 	const db = getDb(env);
@@ -35,6 +51,10 @@ export async function sweepOrphanedRawMail(env: CloudflareEnv, now = new Date())
 		}
 		if (!listing.truncated || !listing.cursor) break;
 		cursor = listing.cursor;
+	}
+	// After the main sweep, so a backlog under these prefixes cannot use up its request budget.
+	for (const { prefix, maxAgeMs } of STALE_PREFIXES) {
+		await sweepStaleObjects(env.BUCKET, prefix, maxAgeMs, now).catch((error) => console.error(`Sweep of ${prefix} failed`, error));
 	}
 	return removed;
 }

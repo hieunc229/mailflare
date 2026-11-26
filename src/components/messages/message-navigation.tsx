@@ -4,8 +4,11 @@ import { useEffect, useRef } from "react";
 import type { MouseEvent } from "react";
 import { useRouter } from "next/navigation";
 import { fetchCachedMessageDetail, getCachedMessageDetail, primeMessageDetail } from "@/lib/messages/detail-cache";
+import { fetchInviteCard, getCachedInviteCard } from "@/lib/calendar/invite-cache";
+import { findInviteAttachment } from "@/lib/calendar/invite-attachment";
 import { FULL_ROUTE_PREFETCH } from "@/lib/navigation/prefetch";
 import type { Message } from "@/hooks/types";
+import type { CachedMessageDetail } from "@/lib/messages/detail-cache-types";
 import type { MessageNavigationState } from "./message-navigation-types";
 
 const HOVER_PREFETCH_DELAY_MS = 120;
@@ -28,16 +31,33 @@ export function useMessageNavigation(href: string, message: Message): MessageNav
 		router.prefetch(href, FULL_ROUTE_PREFETCH);
 	}
 
+	function warmInvite(detail?: CachedMessageDetail) {
+		if (getCachedInviteCard(message.id) !== undefined) return;
+		if (detail?.attachments && !findInviteAttachment(detail.attachments)) return;
+		void fetchInviteCard(message.id).catch(() => {});
+	}
+
 	function warmDetail() {
-		if (getCachedMessageDetail(message.id)?.body) return;
+		const cached = getCachedMessageDetail(message.id);
+		if (cached?.body) {
+			warmInvite(cached);
+			return;
+		}
 		// Seed the header while the body loads.
 		primeMessageDetail({ ...message, read: message.read });
-		void fetchCachedMessageDetail(message.id, true).catch(() => {});
+		void fetchCachedMessageDetail(message.id, true)
+			.then((detail) => warmInvite(detail))
+			.catch(() => {});
 	}
 
 	function prefetch() {
 		prefetchRoute();
-		if (hoverTimer.current || getCachedMessageDetail(message.id)?.body) return;
+		const cached = getCachedMessageDetail(message.id);
+		if (cached?.body) {
+			warmInvite(cached);
+			return;
+		}
+		if (hoverTimer.current) return;
 		hoverTimer.current = window.setTimeout(() => {
 			hoverTimer.current = null;
 			if ("requestIdleCallback" in window) {
@@ -50,6 +70,8 @@ export function useMessageNavigation(href: string, message: Message): MessageNav
 
 	function prefetchNow() {
 		prefetchRoute();
+		// Start the invitation in parallel with the body for a tap that is about to navigate.
+		warmInvite(getCachedMessageDetail(message.id));
 		warmDetail();
 	}
 
@@ -69,6 +91,7 @@ export function useMessageNavigation(href: string, message: Message): MessageNav
 		event.preventDefault();
 		prefetchRoute();
 		primeMessageDetail({ ...message, read: markRead || message.read });
+		warmInvite(getCachedMessageDetail(message.id));
 		router.push(href);
 	}
 

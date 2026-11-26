@@ -30,15 +30,32 @@ export type MessageListRowProps = {
 	onSelectedChange: (messageId: string, selected: boolean) => void;
 	onMessageAction: (messageId: string, action: RowMessageAction) => Promise<void>;
 	onOpening?: (messageId: string) => void;
+	onSnoozeChange?: (messageId: string, snoozed: boolean) => void;
+	showCompactRowActions?: boolean;
 	dragMessageIds?: string[];
 	todayKey: string;
+	/** The row mailbox's Promotions mode when it is on; undefined means off. */
+	promotionMode?: "show" | "separate";
+	/** Offer "Move to Promotions / Inbox" on this row. */
+	canMovePromotions?: boolean;
 };
 
-export type RowMessageAction = "archive" | "trash" | "read" | "unread";
+export type RowMessageAction = "archive" | "trash" | "read" | "unread" | "inbox" | "delete";
 
 export type MessageListRowActionsProps = {
 	message: Message;
+	/** Folder being listed; archived, spam and trash use a different primary action. */
+	folder: MessageFolder;
+	folderId?: string;
 	onAction: (action: RowMessageAction) => Promise<void>;
+	/** Tighter rail for the split-view message list. */
+	compact?: boolean;
+	/** The row holds the open message, so its rail uses the active-row surface. */
+	active?: boolean;
+	onSnoozeChange?: (messageId: string, snoozed: boolean) => void;
+	/** Where "Move to ..." would send this message; undefined hides the action (Promotions off, no full access, wrong folder). */
+	promotionTarget?: "promotions" | "inbox";
+	onPromotionMove?: () => void;
 };
 
 export type MessageFolderPageProps = {

@@ -35,6 +35,8 @@ export class RealtimeHubRegistry {
 				socket.send(JSON.stringify(notification));
 			})().catch(() => socket.close(1011, "Revision lookup failed"));
 		});
+		// ws emits "error" for malformed frames; without a listener it is thrown.
+		socket.on("error", () => socket.terminate());
 		socket.on("close", () => {
 			set.delete(socket);
 			if (set.size === 0) this.sockets.delete(userId);

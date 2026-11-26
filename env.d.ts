@@ -33,6 +33,8 @@ interface CloudflareEnv {
 	LOGIN_RATE_LIMIT?: RateLimit;
 	/** Mobile device sign-in (`/api/auth/device`), stricter than the web login. */
 	DEVICE_LOGIN_RATE_LIMIT?: RateLimit;
+	/** CalDAV/CardDAV requests per app password (600 per minute) and writes per user. */
+	DAV_RATE_LIMIT?: RateLimit;
 	/** APNs auth key for the mobile push relay (src/lib/push/native.ts). */
 	APNS_KEY_ID?: string;
 	APNS_TEAM_ID?: string;
@@ -64,6 +66,8 @@ interface CloudflareEnv {
 	S3_ACCESS_KEY_ID?: string;
 	S3_SECRET_ACCESS_KEY?: string;
 	CF_TOKEN?: string;
+	/** Deployed Worker name Email Routing rules target; defaults to "mailflare". */
+	CF_EMAIL_WORKER_NAME?: string;
 	CF_API_KEY?: string;
 	CF_EMAIL?: string;
 	TURNSTILE_SECRET_KEY?: string;
@@ -80,6 +84,8 @@ interface CloudflareEnv {
 	CF_ACCOUNT_ID?: string;
 	/** Public origin of this install (https://mail.example.com) when it sits behind a proxy. */
 	APP_URL?: string;
+	/** Node runtime only: set when a reverse proxy terminates TLS, so x-forwarded-proto is trusted. */
+	TRUST_PROXY?: string;
 	/** VAPID public key (uncompressed P-256 point, URL-safe base64) for Web Push. */
 	VAPID_PUBLIC_KEY?: string;
 	/** VAPID private scalar (URL-safe base64). Keep this secret. */

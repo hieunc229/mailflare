@@ -1,4 +1,5 @@
 import { createElement, forwardRef, type ComponentType, type SVGProps } from "react";
+import { cn } from "@/lib/utils";
 import { HugeiconsIcon, type IconSvgElement } from "@hugeicons/react";
 import {
 	ActivityIcon as HugeActivityIcon,
@@ -130,6 +131,7 @@ import {
 	SquareIcon as HugeSquareIcon,
 	StarIcon as HugeStarIcon,
 	StrikethroughIcon as HugeStrikethroughIcon,
+	TagIcon as HugeTagIcon,
 	TextAlignJustifyIcon as HugeTextAlignJustifyIcon,
 	TextAlignLeftIcon as HugeTextAlignLeftIcon,
 	TriangleAlertIcon as HugeTriangleAlertIcon,
@@ -244,9 +246,10 @@ export const FileWarning = createIcon(HugeFileExclamationPointIcon, "FileWarning
 export const Folder = createIcon(HugeFolderIcon, "Folder");
 export const FolderInput = createIcon(HugeFolderInputIcon, "FolderInput");
 export const FolderPlus = createIcon(HugeFolderPlusIcon, "FolderPlus");
-export const Forward = function (props) {
-	return createElement(createIcon(HugeReplyIcon, "Forward"), {...props, className: `${props.className} scale-x-[-1]`});
-}
+// Created once: building the icon component inside render gives React a new type every time and remounts the SVG.
+const ForwardBase = createIcon(HugeReplyIcon, "Forward");
+export const Forward: LucideIcon = (props) =>
+	createElement(ForwardBase, { ...props, className: cn(props.className, "scale-x-[-1]") });
 export const Globe2 = createIcon(HugeGlobeIcon, "Globe2");
 export const HardDrive = createIcon(HugeHardDriveIcon, "HardDrive");
 export const HelpCircle = createIcon(HugeHelpCircleIcon, "HelpCircle");
@@ -316,6 +319,7 @@ export const Sparkles = createIcon(HugeSparklesIcon, "Sparkles");
 export const Square = createIcon(HugeSquareIcon, "Square");
 export const Star = createIcon(HugeStarIcon, "Star");
 export const Strikethrough = createIcon(HugeStrikethroughIcon, "Strikethrough");
+export const Tag = createIcon(HugeTagIcon, "Tag");
 export const TextAlignJustify = createIcon(HugeTextAlignJustifyIcon, "TextAlignJustify");
 export const Trash2 = createIcon(HugeDelete02Icon, "Trash2");
 export const Underline = createIcon(HugeUnderlineIcon, "Underline");

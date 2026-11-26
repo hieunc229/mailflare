@@ -8,6 +8,7 @@ import { useEffect, useState, useSyncExternalStore } from "react";
 import { usePathname } from "next/navigation";
 import {
   Archive,
+  BellOff,
   CalendarClock,
   Clock,
   FileText,
@@ -18,6 +19,7 @@ import {
   Send,
   ShieldAlert,
   Star,
+  Tag,
   Trash2,
 } from "@/components/icons";
 import { useSelectedMailbox } from "@/components/mailbox-provider";
@@ -33,6 +35,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useMessageCounts } from "@/hooks/use-message-counts";
+import { hasActivePromotions } from "@/lib/promotions/ui-utils";
 import { AUTH_SESSION_CHANGED_EVENT, authFetch } from "@/lib/auth/client";
 import { getMailboxFolders, invalidateFolderCache } from "@/lib/folders/client";
 import {
@@ -60,6 +63,7 @@ import { useSidebar } from "./sidebar-state";
 const links = [
   { href: "/compose", labelKey: "navigation.compose", icon: MailPlus, primary: true },
   { href: "/inbox", labelKey: "navigation.inbox", icon: Inbox, preloadMessages: true },
+  { href: "/promotions", labelKey: "navigation.promotions", icon: Tag, preloadMessages: true },
   { href: "/starred", labelKey: "navigation.starred", icon: Star, preloadMessages: true },
   { href: "/snoozed", labelKey: "navigation.snoozed", icon: Clock, preloadMessages: true },
   { href: "/sent", labelKey: "navigation.sent", icon: Send, preloadMessages: true },
@@ -73,11 +77,12 @@ const links = [
   },
   { href: "/spam", labelKey: "navigation.spam", icon: ShieldAlert, preloadMessages: true },
   { href: "/trash", labelKey: "navigation.trash", icon: Trash2, preloadMessages: true },
+  { href: "/subscriptions", labelKey: "navigation.subscriptions", icon: BellOff },
 ] satisfies (Omit<NavLink, "label"> & { labelKey: TranslationKey })[];
 
 
-// Drafts, Archived, Spam and Trash start tucked under "More...".
-const MORE_LINK_HREFS = ["/drafts", "/archived", "/spam", "/trash"];
+// Drafts, Archived, Spam, Trash and Subscriptions start tucked under "More...".
+const MORE_LINK_HREFS = ["/drafts", "/archived", "/spam", "/trash", "/subscriptions"];
 const MAX_VISIBLE_FOLDERS = 3;
 const MORE_OPEN_KEY = "mailflare:nav:more-open";
 const FOLDERS_OPEN_KEY = "mailflare:nav:folders-open";
@@ -124,10 +129,15 @@ export function DashboardNav({ className }: { className?: string }) {
     useState<FolderColor>(DEFAULT_FOLDER_COLOR);
   const [addingFolder, setAddingFolder] = useState(false);
   const [folderDialogOpen, setFolderDialogOpen] = useState(false);
-  const linksWithCounts: NavLink[] = links.filter((link) => link.href !== "/scheduled" || counts.folders.scheduled.total > 0).map(({ labelKey, ...rest }): NavLink => {
+  const [folderError, setFolderError] = useState<string | null>(null);
+  const promotionsOn = hasActivePromotions(counts.promotionModes);
+  const linksWithCounts: NavLink[] = links.filter((link) => (link.href !== "/scheduled" || counts.folders.scheduled.total > 0) && (link.href !== "/promotions" || promotionsOn) && (link.href !== "/subscriptions" || promotionsOn)).map(({ labelKey, ...rest }): NavLink => {
     const link = { ...rest, label: t(labelKey) };
     if (link.href === "/inbox") {
       return { ...link, count: getFolderNavCount("inbox", counts.folders) };
+    }
+    if (link.href === "/promotions") {
+      return { ...link, count: getFolderNavCount("promotions", counts.folders) };
     }
     if (link.href === "/starred") {
       return { ...link, count: getFolderNavCount("starred", counts.folders) };
@@ -217,6 +227,7 @@ export function DashboardNav({ className }: { className?: string }) {
     if (!selectedMailbox?.id || !newFolderName.trim()) return;
 
     setAddingFolder(true);
+    setFolderError(null);
     try {
       const response = await authFetch("/api/folders", {
         method: "POST",
@@ -227,7 +238,11 @@ export function DashboardNav({ className }: { className?: string }) {
           color: newFolderColor,
         }),
       });
-      if (!response.ok) return;
+      if (!response.ok) {
+        const body = (await response.json().catch(() => null)) as { error?: unknown } | null;
+        setFolderError(typeof body?.error === "string" ? body.error : t("navigation.createFolderFailed"));
+        return;
+      }
       const folder = (await response.json()) as CustomFolder;
       invalidateFolderCache();
       setFolders((items) =>
@@ -236,6 +251,8 @@ export function DashboardNav({ className }: { className?: string }) {
       setNewFolderName("");
       setNewFolderColor(DEFAULT_FOLDER_COLOR);
       setFolderDialogOpen(false);
+    } catch {
+      setFolderError(t("auth.serverUnreachable"));
     } finally {
       setAddingFolder(false);
     }
@@ -262,7 +279,7 @@ export function DashboardNav({ className }: { className?: string }) {
       {!minimal && (
         <NavSectionHeader label={t("navigation.folders")} open={foldersSectionOpen} onToggle={toggleFoldersSection}>
           {selectedMailbox && (
-            <Dialog open={folderDialogOpen} onOpenChange={setFolderDialogOpen}>
+            <Dialog open={folderDialogOpen} onOpenChange={(open) => { setFolderDialogOpen(open); if (!open) setFolderError(null); }}>
               <DialogTrigger asChild>
                 <button
                   type="button"
@@ -316,6 +333,7 @@ export function DashboardNav({ className }: { className?: string }) {
                       ))}
                     </div>
                   </div>
+                  {folderError && <p role="alert" className="text-sm text-red-600">{folderError}</p>}
                   <Button
                     type="submit"
                     disabled={addingFolder || !newFolderName.trim()}

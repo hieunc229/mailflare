@@ -18,6 +18,11 @@ type StoredMeta = {
 	etag: string;
 };
 
+/** `join` resolves `.` and `..`, which would let a key built from user input reach another key under the root. */
+function assertPlainKey(key: string) {
+	if (key.split("/").some((part) => part === "." || part === "..")) throw new Error("Object key has a . or .. segment");
+}
+
 function assertInside(root: string, path: string) {
 	const full = resolve(path);
 	if (full !== root && !full.startsWith(root + sep)) throw new Error("Object key escapes the bucket root");
@@ -89,6 +94,7 @@ export class FileBucket {
 	}
 
 	private pathFor(key: string) {
+		assertPlainKey(key);
 		return assertInside(this.root, join(this.root, key));
 	}
 

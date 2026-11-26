@@ -4,6 +4,7 @@ import { useCallback, useSyncExternalStore } from "react";
 
 const mobileQuery = "(max-width: 767px)";
 const desktopQuery = "(min-width: 1024px)";
+const hoverQuery = "(hover: hover) and (pointer: fine)";
 
 function useMediaQuery(query: string): boolean {
 	const subscribe = useCallback((onChange: () => void) => {
@@ -26,4 +27,9 @@ export function useIsMobile(): boolean {
 /** Whether the split message list is actually rendered beside the reader. */
 export function useIsDesktop(): boolean {
 	return useMediaQuery(desktopQuery);
+}
+
+/** Whether the primary pointer can hover; coarse touch screens get no hover rail. */
+export function useHasHover(): boolean {
+	return useMediaQuery(hoverQuery);
 }

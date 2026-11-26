@@ -7,7 +7,9 @@ import { getDb } from "@/db";
 import { messages, users } from "@/db/schema";
 import { getMailboxAccessLevel, listAccessibleMailboxIds } from "@/lib/mailboxes/access";
 import { buildSearchConditions } from "@/lib/search/conditions";
+import { draftsVisibleTo } from "@/lib/email/draft-access";
 import { getRequestTimeZone } from "@/lib/time/utils";
+import { parseLimit } from "@/lib/api/query-params";
 
 export async function GET(request: Request) {
 	const env = getEnv();
@@ -20,7 +22,7 @@ export async function GET(request: Request) {
 	const mailboxId = url.searchParams.get("mailboxId");
 	const direction = url.searchParams.get("direction");
 	const query = url.searchParams.get("q")?.trim();
-	const limit = Math.min(Number(url.searchParams.get("limit") ?? 50), 100);
+	const limit = parseLimit(url.searchParams.get("limit"), 50, 100);
 
 	const db = getDb(env);
 	const [user] = await db.select().from(users).where(eq(users.id, auth.userId)).limit(1);
@@ -47,6 +49,8 @@ export async function GET(request: Request) {
 			conditions.push(eq(messages.userId, auth.userId));
 		}
 	}
+	// Other users' drafts in a shared mailbox are private, as in the web list.
+	conditions.push(draftsVisibleTo(auth.userId));
 	if (direction === "inbound" || direction === "outbound") {
 		conditions.push(eq(messages.direction, direction));
 	}

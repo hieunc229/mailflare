@@ -8,7 +8,9 @@ const LIFETIME_MS = 15 * 60_000;
 
 export type CalendarConfirmation = { userId: string; name: CalendarToolName; input: unknown; expiresAt: number };
 
-const encode = (value: string) => btoa(String.fromCharCode(...new TextEncoder().encode(value))).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+// Build the binary string in slices: spreading a large array into one call overflows the stack.
+const binary = (bytes: Uint8Array) => { let out = ""; for (let i = 0; i < bytes.length; i += 8192) out += String.fromCharCode(...bytes.subarray(i, i + 8192)); return out; };
+const encode = (value: string) => btoa(binary(new TextEncoder().encode(value))).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
 const decode = (value: string) => new TextDecoder().decode(Uint8Array.from(atob(value.replace(/-/g, "+").replace(/_/g, "/")), (char) => char.charCodeAt(0)));
 
 async function mac(env: CloudflareEnv, payload: string): Promise<string> {

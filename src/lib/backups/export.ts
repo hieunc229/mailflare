@@ -4,16 +4,21 @@ import type { BackupTableGroupId, DatabaseBackupDocument, DatabaseBackupTable, D
 import { mergeLegacyMessageBodies } from "./utils";
 import { BACKUP_TABLE_GROUPS, getSelectedBackupTables } from "./table-groups";
 
-export const BACKUP_TABLES: DatabaseBackupTable[] = ["users", "user_compose_preferences", "domains", "domain_tracking_hosts", "mailboxes", "mailbox_access", "contacts", "folders", "api_keys", "messages", "message_attachments", "shared_attachment_links", "outbound_jobs", "message_tracking", "message_opens", "follow_ups", "conversation_notes", "routing_rules", "webhooks", "webhook_deliveries", "sessions", "audit_logs", "backup_settings", "backups", "app_settings", "license_settings", "email_templates", "calendar_events", "booking_events", "booking_confirmation_templates", "auto_reply_deliveries", "spam_token_stats", "spam_reputation", "spam_feedback", "mailbox_aliases", "password_reset_tokens", "mfa_recovery_codes", "login_challenges", "passkey_credentials", "mailbox_agent_settings", "agent_conversations", "agent_chat_messages", "agent_jobs", "agent_draft_metadata", "agent_send_approvals", "mcp_key_mailboxes", "ai_usage", "drive_items", "drive_upload_parts", "drive_shares"];
+export const BACKUP_TABLES: DatabaseBackupTable[] = ["users", "user_compose_preferences", "domains", "domain_tracking_hosts", "email_suppressions", "domain_deliverability", "mailboxes", "mailbox_access", "contacts", "contact_details", "dav_collections", "dav_cards", "folders", "mailbox_promotion_settings", "mailbox_sender_preferences", "api_keys", "messages", "message_attachments", "shared_attachment_links", "outbound_jobs", "message_tracking", "message_opens", "follow_ups", "conversation_notes", "routing_rules", "webhooks", "webhook_deliveries", "sessions", "audit_logs", "backup_settings", "backups", "app_settings", "deliverability_reports", "dmarc_daily_stats", "tls_daily_stats", "deliverability_alerts", "license_settings", "email_templates", "calendar_events", "dav_calendar_objects", "calendar_event_overrides", "calendar_occurrence_responses", "calendar_invite_tombstones", "booking_events", "booking_confirmation_templates", "auto_reply_deliveries", "spam_token_stats", "spam_reputation", "spam_feedback", "mailbox_aliases", "password_reset_tokens", "mfa_recovery_codes", "login_challenges", "passkey_credentials", "mailbox_agent_settings", "agent_conversations", "agent_chat_messages", "agent_jobs", "agent_draft_metadata", "agent_send_approvals", "mcp_key_mailboxes", "ai_usage", "drive_items", "drive_upload_parts", "drive_shares"];
 /**
  * Tables every backup document must contain. Tables added to BACKUP_TABLES
  * after the format shipped are absent from older documents, so they stay
  * optional here and are filled in as empty on restore.
  */
 /** Added by migrations 0068 and later; databases that have not applied them yet back up and restore without them. */
-const LATER_MIGRATION_TABLES: DatabaseBackupTable[] = ["domain_tracking_hosts", "message_tracking", "message_opens", "follow_ups", "conversation_notes", "user_compose_preferences", "booking_confirmation_templates"];
-const REQUIRED_BACKUP_TABLES: DatabaseBackupTable[] = ["users", "domains", "mailboxes", "mailbox_access", "contacts", "folders", "api_keys", "messages", "message_attachments", "outbound_jobs", "routing_rules", "webhooks", "webhook_deliveries", "sessions", "audit_logs", "backup_settings", "backups", "app_settings", "license_settings"];
+const LATER_MIGRATION_TABLES: DatabaseBackupTable[] = ["domain_tracking_hosts", "message_tracking", "message_opens", "follow_ups", "conversation_notes", "user_compose_preferences", "booking_confirmation_templates", "mailbox_promotion_settings", "mailbox_sender_preferences", "dav_collections", "dav_cards", "dav_calendar_objects", "email_suppressions", "domain_deliverability", "deliverability_reports", "dmarc_daily_stats", "deliverability_alerts", "tls_daily_stats", "contact_details"];
+const REQUIRED_BACKUP_TABLES: DatabaseBackupTable[] = ["users", "domains", "mailboxes", "mailbox_access", "contacts", "folders", "mailbox_promotion_settings", "mailbox_sender_preferences", "api_keys", "messages", "message_attachments", "outbound_jobs", "routing_rules", "webhooks", "webhook_deliveries", "sessions", "audit_logs", "backup_settings", "backups", "app_settings", "license_settings"];
 const INSERT_BATCH_SIZE = 50;
+/**
+ * Serial ids that are never backed up or restored: on PostgreSQL an explicit id does not advance the sequence,
+ * so the next insert after a restore would collide. The row's identity is its unique key, not the id.
+ */
+const OMITTED_COLUMNS: Partial<Record<DatabaseBackupTable, string[]>> = { dmarc_daily_stats: ["id"], tls_daily_stats: ["id"] };
 
 export function getBackupConfigurationStatus(_env?: CloudflareEnv) {
 	return { configured: true, missing: [] };
@@ -41,6 +46,11 @@ export const INTERNAL_TABLES = [
 	// after a restore clients resync because their states no longer apply.
 	"jmap_changes",
 	"jmap_change_floor",
+	// The CalDAV/CardDAV change log is derived the same way (dav_changes_* triggers fire as calendar events and
+	// cards are restored). dav_sync_state is left out on purpose: a restore into a fresh database then gets a new
+	// random epoch, so sync tokens issued by another database are refused instead of trusted.
+	"dav_changes",
+	"dav_sync_state",
 	// Push registrations are re-sent by each app on launch.
 	"push_devices",
 	// Web-push subscriptions are saved again by each client whenever it resolves
@@ -54,6 +64,10 @@ export const INTERNAL_TABLES = [
 	"webauthn_challenges",
 	"passkey_enrollment_grants",
 	"auth_step_ups",
+	// Single-use undo-token consumption records. Restoring a stale claim would
+	// let an already-used undo token be replayed, and the table is rewritten by
+	// the installation that owns the tokens.
+	"message_action_undo_claims",
 ];
 
 /**
@@ -96,7 +110,9 @@ export async function exportDatabaseRecords(db: D1Database, excludedGroups: Back
 		}
 		const result = await db.prepare(`SELECT * FROM ${table}`).all<DatabaseRecord>();
 		// Backups hold SQLite-style values whichever database wrote them, so they restore anywhere.
-		tables[table] = dialect === "sqlite" ? result.results : result.results.map(toPortableRecord);
+		const rows = dialect === "sqlite" ? result.results : result.results.map(toPortableRecord);
+		const omitted = OMITTED_COLUMNS[table];
+		tables[table] = omitted ? rows.map((row) => Object.fromEntries(Object.entries(row).filter(([column]) => !omitted.includes(column)))) : rows;
 	}
 	const document: DatabaseBackupDocument = { format: "mailflare-database-backup", version: 2, createdAt: new Date().toISOString(), includedTables, tables };
 	return new TextEncoder().encode(JSON.stringify(document));
@@ -130,6 +146,14 @@ export async function restoreDatabaseRecords(db: D1Database, content: ArrayBuffe
 	// The passkey table can predate later credential columns (aaguid); filter
 	// those out instead of failing after the restore has already torn down data.
 	const passkeyColumns = passkeyTable ? await listColumnNames(db, "passkey_credentials") : null;
+	// Likewise `messages.category` and `sender_address` (derived, so dropping them loses nothing) before their migration.
+	const messageColumns = await listColumnNames(db, "messages");
+	// The backfill state columns of `mailbox_promotion_settings` (stall count, error, daily counter) arrive with a later migration than the table; they are job bookkeeping, so dropping them restarts nothing that matters.
+	const promotionSettingColumns = restoreTables.includes("mailbox_promotion_settings") ? await listColumnNames(db, "mailbox_promotion_settings") : null;
+	// These tables gained columns after they shipped (MTA-STS settings, the report kind); a backup from a newer
+	// database drops them here instead of failing after the teardown.
+	const deliverabilityColumns = new Map<string, Set<string>>();
+	for (const table of ["domain_deliverability", "deliverability_reports"]) if (existing.has(table)) deliverabilityColumns.set(table, await listColumnNames(db, table));
 	// Mark users deleted before removing them: the passkey trigger permits the
 	// cascade to remove the last credential only for an account that is being
 	// purged. Deleting users first also empties the table the restore inserts
@@ -140,6 +164,9 @@ export async function restoreDatabaseRecords(db: D1Database, content: ArrayBuffe
 		if (table === "users") continue;
 		await db.prepare(`DELETE FROM ${table}`).run();
 	}
+	// Derived DAV state of the old data: the triggers rebuild the log as rows are restored, and a new epoch makes every
+	// client resync. Explicit because MySQL does not fire triggers for FK cascades, so the teardown above leaves stale rows there.
+	for (const table of ["dav_changes", "dav_sync_state"]) if (existing.has(table)) await db.prepare(`DELETE FROM ${table}`).run();
 	for (const table of restoreTables) {
 		const rows = document.tables[table] ?? [];
 		for (let index = 0; index < rows.length; index += INSERT_BATCH_SIZE) {
@@ -149,7 +176,11 @@ export async function restoreDatabaseRecords(db: D1Database, content: ArrayBuffe
 					? bookingColumns
 					: table === "passkey_credentials"
 						? passkeyColumns
-						: null;
+						: table === "messages"
+							? messageColumns
+							: table === "mailbox_promotion_settings"
+								? promotionSettingColumns
+								: deliverabilityColumns.get(table) ?? null;
 			const statements = rows.slice(index, index + INSERT_BATCH_SIZE).map((row) => createInsertStatement(db, dialect, table, row, columns));
 			// MySQL checks foreign keys per statement, so the batch suspends them for its own connection.
 			if (statements.length > 0) await db.batch(dialect === "mysql" ? [db.prepare("SET FOREIGN_KEY_CHECKS = 0"), ...statements, db.prepare("SET FOREIGN_KEY_CHECKS = 1")] : statements);
@@ -179,7 +210,8 @@ function isDatabaseBackupDocument(value: unknown): value is DatabaseBackupDocume
 }
 
 function createInsertStatement(db: D1Database, dialect: DatabaseDialect, table: DatabaseBackupTable, row: DatabaseRecord, availableColumns: Set<string> | null = null) {
-	const columns = Object.keys(row).filter((column) => !availableColumns || availableColumns.has(column));
+	const omitted = OMITTED_COLUMNS[table] ?? [];
+	const columns = Object.keys(row).filter((column) => !omitted.includes(column) && (!availableColumns || availableColumns.has(column)));
 	if (columns.length === 0) throw new Error(`Backup contains an invalid ${table} record`);
 	const placeholders = columns.map(() => "?").join(", ");
 	const identifiers = columns.map((column) => quoteIdentifier(dialect, column)).join(", ");
@@ -193,6 +225,15 @@ function fillMissingBackupTables(document: DatabaseBackupDocument): void {
 	}
 	for (const row of document.tables.booking_events ?? []) {
 		if (row.slug === undefined && typeof row.id === "string") row.slug = Array.from(new TextEncoder().encode(row.id)).map((byte) => byte.toString(16).padStart(2, "0")).join("");
+	}
+	// `private_draft` was added after drafts existed. A backup from before that column restores with
+	// the default false unless it is derived the way migration 0090 backfills it, which would publish
+	// every draft to the mailbox's other readers: drafts, plus outbound mail in Trash, Archive or the
+	// inbox that no outbound job ever sent.
+	const submitted = new Set((document.tables.outbound_jobs ?? []).map((job) => job.message_id));
+	for (const row of document.tables.messages ?? []) {
+		if (row.private_draft !== undefined) continue;
+		row.private_draft = row.status === "draft" || (row.direction === "outbound" && ["trash", "received", "archived"].includes(String(row.status)) && !submitted.has(row.id)) ? 1 : 0;
 	}
 	// `require_second_factor` was added after TOTP already existed. A backup from
 	// before that column restores with the default false unless it is derived,

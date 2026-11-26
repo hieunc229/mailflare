@@ -1,4 +1,4 @@
-import { and, eq, exists, gte, lt, not, or, sql } from "drizzle-orm";
+import { and, eq, exists, gte, isNull, lt, ne, not, or, sql } from "drizzle-orm";
 import type { AnyColumn, SQL } from "drizzle-orm";
 import { messageAttachments, messages } from "@/db/schema";
 import { schemaDialect } from "@/db/dialect";
@@ -7,7 +7,8 @@ import type { ParsedSearchQuery } from "./types";
 
 /** `!` is the escape character because it needs no escaping itself in either SQL string syntax. */
 const likePattern = (term: string) => `%${term.toLowerCase().replace(/[!%_]/g, "!$&")}%`;
-const contains = (column: SQL | AnyColumn, term: string) => sql`lower(${column}) like ${likePattern(term)} escape '!'`;
+/** A NULL column counts as empty text: otherwise `NOT (a OR b)` is NULL and a negated term hides the row. */
+const contains = (column: SQL | AnyColumn, term: string) => sql`coalesce(lower(${column}), '') like ${likePattern(term)} escape '!'`;
 
 /**
  * Text search for databases without FTS5 (PostgreSQL, MySQL): every term must appear as a substring of the
@@ -47,9 +48,11 @@ export function buildSearchConditions(raw: string, timeZone = "UTC"): SQL[] {
 	const conditions: SQL[] = [];
 
 	if (schemaDialect() === "sqlite") {
-		const match = buildFtsMatch(parsed);
+		const { match, exclude } = buildFtsMatch(parsed);
 		if (match) {
 			conditions.push(sql`${messages}.rowid IN (SELECT rowid FROM messages_fts WHERE messages_fts MATCH ${match})`);
+		} else if (exclude) {
+			conditions.push(sql`${messages}.rowid NOT IN (SELECT rowid FROM messages_fts WHERE messages_fts MATCH ${exclude})`);
 		}
 	} else {
 		conditions.push(...buildLikeConditions(parsed));
@@ -64,6 +67,8 @@ export function buildSearchConditions(raw: string, timeZone = "UTC"): SQL[] {
 	if (parsed.read === "read") conditions.push(eq(messages.read, true));
 	if (parsed.read === "unread") conditions.push(eq(messages.read, false));
 	if (parsed.starred) conditions.push(eq(messages.starred, true));
+	if (parsed.category === "promotions") conditions.push(eq(messages.category, "promotions"));
+	if (parsed.category === "primary") conditions.push(or(isNull(messages.category), ne(messages.category, "promotions"))!);
 	if (parsed.after) conditions.push(gte(messages.createdAt, parsed.after));
 	if (parsed.before) conditions.push(lt(messages.createdAt, parsed.before));
 

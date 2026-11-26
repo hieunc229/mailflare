@@ -9,6 +9,7 @@ import { rollbackEmailRoutingRuleChanges } from "@/lib/cloudflare-api";
 import type { CfEmailRoutingRuleChange } from "@/lib/cloudflare-api.types";
 import { normalizeRecipientLocalPart } from "@/lib/email/recipient-address";
 import { newId } from "@/lib/ids";
+import { isReportAddressReserved } from "@/lib/deliverability/report-address";
 import { getAccountSeatError } from "@/lib/licenses/seats";
 import { ensureMailboxDomainRouting } from "@/lib/mailboxes/domain-addresses";
 import type { CreateUserAccountInput } from "./types";
@@ -42,6 +43,9 @@ export async function createAccountResponse(env: CloudflareEnv, actor: AccountAd
 		}
 		const localPart = normalizeRecipientLocalPart(address.localPart);
 		if (!localPart) return NextResponse.json({ error: "Enter a valid address username" }, { status: 400 });
+		if (await isReportAddressReserved(env, domain.id, localPart)) {
+			return NextResponse.json({ error: "This address is reserved for DMARC reports" }, { status: 409 });
+		}
 		const key = `${localPart}@${domain.id}`;
 		if (seen.has(key)) {
 			return NextResponse.json({ error: "Each alias must be distinct from the primary address and other aliases" }, { status: 400 });
@@ -71,9 +75,10 @@ export async function createAccountResponse(env: CloudflareEnv, actor: AccountAd
 			role: input.role, createdByUserId: adminUserId, remoteContentMode: "ask",
 		}).returning();
 		const mailboxInsert = db.insert(mailboxes).values(mailbox);
-		// Five bound columns per alias: 20 rows fit D1's 100-parameter limit.
-		const aliasInserts = Array.from({ length: Math.ceil(input.aliases.length / 20) }, (_, index) =>
-			db.insert(mailboxAliases).values(input.aliases.slice(index * 20, (index + 1) * 20).map((alias) => ({
+		// Seven bound columns per alias — the four fields below plus the
+		// created_at, enabled and masked defaults: 14 rows fit D1's 100-parameter limit.
+		const aliasInserts = Array.from({ length: Math.ceil(input.aliases.length / 14) }, (_, index) =>
+			db.insert(mailboxAliases).values(input.aliases.slice(index * 14, (index + 1) * 14).map((alias) => ({
 				id: newId("als"), mailboxId, domainId: alias.domainId, localPart: alias.localPart,
 			}))),
 		);

@@ -37,15 +37,15 @@ test("the overflow trigger is reserved before any action", () => {
 });
 
 test("a group divider is counted only with an action after it", () => {
-	// Three actions use 32 + 3 * 40 = 152px. The divider plus the fourth action
-	// needs 49px more, so 200px stops at three and 201px shows four.
-	assert.equal(count(200), 3);
-	assert.equal(count(201), 4);
+	// Three actions use 32 + 3 * 40 = 152px. The divider (8 + 1 + 8 = 17px) plus
+	// the fourth action needs 65px more, so 216px stops at three and 217px shows four.
+	assert.equal(count(216), 3);
+	assert.equal(count(217), 4);
 });
 
 test("typical phone widths fill the row before overflowing", () => {
-	assert.equal(count(216), 4); // 320px viewport
-	assert.equal(count(286), 6); // 390px viewport, as in the reproduction
+	assert.equal(count(217), 4); // 320px viewport
+	assert.equal(count(297), 6); // 390px viewport, as in the reproduction
 	assert.equal(count(362), 7); // 466px viewport, every action fits
 });
 

@@ -13,11 +13,15 @@ import { tracksAccountIdentity } from "@/lib/profile/identity-utils";
 import { buildSearchConditions } from "@/lib/search/conditions";
 import { getRequestTimeZone } from "@/lib/time/utils";
 import { scheduledMessageCondition } from "@/lib/email/scheduled";
+import { selectInBatches } from "@/lib/db-params";
 import { getMessageListColumns, loadConversationPage } from "./utils";
 import type { ListMessage } from "./types";
 import { getOpenCounts } from "@/lib/tracking/open-tracking";
 import { summarizeNotesForRows } from "@/lib/notes/service";
 import { isMissingTableError } from "@/lib/database-errors";
+import { parseLimit, parseOffset } from "@/lib/api/query-params";
+import { draftsVisibleTo } from "@/lib/email/draft-access";
+import { categoryScopeCondition } from "@/lib/promotions/settings";
 
 export async function GET(request: Request) {
 	const env = getEnv();
@@ -35,13 +39,18 @@ export async function GET(request: Request) {
 	const title = url.searchParams.get("title")?.trim();
 	const read = url.searchParams.get("read");
 	const starred = url.searchParams.get("starred");
+	const category = url.searchParams.get("category");
 	const snoozed = url.searchParams.get("snoozed");
 	const scheduled = url.searchParams.get("scheduled");
-	const limit = Math.min(Number(url.searchParams.get("limit") ?? 50), 100);
-	const offset = Math.max(Number(url.searchParams.get("offset") ?? 0), 0);
+	const limit = parseLimit(url.searchParams.get("limit"), 50, 100);
+	const offset = parseOffset(url.searchParams.get("offset"));
 	// Conversation view: one row per thread, represented by its newest message
 	// that matches the filter. Drafts are never grouped.
 	const groupByThread = url.searchParams.get("group") === "thread" && status !== "draft";
+
+	if (category && (category !== "promotions" || status !== "received" || folderId)) {
+		return NextResponse.json({ error: "category=promotions needs status=received and no folderId" }, { status: 400 });
+	}
 
 	const db = getDb(env);
 	const accessibleMailboxes = await listAccessibleMailboxes(db, user);
@@ -63,6 +72,8 @@ export async function GET(request: Request) {
 	} else {
 		conditions.push(eq(messages.userId, user.id));
 	}
+	// Another user's unsent drafts are never listed, even in a shared mailbox.
+	conditions.push(draftsVisibleTo(user.id));
 	if (direction === "inbound" || direction === "outbound") {
 		conditions.push(eq(messages.direction, direction));
 	}
@@ -79,6 +90,9 @@ export async function GET(request: Request) {
 	if (status === "received" && !folderId) {
 		conditions.push(isNull(messages.folderId));
 		conditions.push(or(isNull(messages.snoozedUntil), lte(messages.snoozedUntil, new Date()))!);
+		// Promotions is its own view, only for mailboxes that turned it on; the Inbox hides what `separate` mailboxes moved there.
+		const hidden = await categoryScopeCondition(db, mailboxId ? [mailboxId] : accessibleMailboxIds, category ? "promotions" : "inbox");
+		if (hidden) conditions.push(hidden);
 	}
 	if (starred === "true") {
 		conditions.push(eq(messages.starred, true));
@@ -121,16 +135,16 @@ export async function GET(request: Request) {
 		const page = await loadConversationPage({ db, where, offset, limit });
 		total = page.total;
 		rows = page.ids.length
-			? await db.select(messageListColumns).from(messages).where(and(where, inArray(messages.id, page.ids)))
+			? await selectInBatches(page.ids, (batch) => db.select(messageListColumns).from(messages).where(and(where, inArray(messages.id, batch))))
 			: [];
 		const rowById = new Map(rows.map((row) => [row.id, row]));
 		rows = page.ids.map((id) => rowById.get(id)).filter((row): row is ListMessage => !!row);
 		const keys = rows.map((row) => row.threadId ?? row.id);
 		if (keys.length > 0) {
-			const members = await db
+			const members = await selectInBatches(keys, (batch) => db
 				.select({ id: messages.id, key: threadKey, read: messages.read })
 				.from(messages)
-				.where(and(where, inArray(threadKey, keys)));
+				.where(and(where, inArray(threadKey, batch))));
 			for (const member of members) {
 				const list = threadMessageIds.get(member.key) ?? [];
 				list.push(member.id);
@@ -166,21 +180,21 @@ export async function GET(request: Request) {
 	// These enrichments depend only on the selected page, not on each other.
 	const [countRows, jobs, openCounts, noteSummaries, contactMaps] = await Promise.all([
 		threadIds.length > 0
-			? db
+			? selectInBatches(threadIds, (batch) => db
 				.select({
 					threadId: messages.threadId,
 					total: count(),
 					unread: sum(sql`case when ${messages.read} then 0 else 1 end`),
 				})
 				.from(messages)
-				.where(and(scope, inArray(messages.threadId, threadIds), isNotNull(messages.threadId), notInArray(messages.status, ["draft", "trash"])))
-				.groupBy(messages.threadId)
+				.where(and(scope, inArray(messages.threadId, batch), isNotNull(messages.threadId), notInArray(messages.status, ["draft", "trash"]), draftsVisibleTo(user.id)))
+				.groupBy(messages.threadId))
 			: [],
 		scheduled === "true" && rows.length > 0
-			? db
+			? selectInBatches(rows.map((row) => row.id), (batch) => db
 				.select({ messageId: outboundJobs.messageId, scheduledAt: outboundJobs.scheduledAt })
 				.from(outboundJobs)
-				.where(and(inArray(outboundJobs.messageId, rows.map((row) => row.id)), eq(outboundJobs.status, "queued"), isNotNull(outboundJobs.scheduledAt)))
+				.where(and(inArray(outboundJobs.messageId, batch), eq(outboundJobs.status, "queued"), isNotNull(outboundJobs.scheduledAt))))
 			: [],
 		getOpenCounts(env, rows.filter((row) => row.direction === "outbound").map((row) => row.id)),
 		// Optional: a database without the notes migration has no notes to show.

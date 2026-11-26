@@ -336,6 +336,181 @@
       "statements": [
         "ALTER TABLE `messages` ADD `invite_response` text;"
       ]
+    },
+    {
+      "name": "0012_message_action_undo_claims.sql",
+      "statements": [
+        "CREATE TABLE `message_action_undo_claims` (\n\t`nonce` varchar(191) NOT NULL,\n\t`user_id` longtext NOT NULL,\n\t`expires_at` bigint NOT NULL,\n\tCONSTRAINT `message_action_undo_claims_nonce` PRIMARY KEY(`nonce`)\n);",
+        "CREATE INDEX `message_action_undo_claims_expires_idx` ON `message_action_undo_claims` (`expires_at`);"
+      ]
+    },
+    {
+      "name": "0013_auto_update.sql",
+      "statements": [
+        "ALTER TABLE `app_settings` ADD `auto_update` boolean NOT NULL DEFAULT false;",
+        "ALTER TABLE `app_settings` ADD `auto_update_dispatched_version` text;",
+        "ALTER TABLE `app_settings` ADD `auto_update_channel` varchar(16) NOT NULL DEFAULT 'release';"
+      ]
+    },
+    {
+      "name": "0014_security_hardening.sql",
+      "statements": [
+        "ALTER TABLE `messages` ADD `private_draft` boolean DEFAULT false NOT NULL;",
+        "UPDATE `messages` SET `private_draft` = true\nWHERE `status` = 'draft'\n\tOR (`direction` = 'outbound'\n\t\tAND `status` IN ('trash', 'received', 'archived')\n\t\tAND NOT EXISTS (SELECT 1 FROM `outbound_jobs` WHERE `outbound_jobs`.`message_id` = `messages`.`id`));",
+        "ALTER TABLE `users` ADD `totp_last_step` bigint;",
+        "UPDATE `jmap_change_floor` SET `seq` = GREATEST(seq, COALESCE((SELECT max(seq) FROM jmap_changes), 0)) WHERE `id` = 1;"
+      ]
+    },
+    {
+      "name": "0015_masked_aliases.sql",
+      "statements": [
+        "ALTER TABLE `mailbox_aliases` ADD `label` text;",
+        "ALTER TABLE `mailbox_aliases` ADD `enabled` boolean NOT NULL DEFAULT true;",
+        "ALTER TABLE `mailbox_aliases` ADD `masked` boolean NOT NULL DEFAULT false;"
+      ]
+    },
+    {
+      "name": "0016_calendar_invite_complete.sql",
+      "statements": [
+        "CREATE TABLE `calendar_event_overrides` (\n\t`id` varchar(191) NOT NULL,\n\t`event_id` varchar(191) NOT NULL,\n\t`occurrence_ms` bigint NOT NULL,\n\t`starts_at` bigint NOT NULL,\n\t`ends_at` bigint NOT NULL,\n\t`title` longtext,\n\t`description` longtext,\n\t`location` longtext,\n\t`created_at` bigint NOT NULL,\n\t`updated_at` bigint NOT NULL,\n\tCONSTRAINT `calendar_event_overrides_id` PRIMARY KEY(`id`),\n\tCONSTRAINT `calendar_event_overrides_event_occurrence_idx` UNIQUE(`event_id`,`occurrence_ms`)\n);",
+        "CREATE TABLE `calendar_invite_tombstones` (\n\t`id` varchar(191) NOT NULL,\n\t`user_id` varchar(191) NOT NULL,\n\t`invite_sequence` bigint NOT NULL DEFAULT 0,\n\t`invite_sender` longtext NOT NULL DEFAULT (''),\n\t`cancelled_at` bigint NOT NULL,\n\tCONSTRAINT `calendar_invite_tombstones_id` PRIMARY KEY(`id`)\n);",
+        "CREATE TABLE `calendar_occurrence_responses` (\n\t`id` varchar(191) NOT NULL,\n\t`event_id` varchar(191) NOT NULL,\n\t`occurrence_ms` bigint NOT NULL,\n\t`guest` varchar(191) NOT NULL,\n\t`status` longtext NOT NULL,\n\t`updated_at` bigint NOT NULL,\n\tCONSTRAINT `calendar_occurrence_responses_id` PRIMARY KEY(`id`),\n\tCONSTRAINT `calendar_occurrence_responses_event_occurrence_guest_idx` UNIQUE(`event_id`,`occurrence_ms`,`guest`)\n);",
+        "ALTER TABLE `calendar_events` ADD `repeat_interval` bigint DEFAULT 1 NOT NULL;",
+        "ALTER TABLE `calendar_events` ADD `repeat_weekday` bigint;",
+        "ALTER TABLE `calendar_events` ADD `repeat_week` bigint;",
+        "ALTER TABLE `calendar_events` ADD `event_sequence` bigint DEFAULT 0 NOT NULL;",
+        "ALTER TABLE `calendar_event_overrides` ADD CONSTRAINT `calendar_event_overrides_event_id_calendar_events_id_fk` FOREIGN KEY (`event_id`) REFERENCES `calendar_events`(`id`) ON DELETE cascade ON UPDATE no action;",
+        "ALTER TABLE `calendar_invite_tombstones` ADD CONSTRAINT `calendar_invite_tombstones_user_id_users_id_fk` FOREIGN KEY (`user_id`) REFERENCES `users`(`id`) ON DELETE cascade ON UPDATE no action;",
+        "ALTER TABLE `calendar_occurrence_responses` ADD CONSTRAINT `calendar_occurrence_responses_event_id_calendar_events_id_fk` FOREIGN KEY (`event_id`) REFERENCES `calendar_events`(`id`) ON DELETE cascade ON UPDATE no action;",
+        "CREATE INDEX `calendar_event_overrides_event_idx` ON `calendar_event_overrides` (`event_id`);",
+        "CREATE INDEX `calendar_invite_tombstones_user_idx` ON `calendar_invite_tombstones` (`user_id`);",
+        "CREATE INDEX `calendar_occurrence_responses_event_idx` ON `calendar_occurrence_responses` (`event_id`);"
+      ]
+    },
+    {
+      "name": "0017_spam_strictness.sql",
+      "statements": [
+        "ALTER TABLE `users` ADD `spam_strictness` varchar(64) NOT NULL DEFAULT 'strict';"
+      ]
+    },
+    {
+      "name": "0018_promotions.sql",
+      "statements": [
+        "CREATE TABLE `mailbox_promotion_settings` (\n\t`mailbox_id` varchar(191) NOT NULL,\n\t`mode` varchar(64) NOT NULL DEFAULT 'off',\n\t`backfill_status` varchar(64) NOT NULL DEFAULT 'idle',\n\t`backfill_cursor` longtext,\n\t`backfill_scanned` int NOT NULL DEFAULT 0,\n\t`updated_at` bigint NOT NULL,\n\tCONSTRAINT `mailbox_promotion_settings_mailbox_id` PRIMARY KEY(`mailbox_id`)\n);",
+        "CREATE TABLE `mailbox_sender_preferences` (\n\t`id` varchar(191) NOT NULL,\n\t`mailbox_id` varchar(191) NOT NULL,\n\t`sender_address` varchar(191) NOT NULL,\n\t`category_override` varchar(64),\n\t`unsubscribed_at` bigint,\n\t`updated_by_user_id` varchar(191),\n\t`updated_at` bigint NOT NULL,\n\tCONSTRAINT `mailbox_sender_preferences_id` PRIMARY KEY(`id`),\n\tCONSTRAINT `mailbox_sender_preferences_mailbox_sender_idx` UNIQUE(`mailbox_id`,`sender_address`)\n);",
+        "ALTER TABLE `messages` ADD `category` varchar(64);",
+        "ALTER TABLE `messages` ADD `sender_address` varchar(191);",
+        "ALTER TABLE `mailbox_promotion_settings` ADD CONSTRAINT `mailbox_promotion_settings_mailbox_id_mailboxes_id_fk` FOREIGN KEY (`mailbox_id`) REFERENCES `mailboxes`(`id`) ON DELETE cascade ON UPDATE no action;",
+        "ALTER TABLE `mailbox_sender_preferences` ADD CONSTRAINT `mailbox_sender_preferences_mailbox_id_mailboxes_id_fk` FOREIGN KEY (`mailbox_id`) REFERENCES `mailboxes`(`id`) ON DELETE cascade ON UPDATE no action;",
+        "ALTER TABLE `mailbox_sender_preferences` ADD CONSTRAINT `mailbox_sender_preferences_updated_by_user_id_users_id_fk` FOREIGN KEY (`updated_by_user_id`) REFERENCES `users`(`id`) ON DELETE set null ON UPDATE no action;",
+        "CREATE INDEX `mailbox_promotion_settings_backfill_idx` ON `mailbox_promotion_settings` (`backfill_status`);",
+        "CREATE INDEX `mailbox_sender_preferences_updated_by_idx` ON `mailbox_sender_preferences` (`updated_by_user_id`);",
+        "CREATE INDEX `messages_category_page_idx` ON `messages` (`mailbox_id`,`category`,`status`,`folder_id`,`created_at`);",
+        "CREATE INDEX `messages_category_count_idx` ON `messages` (`mailbox_id`,`category`,`folder_id`,`direction`,`status`,`read`,`snoozed_until`);"
+      ]
+    },
+    {
+      "name": "0019_promotion_sender_backfill.sql",
+      "statements": [
+        "ALTER TABLE `mailbox_promotion_settings` ADD `backfill_stalls` int DEFAULT 0 NOT NULL;",
+        "ALTER TABLE `mailbox_promotion_settings` ADD `backfill_error` longtext;",
+        "ALTER TABLE `mailbox_promotion_settings` ADD `backfill_day` int DEFAULT 0 NOT NULL;",
+        "ALTER TABLE `mailbox_promotion_settings` ADD `backfill_day_rows` int DEFAULT 0 NOT NULL;",
+        "CREATE INDEX `messages_sender_idx` ON `messages` (`mailbox_id`,`sender_address`,`created_at`);"
+      ]
+    },
+    {
+      "name": "0020_app_password_usage.sql",
+      "statements": [
+        "ALTER TABLE `api_keys` ADD `last_used_protocol` text;",
+        "ALTER TABLE `api_keys` ADD `last_used_ip` text;"
+      ]
+    },
+    {
+      "name": "0021_dav_enabled.sql",
+      "statements": [
+        "ALTER TABLE `app_settings` ADD `dav_enabled` boolean NOT NULL DEFAULT false;"
+      ]
+    },
+    {
+      "name": "0022_dav_storage.sql",
+      "statements": [
+        "CREATE TABLE `dav_calendar_objects` (\n\t`id` varchar(191) NOT NULL,\n\t`user_id` varchar(191) NOT NULL,\n\t`collection_id` varchar(191) NOT NULL,\n\t`name` varchar(255) NOT NULL,\n\t`uid` varchar(191) NOT NULL,\n\t`body` longtext,\n\t`rows_hash` longtext,\n\t`size` bigint NOT NULL,\n\t`created_at` bigint NOT NULL,\n\t`updated_at` bigint NOT NULL,\n\tCONSTRAINT `dav_calendar_objects_id` PRIMARY KEY(`id`),\n\tCONSTRAINT `dav_calendar_objects_name_idx` UNIQUE(`collection_id`,`name`),\n\tCONSTRAINT `dav_calendar_objects_uid_idx` UNIQUE(`collection_id`,`uid`)\n);",
+        "CREATE TABLE `dav_cards` (\n\t`id` varchar(191) NOT NULL,\n\t`user_id` varchar(191) NOT NULL,\n\t`collection_id` varchar(191) NOT NULL,\n\t`name` varchar(255) NOT NULL,\n\t`uid` varchar(191) NOT NULL,\n\t`body` longtext NOT NULL,\n\t`version` varchar(64) NOT NULL,\n\t`fn` longtext NOT NULL DEFAULT (''),\n\t`emails` longtext NOT NULL DEFAULT ('[]'),\n\t`size` bigint NOT NULL,\n\t`created_at` bigint NOT NULL,\n\t`updated_at` bigint NOT NULL,\n\tCONSTRAINT `dav_cards_id` PRIMARY KEY(`id`),\n\tCONSTRAINT `dav_cards_name_idx` UNIQUE(`collection_id`,`name`),\n\tCONSTRAINT `dav_cards_uid_idx` UNIQUE(`collection_id`,`uid`)\n);",
+        "CREATE TABLE `dav_changes` (\n\t`seq` bigint AUTO_INCREMENT NOT NULL,\n\t`collection_id` varchar(191) NOT NULL,\n\t`object_key` varchar(191) NOT NULL,\n\t`change_type` varchar(64) NOT NULL,\n\t`created_at` bigint NOT NULL DEFAULT (unix_timestamp()),\n\tCONSTRAINT `dav_changes_seq` PRIMARY KEY(`seq`)\n);",
+        "CREATE TABLE `dav_collections` (\n\t`id` varchar(191) NOT NULL,\n\t`user_id` varchar(191) NOT NULL,\n\t`kind` varchar(64) NOT NULL,\n\t`display_name` longtext,\n\t`color` longtext,\n\t`description` longtext,\n\t`sort_order` bigint,\n\t`dead_props` longtext NOT NULL DEFAULT ('{}'),\n\t`seeded_at` bigint,\n\t`created_at` bigint NOT NULL,\n\t`updated_at` bigint NOT NULL,\n\tCONSTRAINT `dav_collections_id` PRIMARY KEY(`id`)\n);",
+        "CREATE TABLE `dav_sync_state` (\n\t`collection_id` varchar(191) NOT NULL,\n\t`epoch` longtext NOT NULL,\n\t`floor` bigint NOT NULL DEFAULT 0,\n\tCONSTRAINT `dav_sync_state_collection_id` PRIMARY KEY(`collection_id`)\n);",
+        "ALTER TABLE `dav_calendar_objects` ADD CONSTRAINT `dav_calendar_objects_id_calendar_events_id_fk` FOREIGN KEY (`id`) REFERENCES `calendar_events`(`id`) ON DELETE cascade ON UPDATE no action;",
+        "ALTER TABLE `dav_cards` ADD CONSTRAINT `dav_cards_user_id_users_id_fk` FOREIGN KEY (`user_id`) REFERENCES `users`(`id`) ON DELETE cascade ON UPDATE no action;",
+        "ALTER TABLE `dav_collections` ADD CONSTRAINT `dav_collections_user_id_users_id_fk` FOREIGN KEY (`user_id`) REFERENCES `users`(`id`) ON DELETE cascade ON UPDATE no action;",
+        "CREATE INDEX `dav_calendar_objects_user_idx` ON `dav_calendar_objects` (`user_id`);",
+        "CREATE INDEX `dav_cards_user_idx` ON `dav_cards` (`user_id`);",
+        "CREATE INDEX `dav_changes_collection_seq_idx` ON `dav_changes` (`collection_id`,`seq`);",
+        "CREATE INDEX `dav_changes_object_idx` ON `dav_changes` (`collection_id`,`object_key`,`seq`);",
+        "CREATE INDEX `dav_collections_user_idx` ON `dav_collections` (`user_id`);",
+        "CREATE TRIGGER dav_changes_calendar_events_ai AFTER INSERT ON calendar_events FOR EACH ROW\nBEGIN\n\tINSERT INTO dav_changes (collection_id, object_key, change_type) VALUES (CONCAT('cal:', NEW.user_id), NEW.id, 'created');\nEND;",
+        "CREATE TRIGGER dav_changes_calendar_events_au AFTER UPDATE ON calendar_events FOR EACH ROW\nBEGIN\n\tIF NOT (CAST(OLD.user_id AS BINARY) <=> CAST(NEW.user_id AS BINARY)) OR NOT (CAST(OLD.mailbox_id AS BINARY) <=> CAST(NEW.mailbox_id AS BINARY) AND CAST(OLD.title AS BINARY) <=> CAST(NEW.title AS BINARY) AND CAST(OLD.description AS BINARY) <=> CAST(NEW.description AS BINARY) AND CAST(OLD.location AS BINARY) <=> CAST(NEW.location AS BINARY) AND CAST(OLD.attendees AS BINARY) <=> CAST(NEW.attendees AS BINARY) AND CAST(OLD.color AS BINARY) <=> CAST(NEW.color AS BINARY) AND CAST(OLD.`repeat` AS BINARY) <=> CAST(NEW.`repeat` AS BINARY) AND CAST(OLD.repeat_days AS BINARY) <=> CAST(NEW.repeat_days AS BINARY) AND CAST(OLD.excluded_occurrences AS BINARY) <=> CAST(NEW.excluded_occurrences AS BINARY) AND CAST(OLD.time_zone AS BINARY) <=> CAST(NEW.time_zone AS BINARY) AND CAST(OLD.response_status AS BINARY) <=> CAST(NEW.response_status AS BINARY) AND CAST(OLD.invite_message_id AS BINARY) <=> CAST(NEW.invite_message_id AS BINARY) AND CAST(OLD.invite_sender AS BINARY) <=> CAST(NEW.invite_sender AS BINARY) AND CAST(OLD.attendee_responses AS BINARY) <=> CAST(NEW.attendee_responses AS BINARY) AND OLD.repeat_anchor_day <=> NEW.repeat_anchor_day AND OLD.repeat_until <=> NEW.repeat_until AND OLD.starts_at <=> NEW.starts_at AND OLD.ends_at <=> NEW.ends_at AND OLD.reminder_minutes <=> NEW.reminder_minutes AND OLD.invite_sequence <=> NEW.invite_sequence AND OLD.event_sequence <=> NEW.event_sequence AND OLD.repeat_interval <=> NEW.repeat_interval AND OLD.repeat_weekday <=> NEW.repeat_weekday AND OLD.repeat_week <=> NEW.repeat_week AND OLD.updated_at <=> NEW.updated_at) THEN\n\t\tIF NOT (CAST(OLD.user_id AS BINARY) <=> CAST(NEW.user_id AS BINARY)) THEN\n\t\t\tINSERT INTO dav_changes (collection_id, object_key, change_type) VALUES (CONCAT('cal:', OLD.user_id), OLD.id, 'destroyed');\n\t\t\tINSERT INTO dav_changes (collection_id, object_key, change_type) VALUES (CONCAT('cal:', NEW.user_id), NEW.id, 'created');\n\t\tELSE\n\t\t\tINSERT INTO dav_changes (collection_id, object_key, change_type) VALUES (CONCAT('cal:', NEW.user_id), NEW.id, 'updated');\n\t\tEND IF;\n\tEND IF;\nEND;",
+        "CREATE TRIGGER dav_changes_calendar_events_ad AFTER DELETE ON calendar_events FOR EACH ROW\nBEGIN\n\tINSERT INTO dav_changes (collection_id, object_key, change_type) VALUES (CONCAT('cal:', OLD.user_id), OLD.id, 'destroyed');\nEND;",
+        "CREATE TRIGGER dav_changes_cards_ai AFTER INSERT ON dav_cards FOR EACH ROW\nBEGIN\n\tINSERT INTO dav_changes (collection_id, object_key, change_type) VALUES (NEW.collection_id, NEW.id, 'created');\nEND;",
+        "CREATE TRIGGER dav_changes_cards_au AFTER UPDATE ON dav_cards FOR EACH ROW\nBEGIN\n\tIF NOT (CAST(OLD.collection_id AS BINARY) <=> CAST(NEW.collection_id AS BINARY)) OR NOT (CAST(OLD.name AS BINARY) <=> CAST(NEW.name AS BINARY) AND CAST(OLD.uid AS BINARY) <=> CAST(NEW.uid AS BINARY) AND CAST(OLD.body AS BINARY) <=> CAST(NEW.body AS BINARY) AND CAST(OLD.version AS BINARY) <=> CAST(NEW.version AS BINARY) AND CAST(OLD.fn AS BINARY) <=> CAST(NEW.fn AS BINARY) AND CAST(OLD.emails AS BINARY) <=> CAST(NEW.emails AS BINARY) AND OLD.size <=> NEW.size AND OLD.updated_at <=> NEW.updated_at) THEN\n\t\tIF NOT (CAST(OLD.collection_id AS BINARY) <=> CAST(NEW.collection_id AS BINARY)) THEN\n\t\t\tINSERT INTO dav_changes (collection_id, object_key, change_type) VALUES (OLD.collection_id, OLD.id, 'destroyed');\n\t\t\tINSERT INTO dav_changes (collection_id, object_key, change_type) VALUES (NEW.collection_id, NEW.id, 'created');\n\t\tELSE\n\t\t\tINSERT INTO dav_changes (collection_id, object_key, change_type) VALUES (NEW.collection_id, NEW.id, 'updated');\n\t\tEND IF;\n\tEND IF;\nEND;",
+        "CREATE TRIGGER dav_changes_cards_ad AFTER DELETE ON dav_cards FOR EACH ROW\nBEGIN\n\tINSERT INTO dav_changes (collection_id, object_key, change_type) VALUES (OLD.collection_id, OLD.id, 'destroyed');\nEND;",
+        "INSERT INTO dav_changes (collection_id, object_key, change_type)\nSELECT CONCAT('cal:', user_id), id, 'created' FROM calendar_events ORDER BY created_at, id;"
+      ]
+    },
+    {
+      "name": "0023_email_suppressions.sql",
+      "statements": [
+        "ALTER TABLE `app_settings` ADD `suppression_mode` varchar(64) NOT NULL DEFAULT 'off';",
+        "ALTER TABLE `app_settings` ADD `resend_events_webhook_id` longtext;",
+        "ALTER TABLE `app_settings` ADD `resend_events_webhook_secret` longtext;",
+        "ALTER TABLE `app_settings` ADD `ses_feedback` longtext;",
+        "CREATE TABLE `email_suppressions` (\n\t`id` varchar(191) NOT NULL,\n\t`domain_id` varchar(191) NOT NULL,\n\t`email` varchar(320) NOT NULL,\n\t`reason` varchar(64) NOT NULL,\n\t`source` varchar(64) NOT NULL,\n\t`detail` longtext,\n\t`confirmed` boolean NOT NULL DEFAULT true,\n\t`evidence_ref` longtext,\n\t`event_count` bigint NOT NULL DEFAULT 1,\n\t`first_event_at` bigint NOT NULL,\n\t`last_event_at` bigint NOT NULL,\n\t`created_by_user_id` varchar(191),\n\tCONSTRAINT `email_suppressions_id` PRIMARY KEY(`id`),\n\tCONSTRAINT `email_suppressions_domain_email_idx` UNIQUE(`domain_id`,`email`)\n);",
+        "ALTER TABLE `email_suppressions` ADD CONSTRAINT `email_suppressions_domain_id_domains_id_fk` FOREIGN KEY (`domain_id`) REFERENCES `domains`(`id`) ON DELETE cascade ON UPDATE no action;",
+        "ALTER TABLE `email_suppressions` ADD CONSTRAINT `email_suppressions_created_by_user_id_users_id_fk` FOREIGN KEY (`created_by_user_id`) REFERENCES `users`(`id`) ON DELETE set null ON UPDATE no action;",
+        "CREATE INDEX `email_suppressions_created_by_idx` ON `email_suppressions` (`created_by_user_id`);"
+      ]
+    },
+    {
+      "name": "0024_dmarc_reports.sql",
+      "statements": [
+        "CREATE TABLE `domain_deliverability` (\n\t`domain_id` varchar(191) NOT NULL,\n\t`reports_enabled` boolean NOT NULL DEFAULT false,\n\t`reports_enabled_at` bigint,\n\t`alert_email` boolean NOT NULL DEFAULT false,\n\t`last_report_at` bigint,\n\t`updated_at` bigint NOT NULL,\n\t`dmarc_created_record` longtext,\n\tCONSTRAINT `domain_deliverability_domain_id` PRIMARY KEY(`domain_id`)\n);",
+        "CREATE TABLE `deliverability_reports` (\n\t`id` varchar(191) NOT NULL,\n\t`domain_id` varchar(191) NOT NULL,\n\t`report_key` varchar(191) NOT NULL,\n\t`reporter_org` longtext,\n\t`reporter_email` longtext,\n\t`external_report_id` longtext,\n\t`date_begin` bigint,\n\t`date_end` bigint,\n\t`policy_p` longtext,\n\t`policy_pct` bigint,\n\t`record_count` bigint NOT NULL DEFAULT 0,\n\t`message_count` bigint NOT NULL DEFAULT 0,\n\t`authenticated` boolean NOT NULL DEFAULT false,\n\t`sender_domain` longtext,\n\t`verified_reporter` boolean NOT NULL DEFAULT false,\n\t`stats_rows` bigint NOT NULL DEFAULT 0,\n\t`status` varchar(64) NOT NULL DEFAULT 'processing',\n\t`error` longtext,\n\t`received_at` bigint NOT NULL,\n\tCONSTRAINT `deliverability_reports_id` PRIMARY KEY(`id`),\n\tCONSTRAINT `deliverability_reports_domain_key_idx` UNIQUE(`domain_id`,`report_key`)\n);",
+        "CREATE TABLE `dmarc_daily_stats` (\n\t`id` bigint AUTO_INCREMENT NOT NULL,\n\t`domain_id` varchar(191) NOT NULL,\n\t`day` varchar(191) NOT NULL,\n\t`row_key` varchar(191) NOT NULL,\n\t`source_ip` longtext NOT NULL,\n\t`source_host` longtext,\n\t`reporter_org` longtext NOT NULL,\n\t`header_from` longtext NOT NULL,\n\t`disposition` varchar(64) NOT NULL,\n\t`dkim_aligned` boolean NOT NULL,\n\t`spf_aligned` boolean NOT NULL,\n\t`message_count` bigint NOT NULL DEFAULT 0,\n\tCONSTRAINT `dmarc_daily_stats_id` PRIMARY KEY(`id`),\n\tCONSTRAINT `dmarc_daily_stats_domain_day_key_idx` UNIQUE(`domain_id`,`day`,`row_key`)\n);",
+        "CREATE TABLE `deliverability_alerts` (\n\t`id` varchar(191) NOT NULL,\n\t`domain_id` varchar(191) NOT NULL,\n\t`kind` varchar(64) NOT NULL,\n\t`day` varchar(191) NOT NULL,\n\t`detail` longtext NOT NULL,\n\t`created_at` bigint NOT NULL,\n\t`acknowledged_at` bigint,\n\t`acknowledged_by_user_id` varchar(191),\n\tCONSTRAINT `deliverability_alerts_id` PRIMARY KEY(`id`),\n\tCONSTRAINT `deliverability_alerts_domain_kind_day_idx` UNIQUE(`domain_id`,`kind`,`day`)\n);",
+        "ALTER TABLE `domain_deliverability` ADD CONSTRAINT `domain_deliverability_domain_id_domains_id_fk` FOREIGN KEY (`domain_id`) REFERENCES `domains`(`id`) ON DELETE cascade ON UPDATE no action;",
+        "ALTER TABLE `deliverability_reports` ADD CONSTRAINT `deliverability_reports_domain_id_domains_id_fk` FOREIGN KEY (`domain_id`) REFERENCES `domains`(`id`) ON DELETE cascade ON UPDATE no action;",
+        "ALTER TABLE `dmarc_daily_stats` ADD CONSTRAINT `dmarc_daily_stats_domain_id_domains_id_fk` FOREIGN KEY (`domain_id`) REFERENCES `domains`(`id`) ON DELETE cascade ON UPDATE no action;",
+        "ALTER TABLE `deliverability_alerts` ADD CONSTRAINT `deliverability_alerts_domain_id_domains_id_fk` FOREIGN KEY (`domain_id`) REFERENCES `domains`(`id`) ON DELETE cascade ON UPDATE no action;",
+        "ALTER TABLE `deliverability_alerts` ADD CONSTRAINT `deliverability_alerts_acknowledged_by_user_id_users_id_fk` FOREIGN KEY (`acknowledged_by_user_id`) REFERENCES `users`(`id`) ON DELETE set null ON UPDATE no action;",
+        "CREATE INDEX `deliverability_reports_domain_received_idx` ON `deliverability_reports` (`domain_id`,`received_at`);",
+        "CREATE INDEX `deliverability_reports_received_idx` ON `deliverability_reports` (`received_at`);",
+        "CREATE INDEX `dmarc_daily_stats_day_idx` ON `dmarc_daily_stats` (`day`);",
+        "CREATE INDEX `deliverability_alerts_ack_user_idx` ON `deliverability_alerts` (`acknowledged_by_user_id`);"
+      ]
+    },
+    {
+      "name": "0025_mta_sts_tls_rpt.sql",
+      "statements": [
+        "ALTER TABLE `domain_deliverability` ADD `tls_rpt_enabled` boolean NOT NULL DEFAULT false;",
+        "ALTER TABLE `domain_deliverability` ADD `mta_sts_mode` varchar(64) NOT NULL DEFAULT 'none';",
+        "ALTER TABLE `domain_deliverability` ADD `mta_sts_policy_id` longtext;",
+        "ALTER TABLE `domain_deliverability` ADD `mta_sts_mx` longtext;",
+        "ALTER TABLE `domain_deliverability` ADD `mta_sts_max_age` bigint NOT NULL DEFAULT 604800;",
+        "ALTER TABLE `domain_deliverability` ADD `mta_sts_served_max_age` bigint;",
+        "ALTER TABLE `domain_deliverability` ADD `mta_sts_verified_at` bigint;",
+        "ALTER TABLE `domain_deliverability` ADD `mta_sts_retire_after` bigint;",
+        "ALTER TABLE `deliverability_reports` ADD `kind` varchar(64) NOT NULL DEFAULT 'dmarc';",
+        "CREATE TABLE `tls_daily_stats` (\n\t`id` bigint AUTO_INCREMENT NOT NULL,\n\t`domain_id` varchar(191) NOT NULL,\n\t`day` varchar(191) NOT NULL,\n\t`row_key` varchar(191) NOT NULL,\n\t`reporter_org` longtext NOT NULL,\n\t`policy_type` longtext NOT NULL,\n\t`mx_host` longtext,\n\t`result_type` longtext NOT NULL,\n\t`success_count` bigint NOT NULL DEFAULT 0,\n\t`failure_count` bigint NOT NULL DEFAULT 0,\n\tCONSTRAINT `tls_daily_stats_id` PRIMARY KEY(`id`),\n\tCONSTRAINT `tls_daily_stats_domain_day_key_idx` UNIQUE(`domain_id`,`day`,`row_key`)\n);",
+        "ALTER TABLE `tls_daily_stats` ADD CONSTRAINT `tls_daily_stats_domain_id_domains_id_fk` FOREIGN KEY (`domain_id`) REFERENCES `domains`(`id`) ON DELETE cascade ON UPDATE no action;",
+        "CREATE INDEX `tls_daily_stats_day_idx` ON `tls_daily_stats` (`day`);"
+      ]
+    },
+    {
+      "name": "0026_contact_details.sql",
+      "statements": [
+        "CREATE TABLE `contact_details` (\n\t`contact_id` varchar(191) NOT NULL,\n\t`details` longtext NOT NULL DEFAULT ('{}'),\n\t`updated_at` bigint NOT NULL,\n\tCONSTRAINT `contact_details_contact_id` PRIMARY KEY(`contact_id`)\n);",
+        "ALTER TABLE `contact_details` ADD CONSTRAINT `contact_details_contact_id_contacts_id_fk` FOREIGN KEY (`contact_id`) REFERENCES `contacts`(`id`) ON DELETE cascade ON UPDATE no action;"
+      ]
     }
   ]
 }

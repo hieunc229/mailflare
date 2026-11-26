@@ -5,7 +5,7 @@
 
 A self-hosted alternative to Google Workspace. Setup **custom domain Emails**, **Calendar, Drive, Booking** and **built-in AI agents**.
 
-Run it on Cloudflare or Docker. Send and receive with Cloudflare, Resend or Amazon SES. Store files in R2, Backblaze B2 or AWS S3. Use D1, Postgres, MySQL or Turso for the database.
+Self-host it on Cloudflare or Docker. **Or try [Mailflare Cloud](https://cloud.mailflare.co?ref=github) with high-deliverable emails** from $4​
 
 [![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/hieunc229/mailflare)
 
@@ -24,20 +24,12 @@ Run it on Cloudflare or Docker. Send and receive with Cloudflare, Resend or Amaz
   </tr>
 </table>
 
-### Sponsors
-
-<a target="_blank" href="https://sequenzy.com/?ref=hieunc229/mailflare"><img height="80" src="sponsors/sequenzy.png" alt="Sequenzy"></a>
-&nbsp;
-<a target="_blank" href="https://drivemug.com/?ref=hieunc229/mailflare"><img height="80" src="sponsors/drivemug.png" alt="Drivemug"></a>
-
-Want to support Mailflare? [Become a sponsor](https://store.paymug.co/buy/mailflare-sponsor).
-
 ## Features
 
 ### Apps
 
 - **Email**: Custom domain mailboxes, personal or shared, with access you control. Send and receive with Cloudflare Email, Resend or Amazon SES.
-- **Routing rules**: Store, forward, reject or sort incoming mail.
+- **Routing rules**: Store, forward, reject or sort incoming mail, including a one-rule filter for newsletters and promotions.
 - **Calendar**: Repeating events with time zones. Attendees get email invitations.
 - **Booking**: Share a public link so anyone can book a free time on your calendar.
 - **Drive**: Store and share files.
@@ -49,7 +41,7 @@ Want to support Mailflare? [Become a sponsor](https://store.paymug.co/buy/mailfl
 - **File storage**: Cloudflare R2, Backblaze B2 or AWS S3.
 - **Hosting**: Cloudflare Workers or a single Docker container.
 - **Admin**: Users, API keys, webhooks, audit logs and backups.
-- **Import**: Bring in mail from IMAP, Gmail Takeout, `.eml` and `.mbox` files.
+- **Import**: Bring in mail from IMAP, Gmail Takeout, `.eml` and `.mbox` files, and Google Calendar events, Google Contacts and Google Drive files from Takeout. See [Importing from Google Takeout](docs/import.md).
 
 Mailflare currently supports 34 languages, including English, Português (Brasil), Português (Portugal), Español, Français, Deutsch, Italiano, Nederlands, Polski, Українська, Русский, Türkçe, 中文（简体）, 日本語, 한국어, Bahasa Indonesia, Bahasa Melayu, Tiếng Việt, ไทย, हिन्दी, বাংলা, मराठी, తెలుగు, தமிழ், ગુજરાતી, ಕನ್ನಡ, മലയാളം, ਪੰਜਾਬੀ, සිංහල, Kiswahili, Hausa, plus العربية, اردو and فارسی (right-to-left).
 
@@ -106,6 +98,8 @@ cp .env.docker.example .env.docker
 docker compose up -d --build
 ```
 
+Or skip the build and run the prebuilt image: `docker compose -f docker-compose.image.yml up -d`.
+
 See [self-hosting](docs/self-hosting.md).
 
 ## Local development
@@ -132,6 +126,7 @@ A schema change needs a migration for each database type. See [Databases](docs/d
 - [Sending and receiving providers](docs/providers.md)
 - [API and integrations](docs/api.md)
 - [Email assistant and MCP](docs/email-assistant-and-mcp.md)
+- [Importing from Google Takeout](docs/import.md)
 - [Adding a language](docs/localization.md)
 - [Troubleshooting](docs/troubleshooting.md)
 

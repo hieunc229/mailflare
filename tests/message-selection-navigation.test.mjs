@@ -99,12 +99,10 @@ export function usePageLoading() {}
 	["@/components/sidebar-mobile-utils", `
 export function useIsMobile() { return false; }
 export function useIsDesktop() { return globalThis.__testIsDesktop !== false; }
+export function useHasHover() { return true; }
 `],
 	["@/components/messages/use-conversation-view", `
 export function useConversationView() { return [true, () => {}]; }
-`],
-	["@/components/messages/use-two-column-reading", `
-export function useTwoColumnReading() { return [true, () => {}]; }
 `],
 	["@/components/follow-ups/due-follow-ups", `
 export function DueFollowUps() { return null; }
@@ -117,6 +115,7 @@ export function MessageDetailNavigationProvider({ children }) { return children;
 export function useMessageNavigation() { return { onNavigate() {}, prefetch() {}, prefetchNow() {}, cancelPrefetch() {} }; }
 export function MessageListRowActions() { return null; }
 export function SwipeableRow({ children }) { return children; }
+export function useTwoColumnReading() { return [globalThis.__testTwoColumnReading !== false, () => {}]; }
 `;
 
 await build({
@@ -125,7 +124,6 @@ await build({
 			import React from "react";
 			import { usePathname } from "next/navigation";
 			import { MessageSplitLayout } from "./src/components/messages/message-split-layout.tsx";
-			import { MessageFolderPage } from "./src/components/messages/message-folder-page.tsx";
 			import { inboxFolderConfig } from "./src/components/messages/message-folder-configs.ts";
 
 			export function Harness() {
@@ -137,7 +135,7 @@ await build({
 					{ config: inboxFolderConfig },
 					detailId
 						? React.createElement("div", { "data-testid": "message-detail", "data-message-id": detailId }, "Message detail")
-						: React.createElement(MessageFolderPage, { config: inboxFolderConfig }),
+						: null,
 				);
 			}
 		`,
@@ -157,7 +155,7 @@ await build({
 		setup(b) {
 			b.onResolve({ filter: /.*/ }, (args) => {
 				if (mock.has(args.path)) return { path: args.path, namespace: "test-stub" };
-				if (["./message-detail-navigation", "./message-navigation", "./message-list-row-actions", "./swipeable-row"].includes(args.path)) {
+				if (["./message-detail-navigation", "./message-navigation", "./message-list-row-actions", "./swipeable-row", "./use-two-column-reading"].includes(args.path)) {
 					return { path: "relative-stub", namespace: "test-relative-stub" };
 				}
 				return undefined;
@@ -222,8 +220,9 @@ globalThis.__testMessageList = (filters) => {
 	};
 };
 
-async function renderInbox({ desktop = true } = {}) {
+async function renderInbox({ desktop = true, twoColumnReading = true } = {}) {
 	globalThis.__testIsDesktop = desktop;
+	globalThis.__testTwoColumnReading = twoColumnReading;
 	globalThis.__setTestPathname("/inbox");
 	const container = document.createElement("div");
 	document.body.appendChild(container);
@@ -312,4 +311,51 @@ test("the focused-message bulk bar stays in the split view", async (t) => {
 	assert.ok(container.querySelector('[data-testid="message-detail"]'), "single-column reading still opens the message");
 	assert.equal(checkedBoxes(container).length, 1, "the selection survives");
 	assert.equal(container.querySelector('[role="region"]'), null, "the bulk bar is hidden without a visible split list");
+});
+
+test("the folder list stays mounted while reading and after returning to the folder", async (t) => {
+	const { container, cleanup } = await renderInbox();
+	t.after(cleanup);
+
+	const list = container.querySelector('[role="list"]');
+	assert.ok(list, "the folder list is rendered by the layout");
+	assert.equal(list.closest('[aria-hidden="true"]'), null, "the list is exposed while no message is open");
+
+	await act(async () => {
+		globalThis.__setTestPathname("/inbox/m1");
+	});
+
+	assert.equal(container.querySelector('[role="list"]'), list, "opening a message does not remount the list");
+	assert.ok(container.querySelector('[data-testid="message-detail"]'), "the message detail is shown");
+	assert.equal(list.closest('[aria-hidden="true"]'), null, "the split list stays interactive");
+
+	await act(async () => {
+		globalThis.__setTestPathname("/inbox");
+	});
+
+	assert.equal(container.querySelector('[role="list"]'), list, "returning to the folder does not remount the list");
+	assert.equal(container.querySelector('[data-testid="message-detail"]'), null, "the message detail is closed");
+});
+
+test("a single-column reader keeps the list mounted but hidden", async (t) => {
+	const { container, cleanup } = await renderInbox({ desktop: false, twoColumnReading: false });
+	t.after(cleanup);
+
+	const list = container.querySelector('[role="list"]');
+	assert.ok(list, "the folder list is rendered by the layout");
+
+	await act(async () => {
+		globalThis.__setTestPathname("/inbox/m1");
+	});
+
+	assert.equal(container.querySelector('[role="list"]'), list, "opening a message does not remount the list");
+	assert.ok(list.closest('[aria-hidden="true"]'), "the hidden list is kept out of the accessibility tree");
+	assert.ok(container.querySelector('[data-testid="message-detail"]'), "the message detail covers the reader");
+
+	await act(async () => {
+		globalThis.__setTestPathname("/inbox");
+	});
+
+	assert.equal(container.querySelector('[role="list"]'), list, "returning to the folder keeps the same list");
+	assert.equal(list.closest('[aria-hidden="true"]'), null, "the list is exposed again");
 });

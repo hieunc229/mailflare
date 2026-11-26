@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useLanguage } from "@/components/language-provider";
 import { Switch } from "@/components/ui/switch";
 import {
 	disablePushNotifications,
@@ -27,6 +28,7 @@ const initialState: State = {
 };
 
 export function PushNotificationSettings() {
+	const { t } = useLanguage();
 	const [state, setState] = useState<State>(initialState);
 
 	useEffect(() => {
@@ -40,13 +42,15 @@ export function PushNotificationSettings() {
 					setState((current) => ({
 						...current,
 						loading: false,
-						error: error instanceof Error ? error.message : "Failed to load notification settings",
+						error: error instanceof Error ? error.message : t("settings.push.loadFailed"),
 					}));
 				}
 			});
 		return () => {
 			cancelled = true;
 		};
+		// Translations are only read when an error happens; reloading push state on a language change is not needed.
+		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, []);
 
 	const disabled =
@@ -54,16 +58,16 @@ export function PushNotificationSettings() {
 		!state.supported ||
 		(!state.configured && !state.subscribed) ||
 		(state.permission === "denied" && !state.subscribed);
-	let description = "Get new mail alerts even when Mailflare is closed.";
-	if (!state.supported) description = "This browser does not support Web Push for Mailflare.";
-	else if (!state.configured) description = "Web Push has not been configured on this Mailflare server.";
-	else if (state.permission === "denied") description = "Notifications are blocked in your browser settings.";
+	let description = t("settings.push.description");
+	if (!state.supported) description = t("settings.push.unsupported");
+	else if (!state.configured) description = t("settings.push.notConfigured");
+	else if (state.permission === "denied") description = t("settings.push.blocked");
 
 	return (
 		<div>
 			<label className="flex items-start gap-3 rounded-xl bg-neutral-50 p-4">
 				<span className="flex-1">
-					<span className="block text-sm font-medium text-neutral-900">Browser push notifications</span>
+					<span className="block text-sm font-medium text-neutral-900">{t("settings.push.title")}</span>
 					<span className="mt-1 block text-sm text-neutral-500">{description}</span>
 				</span>
 				<Switch
@@ -78,11 +82,11 @@ export function PushNotificationSettings() {
 								setState((current) => ({
 									...current,
 									loading: false,
-									error: error instanceof Error ? error.message : "Failed to update notifications",
+									error: error instanceof Error ? error.message : t("settings.push.updateFailed"),
 								}));
 							});
 					}}
-					aria-label="Enable browser push notifications"
+					aria-label={t("settings.push.toggleLabel")}
 				/>
 			</label>
 			{state.error && <p role="alert" className="mt-2 px-4 text-sm text-red-600">{state.error}</p>}

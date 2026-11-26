@@ -8,6 +8,11 @@ import { newId } from "@/lib/ids";
 import { getMailboxAccessLevel } from "@/lib/mailboxes/access";
 import { routingRuleSchema } from "@/lib/validators";
 import { resolveRuleTarget } from "./utils";
+import { readJsonObject } from "@/lib/http/request";
+import { getSessionTokenFromRequestHeaders } from "@/lib/auth/session";
+import { authorizeSecurityChange } from "@/lib/auth/webauthn/authorize";
+import { authError } from "@/lib/http/auth-error";
+import { forwardTargetChanged, isExternalForwardTarget } from "@/lib/routing/forward-proof";
 
 export async function GET(request: Request) {
 	const env = getEnv();
@@ -34,7 +39,7 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
 	const env = getEnv();
 	const user = await requireUser(env, request);
-	const parsed = routingRuleSchema.safeParse(await request.json());
+	const parsed = routingRuleSchema.safeParse(await readJsonObject(request));
 	if (!parsed.success) {
 		return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
 	}
@@ -49,6 +54,12 @@ export async function POST(request: Request) {
 	const target = await resolveRuleTarget(db, mailbox.id, parsed.data);
 	if ("error" in target) {
 		return NextResponse.json({ error: target.error }, { status: target.status });
+	}
+
+	// A forward to an outside address copies all matching mail there: it needs fresh proof.
+	if (forwardTargetChanged(null, target) && await isExternalForwardTarget(db, user, target.forwardTo!)
+		&& !(await authorizeSecurityChange(env, user, getSessionTokenFromRequestHeaders(request), parsed.data, "routing.forward"))) {
+		return authError("verification_failed", 401);
 	}
 
 	const id = newId("rule");
