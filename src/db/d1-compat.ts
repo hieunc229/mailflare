@@ -100,6 +100,11 @@ export class CompatTransaction implements StatementHost {
 	}
 
 	batch<T = Row>(statements: CompatStatement[]) {
+		// A statement prepared on the adapter would run here on the transaction's connection, silently joining it.
+		// Reject it instead: the caller has to prepare through this view.
+		for (const statement of statements) {
+			if (statement.db !== this) throw new Error("A statement prepared outside this transaction cannot run in it; prepare it on the transaction view.");
+		}
 		return runStatements<T>(statements, this.connection);
 	}
 
@@ -121,9 +126,9 @@ export class CompatDatabase implements StatementHost {
 		private readonly active: () => SqlExecutor | null = () => null,
 	) {}
 
-	/** Whether `transaction` can hand out a real transaction; HTTP drivers cannot hold one open. */
+	/** The driver's own declaration; never inferred from whether a `transaction` method happens to exist. */
 	supportsTransaction(): boolean {
-		return typeof this.base.transaction === "function";
+		return this.base.transactions === "atomic" && typeof this.base.transaction === "function";
 	}
 
 	executor() {
@@ -137,18 +142,21 @@ export class CompatDatabase implements StatementHost {
 	 * cannot hold a transaction open, so a caller that depends on atomicity can tell.
 	 */
 	async transaction<T>(work: (tx: CompatTransaction) => Promise<T>): Promise<T> {
-		if (!this.base.transaction) throw new Error("This database driver cannot hold a transaction open.");
-		return this.base.transaction((connection) => work(new CompatTransaction(this.dialect, connection)));
+		if (!this.supportsTransaction()) throw new Error("This database driver cannot hold a transaction open.");
+		return this.base.transaction!((connection) => work(new CompatTransaction(this.dialect, connection)));
 	}
 
 	prepare(sql: string) {
 		return new CompatStatement(this, sql);
 	}
 
-	/** A batch is atomic on its own: it gets a connection (and so a transaction) of its own. */
+	/**
+	 * A batch is atomic when the driver can hold a transaction: it gets a connection of its own. On a driver that
+	 * declared none (Neon, D1) the statements run one after another, as they did before transactions existed.
+	 */
 	async batch<T = Row>(statements: CompatStatement[]) {
-		if (!this.base.transaction) return runStatements<T>(statements, this.base);
-		return this.base.transaction((connection) => runStatements<T>(statements, connection));
+		if (!this.supportsTransaction()) return runStatements<T>(statements, this.base);
+		return this.base.transaction!((connection) => runStatements<T>(statements, connection));
 	}
 
 	async exec(sql: string) {

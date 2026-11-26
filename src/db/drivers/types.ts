@@ -16,8 +16,14 @@ export interface QueryResult {
  */
 export interface SqlExecutor {
 	readonly dialect: DatabaseDialect;
+	/**
+	 * Whether `transaction` can run the callback atomically on one connection. **Declared by the driver**, not
+	 * inferred from the presence of a method: an HTTP driver can accept a `transaction` call and have no choice but
+	 * to run the statements one by one. A caller that needs atomicity (the backup restore) branches on this.
+	 */
+	readonly transactions: "atomic" | "none";
 	query(sql: string, params: unknown[], mode: RowMode): Promise<QueryResult>;
-	/** Run `fn` atomically on one connection. Absent for HTTP drivers that cannot hold a transaction open. */
+	/** Run `fn` atomically on one connection. Present only when `transactions` is `"atomic"`. */
 	transaction?<T>(fn: (tx: SqlExecutor) => Promise<T>): Promise<T>;
 	/**
 	 * Throws away the connection this executor is bound to instead of returning it to the pool. Set on the
@@ -80,8 +86,12 @@ export function toObjects(columns: string[], rows: unknown[][]): Record<string, 
 	return rows.map((row) => Object.fromEntries(columns.map((name, i) => [name, row[i]])));
 }
 
-/** Lazily open a driver the first time it is needed so unused drivers are never imported. */
-export function lazyExecutor(dialect: DatabaseDialect, open: () => Promise<SqlExecutor>): SqlExecutor {
+/**
+ * Lazily open a driver the first time it is needed so unused drivers are never imported. `transactions` is the
+ * driver's declared capability, so a caller can decide before the driver is even loaded — and a driver that
+ * cannot hold one does not get a `transaction` method here, which keeps `batch`/drizzle on their sequential path.
+ */
+export function lazyExecutor(dialect: DatabaseDialect, transactions: SqlExecutor["transactions"], open: () => Promise<SqlExecutor>): SqlExecutor {
 	let pending: Promise<SqlExecutor> | undefined;
 	const ready = () => (pending ??= open().catch((error) => {
 		pending = undefined;
@@ -89,17 +99,20 @@ export function lazyExecutor(dialect: DatabaseDialect, open: () => Promise<SqlEx
 	}));
 	return {
 		dialect,
+		transactions,
 		query: async (sql, params, mode) => (await ready()).query(sql, params, mode),
-		transaction: async (fn) => {
-			const inner = await ready();
-			// An HTTP driver has no interactive transaction; saying so lets the caller decide what to do about a
-			// failure instead of silently running the statements outside a transaction.
-			if (!inner.transaction) throw new Error(`The ${dialect} driver cannot hold a transaction open.`);
-			return inner.transaction(fn);
-		},
+		...(transactions === "atomic"
+			? {
+					transaction: async <T>(fn: (tx: SqlExecutor) => Promise<T>): Promise<T> => {
+						const inner = await ready();
+						if (!inner.transaction) throw new Error(`The ${dialect} driver was declared atomic but exposes no transaction.`);
+						return inner.transaction(fn);
+					},
+				}
+			: {}),
 		close: async () => {
 			if (pending) await (await pending).close?.();
 			pending = undefined;
 		},
-	};
+	} as SqlExecutor;
 }

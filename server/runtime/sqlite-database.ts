@@ -35,18 +35,20 @@ class SqlitePreparedStatement {
 		/**
 		 * The connection's lock, for a statement prepared outside a transaction: it waits until any transaction
 		 * in progress has committed or rolled back. A statement prepared by `SqliteTransaction` passes null —
-		 * it already runs inside that transaction.
+		 * it already runs inside that transaction — and names its owner in `scope`.
 		 */
 		private readonly gate: (() => Promise<() => void>) | null = null,
+		/** The transaction that prepared this statement, or null for an ordinary one. */
+		readonly scope: SqliteTransaction | null = null,
 	) {}
 
 	bind(...values: unknown[]) {
-		return new SqlitePreparedStatement(this.db, this.sql, values.map(normalizeParam), this.gate);
+		return new SqlitePreparedStatement(this.db, this.sql, values.map(normalizeParam), this.gate, this.scope);
 	}
 
 	/** @internal The same statement without the connection gate, for a caller that already holds it. */
 	withoutGate() {
-		return new SqlitePreparedStatement(this.db, this.sql, this.params, null);
+		return new SqlitePreparedStatement(this.db, this.sql, this.params, null, null);
 	}
 
 	/** Runs `work` while holding the connection, or directly when this statement's scope already holds it. */
@@ -121,12 +123,17 @@ export class SqliteTransaction {
 
 	/** Statements prepared here run inside the transaction; they must not wait for its lock. */
 	prepare(sql: string) {
-		return new SqlitePreparedStatement(this.database.raw, sql, [], null);
+		return new SqlitePreparedStatement(this.database.raw, sql, [], null, this);
 	}
 
 	async batch<T = Row>(statements: SqlitePreparedStatement[]) {
+		// A statement prepared outside this transaction would wait for the connection this callback is holding:
+		// say so instead of hanging until something times out.
+		for (const statement of statements) {
+			if (statement.scope !== this) throw new Error("A statement prepared outside this transaction cannot run in it; prepare it on the transaction scope.");
+		}
 		const results: Awaited<ReturnType<SqlitePreparedStatement["all"]>>[] = [];
-		for (const statement of statements) results.push(await statement.all<T>());
+		for (const statement of statements) results.push(await statement.withoutGate().all<T>());
 		return results;
 	}
 

@@ -15,6 +15,7 @@ type Queryable = {
 function mysqlExecutor(queryable: Queryable, transaction?: SqlExecutor["transaction"]): SqlExecutor {
 	return {
 		dialect: "mysql",
+		transactions: transaction ? "atomic" : "none",
 		async query(sql, values, mode) {
 			const [result] = await queryable.query({ sql, rowsAsArray: mode === "array" }, params(values));
 			if (Array.isArray(result)) return { rows: result, affectedRows: result.length };
@@ -27,7 +28,7 @@ function mysqlExecutor(queryable: Queryable, transaction?: SqlExecutor["transact
 
 /** mysql2: MySQL, MariaDB, TiDB, Aurora. */
 export function openMysql2({ url, shared }: OpenOptions): SqlExecutor {
-	return lazyExecutor("mysql", async () => {
+	return lazyExecutor("mysql", "atomic", async () => {
 		const mysql = await import("mysql2/promise");
 		const lib = (mysql as unknown as { default?: typeof mysql }).default ?? mysql;
 		const options = {
@@ -89,6 +90,7 @@ export function openMysql2({ url, shared }: OpenOptions): SqlExecutor {
 		};
 		return {
 			dialect: "mysql",
+			transactions: "atomic",
 			query: (sql, values, mode) => withConnection((connection) => mysqlExecutor(connection as unknown as Queryable).query(sql, values, mode)),
 			transaction: (fn) => withConnection((connection) => inTransaction(connection, fn)),
 		};
@@ -97,7 +99,7 @@ export function openMysql2({ url, shared }: OpenOptions): SqlExecutor {
 
 /** PlanetScale's HTTP driver (fetch, so it runs on Workers without sockets). */
 export function openPlanetScale({ url }: OpenOptions): SqlExecutor {
-	return lazyExecutor("mysql", async () => {
+	return lazyExecutor("mysql", "atomic", async () => {
 		const { connect } = await import("@planetscale/database");
 		const cast = (field: { type: string }, value: string | null) => {
 			if (value === null) return null;
@@ -108,6 +110,7 @@ export function openPlanetScale({ url }: OpenOptions): SqlExecutor {
 		type Tx = { execute(sql: string, values?: unknown[], options?: { as?: "array" | "object" }): Promise<{ rows: unknown[]; rowsAffected: number; insertId: string }> };
 		const executorFor = (target: Tx, transaction?: SqlExecutor["transaction"]): SqlExecutor => ({
 			dialect: "mysql",
+			transactions: transaction ? "atomic" : "none",
 			async query(sql, values, mode) {
 				const result = await target.execute(sql, params(values), { as: mode === "array" ? "array" : "object" });
 				return { rows: result.rows, affectedRows: result.rowsAffected, insertId: result.insertId ? Number(result.insertId) : undefined };

@@ -199,9 +199,41 @@ export async function restoreDatabaseRecords(db: D1Database, content: ArrayBuffe
 	// Every check that can be made without writing happens here, before the first DELETE. The row shape is
 	// validated against this database's own columns, so a document carrying a column the table does not have is
 	// refused now instead of failing the INSERT after the live rows are gone.
-	validateDatabaseBackup(document, restoreTables.includes("external_accounts") ? await listColumnNames(db, "external_accounts") : null, dialect);
+	const externalAccountColumns = restoreTables.includes("external_accounts") ? await listColumnNames(db, "external_accounts") : null;
+	// The identity comparison mirrors the destination's own collations, read here rather than assumed.
+	const collations = externalAccountColumns && dialect === "mysql" ? await externalAccountCollations(db) : null;
+	validateDatabaseBackup(document, externalAccountColumns, dialect, collations);
+	/** The columns a table's rows may carry in this database (some gained columns after they shipped). */
+	const insertColumns = (table: DatabaseBackupTable) =>
+		table === "users"
+			? userColumns
+			: table === "booking_events"
+				? bookingColumns
+				: table === "passkey_credentials"
+					? passkeyColumns
+					: table === "messages"
+						? messageColumns
+						: table === "mailbox_promotion_settings"
+							? promotionSettingColumns
+							: deliverabilityColumns.get(table) ?? null;
+	// Plan every INSERT before the first DELETE. A row whose columns are all filtered out (an empty object in
+	// `contacts`, say) is a document problem, and on a database that cannot roll back it must not be discovered
+	// half-way through the restore.
+	const planned = new Map<DatabaseBackupTable, DatabaseRecord[][]>();
+	for (const table of restoreTables) {
+		const rows = document.tables[table] ?? [];
+		const columns = insertColumns(table);
+		for (const row of rows) insertColumnsFor(table, row, columns);
+		const chunks: DatabaseRecord[][] = [];
+		for (let index = 0; index < rows.length; index += INSERT_BATCH_SIZE) chunks.push(rows.slice(index, index + INSERT_BATCH_SIZE));
+		planned.set(table, chunks);
+	}
 	const atomic = restoreRollsBack(db);
+	// Once the teardown has started writing, a failure is no longer a preflight refusal: on a database that cannot
+	// roll back, the installation is in an unknown state whatever the error says.
+	let started = false;
 	const apply = async (tx: D1Database) => {
+		started = true;
 		// Mark users deleted before removing them: the passkey trigger permits the
 		// cascade to remove the last credential only for an account that is being
 		// purged. Deleting users first also empties the table the restore inserts
@@ -222,20 +254,9 @@ export async function restoreDatabaseRecords(db: D1Database, content: ArrayBuffe
 		if (suspendsForeignKeys) await tx.prepare("SET FOREIGN_KEY_CHECKS = 0").run();
 		try {
 			for (const table of restoreTables) {
-				const rows = document.tables[table] ?? [];
-				for (let index = 0; index < rows.length; index += INSERT_BATCH_SIZE) {
-					const columns = table === "users"
-						? userColumns
-						: table === "booking_events"
-							? bookingColumns
-							: table === "passkey_credentials"
-								? passkeyColumns
-								: table === "messages"
-									? messageColumns
-									: table === "mailbox_promotion_settings"
-										? promotionSettingColumns
-										: deliverabilityColumns.get(table) ?? null;
-					const statements = rows.slice(index, index + INSERT_BATCH_SIZE).map((row) => createInsertStatement(tx, dialect, table, row, columns));
+				const columns = insertColumns(table);
+				for (const chunk of planned.get(table) ?? []) {
+					const statements = chunk.map((row) => createInsertStatement(tx, dialect, table, row, columns));
 					if (statements.length > 0) await tx.batch(statements);
 				}
 			}
@@ -257,10 +278,12 @@ export async function restoreDatabaseRecords(db: D1Database, content: ArrayBuffe
 		if (atomic) await (db as TransactionCapableDatabase).transaction!((tx) => apply(tx));
 		else await apply(db);
 	} catch (error) {
-		// A refusal we wrote ourselves means nothing was written; any other failure on a database that cannot roll
-		// back leaves the installation in an unknown state, and the admin has to know that.
-		if (!atomic && !(error instanceof BackupRestoreError)) throw new BackupRestoreError(PARTIAL_RESTORE_MESSAGE);
-		throw error;
+		// On a database that can roll back, the error is the whole story: nothing was applied. On one that cannot,
+		// any failure once the teardown has started leaves the installation in an unknown state — including a
+		// refusal we authored ourselves, because by then the old rows are already gone.
+		if (atomic || !started) throw error;
+		const detail = error instanceof BackupRestoreError ? `${error.message} ` : "";
+		throw new BackupRestoreError(`${detail}${PARTIAL_RESTORE_MESSAGE}`);
 	}
 }
 
@@ -285,10 +308,16 @@ function isDatabaseBackupDocument(value: unknown): value is DatabaseBackupDocume
 	});
 }
 
-function createInsertStatement(db: D1Database, dialect: DatabaseDialect, table: DatabaseBackupTable, row: DatabaseRecord, availableColumns: Set<string> | null = null) {
+/** The columns an INSERT for this row will carry, or a refusal when the row has nothing to write. */
+function insertColumnsFor(table: DatabaseBackupTable, row: DatabaseRecord, availableColumns: Set<string> | null): string[] {
 	const omitted = OMITTED_COLUMNS[table] ?? [];
 	const columns = Object.keys(row).filter((column) => !omitted.includes(column) && (!availableColumns || availableColumns.has(column)));
 	if (columns.length === 0) throw new BackupRestoreError(`Backup contains an invalid ${table} record`);
+	return columns;
+}
+
+function createInsertStatement(db: D1Database, dialect: DatabaseDialect, table: DatabaseBackupTable, row: DatabaseRecord, availableColumns: Set<string> | null = null) {
+	const columns = insertColumnsFor(table, row, availableColumns);
 	const placeholders = columns.map(() => "?").join(", ");
 	const identifiers = columns.map((column) => quoteIdentifier(dialect, column)).join(", ");
 	return db.prepare(`INSERT INTO ${table} (${identifiers}) VALUES (${placeholders})`).bind(...columns.map((column) => row[column]));
@@ -324,7 +353,7 @@ function fillMissingBackupTables(document: DatabaseBackupDocument): void {
 	}
 }
 
-function validateDatabaseBackup(document: DatabaseBackupDocument, externalAccountColumns: Set<string> | null, dialect: DatabaseDialect): void {
+function validateDatabaseBackup(document: DatabaseBackupDocument, externalAccountColumns: Set<string> | null, dialect: DatabaseDialect, collations: ColumnCollations | null): void {
 	for (const table of BACKUP_TABLES) {
 		for (const row of document.tables[table] ?? []) {
 			if (!row || typeof row !== "object" || Array.isArray(row)) {
@@ -332,7 +361,7 @@ function validateDatabaseBackup(document: DatabaseBackupDocument, externalAccoun
 			}
 		}
 	}
-	validateExternalAccountRows(document, externalAccountColumns, dialect);
+	validateExternalAccountRows(document, externalAccountColumns, dialect, collations);
 }
 
 const isIntegerInRange = (value: unknown, min: number, max: number) => typeof value === "number" && Number.isInteger(value) && value >= min && value <= max;
@@ -341,26 +370,68 @@ const isIntegerInRange = (value: unknown, min: number, max: number) => typeof va
  * index would see.
  *
  * - SQLite, PostgreSQL and D1 compare text byte for byte: exact values.
- * - MySQL `id` and `mailbox_id` inherit the table's default `utf8mb4_0900_ai_ci`: case-insensitive (and
- *   accent-insensitive, which is not emulated — an accent-only collision is left to the index and the rollback)
- *   and NO PAD, so a trailing space still differs.
- * - MySQL `host` and `username` are `utf8mb4_bin`: case-sensitive but PAD SPACE, so trailing ASCII spaces are
- *   ignored. A trailing NBSP is not padding and stays significant.
+ * - MySQL compares each column with its own collation, so the collations are read from the database rather than
+ *   assumed: a `_ci` column folds case, a `_bin` or `_as_cs` one does not, and only a PAD SPACE collation ignores
+ *   trailing ASCII spaces. A column whose collation cannot be read is compared exactly (accepting), because the
+ *   index plus the transaction still catch a real collision there.
  */
-function identityComparator(dialect: DatabaseDialect) {
-	if (dialect !== "mysql") {
-		return {
-			id: (id: string) => id,
-			identity: (mailboxId: string, host: string, username: string) => JSON.stringify([mailboxId, host, username]),
-		};
-	}
-	// Only the ASCII space pads a utf8mb4_bin value; `trimEnd()` would also swallow NBSP, which the server keeps.
-	const stripAsciiPadding = (value: string) => value.replace(/ +$/, "");
-	return {
-		id: (id: string) => id.toLowerCase(),
-		identity: (mailboxId: string, host: string, username: string) =>
-			JSON.stringify([mailboxId.toLowerCase(), stripAsciiPadding(host), stripAsciiPadding(username)]),
+type ColumnCollations = Record<"id" | "mailbox_id" | "host" | "username", string | null>;
+
+const exactComparator = {
+	id: (id: string) => id,
+	identity: (mailboxId: string, host: string, username: string) => JSON.stringify([mailboxId, host, username]),
+};
+
+/**
+ * What a MySQL collation name promises: `_bin` and `_cs` compare case-sensitively, `_ci` folds it, and anything
+ * else (an unknown name) is not narrowed at all. The UCA 9.0.0 collations (`utf8mb4_0900_*`) are NO PAD; the older
+ * ones pad with the ASCII space.
+ */
+function collationRules(collation: string | null): { foldsCase: boolean; padsSpaces: boolean } | null {
+	if (!collation) return null;
+	const value = collation.toLowerCase();
+	const padsSpaces = !value.includes("_0900_");
+	if (value.endsWith("_bin") || value.endsWith("_cs")) return { foldsCase: false, padsSpaces };
+	if (value.endsWith("_ci")) return { foldsCase: true, padsSpaces };
+	return null;
+}
+
+function identityComparator(dialect: DatabaseDialect, collations: ColumnCollations | null) {
+	if (dialect !== "mysql" || !collations) return exactComparator;
+	const rules = (column: keyof ColumnCollations) => collationRules(collations[column]);
+	const key = (value: string, column: keyof ColumnCollations) => {
+		const rule = rules(column);
+		if (!rule) return value;
+		// Only the ASCII space pads a PAD SPACE collation; `trimEnd()` would also swallow NBSP, which stays significant.
+		return rule.foldsCase ? (rule.padsSpaces ? value.trimEnd().toLowerCase() : value.toLowerCase()) : rule.padsSpaces ? value.replace(/ +$/, "") : value;
 	};
+	return {
+		id: (id: string) => key(id, "id"),
+		identity: (mailboxId: string, host: string, username: string) =>
+			JSON.stringify([key(mailboxId, "mailbox_id"), key(host, "host"), key(username, "username")]),
+	};
+}
+
+/** The collations MySQL gives the four identity columns, or null when they cannot be read. */
+async function externalAccountCollations(db: D1Database): Promise<ColumnCollations | null> {
+	try {
+		const result = await db
+			.prepare(
+				"SELECT COLUMN_NAME AS name, COLLATION_NAME AS collation FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = database() AND TABLE_NAME = 'external_accounts' AND COLUMN_NAME IN ('id', 'mailbox_id', 'host', 'username')",
+			)
+			.all<{ name?: string; NAME?: string; collation?: string; COLLATION?: string }>();
+		const found: Partial<ColumnCollations> = {};
+		for (const row of result.results) {
+			const name = (row.name ?? row.NAME)?.toLowerCase();
+			const collation = row.collation ?? row.COLLATION ?? null;
+			if (name === "id" || name === "mailbox_id" || name === "host" || name === "username") found[name] = collation ? String(collation) : null;
+		}
+		// Every column has to be known: a partial answer would compare some of the tuple with guessed rules.
+		if (!found.id || !found.mailbox_id || !found.host || !found.username) return null;
+		return found as ColumnCollations;
+	} catch {
+		return null;
+	}
 }
 
 /** Backups hold `0`/`1`; a hand-written document may use booleans. */
@@ -387,7 +458,7 @@ const isOptionalTimestamp = (value: unknown) => value === null || value === unde
  * `password_encrypted`, which restores as opaque bytes that fail to decrypt. Restore only backups this install
  * produced, or one you trust as much as the database itself. The message names the row and column only.
  */
-function validateExternalAccountRows(document: DatabaseBackupDocument, liveColumns: Set<string> | null, dialect: DatabaseDialect): void {
+function validateExternalAccountRows(document: DatabaseBackupDocument, liveColumns: Set<string> | null, dialect: DatabaseDialect, collations: ColumnCollations | null): void {
 	const rows = document.tables.external_accounts ?? [];
 	const tlsModes = new Set(["implicit-tls", "starttls", "none"]);
 	const expectedColumns = liveColumns ? new Set([...liveColumns, ...OMITTED_COLUMNS.external_accounts ?? []]) : null;
@@ -399,7 +470,7 @@ function validateExternalAccountRows(document: DatabaseBackupDocument, liveColum
 	// refused backups PostgreSQL and SQLite would happily store, while `id` on MySQL is case-insensitive and
 	// trailing ASCII spaces in the binary tuple columns do not count either. Where the emulation is uncertain it
 	// errs towards accepting: a real conflict on MySQL or PostgreSQL is caught by the transaction's rollback.
-	const compare = identityComparator(dialect);
+	const compare = identityComparator(dialect, collations);
 	const ids = new Set<string>();
 	const identities = new Set<string>();
 	rows.forEach((row, index) => {

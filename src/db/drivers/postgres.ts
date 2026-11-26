@@ -11,6 +11,18 @@ function params(values: unknown[]) {
 
 // ---- node-postgres (also Supabase, Neon over TCP, RDS, Hyperdrive) ----
 
+/**
+ * Commits and fails loudly when PostgreSQL turns the commit into a rollback. A statement error inside the
+ * transaction aborts it, and `COMMIT` on an aborted transaction answers `ROLLBACK` instead of raising: without
+ * this check a caller that caught the error itself would be told the transaction succeeded while nothing was
+ * written.
+ */
+async function commitOrThrow(client: PgQueryable, text: string) {
+	const result = await client.query({ text, values: [] });
+	const command = (result as unknown as { command?: string }).command;
+	if (command && command.toUpperCase() !== "COMMIT") throw new Error(`The database rolled the transaction back (${command}) after a statement failed inside it.`);
+}
+
 type PgQueryable = {
 	query(config: { text: string; values: unknown[]; rowMode?: "array"; types?: unknown }): Promise<{ rows: unknown[]; rowCount: number | null }>;
 };
@@ -18,6 +30,7 @@ type PgQueryable = {
 function pgExecutor(queryable: PgQueryable, types: unknown, inTransaction?: <T>(fn: (tx: SqlExecutor) => Promise<T>) => Promise<T>): SqlExecutor {
 	return {
 		dialect: "postgres",
+		transactions: "atomic",
 		async query(text, values, mode: RowMode): Promise<QueryResult> {
 			const result = await queryable.query({ text, values: params(values), rowMode: mode === "array" ? "array" : undefined, types });
 			return { rows: result.rows, affectedRows: result.rowCount ?? 0 };
@@ -27,7 +40,7 @@ function pgExecutor(queryable: PgQueryable, types: unknown, inTransaction?: <T>(
 }
 
 export function openNodePostgres({ url, shared }: OpenOptions): SqlExecutor {
-	return lazyExecutor("postgres", async () => {
+	return lazyExecutor("postgres", "atomic", async () => {
 		const pg = await import("pg");
 		const { Pool, Client, types: pgTypes } = (pg as unknown as { default?: typeof pg }).default ?? pg;
 		const types = {
@@ -54,7 +67,7 @@ export function openNodePostgres({ url, shared }: OpenOptions): SqlExecutor {
 							client.release(true);
 						},
 					});
-					await client.query("COMMIT");
+					await commitOrThrow(client, "COMMIT");
 					return result;
 				} catch (error) {
 					await client.query("ROLLBACK").catch(() => undefined);
@@ -78,13 +91,14 @@ export function openNodePostgres({ url, shared }: OpenOptions): SqlExecutor {
 		};
 		return {
 			dialect: "postgres",
+			transactions: "atomic",
 			query: (text, values, mode) => withClient((client) => pgExecutor(client as unknown as PgQueryable, types).query(text, values, mode)),
 			transaction: (fn) =>
 				withClient(async (client) => {
 					await client.query("BEGIN");
 					try {
 						const result = await fn({ ...pgExecutor(client as unknown as PgQueryable, types), destroy: async () => client.end().catch(() => undefined) });
-						await client.query("COMMIT");
+						await commitOrThrow(client, "COMMIT");
 						return result;
 					} catch (error) {
 						await client.query("ROLLBACK").catch(() => undefined);
@@ -98,7 +112,7 @@ export function openNodePostgres({ url, shared }: OpenOptions): SqlExecutor {
 // ---- postgres.js ----
 
 export function openPostgresJs({ url, shared }: OpenOptions): SqlExecutor {
-	return lazyExecutor("postgres", async () => {
+	return lazyExecutor("postgres", "atomic", async () => {
 		const imported = await import("postgres");
 		const postgres = (imported as unknown as { default: typeof imported.default }).default;
 		const make = () =>
@@ -114,6 +128,7 @@ export function openPostgresJs({ url, shared }: OpenOptions): SqlExecutor {
 		type Sql = ReturnType<typeof make>;
 		const executorFor = (sql: Sql | { unsafe: Sql["unsafe"] }, transaction?: SqlExecutor["transaction"]): SqlExecutor => ({
 			dialect: "postgres",
+			transactions: "atomic",
 			async query(text, values, mode) {
 				const statement = sql.unsafe(text, params(values) as never);
 				if (mode === "array") {
@@ -134,6 +149,7 @@ export function openPostgresJs({ url, shared }: OpenOptions): SqlExecutor {
 		}
 		return {
 			dialect: "postgres",
+			transactions: "atomic",
 			query: async (text, values, mode) => {
 				const sql = make();
 				try {
@@ -157,11 +173,14 @@ export function openPostgresJs({ url, shared }: OpenOptions): SqlExecutor {
 // ---- Neon / Vercel Postgres over HTTP (fetch, so it runs anywhere) ----
 
 export function openNeon({ url }: OpenOptions): SqlExecutor {
-	return lazyExecutor("postgres", async () => {
+	// The HTTP protocol has no interactive transaction: every call is its own request. Declared, so the restore
+	// takes its non-atomic path instead of calling a `transaction` that could only pretend.
+	return lazyExecutor("postgres", "none", async () => {
 		const { neon } = await import("@neondatabase/serverless");
 		const sql = neon(url, { fullResults: true });
 		return {
 			dialect: "postgres",
+			transactions: "none",
 			async query(text, values, mode) {
 				const result = (await sql.query(text, params(values), { arrayMode: mode === "array", fullResults: true } as never)) as unknown as {
 					rows: unknown[];
@@ -190,7 +209,7 @@ export function openNeon({ url }: OpenOptions): SqlExecutor {
 // ---- PGlite (in-process Postgres on WASM; Node only) ----
 
 export function openPglite({ url }: OpenOptions): SqlExecutor {
-	return lazyExecutor("postgres", async () => {
+	return lazyExecutor("postgres", "atomic", async () => {
 		// Variable specifier: PGlite is large and Node-only, so bundlers must not pull it into the Worker.
 		const name = "@electric-sql/pglite";
 		const { PGlite } = (await import(/* @vite-ignore */ name)) as typeof import("@electric-sql/pglite");
@@ -199,6 +218,7 @@ export function openPglite({ url }: OpenOptions): SqlExecutor {
 		const db = await PGlite.create(dataDir, { parsers: { [INT8]: (value: string) => Number(value), [NUMERIC]: (value: string) => Number(value) } });
 		const executorFor = (target: Pick<typeof db, "query">, transaction?: SqlExecutor["transaction"]): SqlExecutor => ({
 			dialect: "postgres",
+			transactions: "atomic",
 			async query(text, values, mode) {
 				const result = await target.query(text, params(values), { rowMode: mode === "array" ? "array" : "object" });
 				return { rows: result.rows as unknown[], affectedRows: result.affectedRows ?? result.rows.length };

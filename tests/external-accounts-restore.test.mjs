@@ -92,6 +92,18 @@ function assertUntouched(target) {
 	assert.equal(target.sql.prepare("SELECT count(*) AS n FROM mailboxes").get().n, 1);
 }
 
+/** Every row a restore would touch, so "untouched" can be compared exactly. */
+async function snapshotOf(fixture) {
+	const ids = (table) => fixture.sql.prepare(`SELECT id FROM ${table} ORDER BY id`).all().map((row) => row.id);
+	return {
+		users: ids("users"),
+		domains: ids("domains"),
+		mailboxes: ids("mailboxes"),
+		accounts: fixture.sql.prepare("SELECT id, password_encrypted FROM external_accounts ORDER BY id").all(),
+		appSettings: fixture.sql.prepare("SELECT app_name FROM app_settings WHERE id = 'default'").all(),
+	};
+}
+
 /** A document holding one external account, exported from a real database. */
 async function documentWithAccount(t) {
 	const source = await seededDatabase(t);
@@ -388,6 +400,57 @@ test("a database without transactions (a D1 binding) still restores, on the pref
 	broken.tables.external_accounts.push({ ...broken.tables.external_accounts[0] });
 	await assert.rejects(restoreDatabaseRecords(plain, new TextEncoder().encode(JSON.stringify(broken)).buffer), /\(row 2, id\)/);
 	assert.deepEqual(inner.sql.prepare("SELECT id FROM external_accounts").all(), [{ id: "ext_1" }]);
+});
+
+test("an insert the plan cannot build is refused before any write, not half way through", async (t) => {
+	// An empty object in `contacts` passes the generic row check and then has no column to insert: the gate saw it
+	// reach the write phase, where on a database without a transaction the old rows were already gone.
+	const inner = await seededDatabase(t);
+	const plain = {
+		prepare: (...args) => inner.database.prepare(...args),
+		batch: (...args) => inner.database.batch(...args),
+		exec: (...args) => inner.database.exec(...args),
+	};
+	const { document } = await documentWithAccount(t);
+	const before = await snapshotOf(inner);
+	const broken = structuredClone(document);
+	broken.tables.contacts.push({});
+	await assert.rejects(restoreDatabaseRecords(plain, new TextEncoder().encode(JSON.stringify(broken)).buffer), (error) => {
+		assert.ok(error instanceof BackupRestoreError);
+		assert.match(error.message, /invalid contacts record/);
+		// Refused before the teardown, so there is nothing to warn about.
+		assert.ok(!/cannot roll it back/i.test(error.message));
+		return true;
+	});
+	assert.deepEqual(await snapshotOf(inner), before);
+});
+
+test("on a database without a transaction, an authored error after the writes began still warns", async (t) => {
+	// The classification rule: once the teardown has started, ANY failure means the installation may be partially
+	// replaced — including a BackupRestoreError, which is otherwise the shape of a preflight refusal.
+	const inner = await seededDatabase(t);
+	const { document } = await documentWithAccount(t);
+	let batches = 0;
+	const plain = {
+		prepare: (...args) => inner.database.prepare(...args),
+		exec: (...args) => inner.database.exec(...args),
+		async batch(statements) {
+			batches += 1;
+			// Let the teardown and the parent inserts happen, then refuse the credentials with authored text.
+			if (statements.some((statement) => /external_accounts/.test(statement.sql))) {
+				throw new BackupRestoreError("Backup contains an invalid external account record (row 1, host)");
+			}
+			return inner.database.batch(statements);
+		},
+	};
+	await assert.rejects(restoreDatabaseRecords(plain, new TextEncoder().encode(JSON.stringify(document)).buffer), (error) => {
+		assert.ok(error instanceof BackupRestoreError);
+		assert.match(error.message, /invalid external account record/i);
+		assert.match(error.message, /cannot roll it back/i);
+		assert.match(error.message, /may already have been replaced/i);
+		return true;
+	});
+	assert.ok(batches > 0);
 });
 
 test("a database that cannot roll back says so when a restore fails", async (t) => {
