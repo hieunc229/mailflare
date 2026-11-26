@@ -26,6 +26,8 @@ export type CalendarEvent = {
   isPrivate?: boolean;
   /** Shown as free: the event does not make its owner busy. */
   transparent?: boolean;
+  /** The calendar the event is in (the default calendar's id when it has none of its own). */
+  calendarId?: string;
   timeZone?: string | null;
   seriesStartsAt?: string;
   /** Set on events created from an emailed invitation: needs-action (pending), tentative or accepted. */
