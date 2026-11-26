@@ -1,3 +1,5 @@
+import type { CalendarRole } from "./shares-types";
+
 export type CalendarSummary = {
 	id: string;
 	/** Null for a default calendar that was never renamed; the UI shows its own label. */
@@ -6,8 +8,10 @@ export type CalendarSummary = {
 	color: string;
 	description: string;
 	isDefault: boolean;
-	/** CS-2 lists only the user's own calendars; sharing adds the other roles. */
-	role: "owner";
+	/** "owner" for the user's own calendars, else the role they were granted. */
+	role: CalendarRole;
+	/** Set on calendars shared with the user: whose they are (a calendar without a name of its own is labelled with it). */
+	ownerName?: string;
 	/** Events in this calendar, for the delete confirmation. */
 	eventCount: number;
 };

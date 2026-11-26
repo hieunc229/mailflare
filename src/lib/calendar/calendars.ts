@@ -20,7 +20,7 @@ const DELETE_CHUNK = 90;
 const fail = (status: CalendarFailure["status"], error: string): CalendarFailure => ({ ok: false, status, error });
 
 /** dav_collections colours come from Apple clients as `#RRGGBBAA`; the web palette is the six-digit prefix. */
-function paletteColor(value: string | null): string {
+export function paletteColor(value: string | null): string {
 	const six = value?.slice(0, 7).toLowerCase();
 	return FOLDER_COLOR_VALUES.find((color) => color === six) ?? DEFAULT_FOLDER_COLOR;
 }
