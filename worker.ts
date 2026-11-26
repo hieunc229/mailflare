@@ -21,6 +21,7 @@ import { autoUpdateJob } from "./src/lib/scheduled/auto-update-job";
 import { dailyJobs, frequentJobs, runScheduledJob } from "./src/lib/scheduled/jobs";
 import { processWebhookRetry, type WebhookRetryMessage } from "./src/lib/email/webhooks";
 import { resolveIncomingMail, forwardMessage } from "./src/lib/email/incoming";
+import { countReceivedInJoinedValue } from "./src/lib/groups/loop-utils";
 import { createBatchBudget } from "./src/lib/deliverability/ingest";
 import { getUserFromSession } from "./src/lib/auth/session";
 import { getSessionTokenFromRequest } from "./src/lib/realtime/utils";
@@ -92,7 +93,11 @@ export default {
 				from: message.headers.get("from"),
 				alreadyForwarded,
 				all: headerMap,
+				receivedHops: countReceivedInJoinedValue(headerMap.received),
 			});
+
+			// Group mail that would loop is accepted and discarded: a bounce would feed the loop.
+			if (decision?.action === "drop") return;
 
 			if (decision?.action === "reject") {
 				message.setReject(decision.rejectReason ?? "Message rejected by routing rule");
@@ -125,6 +130,7 @@ export default {
 				to: message.to,
 				rawR2Key,
 				headers: headerMap,
+				...(decision?.action === "group" && decision.group ? { groupExpansion: { groupId: decision.group.groupId } } : {}),
 			};
 			await env.INBOUND_QUEUE.send(payload);
 		} catch (err) {

@@ -24,4 +24,6 @@ export type IntakeActions = {
 export type IntakeResult =
 	| { action: "reject"; reason: string }
 	| { action: "forward"; forwardedTo: string | null }
+	/** Group mail that would loop: accepted and discarded, never bounced. */
+	| { action: "drop" }
 	| { action: "store"; rawR2Key: string; forwardedTo: string | null };

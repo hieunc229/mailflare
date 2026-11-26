@@ -1,9 +1,9 @@
 import { and, eq, inArray, ne } from "drizzle-orm";
 import type { AppDatabase } from "@/db";
-import { domains, mailGroups, mailboxAliases, mailboxes } from "@/db/schema";
-import { isMissingTableError } from "@/lib/database-errors";
+import { domains, mailboxAliases, mailboxes } from "@/db/schema";
 import { normalizeRecipientLocalPart, parseRecipientAddress } from "@/lib/email/recipient-address";
 import { getMailboxDomainAddresses } from "./domain-addresses";
+import { loadGroupAddresses } from "./group-addresses";
 
 export type AddressOwner = "mailbox" | "alias" | "group";
 
@@ -65,16 +65,6 @@ export async function findAddressOwner(
 	options: FindAddressOwnerOptions = {},
 ): Promise<AddressOwner | null> {
 	return (await createAddressOwnerLookup(db, [domainId], options))(domainId, localPart);
-}
-
-/** A group is optional: before its migration is applied no address belongs to one. */
-async function loadGroupAddresses(db: AppDatabase, domainIds: string[]) {
-	try {
-		return await db.select({ domainId: mailGroups.domainId, localPart: mailGroups.localPart }).from(mailGroups).where(inArray(mailGroups.domainId, domainIds));
-	} catch (error) {
-		if (isMissingTableError(error)) return [];
-		throw error;
-	}
 }
 
 /** Addresses other mailboxes receive through "Use all domains", which a new address would silently take over. */

@@ -47,6 +47,10 @@ export type InboundQueueMessage = {
 	headers?: Record<string, string>;
 	verdicts?: ProviderVerdicts;
 	senderIp?: string;
+	/** Set by intake for mail to a group it admitted: the consumer expands it, from `cursor` on for later chunks. */
+	groupExpansion?: { groupId: string; cursor?: string };
+	/** One member's copy of group mail: stored in that mailbox without resolving the address again. */
+	groupDelivery?: { groupId: string; mailboxId: string };
 };
 
 /** True when the address is a mailbox or alias owned by the user, so their own mail never counts as unread. */

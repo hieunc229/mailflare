@@ -1,6 +1,7 @@
 import { eq, and, asc, desc } from "drizzle-orm";
 import type { AppDatabase } from "@/db";
-import { domains, folders, mailboxAliases, mailboxes, routingRules } from "@/db/schema";
+import { domains, folders, mailGroups, mailboxAliases, mailboxes, routingRules } from "@/db/schema";
+import { isMissingTableError } from "@/lib/database-errors";
 import { getEmailAddress } from "@/lib/email/address";
 import { getMailboxDomainAddresses } from "@/lib/mailboxes/domain-addresses";
 import { isBulkMail, type MailHeaders } from "@/lib/email/bulk-mail";
@@ -17,9 +18,21 @@ export type ResolvedMailbox = {
 	displayName: string | null;
 };
 
+export type ResolvedGroup = {
+	groupId: string;
+	domainId: string;
+	/** Lower-cased `local@hostname` as stored. */
+	address: string;
+	name: string;
+	whoCanPost: "anyone" | "org" | "members";
+	replyTo: "sender" | "group";
+};
+
 export type RoutingDecision = {
-	action: "store" | "forward" | "reject";
+	action: "store" | "forward" | "reject" | "group";
 	mailbox?: ResolvedMailbox;
+	/** Set when `action` is `group`: the live handler enforces who may post, the queue consumer expands. */
+	group?: ResolvedGroup;
 	forwardTo?: string;
 	/** Forward rules drop the message unless the rule also keeps a copy in the mailbox. */
 	keepCopy?: boolean;
@@ -56,6 +69,11 @@ export type ResolveInboundOptions = {
 	 * sender, which bulk senders set to a bounce address the user never sees.
 	 */
 	mailboxForwards?: { subject?: string | null; from?: string | null };
+	/**
+	 * Whether group addresses are active (the licence entitlement). Asked only when an address
+	 * matches a group. Without it groups are ignored and the address falls through as unknown.
+	 */
+	allowGroups?: () => Promise<boolean>;
 };
 
 /**
@@ -64,7 +82,7 @@ export type ResolveInboundOptions = {
  * Domain-scope rules are evaluated in three phases so that a broad catch-all can never
  * shadow a real mailbox:
  *   1. `reject` rules (block lists) — highest precedence, evaluated before delivery.
- *   2. exact mailbox, then multi-domain mailbox aliases.
+ *   2. exact mailbox, then alias, then group, then multi-domain mailbox aliases.
  *   3. remaining `forward` / `store` rules — the catch-all fallback.
  * Within each phase rules run by descending priority, then oldest first.
  */
@@ -115,6 +133,11 @@ export async function resolveInboundAddress(
 	// use-all-domains mailbox or a catch-all rule deliver its mail elsewhere.
 	if (!mailbox && await findDisabledAlias(db, domain.id, parsed.localPart)) {
 		return { action: "reject", rejectReason: "Mailbox unavailable" };
+	}
+	if (!mailbox) {
+		const group = await resolveGroup(db, domain, parsed.localPart, options.allowGroups);
+		if (group === "disabled") return { action: "reject", rejectReason: "Group unavailable" };
+		if (group) return { action: "group", group };
 	}
 	mailbox ??= await resolveMailboxDomainAlias(db, parsed.localPart, parsed.normalizedAddress);
 
@@ -168,6 +191,54 @@ export async function resolveInboundAddress(
 	}
 
 	return null;
+}
+
+/** The group at this address, `"disabled"` when it is switched off, or null (also before the migration, or without the entitlement). */
+async function resolveGroup(
+	db: AppDatabase,
+	domain: { id: string; hostname: string },
+	localPart: string,
+	allowGroups?: () => Promise<boolean>,
+): Promise<ResolvedGroup | "disabled" | null> {
+	if (!allowGroups) return null;
+	let rows: (typeof mailGroups.$inferSelect)[];
+	try {
+		rows = await db.select().from(mailGroups).where(eq(mailGroups.domainId, domain.id));
+	} catch (error) {
+		if (isMissingTableError(error)) return null;
+		throw error;
+	}
+	const row = rows.find((item) => normalizeRecipientLocalPart(item.localPart) === localPart);
+	if (!row || !(await allowGroups())) return null;
+	if (row.disabled) return "disabled";
+	return {
+		groupId: row.id,
+		domainId: domain.id,
+		address: `${row.localPart}@${domain.hostname}`.toLowerCase(),
+		name: row.name,
+		whoCanPost: row.whoCanPost,
+		replyTo: row.replyTo,
+	};
+}
+
+/** The enabled mailbox that receives this address (exact, alias, or use-all-domains), with no rules applied. */
+export async function resolveMailboxForAddress(db: AppDatabase, address: string): Promise<typeof mailboxes.$inferSelect | null> {
+	const parsed = parseRecipientAddress(address);
+	if (!parsed) return null;
+	const [domain] = await db
+		.select({ id: domains.id })
+		.from(domains)
+		.where(and(eq(domains.hostname, parsed.domain), eq(domains.status, "active")))
+		.limit(1);
+	if (!domain) return null;
+	const candidates = await db
+		.select()
+		.from(mailboxes)
+		.where(and(eq(mailboxes.domainId, domain.id), eq(mailboxes.disabled, false)));
+	const exact = candidates.find((mailbox) => normalizeRecipientLocalPart(mailbox.localPart) === parsed.localPart);
+	return exact
+		?? await resolveMailboxAlias(db, domain.id, parsed.localPart)
+		?? await resolveMailboxDomainAlias(db, parsed.localPart, parsed.normalizedAddress);
 }
 
 /**

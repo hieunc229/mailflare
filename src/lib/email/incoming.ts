@@ -2,29 +2,50 @@ import { getDb } from "@/db";
 import { recordRuleMatch, resolveInboundAddress, type RoutingDecision } from "@/lib/email/routing";
 import { matchReportAddress } from "@/lib/deliverability/report-address";
 import { forwardedMarker, MAILFLARE_FORWARDED_HEADER } from "@/lib/email/account-forwarding";
+import { groupListIdentifier, groupDropReason } from "@/lib/groups/loop-utils";
+import { groupsAllowed } from "@/lib/groups/license";
+import { findMemberSenderAddress, loadOrgHostnames } from "@/lib/groups/policy";
+import { canPost, GROUP_POST_REJECT_REASON } from "@/lib/groups/policy-utils";
+import { readTrustedDmarcResult } from "@/lib/spam/analyzers/authentication";
+import type { ProviderVerdicts } from "@/lib/spam/types";
 
-/** A routing decision, or `report`: DMARC report mail, which only the report queue consumer may touch. */
-export type IncomingDecision = RoutingDecision | { action: "report" };
+/**
+ * A routing decision, `report` (DMARC report mail, which only the report queue consumer may touch),
+ * or `drop`: group mail that must vanish silently so it cannot loop.
+ */
+export type IncomingDecision = RoutingDecision | { action: "report" } | { action: "drop" };
 
 /**
  * Resolves the routing decision for a live inbound message. Used by the Worker `email`
  * handler, where `forward()` and `setReject()` are still available on the message.
  *
- * Never throws: a routing failure must not stop mail from being stored.
+ * A routing failure must not stop mail from being stored, so resolving never throws. Checking who
+ * may post to a group does: failing open there would let anyone post to a restricted group.
  */
 export async function resolveIncomingMail(
 	env: CloudflareEnv,
 	from: string,
 	to: string,
-	headers?: { subject?: string | null; from?: string | null; alreadyForwarded?: boolean; all?: Record<string, string> },
+	headers?: {
+		subject?: string | null;
+		from?: string | null;
+		alreadyForwarded?: boolean;
+		all?: Record<string, string>;
+		/** Verdicts the receiving provider or SMTP listener computed; they decide who may post to a group. */
+		verdicts?: ProviderVerdicts;
+		/** How many `Received` headers the message carries, for the group loop guard. */
+		receivedHops?: number;
+	},
 ): Promise<IncomingDecision | null> {
+	let decision: RoutingDecision | null;
 	try {
 		const db = getDb(env);
 		// A DMARC report address is never a mailbox: no reject or forward rule (a catch-all included), and no account
 		// forwarding, may apply to it. Callers store it and queue it for the report consumer, nothing else.
 		if (await matchReportAddress(env, to)) return { action: "report" };
-		const decision = await resolveInboundAddress(db, to, from, {
+		decision = await resolveInboundAddress(db, to, from, {
 			headers: headers?.all,
+			allowGroups: groupsAllowed(env),
 			// A message that already went through a forward is never forwarded again by a
 			// mailbox rule, so two inboxes forwarding to each other cannot loop.
 			mailboxForwards: headers?.alreadyForwarded ? undefined : { subject: headers?.subject, from: headers?.from },
@@ -32,11 +53,48 @@ export async function resolveIncomingMail(
 		if (decision?.ruleId) {
 			await recordRuleMatch(db, decision.ruleId).catch(() => undefined);
 		}
-		return decision;
 	} catch (error) {
 		console.error(`Routing resolution failed for ${to}`, error);
 		return null;
 	}
+	// Outside the try: a failure while checking who may post must not let the message through. It
+	// throws, the handler fails the delivery, and the sender retries.
+	return decision?.action === "group" ? admitGroupMail(env, decision, headers) : decision;
+}
+
+/** Group mail is dropped (loops), rejected (not allowed to post) or admitted unchanged. */
+async function admitGroupMail(
+	env: CloudflareEnv,
+	decision: RoutingDecision,
+	input: { all?: Record<string, string>; verdicts?: ProviderVerdicts; receivedHops?: number; from?: string | null } = {},
+): Promise<IncomingDecision> {
+	const group = decision.group;
+	if (!group) return decision;
+	const headers = input.all ?? {};
+	const hostname = group.address.slice(group.address.lastIndexOf("@") + 1);
+	const dropReason = groupDropReason({
+		groupId: group.groupId,
+		listIdentifier: groupListIdentifier(group.address.slice(0, group.address.lastIndexOf("@")), hostname),
+		headers,
+		receivedHops: input.receivedHops ?? 0,
+	});
+	if (dropReason) {
+		console.warn(`Dropped mail to group ${group.address}: ${dropReason}`);
+		return { action: "drop" };
+	}
+	if (group.whoCanPost === "anyone") return decision;
+	const db = getDb(env);
+	const senderAddress = input.from ?? headers.from ?? "";
+	const allowed = canPost({
+		whoCanPost: group.whoCanPost,
+		senderAddress,
+		dmarc: readTrustedDmarcResult(headers, input.verdicts),
+		orgHostnames: group.whoCanPost === "org" ? await loadOrgHostnames(db) : [],
+		memberAddresses: group.whoCanPost === "members" ? await findMemberSenderAddress(db, group.groupId, senderAddress) : [],
+	});
+	if (allowed) return decision;
+	console.warn(`Refused post to group ${group.address}`);
+	return { action: "reject", rejectReason: GROUP_POST_REJECT_REASON };
 }
 
 /**
