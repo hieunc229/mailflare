@@ -9,7 +9,7 @@ import { getEnv } from "@/lib/cloudflare";
 import { buildCounterIcs, buildReplyIcs, buildReplyText, parseCounterProposal, parseInvite, type InviteResponse, type ParsedInvite } from "@/lib/calendar/invite";
 import { findInviteAttachment, MAX_INVITE_BYTES } from "@/lib/calendar/invite-attachment";
 import { addExcludedOccurrence, normalizeInviteSender, planInviteAnswer } from "@/lib/calendar/invite-rules";
-import { inviteEventId, inviteEventValues, recipientInviteTimeZone, sameInviteSender, upsertEventOverride } from "@/lib/calendar/invite-store";
+import { inviteEventFlags, inviteEventId, inviteEventValues, recipientInviteTimeZone, sameInviteSender, upsertEventOverride } from "@/lib/calendar/invite-store";
 import { hasValidSessionMutationOrigin } from "@/lib/auth/origin";
 import { getEmailAddress, splitEmailAddressList } from "@/lib/email/address";
 import { getAttachmentForUser, listMessageAttachments } from "@/lib/email/attachments";
@@ -154,7 +154,7 @@ export async function POST(request: Request, { params }: InviteRouteParams) {
 		// The reminder is written once on insert, and on update only when the row has none.
 		const insertValues = invite.alarmMinutes != null ? { ...values, reminderMinutes: invite.alarmMinutes } : values;
 		const updateValues = existing?.reminderMinutes == null ? insertValues : values;
-		await db.insert(calendarEvents).values({ id, userId: user.id, mailboxId: message.mailboxId, color: response === "tentative" ? "#7c3aed" : "#2563eb", ...insertValues }).onConflictDoUpdate({ target: calendarEvents.id, set: updateValues });
+		await db.insert(calendarEvents).values({ id, userId: user.id, mailboxId: message.mailboxId, color: response === "tentative" ? "#7c3aed" : "#2563eb", ...inviteEventFlags(invite), ...insertValues }).onConflictDoUpdate({ target: calendarEvents.id, set: updateValues });
 		eventId = id;
 	}
 

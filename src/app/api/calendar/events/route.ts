@@ -9,7 +9,7 @@ import { sendToAttendees } from "@/lib/calendar/invite-delivery";
 import { assertInviteesAllowed } from "@/lib/deliverability/suppression";
 import { SuppressedRecipientError, suppressedRecipientBody } from "@/lib/deliverability/suppression-utils";
 import { createCalendarInvitation } from "@/lib/calendar/utils";
-import { resolveEventFlags } from "@/lib/calendar/event-flags";
+import { EVENT_FLAGS_ERROR, resolveEventFlags } from "@/lib/calendar/event-flags";
 import { normalizeCalendarColor } from "@/lib/calendar/colors";
 import { normalizeReminderMinutes } from "@/lib/calendar/reminder-utils";
 import { DEFAULT_REPEAT_DAYS, normalizeCalendarRepeat, normalizeCalendarRepeatDays, normalizeRepeatInterval, normalizeRepeatWeek, normalizeRepeatWeekday } from "@/lib/calendar/recurrence";
@@ -58,6 +58,8 @@ export async function POST(request: Request) {
 	const startsAt = new Date(input.startsAt);
 	const endsAt = new Date(input.endsAt);
 	if (!input.title?.trim() || Number.isNaN(startsAt.getTime()) || Number.isNaN(endsAt.getTime()) || endsAt <= startsAt) return NextResponse.json({ error: "Enter a title and valid event times" }, { status: 400 });
+	const flags = resolveEventFlags(null, input);
+	if (!flags) return NextResponse.json({ error: EVENT_FLAGS_ERROR }, { status: 400 });
 	const repeat = normalizeCalendarRepeat(input.repeat);
 	const repeatDays = repeat === "weekdays" ? normalizeCalendarRepeatDays(input.repeatDays ?? DEFAULT_REPEAT_DAYS) : [];
 	if (repeat === "weekdays" && repeatDays.length === 0) return NextResponse.json({ error: "Choose at least one weekday" }, { status: 400 });
@@ -78,7 +80,7 @@ export async function POST(request: Request) {
 			throw error;
 		}
 	}
-	const event = { id: newId("evt"), userId: user.id, mailboxId: input.mailboxId ?? null, title: input.title.trim(), description: input.description?.trim() ?? "", location: input.location?.trim() ?? "", attendees: JSON.stringify(attendees), color: normalizeCalendarColor(input.color), repeat, repeatDays: JSON.stringify(repeatDays), repeatAnchorDay: repeat === "monthly" && Number.isInteger(input.repeatAnchorDay) && input.repeatAnchorDay! >= 1 && input.repeatAnchorDay! <= 31 ? input.repeatAnchorDay : null, repeatInterval, repeatWeekday, repeatWeek, eventSequence: 0, reminderMinutes: normalizeReminderMinutes(input.reminderMinutes), ...resolveEventFlags(null, input), startsAt, endsAt };
+	const event = { id: newId("evt"), userId: user.id, mailboxId: input.mailboxId ?? null, title: input.title.trim(), description: input.description?.trim() ?? "", location: input.location?.trim() ?? "", attendees: JSON.stringify(attendees), color: normalizeCalendarColor(input.color), repeat, repeatDays: JSON.stringify(repeatDays), repeatAnchorDay: repeat === "monthly" && Number.isInteger(input.repeatAnchorDay) && input.repeatAnchorDay! >= 1 && input.repeatAnchorDay! <= 31 ? input.repeatAnchorDay : null, repeatInterval, repeatWeekday, repeatWeek, eventSequence: 0, reminderMinutes: normalizeReminderMinutes(input.reminderMinutes), ...flags, startsAt, endsAt };
 	const savedEvent = { ...event, timeZone: input.timeZone ? normalizeTimeZone(input.timeZone) : getRequestTimeZone(request, user.timeZone) };
 	await getDb(env).insert(calendarEvents).values(savedEvent);
 	let inviteErrors: string[] = [];

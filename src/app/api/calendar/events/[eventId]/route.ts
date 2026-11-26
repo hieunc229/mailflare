@@ -10,7 +10,7 @@ import type { CalendarEventInput } from "../types";
 import type { CalendarEventRouteParams } from "./types";
 import { normalizeCalendarColor } from "@/lib/calendar/colors";
 import { normalizeReminderMinutes } from "@/lib/calendar/reminder-utils";
-import { resolveEventFlags } from "@/lib/calendar/event-flags";
+import { EVENT_FLAGS_ERROR, resolveEventFlags } from "@/lib/calendar/event-flags";
 import { normalizeRepeatInterval, normalizeRepeatWeek, normalizeRepeatWeekday, parseCalendarOccurrenceId, parseCalendarRepeatDays, parseExcludedOccurrences } from "@/lib/calendar/recurrence";
 import { CUSTOM_DAY_LOCKED, editedTimeZone, endLegacySeries, resolveRepeat, shiftCustomSeries } from "@/lib/calendar/repeat-fields";
 import { limitRrule, rruleEndedBefore } from "@/lib/calendar/rrule";
@@ -44,6 +44,8 @@ export async function PATCH(request: Request, { params }: CalendarEventRoutePara
 	if (existing.repeat !== "none" && effectiveFrom && existing.repeatUntil && effectiveFrom >= existing.repeatUntil) return NextResponse.json({ error: "No future occurrences remain" }, { status: 404 });
 	// A custom series has no repeat_until: its end lives in the rule, so ask the rule.
 	if (existing.rrule && effectiveFrom && rruleEndedBefore(existing.rrule, existing.startsAt, existing.timeZone, effectiveFrom)) return NextResponse.json({ error: "No future occurrences remain" }, { status: 404 });
+	const flags = resolveEventFlags(existing, input);
+	if (!flags) return NextResponse.json({ error: EVENT_FLAGS_ERROR }, { status: 400 });
 	const attendees = (input.attendees ?? []).map((email) => email.trim()).filter((email) => /^\S+@\S+\.\S+$/.test(email));
 	if (attendees.length && existing.mailboxId && input.from && !calendarKeyCanSendInvitations(key, existing.mailboxId)) return NextResponse.json({ error: "Sending invitations requires mail send permission for this mailbox" }, { status: 403 });
 	let inviteErrors: string[] = [];
@@ -52,7 +54,7 @@ export async function PATCH(request: Request, { params }: CalendarEventRoutePara
 		const excluded = parseExcludedOccurrences(existing.excludedOccurrences);
 		if (excluded.includes(occurrence.startsAt.getTime())) return NextResponse.json({ error: "Occurrence already moved" }, { status: 409 });
 		const now = new Date();
-		const moved = { ...existing, id: newId("evt"), eventSequence: 0, title: input.title.trim(), description: input.description?.trim() ?? "", location: input.location?.trim() ?? "", attendees: JSON.stringify(attendees), color: normalizeCalendarColor(input.color ?? existing.color), ...resolveEventFlags(existing, input), repeat: "none" as const, repeatDays: "[]", repeatAnchorDay: null, repeatUntil: null, repeatInterval: 1, repeatWeekday: null, repeatWeek: null, excludedOccurrences: "[]", rrule: null,
+		const moved = { ...existing, id: newId("evt"), eventSequence: 0, title: input.title.trim(), description: input.description?.trim() ?? "", location: input.location?.trim() ?? "", attendees: JSON.stringify(attendees), color: normalizeCalendarColor(input.color ?? existing.color), ...flags, repeat: "none" as const, repeatDays: "[]", repeatAnchorDay: null, repeatUntil: null, repeatInterval: 1, repeatWeekday: null, repeatWeek: null, excludedOccurrences: "[]", rrule: null,
 			// A moved occurrence of a DAV series stays part of that resource as an override row; otherwise it is a plain one-off.
 			davObjectId: existing.davObjectId === existing.id ? existing.id : null, recurrenceId: existing.davObjectId === existing.id ? occurrence.startsAt : null, startsAt, endsAt, createdAt: now, updatedAt: now };
 		const newExcluded = [...excluded, occurrence.startsAt.getTime()];
@@ -84,7 +86,7 @@ export async function PATCH(request: Request, { params }: CalendarEventRoutePara
 		repeatWeek = null;
 	} else if ((repeatWeekday == null) !== (repeatWeek == null)) return NextResponse.json({ error: "Set both a weekday and a week for this repeat" }, { status: 400 });
 	const nextSequence = (existing.eventSequence ?? 0) + 1;
-	const event = { ...existing, timeZone, eventSequence: nextSequence, title: input.title.trim(), description: input.description?.trim() ?? "", location: input.location?.trim() ?? "", attendees: JSON.stringify(attendees), color: normalizeCalendarColor(input.color ?? existing.color), ...repeatFields, repeatInterval, repeatWeekday, repeatWeek, reminderMinutes: input.reminderMinutes === undefined ? existing.reminderMinutes : normalizeReminderMinutes(input.reminderMinutes), lastRemindedStart: null, ...resolveEventFlags(existing, input), startsAt, endsAt };
+	const event = { ...existing, timeZone, eventSequence: nextSequence, title: input.title.trim(), description: input.description?.trim() ?? "", location: input.location?.trim() ?? "", attendees: JSON.stringify(attendees), color: normalizeCalendarColor(input.color ?? existing.color), ...repeatFields, repeatInterval, repeatWeekday, repeatWeek, reminderMinutes: input.reminderMinutes === undefined ? existing.reminderMinutes : normalizeReminderMinutes(input.reminderMinutes), lastRemindedStart: null, ...flags, startsAt, endsAt };
 	// A kept custom rule is not editable here, so the series may change time of day only: its exclusions and moved occurrences move with it.
 	const shifted = event.repeat === "custom" ? shiftCustomSeries(existing, startsAt, timeZone) : null;
 	if (event.repeat === "custom" && !shifted) return NextResponse.json({ error: CUSTOM_DAY_LOCKED }, { status: 409 });

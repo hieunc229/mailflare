@@ -82,10 +82,16 @@ export function inviteEventValues(invite: ParsedInvite, timeZone: string | null,
 		...repeat,
 		excludedOccurrences: mergeExcludedOccurrences(existingExcluded, invite.excludedDates), timeZone,
 		inviteSequence: invite.sequence,
-		// The organiser's current CLASS and TRANSP: a revision that drops them clears them.
-		isPrivate: !!invite.isPrivate, transparent: !!invite.transparent,
 		startsAt: invite.startsAt, endsAt: invite.endsAt, updatedAt: new Date(),
 	};
+}
+
+/**
+ * The invitation's CLASS and TRANSP, for a new event only. Once the event exists the attendee owns these two choices,
+ * so an organiser's update or a re-answered invitation never writes them.
+ */
+export function inviteEventFlags(invite: ParsedInvite) {
+	return { isPrivate: !!invite.isPrivate, transparent: !!invite.transparent };
 }
 
 /**
@@ -220,7 +226,7 @@ export async function registerInboundInvite(env: CloudflareEnv, input: { userId:
 		const values = { ...inviteEventValues(invite, invite.timeZone ?? userZone, existing?.excludedOccurrences), inviteSender: sender };
 		if (plan.action === "insert" || !existing) {
 			// The reminder is written once on insert; the event editor stays the only later overwriter.
-			await db.insert(calendarEvents).values({ id, userId: input.userId, mailboxId: input.mailboxId, color: "#2563eb", responseStatus: "needs-action", inviteMessageId: input.messageId, ...values, ...(invite.alarmMinutes != null ? { reminderMinutes: invite.alarmMinutes } : {}) });
+			await db.insert(calendarEvents).values({ id, userId: input.userId, mailboxId: input.mailboxId, color: "#2563eb", responseStatus: "needs-action", inviteMessageId: input.messageId, ...inviteEventFlags(invite), ...values, ...(invite.alarmMinutes != null ? { reminderMinutes: invite.alarmMinutes } : {}) });
 			await mergeRdateOverrides(db, id, invite);
 			return;
 		}
