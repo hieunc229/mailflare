@@ -1,17 +1,17 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useEffect, useId, useRef, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { Mail, Search, Users } from "@/components/icons";
 import { useLanguage } from "@/components/language-provider";
-import type { GroupCandidate } from "../types";
-import { fetchCandidates, groupsFetch, jsonInit, nextIndex } from "../utils";
+import type { AddOption } from "../types";
+import { externalOption, fetchCandidates, groupsFetch, jsonInit, MAX_EXTERNAL_MEMBERS, memberBody, nextIndex } from "../utils";
 
 /**
  * Search accounts and shared mailboxes and add one with Enter or a click. It follows the ARIA combobox
  * pattern (input + listbox, focus stays in the input) so the list works with arrow keys and screen readers.
  */
-export function AddMembers({ groupId, disabled }: { groupId: string; disabled: boolean }) {
+export function AddMembers({ groupId, disabled, memberAddresses = [], externalFull = false }: { groupId: string; disabled: boolean; memberAddresses?: string[]; externalFull?: boolean }) {
 	const { t } = useLanguage();
 	const qc = useQueryClient();
 	const listId = useId();
@@ -21,6 +21,8 @@ export function AddMembers({ groupId, disabled }: { groupId: string; disabled: b
 	const [open, setOpen] = useState(false);
 	const [active, setActive] = useState(-1);
 	const [announcement, setAnnouncement] = useState("");
+	// An external member is a billed send per message: the admin confirms in place before it is added.
+	const [pending, setPending] = useState<AddOption | null>(null);
 
 	useEffect(() => {
 		const timer = setTimeout(() => setQuery(text.trim()), 200);
@@ -33,24 +35,30 @@ export function AddMembers({ groupId, disabled }: { groupId: string; disabled: b
 		enabled: open && !disabled,
 		retry: false,
 	});
-	const options = candidates.data?.candidates ?? [];
+	const typed = useMemo(() => (externalFull ? null : externalOption(text, memberAddresses)), [text, memberAddresses, externalFull]);
+	const options: AddOption[] = [...(candidates.data?.candidates ?? []), ...(typed ? [{ kind: "external" as const, id: typed, name: typed, address: typed }] : [])];
 
 	const add = useMutation({
-		mutationFn: (candidate: GroupCandidate) => groupsFetch<{ added: unknown[] }>(`/api/groups/${groupId}/members`, t("groups.addFailed"), jsonInit("POST", {
-			members: [candidate.kind === "user" ? { kind: "user", userId: candidate.id } : { kind: "mailbox", mailboxId: candidate.id }],
-		})),
+		mutationFn: (candidate: AddOption) => groupsFetch<{ added: unknown[] }>(`/api/groups/${groupId}/members`, t("groups.addFailed"), jsonInit("POST", { members: [memberBody(candidate)] })),
 		onSuccess: (_data, candidate) => {
 			qc.invalidateQueries({ queryKey: ["groups"] });
 			setText("");
 			setQuery("");
 			setActive(-1);
+			setPending(null);
 			setAnnouncement(t("groups.added", { name: candidate.name }));
 			inputRef.current?.focus();
 		},
 	});
 
-	function choose(candidate: GroupCandidate | undefined) {
-		if (candidate && !add.isPending) add.mutate(candidate);
+	function choose(candidate: AddOption | undefined) {
+		if (!candidate || add.isPending) return;
+		if (candidate.kind === "external") {
+			setPending(candidate);
+			setOpen(false);
+			return;
+		}
+		add.mutate(candidate);
 	}
 
 	function onKeyDown(event: React.KeyboardEvent<HTMLInputElement>) {
@@ -61,10 +69,11 @@ export function AddMembers({ groupId, disabled }: { groupId: string; disabled: b
 		} else if (event.key === "Enter" && open && active >= 0) {
 			event.preventDefault();
 			choose(options[active]);
-		} else if (event.key === "Escape" && open) {
+		} else if (event.key === "Escape" && (open || pending)) {
 			event.preventDefault();
 			setOpen(false);
 			setActive(-1);
+			setPending(null);
 		}
 	}
 
@@ -106,11 +115,18 @@ export function AddMembers({ groupId, disabled }: { groupId: string; disabled: b
 			>
 				{option.kind === "user" ? <Users className="h-4 w-4 shrink-0 text-neutral-500" aria-hidden="true" /> : <Mail className="h-4 w-4 shrink-0 text-neutral-500" aria-hidden="true" />}
 				<span className="min-w-0"><span className="block truncate font-medium text-neutral-900">{option.name}</span><span className="block truncate no-font-mono text-neutral-500">{option.address}</span></span>
-				<span className="ml-auto shrink-0 text-xs text-neutral-500">{option.kind === "user" ? t("groups.kindUser") : t("groups.kindMailbox")}</span>
+				<span className="ml-auto shrink-0 text-xs text-neutral-500">{option.kind === "user" ? t("groups.kindUser") : option.kind === "mailbox" ? t("groups.kindMailbox") : t("groups.kindExternal")}</span>
 			</li>)}
 			{!options.length && <li role="presentation" className="px-3 py-3 text-sm text-neutral-500">{status}</li>}
 		</ul>
-		<p className="mt-2 text-xs text-neutral-500">{t("groups.addHint")}</p>
+		{pending && <div data-testid="external-confirm" role="group" aria-label={t("groups.addExternalTitle")} className="mt-3 space-y-3 rounded-2xl bg-amber-50 px-4 py-3 text-sm text-amber-900">
+			<p>{t("groups.externalCostConfirm", { email: pending.address })}</p>
+			<div className="flex flex-wrap gap-2">
+				<button type="button" disabled={add.isPending} onClick={() => add.mutate(pending)} className="min-h-11 rounded-md bg-neutral-900 px-4 text-sm font-medium text-white disabled:opacity-50">{t("groups.addExternalConfirm")}</button>
+				<button type="button" onClick={() => { setPending(null); inputRef.current?.focus(); }} className="min-h-11 rounded-md border border-neutral-300 bg-white px-4 text-sm text-neutral-800">{t("common.cancel")}</button>
+			</div>
+		</div>}
+		<p className="mt-2 text-xs text-neutral-500">{t("groups.addHint")} {externalFull ? t("groups.externalLimit", { max: MAX_EXTERNAL_MEMBERS }) : t("groups.externalHint")}</p>
 		{add.isError && <p role="alert" className="mt-2 text-sm text-red-600">{(add.error as Error).message}</p>}
 		<p className="sr-only" role="status" aria-live="polite">{showList ? status : announcement}</p>
 	</div>;

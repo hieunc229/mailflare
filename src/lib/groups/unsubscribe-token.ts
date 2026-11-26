@@ -8,7 +8,7 @@ function toBase64Url(bytes: Uint8Array): string {
 	return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
 }
 
-function fromBase64Url(value: string): Uint8Array | null {
+function fromBase64Url(value: string): Uint8Array<ArrayBuffer> | null {
 	if (!/^[A-Za-z0-9_-]+$/.test(value)) return null;
 	try {
 		const binary = atob(value.replace(/-/g, "+").replace(/_/g, "/").padEnd(Math.ceil(value.length / 4) * 4, "="));
@@ -18,7 +18,7 @@ function fromBase64Url(value: string): Uint8Array | null {
 	}
 }
 
-async function mac(secret: string, payload: Uint8Array): Promise<Uint8Array> {
+async function mac(secret: string, payload: Uint8Array<ArrayBuffer>): Promise<Uint8Array> {
 	// Own key domain: the forwarded-mail marker is keyed from the same server secret and must never validate here.
 	const key = await crypto.subtle.importKey("raw", encoder.encode(`mailflare-group-unsub\n${secret}`), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
 	return new Uint8Array(await crypto.subtle.sign("HMAC", key, payload));
