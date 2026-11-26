@@ -389,11 +389,11 @@ test("a delegate cannot see, replace or delete the owner's hidden invitations (u
 	assert.equal((await call(env, "DELETE", "/dav/calendars/u1/c-work/evt_h.ics", { key: keys.u1 })).status, 204);
 });
 
-test("the sync report names no hidden resource to a delegate or reader; the owner's own phone is still told", async (t) => {
+test("an event that becomes hidden (declined) is reported gone to a reader and the owner alike, so a phone that had it drops it", async (t) => {
 	const { env, keys, sql } = await fixture(t);
 	addEvent(sql, "evt_h");
 	const [readerToken, ownerToken] = [tokenOf(await (await syncSince(env, SHARED(), keys.u2, "")).text()), tokenOf(await (await syncSince(env, "/dav/calendars/u1/c-work/", keys.u1, "")).text())];
 	sql.prepare("UPDATE calendar_events SET response_status = 'declined', updated_at = updated_at + 1 WHERE id = 'evt_h'").run();
-	assert.doesNotMatch(await (await syncSince(env, SHARED(), keys.u2, readerToken)).text(), /evt_h/);
+	assert.match(await (await syncSince(env, SHARED(), keys.u2, readerToken)).text(), /evt_h\.ics<\/D:href><D:status>HTTP\/1\.1 404/);
 	assert.match(await (await syncSince(env, "/dav/calendars/u1/c-work/", keys.u1, ownerToken)).text(), /evt_h\.ics<\/D:href><D:status>HTTP\/1\.1 404/);
 });
