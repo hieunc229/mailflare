@@ -327,7 +327,7 @@ test("a phone that was never sent the guests (a redacted-render body has no ATTE
 });
 
 test("a delegate's text is never stored as the owner's body: the owner's phone keeps its own alarm and gets no PARTSTAT, ORGANIZER or alarm of the delegate", async (t) => {
-	const { env, keys, sql } = await fixture(t);
+	const { env, keys } = await fixture(t);
 	const own = vevent("uid-o", "Mine", "BEGIN:VALARM\r\nACTION:DISPLAY\r\nDESCRIPTION:Mine\r\nTRIGGER:-PT10M\r\nEND:VALARM\r\n");
 	assert.equal((await put(env, "/dav/calendars/u1/c-work/o.ics", keys.u1, own)).status, 201);
 	const etag = (await get(env, `${SHARED("csh_edit", "u3")}o.ics`, keys.u3)).etag;

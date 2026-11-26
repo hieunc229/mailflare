@@ -83,5 +83,6 @@ export function shareErrorKey(status: number, code?: string): string {
 /** The translation key for a refused event save or delete, or null when the server's own text is the better message (a validation error). */
 export function eventErrorKey(status: number, code?: string): string | null {
 	if (code === "INVITE_REQUIRES_OWNER") return "calendar.share.inviteRefused";
+	if (code === "EVENT_ID_EXISTS") return "calendar.calendars.error.eventIdExists";
 	return status === 403 || status === 404 ? "calendar.share.error.eventDenied" : null;
 }

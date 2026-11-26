@@ -1,7 +1,7 @@
 import { and, eq, ne } from "drizzle-orm";
 import { NextResponse } from "next/server";
 import { getDb } from "@/db";
-import { calendarEventOverrides, calendarEvents } from "@/db/schema";
+import { calendarEventOverrides, calendarEvents, davCollections } from "@/db/schema";
 import { getEnv } from "@/lib/cloudflare";
 import { createCalendarInvitation } from "@/lib/calendar/utils";
 import { sendEmail } from "@/lib/email/send";
@@ -22,7 +22,7 @@ import { buildSplitAnnouncement } from "@/lib/calendar/split-announcement";
 import { readJsonObject } from "@/lib/http/request";
 import { calendarExistsGuard } from "@/lib/calendar/calendars";
 import { getEventAccess, resolveCalendarForWrite, roleAtLeast } from "@/lib/calendar/shares";
-import { INVITE_REQUIRES_OWNER } from "@/lib/calendar/shares-errors";
+import { EVENT_ID_EXISTS, INVITE_REQUIRES_OWNER } from "@/lib/calendar/shares-errors";
 import { calendarCollectionId } from "@/lib/dav/changes";
 import { createAuditLog } from "@/lib/mailboxes/audit";
 import type { SessionUser } from "@/lib/auth/types";
@@ -84,8 +84,11 @@ export async function PATCH(request: Request, { params }: CalendarEventRoutePara
 	const guard = typeof moveTo === "string" ? calendarExistsGuard(db, ownerId, moveTo) : [];
 	const batched = async (statements: unknown[]): Promise<NextResponse | null> => {
 		try { await db.batch([...guard, ...statements] as never); return null; } catch (error) {
-			if (isUniqueConstraintError(error)) return NextResponse.json({ error: "That calendar no longer exists" }, { status: 409 });
-			throw error;
+			if (!isUniqueConstraintError(error)) throw error;
+			// The calendar guard and the stored resource's unique (collection, UID) and (collection, name) keys fail the same way: say which it was.
+			const [still] = typeof moveTo === "string" ? await db.select({ id: davCollections.id }).from(davCollections).where(and(eq(davCollections.id, moveTo), eq(davCollections.userId, ownerId))).limit(1) : [];
+			if (!still) return NextResponse.json({ error: "That calendar no longer exists" }, { status: 409 });
+			return NextResponse.json({ error: "An event with the same ID already exists in that calendar", code: EVENT_ID_EXISTS }, { status: 409 });
 		}
 	};
 	// An invitation received by mail is never re-announced to its guests from here.
