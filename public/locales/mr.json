@@ -3100,7 +3100,7 @@
 	"domains.forceRemovedCache": "मेल सर्व्हर {date} पर्यंत जुने MTA-STS धोरण लागू करत राहू शकतात.",
 	"general.orgFreeBusy": "Organisation-wide free/busy",
 	"general.orgFreeBusyEnabled": "Let everyone see when everyone else is busy",
-	"general.orgFreeBusyHint": "When someone is invited to an event, the organiser sees when that person is busy, never titles or details. Accounts that are disabled or have Calendar turned off are never shown. Off by default; needs a Team licence.",
+	"general.orgFreeBusyHint": "When on, every account on this installation, across all domains, and every API key with the calendar:read scope can look up any other account's busy times by email address. They see only when someone is busy, never titles or details. Accounts that are disabled or have Calendar turned off are not shown. Off by default; needs a Team licence.",
 	"general.orgFreeBusyLoading": "Loading...",
 	"general.orgFreeBusyLoadFailed": "Could not load this setting.",
 	"general.orgFreeBusySaved": "Saved",
