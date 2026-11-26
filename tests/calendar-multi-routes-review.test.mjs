@@ -93,7 +93,7 @@ test("the whole-series edit and the move to another calendar are one batch", asy
 	const response = await patch("w1", { effectiveFrom: "2026-01-05T10:00:00.000Z", calendarId: "cal:work" });
 	assert.equal(response.status, 200);
 	assert.deepEqual(calendars(), [["o1", "cal:work"], ["w1", "cal:work"]]);
-	assert.deepEqual(batches, [4], "the calendar guard (2), the edit and the move");
+	assert.deepEqual(batches, [5], "the calendar guard (2), the edit, the move and its stored CalDAV resource");
 });
 
 const postBody = (calendarId) => ({ title: "New", startsAt: "2026-12-01T10:00:00.000Z", endsAt: "2026-12-01T11:00:00.000Z", calendarId });
