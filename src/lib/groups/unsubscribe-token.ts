@@ -1,6 +1,6 @@
 const encoder = new TextEncoder();
 
-export type UnsubscribeClaim = { groupId: string; memberId: string; email: string };
+export type UnsubscribeClaim = { groupId: string; memberId: string };
 
 function toBase64Url(bytes: Uint8Array): string {
 	let binary = "";
@@ -32,12 +32,11 @@ function sameBytes(a: Uint8Array, b: Uint8Array): boolean {
 }
 
 /**
- * `base64url(groupId \n memberId \n email) . base64url(HMAC-SHA256)`. The MAC covers all three, so a
- * token unsubscribes exactly one address from exactly one group and cannot be re-aimed. It carries
- * the recipient's own address, which they already hold in the mail it arrived in.
+ * `base64url(groupId \n memberId) . base64url(HMAC-SHA256)`. The MAC covers both, so a token removes exactly
+ * one member row of exactly one group and cannot be re-aimed. It carries no address: the row says whose it is.
  */
 export async function signUnsubscribeToken(secret: string, claim: UnsubscribeClaim): Promise<string> {
-	const payload = encoder.encode(`${claim.groupId}\n${claim.memberId}\n${claim.email}`);
+	const payload = encoder.encode(`${claim.groupId}\n${claim.memberId}`);
 	return `${toBase64Url(payload)}.${toBase64Url(await mac(secret, payload))}`;
 }
 
@@ -49,6 +48,6 @@ export async function verifyUnsubscribeToken(secret: string, token: string): Pro
 	const given = fromBase64Url(parts[1]);
 	if (!payload || !given || !sameBytes(await mac(secret, payload), given)) return null;
 	const fields = new TextDecoder().decode(payload).split("\n");
-	if (fields.length !== 3 || fields.some((field) => !field)) return null;
-	return { groupId: fields[0], memberId: fields[1], email: fields[2] };
+	if (fields.length !== 2 || fields.some((field) => !field)) return null;
+	return { groupId: fields[0], memberId: fields[1] };
 }
