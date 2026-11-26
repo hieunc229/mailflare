@@ -1,6 +1,6 @@
 import { and, eq, inArray, isNotNull, isNull, lte } from "drizzle-orm";
 import { getDb } from "@/db";
-import { calendarEvents, driveItems, mailboxes, messageAttachments, messages, sessions, users } from "@/db/schema";
+import { calendarEvents, calendarShares, davCollections, driveItems, mailboxes, messageAttachments, messages, sessions, users } from "@/db/schema";
 import { canManageUsers, isPrimaryAdmin } from "@/lib/auth/admin";
 import type { SessionUser } from "@/lib/auth/types";
 import { deleteDriveItems } from "@/lib/drive/access";
@@ -46,6 +46,19 @@ export async function transferAccountData(env: CloudflareEnv, fromId: string, fr
 }
 
 /**
+ * A deleted account takes its sharing with it: grants it holds, and grants on the calendars it still owns (the extra
+ * calendars it handed to another account are not its any more, so their grants stay). Explicit statements, not just the
+ * foreign-key cascade the purge relies on, so the people it shared with lose access when the account is deleted, not 30 days later.
+ */
+async function removeCalendarShares(db: ReturnType<typeof getDb>, userIds: string[]): Promise<void> {
+	for (const group of chunks(userIds)) {
+		await db.delete(calendarShares).where(inArray(calendarShares.granteeUserId, group));
+		const owned = (await db.select({ id: davCollections.id }).from(davCollections).where(inArray(davCollections.userId, group))).map((row) => row.id);
+		for (const calendars of chunks(owned)) await db.delete(calendarShares).where(inArray(calendarShares.calendarId, calendars));
+	}
+}
+
+/**
  * Soft-deletes accounts: they are disabled, signed out and stamped with `deletedAt`. They can be restored until the
  * scheduled purge removes them after the retention window. Optionally hands their Drive and calendar data to another account.
  */
@@ -74,6 +87,7 @@ export async function deleteAccounts(env: CloudflareEnv, actor: SessionUser, inp
 		}
 		for (const target of targets) await transferAccountData(env, target.id, target.name || target.email, recipient.id);
 	}
+	await removeCalendarShares(db, ids);
 	const now = new Date();
 	for (const group of chunks(ids)) {
 		await db.update(users).set({ deletedAt: now, disabled: true }).where(inArray(users.id, group));

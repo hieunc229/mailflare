@@ -2,7 +2,8 @@ import { NextResponse } from "next/server";
 import { getDb } from "@/db";
 import { getEnv } from "@/lib/cloudflare";
 import { authorizeCalendarRequest } from "@/lib/calendar/api-auth";
-import { createCalendar, listOwnCalendars } from "@/lib/calendar/calendars";
+import { createCalendar } from "@/lib/calendar/calendars";
+import { listVisibleCalendars } from "@/lib/calendar/shares";
 import type { CalendarInput } from "@/lib/calendar/calendars-types";
 import { readJsonObject } from "@/lib/http/request";
 import { createAuditLog } from "@/lib/mailboxes/audit";
@@ -11,7 +12,7 @@ export async function GET(request: Request) {
 	const env = getEnv();
 	const { user, error } = await authorizeCalendarRequest(env, request, "calendar:read");
 	if (error) return error;
-	return NextResponse.json({ calendars: await listOwnCalendars(getDb(env), user.id) });
+	return NextResponse.json({ calendars: await listVisibleCalendars(getDb(env), user) });
 }
 
 export async function POST(request: Request) {
