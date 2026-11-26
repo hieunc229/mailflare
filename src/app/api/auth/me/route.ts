@@ -1,16 +1,17 @@
 import { NextResponse } from "next/server";
-import { getCurrentUser } from "@/lib/auth/cookies";
 import { getEnv } from "@/lib/cloudflare";
+import { requireSessionUser } from "@/lib/api/auth";
 import { hasPrimaryDomain, userHasMailboxes } from "@/lib/user";
 import { getLicenseEntitlements } from "@/lib/licenses/service";
 import { hasCloudflareCredentials, isNodeRuntime } from "@/lib/runtime";
 
 export async function GET(request: Request) {
 	const env = getEnv();
-	const user = await getCurrentUser(env, request);
-	if (!user) {
-		return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-	}
+	// `requireSessionUser` also turns a database behind on migrations into a 409 saying so,
+	// instead of the 500 that reads as a broken sign-in.
+	const auth = await requireSessionUser(env, request);
+	if (auth.error) return auth.error;
+	const user = auth.user;
 
 	const [entitlements, setup] = await Promise.all([
 		getLicenseEntitlements(env),

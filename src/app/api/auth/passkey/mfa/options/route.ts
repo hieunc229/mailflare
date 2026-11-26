@@ -16,6 +16,7 @@ import {
 	setCeremonyCookie,
 } from "@/lib/auth/webauthn/challenges";
 import { authError } from "@/lib/http/auth-error";
+import { migrationRequired } from "@/lib/http/migration-required";
 
 /** Starts the passkey alternative to a TOTP prompt after a password sign-in. */
 export async function POST(request: Request) {
@@ -28,7 +29,13 @@ export async function POST(request: Request) {
 
 	const userId = await getLoginChallengeUserId(env, parsed.data.challengeToken);
 	if (!userId) return authError("passkey_expired", 401);
-	const [user] = await getDb(env).select().from(users).where(eq(users.id, userId)).limit(1);
+	let user: typeof users.$inferSelect | undefined;
+	try {
+		[user] = await getDb(env).select().from(users).where(eq(users.id, userId)).limit(1);
+	} catch (error) {
+		// A database behind on migrations must not read as a disabled account.
+		return migrationRequired(error);
+	}
 	if (!user || user.disabled || user.deletedAt) return authError("account_disabled", 403);
 	const passkeys = await listPasskeys(env, user.id);
 	if (passkeys.length === 0) return authError("passkey_not_found", 400);

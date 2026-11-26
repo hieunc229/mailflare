@@ -1,3 +1,4 @@
+import { NextResponse } from "next/server";
 import { getEnv } from "@/lib/cloudflare";
 import { allowLoginAttempt } from "@/lib/auth/rate-limit";
 import { readJsonBody } from "@/lib/http/request";
@@ -13,6 +14,7 @@ import { completeLogin } from "@/lib/auth/login-response";
 import { recordAuthActivity } from "@/lib/auth/activity";
 import { authError } from "@/lib/http/auth-error";
 import { PasskeyVerificationError } from "@/lib/auth/webauthn/errors";
+import { isMigrationRequired, MIGRATION_REQUIRED } from "@/lib/http/migration-required";
 
 /** Completes a discoverable passkey sign-in. */
 export async function POST(request: Request) {
@@ -48,6 +50,13 @@ export async function POST(request: Request) {
 		removeCeremonyCookie(response.headers, request, challenge.binding);
 		return response;
 	} catch (error) {
+		// A database behind on migrations must not read as a rejected passkey: answer 409 with
+		// the fix instead of a 401 that blames the user's credential.
+		if (isMigrationRequired(error)) {
+			const migrationResponse = NextResponse.json(MIGRATION_REQUIRED, { status: 409 });
+			removeCeremonyCookie(migrationResponse.headers, request, challenge.binding);
+			return migrationResponse;
+		}
 		const response = authError(error instanceof PasskeyVerificationError ? error.code : "passkey_invalid", 401);
 		removeCeremonyCookie(response.headers, request, challenge.binding);
 		return response;

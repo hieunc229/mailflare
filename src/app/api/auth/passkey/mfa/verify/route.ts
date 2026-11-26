@@ -1,3 +1,4 @@
+import { NextResponse } from "next/server";
 import { eq } from "drizzle-orm";
 import { getEnv } from "@/lib/cloudflare";
 import { getDb } from "@/db";
@@ -16,6 +17,7 @@ import { isAuthenticationResponseJSON, verifyPasskeyAuthentication } from "@/lib
 import { completeLogin } from "@/lib/auth/login-response";
 import { recordAuthActivity } from "@/lib/auth/activity";
 import { authError } from "@/lib/http/auth-error";
+import { isMigrationRequired, migrationRequired, MIGRATION_REQUIRED } from "@/lib/http/migration-required";
 import { PasskeyVerificationError } from "@/lib/auth/webauthn/errors";
 
 /** Finishes a password + passkey sign-in. */
@@ -40,7 +42,13 @@ export async function POST(request: Request) {
 	if (!binding) return authError("passkey_expired", 401);
 	const userId = await getLoginChallengeUserId(env, parsed.data.challengeToken);
 	if (!userId) return authError("passkey_expired", 401);
-	const [user] = await getDb(env).select().from(users).where(eq(users.id, userId)).limit(1);
+	let user: typeof users.$inferSelect | undefined;
+	try {
+		[user] = await getDb(env).select().from(users).where(eq(users.id, userId)).limit(1);
+	} catch (error) {
+		// A database behind on migrations must not read as a disabled account.
+		return migrationRequired(error);
+	}
 	if (!user || user.disabled || user.deletedAt) return authError("account_disabled", 403);
 
 	const challenge = await consumeWebAuthnChallenge(env, {
@@ -62,6 +70,12 @@ export async function POST(request: Request) {
 		removeCeremonyCookie(response.headers, request, challenge.binding);
 		return response;
 	} catch (error) {
+		// A database behind on migrations must not read as a rejected passkey.
+		if (isMigrationRequired(error)) {
+			const migrationResponse = NextResponse.json(MIGRATION_REQUIRED, { status: 409 });
+			removeCeremonyCookie(migrationResponse.headers, request, challenge.binding);
+			return migrationResponse;
+		}
 		const response = authError(error instanceof PasskeyVerificationError ? error.code : "passkey_invalid", 401);
 		removeCeremonyCookie(response.headers, request, challenge.binding);
 		return response;
