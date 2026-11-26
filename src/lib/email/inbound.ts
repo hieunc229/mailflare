@@ -8,10 +8,11 @@ import { ingestReportMail, type BatchBudget } from "@/lib/deliverability/ingest"
 import { readTrustedDmarcResult } from "@/lib/spam/analyzers/authentication";
 import { boundParsedEmail } from "@/lib/email/inbound-limits";
 import { resolveInboundAddress, resolveInboxRuleDestination, type RoutingDecision } from "@/lib/email/routing";
-import { expandGroupDelivery, resolveGroupDelivery } from "@/lib/groups/expand";
+import { expandGroupDelivery, resolveGroupDelivery, scopeRawToGroup } from "@/lib/groups/expand";
 import { groupsAllowed } from "@/lib/groups/license";
 import { admitGroupMail } from "@/lib/email/incoming";
-import { countReceivedInJoinedValue } from "@/lib/groups/loop-utils";
+import { countReceivedHeaders } from "@/lib/groups/loop-utils";
+import type { ExpansionBudget } from "@/lib/groups/expand-utils";
 import { dispatchWebhooks } from "@/lib/email/webhooks";
 import { getMessageContactNames, upsertContactFromAddress } from "@/lib/contacts/service";
 import { getEmailAddress } from "@/lib/email/address";
@@ -61,7 +62,7 @@ export type InboundQueueMessage = {
 export async function processInboundMessage(
 	env: CloudflareEnv,
 	payload: InboundQueueMessage,
-	options: { reportBudget?: BatchBudget } = {},
+	options: { reportBudget?: BatchBudget; expansionBudget?: ExpansionBudget } = {},
 ): Promise<void> {
 	const db = getDb(env);
 	// DMARC aggregate reports bypass mailboxes entirely (see report-address.ts); they are parsed into stats and discarded.
@@ -78,7 +79,7 @@ export async function processInboundMessage(
 	// Group mail was admitted (who may post, loops) by the live handler. This consumer fans it out into one
 	// copy per member mailbox, and each copy comes back here with `groupDelivery`.
 	if (payload.groupExpansion) {
-		await expandGroupDelivery(env, payload);
+		await expandGroupDelivery(env, payload, { budget: options.expansionBudget });
 		return;
 	}
 	let decision: RoutingDecision | null;
@@ -93,25 +94,33 @@ export async function processInboundMessage(
 
 	if (!decision) {
 		console.warn(`No routing for inbound address: ${payload.to}`);
-		await dropRaw();
+		// A group copy's object can be the same for a mailbox's copies from two groups; the sweeper removes strays.
+		if (!payload.groupDelivery) await dropRaw();
 		return;
 	}
 
 	// Group mail reaches here without `groupExpansion` when the live handler's routing failed and stored
 	// it anyway. Run the checks it skipped (loops, who may post) now, then expand or drop.
 	if (decision.action === "group" && decision.group) {
+		const raw = await env.BUCKET.get(payload.rawR2Key);
+		if (!raw) {
+			console.error(`Missing R2 object: ${payload.rawR2Key}`);
+			return;
+		}
 		const admitted = await admitGroupMail(env, decision, {
 			all: payload.headers,
 			verdicts: payload.verdicts,
-			receivedHops: countReceivedInJoinedValue(payload.headers?.received),
+			// The header map has no Received headers (they are untrusted and stripped), so count them in the raw message.
+			receivedHops: countReceivedHeaders(await raw.arrayBuffer()),
 			envelopeFrom: payload.from,
 		});
 		if (admitted.action !== "group") {
+			// The queued key may be shared with other recipients of the message, so leave it to the raw sweeper.
 			console.warn(`Dropped group mail to ${payload.to}: ${admitted.action}`);
-			await dropRaw();
 			return;
 		}
-		await expandGroupDelivery(env, { ...payload, groupExpansion: { groupId: decision.group.groupId } });
+		const scoped = await scopeRawToGroup(env, payload, decision.group.groupId);
+		if (scoped) await expandGroupDelivery(env, scoped.payload, { budget: options.expansionBudget });
 		return;
 	}
 
