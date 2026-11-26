@@ -26,6 +26,7 @@ await build({
 		contents: `
 			export * from './server/runtime/sqlite-database';
 			export * from './server/runtime/file-bucket';
+			export * from './src/lib/email/send';
 			export * from './src/lib/email/trash-retention';
 			export * from './src/lib/import/service';
 			export * from './src/lib/auth/session';
@@ -53,10 +54,11 @@ await build({
 });
 
 const m = await import(pathToFileURL(join(outDir, "bundle.mjs")).href);
-const { runTrashRetention, importMessagesToMailbox, createSession, retentionRoute, bulkRoute, SqliteDatabase, openFileBucket } = m;
+const { runTrashRetention, sendEmail, sendScheduledMessageNow, importMessagesToMailbox, createSession, retentionRoute, bulkRoute, SqliteDatabase, openFileBucket } = m;
 
 const DAY = 86_400_000;
 const NOW = new Date();
+let providerMessages = 0;
 const daysAgo = (days) => Math.floor((NOW.getTime() - days * DAY) / 1000);
 
 /** Migrated SQLite + real file bucket, two accounts, a shared mailbox with a folder and a bearer session each. */
@@ -80,6 +82,9 @@ async function fixture(t) {
 	run("INSERT INTO domains (id, user_id, hostname, zone_id, created_at) VALUES ('da', 'a', 'a.test', 'z', ?), ('db', 'b', 'b.test', 'z', ?)", created, created);
 	run("INSERT INTO mailboxes (id, user_id, domain_id, local_part, type, created_at) VALUES ('a1', 'a', 'da', 'a', 'shared', ?), ('b1', 'b', 'db', 'b', 'personal', ?)", created, created);
 	run("INSERT INTO folders (id, user_id, mailbox_id, name, retention_days, created_at) VALUES ('news', 'a', 'a1', 'News', 7, ?), ('plain', 'a', 'a1', 'Plain', NULL, ?)", created, created);
+	run("UPDATE domains SET sending_enabled = 1, sending_provider = 'cloudflare' WHERE id = 'da'");
+	env.EMAIL = { send: async () => ({ messageId: `<provider-${++providerMessages}@a.test>` }) };
+	env.OUTBOUND_QUEUE = { send: async () => {} };
 	// b is a delegate on a's shared mailbox.
 	run("INSERT INTO mailbox_access (id, mailbox_id, user_id, permission, created_at) VALUES ('grant', 'a1', 'b', 'full_access', ?)", created);
 
@@ -97,7 +102,60 @@ async function fixture(t) {
 	const bulk = (token, payload) => bulkRoute.POST(request("POST", token, payload));
 	const setRule = (token, folderId, days) => retentionRoute.PATCH(request("PATCH", token, { days }), { params: Promise.resolve({ id: folderId }) });
 
-	return { env, db, bucket, run, message, messageRow, bulk, setRule, sessions };
+	const send = async (subject) => (await sendEmail(env, {
+		userId: "a",
+		mailboxId: "a1",
+		from: "a@a.test",
+		to: "someone@example.test",
+		subject,
+		text: "hello",
+		scheduledAt: new Date(Date.now() + DAY).toISOString(),
+	})).messageId;
+
+	return { env, db, database, bucket, run, message, messageRow, bulk, setRule, send, sessions };
+}
+
+/**
+ * Wrap the database so the first attachment-key read pauses: the callback runs before that read is executed,
+ * which is the window between the key capture and the conditional DELETE.
+ */
+function pausingDatabase(database, onKeyRead) {
+	let paused = false;
+	return new Proxy(database, {
+		get(target, property) {
+			if (property !== "prepare") {
+				const value = Reflect.get(target, property, target);
+				return typeof value === "function" ? value.bind(target) : value;
+			}
+			return (sql) => {
+				const statement = target.prepare(sql);
+				if (paused || !/from "message_attachments"/.test(sql)) return statement;
+				return new Proxy(statement, {
+					get(statementTarget, statementProperty) {
+						const statementValue = Reflect.get(statementTarget, statementProperty, statementTarget);
+						if (statementProperty !== "bind") return typeof statementValue === "function" ? statementValue.bind(statementTarget) : statementValue;
+						return (...args) => {
+							const bound = statementTarget.bind(...args);
+							return new Proxy(bound, {
+								get(boundTarget, boundProperty) {
+									const boundValue = Reflect.get(boundTarget, boundProperty, boundTarget);
+									if (typeof boundValue !== "function") return boundValue;
+									if (!["raw", "all", "run"].includes(boundProperty)) return boundValue.bind(boundTarget);
+									return async (...callArgs) => {
+										if (!paused) {
+											paused = true;
+											await onKeyRead(args);
+										}
+										return boundValue.apply(boundTarget, callArgs);
+									};
+								},
+							});
+						};
+					},
+				});
+			};
+		},
+	});
 }
 
 test("a queued message moved into a ruled folder keeps its live send", async (t) => {
@@ -196,7 +254,7 @@ test("clearing the rule during the run spares the candidates not yet reached", a
 
 test("a delegate's message filed in the shared mailbox's ruled folder follows the mailbox owner's rule", async (t) => {
 	const f = await fixture(t);
-	f.message("delegated", { userId: "b", mailboxId: "a1", direction: "outbound" });
+	f.message("delegated", { userId: "b", mailboxId: "a1" });
 	assert.equal((await f.bulk(f.sessions.b, { messageIds: ["delegated"], action: "folder", folderId: "news" })).status, 200);
 
 	assert.equal(await runTrashRetention(f.env, NOW), 1);
@@ -252,4 +310,137 @@ test("an unreachable database is reported as zero deletions, not a rejection", a
 		console.error = original;
 	}
 	assert.match(logged, /could not list owners/);
+});
+
+test("a really sent message filed into a ruled folder keeps its Sent provenance", async (t) => {
+	const f = await fixture(t);
+	const id = await f.send("Completed");
+	assert.equal(await sendScheduledMessageNow(f.env, id), true, "the scheduled send completes for real");
+	f.run("UPDATE messages SET created_at = ? WHERE id = ?", daysAgo(90), id);
+	assert.deepEqual(
+		f.db.prepare("SELECT messages.direction AS direction, outbound_jobs.status AS status FROM outbound_jobs join messages on messages.id = outbound_jobs.message_id WHERE message_id = ?").get(id),
+		{ direction: "outbound", status: "sent" },
+		"a terminal job, so the live-job guard is not what protects it",
+	);
+
+	assert.equal((await f.bulk(f.sessions.a, { messageIds: [id], action: "folder", folderId: "news" })).status, 200);
+	assert.deepEqual(
+		f.db.prepare("SELECT folder_id, status, direction FROM messages WHERE id = ?").get(id),
+		{ folder_id: "news", status: "received", direction: "outbound" },
+		"filing rewrites the status but not the direction",
+	);
+	assert.equal(await runTrashRetention(f.env, NOW), 0, "a filed sent copy is not folder-retention material");
+	assert.equal(f.messageRow(id)?.id, id);
+});
+
+test("imported Sent mail with no outbound job, filed into a ruled folder, survives", async (t) => {
+	const f = await fixture(t);
+	const raw = new TextEncoder().encode([
+		"From: A <a@a.test>",
+		"To: someone@example.test",
+		"Date: Mon, 01 Jan 2001 12:00:00 +0000",
+		"Message-ID: <imported-sent@a.test>",
+		"Subject: sent copy",
+		"MIME-Version: 1.0",
+		"Content-Type: text/plain",
+		"",
+		"body",
+		"",
+	].join("\r\n")).buffer;
+	assert.deepEqual(
+		await importMessagesToMailbox(f.env, { userId: "a", mailboxId: "a1", destination: { type: "system", section: "sent" }, messages: [{ filename: "sent.eml", raw }] }),
+		{ imported: 1, skipped: 0, errors: [] },
+	);
+	const [imported] = f.db.prepare("SELECT id, direction, status, created_at FROM messages").all();
+	assert.deepEqual([imported.direction, imported.status], ["outbound", "sent"], "the Sent destination records the provenance");
+	assert.equal(f.db.prepare("SELECT count(*) AS n FROM outbound_jobs").get().n, 0, "no job row to protect it");
+
+	f.run("UPDATE messages SET created_at = ? WHERE id = ?", daysAgo(90), imported.id);
+	assert.equal((await f.bulk(f.sessions.a, { messageIds: [imported.id], action: "folder", folderId: "news" })).status, 200);
+	assert.equal(f.db.prepare("SELECT status FROM messages WHERE id = ?").get(imported.id).status, "received");
+	assert.equal(await runTrashRetention(f.env, NOW), 0);
+	assert.equal(f.messageRow(imported.id)?.id, imported.id);
+});
+
+test("a move committed between the key read and the delete still wins", async (t) => {
+	const f = await fixture(t);
+	f.message("gap", { folderId: "news", rawR2Key: "gap.eml" });
+	await f.bucket.put("gap.eml", "gap");
+
+	const paused = pausingDatabase(f.database, async () => {
+		// The real bulk route moves the candidate to an unruled folder after its objects were listed.
+		assert.equal((await f.bulk(f.sessions.a, { messageIds: ["gap"], action: "folder", folderId: "plain" })).status, 200);
+		assert.equal(f.messageRow("gap").folder_id, "plain");
+	});
+
+	assert.equal(await runTrashRetention({ ...f.env, DB: paused }, NOW), 0);
+	assert.equal(f.messageRow("gap")?.folder_id, "plain", "the conditional delete matched nothing");
+	assert.ok(await f.bucket.head("gap.eml"), "and no object was touched");
+});
+
+test("a rule enabled during the Trash phase applies from the next run, like one enabled in the folder phase", async (t) => {
+	const f = await fixture(t);
+	f.run("UPDATE users SET trash_retention_days = 7 WHERE id = 'a'");
+	f.run("INSERT INTO folders (id, user_id, mailbox_id, name, retention_days, created_at) VALUES ('late', 'a', 'a1', 'Late', NULL, ?)", daysAgo(400));
+	f.message("late-msg", { folderId: "late" });
+	f.message("trash-now", { status: "trash", rawR2Key: "trash-now.eml" });
+	f.run("UPDATE messages SET trashed_at = ? WHERE id = 'trash-now'", daysAgo(60));
+	await f.bucket.put("trash-now.eml", "x");
+
+	const enabling = {
+		...f.env,
+		BUCKET: {
+			...f.bucket,
+			delete: async (key) => {
+				if (String(key) === "trash-now.eml") {
+					// The real settings route enables the rule while the Trash phase is running.
+					assert.equal((await f.setRule(f.sessions.a, "late", 7)).status, 200);
+				}
+				return f.bucket.delete(key);
+			},
+		},
+	};
+
+	assert.equal(await runTrashRetention(enabling, NOW), 1, "only the Trash candidate goes");
+	assert.equal(f.messageRow("late-msg")?.id, "late-msg", "rules are snapshotted at run start");
+	assert.equal(await runTrashRetention(f.env, NOW), 1, "the next run applies it");
+	assert.equal(f.messageRow("late-msg"), undefined);
+});
+
+test("clearing the owner's Trash rule mid-phase spares the candidates not yet claimed", async (t) => {
+	const f = await fixture(t);
+	f.run("UPDATE users SET trash_retention_days = 7 WHERE id = 'a'");
+	for (const id of ["trash-a", "trash-b"]) {
+		f.message(id, { status: "trash", rawR2Key: `${id}.eml` });
+		f.run("UPDATE messages SET trashed_at = ? WHERE id = ?", daysAgo(60), id);
+		await f.bucket.put(`${id}.eml`, "x");
+	}
+
+	const clearing = {
+		...f.env,
+		BUCKET: {
+			...f.bucket,
+			delete: async (key) => {
+				if (String(key) === "trash-a.eml") f.run("UPDATE users SET trash_retention_days = NULL WHERE id = 'a'");
+				return f.bucket.delete(key);
+			},
+		},
+	};
+
+	assert.equal(await runTrashRetention(clearing, NOW), 1);
+	assert.equal(f.messageRow("trash-a"), undefined, "already claimed");
+	assert.equal(f.messageRow("trash-b")?.id, "trash-b", "the rule is read again by the conditional delete");
+	assert.ok(await f.bucket.head("trash-b.eml"));
+});
+
+test("a missing database binding is reported as zero deletions, not a rejection", async () => {
+	let logged = "";
+	const original = console.error;
+	console.error = (...args) => { logged += args.join(" "); };
+	try {
+		assert.equal(await runTrashRetention({ BUCKET: { delete: async () => {} } }, NOW), 0);
+	} finally {
+		console.error = original;
+	}
+	assert.match(logged, /database binding is unavailable/);
 });

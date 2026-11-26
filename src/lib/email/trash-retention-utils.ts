@@ -12,6 +12,10 @@ export const TRASH_RETENTION_BATCH_SIZE = 200;
  * an unknown value must mean "keep". `received` and `archived` are the two normal filing statuses; `draft`,
  * `queued` and `failed` are unsent or still sending, `sent` is the user's sent record (JMAP files sent mail
  * into folders as literal `sent`), and Trash/Spam belong to the owner's Trash retention rule.
+ *
+ * Status alone cannot see provenance: the web send path completes a scheduled message and the bulk folder
+ * action rewrites it to `received`, so the folder rule also requires `messages.direction <> 'outbound'` —
+ * that column is written by every send path and by imported Sent/Drafts mail, and filing never rewrites it.
  */
 export const FOLDER_RETENTION_ELIGIBLE_STATUSES: readonly string[] = ["received", "archived"];
 

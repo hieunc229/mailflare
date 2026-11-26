@@ -170,12 +170,26 @@ test("an unsent draft filed through archive-then-move keeps its private_draft fl
 	assert.deepEqual(f.ids(), ["filed-draft"]);
 });
 
+test("a folder rule never deletes outbound mail, while a deliberately trashed sent copy still goes", async (t) => {
+	const f = await fixture(t);
+	f.setGlobalDays("u1", 7);
+	f.addFolder("fld_news", "u1", "mb1", 7);
+	// Status cannot carry provenance: a completed send filed here is `received` with direction `outbound`.
+	f.insertMessage("filed-sent", { folderId: "fld_news", status: "received", direction: "outbound", created: 90 });
+	f.insertMessage("filed-inbound", { folderId: "fld_news", status: "received", created: 90 });
+	// The user threw this sent copy away themselves, so the Trash rule still owns it.
+	f.insertMessage("trashed-sent", { status: "trash", direction: "outbound", created: 90, trashed: 60 });
+
+	assert.equal(await runTrashRetention(f.env, NOW), 2, "the filed inbound message and the explicitly trashed sent copy");
+	assert.deepEqual(f.ids(), ["filed-sent"]);
+});
+
 test("a message a live outbound job still owns is never purged, whatever its status", async (t) => {
 	const f = await fixture(t);
 	f.addFolder("fld_news", "u1", "mb1", 7);
 	f.setGlobalDays("u1", 7);
 	for (const [id, jobStatus] of [["job-queued", "queued"], ["job-sending", "sending"], ["job-sent", "sent"], ["job-failed", "failed"]]) {
-		f.insertMessage(id, { folderId: "fld_news", status: "received", direction: "outbound", created: 90 });
+		f.insertMessage(id, { folderId: "fld_news", status: "received", created: 90 });
 		f.addOutboundJob(`out-${id}`, id, jobStatus);
 	}
 	f.insertMessage("in-trash-with-job", { status: "trash", created: 90, trashed: 60 });
@@ -196,7 +210,7 @@ test("a folder rule is bound to the folder's mailbox and mailbox owner, not to t
 	// Same folder id, but the message lives in another mailbox: never in scope.
 	f.insertMessage("other-mailbox", { mailboxId: "mb1b", folderId: "fld_news", created: 90 });
 	// A delegate's message filed in the shared mailbox's folder follows the mailbox owner's rule.
-	f.insertMessage("delegated", { userId: "u2", mailboxId: "mb1", folderId: "fld_news", created: 90, direction: "outbound" });
+	f.insertMessage("delegated", { userId: "u2", mailboxId: "mb1", folderId: "fld_news", created: 90 });
 
 	assert.equal(await runTrashRetention(f.env, NOW), 1);
 	assert.deepEqual(f.ids(), ["other-mailbox"]);
@@ -271,15 +285,16 @@ test("a mid-batch storage failure cannot borrow budget from the next pass, and t
 	const claimed = await runTrashRetention(f.env, NOW);
 	const physicallyDeleted = before - f.count();
 	assert.equal(claimed, physicallyDeleted, "the reported count matches what is actually gone");
-	assert.equal(physicallyDeleted, TRASH_RETENTION_BATCH_SIZE - 1);
-	assert.ok(physicallyDeleted <= TRASH_RETENTION_BATCH_SIZE, "the cap holds even though an attempt failed");
+	assert.equal(physicallyDeleted, TRASH_RETENTION_BATCH_SIZE, "the row delete is the claim: the 200th row is gone too");
+	assert.ok(physicallyDeleted <= TRASH_RETENTION_BATCH_SIZE, "the cap holds even though an object delete failed");
 	assert.equal(f.ids().filter((id) => id.startsWith("news-")).length, 205, "the folder pass got no leftover budget");
-	assert.deepEqual(f.ids().filter((id) => id.startsWith("trash-")), ["trash-199"], "the failed row is still there for the next run");
+	assert.deepEqual(f.ids().filter((id) => id.startsWith("trash-")), [], "no row survives a claim");
+	assert.deepEqual(f.files, ["fail-budget.eml"], "the documented trade-off: the row is gone, its object is orphaned");
 
 	f.env.onDelete = undefined;
-	// 200 for the retried Trash row plus the first 199 folder rows; the rest drains on a later run.
-	assert.equal(await runTrashRetention(f.env, NOW), 200, "the next run retries it and then spends the rest on the folder");
-	assert.equal(f.ids().filter((id) => id.startsWith("news-")).length, 6);
+	// The next run has a full budget again and spends it on the folder backlog.
+	assert.equal(await runTrashRetention(f.env, NOW), 200, "the next run starts from a full budget");
+	assert.equal(f.ids().filter((id) => id.startsWith("news-")).length, 5);
 });
 
 test("folder retention days outside 1-365 mean no folder rule", async (t) => {
