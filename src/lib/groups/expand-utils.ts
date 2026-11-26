@@ -51,12 +51,46 @@ export function isAccountPrimaryAddress(localPart: string, hostname: string, acc
 	return `${localPart}@${hostname}`.toLowerCase() === accountEmail.trim().toLowerCase();
 }
 
-/**
- * Storage key of one member's copy. It is derived from the original raw key, so a redelivered
- * chunk writes the same objects and the consumer's `(mailboxId, rawR2Key)` dedupe skips them.
- * (Hashing the bytes, as `inboundStorageKey` does, would cost 40 SHA-256 passes over up to 25 MB.)
- */
-export async function groupCopyKey(rawR2Key: string, mailboxId: string): Promise<string> {
-	const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(`group-copy\0${mailboxId}\0${rawR2Key}`));
-	return `inbound/${Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("")}.eml`;
+/** SHA-256 of the message bytes, hex: one pass per chunk, however many members get a copy. */
+export async function contentDigest(bytes: ArrayBuffer): Promise<string> {
+	return hex(await crypto.subtle.digest("SHA-256", bytes));
 }
+
+function hex(digest: ArrayBuffer): string {
+	return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");
+}
+
+/**
+ * Storage key of one member's copy, from the message content and the mailbox. It does not depend
+ * on which group sent it: a mailbox in two groups addressed in one message gets the same key twice,
+ * so the consumer's `(mailboxId, rawR2Key)` dedupe stores one copy. A redelivered chunk rewrites
+ * the same objects. (Hashing the bytes per member, as `inboundStorageKey` does, would cost 20
+ * SHA-256 passes over up to 25 MB.)
+ */
+export async function groupCopyKey(digest: string, mailboxId: string): Promise<string> {
+	return `inbound/${hex(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(`group-copy\0${mailboxId}\0${digest}`)))}.eml`;
+}
+
+/** Subrequests one chunk can use at most: its copies plus the queries, queue sends and cleanup around them. */
+export const EXPANSION_CHUNK_COST = GROUP_EXPANSION_CHUNK + 12;
+/** What expansion may spend in one queue batch: under the 50 subrequests of an invocation on the Free plan. */
+export const EXPANSION_SUBREQUEST_BUDGET = 45;
+
+export type ExpansionBudget = { remaining: number; started: boolean };
+
+/** One per queue batch. A batch holds several messages and runs them in one invocation. */
+export const createExpansionBudget = (): ExpansionBudget => ({ remaining: EXPANSION_SUBREQUEST_BUDGET, started: false });
+
+/**
+ * Claims a chunk's worth of subrequests. The first chunk of a batch always runs, so expansion
+ * makes progress; later ones return false and are re-enqueued with a delay, never dropped.
+ */
+export function reserveExpansion(budget: ExpansionBudget): boolean {
+	if (budget.started && EXPANSION_CHUNK_COST > budget.remaining) return false;
+	budget.started = true;
+	budget.remaining -= EXPANSION_CHUNK_COST;
+	return true;
+}
+
+/** Seconds a deferred chunk waits before the queue offers it again. */
+export const EXPANSION_DEFER_SECONDS = 5;

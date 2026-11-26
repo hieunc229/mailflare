@@ -118,6 +118,8 @@ export function startSmtpListener(
 					mta: options.hostname,
 				});
 				let rejectReason: string | null = null;
+				let groupRefusals = 0;
+				let groupRefusal: string | null = null;
 				for (const recipient of session.envelope.rcptTo) {
 					const result = await intakeIncomingMail(
 						env,
@@ -126,7 +128,11 @@ export function startSmtpListener(
 							reject: (reason, info) => {
 								// A 550 at DATA bounces the message for every recipient, including those already stored.
 								// Refusing one group's post must not do that: with several recipients, drop it silently.
-								if (info?.groupPolicy && session.envelope.rcptTo.length > 1) return;
+								if (info?.groupPolicy && session.envelope.rcptTo.length > 1) {
+									groupRefusals += 1;
+									groupRefusal = reason;
+									return;
+								}
 								rejectReason = reason;
 							},
 							forward: async (destination, extra) => mailer.sendRaw(from, destination, prependHeaders(raw, extra)),
@@ -140,6 +146,8 @@ export function startSmtpListener(
 						return;
 					}
 				}
+				// When every recipient was such a group, nothing was stored: say so rather than 250 and vanish.
+				if (!rejectReason && groupRefusal && groupRefusals === session.envelope.rcptTo.length) rejectReason = groupRefusal;
 				if (rejectReason) {
 					callback(Object.assign(new Error(rejectReason), { responseCode: 550 }));
 					return;

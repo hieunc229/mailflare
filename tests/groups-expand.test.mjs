@@ -21,6 +21,14 @@ test("planChunk splits ordered members after a cursor and reports the next curso
 	assert.equal(app.utils.GROUP_EXPANSION_CHUNK, 20);
 });
 
+test("the expansion budget lets the first chunk through and defers the rest of a batch", () => {
+	const budget = app.utils.createExpansionBudget();
+	assert.equal(app.utils.reserveExpansion(budget), true);
+	assert.equal(app.utils.reserveExpansion(budget), false);
+	assert.ok(app.utils.EXPANSION_CHUNK_COST * 2 > app.utils.EXPANSION_SUBREQUEST_BUDGET);
+	assert.equal(app.utils.reserveExpansion(app.utils.createExpansionBudget()), true);
+});
+
 test("planDeliveries de-duplicates by mailbox and skips the sender's own mailbox", () => {
 	const targets = [{ mailboxId: "a" }, { mailboxId: "b" }, { mailboxId: "a" }, { mailboxId: "c" }];
 	assert.deepEqual(app.utils.planDeliveries(targets, null), ["a", "b", "c"]);
@@ -41,10 +49,14 @@ test("isAccountPrimaryAddress compares the mailbox address with the account emai
 	assert.equal(app.utils.isAccountPrimaryAddress("alice", "other.com", "alice@example.com"), false);
 });
 
-test("the copy key is deterministic per mailbox and raw object", async () => {
-	const a = await app.utils.groupCopyKey("inbound/x.eml", "m1");
-	assert.equal(a, await app.utils.groupCopyKey("inbound/x.eml", "m1"));
-	assert.notEqual(a, await app.utils.groupCopyKey("inbound/x.eml", "m2"));
+test("the copy key is deterministic per mailbox and message content, whichever group sent it", async () => {
+	const bytes = new TextEncoder().encode("same message").buffer;
+	const digest = await app.utils.contentDigest(bytes);
+	assert.equal(digest, await app.utils.contentDigest(new TextEncoder().encode("same message").buffer));
+	assert.notEqual(digest, await app.utils.contentDigest(new TextEncoder().encode("other").buffer));
+	const a = await app.utils.groupCopyKey(digest, "m1");
+	assert.equal(a, await app.utils.groupCopyKey(digest, "m1"));
+	assert.notEqual(a, await app.utils.groupCopyKey(digest, "m2"));
 	assert.match(a, /^inbound\/[0-9a-f]{64}\.eml$/);
 });
 
@@ -82,10 +94,11 @@ async function fixture(t, count = MEMBERS) {
 			delete: async (key) => { objects.delete(key); },
 		},
 		INBOUND_QUEUE: {
-			send: async (body) => { queue.push(body); },
+			send: async (body, options) => { queue.push(body); env.sendOptions.push(options); },
 			sendBatch: async (batch) => { env.batches.push(batch.length); for (const message of batch) queue.push(message.body); },
 		},
 		batches: [],
+		sendOptions: [],
 		REALTIME: { getByName: () => ({ fetch: async () => new Response(null, { status: 204 }) }) },
 	};
 	globalThis.__mailflareNodeEnv = env;
@@ -200,7 +213,7 @@ test("mailbox members, disabled accounts and duplicate targets are handled", asy
 	assert.deepEqual(queue.map((m) => m.groupDelivery.mailboxId).sort(), ["m-support", "mb000"]);
 });
 
-test("a copy for a mailbox that left the group is dropped with its raw object", async (t) => {
+test("a copy for a mailbox that left the group is dropped", async (t) => {
 	const { env, queue, payload, sqlite, objects } = await fixture(t, 2);
 	queue.push(payload());
 	await app.expandGroupDelivery(env, queue.shift());
@@ -208,8 +221,9 @@ test("a copy for a mailbox that left the group is dropped with its raw object", 
 	const copies = queue.splice(0);
 	for (const message of copies) await app.processInboundMessage(env, message);
 	assert.deepEqual(sqlite.prepare("SELECT mailbox_id FROM messages").all().map((r) => r.mailbox_id), ["mb000"]);
+	// The copy's raw object may be shared with another group's copy for the same mailbox, so it is left to the sweeper.
 	const left = copies.find((m) => m.groupDelivery.mailboxId === "mb001");
-	assert.equal(objects.has(left.rawR2Key), false);
+	assert.equal(objects.has(left.rawR2Key), true);
 });
 
 test("expansion stops for a disabled group, a lapsed licence and a missing group", async (t) => {
@@ -267,4 +281,58 @@ test("a multi-address From never counts as the poster for the self-skip", async 
 	const headers = { "authentication-results": "mx.cloudflare.net; dmarc=pass header.from=example.com", from: "u001@example.com, x@y.com" };
 	await app.expandGroupDelivery(env, payload({ headers }));
 	assert.deepEqual(queue.map((m) => m.groupDelivery.mailboxId), ["mb000", "mb001", "mb002"]);
+});
+
+test("a batch of expansion chunks is deferred past the subrequest budget, not lost", async (t) => {
+	const { env, queue, payload } = await fixture(t, 60);
+	const budget = app.utils.createExpansionBudget();
+	await app.expandGroupDelivery(env, payload(), { budget });
+	const continuation = queue.find((m) => m.groupExpansion?.cursor);
+	assert.equal(queue.filter((m) => m.groupDelivery).length, 20);
+	queue.length = 0;
+	env.sendOptions.length = 0;
+	await app.expandGroupDelivery(env, continuation, { budget });
+	assert.deepEqual(queue, [continuation]);
+	assert.ok(env.sendOptions[0].delaySeconds > 0);
+	await app.expandGroupDelivery(env, queue.shift(), { budget: app.utils.createExpansionBudget() });
+	assert.equal(queue.filter((m) => m.groupDelivery).length, 20);
+});
+
+test("a mailbox in two groups addressed in one message gets one copy", async (t) => {
+	const { env, queue, sqlite } = await fixture(t, 1);
+	sqlite.exec(`
+		INSERT INTO mail_groups (id, domain_id, local_part, name, who_can_post, reply_to, disabled, created_at, updated_at) VALUES ('g2', 'd1', 'sales', 'Sales', 'anyone', 'sender', 0, 1, 1);
+		INSERT INTO mail_group_members (id, group_id, kind, mailbox_id, can_send_as, created_at) VALUES ('gs1', 'g2', 'mailbox', 'mb000', 0, 1);
+	`);
+	const raw = new TextEncoder().encode(MIME()).buffer;
+	const input = (to) => ({ from: "bob@gmail.com", to, raw, headers: { from: "Bob <bob@gmail.com>" } });
+	await app.intakeIncomingMail(env, input("team@example.com"), {});
+	await app.intakeIncomingMail(env, input("sales@example.com"), {});
+	await drain(env, queue, async (message) => {
+		if (message.groupExpansion) await app.expandGroupDelivery(env, message);
+		else await app.processInboundMessage(env, message);
+	});
+	assert.equal(sqlite.prepare("SELECT COUNT(*) AS n FROM messages WHERE mailbox_id = 'mb000'").get().n, 1);
+});
+
+test("re-admitted group mail is copied to the group's own key and leaves the shared object alone", async (t) => {
+	const { env, queue, payload, objects } = await fixture(t, 2);
+	await app.processInboundMessage(env, payload({ groupExpansion: undefined }));
+	assert.equal(objects.has("inbound/orig.eml"), true);
+	const keys = new Set(queue.filter((m) => m.groupDelivery).map((m) => m.rawR2Key));
+	assert.equal(keys.size, 2);
+	const scoped = objects.size;
+	// A retry of the same message is idempotent: same scoped key, no extra objects.
+	queue.length = 0;
+	await app.processInboundMessage(env, payload({ groupExpansion: undefined }));
+	assert.equal(objects.size, scoped);
+});
+
+test("re-admitted group mail with too many Received headers is dropped", async (t) => {
+	const { env, queue, payload, objects } = await fixture(t, 2);
+	const hops = Array.from({ length: 31 }, (_, i) => `Received: from h${i}.example by mx.example; Thu, 26 Nov 2026 10:00:00 +0000\r\n`).join("");
+	const p = payload({ groupExpansion: undefined });
+	objects.set("inbound/orig.eml", new TextEncoder().encode(hops + MIME()).buffer);
+	await app.processInboundMessage(env, p);
+	assert.equal(queue.length, 0);
 });
