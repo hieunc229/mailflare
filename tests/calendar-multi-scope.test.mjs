@@ -81,8 +81,8 @@ test("every change-log read of the default calendar uses an index on dav_changes
 	for (const read of reads) {
 		const plan = database.db.prepare(`EXPLAIN QUERY PLAN ${read.sql}`).all(...read.params).map((row) => row.detail).join(" | ");
 		assert.doesNotMatch(plan, /SCAN dav_changes(?! USING)/, `${read.sql}\n${plan}`);
-		// The sync report reads in log order, so SQLite may walk the log from the token's position; the others must use an index.
-		if (!/order by/i.test(read.sql)) assert.match(plan, /dav_changes_(collection_seq|object)_idx/, plan);
+		// Including the sync report: walking the log by rowid from the token would read every user's rows until the limit fills.
+		assert.match(plan, /dav_changes_(collection_seq|object)_idx/, plan);
 	}
 });
 

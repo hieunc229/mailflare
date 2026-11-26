@@ -1,4 +1,4 @@
-import { and, asc, eq, gt, inArray, or, sql, type AnyColumn, type SQL } from "drizzle-orm";
+import { and, eq, gt, inArray, or, sql, type AnyColumn, type SQL } from "drizzle-orm";
 import { getDb } from "@/db";
 import { davChanges, davCollections, davSyncState } from "@/db/schema";
 import { excluded, greatest } from "@/db/sql";
@@ -126,7 +126,9 @@ export async function changesSince(env: Pick<CloudflareEnv, "DB">, collectionId:
 		.select({ seq: davChanges.seq, objectKey: davChanges.objectKey, type: davChanges.changeType, name: davChanges.resourceName })
 		.from(davChanges)
 		.where(and(collectionScope(davChanges.collectionId, ids), gt(davChanges.seq, parsed.seq)))
-		.orderBy(asc(davChanges.seq))
+		// `seq + 0` is the same order but not the table's rowid order, so the planner reads the matching collections through
+		// `dav_changes_collection_seq_idx` (and sorts that small result) instead of walking every user's rows after the token.
+		.orderBy(sql`${davChanges.seq} + 0`)
 		.limit(MAX_SYNC_CHANGES + 1);
 	if (!rows.length && parsed.seq > (await newestSeq(env, ids, floor))) return "invalid";
 	const hasMore = rows.length > MAX_SYNC_CHANGES;
