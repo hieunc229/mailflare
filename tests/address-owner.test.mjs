@@ -14,7 +14,7 @@ const mocks = {
 };
 
 const { app, newDatabase } = await loadApp("address-owner", `
-	export { findAddressOwner } from "./src/lib/mailboxes/address-owner.ts";
+	export { findAddressOwner, createAddressOwnerLookup } from "./src/lib/mailboxes/address-owner.ts";
 	export * as mailboxesRoute from "./src/app/api/mailboxes/route.ts";
 	export * as v1Mailboxes from "./src/app/api/v1/mailboxes/route.ts";
 	export * as aliasesRoute from "./src/app/api/mailboxes/[id]/aliases/route.ts";
@@ -141,4 +141,73 @@ test("every address route refuses an address a group already uses", async (t) =>
 	const account = await app.createAccountResponse(globalThis.ownerEnv, actor, { username: "team", password: "pw-long-enough-1", role: "user", domainId: "d1", aliases: [], useAllDomains: false });
 	assert.equal(account.status, 409);
 	assert.deepEqual(await account.json(), expected);
+});
+
+function countQueries(env) {
+	let queries = 0;
+	const prepare = env.DB.prepare.bind(env.DB);
+	env.DB.prepare = (sql) => {
+		queries += 1;
+		return prepare(sql);
+	};
+	return () => queries;
+}
+
+test("createAddressOwnerLookup answers like findAddressOwner for many addresses in a fixed number of queries", async (t) => {
+	const { db, env, sqlite } = await ctx(t);
+	sqlite.exec("INSERT INTO mail_groups (id, domain_id, local_part, name, created_at, updated_at) VALUES ('g1', 'd1', 'team', 'Team', 1, 1)");
+	const queries = countQueries(env);
+	const lookup = await app.createAddressOwnerLookup(db, ["d1", "d2", "d1"]);
+	const loaded = queries();
+	const cases = [["d1", "sales"], ["d1", "s.ales+x"], ["d1", "Billing"], ["d1", "te.am"], ["d2", "sales"], ["d2", "nobody"], ["d1", "nobody"]];
+	for (let i = 0; i < 20; i++) cases.push(["d1", `fresh${i}`]);
+	for (const [domainId, localPart] of cases) {
+		assert.equal(lookup(domainId, localPart), await app.findAddressOwner(db, domainId, localPart), `${domainId} ${localPart}`);
+	}
+	assert.ok(loaded <= 3, `loaded with ${loaded} queries`);
+	assert.deepEqual(["mailbox", "alias", "group", null].map((_, i) => lookup("d1", ["sales", "billing", "team", "nobody"][i])), ["mailbox", "alias", "group", null]);
+});
+
+test("createAddressOwnerLookup checks use-all-domains mailboxes once", async (t) => {
+	const { db, env } = await ctx(t);
+	const lookup = await app.createAddressOwnerLookup(db, ["d2"], { allDomains: { exceptMailboxId: "m-admin" } });
+	const queries = countQueries(env);
+	for (let i = 0; i < 10; i++) lookup("d2", `x${i}`);
+	assert.equal(queries(), 0);
+	assert.equal(lookup("d2", "everywhere"), "mailbox");
+	assert.equal(await app.createAddressOwnerLookup(db, ["d2"], { allDomains: { exceptMailboxId: "m-all" } }).then((l) => l("d2", "everywhere")), null);
+});
+
+test("createAddressOwnerLookup tolerates a missing groups table but not other errors", async (t) => {
+	const { db, sqlite } = await ctx(t);
+	sqlite.exec("DROP TABLE mail_group_members; DROP TABLE mail_groups");
+	const lookup = await app.createAddressOwnerLookup(db, ["d1"]);
+	assert.equal(lookup("d1", "sales"), "mailbox");
+	assert.equal(lookup("d1", "team"), null);
+	sqlite.exec("DROP TABLE mailbox_aliases");
+	await assert.rejects(app.createAddressOwnerLookup(db, ["d1"]));
+});
+
+test("account creation checks every requested address in a fixed number of queries", async (t) => {
+	const { env } = await ctx(t);
+	const actor = { id: "admin", canManageMailboxes: true, createdByUserId: null };
+	const create = async (username, count) => {
+		const queries = countQueries(env);
+		const before = queries();
+		const aliases = Array.from({ length: count }, (_, i) => ({ domainId: "d1", localPart: `${username}-als${i}` }));
+		const res = await app.createAccountResponse(globalThis.ownerEnv, actor, { username, password: "pw-long-enough-1", role: "user", domainId: "d1", aliases, useAllDomains: false });
+		assert.equal(res.status, 201, username);
+		return queries() - before;
+	};
+	const one = await create("newbie1", 1);
+	const many = await create("newbie2", 15);
+	assert.ok(many <= one + 4, `15 aliases cost ${many} queries against ${one} for one`);
+});
+
+test("createAddressOwnerLookup stays within the bound-parameter limit for many domains", async (t) => {
+	const { db } = await ctx(t);
+	const ids = ["d1", ...Array.from({ length: 150 }, (_, i) => `nodomain${i}`)];
+	const lookup = await app.createAddressOwnerLookup(db, ids, { allDomains: {} });
+	assert.equal(lookup("d1", "sales"), "mailbox");
+	assert.equal(lookup("nodomain7", "sales"), null);
 });
