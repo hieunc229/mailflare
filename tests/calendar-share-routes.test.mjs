@@ -10,7 +10,7 @@ const mocks = {
 	"next/server": "export const NextResponse={json:(data,init)=>Response.json(data,init)};",
 	"@/db": "export function getDb(){return globalThis.calShareRt.db}",
 	"@/lib/cloudflare": "export function getEnv(){return {}}",
-	"@/lib/calendar/api-auth": "export async function authorizeCalendarRequest(){const s=globalThis.calShareRt;return s.user?{user:s.user,key:null,error:null}:{user:null,key:null,error:Response.json({error:'Unauthorized'},{status:401})}} export function calendarKeyCanSendInvitations(){return true}",
+	"@/lib/calendar/api-auth": "export async function authorizeCalendarRequest(){const s=globalThis.calShareRt;return s.user?{user:s.user,key:s.key??null,error:null}:{user:null,key:null,error:Response.json({error:'Unauthorized'},{status:401})}} export function calendarKeyCanSendInvitations(){return true}",
 	"@/lib/mailboxes/audit": "export async function createAuditLog(env,input){globalThis.calShareRt.audit.push(input)}",
 };
 const load = (name, entryPoint) => loadFixture({ name, entryPoint, mocks });
@@ -136,4 +136,21 @@ test("the share routes need a signed-in user", async () => {
 	globalThis.calShareRt.user = null;
 	assert.equal((await listShares(new Request(`${url}/shares`), params("cal:work"))).status, 401);
 	assert.equal((await postShare(new Request(`${url}/shares`, json({ email: "u2@one.test", role: "read" })), params("cal:work"))).status, 401);
+});
+
+test("sharing can only be changed from a signed-in session: an API key is refused on every mutation, and nothing changes", async () => {
+	setup();
+	globalThis.calShareRt.key = { scopes: ["calendar:write"] };
+	const before = rolesOf();
+	const post = await postShare(new Request(`${url}/shares`, json({ email: "u6@one.test", role: "read" })), params("cal:work"));
+	const patch = await patchShare(new Request(`${url}/shares`, json({ id: "g2", role: "read" }, "PATCH")), params("cal:work"));
+	const del = await deleteShare(new Request(`${url}/shares`, json({ id: "g2" }, "DELETE")), params("cal:work"));
+	assert.deepEqual([post.status, patch.status, del.status], [403, 403, 403]);
+	assert.deepEqual(rolesOf(), before);
+	assert.equal(audit().length, 0);
+	// Reading the list stays open to a key, under the same role check.
+	assert.equal((await listShares(new Request(`${url}/shares`), params("cal:work"))).status, 200);
+	as("u3");
+	globalThis.calShareRt.key = { scopes: ["calendar:read"] };
+	assert.equal((await listShares(new Request(`${url}/shares`), params("cal:work"))).status, 403);
 });

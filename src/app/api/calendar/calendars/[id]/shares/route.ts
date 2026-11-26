@@ -8,6 +8,8 @@ import { readJsonObject } from "@/lib/http/request";
 import { createAuditLog } from "@/lib/mailboxes/audit";
 import type { CalendarRouteParams } from "../types";
 
+/** A write-scope key must not be able to turn itself into a permanent read grant for someone else: sharing is changed from a session only (like the publish link, F9 D-11). */
+const sessionOnly = () => NextResponse.json({ error: "Sharing can only be changed from a signed-in session" }, { status: 403 });
 const refuse = (result: { status: number; error: string; code?: string }) => NextResponse.json({ error: result.error, ...(result.code ? { code: result.code } : {}) }, { status: result.status });
 
 export async function GET(request: Request, { params }: CalendarRouteParams) {
@@ -20,8 +22,9 @@ export async function GET(request: Request, { params }: CalendarRouteParams) {
 
 export async function POST(request: Request, { params }: CalendarRouteParams) {
 	const env = getEnv();
-	const { user, error } = await authorizeCalendarRequest(env, request, "calendar:write");
+	const { user, key, error } = await authorizeCalendarRequest(env, request, "calendar:write");
 	if (error) return error;
+	if (key) return sessionOnly();
 	const input = await readJsonObject<{ email?: unknown; role?: unknown }>(request);
 	if (!input) return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
 	const calendarId = calendarIdFrom((await params).id);
@@ -33,8 +36,9 @@ export async function POST(request: Request, { params }: CalendarRouteParams) {
 
 export async function PATCH(request: Request, { params }: CalendarRouteParams) {
 	const env = getEnv();
-	const { user, error } = await authorizeCalendarRequest(env, request, "calendar:write");
+	const { user, key, error } = await authorizeCalendarRequest(env, request, "calendar:write");
 	if (error) return error;
+	if (key) return sessionOnly();
 	const input = await readJsonObject<{ id?: unknown; role?: unknown }>(request);
 	if (!input) return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
 	const calendarId = calendarIdFrom((await params).id);
@@ -49,8 +53,9 @@ export async function PATCH(request: Request, { params }: CalendarRouteParams) {
 /** The grant to remove is `id` in the JSON body or `shareId` in the query. */
 export async function DELETE(request: Request, { params }: CalendarRouteParams) {
 	const env = getEnv();
-	const { user, error } = await authorizeCalendarRequest(env, request, "calendar:write");
+	const { user, key, error } = await authorizeCalendarRequest(env, request, "calendar:write");
 	if (error) return error;
+	if (key) return sessionOnly();
 	const input = await request.json().catch(() => null) as { id?: unknown } | null;
 	const shareId = typeof input?.id === "string" ? input.id : new URL(request.url).searchParams.get("shareId");
 	const calendarId = calendarIdFrom((await params).id);
