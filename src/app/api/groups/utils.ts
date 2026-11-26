@@ -4,7 +4,7 @@ import { canManageUsers } from "@/lib/auth/admin";
 import { requireSessionUser } from "@/lib/api/auth";
 import { hasValidSessionMutationOrigin } from "@/lib/auth/origin";
 import { getEnv } from "@/lib/cloudflare";
-import { isMissingTableError } from "@/lib/database-errors";
+import { isMissingColumnError, isMissingTableError } from "@/lib/database-errors";
 import { groupsAllowed } from "@/lib/groups/license";
 import type { GroupResult } from "@/lib/groups/types";
 
@@ -30,7 +30,7 @@ export async function respond<T>(run: () => Promise<GroupResult<T>>, success: { 
 		if (!result.ok) return NextResponse.json({ error: result.error, ...(result.code ? { code: result.code } : {}) }, { status: result.status });
 		return NextResponse.json(success.map ? success.map(result.data) : result.data, { status: success.status ?? 200 });
 	} catch (error) {
-		if (isMissingTableError(error)) {
+		if (isMissingTableError(error) || isMissingColumnError(error)) {
 			return NextResponse.json({ error: "Apply pending database migrations to use groups", code: "MIGRATION_REQUIRED" }, { status: 503 });
 		}
 		throw error;

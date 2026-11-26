@@ -574,6 +574,12 @@
         "ALTER TABLE \"mail_group_members\" ADD CONSTRAINT \"mail_group_members_mailbox_id_mailboxes_id_fk\" FOREIGN KEY (\"mailbox_id\") REFERENCES \"public\".\"mailboxes\"(\"id\") ON DELETE cascade ON UPDATE no action;",
         "ALTER TABLE \"mail_group_members\" ADD CONSTRAINT \"mail_group_members_created_by_user_id_users_id_fk\" FOREIGN KEY (\"created_by_user_id\") REFERENCES \"public\".\"users\"(\"id\") ON DELETE set null ON UPDATE no action;"
       ]
+    },
+    {
+      "name": "0028_relay_outside_posts.sql",
+      "statements": [
+        "ALTER TABLE \"mail_groups\" ADD COLUMN \"relay_outside_posts\" boolean DEFAULT false NOT NULL;"
+      ]
     }
   ]
 }

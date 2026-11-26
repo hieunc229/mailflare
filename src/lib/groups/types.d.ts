@@ -14,6 +14,8 @@ export type GroupSummary = {
 	description: string | null;
 	whoCanPost: "anyone" | "org" | "members";
 	replyTo: "sender" | "group";
+	/** Anyone-group only: relay posts from outside senders to external members too. */
+	relayOutsidePosts: boolean;
 	disabled: boolean;
 	memberCount: number;
 	/** False when the domain has no way to send, so external members would receive nothing. */

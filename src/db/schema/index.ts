@@ -219,6 +219,8 @@ export const mailGroups = sqliteTable(
 		description: text("description"),
 		whoCanPost: text("who_can_post", { enum: ["anyone", "org", "members"] }).notNull().default("anyone"),
 		replyTo: text("reply_to", { enum: ["sender", "group"] }).notNull().default("sender"),
+		/** Anyone-group only: also relay posts from outside senders to external members (off by default: each relay is a billed send). */
+		relayOutsidePosts: bool("relay_outside_posts").notNull().default(false),
 		disabled: bool("disabled").notNull().default(false),
 		createdByUserId: text("created_by_user_id").references(() => users.id, { onDelete: "set null" }),
 		createdAt: timestamp("created_at")

@@ -22,7 +22,7 @@ const seed = (provider = "resend") => `
 		('alice', 'alice@example.com', 'hash', 'Alice', 'user', 0, 1);
 	INSERT INTO domains (id, user_id, hostname, zone_id, status, sending_provider, sending_enabled, created_at) VALUES ('d1', 'admin', 'example.com', 'z1', 'active', '${provider}', 1, 1);
 	INSERT INTO mailboxes (id, user_id, domain_id, local_part, type, created_at) VALUES ('m-alice', 'alice', 'd1', 'alice', 'personal', 1);
-	INSERT INTO mail_groups (id, domain_id, local_part, name, who_can_post, reply_to, disabled, created_at, updated_at) VALUES ('g1', 'd1', 'team', 'Team', 'anyone', 'sender', 0, 1, 1);
+	INSERT INTO mail_groups (id, domain_id, local_part, name, who_can_post, reply_to, relay_outside_posts, disabled, created_at, updated_at) VALUES ('g1', 'd1', 'team', 'Team', 'anyone', 'sender', 1, 0, 1, 1);
 	INSERT INTO mail_group_members (id, group_id, kind, user_id, email, can_send_as, created_at) VALUES
 		('gm1', 'g1', 'user', 'alice', NULL, 0, 1),
 		('gm2', 'g1', 'external', NULL, 'pat@ext.com', 0, 1),

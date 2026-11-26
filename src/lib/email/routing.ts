@@ -203,9 +203,10 @@ async function resolveGroup(
 	allowGroups?: () => Promise<boolean>,
 ): Promise<ResolvedGroup | "disabled" | null> {
 	if (!allowGroups) return null;
-	let rows: (typeof mailGroups.$inferSelect)[];
+	let rows: Pick<typeof mailGroups.$inferSelect, "id" | "localPart" | "name" | "disabled" | "whoCanPost" | "replyTo">[];
 	try {
-		rows = await db.select().from(mailGroups).where(eq(mailGroups.domainId, domain.id));
+		// Named columns: a database that has not run the newest group migration must still route mail.
+		rows = await db.select({ id: mailGroups.id, localPart: mailGroups.localPart, name: mailGroups.name, disabled: mailGroups.disabled, whoCanPost: mailGroups.whoCanPost, replyTo: mailGroups.replyTo }).from(mailGroups).where(eq(mailGroups.domainId, domain.id));
 	} catch (error) {
 		if (isMissingTableError(error)) return null;
 		throw error;

@@ -561,6 +561,7 @@ export const createGroupSchema = z.object({
 	description: groupSettings.description,
 	whoCanPost: groupSettings.whoCanPost.default("anyone"),
 	replyTo: groupSettings.replyTo.default("sender"),
+	relayOutsidePosts: z.boolean().default(false),
 });
 
 export const updateGroupSchema = z.object({
@@ -570,6 +571,7 @@ export const updateGroupSchema = z.object({
 	description: groupSettings.description,
 	whoCanPost: groupSettings.whoCanPost.optional(),
 	replyTo: groupSettings.replyTo.optional(),
+	relayOutsidePosts: z.boolean().optional(),
 	disabled: z.boolean().optional(),
 });
 

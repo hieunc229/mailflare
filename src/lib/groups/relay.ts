@@ -53,7 +53,11 @@ export async function processGroupRelay(env: CloudflareEnv, message: GroupRelayM
 	let found;
 	try {
 		[found] = await db
-			.select({ group: mailGroups, domain: domains, member: mailGroupMembers })
+			.select({
+				group: { id: mailGroups.id, domainId: mailGroups.domainId, localPart: mailGroups.localPart, name: mailGroups.name, replyTo: mailGroups.replyTo, disabled: mailGroups.disabled },
+				domain: domains,
+				member: mailGroupMembers,
+			})
 			.from(mailGroupMembers)
 			.innerJoin(mailGroups, eq(mailGroupMembers.groupId, mailGroups.id))
 			.innerJoin(domains, eq(mailGroups.domainId, domains.id))

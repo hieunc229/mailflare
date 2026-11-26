@@ -666,6 +666,13 @@
       "when": 1795027688014,
       "tag": "0103_mail_groups",
       "breakpoints": true
+    },
+    {
+      "idx": 96,
+      "version": "6",
+      "when": 1795114088014,
+      "tag": "0104_relay_outside_posts",
+      "breakpoints": true
     }
   ]
 }
