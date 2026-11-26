@@ -5,7 +5,8 @@ import { getMailboxAccessLevel } from "@/lib/mailboxes/access";
 import { formatEmailAddress, getEmailAddress } from "@/lib/email/address";
 import { getMailboxAliasForAddress, getMailboxDomainAddresses } from "@/lib/mailboxes/domain-addresses";
 import { resolveMailboxDisplayName } from "@/lib/profile/identity-utils";
-import { authorizeSendAsGroup } from "@/lib/groups/send-as";
+import { authorizeSendAsGroup, type SendAsGroup } from "@/lib/groups/send-as";
+import { plain } from "@/lib/groups/relay-utils";
 
 export async function getAuthorizedSenderAddress(
 	env: CloudflareEnv,
@@ -14,7 +15,7 @@ export async function getAuthorizedSenderAddress(
 		from: string;
 		mailboxId?: string | null;
 	},
-): Promise<{ fromAddr: string; mailboxId: string }> {
+): Promise<{ fromAddr: string; mailboxId: string; group?: SendAsGroup }> {
 	if (!input.mailboxId) throw new Error("Mailbox is required");
 
 	const db = getDb(env);
@@ -52,7 +53,7 @@ export async function getAuthorizedSenderAddress(
 		// A group the actor may send as (spec D-10): the Sent copy stays in the selected mailbox.
 		const group = await authorizeSendAsGroup(env, db, actor, mailbox, requestedAddress);
 		if (!group) throw new Error("Sender address does not match the selected mailbox");
-		return { fromAddr: formatEmailAddress(group.address, group.name), mailboxId: mailbox.id };
+		return { fromAddr: formatEmailAddress(group.address, plain(group.name)), mailboxId: mailbox.id, group };
 	}
 	const senderAddress = requestedAddress.toLowerCase();
 	// The primary mailbox sends under the account name; every other mailbox

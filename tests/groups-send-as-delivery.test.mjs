@@ -45,9 +45,15 @@ async function fixture(t) {
 		INSERT INTO mail_group_members (id, group_id, kind, user_id, can_send_as, created_at) VALUES ('gm1', 'g1', 'user', 'alice', 1, 1), ('gm2', 'g1', 'user', 'bob', 0, 1);
 	`);
 	const sent = [];
+	const objects = new Map();
 	const env = {
 		DB: database,
-		BUCKET: { put: async () => undefined, get: async () => null, delete: async () => undefined, head: async () => null },
+		BUCKET: {
+			put: async (key, body) => { objects.set(key, body); },
+			get: async (key) => (objects.has(key) ? { arrayBuffer: async () => objects.get(key) } : null),
+			delete: async (key) => { objects.delete(key); },
+			head: async () => null,
+		},
 		EMAIL: { send: async (message) => { sent.push(message); return { messageId: `<out-${sent.length}@example.com>` }; } },
 		OUTBOUND_QUEUE: { send: async () => undefined },
 	};
@@ -93,4 +99,37 @@ test("a send queued as the group still goes out while the member keeps the flag"
 	assert.equal(await send.sendScheduledMessageNow(env, messageId), true);
 	assert.equal(sent.length, 1);
 	assert.equal(row(messageId).status, "sent");
+});
+
+const audit = (raw, action) => raw.prepare("SELECT actor_user_id, mailbox_id, message_id, metadata FROM audit_logs WHERE action = ?").all(action).map((row) => ({ ...row, metadata: JSON.parse(row.metadata) }));
+
+test("a send as the group carries a signed marker and writes one send_as_group audit row", async (t) => {
+	const { env, sent, input, raw } = await fixture(t);
+	const { messageId } = await send.sendEmail(env, input());
+	const header = Object.entries(sent[0].headers ?? {}).find(([name]) => name.toLowerCase() === "x-mailflare-send-as")?.[1];
+	assert.match(header, new RegExp(`^v1\\.${messageId}\\.g1\\.[0-9a-f]{64}$`));
+	assert.deepEqual(audit(raw, "email.send_as_group"), [{ actor_user_id: "alice", mailbox_id: "m-alice", message_id: messageId, metadata: { groupId: "g1", address: "team@example.com" } }]);
+});
+
+test("a scheduled send as the group keeps its marker", async (t) => {
+	const { env, sent, input } = await fixture(t);
+	const { messageId } = await send.sendEmail(env, input({ scheduledAt: new Date(Date.now() + 3600_000).toISOString() }));
+	await send.sendScheduledMessageNow(env, messageId);
+	assert.ok(Object.keys(sent[0].headers ?? {}).some((name) => name.toLowerCase() === "x-mailflare-send-as"));
+});
+
+test("a plain send from the member's own address has no marker and no send_as_group row", async (t) => {
+	const { env, sent, input, raw } = await fixture(t);
+	await send.sendEmail(env, input({ from: "alice@example.com" }));
+	assert.equal(sent.length, 1);
+	assert.ok(!Object.keys(sent[0].headers ?? {}).some((name) => name.toLowerCase() === "x-mailflare-send-as"));
+	assert.deepEqual(audit(raw, "email.send_as_group"), []);
+});
+
+test("a group name with control characters cannot split the From header", async (t) => {
+	const { env, input, raw, row } = await fixture(t);
+	raw.exec("UPDATE mail_groups SET name = 'Team' || char(13) || char(10) || 'Bcc: evil@example.net'");
+	const { messageId } = await send.sendEmail(env, input());
+	assert.doesNotMatch(row(messageId).from_addr, /[\r\n]/);
+	assert.match(row(messageId).from_addr, /<team@example\.com>$/);
 });

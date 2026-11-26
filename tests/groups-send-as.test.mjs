@@ -36,8 +36,9 @@ const send = (c, userId, from, mailboxId) => app.getAuthorizedSenderAddress(c.en
 
 test("a flagged user member sends as the group from their own primary mailbox, Sent copy in that mailbox", async (t) => {
 	const c = await ctx(t);
-	assert.deepEqual(await send(c, "alice", "team@example.com", "m-alice"), { fromAddr: "\"Team\" <team@example.com>", mailboxId: "m-alice" });
-	assert.deepEqual(await send(c, "alice", "Team <TEAM@example.com>", "m-alice"), { fromAddr: "\"Team\" <team@example.com>", mailboxId: "m-alice" });
+	const group = { groupId: "g1", name: "Team", address: "team@example.com" };
+	assert.deepEqual(await send(c, "alice", "team@example.com", "m-alice"), { fromAddr: "\"Team\" <team@example.com>", mailboxId: "m-alice", group });
+	assert.deepEqual(await send(c, "alice", "Team <TEAM@example.com>", "m-alice"), { fromAddr: "\"Team\" <team@example.com>", mailboxId: "m-alice", group });
 });
 
 test("a member without the flag, a non-member and an external mailbox owner are refused", async (t) => {
