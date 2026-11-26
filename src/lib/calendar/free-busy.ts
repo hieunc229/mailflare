@@ -27,6 +27,8 @@ export type FreeBusyTargets = {
 	resourceIds?: string[];
 	/** An event being edited: it, its moved occurrences and every guest's copy of its invitation are left out, so it does not clash with itself. The caller must have checked the right to edit it. */
 	excludeEventId?: string;
+	/** Start (ms) of the one occurrence being edited: only that occurrence, and the moved row that replaced it, is left out; the rest of the series counts. */
+	excludeOccurrence?: number;
 	/**
 	 * Also look up the UID a CalDAV client stored for that event and leave out copies carrying it. Only for the event's owner: for
 	 * anyone else the stored UID is never read, so it cannot be probed. Invitations Mailflare sends always carry `<id>@mailflare`.
@@ -79,10 +81,14 @@ export async function busyIntervals(env: CloudflareEnv, targets: FreeBusyTargets
 		const rows = await db.select({
 			id: calendarEvents.id, davObjectId: calendarEvents.davObjectId, userId: calendarEvents.userId, startsAt: calendarEvents.startsAt, endsAt: calendarEvents.endsAt, timeZone: calendarEvents.timeZone, repeat: calendarEvents.repeat, rrule: calendarEvents.rrule,
 			repeatDays: calendarEvents.repeatDays, repeatAnchorDay: calendarEvents.repeatAnchorDay, repeatUntil: calendarEvents.repeatUntil, excludedOccurrences: calendarEvents.excludedOccurrences,
-			transparent: calendarEvents.transparent, responseStatus: calendarEvents.responseStatus,
+			recurrenceId: calendarEvents.recurrenceId, transparent: calendarEvents.transparent, responseStatus: calendarEvents.responseStatus,
 		}).from(calendarEvents).where(and(inArray(calendarEvents.userId, ids.slice(index, index + USER_CHUNK)), lt(calendarEvents.startsAt, end), or(gt(calendarEvents.endsAt, start), and(ne(calendarEvents.repeat, "none"), or(isNull(calendarEvents.repeatUntil), sql`${calendarEvents.repeatUntil} + (${calendarEvents.endsAt} - ${calendarEvents.startsAt}) > ${Math.floor(from / 1000)}`)))));
 		for (const row of rows) {
-			if (!isBusyEvent(row) || excluded.has(row.id) || (targets.excludeEventId && row.davObjectId === targets.excludeEventId)) continue;
+			if (!isBusyEvent(row)) continue;
+			// The event being edited: all of it, or (with an occurrence named) that occurrence and the moved row that replaced it.
+			const edited = excluded.has(row.id);
+			const movedRow = !!targets.excludeEventId && row.davObjectId === targets.excludeEventId && row.id !== targets.excludeEventId;
+			if (targets.excludeOccurrence === undefined ? edited || movedRow : movedRow && row.recurrenceId?.getTime() === targets.excludeOccurrence) continue;
 			const duration = row.endsAt.getTime() - row.startsAt.getTime();
 			if (duration <= 0) continue;
 			const list = collected.get(row.userId)!;
@@ -91,6 +97,7 @@ export async function busyIntervals(env: CloudflareEnv, targets: FreeBusyTargets
 			spent.set(row.userId, (spent.get(row.userId) ?? 0) + 1 + starts.length);
 			if (exhausted) { list.push([from, to]); continue; }
 			for (const at of starts) {
+				if (edited && at.getTime() === targets.excludeOccurrence) continue;
 				const occurrenceEnd = at.getTime() + duration;
 				if (occurrenceEnd > from && at.getTime() < to) list.push([Math.max(at.getTime(), from), Math.min(occurrenceEnd, to)]);
 			}

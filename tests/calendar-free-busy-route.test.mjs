@@ -183,3 +183,21 @@ test("excludeEventId: the owner's CalDAV UID is honoured, an editor's request ne
 	globalThis.calFbRt.user = { id: "u1", calendarEnabled: true };
 	assert.equal(await planOf(), true, "an editor leaves out the @mailflare copy only; the copy keyed by the phone's UID stays");
 });
+
+test("excludeEventId with an occurrence id leaves out only that occurrence; an override row's id names its series and original time", async () => {
+	setup();
+	sqlite.exec("INSERT INTO dav_collections (id, user_id, kind, display_name, created_at, updated_at) VALUES ('cal:u3', 'u3', 'calendar', 'u3', 1, 1)");
+	sqlite.exec("INSERT INTO calendar_shares (id, calendar_id, grantee_user_id, role, created_at) VALUES ('g9', 'cal:u3', 'u2', 'freebusy', 1)");
+	globalThis.calFbRt.user = { id: "u2", calendarEnabled: true };
+	sqlite.exec(`INSERT INTO calendar_events (id, user_id, title, repeat, starts_at, ends_at, created_at, updated_at) VALUES ('evt_wk', 'u2', 'Wk', 'weekly', ${seconds(0, 16)}, ${seconds(0, 17)}, 1, 1)`);
+	sqlite.exec(`INSERT INTO calendar_events (id, user_id, title, repeat, starts_at, ends_at, response_status, created_at, updated_at) VALUES ('${copyId("u3", "evt_wk@mailflare")}', 'u3', 'Wk', 'weekly', ${seconds(0, 16)}, ${seconds(0, 17)}, 'accepted', 1, 1)`);
+	const sixteen = (days) => [iso(days, 16), iso(days, 17)].join();
+	const days = async (extra) => { const out = busyOf((await post({ addresses: ["u3@one.test"], start: iso(0), end: iso(15), ...extra }).then((r) => r.json())).results, "u3@one.test"); return out.map((pair) => pair.join()); };
+	assert.ok((await days({})).includes(sixteen(7)));
+	const one = await days({ excludeEventId: `evt_wk@${T0 + 7 * DAY + 16 * 3_600_000}` });
+	assert.ok(!one.includes(sixteen(7)) && one.includes(sixteen(0)) && one.includes(sixteen(14)), "only the 7th goes");
+	// An override row (moved occurrence of the 7th) names its master and the original time.
+	sqlite.exec(`INSERT INTO calendar_events (id, user_id, title, starts_at, ends_at, dav_object_id, recurrence_id, created_at, updated_at) VALUES ('evt_wk_ov', 'u2', 'Moved', ${seconds(7, 20)}, ${seconds(7, 21)}, 'evt_wk', ${seconds(7, 16)}, 1, 1)`);
+	const viaOverride = await days({ excludeEventId: "evt_wk_ov" });
+	assert.ok(!viaOverride.includes(sixteen(7)) && viaOverride.includes(sixteen(0)) && viaOverride.includes(sixteen(14)));
+});
