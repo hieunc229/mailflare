@@ -1,8 +1,11 @@
 import { authFetch } from "@/lib/auth/client";
+import { MAX_EXTERNAL_MEMBERS, normalizeExternalEmail } from "@/lib/groups/members-utils";
 import type { TranslationKey } from "@/lib/i18n/types";
-import type { GroupCandidate, GroupDetailResponse, GroupsListResponse, WhoCanPost } from "./types";
+import type { AddOption, GroupDetailResponse, GroupsListResponse, WhoCanPost } from "./types";
+import type { GroupCandidate } from "./types";
 
 export const MAX_GROUP_MEMBERS = 500;
+export { MAX_EXTERNAL_MEMBERS };
 
 /** A failed groups API call. `code` is the API's machine-readable reason, for the states that are not plain errors. */
 export class GroupsApiError extends Error {
@@ -56,4 +59,17 @@ export function nextIndex(current: number, delta: 1 | -1, length: number): numbe
 	if (length === 0) return -1;
 	if (current < 0) return delta === 1 ? 0 : length - 1;
 	return (current + delta + length) % length;
+}
+
+/** The address a typed text names as an external member (plain `a@b.co` only), or null when it is not one or is already a member. */
+export function externalOption(text: string, memberAddresses: string[]): string | null {
+	const email = normalizeExternalEmail(text);
+	if (!email || memberAddresses.some((address) => address.toLowerCase() === email)) return null;
+	return email;
+}
+
+/** The body of the add-members call for one chosen option. */
+export function memberBody(option: AddOption) {
+	if (option.kind === "external") return { kind: "external" as const, email: option.address };
+	return option.kind === "user" ? { kind: "user" as const, userId: option.id } : { kind: "mailbox" as const, mailboxId: option.id };
 }
