@@ -8,7 +8,7 @@ export async function GET(request: Request, { params }: Context) {
 	const access = await requireGroupsKey(request);
 	if (access.error) return access.error;
 	const { id } = await params;
-	return respond(() => getGroup(access.db, access.user, id));
+	return respond(() => getGroup(access.db, access.user, id, access.env));
 }
 
 export async function PATCH(request: Request, { params }: Context) {

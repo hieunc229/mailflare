@@ -1,7 +1,7 @@
-import { and, asc, eq, inArray, isNull, or, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gte, inArray, isNull, or, sql } from "drizzle-orm";
 import type { AppDatabase } from "@/db";
 import { containsLike } from "@/db/sql";
-import { domains, emailSuppressions, mailGroupMembers, mailGroups, mailboxes, users } from "@/db/schema";
+import { auditLogs, domains, emailSuppressions, mailGroupMembers, mailGroups, mailboxes, users } from "@/db/schema";
 import { domainOwnerIdsForAdmin } from "@/app/api/accounts/utils";
 import { deleteEmailRoutingRuleForAddress, ensureEmailRoutingRuleToWorker, rollbackEmailRoutingRuleChanges } from "@/lib/cloudflare-api";
 import type { CfEmailRoutingRuleChange } from "@/lib/cloudflare-api.types";
@@ -9,6 +9,7 @@ import { isMissingTableError, isUniqueConstraintError } from "@/lib/database-err
 import { isReportAddressReserved } from "@/lib/deliverability/report-address";
 import { normalizeRecipientLocalPart } from "@/lib/email/recipient-address";
 import { newId } from "@/lib/ids";
+import { unsubscribeOrigin } from "@/lib/groups/relay-utils";
 import { domainCanSend } from "@/lib/groups/sending";
 import { createAuditLog, createAuditLogs } from "@/lib/mailboxes/audit";
 import { findAddressOwner } from "@/lib/mailboxes/address-owner";
@@ -25,7 +26,7 @@ import {
 	type MemberInput,
 	type ValidMember,
 } from "./members-utils";
-import type { GroupActor, GroupCandidate, GroupMemberView, GroupResult, GroupSummary } from "./types";
+import type { GroupActor, GroupCandidate, GroupMemberView, GroupNotices, GroupResult, GroupSummary } from "./types";
 
 type GroupRow = typeof mailGroups.$inferSelect;
 type DomainRow = typeof domains.$inferSelect;
@@ -81,6 +82,28 @@ function summarize(group: GroupRow, domain: Pick<DomainRow, "hostname" | "sendin
 async function countMembers(db: AppDatabase, groupId: string): Promise<number> {
 	const [row] = await db.select({ n: sql<number>`count(*)` }).from(mailGroupMembers).where(eq(mailGroupMembers.groupId, groupId));
 	return Number(row?.n ?? 0);
+}
+
+/** The addresses among `emails` that used their unsubscribe link in this group before: re-adding one is the admin's call, but they are told. */
+async function previouslyUnsubscribed(db: AppDatabase, groupId: string, emails: string[]): Promise<AddResult["warnings"]> {
+	if (!emails.length) return [];
+	const wanted = new Set(emails);
+	const rows = await db
+		.select({ metadata: auditLogs.metadata })
+		.from(auditLogs)
+		.where(and(eq(auditLogs.action, "group.member_unsubscribed"), containsLike(auditLogs.metadata, `"groupId":"${groupId}"`)))
+		.orderBy(desc(auditLogs.createdAt))
+		.limit(1000);
+	const found = new Set<string>();
+	for (const row of rows) {
+		try {
+			const email = (JSON.parse(row.metadata ?? "{}") as { email?: unknown }).email;
+			if (typeof email === "string" && wanted.has(email)) found.add(email);
+		} catch {
+			// A damaged audit row says nothing.
+		}
+	}
+	return [...found].map((email) => ({ email, reason: "previously_unsubscribed" as const }));
 }
 
 async function countExternal(db: AppDatabase, groupId: string): Promise<number> {
@@ -199,13 +222,31 @@ async function describeMembers(db: AppDatabase, domainId: string, rows: MemberRo
 	});
 }
 
-export async function getGroup(db: AppDatabase, actor: GroupActor, id: string) {
+/** What the group page should warn about besides its members: links that cannot be built, and a send cap that stopped relays. */
+async function groupNotices(env: CloudflareEnv | undefined, db: AppDatabase, groupId: string): Promise<GroupNotices> {
+	let relayCapped: GroupNotices["relayCapped"] = null;
+	try {
+		const rows = await db
+			.select({ metadata: auditLogs.metadata, createdAt: auditLogs.createdAt })
+			.from(auditLogs)
+			.where(and(eq(auditLogs.action, "group.relay_capped"), gte(auditLogs.createdAt, new Date(Date.now() - 24 * 60 * 60 * 1000)), containsLike(auditLogs.metadata, `"groupId":"${groupId}"`)))
+			.orderBy(desc(auditLogs.createdAt))
+			.limit(1);
+		const metadata = rows[0]?.metadata ? (JSON.parse(rows[0].metadata) as { scope?: "group" | "installation"; period?: "hour" | "day"; limit?: number }) : null;
+		if (rows[0] && metadata?.scope && metadata.period) relayCapped = { scope: metadata.scope, period: metadata.period, limit: metadata.limit ?? 0, at: new Date(rows[0].createdAt).toISOString() };
+	} catch (error) {
+		console.warn("Reading the relay cap notice failed", error);
+	}
+	return { unsubscribeReady: !!env && unsubscribeOrigin(env) !== null, relayCapped };
+}
+
+export async function getGroup(db: AppDatabase, actor: GroupActor, id: string, env?: CloudflareEnv) {
 	const found = await loadOwnedGroup(db, actor, id);
 	if (!found) return fail(404, "Group not found");
 	const rows = await db.select().from(mailGroupMembers).where(eq(mailGroupMembers.groupId, id)).orderBy(asc(mailGroupMembers.createdAt), asc(mailGroupMembers.id));
 	const members = await describeMembers(db, found.group.domainId, rows);
 	members.sort((a, b) => a.name.localeCompare(b.name));
-	return ok({ group: summarize(found.group, found.domain, rows.length), members });
+	return ok({ group: summarize(found.group, found.domain, rows.length), members, notices: await groupNotices(env, db, id) });
 }
 
 type CreateInput = { domainId: string; localPart: string; name: string; description?: string | null; whoCanPost: GroupRow["whoCanPost"]; replyTo: GroupRow["replyTo"] };
@@ -355,7 +396,7 @@ export async function deleteGroup(env: CloudflareEnv, db: AppDatabase, actor: Gr
 	return ok({ id });
 }
 
-type AddResult = { added: GroupMemberView[]; skipped: { index: number; reason: "already_member" }[] };
+type AddResult = { added: GroupMemberView[]; skipped: { index: number; reason: "already_member" }[]; warnings: { email: string; reason: "previously_unsubscribed" }[] };
 
 export async function addMembers(env: CloudflareEnv, db: AppDatabase, actor: GroupActor, id: string, inputs: MemberInput[]): Promise<GroupResult<AddResult>> {
 	const found = await loadOwnedGroup(db, actor, id);
@@ -424,7 +465,7 @@ export async function addMembers(env: CloudflareEnv, db: AppDatabase, actor: Gro
 		seen.add(key);
 		fresh.push({ index, member });
 	});
-	if (!fresh.length) return ok({ added: [], skipped });
+	if (!fresh.length) return ok({ added: [], skipped, warnings: [] });
 	if ((await countMembers(db, id)) + fresh.length > MAX_GROUP_MEMBERS) return fail(422, `A group holds at most ${MAX_GROUP_MEMBERS} members`);
 	const freshExternal = fresh.filter(({ member }) => member.kind === "external").length;
 	if (freshExternal && (await countExternal(db, id)) + freshExternal > MAX_EXTERNAL_MEMBERS) return fail(422, externalCapMessage());
@@ -455,6 +496,7 @@ export async function addMembers(env: CloudflareEnv, db: AppDatabase, actor: Gro
 		await db.batch(chunk(rows.map((row) => row.id), IN_CHUNK).map((part) => db.delete(mailGroupMembers).where(inArray(mailGroupMembers.id, part))) as never);
 		return fail(422, externalCapMessage());
 	}
+	const warnings = await previouslyUnsubscribed(db, id, rows.flatMap((row) => (row.email ? [row.email] : [])));
 	const stored: MemberRow[] = [];
 	for (const part of chunk(rows.map((row) => row.id), IN_CHUNK)) stored.push(...(await db.select().from(mailGroupMembers).where(inArray(mailGroupMembers.id, part))));
 	const added = await describeMembers(db, found.group.domainId, stored);
@@ -465,7 +507,7 @@ export async function addMembers(env: CloudflareEnv, db: AppDatabase, actor: Gro
 		action: "group.member_added",
 		metadata: { groupId: id, address, kind: row.kind, ...(row.email ? { email: row.email } : {}) },
 	})));
-	return ok({ added, skipped });
+	return ok({ added, skipped, warnings });
 }
 
 async function loadMember(db: AppDatabase, actor: GroupActor, id: string, memberId: string) {

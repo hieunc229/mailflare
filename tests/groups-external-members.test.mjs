@@ -108,3 +108,33 @@ test("canSend is false only when the domain has no sending provider", async (t) 
 	assert.equal((await (await app.item.GET(req(undefined, "GET"), ids("g1"))).json()).group.canSend, true);
 	assert.equal((await (await app.item.GET(req(undefined, "GET"), ids("g2"))).json()).group.canSend, false);
 });
+
+const unsubscribed = (sqlite, email, group = "g1") => sqlite.prepare("INSERT INTO audit_logs (id, action, metadata, created_at) VALUES (?, 'group.member_unsubscribed', ?, ?)").run(`a-${email}-${group}`, JSON.stringify({ groupId: group, address: "team@example.com", kind: "external", email }), Math.floor(Date.now() / 1000));
+
+test("re-adding an address that unsubscribed from this group still works but warns the admin", async (t) => {
+	const { sqlite } = await ctx(t);
+	unsubscribed(sqlite, "pat@ext.com");
+	unsubscribed(sqlite, "kim@ext.com", "g2");
+	const body = await (await add([{ kind: "external", email: "Pat@ext.com" }, { kind: "external", email: "kim@ext.com" }, { kind: "external", email: "new@ext.com" }])).json();
+	assert.equal(body.added.length, 3);
+	assert.deepEqual(body.warnings, [{ email: "pat@ext.com", reason: "previously_unsubscribed" }]);
+	assert.deepEqual((await (await add([{ kind: "external", email: "other@ext.com" }])).json()).warnings, []);
+});
+
+test("the group view says whether unsubscribe links can be built and whether a cap stopped relays", async (t) => {
+	const { sqlite } = await ctx(t);
+	const view = async () => (await (await app.item.GET(req(undefined, "GET"), ids("g1"))).json()).notices;
+	assert.deepEqual(await view(), { unsubscribeReady: false, relayCapped: null });
+	globalThis.grp.env = { ...globalThis.grp.env, APP_URL: "https://mail.example.com" };
+	assert.equal((await view()).unsubscribeReady, true);
+	globalThis.grp.env = { ...globalThis.grp.env, APP_URL: "http://plain.test" };
+	assert.equal((await view()).unsubscribeReady, false, "links need https");
+	const row = (id, group, at) => sqlite.prepare("INSERT INTO audit_logs (id, action, metadata, created_at) VALUES (?, 'group.relay_capped', ?, ?)").run(id, JSON.stringify({ groupId: group, address: "team@example.com", scope: "installation", period: "day", limit: 2000 }), Math.floor(at / 1000));
+	row("c0", "g1", Date.now() - 3 * 86_400_000);
+	row("c1", "g2", Date.now() - 1000);
+	assert.equal((await view()).relayCapped, null, "only this group's, and only the last day");
+	row("c2", "g1", Date.now() - 60_000);
+	const capped = (await view()).relayCapped;
+	assert.deepEqual({ scope: capped.scope, period: capped.period, limit: capped.limit }, { scope: "installation", period: "day", limit: 2000 });
+	assert.ok(Number.isFinite(Date.parse(capped.at)));
+});

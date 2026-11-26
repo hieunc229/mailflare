@@ -200,3 +200,10 @@ export function rawHeaderValue(raw: ArrayBuffer, name: string): string | null {
 	for (const line of block.split(/\r?\n/)) if (line.toLowerCase().startsWith(wanted)) return line.slice(wanted.length).trim();
 	return null;
 }
+
+/** Whether unsubscribe links can be built: they need a public HTTPS origin to point at. */
+export function unsubscribeOrigin(env: { APP_URL?: string }): string | null {
+	const origin = env.APP_URL?.trim().replace(/\/+$/, "");
+	return origin && /^https:\/\//i.test(origin) ? origin : null;
+}
+
