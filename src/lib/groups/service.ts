@@ -9,6 +9,7 @@ import { isMissingTableError, isUniqueConstraintError } from "@/lib/database-err
 import { isReportAddressReserved } from "@/lib/deliverability/report-address";
 import { normalizeRecipientLocalPart } from "@/lib/email/recipient-address";
 import { newId } from "@/lib/ids";
+import { domainCanSend } from "@/lib/groups/sending";
 import { createAuditLog, createAuditLogs } from "@/lib/mailboxes/audit";
 import { findAddressOwner } from "@/lib/mailboxes/address-owner";
 import type { AuditLogInput } from "@/lib/mailboxes/types";
@@ -57,11 +58,6 @@ async function loadOwnedGroup(db: AppDatabase, actor: GroupActor, id: string): P
 		.where(and(eq(mailGroups.id, id), inArray(domains.userId, domainOwnerIdsForAdmin(actor))))
 		.limit(1);
 	return row ?? null;
-}
-
-/** Whether mail to external members can leave this domain: a provider is chosen, and Cloudflare sending is switched on. */
-export function domainCanSend(domain: Pick<DomainRow, "sendingProvider" | "sendingEnabled">): boolean {
-	return domain.sendingProvider !== "none" && (domain.sendingProvider !== "cloudflare" || domain.sendingEnabled);
 }
 
 function summarize(group: GroupRow, domain: Pick<DomainRow, "hostname" | "sendingProvider" | "sendingEnabled">, memberCount: number): GroupSummary {

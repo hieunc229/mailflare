@@ -8,6 +8,8 @@ import { resolveMailboxForAddress, toResolvedMailbox, type ResolvedMailbox } fro
 import { readTrustedDmarcResult } from "@/lib/spam/analyzers/authentication";
 import { isMissingTableError } from "@/lib/database-errors";
 import { groupsAllowed } from "@/lib/groups/license";
+import { relayStorageKey } from "@/lib/groups/relay-utils";
+import { domainCanSend } from "@/lib/groups/sending";
 import { singleSenderAddress } from "@/lib/groups/policy-utils";
 import {
 	EXPANSION_DEFER_SECONDS,
@@ -97,7 +99,7 @@ export async function resolveGroupDelivery(
  * Expands group mail that the live handler admitted into one queue message per member mailbox
  * (spec D-4, D-6). Handles one chunk of `GROUP_EXPANSION_CHUNK` members, then enqueues itself with
  * a cursor for the next. Every key and message is deterministic, so a redelivered chunk is harmless.
- * Internal members only: external members are relayed by a later change.
+ * External members get one `group.relay` message each on the outbound queue (spec D-7), sharing one relay copy.
  */
 export async function expandGroupDelivery(
 	env: CloudflareEnv,
@@ -127,7 +129,6 @@ export async function expandGroupDelivery(
 		.from(mailGroupMembers)
 		.where(and(
 			eq(mailGroupMembers.groupId, group.id),
-			inArray(mailGroupMembers.kind, ["user", "mailbox"]),
 			expansion.cursor ? gt(mailGroupMembers.id, expansion.cursor) : undefined,
 		))
 		.orderBy(asc(mailGroupMembers.id))
@@ -136,30 +137,58 @@ export async function expandGroupDelivery(
 
 	// The poster already has a Sent copy; only a trusted DMARC pass says the From really is theirs.
 	const fromAddress = singleSenderAddress(payload.headers?.from);
-	const senderMailbox = fromAddress && readTrustedDmarcResult(payload.headers, payload.verdicts) === "pass"
+	const dmarcPass = readTrustedDmarcResult(payload.headers, payload.verdicts) === "pass";
+	const senderMailbox = fromAddress && dmarcPass
 		? await resolveMailboxForAddress(db, fromAddress)
 		: null;
 	const mailboxIds = planDeliveries(await resolveMemberMailboxIds(db, chunk), senderMailbox?.id ?? null);
+	// External members get a re-sent copy, and only of mail whose sender the receiver authenticated (spec D-7): relaying
+	// spam or a spoof from our domain would hurt its sending reputation. The poster does not get their own post back.
+	const externalIds = chunk.flatMap((member) => (member.kind === "external" && member.email && !(dmarcPass && member.email === fromAddress) ? [member.id] : []));
+
+	let bytes: ArrayBuffer | null = null;
+	const loadBytes = async () => {
+		if (bytes) return bytes;
+		const raw = await env.BUCKET.get(payload.rawR2Key);
+		bytes = raw ? await raw.arrayBuffer() : null;
+		return bytes;
+	};
+	const missing = () => console.error(`Missing R2 object for group mail: ${payload.rawR2Key}`);
+
+	let relayed = 0;
+	if (externalIds.length) {
+		const [domain] = await db.select().from(domains).where(eq(domains.id, group.domainId)).limit(1);
+		if (!dmarcPass) console.warn(`Group ${group.id}: mail without a DMARC pass goes to internal members only`);
+		else if (!domain || !domainCanSend(domain)) console.warn(`Group ${group.id}: ${domain?.hostname ?? "its domain"} cannot send, so external members are skipped`);
+		else {
+			const content = await loadBytes();
+			if (!content) return missing();
+			// One shared copy per message, keyed by group and content so a retried chunk writes the same object.
+			const rawR2Key = await relayStorageKey(group.id, await contentDigest(content));
+			await env.BUCKET.put(rawR2Key, content, { httpMetadata: { contentType: "message/rfc822" }, customMetadata: { from: payload.from, to: payload.to } });
+			const relays = externalIds.map((memberId) => ({ body: { kind: "group.relay" as const, groupId: group.id, memberId, rawR2Key } }));
+			for (const batch of planQueueBatches(relays)) await env.OUTBOUND_QUEUE.sendBatch(batch);
+			relayed = relays.length;
+		}
+	}
 
 	if (mailboxIds.length) {
-		const raw = await env.BUCKET.get(payload.rawR2Key);
-		if (!raw) {
+		const content = await loadBytes();
+		if (!content) {
 			// An earlier attempt of the last chunk already deleted it, or it was swept: nothing left to copy.
-			console.error(`Missing R2 object for group mail: ${payload.rawR2Key}`);
-			return;
+			return missing();
 		}
-		const bytes = await raw.arrayBuffer();
-		const digest = await contentDigest(bytes);
+		const digest = await contentDigest(content);
 		const { groupExpansion: _expansion, ...base } = payload;
 		void _expansion;
 		const messages: { body: InboundQueueMessage }[] = [];
 		for (const mailboxId of mailboxIds) {
 			const rawR2Key = await groupCopyKey(digest, mailboxId);
-			await env.BUCKET.put(rawR2Key, bytes, { httpMetadata: { contentType: "message/rfc822" }, customMetadata: { from: payload.from, to: payload.to } });
+			await env.BUCKET.put(rawR2Key, content, { httpMetadata: { contentType: "message/rfc822" }, customMetadata: { from: payload.from, to: payload.to } });
 			messages.push({ body: { ...base, rawR2Key, groupDelivery: { groupId: group.id, mailboxId } } });
 		}
 		for (const batch of planQueueBatches(messages)) await env.INBOUND_QUEUE.sendBatch(batch);
-	} else if (!nextCursor && !expansion.cursor) {
+	} else if (!relayed && !nextCursor && !expansion.cursor) {
 		console.warn(`Group ${group.id} has no deliverable members`);
 	}
 

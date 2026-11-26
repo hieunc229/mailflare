@@ -69,3 +69,28 @@ export function relayHeaders(input: RelayHeaderInput): Record<string, string> {
 	if (input.references.length) headers.References = input.references.map(plain).join(" ");
 	return headers;
 }
+
+/** Cloudflare Queues takes at most 100 messages per `sendBatch`. */
+export const GROUP_RELAY_BATCH_MAX = 100;
+
+/**
+ * Subrequests one relay can use: the group, member and licence lookups, suppression, the raw copy, the
+ * provider settings and the send itself. A queue batch holds up to 5 messages in one invocation, and the
+ * Free plan allows 50 subrequests per invocation, so a batch runs only as many relays as fit.
+ */
+export const RELAY_COST = 12;
+export const RELAY_SUBREQUEST_BUDGET = 45;
+/** Seconds a deferred relay waits before the queue offers it again. */
+export const RELAY_DEFER_SECONDS = 5;
+
+export type RelayBudget = { remaining: number; started: boolean };
+
+export const createRelayBudget = (): RelayBudget => ({ remaining: RELAY_SUBREQUEST_BUDGET, started: false });
+
+/** The first relay of a batch always runs, so the queue makes progress; later ones return false and are re-enqueued, never dropped. */
+export function reserveRelay(budget: RelayBudget): boolean {
+	if (budget.started && RELAY_COST > budget.remaining) return false;
+	budget.started = true;
+	budget.remaining -= RELAY_COST;
+	return true;
+}

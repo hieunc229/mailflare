@@ -9,11 +9,12 @@ import { processInboundMessage } from "@/lib/email/inbound";
 import { processAgentDraftJob } from "@/lib/agent/jobs/utils";
 import { processOutboundQueue, type OutboundQueueMessage } from "@/lib/email/send";
 import { processWebhookRetry, type WebhookRetryMessage } from "@/lib/email/webhooks";
+import { processGroupRelay } from "@/lib/groups/relay";
 import { processImportJob } from "@/lib/import/jobs";
 import { handleDavRequest, isDavPath } from "@/lib/dav/handler";
 import { guardMtaStsHost, hostnameOf, isMtaStsHost } from "@/lib/deliverability/mta-sts";
 import { applyPendingMigrations } from "@/lib/migrations/service";
-import { isImportJobMessage, isInboundQueueMessage, isWebhookRetryMessage } from "../worker-utils";
+import { isGroupRelayMessage, isImportJobMessage, isInboundQueueMessage, isWebhookRetryMessage } from "../worker-utils";
 import { createNodeRuntime } from "./runtime/env";
 import { isRealtimeOriginAllowed } from "./runtime/realtime-origin";
 import { serveFetch } from "./runtime/fetch-adapter";
@@ -44,6 +45,7 @@ async function main() {
 	});
 	runtime.outboundQueue.setConsumer(async (body) => {
 		if (isWebhookRetryMessage(body)) await processWebhookRetry(env, body as WebhookRetryMessage);
+		else if (isGroupRelayMessage(body)) await processGroupRelay(env, body);
 		else if (isImportJobMessage(body)) await processImportJob(env, body);
 		else await processOutboundQueue(env, body as OutboundQueueMessage);
 	});

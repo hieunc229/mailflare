@@ -23,6 +23,7 @@ interface CloudflareEnv {
 		| import("./src/lib/email/send").OutboundQueueMessage
 		| import("./src/lib/email/webhooks").WebhookRetryMessage
 		| import("./src/lib/import/jobs-types").ImportJobMessage
+		| import("./src/lib/groups/relay-utils").GroupRelayMessage
 	>;
 	ASSETS: Fetcher;
 	IMAGES: ImagesBinding;
