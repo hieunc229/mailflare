@@ -12,8 +12,10 @@ export type MemberInput = {
 	canSendAs?: boolean;
 };
 
+export type ValidMember = { kind: "user"; userId: string; canSendAs: boolean } | { kind: "mailbox"; mailboxId: string; canSendAs: false };
+
 export type MemberValidation =
-	| { ok: true; member: { kind: "user"; userId: string; canSendAs: boolean } | { kind: "mailbox"; mailboxId: string; canSendAs: false } }
+	| { ok: true; member: ValidMember }
 	| { ok: false; status: 400 | 422; error: string };
 
 /**

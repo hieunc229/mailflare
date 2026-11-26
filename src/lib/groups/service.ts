@@ -20,6 +20,7 @@ import {
 	groupAddress,
 	validateMember,
 	type MemberInput,
+	type ValidMember,
 } from "./members-utils";
 import type { GroupActor, GroupCandidate, GroupMemberView, GroupResult, GroupSummary } from "./types";
 
@@ -290,7 +291,7 @@ export async function addMembers(env: CloudflareEnv, db: AppDatabase, actor: Gro
 	if (!found) return fail(404, "Group not found");
 	const address = groupAddress(found.group.localPart, found.domain.hostname);
 
-	const checked = [];
+	const checked: ValidMember[] = [];
 	for (const input of inputs) {
 		const result = validateMember(input);
 		if (!result.ok) return fail(result.status, result.error);
@@ -333,7 +334,7 @@ export async function addMembers(env: CloudflareEnv, db: AppDatabase, actor: Gro
 		: [];
 	const seen = new Set(existingRows.map((row) => row.userId ?? row.mailboxId));
 	const skipped: AddResult["skipped"] = [];
-	const fresh: { index: number; member: (typeof checked)[number] }[] = [];
+	const fresh: { index: number; member: ValidMember }[] = [];
 	checked.forEach((member, index) => {
 		const key = member.kind === "user" ? member.userId : member.mailboxId;
 		if (seen.has(key)) return void skipped.push({ index, reason: "already_member" });

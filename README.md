@@ -29,6 +29,7 @@ Self-host it on Cloudflare or Docker. **Or try [Mailflare Cloud](https://cloud.m
 ### Apps
 
 - **Email**: Custom domain mailboxes, personal or shared, with access you control. Send and receive with Cloudflare Email, Resend or Amazon SES.
+- **Groups**: Addresses like `team@` that deliver a copy of each message to every member's own inbox, with a who-can-send policy. See [Groups](docs/groups.md).
 - **Routing rules**: Store, forward, reject or sort incoming mail, including a one-rule filter for newsletters and promotions.
 - **Calendar**: Repeating events with time zones. Attendees get email invitations.
 - **Booking**: Share a public link so anyone can book a free time on your calendar.
@@ -124,6 +125,7 @@ A schema change needs a migration for each database type. See [Databases](docs/d
 - [Deployment and configuration](docs/deployment.md)
 - [Databases](docs/databases.md)
 - [Sending and receiving providers](docs/providers.md)
+- [Groups](docs/groups.md)
 - [API and integrations](docs/api.md)
 - [Email assistant and MCP](docs/email-assistant-and-mcp.md)
 - [Importing from Google Takeout](docs/import.md)
