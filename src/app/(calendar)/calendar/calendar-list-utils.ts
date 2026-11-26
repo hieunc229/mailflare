@@ -72,10 +72,16 @@ export function writableCalendars<T extends Pick<CalendarSummary, "id" | "role" 
 }
 
 /** The translation key for a failed sharing request, chosen by the response status so the server's English text is never shown. */
-export function shareErrorKey(status: number): string {
+export function shareErrorKey(status: number, code?: string): string {
 	if (status === 404) return "calendar.share.error.notFound";
 	if (status === 400) return "calendar.share.error.invalid";
-	if (status === 409) return "calendar.share.error.conflict";
+	if (status === 409) return code === "ALREADY_SHARED" ? "calendar.share.error.exists" : code === "SHARE_LIMIT" ? "calendar.share.error.limit" : "calendar.share.error.conflict";
 	if (status === 403) return "calendar.share.error.denied";
 	return "calendar.share.error.generic";
+}
+
+/** The translation key for a refused event save or delete, or null when the server's own text is the better message (a validation error). */
+export function eventErrorKey(status: number, code?: string): string | null {
+	if (code === "INVITE_REQUIRES_OWNER") return "calendar.share.inviteRefused";
+	return status === 403 || status === 404 ? "calendar.share.error.eventDenied" : null;
 }

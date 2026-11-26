@@ -4,6 +4,7 @@ import { getEnv } from "@/lib/cloudflare";
 import { authorizeCalendarRequest } from "@/lib/calendar/api-auth";
 import { calendarIdFrom } from "@/lib/calendar/calendar-id";
 import { deleteCalendar, updateCalendar } from "@/lib/calendar/calendars";
+import { calendarCollectionId } from "@/lib/dav/changes";
 import { getCalendarAccess, roleAtLeast } from "@/lib/calendar/shares";
 import type { CalendarInput } from "@/lib/calendar/calendars-types";
 import { readJsonObject } from "@/lib/http/request";
@@ -26,7 +27,7 @@ export async function PATCH(request: Request, { params }: CalendarRouteParams) {
 	const result = await updateCalendar(db, access.ownerId, calendarId, input);
 	if (!result.ok) return NextResponse.json({ error: result.error }, { status: result.status });
 	await createAuditLog(env, { actorUserId: user.id, targetUserId: access.ownerId, action: "calendar.updated", metadata: { calendarId, name: result.calendar.name } });
-	return NextResponse.json({ calendar: { ...result.calendar, role: access.role, isDefault: calendarId === `cal:${user.id}` } });
+	return NextResponse.json({ calendar: { ...result.calendar, role: access.role, isDefault: calendarId === calendarCollectionId(user.id) } });
 }
 
 export async function DELETE(request: Request, { params }: CalendarRouteParams) {

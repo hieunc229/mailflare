@@ -22,7 +22,7 @@ const fixtures = {
 const { CalendarList } = await fixtures.list.import();
 const { ShareView } = await fixtures.view.import();
 const api = await fixtures.api.import();
-const { calendarLabel, writableCalendars, canManageCalendar, canWriteEvents, shareErrorKey, calendarErrorKey } = await fixtures.utils.import();
+const { calendarLabel, eventErrorKey, writableCalendars, canManageCalendar, canWriteEvents, shareErrorKey, calendarErrorKey } = await fixtures.utils.import();
 const { EventDetails } = await fixtures.eventView.import();
 after(() => { delete globalThis.calShareUi; for (const fixture of Object.values(fixtures)) fixture.dispose(); });
 
@@ -73,6 +73,16 @@ test("the editor offers writable calendars; an existing event stays with its own
 	assert.deepEqual(writableCalendars(all, { role: "edit", calendarId: "cal:ops" }).map((c) => c.id), ["cal:u2", "cal:ops"]);
 	assert.deepEqual([canWriteEvents("read"), canWriteEvents("edit"), canWriteEvents("owner"), canWriteEvents(undefined)], [false, true, true, true]);
 	assert.deepEqual([canManageCalendar("manage"), canManageCalendar("edit"), canManageCalendar("owner")], [true, false, true]);
+});
+
+test("a duplicate share and the people limit read differently; an event write refused after a revoke is a translated message", () => {
+	assert.equal(shareErrorKey(409, "ALREADY_SHARED"), "calendar.share.error.exists");
+	assert.equal(shareErrorKey(409, "SHARE_LIMIT"), "calendar.share.error.limit");
+	assert.equal(eventErrorKey(403, "INVITE_REQUIRES_OWNER"), "calendar.share.inviteRefused");
+	assert.equal(eventErrorKey(403), "calendar.share.error.eventDenied");
+	assert.equal(eventErrorKey(404), "calendar.share.error.eventDenied");
+	assert.equal(eventErrorKey(400), null);
+	for (const key of ["exists", "limit", "eventDenied"]) assert.ok(en[`calendar.share.error.${key}`], key);
 });
 
 test("sharing errors map to translated messages by status", () => {
@@ -146,7 +156,9 @@ test("the share api sends the grant to the right route and reports statuses", as
 	await api.removeShare("cal:work", "n");
 	assert.deepEqual([calls[3][1].method, JSON.parse(calls[3][1].body)], ["DELETE", { id: "n" }]);
 	globalThis.calShareUi.reply = () => Response.json({ error: "x" }, { status: 409 });
-	assert.deepEqual(await api.addShare("cal:work", "n@one.test", "edit"), { ok: false, status: 409 });
+	assert.deepEqual(await api.addShare("cal:work", "n@one.test", "edit"), { ok: false, status: 409, code: undefined });
+	globalThis.calShareUi.reply = () => Response.json({ error: "x", code: "SHARE_LIMIT" }, { status: 409 });
+	assert.deepEqual(await api.addShare("cal:work", "n@one.test", "edit"), { ok: false, status: 409, code: "SHARE_LIMIT" });
 	globalThis.calShareUi.reply = () => { throw new Error("offline"); };
 	assert.deepEqual(await api.loadShares("cal:work"), { ok: false, status: 0 });
 });

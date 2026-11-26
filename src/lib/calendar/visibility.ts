@@ -14,6 +14,8 @@ type Viewable = {
 	inviteMessageId?: string | null;
 	inviteSender?: string | null;
 	reminderMinutes?: number | null;
+	lastRemindedStart?: Date | null;
+	inviteSequence?: number | null;
 	isPrivate?: boolean;
 	transparent?: boolean;
 	responseStatus?: string | null;
@@ -30,7 +32,7 @@ export function redactEvent<T extends Viewable>(event: T, role: CalendarRole): T
 	const own = { ...event, mailboxId: null, inviteMessageId: null, inviteSender: null, reminderMinutes: null };
 	const hidden = role === "freebusy" || ((role === "read") && event.isPrivate === true);
 	if (!hidden) return own;
-	return { ...own, title: BUSY_TITLE, description: "", location: "", attendees: "[]", attendeeResponses: null, redacted: true };
+	return { ...own, title: BUSY_TITLE, description: "", location: "", attendees: "[]", attendeeResponses: null, responseStatus: null, inviteSequence: 0, lastRemindedStart: null, redacted: true };
 }
 
 /** Counts towards someone's busy time: not marked free, not an invitation still unanswered, declined or cancelled. */

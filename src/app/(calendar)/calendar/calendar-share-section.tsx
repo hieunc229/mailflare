@@ -33,7 +33,7 @@ export function ShareSection({ calendarId }: { calendarId: string }) {
 		setError("");
 		const result = await addShare(calendarId, email.trim(), role);
 		setAdding(false);
-		if (!result.ok) { setError(t(shareErrorKey(result.status) as never)); return; }
+		if (!result.ok) { setError(t(shareErrorKey(result.status, result.code) as never)); return; }
 		setShares((current) => [...current, result.share]);
 		setEmail("");
 		toast.success(t("calendar.share.added", { name: result.share.name || result.share.email }));

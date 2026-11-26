@@ -98,7 +98,8 @@ test("redactEvent: owner and editors see everything, readers lose private detail
 		assert.equal(view.inviteSender, null, "who invited the owner is the owner's business");
 		assert.equal(view.reminderMinutes, null);
 	}
-	const hidden = redactEvent(base, "read");
+	const hidden = redactEvent({ ...base, responseStatus: "tentative", inviteSequence: 3, lastRemindedStart: new Date(5) }, "read");
+	assert.deepEqual([hidden.responseStatus, hidden.inviteSequence, hidden.lastRemindedStart], [null, 0, null], "whether the owner answered an invitation is not shown for a private event");
 	assert.deepEqual([hidden.title, hidden.description, hidden.location, hidden.attendees, hidden.attendeeResponses, hidden.mailboxId, hidden.inviteMessageId, hidden.reminderMinutes, hidden.redacted], ["Busy", "", "", "[]", null, null, null, null, true]);
 	assert.deepEqual([hidden.startsAt, hidden.endsAt, hidden.repeat, hidden.transparent], [base.startsAt, base.endsAt, "weekly", false]);
 	const open = redactEvent({ ...base, isPrivate: false }, "read");
@@ -146,7 +147,8 @@ test("grantShare: the owner shares by email, a second grant for the same person 
 	const ok = await shares.grantShare(orm, u("u1"), "cal:work", { email: " U2@One.test ", role: "read" });
 	assert.equal(ok.ok, true);
 	assert.deepEqual([ok.ownerId, ok.share.userId, ok.share.role, ok.share.email], ["u1", "u2", "read", email("u2")]);
-	assert.equal((await shares.grantShare(orm, u("u1"), "cal:work", { email: email("u2"), role: "edit" })).status, 409);
+	const again = await shares.grantShare(orm, u("u1"), "cal:work", { email: email("u2"), role: "edit" });
+	assert.deepEqual([again.status, again.code], [409, "ALREADY_SHARED"]);
 	assert.equal((await shares.grantShare(orm, u("u1"), "cal:work", { email: email("u1"), role: "edit" })).status, 400);
 	assert.equal((await shares.grantShare(orm, u("u1"), "cal:work", { email: "nobody@else.test", role: "read" })).status, 404);
 	assert.equal((await shares.grantShare(orm, u("u1"), "cal:work", { email: email("u3"), role: "owner" })).status, 400);
@@ -191,7 +193,7 @@ test("grantShare: a manager cannot hand out more than their own role; the cap is
 	assert.equal(sqlite.prepare("SELECT count(*) AS n FROM calendar_shares").get().n, 99);
 	assert.equal((await shares.grantShare(orm, u("u1"), "cal:work", { email: email("u3"), role: "read" })).ok, true);
 	const over = await shares.grantShare(orm, u("u1"), "cal:work", { email: email("u4"), role: "read" });
-	assert.equal(over.status, 409);
+	assert.deepEqual([over.status, over.code], [409, "SHARE_LIMIT"]);
 	assert.equal(sqlite.prepare("SELECT count(*) AS n FROM calendar_shares").get().n, 100);
 });
 
@@ -233,11 +235,13 @@ test("changeShare and revokeShare: only on this calendar's grants, only by a man
 });
 
 test("listShares: manager and owner only; entries carry the person and role", async () => {
-	const { orm, calendar, grant } = setup();
+	const { orm, statements, calendar, grant } = setup();
 	calendar("cal:work"); grant("g1", "cal:work", "u2", "manage"); grant("g2", "cal:work", "u3", "read");
 	const own = await shares.listShares(orm, u("u1"), "cal:work");
 	assert.deepEqual(own.shares.map((share) => [share.id, share.email, share.name, share.role]), [["g1", email("u2"), "User u2", "manage"], ["g2", email("u3"), "User u3", "read"]]);
+	statements.length = 0;
 	assert.equal((await shares.listShares(orm, u("u2"), "cal:work")).ok, true);
+	assert.ok(statements.length <= 3, `${statements.length} queries for a list of 2 grants`);
 	assert.equal((await shares.listShares(orm, u("u3"), "cal:work")).status, 403);
 	assert.equal((await shares.listShares(orm, u("u4"), "cal:work")).status, 404);
 });

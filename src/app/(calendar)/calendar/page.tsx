@@ -32,7 +32,7 @@ import { MonthGrid } from "./month-grid";
 import { CalendarSubscribeDialog } from "./subscribe-dialog";
 import { InviteResponseDialog } from "./invite-response-dialog";
 import { CalendarList } from "./calendar-list";
-import { calendarLabel, canWriteEvents, visibleCalendarEvents, writableCalendars } from "./calendar-list-utils";
+import { calendarLabel, canWriteEvents, eventErrorKey, visibleCalendarEvents, writableCalendars } from "./calendar-list-utils";
 import { EventViewDialog } from "./event-view-dialog";
 import { useCalendarState } from "./calendar-state";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -313,7 +313,8 @@ export default function CalendarPage() {
         setClosingEventEditor(true);
       } else {
         const result = (await response.json()) as { error?: string; code?: string };
-        toast.error(result.code === "INVITE_REQUIRES_OWNER" ? t("calendar.share.inviteRefused") : result.error ?? t("calendar.saveFailed"));
+        const refused = eventErrorKey(response.status, result.code);
+        toast.error(refused ? t(refused as never) : result.error ?? t("calendar.saveFailed"));
       }
     } catch {
       toast.error(t("calendar.saveFailed"));
@@ -335,8 +336,9 @@ export default function CalendarPage() {
         setEventsVersion((version) => version + 1);
         setClosingEventEditor(true);
       } else {
-        const result = (await response.json()) as { error?: string };
-        toast.error(result.error ?? t("calendar.deleteFailed"));
+        const result = (await response.json()) as { error?: string; code?: string };
+        const refused = eventErrorKey(response.status, result.code);
+        toast.error(refused ? t(refused as never) : result.error ?? t("calendar.deleteFailed"));
       }
     } catch {
       toast.error(t("calendar.deleteFailed"));
