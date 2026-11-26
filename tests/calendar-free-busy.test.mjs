@@ -273,13 +273,24 @@ test("busyIntervals: excludeEventId leaves out the event, its moved occurrences 
 	assert.deepEqual((await busy(["u2"], at(0), at(1))).get("u2"), [[at(0, 9), at(0, 10)], [at(0, 13), at(0, 14)]], "without it, nothing is left out");
 });
 
-test("busyIntervals: an event that came from a CalDAV client is matched by its stored UID", async () => {
+test("busyIntervals: an event a phone made is excluded together with the guests' copies, which always carry UID <id>@mailflare", async () => {
 	setup();
 	const master = event("u1", at(0, 9), at(0, 10), { id: "evt_dav" });
 	sqlite.exec(`INSERT INTO dav_calendar_objects (id, user_id, collection_id, name, uid, size, created_at, updated_at) VALUES ('${master}', 'u1', 'cal:u1', 'a.ics', 'uid-from-phone', 0, 1, 1)`);
-	event("u2", at(0, 9), at(0, 10), { id: copyId("u2", "uid-from-phone") });
-	const result = await busyIntervals({}, { userIds: ["u1", "u2"], excludeEventId: "evt_dav" }, ...win(at(0), at(1)));
+	event("u2", at(0, 9), at(0, 10), { id: copyId("u2", "evt_dav@mailflare") });
+	const result = await busyIntervals({}, { userIds: ["u1", "u2"], excludeEventId: "evt_dav", excludeStoredUid: true }, ...win(at(0), at(1)));
 	assert.deepEqual([result.get("u1"), result.get("u2")], [[], []]);
+});
+
+test("busyIntervals: the stored CalDAV UID is also matched for the owner (a copy made from the phone's own UID), and never without the owner's say-so", async () => {
+	setup();
+	const master = event("u1", at(0, 9), at(0, 10), { id: "evt_dav2" });
+	sqlite.exec(`INSERT INTO dav_calendar_objects (id, user_id, collection_id, name, uid, size, created_at, updated_at) VALUES ('${master}', 'u1', 'cal:u1', 'a.ics', 'uid-from-phone', 0, 1, 1)`);
+	event("u2", at(0, 9), at(0, 10), { id: copyId("u2", "uid-from-phone") });
+	const owner = await busyIntervals({}, { userIds: ["u2"], excludeEventId: "evt_dav2", excludeStoredUid: true }, ...win(at(0), at(1)));
+	assert.deepEqual(owner.get("u2"), []);
+	const delegate = await busyIntervals({}, { userIds: ["u2"], excludeEventId: "evt_dav2" }, ...win(at(0), at(1)));
+	assert.deepEqual(delegate.get("u2"), [[at(0, 9), at(0, 10)]], "the stored UID is not looked up, so it cannot be probed");
 });
 
 test("busyIntervals: the last occurrence of a series that ended before the window but runs into it is busy", async () => {

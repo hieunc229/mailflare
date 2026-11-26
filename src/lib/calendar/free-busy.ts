@@ -27,6 +27,11 @@ export type FreeBusyTargets = {
 	resourceIds?: string[];
 	/** An event being edited: it, its moved occurrences and every guest's copy of its invitation are left out, so it does not clash with itself. The caller must have checked the right to edit it. */
 	excludeEventId?: string;
+	/**
+	 * Also look up the UID a CalDAV client stored for that event and leave out copies carrying it. Only for the event's owner: for
+	 * anyone else the stored UID is never read, so it cannot be probed. Invitations Mailflare sends always carry `<id>@mailflare`.
+	 */
+	excludeStoredUid?: boolean;
 };
 
 /** Sorts, then joins intervals that overlap or touch; empty ones are dropped. */
@@ -56,13 +61,16 @@ export async function busyIntervals(env: CloudflareEnv, targets: FreeBusyTargets
 	if (ids.length > MAX_FREE_BUSY_IDS) throw new RangeError(`Free/busy covers at most ${MAX_FREE_BUSY_IDS} people at a time`);
 	if (!Number.isFinite(from) || !Number.isFinite(to) || to <= from) throw new RangeError("Choose a start before the end");
 	if (to - from > MAX_FREE_BUSY_DAYS * DAY) throw new RangeError(`Free/busy covers at most ${MAX_FREE_BUSY_DAYS} days at a time`);
-	// The event being edited, as the UID its invitations carry: the CalDAV UID when a phone made it, else `<id>@mailflare`.
+	// The event being edited and each guest's copy of its invitation, which carries UID `<id>@mailflare` (and the CalDAV client's own UID when the owner asks).
 	const excluded = new Set<string>();
 	if (targets.excludeEventId) {
-		const [stored] = await db.select({ uid: davCalendarObjects.uid }).from(davCalendarObjects).where(eq(davCalendarObjects.id, targets.excludeEventId)).limit(1);
-		const uid = stored?.uid ?? `${targets.excludeEventId}@mailflare`;
+		const uids = [`${targets.excludeEventId}@mailflare`];
+		if (targets.excludeStoredUid) {
+			const [stored] = await db.select({ uid: davCalendarObjects.uid }).from(davCalendarObjects).where(eq(davCalendarObjects.id, targets.excludeEventId)).limit(1);
+			if (stored?.uid && !uids.includes(stored.uid)) uids.push(stored.uid);
+		}
 		excluded.add(targets.excludeEventId);
-		for (const id of ids) excluded.add(await inviteEventId(id, uid));
+		for (const id of ids) for (const uid of uids) excluded.add(await inviteEventId(id, uid));
 	}
 	let spent = 0;
 	const collected = new Map<string, BusyInterval[]>(ids.map((id) => [id, []]));

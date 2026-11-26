@@ -169,3 +169,17 @@ test("excludeEventId must be text", async () => {
 	setup();
 	assert.equal((await post({ addresses: ["u1@one.test"], start: iso(0), end: iso(1), excludeEventId: 7 })).status, 400);
 });
+
+test("excludeEventId: the owner's CalDAV UID is honoured, an editor's request never reads it; the @mailflare copies go for both", async () => {
+	setup();
+	sqlite.exec("INSERT INTO dav_collections (id, user_id, kind, display_name, created_at, updated_at) VALUES ('cal:u3', 'u3', 'calendar', 'u3', 1, 1), ('cal:plans', 'u2', 'calendar', 'Plans', 1, 1)");
+	sqlite.exec("INSERT INTO calendar_shares (id, calendar_id, grantee_user_id, role, created_at) VALUES ('g9', 'cal:u3', 'u2', 'freebusy', 1), ('g10', 'cal:u3', 'u1', 'freebusy', 1), ('g11', 'cal:plans', 'u1', 'edit', 1)");
+	meeting("u2", "cal:plans");
+	sqlite.exec("INSERT INTO dav_calendar_objects (id, user_id, collection_id, name, uid, size, created_at, updated_at) VALUES ('evt_plan', 'u2', 'cal:plans', 'p.ics', 'phone-uid', 0, 1, 1)");
+	sqlite.exec(`INSERT INTO calendar_events (id, user_id, title, starts_at, ends_at, created_at, updated_at) VALUES ('${copyId("u3", "phone-uid")}', 'u3', 'Plan', ${seconds(0, 14)}, ${seconds(0, 15)}, 1, 1)`);
+	const planOf = async () => busyOf((await ask(["u3@one.test"], { excludeEventId: "evt_plan" })).results, "u3@one.test").some((pair) => pair.join() === PLAN.join());
+	globalThis.calFbRt.user = { id: "u2", calendarEnabled: true };
+	assert.equal(await planOf(), false, "owner: both copies gone");
+	globalThis.calFbRt.user = { id: "u1", calendarEnabled: true };
+	assert.equal(await planOf(), true, "an editor leaves out the @mailflare copy only; the copy keyed by the phone's UID stays");
+});
