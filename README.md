@@ -5,9 +5,10 @@
 
 A self-hosted alternative to Google Workspace. Setup **custom domain Emails**, **Calendar, Drive, Booking** and **built-in AI agents**.
 
-Self-host it on Cloudflare or Docker. **Or try [Mailflare Cloud](https://cloud.mailflare.co?ref=github) with high-deliverable emails** from $4​
+Self-host it on Cloudflare, Docker or Vercel (experimental). **Or try [Mailflare Cloud](https://cloud.mailflare.co?ref=github) with high-deliverable emails** from $4​
 
 [![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/hieunc229/mailflare)
+[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2Fhieunc229%2Fmailflare&env=DATABASE_URL,S3_BUCKET,S3_REGION,S3_ACCESS_KEY_ID,S3_SECRET_ACCESS_KEY,QSTASH_TOKEN,QSTASH_CURRENT_SIGNING_KEY,QSTASH_NEXT_SIGNING_KEY,UPSTASH_REDIS_REST_URL,UPSTASH_REDIS_REST_TOKEN,CRON_SECRET&envDescription=See%20docs%2Fvercel.md&envLink=https%3A%2F%2Fgithub.com%2Fhieunc229%2Fmailflare%2Fblob%2Fmain%2Fdocs%2Fvercel.md)
 
 ## Screenshots
 
@@ -39,7 +40,7 @@ Self-host it on Cloudflare or Docker. **Or try [Mailflare Cloud](https://cloud.m
 
 - **Databases**: Cloudflare D1 (default), PostgreSQL, MySQL, Turso / libSQL, or a local SQLite file. Set `DATABASE_URL` to switch. Works with Supabase, Neon, PlanetScale, TiDB and more. See [Databases](docs/databases.md).
 - **File storage**: Cloudflare R2, Backblaze B2 or AWS S3.
-- **Hosting**: Cloudflare Workers or a single Docker container.
+- **Hosting**: Cloudflare Workers, a single Docker container, or Vercel (experimental).
 - **Admin**: Users, API keys, webhooks, audit logs and backups.
 - **Import**: Bring in mail from IMAP, Gmail Takeout, `.eml` and `.mbox` files, and Google Calendar events, Google Contacts and Google Drive files from Takeout. See [Importing from Google Takeout](docs/import.md).
 
@@ -101,6 +102,14 @@ docker compose up -d --build
 Or skip the build and run the prebuilt image: `docker compose -f docker-compose.image.yml up -d`.
 
 See [self-hosting](docs/self-hosting.md).
+
+### Deploy to Vercel (experimental)
+
+[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2Fhieunc229%2Fmailflare&env=DATABASE_URL,S3_BUCKET,S3_REGION,S3_ACCESS_KEY_ID,S3_SECRET_ACCESS_KEY,QSTASH_TOKEN,QSTASH_CURRENT_SIGNING_KEY,QSTASH_NEXT_SIGNING_KEY,UPSTASH_REDIS_REST_URL,UPSTASH_REDIS_REST_TOKEN,CRON_SECRET&envDescription=See%20docs%2Fvercel.md&envLink=https%3A%2F%2Fgithub.com%2Fhieunc229%2Fmailflare%2Fblob%2Fmain%2Fdocs%2Fvercel.md)
+
+Vercel needs a hosted database, AWS S3 or Backblaze B2 storage, and Upstash QStash and Redis. Mail arrives through the [email relay Worker](deploy/cloudflare-email-relay/README.md), Resend or Amazon SES. On the Hobby plan (non-commercial use only), also add the [five-minute schedule](docs/vercel.md#five-minute-schedule) after deploying.
+
+Setup steps, variables and limits: [Vercel guide](docs/vercel.md).
 
 ## Local development
 
