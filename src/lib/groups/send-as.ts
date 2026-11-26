@@ -4,6 +4,7 @@ import { domains, mailGroupMembers, mailGroups } from "@/db/schema";
 import { isMissingTableError } from "@/lib/database-errors";
 import { getEmailAddress } from "@/lib/email/address";
 import { groupsAllowed } from "@/lib/groups/license";
+import { isPrimaryMailbox } from "@/lib/profile/identity-utils";
 
 export type SendAsGroup = { groupId: string; name: string; address: string };
 
@@ -39,6 +40,36 @@ export async function findSendAsGroup(db: AppDatabase, actorUserId: string, addr
 	}
 }
 
+/** Only the account's own primary mailbox carries group addresses: a shared or secondary mailbox never does. */
+export function isOwnPrimaryMailbox(
+	actor: { id: string; email: string },
+	mailbox: { userId: string; type: string; localPart: string; hostname: string },
+): boolean {
+	return mailbox.type === "personal" && mailbox.userId === actor.id && isPrimaryMailbox(mailbox, actor.email);
+}
+
+/** Group addresses the actor may add to the primary mailbox's From list (empty elsewhere, without the licence or before the migration). */
+export async function listSendAsGroupAddresses(
+	env: CloudflareEnv,
+	db: AppDatabase,
+	actor: { id: string; email: string },
+	mailbox: { userId: string; type: string; localPart: string; hostname: string },
+): Promise<string[]> {
+	if (!isOwnPrimaryMailbox(actor, mailbox) || !(await groupsAllowed(env)())) return [];
+	try {
+		const rows = await db
+			.select({ localPart: mailGroups.localPart, hostname: domains.hostname })
+			.from(mailGroupMembers)
+			.innerJoin(mailGroups, eq(mailGroupMembers.groupId, mailGroups.id))
+			.innerJoin(domains, eq(mailGroups.domainId, domains.id))
+			.where(and(eq(mailGroupMembers.userId, actor.id), eq(mailGroupMembers.kind, "user"), eq(mailGroupMembers.canSendAs, true), eq(mailGroups.disabled, false)));
+		return rows.map((row) => `${row.localPart}@${row.hostname}`.toLowerCase()).sort();
+	} catch (error) {
+		if (isMissingTableError(error)) return [];
+		throw error;
+	}
+}
+
 /**
  * The one decision every send path asks (web composer, API, MCP, JMAP, queued and scheduled delivery):
  * the group `address` may go out from `mailbox` for `actor` only when the licence allows groups, the
@@ -52,8 +83,7 @@ export async function authorizeSendAsGroup(
 	address: string,
 ): Promise<SendAsGroup | null> {
 	if (actor.disabled) return null;
-	if (mailbox.type === "shared" || mailbox.userId !== actor.id) return null;
-	if (`${mailbox.localPart}@${mailbox.hostname}`.toLowerCase() !== actor.email.toLowerCase()) return null;
+	if (!isOwnPrimaryMailbox(actor, mailbox)) return null;
 	if (!(await groupsAllowed(env)())) return null;
 	return findSendAsGroup(db, actor.id, address);
 }

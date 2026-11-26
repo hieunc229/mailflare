@@ -11,6 +11,7 @@ import { tracksAccountIdentity } from "@/lib/profile/identity-utils";
 import { mailboxSchema } from "@/lib/validators";
 import { ensureMailboxDomainRouting, getMailboxDomainAddresses } from "@/lib/mailboxes/domain-addresses";
 import { findAddressOwner } from "@/lib/mailboxes/address-owner";
+import { listSendAsGroupAddresses } from "@/lib/groups/send-as";
 import { ensurePersonalMailbox } from "./utils";
 
 export async function GET(request: Request) {
@@ -25,7 +26,11 @@ export async function GET(request: Request) {
 			...(mailbox.userId === user.id && tracksAccountIdentity(mailbox, user.email)
 				? { displayName: user.name, hasAvatar: !!user.avatarKey }
 				: {}),
-			senderAddresses: await getMailboxDomainAddresses(db, mailbox),
+			senderAddresses: [
+				...await getMailboxDomainAddresses(db, mailbox),
+				// Groups this account may send as sit under its primary mailbox (spec D-10).
+				...await listSendAsGroupAddresses(env, db, user, mailbox),
+			],
 		}))),
 		canCreateShared: user.role === "admin" && entitlements.canShareMailboxes,
 	});
