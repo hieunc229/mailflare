@@ -72,7 +72,7 @@ test("invalid externals are refused as a whole", async (t) => {
 	await attempt({ kind: "external", email: "not-an-address" }, 422, /valid email/i);
 	await attempt({ kind: "external", email: "a b@ext.com" }, 422, /valid email/i);
 	await attempt({ kind: "external", email: "A <a@ext.com>" }, 422, /valid email/i);
-	await attempt({ kind: "external", email: "x@ext.com", canSendAs: true }, 422, /not available yet/i);
+	await attempt({ kind: "external", email: "x@ext.com", canSendAs: true }, 422, /only account members/i);
 	await attempt({ kind: "external", email: "x@Example.com" }, 422, /domain/i);
 	await attempt({ kind: "external", email: "x@other.com" }, 422, /domain/i);
 	await attempt({ kind: "external", email: "TEAM@example.com" }, 422, /group's own address/i);
