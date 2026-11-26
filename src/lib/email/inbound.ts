@@ -7,7 +7,9 @@ import { matchReportAddress } from "@/lib/deliverability/report-address";
 import { ingestReportMail, type BatchBudget } from "@/lib/deliverability/ingest";
 import { readTrustedDmarcResult } from "@/lib/spam/analyzers/authentication";
 import { boundParsedEmail } from "@/lib/email/inbound-limits";
-import { resolveInboundAddress, resolveInboxRuleDestination } from "@/lib/email/routing";
+import { resolveInboundAddress, resolveInboxRuleDestination, type RoutingDecision } from "@/lib/email/routing";
+import { expandGroupDelivery, resolveGroupDelivery } from "@/lib/groups/expand";
+import { groupsAllowed } from "@/lib/groups/license";
 import { dispatchWebhooks } from "@/lib/email/webhooks";
 import { getMessageContactNames, upsertContactFromAddress } from "@/lib/contacts/service";
 import { getEmailAddress } from "@/lib/email/address";
@@ -68,15 +70,35 @@ export async function processInboundMessage(
 		await ingestReportMail(env, reportTarget, { rawR2Key: payload.rawR2Key, authenticated: readTrustedDmarcResult(payload.headers, payload.verdicts) === "pass", from }, { batchBudget: options.reportBudget });
 		return;
 	}
-	// The sender is passed so that sender-based block rules resolve the same way here as they
-	// do in the Worker email handler.
-	const decision = await resolveInboundAddress(db, payload.to, payload.from, { headers: payload.headers });
-
 	// Nothing references the raw object on these paths, so keep it from piling up in storage.
 	const dropRaw = () => env.BUCKET.delete(payload.rawR2Key).catch((error) => console.error(`Raw cleanup failed for ${payload.rawR2Key}`, error));
 
+	// Group mail was admitted (who may post, loops) by the live handler. This consumer fans it out into one
+	// copy per member mailbox, and each copy comes back here with `groupDelivery`.
+	if (payload.groupExpansion) {
+		await expandGroupDelivery(env, payload);
+		return;
+	}
+	let decision: RoutingDecision | null;
+	if (payload.groupDelivery) {
+		const mailbox = await resolveGroupDelivery(db, payload.groupDelivery);
+		decision = mailbox ? { action: "store", mailbox } : null;
+	} else {
+		// The sender is passed so that sender-based block rules resolve the same way here as they
+		// do in the Worker email handler.
+		decision = await resolveInboundAddress(db, payload.to, payload.from, { headers: payload.headers, allowGroups: groupsAllowed(env) });
+	}
+
 	if (!decision) {
 		console.warn(`No routing for inbound address: ${payload.to}`);
+		await dropRaw();
+		return;
+	}
+
+	// Group mail that reaches here without `groupExpansion` skipped the live handler's checks
+	// (a routing failure there stored it anyway); fail closed rather than fan it out.
+	if (decision.action === "group") {
+		console.warn(`Dropped unadmitted group mail to ${payload.to}`);
 		await dropRaw();
 		return;
 	}
@@ -276,7 +298,8 @@ export async function processInboundMessage(
 		console.error(`Bounce recording failed for ${messageId}`, error);
 	}
 
-	if (status === "received") {
+	// RFC 3834: list mail gets no auto-reply.
+	if (status === "received" && !payload.groupDelivery) {
 		try {
 			await sendMailboxAutoReply(env, {
 				mailboxId: decision.mailbox.mailboxId,

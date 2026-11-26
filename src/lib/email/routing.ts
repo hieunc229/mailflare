@@ -312,7 +312,7 @@ async function getRuleMailbox(
 	return toResolvedMailbox(mailbox, domainId, domain.hostname);
 }
 
-function toResolvedMailbox(
+export function toResolvedMailbox(
 	mailbox: typeof mailboxes.$inferSelect,
 	domainId: string,
 	hostname: string,
