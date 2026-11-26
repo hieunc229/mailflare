@@ -430,6 +430,32 @@ test("a dotted variant that appears while the address is being changed restores 
 	assert.deepEqual(globalThis.grp.cf.deleted, [], "the old rule stays");
 });
 
+test("a backed-out address change restores every field, not only the address", async (t) => {
+	const { sqlite } = await ctx(t);
+	const group = await makeGroup({ description: "Everyone" });
+	globalThis.grp.cf.onEnsure = (address) => {
+		if (address === "crew@example.com") sqlite.exec(`INSERT INTO mail_groups (id, domain_id, local_part, name, created_at, updated_at) VALUES ('rival', 'd1', 'c.rew', 'Rival', 1, 1)`);
+	};
+	const before = sqlite.prepare("SELECT * FROM mail_groups WHERE id = ?").get(group.id);
+	const response = await app.item.PATCH(req("PATCH", { localPart: "crew", name: "Crew", description: "Other", whoCanPost: "members", replyTo: "group", disabled: true }), ids(group.id));
+	assert.equal(response.status, 409);
+	assert.deepEqual(sqlite.prepare("SELECT * FROM mail_groups WHERE id = ?").get(group.id), before);
+	assert.deepEqual(globalThis.grp.cf.rolledBack, ["r-crew@example.com"]);
+});
+
+test("if the old address was taken meanwhile, the backout still rolls the new rule back and answers 409", async (t) => {
+	const { sqlite } = await ctx(t);
+	const group = await makeGroup({});
+	globalThis.grp.cf.onEnsure = (address) => {
+		if (address === "crew@example.com") sqlite.exec(`INSERT INTO mail_groups (id, domain_id, local_part, name, created_at, updated_at) VALUES ('rival', 'd1', 'c.rew', 'Rival', 1, 1)`);
+	};
+	// Another request takes the freed address the moment this update lands.
+	sqlite.exec(`CREATE TRIGGER taken AFTER UPDATE ON mail_groups WHEN NEW.local_part = 'crew' BEGIN INSERT INTO mail_groups (id, domain_id, local_part, name, created_at, updated_at) VALUES ('taker', 'd1', 'team', 'Taker', 1, 1); END`);
+	const response = await app.item.PATCH(req("PATCH", { localPart: "crew", name: "Crew" }), ids(group.id));
+	assert.equal(response.status, 409);
+	assert.deepEqual(globalThis.grp.cf.rolledBack, ["r-crew@example.com"], "the new rule is not left behind");
+});
+
 test("deleting a group removes group and members in one batch", async (t) => {
 	const { sqlite } = await ctx(t);
 	const group = await makeGroup({});
