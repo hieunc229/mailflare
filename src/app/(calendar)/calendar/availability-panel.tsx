@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { getUserTimeZone, parseUserDateTimeLocal } from "@/lib/time/utils";
 import { fetchAvailability, type PersonAvailability } from "./availability-api";
-import { FIND_DAYS, MAX_FIND_DURATION_MS, availabilityWindow, findFreeSlots, parseGuestAddresses } from "./availability-utils";
+import { FIND_DAYS, MAX_FIND_DURATION_MS, MAX_GUESTS, availabilityWindow, findFreeSlots, parseGuestAddresses } from "./availability-utils";
 import { AvailabilityView, type FindState } from "./availability-view";
 
 /** The pause after the last keystroke before the server is asked (spec F9 8.6). */
@@ -17,7 +17,7 @@ type Found = { key: string; at: Date; state: "loading" | "error" | "ready"; busy
  * Who is free when the event is: reads the guest field and the event's times, asks `/api/calendar/free-busy` for the event's day
  * and a day either side once typing pauses, and offers "Find a time". A failure never blocks saving; it only shows here.
  */
-export function AvailabilityPanel({ guests, startsAt, endsAt, excludeEventId, onPick }: { guests: string; startsAt: string; endsAt: string; excludeEventId?: string; onPick: (start: Date, end: Date) => void }) {
+export function AvailabilityPanel({ guests, startsAt, endsAt, excludeEventId, selfAddress, onPick }: { guests: string; startsAt: string; endsAt: string; excludeEventId?: string; selfAddress?: string; onPick: (start: Date, end: Date) => void }) {
 	const zone = getUserTimeZone();
 	const { addresses: parsed, truncated } = useMemo(() => parseGuestAddresses(guests), [guests]);
 	const addressKey = parsed.join(",");
@@ -60,7 +60,10 @@ export function AvailabilityPanel({ guests, startsAt, endsAt, excludeEventId, on
 		const token = ++finding.current;
 		const at = new Date();
 		setFound({ key: addressKey, at, state: "loading", busy: [] });
-		void fetchAvailability(addresses, at, new Date(at.getTime() + (FIND_DAYS + 1) * DAY), excludeEventId).then((result) => {
+		// The organiser's own calendar counts too, though it is not a row: they are asked for last, and never twice.
+		const self = selfAddress?.trim().toLowerCase();
+		const askFor = self ? [...addresses.filter((address) => address !== self).slice(0, MAX_GUESTS - 1), self] : addresses;
+		void fetchAvailability(askFor, at, new Date(at.getTime() + (FIND_DAYS + 1) * DAY), excludeEventId).then((result) => {
 			if (token !== finding.current) return;
 			if (!result.ok) { setFound({ key: addressKey, at, state: "error", busy: [] }); return; }
 			setFound({ key: addressKey, at, state: "ready", busy: Object.values(result.results).flatMap((person) => (person.status === "ok" ? [person.busy] : [])) });

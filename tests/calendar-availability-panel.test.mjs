@@ -165,3 +165,33 @@ test("a new event sends no excludeEventId", async () => {
 	assert.equal("excludeEventId" in globalThis.panelT.calls[0].body, false);
 	await teardown();
 });
+
+test("Find a time counts the organiser's own busy time too: their address is asked for, is not listed as a guest, and a slot they are busy in is not offered", async () => {
+	setup();
+	const answers = (body) => ok(Object.fromEntries(body.addresses.map((address) => [address, address === "me@one.test"
+		? { status: "ok", busy: [[new Date(Date.now() - DAY).toISOString(), new Date(Date.now() + 20 * DAY).toISOString()]] }
+		: { status: "ok", busy: [] }])));
+	globalThis.panelT.responder = answers;
+	await mount({ guests: "ann@one.test", selfAddress: "Me@One.test" });
+	await ticks(400);
+	await ticks(0);
+	assert.deepEqual(globalThis.panelT.calls[0].body.addresses, ["ann@one.test"], "the read for the rows asks about the guests only");
+	assert.doesNotMatch(text(), /me@one\.test/);
+	await act(async () => { [...container.querySelectorAll("button")].find((button) => button.textContent === "Find a time").click(); });
+	await ticks(0);
+	assert.deepEqual(globalThis.panelT.calls[1].body.addresses, ["ann@one.test", "me@one.test"]);
+	assert.match(text(), /No time in the next 14 days/);
+	await teardown();
+});
+
+test("the organiser who is also on the guest list is asked for once", async () => {
+	setup();
+	globalThis.panelT.responder = (body) => ok(Object.fromEntries(body.addresses.map((address) => [address, { status: "ok", busy: [] }])));
+	await mount({ guests: "ann@one.test, me@one.test", selfAddress: "me@one.test" });
+	await ticks(400);
+	await ticks(0);
+	await act(async () => { [...container.querySelectorAll("button")].find((button) => button.textContent === "Find a time").click(); });
+	await ticks(0);
+	assert.deepEqual(globalThis.panelT.calls[1].body.addresses, ["ann@one.test", "me@one.test"]);
+	await teardown();
+});
