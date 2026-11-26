@@ -270,7 +270,7 @@ test("a delegate saving an event with its guests as they are keeps the stored gu
 	assert.equal(after.title, "Retitled");
 	assert.equal(after.user_id, "u1");
 	assert.deepEqual({ attendees: after.attendees, attendee_responses: after.attendee_responses }, before);
-	for (const extra of ["ATTENDEE:mailto:guest@x.test\r\nATTENDEE:mailto:other@x.test\r\n", ""]) {
+	for (const extra of ["ATTENDEE:mailto:guest@x.test\r\nATTENDEE:mailto:other@x.test\r\n", "ATTENDEE:mailto:other@x.test\r\n"]) {
 		const refused = await put(env, path, keys.u3, vevent("evt_g@mailflare", "Changed guests", extra));
 		assert.equal(refused.status, 403, extra);
 	}
@@ -314,4 +314,27 @@ test("documented limit: a read grantee's ETag and sync report move when the owne
 	const stamps = (text) => text.replace(/(DTSTAMP|LAST-MODIFIED):\d+T\d+Z/g, "");
 	assert.equal(stamps(after.text), stamps(before.text), "the redacted body shows no change but its time stamps");
 	assert.doesNotMatch(after.text, /secret/i);
+});
+
+test("a phone that was never sent the guests (a redacted-render body has no ATTENDEE lines) can still move the event; the guests stay", async (t) => {
+	const { env, keys, sql } = await fixture(t);
+	addEvent(sql, "evt_g", { attendees: '["guest@x.test"]' });
+	const path = `${SHARED("csh_edit", "u3")}evt_g.ics`;
+	assert.doesNotMatch((await get(env, path, keys.u3)).text, /ATTENDEE/);
+	assert.equal((await put(env, path, keys.u3, vevent("evt_g@mailflare", "Moved by phone"))).status, 204);
+	const row = sql.prepare("SELECT title, attendees FROM calendar_events WHERE id = 'evt_g'").get();
+	assert.deepEqual({ ...row }, { title: "Moved by phone", attendees: '["guest@x.test"]' });
+});
+
+test("a delegate's text is never stored as the owner's body: the owner's phone keeps its own alarm and gets no PARTSTAT, ORGANIZER or alarm of the delegate", async (t) => {
+	const { env, keys, sql } = await fixture(t);
+	const own = vevent("uid-o", "Mine", "BEGIN:VALARM\r\nACTION:DISPLAY\r\nDESCRIPTION:Mine\r\nTRIGGER:-PT10M\r\nEND:VALARM\r\n");
+	assert.equal((await put(env, "/dav/calendars/u1/c-work/o.ics", keys.u1, own)).status, 201);
+	const etag = (await get(env, `${SHARED("csh_edit", "u3")}o.ics`, keys.u3)).etag;
+	const delegate = vevent("uid-o", "Mine, moved", "ORGANIZER:mailto:u3@one.test\r\nBEGIN:VALARM\r\nACTION:DISPLAY\r\nDESCRIPTION:x\r\nTRIGGER:-PT1H\r\nEND:VALARM\r\nX-DELEGATE:yes\r\n");
+	assert.equal((await put(env, `${SHARED("csh_edit", "u3")}o.ics`, keys.u3, delegate, { "If-Match": etag })).status, 204);
+	const seen = (await get(env, "/dav/calendars/u1/c-work/o.ics", keys.u1)).text;
+	assert.match(seen, /SUMMARY:Mine\\, moved/);
+	assert.match(seen, /TRIGGER:-PT10M/, "the owner's alarm");
+	assert.doesNotMatch(seen, /PT1H|ORGANIZER|X-DELEGATE/);
 });

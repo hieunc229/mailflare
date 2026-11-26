@@ -1,4 +1,4 @@
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { getDb } from "@/db";
 import { davCollections, users } from "@/db/schema";
 import { validTimeZone } from "@/lib/calendar/feed";
@@ -102,7 +102,7 @@ export function collectionProperties(area: Area, ctx: DavContext, preload: Colle
 	const calendarName = async () => {
 		const base = (await settings())?.displayName || "Mailflare";
 		if (!shared) return base;
-		const [owner] = preload.listing ? [{ name: preload.listing.ownerName }] : await getDb(ctx.env).select({ name: users.name }).from(users).where(eq(users.id, calendarRole!.ownerId)).limit(1);
+		const [owner] = preload.listing ? [{ name: preload.listing.ownerName }] : await getDb(ctx.env).select({ name: sql<string>`coalesce(nullif(${users.name}, ''), ${users.email})` }).from(users).where(eq(users.id, calendarRole!.ownerId)).limit(1);
 		return owner?.name ? `${base} (${owner.name})` : base;
 	};
 	const principal = `/dav/principals/${ctx.userId}/`;
