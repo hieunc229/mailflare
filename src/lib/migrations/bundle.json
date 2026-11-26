@@ -924,6 +924,12 @@
         "CREATE TRIGGER `dav_changes_calendar_events_bd` BEFORE DELETE ON `calendar_events` BEGIN\n\tINSERT INTO dav_changes (collection_id, object_key, change_type, resource_name)\n\tSELECT COALESCE(OLD.calendar_id, 'cal:' || OLD.user_id), OLD.id, 'destroyed', (SELECT name FROM dav_calendar_objects WHERE id = OLD.id) WHERE OLD.dav_object_id IS NULL OR OLD.dav_object_id = OLD.id;\nEND;",
         "CREATE TRIGGER `dav_changes_calendar_events_ad` AFTER DELETE ON `calendar_events` BEGIN\n\tINSERT INTO dav_changes (collection_id, object_key, change_type)\n\tSELECT COALESCE(OLD.calendar_id, 'cal:' || OLD.user_id), OLD.dav_object_id, 'updated'\n\tWHERE OLD.dav_object_id <> OLD.id AND EXISTS (SELECT 1 FROM calendar_events WHERE id = OLD.dav_object_id);\nEND;"
       ]
+    },
+    {
+      "name": "0106_calendar_org_free_busy.sql",
+      "statements": [
+        "ALTER TABLE `app_settings` ADD `calendar_org_free_busy` integer DEFAULT 0 NOT NULL;"
+      ]
     }
   ]
 }

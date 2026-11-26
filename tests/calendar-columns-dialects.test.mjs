@@ -14,9 +14,11 @@ const DIALECTS = [
 for (const [dialect, directory, tag] of DIALECTS) {
 	test(`${dialect}: the calendar columns migration exists, is journalled last, and is bundled`, () => {
 		const entries = journal(directory);
-		assert.equal(entries.at(-1).tag, tag);
-		assert.equal(entries.at(-1).idx, entries.at(-2).idx + 1);
-		assert.ok(entries.at(-1).when > entries.at(-2).when, "journal timestamps stay increasing");
+		// Later migrations follow it, so it is found by tag rather than at the end of the journal.
+		const at = entries.findIndex((entry) => entry.tag === tag);
+		assert.ok(at > 0, "journalled");
+		assert.equal(entries[at].idx, entries[at - 1].idx + 1);
+		assert.ok(entries[at].when > entries[at - 1].when, "journal timestamps stay increasing");
 		const sql = read(`${directory}/${tag}.sql`);
 		for (const needle of ["calendar_id", "is_private", "transparent", "calendar_shares", "calendar_resources", "calendar_resource_bookings", "grantee_user_id"]) assert.match(sql, new RegExp(needle), needle);
 		assert.doesNotMatch(sql, /grantee_group_id/, "D-3: the group column is the groups PR's");

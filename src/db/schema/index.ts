@@ -1306,6 +1306,8 @@ export const appSettings = sqliteTable("app_settings", {
 	autoUpdateDispatchedVersion: text("auto_update_dispatched_version"),
 	/** CalDAV/CardDAV endpoints (/dav/*) answer only when an administrator turns this on. */
 	davEnabled: bool("dav_enabled").notNull().default(false),
+	/** Everyone with Calendar on sees every other such account's busy times (never details). Team only; off until an administrator turns it on (spec F9 D-10, D-13). */
+	calendarOrgFreeBusy: bool("calendar_org_free_busy").notNull().default(false),
 	updatedAt: timestamp("updated_at")
 		.notNull()
 		.$defaultFn(() => new Date()),

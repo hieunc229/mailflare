@@ -610,6 +610,13 @@
       "when": 1794516484572,
       "tag": "0105_calendar_columns",
       "breakpoints": true
+    },
+    {
+      "idx": 88,
+      "version": "6",
+      "when": 1794516485572,
+      "tag": "0106_calendar_org_free_busy",
+      "breakpoints": true
     }
   ]
 }
