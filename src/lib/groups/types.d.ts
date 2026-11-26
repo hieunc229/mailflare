@@ -30,6 +30,8 @@ export type GroupMemberView = {
 	mailboxId: string | null;
 	email: string | null;
 	canSendAs: boolean;
+	/** False for an account with no personal mailbox at its own address: send-as has nowhere to show up for it. */
+	hasPrimaryMailbox: boolean;
 	name: string;
 	address: string;
 	disabled: boolean;

@@ -553,7 +553,8 @@ export const webhookUpdateSchema = z.object({
 
 const groupLocalPart = z.string().trim().min(1, "Enter the part before the @").max(64, "The part before the @ can have at most 64 characters").regex(/^[a-zA-Z0-9._%+-]+$/, "Use only letters, numbers and . _ % + - before the @").refine((value) => normalizeRecipientLocalPart(value).length > 0, { message: "The address needs at least one letter or number" });
 const groupSettings = {
-	name: z.string().trim().min(1, "Enter a name").max(100, "The name can have at most 100 characters"),
+	// No control characters: the name lands in From headers.
+	name: z.string().trim().min(1, "Enter a name").max(100, "The name can have at most 100 characters").refine((value) => !/[\u0000-\u001f\u007f]/.test(value), { message: "The name cannot contain control characters" }),
 	description: z.string().trim().max(500, "The description can have at most 500 characters").nullable().optional(),
 	whoCanPost: z.enum(["anyone", "org", "members"]),
 	replyTo: z.enum(["sender", "group"]),

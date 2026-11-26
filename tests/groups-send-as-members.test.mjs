@@ -121,3 +121,38 @@ test("the group page lists who may send as the group", async (t) => {
 	const detail = await (await app.item.GET(req("GET"), ids(group.id))).json();
 	assert.equal(detail.members.find((m) => m.userId === "alice").canSendAs, true);
 });
+
+test("setting send-as to the value it already has changes nothing and writes no audit row", async (t) => {
+	const { sqlite } = await ctx(t);
+	const group = await makeGroup();
+	const body = await (await app.members.POST(req("POST", { members: [{ kind: "user", userId: "alice", canSendAs: true }] }), ids(group.id))).json();
+	const member = body.added[0];
+	const before = audit(sqlite).length;
+	for (const value of [true, true]) {
+		const response = await app.member.PATCH(req("PATCH", { canSendAs: value }), ids(group.id, member.id));
+		assert.equal(response.status, 200);
+		assert.equal((await response.json()).member.canSendAs, true);
+	}
+	assert.equal(audit(sqlite).length, before);
+	await app.member.PATCH(req("PATCH", { canSendAs: false }), ids(group.id, member.id));
+	assert.equal(audit(sqlite).length, before + 1);
+});
+
+test("a group name with control characters is refused on create and update", async (t) => {
+	await ctx(t);
+	for (const name of ["Team\r\nBcc: x@evil.test", "Te\u0007am", "Te\u007fam"]) {
+		const created = await app.list.POST(req("POST", { domainId: "d1", localPart: "ctl", name }));
+		assert.equal(created.status, 400, JSON.stringify(name));
+	}
+	const group = await makeGroup();
+	const updated = await app.item.PATCH(req("PATCH", { name: "Bad\nname" }), ids(group.id));
+	assert.equal(updated.status, 400);
+});
+
+test("each user member says whether they have a primary mailbox for send-as to show up in", async (t) => {
+	await ctx(t);
+	const group = await makeGroup();
+	await app.members.POST(req("POST", { members: [{ kind: "user", userId: "alice" }, { kind: "user", userId: "bob" }, { kind: "mailbox", mailboxId: "m-support" }] }), ids(group.id));
+	const { members } = await (await app.item.GET(req("GET"), ids(group.id))).json();
+	assert.deepEqual(Object.fromEntries(members.map((m) => [m.name, m.hasPrimaryMailbox])), { "Alice Doe": true, "Bob Roe": false, support: true });
+});
