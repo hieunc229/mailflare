@@ -5,6 +5,7 @@ import type { TranslationKey } from "@/lib/i18n/types";
 export const adminPageTitles: Record<string, TranslationKey> = {
 	"/admin": "admin.title",
 	"/mailboxes": "admin.nav.mailboxes",
+	"/groups": "admin.nav.groups",
 	"/domains": "admin.nav.domains",
 	"/deliverability": "admin.nav.deliverability",
 	"/routing": "admin.nav.routing",

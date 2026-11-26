@@ -31,6 +31,13 @@ const sections: AdminSection[] = [
 		icon: Mail,
 	},
 	{
+		href: "/groups",
+		titleKey: "admin.nav.groups",
+		descriptionKey: "admin.section.groups",
+		icon: Users,
+		permission: "users",
+	},
+	{
 		href: "/domains",
 		titleKey: "admin.nav.domains",
 		descriptionKey: "admin.section.domains",

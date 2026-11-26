@@ -5,6 +5,7 @@ const staticRouteTitles: Array<[string, TranslationKey]> = [
 	["/settings", "settings.nav.settings"],
 	["/admin", "admin.title"],
 	["/mailboxes", "admin.nav.mailboxes"],
+	["/groups", "admin.nav.groups"],
 	["/domains", "admin.nav.domains"],
 	["/routing", "admin.nav.routing"],
 	["/webhooks", "admin.nav.webhooks"],
