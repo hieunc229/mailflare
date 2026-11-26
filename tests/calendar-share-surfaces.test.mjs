@@ -33,7 +33,7 @@ function setup() {
 	sqlite.exec("INSERT INTO calendar_shares (id, calendar_id, grantee_user_id, role, created_at) VALUES ('g2', 'cal:work', 'u2', 'manage', 1), ('g3', 'cal:work', 'u3', 'read', 1)");
 }
 const soon = Math.floor(Date.now() / 1000) + 600;
-const addEvent = (id, extra = "") => sqlite.exec(`INSERT INTO calendar_events (id, user_id, calendar_id, title, starts_at, ends_at, reminder_minutes, created_at, updated_at) VALUES ('${id}', 'u1', 'cal:work', 'Board meeting', ${soon}, ${soon + 3600}, 30, 1, 1)`);
+const addEvent = (id) => sqlite.exec(`INSERT INTO calendar_events (id, user_id, calendar_id, title, starts_at, ends_at, reminder_minutes, created_at, updated_at) VALUES ('${id}', 'u1', 'cal:work', 'Board meeting', ${soon}, ${soon + 3600}, 30, 1, 1)`);
 
 test("a reminder for an event in a shared calendar goes to its owner and to nobody it is shared with", async () => {
 	setup();

@@ -113,7 +113,7 @@ test("redactEvent: owner and editors see everything, readers lose private detail
 });
 
 test("calendarScopes: shared calendars filter by id (and the owner's null-calendar events for a default), in statements under D1's 100 parameters", async () => {
-	const { orm, statements, calendar, grant, event } = setup();
+	const { orm, statements, calendar, event } = setup();
 	calendar("cal:work"); calendar("cal:u1", "u1", null); calendar("cal:other", "u3", "O");
 	event("w1", "u1", "cal:work"); event("d1", "u1", null); event("d2", "u1", "cal:u1"); event("x1", "u3", "cal:other"); event("x2", "u3", null); event("p1", "u4", null);
 	const granted = [{ id: "cal:work", ownerId: "u1" }, { id: "cal:u1", ownerId: "u1" }, { id: "cal:other", ownerId: "u3" }];
