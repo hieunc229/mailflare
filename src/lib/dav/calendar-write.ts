@@ -105,8 +105,11 @@ export async function putCalendarResource(ctx: DavContext, name: string, request
 	const seq = existing === atName ? atNameSeq : existing ? (await etagSeqs(env, cid, [existing.id])).get(existing.id) : undefined;
 	if (delegate && existing) await withOverrides(env, userId, [existing]);
 	const storedOverride = (at: Date) => existing?.overrides.find((row) => row.recurrenceId?.getTime() === at.getTime());
-	// The guest list is the owner's: a body that adds or removes a guest is refused, one that keeps them is saved with the stored list as it is.
-	if (delegate && (guestSet(parsed.master.attendees) !== guestSet(existing?.master.attendees ?? null) || parsed.overrides.some((fields) => guestSet(fields.attendees) !== guestSet(storedOverride(fields.recurrenceId)?.attendees ?? null)))) return precondition(403, "valid-calendar-object-resource", "C");
+	// The guest list is the owner's. A body with no guests is what a phone sends for an event it was served without them (a delegate's body is generated
+	// without ATTENDEE lines), so it keeps the stored list; a body that names guests must name exactly the stored ones. An occurrence the delegate moves
+	// has the series' guests. Either way the stored list is saved as it is, byte for byte.
+	const referenceFor = (at: Date | null): EventRow | undefined => (at ? storedOverride(at) : undefined) ?? existing?.master;
+	if (delegate && [{ fields: parsed.master as EventFields, at: null as Date | null }, ...parsed.overrides.map((fields) => ({ fields: fields as EventFields, at: fields.recurrenceId as Date | null }))].some(({ fields, at }) => guestSet(fields.attendees) !== "" && guestSet(fields.attendees) !== guestSet(referenceFor(at)?.attendees ?? null))) return precondition(403, "valid-calendar-object-resource", "C");
 	const owned = <T extends EventFields>(fields: T, stored: EventRow | undefined): T => (delegate ? { ...fields, attendees: stored?.attendees ?? "[]", attendeeResponses: stored?.attendeeResponses ?? null, responseStatus: stored?.responseStatus ?? null, inviteSender: stored?.inviteSender ?? null } : fields);
 	const size = new TextEncoder().encode(body).byteLength;
 	const oldSize = existing?.size ?? 0;
@@ -132,7 +135,7 @@ export async function putCalendarResource(ctx: DavContext, name: string, request
 	};
 	const color = old?.color ?? normalizeCalendarColor(undefined);
 	const overrideRows = parsed.overrides.map((source) => {
-		const fields = owned(source, storedOverride(source.recurrenceId));
+		const fields = owned(source, referenceFor(source.recurrenceId));
 		return {
 			...columns(fields, now),
 			id: newId("evt"),
@@ -159,7 +162,9 @@ export async function putCalendarResource(ctx: DavContext, name: string, request
 
 	const db = getDb(env);
 	const scope = [cid];
-	const objectValues = { uid: parsed.uid, name, body, rowsHash: hash, size, updatedAt: now };
+	// A delegate's text is never kept as the resource's body: it carries the delegate's own PARTSTAT, ORGANIZER and alarms, which the owner's phone
+	// would take as the owner's. The previous body stays (its hash cleared, so the rows' mapped properties are merged into it on the next read).
+	const objectValues = delegate ? { uid: parsed.uid, name, rowsHash: null, size, updatedAt: now } : { uid: parsed.uid, name, body, rowsHash: hash, size, updatedAt: now };
 	// A calendar deleted meanwhile refuses the batch instead of taking rows for a collection that is gone.
 	const statements: unknown[] = [...writeGuards(db, ctx), ...(existing ? staleGuard(db, calendarEvents, scope, id, userId, { seq: seq ?? null, updatedAt: existing.master.updatedAt }) : [])];
 	if (old?.davObjectId === id) statements.push(db.delete(calendarEvents).where(and(eq(calendarEvents.userId, userId), eq(calendarEvents.davObjectId, id), ne(calendarEvents.id, id))));
@@ -167,7 +172,7 @@ export async function putCalendarResource(ctx: DavContext, name: string, request
 	for (let i = 0; i < overrideRows.length; i += ROWS_PER_INSERT) statements.push(db.insert(calendarEvents).values(overrideRows.slice(i, i + ROWS_PER_INSERT)));
 	// A native event written for the first time has no stored resource yet.
 	const hasObject = (await db.select({ id: davCalendarObjects.id }).from(davCalendarObjects).where(eq(davCalendarObjects.id, id)).limit(1)).length > 0;
-	statements.push(hasObject ? db.update(davCalendarObjects).set(objectValues).where(eq(davCalendarObjects.id, id)) : db.insert(davCalendarObjects).values({ ...objectValues, id, userId, collectionId: cid, createdAt: now }));
+	statements.push(hasObject ? db.update(davCalendarObjects).set(objectValues).where(eq(davCalendarObjects.id, id)) : db.insert(davCalendarObjects).values({ ...objectValues, body: delegate ? null : body, id, userId, collectionId: cid, createdAt: now }));
 	if (delegate) statements.push(delegateAudit(db, ctx, existing ? "updated" : "created", id));
 	statements.push(db.select({ seq: sql<number | null>`max(${davChanges.seq})` }).from(davChanges).where(and(collectionScope(davChanges.collectionId, scope), eq(davChanges.objectKey, id))));
 	let results: unknown[];

@@ -112,10 +112,12 @@ export async function syncPositions(env: Pick<CloudflareEnv, "DB">, collectionId
 		}
 	};
 	await readStates(collectionIds);
-	const stale = [...states].filter(([id, state]) => !currentEpoch(id, state.epoch));
-	for (const [id, state] of stale) {
-		await db.update(davSyncState).set({ epoch: newEpoch(id) }).where(and(eq(davSyncState.collectionId, id), eq(davSyncState.epoch, state.epoch)));
-		states.delete(id);
+	// Calendar epochs from before per-calendar logs are renewed together (one statement per chunk). They may share one epoch: a token also names its collection.
+	const stale = [...states].filter(([id, state]) => !currentEpoch(id, state.epoch)).map(([id]) => id);
+	if (stale.length) {
+		const renewed = newEpoch("cal:");
+		for (let i = 0; i < stale.length; i += POSITION_CHUNK - 2) await db.update(davSyncState).set({ epoch: renewed }).where(and(inArray(davSyncState.collectionId, stale.slice(i, i + POSITION_CHUNK - 2)), sql`substr(${davSyncState.epoch}, 15, 1) <> '8'`));
+		await readStates(stale);
 	}
 	const missing = collectionIds.filter((id) => !states.has(id));
 	for (let i = 0; i < missing.length; i += STATE_ROWS_PER_INSERT) await db.insert(davSyncState).values(missing.slice(i, i + STATE_ROWS_PER_INSERT).map((collectionId) => ({ collectionId, epoch: newEpoch(collectionId), floor: 0 }))).onConflictDoNothing();
@@ -126,10 +128,8 @@ export async function syncPositions(env: Pick<CloudflareEnv, "DB">, collectionId
 		const rows = await db.select({ id: davChanges.collectionId, seq: sql<number | null>`max(${davChanges.seq})` }).from(davChanges).where(inArray(davChanges.collectionId, collectionIds.slice(i, i + POSITION_CHUNK))).groupBy(davChanges.collectionId);
 		for (const row of rows) newest.set(row.id, Number(row.seq ?? 0));
 	}
-	return new Map(collectionIds.map((id) => {
-		const state = states.get(id)!;
-		return [id, { epoch: state.epoch, seq: Math.max(state.floor, newest.get(id) ?? 0) }];
-	}));
+	// A collection whose state row vanished meanwhile (a calendar deleted) is left out; the caller reads its position singly.
+	return new Map(collectionIds.filter((id) => states.has(id)).map((id) => [id, { epoch: states.get(id)!.epoch, seq: Math.max(states.get(id)!.floor, newest.get(id) ?? 0) }]));
 }
 
 /** Position to put in the collection's sync token / CTag right now. */
