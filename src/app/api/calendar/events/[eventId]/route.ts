@@ -13,7 +13,7 @@ import { EVENT_FLAGS_ERROR, resolveEventFlags } from "@/lib/calendar/event-flags
 import { parseCalendarOccurrenceId, parseExcludedOccurrences } from "@/lib/calendar/recurrence";
 import { CUSTOM_DAY_LOCKED, editedTimeZone, endLegacySeries, resolveRepeat, shiftCustomSeries } from "@/lib/calendar/repeat-fields";
 import { limitRrule, rruleEndedBefore } from "@/lib/calendar/rrule";
-import { deleteOverridesFrom, deleteSeriesRows, moveSeriesStatements, shiftOverrides, splitSeriesRows, splitSeriesStatements } from "@/lib/calendar/series-rows";
+import { deleteOverridesFrom, deleteSeriesRows, moveSeriesStatements, shiftOverrides, splitSeriesStatements } from "@/lib/calendar/series-rows";
 import { newId } from "@/lib/ids";
 import { getRequestTimeZone } from "@/lib/time/utils";
 import { authorizeCalendarRequest, calendarKeyCanSendInvitations } from "@/lib/calendar/api-auth";
@@ -83,12 +83,14 @@ export async function PATCH(request: Request, { params }: CalendarEventRoutePara
 	// Undefined keeps the calendar; otherwise the whole series moves, so compare against where it is now.
 	const moveTo = calendar.calendarId !== undefined && calendar.calendarId !== (head.calendarId ?? null) ? calendar.calendarId : undefined;
 	// Writes that put rows into another calendar run as one batch that first checks the calendar still exists (a competing delete refuses it with 409).
-	const guard = typeof moveTo === "string" ? calendarExistsGuard(db, ownerId, moveTo) : [];
+	// A write that puts rows into a named calendar (the one it moves to, or the one it is already in) first checks that the calendar is still there.
+	const guardedCalendar = moveTo !== undefined ? moveTo : existing.calendarId;
+	const guard = typeof guardedCalendar === "string" ? calendarExistsGuard(db, ownerId, guardedCalendar) : [];
 	const batched = async (statements: unknown[]): Promise<NextResponse | null> => {
 		try { await db.batch([...guard, ...statements] as never); return null; } catch (error) {
 			if (!isUniqueConstraintError(error)) throw error;
 			// The calendar guard and the stored resource's unique (collection, UID) and (collection, name) keys fail the same way: say which it was.
-			const [still] = typeof moveTo === "string" ? await db.select({ id: davCollections.id }).from(davCollections).where(and(eq(davCollections.id, moveTo), eq(davCollections.userId, ownerId))).limit(1) : [];
+			const [still] = typeof guardedCalendar === "string" ? await db.select({ id: davCollections.id }).from(davCollections).where(and(eq(davCollections.id, guardedCalendar), eq(davCollections.userId, ownerId))).limit(1) : [];
 			if (!still) return NextResponse.json({ error: "That calendar no longer exists" }, { status: 409 });
 			return NextResponse.json({ error: "An event with the same ID already exists in that calendar", code: EVENT_ID_EXISTS }, { status: 409 });
 		}
@@ -120,7 +122,10 @@ export async function PATCH(request: Request, { params }: CalendarEventRoutePara
 		if (moveTo !== undefined) {
 			const refused = await batched([insertMoved, excludeOriginal, ...moveSeriesStatements(db, ownerId, head.id, moveTo)]);
 			if (refused) return refused;
-		} else { await insertMoved; await excludeOriginal; }
+		} else {
+			const refused = await batched([insertMoved, excludeOriginal]);
+			if (refused) return refused;
+		}
 		if (!delegate && attendees.length && existing.mailboxId && input.from) { const file = createCalendarInvitation({ ...moved, uid: moved.id, organizer: input.from, attendees }); await Promise.all(attendees.map((to) => sendEmail(env, { userId: user.id, mailboxId: existing.mailboxId!, from: input.from!, to, subject: `Updated invitation: ${moved.title}`, text: moved.description || `This event has been updated: ${moved.title}.`, attachments: [{ filename: "invite.ics", type: "text/calendar; charset=utf-8", content: file }] }))); }
 		if (delegate) await auditDelegate(env, user, existing, "calendar.event_updated_by_delegate", moveTo);
 		return NextResponse.json({ ok: true });
@@ -141,7 +146,10 @@ export async function PATCH(request: Request, { params }: CalendarEventRoutePara
 		if (moveTo !== undefined) {
 			const refused = await batched([...splitSeriesStatements(db, ownerId, existing, splitAt, fresh, endPatch), ...moveSeriesStatements(db, ownerId, head.id, moveTo)]);
 			if (refused) return refused;
-		} else await splitSeriesRows(db, ownerId, existing, splitAt, fresh, endPatch);
+		} else {
+			const refused = await batched(splitSeriesStatements(db, ownerId, existing, splitAt, fresh, endPatch));
+			if (refused) return refused;
+		}
 	} else {
 		const edit = db.update(calendarEvents).set({ title: event.title, description: event.description, location: event.location, attendees: event.attendees, color: event.color, repeat: event.repeat, repeatDays: event.repeatDays, repeatAnchorDay: event.repeatAnchorDay, repeatUntil: event.repeatUntil, rrule: event.rrule, ...(shifted ? { excludedOccurrences: shifted.excludedOccurrences } : {}), reminderMinutes: event.reminderMinutes, isPrivate: event.isPrivate, transparent: event.transparent, lastRemindedStart: null, timeZone, startsAt, endsAt, updatedAt: new Date() }).where(eq(calendarEvents.id, existing.id));
 		// Privacy belongs to the series: the moved occurrences carry the same flag, written in the same batch so no reader sees them apart.
