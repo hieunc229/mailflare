@@ -284,6 +284,21 @@ test("PATCH moves an event between two calendars of the same owner when the acto
 	assert.equal(audit()[0].metadata.calendarId, "cal:home");
 });
 
+test("the audit entry of a move names the calendar the event went to, the owner's default included", async () => {
+	setup();
+	sqlite.exec("INSERT INTO dav_collections (id, user_id, kind, created_at, updated_at) VALUES ('cal:u1', 'u1', 'calendar', 1, 1)");
+	sqlite.exec("INSERT INTO calendar_shares (id, calendar_id, grantee_user_id, role, created_at) VALUES ('gd', 'cal:u1', 'u2', 'edit', 1)");
+	add("w1", { calendar: "cal:work" });
+	as("u2");
+	assert.equal((await patch("w1", { attendees: ["g@x.co"], calendarId: "cal:u1" })).status, 200);
+	assert.equal(row("w1").calendar_id, null);
+	assert.equal(audit()[0].metadata.calendarId, "cal:u1");
+	assert.equal((await patch("w1", { attendees: ["g@x.co"], calendarId: "cal:home" })).status, 200);
+	assert.equal(audit()[1].metadata.calendarId, "cal:home");
+	assert.equal((await patch("w1", { attendees: ["g@x.co"] })).status, 200);
+	assert.equal(audit()[2].metadata.calendarId, "cal:home", "no move: where it is");
+});
+
 test("PATCH refuses a move that needs a role the actor lacks on either side, or another owner's calendar", async () => {
 	setup();
 	add("w1", { calendar: "cal:work" }); add("t1", { user: "u7", calendar: "cal:theirs" });
