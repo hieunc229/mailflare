@@ -34,6 +34,7 @@ import { InviteResponseDialog } from "./invite-response-dialog";
 import { CalendarList } from "./calendar-list";
 import { calendarLabel, canWriteEvents, eventErrorKey, movesSeries, visibleCalendarEvents, writableCalendars } from "./calendar-list-utils";
 import { EventViewDialog } from "./event-view-dialog";
+import { AvailabilityPanel } from "./availability-panel";
 import { useCalendarState } from "./calendar-state";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import type { CalendarEvent, CalendarView, EventDragPreview, EventResizeEdge, EventResizeSession } from "./types";
@@ -740,6 +741,10 @@ export default function CalendarPage() {
                 <UsersRound aria-hidden="true" className="h-5 w-5 text-neutral-600" />
                 <Input value={guests} onChange={(event) => setGuests(event.target.value)} placeholder={t("calendar.addGuests")} aria-label={t("calendar.guestsLabel")} className={eventFieldClass} />
                 {guestReplies && <p className="mt-1 px-2 text-xs text-neutral-600">{t("calendar.guestResponses", { list: guestReplies })}</p>}
+              </div>}
+              {!delegate && <div className="grid grid-cols-[24px_minmax(0,1fr)] items-start gap-3">
+                <div />
+                <AvailabilityPanel guests={guests} startsAt={startsAt} endsAt={endsAt} onPick={(start, end) => { setStartsAt(formatLocalDateTime(start)); setEndsAt(formatLocalDateTime(end)); }} />
               </div>}
               <div className="grid grid-cols-[24px_minmax(0,1fr)] items-center gap-3">
                 <MapPin aria-hidden="true" className="h-5 w-5 text-neutral-600" />
