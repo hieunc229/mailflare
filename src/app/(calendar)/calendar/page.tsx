@@ -851,7 +851,7 @@ export default function CalendarPage() {
               </div>}
               {!delegate && <div className="grid grid-cols-[24px_minmax(0,1fr)] items-start gap-3">
                 <div />
-                <AvailabilityPanel guests={guests} startsAt={startsAt} endsAt={endsAt} onPick={(start, end) => { setStartsAt(formatLocalDateTime(start)); setEndsAt(formatLocalDateTime(end)); }} />
+                <AvailabilityPanel guests={guests} excludeEventId={editing?.id} startsAt={startsAt} endsAt={endsAt} onPick={(start, end) => { setStartsAt(formatLocalDateTime(start)); setEndsAt(formatLocalDateTime(end)); }} />
               </div>}
               <div className="grid grid-cols-[24px_minmax(0,1fr)] items-center gap-3">
                 <MapPin aria-hidden="true" className="h-5 w-5 text-neutral-600" />

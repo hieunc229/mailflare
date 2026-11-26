@@ -114,3 +114,58 @@ test("an unauthenticated caller is refused", async () => {
 	globalThis.calFbRt.user = null;
 	assert.equal((await post({ addresses: ["u1@one.test"], start: iso(0), end: iso(1) })).status, 401);
 });
+
+// ---- excludeEventId -----------------------------------------------------------------------------------------------------
+
+const { createHash } = await import("node:crypto");
+const copyId = (user, uid) => `inv_${createHash("sha256").update(`${user}\n${uid}`).digest("hex").slice(0, 24)}`;
+const seconds = (days, hours) => Math.floor((T0 + days * DAY + hours * 3_600_000) / 1000);
+function meeting(owner = "u2", calendar = null) {
+	// u2 organises "plan" with u3 (accepted copy); u3 and u1 also have unrelated events at 9:00 (u1's from setup).
+	sqlite.exec(`INSERT INTO calendar_events (id, user_id, calendar_id, title, starts_at, ends_at, created_at, updated_at) VALUES ('evt_plan', '${owner}', ${calendar ? `'${calendar}'` : "NULL"}, 'Plan', ${seconds(0, 14)}, ${seconds(0, 15)}, 1, 1)`);
+	sqlite.exec(`INSERT INTO calendar_events (id, user_id, title, starts_at, ends_at, response_status, created_at, updated_at) VALUES ('${copyId("u3", "evt_plan@mailflare")}', 'u3', 'Plan', ${seconds(0, 14)}, ${seconds(0, 15)}, 'accepted', 1, 1)`);
+}
+const PLAN = [iso(0, 14), iso(0, 15)];
+const busyOf = (results, address) => results[address].busy;
+
+test("excludeEventId: the organiser editing an event no longer sees it, or its guests' copies of it, as busy", async () => {
+	setup();
+	globalThis.calFbRt.user = { id: "u2", calendarEnabled: true };
+	sqlite.exec("INSERT INTO dav_collections (id, user_id, kind, display_name, created_at, updated_at) VALUES ('cal:u3', 'u3', 'calendar', 'u3', 1, 1)");
+	sqlite.exec("INSERT INTO calendar_shares (id, calendar_id, grantee_user_id, role, created_at) VALUES ('g9', 'cal:u3', 'u2', 'freebusy', 1)");
+	meeting();
+	const asked = ["u2@one.test", "u3@one.test"];
+	const without = (await ask(asked)).results;
+	assert.ok(busyOf(without, "u3@one.test").some((pair) => pair.join() === PLAN.join()), "counted before");
+	const { results } = await ask(asked, { excludeEventId: "evt_plan" });
+	assert.deepEqual(busyOf(results, "u3@one.test"), [BUSY.busy[0]], "only the unrelated 9:00 event is left");
+	assert.ok(!busyOf(results, "u2@one.test").some((pair) => pair.join() === PLAN.join()));
+});
+
+test("excludeEventId also takes the occurrence form of an id (`<series>@<start>`)", async () => {
+	setup();
+	globalThis.calFbRt.user = { id: "u2", calendarEnabled: true };
+	sqlite.exec("INSERT INTO dav_collections (id, user_id, kind, display_name, created_at, updated_at) VALUES ('cal:u3', 'u3', 'calendar', 'u3', 1, 1)");
+	sqlite.exec("INSERT INTO calendar_shares (id, calendar_id, grantee_user_id, role, created_at) VALUES ('g9', 'cal:u3', 'u2', 'freebusy', 1)");
+	meeting();
+	const { results } = await ask(["u3@one.test"], { excludeEventId: `evt_plan@${T0 + 14 * 3_600_000}` });
+	assert.deepEqual(busyOf(results, "u3@one.test"), [BUSY.busy[0]]);
+});
+
+test("excludeEventId is ignored, without a trace, when the caller cannot edit that event: no role, a read role, a missing event all answer as if it was not sent", async () => {
+	setup();
+	sqlite.exec("INSERT INTO dav_collections (id, user_id, kind, display_name, created_at, updated_at) VALUES ('cal:plans', 'u2', 'calendar', 'Plans', 1, 1)");
+	sqlite.exec("INSERT INTO calendar_shares (id, calendar_id, grantee_user_id, role, created_at) VALUES ('g8', 'cal:plans', 'u1', 'read', 1)");
+	meeting("u2", "cal:plans");
+	// u1 holds a free/busy grant on u2 (setup), so u2's 14:00 plan shows as busy to u1, who may not edit it.
+	const baseline = JSON.stringify((await ask(["u2@one.test"])).results);
+	assert.match(baseline, /T14:00:00/);
+	for (const id of ["evt_plan", "evt_missing", `evt_plan@${T0}`]) assert.equal(JSON.stringify((await ask(["u2@one.test"], { excludeEventId: id })).results), baseline, id);
+	sqlite.exec("UPDATE calendar_shares SET role = 'edit' WHERE id = 'g8'");
+	assert.doesNotMatch(JSON.stringify((await ask(["u2@one.test"], { excludeEventId: "evt_plan" })).results), /T14:00:00/, "an editor may");
+});
+
+test("excludeEventId must be text", async () => {
+	setup();
+	assert.equal((await post({ addresses: ["u1@one.test"], start: iso(0), end: iso(1), excludeEventId: 7 })).status, 400);
+});

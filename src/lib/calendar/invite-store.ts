@@ -9,15 +9,12 @@ import { isIcsAddress } from "./ics";
 import { getEmailAddress } from "@/lib/email/address";
 import type { CalendarRepeat } from "./types";
 import { findInviteAttachment, MAX_INVITE_BYTES } from "./invite-attachment";
+import { inviteEventId } from "./invite-id";
 import { addExcludedOccurrence, chooseRecipientZone, inboundNeedsRecipientZone, inviteSenderMatches, mergeExcludedOccurrences, normalizeInviteSender, planInboundInvite } from "./invite-rules";
 
 export { findInviteAttachment };
 
-/** One calendar row per (user, invitation UID), so a re-sent or updated invitation edits the same event. */
-export async function inviteEventId(userId: string, uid: string): Promise<string> {
-	const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(`${userId}\n${uid}`));
-	return `inv_${[...new Uint8Array(digest)].slice(0, 12).map((byte) => byte.toString(16).padStart(2, "0")).join("")}`;
-}
+export { inviteEventId };
 
 /** Latest RSVP per guest per occurrence: the same hash scheme as inviteEventId over event, occurrence and guest. */
 export async function occurrenceResponseId(eventId: string, occurrenceMs: number, guest: string): Promise<string> {

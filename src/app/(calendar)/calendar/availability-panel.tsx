@@ -17,7 +17,7 @@ type Found = { key: string; at: Date; state: "loading" | "error" | "ready"; busy
  * Who is free when the event is: reads the guest field and the event's times, asks `/api/calendar/free-busy` for the event's day
  * and a day either side once typing pauses, and offers "Find a time". A failure never blocks saving; it only shows here.
  */
-export function AvailabilityPanel({ guests, startsAt, endsAt, onPick }: { guests: string; startsAt: string; endsAt: string; onPick: (start: Date, end: Date) => void }) {
+export function AvailabilityPanel({ guests, startsAt, endsAt, excludeEventId, onPick }: { guests: string; startsAt: string; endsAt: string; excludeEventId?: string; onPick: (start: Date, end: Date) => void }) {
 	const zone = getUserTimeZone();
 	const { addresses: parsed, truncated } = useMemo(() => parseGuestAddresses(guests), [guests]);
 	const addressKey = parsed.join(",");
@@ -38,12 +38,12 @@ export function AvailabilityPanel({ guests, startsAt, endsAt, onPick }: { guests
 		if (!requestKey) return;
 		let current = true;
 		const timer = setTimeout(() => {
-			void fetchAvailability(addresses, new Date(fromMs), new Date(toMs)).then((result) => {
+			void fetchAvailability(addresses, new Date(fromMs), new Date(toMs), excludeEventId).then((result) => {
 				if (current) setAnswer({ key: requestKey, ok: result.ok, results: result.ok ? result.results : {} });
 			});
 		}, DEBOUNCE_MS);
 		return () => { current = false; clearTimeout(timer); };
-	}, [requestKey, addresses, fromMs, toMs]);
+	}, [requestKey, addresses, fromMs, toMs, excludeEventId]);
 
 	if (!window) return null;
 	const settled = answer?.key === requestKey ? answer : null;
@@ -60,7 +60,7 @@ export function AvailabilityPanel({ guests, startsAt, endsAt, onPick }: { guests
 		const token = ++finding.current;
 		const at = new Date();
 		setFound({ key: addressKey, at, state: "loading", busy: [] });
-		void fetchAvailability(addresses, at, new Date(at.getTime() + (FIND_DAYS + 1) * DAY)).then((result) => {
+		void fetchAvailability(addresses, at, new Date(at.getTime() + (FIND_DAYS + 1) * DAY), excludeEventId).then((result) => {
 			if (token !== finding.current) return;
 			if (!result.ok) { setFound({ key: addressKey, at, state: "error", busy: [] }); return; }
 			setFound({ key: addressKey, at, state: "ready", busy: Object.values(result.results).flatMap((person) => (person.status === "ok" ? [person.busy] : [])) });

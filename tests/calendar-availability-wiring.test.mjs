@@ -6,7 +6,7 @@ const page = readFileSync(new URL("../src/app/(calendar)/calendar/page.tsx", imp
 
 test("the event editor shows availability under the guests, never for a delegate (who cannot invite), and a picked time fills both fields", () => {
 	assert.match(page, /import \{ AvailabilityPanel \} from "\.\/availability-panel";/);
-	const mount = page.match(/\{!delegate && <div[^>]*>\s*<div \/>\s*<AvailabilityPanel guests=\{guests\} startsAt=\{startsAt\} endsAt=\{endsAt\} onPick=\{\(start, end\) => \{ setStartsAt\(formatLocalDateTime\(start\)\); setEndsAt\(formatLocalDateTime\(end\)\); \}\} \/>\s*<\/div>\}/);
+	const mount = page.match(/\{!delegate && <div[^>]*>\s*<div \/>\s*<AvailabilityPanel guests=\{guests\} excludeEventId=\{editing\?\.id\} startsAt=\{startsAt\} endsAt=\{endsAt\} onPick=\{\(start, end\) => \{ setStartsAt\(formatLocalDateTime\(start\)\); setEndsAt\(formatLocalDateTime\(end\)\); \}\} \/>\s*<\/div>\}/);
 	assert.ok(mount, "mounted once, behind !delegate, with the picked slot written to both fields");
 	assert.ok(page.indexOf("AvailabilityPanel guests") > page.indexOf('aria-label={t("calendar.guestsLabel")}'), "after the guests field");
 	assert.ok(page.indexOf("AvailabilityPanel guests") < page.indexOf('aria-label={t("calendar.location")}'), "before the location field");
