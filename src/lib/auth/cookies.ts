@@ -6,6 +6,23 @@ import { MigrationRequiredError, UnauthorizedError } from "./unauthorized";
 
 const MUTATING_METHODS = new Set(["POST", "PUT", "PATCH", "DELETE"]);
 
+/**
+ * The session read behind every auth path. A database behind on migrations (a missing table, or a
+ * column a later migration adds) must say so (409) instead of letting the driver error out as a 500
+ * no client can act on — `requireUser` already answers that way for its ~72 sites, and the callers
+ * that read `getCurrentUser` directly deserve the same answer. Every other failure — an outage, a
+ * lock, a real query bug — is rethrown untouched: this catch must not hide one behind a migration
+ * message.
+ */
+async function userFromSession(env: CloudflareEnv, token: string | undefined) {
+	try {
+		return await getUserFromSession(env, token);
+	} catch (error) {
+		if (isMissingTableError(error) || isMissingColumnError(error)) throw new MigrationRequiredError();
+		throw error;
+	}
+}
+
 function getBearerToken(request?: Request): string | undefined {
 	const authorization = request?.headers.get("Authorization");
 	if (!authorization?.startsWith("Bearer ")) return undefined;
@@ -16,7 +33,7 @@ function getBearerToken(request?: Request): string | undefined {
 export async function getCurrentUser(env: CloudflareEnv, request?: Request) {
 	const bearerToken = getBearerToken(request);
 	if (bearerToken) {
-		const user = await getUserFromSession(env, bearerToken);
+		const user = await userFromSession(env, bearerToken);
 		return user?.disabled || user?.deletedAt ? null : user;
 	}
 
@@ -27,7 +44,7 @@ export async function getCurrentUser(env: CloudflareEnv, request?: Request) {
 
 	const jar = await cookies();
 	const token = jar.get(SESSION_COOKIE)?.value;
-	const user = await getUserFromSession(env, token);
+	const user = await userFromSession(env, token);
 	return user?.disabled || user?.deletedAt ? null : user;
 }
 

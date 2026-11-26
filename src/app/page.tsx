@@ -5,6 +5,7 @@ import { heroMessages, sidebarItems } from "./utils";
 import { Inbox, Mail, Search, ShieldCheck } from "@/components/icons";
 import { getServerTranslator } from "@/lib/i18n/server";
 import { getCurrentUser } from "@/lib/auth/cookies";
+import { MigrationRequiredError } from "@/lib/auth/unauthorized";
 import { getEnv } from "@/lib/cloudflare";
 import { LanguageSelector } from "@/components/language-selector";
 import { getHomeBranding } from "./home-server-utils";
@@ -26,8 +27,12 @@ export default async function HomePage() {
   const [branding, t, sessionUser] = await Promise.all([
     getHomeBranding(),
     getServerTranslator(),
-    // A session lookup failure must not take down the public landing page.
-    getCurrentUser(getEnv()).catch(() => null),
+    // A session lookup failure must not take down the public landing page — except a database
+    // behind on migrations, which must surface (409) instead of reading as a signed-out visitor.
+    getCurrentUser(getEnv()).catch((error: unknown) => {
+      if (error instanceof MigrationRequiredError) throw error;
+      return null;
+    }),
   ]);
   // Signed-in users skip the landing page; the inbox restores their last-used mailbox.
   if (sessionUser && !sessionUser.disabled) redirect("/inbox");
