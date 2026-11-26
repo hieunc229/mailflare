@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import toast from "react-hot-toast";
 import { useLanguage } from "@/components/language-provider";
 import type { CalendarGrantRole, ShareEntry } from "@/lib/calendar/shares-types";
@@ -19,14 +19,19 @@ export function ShareSection({ calendarId }: { calendarId: string }) {
 	const [adding, setAdding] = useState(false);
 	const [error, setError] = useState("");
 
-	const load = useCallback(async () => {
-		setState("loading");
-		const result = await loadShares(calendarId);
-		if (!result.ok) { setState("error"); return; }
-		setShares(result.shares);
-		setState("ready");
+	const settle = (result: Awaited<ReturnType<typeof loadShares>>) => {
+		if (result.ok) { setShares(result.shares); setState("ready"); } else setState("error");
+	};
+	// Not through `settle`: an effect that calls a function setting state runs it synchronously, which the lint rule rightly dislikes.
+	useEffect(() => {
+		let active = true;
+		void loadShares(calendarId).then((result) => {
+			if (!active) return;
+			if (result.ok) { setShares(result.shares); setState("ready"); } else setState("error");
+		});
+		return () => { active = false; };
 	}, [calendarId]);
-	useEffect(() => { void load(); }, [load]);
+	const reload = async () => settle(await loadShares(calendarId));
 
 	async function add() {
 		setAdding(true);
@@ -45,7 +50,7 @@ export function ShareSection({ calendarId }: { calendarId: string }) {
 		setError("");
 		const result = await changeShareRole(calendarId, share.id, next);
 		setPendingId(null);
-		if (!result.ok) { setError(t(shareErrorKey(result.status) as never)); if (result.status === 404) void load(); return; }
+		if (!result.ok) { setError(t(shareErrorKey(result.status) as never)); if (result.status === 404) void reload(); return; }
 		setShares((current) => current.map((entry) => (entry.id === share.id ? result.share : entry)));
 		toast.success(t("calendar.share.roleChanged", { name: share.name || share.email }));
 	}
@@ -55,11 +60,11 @@ export function ShareSection({ calendarId }: { calendarId: string }) {
 		setError("");
 		const result = await removeShare(calendarId, share.id);
 		setPendingId(null);
-		if (!result.ok) { setError(t(shareErrorKey(result.status) as never)); if (result.status === 404) void load(); return; }
+		if (!result.ok) { setError(t(shareErrorKey(result.status) as never)); if (result.status === 404) void reload(); return; }
 		setShares((current) => current.filter((entry) => entry.id !== share.id));
 		toast.success(t("calendar.share.removed", { name: share.name || share.email }));
 	}
 
 	return <ShareView state={state} shares={shares} pendingId={pendingId} email={email} role={role} adding={adding} error={error}
-		onEmail={setEmail} onRole={setRole} onAdd={() => void add()} onChangeRole={(share, next) => void change(share, next)} onRemove={(share) => void remove(share)} onRetry={() => void load()} />;
+		onEmail={setEmail} onRole={setRole} onAdd={() => void add()} onChangeRole={(share, next) => void change(share, next)} onRemove={(share) => void remove(share)} onRetry={() => { setState("loading"); void reload(); }} />;
 }
