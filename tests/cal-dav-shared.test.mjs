@@ -372,3 +372,28 @@ test("a delegate's PUT answers without an ETag, since the stored text is not wha
 	assert.equal(replaced.headers.get("ETag"), null);
 	assert.match((await put(env, "/dav/calendars/u1/c-work/o.ics", keys.u1, vevent("uid-o", "Mine"))).headers.get("ETag"), /^"\d+"$/);
 });
+
+test("a delegate cannot see, replace or delete the owner's hidden invitations (unanswered or declined), by name or by UID", async (t) => {
+	const { env, keys, sql } = await fixture(t);
+	addEvent(sql, "evt_h", { title: "Invitation" });
+	sql.prepare("UPDATE calendar_events SET response_status = 'needs-action' WHERE id = 'evt_h'").run();
+	const path = `${SHARED("csh_edit", "u3")}evt_h.ics`;
+	assert.equal((await call(env, "DELETE", path, { key: keys.u3 })).status, 404);
+	const byUid = await put(env, `${SHARED("csh_edit", "u3")}other.ics`, keys.u3, vevent("evt_h@mailflare", "Taken over"));
+	assert.equal(byUid.status, 403);
+	assert.doesNotMatch(await byUid.text(), /evt_h/, "the refusal does not name the hidden resource");
+	assert.equal((await put(env, path, keys.u3, vevent("evt_h@mailflare", "Taken over"))).status, 403);
+	assert.deepEqual({ ...sql.prepare("SELECT title, response_status FROM calendar_events WHERE id = 'evt_h'").get() }, { title: "Invitation", response_status: "needs-action" });
+	assert.equal(sql.prepare("SELECT count(*) AS n FROM audit_logs").get().n, 0);
+	// The owner still can.
+	assert.equal((await call(env, "DELETE", "/dav/calendars/u1/c-work/evt_h.ics", { key: keys.u1 })).status, 204);
+});
+
+test("the sync report names no hidden resource to a delegate or reader; the owner's own phone is still told", async (t) => {
+	const { env, keys, sql } = await fixture(t);
+	addEvent(sql, "evt_h");
+	const [readerToken, ownerToken] = [tokenOf(await (await syncSince(env, SHARED(), keys.u2, "")).text()), tokenOf(await (await syncSince(env, "/dav/calendars/u1/c-work/", keys.u1, "")).text())];
+	sql.prepare("UPDATE calendar_events SET response_status = 'declined', updated_at = updated_at + 1 WHERE id = 'evt_h'").run();
+	assert.doesNotMatch(await (await syncSince(env, SHARED(), keys.u2, readerToken)).text(), /evt_h/);
+	assert.match(await (await syncSince(env, "/dav/calendars/u1/c-work/", keys.u1, ownerToken)).text(), /evt_h\.ics<\/D:href><D:status>HTTP\/1\.1 404/);
+});
