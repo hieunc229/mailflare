@@ -3,6 +3,7 @@ import type { AppDatabase } from "@/db";
 import { domains, mailboxAliases, mailboxes } from "@/db/schema";
 import { deleteEmailRoutingRuleForAddress, ensureEmailRoutingRuleToWorker, type EmailRoutingRuleCache } from "@/lib/cloudflare-api";
 import { normalizeRecipientLocalPart, parseRecipientAddress } from "@/lib/email/recipient-address";
+import { loadGroupAddresses } from "./group-addresses";
 import type { MailboxDomainAddressInput } from "./domain-addresses-types";
 import type { CfEmailRoutingRuleChange } from "@/lib/cloudflare-api.types";
 
@@ -88,6 +89,7 @@ export async function getMailboxDomainAddresses(
 		})
 		.from(mailboxAliases)
 		.where(inArray(mailboxAliases.domainId, candidateDomainIds));
+	const assignedGroups = await loadGroupAddresses(db, candidateDomainIds);
 	const normalizedLocalPart = normalizeRecipientLocalPart(mailbox.localPart);
 	// A domain is taken when another mailbox or alias owns the same normalized
 	// local part on it, and also when this mailbox's own disabled alias does:
@@ -103,6 +105,8 @@ export async function getMailboxDomainAddresses(
 					(item.mailboxId !== mailbox.id || !item.enabled) &&
 					normalizeRecipientLocalPart(item.localPart) === normalizedLocalPart,
 			),
+			// A group owns its address too: routing picks it before a use-all-domains mailbox.
+			...assignedGroups.filter((item) => normalizeRecipientLocalPart(item.localPart) === normalizedLocalPart),
 		].map((item) => item.domainId),
 	);
 
