@@ -32,7 +32,8 @@ import { MonthGrid } from "./month-grid";
 import { CalendarSubscribeDialog } from "./subscribe-dialog";
 import { InviteResponseDialog } from "./invite-response-dialog";
 import { CalendarList } from "./calendar-list";
-import { visibleCalendarEvents } from "./calendar-list-utils";
+import { calendarLabel, canWriteEvents, visibleCalendarEvents, writableCalendars } from "./calendar-list-utils";
+import { EventViewDialog } from "./event-view-dialog";
 import { useCalendarState } from "./calendar-state";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import type { CalendarEvent, CalendarView, EventDragPreview, EventResizeEdge, EventResizeSession } from "./types";
@@ -72,6 +73,8 @@ export default function CalendarPage() {
   const [calendarId, setCalendarId] = useState("");
   const defaultCalendar = calendars.find((calendar) => calendar.isDefault);
   const [pendingInvite, setPendingInvite] = useState<CalendarEvent | null>(null);
+  // An event of a calendar shared as view-only opens here, for reading, instead of in the editor.
+  const [viewing, setViewing] = useState<CalendarEvent | null>(null);
   function chooseView(next: CalendarView) {
     setView(next);
     try { window.localStorage.setItem("mailflare.calendar.view", next); } catch { /* not remembered */ }
@@ -178,7 +181,7 @@ export default function CalendarPage() {
         if (!response.ok) throw new Error(t("calendar.loadFailed"));
         return response.json() as Promise<{ events?: Parameters<typeof expandCalendarEvents>[0] }>;
       })
-      .then((data) => { if (active) setEvents(expandCalendarEvents(data.events ?? [], start, end)); })
+      .then((data) => { if (active) setEvents(expandCalendarEvents((data.events ?? []).map((event) => (event.redacted ? { ...event, title: t("calendar.busy") } : event)), start, end)); })
       .catch(() => { if (active) toast.error(t("calendar.loadFailed")); })
       .finally(() => { if (active) setLoading(false); });
     return () => { active = false; };
@@ -218,6 +221,11 @@ export default function CalendarPage() {
     setAdding(true);
   }
 
+  // Writing into someone else's calendar (as an editor or manager) is delegating: no guests, no reminder (the owner's), no invitations.
+  const selectedCalendar = calendars.find((calendar) => calendar.id === calendarId);
+  const delegate = selectedCalendar ? selectedCalendar.role !== "owner" : !!editing?.role && editing.role !== "owner";
+  const calendarChoices = writableCalendars(calendars, editing);
+
   async function addEvent() {
     setPendingAction("save");
     try {
@@ -250,7 +258,7 @@ export default function CalendarPage() {
         method: editing ? "PATCH" : "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          title, startsAt: savedStart.toISOString(), endsAt: savedEnd.toISOString(), color, repeat, repeatDays, repeatAnchorDay, reminderMinutes, isPrivate, transparent, ...(calendarId ? { calendarId } : {}), effectiveFrom: effectiveFrom?.toISOString(), moveOccurrenceToPast: movingToPast, attendees: guests.split(","),
+          title, startsAt: savedStart.toISOString(), endsAt: savedEnd.toISOString(), color, repeat, repeatDays, repeatAnchorDay, reminderMinutes, isPrivate, transparent, ...(calendarId ? { calendarId } : {}), effectiveFrom: effectiveFrom?.toISOString(), moveOccurrenceToPast: movingToPast, attendees: delegate && !editing ? [] : guests.split(","),
           timeZone: getUserTimeZone(),
           description,
           location,
@@ -263,8 +271,8 @@ export default function CalendarPage() {
         setEventsVersion((version) => version + 1);
         setClosingEventEditor(true);
       } else {
-        const result = (await response.json()) as { error?: string };
-        toast.error(result.error ?? t("calendar.saveFailed"));
+        const result = (await response.json()) as { error?: string; code?: string };
+        toast.error(result.code === "INVITE_REQUIRES_OWNER" ? t("calendar.share.inviteRefused") : result.error ?? t("calendar.saveFailed"));
       }
     } catch {
       toast.error(t("calendar.saveFailed"));
@@ -296,6 +304,7 @@ export default function CalendarPage() {
 
   function editEvent(event: CalendarEvent) {
     if (isPendingInvite(event)) { setPendingInvite(event); return; }
+    if (!canWriteEvents(event.role)) { setViewing(event); return; }
     setEditing(event);
     setTitle(event.title);
     setColor(normalizeCalendarColor(event.color));
@@ -395,7 +404,7 @@ export default function CalendarPage() {
   }
 
   function startResize(pointerEvent: ReactPointerEvent<HTMLButtonElement>, event: CalendarEvent, day: Date, edge: EventResizeEdge) {
-    if (pendingAction !== null) return;
+    if (pendingAction !== null || !canWriteEvents(event.role)) return;
     const column = pointerEvent.currentTarget.parentElement;
     if (!column) return;
     pointerEvent.preventDefault();
@@ -447,6 +456,7 @@ export default function CalendarPage() {
   const onResizeEnd = useCallback((pointerEvent: ReactPointerEvent<HTMLButtonElement>) => handlers.current.finishResize(pointerEvent), []);
   const onResizeCancel = useCallback(() => handlers.current.cancelResize(), []);
   const onEventDragStart = useCallback((dragEvent: DragEvent<HTMLButtonElement>, event: CalendarEvent) => {
+    if (!canWriteEvents(event.role)) { dragEvent.preventDefault(); return; }
     dragOffsetPixels.current = dragEvent.clientY - dragEvent.currentTarget.getBoundingClientRect().top;
     dragEvent.dataTransfer.setData("text/plain", event.id);
     dragEvent.dataTransfer.effectAllowed = "move";
@@ -617,6 +627,7 @@ export default function CalendarPage() {
           <CalendarList />
         </DialogContent>
       </Dialog>
+      <EventViewDialog event={viewing} calendarName={(() => { const calendar = calendars.find((item) => item.id === viewing?.calendarId); return calendar ? calendarLabel(calendar, t as never) : ""; })()} onClose={() => setViewing(null)} />
       <InviteResponseDialog event={pendingInvite} onClose={() => setPendingInvite(null)} onAnswered={() => setEventsVersion((version) => version + 1)} />
 
       {adding && createPortal(
@@ -659,7 +670,7 @@ export default function CalendarPage() {
                   </div>}
                 </div>
               </div>
-              <div className="grid grid-cols-[24px_minmax(0,1fr)] items-start gap-3">
+              {!delegate && <div className="grid grid-cols-[24px_minmax(0,1fr)] items-start gap-3">
                 <Bell aria-hidden="true" className="mt-2 h-5 w-5 text-neutral-600" />
                 <div className="relative min-w-0">
                   <Select value={reminderMinutes ?? ""} containerClassName="contents" onChange={(event) => setReminderMinutes(event.target.value === "" ? null : Number(event.target.value))} aria-label={t("calendar.reminder")}
@@ -670,7 +681,7 @@ export default function CalendarPage() {
                     ))}
                   </Select>
                 </div>
-              </div>
+              </div>}
               <div className="grid grid-cols-[24px_minmax(0,1fr)] items-start gap-3">
                 <CalendarClock aria-hidden="true" className="mt-2 h-5 w-5 text-neutral-600" />
                 <div className="relative min-w-0">
@@ -718,11 +729,16 @@ export default function CalendarPage() {
                   )}
                 </div>
               </div>
-              <div className="grid grid-cols-[24px_minmax(0,1fr)] items-center gap-3">
+              {delegate
+                ? <div className="grid grid-cols-[24px_minmax(0,1fr)] items-start gap-3">
+                  <UsersRound aria-hidden="true" className="mt-0.5 h-5 w-5 text-neutral-600" />
+                  <p className="px-2 text-xs text-neutral-600">{t("calendar.share.ownerOnly")}</p>
+                </div>
+                : <div className="grid grid-cols-[24px_minmax(0,1fr)] items-center gap-3">
                 <UsersRound aria-hidden="true" className="h-5 w-5 text-neutral-600" />
                 <Input value={guests} onChange={(event) => setGuests(event.target.value)} placeholder={t("calendar.addGuests")} aria-label={t("calendar.guestsLabel")} className={eventFieldClass} />
                 {guestReplies && <p className="mt-1 px-2 text-xs text-neutral-600">{t("calendar.guestResponses", { list: guestReplies })}</p>}
-              </div>
+              </div>}
               <div className="grid grid-cols-[24px_minmax(0,1fr)] items-center gap-3">
                 <MapPin aria-hidden="true" className="h-5 w-5 text-neutral-600" />
                 <Input value={location} onChange={(event) => setLocation(event.target.value)} placeholder={t("calendar.addLocation")} aria-label={t("calendar.location")} className={eventFieldClass} />
@@ -731,7 +747,7 @@ export default function CalendarPage() {
                 <AlignLeft aria-hidden="true" className="mt-2 h-5 w-5 text-neutral-600" />
                 <Textarea value={description} onChange={(event) => setDescription(event.target.value)} placeholder={t("calendar.addDescription")} aria-label={t("calendar.description")} rows={Math.max(1, description.split("\n").length)} className={clsx("min-h-9 border-transparent bg-transparent px-2 py-2 shadow-none hover:bg-white/60 focus:min-h-24 focus:resize-y focus:border-blue-600 focus:bg-white focus-visible:ring-0", description ? "min-h-24 resize-y" : "resize-none")} />
               </div>
-              {calendars.length > 1 && (
+              {calendarChoices.length > 1 && (
                 <div className="grid grid-cols-[24px_minmax(0,1fr)] items-center gap-3">
                   <CalendarDays aria-hidden="true" className="h-5 w-5 text-neutral-600" />
                   <div className="flex items-center gap-2">
@@ -744,7 +760,7 @@ export default function CalendarPage() {
                         if (!editing && next) setColor(normalizeCalendarColor(next.color));
                       }}
                       className="h-9 min-w-0 rounded-md border border-transparent pl-2 pr-2 text-sm text-neutral-700 hover:bg-neutral-50 focus-visible:border-blue-600 focus-visible:bg-white [@media(pointer:coarse)]:h-11">
-                      {calendars.map((calendar) => <option key={calendar.id} value={calendar.id}>{calendar.name ?? t("calendar.defaultName")}</option>)}
+                      {calendarChoices.map((calendar) => <option key={calendar.id} value={calendar.id}>{calendarLabel(calendar, t as never)}{calendar.role !== "owner" ? ` (${calendar.ownerName ?? ""})` : ""}</option>)}
                     </Select>
                   </div>
                   {editing && editing.repeat !== "none" && calendarId !== (editing.calendarId ?? defaultCalendar?.id) && <p className="col-start-2 -mt-1 px-5 text-xs text-neutral-600">{t("calendar.calendars.seriesMoves")}</p>}

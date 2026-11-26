@@ -23,7 +23,6 @@ import { getEventAccess, resolveCalendarForWrite, roleAtLeast } from "@/lib/cale
 import { INVITE_REQUIRES_OWNER } from "@/lib/calendar/shares-errors";
 import { calendarCollectionId } from "@/lib/dav/changes";
 import { createAuditLog } from "@/lib/mailboxes/audit";
-import type { getDb } from "@/db";
 import type { SessionUser } from "@/lib/auth/types";
 import { isUniqueConstraintError } from "@/lib/database-errors";
 

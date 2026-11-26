@@ -1,4 +1,5 @@
 import type { CalendarRepeat } from "@/lib/calendar/types";
+import type { CalendarRole } from "@/lib/calendar/shares-types";
 
 export type CalendarEvent = {
   id: string;
@@ -23,6 +24,12 @@ export type CalendarEvent = {
   transparent?: boolean;
   /** The calendar the event is in (the default calendar's id when it has none of its own). */
   calendarId?: string;
+  /** The owner of the calendar the event is in: the viewer's own id for their own events. */
+  userId?: string;
+  /** What the viewer may do with it: "owner" for their own events, else the role they were granted on its calendar. */
+  role?: CalendarRole;
+  /** The server hid the details (a private event, or a free/busy view): `title` is a placeholder to translate. */
+  redacted?: boolean;
   timeZone?: string | null;
   seriesStartsAt?: string;
   /** Set on events created from an emailed invitation: needs-action (pending), tentative or accepted. */

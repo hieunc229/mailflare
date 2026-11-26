@@ -103,6 +103,15 @@ test("GET reads a shared default calendar: the owner's events without a calendar
 	assert.deepEqual((await list("&calendarIds=cal:u1")).map((event) => [event.id, event.calendarId]), [["d1", "cal:u1"]]);
 });
 
+test("GET leaves the owner's unanswered, declined and cancelled invitations out of what a grantee sees", async () => {
+	setup();
+	add("ok", { calendar: "cal:work" }); add("na", { calendar: "cal:work", extra: "response_status='needs-action'" }); add("dc", { calendar: "cal:work", extra: "response_status='declined'" }); add("cx", { calendar: "cal:work", extra: "response_status='cancelled'" }); add("acc", { calendar: "cal:work", extra: "response_status='accepted'" });
+	as("u2");
+	assert.deepEqual((await list()).map((event) => event.id).sort(), ["acc", "ok"]);
+	as("u1");
+	assert.equal((await list()).length, 5, "the owner still sees all of them");
+});
+
 // ---- create ---------------------------------------------------------------------------------------------------------
 
 test("POST by an editor writes into the owner's calendar as the owner's row, audits the delegate, and sets no reminder or mailbox", async () => {
