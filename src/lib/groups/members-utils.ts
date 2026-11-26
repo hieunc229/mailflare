@@ -1,4 +1,6 @@
 export const MAX_GROUP_MEMBERS = 500;
+/** The member flag exists in the schema, but sending as a group arrives with a later change. */
+export const CAN_SEND_AS_UNAVAILABLE = "Sending as the group is not available yet";
 export const MAX_GROUPS_PER_DOMAIN = 50;
 export const MAX_MEMBERS_PER_CALL = 50;
 /** Rows per insert: 9 bound parameters each, far under D1's 100 per statement. */
@@ -25,13 +27,13 @@ export type MemberValidation =
 export function validateMember(input: MemberInput): MemberValidation {
 	const set = [input.userId, input.mailboxId, input.email].filter((value) => value !== undefined && value !== null).length;
 	if (input.kind === "external") return { ok: false, status: 422, error: "External members are not supported yet" };
+	if (input.canSendAs) return { ok: false, status: 422, error: CAN_SEND_AS_UNAVAILABLE };
 	if (input.kind === "user") {
 		if (!input.userId || set !== 1) return { ok: false, status: 400, error: "A user member needs a userId and nothing else" };
-		return { ok: true, member: { kind: "user", userId: input.userId, canSendAs: input.canSendAs === true } };
+		return { ok: true, member: { kind: "user", userId: input.userId, canSendAs: false } };
 	}
 	if (input.kind === "mailbox") {
 		if (!input.mailboxId || set !== 1) return { ok: false, status: 400, error: "A mailbox member needs a mailboxId and nothing else" };
-		if (input.canSendAs) return { ok: false, status: 400, error: "Only account members can be allowed to send as the group" };
 		return { ok: true, member: { kind: "mailbox", mailboxId: input.mailboxId, canSendAs: false } };
 	}
 	return { ok: false, status: 400, error: "Unknown member kind" };

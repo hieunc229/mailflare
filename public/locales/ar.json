@@ -3109,7 +3109,7 @@
 	"groups.post.orgHint": "فقط المرسلون من نطاقاتك.",
 	"groups.post.members": "أعضاء المجموعة فقط",
 	"groups.post.membersHint": "فقط العناوين التي تخص أحد الأعضاء.",
-	"groups.post.dmarcNote": "يجب أن ينجح نطاق المرسل في فحص DMARC. تُرفض الرسائل التي تفشل برسالة ارتداد.",
+	"groups.post.dmarcNote": "يجب أن ينجح نطاق المرسل في فحص DMARC. تُرفض الرسائل التي تفشل برسالة ارتداد، أو تُهمل بصمت عندما يستقبل نطاقك عبر Resend أو Amazon SES.",
 	"groups.back": "العودة إلى المجموعات",
 	"groups.notFound": "لم تعد هذه المجموعة موجودة.",
 	"groups.settings": "الإعدادات",
@@ -3144,5 +3144,6 @@
 	"groups.delete": "حذف المجموعة",
 	"groups.deleteTitle": "حذف هذه المجموعة؟",
 	"groups.deleteConfirm": "سترتد الرسائل المرسلة إلى {address} بعد ذلك. لا يمكن التراجع عن هذا الإجراء.",
-	"groups.deleteFailed": "تعذّر حذف المجموعة"
+	"groups.deleteFailed": "تعذّر حذف المجموعة",
+	"groups.localPartHint": "أحرف وأرقام و . _ % + - فقط."
 }

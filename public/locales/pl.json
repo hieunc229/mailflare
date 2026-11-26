@@ -3065,7 +3065,7 @@
 	"groups.post.orgHint": "Tylko nadawcy z Twoich własnych domen.",
 	"groups.post.members": "Tylko członkowie grupy",
 	"groups.post.membersHint": "Tylko adresy należące do członka.",
-	"groups.post.dmarcNote": "Domena nadawcy musi przejść weryfikację DMARC. Poczta, która jej nie przejdzie, jest odrzucana z odesłaniem.",
+	"groups.post.dmarcNote": "Domena nadawcy musi przejść weryfikację DMARC. Poczta, która jej nie przejdzie, jest odrzucana z odesłaniem lub po cichu porzucana, gdy Twoja domena odbiera pocztę przez Resend albo Amazon SES.",
 	"groups.back": "Wróć do grup",
 	"groups.notFound": "Ta grupa już nie istnieje.",
 	"groups.settings": "Ustawienia",
@@ -3098,5 +3098,6 @@
 	"groups.delete": "Usuń grupę",
 	"groups.deleteTitle": "Usunąć tę grupę?",
 	"groups.deleteConfirm": "Poczta wysłana na adres {address} będzie odsyłana. Tej operacji nie można cofnąć.",
-	"groups.deleteFailed": "Nie można usunąć grupy"
+	"groups.deleteFailed": "Nie można usunąć grupy",
+	"groups.localPartHint": "Tylko litery, cyfry oraz . _ % + -."
 }

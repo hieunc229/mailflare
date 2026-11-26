@@ -45,18 +45,20 @@ function SettingsForm({ detail }: { detail: GroupDetailResponse }) {
 				<div className="space-y-2">
 					<Label htmlFor="group-local-part">{t("groups.address")}</Label>
 					<div className="flex h-10 overflow-hidden rounded-md border border-neutral-200 bg-white shadow-sm shadow-neutral-200/50 focus-within:border-blue-600 pointer-coarse:h-11">
-						<Input id="group-local-part" value={localPart} onChange={(event) => setLocalPart(event.target.value)} required maxLength={64} autoComplete="off" aria-describedby={addressChanged ? "group-address-hint" : undefined} className="h-full min-w-0 flex-1 rounded-none border-0 shadow-none focus-visible:border-0" />
+						<Input id="group-local-part" value={localPart} onChange={(event) => setLocalPart(event.target.value)} required maxLength={64} autoComplete="off" pattern="[a-zA-Z0-9._%+\-]+" title={t("groups.localPartHint")} aria-describedby={addressChanged ? "group-local-hint group-address-hint" : "group-local-hint"} className="h-full min-w-0 flex-1 rounded-none border-0 shadow-none focus-visible:border-0" />
 						<span className="flex items-center text-sm text-neutral-500" aria-hidden="true">@</span>
 						<Select aria-label={t("accounts.domain")} value={domainId} onChange={(event) => setDomainId(event.target.value)} containerClassName="max-w-[55%] rounded-none border-0 p-0" className="h-full rounded-none border-0 bg-transparent px-3 text-sm text-neutral-700 shadow-none">
 							{(domains.data ?? [{ id: group.domainId, hostname: group.hostname }]).map((domain) => <option key={domain.id} value={domain.id}>{domain.hostname}</option>)}
 						</Select>
 					</div>
+					<p id="group-local-hint" className="text-xs text-neutral-500">{t("groups.localPartHint")}</p>
 					{addressChanged && <p id="group-address-hint" className="text-xs text-amber-700">{t("groups.addressChangeHint")}</p>}
 				</div>
 				<WhoCanPostField value={whoCanPost} onChange={setWhoCanPost} />
-				<div className="flex min-h-11 items-center justify-between gap-4 rounded-xl border border-neutral-200 px-3">
-					<span id="group-disabled-label" className="min-w-0 text-sm"><span className="block font-medium text-neutral-900">{t("groups.disable")}</span><span className="block text-neutral-600">{t("groups.disableHint")}</span></span>
-					<Switch checked={disabled} onCheckedChange={setDisabled} aria-labelledby="group-disabled-label" className="pointer-coarse:h-8 pointer-coarse:w-14" />
+				<div className="flex items-center gap-2 rounded-xl border border-neutral-200 pr-3">
+					{/* A real label: clicking anywhere on the row toggles the switch, which also gives touch a full-height target. */}
+					<label htmlFor="group-disabled" className="min-h-11 min-w-0 flex-1 cursor-pointer px-3 py-2 text-sm"><span className="block font-medium text-neutral-900">{t("groups.disable")}</span><span className="block text-neutral-600">{t("groups.disableHint")}</span></label>
+					<Switch id="group-disabled" checked={disabled} onCheckedChange={setDisabled} />
 				</div>
 			</fieldset>
 			{save.isError && <p role="alert" className="text-sm text-red-600">{(save.error as Error).message}</p>}

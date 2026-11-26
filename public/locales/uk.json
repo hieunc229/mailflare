@@ -3063,7 +3063,7 @@
 	"groups.post.orgHint": "Лише відправники з ваших власних доменів.",
 	"groups.post.members": "Лише учасники групи",
 	"groups.post.membersHint": "Лише адреси, що належать учасникам.",
-	"groups.post.dmarcNote": "Домен відправника має пройти перевірку DMARC. Листи, що її не пройшли, відхиляються зі сповіщенням про помилку доставки.",
+	"groups.post.dmarcNote": "Домен відправника має пройти перевірку DMARC. Листи, що її не пройшли, відхиляються зі сповіщенням про помилку доставки або мовчки відкидаються, якщо ваш домен отримує пошту через Resend або Amazon SES.",
 	"groups.back": "Назад до груп",
 	"groups.notFound": "Цієї групи більше не існує.",
 	"groups.settings": "Налаштування",
@@ -3098,5 +3098,6 @@
 	"groups.memberCount.few": "{count} учасники",
 	"groups.memberCount.many": "{count} учасників",
 	"groups.resultCount.few": "{count} результати",
-	"groups.resultCount.many": "{count} результатів"
+	"groups.resultCount.many": "{count} результатів",
+	"groups.localPartHint": "Лише літери, цифри та символи . _ % + -"
 }

@@ -5,12 +5,12 @@ import { loadApp } from "./helpers/real-db.mjs";
 const mocks = {
 	"next/server": "export const NextResponse={json:(data,init)=>Response.json(data,init)};",
 	"@/lib/cloudflare": "export function getEnv(){return globalThis.grp.env}",
-	"@/lib/auth/cookies": "export async function requireUser(){if(!globalThis.grp.user)throw new Error('Unauthorized');return globalThis.grp.user}",
+	"@/lib/api/auth": "export async function requireSessionUser(){const u=globalThis.grp.user;if(globalThis.grp.dbDown)throw new Error('database unavailable');return u?{user:u,error:null}:{user:null,error:Response.json({error:'Unauthorized'},{status:401})}}",
 	"@/lib/auth/origin": "export function hasValidSessionMutationOrigin(){return globalThis.grp.origin!==false}",
 	"@/lib/licenses/service": "export async function getLicenseEntitlements(){return {canManageAccounts:globalThis.grp.licensed}}",
 	"@/lib/deliverability/report-address": "export async function isReportAddressReserved(env,domainId,localPart){return localPart==='mailflare-reports'}",
 	"@/lib/cloudflare-api": `
-		export async function ensureEmailRoutingRuleToWorker(env,zone,address,changes){const g=globalThis.grp.cf;if(g.fail)throw new Error('Cloudflare is down');g.ensured.push(address);changes?.push({zoneId:zone,ruleId:'r-'+address})}
+		export async function ensureEmailRoutingRuleToWorker(env,zone,address,changes){const g=globalThis.grp.cf;if(g.fail)throw new Error('Cloudflare is down');g.ensured.push(address);g.onEnsure?.(address);changes?.push({zoneId:zone,ruleId:'r-'+address})}
 		export async function deleteEmailRoutingRuleForAddress(env,zone,address){const g=globalThis.grp.cf;if(g.failDelete)throw new Error('delete failed');g.deleted.push(address);return true}
 		export async function rollbackEmailRoutingRuleChanges(env,changes){globalThis.grp.cf.rolledBack.push(...changes.map((c)=>c.ruleId))}
 	`,
@@ -82,7 +82,13 @@ test("every route needs the accounts licence and a user manager", async (t) => {
 	globalThis.grp.user = { ...admin, isPrimaryAdmin: false, canManageUsers: false };
 	assert.equal((await create({})).status, 403);
 	globalThis.grp.user = null;
-	assert.equal((await app.list.GET(req("GET"))).status, 403);
+	assert.equal((await app.list.GET(req("GET"))).status, 401, "an expired session is a 401, not a 403");
+});
+
+test("a database failure while authenticating is not reported as a permission error", async (t) => {
+	await ctx(t);
+	globalThis.grp.dbDown = true;
+	await assert.rejects(() => app.list.GET(req("GET")), /database unavailable/);
 });
 
 test("a cross-site mutation is refused", async (t) => {
@@ -113,8 +119,11 @@ test("create skips the Cloudflare rule when Cloudflare does not receive the doma
 
 test("create validates the body and the domain", async (t) => {
 	await ctx(t);
-	assert.equal((await create({ localPart: "bad address" })).status, 400);
+	const bad = await create({ localPart: "bad address" });
+	assert.equal(bad.status, 400);
+	assert.match((await bad.json()).error, /letters, numbers/i, "the reason is readable text");
 	assert.equal((await create({ name: "" })).status, 400);
+	assert.match((await (await create({ name: "" })).json()).error, /name/i);
 	assert.equal((await create({ whoCanPost: "moderated" })).status, 400);
 	assert.equal((await create({ domainId: "dx" })).status, 404);
 	assert.equal((await create({ domainId: "nope" })).status, 404);
@@ -212,6 +221,7 @@ test("changing the address moves the routing rule and checks for conflicts", asy
 	assert.equal(moved.status, 200);
 	assert.equal((await moved.json()).group.address, "crew@other.com");
 	assert.deepEqual(globalThis.grp.cf.deleted, ["team@example.com", "t.eam@example.com"]);
+	assert.deepEqual(audit(sqlite).at(-1).metadata, { groupId: group.id, address: "crew@other.com", previousAddress: "t.eam@example.com", changed: ["localPart", "domainId"] });
 	assert.deepEqual(globalThis.grp.cf.ensured, ["t.eam@example.com"], "resend-received d2 needs no rule");
 	assert.equal(sqlite.prepare("SELECT domain_id FROM mail_groups WHERE id = ?").get(group.id).domain_id, "d2");
 });
@@ -251,7 +261,7 @@ test("delete still succeeds when the Cloudflare rule cannot be removed", async (
 test("adding members stores users and shared mailboxes and audits each", async (t) => {
 	const { sqlite } = await ctx(t);
 	const group = await makeGroup({});
-	const response = await app.members.POST(req("POST", { members: [{ kind: "user", userId: "alice" }, { kind: "mailbox", mailboxId: "m-support" }, { kind: "user", userId: "bob", canSendAs: true }] }), ids(group.id));
+	const response = await app.members.POST(req("POST", { members: [{ kind: "user", userId: "alice" }, { kind: "mailbox", mailboxId: "m-support" }, { kind: "user", userId: "bob" }] }), ids(group.id));
 	assert.equal(response.status, 200);
 	const body = await response.json();
 	assert.equal(body.added.length, 3);
@@ -260,7 +270,7 @@ test("adding members stores users and shared mailboxes and audits each", async (
 	assert.deepEqual(rows, [
 		{ kind: "mailbox", user_id: null, mailbox_id: "m-support", email: null, can_send_as: 0, created_by_user_id: "admin" },
 		{ kind: "user", user_id: "alice", mailbox_id: null, email: null, can_send_as: 0, created_by_user_id: "admin" },
-		{ kind: "user", user_id: "bob", mailbox_id: null, email: null, can_send_as: 1, created_by_user_id: "admin" },
+		{ kind: "user", user_id: "bob", mailbox_id: null, email: null, can_send_as: 0, created_by_user_id: "admin" },
 	]);
 	const added = audit(sqlite).filter((entry) => entry.action === "group.member_added");
 	assert.equal(added.length, 3);
@@ -292,7 +302,8 @@ test("invalid members are refused as a whole and nothing is stored", async (t) =
 	await attempt({ kind: "mailbox", mailboxId: "m-alice" }, 422, /shared/i);
 	await attempt({ kind: "mailbox", mailboxId: "m-xshared" }, 422, /mailbox/i);
 	await attempt({ kind: "user", userId: "alice", mailboxId: "m-support" }, 400);
-	await attempt({ kind: "mailbox", mailboxId: "m-support", canSendAs: true }, 400);
+	await attempt({ kind: "mailbox", mailboxId: "m-support", canSendAs: true }, 422, /not available yet/i);
+	await attempt({ kind: "user", userId: "bob", canSendAs: true }, 422, /not available yet/i);
 	await attempt({ kind: "user" }, 400);
 	assert.equal(sqlite.prepare("SELECT count(*) AS n FROM mail_group_members").get().n, 0);
 });
@@ -329,10 +340,10 @@ test("member updates only toggle send-as on user members", async (t) => {
 	const body = await (await app.members.POST(req("POST", { members: [{ kind: "user", userId: "alice" }, { kind: "mailbox", mailboxId: "m-support" }] }), ids(group.id))).json();
 	const user = body.added.find((m) => m.kind === "user");
 	const mailbox = body.added.find((m) => m.kind === "mailbox");
-	assert.equal((await app.member.PATCH(req("PATCH", { canSendAs: true }), ids(group.id, user.id))).status, 200);
-	assert.equal(sqlite.prepare("SELECT can_send_as FROM mail_group_members WHERE id = ?").get(user.id).can_send_as, 1);
-	assert.deepEqual(audit(sqlite).at(-1), { action: "group.member_updated", actor_user_id: "admin", target_user_id: "alice", mailbox_id: null, metadata: { groupId: group.id, address: "team@example.com", kind: "user", canSendAs: true } });
-	assert.equal((await app.member.PATCH(req("PATCH", { canSendAs: true }), ids(group.id, mailbox.id))).status, 422);
+	assert.equal((await app.member.PATCH(req("PATCH", { canSendAs: true }), ids(group.id, user.id))).status, 422, "send-as arrives with a later change");
+	assert.equal((await app.member.PATCH(req("PATCH", { canSendAs: false }), ids(group.id, user.id))).status, 200);
+	assert.deepEqual(audit(sqlite).at(-1), { action: "group.member_updated", actor_user_id: "admin", target_user_id: "alice", mailbox_id: null, metadata: { groupId: group.id, address: "team@example.com", kind: "user", canSendAs: false } });
+	assert.equal((await app.member.PATCH(req("PATCH", { canSendAs: false }), ids(group.id, mailbox.id))).status, 422);
 	assert.equal((await app.member.PATCH(req("PATCH", {}), ids(group.id, user.id))).status, 400);
 	assert.equal((await app.member.PATCH(req("PATCH", { canSendAs: true }), ids(group.id, "missing"))).status, 404);
 });
@@ -368,4 +379,64 @@ test("candidates search accounts and shared mailboxes, without current members",
 	assert.deepEqual((await search("supp")).map((c) => [c.kind, c.id, c.address]), [["mailbox", "m-support", "support@example.com"]]);
 	assert.deepEqual((await search("xshared")).length, 0, "another admin's mailbox");
 	assert.equal((await search("")).length <= 20, true);
+});
+
+test("a batch that hits a conflict stores none of its members and audits nothing", async (t) => {
+	const { sqlite } = await ctx(t);
+	const group = await makeGroup({});
+	for (let i = 0; i < 40; i += 1) sqlite.exec(`INSERT INTO users (id, email, password_hash, name, role, created_at) VALUES ('u${i}', 'u${i}@example.com', 'h', 'U${i}', 'user', 1)`);
+	// A concurrent add of u35 lands after validation: the unique index then fails the whole batch.
+	sqlite.exec(`CREATE TRIGGER race BEFORE INSERT ON mail_group_members WHEN NEW.user_id = 'u30' BEGIN INSERT INTO mail_group_members (id, group_id, kind, user_id, created_at) VALUES ('raced', NEW.group_id, 'user', 'u35', 1); END`);
+	const response = await app.members.POST(req("POST", { members: Array.from({ length: 40 }, (_, i) => ({ kind: "user", userId: `u${i}` })) }), ids(group.id));
+	assert.equal(response.status, 409);
+	assert.deepEqual(sqlite.prepare("SELECT id FROM mail_group_members").all(), [], "all or nothing");
+	assert.equal(audit(sqlite).filter((entry) => entry.action === "group.member_added").length, 0);
+});
+
+test("a member added by a concurrent request cannot push the group past 500", async (t) => {
+	const { sqlite } = await ctx(t);
+	const group = await makeGroup({});
+	sqlite.exec("PRAGMA foreign_keys = OFF; DROP INDEX mail_group_members_group_user_idx");
+	const insert = sqlite.prepare("INSERT INTO mail_group_members (id, group_id, kind, user_id, created_at) VALUES (?, ?, 'user', 'alice', 1)");
+	for (let i = 0; i < 499; i += 1) insert.run(`gmb${i}`, group.id);
+	sqlite.exec(`CREATE TRIGGER race AFTER INSERT ON mail_group_members WHEN NEW.user_id = 'bob' BEGIN INSERT INTO mail_group_members (id, group_id, kind, mailbox_id, created_at) VALUES ('raced', NEW.group_id, 'mailbox', 'm-ops', 1); END`);
+	const response = await app.members.POST(req("POST", { members: [{ kind: "user", userId: "bob" }] }), ids(group.id));
+	assert.equal(response.status, 422);
+	assert.equal(sqlite.prepare("SELECT count(*) AS n FROM mail_group_members WHERE user_id = 'bob'").get().n, 0, "the over-cap insert is rolled back");
+	assert.match((await response.json()).error, /500 members/);
+});
+
+test("two dotted variants created at once do not both survive", async (t) => {
+	const { sqlite } = await ctx(t);
+	globalThis.grp.cf.onEnsure = (address) => {
+		if (address === "john2@example.com") sqlite.exec(`INSERT INTO mail_groups (id, domain_id, local_part, name, created_at, updated_at) VALUES ('rival', 'd1', 'j.ohn2', 'Rival', 1, 1)`);
+	};
+	const response = await create({ localPart: "john2" });
+	assert.equal(response.status, 409);
+	assert.match((await response.json()).error, /group already uses/i);
+	assert.equal(sqlite.prepare("SELECT count(*) AS n FROM mail_groups WHERE local_part = 'john2'").get().n, 0, "the loser is removed");
+	assert.deepEqual(globalThis.grp.cf.rolledBack, ["r-john2@example.com"]);
+});
+
+test("a dotted variant that appears while the address is being changed restores the old one", async (t) => {
+	const { sqlite } = await ctx(t);
+	const group = await makeGroup({});
+	globalThis.grp.cf.onEnsure = (address) => {
+		if (address === "crew@example.com") sqlite.exec(`INSERT INTO mail_groups (id, domain_id, local_part, name, created_at, updated_at) VALUES ('rival', 'd1', 'c.rew', 'Rival', 1, 1)`);
+	};
+	const response = await app.item.PATCH(req("PATCH", { localPart: "crew" }), ids(group.id));
+	assert.equal(response.status, 409);
+	assert.equal(sqlite.prepare("SELECT local_part FROM mail_groups WHERE id = ?").get(group.id).local_part, "team");
+	assert.deepEqual(globalThis.grp.cf.deleted, [], "the old rule stays");
+});
+
+test("deleting a group removes group and members in one batch", async (t) => {
+	const { sqlite } = await ctx(t);
+	const group = await makeGroup({});
+	await app.members.POST(req("POST", { members: [{ kind: "user", userId: "alice" }] }), ids(group.id));
+	// If the group delete fails, the member delete must not have been kept.
+	sqlite.exec(`CREATE TRIGGER keep BEFORE DELETE ON mail_groups BEGIN SELECT RAISE(ABORT, 'blocked'); END`);
+	await assert.rejects(() => app.item.DELETE(req("DELETE"), ids(group.id)));
+	assert.equal(sqlite.prepare("SELECT count(*) AS n FROM mail_group_members").get().n, 1);
+	assert.deepEqual(globalThis.grp.cf.deleted, []);
 });

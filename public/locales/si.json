@@ -3021,7 +3021,7 @@
 	"groups.post.orgHint": "ඔබේ ම වසම් වලින් එවන්නන් පමණි.",
 	"groups.post.members": "සමූහ සාමාජිකයන් පමණි",
 	"groups.post.membersHint": "සාමාජිකයෙකුට අයත් ලිපිනයන් පමණි.",
-	"groups.post.dmarcNote": "එවන්නාගේ වසම DMARC සමත් විය යුතුය. අසමත් වන තැපෑල ප්‍රතික්ෂේප කර බවුන්ස් එකක් යැවේ.",
+	"groups.post.dmarcNote": "එවන්නාගේ වසම DMARC සමත් විය යුතුය. අසමත් වන තැපෑල බවුන්ස් එකක් සමඟ ප්‍රතික්ෂේප කෙරේ, නැතහොත් ඔබේ වසම Resend හෝ Amazon SES හරහා ලබන්නේ නම් නිහඬව ඉවත දමනු ලැබේ.",
 	"groups.back": "සමූහ වෙත ආපසු",
 	"groups.notFound": "මෙම සමූහය තවදුරටත් නොපවතී.",
 	"groups.settings": "සැකසුම්",
@@ -3052,5 +3052,6 @@
 	"groups.delete": "සමූහය මකන්න",
 	"groups.deleteTitle": "මෙම සමූහය මකන්නද?",
 	"groups.deleteConfirm": "{address} වෙත යවන තැපෑල මින් පසු බවුන්ස් වේ. මෙය අහෝසි කළ නොහැක.",
-	"groups.deleteFailed": "සමූහය මකා දැමිය නොහැකි විය"
+	"groups.deleteFailed": "සමූහය මකා දැමිය නොහැකි විය",
+	"groups.localPartHint": "අකුරු, ඉලක්කම් සහ . _ % + - පමණි."
 }

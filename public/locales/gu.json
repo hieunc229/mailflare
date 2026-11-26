@@ -3021,7 +3021,7 @@
 	"groups.post.orgHint": "ફક્ત તમારા પોતાના ડોમેનના મોકલનાર.",
 	"groups.post.members": "ફક્ત ગ્રુપના સભ્યો",
 	"groups.post.membersHint": "ફક્ત સભ્યના હોય તેવા સરનામાં.",
-	"groups.post.dmarcNote": "મોકલનારના ડોમેને DMARC પાસ કરવું આવશ્યક છે. નિષ્ફળ થનાર મેઇલ બાઉન્સ સાથે નકારવામાં આવે છે.",
+	"groups.post.dmarcNote": "મોકલનારના ડોમેને DMARC પાસ કરવું આવશ્યક છે. નિષ્ફળ થનાર મેઇલ બાઉન્સ સાથે નકારવામાં આવે છે, અથવા તમારું ડોમેન Resend કે Amazon SES મારફતે મેળવતું હોય ત્યારે ચૂપચાપ કાઢી નાખવામાં આવે છે.",
 	"groups.back": "ગ્રુપ્સ પર પાછા જાઓ",
 	"groups.notFound": "આ ગ્રુપ હવે અસ્તિત્વમાં નથી.",
 	"groups.settings": "સેટિંગ્સ",
@@ -3052,5 +3052,6 @@
 	"groups.delete": "ગ્રુપ કાઢી નાખો",
 	"groups.deleteTitle": "આ ગ્રુપ કાઢી નાખવું?",
 	"groups.deleteConfirm": "આ પછી {address} પર મોકલેલો મેઇલ બાઉન્સ થશે. આ ક્રિયા પાછી ફેરવી શકાતી નથી.",
-	"groups.deleteFailed": "ગ્રુપ કાઢી શકાયું નથી"
+	"groups.deleteFailed": "ગ્રુપ કાઢી શકાયું નથી",
+	"groups.localPartHint": "ફક્ત અક્ષરો, અંકો અને . _ % + -"
 }

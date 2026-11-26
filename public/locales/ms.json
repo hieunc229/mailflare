@@ -3012,7 +3012,7 @@
 	"groups.post.orgHint": "Hanya penghantar daripada domain anda sendiri.",
 	"groups.post.members": "Ahli kumpulan sahaja",
 	"groups.post.membersHint": "Hanya alamat milik seorang ahli.",
-	"groups.post.dmarcNote": "Domain penghantar mesti lulus DMARC. Mel yang gagal ditolak dengan lantunan.",
+	"groups.post.dmarcNote": "Domain penghantar mesti lulus DMARC. Mel yang gagal ditolak dengan lantunan, atau dibuang secara senyap jika domain anda menerima melalui Resend atau Amazon SES.",
 	"groups.back": "Kembali ke kumpulan",
 	"groups.notFound": "Kumpulan ini sudah tidak wujud.",
 	"groups.settings": "Tetapan",
@@ -3043,5 +3043,6 @@
 	"groups.delete": "Padam kumpulan",
 	"groups.deleteTitle": "Padam kumpulan ini?",
 	"groups.deleteConfirm": "Mel yang dihantar ke {address} akan melantun selepas ini. Tindakan ini tidak boleh dibuat asal.",
-	"groups.deleteFailed": "Tidak dapat memadam kumpulan"
+	"groups.deleteFailed": "Tidak dapat memadam kumpulan",
+	"groups.localPartHint": "Huruf, nombor dan . _ % + - sahaja."
 }

@@ -3021,7 +3021,7 @@
 	"groups.post.orgHint": "Alleen afzenders van je eigen domeinen.",
 	"groups.post.members": "Alleen groepsleden",
 	"groups.post.membersHint": "Alleen adressen die bij een lid horen.",
-	"groups.post.dmarcNote": "Het domein van de afzender moet DMARC doorstaan. Mail die faalt, wordt geweigerd met een bounce.",
+	"groups.post.dmarcNote": "Het domein van de afzender moet DMARC doorstaan. Mail die faalt, wordt geweigerd met een bounce, of stilzwijgend verwijderd als je domein via Resend of Amazon SES ontvangt.",
 	"groups.back": "Terug naar groepen",
 	"groups.notFound": "Deze groep bestaat niet meer.",
 	"groups.settings": "Instellingen",
@@ -3052,5 +3052,6 @@
 	"groups.delete": "Groep verwijderen",
 	"groups.deleteTitle": "Deze groep verwijderen?",
 	"groups.deleteConfirm": "Mail naar {address} wordt hierna gebounced. Dit kan niet ongedaan worden gemaakt.",
-	"groups.deleteFailed": "Groep verwijderen mislukt"
+	"groups.deleteFailed": "Groep verwijderen mislukt",
+	"groups.localPartHint": "Alleen letters, cijfers en . _ % + -."
 }
