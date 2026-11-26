@@ -248,6 +248,68 @@ test("a rewritten DAV request gets its own path back", () => {
 	assert.equal(dav.davRequestTarget("/api/internal/dav?__dav=%2Fdav%2Fprincipals%2Fu1"), "/dav/principals/u1");
 });
 
+/** Variables for a setup whose only storage is Vercel Blob. */
+const blobVars = { ...Object.fromEntries(Object.entries(defaults).filter(([name]) => !name.startsWith("S3_"))), BLOB_STORE_ID: "store_abc" };
+
+test("Vercel Blob is used only without an S3 or Backblaze bucket", () => {
+	assert.deepEqual(runtimeEnv.vercelConfigProblems(blobVars), []);
+	const env = runtimeEnv.createVercelEnv(blobVars);
+	assert.equal(typeof env.BUCKET.get, "function");
+	assert.equal(typeof env.UPLOAD_PRESIGNER, "function");
+	assert.equal(uploads.directUploadsEnabled(env), true);
+	const both = runtimeEnv.createVercelEnv({ ...defaults, BLOB_STORE_ID: "store_abc" });
+	assert.equal(both.BUCKET, undefined);
+	assert.equal(both.UPLOAD_PRESIGNER, undefined);
+	assert.match(runtimeEnv.vercelConfigProblems({ ...blobVars, S3_BUCKET: "half" }).join("\n"), /AWS S3 needs/);
+});
+
+test("an upload ticket for Blob carries the headers to send", async () => {
+	const env = { MAILFLARE_RUNTIME: "vercel", UPLOAD_PRESIGNER: async (key, size) => ({ url: `https://blob.example/${size}`, headers: { "x-vercel-blob-access": "private" } }) };
+	const ticket = await uploads.createUploadTicket(env, "u1", 5);
+	assert.match(ticket.key, /^request-uploads\/u1\//);
+	assert.equal(ticket.url, "https://blob.example/5");
+	assert.deepEqual(ticket.headers, { "x-vercel-blob-access": "private" });
+});
+
+test("the Blob bucket encodes download paths, reads ranges and resumes multipart uploads", async () => {
+	const calls = (globalThis.__blobCalls = []);
+	const sdk = await load("vercel-blob", "server/runtime/vercel-blob.ts", {
+		"@vercel/blob": `
+			const record = (name, args) => globalThis.__blobCalls.push([name, ...args]);
+			export class BlobNotFoundError extends Error {}
+			export const get = async (...args) => { record("get", args); return { statusCode: 200, stream: new Response("0123456789").body, headers: new Headers({ "content-length": "10" }), blob: { etag: '"e"', uploadedAt: new Date(), contentType: "text/plain" } }; };
+			export const head = async () => { throw new BlobNotFoundError(); };
+			export const createMultipartUpload = async () => ({ key: "blob-key", uploadId: "blob-upload" });
+			export const uploadPart = async (...args) => { record("uploadPart", args); return { etag: "p1", partNumber: 1 }; };
+			export const completeMultipartUpload = async () => {};
+			export const del = async () => {};
+			export const list = async () => ({ blobs: [], hasMore: false });
+			export const put = async () => ({ etag: "e" });
+			export const issueSignedToken = async () => ({});
+			export const presignUrl = async () => ({ presignedUrl: "" });
+			export const parseStoreIdFromDelegationToken = () => "abc";
+		`,
+	});
+	const bucket = new sdk.VercelBlobBucket({ storeId: "store_abc" });
+	assert.equal(await bucket.head("missing"), null);
+
+	const whole = await bucket.get("attachments/m/a/50% #1?.txt");
+	assert.equal(calls.at(-1)[1], "attachments/m/a/50%25%20%231%3F.txt");
+	assert.equal(await whole.text(), "0123456789");
+
+	// This store ignores the range, so it is cut out locally.
+	const part = await bucket.get("k", { range: { offset: 2, length: 3 } });
+	assert.equal(calls.at(-1)[2].headers.range, "bytes=2-4");
+	assert.equal(part.size, 10);
+	assert.equal(await part.text(), "234");
+	assert.equal(await (await bucket.get("k", { range: { suffix: 2 } })).text(), "89");
+
+	const upload = await bucket.createMultipartUpload("drive/u/i");
+	await bucket.resumeMultipartUpload("drive/u/i", upload.uploadId).uploadPart(1, new Uint8Array([1]));
+	const [, pathname, , options] = calls.at(-1);
+	assert.deepEqual([pathname, options.key, options.uploadId, options.partNumber, options.access], ["drive/u/i", "blob-key", "blob-upload", 1, "private"]);
+});
+
 test("the self-hosted server bundle imports no Next module Node cannot load", async () => {
 	const { build } = await import("esbuild");
 	// `next/server` and `next/headers` resolve inside a Next build only; in dist/server.mjs they stop the start.
@@ -266,6 +328,6 @@ test("the self-hosted server bundle imports no Next module Node cannot load", as
 	const offenders = Object.entries(result.metafile.inputs).flatMap(([file, input]) =>
 		input.imports.filter((entry) => entry.external && entry.path.startsWith("next/")).map((entry) => `${file} imports ${entry.path}`));
 	assert.deepEqual(offenders, []);
-	// The Vercel queue SDK stays out of every other runtime.
-	assert.equal(Object.values(result.metafile.inputs).some((input) => input.imports.some((entry) => entry.path === "@vercel/queue")), false);
+	// The Vercel SDKs stay out of every other runtime.
+	assert.equal(Object.values(result.metafile.inputs).some((input) => input.imports.some((entry) => entry.path.startsWith("@vercel/"))), false);
 });

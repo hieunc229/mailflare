@@ -55,6 +55,8 @@ export function getObjectStorageConfig(env: B2Env): (B2Config & { provider: "bac
 export function getStorageStatus(env: B2Env): StorageStatus {
 	const configured = getObjectStorageConfig(env);
 	if (configured) return { provider: configured.provider, configured: true, bucket: configured.bucket, endpoint: configured.endpoint };
+	// Vercel starts only with a bucket or a Blob store, so no bucket means Blob.
+	if (env.MAILFLARE_RUNTIME === "vercel") return { provider: "vercel-blob", configured: true, bucket: null, endpoint: null };
 	return { provider: env.MAILFLARE_RUNTIME === "node" ? "files" : "r2", configured: true, bucket: null, endpoint: null };
 }
 

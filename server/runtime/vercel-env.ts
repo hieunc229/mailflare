@@ -1,8 +1,9 @@
 import { resolveDatabaseConfig } from "@/db/dialect";
 import { withDatabase } from "@/db/with-database";
-import { getObjectStorageConfig } from "@/lib/storage/b2-config";
+import { describeB2Problem, getObjectStorageConfig } from "@/lib/storage/b2-config";
 import { mailerConfigFromEnv, openMailer } from "./mailer";
 import { openVercelAssets } from "./vercel-assets";
+import { readBlobCredentials, VercelBlobBucket } from "./vercel-blob";
 import { openQStashQueue, readQStashConfig, type QueueName } from "./vercel-queue";
 import { openVercelQueue, openVercelQueues } from "./vercel-queues";
 import { openDatabaseRateLimiter, openUpstashRateLimiter, readUpstashConfig, type RateLimitStore } from "./vercel-rate-limit";
@@ -48,8 +49,14 @@ export function vercelConfigProblems(input: Vars): string[] {
 	if (database && (!vars.DATABASE_URL?.trim() || LOCAL_DRIVERS.includes(database.driver) || database.url?.startsWith("file:"))) {
 		problems.push("DATABASE_URL must point at a hosted PostgreSQL, MySQL or libSQL (Turso) database, or connect Turso to the project (TURSO_DATABASE_URL, TURSO_AUTH_TOKEN)");
 	}
-	if (!getObjectStorageConfig(vars as Parameters<typeof getObjectStorageConfig>[0])) {
-		problems.push("Object storage is required: S3_BUCKET, S3_REGION and credentials, or B2_KEY_ID, B2_APPLICATION_KEY, B2_BUCKET and B2_ENDPOINT");
+	const storageVars = vars as Parameters<typeof getObjectStorageConfig>[0];
+	if (!getObjectStorageConfig(storageVars)) {
+		// A half-set S3 or Backblaze bucket must not silently fall through to Blob.
+		const partial = describeB2Problem(storageVars);
+		if (partial) problems.push(partial);
+		else if (!readBlobCredentials(vars)) {
+			problems.push("Object storage is required: connect a private Vercel Blob store (BLOB_STORE_ID or BLOB_READ_WRITE_TOKEN), or set S3_BUCKET, S3_REGION and credentials, or B2_KEY_ID, B2_APPLICATION_KEY, B2_BUCKET and B2_ENDPOINT");
+		}
 	}
 	if (!readQStashConfig(vars) && QSTASH_VARS.some((name) => vars[name]?.trim())) {
 		problems.push(`QStash is partly configured: set all of ${QSTASH_VARS.join(", ")}, or none of them to use Vercel Queues`);
@@ -61,8 +68,8 @@ export function vercelConfigProblems(input: Vars): string[] {
 
 /**
  * Assemble a `CloudflareEnv` for a Vercel function. Every variable passes through, as on Workers; the bindings
- * Cloudflare would provide are replaced by hosted services. `DB` and `BUCKET` are left to `withDatabase` and
- * `withStorage`, which `getEnv()` applies on every runtime.
+ * Cloudflare would provide are replaced by hosted services. `DB` is left to `withDatabase`, and `BUCKET` to
+ * `withStorage` unless Vercel Blob is the storage; `getEnv()` applies both on every runtime.
  */
 export function createVercelEnv(input: Vars = process.env): CloudflareEnv {
 	const vars = withTursoVars(input);
@@ -77,13 +84,17 @@ export function createVercelEnv(input: Vars = process.env): CloudflareEnv {
 	const store: RateLimitStore = { db: () => withDatabase(databaseEnv).DB, dialect: resolveDatabaseConfig(databaseVars).dialect };
 	const rateLimit = (name: string, limit: number, period: number) =>
 		upstash ? openUpstashRateLimiter(upstash, name, limit, period) : openDatabaseRateLimiter(store, name, limit, period);
+	// An S3 or Backblaze bucket wins (`withStorage` serves it); otherwise the connected Vercel Blob store.
+	const blobCredentials = getObjectStorageConfig(vars as Parameters<typeof getObjectStorageConfig>[0]) ? null : readBlobCredentials(vars);
+	const blob = blobCredentials ? new VercelBlobBucket(blobCredentials) : undefined;
 	const queue = (name: QueueName) => (qstash ? openQStashQueue(name, qstash, appUrl) : openVercelQueue(name));
 	return {
 		...vars,
 		MAILFLARE_RUNTIME: "vercel",
 		APP_URL: appUrl,
 		DB: undefined,
-		BUCKET: undefined,
+		BUCKET: blob,
+		UPLOAD_PRESIGNER: blob?.presignUpload,
 		EMAIL: openMailer(mailerConfigFromEnv()),
 		INBOUND_QUEUE: queue("inbound"),
 		OUTBOUND_QUEUE: queue("outbound"),

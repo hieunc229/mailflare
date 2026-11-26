@@ -25,7 +25,7 @@ export function needsDirectUpload(body: FormData | Blob): boolean {
 }
 
 // XMLHttpRequest rather than fetch, because only it reports upload progress.
-function putToStorage(url: string, blob: Blob, options: UploadOptions): Promise<void> {
+function putToStorage(url: string, headers: Record<string, string>, blob: Blob, options: UploadOptions): Promise<void> {
 	return new Promise((resolve, reject) => {
 		const request = new XMLHttpRequest();
 		const abort = () => request.abort();
@@ -36,6 +36,7 @@ function putToStorage(url: string, blob: Blob, options: UploadOptions): Promise<
 		};
 		options.signal?.addEventListener("abort", abort, { once: true });
 		request.open("PUT", url);
+		for (const [name, value] of Object.entries(headers)) request.setRequestHeader(name, value);
 		request.upload.onprogress = (event) => { if (event.lengthComputable) options.onProgress?.(event.loaded, event.total); };
 		request.onload = () => done(request.status >= 200 && request.status < 300 ? undefined : new StorageUploadError(`Upload to storage failed (${request.status})`, request.status));
 		request.onerror = () => done(new StorageUploadError("Upload to storage failed: network error"));
@@ -62,6 +63,6 @@ export async function prepareUpload<Body extends FormData | Blob>(body: Body, op
 	});
 	const ticket = (await response.json().catch(() => ({}))) as Partial<UploadTicket> & { error?: string };
 	if (!response.ok || !ticket.url || !ticket.key) throw new StorageUploadError(ticket.error ?? `Upload failed (${response.status})`, response.status);
-	await putToStorage(ticket.url, blob, options);
+	await putToStorage(ticket.url, ticket.headers ?? {}, blob, options);
 	return { body: undefined, headers: { [UPLOAD_KEY_HEADER]: ticket.key, [UPLOAD_TYPE_HEADER]: type } };
 }

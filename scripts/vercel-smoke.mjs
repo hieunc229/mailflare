@@ -79,7 +79,7 @@ async function relay(subject, padding) {
 			body: JSON.stringify({ size: raw.length }),
 		})).json();
 		if (!ticket.url) throw new Error(`no upload ticket: ${ticket.error}`);
-		const put = await fetch(ticket.url, { method: "PUT", body: raw });
+		const put = await fetch(ticket.url, { method: "PUT", headers: ticket.headers, body: raw });
 		if (!put.ok) throw new Error(`storage answered ${put.status}: ${(await put.text()).slice(0, 200)}`);
 		uploadKey = ticket.key;
 	}

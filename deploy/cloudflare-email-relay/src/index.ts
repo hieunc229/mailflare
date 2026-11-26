@@ -40,8 +40,8 @@ async function uploadToStorage(base: string, secret: string, raw: ArrayBuffer): 
 	});
 	if (response.status === 404 || response.status === 405) return null;
 	if (!response.ok) throw new Error(`Mailflare answered ${response.status} to the upload request`);
-	const ticket = (await response.json()) as { key: string; url: string };
-	const put = await fetch(ticket.url, { method: "PUT", body: raw });
+	const ticket = (await response.json()) as { key: string; url: string; headers?: Record<string, string> };
+	const put = await fetch(ticket.url, { method: "PUT", headers: ticket.headers, body: raw });
 	if (!put.ok) throw new Error(`Storage answered ${put.status}`);
 	return ticket.key;
 }

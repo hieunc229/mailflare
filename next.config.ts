@@ -7,6 +7,20 @@ import { getSecurityHeaders } from "./src/lib/security/headers";
 const runtime = process.env.MAILFLARE_RUNTIME || (process.env.VERCEL ? "vercel" : undefined);
 const isVercel = runtime === "vercel";
 
+/**
+ * On Vercel the browser PUTs large uploads straight to storage, which the content security policy must allow:
+ * the configured S3 or Backblaze bucket, and the Vercel Blob API. Read at build time, like the variables
+ * themselves, which need a redeploy to change.
+ */
+function uploadSources(env = process.env): string[] {
+	const sources = ["https://vercel.com/api/blob/"];
+	const region = env.S3_REGION || env.AWS_REGION || env.AWS_DEFAULT_REGION;
+	if (env.S3_BUCKET && region) sources.push(`https://${env.S3_BUCKET.trim()}.s3.${region.trim()}.amazonaws.com`);
+	const endpoint = env.B2_ENDPOINT?.trim().replace(/^https?:\/\//i, "").replace(/\/+$/, "").toLowerCase();
+	if (env.B2_BUCKET && endpoint) sources.push(`https://${env.B2_BUCKET.trim()}.${endpoint}`);
+	return sources;
+}
+
 const nextConfig: NextConfig = {
 	distDir: runtime === "node" ? ".next-node" : undefined,
 	turbopack: {
@@ -36,7 +50,7 @@ const nextConfig: NextConfig = {
 		return [
 			{
 				source: "/(.*)",
-				headers: getSecurityHeaders(),
+				headers: getSecurityHeaders(isVercel ? uploadSources() : []),
 			},
 		];
 	},

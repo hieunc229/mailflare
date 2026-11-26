@@ -9,7 +9,7 @@ Mailflare. Vercel works, with more services to set up and the [limits](#limits) 
 | --- | --- | --- |
 | Vercel Hobby or Pro | The app, with 300 s functions, and its job queue ([Vercel Queues](https://vercel.com/docs/queues), beta). Hobby is for non-commercial use only. | |
 | PostgreSQL, MySQL or Turso ([databases](databases.md)) | All records and rate limit counters | See [database](#database) |
-| AWS S3 or Backblaze B2 | Raw mail, attachments, Drive, backups | `S3_BUCKET`, `S3_REGION`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY`, or the four `B2_*` |
+| Vercel Blob, AWS S3 or Backblaze B2 | Raw mail, attachments, Drive, backups | See [storage](#storage) |
 | | Protects the cron routes | `CRON_SECRET`: a long random string |
 | | Public address | `APP_URL=https://mail.example.com`; defaults to the project's production domain |
 
@@ -29,6 +29,22 @@ Either way works:
 A PostgreSQL provider with an HTTP driver (Neon) or a connection pooler suits serverless functions best, because
 each query otherwise opens its own connection. Turso is reached over HTTP.
 
+### Storage
+
+Pick one:
+
+- **Vercel Blob.** In the project's Storage tab, create a Blob store with **private** access and connect it, keeping
+  the default variable prefix. Vercel sets `BLOB_STORE_ID` (or `BLOB_READ_WRITE_TOKEN`), and Mailflare reads
+  either. No bucket CORS is needed. **Check the [Hobby limits](https://vercel.com/docs/vercel-blob/usage-and-pricing)
+  first:** 1 GB, 10,000 simple and 2,000 advanced operations a month. Every stored file is an advanced operation,
+  and each incoming message stores several, so a few hundred messages can use up the month. Over a limit, Hobby
+  loses access to Blob for 30 days, which stops mail.
+- **AWS S3 or Backblaze B2.** `S3_BUCKET`, `S3_REGION`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY`, or the four
+  `B2_*`. Then [allow browser uploads on the bucket](#bucket-cors).
+
+An S3 or Backblaze bucket wins over a connected Blob store. Nothing moves files between stores, so changing storage
+later leaves the existing ones behind.
+
 ### Optional: QStash and Upstash Redis
 
 Nothing here is required. Set these only to replace the defaults:
@@ -41,18 +57,18 @@ Nothing here is required. Set these only to replace the defaults:
 
 ## Deploy
 
-[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2Fhieunc229%2Fmailflare&env=S3_BUCKET,S3_REGION,S3_ACCESS_KEY_ID,S3_SECRET_ACCESS_KEY,CRON_SECRET&envDescription=See%20docs%2Fvercel.md&envLink=https%3A%2F%2Fgithub.com%2Fhieunc229%2Fmailflare%2Fblob%2Fmain%2Fdocs%2Fvercel.md)
+[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2Fhieunc229%2Fmailflare&env=CRON_SECRET&envDescription=See%20docs%2Fvercel.md&envLink=https%3A%2F%2Fgithub.com%2Fhieunc229%2Fmailflare%2Fblob%2Fmain%2Fdocs%2Fvercel.md)
 
 1. Import the repository and set the variables above. `vercel.json` sets the build command, the queue consumer and
    the daily cron jobs.
-2. Add the [database](#database), then redeploy so the app sees its variables.
-3. [Allow browser uploads on the bucket](#bucket-cors).
+2. Add the [database](#database) and [storage](#storage), then redeploy so the app sees their variables.
+3. With S3 or Backblaze, [allow browser uploads on the bucket](#bucket-cors).
 4. Turn off Deployment Protection for the production domain: the five-minute schedule, cron and mail providers must
    reach it.
 5. Open `/setup`, create the admin account and add your domain.
 6. [Start the five-minute schedule](#five-minute-schedule).
 
-Preview deployments need their own database, bucket and `APP_URL`.
+Preview deployments need their own database, storage and `APP_URL`.
 
 ### Five-minute schedule
 
@@ -88,8 +104,8 @@ updates the same schedule. It uses 288 messages a day of your QStash quota, whic
 
 ### Bucket CORS
 
-Bodies over 4 MB (attachments, Drive parts, imports, backup restore) go from the browser straight to the bucket.
-Allow it on S3 with:
+Bodies over 4 MB (attachments, Drive parts, imports, backup restore) go from the browser straight to storage. An
+S3 or Backblaze bucket has to allow it (Vercel Blob already does). On S3:
 
 ```json
 [{ "AllowedOrigins": ["https://mail.example.com"], "AllowedMethods": ["PUT"], "AllowedHeaders": ["*"] }]
@@ -104,7 +120,8 @@ Vercel cannot accept SMTP. Pick one:
 - **Cloudflare Email Routing relay.** Deploy `deploy/cloudflare-email-relay`, set its `MAILFLARE_URL` to the
   deployment and give both the same `INBOUND_WEBHOOK_SECRET`. Route the catch-all to it. If Mailflare manages the
   zone with `CF_TOKEN`, also set `CF_EMAIL_WORKER_NAME=mailflare-email-relay` so the rules it creates point at the
-  relay. A relay deployed earlier must be redeployed: only the current one can deliver messages over 4 MB.
+  relay. A relay deployed earlier must be redeployed: only the current one can deliver messages over 4 MB (with Vercel Blob
+  too).
 - **Resend or Amazon SES**, chosen per domain on the Domains page ([providers](providers.md)).
 
 ## Sending mail
@@ -121,6 +138,8 @@ Resend or Amazon SES per domain, `SMTP_URL`, or `CF_ACCOUNT_ID` with `CF_TOKEN`,
 - **Attachments** stay limited to 25 MB per message.
 - **No IMAP import.** Import `.eml`, `.mbox` or Google Takeout files instead.
 - **Rate limits** fall back to per-instance counting if the database (or Redis) is unreachable.
+- **Vercel Blob** keeps no custom object metadata (an unnamed JMAP upload loses its file name), and an abandoned
+  Drive upload is left for Vercel to expire.
 - **Vercel Queues is in beta.** A waiting job (scheduled send, retry) runs on the deployment that queued it, so do
   not delete recent deployments.
 - **Long jobs** (very large backups or imports) must finish a step within 300 seconds.

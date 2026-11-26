@@ -3,7 +3,7 @@ import { isVercelRuntime } from "@/lib/runtime";
 import { getObjectStorageConfig } from "@/lib/storage/b2-config";
 import { presignPutUrl } from "@/lib/storage/b2-bucket";
 import { REQUEST_UPLOAD_PREFIX, UPLOAD_KEY_HEADER, UPLOAD_TYPE_HEADER } from "./constants";
-import type { UploadTicket } from "./types";
+import type { UploadPresigner, UploadTicket } from "./types";
 
 export { MAX_UPLOAD_BYTES } from "./constants";
 
@@ -11,15 +11,22 @@ export { MAX_UPLOAD_BYTES } from "./constants";
 const TICKET_SECONDS = 15 * 60;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 
+/** Set by the Vercel env when Vercel Blob is the storage. An S3 or Backblaze bucket takes precedence. */
+function blobPresigner(env: CloudflareEnv): UploadPresigner | undefined {
+	return (env as unknown as { UPLOAD_PRESIGNER?: UploadPresigner }).UPLOAD_PRESIGNER;
+}
+
 export function directUploadsEnabled(env: CloudflareEnv): boolean {
-	return isVercelRuntime(env) && !!getObjectStorageConfig(env);
+	return isVercelRuntime(env) && !!(getObjectStorageConfig(env) || blobPresigner(env));
 }
 
 export async function createUploadTicket(env: CloudflareEnv, owner: string, size: number): Promise<UploadTicket> {
 	const config = getObjectStorageConfig(env);
-	if (!config) throw new Error("Object storage is not configured");
+	const presign = blobPresigner(env);
 	const key = `${REQUEST_UPLOAD_PREFIX}/${owner}/${crypto.randomUUID()}`;
-	return { key, url: await presignPutUrl(config, key, size, TICKET_SECONDS) };
+	if (config) return { key, url: await presignPutUrl(config, key, size, TICKET_SECONDS) };
+	if (!presign) throw new Error("Object storage is not configured");
+	return { key, ...(await presign(key, size, TICKET_SECONDS)) };
 }
 
 /** The bytes of an object `owner` uploaded. A key outside the owner's prefix is treated as missing. */
