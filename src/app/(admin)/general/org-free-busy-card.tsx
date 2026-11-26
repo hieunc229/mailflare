@@ -7,15 +7,20 @@ import { OrgFreeBusyView } from "./org-free-busy-view";
 
 type Settings = { available: boolean; enabled: boolean };
 
-/** The answer as settings, or null for any failure: a refusal, a body that is not JSON, a network error. The status is checked before the body is read. */
-async function request(init?: RequestInit): Promise<Settings | null> {
+type Answer = { ok: true; data: Settings } | { ok: false; code?: string };
+
+/** The answer as settings, or `ok: false` for any failure: a refusal, a body that is not JSON, a network error. The status is checked before the body is read. */
+async function request(init?: RequestInit): Promise<Answer> {
 	try {
 		const response = await authFetch("/api/admin/calendar-free-busy", init);
-		if (!response.ok) return null;
+		if (!response.ok) {
+			const body = (await response.json().catch(() => null)) as { code?: unknown } | null;
+			return { ok: false, code: typeof body?.code === "string" ? body.code : undefined };
+		}
 		const data = (await response.json()) as Partial<Settings>;
-		return typeof data.enabled === "boolean" && typeof data.available === "boolean" ? { available: data.available, enabled: data.enabled } : null;
+		return typeof data.enabled === "boolean" && typeof data.available === "boolean" ? { ok: true, data: { available: data.available, enabled: data.enabled } } : { ok: false };
 	} catch {
-		return null;
+		return { ok: false };
 	}
 }
 
@@ -31,12 +36,12 @@ export function OrgFreeBusyCard() {
 
 	useEffect(() => {
 		let active = true;
-		void request({ cache: "no-store" }).then((data) => {
+		void request({ cache: "no-store" }).then((answer) => {
 			if (!active) return;
-			if (!data) { setState("error"); return; }
-			setEnabled(data.enabled);
-			setAvailable(data.available);
-			setState(data.available || data.enabled ? "ready" : "unavailable");
+			if (!answer.ok) { setState("error"); return; }
+			setEnabled(answer.data.enabled);
+			setAvailable(answer.data.available);
+			setState(answer.data.available || answer.data.enabled ? "ready" : "unavailable");
 		});
 		return () => { active = false; };
 	}, [attempt]);
@@ -44,9 +49,17 @@ export function OrgFreeBusyCard() {
 	const change = useCallback(async (next: boolean) => {
 		setSaving(true);
 		setStatus("");
-		const data = await request({ method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ enabled: next }) });
-		if (data) { setEnabled(data.enabled); setAvailable(data.available); }
-		setStatus(data ? t("general.orgFreeBusySaved") : t("general.orgFreeBusySaveFailed"));
+		const answer = await request({ method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ enabled: next }) });
+		if (answer.ok) {
+			setEnabled(answer.data.enabled);
+			setAvailable(answer.data.available);
+			setStatus(t("general.orgFreeBusySaved"));
+		} else {
+			setStatus(answer.code === "TEAM_REQUIRED" ? t("general.orgFreeBusyNeedsTeam") : t("general.orgFreeBusySaveFailed"));
+			// What was stored, and whether a licence is still there, may differ from what the page last knew.
+			const fresh = await request({ cache: "no-store" });
+			if (fresh.ok) { setEnabled(fresh.data.enabled); setAvailable(fresh.data.available); }
+		}
 		setSaving(false);
 	}, [t]);
 

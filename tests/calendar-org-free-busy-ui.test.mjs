@@ -48,3 +48,8 @@ test("a switch left on after the licence lapsed stays visible, says it is not in
 	assert.match(html, /not in effect/);
 	assert.doesNotMatch(render({ enabled: true }), /not in effect/);
 });
+
+test("a switch that is off with no Team licence says why it cannot be turned on", () => {
+	assert.match(render({ enabled: false, available: false }), /needs a Team licence\./);
+	assert.doesNotMatch(render({ enabled: false, available: false }), /not in effect/);
+});

@@ -3131,5 +3131,6 @@
 	"calendar.availability.findTooLong": "Find a time works for events up to 10 hours.",
 	"general.orgFreeBusySaveFailed": "Could not save this setting.",
 	"calendar.availability.findSelfLeftOut": "With 50 guests, your own calendar is not included in these suggestions.",
-	"calendar.availability.updating": "Updating availability..."
+	"calendar.availability.updating": "Updating availability...",
+	"general.orgFreeBusyNeedsTeam": "Organisation-wide free/busy needs a Team licence."
 }
