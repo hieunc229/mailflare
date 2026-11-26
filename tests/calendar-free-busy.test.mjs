@@ -303,15 +303,29 @@ test("busyIntervals: the last occurrence of a series that ended before the windo
 	assert.deepEqual((await busy(["u2"], at(0), at(1))).get("u2"), []);
 });
 
-test("busyIntervals: one request has a total expansion budget; past it the person's whole window is busy, not free", async () => {
+test("busyIntervals: the expansion budget is per person, so one heavy account does not blank the others in the same request", async () => {
 	setup();
-	assert.equal(typeof MAX_EXPANSION_BUDGET, "number");
-	const rows = Math.ceil(MAX_EXPANSION_BUDGET / 60) + 50;
+	const rows = Math.ceil(MAX_EXPANSION_BUDGET / 2 / 60) + 50;
 	sqlite.exec("BEGIN");
 	for (let index = 0; index < rows; index += 1) event("u1", at(-1, 1), at(-1, 1.5), { repeat: "daily" });
 	event("u2", at(0, 9), at(0, 10));
+	event("u2", at(5, 9), at(5, 10), { repeat: "weekly" });
 	sqlite.exec("COMMIT");
-	const result = await busy(["u1"], at(0), at(62));
-	assert.deepEqual(result.get("u1"), [[at(0), at(62)]]);
-	assert.deepEqual((await busy(["u2"], at(0), at(1))).get("u2"), [[at(0, 9), at(0, 10)]], "a person with a few events is unaffected");
+	const result = await busy(["u1", "u2"], at(0), at(62));
+	assert.deepEqual(result.get("u1"), [[at(0), at(62)]], "the heavy person is busy for the whole window");
+	assert.equal(result.get("u2").length > 2, true);
+	assert.deepEqual(result.get("u2")[0], [at(0, 9), at(0, 10)], "the other person gets real intervals");
+	assert.notDeepEqual(result.get("u2"), [[at(0), at(62)]]);
+});
+
+test("busyIntervals: asked about one person alone, the whole budget is theirs", async () => {
+	setup();
+	const rows = Math.ceil(MAX_EXPANSION_BUDGET / 60) + 50;
+	sqlite.exec("BEGIN");
+	for (let index = 0; index < rows; index += 1) event("u1", at(-1, 1), at(-1, 1.5), { repeat: "daily" });
+	sqlite.exec("COMMIT");
+	assert.deepEqual((await busy(["u1"], at(0), at(62))).get("u1"), [[at(0), at(62)]]);
+	sqlite.exec("DELETE FROM calendar_events");
+	for (let index = 0; index < Math.ceil(MAX_EXPANSION_BUDGET / 2 / 60); index += 1) event("u1", at(-1, 1), at(-1, 1.5), { repeat: "daily" });
+	assert.deepEqual((await busy(["u1"], at(0), at(62))).get("u1").length, 62, "more than half the budget is fine for one person");
 });
