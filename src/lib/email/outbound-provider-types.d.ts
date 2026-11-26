@@ -17,6 +17,8 @@ export type OutboundProviderAttachment = {
 
 export type OutboundProviderMessage = {
 	from: string;
+	/** The same sender as name and address, for a provider API that takes them apart and encodes the name itself (Cloudflare). */
+	fromParts?: { name: string; email: string };
 	to: string[];
 	cc?: string[];
 	bcc?: string[];

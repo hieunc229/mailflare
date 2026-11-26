@@ -1,8 +1,20 @@
 import { GROUP_HEADER } from "@/lib/groups/loop-utils";
 
-/** Raw copies written for relaying live here; the daily sweep removes them after 7 days. */
+/**
+ * Everything written for relaying lives under `group-relay/<day>/<kind>/...` (`day` = whole days since the epoch):
+ * the shared raw copies (`copy`), the Message-IDs of relayed copies (`mid`), send-cap markers (`rate`), chunk
+ * markers (`chunk`), spam skips (`skip`) and cap notices (`capnote`). A whole day is deleted by prefix once it is
+ * `GROUP_RELAY_TTL_DAYS` old, so cleaning costs the same however much was written, unlike an age filter over one
+ * ever-growing listing.
+ */
 export const GROUP_RELAY_PREFIX = "group-relay/";
-export const GROUP_RELAY_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
+export const GROUP_RELAY_TTL_DAYS = 7;
+/** How many days back a Message-ID is looked up: bounces and auto-replies arrive within a few days. */
+export const RELAY_MID_LOOKUP_DAYS = 4;
+
+export const dayOf = (now: Date = new Date()): number => Math.floor(now.getTime() / 86_400_000);
+export type RelayKind = "copy" | "mid" | "rate" | "chunk" | "capnote" | "skip";
+export const relayKey = (kind: RelayKind, day: number, rest: string): string => `${GROUP_RELAY_PREFIX}${day}/${kind}/${rest}`;
 /** External members per group: each one is a billed send through the domain's provider. */
 export const MAX_EXTERNAL_MEMBERS = 100;
 
@@ -15,9 +27,8 @@ export function isGroupRelayMessage(payload: unknown): payload is GroupRelayMess
 }
 
 /** Same key for every member and every retry of one message to one group (`digest` is the SHA-256 of the raw bytes). */
-export async function relayStorageKey(groupId: string, digest: string): Promise<string> {
-	const hash = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(`group-relay\0${groupId}\0${digest}`));
-	return `${GROUP_RELAY_PREFIX}${Array.from(new Uint8Array(hash), (byte) => byte.toString(16).padStart(2, "0")).join("")}.eml`;
+export async function relayStorageKey(groupId: string, digest: string, now?: Date): Promise<string> {
+	return relayKey("copy", dayOf(now), `${await sha256Hex(`group-relay\0${groupId}\0${digest}`)}.eml`);
 }
 
 export const relayIdempotencyKey = (message: GroupRelayMessage): string => `${message.groupId}:${message.rawR2Key}:${message.memberId}`;
@@ -28,18 +39,52 @@ export function plain(value: string): string {
 }
 
 const quote = (value: string) => `"${value.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`;
+const isAscii = (value: string) => /^[\x20-\x7e]*$/.test(value);
 
 /**
- * `"'Bob <bob@gmail.com>' via Team" <team@a.com>`: Google's format, so the provider signs it as our domain and
- * the reader sees who posted. The poster's real address is part of the display name, so a chosen name such as
- * "ceo@bank.com" cannot stand in for it. A quoted string, so `<`, `@` and spaces are legal inside it.
+ * RFC 2047 encoded words (`=?UTF-8?B?...?=`), each under 75 characters and cut between characters, joined by spaces.
+ * For header text a provider passes through untouched.
  */
-export function relayFrom(input: { senderName: string; senderAddress: string; groupName: string; groupAddress: string }): string {
+export function encodeWords(value: string): string {
+	const bytes = new TextEncoder().encode(value);
+	const words: string[] = [];
+	let start = 0;
+	while (start < bytes.length) {
+		let end = Math.min(start + 45, bytes.length);
+		while (end > start + 1 && end < bytes.length && (bytes[end] & 0xc0) === 0x80) end -= 1;
+		words.push(`=?UTF-8?B?${btoa(String.fromCharCode(...bytes.subarray(start, end)))}?=`);
+		start = end;
+	}
+	return words.join(" ");
+}
+
+/** A phrase for a header: a quoted string when it is plain ASCII, encoded words otherwise (which cannot sit inside quotes). */
+export const phrase = (value: string): string => (isAscii(value) ? quote(value) : encodeWords(value));
+
+/** The display name of the relay From: `'Bob <bob@gmail.com>' via Team`. The poster's real address is part of it. */
+export function relayFromName(input: { senderName: string; senderAddress: string; groupName: string; groupAddress: string }): string {
 	const name = plain(input.senderName).replace(/'/g, "");
 	const address = plain(input.senderAddress);
 	const who = name ? `${name} <${address}>` : address;
 	const group = plain(input.groupName) || input.groupAddress;
-	return `${quote(`'${who}' via ${group}`)} <${input.groupAddress}>`;
+	return `'${who}' via ${group}`;
+}
+
+/**
+ * `"'Bob <bob@gmail.com>' via Team" <team@a.com>`: Google's format, so the provider signs it as our domain and
+ * the reader sees who posted. A name such as "ceo@bank.com" cannot stand in for the real address, which always follows
+ * it. A quoted string, so `<`, `@` and spaces are legal inside it. With `encode`, non-ASCII text becomes RFC 2047
+ * encoded words (SES needs that); without it the raw UTF-8 goes to providers that encode it themselves.
+ */
+export function relayFrom(input: { senderName: string; senderAddress: string; groupName: string; groupAddress: string }, encode = false): string {
+	const name = relayFromName(input);
+	return `${encode ? phrase(name) : quote(name)} <${input.groupAddress}>`;
+}
+
+/** The poster's From as `X-Original-From`: encoded words for a non-ASCII name, since this header travels as it is written. */
+export function relayOriginalFrom(name: string | null, address: string): string {
+	const display = plain(name ?? "");
+	return display ? `${phrase(display)} <${plain(address)}>` : plain(address);
 }
 
 export type RelayHeaderInput = {
@@ -64,7 +109,7 @@ export function relayHeaders(input: RelayHeaderInput): Record<string, string> {
 	const address = `${input.localPart}@${input.hostname}`.toLowerCase();
 	const headers: Record<string, string> = {
 		"Reply-To": input.replyTo === "group" ? address : plain(input.senderAddress),
-		"List-Id": `${quote(plain(input.groupName) || address)} <${`${input.localPart}.${input.hostname}`.toLowerCase()}>`,
+		"List-Id": `${phrase(plain(input.groupName) || address)} <${`${input.localPart}.${input.hostname}`.toLowerCase()}>`,
 		"List-Post": `<mailto:${address}>`,
 		Precedence: "list",
 		[GROUP_HEADER]: input.groupId,
@@ -84,12 +129,13 @@ export const GROUP_RELAY_BATCH_MAX = 100;
 
 /**
  * Subrequests one relay can use: the group, member and licence lookups, suppression, the raw copy, the
- * provider settings and the send itself. A queue batch holds up to 5 messages in one invocation, and the
- * Free plan allows 50 subrequests per invocation, so a batch runs only as many relays as fit.
+ * provider settings and the send itself. A queue batch holds up to 3 messages in one invocation, and the
+ * Free plan allows 50 subrequests per invocation, so a batch runs only as many relays as fit. Each deferral costs
+ * more queue operations (the Free plan has 10,000 a day), which is why the batch size is kept at 3 and nothing is deferred.
  */
 export const RELAY_COST = 14;
-// Below the 50 of an invocation: other outbound messages (scheduled sends, webhook retries) share the batch and are not budgeted.
-export const RELAY_SUBREQUEST_BUDGET = 30;
+// Under the 50 of an invocation. The outbound consumer's batch size (3) means a batch of relays fits and none is deferred; deferral only guards a larger batch.
+export const RELAY_SUBREQUEST_BUDGET = 45;
 /** Seconds a deferred relay waits before the queue offers it again. */
 export const RELAY_DEFER_SECONDS = 5;
 
@@ -109,67 +155,99 @@ export function reserveRelay(budget: RelayBudget): boolean {
  * Sends (messages x external members) allowed per hour and per day, for one group and for the whole installation.
  * Every send is billed on Resend, SES and metered Cloudflare sending, goes out under our domain's name, and the
  * receiving side only authenticates the sender: these are the circuit breakers for a spam run, a loop the other
- * guards miss, and a surprise bill. Low on purpose; an admin who needs more raises the constants.
+ * guards miss, and a surprise bill. The defaults are overridable with `GROUP_RELAY_GROUP_HOURLY`,
+ * `GROUP_RELAY_GROUP_DAILY`, `GROUP_RELAY_INSTALL_HOURLY` and `GROUP_RELAY_INSTALL_DAILY`.
  */
-export const GROUP_SENDS_PER_HOUR = 200;
-export const GROUP_SENDS_PER_DAY = 500;
-export const INSTALL_SENDS_PER_HOUR = 800;
-export const INSTALL_SENDS_PER_DAY = 2000;
+export const GROUP_SENDS_PER_HOUR = 300;
+export const GROUP_SENDS_PER_DAY = 1000;
+export const INSTALL_SENDS_PER_HOUR = 1000;
+export const INSTALL_SENDS_PER_DAY = 5000;
+
+export type RelayCaps = { groupHour: number; groupDay: number; installHour: number; installDay: number };
+export const DEFAULT_RELAY_CAPS: RelayCaps = { groupHour: GROUP_SENDS_PER_HOUR, groupDay: GROUP_SENDS_PER_DAY, installHour: INSTALL_SENDS_PER_HOUR, installDay: INSTALL_SENDS_PER_DAY };
+
+type CapEnv = { GROUP_RELAY_GROUP_HOURLY?: string; GROUP_RELAY_GROUP_DAILY?: string; GROUP_RELAY_INSTALL_HOURLY?: string; GROUP_RELAY_INSTALL_DAILY?: string };
+
+/** The caps in force: the defaults, each replaced by its environment variable when that is a positive whole number. */
+export function relayCaps(env: CapEnv): RelayCaps {
+	const read = (value: string | undefined, fallback: number) => {
+		const parsed = value === undefined ? NaN : Number(value.trim());
+		return Number.isInteger(parsed) && parsed > 0 ? parsed : fallback;
+	};
+	return {
+		groupHour: read(env.GROUP_RELAY_GROUP_HOURLY, DEFAULT_RELAY_CAPS.groupHour),
+		groupDay: read(env.GROUP_RELAY_GROUP_DAILY, DEFAULT_RELAY_CAPS.groupDay),
+		installHour: read(env.GROUP_RELAY_INSTALL_HOURLY, DEFAULT_RELAY_CAPS.installHour),
+		installDay: read(env.GROUP_RELAY_INSTALL_DAILY, DEFAULT_RELAY_CAPS.installDay),
+	};
+}
 
 /** Relays per second a chunk releases, so up to 100 of them do not meet a provider's rate limit together. */
 export const GROUP_RELAY_PER_SECOND = 2;
 
-export const relayDelaySeconds = (index: number): number => Math.floor(index / GROUP_RELAY_PER_SECOND);
+/** Longest a relay waits to be released: a group's cap keeps the queue behind it short. */
+export const GROUP_RELAY_MAX_DELAY_SECONDS = 600;
+
+/**
+ * Seconds before relay number `index` of a message goes out. `ahead` is how many sends of this group were reserved
+ * moments ago by other messages, so messages arriving together queue up behind each other instead of all starting at 0.
+ */
+export const relayDelaySeconds = (index: number, ahead = 0): number => Math.min(GROUP_RELAY_MAX_DELAY_SECONDS, Math.floor((ahead + index) / GROUP_RELAY_PER_SECOND));
 
 /** The receiving provider's own spam or virus verdict (SES); `fail` keeps the message from external members. */
 export function relayBlockedByVerdicts(verdicts: { spam?: string; virus?: string } | undefined): boolean {
 	return verdicts?.spam?.toLowerCase() === "fail" || verdicts?.virus?.toLowerCase() === "fail";
 }
 
-async function sha256Hex(value: string): Promise<string> {
+export async function sha256Hex(value: string): Promise<string> {
 	return Array.from(new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(value))), (byte) => byte.toString(16).padStart(2, "0")).join("");
 }
 
-export type RateFlag = "ok" | "skip";
-export type RateEntry = { day: number; hour: number; groupId: string; digest: string; sends: number; flag: RateFlag };
+export type RateEntry = { day: number; hour: number; groupId: string; digest: string; sends: number; uploaded?: Date };
 
-export const RELAY_RATE_PREFIX = `${GROUP_RELAY_PREFIX}rate/`;
-export const relayRateDayPrefix = (day: number): string => `${RELAY_RATE_PREFIX}${day}/`;
+export const relayRateDayPrefix = (day: number): string => `${GROUP_RELAY_PREFIX}${day}/rate/`;
 
 /**
- * One marker per message and group: `group-relay/rate/<day>/<hour>/<group>/<digest>-<sends>-<ok|skip>`. The key
- * says everything (no object body to read), so one listing of the day's prefix yields every counter, and the flag
- * keeps the spam verdict for the message's later chunks. A message counts once however many chunks it has.
+ * One marker per message and group: `group-relay/<day>/rate/<hour>/<group>/<digest>-<sends>`. The key says everything
+ * (no object body to read), so one listing of the day's prefix yields every counter. A message counts once however
+ * many chunks it has. It is written before the spam check (to reserve the sends) and removed if the message is
+ * blocked or a cap turns out to be exceeded.
  */
-export function relayRateKey(input: { groupId: string; digest: string; sends: number; flag: RateFlag; now?: Date }): string {
-	const hour = Math.floor((input.now ?? new Date()).getTime() / 3_600_000);
-	return `${RELAY_RATE_PREFIX}${Math.floor(hour / 24)}/${hour}/${input.groupId}/${input.digest}-${input.sends}-${input.flag}`;
+export function relayRateKey(input: { groupId: string; digest: string; sends: number; now?: Date }): string {
+	const now = input.now ?? new Date();
+	return relayKey("rate", dayOf(now), `${Math.floor(now.getTime() / 3_600_000)}/${input.groupId}/${input.digest}-${input.sends}`);
 }
 
 export function parseRateKey(key: string): RateEntry | null {
-	const match = /^group-relay\/rate\/(\d+)\/(\d+)\/([^/]+)\/([0-9a-f]{64})-(\d+)-(ok|skip)$/.exec(key);
-	return match ? { day: Number(match[1]), hour: Number(match[2]), groupId: match[3], digest: match[4], sends: Number(match[5]), flag: match[6] as RateFlag } : null;
+	const match = /^group-relay\/(\d+)\/rate\/(\d+)\/([^/]+)\/([0-9a-f]{64})-(\d+)$/.exec(key);
+	return match ? { day: Number(match[1]), hour: Number(match[2]), groupId: match[3], digest: match[4], sends: Number(match[5]) } : null;
 }
 
 export type RelayAllowance = { ok: true } | { ok: false; scope: "group" | "installation"; period: "hour" | "day"; limit: number };
 
 /** Whether `sends` more fit, given the day's markers (all of one UTC day): group hour, group day, installation hour, installation day. */
-export function planRelayAllowance(entries: RateEntry[], now: { groupId: string; hour: number; day: number; sends: number }): RelayAllowance {
+export function planRelayAllowance(entries: RateEntry[], now: { groupId: string; hour: number; day: number; sends: number }, caps: RelayCaps = DEFAULT_RELAY_CAPS): RelayAllowance {
 	const total = (filter: (entry: RateEntry) => boolean) => entries.filter(filter).reduce((sum, entry) => sum + entry.sends, 0);
 	const checks = [
-		{ scope: "group", period: "hour", limit: GROUP_SENDS_PER_HOUR, used: total((e) => e.groupId === now.groupId && e.hour === now.hour) },
-		{ scope: "group", period: "day", limit: GROUP_SENDS_PER_DAY, used: total((e) => e.groupId === now.groupId) },
-		{ scope: "installation", period: "hour", limit: INSTALL_SENDS_PER_HOUR, used: total((e) => e.hour === now.hour) },
-		{ scope: "installation", period: "day", limit: INSTALL_SENDS_PER_DAY, used: total(() => true) },
+		{ scope: "group", period: "hour", limit: caps.groupHour, used: total((e) => e.groupId === now.groupId && e.hour === now.hour) },
+		{ scope: "group", period: "day", limit: caps.groupDay, used: total((e) => e.groupId === now.groupId) },
+		{ scope: "installation", period: "hour", limit: caps.installHour, used: total((e) => e.hour === now.hour) },
+		{ scope: "installation", period: "day", limit: caps.installDay, used: total(() => true) },
 	] as const;
 	const tripped = checks.find((check) => check.used + now.sends > check.limit);
 	return tripped ? { ok: false, scope: tripped.scope, period: tripped.period, limit: tripped.limit } : { ok: true };
 }
 
-/** Written once a chunk's relays are queued, so a redelivered chunk does not queue (and bill) them again. */
-export async function relayChunkKey(groupId: string, digest: string, cursor: string | undefined): Promise<string> {
-	return `${GROUP_RELAY_PREFIX}chunk/${await sha256Hex(`${groupId}\0${digest}\0${cursor ?? ""}`)}`;
+/** Written when a chunk's relays are about to be queued, so a redelivered chunk does not queue (and bill) them again. */
+export async function relayChunkKey(groupId: string, digest: string, cursor: string | undefined, now?: Date): Promise<string> {
+	return relayKey("chunk", dayOf(now), await sha256Hex(`${groupId}\0${digest}\0${cursor ?? ""}`));
 }
+
+/** Written when the spam filters put a message aside, so its later chunks do not judge it again. */
+export const relaySkipKey = (groupId: string, digest: string, now?: Date): string => relayKey("skip", dayOf(now), `${groupId}-${digest}`);
+
+/** Written the first time a cap notice is sent for a group, scope and period. */
+export const relayCapNoteKey = (groupId: string, scope: string, period: string, bucket: number, now?: Date): string => relayKey("capnote", dayOf(now), `${groupId}-${scope}-${period}-${bucket}`);
 
 /** A provider answering "slow down" (HTTP 429, throttling): retry later without using up the queue's few retries. */
 export function isRateLimited(error: unknown): boolean {
@@ -187,8 +265,13 @@ export const relayRetryDelay = (attempt: number): number => Math.min(300, 15 * 2
  * is how it is traced back to the member the copy was for. Cloudflare sending assigns its own Message-ID and ignores
  * ours, so the ID the provider reports is the only one every provider has.
  */
-export async function relayMessageIdKey(messageId: string): Promise<string> {
-	return `${GROUP_RELAY_PREFIX}mid/${await sha256Hex(messageId.trim().replace(/^<|>$/g, "").toLowerCase())}`;
+export async function relayMessageIdKey(messageId: string, now?: Date): Promise<string> {
+	return relayKey("mid", dayOf(now), await sha256Hex(messageId.trim().replace(/^<|>$/g, "").toLowerCase()));
+}
+
+/** The keys a Message-ID may be stored under: today's and the last few days'. */
+export async function relayMessageIdKeys(messageId: string, now: Date = new Date()): Promise<string[]> {
+	return Promise.all(Array.from({ length: RELAY_MID_LOOKUP_DAYS }, (_, back) => relayMessageIdKey(messageId, new Date(now.getTime() - back * 86_400_000))));
 }
 
 /** The unfolded value of one header from the header block of a raw message (first 256 KiB), or null. */

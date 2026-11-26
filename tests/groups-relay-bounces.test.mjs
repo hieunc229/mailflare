@@ -43,7 +43,27 @@ async function fixture(t, mode = "record") {
 test("a bounce naming a relayed copy's Message-ID and its own member suppresses that address, then is dropped", async (t) => {
 	const { dsn, suppressed } = await fixture(t);
 	assert.deepEqual(await dsn(DSN()), { action: "drop" });
-	assert.deepEqual(suppressed(), [{ domain_id: "d1", email: "pat@ext.com", reason: "hard_bounce", source: "dsn", confirmed: 1 }]);
+	assert.deepEqual(suppressed(), [{ domain_id: "d1", email: "pat@ext.com", reason: "hard_bounce", source: "dsn", confirmed: 0 }], "one bounce proves nothing: Message-IDs are visible to members");
+});
+
+test("a second bounce naming a different copy confirms it, as with every other DSN", async (t) => {
+	const { dsn, suppressed, remember } = await fixture(t);
+	await dsn(DSN());
+	await remember("<cf-3@mta.test>", "g1", "m1");
+	await dsn(DSN({ id: "<cf-3@mta.test>" }));
+	assert.equal(suppressed()[0].confirmed, 1);
+});
+
+test("a copy's Message-ID is found for a few days after it was sent, and not for ever", async (t) => {
+	const { dsn, suppressed, objects, sqlite } = await fixture(t);
+	const day = (n) => new Date(Date.now() - n * 86_400_000);
+	for (const [n, found] of [[3, true], [5, false]]) {
+		objects.clear();
+		sqlite.exec("DELETE FROM email_suppressions");
+		objects.set(await app.relayMessageIdKey("<cf-1@mta.test>", day(n)), new TextEncoder().encode(JSON.stringify({ g: "g1", m: "m1" })));
+		await dsn(DSN());
+		assert.equal(suppressed().length > 0, found, `${n} days old`);
+	}
 });
 
 test("a bounce that does not fit is dropped and records nothing", async (t) => {

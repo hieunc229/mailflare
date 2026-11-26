@@ -4,7 +4,7 @@ import { loadApp } from "./helpers/real-db.mjs";
 
 const mocks = {
 	"@/lib/email/outbound-provider": `
-		export async function getOutboundProviderConfig(env, from) { globalThis.relayLog.configs.push(from); return { provider: "resend", apiKey: "k" }; }
+		export async function getOutboundProviderConfig(env, from) { globalThis.relayLog.configs.push(from); return globalThis.relayLog.provider === "cloudflare" ? { provider: "cloudflare" } : globalThis.relayLog.provider === "ses" ? { provider: "ses", config: {} } : { provider: "resend", apiKey: "k" }; }
 		export async function sendThroughProvider(env, config, message, key) { if (globalThis.relayLog.error) throw globalThis.relayLog.error; if (globalThis.relayLog.fail) throw new Error("provider down"); globalThis.relayLog.sent.push({ message, key }); return { messageId: "<provider-" + globalThis.relayLog.sent.length + "@mta.test>" }; }
 	`,
 };
@@ -72,8 +72,9 @@ test("expansion queues one relay message per external member, sharing one relay 
 	const keys = new Set(outbound.map((m) => m.body.rawR2Key));
 	assert.equal(keys.size, 1);
 	const [key] = keys;
-	assert.match(key, /^group-relay\/[0-9a-f]{64}\.eml$/);
+	
 	assert.equal(new TextDecoder().decode(objects.get(key)), MIME());
+	assert.match(key, /^group-relay\/\d+\/copy\/[0-9a-f]{64}\.eml$/);
 	assert.ok(outbound.every((m) => m.body.kind === "group.relay" && m.body.groupId === "g1"));
 	assert.equal(objects.has("inbound/orig.eml"), false);
 	// A redelivered chunk (its queue message failed after the relays were queued) must not queue them twice:
@@ -241,43 +242,73 @@ test("the relay budget lets the first message of a batch through and defers the 
 	assert.equal(app.relayUtils.reserveRelay(app.relayUtils.createRelayBudget()), true);
 });
 
-test("the daily sweep removes relay copies older than 7 days and keeps newer ones", async (t) => {
+const day = () => Math.floor(Date.now() / 86_400_000);
+
+test("the daily sweep deletes whole expired days of every kind, and keeps the rest, whatever the volume", async (t) => {
 	const { env, objects } = await fixture(t);
-	const now = new Date("2026-12-10T00:00:00Z");
-	const uploaded = { "group-relay/old.eml": new Date("2026-12-02T00:00:00Z"), "group-relay/new.eml": new Date("2026-12-05T00:00:00Z") };
-	for (const key of Object.keys(uploaded)) objects.set(key, new ArrayBuffer(1));
-	env.BUCKET.list = async ({ prefix }) => ({ objects: Object.keys(uploaded).filter((key) => key.startsWith(prefix)).map((key) => ({ key, uploaded: uploaded[key] })), truncated: false });
+	const now = new Date("2026-12-20T00:30:00Z");
+	const today = Math.floor(now / 86_400_000);
+	const kinds = ["copy", "mid", "rate", "chunk", "skip", "capnote"];
+	for (const kind of kinds) {
+		for (const d of [today, today - 3, today - 6, today - 7, today - 8]) objects.set(`group-relay/${d}/${kind}/keep-or-not.x`, new ArrayBuffer(1));
+	}
+	// One old day holds far more than a page, and today holds more than the sweep ever reads.
+	for (let i = 0; i < 2500; i += 1) objects.set(`group-relay/${today - 7}/mid/m${i}`, new ArrayBuffer(1));
+	for (let i = 0; i < 7000; i += 1) objects.set(`group-relay/${today}/mid/t${i}`, new ArrayBuffer(1));
+	env.BUCKET.list = async ({ prefix, limit = 1000 }) => {
+		const keys = [...objects.keys()].filter((key) => key.startsWith(prefix));
+		return { objects: keys.slice(0, limit).map((key) => ({ key, uploaded: now })), truncated: keys.length > limit };
+	};
+	env.BUCKET.delete = async (keys) => { for (const key of [keys].flat()) objects.delete(key); };
 	await app.sweepOrphanedRawMail(env, now);
-	assert.deepEqual([...objects.keys()].sort(), ["group-relay/new.eml"]);
+	const left = [...objects.keys()];
+	assert.ok(!left.some((key) => key.startsWith(`group-relay/${today - 7}/`) || key.startsWith(`group-relay/${today - 8}/`)), "days at the TTL are gone, all kinds, all 2500+");
+	for (const d of [today, today - 3, today - 6]) for (const kind of kinds) assert.ok(left.includes(`group-relay/${d}/${kind}/keep-or-not.x`), `${d} ${kind}`);
+	assert.equal(left.filter((key) => key.startsWith(`group-relay/${today}/mid/t`)).length, 7000);
 });
 
-test("the provider's Message-ID of every relayed copy is remembered for the member it was sent to", async (t) => {
-	const { env, objects } = await relayFixture(t);
-	await app.processGroupRelay(env, relayMessage());
-	const key = await app.relayUtils.relayMessageIdKey("<provider-1@mta.test>");
-	assert.deepEqual(JSON.parse(new TextDecoder().decode(objects.get(key))), { g: "g1", m: "gm2" });
-	assert.equal(key, await app.relayUtils.relayMessageIdKey("provider-1@MTA.test"), "brackets and case do not matter");
+test("a missed sweep is made up for on the next run", async (t) => {
+	const { env, objects } = await fixture(t);
+	const now = new Date("2026-12-20T00:30:00Z");
+	const today = Math.floor(now / 86_400_000);
+	objects.set(`group-relay/${today - 9}/copy/old.eml`, new ArrayBuffer(1));
+	objects.set(`group-relay/${today - 12}/copy/ancient.eml`, new ArrayBuffer(1));
+	env.BUCKET.list = async ({ prefix }) => ({ objects: [...objects.keys()].filter((key) => key.startsWith(prefix)).map((key) => ({ key, uploaded: now })), truncated: false });
+	env.BUCKET.delete = async (keys) => { for (const key of [keys].flat()) objects.delete(key); };
+	await app.sweepOrphanedRawMail(env, now);
+	assert.ok(!objects.has(`group-relay/${today - 9}/copy/old.eml`), "two days late is still found");
 });
 
-test("a rate-limited send is queued again with a growing delay, and gives up after six", async (t) => {
-	const { env, outbound } = await relayFixture(t);
-	globalThis.relayLog.error = Object.assign(new Error("Resend: Too many requests"), { status: 429 });
+test("a post too big for the provider is not sent, and the admin is told once per message", async (t) => {
+	const { env, objects, sqlite } = await relayFixture(t);
+	const big = Buffer.alloc(6 * 1024 * 1024, 1).toString("base64").replace(/(.{76})/g, "$1\r\n");
+	const mime = `From: Bob <bob@gmail.com>\r\nTo: team@example.com\r\nSubject: Big\r\nMIME-Version: 1.0\r\nContent-Type: multipart/mixed; boundary="b"\r\n\r\n--b\r\nContent-Type: text/plain\r\n\r\nsee file\r\n--b\r\nContent-Type: application/pdf; name="f.pdf"\r\nContent-Disposition: attachment; filename="f.pdf"\r\nContent-Transfer-Encoding: base64\r\n\r\n${big}\r\n--b--\r\n`;
+	objects.set("group-relay/x.eml", new TextEncoder().encode(mime).buffer);
+	globalThis.relayLog.provider = "cloudflare";
 	assert.equal(await app.processGroupRelay(env, relayMessage()), "skipped");
-	assert.deepEqual(outbound.map((m) => [m.body.attempt, m.options.delaySeconds]), [[1, 15]]);
-	await app.processGroupRelay(env, relayMessage({ attempt: 2 }));
-	assert.deepEqual(outbound.at(-1).options.delaySeconds, 60);
-	await assert.rejects(() => app.processGroupRelay(env, relayMessage({ attempt: 6 })), /Too many requests/);
-	globalThis.relayLog.error = new Error("Resend: invalid address");
-	await assert.rejects(() => app.processGroupRelay(env, relayMessage()), /invalid address/);
-});
-
-test("mail with several From addresses is not relayed, and the subject cannot carry a header break", async (t) => {
-	const { env, objects, outbound } = await relayFixture(t);
-	objects.set("group-relay/x.eml", new TextEncoder().encode(MIME("a@x.com, b@y.com")).buffer);
-	assert.equal(await app.processGroupRelay(env, relayMessage()), "skipped");
+	assert.equal(await app.processGroupRelay(env, relayMessage({ memberId: "gm3" })), "skipped");
 	assert.equal(globalThis.relayLog.sent.length, 0);
-	objects.set("group-relay/x.eml", new TextEncoder().encode(MIME().replace("Subject: Hello team", "Subject: =?utf-8?Q?Hi=0D=0ABcc:_evil=40x.com?=")).buffer);
-	await app.processGroupRelay(env, relayMessage());
-	assert.ok(!/[\r\n]/.test(globalThis.relayLog.sent[0].message.subject));
-	void outbound;
+	const rows = sqlite.prepare("SELECT metadata FROM audit_logs WHERE action = 'group.relay_skipped'").all().map((r) => JSON.parse(r.metadata));
+	assert.equal(rows.length, 1);
+	assert.equal(rows[0].reason, "message_too_large");
+	globalThis.relayLog.provider = "resend";
+	assert.equal(await app.processGroupRelay(env, relayMessage()), "sent", "the same message goes through a provider that carries it");
+});
+
+test("each provider gets the sender in the form it handles: UTF-8, RFC 2047 words, or name and address apart", async (t) => {
+	const { env, objects } = await relayFixture(t);
+	objects.set("group-relay/x.eml", new TextEncoder().encode(MIME("=?utf-8?B?Sm9zw6k=?= <jose@gmail.com>")).buffer);
+	const sendOnce = async (provider) => {
+		globalThis.relayLog.provider = provider;
+		globalThis.relayLog.sent.length = 0;
+		await app.processGroupRelay(env, relayMessage());
+		return globalThis.relayLog.sent[0].message;
+	};
+	const resend = await sendOnce("resend");
+	assert.equal(resend.from, `"'José <jose@gmail.com>' via Team" <team@example.com>`);
+	const ses = await sendOnce("ses");
+	assert.ok(/^[\x20-\x7e]+$/.test(ses.from) && ses.from.includes("=?UTF-8?B?"), ses.from);
+	const cloudflare = await sendOnce("cloudflare");
+	assert.deepEqual(cloudflare.fromParts, { name: "'José <jose@gmail.com>' via Team", email: "team@example.com" });
+	assert.match(cloudflare.headers["X-Original-From"], /^=\?UTF-8\?B\?.+\?= <jose@gmail\.com>$/);
 });

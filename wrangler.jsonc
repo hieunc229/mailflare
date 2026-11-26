@@ -116,7 +116,8 @@
 			},
 			{
 				"queue": "mailflare-outbound",
-				"max_batch_size": 5,
+				// 3, not 5: a batch of group relays then fits the 50 subrequests of an invocation, so none is deferred (each deferral costs more queue operations).
+				"max_batch_size": 3,
 				// Sends wait out the undo window already; do not also wait for a batch to fill.
 				"max_batch_timeout": 1,
 				"max_retries": 3,

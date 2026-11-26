@@ -79,6 +79,11 @@ interface CloudflareEnv {
 	MAILFLARE_RUNTIME?: "node" | "vercel";
 	/** Shared secret the Cloudflare email relay signs inbound webhooks with (self-hosted only). */
 	INBOUND_WEBHOOK_SECRET?: string;
+	/** Send caps for relayed group mail (whole numbers; see docs/groups.md). */
+	GROUP_RELAY_GROUP_HOURLY?: string;
+	GROUP_RELAY_GROUP_DAILY?: string;
+	GROUP_RELAY_INSTALL_HOURLY?: string;
+	GROUP_RELAY_INSTALL_DAILY?: string;
 	/** "1" refuses relays that do not sign the header map with a timestamp (relay Worker v2). */
 	INBOUND_REQUIRE_SIGNED_HEADERS?: string;
 	/** Cloudflare account id, needed for the Email Sending REST API off Workers. */

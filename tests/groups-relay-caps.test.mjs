@@ -66,15 +66,17 @@ async function fixture(t, provider) {
 
 const hourNow = () => Math.floor(Date.now() / 3_600_000);
 const dayNow = () => Math.floor(Date.now() / 86_400_000);
-const rateKey = (group, n, sends = 1, flag = "ok", hour = hourNow()) => `group-relay/rate/${Math.floor(hour / 24)}/${hour}/${group}/${String(n).padStart(64, "0")}-${sends}-${flag}`;
+const rateKey = (group, n, sends = 1, hour = hourNow()) => `group-relay/${Math.floor(hour / 24)}/rate/${hour}/${group}/${String(n).padStart(64, "0")}-${sends}`;
 const audits = (sqlite) => sqlite.prepare("SELECT action, actor_user_id, metadata FROM audit_logs WHERE action = 'group.relay_capped'").all().map((r) => ({ ...r, metadata: JSON.parse(r.metadata) }));
 
 test("pure: rate keys round-trip and the allowance trips on the first scope that is full", () => {
 	const u = app.relayUtils;
-	const key = u.relayRateKey({ groupId: "g1", digest: "ab".repeat(32), sends: 3, flag: "ok", now: new Date("2026-12-01T10:30:00Z") });
-	assert.deepEqual(u.parseRateKey(key), { day: Math.floor(Date.parse("2026-12-01T10:30:00Z") / 86400000), hour: Math.floor(Date.parse("2026-12-01T10:30:00Z") / 3600000), groupId: "g1", digest: "ab".repeat(32), sends: 3, flag: "ok" });
+	const at = new Date("2026-12-01T10:30:00Z");
+	const key = u.relayRateKey({ groupId: "g1", digest: "ab".repeat(32), sends: 3, now: at });
+	assert.equal(key, `group-relay/${Math.floor(at / 86400000)}/rate/${Math.floor(at / 3600000)}/g1/${"ab".repeat(32)}-3`);
+	assert.deepEqual(u.parseRateKey(key), { day: Math.floor(at / 86400000), hour: Math.floor(at / 3600000), groupId: "g1", digest: "ab".repeat(32), sends: 3 });
 	assert.equal(u.parseRateKey("group-relay/rate/x"), null);
-	const entry = (groupId, sends, hour = 10, day = 0) => ({ day, hour, groupId, sends, digest: "d", flag: "ok" });
+	const entry = (groupId, sends, hour = 10, day = 0) => ({ day, hour, groupId, sends, digest: "d" });
 	assert.deepEqual(u.planRelayAllowance([], { groupId: "g", hour: 10, day: 0, sends: 5 }), { ok: true });
 	const hourFull = [entry("g", u.GROUP_SENDS_PER_HOUR - 4)];
 	assert.deepEqual(u.planRelayAllowance(hourFull, { groupId: "g", hour: 10, day: 0, sends: 5 }), { ok: false, scope: "group", period: "hour", limit: u.GROUP_SENDS_PER_HOUR });
@@ -87,7 +89,16 @@ test("pure: rate keys round-trip and the allowance trips on the first scope that
 	assert.deepEqual(u.planRelayAllowance(others, { groupId: "g", hour: 10, day: 0, sends: 1 }), { ok: false, scope: "installation", period: "hour", limit: u.INSTALL_SENDS_PER_HOUR });
 	const days = Array.from({ length: 20 }, (_, i) => entry(`o${i}`, u.INSTALL_SENDS_PER_DAY / 20, i));
 	assert.deepEqual(u.planRelayAllowance(days, { groupId: "g", hour: 30, day: 0, sends: 1 }), { ok: false, scope: "installation", period: "day", limit: u.INSTALL_SENDS_PER_DAY });
-	assert.ok(u.GROUP_SENDS_PER_DAY <= 500 && u.INSTALL_SENDS_PER_DAY <= 2000, "low defaults");
+	assert.deepEqual(u.DEFAULT_RELAY_CAPS, { groupHour: 300, groupDay: 1000, installHour: 1000, installDay: 5000 });
+});
+
+test("the caps can be overridden from the environment, and bad values fall back", () => {
+	const u = app.relayUtils;
+	assert.deepEqual(u.relayCaps({}), u.DEFAULT_RELAY_CAPS);
+	assert.deepEqual(u.relayCaps({ GROUP_RELAY_GROUP_HOURLY: "50", GROUP_RELAY_GROUP_DAILY: " 120 ", GROUP_RELAY_INSTALL_HOURLY: "70", GROUP_RELAY_INSTALL_DAILY: "400" }), { groupHour: 50, groupDay: 120, installHour: 70, installDay: 400 });
+	assert.deepEqual(u.relayCaps({ GROUP_RELAY_GROUP_HOURLY: "0", GROUP_RELAY_GROUP_DAILY: "-3", GROUP_RELAY_INSTALL_HOURLY: "many", GROUP_RELAY_INSTALL_DAILY: "1.5" }), u.DEFAULT_RELAY_CAPS);
+	const tight = { groupHour: 10, groupDay: 10, installHour: 10, installDay: 10 };
+	assert.equal(u.planRelayAllowance([], { groupId: "g", hour: 1, day: 0, sends: 11 }, tight).ok, false);
 });
 
 test("a message counts messages x external members against the group's hour", async (t) => {
@@ -101,9 +112,9 @@ test("a message counts messages x external members against the group's hour", as
 test("the group's day, and the whole installation's hour and day, are capped too", async (t) => {
 	const u = app.relayUtils;
 	for (const [name, fill] of [
-		["group day", (objects) => objects.set(rateKey("g1", 1, u.GROUP_SENDS_PER_DAY - 1, "ok", hourNow() - 1 < dayNow() * 24 ? hourNow() : hourNow() - 1), new ArrayBuffer(0))],
+		["group day", (objects) => objects.set(rateKey("g1", 1, u.GROUP_SENDS_PER_DAY - 1, hourNow() - 1 < dayNow() * 24 ? hourNow() : hourNow() - 1), new ArrayBuffer(0))],
 		["installation hour", (objects) => { for (let i = 0; i < 40; i += 1) objects.set(rateKey(`o${i}`, i, u.INSTALL_SENDS_PER_HOUR / 40), new ArrayBuffer(0)); }],
-		["installation day", (objects) => { for (let i = 0; i < 40; i += 1) objects.set(rateKey(`o${i}`, i, u.INSTALL_SENDS_PER_DAY / 40, "ok", dayNow() * 24), new ArrayBuffer(0)); }],
+		["installation day", (objects) => { for (let i = 0; i < 40; i += 1) objects.set(rateKey(`o${i}`, i, u.INSTALL_SENDS_PER_DAY / 40, dayNow() * 24), new ArrayBuffer(0)); }],
 	]) {
 		const { env, outbound, objects, payload } = await fixture(t);
 		fill(objects);
@@ -122,28 +133,88 @@ test("a message under the caps is counted once, however many chunks it takes", a
 	env.INBOUND_QUEUE.send = async (body) => { if (body.groupExpansion) queue.push(body); else await send(body); };
 	while (queue.length) await app.expandGroupDelivery(env, queue.shift());
 	assert.equal(outbound.length, 32);
-	const markers = [...objects.keys()].filter((key) => key.startsWith("group-relay/rate/"));
+	const markers = [...objects.keys()].filter((key) => key.includes("/rate/"));
 	assert.equal(markers.length, 1);
-	assert.match(markers[0], /-32-ok$/);
+	assert.match(markers[0], /-32$/);
 	assert.equal(globalThis.relayLog.analysed, 1, "spam analysis ran once per message, not per chunk");
 	const delays = outbound.map((m) => m.options.delaySeconds).sort((a, b) => a - b);
 	assert.equal(delays.at(-1), 15, "spread by position among all 32 externals, not restarted per chunk");
 });
 
-test("mail the spam filters put aside is not relayed, and the verdict is remembered", async (t) => {
-	const { env, outbound, inbound, objects, payload } = await fixture(t);
-	for (const verdict of ["spam", "suspicious"]) {
-		globalThis.relayLog.verdict = verdict;
-		objects.clear();
-		await app.expandGroupDelivery(env, payload());
-		assert.equal(outbound.length, 0, verdict);
-		assert.match([...objects.keys()].find((key) => key.startsWith("group-relay/rate/")), /-0-skip$/);
-	}
+test("mail the spam filters call spam is not relayed, the verdict is remembered away from the caps, and the admin is told once", async (t) => {
+	const { env, outbound, inbound, objects, payload, sqlite } = await fixture(t);
+	globalThis.relayLog.verdict = "spam";
+	await app.expandGroupDelivery(env, payload());
+	await app.expandGroupDelivery(env, payload());
+	assert.equal(outbound.length, 0);
 	assert.equal(inbound.length, 2, "internal members still get it, each mailbox's own filter decides");
-	globalThis.relayLog.verdict = "inbox";
-	objects.clear();
+	assert.equal([...objects.keys()].filter((key) => key.includes("/rate/")).length, 0, "the reserved sends were given back");
+	assert.equal([...objects.keys()].filter((key) => key.includes("/skip/")).length, 1);
+	assert.equal(globalThis.relayLog.analysed, 1, "the second message found the skip marker");
+	const rows = sqlite.prepare("SELECT actor_user_id, metadata FROM audit_logs WHERE action = 'group.relay_blocked'").all();
+	assert.equal(rows.length, 1);
+	assert.equal(JSON.parse(rows[0].metadata).groupId, "g1");
+});
+
+test("a suspicious message is still relayed: only spam blocks", async (t) => {
+	const { env, outbound, payload } = await fixture(t);
+	globalThis.relayLog.verdict = "suspicious";
 	await app.expandGroupDelivery(env, payload());
 	assert.equal(outbound.length, 2);
+});
+
+test("spam skips do not count towards the cap listing", async (t) => {
+	const { env, outbound, objects, payload } = await fixture(t);
+	for (let i = 0; i < 5000; i += 1) objects.set(`group-relay/${dayNow()}/skip/g1-${String(i).padStart(64, "0")}`, new ArrayBuffer(0));
+	await app.expandGroupDelivery(env, payload());
+	assert.equal(outbound.length, 2, "thousands of skip markers do not make the listing look truncated");
+});
+
+test("two messages arriving together cannot both take the last of the allowance", async (t) => {
+	const { env, outbound, objects, payload } = await fixture(t);
+	const u = app.relayUtils;
+	objects.set(rateKey("g1", 1, u.GROUP_SENDS_PER_HOUR - 3), new ArrayBuffer(0));
+	// Another message reserves its 2 sends between this one's first look and its second.
+	const list = env.BUCKET.list;
+	let lists = 0;
+	env.BUCKET.list = async (options) => {
+		lists += 1;
+		if (lists === 2) objects.set(rateKey("g1", 2, 2), new ArrayBuffer(0));
+		return list(options);
+	};
+	await app.expandGroupDelivery(env, payload());
+	assert.equal(outbound.length, 0, "this one saw the other's reservation and backed out");
+	assert.ok([...objects.keys()].some((key) => key.endsWith("2".padStart(64, "0") + "-2")), "the other reservation stands");
+	assert.equal([...objects.keys()].filter((key) => key.includes("/rate/")).length, 2, "and this one's own reservation was removed");
+});
+
+test("messages that arrive together are queued behind each other", async (t) => {
+	const { env, outbound, objects, payload } = await fixture(t);
+	objects.set("inbound/orig2.eml", new TextEncoder().encode(MIME().replace("Hello team", "Second")).buffer);
+	await app.expandGroupDelivery(env, payload());
+	const first = outbound.map((m) => m.options.delaySeconds);
+	outbound.length = 0;
+	await app.expandGroupDelivery(env, payload({ rawR2Key: "inbound/orig2.eml" }));
+	assert.ok(Math.min(...outbound.map((m) => m.options.delaySeconds)) >= Math.max(...first), "the second message starts after the first one's position");
+	assert.ok(Math.min(...outbound.map((m) => m.options.delaySeconds)) >= 1);
+});
+
+test("a cap can be raised from the environment", async (t) => {
+	const { env, outbound, objects, payload } = await fixture(t);
+	objects.set(rateKey("g1", 1, 90), new ArrayBuffer(0));
+	await app.expandGroupDelivery({ ...env, GROUP_RELAY_GROUP_HOURLY: "91" }, payload());
+	assert.equal(outbound.length, 0, "90 + 2 sends is over 91");
+	await app.expandGroupDelivery({ ...env, GROUP_RELAY_GROUP_HOURLY: "92" }, payload());
+	assert.equal(outbound.length, 2);
+});
+
+test("a redelivered chunk says in the log that its relays were queued before, or lost", async (t) => {
+	const { env, payload } = await fixture(t);
+	const lines = [];
+	console.warn = (...args) => lines.push(args.join(" "));
+	await app.expandGroupDelivery(env, payload());
+	await app.expandGroupDelivery(env, payload());
+	assert.ok(lines.some((line) => /queued before \(or lost/.test(line)), lines.join("\n"));
 });
 
 test("when a cap trips the admin is told once per period, in the audit log", async (t) => {
@@ -161,7 +232,7 @@ test("the chunk marker is written before the relays are queued, so a failure can
 	const { env, objects, outbound, payload } = await fixture(t);
 	const sendBatch = env.OUTBOUND_QUEUE.sendBatch;
 	let markersSeen = -1;
-	env.OUTBOUND_QUEUE.sendBatch = async (batch) => { markersSeen = [...objects.keys()].filter((key) => key.startsWith("group-relay/chunk/")).length; throw new Error("queue down"); };
+	env.OUTBOUND_QUEUE.sendBatch = async (batch) => { markersSeen = [...objects.keys()].filter((key) => key.includes("/chunk/")).length; throw new Error("queue down"); };
 	await assert.rejects(() => app.expandGroupDelivery(env, payload()), /queue down/);
 	assert.equal(markersSeen, 1);
 	env.OUTBOUND_QUEUE.sendBatch = sendBatch;

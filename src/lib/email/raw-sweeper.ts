@@ -7,6 +7,7 @@ import { UPLOAD_PREFIX } from "@/lib/jmap/blobs";
 import { sweepStaleObjects } from "@/lib/email/stale-objects";
 import { REQUEST_UPLOAD_PREFIX } from "@/lib/uploads/constants";
 import { GROUP_RELAY_MAX_AGE_MS, GROUP_RELAY_PREFIX } from "@/lib/groups/relay-utils";
+import { sweepGroupRelay } from "@/lib/groups/relay-sweep";
 
 const PREFIX = "inbound/";
 const MIN_AGE_MS = 24 * 60 * 60 * 1000;
@@ -62,5 +63,7 @@ export async function sweepOrphanedRawMail(env: CloudflareEnv, now = new Date())
 	for (const { prefix, maxAgeMs } of STALE_PREFIXES) {
 		await sweepStaleObjects(env.BUCKET, prefix, maxAgeMs, now).catch((error) => console.error(`Sweep of ${prefix} failed`, error));
 	}
+	// Group relay objects are partitioned by day and deleted a day at a time, whatever the volume.
+	await sweepGroupRelay(env.BUCKET, now).catch((error) => console.error("Sweep of group relay objects failed", error));
 	return removed;
 }
