@@ -18,6 +18,8 @@ await build({
 			export { encryptSecret, decryptSecret } from "./src/lib/external-accounts/crypto.ts";
 			export { exportDatabaseRecords, restoreDatabaseRecords, BackupRestoreError } from "./src/lib/backups/export.ts";
 			export * as restoreRoute from "./src/app/api/backups/restore/route.ts";
+			export { externalAccounts } from "./src/db/schema/index.ts";
+			export { getTableConfig } from "drizzle-orm/sqlite-core";
 		`,
 		resolveDir: root,
 		sourcefile: "external-accounts-restore-test-entry.ts",
@@ -32,7 +34,7 @@ await build({
 	alias: { "next/headers": "next/headers.js", "next/server": "next/server.js", "cloudflare:workers": "./server/runtime/cloudflare-workers.ts" },
 	logLevel: "silent",
 });
-const { SqliteDatabase, applyMigrations, createSession, encryptSecret, decryptSecret, exportDatabaseRecords, restoreDatabaseRecords, BackupRestoreError, restoreRoute } =
+const { SqliteDatabase, applyMigrations, createSession, encryptSecret, decryptSecret, exportDatabaseRecords, restoreDatabaseRecords, BackupRestoreError, restoreRoute, externalAccounts, getTableConfig } =
 	await import(pathToFileURL(join(directory, "entry.mjs")).href);
 
 const PASSWORD = "imap-secret-p@ss";
@@ -69,6 +71,27 @@ async function seededDatabase(t) {
 	return { database, sql, env, restore };
 }
 
+/** A target database that already holds one credential, so a failed restore can prove it survived. */
+async function targetWithExistingRow(t) {
+	const target = await seededDatabase(t);
+	target.existingSealed = await encryptSecret({ MAILFLARE_ENCRYPTION_KEY: KEY }, "live-password");
+	target.sql
+		.prepare(`INSERT INTO external_accounts (id, mailbox_id, user_id, protocol, host, port, tls_mode, username, password_encrypted, enabled, created_at, updated_at)
+			VALUES ('ext_live', 'm-personal', 'admin', 'imap', 'live.example.com', 993, 'implicit-tls', 'live@example.com', ?, 1, 1, 1)`)
+		.run(target.existingSealed);
+	return target;
+}
+
+/** Nothing was torn down: the same single row, the same ciphertext, and the users table still populated. */
+function assertUntouched(target) {
+	const rows = target.sql.prepare("SELECT id, password_encrypted FROM external_accounts").all();
+	assert.deepEqual(rows.map((row) => row.id), ["ext_live"]);
+	// Byte for byte: a refused restore must not have touched the credential either.
+	assert.equal(rows[0].password_encrypted, target.existingSealed);
+	assert.equal(target.sql.prepare("SELECT count(*) AS n FROM users").get().n, 1);
+	assert.equal(target.sql.prepare("SELECT count(*) AS n FROM mailboxes").get().n, 1);
+}
+
 /** A document holding one external account, exported from a real database. */
 async function documentWithAccount(t) {
 	const source = await seededDatabase(t);
@@ -100,11 +123,7 @@ test("a valid backup restores under the same key and under a different key witho
 
 test("a restore refuses a plaintext credential before it tears anything down", async (t) => {
 	const { document } = await documentWithAccount(t);
-	const target = await seededDatabase(t);
-	target.sql
-		.prepare(`INSERT INTO external_accounts (id, mailbox_id, user_id, protocol, host, port, tls_mode, username, password_encrypted, enabled, created_at, updated_at)
-			VALUES ('ext_live', 'm-personal', 'admin', 'imap', 'live.example.com', 993, 'implicit-tls', 'live@example.com', ?, 1, 1, 1)`)
-		.run("a2VwdC1saXZlLWVudmVsb3BlLXZhbHVlLXBsYWNlaG9sZGVy");
+	const target = await targetWithExistingRow(t);
 
 	const plaintext = structuredClone(document);
 	plaintext.tables.external_accounts[0].password_encrypted = "my-plaintext-password";
@@ -115,8 +134,8 @@ test("a restore refuses a plaintext credential before it tears anything down", a
 	assert.match(body.error, /password_encrypted/);
 	// The message names the column, never the offending value.
 	assert.ok(!JSON.stringify(body).includes("my-plaintext-password"));
-	// Refused before the teardown: the row that was already there is still there.
-	assert.equal(target.sql.prepare("SELECT id FROM external_accounts").all().map((row) => row.id).join(","), "ext_live");
+	// Refused before the teardown: the row that was already there is still there, unchanged.
+	assertUntouched(target);
 
 	for (const value of ["", "not base64!", Buffer.alloc(20).toString("base64"), `${"A".repeat(6000)}`]) {
 		const broken = structuredClone(document);
@@ -125,23 +144,122 @@ test("a restore refuses a plaintext credential before it tears anything down", a
 	}
 });
 
-test("a restore refuses a cursor that is not bounded JSON", async (t) => {
+test("a restore refuses a cursor that is not the protocol's bounded JSON shape", async (t) => {
 	const { document } = await documentWithAccount(t);
-	const target = await seededDatabase(t);
-	for (const cursor of ["not JSON", '{"uidValidity":', "42", JSON.stringify({ big: "x".repeat(70 * 1024) })]) {
+	const target = await targetWithExistingRow(t);
+	const cases = [
+		// Not JSON at all, or JSON that is not an object.
+		["not JSON", undefined],
+		['{"uidValidity":', undefined],
+		["42", undefined],
+		["[1,2,3]", undefined],
+		// Unknown keys: the shape is the format, so a poller cannot smuggle state through it.
+		[JSON.stringify({ big: "x".repeat(70 * 1024) }), undefined],
+		[JSON.stringify({ uidValidity: 1, lastUid: 2, extra: true }), undefined],
+		// Wrong types for the IMAP keys.
+		[JSON.stringify({ uidValidity: "1", lastUid: 2 }), undefined],
+		[JSON.stringify({ uidValidity: 1.5, lastUid: 2 }), undefined],
+		[JSON.stringify({ uidValidity: 1, lastUid: 2 ** 33 }), undefined],
+		// A POP3 cursor on an IMAP account, and an IMAP cursor on a POP3 account.
+		[JSON.stringify({ uidls: ["a", "b"] }), undefined],
+		[JSON.stringify({ uidValidity: 1, lastUid: 2 }), "pop3"],
+		// Over the byte bound in UTF-8 even though JS would count fewer code units.
+		[JSON.stringify({ uidls: ["\u00e9".repeat(40 * 1024)] }), "pop3"],
+	];
+	for (const [cursor, protocol] of cases) {
 		const broken = structuredClone(document);
 		broken.tables.external_accounts[0].sync_cursor = cursor;
+		if (protocol) {
+			broken.tables.external_accounts[0].protocol = protocol;
+			broken.tables.external_accounts[0].port = 995;
+		}
 		const refused = await target.restore(broken);
-		assert.equal(refused.status, 400, cursor.slice(0, 12));
+		assert.equal(refused.status, 400, `${String(cursor).slice(0, 20)} / ${protocol ?? "imap"}`);
 		assert.match((await refused.json()).error, /sync_cursor/);
 	}
-	// Null and ordinary JSON are both accepted.
-	for (const cursor of [null, JSON.stringify({ uidValidity: 1, lastUid: 2 }), JSON.stringify({ uidls: ["a", "b"] })]) {
+	assertUntouched(target);
+
+	// Null and the documented shapes are accepted, per protocol.
+	const accepted = [
+		[null, undefined],
+		[JSON.stringify({ uidValidity: 1, lastUid: 2 }), undefined],
+		[JSON.stringify({}), undefined],
+		[JSON.stringify({ uidls: ["a", "b"] }), "pop3"],
+		[JSON.stringify({ uidls: [], lastCheckedAt: new Date().toISOString() }), "pop3"],
+	];
+	for (const [cursor, protocol] of accepted) {
 		const ok = structuredClone(document);
 		ok.tables.external_accounts[0].sync_cursor = cursor;
+		if (protocol) {
+			ok.tables.external_accounts[0].protocol = protocol;
+			ok.tables.external_accounts[0].port = 995;
+		}
 		const response = await target.restore(ok);
-		assert.equal(response.status, 200, String(cursor));
+		assert.equal(response.status, 200, `${String(cursor).slice(0, 20)} / ${protocol ?? "imap"}`);
 	}
+});
+
+test("an explicit null for a NOT NULL column is refused before the teardown, not after it", async (t) => {
+	// The required columns come from the table definition, so a column added later is covered without editing
+	// this test: null is bound as NULL, which the INSERT would reject only after the old rows are gone.
+	const { document } = await documentWithAccount(t);
+	const target = await targetWithExistingRow(t);
+	const required = getTableConfig(externalAccounts).columns.filter((column) => column.notNull).map((column) => column.name);
+	assert.ok(required.includes("tls_mode") && required.includes("enabled") && required.includes("password_encrypted"), required.join(","));
+	for (const column of required) {
+		const broken = structuredClone(document);
+		broken.tables.external_accounts[0][column] = null;
+		const refused = await target.restore(broken);
+		assert.equal(refused.status, 400, column);
+		const body = await refused.json();
+		assert.match(body.error, new RegExp(column), column);
+		assert.equal(body.error.includes("null"), false, "the message must not echo the value");
+		assertUntouched(target);
+	}
+	// A non-string TLS mode is refused rather than coerced, and so is a made-up one.
+	for (const tlsMode of [1, true, "ssl", "IMPLICIT-TLS", " implicit-tls"]) {
+		const broken = structuredClone(document);
+		broken.tables.external_accounts[0].tls_mode = tlsMode;
+		const refused = await target.restore(broken);
+		assert.equal(refused.status, 400, String(tlsMode));
+		assert.match((await refused.json()).error, /tls_mode/);
+		assertUntouched(target);
+	}
+	for (const enabled of [null, 2, -1, "yes", "1"]) {
+		const broken = structuredClone(document);
+		broken.tables.external_accounts[0].enabled = enabled;
+		const refused = await target.restore(broken);
+		assert.equal(refused.status, 400, String(enabled));
+		assert.match((await refused.json()).error, /enabled/);
+		assertUntouched(target);
+	}
+	// Omitting them is not the same as null: the column defaults apply and the restore succeeds.
+	const omitted = structuredClone(document);
+	delete omitted.tables.external_accounts[0].tls_mode;
+	delete omitted.tables.external_accounts[0].enabled;
+	assert.equal((await target.restore(omitted)).status, 200);
+	const restored = target.sql.prepare("SELECT tls_mode, enabled FROM external_accounts WHERE id = 'ext_1'").get();
+	assert.deepEqual(restored, { tls_mode: "implicit-tls", enabled: 1 });
+});
+
+test("a restore refuses a document whose rows would collide or point at a missing mailbox", async (t) => {
+	const { document } = await documentWithAccount(t);
+	const target = await targetWithExistingRow(t);
+	// The unique tuple is enforced by the index after the teardown, so it is checked before it.
+	const duplicate = structuredClone(document);
+	duplicate.tables.external_accounts.push({ ...document.tables.external_accounts[0], id: "ext_2" });
+	const refused = await target.restore(duplicate);
+	assert.equal(refused.status, 400);
+	assert.match((await refused.json()).error, /external account record \(row 2, host\)/);
+	assertUntouched(target);
+
+	// The mailbox foreign key is enforced the same way, and `mailboxes` is restored from this document.
+	const orphan = structuredClone(document);
+	orphan.tables.external_accounts[0].mailbox_id = "m-not-in-this-backup";
+	const orphaned = await target.restore(orphan);
+	assert.equal(orphaned.status, 400);
+	assert.match((await orphaned.json()).error, /\(row 1, mailbox_id\)/);
+	assertUntouched(target);
 });
 
 test("a restore refuses an out-of-range port or unknown protocol before the teardown", async (t) => {
@@ -166,18 +284,20 @@ test("a restore refuses an out-of-range port or unknown protocol before the tear
 
 test("a driver failure during restore is reported without the statement or its parameters", async (t) => {
 	const { document, sealed } = await documentWithAccount(t);
-	// Two rows with one primary key reach the insert phase, so the failure is a real driver error carrying the
-	// bound ciphertext — the exact shape that must not be echoed to the client.
-	const broken = structuredClone(document);
-	broken.tables.external_accounts.push({ ...document.tables.external_accounts[0] });
 	const target = await seededDatabase(t);
+	// A rejection the preflight cannot foresee, which is exactly the mid-restore case: the route must not repeat
+	// the driver error, whose message carries the INSERT and the bound ciphertext.
+	target.sql.exec(`CREATE TRIGGER f36_reject_restore BEFORE INSERT ON external_accounts WHEN NEW.username = 'rejected-by-db'
+		BEGIN SELECT RAISE(ABORT, 'injected restore failure'); END`);
+	const broken = structuredClone(document);
+	broken.tables.external_accounts[0].username = "rejected-by-db";
 	const response = await target.restore(broken);
 	assert.equal(response.status, 400);
 	const text = JSON.stringify(await response.json());
 	assert.match(text, /could not be restored/i);
 	assert.ok(!text.includes(sealed));
 	assert.ok(!text.includes(PASSWORD));
-	assert.ok(!/"Failed query"/.test(text));
+	assert.ok(!/Failed query/i.test(text));
 });
 
 test("restore validation throws the typed error the route is allowed to repeat", async (t) => {

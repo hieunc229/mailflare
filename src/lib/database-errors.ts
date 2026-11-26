@@ -31,6 +31,11 @@ export function isMissingColumnError(error: unknown): boolean {
 	return errorChainMatches(error, /no such column|has no column named|column ("[^"]+"|[\w.]+) (of relation "[^"]+" )?does not exist|unknown column/i, ["42703", 1054, "ER_BAD_FIELD_ERROR"]);
 }
 
+/**
+ * A duplicate key. PostgreSQL reports SQLSTATE `23505` and MySQL `ER_DUP_ENTRY`/`1062`, which the driver hands
+ * over as `code`/`errno`, so those are checked first and do not depend on wording; SQLite and D1 have no such
+ * code, so their message stays as the fallback.
+ */
 export function isUniqueConstraintError(error: unknown): boolean {
-	return errorChainMatches(error, /UNIQUE constraint failed|duplicate key value violates unique constraint|duplicate entry/i);
+	return errorChainMatches(error, /UNIQUE constraint failed|duplicate key value violates unique constraint|duplicate entry/i, ["23505", "ER_DUP_ENTRY", 1062]);
 }

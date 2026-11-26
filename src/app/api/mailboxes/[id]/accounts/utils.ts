@@ -78,14 +78,58 @@ export class ExternalAccountWriteError extends Error {
 	}
 }
 
-/** A short alphanumeric driver code (PostgreSQL `23514`, MySQL `ER_DATA_TOO_LONG`); never a message or a value. */
+/**
+ * The driver codes this feature reports, so the response never echoes an arbitrary `code` property from a
+ * wrapped error object. Each one is a constant that names a class of rejection — a failed check or NOT NULL
+ * constraint, a value the column cannot hold, a missing column or table — never a value or a statement.
+ *
+ * PostgreSQL SQLSTATEs and MySQL error names/numbers for the same conditions; SQLite and D1 report no code, so
+ * a rejection there is reported without one.
+ */
+const REPORTABLE_DRIVER_CODES = new Set([
+	// PostgreSQL: check violation, not-null violation, foreign key, string/date overflow, numeric range, unknown column/table.
+	"23502",
+	"23503",
+	"23505",
+	"23514",
+	"22001",
+	"22003",
+	"42703",
+	"42P01",
+	// MySQL: same conditions, by name and by number.
+	"ER_DUP_ENTRY",
+	"ER_BAD_NULL_ERROR",
+	"ER_NO_DEFAULT_FOR_FIELD",
+	"ER_DATA_TOO_LONG",
+	"ER_TRUNCATED_WRONG_VALUE",
+	"ER_TRUNCATED_WRONG_VALUE_FOR_FIELD",
+	"ER_CHECK_CONSTRAINT_VIOLATED",
+	"ER_NO_REFERENCED_ROW",
+	"ER_NO_REFERENCED_ROW_2",
+	"ER_ROW_IS_REFERENCED",
+	"ER_ROW_IS_REFERENCED_2",
+	"1062",
+	"1048",
+	"1364",
+	"1406",
+	"1265",
+	"1292",
+	"3819",
+	"1451",
+	"1452",
+]);
+
+/** The allowlisted driver code on the cause chain, or null. Never a message, a statement or a bound value. */
 function driverErrorCode(error: unknown): string | null {
 	const seen = new Set<unknown>();
 	let current: unknown = error;
 	while (current && typeof current === "object" && !seen.has(current)) {
 		seen.add(current);
-		const code = (current as { code?: unknown }).code;
-		if (typeof code === "string" && /^[A-Za-z0-9_]{1,32}$/.test(code)) return code;
+		const { code, errno } = current as { code?: unknown; errno?: unknown };
+		for (const candidate of [code, errno]) {
+			if (typeof candidate === "string" && REPORTABLE_DRIVER_CODES.has(candidate)) return candidate;
+			if (typeof candidate === "number" && REPORTABLE_DRIVER_CODES.has(String(candidate))) return String(candidate);
+		}
 		current = (current as { cause?: unknown }).cause;
 	}
 	return null;

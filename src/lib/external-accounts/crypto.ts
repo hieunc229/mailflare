@@ -27,6 +27,14 @@ const NONCE_BYTES = 12;
 const TAG_BYTES = 16;
 /** The longest password a route accepts (1024 characters, up to 4 UTF-8 bytes each). */
 const MAX_SECRET_BYTES = 1024 * 4;
+const MIN_SEALED_BYTES = NONCE_BYTES + TAG_BYTES + 1;
+const MAX_SEALED_BYTES = NONCE_BYTES + TAG_BYTES + MAX_SECRET_BYTES;
+/** Base64 of the shortest and longest possible envelope, so an oversized value is refused before it is decoded. */
+const BASE64_GROUPS = (bytes: number) => Math.ceil(bytes / 3) * 4;
+const MIN_SEALED_LENGTH = BASE64_GROUPS(MIN_SEALED_BYTES);
+const MAX_SEALED_LENGTH = BASE64_GROUPS(MAX_SEALED_BYTES);
+/** Exported so a caller can refuse an oversized password with its own message before handing it over. */
+export const MAX_STORED_SECRET_BYTES = MAX_SECRET_BYTES;
 /** Enough for one rotation in flight, without keeping stale secrets in memory forever. */
 const MAX_CACHED_KEYS = 4;
 
@@ -35,6 +43,7 @@ export type ExternalAccountCryptoErrorCode =
 	| "encryption_key_invalid"
 	| "secret_empty"
 	| "secret_not_encodable"
+	| "secret_too_long"
 	| "secret_decrypt_failed";
 
 export class ExternalAccountCryptoError extends Error {
@@ -137,10 +146,16 @@ export async function encryptSecret(env: EncryptionEnv, plaintext: string): Prom
 		// UTF-8 would replace the lone surrogate with U+FFFD, so the value could never read back as it was.
 		throw new ExternalAccountCryptoError("secret_not_encodable", UNPAIRED_SURROGATE_MESSAGE);
 	}
+	const encoded = new TextEncoder().encode(plaintext);
+	// The reader refuses an envelope past this bound, so encrypting a longer value would produce something the
+	// app itself could not open. Callers cap the password; this keeps the two ends in step.
+	if (encoded.byteLength > MAX_SECRET_BYTES) {
+		throw new ExternalAccountCryptoError("secret_too_long", "A stored password is too long.");
+	}
 	const key = await encryptionKey(encryptionSecret(env));
 	const nonce = crypto.getRandomValues(new Uint8Array(NONCE_BYTES));
 	// The sealed output already ends with the 16-byte GCM tag.
-	const sealed = new Uint8Array(await crypto.subtle.encrypt({ name: "AES-GCM", iv: buffer(nonce) }, key, buffer(new TextEncoder().encode(plaintext))));
+	const sealed = new Uint8Array(await crypto.subtle.encrypt({ name: "AES-GCM", iv: buffer(nonce) }, key, buffer(encoded)));
 	const payload = new Uint8Array(nonce.byteLength + sealed.byteLength);
 	payload.set(nonce);
 	payload.set(sealed, nonce.byteLength);
@@ -154,7 +169,9 @@ export async function encryptSecret(env: EncryptionEnv, plaintext: string): Prom
  * refuse plaintext or truncated envelopes while still accepting a backup made under another key.
  */
 export function isSealedSecretFormat(value: unknown): value is string {
-	if (typeof value !== "string" || value.length % 4 !== 0 || !/^[A-Za-z0-9+/]+={0,2}$/.test(value)) return false;
+	// The length bounds come first: an oversized value is refused without allocating a decode buffer.
+	if (typeof value !== "string" || value.length < MIN_SEALED_LENGTH || value.length > MAX_SEALED_LENGTH) return false;
+	if (value.length % 4 !== 0 || !/^[A-Za-z0-9+/]+={0,2}$/.test(value)) return false;
 	let bytes: Uint8Array;
 	try {
 		bytes = fromBase64(value);
@@ -162,7 +179,7 @@ export function isSealedSecretFormat(value: unknown): value is string {
 		return false;
 	}
 	// At least one byte of ciphertext, and no more than the longest accepted password could produce.
-	return bytes.byteLength > NONCE_BYTES + TAG_BYTES && bytes.byteLength <= NONCE_BYTES + TAG_BYTES + MAX_SECRET_BYTES;
+	return bytes.byteLength >= MIN_SEALED_BYTES && bytes.byteLength <= MAX_SEALED_BYTES;
 }
 
 /**
@@ -171,15 +188,11 @@ export function isSealedSecretFormat(value: unknown): value is string {
  */
 export async function decryptSecret(env: EncryptionEnv, payload: string): Promise<string> {
 	const key = await encryptionKey(encryptionSecret(env));
-	let bytes: Uint8Array;
-	try {
-		bytes = fromBase64(payload);
-	} catch {
+	if (!isSealedSecretFormat(payload)) {
+		// Shape and size are checked before decoding, so a huge or truncated value costs no buffer.
 		throw new ExternalAccountCryptoError("secret_decrypt_failed", "The stored password could not be read; set it again.");
 	}
-	if (bytes.byteLength <= NONCE_BYTES + TAG_BYTES) {
-		throw new ExternalAccountCryptoError("secret_decrypt_failed", "The stored password could not be read; set it again.");
-	}
+	const bytes = fromBase64(payload);
 	const nonce = bytes.subarray(0, NONCE_BYTES);
 	const sealed = bytes.subarray(NONCE_BYTES);
 	let plaintext: ArrayBuffer;

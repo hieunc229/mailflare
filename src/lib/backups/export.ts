@@ -1,6 +1,6 @@
 import { dialectOf, listColumnNames, listTableNames, quoteIdentifier } from "@/db/introspect";
 import type { DatabaseDialect } from "@/db/dialect";
-import { isSyncCursorFormat, SYNC_CURSOR_MAX_BYTES } from "@/lib/external-accounts/cursor";
+import { isSyncCursorFormat } from "@/lib/external-accounts/cursor";
 import { isSealedSecretFormat } from "@/lib/external-accounts/crypto";
 import type { BackupTableGroupId, DatabaseBackupDocument, DatabaseBackupTable, DatabaseRecord } from "./types";
 import { mergeLegacyMessageBodies } from "./utils";
@@ -272,45 +272,64 @@ function validateDatabaseBackup(document: DatabaseBackupDocument): void {
 			}
 		}
 	}
-	validateExternalAccountRows(document.tables.external_accounts ?? []);
+	validateExternalAccountRows(document);
 }
 
 const isIntegerInRange = (value: unknown, min: number, max: number) => typeof value === "number" && Number.isInteger(value) && value >= min && value <= max;
 const isOptionalInteger = (value: unknown) => value === null || value === undefined || isIntegerInRange(value, 0, Number.MAX_SAFE_INTEGER);
 /** Backups hold `0`/`1`; a hand-written document may use booleans. */
 const isFlag = (value: unknown) => value === 0 || value === 1 || value === true || value === false;
-const isIdentityText = (value: unknown) => typeof value === "string" && value.length > 0 && value.length <= 191;
+const isIdentityText = (value: unknown): value is string => typeof value === "string" && value.length > 0 && value.length <= 191;
 
 /**
  * A restore writes whatever the document holds, so this is the one path that could plant a value the API would
  * never produce: a plaintext password in `password_encrypted`, a non-JSON cursor, an out-of-range port. The
- * check runs before the teardown and is **format only**: the sealed envelope is never decrypted and never
- * re-encrypted, because a backup made under another MAILFLARE_ENCRYPTION_KEY must still restore — its rows
- * simply need the passwords entered again on this install. The message names the row and column only.
+ * check runs **before the teardown**, and it has to be strict enough that the later INSERT cannot fail: a value
+ * refused here costs nothing, while one that slips through is written after every existing row is already gone.
+ *
+ * It is also **format only**: the sealed envelope is never decrypted and never re-encrypted, because a backup
+ * made under another MAILFLARE_ENCRYPTION_KEY must still restore — its rows simply need the passwords entered
+ * again on this install. And it is not a provenance check: a hand-edited document can hold any canonical base64
+ * in `password_encrypted`, which restores as opaque bytes that fail to decrypt. Restore only backups this
+ * install produced, or one you trust as much as the database itself. The message names the row and column only.
  */
-function validateExternalAccountRows(rows: DatabaseRecord[]): void {
+function validateExternalAccountRows(document: DatabaseBackupDocument): void {
+	const rows = document.tables.external_accounts ?? [];
 	const tlsModes = new Set(["implicit-tls", "starttls", "none"]);
+	// The rows are inserted after `mailboxes` was replaced by this document, so a mailbox the document does not
+	// carry would fail the foreign key after the teardown.
+	const mailboxIds = new Set((document.tables.mailboxes ?? []).map((mailbox) => mailbox?.id).filter((id): id is string => typeof id === "string"));
+	const identities = new Set<string>();
 	rows.forEach((row, index) => {
-		const invalid = (column: string) => {
+		// Annotated on the variable so the calls below narrow control flow: every check ends the restore.
+		const invalid: (column: string) => never = (column) => {
 			throw new BackupRestoreError(`Backup contains an invalid external account record (row ${index + 1}, ${column})`);
 		};
 		if (!isIdentityText(row.id)) invalid("id");
 		if (!isIdentityText(row.mailbox_id)) invalid("mailbox_id");
+		if (!mailboxIds.has(row.mailbox_id)) invalid("mailbox_id");
 		if (!isIdentityText(row.user_id)) invalid("user_id");
 		if (row.protocol !== "imap" && row.protocol !== "pop3") invalid("protocol");
 		if (!isIdentityText(row.host)) invalid("host");
 		if (!isIdentityText(row.username)) invalid("username");
 		if (!isIntegerInRange(row.port, 1, 65535)) invalid("port");
-		if (row.tls_mode !== undefined && row.tls_mode !== null && !tlsModes.has(String(row.tls_mode))) invalid("tls_mode");
+		// `tls_mode` and `enabled` are NOT NULL with a database default: only omission may fall back to it. An
+		// explicit null would be bound as NULL and fail the INSERT, so it is refused here — and `tls_mode` must be
+		// one of the three strings, never a coerced number or boolean.
+		if (row.tls_mode !== undefined && (typeof row.tls_mode !== "string" || !tlsModes.has(row.tls_mode))) invalid("tls_mode");
+		if (row.enabled !== undefined && !isFlag(row.enabled)) invalid("enabled");
 		// Only the envelope shape: base64 nonce + ciphertext + tag, no plaintext and no truncated value.
 		if (!isSealedSecretFormat(row.password_encrypted)) invalid("password_encrypted");
-		if (row.enabled !== undefined && row.enabled !== null && !isFlag(row.enabled)) invalid("enabled");
 		if (!isOptionalInteger(row.last_synced_at)) invalid("last_synced_at");
 		if (row.last_error !== null && row.last_error !== undefined && (typeof row.last_error !== "string" || row.last_error.length > 4096)) invalid("last_error");
-		if (!isSyncCursorFormat(row.sync_cursor) || (typeof row.sync_cursor === "string" && row.sync_cursor.length > SYNC_CURSOR_MAX_BYTES)) invalid("sync_cursor");
+		if (!isSyncCursorFormat(row.sync_cursor, row.protocol)) invalid("sync_cursor");
 		// NOT NULL with no database default: an omitted value would fail the insert after the teardown.
 		if (!isIntegerInRange(row.created_at, 0, Number.MAX_SAFE_INTEGER)) invalid("created_at");
 		if (!isIntegerInRange(row.updated_at, 0, Number.MAX_SAFE_INTEGER)) invalid("updated_at");
+		// The unique tuple, checked before the teardown rather than by the index afterwards.
+		const identity = JSON.stringify([row.mailbox_id, row.host, row.username]);
+		if (identities.has(identity)) invalid("host");
+		identities.add(identity);
 	});
 }
 

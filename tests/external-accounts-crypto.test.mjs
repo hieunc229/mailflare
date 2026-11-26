@@ -145,6 +145,24 @@ test("a placeholder key is refused even when it is long enough", async () => {
 	}
 });
 
+test("the envelope size bounds are checked on the encoded text, before any decode", async () => {
+	const stored = await encryptSecret(env(key("one")), PASSWORD);
+	// A real envelope sits between the bounds; anything far past them is refused without being decoded.
+	assert.equal(isSealedSecretFormat(stored), true);
+	const oversized = "A".repeat(40 * 1024);
+	assert.equal(oversized.length % 4, 0);
+	assert.equal(isSealedSecretFormat(oversized), false);
+	// 1024 characters are the most a route accepts, and 4 UTF-8 bytes each is the most they can take.
+	const longest = await encryptSecret(env(key("one")), "\u{1F512}".repeat(1024));
+	assert.equal(isSealedSecretFormat(longest), true);
+	assert.ok(longest.length < 40 * 1024 + 1);
+	// The reader refuses an oversized payload rather than allocating a decode buffer for it.
+	await assert.rejects(decryptSecret(env(key("one")), oversized), (error) => error.code === "secret_decrypt_failed");
+	await assert.rejects(decryptSecret(env(key("one")), stored.slice(0, 24)), (error) => error.code === "secret_decrypt_failed");
+	// Encrypting past the stored bound would produce an envelope this reader refuses, so it is refused here.
+	await assert.rejects(encryptSecret(env(key("one")), "x".repeat(4097)), (error) => (assert.equal(error.code, "secret_too_long"), true));
+});
+
 test("no dialect migration is needed for the sync state F37 and F38 will write", () => {
 	const files = {
 		sqlite: join(root, "drizzle/migrations/0111_external_accounts.sql"),

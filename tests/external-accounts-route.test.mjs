@@ -334,6 +334,46 @@ test("a credential-bearing database error is reduced to a code, never rethrown w
 	assert.equal(f.rows().length, 0);
 });
 
+test("the write guard reports only allowlisted driver codes and classifies duplicates by code", async (t) => {
+	const sealed = "c2VhbGVkLWVudmVsb3BlLXBsYWNlaG9sZGVyLXZhbHVl";
+	const reject = async (error) => {
+		try {
+			await accountsUtils.writeCredential(async () => { throw error; });
+		} catch (thrown) {
+			assert.equal(thrown.name, "ExternalAccountWriteError");
+			assert.ok(!thrown.message.includes(sealed));
+			return thrown;
+		}
+		assert.fail("writeCredential should have thrown");
+	};
+	// A code the allowlist names survives; anything else is dropped rather than echoed.
+	const allowed = await reject(Object.assign(new Error(`Failed query: insert params: ${sealed}`), { params: [sealed], cause: Object.assign(new Error("duplicate"), { code: "23502" }) }));
+	assert.equal(allowed.kind, "rejected");
+	assert.equal(allowed.driverCode, "23502");
+	const mysql = await reject(Object.assign(new Error("insert failed"), { code: "ER_DATA_TOO_LONG" }));
+	assert.equal(mysql.driverCode, "ER_DATA_TOO_LONG");
+	const numeric = await reject(Object.assign(new Error("insert failed"), { errno: 1406 }));
+	assert.equal(numeric.driverCode, "1406");
+	const unknown = await reject(Object.assign(new Error(`Failed query: insert params: ${sealed}`), { code: "SOMETHING_ELSE", params: [sealed] }));
+	assert.equal(unknown.driverCode, null);
+	// A duplicate is recognised from SQLSTATE/errno alone, without matching any message wording.
+	assert.equal((await reject(Object.assign(new Error("insert failed"), { code: "23505" }))).kind, "duplicate");
+	assert.equal((await reject(Object.assign(new Error("insert failed"), { code: "ER_DUP_ENTRY" }))).kind, "duplicate");
+	assert.equal((await reject(Object.assign(new Error("insert failed"), { errno: 1062 }))).kind, "duplicate");
+
+	// End to end, a real driver rejection still reaches the client as a bare code.
+	const f = await fixture(t);
+	f.sql.exec(`CREATE TRIGGER f36_reject BEFORE INSERT ON external_accounts WHEN NEW.username = 'rejected-by-db'
+		BEGIN SELECT RAISE(ABORT, 'injected write failure'); END`);
+	const response = await f.create("owner", "m-personal", valid({ username: "rejected-by-db" }));
+	assert.equal(response.status, 500);
+	const body = await response.json();
+	assert.equal(body.code, "WRITE_FAILED");
+	// SQLite reports no driver code, so none is invented.
+	assert.equal(body.driverCode, undefined);
+	assert.equal(f.rows().length, 0);
+});
+
 test("external_accounts is backed up, in the accounts group", () => {
 	const exportSource = readFileSync(join(root, "src/lib/backups/export.ts"), "utf8");
 	const groupSource = readFileSync(join(root, "src/lib/backups/table-groups.ts"), "utf8");
