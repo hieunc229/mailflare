@@ -4,6 +4,7 @@ import type { getDb } from "@/db";
 import { domains, mailboxes, users } from "@/db/schema";
 import { assertAdmin } from "@/lib/auth/admin";
 import { requireUser } from "@/lib/auth/cookies";
+import { MigrationRequiredError } from "@/lib/auth/unauthorized";
 import { getLicenseEntitlements } from "@/lib/licenses/service";
 import { getEnv } from "@/lib/cloudflare";
 
@@ -137,7 +138,9 @@ export async function requireTeamAdmin(request: Request) {
 			};
 		}
 		return { env, user, error: null };
-	} catch {
+	} catch (error) {
+		// A pending migration is not a permission problem: let the 409 fallback answer it.
+		if (error instanceof MigrationRequiredError) throw error;
 		return { env, user: null, error: NextResponse.json({ error: "Forbidden" }, { status: 403 }) };
 	}
 }
