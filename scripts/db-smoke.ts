@@ -474,10 +474,11 @@ const fbDay = new Date(Math.ceil(Date.now() / 86_400_000) * 86_400_000 + 86_400_
 await db.insert(users).values({ id: fbUser, email: `fb${stamp}@example.com`, passwordHash: "x", name: "Fb" });
 await db.insert(calendarEvents).values([
 	{ id: `evt_fb1_${stamp}`, userId: fbUser, title: "Weekly", startsAt: new Date(fbDay.getTime() + 9 * 3_600_000), endsAt: new Date(fbDay.getTime() + 10 * 3_600_000), repeat: "weekly", isPrivate: true },
+	{ id: `evt_fb3_${stamp}`, userId: fbUser, title: "Daily", startsAt: new Date(fbDay.getTime() + 20 * 3_600_000), endsAt: new Date(fbDay.getTime() + 21 * 3_600_000), repeat: "daily", repeatUntil: new Date(fbDay.getTime() + 5 * 86_400_000) },
 	{ id: `evt_fb2_${stamp}`, userId: fbUser, title: "Free", startsAt: new Date(fbDay.getTime() + 12 * 3_600_000), endsAt: new Date(fbDay.getTime() + 13 * 3_600_000), transparent: true },
 ] as never);
 const fbBusy = await busyIntervals(env, { userIds: [fbUser, userId] }, fbDay, new Date(fbDay.getTime() + 15 * 86_400_000));
-check("free/busy expands a private weekly series and skips a free event", fbBusy.get(fbUser)?.length === 3 && fbBusy.get(fbUser)![0][0] === fbDay.getTime() + 9 * 3_600_000 && fbBusy.get(userId)?.length !== undefined);
+check("free/busy expands a private weekly series and a daily one that ends, and skips a free event", fbBusy.get(fbUser)?.length === 8 && fbBusy.get(fbUser)![0][0] === fbDay.getTime() + 9 * 3_600_000 && fbBusy.get(userId)?.length !== undefined);
 const fbResolved = await resolveFreeBusyAddresses(env, [`FB${stamp}@example.com`, "nobody@example.com"]);
 check("free/busy resolves an address regardless of case and drops unknown ones", fbResolved.get(`fb${stamp}@example.com`) === fbUser && fbResolved.size === 1);
 check("free/busy: a stranger sees nobody, and org free/busy is off without the switch", (await viewableFreeBusyUsers(env, userId, [fbUser])).size === 0 && (await isOrgFreeBusyEnabled(env)) === false);
