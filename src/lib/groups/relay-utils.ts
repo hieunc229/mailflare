@@ -79,7 +79,8 @@ export const GROUP_RELAY_BATCH_MAX = 100;
  * Free plan allows 50 subrequests per invocation, so a batch runs only as many relays as fit.
  */
 export const RELAY_COST = 12;
-export const RELAY_SUBREQUEST_BUDGET = 45;
+// Below the 50 of an invocation: other outbound messages (scheduled sends, webhook retries) share the batch and are not budgeted.
+export const RELAY_SUBREQUEST_BUDGET = 30;
 /** Seconds a deferred relay waits before the queue offers it again. */
 export const RELAY_DEFER_SECONDS = 5;
 
@@ -93,4 +94,32 @@ export function reserveRelay(budget: RelayBudget): boolean {
 	budget.started = true;
 	budget.remaining -= RELAY_COST;
 	return true;
+}
+
+/**
+ * Messages one group may relay to its external members per hour. Every relay is a billed send under our
+ * domain's name, and the receiving side only authenticates the sender, it does not judge the content: this
+ * is the circuit breaker for a spam run into an `anyone` group and for any loop the other guards miss.
+ */
+export const GROUP_RELAY_MESSAGES_PER_HOUR = 120;
+/** Relays per second a chunk releases, so up to 100 of them do not meet a provider's rate limit together. */
+export const GROUP_RELAY_PER_SECOND = 2;
+
+export const relayDelaySeconds = (index: number): number => Math.floor(index / GROUP_RELAY_PER_SECOND);
+
+/** The receiving provider's own spam or virus verdict (SES); `fail` keeps the message from external members. */
+export function relayBlockedByVerdicts(verdicts: { spam?: string; virus?: string } | undefined): boolean {
+	return verdicts?.spam?.toLowerCase() === "fail" || verdicts?.virus?.toLowerCase() === "fail";
+}
+
+async function sha256Hex(value: string): Promise<string> {
+	return Array.from(new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(value))), (byte) => byte.toString(16).padStart(2, "0")).join("");
+}
+
+/** Marks a message as counted against the group's hourly relay allowance; the same message counts once. */
+export const relayRatePrefix = (groupId: string, hour: number): string => `${GROUP_RELAY_PREFIX}rate/${groupId}/${hour}/`;
+
+/** Written once a chunk's relays are queued, so a redelivered chunk does not queue (and bill) them again. */
+export async function relayChunkKey(groupId: string, digest: string, cursor: string | undefined): Promise<string> {
+	return `${GROUP_RELAY_PREFIX}chunk/${await sha256Hex(`${groupId}\0${digest}\0${cursor ?? ""}`)}`;
 }

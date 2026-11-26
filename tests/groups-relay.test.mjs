@@ -40,6 +40,7 @@ async function fixture(t, provider) {
 		get: async (key) => (objects.has(key) ? { arrayBuffer: async () => objects.get(key) } : null),
 		put: async (key, body) => { objects.set(key, body); },
 		delete: async (key) => { for (const k of [key].flat()) objects.delete(k); },
+		list: async ({ prefix, limit = 1000 }) => ({ objects: [...objects.keys()].filter((key) => key.startsWith(prefix)).slice(0, limit).map((key) => ({ key, uploaded: new Date() })), truncated: false }),
 	};
 	const env = {
 		...database.env,
@@ -48,7 +49,7 @@ async function fixture(t, provider) {
 		CF_TOKEN: "server-secret",
 		BUCKET: bucket,
 		INBOUND_QUEUE: { send: async (b) => { inbound.push(b); }, sendBatch: async (batch) => { for (const m of batch) inbound.push(m.body); } },
-		OUTBOUND_QUEUE: { send: async (b, o) => { outbound.push({ body: b, options: o }); }, sendBatch: async (batch) => { env.outboundBatches.push(batch.length); for (const m of batch) outbound.push({ body: m.body }); } },
+		OUTBOUND_QUEUE: { send: async (b, o) => { outbound.push({ body: b, options: o }); }, sendBatch: async (batch) => { env.outboundBatches.push(batch.length); for (const m of batch) outbound.push({ body: m.body, options: { delaySeconds: m.delaySeconds } }); } },
 		outboundBatches: [],
 	};
 	globalThis.relayLog = { configs: [], sent: [] };
@@ -75,11 +76,11 @@ test("expansion queues one relay message per external member, sharing one relay 
 	assert.equal(new TextDecoder().decode(objects.get(key)), MIME());
 	assert.ok(outbound.every((m) => m.body.kind === "group.relay" && m.body.groupId === "g1"));
 	assert.equal(objects.has("inbound/orig.eml"), false);
-	// A redelivered expansion queues the same messages for the same key, so retries stay idempotent.
-	const first = outbound.map((m) => JSON.stringify(m.body)).sort();
-	outbound.length = 0;
+	// A redelivered chunk (its queue message failed after the relays were queued) must not queue them twice:
+	// SES and Cloudflare sending have no idempotency key, so a second queueing would be a second billed send.
+	const queued = outbound.length;
 	await app.expandGroupDelivery(env, payload());
-	assert.deepEqual(outbound.map((m) => JSON.stringify(m.body)).sort(), first);
+	assert.equal(outbound.length, queued);
 });
 
 test("only a trusted DMARC pass is relayed; others reach internal members only", async (t) => {
@@ -88,6 +89,42 @@ test("only a trusted DMARC pass is relayed; others reach internal members only",
 	await app.expandGroupDelivery(env, payload({ verdicts: { dmarc: "FAIL" } }));
 	assert.equal(outbound.length, 0);
 	assert.equal(inbound.length, 2);
+});
+
+test("a message the receiver flags as spam or a virus is not relayed", async (t) => {
+	const { env, outbound, inbound, payload } = await fixture(t);
+	await app.expandGroupDelivery(env, payload({ verdicts: { dmarc: "PASS", spam: "FAIL" } }));
+	await app.expandGroupDelivery(env, payload({ verdicts: { dmarc: "PASS", virus: "FAIL" } }));
+	assert.equal(outbound.length, 0);
+	assert.equal(inbound.length, 2);
+	await app.expandGroupDelivery(env, payload({ verdicts: { dmarc: "PASS", spam: "PASS" } }));
+	assert.equal(outbound.length, 2);
+});
+
+test("a group relays at most 120 messages an hour, and a message already counted is not counted twice", async (t) => {
+	const { env, outbound, inbound, payload, objects } = await fixture(t);
+	const hour = Math.floor(Date.now() / 3_600_000);
+	for (let i = 0; i < app.relayUtils.GROUP_RELAY_MESSAGES_PER_HOUR; i += 1) objects.set(`group-relay/rate/g1/${hour}/m${i}`, new ArrayBuffer(0));
+	await app.expandGroupDelivery(env, payload());
+	assert.equal(outbound.length, 0, "over the cap: external members skipped");
+	assert.equal(inbound.length, 1, "internal members are unaffected");
+	for (const key of [...objects.keys()]) if (key.startsWith("group-relay/rate/")) objects.delete(key);
+	for (let i = 0; i < app.relayUtils.GROUP_RELAY_MESSAGES_PER_HOUR - 1; i += 1) objects.set(`group-relay/rate/g1/${hour}/m${i}`, new ArrayBuffer(0));
+	await app.expandGroupDelivery(env, payload());
+	assert.equal(outbound.length, 2, "the last free slot is used");
+});
+
+test("relays are spread out so a provider's rate limit is not hit by 100 at once", async (t) => {
+	const { env, outbound, payload, sqlite } = await fixture(t);
+	let sql = "";
+	for (let i = 0; i < 5; i += 1) sql += `INSERT INTO mail_group_members (id, group_id, kind, email, can_send_as, created_at) VALUES ('gy${i}', 'g1', 'external', 'y${i}@ext.com', 0, 1);`;
+	sqlite.exec(sql);
+	await app.expandGroupDelivery(env, payload());
+	const delays = outbound.map((m) => m.options.delaySeconds).sort((a, b) => a - b);
+	assert.equal(delays.length, 7);
+	assert.equal(delays[0], 0);
+	assert.ok(delays.at(-1) >= 3, `last relay waits ${delays.at(-1)}s`);
+	assert.ok(delays.every((d) => d <= 20));
 });
 
 test("a domain that cannot send relays nothing, and a poster does not get their own post back", async (t) => {
