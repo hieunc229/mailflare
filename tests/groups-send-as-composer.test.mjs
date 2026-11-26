@@ -56,3 +56,14 @@ test("a member without the flag sees no group, and neither does anyone without t
 	assert.ok(!(await list(t, "bob"))["m-bob"].some((a) => /team/.test(a)));
 	assert.ok(!(await list(t, "alice", "free"))["m-alice"].some((a) => /team|sales/.test(a)));
 });
+
+test("the mailbox list names which sender addresses are groups, so replies can default to the personal one", async (t) => {
+	const database = await newDatabase(t, seed());
+	globalThis.cmp = { env: database.env, user: userOf("alice") };
+	t.after(() => { delete globalThis.cmp; });
+	const body = await (await app.mailboxes.GET(new Request("https://x.test/api/mailboxes"))).json();
+	const byId = Object.fromEntries(body.mailboxes.map((mailbox) => [mailbox.id, mailbox]));
+	assert.deepEqual(byId["m-alice"].groupSenderAddresses, ["sales@other.com", "team@example.com"]);
+	assert.deepEqual(byId["m-alice2"].groupSenderAddresses, []);
+	assert.deepEqual(byId["m-shared"].groupSenderAddresses, []);
+});

@@ -36,6 +36,15 @@ export function getMessageHeaderParties(message: Message, currentAccountName?: s
 }
 
 /**
+ * The sender addresses that are the member's own. A group they may send as stays selectable in the From list
+ * but is never the default of a reply, and reply-all must not treat it as "me" and drop it from the recipients.
+ */
+export function getPersonalAddresses(senderAddresses: string[], groupAddresses: string[] | undefined): string[] {
+	const groups = new Set((groupAddresses ?? []).map((address) => normalizeEmailAddress(address)));
+	return senderAddresses.filter((address) => !groups.has(normalizeEmailAddress(address)));
+}
+
+/**
  * The mailbox address this message reached, used as the reply sender and to
  * tell "sent" from "received" in quoted history. With several recipients the
  * mailbox's own address is whichever of them it can send as.

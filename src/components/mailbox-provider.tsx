@@ -41,6 +41,8 @@ export type MailboxOption = {
 	permission?: "read_only" | "send_as" | "send_on_behalf" | "full_access";
 	isPrimary?: boolean;
 	senderAddresses?: string[];
+	/** The part of `senderAddresses` that is groups the account may send as. */
+	groupSenderAddresses?: string[];
 };
 
 type MailboxContextValue = {
