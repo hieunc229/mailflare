@@ -211,6 +211,13 @@
       "when": 1795027634043,
       "tag": "0029_contacts_dav_card",
       "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "6",
+      "when": 1795027635043,
+      "tag": "0030_calendar_columns",
+      "breakpoints": true
     }
   ]
 }

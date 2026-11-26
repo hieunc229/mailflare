@@ -680,6 +680,13 @@
       "when": 1795027690014,
       "tag": "0105_contacts_dav_card",
       "breakpoints": true
+    },
+    {
+      "idx": 88,
+      "version": "6",
+      "when": 1795027691014,
+      "tag": "0106_calendar_columns",
+      "breakpoints": true
     }
   ]
 }

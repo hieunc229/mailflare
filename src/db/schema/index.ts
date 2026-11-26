@@ -945,11 +945,21 @@ export const calendarEvents = sqliteTable(
 		davObjectId: text("dav_object_id"),
 		/** The CalDAV client sent a date without a time. Times are still stored midnight to midnight in the event zone. */
 		allDay: bool("all_day").notNull().default(false),
+		/**
+		 * The `dav_collections.id` of the calendar this event is in; null is the owner's default calendar (`cal:<userId>`).
+		 * No foreign key: the default calendar's row is created lazily. Read it through the default-calendar helper, never inline.
+		 */
+		calendarId: text("calendar_id"),
+		/** CLASS:PRIVATE or CONFIDENTIAL. Viewers other than the owner and editors see only a "Busy" block. */
+		isPrivate: bool("is_private").notNull().default(false),
+		/** TRANSP:TRANSPARENT: shown as free, so it never makes its owner busy. */
+		transparent: bool("transparent").notNull().default(false),
 		createdAt: timestamp("created_at").notNull().$defaultFn(() => new Date()),
 		updatedAt: timestamp("updated_at").notNull().$defaultFn(() => new Date()),
 	},
 	(t) => [
 		index("calendar_events_user_starts_idx").on(t.userId, t.startsAt),
+		index("calendar_events_calendar_starts_idx").on(t.calendarId, t.startsAt),
 		index("calendar_events_mailbox_idx").on(t.mailboxId),
 		index("calendar_events_dav_object_idx").on(t.davObjectId),
 	],
@@ -1059,6 +1069,63 @@ export const davCollections = sqliteTable(
 		updatedAt: timestamp("updated_at").notNull().$defaultFn(() => new Date()),
 	},
 	(t) => [index("dav_collections_user_idx").on(t.userId)],
+);
+
+/**
+ * A calendar shared with one user. The grantee is a nullable user column so the groups feature can add a nullable
+ * `grantee_group_id` with ALTER TABLE ADD COLUMN later, without rebuilding this table. Exactly one grantee is set (checked in code).
+ * A role change deletes the grant and inserts a new row with a new id.
+ */
+export const calendarShares = sqliteTable(
+	"calendar_shares",
+	{
+		id: text("id").primaryKey(),
+		calendarId: text("calendar_id").notNull().references(() => davCollections.id, { onDelete: "cascade" }),
+		granteeUserId: text("grantee_user_id").references(() => users.id, { onDelete: "cascade" }),
+		role: text("role", { enum: ["freebusy", "read", "edit", "manage"] }).notNull(),
+		createdByUserId: text("created_by_user_id").references(() => users.id, { onDelete: "set null" }),
+		createdAt: timestamp("created_at").notNull().$defaultFn(() => new Date()),
+	},
+	(t) => [
+		uniqueIndex("calendar_shares_calendar_grantee_idx").on(t.calendarId, t.granteeUserId),
+		index("calendar_shares_grantee_idx").on(t.granteeUserId),
+	],
+);
+
+/** A bookable room or piece of equipment. Not a user: it has no seat, mailbox or events of its own. */
+export const calendarResources = sqliteTable(
+	"calendar_resources",
+	{
+		id: text("id").primaryKey(),
+		name: text("name").notNull(),
+		kind: text("kind", { enum: ["room", "equipment"] }).notNull().default("room"),
+		capacity: integer("capacity"),
+		location: text("location").notNull().default(""),
+		description: text("description").notNull().default(""),
+		/** Hidden from pickers; existing bookings are kept. */
+		disabled: bool("disabled").notNull().default(false),
+		createdByUserId: text("created_by_user_id").references(() => users.id, { onDelete: "set null" }),
+		createdAt: timestamp("created_at").notNull().$defaultFn(() => new Date()),
+		updatedAt: timestamp("updated_at").notNull().$defaultFn(() => new Date()),
+	},
+	(t) => [uniqueIndex("calendar_resources_name_idx").on(t.name)],
+);
+
+/** A resource reserved by an organiser's event. The room's schedule is these events; no copy row is made in `calendar_events`. */
+export const calendarResourceBookings = sqliteTable(
+	"calendar_resource_bookings",
+	{
+		id: text("id").primaryKey(),
+		resourceId: text("resource_id").notNull().references(() => calendarResources.id, { onDelete: "cascade" }),
+		eventId: text("event_id").notNull().references(() => calendarEvents.id, { onDelete: "cascade" }),
+		status: text("status", { enum: ["accepted", "declined"] }).notNull(),
+		createdAt: timestamp("created_at").notNull().$defaultFn(() => new Date()),
+	},
+	(t) => [
+		uniqueIndex("calendar_resource_bookings_resource_event_idx").on(t.resourceId, t.eventId),
+		index("calendar_resource_bookings_resource_status_idx").on(t.resourceId, t.status),
+		index("calendar_resource_bookings_event_idx").on(t.eventId),
+	],
 );
 
 /** The stored iCalendar text of a calendar event (the DAV resource), keyed by the master event row. */
@@ -1824,6 +1891,9 @@ export const schema = {
 	calendarEventOverrides,
 	calendarInviteTombstones,
 	calendarOccurrenceResponses,
+	calendarShares,
+	calendarResources,
+	calendarResourceBookings,
 	bookingEvents,
 	routingRules,
 	webhooks,
