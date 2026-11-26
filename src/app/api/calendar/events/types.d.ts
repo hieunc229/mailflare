@@ -10,6 +10,10 @@ export type CalendarEventInput = {
 	repeatDays?: number[];
 	repeatAnchorDay?: number;
 	reminderMinutes?: number | null;
+	/** CLASS:PRIVATE. Omitted keeps the stored value. */
+	isPrivate?: boolean;
+	/** Show as free (TRANSP:TRANSPARENT) instead of busy. Omitted keeps the stored value. */
+	transparent?: boolean;
 	timeZone?: string;
 	effectiveFrom?: string;
 	moveOccurrenceToPast?: boolean;

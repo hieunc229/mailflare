@@ -11,11 +11,14 @@ type CalendarInvitationInput = {
 	method?: "REQUEST" | "CANCEL" | "PUBLISH";
 	organizer?: string;
 	attendees?: string[];
+	isPrivate?: boolean;
+	transparent?: boolean;
 };
 
 export function createCalendarInvitation(input: CalendarInvitationInput): ArrayBuffer {
 	const organizer = input.method !== "PUBLISH" && input.organizer && ICS_ADDRESS.test(input.organizer) ? input.organizer : null;
 	const lines = ["BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//Mailflare//Calendar//EN", "CALSCALE:GREGORIAN", `METHOD:${input.method ?? "REQUEST"}`, "BEGIN:VEVENT", `UID:${input.uid}@mailflare`, `DTSTAMP:${formatIcsUtc(new Date())}`, `DTSTART:${formatIcsUtc(input.startsAt)}`, `DTEND:${formatIcsUtc(input.endsAt)}`, `SUMMARY:${escapeIcsText(input.title)}`, `DESCRIPTION:${escapeIcsText(input.description)}`, `LOCATION:${escapeIcsText(input.location)}`,
+		...(input.isPrivate ? ["CLASS:PRIVATE"] : []), ...(input.transparent ? ["TRANSP:TRANSPARENT"] : []),
 		...(organizer ? [`ORGANIZER:mailto:${organizer}`] : []),
 		...(organizer ? (input.attendees ?? []).filter((address) => ICS_ADDRESS.test(address)).map((address) => `ATTENDEE;ROLE=REQ-PARTICIPANT;PARTSTAT=NEEDS-ACTION;RSVP=TRUE:mailto:${address}`) : []),
 		"END:VEVENT", "END:VCALENDAR"];
