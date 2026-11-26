@@ -35,18 +35,22 @@ const RECENT_MS = 120_000;
 
 /** Every marker under the day's rate prefix. `truncated` means there were more than we are willing to read. */
 async function readRateEntries(env: CloudflareEnv, day: number): Promise<{ entries: RateEntry[]; truncated: boolean }> {
-	const entries: RateEntry[] = [];
+	// One entry per message and group: the approved marker, if the reserved one has not been removed yet, stands for both.
+	const found = new Map<string, RateEntry>();
+	const result = (truncated: boolean) => ({ entries: [...found.values()], truncated });
 	let cursor: string | undefined;
 	for (let page = 0; page < MAX_RATE_PAGES; page += 1) {
 		const listing = await env.BUCKET.list({ prefix: relayRateDayPrefix(day), cursor, limit: 1000 });
 		for (const object of listing.objects) {
 			const entry = parseRateKey(object.key);
-			if (entry) entries.push({ ...entry, uploaded: object.uploaded });
+			if (!entry) continue;
+			const id = `${entry.groupId}/${entry.digest}`;
+			if (found.get(id)?.state !== "approved") found.set(id, { ...entry, uploaded: object.uploaded });
 		}
-		if (!listing.truncated || !("cursor" in listing) || !listing.cursor) return { entries, truncated: false };
+		if (!listing.truncated || !("cursor" in listing) || !listing.cursor) return result(false);
 		cursor = listing.cursor;
 	}
-	return { entries, truncated: true };
+	return result(true);
 }
 
 /**
@@ -136,36 +140,39 @@ export async function queueRelays(
 	const hour = Math.floor(now.getTime() / 3_600_000);
 	const day = dayOf(now);
 	const chunkKey = await relayChunkKey(group.id, digest, context.cursor, now);
-	if (await env.BUCKET.get(chunkKey)) {
+	// A marker written just before UTC midnight is under yesterday's day: look there too.
+	const yesterday = new Date(now.getTime() - 86_400_000);
+	const marked = async (keys: string[]) => (await Promise.all(keys.map((key) => env.BUCKET.get(key)))).some((object) => object !== null);
+	if (await marked([chunkKey, await relayChunkKey(group.id, digest, context.cursor, yesterday)])) {
 		console.warn(`Group ${group.id}: a chunk of ${payload.rawR2Key} was queued before (or lost, if that attempt failed after marking it); not queueing it again`);
 		return 0;
 	}
-	if (await env.BUCKET.get(relaySkipKey(group.id, digest, now))) return skip("mail our spam filters put aside goes to internal members only");
+	if (await marked([relaySkipKey(group.id, digest, now), relaySkipKey(group.id, digest, yesterday)])) return skip("mail our spam filters put aside goes to internal members only");
 
 	const caps = relayCaps(env);
 	const { entries, truncated } = await readRateEntries(env, day);
-	const counted = entries.find((entry) => entry.groupId === group.id && entry.digest === digest);
+	const own = (entry: RateEntry) => entry.groupId === group.id && entry.digest === digest;
 	// All external members in id order: how many sends this message is, and each member's place in the spread-out release.
 	const all = await db.select({ id: mailGroupMembers.id }).from(mailGroupMembers).where(and(eq(mailGroupMembers.groupId, group.id), eq(mailGroupMembers.kind, "external"))).orderBy(asc(mailGroupMembers.id));
 	let ahead = 0;
 
-	if (!counted) {
-		const check = (list: RateEntry[], over: boolean): RelayAllowance => (over ? { ok: false, scope: "installation", period: "day", limit: 0 } : planRelayAllowance(list, { groupId: group.id, hour, day, sends: all.length }, caps));
+	// Only an approved marker says the message was judged; a reservation may be what an attempt left when it died.
+	if (entries.find(own)?.state !== "approved") {
+		const check = (list: RateEntry[], over: boolean): RelayAllowance => (over ? { ok: false, scope: "installation", period: "day", limit: 0 } : planRelayAllowance(list.filter((entry) => !own(entry)), { groupId: group.id, hour, day, sends: all.length }, caps));
 		const early = check(entries, truncated);
 		if (!early.ok) {
 			await notifyCapped(env, group, address, early, { hour, day });
 			return skip(`the ${early.scope} limit of ${early.limit} relayed sends per ${early.period} is reached; external members are skipped`);
 		}
-		ahead = entries.filter((entry) => entry.groupId === group.id && entry.uploaded && now.getTime() - entry.uploaded.getTime() < RECENT_MS).reduce((sum, entry) => sum + entry.sends, 0);
+		ahead = entries.filter((entry) => !own(entry) && entry.groupId === group.id && entry.uploaded && now.getTime() - entry.uploaded.getTime() < RECENT_MS).reduce((sum, entry) => sum + entry.sends, 0);
 		// Reserve, then look again: the check above cannot see a message that reserved at the same moment.
-		const reservation = relayRateKey({ groupId: group.id, digest, sends: all.length, now });
+		const reservation = relayRateKey({ groupId: group.id, digest, sends: all.length, state: "reserved", now });
 		await env.BUCKET.put(reservation, new ArrayBuffer(0));
 		const again = await readRateEntries(env, day);
-		const others = again.entries.filter((entry) => !(entry.groupId === group.id && entry.digest === digest));
-		const final = check(others, again.truncated);
+		const final = check(again.entries, again.truncated);
 		if (!final.ok) {
+			// Backing out: another message reserved at the same moment. That is contention, not a cap being reached, so no notice.
 			await env.BUCKET.delete(reservation);
-			await notifyCapped(env, group, address, final, { hour, day });
 			return skip(`the ${final.scope} limit of ${final.limit} relayed sends per ${final.period} is reached; external members are skipped`);
 		}
 		const verdict = await judgeSpam(env, db, group, payload, content);
@@ -176,6 +183,8 @@ export async function queueRelays(
 			await createAuditLog(env, { actorUserId: null, action: "group.relay_blocked", metadata: { groupId: group.id, address, reason: verdict.reason } });
 			return skip(`our spam filters blocked the relay (${verdict.reason}); external members are skipped`);
 		}
+		await env.BUCKET.put(relayRateKey({ groupId: group.id, digest, sends: all.length, state: "approved", now }), new ArrayBuffer(0));
+		await env.BUCKET.delete(reservation);
 	}
 
 	// One shared copy per message, keyed by group and content so a later chunk writes the same object.

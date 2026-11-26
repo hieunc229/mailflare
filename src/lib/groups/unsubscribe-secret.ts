@@ -19,10 +19,13 @@ async function load(env: CloudflareEnv): Promise<string> {
 	if (existing) return existing;
 	const fresh = Array.from(crypto.getRandomValues(new Uint8Array(32)), (byte) => byte.toString(16).padStart(2, "0")).join("");
 	// `onlyIf` makes the write refuse to replace an existing key where the bucket supports it (R2); elsewhere the last writer wins.
-	await env.BUCKET.put(KEY, new TextEncoder().encode(fresh), { httpMetadata: { contentType: "text/plain" }, onlyIf: { etagDoesNotMatch: "*" } } as R2PutOptions).catch(() => null);
+	// A failed write throws: a key that was never stored would sign links nobody can verify later.
+	await env.BUCKET.put(KEY, new TextEncoder().encode(fresh), { httpMetadata: { contentType: "text/plain" }, onlyIf: { etagDoesNotMatch: "*" } } as R2PutOptions);
 	// Whatever is stored once the writers have settled is the key; nothing is signed with a value that might be overwritten.
 	await new Promise((resolve) => setTimeout(resolve, SETTLE_MS));
-	return (await read(env)) ?? fresh;
+	const stored = await read(env);
+	if (!stored) throw new Error("The unsubscribe key could not be stored");
+	return stored;
 }
 
 /**
