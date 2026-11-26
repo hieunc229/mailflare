@@ -98,6 +98,8 @@ export async function putCalendarResource(ctx: DavContext, name: string, request
 	const other = await findUidConflict(env, calendar, parsed.uid, atName?.id ?? null);
 	const hidden = !!other && !!other.master.responseStatus && (OFF_CALENDAR_RESPONSES as readonly string[]).includes(other.master.responseStatus);
 	if (other && !hidden) return conflict(pathOf("calendars", ctx) + other.name);
+	// A hidden invitation (unanswered, declined, cancelled) is the owner's to take over; to anyone else it is refused without naming it.
+	if (other && hidden && delegate) return precondition(403, "no-uid-conflict", "C");
 	// A resource keeps its UID (RFC 4791 5.3.2.1): the one at this name is refused a different one, with its own href.
 	if (atName && atName.uid !== parsed.uid) return conflict(pathOf("calendars", ctx) + atName.name);
 	// The UID is held by a hidden (cancelled, declined) resource, which a client cannot see or name: the new name takes it over.
