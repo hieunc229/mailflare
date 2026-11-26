@@ -13,6 +13,8 @@ import { syncPositions } from "@/lib/dav/changes";
 import { moveSeriesStatements } from "@/lib/calendar/series-rows";
 import { calendarExistsGuard } from "@/lib/calendar/calendars";
 import { listVisibleEvents } from "@/lib/calendar/event-list";
+import { busyIntervals } from "@/lib/calendar/free-busy";
+import { isOrgFreeBusyEnabled, resolveFreeBusyAddresses, viewableFreeBusyUsers } from "@/lib/calendar/free-busy-access";
 import { calendarScopes, changeShare, getCalendarRole, grantShare, listVisibleCalendars, revokeShare } from "@/lib/calendar/shares";
 import { applyPendingMigrations, getMigrationStatus } from "@/lib/migrations/service";
 import { buildSearchConditions } from "@/lib/search/conditions";
@@ -294,6 +296,30 @@ check("calendar sync epochs are renewed to version 8 once, card epochs are untou
 await db.delete(davSyncState).where(inArray(davSyncState.collectionId, [staleCal, `cal:cal_fresh_${stamp}`, `card:${userId}`]));
 await db.delete(calendarEvents).where(eq(calendarEvents.id, davEventId));
 check("dav trigger logs a deleted event", (await davLog(`cal:${userId}`, davEventId)).endsWith("destroyed"));
+
+// Free/busy (CS-5): busy intervals, address resolution, access by grant, and the org switch column on every dialect.
+const fbUser = `usr_fb_${stamp}`;
+const fbCal = `cal:fb_${stamp}`;
+const fbDay = new Date(Math.ceil(Date.now() / 86_400_000) * 86_400_000 + 86_400_000);
+await db.insert(users).values({ id: fbUser, email: `fb${stamp}@example.com`, passwordHash: "x", name: "Fb" });
+await db.insert(calendarEvents).values([
+	{ id: `evt_fb1_${stamp}`, userId: fbUser, title: "Weekly", startsAt: new Date(fbDay.getTime() + 9 * 3_600_000), endsAt: new Date(fbDay.getTime() + 10 * 3_600_000), repeat: "weekly", isPrivate: true },
+	{ id: `evt_fb2_${stamp}`, userId: fbUser, title: "Free", startsAt: new Date(fbDay.getTime() + 12 * 3_600_000), endsAt: new Date(fbDay.getTime() + 13 * 3_600_000), transparent: true },
+] as never);
+const fbBusy = await busyIntervals(env, { userIds: [fbUser, userId] }, fbDay, new Date(fbDay.getTime() + 15 * 86_400_000));
+check("free/busy expands a private weekly series and skips a free event", fbBusy.get(fbUser)?.length === 3 && fbBusy.get(fbUser)![0][0] === fbDay.getTime() + 9 * 3_600_000 && fbBusy.get(userId)?.length !== undefined);
+const fbResolved = await resolveFreeBusyAddresses(env, [`FB${stamp}@example.com`, "nobody@example.com"]);
+check("free/busy resolves an address regardless of case and drops unknown ones", fbResolved.get(`fb${stamp}@example.com`) === fbUser && fbResolved.size === 1);
+check("free/busy: a stranger sees nobody, and org free/busy is off without the switch", (await viewableFreeBusyUsers(env, userId, [fbUser])).size === 0 && (await isOrgFreeBusyEnabled(env)) === false);
+await db.insert(davCollections).values({ id: fbCal, userId: fbUser, kind: "calendar", displayName: "Fb" } as never);
+await db.insert(calendarShares).values({ id: `csh_fb_${stamp}`, calendarId: fbCal, granteeUserId: userId, role: "freebusy" } as never);
+check("free/busy: any grant on the owner's calendar opens it", (await viewableFreeBusyUsers(env, userId, [fbUser])).has(fbUser));
+await db.insert(appSettings).values({ id: "default", calendarOrgFreeBusy: true } as never).onConflictDoUpdate({ target: appSettings.id, set: { calendarOrgFreeBusy: true } });
+const [orgOn] = await db.select({ on: appSettings.calendarOrgFreeBusy }).from(appSettings).where(eq(appSettings.id, "default"));
+check("app_settings.calendar_org_free_busy stores a boolean, and without Team the switch still counts as off", orgOn?.on === true && (await isOrgFreeBusyEnabled(env)) === false);
+await db.update(appSettings).set({ calendarOrgFreeBusy: false }).where(eq(appSettings.id, "default"));
+await db.delete(davCollections).where(eq(davCollections.id, fbCal));
+await db.delete(users).where(eq(users.id, fbUser));
 
 const [settings] = await db.select().from(appSettings).where(eq(appSettings.id, "default"));
 check("seed rows present", settings?.appName === "Mailflare");

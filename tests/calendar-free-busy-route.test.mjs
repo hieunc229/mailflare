@@ -58,7 +58,7 @@ test("organisation-wide free/busy opens every active account with Calendar on, o
 	setup();
 	sqlite.exec("INSERT INTO app_settings (id, calendar_org_free_busy, updated_at) VALUES ('default', 1, 1) ON CONFLICT(id) DO UPDATE SET calendar_org_free_busy = 1");
 	const addresses = ["u3@one.test", "u4@one.test", "u5@one.test"];
-	let { results } = await ask(addresses);
+	const { results } = await ask(addresses);
 	assert.equal(results["u3@one.test"].status, "ok");
 	assert.deepEqual(results["u4@one.test"], { status: "unknown" }, "disabled account");
 	assert.deepEqual(results["u5@one.test"], { status: "unknown" }, "Calendar turned off");
