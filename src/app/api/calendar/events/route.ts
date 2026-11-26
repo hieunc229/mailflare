@@ -1,4 +1,4 @@
-import { and, eq, gte, inArray, lt, ne, or } from "drizzle-orm";
+import { inArray } from "drizzle-orm";
 import { NextResponse } from "next/server";
 import { getDb } from "@/db";
 import { calendarEventOverrides, calendarEvents, calendarOccurrenceResponses } from "@/db/schema";
@@ -19,7 +19,12 @@ import { chunkIds } from "@/lib/calendar/chunks";
 import { authorizeCalendarRequest, calendarKeyCanSendInvitations } from "@/lib/calendar/api-auth";
 import { readJsonObject } from "@/lib/http/request";
 import { isUniqueConstraintError } from "@/lib/database-errors";
-import { calendarExistsGuard, calendarFilter, eventCalendarId, ownCalendarIds, resolveEventCalendar } from "@/lib/calendar/calendars";
+import { calendarExistsGuard, eventCalendarId } from "@/lib/calendar/calendars";
+import { listVisibleEvents } from "@/lib/calendar/event-list";
+import { resolveCalendarForWrite } from "@/lib/calendar/shares";
+import { INVITE_REQUIRES_OWNER } from "@/lib/calendar/shares-errors";
+import { calendarCollectionId } from "@/lib/dav/changes";
+import { createAuditLog } from "@/lib/mailboxes/audit";
 
 export async function GET(request: Request) {
 	const env = getEnv();
@@ -30,10 +35,7 @@ export async function GET(request: Request) {
 	const end = new Date(url.searchParams.get("end") ?? start.getTime() + 31 * 86_400_000);
 	const db = getDb(env);
 	const requested = url.searchParams.getAll("calendarIds").flatMap((value) => value.split(",")).map((value) => value.trim()).filter(Boolean);
-	const scope = requested.length ? calendarFilter(user.id, requested) : eq(calendarEvents.userId, user.id);
-	const rows = await db.select().from(calendarEvents).where(and(scope, lt(calendarEvents.startsAt, end), or(gte(calendarEvents.endsAt, start), ne(calendarEvents.repeat, "none")))).orderBy(calendarEvents.startsAt);
-	const known = new Set(await ownCalendarIds(db, user.id));
-	const events = rows.map((row) => ({ ...row, calendarId: eventCalendarId(row, known) }));
+	const events = await listVisibleEvents(db, user, { start, end }, requested);
 	// Additive occurrence data for the expanders: moved/extra occurrences and per-occurrence guest replies.
 	const overrides: Record<string, Array<{ occurrenceMs: number; startsAt: Date; endsAt: Date }>> = {};
 	const occurrenceResponses: Record<string, Array<{ occurrenceMs: number; guest: string; status: string }>> = {};
@@ -66,7 +68,7 @@ export async function POST(request: Request) {
 	if (!input.title?.trim() || Number.isNaN(startsAt.getTime()) || Number.isNaN(endsAt.getTime()) || endsAt <= startsAt) return NextResponse.json({ error: "Enter a title and valid event times" }, { status: 400 });
 	const flags = resolveEventFlags(null, input);
 	if (!flags) return NextResponse.json({ error: EVENT_FLAGS_ERROR }, { status: 400 });
-	const calendar = await resolveEventCalendar(getDb(env), user.id, input.calendarId);
+	const calendar = await resolveCalendarForWrite(getDb(env), user, input.calendarId);
 	if (!calendar.ok) return NextResponse.json({ error: calendar.error }, { status: calendar.status });
 	const repeat = normalizeCalendarRepeat(input.repeat);
 	const repeatDays = repeat === "weekdays" ? normalizeCalendarRepeatDays(input.repeatDays ?? DEFAULT_REPEAT_DAYS) : [];
@@ -78,6 +80,9 @@ export async function POST(request: Request) {
 	if (repeat === "monthly" && (repeatWeekday == null) !== (repeatWeek == null)) return NextResponse.json({ error: "Set both a weekday and a week for this repeat" }, { status: 400 });
 	// A listed-days repeat steps day by day, so its interval is always 1.
 	const attendees = (input.attendees ?? []).map((email) => email.trim()).filter((email) => /^\S+@\S+\.\S+$/.test(email));
+	// Whoever is not the calendar's owner is a delegate: the row is the owner's (D-2), with no guests, mailbox or reminder of its own.
+	const delegate = calendar.ownerId !== user.id;
+	if (delegate && attendees.length) return NextResponse.json({ error: "Only the calendar's owner can invite guests to its events", code: INVITE_REQUIRES_OWNER }, { status: 403 });
 	if (attendees.length && input.mailboxId && !calendarKeyCanSendInvitations(key, input.mailboxId)) return NextResponse.json({ error: "Sending invitations requires mail send permission for this mailbox" }, { status: 403 });
 	if (attendees.length && input.mailboxId) {
 		// Before the event is stored: a refused invitation leaves nothing behind, so a retry cannot duplicate it.
@@ -88,12 +93,12 @@ export async function POST(request: Request) {
 			throw error;
 		}
 	}
-	const event = { id: newId("evt"), userId: user.id, mailboxId: input.mailboxId ?? null, calendarId: calendar.calendarId ?? null, title: input.title.trim(), description: input.description?.trim() ?? "", location: input.location?.trim() ?? "", attendees: JSON.stringify(attendees), color: normalizeCalendarColor(input.color), repeat, repeatDays: JSON.stringify(repeatDays), repeatAnchorDay: repeat === "monthly" && Number.isInteger(input.repeatAnchorDay) && input.repeatAnchorDay! >= 1 && input.repeatAnchorDay! <= 31 ? input.repeatAnchorDay : null, repeatInterval, repeatWeekday, repeatWeek, eventSequence: 0, reminderMinutes: normalizeReminderMinutes(input.reminderMinutes), ...flags, startsAt, endsAt };
+	const event = { id: newId("evt"), userId: calendar.ownerId, mailboxId: delegate ? null : input.mailboxId ?? null, calendarId: calendar.calendarId ?? null, title: input.title.trim(), description: input.description?.trim() ?? "", location: input.location?.trim() ?? "", attendees: JSON.stringify(attendees), color: normalizeCalendarColor(input.color), repeat, repeatDays: JSON.stringify(repeatDays), repeatAnchorDay: repeat === "monthly" && Number.isInteger(input.repeatAnchorDay) && input.repeatAnchorDay! >= 1 && input.repeatAnchorDay! <= 31 ? input.repeatAnchorDay : null, repeatInterval, repeatWeekday, repeatWeek, eventSequence: 0, reminderMinutes: delegate ? null : normalizeReminderMinutes(input.reminderMinutes), ...flags, startsAt, endsAt };
 	const savedEvent = { ...event, timeZone: input.timeZone ? normalizeTimeZone(input.timeZone) : getRequestTimeZone(request, user.timeZone) };
 	const db = getDb(env);
 	if (typeof calendar.calendarId === "string") {
 		// The calendar may be deleted between the check above and this write: the batch refuses to write into a calendar that is gone.
-		try { await db.batch([...calendarExistsGuard(db, user.id, calendar.calendarId), db.insert(calendarEvents).values(savedEvent)] as never); } catch (error) {
+		try { await db.batch([...calendarExistsGuard(db, calendar.ownerId, calendar.calendarId), db.insert(calendarEvents).values(savedEvent)] as never); } catch (error) {
 			if (isUniqueConstraintError(error)) return NextResponse.json({ error: "That calendar no longer exists" }, { status: 409 });
 			throw error;
 		}
@@ -103,6 +108,7 @@ export async function POST(request: Request) {
 		const calendarFile = createCalendarInvitation({ isPrivate: event.isPrivate, transparent: event.transparent, title: event.title, description: event.description, location: event.location, startsAt, endsAt, uid: event.id, organizer: input.from || undefined, attendees, sequence: 0, reminderMinutes: event.reminderMinutes, repeat, repeatDays, repeatAnchorDay: event.repeatAnchorDay, repeatUntil: null, repeatInterval, repeatWeekday, repeatWeek, excludedOccurrences: [], overrides: [] });
 		inviteErrors = await sendToAttendees(attendees, (to) => sendEmail(env, { userId: user.id, mailboxId: input.mailboxId!, from: input.from ?? "", to, subject: `Invitation: ${event.title}`, text: event.description || `You are invited to ${event.title}.`, attachments: [{ filename: "invite.ics", type: "text/calendar; charset=utf-8", content: calendarFile }] }));
 	}
+	if (delegate) await createAuditLog(env, { actorUserId: user.id, targetUserId: calendar.ownerId, action: "calendar.event_created_by_delegate", metadata: { calendarId: calendar.calendarId ?? calendarCollectionId(calendar.ownerId), eventId: event.id } });
 	const responseEvent = { ...savedEvent, calendarId: eventCalendarId(savedEvent) };
 	return NextResponse.json(inviteErrors.length ? { event: responseEvent, inviteErrors } : { event: responseEvent });
 }

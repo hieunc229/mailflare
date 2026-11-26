@@ -199,3 +199,28 @@ export async function revokeShare(db: Db, actor: Actor, calendarId: string, shar
 	await db.delete(calendarShares).where(and(eq(calendarShares.id, existing.id), eq(calendarShares.calendarId, calendarId)));
 	return { ok: true, ownerId: access.ownerId, share: entry };
 }
+
+// ---- Writing into a calendar ----------------------------------------------------------------------------------------
+
+export type WriteTarget =
+	| { ok: true; calendarId: string | null | undefined; ownerId: string; role: CalendarRole }
+	| { ok: false; status: 400 | 403 | 404; error: string };
+
+/**
+ * Where an event write goes and as whom (D-2). Undefined `calendarId` means "leave it where it is" (PATCH) and null the owner's
+ * default calendar; `ownerId` is the user id the row carries, which is the calendar's owner, never the actor. Writing needs
+ * `edit`: a calendar with no role (or free/busy only, which is not listed) is "not found", one the actor can see but not
+ * change is 403. `current` is the event being edited: it never moves to another person's calendar (D-2 keeps one owner per
+ * row, and cross-owner moves are refused), and naming the calendar it is already in changes nothing.
+ */
+export async function resolveCalendarForWrite(db: Db, user: Actor, requested: unknown, current?: { ownerId: string; calendarId: string | null }): Promise<WriteTarget> {
+	if (requested === undefined) return current ? { ok: true, calendarId: undefined, ownerId: current.ownerId, role: "owner" } : { ok: true, calendarId: null, ownerId: user.id, role: "owner" };
+	if (requested !== null && typeof requested !== "string") return { ok: false, status: 400, error: "Invalid calendar" };
+	const target = requested ?? calendarCollectionId(user.id);
+	if (current && target === (current.calendarId ?? calendarCollectionId(current.ownerId))) return { ok: true, calendarId: undefined, ownerId: current.ownerId, role: "owner" };
+	const access = await getCalendarAccess(db, user, target);
+	if (!access || access.role === "freebusy") return { ok: false, status: 404, error: "Calendar not found" };
+	if (!roleAtLeast(access.role, "edit")) return { ok: false, status: 403, error: "You can only view this calendar" };
+	if (current && access.ownerId !== current.ownerId) return { ok: false, status: 400, error: "Events cannot move to another person's calendar" };
+	return { ok: true, calendarId: target === calendarCollectionId(access.ownerId) ? null : target, ownerId: access.ownerId, role: access.role };
+}

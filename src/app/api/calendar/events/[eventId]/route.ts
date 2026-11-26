@@ -1,4 +1,4 @@
-import { and, eq } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { NextResponse } from "next/server";
 import { getDb } from "@/db";
 import { calendarEventOverrides, calendarEvents } from "@/db/schema";
@@ -20,8 +20,38 @@ import { getRequestTimeZone } from "@/lib/time/utils";
 import { authorizeCalendarRequest, calendarKeyCanSendInvitations } from "@/lib/calendar/api-auth";
 import { buildSplitAnnouncement } from "@/lib/calendar/split-announcement";
 import { readJsonObject } from "@/lib/http/request";
-import { calendarExistsGuard, resolveEventCalendar } from "@/lib/calendar/calendars";
+import { calendarExistsGuard } from "@/lib/calendar/calendars";
+import { getEventAccess, resolveCalendarForWrite, roleAtLeast } from "@/lib/calendar/shares";
+import { INVITE_REQUIRES_OWNER } from "@/lib/calendar/shares-errors";
+import { calendarCollectionId } from "@/lib/dav/changes";
+import { createAuditLog } from "@/lib/mailboxes/audit";
+import type { SessionUser } from "@/lib/auth/types";
 import { isUniqueConstraintError } from "@/lib/database-errors";
+
+type Db = ReturnType<typeof getDb>;
+type EventRow = typeof calendarEvents.$inferSelect;
+
+/**
+ * The event a request names, with the actor's role on its calendar (the one check every write goes through). An id the actor
+ * cannot see, or that is not there, is the same 404; a calendar they can read but not change is 403. The row is looked up by
+ * id alone: the role, never the owner column, decides.
+ */
+async function loadEditableEvent(db: Db, user: { id: string }, id: string): Promise<{ existing: EventRow } | { response: NextResponse }> {
+	const [existing] = await db.select().from(calendarEvents).where(eq(calendarEvents.id, id)).limit(1);
+	const role = existing ? await getEventAccess(db, user, existing) : null;
+	if (!existing || !role || role === "freebusy") return { response: NextResponse.json({ error: "Event not found" }, { status: 404 }) };
+	if (!roleAtLeast(role, "edit")) return { response: NextResponse.json({ error: "You can only view this calendar" }, { status: 403 }) };
+	return { existing };
+}
+
+/** The guests an invitation lists, as a comparable set. */
+const guestSet = (list: string[]) => [...new Set(list.map((email) => email.trim().toLowerCase()).filter(Boolean))].sort().join(",");
+function storedGuests(raw: string | null): string[] {
+	try { const parsed: unknown = JSON.parse(raw || "[]"); return Array.isArray(parsed) ? parsed.filter((entry): entry is string => typeof entry === "string") : []; } catch { return []; }
+}
+
+const auditDelegate = (env: CloudflareEnv, user: Pick<SessionUser, "id">, existing: EventRow, action: string, calendarId: string | null | undefined) =>
+	createAuditLog(env, { actorUserId: user.id, targetUserId: existing.userId, action, metadata: { calendarId: calendarId ?? existing.calendarId ?? calendarCollectionId(existing.userId), eventId: existing.id } });
 
 export async function PATCH(request: Request, { params }: CalendarEventRouteParams) {
 	const env = getEnv();
@@ -37,14 +67,18 @@ export async function PATCH(request: Request, { params }: CalendarEventRoutePara
 	if (!input.title?.trim() || Number.isNaN(startsAt.getTime()) || Number.isNaN(endsAt.getTime()) || endsAt <= startsAt) return NextResponse.json({ error: "Enter a title and valid event times" }, { status: 400 });
 	if (effectiveFrom && Number.isNaN(effectiveFrom.getTime())) return NextResponse.json({ error: "Invalid repeat start" }, { status: 400 });
 	const db = getDb(env);
-	const [existing] = await db.select().from(calendarEvents).where(and(eq(calendarEvents.id, occurrence?.seriesId ?? eventId), eq(calendarEvents.userId, user.id))).limit(1);
-	if (!existing) return NextResponse.json({ error: "Event not found" }, { status: 404 });
-	const calendar = await resolveEventCalendar(db, user.id, input.calendarId, existing.calendarId);
+	const loaded = await loadEditableEvent(db, user, occurrence?.seriesId ?? eventId);
+	if ("response" in loaded) return loaded.response;
+	const { existing } = loaded;
+	// A delegate (an editor or manager acting on someone else's calendar) writes the owner's rows, never their own (D-2).
+	const ownerId = existing.userId;
+	const delegate = ownerId !== user.id;
+	const calendar = await resolveCalendarForWrite(db, user, input.calendarId, { ownerId, calendarId: existing.calendarId });
 	if (!calendar.ok) return NextResponse.json({ error: calendar.error }, { status: calendar.status });
 	// Undefined keeps the calendar; otherwise the whole series moves, so compare against where it is now.
 	const moveTo = calendar.calendarId !== undefined && calendar.calendarId !== (existing.calendarId ?? null) ? calendar.calendarId : undefined;
 	// Writes that put rows into another calendar run as one batch that first checks the calendar still exists (a competing delete refuses it with 409).
-	const guard = typeof moveTo === "string" ? calendarExistsGuard(db, user.id, moveTo) : [];
+	const guard = typeof moveTo === "string" ? calendarExistsGuard(db, ownerId, moveTo) : [];
 	const batched = async (statements: unknown[]): Promise<NextResponse | null> => {
 		try { await db.batch([...guard, ...statements] as never); return null; } catch (error) {
 			if (isUniqueConstraintError(error)) return NextResponse.json({ error: "That calendar no longer exists" }, { status: 409 });
@@ -52,7 +86,8 @@ export async function PATCH(request: Request, { params }: CalendarEventRoutePara
 		}
 	};
 	// An invitation received by mail is never re-announced to its guests from here.
-	const isInboundInvite = existing.responseStatus != null || existing.inviteMessageId != null;
+	// A delegate sends nothing either: v1 invites are the owner's alone.
+	const isInboundInvite = delegate || existing.responseStatus != null || existing.inviteMessageId != null;
 	const timeZone = editedTimeZone(existing, input.repeat, input.timeZone ?? existing.timeZone ?? getRequestTimeZone(request, user.timeZone));
 	if (occurrence && (existing.repeat === "none" || occurrence.startsAt < existing.startsAt || (existing.repeatUntil && occurrence.startsAt >= existing.repeatUntil))) return NextResponse.json({ error: "Occurrence not found" }, { status: 404 });
 	if (existing.repeat !== "none" && effectiveFrom && existing.repeatUntil && effectiveFrom >= existing.repeatUntil) return NextResponse.json({ error: "No future occurrences remain" }, { status: 404 });
@@ -60,8 +95,11 @@ export async function PATCH(request: Request, { params }: CalendarEventRoutePara
 	if (existing.rrule && effectiveFrom && rruleEndedBefore(existing.rrule, existing.startsAt, existing.timeZone, effectiveFrom)) return NextResponse.json({ error: "No future occurrences remain" }, { status: 404 });
 	const flags = resolveEventFlags(existing, input);
 	if (!flags) return NextResponse.json({ error: EVENT_FLAGS_ERROR }, { status: 400 });
-	const attendees = (input.attendees ?? []).map((email) => email.trim()).filter((email) => /^\S+@\S+\.\S+$/.test(email));
-	if (attendees.length && existing.mailboxId && input.from && !calendarKeyCanSendInvitations(key, existing.mailboxId)) return NextResponse.json({ error: "Sending invitations requires mail send permission for this mailbox" }, { status: 403 });
+	const requestedGuests = (input.attendees ?? []).map((email) => email.trim()).filter((email) => /^\S+@\S+\.\S+$/.test(email));
+	// v1: only the owner invites. A delegate may save an event with its guest list as it is, never change it, and sends nothing.
+	if (delegate && guestSet(requestedGuests) !== guestSet(storedGuests(existing.attendees))) return NextResponse.json({ error: "Only the calendar's owner can change who is invited", code: INVITE_REQUIRES_OWNER }, { status: 403 });
+	const attendees = delegate ? storedGuests(existing.attendees) : requestedGuests;
+	if (!delegate && attendees.length && existing.mailboxId && input.from && !calendarKeyCanSendInvitations(key, existing.mailboxId)) return NextResponse.json({ error: "Sending invitations requires mail send permission for this mailbox" }, { status: 403 });
 	let inviteErrors: string[] = [];
 	if (input.moveOccurrenceToPast) {
 		if (!occurrence || existing.repeat === "none" || startsAt >= new Date()) return NextResponse.json({ error: "Choose a past time for this occurrence" }, { status: 400 });
@@ -77,7 +115,7 @@ export async function PATCH(request: Request, { params }: CalendarEventRoutePara
 		const insertMoved = db.insert(calendarEvents).values(moved);
 		const excludeOriginal = db.update(calendarEvents).set({ excludedOccurrences: JSON.stringify(newExcluded), eventSequence: seriesSequence, updatedAt: now }).where(eq(calendarEvents.id, existing.id));
 		if (moveTo !== undefined) {
-			const refused = await batched([insertMoved, excludeOriginal, moveSeriesStatement(db, user.id, existing.id, moveTo)]);
+			const refused = await batched([insertMoved, excludeOriginal, moveSeriesStatement(db, ownerId, existing.id, moveTo)]);
 			if (refused) return refused;
 		} else { await insertMoved; await excludeOriginal; }
 		if (attendees.length && existing.mailboxId && input.from && !isInboundInvite) {
@@ -88,6 +126,7 @@ export async function PATCH(request: Request, { params }: CalendarEventRoutePara
 			inviteErrors.push(...await sendToAttendees(attendees, (to) => sendEmail(env, { userId: user.id, mailboxId: existing.mailboxId!, from: input.from!, to, subject: `Updated invitation: ${moved.title}`, text: moved.description || `This event has been updated: ${moved.title}.`, attachments: [{ filename: "invite.ics", type: "text/calendar; charset=utf-8", content: movedFile }] })));
 			inviteErrors.push(...await sendToAttendees(attendees, (to) => sendEmail(env, { userId: user.id, mailboxId: existing.mailboxId!, from: input.from!, to, subject: `Updated invitation: ${existing.title}`, text: existing.description || `This event has been updated: ${existing.title}.`, attachments: [{ filename: "invite.ics", type: "text/calendar; charset=utf-8", content: seriesFile }] })));
 		}
+		if (delegate) await auditDelegate(env, user, existing, "calendar.event_updated_by_delegate", moveTo);
 		return NextResponse.json(inviteErrors.length ? { ok: true, inviteErrors: [...new Set(inviteErrors)] } : { ok: true });
 	}
 	const repeatFields = resolveRepeat(existing, input);
@@ -104,7 +143,7 @@ export async function PATCH(request: Request, { params }: CalendarEventRoutePara
 		repeatWeek = null;
 	} else if ((repeatWeekday == null) !== (repeatWeek == null)) return NextResponse.json({ error: "Set both a weekday and a week for this repeat" }, { status: 400 });
 	const nextSequence = (existing.eventSequence ?? 0) + 1;
-	const event = { ...existing, timeZone, eventSequence: nextSequence, title: input.title.trim(), description: input.description?.trim() ?? "", location: input.location?.trim() ?? "", attendees: JSON.stringify(attendees), color: normalizeCalendarColor(input.color ?? existing.color), ...repeatFields, repeatInterval, repeatWeekday, repeatWeek, reminderMinutes: input.reminderMinutes === undefined ? existing.reminderMinutes : normalizeReminderMinutes(input.reminderMinutes), lastRemindedStart: null, ...flags, startsAt, endsAt };
+	const event = { ...existing, timeZone, eventSequence: nextSequence, title: input.title.trim(), description: input.description?.trim() ?? "", location: input.location?.trim() ?? "", attendees: JSON.stringify(attendees), color: normalizeCalendarColor(input.color ?? existing.color), ...repeatFields, repeatInterval, repeatWeekday, repeatWeek, reminderMinutes: delegate || input.reminderMinutes === undefined ? existing.reminderMinutes : normalizeReminderMinutes(input.reminderMinutes), lastRemindedStart: null, ...flags, startsAt, endsAt };
 	// A kept custom rule is not editable here, so the series may change time of day only: its exclusions and moved occurrences move with it.
 	const shifted = event.repeat === "custom" ? shiftCustomSeries(existing, startsAt, timeZone) : null;
 	if (event.repeat === "custom" && !shifted) return NextResponse.json({ error: CUSTOM_DAY_LOCKED }, { status: 409 });
@@ -119,9 +158,9 @@ export async function PATCH(request: Request, { params }: CalendarEventRoutePara
 		const fresh = { ...event, id: forkId, eventSequence: 0, davObjectId: null, recurrenceId: null, ...(moveTo !== undefined ? { calendarId: moveTo } : {}), createdAt: now, updatedAt: now };
 		const endPatch = existing.rrule ? { rrule: limitRrule(existing.rrule, splitAt, existing.startsAt, existing.timeZone, existing.allDay), eventSequence: nextSequence, updatedAt: now } : { repeatUntil: splitAt, eventSequence: nextSequence, updatedAt: now };
 		if (moveTo !== undefined) {
-			const refused = await batched([...splitSeriesStatements(db, user.id, existing, splitAt, fresh, endPatch), moveSeriesStatement(db, user.id, existing.id, moveTo)]);
+			const refused = await batched([...splitSeriesStatements(db, ownerId, existing, splitAt, fresh, endPatch), moveSeriesStatement(db, ownerId, existing.id, moveTo)]);
 			if (refused) return refused;
-		} else await splitSeriesRows(db, user.id, existing, splitAt, fresh, endPatch);
+		} else await splitSeriesRows(db, ownerId, existing, splitAt, fresh, endPatch);
 		// Overrides at or after the split belong to the fork; earlier ones stay on the truncated original.
 		const stored = await db.select().from(calendarEventOverrides).where(eq(calendarEventOverrides.eventId, existing.id));
 		for (const override of stored) {
@@ -155,20 +194,22 @@ export async function PATCH(request: Request, { params }: CalendarEventRoutePara
 			inviteErrors.push(...await sendToAttendees(attendees, (to) => sendEmail(env, { userId: user.id, mailboxId: existing.mailboxId!, from: input.from!, to, subject: `Updated invitation: ${existing.title}`, text: existing.description || `This event has been updated: ${existing.title}.`, attachments: [{ filename: "invite.ics", type: "text/calendar; charset=utf-8", content: truncationFile }] })));
 			inviteErrors.push(...await sendToAttendees(attendees, (to) => sendEmail(env, { userId: user.id, mailboxId: existing.mailboxId!, from: input.from!, to, subject: `Invitation: ${event.title}`, text: event.description || `You are invited to ${event.title}.`, attachments: [{ filename: "invite.ics", type: "text/calendar; charset=utf-8", content: forkFile }] })));
 		}
+		if (delegate) await auditDelegate(env, user, existing, "calendar.event_updated_by_delegate", moveTo);
 		return NextResponse.json(inviteErrors.length ? { ok: true, inviteErrors: [...new Set(inviteErrors)] } : { ok: true });
 	}
 	const edit = db.update(calendarEvents).set({ title: event.title, description: event.description, location: event.location, attendees: event.attendees, color: event.color, repeat: event.repeat, repeatDays: event.repeatDays, repeatAnchorDay: event.repeatAnchorDay, repeatInterval: event.repeatInterval, repeatWeekday: event.repeatWeekday, repeatWeek: event.repeatWeek, repeatUntil: event.repeatUntil, rrule: event.rrule, ...(shifted ? { excludedOccurrences: shifted.excludedOccurrences } : {}), eventSequence: nextSequence, reminderMinutes: event.reminderMinutes, isPrivate: event.isPrivate, transparent: event.transparent, lastRemindedStart: null, timeZone, startsAt, endsAt, updatedAt: new Date() }).where(eq(calendarEvents.id, existing.id));
 	// The edit and the move to another calendar succeed or fail together.
 	if (moveTo !== undefined) {
-		const refused = await batched([edit, moveSeriesStatement(db, user.id, existing.id, moveTo)]);
+		const refused = await batched([edit, moveSeriesStatement(db, ownerId, existing.id, moveTo)]);
 		if (refused) return refused;
 	} else await edit;
-	if (shifted?.moved) await shiftOverrides(db, user.id, existing.id, shifted.shift);
+	if (shifted?.moved) await shiftOverrides(db, ownerId, existing.id, shifted.shift);
 	if (attendees.length && existing.mailboxId && input.from && !isInboundInvite) {
 		const overrides = (await db.select().from(calendarEventOverrides).where(eq(calendarEventOverrides.eventId, existing.id))).map((override) => ({ recurrenceId: new Date(override.occurrenceMs), startsAt: override.startsAt, endsAt: override.endsAt }));
 		const file = createCalendarInvitation({ isPrivate: event.isPrivate, transparent: event.transparent, title: event.title, description: event.description, location: event.location, startsAt: event.startsAt, endsAt: event.endsAt, uid: existing.id, organizer: input.from, attendees, sequence: nextSequence, reminderMinutes: event.reminderMinutes, repeat: event.repeat, rrule: event.rrule, repeatDays, repeatAnchorDay: event.repeatAnchorDay, repeatUntil: event.repeatUntil, repeatInterval: event.repeatInterval, repeatWeekday: event.repeatWeekday, repeatWeek: event.repeatWeek, excludedOccurrences: parseExcludedOccurrences(event.excludedOccurrences), overrides });
 		inviteErrors.push(...await sendToAttendees(attendees, (to) => sendEmail(env, { userId: user.id, mailboxId: existing.mailboxId!, from: input.from!, to, subject: `Updated invitation: ${event.title}`, text: event.description || `This event has been updated: ${event.title}.`, attachments: [{ filename: "invite.ics", type: "text/calendar; charset=utf-8", content: file }] })));
 	}
+	if (delegate) await auditDelegate(env, user, existing, "calendar.event_updated_by_delegate", moveTo);
 	return NextResponse.json(inviteErrors.length ? { ok: true, inviteErrors: [...new Set(inviteErrors)] } : { ok: true });
 }
 
@@ -182,19 +223,22 @@ export async function DELETE(request: Request, { params }: CalendarEventRoutePar
 	const effectiveFrom = input.effectiveFrom ? new Date(input.effectiveFrom) : occurrence?.startsAt;
 	if (effectiveFrom && Number.isNaN(effectiveFrom.getTime())) return NextResponse.json({ error: "Invalid repeat start" }, { status: 400 });
 	const db = getDb(env);
-	const [existing] = await db.select().from(calendarEvents).where(and(eq(calendarEvents.id, occurrence?.seriesId ?? eventId), eq(calendarEvents.userId, user.id))).limit(1);
-	if (!existing) return NextResponse.json({ error: "Event not found" }, { status: 404 });
+	const loaded = await loadEditableEvent(db, user, occurrence?.seriesId ?? eventId);
+	if ("response" in loaded) return loaded.response;
+	const { existing } = loaded;
 	if (occurrence && (existing.repeat === "none" || occurrence.startsAt < existing.startsAt || (existing.repeatUntil && occurrence.startsAt >= existing.repeatUntil))) return NextResponse.json({ error: "Occurrence not found" }, { status: 404 });
 	// An invitation received by mail is never announced to its guests from here; cancelling one only removes the row.
-	const isInboundInvite = existing.responseStatus != null || existing.inviteMessageId != null;
-	if (existing.mailboxId && input.from && !calendarKeyCanSendInvitations(key, existing.mailboxId)) return NextResponse.json({ error: "Sending invitations requires mail send permission for this mailbox" }, { status: 403 });
+	const delegate = existing.userId !== user.id;
+	const isInboundInvite = delegate || existing.responseStatus != null || existing.inviteMessageId != null;
+	if (!delegate && existing.mailboxId && input.from && !calendarKeyCanSendInvitations(key, existing.mailboxId)) return NextResponse.json({ error: "Sending invitations requires mail send permission for this mailbox" }, { status: 403 });
 	if (existing.repeat !== "none" && effectiveFrom && effectiveFrom > existing.startsAt) {
 		await db.update(calendarEvents).set(existing.rrule ? { rrule: limitRrule(existing.rrule, effectiveFrom, existing.startsAt, existing.timeZone, existing.allDay), updatedAt: new Date() } : { repeatUntil: endLegacySeries(existing.repeatUntil, effectiveFrom), updatedAt: new Date() }).where(eq(calendarEvents.id, existing.id));
 		// Moved occurrences of a DAV series that fall in the part being deleted go with it.
-		if (existing.davObjectId === existing.id) await deleteOverridesFrom(db, user.id, existing.id, effectiveFrom);
+		if (existing.davObjectId === existing.id) await deleteOverridesFrom(db, existing.userId, existing.id, effectiveFrom);
+		if (delegate) await auditDelegate(env, user, existing, "calendar.event_deleted_by_delegate", undefined);
 		return NextResponse.json({ ok: true });
 	}
-	await deleteSeriesRows(db, user.id, existing.id);
+	await deleteSeriesRows(db, existing.userId, existing.id);
 	if (!isInboundInvite && existing.mailboxId && input.from) {
 		let attendees: string[] = [];
 		try { attendees = (JSON.parse(existing.attendees || "[]") as string[]).filter((address) => /^\S+@\S+\.\S+$/.test(address)); } catch { attendees = []; }
@@ -203,5 +247,6 @@ export async function DELETE(request: Request, { params }: CalendarEventRoutePar
 			await Promise.all(attendees.map((to) => sendEmail(env, { userId: user.id, mailboxId: existing.mailboxId!, from: input.from!, to, subject: `Cancelled: ${existing.title}`, text: `This event has been cancelled: ${existing.title}.`, attachments: [{ filename: "invite.ics", type: "text/calendar; charset=utf-8", content: file }] })));
 		}
 	}
+	if (delegate) await auditDelegate(env, user, existing, "calendar.event_deleted_by_delegate", undefined);
 	return NextResponse.json({ ok: true });
 }
