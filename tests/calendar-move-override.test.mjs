@@ -19,13 +19,11 @@ const utils = await loadFixture({ name: "cal-override-utils", entryPoint: "src/a
 const { PATCH: patchEvent } = await route.import();
 const { movesSeries } = await utils.import();
 let sqlite;
-let current;
 after(() => { sqlite?.close(); delete globalThis.calOverride; route.dispose(); utils.dispose(); });
 
 /** u1 owns "Work" (cal:work); a CalDAV series m1 with a moved occurrence o1 lives in it; u2 reads it, u3 edits it. */
 function setup(user = "u1") {
 	sqlite?.close();
-	current = user;
 	sqlite = installSqlite("calOverride", { schema, extra: { user: { id: user, timeZone: "UTC", calendarEnabled: true } } });
 	globalThis.calOverride.db.batch = async (statements) => {
 		sqlite.exec("BEGIN");
