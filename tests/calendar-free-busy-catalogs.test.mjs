@@ -17,3 +17,10 @@ test("the placeholders of each string are the same in every catalog", () => {
 	const names = (value) => [...value.matchAll(/\{(\w+)\}/g)].map((match) => match[1]).sort().join();
 	for (const [name, catalog] of catalogs) for (const key of mine) assert.equal(names(catalog[key]), names(en[key]), `${name}: ${key}`);
 });
+
+test("the admin hint says plainly who can see what, in every catalog", () => {
+	for (const [name, catalog] of catalogs) {
+		const hint = catalog["general.orgFreeBusyHint"];
+		for (const needle of ["every account on this installation", "all domains", "API key with the calendar:read scope", "busy times", "by email address", "never titles or details", "Team licence"]) assert.ok(hint.includes(needle), `${name}: missing "${needle}"`);
+	}
+});
