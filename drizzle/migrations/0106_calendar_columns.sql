@@ -80,8 +80,7 @@ WHEN OLD.user_id <> NEW.user_id OR OLD.calendar_id IS NOT NEW.calendar_id OR OLD
 	VALUES (COALESCE(NEW.calendar_id, 'cal:' || NEW.user_id), coalesce(NEW.dav_object_id, NEW.id), CASE WHEN COALESCE(OLD.calendar_id, 'cal:' || OLD.user_id) <> COALESCE(NEW.calendar_id, 'cal:' || NEW.user_id) AND (NEW.dav_object_id IS NULL OR NEW.dav_object_id = NEW.id) THEN 'created' ELSE 'updated' END);
 	INSERT INTO dav_changes (collection_id, object_key, change_type)
 	SELECT COALESCE(OLD.calendar_id, 'cal:' || OLD.user_id), coalesce(OLD.dav_object_id, OLD.id), 'updated'
-	WHERE (COALESCE(OLD.calendar_id, 'cal:' || OLD.user_id) = COALESCE(NEW.calendar_id, 'cal:' || NEW.user_id) AND coalesce(OLD.dav_object_id, OLD.id) <> coalesce(NEW.dav_object_id, NEW.id))
-		OR (COALESCE(OLD.calendar_id, 'cal:' || OLD.user_id) <> COALESCE(NEW.calendar_id, 'cal:' || NEW.user_id) AND OLD.dav_object_id IS NOT NULL AND OLD.dav_object_id <> OLD.id);
+	WHERE COALESCE(OLD.calendar_id, 'cal:' || OLD.user_id) = COALESCE(NEW.calendar_id, 'cal:' || NEW.user_id) AND coalesce(OLD.dav_object_id, OLD.id) <> coalesce(NEW.dav_object_id, NEW.id);
 END;
 --> statement-breakpoint
 CREATE TRIGGER `dav_changes_calendar_events_bd` BEFORE DELETE ON `calendar_events` BEGIN

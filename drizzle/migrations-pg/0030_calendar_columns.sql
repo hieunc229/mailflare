@@ -76,8 +76,7 @@ BEGIN
 		END IF;
 		INSERT INTO dav_changes (collection_id, object_key, change_type)
 		VALUES (coalesce(NEW.calendar_id, 'cal:' || NEW.user_id), coalesce(NEW.dav_object_id, NEW.id), CASE WHEN coalesce(OLD.calendar_id, 'cal:' || OLD.user_id) <> coalesce(NEW.calendar_id, 'cal:' || NEW.user_id) AND (NEW.dav_object_id IS NULL OR NEW.dav_object_id = NEW.id) THEN 'created' ELSE 'updated' END);
-		IF (coalesce(OLD.calendar_id, 'cal:' || OLD.user_id) = coalesce(NEW.calendar_id, 'cal:' || NEW.user_id) AND coalesce(OLD.dav_object_id, OLD.id) <> coalesce(NEW.dav_object_id, NEW.id))
-			OR (coalesce(OLD.calendar_id, 'cal:' || OLD.user_id) <> coalesce(NEW.calendar_id, 'cal:' || NEW.user_id) AND OLD.dav_object_id IS NOT NULL AND OLD.dav_object_id <> OLD.id) THEN
+		IF coalesce(OLD.calendar_id, 'cal:' || OLD.user_id) = coalesce(NEW.calendar_id, 'cal:' || NEW.user_id) AND coalesce(OLD.dav_object_id, OLD.id) <> coalesce(NEW.dav_object_id, NEW.id) THEN
 			INSERT INTO dav_changes (collection_id, object_key, change_type) VALUES (coalesce(OLD.calendar_id, 'cal:' || OLD.user_id), coalesce(OLD.dav_object_id, OLD.id), 'updated');
 		END IF;
 	ELSE
