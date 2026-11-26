@@ -1623,6 +1623,8 @@
 	"adminKeys.perm.mailboxesDesc": "Unda, sasisha na uondoe visanduku vya barua.",
 	"adminKeys.perm.storage": "Angalia hifadhi",
 	"adminKeys.perm.storageDesc": "Ona hifadhi ya vitu inayotumika (R2, Backblaze B2, AWS S3 au faili za ndani) na ujaribu kama inafanya kazi.",
+	"adminKeys.perm.groups": "Dhibiti vikundi",
+	"adminKeys.perm.groupsDesc": "Unda, badilisha na futa vikundi (anwani za pamoja zinazowasilisha kwa watu kadhaa) na wanachama wao. Inahitaji leseni ya Pro au Team.",
 	"adminKeys.namePlaceholder": "Programu ya uzalishaji",
 	"adminKeys.allowMcpHint": "Tumia ufunguo huu na mteja wa MCP kusimamia maeneo ya usimamizi yaliyochaguliwa hapa chini tu. Hauwezi kusoma wala kutuma barua.",
 	"adminKeys.createKey": "Unda ufunguo",

@@ -1612,6 +1612,8 @@
 	"adminKeys.perm.mailboxesDesc": "Buat, perbarui, dan hapus kotak surat.",
 	"adminKeys.perm.storage": "Periksa penyimpanan",
 	"adminKeys.perm.storageDesc": "Lihat penyimpanan objek yang digunakan (R2, Backblaze B2, AWS S3, atau file lokal) dan uji apakah berfungsi.",
+	"adminKeys.perm.groups": "Kelola grup",
+	"adminKeys.perm.groupsDesc": "Buat, ubah, dan hapus grup (alamat bersama yang mengirim ke beberapa orang) beserta anggotanya. Memerlukan lisensi Pro atau Team.",
 	"adminKeys.namePlaceholder": "Aplikasi produksi",
 	"adminKeys.allowMcpHint": "Gunakan kunci ini dengan klien MCP untuk mengelola hanya area admin yang dipilih di bawah. Kunci ini tidak dapat membaca atau mengirim email.",
 	"adminKeys.createKey": "Buat kunci",

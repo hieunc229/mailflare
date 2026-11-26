@@ -1623,6 +1623,8 @@
 	"adminKeys.perm.mailboxesDesc": "ਮੇਲਬਾਕਸ ਬਣਾਓ, ਅੱਪਡੇਟ ਕਰੋ ਅਤੇ ਹਟਾਓ।",
 	"adminKeys.perm.storage": "ਸਟੋਰੇਜ ਦੀ ਜਾਂਚ ਕਰੋ",
 	"adminKeys.perm.storageDesc": "ਵੇਖੋ ਕਿ ਕਿਹੜੀ ਆਬਜੈਕਟ ਸਟੋਰੇਜ ਵਰਤੀ ਜਾ ਰਹੀ ਹੈ (R2, Backblaze B2, AWS S3 ਜਾਂ ਲੋਕਲ ਫ਼ਾਈਲਾਂ) ਅਤੇ ਜਾਂਚ ਕਰੋ ਕਿ ਇਹ ਕੰਮ ਕਰਦੀ ਹੈ।",
+	"adminKeys.perm.groups": "ਸਮੂਹ ਪ੍ਰਬੰਧਿਤ ਕਰੋ",
+	"adminKeys.perm.groupsDesc": "ਸਮੂਹ (ਕਈ ਲੋਕਾਂ ਨੂੰ ਡਿਲੀਵਰ ਕਰਨ ਵਾਲੇ ਸਾਂਝੇ ਪਤੇ) ਅਤੇ ਉਨ੍ਹਾਂ ਦੇ ਮੈਂਬਰ ਬਣਾਓ, ਬਦਲੋ ਅਤੇ ਮਿਟਾਓ। Pro ਜਾਂ Team ਲਾਇਸੰਸ ਲੋੜੀਂਦਾ ਹੈ।",
 	"adminKeys.namePlaceholder": "ਪ੍ਰੋਡਕਸ਼ਨ ਐਪ",
 	"adminKeys.allowMcpHint": "ਹੇਠਾਂ ਚੁਣੇ ਐਡਮਿਨ ਖੇਤਰਾਂ ਨੂੰ ਹੀ ਸੰਭਾਲਣ ਲਈ ਇਹ ਕੁੰਜੀ MCP ਕਲਾਇੰਟ ਨਾਲ ਵਰਤੋ। ਇਹ ਮੇਲ ਪੜ੍ਹ ਜਾਂ ਭੇਜ ਨਹੀਂ ਸਕਦੀ।",
 	"adminKeys.createKey": "ਕੁੰਜੀ ਬਣਾਓ",

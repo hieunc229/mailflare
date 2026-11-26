@@ -1645,6 +1645,8 @@
 	"adminKeys.perm.mailboxesDesc": "Twórz, aktualizuj i usuwaj skrzynki pocztowe.",
 	"adminKeys.perm.storage": "Sprawdzanie magazynu",
 	"adminKeys.perm.storageDesc": "Sprawdź, który magazyn obiektów jest używany (R2, Backblaze B2, AWS S3 lub pliki lokalne) i przetestuj, czy działa.",
+	"adminKeys.perm.groups": "Zarządzaj grupami",
+	"adminKeys.perm.groupsDesc": "Twórz, zmieniaj i usuwaj grupy (wspólne adresy dostarczające pocztę do kilku osób) oraz ich członków. Wymaga licencji Pro lub Team.",
 	"adminKeys.namePlaceholder": "Aplikacja produkcyjna",
 	"adminKeys.allowMcpHint": "Używaj tego klucza z klientem MCP do zarządzania tylko wybranymi niżej obszarami administracji. Nie może czytać ani wysyłać poczty.",
 	"adminKeys.createKey": "Utwórz klucz",

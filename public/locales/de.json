@@ -1623,6 +1623,8 @@
 	"adminKeys.perm.mailboxesDesc": "Postfächer erstellen, aktualisieren und entfernen.",
 	"adminKeys.perm.storage": "Speicher prüfen",
 	"adminKeys.perm.storageDesc": "Zeige, welcher Objektspeicher verwendet wird (R2, Backblaze B2, AWS S3 oder lokale Dateien), und teste, ob er funktioniert.",
+	"adminKeys.perm.groups": "Gruppen verwalten",
+	"adminKeys.perm.groupsDesc": "Gruppen (gemeinsame Adressen, die an mehrere Personen zustellen) und ihre Mitglieder erstellen, ändern und löschen. Erfordert eine Pro- oder Team-Lizenz.",
 	"adminKeys.namePlaceholder": "Produktions-App",
 	"adminKeys.allowMcpHint": "Verwenden Sie diesen Schlüssel mit einem MCP-Client, um nur die unten ausgewählten Admin-Bereiche zu verwalten. Er kann keine E-Mails lesen oder senden.",
 	"adminKeys.createKey": "Schlüssel erstellen",

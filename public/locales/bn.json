@@ -1621,6 +1621,8 @@
 	"adminKeys.perm.mailboxesDesc": "মেইলবক্স তৈরি, আপডেট ও সরান।",
 	"adminKeys.perm.storage": "স্টোরেজ পরীক্ষা করুন",
 	"adminKeys.perm.storageDesc": "কোন অবজেক্ট স্টোরেজ ব্যবহৃত হচ্ছে (R2, Backblaze B2, AWS S3 বা লোকাল ফাইল) তা দেখুন এবং সেটি কাজ করছে কি না পরীক্ষা করুন।",
+	"adminKeys.perm.groups": "গ্রুপ পরিচালনা করুন",
+	"adminKeys.perm.groupsDesc": "গ্রুপ (একাধিক ব্যক্তির কাছে পৌঁছানো শেয়ার্ড ঠিকানা) ও তাদের সদস্য তৈরি, পরিবর্তন ও মুছুন। Pro বা Team লাইসেন্স প্রয়োজন।",
 	"adminKeys.namePlaceholder": "প্রোডাকশন অ্যাপ",
 	"adminKeys.allowMcpHint": "এই কী MCP ক্লায়েন্টের সাথে ব্যবহার করে শুধু নিচে নির্বাচিত অ্যাডমিন এলাকা পরিচালনা করুন। এটি মেইল পড়তে বা পাঠাতে পারে না।",
 	"adminKeys.createKey": "কী তৈরি করুন",

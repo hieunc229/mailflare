@@ -1667,6 +1667,8 @@
 	"adminKeys.perm.mailboxesDesc": "أنشئ صناديق البريد وحدّثها وأزلها.",
 	"adminKeys.perm.storage": "فحص التخزين",
 	"adminKeys.perm.storageDesc": "اعرف أي مساحة تخزين كائنات قيد الاستخدام (R2 أو Backblaze B2 أو AWS S3 أو ملفات محلية) وتحقق من عملها.",
+	"adminKeys.perm.groups": "إدارة المجموعات",
+	"adminKeys.perm.groupsDesc": "أنشئ المجموعات (عناوين مشتركة تُسلَّم إلى عدة أشخاص) وأعضاءها وغيّرها واحذفها. يتطلب ترخيص Pro أو Team.",
 	"adminKeys.namePlaceholder": "تطبيق الإنتاج",
 	"adminKeys.allowMcpHint": "استخدم هذا المفتاح مع عميل MCP لإدارة مناطق الإدارة المحددة أدناه فقط. لا يمكنه قراءة البريد أو إرساله.",
 	"adminKeys.createKey": "إنشاء مفتاح",

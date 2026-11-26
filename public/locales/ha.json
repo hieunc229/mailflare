@@ -1623,6 +1623,8 @@
 	"adminKeys.perm.mailboxesDesc": "Ƙirƙira, sabunta da cire akwatunan saƙo.",
 	"adminKeys.perm.storage": "Duba ma'ajiya",
 	"adminKeys.perm.storageDesc": "Duba ma'ajiyar abubuwa da ake amfani da ita (R2, Backblaze B2, AWS S3 ko fayilolin gida) kuma ka gwada ko tana aiki.",
+	"adminKeys.perm.groups": "Sarrafa Ƙungiyoyi",
+	"adminKeys.perm.groupsDesc": "Ƙirƙira, canza da share ƙungiyoyi (adireshin da ake rabawa wanda ke isar da saƙo ga mutane da yawa) da membobinsu. Yana buƙatar lasisin Pro ko Team.",
 	"adminKeys.namePlaceholder": "Manhajar aikin gaske",
 	"adminKeys.allowMcpHint": "Yi amfani da wannan maɓalli da abokin MCP don sarrafa wuraren gudanarwar da aka zaɓa a ƙasa kawai. Ba zai iya karanta ko aika saƙo ba.",
 	"adminKeys.createKey": "Ƙirƙiri maɓalli",

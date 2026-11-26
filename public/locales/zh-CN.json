@@ -1612,6 +1612,8 @@
 	"adminKeys.perm.mailboxesDesc": "创建、更新和移除邮箱。",
 	"adminKeys.perm.storage": "检查存储",
 	"adminKeys.perm.storageDesc": "查看正在使用的对象存储（R2、Backblaze B2、AWS S3 或本地文件）并测试其是否正常工作。",
+	"adminKeys.perm.groups": "管理群组",
+	"adminKeys.perm.groupsDesc": "创建、修改和删除群组（投递给多人的共享地址）及其成员。需要 Pro 或 Team 许可证。",
 	"adminKeys.namePlaceholder": "生产环境应用",
 	"adminKeys.allowMcpHint": "将此密钥与 MCP 客户端配合使用，仅管理下方选定的管理区域。它无法读取或发送邮件。",
 	"adminKeys.createKey": "创建密钥",

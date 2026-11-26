@@ -1622,6 +1622,8 @@
 	"adminKeys.perm.mailboxesDesc": "메일함을 만들고, 업데이트하고, 제거합니다.",
 	"adminKeys.perm.storage": "스토리지 확인",
 	"adminKeys.perm.storageDesc": "사용 중인 오브젝트 스토리지(R2, Backblaze B2, AWS S3 또는 로컬 파일)를 확인하고 정상 작동하는지 테스트합니다.",
+	"adminKeys.perm.groups": "그룹 관리",
+	"adminKeys.perm.groupsDesc": "그룹(여러 사람에게 전달되는 공유 주소)과 구성원을 만들고 변경하고 삭제합니다. Pro 또는 Team 라이선스가 필요합니다.",
 	"adminKeys.namePlaceholder": "프로덕션 앱",
 	"adminKeys.allowMcpHint": "MCP 클라이언트에서 이 키를 사용해 아래에서 선택한 관리 영역만 관리합니다. 메일을 읽거나 보낼 수 없습니다.",
 	"adminKeys.createKey": "키 만들기",

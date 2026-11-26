@@ -1622,6 +1622,8 @@
 	"adminKeys.perm.mailboxesDesc": "สร้าง อัปเดต และลบกล่องจดหมาย",
 	"adminKeys.perm.storage": "ตรวจสอบที่เก็บข้อมูล",
 	"adminKeys.perm.storageDesc": "ดูว่าใช้ที่เก็บข้อมูลออบเจ็กต์ใด (R2, Backblaze B2, AWS S3 หรือไฟล์ในเครื่อง) และทดสอบว่าใช้งานได้",
+	"adminKeys.perm.groups": "จัดการกลุ่ม",
+	"adminKeys.perm.groupsDesc": "สร้าง เปลี่ยนแปลง และลบกลุ่ม (ที่อยู่ที่ใช้ร่วมกันซึ่งส่งถึงหลายคน) และสมาชิกของกลุ่ม ต้องใช้ใบอนุญาต Pro หรือ Team",
 	"adminKeys.namePlaceholder": "แอปที่ใช้งานจริง",
 	"adminKeys.allowMcpHint": "ใช้คีย์นี้กับไคลเอนต์ MCP เพื่อจัดการเฉพาะส่วนการดูแลระบบที่เลือกด้านล่าง ไม่สามารถอ่านหรือส่งอีเมลได้",
 	"adminKeys.createKey": "สร้างคีย์",

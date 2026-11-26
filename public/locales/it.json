@@ -1634,6 +1634,8 @@
 	"adminKeys.perm.mailboxesDesc": "Crea, aggiorna e rimuovi caselle.",
 	"adminKeys.perm.storage": "Controlla archiviazione",
 	"adminKeys.perm.storageDesc": "Vedi quale archiviazione di oggetti è in uso (R2, Backblaze B2, AWS S3 o file locali) e verifica che funzioni.",
+	"adminKeys.perm.groups": "Gestire i gruppi",
+	"adminKeys.perm.groupsDesc": "Crea, modifica ed elimina gruppi (indirizzi condivisi che recapitano a più persone) e i loro membri. Richiede una licenza Pro o Team.",
 	"adminKeys.namePlaceholder": "App di produzione",
 	"adminKeys.allowMcpHint": "Usa questa chiave con un client MCP per gestire solo le aree di amministrazione selezionate qui sotto. Non può leggere né inviare posta.",
 	"adminKeys.createKey": "Crea chiave",

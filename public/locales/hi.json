@@ -1623,6 +1623,8 @@
 	"adminKeys.perm.mailboxesDesc": "मेलबॉक्स बनाएँ, अपडेट करें और हटाएँ।",
 	"adminKeys.perm.storage": "स्टोरेज जाँचें",
 	"adminKeys.perm.storageDesc": "देखें कि कौन-सा ऑब्जेक्ट स्टोरेज इस्तेमाल हो रहा है (R2, Backblaze B2, AWS S3 या लोकल फ़ाइलें) और जाँचें कि वह काम करता है।",
+	"adminKeys.perm.groups": "समूह प्रबंधित करें",
+	"adminKeys.perm.groupsDesc": "समूह (साझा पते जो कई लोगों तक संदेश पहुँचाते हैं) और उनके सदस्य बनाएँ, बदलें और हटाएँ। इसके लिए Pro या Team लाइसेंस ज़रूरी है।",
 	"adminKeys.namePlaceholder": "प्रोडक्शन ऐप",
 	"adminKeys.allowMcpHint": "इस कुंजी का उपयोग MCP क्लाइंट के साथ केवल नीचे चुने गए एडमिन क्षेत्रों को प्रबंधित करने के लिए करें। यह मेल पढ़ या भेज नहीं सकती।",
 	"adminKeys.createKey": "कुंजी बनाएँ",
