@@ -88,7 +88,8 @@ async function addressConflict(env: CloudflareEnv, db: AppDatabase, domain: Doma
 }
 
 /**
- * Another group on the domain whose normalized address equals this one (john and j.ohn route alike). The
+ * Another group on the domain whose normalized address equals this one (john and j.ohn route alike). Groups
+ * only: a mailbox or alias created at the same moment as a dotted group variant is not covered. The
  * pre-insert check cannot see a concurrent request, so create and update look again once their own row
  * is stored and the loser backs out; two racing requests may both back out, and a retry then succeeds.
  */
@@ -285,8 +286,23 @@ export async function updateGroup(env: CloudflareEnv, db: AppDatabase, actor: Gr
 		throw error;
 	}
 	if (addressChanged && !sameClaim && (await normalizedClash(db, domain.id, localPart, id))) {
-		await db.update(mailGroups).set({ localPart: group.localPart, domainId: group.domainId, updatedAt: group.updatedAt }).where(eq(mailGroups.id, id));
+		// The new rule goes first: it must not outlive a failed restore. Then put back every field this update wrote.
 		await rollbackRules(env, changes);
+		try {
+			await db.update(mailGroups).set({
+				localPart: group.localPart,
+				domainId: group.domainId,
+				name: group.name,
+				description: group.description,
+				whoCanPost: group.whoCanPost,
+				replyTo: group.replyTo,
+				disabled: group.disabled,
+				updatedAt: group.updatedAt,
+			}).where(eq(mailGroups.id, id));
+		} catch (error) {
+			// The old address was taken in the meantime: nothing safe to restore to, so report the clash.
+			if (!isUniqueConstraintError(error)) throw error;
+		}
 		return fail(409, OWNER_MESSAGES.group);
 	}
 	if (addressChanged) await removeRule(env, oldDomain, oldAddress);
@@ -389,7 +405,7 @@ export async function addMembers(env: CloudflareEnv, db: AppDatabase, actor: Gro
 	}
 	// The cap check above cannot see a concurrent add, so count again and back out if this one overflowed it.
 	if ((await countMembers(db, id)) > MAX_GROUP_MEMBERS) {
-		for (const part of chunk(rows.map((row) => row.id), IN_CHUNK)) await db.delete(mailGroupMembers).where(inArray(mailGroupMembers.id, part));
+		await db.batch(chunk(rows.map((row) => row.id), IN_CHUNK).map((part) => db.delete(mailGroupMembers).where(inArray(mailGroupMembers.id, part))) as never);
 		return fail(422, `A group holds at most ${MAX_GROUP_MEMBERS} members`);
 	}
 	const stored: MemberRow[] = [];

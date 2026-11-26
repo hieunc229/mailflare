@@ -31,6 +31,13 @@ test("one failing rule does not stop the others", async (t) => {
 	assert.deepEqual(globalThis.gr.ensured.map(([, address]) => address), ["team@example.com"]);
 });
 
+test("a database error while restoring group rules is logged, not thrown", async () => {
+	globalThis.gr = { ensured: [] };
+	const db = { select() { throw new Error("connection reset"); } };
+	await app.ensureGroupDomainRouting({}, db, domain, new Map());
+	assert.deepEqual(globalThis.gr.ensured, []);
+});
+
 test("a database without the groups migration has nothing to restore", async (t) => {
 	const { env, db, sqlite } = await newDatabase(t, seed);
 	sqlite.exec("DROP TABLE mail_group_members; DROP TABLE mail_groups");

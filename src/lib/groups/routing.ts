@@ -20,8 +20,9 @@ export async function ensureGroupDomainRouting(
 	try {
 		rows = await db.select({ localPart: mailGroups.localPart }).from(mailGroups).where(eq(mailGroups.domainId, domain.id));
 	} catch (error) {
-		if (isMissingTableError(error)) return;
-		throw error;
+		// Receiving has already switched when this runs, so a failed lookup must not fail the whole setup.
+		if (!isMissingTableError(error)) console.warn("Listing groups to restore their routing rules failed", error);
+		return;
 	}
 	const results = await Promise.allSettled(rows.map((row) => ensureEmailRoutingRuleToWorker(env, domain.zoneId, `${row.localPart}@${domain.hostname}`.toLowerCase(), undefined, ruleCache)));
 	for (const result of results) if (result.status === "rejected") console.warn("Restoring a group routing rule failed", result.reason);
