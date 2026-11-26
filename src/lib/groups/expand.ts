@@ -6,10 +6,11 @@ import type { InboundQueueMessage } from "@/lib/email/inbound";
 import { inboundStorageKey } from "@/lib/email/inbound-id";
 import { resolveMailboxForAddress, toResolvedMailbox, type ResolvedMailbox } from "@/lib/email/routing";
 import { readTrustedDmarcResult } from "@/lib/spam/analyzers/authentication";
-import { isMissingTableError } from "@/lib/database-errors";
+import { isMissingColumnError, isMissingTableError } from "@/lib/database-errors";
 import { groupsAllowed } from "@/lib/groups/license";
 import { queueRelays } from "@/lib/groups/relay-queue";
-import { singleSenderAddress } from "@/lib/groups/policy-utils";
+import { findMemberSenderAddress, loadOrgHostnames } from "@/lib/groups/policy";
+import { canPost, externalsMayReceive, singleSenderAddress } from "@/lib/groups/policy-utils";
 import {
 	EXPANSION_DEFER_SECONDS,
 	GROUP_EXPANSION_CHUNK,
@@ -25,9 +26,23 @@ import {
 
 type MemberRow = typeof mailGroupMembers.$inferSelect;
 
+/** Named columns, not `select()`: a database that has not run the newest group migration must still route mail. */
+const GROUP_COLUMNS = { id: mailGroups.id, domainId: mailGroups.domainId, localPart: mailGroups.localPart, name: mailGroups.name, disabled: mailGroups.disabled, whoCanPost: mailGroups.whoCanPost };
+
+/** The group's "relay outside posts" toggle; off when its migration has not been applied. */
+async function readRelayOutsidePosts(db: AppDatabase, groupId: string): Promise<boolean> {
+	try {
+		const [row] = await db.select({ value: mailGroups.relayOutsidePosts }).from(mailGroups).where(eq(mailGroups.id, groupId)).limit(1);
+		return row?.value === true;
+	} catch (error) {
+		if (isMissingColumnError(error)) return false;
+		throw error;
+	}
+}
+
 async function loadGroup(db: AppDatabase, groupId: string) {
 	try {
-		const [group] = await db.select().from(mailGroups).where(eq(mailGroups.id, groupId)).limit(1);
+		const [group] = await db.select(GROUP_COLUMNS).from(mailGroups).where(eq(mailGroups.id, groupId)).limit(1);
 		return group ?? null;
 	} catch (error) {
 		if (isMissingTableError(error)) return null;
@@ -172,8 +187,21 @@ export async function expandGroupDelivery(
 		for (const batch of planQueueBatches(messages)) await env.INBOUND_QUEUE.sendBatch(batch);
 	}
 
+	// An anyone group relays to externals only posts from members or your own domains, unless its toggle says otherwise.
+	let relayIds = externalIds;
+	if (relayIds.length && group.whoCanPost === "anyone" && !(await readRelayOutsidePosts(db, group.id))) {
+		const dmarc = readTrustedDmarcResult(payload.headers, payload.verdicts);
+		const qualified = !!fromAddress && dmarc === "pass" && (
+			canPost({ whoCanPost: "org", senderAddress: fromAddress, dmarc, orgHostnames: await loadOrgHostnames(db), memberAddresses: [] })
+			|| canPost({ whoCanPost: "members", senderAddress: fromAddress, dmarc, orgHostnames: [], memberAddresses: await findMemberSenderAddress(db, group.id, fromAddress) })
+		);
+		if (!externalsMayReceive({ whoCanPost: "anyone", relayOutsidePosts: false, qualified })) {
+			console.warn(`Group ${group.id}: a post from outside goes to internal members only (the group's outside-posts toggle is off)`);
+			relayIds = [];
+		}
+	}
 	// Last, after the internal copies: queueing relays is the one step a retried chunk must not repeat.
-	const relayed = externalIds.length ? await queueRelays(env, db, group, payload, externalIds, { dmarcPass, cursor: expansion.cursor, loadBytes }) : 0;
+	const relayed = relayIds.length ? await queueRelays(env, db, group, payload, relayIds, { dmarcPass, cursor: expansion.cursor, loadBytes }) : 0;
 	if (!mailboxIds.length && !relayed && !nextCursor && !expansion.cursor) console.warn(`Group ${group.id} has no deliverable members`);
 
 	if (nextCursor) {

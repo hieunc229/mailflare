@@ -46,3 +46,13 @@ export function canPost(input: CanPostInput): boolean {
 	for (const candidate of input.memberAddresses) if (candidate.toLowerCase() === sender) return true;
 	return false;
 }
+
+/**
+ * Whether external members get this post. An `org` or `members` group only admitted qualified posters, so it always
+ * does. An `anyone` group admits everybody, and every relay is a billed send under our domain, so by default only a
+ * qualified poster (a member or one of your own domains, with a trusted DMARC pass) reaches externals; the group's
+ * `relayOutsidePosts` toggle opens that to everyone.
+ */
+export function externalsMayReceive(input: { whoCanPost: WhoCanPost; relayOutsidePosts: boolean; qualified: boolean }): boolean {
+	return input.whoCanPost !== "anyone" || input.relayOutsidePosts || input.qualified;
+}

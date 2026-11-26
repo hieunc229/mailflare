@@ -14,6 +14,7 @@ const mocks = {
 const { app, newDatabase } = await loadApp("groups-external-members", `
 	export * as members from "./src/app/api/groups/[id]/members/route.ts";
 	export * as item from "./src/app/api/groups/[id]/route.ts";
+	export * as list from "./src/app/api/groups/route.ts";
 	export * as utils from "./src/lib/groups/members-utils.ts";
 `, { mocks });
 
@@ -137,4 +138,30 @@ test("the group view says whether unsubscribe links can be built and whether a c
 	const capped = (await view()).relayCapped;
 	assert.deepEqual({ scope: capped.scope, period: capped.period, limit: capped.limit }, { scope: "installation", period: "day", limit: 2000 });
 	assert.ok(Number.isFinite(Date.parse(capped.at)));
+});
+
+test("the outside-posts toggle defaults off, is set on create and update, is audited, and shows in the group view", async (t) => {
+	const { sqlite } = await ctx(t);
+	const create = (body) => app.list.POST(req({ domainId: "d1", localPart: "sales", name: "Sales", ...body }));
+	const off = await (await create({})).json();
+	assert.equal(off.group.relayOutsidePosts, false);
+	const on = await (await create({ localPart: "ops", relayOutsidePosts: true })).json();
+	assert.equal(on.group.relayOutsidePosts, true);
+	assert.equal(sqlite.prepare("SELECT relay_outside_posts AS v FROM mail_groups WHERE id = ?").get(on.group.id).v, 1);
+	const patched = await app.item.PATCH(req({ relayOutsidePosts: true }, "PATCH"), ids("g1"));
+	assert.equal((await patched.json()).group.relayOutsidePosts, true);
+	assert.equal((await (await app.item.GET(req(undefined, "GET"), ids("g1"))).json()).group.relayOutsidePosts, true);
+	const audit = sqlite.prepare("SELECT metadata FROM audit_logs WHERE action = 'group.updated'").all().map((r) => JSON.parse(r.metadata));
+	assert.deepEqual(audit[0].changed, ["relayOutsidePosts"]);
+	assert.equal((await app.item.PATCH(req({ relayOutsidePosts: true }, "PATCH"), ids("g1"))).status, 200);
+	assert.equal(sqlite.prepare("SELECT count(*) AS n FROM audit_logs WHERE action = 'group.updated'").get().n, 1, "no change, no audit");
+	assert.equal((await app.item.PATCH(req({ relayOutsidePosts: "yes" }, "PATCH"), ids("g1"))).status, 400);
+});
+
+test("without the migration the admin routes answer MIGRATION_REQUIRED", async (t) => {
+	const { sqlite } = await ctx(t);
+	sqlite.exec("ALTER TABLE mail_groups DROP COLUMN relay_outside_posts");
+	const response = await app.item.GET(req(undefined, "GET"), ids("g1"));
+	assert.equal(response.status, 503);
+	assert.equal((await response.json()).code, "MIGRATION_REQUIRED");
 });

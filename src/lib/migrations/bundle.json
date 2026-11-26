@@ -1001,6 +1001,12 @@
         "CREATE INDEX `mail_group_members_mailbox_idx` ON `mail_group_members` (`mailbox_id`);",
         "CREATE INDEX `mail_group_members_created_by_idx` ON `mail_group_members` (`created_by_user_id`);"
       ]
+    },
+    {
+      "name": "0104_relay_outside_posts.sql",
+      "statements": [
+        "ALTER TABLE `mail_groups` ADD `relay_outside_posts` integer DEFAULT false NOT NULL;"
+      ]
     }
   ]
 }

@@ -72,6 +72,7 @@ function summarize(group: GroupRow, domain: Pick<DomainRow, "hostname" | "sendin
 		description: group.description,
 		whoCanPost: group.whoCanPost,
 		replyTo: group.replyTo,
+		relayOutsidePosts: group.relayOutsidePosts,
 		disabled: group.disabled,
 		memberCount,
 		canSend: domainCanSend(domain),
@@ -249,7 +250,7 @@ export async function getGroup(db: AppDatabase, actor: GroupActor, id: string, e
 	return ok({ group: summarize(found.group, found.domain, rows.length), members, notices: await groupNotices(env, db, id) });
 }
 
-type CreateInput = { domainId: string; localPart: string; name: string; description?: string | null; whoCanPost: GroupRow["whoCanPost"]; replyTo: GroupRow["replyTo"] };
+type CreateInput = { domainId: string; localPart: string; name: string; description?: string | null; whoCanPost: GroupRow["whoCanPost"]; replyTo: GroupRow["replyTo"]; relayOutsidePosts?: boolean };
 
 export async function createGroup(env: CloudflareEnv, db: AppDatabase, actor: GroupActor, input: CreateInput) {
 	const domain = await usableDomain(db, actor, input.domainId);
@@ -270,6 +271,7 @@ export async function createGroup(env: CloudflareEnv, db: AppDatabase, actor: Gr
 			description: input.description?.trim() || null,
 			whoCanPost: input.whoCanPost,
 			replyTo: input.replyTo,
+			relayOutsidePosts: input.relayOutsidePosts ?? false,
 			createdByUserId: actor.id,
 		});
 	} catch (error) {
@@ -295,7 +297,7 @@ export async function createGroup(env: CloudflareEnv, db: AppDatabase, actor: Gr
 	return ok(summarize(row, domain, 0));
 }
 
-type UpdateInput = Partial<Pick<CreateInput, "domainId" | "localPart" | "name" | "whoCanPost" | "replyTo">> & { description?: string | null; disabled?: boolean };
+type UpdateInput = Partial<Pick<CreateInput, "domainId" | "localPart" | "name" | "whoCanPost" | "replyTo" | "relayOutsidePosts">> & { description?: string | null; disabled?: boolean };
 
 export async function updateGroup(env: CloudflareEnv, db: AppDatabase, actor: GroupActor, id: string, input: UpdateInput) {
 	const found = await loadOwnedGroup(db, actor, id);
@@ -331,9 +333,10 @@ export async function updateGroup(env: CloudflareEnv, db: AppDatabase, actor: Gr
 		description,
 		whoCanPost: input.whoCanPost ?? group.whoCanPost,
 		replyTo: input.replyTo ?? group.replyTo,
+		relayOutsidePosts: input.relayOutsidePosts ?? group.relayOutsidePosts,
 		disabled: input.disabled ?? group.disabled,
 	};
-	const changed = (["localPart", "domainId", "name", "description", "whoCanPost", "replyTo", "disabled"] as const).filter((key) => {
+	const changed = (["localPart", "domainId", "name", "description", "whoCanPost", "replyTo", "relayOutsidePosts", "disabled"] as const).filter((key) => {
 		if (key === "localPart") return addressChanged && localPart !== group.localPart;
 		return next[key] !== group[key];
 	});
@@ -366,6 +369,7 @@ export async function updateGroup(env: CloudflareEnv, db: AppDatabase, actor: Gr
 				description: group.description,
 				whoCanPost: group.whoCanPost,
 				replyTo: group.replyTo,
+				relayOutsidePosts: group.relayOutsidePosts,
 				disabled: group.disabled,
 				updatedAt: group.updatedAt,
 			}).where(eq(mailGroups.id, id));

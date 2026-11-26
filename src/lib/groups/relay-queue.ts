@@ -22,7 +22,7 @@ import { domainCanSend } from "@/lib/groups/sending";
 import { createAuditLog } from "@/lib/mailboxes/audit";
 import { analyzeSpam } from "@/lib/spam/engine";
 
-type GroupRow = typeof mailGroups.$inferSelect;
+type GroupRow = Pick<typeof mailGroups.$inferSelect, "id" | "domainId" | "localPart" | "name" | "disabled">;
 const MAX_RATE_PAGES = 3;
 
 /** Every marker under the day's prefix. `truncated` means there were more than we are willing to read. */
