@@ -75,12 +75,12 @@ export async function grantedCalendars(db: Db, userId: string): Promise<GrantedC
 /** The user's own calendars, then those shared with them as `read` or better (a `freebusy` grant is not a calendar to show). */
 export async function listVisibleCalendars(db: Db, user: Actor): Promise<CalendarSummary[]> {
 	const own = await listOwnCalendars(db, user.id);
-	const rows = await db.select({ id: davCollections.id, name: davCollections.displayName, color: davCollections.color, description: davCollections.description, role: calendarShares.role, ownerName: users.name, ownerEmail: users.email }).from(calendarShares)
+	const rows = await db.select({ id: davCollections.id, name: davCollections.displayName, color: davCollections.color, description: davCollections.description, role: calendarShares.role, ownerId: users.id, ownerName: users.name, ownerEmail: users.email }).from(calendarShares)
 		.innerJoin(davCollections, eq(davCollections.id, calendarShares.calendarId))
 		.innerJoin(users, eq(users.id, davCollections.userId))
 		.where(and(eq(calendarShares.granteeUserId, user.id), inArray(calendarShares.role, ["read", "edit", "manage"]), eq(davCollections.kind, "calendar"), eq(users.disabled, false)))
 		.orderBy(asc(davCollections.createdAt), asc(davCollections.id)).limit(MAX_GRANTS_READ);
-	const shared: CalendarSummary[] = rows.map((row) => ({ id: row.id, name: row.name, color: paletteColor(row.color), description: row.description ?? "", isDefault: false, role: row.role, ownerName: row.ownerName || row.ownerEmail, eventCount: 0 }));
+	const shared: CalendarSummary[] = rows.map((row) => ({ id: row.id, name: row.name, color: paletteColor(row.color), description: row.description ?? "", isDefault: false, role: row.role, ownerId: row.ownerId, ownerName: row.ownerName || row.ownerEmail, eventCount: 0 }));
 	return [...own, ...shared];
 }
 

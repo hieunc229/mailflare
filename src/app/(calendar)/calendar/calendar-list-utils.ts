@@ -1,3 +1,4 @@
+import type { CalendarSummary } from "@/lib/calendar/calendars-types";
 import type { CalendarEvent } from "./types";
 
 /** Which calendars are hidden is a per-browser choice, kept in localStorage. */
@@ -28,6 +29,7 @@ export function visibleCalendarEvents(events: CalendarEvent[], hidden: string[],
 /** The translation key for a failed save or delete, chosen by the response status so the server's English text is never shown. */
 export function calendarErrorKey(action: "save" | "delete", status: number): string {
 	if (status === 404) return "calendar.calendars.error.notFound";
+	if (status === 403) return "calendar.calendars.error.denied";
 	if (action === "save") return status === 409 ? "calendar.calendars.error.limit" : status === 400 ? "calendar.calendars.error.invalid" : "calendar.calendars.saveFailed";
 	return status === 409 ? "calendar.calendars.error.defaultCalendar" : "calendar.calendars.deleteFailed";
 }
@@ -41,4 +43,39 @@ export function nextColor(values: readonly string[], current: string, key: strin
 	if (key === "Home") return values[0];
 	if (key === "End") return values[values.length - 1];
 	return null;
+}
+
+type Translate = (key: never, values?: Record<string, string | number>) => string;
+type Listed = Pick<CalendarSummary, "name" | "role" | "ownerName" | "ownerId">;
+
+/** The name a calendar goes by: its own, else the localised default label, or "<owner>'s calendar" for someone else's unnamed default. */
+export function calendarLabel(calendar: Listed, t: Translate): string {
+	if (calendar.name) return calendar.name;
+	return calendar.role === "owner" ? t("calendar.defaultName" as never) : t("calendar.shared.calendarOf" as never, { owner: calendar.ownerName ?? "" });
+}
+
+/** Roles that may change events (the editor offers only these calendars). */
+export const canWriteEvents = (role: CalendarSummary["role"] | undefined): boolean => role === undefined || role === "owner" || role === "edit" || role === "manage";
+/** Roles that may change a calendar's name and colour and who it is shared with. */
+export const canManageCalendar = (role: CalendarSummary["role"]): boolean => role === "owner" || role === "manage";
+
+/**
+ * Calendars the event editor offers. A new event may go to any calendar the user can write to; an existing one stays with its owner
+ * (the server refuses a move to someone else's calendar), so only the owner's calendars it can reach are offered.
+ */
+export function writableCalendars<T extends Pick<CalendarSummary, "id" | "role" | "ownerId">>(calendars: T[], editing: { calendarId?: string; role?: string } | null): T[] {
+	const writable = calendars.filter((calendar) => canWriteEvents(calendar.role));
+	if (!editing) return writable;
+	if (!editing.role || editing.role === "owner") return writable.filter((calendar) => calendar.role === "owner");
+	const current = calendars.find((calendar) => calendar.id === editing.calendarId);
+	return writable.filter((calendar) => calendar.role !== "owner" && calendar.ownerId === current?.ownerId);
+}
+
+/** The translation key for a failed sharing request, chosen by the response status so the server's English text is never shown. */
+export function shareErrorKey(status: number): string {
+	if (status === 404) return "calendar.share.error.notFound";
+	if (status === 400) return "calendar.share.error.invalid";
+	if (status === 409) return "calendar.share.error.conflict";
+	if (status === 403) return "calendar.share.error.denied";
+	return "calendar.share.error.generic";
 }

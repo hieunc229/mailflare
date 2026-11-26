@@ -7,7 +7,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { build } from "esbuild";
 import Database from "better-sqlite3";
 import { drizzle } from "drizzle-orm/better-sqlite3";
-import { and, eq, or } from "drizzle-orm";
+import { and, eq, gte, lt, ne, or } from "drizzle-orm";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 const dir = mkdtempSync(join(tmpdir(), "mailflare-cal-share-"));
@@ -87,7 +87,7 @@ test("listVisibleCalendars: own calendars, then calendars shared as read or bett
 });
 
 test("redactEvent: owner and editors see everything, readers lose private details, free/busy sees blocks only", () => {
-	const base = { id: "e", userId: "u1", title: "Therapy", description: "d", location: "l", attendees: '["a@b.co"]', attendeeResponses: '{"a@b.co":"accepted"}', mailboxId: "mbx", inviteMessageId: "msg", reminderMinutes: 10, startsAt: new Date(1000), endsAt: new Date(2000), repeat: "weekly", transparent: false, isPrivate: true, responseStatus: null, color: "#000" };
+	const base = { id: "e", userId: "u1", title: "Therapy", description: "d", location: "l", attendees: '["a@b.co"]', attendeeResponses: '{"a@b.co":"accepted"}', mailboxId: "mbx", inviteMessageId: "msg", inviteSender: "boss@elsewhere.test", reminderMinutes: 10, startsAt: new Date(1000), endsAt: new Date(2000), repeat: "weekly", transparent: false, isPrivate: true, responseStatus: null, color: "#000" };
 	assert.deepEqual(redactEvent(base, "owner"), base);
 	for (const role of ["edit", "manage"]) {
 		const view = redactEvent(base, role);
@@ -95,6 +95,7 @@ test("redactEvent: owner and editors see everything, readers lose private detail
 		assert.equal(view.description, "d");
 		assert.equal(view.mailboxId, null, "the owner's mailbox is not for delegates");
 		assert.equal(view.inviteMessageId, null);
+		assert.equal(view.inviteSender, null, "who invited the owner is the owner's business");
 		assert.equal(view.reminderMinutes, null);
 	}
 	const hidden = redactEvent(base, "read");
@@ -241,11 +242,21 @@ test("listShares: manager and owner only; entries carry the person and role", as
 	assert.equal((await shares.listShares(orm, u("u4"), "cal:work")).status, 404);
 });
 
-test("deleting a calendar's collection row or a grantee's account removes the grants", async () => {
-	const { sqlite, orm, calendar, grant } = setup();
+test("deleting a calendar's collection row or a grantee's account removes the grants", () => {
+	const { sqlite, calendar, grant } = setup();
 	calendar("cal:work"); calendar("cal:two"); grant("g1", "cal:work", "u2", "read"); grant("g2", "cal:two", "u2", "read"); grant("g3", "cal:two", "u3", "read");
 	sqlite.prepare("DELETE FROM dav_collections WHERE id = 'cal:work'").run();
 	sqlite.prepare("DELETE FROM users WHERE id = 'u3'").run();
 	assert.deepEqual(sqlite.prepare("SELECT id FROM calendar_shares").all().map((row) => row.id), ["g2"]);
-	void orm; void or;
+});
+
+test("calendarScopes: the shared-calendar query is answered from the calendar and user indexes, never a table scan", async () => {
+	const { sqlite, orm } = setup();
+	const granted = [{ id: "cal:work", ownerId: "u1" }, { id: "cal:u1", ownerId: "u1" }];
+	const [scope] = shares.calendarScopes(granted);
+	const query = orm.select().from(calendarEvents).where(and(scope, lt(calendarEvents.startsAt, new Date(2000)), or(gte(calendarEvents.endsAt, new Date(1000)), ne(calendarEvents.repeat, "none")))).toSQL();
+	const plan = sqlite.prepare(`EXPLAIN QUERY PLAN ${query.sql}`).all(...query.params).map((row) => row.detail).join("\n");
+	assert.match(plan, /calendar_events_calendar_starts_idx/);
+	assert.match(plan, /calendar_events_user_starts_idx/);
+	assert.doesNotMatch(plan, /SCAN calendar_events\b(?! USING)/);
 });

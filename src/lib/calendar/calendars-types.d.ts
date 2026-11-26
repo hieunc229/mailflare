@@ -12,6 +12,8 @@ export type CalendarSummary = {
 	role: CalendarRole;
 	/** Set on calendars shared with the user: whose they are (a calendar without a name of its own is labelled with it). */
 	ownerName?: string;
+	/** Set with `ownerName`: the owner's user id, so the editor offers an event only calendars of its own owner. */
+	ownerId?: string;
 	/** Events in this calendar, for the delete confirmation. */
 	eventCount: number;
 };

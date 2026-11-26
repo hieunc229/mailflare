@@ -2,6 +2,7 @@ import { and, eq, gte, lt, ne, or } from "drizzle-orm";
 import type { getDb } from "@/db";
 import { calendarEvents } from "@/db/schema";
 import { calendarCollectionId } from "@/lib/dav/changes";
+import { isOffCalendarResponse } from "./response-status";
 import { calendarFilter, eventCalendarId, ownCalendarIds } from "./calendars";
 import { calendarScopes, grantedCalendars } from "./shares";
 import type { CalendarRole } from "./shares-types";
@@ -32,7 +33,8 @@ export async function listVisibleEvents(db: Db, user: { id: string }, range: { s
 				const role = roles.get(calendarId);
 				// A row whose user is not its calendar's owner (D-2) is not served through that calendar's grant.
 				if (!role || !grants.some((grant) => grant.id === calendarId && grant.ownerId === row.userId)) continue;
-				if (role === "freebusy" && !isBusyEvent(row)) continue;
+				// Invitations the owner has not answered, and declined or cancelled ones, are not on the calendar for anyone else.
+				if (isOffCalendarResponse(row.responseStatus) || (role === "freebusy" && !isBusyEvent(row))) continue;
 				shared.push({ ...redactEvent(row, role), calendarId, role });
 			}
 		}

@@ -13,7 +13,8 @@ import { authFetch } from "@/lib/auth/client";
 import { DEFAULT_FOLDER_COLOR, FOLDER_COLOR_OPTIONS } from "@/lib/folders/colors";
 import { folderColorKeys } from "@/lib/folders/color-keys";
 import type { CalendarSummary } from "@/lib/calendar/calendars-types";
-import { calendarErrorKey, nextColor } from "./calendar-list-utils";
+import { calendarErrorKey, canManageCalendar, nextColor } from "./calendar-list-utils";
+import { ShareSection } from "./calendar-share-section";
 import { saveCalendar } from "./calendar-save";
 import { calendarChanged, closeCalendarSettings, useCalendarState } from "./calendar-state";
 
@@ -102,7 +103,7 @@ function SettingsForm({ target }: { target: CalendarSummary | "new" }) {
 			{error && <p role="alert" className="text-red-700">{error}</p>}
 			<div className="flex flex-wrap items-center justify-between gap-2 pt-2">
 				<div>
-					{calendar && !calendar.isDefault && (
+					{calendar && !calendar.isDefault && calendar.role === "owner" && (
 						<Button type="button" variant="ghost" disabled={pending !== null} onClick={() => void remove()} className="text-red-600 hover:bg-red-50 [@media(pointer:coarse)]:min-h-11">
 							{pending === "delete" ? <Loader2 aria-hidden="true" className="h-4 w-4 animate-spin motion-reduce:animate-none" /> : <Trash2 aria-hidden="true" className="h-4 w-4" />}{t("calendar.calendars.delete")}
 						</Button>
@@ -129,6 +130,7 @@ export function CalendarSettingsDialog() {
 					<DialogDescription className="sr-only">{t("calendar.calendars.settingsDescription")}</DialogDescription>
 				</DialogHeader>
 				{target !== null && <SettingsForm key={target === "new" ? "new" : target.id} target={target} />}
+				{target !== null && target !== "new" && canManageCalendar(target.role) && <ShareSection key={`share-${target.id}`} calendarId={target.id} />}
 			</DialogContent>
 		</Dialog>
 	);
