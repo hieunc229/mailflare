@@ -21,17 +21,18 @@ export async function GET(request: Request) {
 	const rows = await ensurePersonalMailbox(env, db, user);
 	const entitlements = await getLicenseEntitlements(env);
 	return NextResponse.json({
-		mailboxes: await Promise.all(rows.map(async (mailbox) => ({
-			...mailbox,
-			...(mailbox.userId === user.id && tracksAccountIdentity(mailbox, user.email)
-				? { displayName: user.name, hasAvatar: !!user.avatarKey }
-				: {}),
-			senderAddresses: [
-				...await getMailboxDomainAddresses(db, mailbox),
-				// Groups this account may send as sit under its primary mailbox (spec D-10).
-				...await listSendAsGroupAddresses(env, db, user, mailbox),
-			],
-		}))),
+		mailboxes: await Promise.all(rows.map(async (mailbox) => {
+			// Groups this account may send as sit under its primary mailbox (spec D-10).
+			const groupSenderAddresses = await listSendAsGroupAddresses(env, db, user, mailbox);
+			return {
+				...mailbox,
+				...(mailbox.userId === user.id && tracksAccountIdentity(mailbox, user.email)
+					? { displayName: user.name, hasAvatar: !!user.avatarKey }
+					: {}),
+				senderAddresses: [...await getMailboxDomainAddresses(db, mailbox), ...groupSenderAddresses],
+				groupSenderAddresses,
+			};
+		})),
 		canCreateShared: user.role === "admin" && entitlements.canShareMailboxes,
 	});
 }
