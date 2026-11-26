@@ -122,14 +122,14 @@ test("a group on a domain the key owner does not own is a 404", async (t) => {
 	assert.equal((await app.members.POST(req("POST", { members: [{ kind: "user", userId: "alice" }] }), ctxId("gx"))).status, 404);
 });
 
-test("members: add, refuse external and canSendAs with 422, remove by memberId", async (t) => {
+test("members: add, refuse an own-domain external and canSendAs with 422, remove by memberId", async (t) => {
 	const { sqlite } = await ctx(t);
 	const group = await makeGroup();
 	const added = await app.members.POST(req("POST", { members: [{ kind: "user", userId: "alice" }] }), ctxId(group.id));
 	assert.equal(added.status, 200, JSON.stringify(await added.clone().json()));
 	const body = await added.json();
 	const memberId = body.added[0].id;
-	const external = await app.members.POST(req("POST", { members: [{ kind: "external", email: "x@ext.com" }] }), ctxId(group.id));
+	const external = await app.members.POST(req("POST", { members: [{ kind: "external", email: "x@example.com" }] }), ctxId(group.id));
 	assert.equal(external.status, 422);
 	const sendAs = await app.members.POST(req("POST", { members: [{ kind: "user", userId: "alice", canSendAs: true }] }), ctxId(group.id));
 	assert.equal(sendAs.status, 422);
@@ -168,7 +168,7 @@ test("manage_groups runs every action through the v1 routes", async (t) => {
 	assert.equal((await call({ action: "update", id, data: { description: "d" } })).status, 200);
 	const added = await call({ action: "add_members", id, data: { members: [{ kind: "user", userId: "alice" }] } });
 	assert.equal(added.status, 200);
-	assert.equal((await call({ action: "add_members", id, data: { members: [{ kind: "external", email: "x@ext.com" }] } })).status, 422);
+	assert.equal((await call({ action: "add_members", id, data: { members: [{ kind: "external", email: "x@example.com" }] } })).status, 422);
 	assert.equal((await call({ action: "remove_member", id, data: { memberId: added.data.added[0].id } })).status, 200);
 	assert.equal((await call({ action: "delete", id })).status, 200);
 	assert.equal((await call({ action: "get" })).isError, true, "id required");

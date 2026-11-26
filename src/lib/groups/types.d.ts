@@ -16,6 +16,8 @@ export type GroupSummary = {
 	replyTo: "sender" | "group";
 	disabled: boolean;
 	memberCount: number;
+	/** False when the domain has no way to send, so external members would receive nothing. */
+	canSend: boolean;
 	createdAt: string;
 };
 
@@ -29,6 +31,8 @@ export type GroupMemberView = {
 	name: string;
 	address: string;
 	disabled: boolean;
+	/** An external member whose address is on the domain's confirmed suppression list. */
+	suppressed: boolean;
 	createdAt: string;
 };
 

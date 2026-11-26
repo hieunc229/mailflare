@@ -1,11 +1,11 @@
 import { and, asc, eq, inArray, isNull, or, sql } from "drizzle-orm";
 import type { AppDatabase } from "@/db";
 import { containsLike } from "@/db/sql";
-import { domains, mailGroupMembers, mailGroups, mailboxes, users } from "@/db/schema";
+import { domains, emailSuppressions, mailGroupMembers, mailGroups, mailboxes, users } from "@/db/schema";
 import { domainOwnerIdsForAdmin } from "@/app/api/accounts/utils";
 import { deleteEmailRoutingRuleForAddress, ensureEmailRoutingRuleToWorker, rollbackEmailRoutingRuleChanges } from "@/lib/cloudflare-api";
 import type { CfEmailRoutingRuleChange } from "@/lib/cloudflare-api.types";
-import { isUniqueConstraintError } from "@/lib/database-errors";
+import { isMissingTableError, isUniqueConstraintError } from "@/lib/database-errors";
 import { isReportAddressReserved } from "@/lib/deliverability/report-address";
 import { normalizeRecipientLocalPart } from "@/lib/email/recipient-address";
 import { newId } from "@/lib/ids";
@@ -14,6 +14,7 @@ import { findAddressOwner } from "@/lib/mailboxes/address-owner";
 import type { AuditLogInput } from "@/lib/mailboxes/types";
 import {
 	CAN_SEND_AS_UNAVAILABLE,
+	MAX_EXTERNAL_MEMBERS,
 	MAX_GROUPS_PER_DOMAIN,
 	MAX_GROUP_MEMBERS,
 	MEMBER_INSERT_CHUNK,
@@ -58,7 +59,12 @@ async function loadOwnedGroup(db: AppDatabase, actor: GroupActor, id: string): P
 	return row ?? null;
 }
 
-function summarize(group: GroupRow, domain: Pick<DomainRow, "hostname">, memberCount: number): GroupSummary {
+/** Whether mail to external members can leave this domain: a provider is chosen, and Cloudflare sending is switched on. */
+export function domainCanSend(domain: Pick<DomainRow, "sendingProvider" | "sendingEnabled">): boolean {
+	return domain.sendingProvider !== "none" && (domain.sendingProvider !== "cloudflare" || domain.sendingEnabled);
+}
+
+function summarize(group: GroupRow, domain: Pick<DomainRow, "hostname" | "sendingProvider" | "sendingEnabled">, memberCount: number): GroupSummary {
 	return {
 		id: group.id,
 		domainId: group.domainId,
@@ -71,6 +77,7 @@ function summarize(group: GroupRow, domain: Pick<DomainRow, "hostname">, memberC
 		replyTo: group.replyTo,
 		disabled: group.disabled,
 		memberCount,
+		canSend: domainCanSend(domain),
 		createdAt: new Date(group.createdAt).toISOString(),
 	};
 }
@@ -79,6 +86,13 @@ async function countMembers(db: AppDatabase, groupId: string): Promise<number> {
 	const [row] = await db.select({ n: sql<number>`count(*)` }).from(mailGroupMembers).where(eq(mailGroupMembers.groupId, groupId));
 	return Number(row?.n ?? 0);
 }
+
+async function countExternal(db: AppDatabase, groupId: string): Promise<number> {
+	const [row] = await db.select({ n: sql<number>`count(*)` }).from(mailGroupMembers).where(and(eq(mailGroupMembers.groupId, groupId), eq(mailGroupMembers.kind, "external")));
+	return Number(row?.n ?? 0);
+}
+
+const externalCapMessage = () => `A group holds at most ${MAX_EXTERNAL_MEMBERS} external members`;
 
 /** Why an address cannot become a group's, or null. */
 async function addressConflict(env: CloudflareEnv, db: AppDatabase, domain: DomainRow, localPart: string): Promise<string | null> {
@@ -136,7 +150,24 @@ export async function listGroups(db: AppDatabase, actor: GroupActor) {
 	return ok({ groups, domains: available.map((domain) => ({ id: domain.id, hostname: domain.hostname })) });
 }
 
-async function describeMembers(db: AppDatabase, rows: MemberRow[]): Promise<GroupMemberView[]> {
+/** Which of the addresses are on the domain's confirmed suppression list. Empty before that migration is applied. */
+async function suppressedAmong(db: AppDatabase, domainId: string, emails: string[]): Promise<Set<string>> {
+	const found = new Set<string>();
+	try {
+		for (const part of chunk([...new Set(emails)], IN_CHUNK)) {
+			const rows = await db
+				.select({ email: emailSuppressions.email })
+				.from(emailSuppressions)
+				.where(and(eq(emailSuppressions.domainId, domainId), eq(emailSuppressions.confirmed, true), inArray(emailSuppressions.email, part)));
+			for (const row of rows) found.add(row.email);
+		}
+	} catch (error) {
+		if (!isMissingTableError(error)) throw error;
+	}
+	return found;
+}
+
+async function describeMembers(db: AppDatabase, domainId: string, rows: MemberRow[]): Promise<GroupMemberView[]> {
 	const userIds = [...new Set(rows.flatMap((row) => (row.userId ? [row.userId] : [])))];
 	const mailboxIds = [...new Set(rows.flatMap((row) => (row.mailboxId ? [row.mailboxId] : [])))];
 	const userRows = new Map<string, { name: string; email: string; disabled: boolean }>();
@@ -152,6 +183,7 @@ async function describeMembers(db: AppDatabase, rows: MemberRow[]): Promise<Grou
 			.where(inArray(mailboxes.id, part));
 		for (const row of found) mailboxRows.set(row.id, { name: row.displayName || row.localPart, address: groupAddress(row.localPart, row.hostname) });
 	}
+	const suppressed = await suppressedAmong(db, domainId, rows.flatMap((row) => (row.kind === "external" && row.email ? [row.email] : [])));
 	return rows.map((row) => {
 		const account = row.userId ? userRows.get(row.userId) : undefined;
 		const mailbox = row.mailboxId ? mailboxRows.get(row.mailboxId) : undefined;
@@ -165,6 +197,7 @@ async function describeMembers(db: AppDatabase, rows: MemberRow[]): Promise<Grou
 			name: account?.name ?? mailbox?.name ?? row.email ?? "",
 			address: account?.email ?? mailbox?.address ?? row.email ?? "",
 			disabled: account?.disabled ?? false,
+			suppressed: row.kind === "external" && !!row.email && suppressed.has(row.email),
 			createdAt: new Date(row.createdAt).toISOString(),
 		};
 	});
@@ -174,7 +207,7 @@ export async function getGroup(db: AppDatabase, actor: GroupActor, id: string) {
 	const found = await loadOwnedGroup(db, actor, id);
 	if (!found) return fail(404, "Group not found");
 	const rows = await db.select().from(mailGroupMembers).where(eq(mailGroupMembers.groupId, id)).orderBy(asc(mailGroupMembers.createdAt), asc(mailGroupMembers.id));
-	const members = await describeMembers(db, rows);
+	const members = await describeMembers(db, found.group.domainId, rows);
 	members.sort((a, b) => a.name.localeCompare(b.name));
 	return ok({ group: summarize(found.group, found.domain, rows.length), members });
 }
@@ -362,29 +395,43 @@ export async function addMembers(env: CloudflareEnv, db: AppDatabase, actor: Gro
 		if (box.type !== "shared") return fail(422, "Only shared mailboxes can be members; add the account instead");
 	}
 
-	const existingRows = userIds.length || mailboxIds.length
+	const emails = [...new Set(checked.flatMap((member) => (member.kind === "external" ? [member.email] : [])))];
+	if (emails.some((email) => email === address)) return fail(422, "The group's own address cannot be a member");
+	if (emails.length) {
+		// Mail to our own domains never leaves the installation: an account or shared mailbox member gets it directly.
+		const hostnames = [...new Set(emails.map((email) => email.slice(email.lastIndexOf("@") + 1)))];
+		const own = new Set<string>();
+		for (const part of chunk(hostnames, IN_CHUNK)) for (const row of await db.select({ hostname: domains.hostname }).from(domains).where(inArray(domains.hostname, part))) own.add(row.hostname.toLowerCase());
+		const clash = emails.find((email) => own.has(email.slice(email.lastIndexOf("@") + 1)));
+		if (clash) return fail(422, `${clash.slice(clash.lastIndexOf("@") + 1)} is one of your domains; add the account or shared mailbox as a member instead`);
+	}
+
+	const existingRows = userIds.length || mailboxIds.length || emails.length
 		? await db
-			.select({ userId: mailGroupMembers.userId, mailboxId: mailGroupMembers.mailboxId })
+			.select({ userId: mailGroupMembers.userId, mailboxId: mailGroupMembers.mailboxId, email: mailGroupMembers.email })
 			.from(mailGroupMembers)
 			.where(and(
 				eq(mailGroupMembers.groupId, id),
 				or(
 					userIds.length ? inArray(mailGroupMembers.userId, userIds) : undefined,
 					mailboxIds.length ? inArray(mailGroupMembers.mailboxId, mailboxIds) : undefined,
+					emails.length ? inArray(mailGroupMembers.email, emails) : undefined,
 				),
 			))
 		: [];
-	const seen = new Set(existingRows.map((row) => row.userId ?? row.mailboxId));
+	const seen = new Set(existingRows.map((row) => row.userId ?? row.mailboxId ?? row.email));
 	const skipped: AddResult["skipped"] = [];
 	const fresh: { index: number; member: ValidMember }[] = [];
 	checked.forEach((member, index) => {
-		const key = member.kind === "user" ? member.userId : member.mailboxId;
+		const key = member.kind === "user" ? member.userId : member.kind === "mailbox" ? member.mailboxId : member.email;
 		if (seen.has(key)) return void skipped.push({ index, reason: "already_member" });
 		seen.add(key);
 		fresh.push({ index, member });
 	});
 	if (!fresh.length) return ok({ added: [], skipped });
 	if ((await countMembers(db, id)) + fresh.length > MAX_GROUP_MEMBERS) return fail(422, `A group holds at most ${MAX_GROUP_MEMBERS} members`);
+	const freshExternal = fresh.filter(({ member }) => member.kind === "external").length;
+	if (freshExternal && (await countExternal(db, id)) + freshExternal > MAX_EXTERNAL_MEMBERS) return fail(422, externalCapMessage());
 
 	const rows = fresh.map(({ member }) => ({
 		id: newId("gmb"),
@@ -392,7 +439,7 @@ export async function addMembers(env: CloudflareEnv, db: AppDatabase, actor: Gro
 		kind: member.kind,
 		userId: member.kind === "user" ? member.userId : null,
 		mailboxId: member.kind === "mailbox" ? member.mailboxId : null,
-		email: null,
+		email: member.kind === "external" ? member.email : null,
 		canSendAs: member.canSendAs,
 		createdByUserId: actor.id,
 	}));
@@ -408,15 +455,19 @@ export async function addMembers(env: CloudflareEnv, db: AppDatabase, actor: Gro
 		await db.batch(chunk(rows.map((row) => row.id), IN_CHUNK).map((part) => db.delete(mailGroupMembers).where(inArray(mailGroupMembers.id, part))) as never);
 		return fail(422, `A group holds at most ${MAX_GROUP_MEMBERS} members`);
 	}
+	if (freshExternal && (await countExternal(db, id)) > MAX_EXTERNAL_MEMBERS) {
+		await db.batch(chunk(rows.map((row) => row.id), IN_CHUNK).map((part) => db.delete(mailGroupMembers).where(inArray(mailGroupMembers.id, part))) as never);
+		return fail(422, externalCapMessage());
+	}
 	const stored: MemberRow[] = [];
 	for (const part of chunk(rows.map((row) => row.id), IN_CHUNK)) stored.push(...(await db.select().from(mailGroupMembers).where(inArray(mailGroupMembers.id, part))));
-	const added = await describeMembers(db, stored);
+	const added = await describeMembers(db, found.group.domainId, stored);
 	await createAuditLogs(env, rows.map((row): AuditLogInput => ({
 		actorUserId: actor.id,
 		targetUserId: row.userId,
 		mailboxId: row.mailboxId,
 		action: "group.member_added",
-		metadata: { groupId: id, address, kind: row.kind },
+		metadata: { groupId: id, address, kind: row.kind, ...(row.email ? { email: row.email } : {}) },
 	})));
 	return ok({ added, skipped });
 }
@@ -441,7 +492,7 @@ export async function updateMember(env: CloudflareEnv, db: AppDatabase, actor: G
 		metadata: { groupId: id, address: found.address, kind: found.member.kind, canSendAs: input.canSendAs },
 	});
 	const [row] = await db.select().from(mailGroupMembers).where(eq(mailGroupMembers.id, memberId)).limit(1);
-	return ok((await describeMembers(db, [row]))[0]);
+	return ok((await describeMembers(db, found.group.domainId, [row]))[0]);
 }
 
 export async function removeMember(env: CloudflareEnv, db: AppDatabase, actor: GroupActor, id: string, memberId: string) {

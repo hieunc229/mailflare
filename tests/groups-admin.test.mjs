@@ -296,7 +296,7 @@ test("invalid members are refused as a whole and nothing is stored", async (t) =
 		assert.equal(response.status, status, JSON.stringify(member));
 		if (pattern) assert.match((await response.json()).error, pattern);
 	};
-	await attempt({ kind: "external", email: "x@ext.com" }, 422, /external/i);
+	await attempt({ kind: "external", email: "x@example.com" }, 422, /domain/i);
 	await attempt({ kind: "user", userId: "missing" }, 422, /account/i);
 	await attempt({ kind: "user", userId: "off" }, 422, /disabled/i);
 	await attempt({ kind: "mailbox", mailboxId: "m-alice" }, 422, /shared/i);
