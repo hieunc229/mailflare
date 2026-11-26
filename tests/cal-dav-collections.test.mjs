@@ -236,3 +236,16 @@ test("replacing a series in c-work/ keeps its override rows in that calendar", a
 	const rows = sql.prepare("SELECT title, calendar_id FROM calendar_events ORDER BY recurrence_id IS NOT NULL").all();
 	assert.deepEqual(rows.map((row) => [row.title, row.calendar_id]), [["Two", "cal:work"], ["Two moved", "cal:work"]]);
 });
+
+test("an event whose calendar row is missing (a partial restore) is served in the owner's default/, never dropped", async (t) => {
+	const { env, keys, sql } = await fixture(t);
+	addEvent(sql, "evt_gone", "cal:gone");
+	addEvent(sql, "evt_work", "cal:work");
+	assert.deepEqual(hrefs(await (await propfind(env, DEFAULT, keys.u1, "<A:getetag/>", "1")).text()).filter((href) => href.endsWith(".ics")), [`${DEFAULT}evt_gone.ics`]);
+	assert.equal((await call(env, "GET", `${DEFAULT}evt_gone.ics`, { key: keys.u1 })).status, 200);
+	assert.equal((await call(env, "GET", `${WORK}evt_gone.ics`, { key: keys.u1 })).status, 404);
+	assert.deepEqual(hrefs(await (await syncSince(env, DEFAULT, keys.u1, "")).text()).filter((href) => href.endsWith(".ics")), [`${DEFAULT}evt_gone.ics`]);
+	// Another user's event with the same dangling id is not served to this user.
+	addEvent(sql, "evt_other", "cal:gone", "u2");
+	assert.equal((await call(env, "GET", `${DEFAULT}evt_other.ics`, { key: keys.u1 })).status, 404);
+});
