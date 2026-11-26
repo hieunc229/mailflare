@@ -85,11 +85,13 @@ On a Team license an administrator can add other users as hosts of a booking eve
 
 ## Account and mailbox management
 
-Admin > API keys can also grant the `accounts`, `mailboxes` and `storage` scopes independently. These routes use `Authorization: Bearer <key>` and require the key owner to retain the admin role. Account management requires a Pro or Team license; creating a shared mailbox requires a Team license. Each key can access only accounts created by its owner and mailboxes owned by those accounts or the admin.
+Admin > API keys can also grant the `accounts`, `mailboxes`, `storage` and `groups` scopes independently. These routes use `Authorization: Bearer <key>` and require the key owner to retain the admin role. Account management requires a Pro or Team license; creating a shared mailbox requires a Team license. Each key can access only accounts created by its owner and mailboxes owned by those accounts or the admin.
 
 The `storage` scope reports and tests object storage: `GET /api/v1/storage` returns `{ storage: { provider: "backblaze" | "s3" | "r2" | "files", configured, bucket, endpoint }, warning }` (credentials are never returned; `warning` explains a half-set `B2_*` configuration), and `POST /api/v1/storage` round-trips a small object and returns `{ ok, error?, latencyMs, storage }` (HTTP 502 on failure). Backblaze B2 (`B2_KEY_ID`, `B2_APPLICATION_KEY`, `B2_BUCKET`, `B2_ENDPOINT`) or AWS S3 (`S3_BUCKET`, `S3_REGION`, credentials) replaces R2 for all stored objects when configured.
 
-Admin API keys cannot read or send mail. Enable **Allow MCP access** when creating an admin key to use its selected `domains`, `accounts`, `mailboxes`, and `storage` permissions through `/mcp`. The `manage_domains`, `manage_accounts`, `manage_mailboxes`, and `manage_storage` (`status`, `test`) tools expose the corresponding management actions below. Admin MCP keys do not expose mail tools. Use Settings > API keys for mail and mail MCP access.
+The `groups` scope manages groups: shared addresses such as `team@example.com` that deliver a copy to every member. It needs a Pro or Team license (otherwise `403` with `code: "LICENSE_REQUIRED"`) and the groups database migration (otherwise `503` with `code: "MIGRATION_REQUIRED"`). It follows the same rules as the Groups admin page and every change is written to the audit log with the key's owner as the actor. Members must be accounts or shared mailboxes the key can see; external addresses and `canSendAs: true` are refused with `422` until they are supported. The MCP tool `manage_groups` takes `action` (`list`, `get`, `create`, `update`, `delete`, `add_members`, `remove_member`), `id` for a group, and `data` (`{ memberId }` for `remove_member`).
+
+Admin API keys cannot read or send mail. Enable **Allow MCP access** when creating an admin key to use its selected `domains`, `accounts`, `mailboxes`, `storage`, and `groups` permissions through `/mcp`. The `manage_domains`, `manage_accounts`, `manage_mailboxes`, `manage_groups`, and `manage_storage` (`status`, `test`) tools expose the corresponding management actions below. Admin MCP keys do not expose mail tools. Use Settings > API keys for mail and mail MCP access.
 
 | Scope | Mailflare route | Purpose |
 | --- | --- | --- |
@@ -102,6 +104,14 @@ Admin API keys cannot read or send mail. Enable **Allow MCP access** when creati
 | `mailboxes` | `GET /api/v1/mailboxes/[id]` | Get a managed mailbox |
 | `mailboxes` | `PATCH /api/v1/mailboxes/[id]` | Update mailbox settings |
 | `mailboxes` | `DELETE /api/v1/mailboxes/[id]` | Delete a mailbox and its routing rule |
+| `groups` | `GET /api/v1/groups` | List groups on the domains the key's owner can use |
+| `groups` | `POST /api/v1/groups` | Create a group (`{ domainId, localPart, name, description?, whoCanPost?, replyTo? }`) |
+| `groups` | `GET /api/v1/groups/[id]` | Get a group with its members |
+| `groups` | `PATCH /api/v1/groups/[id]` | Update a group (same fields, plus `disabled`) |
+| `groups` | `DELETE /api/v1/groups/[id]` | Delete a group and its routing rule |
+| `groups` | `POST /api/v1/groups/[id]/members` | Add members (`{ members: [{ kind: "user", userId } \| { kind: "mailbox", mailboxId }] }`) |
+| `groups` | `PATCH /api/v1/groups/[id]/members?memberId=` | Change a member (`{ canSendAs }`) |
+| `groups` | `DELETE /api/v1/groups/[id]/members?memberId=` | Remove a member |
 | `storage` | `GET /api/v1/storage` | Active object storage (R2, Backblaze B2, AWS S3 or local files) |
 | `storage` | `POST /api/v1/storage` | Write, read and delete a test object to verify storage |
 

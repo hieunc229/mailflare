@@ -8,6 +8,9 @@ import { GET as listAccounts, POST as createAccount } from "@/app/api/v1/account
 import { GET as getAccount, PATCH as updateAccount } from "@/app/api/v1/accounts/[id]/route";
 import { GET as listMailboxes, POST as createMailbox } from "@/app/api/v1/mailboxes/route";
 import { GET as getMailbox, PATCH as updateMailbox, DELETE as deleteMailbox } from "@/app/api/v1/mailboxes/[id]/route";
+import { GET as listGroups, POST as createGroup } from "@/app/api/v1/groups/route";
+import { GET as getGroup, PATCH as updateGroup, DELETE as deleteGroup } from "@/app/api/v1/groups/[id]/route";
+import { POST as addGroupMembers, DELETE as removeGroupMember } from "@/app/api/v1/groups/[id]/members/route";
 import { GET as getStorage, POST as testStorage } from "@/app/api/v1/storage/route";
 import type { McpPrincipal } from "./types";
 
@@ -90,6 +93,32 @@ export function registerAdminMcpTools(server: McpServer, principal: McpPrincipal
 				default: return result({ error: "Unknown action" }, true);
 			}
 		} catch (error) { return result({ error: error instanceof Error ? error.message : "Mailbox action failed" }, true); }
+	});
+
+	if (principal.scopes.includes("groups")) server.registerTool("manage_groups", {
+		description: "List, inspect, create, update, or delete groups (shared addresses that deliver a copy to each member) and manage their members. Actions: list, get, create, update, delete, add_members, remove_member. Pass id for every action except list and create. create data: domainId, localPart, name, description?, whoCanPost? (anyone, org, members), replyTo? (sender, group). update data accepts the same fields plus disabled. add_members data: { members: [{ kind: user, userId } | { kind: mailbox, mailboxId }] }. remove_member data: { memberId }. Requires a Pro or Team license.",
+		inputSchema: adminInput,
+	}, async ({ action, id, data }) => {
+		if (!principal.scopes.includes("groups")) return result({ error: "Permission denied" }, true);
+		if (!["list", "create"].includes(action) && !id) return result({ error: "Group id required" }, true);
+		const path = id ? `/api/v1/groups/${encodeURIComponent(id)}` : "/api/v1/groups";
+		const context = { params: Promise.resolve({ id: id! }) };
+		try {
+			switch (action) {
+				case "list": return responseResult(await listGroups(adminRequest(baseUrl, path, authorization)));
+				case "get": return responseResult(await getGroup(adminRequest(baseUrl, path, authorization), context));
+				case "create": return responseResult(await createGroup(adminRequest(baseUrl, path, authorization, "POST", data ?? {})));
+				case "update": return responseResult(await updateGroup(adminRequest(baseUrl, path, authorization, "PATCH", data ?? {}), context));
+				case "delete": return responseResult(await deleteGroup(adminRequest(baseUrl, path, authorization, "DELETE"), context));
+				case "add_members": return responseResult(await addGroupMembers(adminRequest(baseUrl, `${path}/members`, authorization, "POST", data ?? {}), context));
+				case "remove_member": {
+					const memberId = typeof data?.memberId === "string" ? data.memberId : "";
+					if (!memberId) return result({ error: "data.memberId required" }, true);
+					return responseResult(await removeGroupMember(adminRequest(baseUrl, `${path}/members?memberId=${encodeURIComponent(memberId)}`, authorization, "DELETE"), context));
+				}
+				default: return result({ error: "Unknown action" }, true);
+			}
+		} catch (error) { return result({ error: error instanceof Error ? error.message : "Group action failed" }, true); }
 	});
 
 	if (principal.scopes.includes("storage")) server.registerTool("manage_storage", {

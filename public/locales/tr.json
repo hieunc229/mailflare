@@ -2308,6 +2308,8 @@
 	"update.databaseUpToDate": "Veritabanı şeması güncel.",
 	"adminKeys.perm.storage": "Depolamayı denetle",
 	"adminKeys.perm.storageDesc": "Hangi nesne depolamasının kullanıldığını (R2, Backblaze B2, AWS S3 veya yerel dosyalar) görün ve çalıştığını sınayın.",
+	"adminKeys.perm.groups": "Grupları yönet",
+	"adminKeys.perm.groupsDesc": "Grupları (birden fazla kişiye teslim eden ortak adresler) ve üyelerini oluşturun, değiştirin ve silin. Pro veya Team lisansı gerektirir.",
 	"accounts.seatsUsed": "{limit} hesap koltuğunun {used} tanesi kullanımda.",
 	"accounts.seatsFull": "Daha fazla hesap oluşturmak için bir hesabı devre dışı bırakın veya lisansınıza koltuk ekleyin.",
 	"licenses.seats": "Hesap koltuğu: {limit}",

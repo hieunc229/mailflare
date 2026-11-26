@@ -1612,6 +1612,8 @@
 	"adminKeys.perm.mailboxesDesc": "Tạo, cập nhật và gỡ hộp thư.",
 	"adminKeys.perm.storage": "Kiểm tra lưu trữ",
 	"adminKeys.perm.storageDesc": "Xem kho lưu trữ đối tượng đang dùng (R2, Backblaze B2, AWS S3 hoặc tệp cục bộ) và kiểm tra xem nó có hoạt động không.",
+	"adminKeys.perm.groups": "Quản lý nhóm",
+	"adminKeys.perm.groupsDesc": "Tạo, thay đổi và xóa nhóm (địa chỉ dùng chung chuyển thư đến nhiều người) cùng các thành viên. Yêu cầu giấy phép Pro hoặc Team.",
 	"adminKeys.namePlaceholder": "Ứng dụng sản xuất",
 	"adminKeys.allowMcpHint": "Dùng khóa này với một ứng dụng khách MCP để chỉ quản lý các khu vực quản trị được chọn bên dưới. Khóa này không thể đọc hay gửi thư.",
 	"adminKeys.createKey": "Tạo khóa",

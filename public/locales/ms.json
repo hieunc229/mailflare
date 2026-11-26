@@ -1622,6 +1622,8 @@
 	"adminKeys.perm.mailboxesDesc": "Cipta, kemas kini dan alih keluar peti mel.",
 	"adminKeys.perm.storage": "Semak storan",
 	"adminKeys.perm.storageDesc": "Lihat storan objek yang digunakan (R2, Backblaze B2, AWS S3 atau fail setempat) dan uji sama ada ia berfungsi.",
+	"adminKeys.perm.groups": "Urus kumpulan",
+	"adminKeys.perm.groupsDesc": "Cipta, ubah dan padam kumpulan (alamat kongsi yang menghantar kepada beberapa orang) serta ahlinya. Memerlukan lesen Pro atau Team.",
 	"adminKeys.namePlaceholder": "Apl pengeluaran",
 	"adminKeys.allowMcpHint": "Gunakan kunci ini dengan klien MCP untuk mengurus hanya kawasan admin yang dipilih di bawah. Ia tidak boleh membaca atau menghantar mel.",
 	"adminKeys.createKey": "Cipta kunci",

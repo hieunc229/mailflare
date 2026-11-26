@@ -1659,6 +1659,8 @@
 	"adminKeys.perm.mailboxesDesc": "Create, update, and remove mailboxes.",
 	"adminKeys.perm.storage": "Check storage",
 	"adminKeys.perm.storageDesc": "See which object storage is in use (R2, Backblaze B2, AWS S3 or local files) and test that it works.",
+	"adminKeys.perm.groups": "Manage groups",
+	"adminKeys.perm.groupsDesc": "Create, change and delete groups (shared addresses that deliver to several people) and their members. Requires a Pro or Team license.",
 	"adminKeys.namePlaceholder": "Production app",
 	"adminKeys.allowMcpHint": "Use this key with an MCP client to manage only the admin areas selected below. It cannot read or send mail.",
 	"adminKeys.createKey": "Create key",

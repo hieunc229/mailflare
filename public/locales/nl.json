@@ -1623,6 +1623,8 @@
 	"adminKeys.perm.mailboxesDesc": "Maak, werk bij en verwijder mailboxen.",
 	"adminKeys.perm.storage": "Opslag controleren",
 	"adminKeys.perm.storageDesc": "Bekijk welke objectopslag in gebruik is (R2, Backblaze B2, AWS S3 of lokale bestanden) en test of deze werkt.",
+	"adminKeys.perm.groups": "Groepen beheren",
+	"adminKeys.perm.groupsDesc": "Maak, wijzig en verwijder groepen (gedeelde adressen die aan meerdere personen bezorgen) en hun leden. Vereist een Pro- of Team-licentie.",
 	"adminKeys.namePlaceholder": "Productie-app",
 	"adminKeys.allowMcpHint": "Gebruik deze sleutel met een MCP-client om alleen de hieronder geselecteerde beheergebieden te beheren. Hij kan geen mail lezen of verzenden.",
 	"adminKeys.createKey": "Sleutel maken",

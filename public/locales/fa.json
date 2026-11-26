@@ -1623,6 +1623,8 @@
 	"adminKeys.perm.mailboxesDesc": "صندوق‌های پستی را ایجاد، به‌روزرسانی و حذف کنید.",
 	"adminKeys.perm.storage": "بررسی فضای ذخیره‌سازی",
 	"adminKeys.perm.storageDesc": "ببینید از کدام فضای ذخیره‌سازی شیء (R2، Backblaze B2، AWS S3 یا فایل‌های محلی) استفاده می‌شود و کار کردن آن را آزمایش کنید.",
+	"adminKeys.perm.groups": "مدیریت گروه‌ها",
+	"adminKeys.perm.groupsDesc": "گروه‌ها (نشانی‌های مشترک که به چند نفر تحویل می‌شوند) و اعضای آن‌ها را ایجاد، ویرایش و حذف کنید. به مجوز Pro یا Team نیاز دارد.",
 	"adminKeys.namePlaceholder": "برنامه محیط تولید",
 	"adminKeys.allowMcpHint": "از این کلید با یک کلاینت MCP فقط برای مدیریت بخش‌های مدیریتی انتخاب‌شده در زیر استفاده کنید. نمی‌تواند ایمیل بخواند یا ارسال کند.",
 	"adminKeys.createKey": "ایجاد کلید",

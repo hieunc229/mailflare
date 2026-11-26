@@ -1621,6 +1621,8 @@
 	"adminKeys.perm.mailboxesDesc": "میل باکسز بنائیں، اپ ڈیٹ کریں اور ہٹائیں۔",
 	"adminKeys.perm.storage": "اسٹوریج چیک کریں",
 	"adminKeys.perm.storageDesc": "دیکھیں کہ کون سی آبجیکٹ اسٹوریج استعمال میں ہے (R2، Backblaze B2، AWS S3 یا مقامی فائلیں) اور جانچیں کہ وہ کام کر رہی ہے۔",
+	"adminKeys.perm.groups": "گروپس کا نظم کریں",
+	"adminKeys.perm.groupsDesc": "گروپس (مشترکہ پتے جو کئی لوگوں کو ڈیلیور کرتے ہیں) اور ان کے ارکان بنائیں، تبدیل کریں اور حذف کریں۔ Pro یا Team لائسنس درکار ہے۔",
 	"adminKeys.namePlaceholder": "پروڈکشن ایپ",
 	"adminKeys.allowMcpHint": "اس کلید کو MCP کلائنٹ کے ساتھ صرف نیچے منتخب ایڈمن علاقوں کو سنبھالنے کے لیے استعمال کریں۔ یہ میل پڑھ یا بھیج نہیں سکتی۔",
 	"adminKeys.createKey": "کلید بنائیں",
