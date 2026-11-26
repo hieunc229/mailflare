@@ -111,7 +111,8 @@ export async function putCalendarResource(ctx: DavContext, name: string, request
 	const referenceFor = (at: Date | null): EventRow | undefined => (at ? storedOverride(at) : undefined) ?? existing?.master;
 	if (delegate && [{ fields: parsed.master as EventFields, at: null as Date | null }, ...parsed.overrides.map((fields) => ({ fields: fields as EventFields, at: fields.recurrenceId as Date | null }))].some(({ fields, at }) => guestSet(fields.attendees) !== "" && guestSet(fields.attendees) !== guestSet(referenceFor(at)?.attendees ?? null))) return precondition(403, "valid-calendar-object-resource", "C");
 	const owned = <T extends EventFields>(fields: T, stored: EventRow | undefined): T => (delegate ? { ...fields, attendees: stored?.attendees ?? "[]", attendeeResponses: stored?.attendeeResponses ?? null, responseStatus: stored?.responseStatus ?? null, inviteSender: stored?.inviteSender ?? null } : fields);
-	const size = new TextEncoder().encode(body).byteLength;
+	// A delegate's text is not what is stored (below), so it neither counts against the owner's quota nor changes the size of what the owner's phone has.
+	const size = delegate ? (existing?.size ?? 0) : new TextEncoder().encode(body).byteLength;
 	const oldSize = existing?.size ?? 0;
 	if (size > oldSize && (await calendarBytes(env, userId)) - oldSize + size > MAX_CALENDAR_BYTES) return insufficientStorage("The calendar");
 

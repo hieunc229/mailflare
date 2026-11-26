@@ -347,3 +347,17 @@ test("an override row that is not in its master's calendar is not served with it
 	assert.match(text, /SUMMARY:Series/);
 	assert.doesNotMatch(text, /Stray occurrence/);
 });
+
+test("a delegate's PUT cannot inflate the owner's stored bytes: an update keeps the owner's size, a new event counts nothing", async (t) => {
+	const { env, keys, sql } = await fixture(t);
+	const total = () => Number(sql.prepare("SELECT coalesce(sum(size), 0) AS n FROM dav_calendar_objects WHERE user_id = 'u1'").get().n);
+	assert.equal((await put(env, "/dav/calendars/u1/c-work/o.ics", keys.u1, vevent("uid-o", "Mine"))).status, 201);
+	const owned = total();
+	assert.ok(owned > 0);
+	const path = `${SHARED("csh_edit", "u3")}o.ics`;
+	const etag = (await get(env, path, keys.u3)).etag;
+	assert.equal((await put(env, path, keys.u3, vevent("uid-o", "Mine", `X-PAD:${"x".repeat(400_000)}\r\n`), { "If-Match": etag })).status, 204);
+	assert.equal(total(), owned);
+	assert.equal((await put(env, `${SHARED("csh_edit", "u3")}n.ics`, keys.u3, vevent("uid-n", "New", `X-PAD:${"x".repeat(400_000)}\r\n`))).status, 201);
+	assert.equal(total(), owned);
+});
