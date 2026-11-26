@@ -281,3 +281,13 @@ test("busyIntervals: an event that came from a CalDAV client is matched by its s
 	const result = await busyIntervals({}, { userIds: ["u1", "u2"], excludeEventId: "evt_dav" }, ...win(at(0), at(1)));
 	assert.deepEqual([result.get("u1"), result.get("u2")], [[], []]);
 });
+
+test("busyIntervals: the last occurrence of a series that ended before the window but runs into it is busy", async () => {
+	setup();
+	// Daily 22:00-03:00 whose repeat_until falls after the day -1 occurrence started: that one ends at 03:00 on day 0, inside the window.
+	event("u1", at(-5, 22), at(-4, 3), { repeat: "daily", repeat_until: secs(at(-1, 23)) });
+	assert.deepEqual((await busy(["u1"], at(0), at(1))).get("u1"), [[at(0), at(0, 3)]]);
+	// One that ended a whole duration earlier is still not read as busy.
+	event("u2", at(-5, 22), at(-4, 3), { repeat: "daily", repeat_until: secs(at(-3, 23)) });
+	assert.deepEqual((await busy(["u2"], at(0), at(1))).get("u2"), []);
+});

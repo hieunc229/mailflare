@@ -1,4 +1,4 @@
-import { and, eq, gt, inArray, isNull, lt, ne, or } from "drizzle-orm";
+import { and, eq, gt, inArray, isNull, lt, ne, or, sql } from "drizzle-orm";
 import { getDb } from "@/db";
 import { calendarEvents, davCalendarObjects } from "@/db/schema";
 import { inviteEventId } from "./invite-id";
@@ -64,7 +64,7 @@ export async function busyIntervals(env: CloudflareEnv, targets: FreeBusyTargets
 			id: calendarEvents.id, davObjectId: calendarEvents.davObjectId, userId: calendarEvents.userId, startsAt: calendarEvents.startsAt, endsAt: calendarEvents.endsAt, timeZone: calendarEvents.timeZone, repeat: calendarEvents.repeat, rrule: calendarEvents.rrule,
 			repeatDays: calendarEvents.repeatDays, repeatAnchorDay: calendarEvents.repeatAnchorDay, repeatUntil: calendarEvents.repeatUntil, excludedOccurrences: calendarEvents.excludedOccurrences,
 			transparent: calendarEvents.transparent, responseStatus: calendarEvents.responseStatus,
-		}).from(calendarEvents).where(and(inArray(calendarEvents.userId, ids.slice(index, index + USER_CHUNK)), lt(calendarEvents.startsAt, end), or(gt(calendarEvents.endsAt, start), and(ne(calendarEvents.repeat, "none"), or(isNull(calendarEvents.repeatUntil), gt(calendarEvents.repeatUntil, start))))));
+		}).from(calendarEvents).where(and(inArray(calendarEvents.userId, ids.slice(index, index + USER_CHUNK)), lt(calendarEvents.startsAt, end), or(gt(calendarEvents.endsAt, start), and(ne(calendarEvents.repeat, "none"), or(isNull(calendarEvents.repeatUntil), sql`${calendarEvents.repeatUntil} + (${calendarEvents.endsAt} - ${calendarEvents.startsAt}) > ${Math.floor(from / 1000)}`)))));
 		for (const row of rows) {
 			if (!isBusyEvent(row) || excluded.has(row.id) || (targets.excludeEventId && row.davObjectId === targets.excludeEventId)) continue;
 			const duration = row.endsAt.getTime() - row.startsAt.getTime();
