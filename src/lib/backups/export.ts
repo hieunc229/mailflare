@@ -137,17 +137,29 @@ export async function exportDatabaseRecords(db: D1Database, excludedGroups: Back
 }
 
 /**
- * Runs the destructive part of a restore inside one transaction when the database can hold one.
+ * The destructive part of a restore runs in a transaction on a database that can hold one, and in nothing at
+ * all on a database that cannot.
  *
- * PostgreSQL, MySQL and the self-hosted SQLite runtime expose `transaction` on `env.DB`, so a failure anywhere
- * in the teardown and the inserts rolls the whole restore back and the live rows survive. A Cloudflare D1
- * binding has no interactive transaction — `batch` is all-or-nothing but the restore cannot fit one batch —
- * so there the preflight above is what stands between a malformed document and lost data.
+ * `transaction` hands the callback a view bound to one checked-out connection; everything outside that view
+ * keeps using the pool (PostgreSQL, MySQL) or waits for the connection (the self-hosted SQLite runtime), so an
+ * unrelated request can neither read the uncommitted rows nor have its own write rolled back with the restore.
+ * A Cloudflare D1 binding has no interactive transaction, and neither has a driver that talks over HTTP, so a
+ * failure there can leave the data partially replaced — `restoreFailure` says so instead of pretending.
  */
-async function runInTransaction<T>(db: D1Database, work: () => Promise<T>): Promise<T> {
-	const transaction = (db as { transaction?: (run: () => Promise<T>) => Promise<T> }).transaction;
-	return typeof transaction === "function" ? transaction.call(db, work) : work();
+type TransactionCapableDatabase = D1Database & {
+	transaction?: <T>(work: (tx: D1Database) => Promise<T>) => Promise<T>;
+	supportsTransaction?: () => boolean;
+};
+
+/** Whether a failure can be rolled back, so the caller knows what a failed restore left behind. */
+export function restoreRollsBack(db: D1Database): boolean {
+	const candidate = db as TransactionCapableDatabase;
+	if (typeof candidate.supportsTransaction === "function") return candidate.supportsTransaction();
+	return typeof candidate.transaction === "function";
 }
+
+const PARTIAL_RESTORE_MESSAGE =
+	"The restore failed and this database cannot roll it back, so some data may already have been replaced. Restore the same backup again (or a snapshot) before using this installation.";
 
 export async function restoreDatabaseRecords(db: D1Database, content: ArrayBuffer): Promise<void> {
 	const document = parseDatabaseBackup(content);
@@ -187,25 +199,27 @@ export async function restoreDatabaseRecords(db: D1Database, content: ArrayBuffe
 	// Every check that can be made without writing happens here, before the first DELETE. The row shape is
 	// validated against this database's own columns, so a document carrying a column the table does not have is
 	// refused now instead of failing the INSERT after the live rows are gone.
-	validateDatabaseBackup(document, restoreTables.includes("external_accounts") ? await listColumnNames(db, "external_accounts") : null);
-	await runInTransaction(db, async () => {
+	validateDatabaseBackup(document, restoreTables.includes("external_accounts") ? await listColumnNames(db, "external_accounts") : null, dialect);
+	const atomic = restoreRollsBack(db);
+	const apply = async (tx: D1Database) => {
 		// Mark users deleted before removing them: the passkey trigger permits the
 		// cascade to remove the last credential only for an account that is being
 		// purged. Deleting users first also empties the table the restore inserts
 		// into last, so the rest of the teardown has no live accounts to protect.
-		await db.prepare("UPDATE users SET deleted_at = ?").bind(Math.floor(Date.now() / 1000)).run();
-		await db.prepare("DELETE FROM users").run();
+		await tx.prepare("UPDATE users SET deleted_at = ?").bind(Math.floor(Date.now() / 1000)).run();
+		await tx.prepare("DELETE FROM users").run();
 		for (const table of [...restoreTables].reverse()) {
 			if (table === "users") continue;
-			await db.prepare(`DELETE FROM ${table}`).run();
+			await tx.prepare(`DELETE FROM ${table}`).run();
 		}
 		// Derived DAV state of the old data: the triggers rebuild the log as rows are restored, and a new epoch makes every
 		// client resync. Explicit because MySQL does not fire triggers for FK cascades, so the teardown above leaves stale rows there.
-		for (const table of ["dav_changes", "dav_sync_state"]) if (existing.has(table)) await db.prepare(`DELETE FROM ${table}`).run();
-		// MySQL checks foreign keys per statement; suspend them for the whole insert phase instead of per batch,
-		// so the reconnect below is the only place that can leave the session with them off — and it always runs.
+		for (const table of ["dav_changes", "dav_sync_state"]) if (existing.has(table)) await tx.prepare(`DELETE FROM ${table}`).run();
+		// MySQL checks foreign keys per statement; suspend them for the whole insert phase. The setting belongs to
+		// the session, not the transaction, so it is put back in a `finally` even when the restore fails — and if
+		// that put-back fails the connection is thrown away instead of returning to the pool with checks off.
 		const suspendsForeignKeys = dialect === "mysql";
-		if (suspendsForeignKeys) await db.prepare("SET FOREIGN_KEY_CHECKS = 0").run();
+		if (suspendsForeignKeys) await tx.prepare("SET FOREIGN_KEY_CHECKS = 0").run();
 		try {
 			for (const table of restoreTables) {
 				const rows = document.tables[table] ?? [];
@@ -221,22 +235,33 @@ export async function restoreDatabaseRecords(db: D1Database, content: ArrayBuffe
 									: table === "mailbox_promotion_settings"
 										? promotionSettingColumns
 										: deliverabilityColumns.get(table) ?? null;
-					const statements = rows.slice(index, index + INSERT_BATCH_SIZE).map((row) => createInsertStatement(db, dialect, table, row, columns));
-					if (statements.length > 0) await db.batch(statements);
+					const statements = rows.slice(index, index + INSERT_BATCH_SIZE).map((row) => createInsertStatement(tx, dialect, table, row, columns));
+					if (statements.length > 0) await tx.batch(statements);
 				}
 			}
 		} finally {
-			// A session variable is not part of the transaction: it survives a rollback, so it is re-armed here
-			// even when the restore failed and the connection goes back to the pool.
 			if (suspendsForeignKeys) {
 				try {
-					await db.prepare("SET FOREIGN_KEY_CHECKS = 1").run();
+					await tx.prepare("SET FOREIGN_KEY_CHECKS = 1").run();
 				} catch {
-					// The connection is already unusable; the pool closes it rather than returning it with checks off.
+					// The connection cannot be trusted to be back to its defaults: throw it away rather than let the
+					// pool hand it out with foreign key checks off.
+					await (tx as { discard?: () => Promise<void> }).discard?.();
+					throw new BackupRestoreError("The restore was rolled back because its database connection could not be reset. Run it again.");
 				}
 			}
 		}
-	});
+	};
+
+	try {
+		if (atomic) await (db as TransactionCapableDatabase).transaction!((tx) => apply(tx));
+		else await apply(db);
+	} catch (error) {
+		// A refusal we wrote ourselves means nothing was written; any other failure on a database that cannot roll
+		// back leaves the installation in an unknown state, and the admin has to know that.
+		if (!atomic && !(error instanceof BackupRestoreError)) throw new BackupRestoreError(PARTIAL_RESTORE_MESSAGE);
+		throw error;
+	}
 }
 
 function parseDatabaseBackup(content: ArrayBuffer): DatabaseBackupDocument {
@@ -299,7 +324,7 @@ function fillMissingBackupTables(document: DatabaseBackupDocument): void {
 	}
 }
 
-function validateDatabaseBackup(document: DatabaseBackupDocument, externalAccountColumns: Set<string> | null): void {
+function validateDatabaseBackup(document: DatabaseBackupDocument, externalAccountColumns: Set<string> | null, dialect: DatabaseDialect): void {
 	for (const table of BACKUP_TABLES) {
 		for (const row of document.tables[table] ?? []) {
 			if (!row || typeof row !== "object" || Array.isArray(row)) {
@@ -307,10 +332,37 @@ function validateDatabaseBackup(document: DatabaseBackupDocument, externalAccoun
 			}
 		}
 	}
-	validateExternalAccountRows(document, externalAccountColumns);
+	validateExternalAccountRows(document, externalAccountColumns, dialect);
 }
 
 const isIntegerInRange = (value: unknown, min: number, max: number) => typeof value === "number" && Number.isInteger(value) && value >= min && value <= max;
+/**
+ * How the destination compares the account identity, so the in-document duplicate check sees what its unique
+ * index would see.
+ *
+ * - SQLite, PostgreSQL and D1 compare text byte for byte: exact values.
+ * - MySQL `id` and `mailbox_id` inherit the table's default `utf8mb4_0900_ai_ci`: case-insensitive (and
+ *   accent-insensitive, which is not emulated — an accent-only collision is left to the index and the rollback)
+ *   and NO PAD, so a trailing space still differs.
+ * - MySQL `host` and `username` are `utf8mb4_bin`: case-sensitive but PAD SPACE, so trailing ASCII spaces are
+ *   ignored. A trailing NBSP is not padding and stays significant.
+ */
+function identityComparator(dialect: DatabaseDialect) {
+	if (dialect !== "mysql") {
+		return {
+			id: (id: string) => id,
+			identity: (mailboxId: string, host: string, username: string) => JSON.stringify([mailboxId, host, username]),
+		};
+	}
+	// Only the ASCII space pads a utf8mb4_bin value; `trimEnd()` would also swallow NBSP, which the server keeps.
+	const stripAsciiPadding = (value: string) => value.replace(/ +$/, "");
+	return {
+		id: (id: string) => id.toLowerCase(),
+		identity: (mailboxId: string, host: string, username: string) =>
+			JSON.stringify([mailboxId.toLowerCase(), stripAsciiPadding(host), stripAsciiPadding(username)]),
+	};
+}
+
 /** Backups hold `0`/`1`; a hand-written document may use booleans. */
 const isFlag = (value: unknown) => value === 0 || value === 1 || value === true || value === false;
 const isIdentityText = (value: unknown): value is string => typeof value === "string" && value.length > 0 && value.length <= MAX_IDENTITY_LENGTH;
@@ -335,17 +387,19 @@ const isOptionalTimestamp = (value: unknown) => value === null || value === unde
  * `password_encrypted`, which restores as opaque bytes that fail to decrypt. Restore only backups this install
  * produced, or one you trust as much as the database itself. The message names the row and column only.
  */
-function validateExternalAccountRows(document: DatabaseBackupDocument, liveColumns: Set<string> | null): void {
+function validateExternalAccountRows(document: DatabaseBackupDocument, liveColumns: Set<string> | null, dialect: DatabaseDialect): void {
 	const rows = document.tables.external_accounts ?? [];
 	const tlsModes = new Set(["implicit-tls", "starttls", "none"]);
 	const expectedColumns = liveColumns ? new Set([...liveColumns, ...OMITTED_COLUMNS.external_accounts ?? []]) : null;
 	// The rows are inserted after `mailboxes` was replaced by this document, so a mailbox the document does not
 	// carry would fail the foreign key after the teardown.
 	const mailboxIds = new Set((document.tables.mailboxes ?? []).map((mailbox) => mailbox?.id).filter((id): id is string => typeof id === "string"));
-	// Two keys are needed because the databases disagree about case and trailing spaces: `id` is the primary key
-	// everywhere, while the unique tuple is binary (case-sensitive) but PAD SPACE on MySQL's utf8mb4_bin, and
-	// `mailbox_id` uses a case-insensitive collation there. A document that would collide on the destination is
-	// refused here rather than by the index after the teardown.
+	// Two sets, compared the way the destination compares them — the point is to catch what its index would catch.
+	// Copying one rule onto every dialect was wrong both ways: lowercasing `mailbox_id` and trimming the login
+	// refused backups PostgreSQL and SQLite would happily store, while `id` on MySQL is case-insensitive and
+	// trailing ASCII spaces in the binary tuple columns do not count either. Where the emulation is uncertain it
+	// errs towards accepting: a real conflict on MySQL or PostgreSQL is caught by the transaction's rollback.
+	const compare = identityComparator(dialect);
 	const ids = new Set<string>();
 	const identities = new Set<string>();
 	rows.forEach((row, index) => {
@@ -355,8 +409,9 @@ function validateExternalAccountRows(document: DatabaseBackupDocument, liveColum
 		};
 		if (expectedColumns) for (const column of Object.keys(row)) if (!expectedColumns.has(column)) invalid(column);
 		if (!isIdentityText(row.id)) invalid("id");
-		if (ids.has(row.id)) invalid("id");
-		ids.add(row.id);
+		const idKey = compare.id(row.id);
+		if (ids.has(idKey)) invalid("id");
+		ids.add(idKey);
 		if (!isIdentityText(row.mailbox_id)) invalid("mailbox_id");
 		if (!mailboxIds.has(row.mailbox_id)) invalid("mailbox_id");
 		if (!isIdentityText(row.user_id)) invalid("user_id");
@@ -384,7 +439,7 @@ function validateExternalAccountRows(document: DatabaseBackupDocument, liveColum
 		// NOT NULL with no database default: an omitted value would fail the insert after the teardown.
 		if (!isTimestamp(row.created_at)) invalid("created_at");
 		if (!isTimestamp(row.updated_at)) invalid("updated_at");
-		const identity = JSON.stringify([row.mailbox_id.toLowerCase(), row.host.trimEnd(), row.username.trimEnd()]);
+		const identity = compare.identity(row.mailbox_id, row.host, row.username);
 		if (identities.has(identity)) invalid("username");
 		identities.add(identity);
 	});

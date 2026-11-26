@@ -4,6 +4,11 @@ import { normalizeParam, numberPlaceholders, type SqlExecutor } from "./drivers/
 /**
  * A `D1Database` over any SqlExecutor, for the raw `env.DB.prepare(...)` call sites. SQL is written
  * with `?` placeholders as D1 expects; PostgreSQL gets them numbered here.
+ *
+ * Transactions are owned explicitly: `transaction(work)` checks out a connection, hands the callback a
+ * `CompatTransaction` bound to it, and commits or rolls back. Nothing else on this adapter can join that
+ * transaction — an ordinary caller keeps using the pool, so it neither sees uncommitted rows nor has its own
+ * writes rolled back with the restore's.
  */
 type Row = Record<string, unknown>;
 
@@ -11,9 +16,15 @@ function meta(affectedRows: number, insertId?: number) {
 	return { duration: 0, size_after: 0, rows_read: 0, rows_written: affectedRows, last_row_id: insertId ?? 0, changed_db: affectedRows > 0, changes: affectedRows };
 }
 
+/** What a statement needs from whatever it was prepared on: the dialect and the connection to run on. */
+interface StatementHost {
+	readonly dialect: DatabaseDialect;
+	executor(): SqlExecutor;
+}
+
 export class CompatStatement {
 	constructor(
-		readonly db: CompatDatabase,
+		readonly db: StatementHost,
 		readonly sql: string,
 		readonly params: unknown[] = [],
 	) {}
@@ -53,58 +64,94 @@ export class CompatStatement {
 	}
 }
 
-export class CompatDatabase {
-	/** Set while a transaction runs, so every statement made through this adapter uses its connection. */
-	private transactionExecutor: SqlExecutor | null = null;
+async function runStatements<T>(statements: CompatStatement[], executor: SqlExecutor) {
+	const results: Array<{ results: T[]; success: true; meta: ReturnType<typeof meta> }> = [];
+	for (const statement of statements) {
+		const result = await statement.execute(executor);
+		results.push({ results: result.rows as T[], success: true as const, meta: meta(result.affectedRows, result.insertId) });
+	}
+	return results;
+}
 
+/**
+ * The view a `transaction` callback receives: every statement it prepares runs on the connection that
+ * transaction checked out, and nothing else can reach that connection.
+ */
+export class CompatTransaction implements StatementHost {
 	constructor(
 		readonly dialect: DatabaseDialect,
-		private readonly base: SqlExecutor,
-		private readonly active: () => SqlExecutor | null = () => null,
+		private readonly connection: SqlExecutor,
 	) {}
 
 	executor() {
-		return this.transactionExecutor ?? this.active() ?? this.base;
+		return this.connection;
 	}
 
 	/**
-	 * Runs `work` inside one transaction on a driver that can hold one. Every statement made through this
-	 * adapter while it runs — `prepare`, `exec` and nested `batch` calls — uses that connection, so a failure
-	 * anywhere rolls the whole block back. The backup restore uses it; D1 has no interactive transaction, so
-	 * there this is a plain call.
+	 * Throws the connection away instead of returning it to the pool. Used when a session setting that was
+	 * changed for the transaction cannot be put back, so the pool never hands out a connection in that state.
 	 */
-	async transaction<T>(work: () => Promise<T>): Promise<T> {
-		if (!this.base.transaction || this.transactionExecutor) return work();
-		return this.base.transaction(async (executor) => {
-			this.transactionExecutor = executor;
-			try {
-				return await work();
-			} finally {
-				this.transactionExecutor = null;
-			}
-		});
+	async discard(): Promise<void> {
+		await this.connection.destroy?.();
 	}
 
 	prepare(sql: string) {
 		return new CompatStatement(this, sql);
 	}
 
-	async batch<T = Row>(statements: CompatStatement[]) {
-		const run = async (executor: SqlExecutor) => {
-			const results: Array<{ results: T[]; success: true; meta: ReturnType<typeof meta> }> = [];
-			for (const statement of statements) {
-				const result = await statement.execute(executor);
-				results.push({ results: result.rows as T[], success: true as const, meta: meta(result.affectedRows, result.insertId) });
-			}
-			return results;
-		};
-		// Inside `transaction` the statements join it, so a later failure rolls this batch back too.
-		if (this.transactionExecutor) return run(this.transactionExecutor);
-		return this.base.transaction ? this.base.transaction(run) : run(this.base);
+	batch<T = Row>(statements: CompatStatement[]) {
+		return runStatements<T>(statements, this.connection);
 	}
 
 	async exec(sql: string) {
-		// Through the executors so a statement issued inside `transaction` stays on its connection.
+		const result = await this.connection.query(sql, [], "object");
+		return { count: 1, duration: 0, rows: result.rows };
+	}
+
+	/** Already inside the transaction: a nested call joins this connection instead of starting another. */
+	transaction<T>(work: (tx: CompatTransaction) => Promise<T>): Promise<T> {
+		return work(this);
+	}
+}
+
+export class CompatDatabase implements StatementHost {
+	constructor(
+		readonly dialect: DatabaseDialect,
+		private readonly base: SqlExecutor,
+		private readonly active: () => SqlExecutor | null = () => null,
+	) {}
+
+	/** Whether `transaction` can hand out a real transaction; HTTP drivers cannot hold one open. */
+	supportsTransaction(): boolean {
+		return typeof this.base.transaction === "function";
+	}
+
+	executor() {
+		return this.active() ?? this.base;
+	}
+
+	/**
+	 * Runs `work` on a connection checked out for it. Only the `CompatTransaction` passed to the callback uses
+	 * that connection: an ordinary caller on this adapter keeps using the pool, so it neither reads the
+	 * uncommitted rows nor has its own statements rolled back with this transaction. Throws when the driver
+	 * cannot hold a transaction open, so a caller that depends on atomicity can tell.
+	 */
+	async transaction<T>(work: (tx: CompatTransaction) => Promise<T>): Promise<T> {
+		if (!this.base.transaction) throw new Error("This database driver cannot hold a transaction open.");
+		return this.base.transaction((connection) => work(new CompatTransaction(this.dialect, connection)));
+	}
+
+	prepare(sql: string) {
+		return new CompatStatement(this, sql);
+	}
+
+	/** A batch is atomic on its own: it gets a connection (and so a transaction) of its own. */
+	async batch<T = Row>(statements: CompatStatement[]) {
+		if (!this.base.transaction) return runStatements<T>(statements, this.base);
+		return this.base.transaction((connection) => runStatements<T>(statements, connection));
+	}
+
+	async exec(sql: string) {
 		const result = await this.executor().query(sql, [], "object");
 		return { count: 1, duration: 0, rows: result.rows };
 	}

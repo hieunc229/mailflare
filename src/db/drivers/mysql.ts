@@ -39,10 +39,22 @@ export function openMysql2({ url, shared }: OpenOptions): SqlExecutor {
 			charset: "utf8mb4",
 			timezone: "Z",
 		};
-		const inTransaction = async <T,>(connection: Awaited<ReturnType<typeof lib.createConnection>>, fn: (tx: SqlExecutor) => Promise<T>) => {
+		/** `onDestroy` lets the pooled caller skip its own release: the connection is already gone. */
+		const inTransaction = async <T,>(
+			connection: Awaited<ReturnType<typeof lib.createConnection>>,
+			fn: (tx: SqlExecutor) => Promise<T>,
+			onDestroy?: () => void,
+		) => {
 			await connection.beginTransaction();
 			try {
-				const result = await fn(mysqlExecutor(connection as unknown as Queryable));
+				const tx: SqlExecutor = {
+					...mysqlExecutor(connection as unknown as Queryable),
+					destroy: async () => {
+						onDestroy?.();
+						connection.destroy();
+					},
+				};
+				const result = await fn(tx);
 				await connection.commit();
 				return result;
 			} catch (error) {
@@ -55,10 +67,13 @@ export function openMysql2({ url, shared }: OpenOptions): SqlExecutor {
 			return {
 				...mysqlExecutor(pool as unknown as Queryable, async (fn) => {
 					const connection = await pool.getConnection();
+					let destroyed = false;
 					try {
-						return await inTransaction(connection as never, fn);
+						return await inTransaction(connection as never, fn, () => {
+							destroyed = true;
+						});
 					} finally {
-						connection.release();
+						if (!destroyed) connection.release();
 					}
 				}),
 				close: () => pool.end(),

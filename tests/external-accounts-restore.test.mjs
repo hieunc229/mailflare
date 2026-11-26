@@ -267,20 +267,6 @@ test("the other ways an imported row could fail the insert are refused before th
 	for (const host of ["imap.example.com:993", "imaps://imap.example.com", "imap.example.com/path", "IMAP.example.com", "imap.example.com.", "localhost"]) {
 		await refuse((rows) => { rows[0].host = host; }, "host");
 	}
-	// The unique tuple as MySQL compares it: `utf8mb4_bin` ignores trailing spaces, `mailbox_id` ignores case.
-	await refuse((rows) => rows.push({ ...rows[0], id: "ext_2", username: `${rows[0].username}  ` }), "username");
-	// `mailbox_id` is compared case-insensitively on MySQL, so a differently cased twin collides there; the
-	// document has to carry that mailbox too, or the earlier missing-mailbox check catches it instead.
-	{
-		const broken = structuredClone(document);
-		const mailbox = { ...broken.tables.mailboxes[0], id: broken.tables.mailboxes[0].id.toUpperCase(), local_part: "admin-twin" };
-		broken.tables.mailboxes.push(mailbox);
-		broken.tables.external_accounts.push({ ...broken.tables.external_accounts[0], id: "ext_3", mailbox_id: mailbox.id });
-		const refused = await target.restore(broken);
-		assert.equal(refused.status, 400);
-		assert.match((await refused.json()).error, /username/);
-		assertUntouched(target);
-	}
 	// Epoch seconds JavaScript cannot turn into a Date: the settings API would throw on the first read.
 	for (const column of ["created_at", "updated_at"]) {
 		await refuse((rows) => { rows[0][column] = 8.64e12 + 1; }, column);
@@ -294,6 +280,17 @@ test("the other ways an imported row could fail the insert are refused before th
 	boundary.tables.external_accounts[0].last_synced_at = 1_700_000_000;
 	assert.equal((await target.restore(boundary)).status, 200);
 	assert.equal(target.sql.prepare("SELECT created_at FROM external_accounts WHERE id = 'ext_1'").get().created_at, 8.64e12);
+
+	// SQLite (and PostgreSQL, and D1) compare text byte for byte, so a trailing space and a differently cased
+	// mailbox id are different accounts and must restore. MySQL is the dialect that equates them, and its own
+	// probe covers that side. These go last because they replace the rows the refusals above left alone.
+	const distinct = structuredClone(document);
+	distinct.tables.external_accounts.push({ ...distinct.tables.external_accounts[0], id: "ext_2", username: `${distinct.tables.external_accounts[0].username}  ` });
+	const twinMailbox = { ...distinct.tables.mailboxes[0], id: distinct.tables.mailboxes[0].id.toUpperCase(), local_part: "admin-twin" };
+	distinct.tables.mailboxes.push(twinMailbox);
+	distinct.tables.external_accounts.push({ ...distinct.tables.external_accounts[0], id: "ext_3", mailbox_id: twinMailbox.id });
+	assert.equal((await target.restore(distinct)).status, 200);
+	assert.deepEqual(target.sql.prepare("SELECT id FROM external_accounts ORDER BY id").all().map((row) => row.id), ["ext_1", "ext_2", "ext_3"]);
 });
 
 test("a restore refuses a document whose rows would collide or point at a missing mailbox", async (t) => {
@@ -391,6 +388,107 @@ test("a database without transactions (a D1 binding) still restores, on the pref
 	broken.tables.external_accounts.push({ ...broken.tables.external_accounts[0] });
 	await assert.rejects(restoreDatabaseRecords(plain, new TextEncoder().encode(JSON.stringify(broken)).buffer), /\(row 2, id\)/);
 	assert.deepEqual(inner.sql.prepare("SELECT id FROM external_accounts").all(), [{ id: "ext_1" }]);
+});
+
+test("a database that cannot roll back says so when a restore fails", async (t) => {
+	// D1 (and any HTTP driver) has no interactive transaction. The restore still runs there, but a failure that
+	// the preflight did not foresee has already replaced data, and the admin has to be told that plainly.
+	const inner = await seededDatabase(t);
+	const plain = {
+		prepare: (...args) => inner.database.prepare(...args),
+		batch: (...args) => inner.database.batch(...args),
+		exec: (...args) => inner.database.exec(...args),
+		// No `transaction`, like a Worker binding.
+	};
+	inner.sql.exec(`CREATE TRIGGER f36_no_rollback BEFORE INSERT ON external_accounts
+		BEGIN SELECT RAISE(ABORT, 'injected'); END`);
+	const { document } = await documentWithAccount(t);
+	await assert.rejects(restoreDatabaseRecords(plain, new TextEncoder().encode(JSON.stringify(document)).buffer), (error) => {
+		assert.ok(error instanceof BackupRestoreError);
+		assert.match(error.message, /cannot roll it back/i);
+		assert.match(error.message, /may already have been replaced/i);
+		assert.match(error.message, /again|snapshot/i);
+		// The driver's own message (statement and parameters) never reaches the admin.
+		assert.ok(!/injected/.test(error.message));
+		return true;
+	});
+	// A refusal before any write is reported as itself: nothing was applied, so there is nothing to warn about.
+	inner.sql.exec("DROP TRIGGER f36_no_rollback");
+	const broken = structuredClone(document);
+	broken.tables.external_accounts[0].password_encrypted = "plaintext";
+	await assert.rejects(restoreDatabaseRecords(plain, new TextEncoder().encode(JSON.stringify(broken)).buffer), (error) => {
+		assert.ok(error instanceof BackupRestoreError);
+		assert.match(error.message, /password_encrypted/);
+		assert.ok(!/cannot roll it back/i.test(error.message));
+		return true;
+	});
+});
+
+test("an unrelated caller cannot join the restore's transaction, and its acknowledged write survives the rollback", async (t) => {
+	// The round-4 gate scenario: pause the restore mid-transaction, let another request read and write through the
+	// same adapter, then let the restore fail. Before the fix that caller saw the uncommitted replacement rows,
+	// was acknowledged, and its write was rolled back with the restore.
+	const inner = await seededDatabase(t);
+	const source = await documentWithAccount(t);
+	const bad = structuredClone(source.document);
+	// A rejection the preflight cannot foresee, in the last table restored.
+	inner.sql.exec(`CREATE TRIGGER f36_isolation BEFORE INSERT ON external_accounts
+		BEGIN SELECT RAISE(ABORT, 'injected'); END`);
+
+	let releaseRestore;
+	const paused = new Promise((resolve) => { releaseRestore = resolve; });
+	let reachedRestore;
+	const reached = new Promise((resolve) => { reachedRestore = resolve; });
+	const scope = (tx) => ({
+		prepare: (sql) => tx.prepare(sql),
+		batch: async (statements) => {
+			// Pause once, just before the credential rows are written: everything before it has been deleted and
+			// replaced inside the open transaction.
+			if (statements.some((statement) => /external_accounts/.test(statement.sql))) {
+				reachedRestore();
+				await paused;
+			}
+			return tx.batch(statements);
+		},
+		exec: (sql) => tx.exec(sql),
+		transaction: (work) => tx.transaction(work),
+	});
+	// A `D1Database` that owns its transactions: the callback gets a connection-bound view, the adapter does not.
+	const adapter = {
+		prepare: (...args) => inner.database.prepare(...args),
+		batch: (...args) => inner.database.batch(...args),
+		exec: (...args) => inner.database.exec(...args),
+		supportsTransaction: () => true,
+		transaction: (work) => inner.database.transaction((tx) => work(scope(tx))),
+	};
+
+	const order = [];
+	const restore = restoreDatabaseRecords(adapter, new TextEncoder().encode(JSON.stringify(bad)).buffer).then(
+		() => order.push("restore-ok"),
+		() => order.push("restore-failed"),
+	);
+	await reached;
+	// An ordinary caller on the same adapter, while the restore holds the connection.
+	const read = adapter.prepare("SELECT display_name FROM mailboxes WHERE id = 'm-personal'").all().then((result) => {
+		order.push("read");
+		return result;
+	});
+	const write = adapter.prepare("UPDATE app_settings SET app_name = ? WHERE id = 'default'").bind("concurrent-write").run().then(() => {
+		order.push("write");
+	});
+	// It waits instead of reading the uncommitted replacement.
+	const firstOfRace = await Promise.race([read.then(() => "read"), new Promise((resolve) => setTimeout(() => resolve("blocked"), 100))]);
+	assert.equal(firstOfRace, "blocked");
+	releaseRestore();
+	await restore;
+	const rows = await read;
+	await write;
+	// The restore rolled back everything it wrote — and the unrelated write, acknowledged only after that, stands.
+	assert.equal(order.at(-1), "write");
+	assert.deepEqual(order.slice(0, 2), ["restore-failed", "read"]);
+	assert.equal(rows.results[0].display_name, "Admin");
+	assert.equal(inner.sql.prepare("SELECT app_name FROM app_settings WHERE id = 'default'").get().app_name, "concurrent-write");
+	assert.equal(inner.sql.prepare("SELECT count(*) AS n FROM external_accounts").get().n, 0);
 });
 
 test("a mailbox transfer does not let a stale owner's deletion remove the account", async (t) => {

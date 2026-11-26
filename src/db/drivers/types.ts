@@ -19,6 +19,13 @@ export interface SqlExecutor {
 	query(sql: string, params: unknown[], mode: RowMode): Promise<QueryResult>;
 	/** Run `fn` atomically on one connection. Absent for HTTP drivers that cannot hold a transaction open. */
 	transaction?<T>(fn: (tx: SqlExecutor) => Promise<T>): Promise<T>;
+	/**
+	 * Throws away the connection this executor is bound to instead of returning it to the pool. Set on the
+	 * executor handed to `transaction` so a caller that cannot put the session back the way it found it (MySQL's
+	 * foreign key checks, for one) can make sure the connection is never reused. Absent when the driver cannot
+	 * promise that, or when the connection is not pooled.
+	 */
+	destroy?(): Promise<void>;
 	close?(): Promise<void>;
 }
 
@@ -85,7 +92,9 @@ export function lazyExecutor(dialect: DatabaseDialect, open: () => Promise<SqlEx
 		query: async (sql, params, mode) => (await ready()).query(sql, params, mode),
 		transaction: async (fn) => {
 			const inner = await ready();
-			if (!inner.transaction) return fn(inner);
+			// An HTTP driver has no interactive transaction; saying so lets the caller decide what to do about a
+			// failure instead of silently running the statements outside a transaction.
+			if (!inner.transaction) throw new Error(`The ${dialect} driver cannot hold a transaction open.`);
 			return inner.transaction(fn);
 		},
 		close: async () => {

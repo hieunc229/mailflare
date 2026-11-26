@@ -43,16 +43,24 @@ export function openNodePostgres({ url, shared }: OpenOptions): SqlExecutor {
 			pool.on("error", (error: Error) => console.error("Postgres pool error:", error.message));
 			const run = async <T,>(fn: (tx: SqlExecutor) => Promise<T>) => {
 				const client = await pool.connect();
+				let destroyed = false;
 				try {
 					await client.query("BEGIN");
-					const result = await fn(pgExecutor(client as unknown as PgQueryable, types));
+					const result = await fn({
+						...pgExecutor(client as unknown as PgQueryable, types),
+						// `release(true)` destroys the client instead of returning it to the pool.
+						destroy: async () => {
+							destroyed = true;
+							client.release(true);
+						},
+					});
 					await client.query("COMMIT");
 					return result;
 				} catch (error) {
 					await client.query("ROLLBACK").catch(() => undefined);
 					throw error;
 				} finally {
-					client.release();
+					if (!destroyed) client.release();
 				}
 			};
 			return { ...pgExecutor(pool as unknown as PgQueryable, types, run), close: () => pool.end() };
@@ -75,7 +83,7 @@ export function openNodePostgres({ url, shared }: OpenOptions): SqlExecutor {
 				withClient(async (client) => {
 					await client.query("BEGIN");
 					try {
-						const result = await fn(pgExecutor(client as unknown as PgQueryable, types));
+						const result = await fn({ ...pgExecutor(client as unknown as PgQueryable, types), destroy: async () => client.end().catch(() => undefined) });
 						await client.query("COMMIT");
 						return result;
 					} catch (error) {
