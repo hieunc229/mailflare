@@ -39,7 +39,7 @@ function setup() {
 }
 const addCollection = (sqlite, id, user = "u1") => sqlite.prepare("INSERT INTO dav_collections (id, user_id, kind, created_at, updated_at) VALUES (?, ?, 'calendar', 1, 1)").run(id, user);
 
-test("deleting a calendar also deletes override rows that lost their calendar, re-keys its change log to the default calendar, in one batch", async () => {
+test("deleting a calendar also deletes override rows that lost their calendar and drops its change log, in one batch", async () => {
 	const { sqlite, orm, batches, event } = setup();
 	addCollection(sqlite, "cal:work");
 	event("m1", "u1", "cal:work", "m1");
@@ -50,7 +50,7 @@ test("deleting a calendar also deletes override rows that lost their calendar, r
 	assert.deepEqual(sqlite.prepare("SELECT id FROM calendar_events").all().map((row) => row.id), ["keep"]);
 	assert.equal(batches.length, 1);
 	assert.equal(sqlite.prepare("SELECT count(*) AS n FROM dav_changes WHERE collection_id = 'cal:work'").get().n, 0);
-	assert.equal(sqlite.prepare("SELECT count(*) AS n FROM dav_changes WHERE collection_id = 'cal:u1' AND object_key = 'm1' AND change_type = 'destroyed'").get().n, 1);
+	assert.equal(sqlite.prepare("SELECT count(*) AS n FROM dav_changes WHERE collection_id = 'cal:u1' AND object_key = 'm1' AND change_type = 'destroyed'").get().n, 0);
 });
 
 test("deleting a calendar with hundreds of series stays under the bound-parameter limit per statement", async () => {

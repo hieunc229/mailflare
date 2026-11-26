@@ -140,7 +140,7 @@ test("updating changes only the fields sent and refuses calendars the user does 
 	assert.deepEqual((await lib.updateCalendar(orm, "u1", calendar.id, { name: "" })).status, 400);
 });
 
-test("deleting a calendar deletes its events first so the phone sees them destroyed (filed under the default calendar), then the calendar and its grants", async () => {
+test("deleting a calendar deletes its events first (the calendar is its own collection, so its log goes with it), then the calendar and its grants", async () => {
 	const { orm, sqlite, event, log } = setup();
 	const { calendar } = await lib.createCalendar(orm, "u1", { name: "Work" });
 	event("e1", "u1", calendar.id);
@@ -152,7 +152,7 @@ test("deleting a calendar deletes its events first so the phone sees them destro
 	assert.deepEqual(sqlite.prepare("SELECT id FROM calendar_events").all().map((row) => row.id), ["keep"]);
 	assert.equal(sqlite.prepare("SELECT count(*) AS n FROM dav_collections").get().n, 0);
 	assert.equal(sqlite.prepare("SELECT count(*) AS n FROM calendar_shares").get().n, 0);
-	assert.deepEqual(log().filter((entry) => entry.t === "destroyed" && entry.c === "cal:u1").map((entry) => entry.k), ["e1", "e2"]);
+	assert.deepEqual(log().filter((entry) => entry.c === calendar.id || entry.c === "cal:u1" && entry.t === "destroyed"), [], "nothing of the deleted calendar is left in any log, and the default calendar's log is not told");
 });
 
 test("the default calendar cannot be deleted (409), nor another user's calendar (404)", async () => {
