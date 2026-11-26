@@ -7,6 +7,12 @@ export const MAX_TRASH_RETENTION_DAYS = 365;
 /** Messages purged per scheduled run, so one invocation stays well inside Worker limits. */
 export const TRASH_RETENTION_BATCH_SIZE = 200;
 
+/**
+ * Statuses a per-folder rule never purges, however old the message is: an unsent draft is the user's work
+ * and mail the sending pipeline owns (queued, failed) may still be delivered.
+ */
+export const FOLDER_RETENTION_PROTECTED_STATUSES: readonly string[] = ["draft", "queued", "failed"];
+
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 /** Messages that entered Trash or Spam before this instant are due for deletion. */

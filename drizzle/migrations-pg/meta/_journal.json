@@ -190,6 +190,13 @@
       "when": 1795027631043,
       "tag": "0026_contact_details",
       "breakpoints": true
+    },
+    {
+      "idx": 28,
+      "version": "7",
+      "when": 1795677354871,
+      "tag": "0034_folder_retention_days",
+      "breakpoints": true
     }
   ]
 }
