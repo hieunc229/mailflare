@@ -9,8 +9,8 @@ import { GROUP_HEADER } from "@/lib/groups/loop-utils";
  */
 export const GROUP_RELAY_PREFIX = "group-relay/";
 export const GROUP_RELAY_TTL_DAYS = 7;
-/** How many days back a Message-ID is looked up: bounces and auto-replies arrive within a few days. */
-export const RELAY_MID_LOOKUP_DAYS = 4;
+/** How many days back a Message-ID is looked up: as long as the records are kept. */
+export const RELAY_MID_LOOKUP_DAYS = GROUP_RELAY_TTL_DAYS;
 
 export const dayOf = (now: Date = new Date()): number => Math.floor(now.getTime() / 86_400_000);
 export type RelayKind = "copy" | "mid" | "rate" | "chunk" | "capnote" | "skip";
@@ -203,24 +203,27 @@ export async function sha256Hex(value: string): Promise<string> {
 	return Array.from(new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(value))), (byte) => byte.toString(16).padStart(2, "0")).join("");
 }
 
-export type RateEntry = { day: number; hour: number; groupId: string; digest: string; sends: number; uploaded?: Date };
+/** `reserved`: the sends are held while the message is being judged. `approved`: it passed, and later chunks can rely on that. */
+export type RateState = "reserved" | "approved";
+export type RateEntry = { day: number; hour: number; groupId: string; digest: string; sends: number; state: RateState; uploaded?: Date };
 
 export const relayRateDayPrefix = (day: number): string => `${GROUP_RELAY_PREFIX}${day}/rate/`;
 
 /**
- * One marker per message and group: `group-relay/<day>/rate/<hour>/<group>/<digest>-<sends>`. The key says everything
+ * One marker per message and group: `group-relay/<day>/rate/<hour>/<group>/<digest>-<sends>-<r|a>`. The key says everything
  * (no object body to read), so one listing of the day's prefix yields every counter. A message counts once however
- * many chunks it has. It is written before the spam check (to reserve the sends) and removed if the message is
- * blocked or a cap turns out to be exceeded.
+ * many chunks it has. It is written as `r` (reserved) before the spam check, becomes `a` (approved) when the message
+ * passes, and is removed if it is blocked or a cap turns out to be exceeded. Only `a` lets a redelivery skip the checks:
+ * a reservation left behind by an attempt that died before its verdict is judged again.
  */
-export function relayRateKey(input: { groupId: string; digest: string; sends: number; now?: Date }): string {
+export function relayRateKey(input: { groupId: string; digest: string; sends: number; state: RateState; now?: Date }): string {
 	const now = input.now ?? new Date();
-	return relayKey("rate", dayOf(now), `${Math.floor(now.getTime() / 3_600_000)}/${input.groupId}/${input.digest}-${input.sends}`);
+	return relayKey("rate", dayOf(now), `${Math.floor(now.getTime() / 3_600_000)}/${input.groupId}/${input.digest}-${input.sends}-${input.state === "approved" ? "a" : "r"}`);
 }
 
 export function parseRateKey(key: string): RateEntry | null {
-	const match = /^group-relay\/(\d+)\/rate\/(\d+)\/([^/]+)\/([0-9a-f]{64})-(\d+)$/.exec(key);
-	return match ? { day: Number(match[1]), hour: Number(match[2]), groupId: match[3], digest: match[4], sends: Number(match[5]) } : null;
+	const match = /^group-relay\/(\d+)\/rate\/(\d+)\/([^/]+)\/([0-9a-f]{64})-(\d+)-([ra])$/.exec(key);
+	return match ? { day: Number(match[1]), hour: Number(match[2]), groupId: match[3], digest: match[4], sends: Number(match[5]), state: match[6] === "a" ? "approved" : "reserved" } : null;
 }
 
 export type RelayAllowance = { ok: true } | { ok: false; scope: "group" | "installation"; period: "hour" | "day"; limit: number };
@@ -260,13 +263,16 @@ export const RELAY_MAX_RATE_LIMIT_ATTEMPTS = 6;
 /** 15 s, 30 s, 60 s ... capped at 5 minutes. */
 export const relayRetryDelay = (attempt: number): number => Math.min(300, 15 * 2 ** attempt);
 
+/** A Message-ID as it is compared and stored: no brackets or spaces, lower case. */
+export const normalizeRelayMessageId = (messageId: string): string => messageId.trim().replace(/^<|>$/g, "").trim().toLowerCase();
+
 /**
  * Where the provider's Message-ID of a relayed copy is remembered. A bounce or an auto-reply names that ID, which
  * is how it is traced back to the member the copy was for. Cloudflare sending assigns its own Message-ID and ignores
  * ours, so the ID the provider reports is the only one every provider has.
  */
 export async function relayMessageIdKey(messageId: string, now?: Date): Promise<string> {
-	return relayKey("mid", dayOf(now), await sha256Hex(messageId.trim().replace(/^<|>$/g, "").toLowerCase()));
+	return relayKey("mid", dayOf(now), await sha256Hex(normalizeRelayMessageId(messageId)));
 }
 
 /** The keys a Message-ID may be stored under: today's and the last few days'. */

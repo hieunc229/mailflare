@@ -256,7 +256,7 @@ test("the daily sweep deletes whole expired days of every kind, and keeps the re
 	for (let i = 0; i < 2500; i += 1) objects.set(`group-relay/${today - 7}/mid/m${i}`, new ArrayBuffer(1));
 	for (let i = 0; i < 7000; i += 1) objects.set(`group-relay/${today}/mid/t${i}`, new ArrayBuffer(1));
 	env.BUCKET.list = async ({ prefix, limit = 1000 }) => {
-		const keys = [...objects.keys()].filter((key) => key.startsWith(prefix));
+		const keys = [...objects.keys()].filter((key) => key.startsWith(prefix)).sort();
 		return { objects: keys.slice(0, limit).map((key) => ({ key, uploaded: now })), truncated: keys.length > limit };
 	};
 	env.BUCKET.delete = async (keys) => { for (const key of [keys].flat()) objects.delete(key); };
@@ -267,13 +267,29 @@ test("the daily sweep deletes whole expired days of every kind, and keeps the re
 	assert.equal(left.filter((key) => key.startsWith(`group-relay/${today}/mid/t`)).length, 7000);
 });
 
+test("any day older than the TTL is swept, however long ago it was written, and strays do not stop the sweep", async (t) => {
+	const { env, objects } = await fixture(t);
+	const now = new Date("2026-12-20T00:30:00Z");
+	const today = Math.floor(now / 86_400_000);
+	for (const d of [today - 30, today - 120, today - 9]) objects.set(`group-relay/${d}/mid/x`, new ArrayBuffer(1));
+	objects.set(`group-relay/${today - 2}/mid/keep`, new ArrayBuffer(1));
+	objects.set("group-relay/stray", new ArrayBuffer(1));
+	env.BUCKET.list = async ({ prefix, limit = 1000 }) => {
+		const keys = [...objects.keys()].filter((key) => key.startsWith(prefix)).sort();
+		return { objects: keys.slice(0, limit).map((key) => ({ key, uploaded: now })), truncated: keys.length > limit };
+	};
+	env.BUCKET.delete = async (keys) => { for (const key of [keys].flat()) objects.delete(key); };
+	await app.sweepOrphanedRawMail(env, now);
+	assert.deepEqual([...objects.keys()].sort(), [`group-relay/${today - 2}/mid/keep`, "group-relay/stray"].sort());
+});
+
 test("a missed sweep is made up for on the next run", async (t) => {
 	const { env, objects } = await fixture(t);
 	const now = new Date("2026-12-20T00:30:00Z");
 	const today = Math.floor(now / 86_400_000);
 	objects.set(`group-relay/${today - 9}/copy/old.eml`, new ArrayBuffer(1));
 	objects.set(`group-relay/${today - 12}/copy/ancient.eml`, new ArrayBuffer(1));
-	env.BUCKET.list = async ({ prefix }) => ({ objects: [...objects.keys()].filter((key) => key.startsWith(prefix)).map((key) => ({ key, uploaded: now })), truncated: false });
+	env.BUCKET.list = async ({ prefix, limit = 1000 }) => ({ objects: [...objects.keys()].filter((key) => key.startsWith(prefix)).sort().slice(0, limit).map((key) => ({ key, uploaded: now })), truncated: false });
 	env.BUCKET.delete = async (keys) => { for (const key of [keys].flat()) objects.delete(key); };
 	await app.sweepOrphanedRawMail(env, now);
 	assert.ok(!objects.has(`group-relay/${today - 9}/copy/old.eml`), "two days late is still found");
@@ -311,4 +327,35 @@ test("each provider gets the sender in the form it handles: UTF-8, RFC 2047 word
 	const cloudflare = await sendOnce("cloudflare");
 	assert.deepEqual(cloudflare.fromParts, { name: "'José <jose@gmail.com>' via Team", email: "team@example.com" });
 	assert.match(cloudflare.headers["X-Original-From"], /^=\?UTF-8\?B\?.+\?= <jose@gmail\.com>$/);
+});
+
+test("the provider's Message-ID of every relayed copy is remembered for the member it was sent to", async (t) => {
+	const { env, objects } = await relayFixture(t);
+	await app.processGroupRelay(env, relayMessage());
+	const key = await app.relayUtils.relayMessageIdKey("<provider-1@mta.test>");
+	assert.match(key, new RegExp(`^group-relay/${day()}/mid/`));
+	assert.deepEqual(JSON.parse(new TextDecoder().decode(objects.get(key))), { g: "g1", m: "gm2" });
+	assert.equal(key, await app.relayUtils.relayMessageIdKey("provider-1@MTA.test"), "brackets and case do not matter");
+});
+
+test("a rate-limited send is queued again with a growing delay, and gives up after six", async (t) => {
+	const { env, outbound } = await relayFixture(t);
+	globalThis.relayLog.error = Object.assign(new Error("Resend: Too many requests"), { status: 429 });
+	assert.equal(await app.processGroupRelay(env, relayMessage()), "skipped");
+	assert.deepEqual(outbound.map((m) => [m.body.attempt, m.options.delaySeconds]), [[1, 15]]);
+	await app.processGroupRelay(env, relayMessage({ attempt: 2 }));
+	assert.deepEqual(outbound.at(-1).options.delaySeconds, 60);
+	await assert.rejects(() => app.processGroupRelay(env, relayMessage({ attempt: 6 })), /Too many requests/);
+	globalThis.relayLog.error = new Error("Resend: invalid address");
+	await assert.rejects(() => app.processGroupRelay(env, relayMessage()), /invalid address/);
+});
+
+test("mail with several From addresses is not relayed, and the subject cannot carry a header break", async (t) => {
+	const { env, objects } = await relayFixture(t);
+	objects.set("group-relay/x.eml", new TextEncoder().encode(MIME("a@x.com, b@y.com")).buffer);
+	assert.equal(await app.processGroupRelay(env, relayMessage()), "skipped");
+	assert.equal(globalThis.relayLog.sent.length, 0);
+	objects.set("group-relay/x.eml", new TextEncoder().encode(MIME().replace("Subject: Hello team", "Subject: =?utf-8?Q?Hi=0D=0ABcc:_evil=40x.com?=")).buffer);
+	await app.processGroupRelay(env, relayMessage());
+	assert.ok(!/[\r\n]/.test(globalThis.relayLog.sent[0].message.subject));
 });

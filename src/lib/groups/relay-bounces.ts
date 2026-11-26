@@ -5,18 +5,14 @@ import { getSuppressionMode, recordSuppression } from "@/lib/deliverability/supp
 import { cleanAddress } from "@/lib/deliverability/suppression-utils";
 import { parseDeliveryStatus } from "@/lib/deliverability/dsn";
 import { parseMessageIdList } from "@/lib/email/threading";
-import { relayMessageIdKeys } from "@/lib/groups/relay-utils";
+import { normalizeRelayMessageId, relayMessageIdKeys } from "@/lib/groups/relay-utils";
 
 type RelayedCopy = { groupId: string; memberId: string };
 
 /** The member a Message-ID was relayed to (see `relayMessageIdKey`), or null for any other ID. */
 async function relayedCopy(env: CloudflareEnv, messageId: string): Promise<RelayedCopy | null> {
-	let stored: Awaited<ReturnType<R2Bucket["get"]>> = null;
-	// Recorded on the day it was sent; a bounce may arrive a few days later.
-	for (const key of await relayMessageIdKeys(messageId)) {
-		stored = await env.BUCKET.get(key);
-		if (stored) break;
-	}
+	// Recorded on the day it was sent; a bounce may arrive any time within the retention. The days are asked at once.
+	const stored = (await Promise.all((await relayMessageIdKeys(messageId)).map((key) => env.BUCKET.get(key)))).find((object) => object !== null) ?? null;
 	if (!stored) return null;
 	try {
 		const value = JSON.parse(new TextDecoder().decode(await stored.arrayBuffer())) as { g?: unknown; m?: unknown };
@@ -50,7 +46,7 @@ export async function recordRelayBounce(env: CloudflareEnv, group: { groupId: st
 	if (!hit) return;
 	// Unconfirmed, like every DSN-derived entry: our relayed Message-IDs are visible to members (References, Reply-To),
 	// so a forged bounce can name one. It is enforced once a second bounce names a different copy, or an admin confirms it.
-	await recordSuppression(env, { domainId: group.domainId, email: member.email, reason: "hard_bounce", source: "dsn", detail: hit.diagnostic, confirmed: false, evidenceRef: status.originalMessageId });
+	await recordSuppression(env, { domainId: group.domainId, email: member.email, reason: "hard_bounce", source: "dsn", detail: hit.diagnostic, confirmed: false, evidenceRef: normalizeRelayMessageId(status.originalMessageId) });
 }
 
 /**

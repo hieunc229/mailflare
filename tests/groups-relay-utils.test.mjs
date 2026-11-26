@@ -127,13 +127,48 @@ test("the unsubscribe secret is generated once, kept in the bucket and survives 
 	assert.equal(objects.size, 1);
 });
 
-test("the unsubscribe secret adopts whatever is stored once racing creators have settled", async () => {
+const textOf = (value) => (typeof value === "string" ? new TextEncoder().encode(value) : value).buffer.slice(0);
+
+test("the unsubscribe secret adopts what another creator stored while this one waited", async () => {
 	const objects = new Map();
+	const writes = [];
 	const bucket = {
 		get: async (key) => (objects.has(key) ? { arrayBuffer: async () => objects.get(key) } : null),
-		// A second isolate's write lands right after ours and wins.
-		put: async (key, body) => { objects.set(key, body); objects.set(key, new TextEncoder().encode("b".repeat(64)).buffer); },
+		put: async (key, body) => {
+			writes.push(new TextDecoder().decode(body));
+			objects.set(key, textOf(body));
+			// A second isolate's write lands during the settling wait, after ours.
+			setTimeout(() => objects.set(key, textOf("b".repeat(64))), 30);
+		},
 	};
 	secretKey.forgetUnsubscribeSecretCache();
-	assert.equal(await secretKey.getUnsubscribeSecret({ BUCKET: bucket }), "b".repeat(64));
+	const adopted = await secretKey.getUnsubscribeSecret({ BUCKET: bucket });
+	assert.equal(adopted, "b".repeat(64));
+	assert.notEqual(writes[0], adopted, "not the value this creator generated");
+});
+
+test("a secret that could not be stored is never used, and the next call tries again", async () => {
+	const objects = new Map();
+	let failing = true;
+	const bucket = {
+		get: async (key) => (objects.has(key) ? { arrayBuffer: async () => objects.get(key) } : null),
+		put: async (key, body) => { if (failing) throw new Error("bucket unavailable"); objects.set(key, textOf(body)); },
+	};
+	secretKey.forgetUnsubscribeSecretCache();
+	await assert.rejects(() => secretKey.getUnsubscribeSecret({ BUCKET: bucket }), /bucket unavailable/);
+	failing = false;
+	const secret = await secretKey.getUnsubscribeSecret({ BUCKET: bucket });
+	assert.match(secret, /^[0-9a-f]{64}$/);
+	assert.equal(new TextDecoder().decode(objects.get("secrets/group-unsubscribe.key")), secret);
+});
+
+test("a write that silently stored nothing is not trusted either", async () => {
+	const bucket = { get: async () => null, put: async () => null };
+	secretKey.forgetUnsubscribeSecretCache();
+	await assert.rejects(() => secretKey.getUnsubscribeSecret({ BUCKET: bucket }), /could not be stored/);
+});
+
+test("the days of a Message-ID cover the whole retention", async () => {
+	assert.equal(relay.RELAY_MID_LOOKUP_DAYS, relay.GROUP_RELAY_TTL_DAYS);
+	assert.equal(relay.normalizeRelayMessageId("  <AbC@Mta.TEST> "), "abc@mta.test");
 });

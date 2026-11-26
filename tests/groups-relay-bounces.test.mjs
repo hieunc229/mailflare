@@ -5,6 +5,7 @@ import { loadApp } from "./helpers/real-db.mjs";
 const { app, newDatabase } = await loadApp("groups-relay-bounces", `
 	export { resolveIncomingMail } from "./src/lib/email/incoming.ts";
 	export { relayMessageIdKey } from "./src/lib/groups/relay-utils.ts";
+	export * as relayUtils from "./src/lib/groups/relay-utils.ts";
 `);
 
 const seed = `
@@ -46,6 +47,16 @@ test("a bounce naming a relayed copy's Message-ID and its own member suppresses 
 	assert.deepEqual(suppressed(), [{ domain_id: "d1", email: "pat@ext.com", reason: "hard_bounce", source: "dsn", confirmed: 0 }], "one bounce proves nothing: Message-IDs are visible to members");
 });
 
+test("the same copy's ID in another spelling is still one copy, so it never confirms on its own", async (t) => {
+	const { dsn, suppressed } = await fixture(t);
+	await dsn(DSN());
+	await dsn(DSN());
+	await dsn(DSN({ id: "<CF-1@MTA.test>" }));
+	await dsn(DSN({ id: "  cf-1@mta.test " }));
+	assert.equal(suppressed().length, 1);
+	assert.equal(suppressed()[0].confirmed, 0);
+});
+
 test("a second bounce naming a different copy confirms it, as with every other DSN", async (t) => {
 	const { dsn, suppressed, remember } = await fixture(t);
 	await dsn(DSN());
@@ -54,16 +65,33 @@ test("a second bounce naming a different copy confirms it, as with every other D
 	assert.equal(suppressed()[0].confirmed, 1);
 });
 
-test("a copy's Message-ID is found for a few days after it was sent, and not for ever", async (t) => {
+test("a copy's Message-ID is found for the whole week it is kept, and not on the day after", async (t) => {
 	const { dsn, suppressed, objects, sqlite } = await fixture(t);
 	const day = (n) => new Date(Date.now() - n * 86_400_000);
-	for (const [n, found] of [[3, true], [5, false]]) {
+	assert.equal(app.relayUtils.RELAY_MID_LOOKUP_DAYS, app.relayUtils.GROUP_RELAY_TTL_DAYS);
+	for (const [n, found] of [[0, true], [6, true], [7, false]]) {
 		objects.clear();
 		sqlite.exec("DELETE FROM email_suppressions");
 		objects.set(await app.relayMessageIdKey("<cf-1@mta.test>", day(n)), new TextEncoder().encode(JSON.stringify({ g: "g1", m: "m1" })));
 		await dsn(DSN());
 		assert.equal(suppressed().length > 0, found, `${n} days old`);
 	}
+});
+
+test("the days of a Message-ID are looked up together, not one after another", async (t) => {
+	const { env, dsn } = await fixture(t);
+	let inFlight = 0;
+	let widest = 0;
+	const get = env.BUCKET.get;
+	env.BUCKET.get = async (key) => {
+		inFlight += 1;
+		widest = Math.max(widest, inFlight);
+		await new Promise((resolve) => setTimeout(resolve, 2));
+		inFlight -= 1;
+		return get(key);
+	};
+	await dsn(DSN({ id: "<unknown@mta.test>" }));
+	assert.ok(widest >= app.relayUtils.RELAY_MID_LOOKUP_DAYS, `${widest} lookups at once`);
 });
 
 test("a bounce that does not fit is dropped and records nothing", async (t) => {
