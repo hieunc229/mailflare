@@ -105,7 +105,7 @@ Admin API keys cannot read or send mail. Enable **Allow MCP access** when creati
 | `mailboxes` | `PATCH /api/v1/mailboxes/[id]` | Update mailbox settings |
 | `mailboxes` | `DELETE /api/v1/mailboxes/[id]` | Delete a mailbox and its routing rule |
 | `groups` | `GET /api/v1/groups` | List groups on the domains the key's owner can use |
-| `groups` | `POST /api/v1/groups` | Create a group (`{ domainId, localPart, name, description?, whoCanPost?, replyTo? }`) |
+| `groups` | `POST /api/v1/groups` | Create a group (`{ domainId, localPart, name, description?, whoCanPost?, replyTo?, relayOutsidePosts? }`; `relayOutsidePosts` defaults to `false`: in an `anyone` group only posts from members or your own domains are re-sent to external members unless it is `true`) |
 | `groups` | `GET /api/v1/groups/[id]` | Get a group with its members |
 | `groups` | `PATCH /api/v1/groups/[id]` | Update a group (same fields, plus `disabled`) |
 | `groups` | `DELETE /api/v1/groups/[id]` | Delete a group and its routing rule |

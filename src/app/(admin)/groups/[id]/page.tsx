@@ -38,9 +38,10 @@ function SettingsForm({ detail }: { detail: GroupDetailResponse }) {
 	const [localPart, setLocalPart] = useState(group.localPart);
 	const [domainId, setDomainId] = useState(group.domainId);
 	const [whoCanPost, setWhoCanPost] = useState<WhoCanPost>(group.whoCanPost);
+	const [relayOutsidePosts, setRelayOutsidePosts] = useState(group.relayOutsidePosts);
 	const [disabled, setDisabled] = useState(group.disabled);
 	const save = useMutation({
-		mutationFn: () => groupsFetch(`/api/groups/${group.id}`, t("groups.saveFailed"), jsonInit("PATCH", { name: name.trim(), description: description.trim() || null, localPart: localPart.trim(), domainId, whoCanPost, disabled })),
+		mutationFn: () => groupsFetch(`/api/groups/${group.id}`, t("groups.saveFailed"), jsonInit("PATCH", { name: name.trim(), description: description.trim() || null, localPart: localPart.trim(), domainId, whoCanPost, relayOutsidePosts, disabled })),
 		onSuccess: () => qc.invalidateQueries({ queryKey: ["groups"] }),
 	});
 	const addressChanged = localPart.trim().toLowerCase() !== group.localPart || domainId !== group.domainId;
@@ -62,6 +63,14 @@ function SettingsForm({ detail }: { detail: GroupDetailResponse }) {
 					{addressChanged && <p id="group-address-hint" className="text-xs text-amber-700">{t("groups.addressChangeHint")}</p>}
 				</div>
 				<WhoCanPostField value={whoCanPost} onChange={setWhoCanPost} />
+				{/* Only an anyone group admits posts from outside, so only there is there anything to decide. */}
+				{whoCanPost === "anyone" && <div className="space-y-2">
+					<div className="flex items-center gap-2 rounded-xl border border-neutral-200 pr-3">
+						<label htmlFor="group-relay-outside" className="min-h-11 min-w-0 flex-1 cursor-pointer px-3 py-2 text-sm"><span className="block font-medium text-neutral-900">{t("groups.relayOutside")}</span><span className="block text-neutral-600">{t("groups.relayOutsideHint")}</span></label>
+						<Switch id="group-relay-outside" checked={relayOutsidePosts} onCheckedChange={setRelayOutsidePosts} />
+					</div>
+					{relayOutsidePosts && <p role="alert" data-testid="relay-outside-warning" className="flex items-start gap-3 rounded-2xl bg-amber-50 px-4 py-3 text-sm text-amber-900"><AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />{t("groups.relayOutsideWarning")}</p>}
+				</div>}
 				<div className="flex items-center gap-2 rounded-xl border border-neutral-200 pr-3">
 					{/* A real label: clicking anywhere on the row toggles the switch, which also gives touch a full-height target. */}
 					<label htmlFor="group-disabled" className="min-h-11 min-w-0 flex-1 cursor-pointer px-3 py-2 text-sm"><span className="block font-medium text-neutral-900">{t("groups.disable")}</span><span className="block text-neutral-600">{t("groups.disableHint")}</span></label>
