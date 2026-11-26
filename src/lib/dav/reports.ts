@@ -295,14 +295,11 @@ async function syncCollection(area: Area, ctx: DavContext, root: DavElement, wan
 	const suffix = area === "calendars" ? ".ics" : ".vcf";
 	// Gone or hidden: a destroyed resource carries the name it had in the change log, a hidden one still has its row.
 	const gone = result.changes.filter((change) => !names.has(change.objectKey));
-	// Hidden resources (unanswered, declined, cancelled invitations) are named only to the owner; a delegate's or reader's report leaves them out.
-	const ownerView = area !== "calendars" || calendarOf(ctx).role === "owner";
-	const hidden = area === "calendars" && ownerView ? await hiddenCalendarNames(ctx.env, calendarOf(ctx), gone.filter((change) => change.type !== "destroyed").map((change) => change.objectKey)) : new Map<string, string>();
-	const unnamed = new Set(ownerView ? [] : gone.filter((change) => change.type !== "destroyed").map((change) => change.objectKey));
+	// A resource that became hidden (declined, cancelled) is reported gone by its name to everyone who could have synced it, or a phone would keep it for good.
+	const hidden = area === "calendars" ? await hiddenCalendarNames(ctx.env, calendarOf(ctx), gone.filter((change) => change.type !== "destroyed").map((change) => change.objectKey)) : new Map<string, string>();
 	const nameOfGone = new Map(gone.map((change) => [change.objectKey, change.name ?? hidden.get(change.objectKey) ?? `${change.objectKey}${suffix}`]));
 	const responses: DavResponse[] = [];
 	for (const key of keys) {
-		if (unnamed.has(key)) continue;
 		const row = names.get(key);
 		if (row) responses.push(await live({ name: row.name, etag: etagOf(seqs, key, row.updatedAt), lastModified: row.updatedAt, contentType: area === "calendars" ? "text/calendar; charset=utf-8" : "text/vcard; charset=utf-8" }));
 		else responses.push({ href: path + nameOfGone.get(key)!, status: 404 });
