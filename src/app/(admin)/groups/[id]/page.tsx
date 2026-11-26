@@ -4,7 +4,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useState } from "react";
-import { AlertTriangle, ArrowLeft, Mail, Trash2, Users, X } from "@/components/icons";
+import { AlertTriangle, ArrowLeft, Trash2 } from "@/components/icons";
 import { LicenseRequiredOverlay } from "@/components/license-required-overlay";
 import { useLanguage } from "@/components/language-provider";
 import { Button } from "@/components/ui/button";
@@ -16,10 +16,11 @@ import { Select } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
-import type { GroupDetailResponse, GroupMemberView, WhoCanPost } from "../types";
+import type { GroupDetailResponse, WhoCanPost } from "../types";
 import { WhoCanPostField } from "../who-can-post-field";
 import { fetchGroup, fetchGroups, groupsFetch, isLicenseRequired, isMigrationRequired, jsonInit, MAX_EXTERNAL_MEMBERS, MAX_GROUP_MEMBERS } from "../utils";
 import { AddMembers } from "./add-members";
+import { MemberRow } from "./member-row";
 
 const CAPPED_KEY = {
 	"group-hour": "groups.relayCappedGroupHour",
@@ -84,24 +85,6 @@ function SettingsForm({ detail }: { detail: GroupDetailResponse }) {
 	</CardContent></Card>;
 }
 
-function MemberRow({ member, groupId }: { member: GroupMemberView; groupId: string }) {
-	const { t } = useLanguage();
-	const qc = useQueryClient();
-	const remove = useMutation({
-		mutationFn: () => groupsFetch(`/api/groups/${groupId}/members/${member.id}`, t("groups.removeFailed"), jsonInit("DELETE")),
-		onSuccess: () => qc.invalidateQueries({ queryKey: ["groups"] }),
-	});
-	return <li className="flex min-h-14 items-center gap-3 py-2">
-		<span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-neutral-100 text-neutral-600" aria-hidden="true">{member.kind === "user" ? <Users className="h-4 w-4" /> : <Mail className="h-4 w-4" />}</span>
-		<span className="min-w-0 flex-1">
-			<span className="flex min-w-0 items-center gap-2"><span className="truncate text-sm font-medium text-neutral-900">{member.name}</span><span className="shrink-0 rounded-full bg-neutral-100 px-2 py-0.5 text-xs text-neutral-600">{member.kind === "user" ? t("groups.kindUser") : member.kind === "mailbox" ? t("groups.kindMailbox") : t("groups.kindExternal")}</span>{member.suppressed && <span title={t("groups.suppressedHint")} className="shrink-0 rounded-full bg-red-100 px-2 py-0.5 text-xs text-red-800">{t("groups.suppressed")}</span>}{member.disabled && <span className="shrink-0 rounded-full bg-amber-100 px-2 py-0.5 text-xs text-amber-800">{t("accounts.status.disabled")}</span>}</span>
-			<span className="block truncate no-font-mono text-sm text-neutral-500">{member.address}</span>
-			{remove.isError && <span role="alert" className="block text-xs text-red-600">{(remove.error as Error).message}</span>}
-		</span>
-		<Button variant="ghost" size="sm" disabled={remove.isPending} onClick={() => remove.mutate()} aria-label={t("groups.removeMember", { name: member.name })} className="h-9 w-9 shrink-0 p-0 pointer-coarse:h-11 pointer-coarse:w-11"><X className="h-4 w-4" /></Button>
-	</li>;
-}
-
 export default function GroupDetailPage() {
 	const { t } = useLanguage();
 	const { id } = useParams<{ id: string }>();
@@ -137,6 +120,7 @@ export default function GroupDetailPage() {
 			{externalCount > 0 && !group.data.notices.unsubscribeReady && <p role="alert" className="flex items-start gap-3 rounded-2xl bg-amber-50 px-4 py-3 text-sm text-amber-900"><AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />{t("groups.unsubscribeNotReady")}</p>}
 			{group.data.notices.relayCapped && <p role="alert" className="flex items-start gap-3 rounded-2xl bg-red-50 px-4 py-3 text-sm text-red-800"><AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />{t(CAPPED_KEY[`${group.data.notices.relayCapped.scope}-${group.data.notices.relayCapped.period}` as keyof typeof CAPPED_KEY], { limit: group.data.notices.relayCapped.limit })}</p>}
 			{externalCount > 0 && <p role="note" className="rounded-2xl bg-neutral-50 px-4 py-3 text-sm text-neutral-700">{t("groups.externalCostNote", { count: externalCount, max: MAX_EXTERNAL_MEMBERS })}</p>}
+			{members.some((member) => member.kind === "user") && <p role="note" className="rounded-2xl bg-neutral-50 px-4 py-3 text-sm text-neutral-700">{t("groups.canSendAsHint", { address: info.address })}</p>}
 			<AddMembers groupId={info.id} disabled={full} memberAddresses={members.map((member) => member.address)} externalFull={externalCount >= MAX_EXTERNAL_MEMBERS} />
 			{members.length === 0
 				? <p role="status" className="flex items-start gap-3 rounded-2xl bg-amber-50 px-4 py-3 text-sm text-amber-900"><AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />{t("groups.noMembers")}</p>
