@@ -242,6 +242,60 @@ test("an explicit null for a NOT NULL column is refused before the teardown, not
 	assert.deepEqual(restored, { tls_mode: "implicit-tls", enabled: 1 });
 });
 
+test("the other ways an imported row could fail the insert are refused before the teardown", async (t) => {
+	const { document } = await documentWithAccount(t);
+	const target = await targetWithExistingRow(t);
+	const refuse = async (mutate, column) => {
+		const broken = structuredClone(document);
+		mutate(broken.tables.external_accounts);
+		const refused = await target.restore(broken);
+		assert.equal(refused.status, 400, column);
+		assert.match((await refused.json()).error, new RegExp(column));
+		assertUntouched(target);
+	};
+
+	// A column the table does not have: the INSERT would fail with an unknown column, after the teardown.
+	await refuse((rows) => { rows[0].made_up_column = "x"; }, "made_up_column");
+	// A duplicate primary key in the document (distinct tuples, so the identity check alone missed it).
+	await refuse((rows) => rows.push({ ...rows[0], username: "other@example.com" }), "\\(row 2, id\\)");
+	// Text PostgreSQL cannot store (NUL) and text MySQL would silently rewrite (a lone surrogate).
+	await refuse((rows) => { rows[0].username = "user\u0000name"; }, "host|username");
+	await refuse((rows) => { rows[0].host = "imap\u0001.example.com"; }, "host");
+	await refuse((rows) => { rows[0].username = "user\uD800name"; }, "username");
+	await refuse((rows) => { rows[0].host = "imap\uD800.example.com"; }, "host");
+	// A URL-shaped host: the API would store only the host name, so this is not a value this app wrote.
+	for (const host of ["imap.example.com:993", "imaps://imap.example.com", "imap.example.com/path", "IMAP.example.com", "imap.example.com.", "localhost"]) {
+		await refuse((rows) => { rows[0].host = host; }, "host");
+	}
+	// The unique tuple as MySQL compares it: `utf8mb4_bin` ignores trailing spaces, `mailbox_id` ignores case.
+	await refuse((rows) => rows.push({ ...rows[0], id: "ext_2", username: `${rows[0].username}  ` }), "username");
+	// `mailbox_id` is compared case-insensitively on MySQL, so a differently cased twin collides there; the
+	// document has to carry that mailbox too, or the earlier missing-mailbox check catches it instead.
+	{
+		const broken = structuredClone(document);
+		const mailbox = { ...broken.tables.mailboxes[0], id: broken.tables.mailboxes[0].id.toUpperCase(), local_part: "admin-twin" };
+		broken.tables.mailboxes.push(mailbox);
+		broken.tables.external_accounts.push({ ...broken.tables.external_accounts[0], id: "ext_3", mailbox_id: mailbox.id });
+		const refused = await target.restore(broken);
+		assert.equal(refused.status, 400);
+		assert.match((await refused.json()).error, /username/);
+		assertUntouched(target);
+	}
+	// Epoch seconds JavaScript cannot turn into a Date: the settings API would throw on the first read.
+	for (const column of ["created_at", "updated_at"]) {
+		await refuse((rows) => { rows[0][column] = 8.64e12 + 1; }, column);
+		await refuse((rows) => { rows[0][column] = 2 ** 53 - 1; }, column);
+	}
+	await refuse((rows) => { rows[0].last_synced_at = 8.64e12 + 1; }, "last_synced_at");
+	// The last representable second and a plausible date are both accepted.
+	const boundary = structuredClone(document);
+	boundary.tables.external_accounts[0].created_at = 8.64e12;
+	boundary.tables.external_accounts[0].updated_at = 1;
+	boundary.tables.external_accounts[0].last_synced_at = 1_700_000_000;
+	assert.equal((await target.restore(boundary)).status, 200);
+	assert.equal(target.sql.prepare("SELECT created_at FROM external_accounts WHERE id = 'ext_1'").get().created_at, 8.64e12);
+});
+
 test("a restore refuses a document whose rows would collide or point at a missing mailbox", async (t) => {
 	const { document } = await documentWithAccount(t);
 	const target = await targetWithExistingRow(t);
@@ -250,7 +304,7 @@ test("a restore refuses a document whose rows would collide or point at a missin
 	duplicate.tables.external_accounts.push({ ...document.tables.external_accounts[0], id: "ext_2" });
 	const refused = await target.restore(duplicate);
 	assert.equal(refused.status, 400);
-	assert.match((await refused.json()).error, /external account record \(row 2, host\)/);
+	assert.match((await refused.json()).error, /external account record \(row 2, username\)/);
 	assertUntouched(target);
 
 	// The mailbox foreign key is enforced the same way, and `mailboxes` is restored from this document.
@@ -282,11 +336,11 @@ test("a restore refuses an out-of-range port or unknown protocol before the tear
 	}
 });
 
-test("a driver failure during restore is reported without the statement or its parameters", async (t) => {
+test("a driver failure mid-restore rolls back: the live rows and the error both survive intact", async (t) => {
 	const { document, sealed } = await documentWithAccount(t);
-	const target = await seededDatabase(t);
-	// A rejection the preflight cannot foresee, which is exactly the mid-restore case: the route must not repeat
-	// the driver error, whose message carries the INSERT and the bound ciphertext.
+	const target = await targetWithExistingRow(t);
+	// A rejection the preflight cannot foresee, injected at the last table restored. This is the case that used
+	// to delete the live credential and only then fail.
 	target.sql.exec(`CREATE TRIGGER f36_reject_restore BEFORE INSERT ON external_accounts WHEN NEW.username = 'rejected-by-db'
 		BEGIN SELECT RAISE(ABORT, 'injected restore failure'); END`);
 	const broken = structuredClone(document);
@@ -294,10 +348,15 @@ test("a driver failure during restore is reported without the statement or its p
 	const response = await target.restore(broken);
 	assert.equal(response.status, 400);
 	const text = JSON.stringify(await response.json());
+	// The route hides the driver error, whose message carries the INSERT and the bound ciphertext.
 	assert.match(text, /could not be restored/i);
 	assert.ok(!text.includes(sealed));
 	assert.ok(!text.includes(PASSWORD));
 	assert.ok(!/Failed query/i.test(text));
+	// The transaction put back everything the teardown removed: the old row, its ciphertext, and the parents.
+	assertUntouched(target);
+	assert.equal(target.sql.prepare("SELECT count(*) AS n FROM domains").get().n, 1);
+	assert.equal(target.sql.prepare("SELECT count(*) AS n FROM external_accounts").get().n, 1);
 });
 
 test("restore validation throws the typed error the route is allowed to repeat", async (t) => {
@@ -310,6 +369,28 @@ test("restore validation throws the typed error the route is allowed to repeat",
 		assert.equal(error.name, "BackupRestoreError");
 		return true;
 	});
+});
+
+test("a database without transactions (a D1 binding) still restores, on the preflight alone", async (t) => {
+	// D1 has no interactive transaction, so `runInTransaction` runs the writes directly: the shape checks above
+	// are the whole guard there. This wrapper is a `D1Database` without `transaction`, like a Worker binding.
+	const inner = await seededDatabase(t);
+	const plain = {
+		prepare: (...args) => inner.database.prepare(...args),
+		batch: (...args) => inner.database.batch(...args),
+		exec: (...args) => inner.database.exec(...args),
+	};
+	const source = await documentWithAccount(t);
+	const document = source.document;
+	assert.equal(await restoreDatabaseRecords(plain, new TextEncoder().encode(JSON.stringify(document)).buffer).then(() => "ok"), "ok");
+	const restored = inner.sql.prepare("SELECT id, password_encrypted FROM external_accounts").all();
+	assert.deepEqual(restored, [{ id: "ext_1", password_encrypted: source.sealed }]);
+	// A malformed document is refused before anything is written, exactly as on a transactional driver.
+	const broken = structuredClone(document);
+	broken.tables.external_accounts[0].id = "ext_2";
+	broken.tables.external_accounts.push({ ...broken.tables.external_accounts[0] });
+	await assert.rejects(restoreDatabaseRecords(plain, new TextEncoder().encode(JSON.stringify(broken)).buffer), /\(row 2, id\)/);
+	assert.deepEqual(inner.sql.prepare("SELECT id FROM external_accounts").all(), [{ id: "ext_1" }]);
 });
 
 test("a mailbox transfer does not let a stale owner's deletion remove the account", async (t) => {

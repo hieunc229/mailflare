@@ -54,6 +54,9 @@ export class CompatStatement {
 }
 
 export class CompatDatabase {
+	/** Set while a transaction runs, so every statement made through this adapter uses its connection. */
+	private transactionExecutor: SqlExecutor | null = null;
+
 	constructor(
 		readonly dialect: DatabaseDialect,
 		private readonly base: SqlExecutor,
@@ -61,7 +64,25 @@ export class CompatDatabase {
 	) {}
 
 	executor() {
-		return this.active() ?? this.base;
+		return this.transactionExecutor ?? this.active() ?? this.base;
+	}
+
+	/**
+	 * Runs `work` inside one transaction on a driver that can hold one. Every statement made through this
+	 * adapter while it runs — `prepare`, `exec` and nested `batch` calls — uses that connection, so a failure
+	 * anywhere rolls the whole block back. The backup restore uses it; D1 has no interactive transaction, so
+	 * there this is a plain call.
+	 */
+	async transaction<T>(work: () => Promise<T>): Promise<T> {
+		if (!this.base.transaction || this.transactionExecutor) return work();
+		return this.base.transaction(async (executor) => {
+			this.transactionExecutor = executor;
+			try {
+				return await work();
+			} finally {
+				this.transactionExecutor = null;
+			}
+		});
 	}
 
 	prepare(sql: string) {
@@ -77,11 +98,14 @@ export class CompatDatabase {
 			}
 			return results;
 		};
+		// Inside `transaction` the statements join it, so a later failure rolls this batch back too.
+		if (this.transactionExecutor) return run(this.transactionExecutor);
 		return this.base.transaction ? this.base.transaction(run) : run(this.base);
 	}
 
 	async exec(sql: string) {
-		const result = await this.base.query(sql, [], "object");
+		// Through the executors so a statement issued inside `transaction` stays on its connection.
+		const result = await this.executor().query(sql, [], "object");
 		return { count: 1, duration: 0, rows: result.rows };
 	}
 

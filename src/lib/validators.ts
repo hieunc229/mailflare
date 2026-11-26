@@ -10,6 +10,12 @@ import {
 	EXTERNAL_ACCOUNT_PROTOCOLS,
 	EXTERNAL_ACCOUNT_TLS_MODES,
 } from "@/lib/external-accounts/protocols";
+import {
+	CONTROL_CHARACTER_MESSAGE,
+	hasControlCharacter,
+	isExternalAccountHost,
+	MAX_IDENTITY_LENGTH,
+} from "@/lib/external-accounts/host";
 import { hasUnpairedSurrogate, UNPAIRED_SURROGATE_MESSAGE } from "@/lib/external-accounts/text";
 import { MAX_FOLLOW_UP_DAYS } from "@/lib/follow-ups/follow-up-utils";
 import { isValidBase64 } from "@/lib/email/base64";
@@ -552,8 +558,6 @@ export const webhookUpdateSchema = z.object({
 	rotateSecret: z.literal(true).optional(),
 });
 
-/** IPv4 literal, allowed alongside hostnames for a mail server on a LAN (see externalAccountHostSchema). */
-const IPV4_PATTERN = /^(?:(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)\.){3}(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)$/;
 
 /**
  * A host a poller can dial: a DNS name or an IPv4 literal. No scheme, port or path — those have their own
@@ -567,9 +571,10 @@ const externalAccountHostSchema = z
 	.string()
 	.trim()
 	.min(1)
-	.max(191)
+	.max(MAX_IDENTITY_LENGTH)
+	.refine((value) => !hasControlCharacter(value), { message: CONTROL_CHARACTER_MESSAGE })
 	.transform(normalizeHostname)
-	.refine((host) => IPV4_PATTERN.test(host) || isValidHostname(host), {
+	.refine(isExternalAccountHost, {
 		message: "Enter a mail server hostname such as imap.example.com",
 	});
 
@@ -582,8 +587,9 @@ const externalAccountUsernameSchema = z
 	.string()
 	.trim()
 	.min(1)
-	.max(191)
-	.refine((value) => !hasUnpairedSurrogate(value), { message: UNPAIRED_SURROGATE_MESSAGE });
+	.max(MAX_IDENTITY_LENGTH)
+	.refine((value) => !hasUnpairedSurrogate(value), { message: UNPAIRED_SURROGATE_MESSAGE })
+	.refine((value) => !hasControlCharacter(value), { message: CONTROL_CHARACTER_MESSAGE });
 
 /**
  * A mail password, not a Mailflare one: any character, never trimmed. An unpaired surrogate is refused here

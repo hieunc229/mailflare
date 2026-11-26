@@ -1,6 +1,8 @@
 import { dialectOf, listColumnNames, listTableNames, quoteIdentifier } from "@/db/introspect";
 import type { DatabaseDialect } from "@/db/dialect";
 import { isSyncCursorFormat } from "@/lib/external-accounts/cursor";
+import { hasControlCharacter, isStoredExternalAccountHost, MAX_IDENTITY_LENGTH } from "@/lib/external-accounts/host";
+import { hasUnpairedSurrogate } from "@/lib/external-accounts/text";
 import { isSealedSecretFormat } from "@/lib/external-accounts/crypto";
 import type { BackupTableGroupId, DatabaseBackupDocument, DatabaseBackupTable, DatabaseRecord } from "./types";
 import { mergeLegacyMessageBodies } from "./utils";
@@ -134,6 +136,19 @@ export async function exportDatabaseRecords(db: D1Database, excludedGroups: Back
 	return new TextEncoder().encode(JSON.stringify(document));
 }
 
+/**
+ * Runs the destructive part of a restore inside one transaction when the database can hold one.
+ *
+ * PostgreSQL, MySQL and the self-hosted SQLite runtime expose `transaction` on `env.DB`, so a failure anywhere
+ * in the teardown and the inserts rolls the whole restore back and the live rows survive. A Cloudflare D1
+ * binding has no interactive transaction — `batch` is all-or-nothing but the restore cannot fit one batch —
+ * so there the preflight above is what stands between a malformed document and lost data.
+ */
+async function runInTransaction<T>(db: D1Database, work: () => Promise<T>): Promise<T> {
+	const transaction = (db as { transaction?: (run: () => Promise<T>) => Promise<T> }).transaction;
+	return typeof transaction === "function" ? transaction.call(db, work) : work();
+}
+
 export async function restoreDatabaseRecords(db: D1Database, content: ArrayBuffer): Promise<void> {
 	const document = parseDatabaseBackup(content);
 	// Format 1 predates the drive group, so its writers could not have named its
@@ -141,7 +156,6 @@ export async function restoreDatabaseRecords(db: D1Database, content: ArrayBuffe
 	if (document.includedTables && !groupsForDocumentVersion(document.version).every((group) => group.tables.some((table) => document.includedTables?.includes(table)))) throw new BackupRestoreError("This backup contains selected table groups only. Restore requires a backup that includes every table group.");
 	mergeLegacyMessageBodies(document);
 	fillMissingBackupTables(document);
-	validateDatabaseBackup(document);
 	const dialect = dialectOf(db);
 	const existing = await listTableNames(db);
 	const sharedLinksTable = existing.has("shared_attachment_links");
@@ -170,38 +184,59 @@ export async function restoreDatabaseRecords(db: D1Database, content: ArrayBuffe
 	// database drops them here instead of failing after the teardown.
 	const deliverabilityColumns = new Map<string, Set<string>>();
 	for (const table of ["domain_deliverability", "deliverability_reports"]) if (existing.has(table)) deliverabilityColumns.set(table, await listColumnNames(db, table));
-	// Mark users deleted before removing them: the passkey trigger permits the
-	// cascade to remove the last credential only for an account that is being
-	// purged. Deleting users first also empties the table the restore inserts
-	// into last, so the rest of the teardown has no live accounts to protect.
-	await db.prepare("UPDATE users SET deleted_at = ?").bind(Math.floor(Date.now() / 1000)).run();
-	await db.prepare("DELETE FROM users").run();
-	for (const table of [...restoreTables].reverse()) {
-		if (table === "users") continue;
-		await db.prepare(`DELETE FROM ${table}`).run();
-	}
-	// Derived DAV state of the old data: the triggers rebuild the log as rows are restored, and a new epoch makes every
-	// client resync. Explicit because MySQL does not fire triggers for FK cascades, so the teardown above leaves stale rows there.
-	for (const table of ["dav_changes", "dav_sync_state"]) if (existing.has(table)) await db.prepare(`DELETE FROM ${table}`).run();
-	for (const table of restoreTables) {
-		const rows = document.tables[table] ?? [];
-		for (let index = 0; index < rows.length; index += INSERT_BATCH_SIZE) {
-			const columns = table === "users"
-				? userColumns
-				: table === "booking_events"
-					? bookingColumns
-					: table === "passkey_credentials"
-						? passkeyColumns
-						: table === "messages"
-							? messageColumns
-							: table === "mailbox_promotion_settings"
-								? promotionSettingColumns
-								: deliverabilityColumns.get(table) ?? null;
-			const statements = rows.slice(index, index + INSERT_BATCH_SIZE).map((row) => createInsertStatement(db, dialect, table, row, columns));
-			// MySQL checks foreign keys per statement, so the batch suspends them for its own connection.
-			if (statements.length > 0) await db.batch(dialect === "mysql" ? [db.prepare("SET FOREIGN_KEY_CHECKS = 0"), ...statements, db.prepare("SET FOREIGN_KEY_CHECKS = 1")] : statements);
+	// Every check that can be made without writing happens here, before the first DELETE. The row shape is
+	// validated against this database's own columns, so a document carrying a column the table does not have is
+	// refused now instead of failing the INSERT after the live rows are gone.
+	validateDatabaseBackup(document, restoreTables.includes("external_accounts") ? await listColumnNames(db, "external_accounts") : null);
+	await runInTransaction(db, async () => {
+		// Mark users deleted before removing them: the passkey trigger permits the
+		// cascade to remove the last credential only for an account that is being
+		// purged. Deleting users first also empties the table the restore inserts
+		// into last, so the rest of the teardown has no live accounts to protect.
+		await db.prepare("UPDATE users SET deleted_at = ?").bind(Math.floor(Date.now() / 1000)).run();
+		await db.prepare("DELETE FROM users").run();
+		for (const table of [...restoreTables].reverse()) {
+			if (table === "users") continue;
+			await db.prepare(`DELETE FROM ${table}`).run();
 		}
-	}
+		// Derived DAV state of the old data: the triggers rebuild the log as rows are restored, and a new epoch makes every
+		// client resync. Explicit because MySQL does not fire triggers for FK cascades, so the teardown above leaves stale rows there.
+		for (const table of ["dav_changes", "dav_sync_state"]) if (existing.has(table)) await db.prepare(`DELETE FROM ${table}`).run();
+		// MySQL checks foreign keys per statement; suspend them for the whole insert phase instead of per batch,
+		// so the reconnect below is the only place that can leave the session with them off — and it always runs.
+		const suspendsForeignKeys = dialect === "mysql";
+		if (suspendsForeignKeys) await db.prepare("SET FOREIGN_KEY_CHECKS = 0").run();
+		try {
+			for (const table of restoreTables) {
+				const rows = document.tables[table] ?? [];
+				for (let index = 0; index < rows.length; index += INSERT_BATCH_SIZE) {
+					const columns = table === "users"
+						? userColumns
+						: table === "booking_events"
+							? bookingColumns
+							: table === "passkey_credentials"
+								? passkeyColumns
+								: table === "messages"
+									? messageColumns
+									: table === "mailbox_promotion_settings"
+										? promotionSettingColumns
+										: deliverabilityColumns.get(table) ?? null;
+					const statements = rows.slice(index, index + INSERT_BATCH_SIZE).map((row) => createInsertStatement(db, dialect, table, row, columns));
+					if (statements.length > 0) await db.batch(statements);
+				}
+			}
+		} finally {
+			// A session variable is not part of the transaction: it survives a rollback, so it is re-armed here
+			// even when the restore failed and the connection goes back to the pool.
+			if (suspendsForeignKeys) {
+				try {
+					await db.prepare("SET FOREIGN_KEY_CHECKS = 1").run();
+				} catch {
+					// The connection is already unusable; the pool closes it rather than returning it with checks off.
+				}
+			}
+		}
+	});
 }
 
 function parseDatabaseBackup(content: ArrayBuffer): DatabaseBackupDocument {
@@ -264,7 +299,7 @@ function fillMissingBackupTables(document: DatabaseBackupDocument): void {
 	}
 }
 
-function validateDatabaseBackup(document: DatabaseBackupDocument): void {
+function validateDatabaseBackup(document: DatabaseBackupDocument, externalAccountColumns: Set<string> | null): void {
 	for (const table of BACKUP_TABLES) {
 		for (const row of document.tables[table] ?? []) {
 			if (!row || typeof row !== "object" || Array.isArray(row)) {
@@ -272,46 +307,68 @@ function validateDatabaseBackup(document: DatabaseBackupDocument): void {
 			}
 		}
 	}
-	validateExternalAccountRows(document);
+	validateExternalAccountRows(document, externalAccountColumns);
 }
 
 const isIntegerInRange = (value: unknown, min: number, max: number) => typeof value === "number" && Number.isInteger(value) && value >= min && value <= max;
-const isOptionalInteger = (value: unknown) => value === null || value === undefined || isIntegerInRange(value, 0, Number.MAX_SAFE_INTEGER);
 /** Backups hold `0`/`1`; a hand-written document may use booleans. */
 const isFlag = (value: unknown) => value === 0 || value === 1 || value === true || value === false;
-const isIdentityText = (value: unknown): value is string => typeof value === "string" && value.length > 0 && value.length <= 191;
+const isIdentityText = (value: unknown): value is string => typeof value === "string" && value.length > 0 && value.length <= MAX_IDENTITY_LENGTH;
+/**
+ * Epoch seconds JavaScript can represent: `new Date(seconds * 1000)` throws a RangeError past 8.64e12 seconds,
+ * and the settings API builds a Date straight from these columns.
+ */
+const MAX_DATE_SECONDS = 8.64e12;
+const isTimestamp = (value: unknown) => isIntegerInRange(value, 0, MAX_DATE_SECONDS);
+const isOptionalTimestamp = (value: unknown) => value === null || value === undefined || isTimestamp(value);
 
 /**
  * A restore writes whatever the document holds, so this is the one path that could plant a value the API would
  * never produce: a plaintext password in `password_encrypted`, a non-JSON cursor, an out-of-range port. The
- * check runs **before the teardown**, and it has to be strict enough that the later INSERT cannot fail: a value
- * refused here costs nothing, while one that slips through is written after every existing row is already gone.
+ * checks run **before the teardown** and are deliberately broad, because a value refused here costs nothing
+ * while one that slips through was written after every existing row was already gone. Where the driver can hold
+ * a transaction the restore also rolls back (see `runInTransaction`); on D1 this preflight is the whole guard.
  *
- * It is also **format only**: the sealed envelope is never decrypted and never re-encrypted, because a backup
- * made under another MAILFLARE_ENCRYPTION_KEY must still restore — its rows simply need the passwords entered
- * again on this install. And it is not a provenance check: a hand-edited document can hold any canonical base64
- * in `password_encrypted`, which restores as opaque bytes that fail to decrypt. Restore only backups this
- * install produced, or one you trust as much as the database itself. The message names the row and column only.
+ * It is **format only**: the sealed envelope is never decrypted and never re-encrypted, because a backup made
+ * under another MAILFLARE_ENCRYPTION_KEY must still restore — its rows simply need the passwords entered again
+ * on this install. And it is not a provenance check: a hand-edited document can hold any canonical base64 in
+ * `password_encrypted`, which restores as opaque bytes that fail to decrypt. Restore only backups this install
+ * produced, or one you trust as much as the database itself. The message names the row and column only.
  */
-function validateExternalAccountRows(document: DatabaseBackupDocument): void {
+function validateExternalAccountRows(document: DatabaseBackupDocument, liveColumns: Set<string> | null): void {
 	const rows = document.tables.external_accounts ?? [];
 	const tlsModes = new Set(["implicit-tls", "starttls", "none"]);
+	const expectedColumns = liveColumns ? new Set([...liveColumns, ...OMITTED_COLUMNS.external_accounts ?? []]) : null;
 	// The rows are inserted after `mailboxes` was replaced by this document, so a mailbox the document does not
 	// carry would fail the foreign key after the teardown.
 	const mailboxIds = new Set((document.tables.mailboxes ?? []).map((mailbox) => mailbox?.id).filter((id): id is string => typeof id === "string"));
+	// Two keys are needed because the databases disagree about case and trailing spaces: `id` is the primary key
+	// everywhere, while the unique tuple is binary (case-sensitive) but PAD SPACE on MySQL's utf8mb4_bin, and
+	// `mailbox_id` uses a case-insensitive collation there. A document that would collide on the destination is
+	// refused here rather than by the index after the teardown.
+	const ids = new Set<string>();
 	const identities = new Set<string>();
 	rows.forEach((row, index) => {
 		// Annotated on the variable so the calls below narrow control flow: every check ends the restore.
 		const invalid: (column: string) => never = (column) => {
 			throw new BackupRestoreError(`Backup contains an invalid external account record (row ${index + 1}, ${column})`);
 		};
+		if (expectedColumns) for (const column of Object.keys(row)) if (!expectedColumns.has(column)) invalid(column);
 		if (!isIdentityText(row.id)) invalid("id");
+		if (ids.has(row.id)) invalid("id");
+		ids.add(row.id);
 		if (!isIdentityText(row.mailbox_id)) invalid("mailbox_id");
 		if (!mailboxIds.has(row.mailbox_id)) invalid("mailbox_id");
 		if (!isIdentityText(row.user_id)) invalid("user_id");
 		if (row.protocol !== "imap" && row.protocol !== "pop3") invalid("protocol");
 		if (!isIdentityText(row.host)) invalid("host");
+		// A host is stored lowercased with no trailing dot, no port and no path (the API normalises before
+		// saving), so anything else came from somewhere that is not this app. Rejected, never rewritten.
+		if (!isStoredExternalAccountHost(row.host)) invalid("host");
 		if (!isIdentityText(row.username)) invalid("username");
+		// Portable text: PostgreSQL cannot store a NUL, and a lone surrogate would land as U+FFFD in MySQL.
+		if (hasControlCharacter(row.host) || hasUnpairedSurrogate(row.host)) invalid("host");
+		if (hasControlCharacter(row.username) || hasUnpairedSurrogate(row.username)) invalid("username");
 		if (!isIntegerInRange(row.port, 1, 65535)) invalid("port");
 		// `tls_mode` and `enabled` are NOT NULL with a database default: only omission may fall back to it. An
 		// explicit null would be bound as NULL and fail the INSERT, so it is refused here — and `tls_mode` must be
@@ -320,15 +377,15 @@ function validateExternalAccountRows(document: DatabaseBackupDocument): void {
 		if (row.enabled !== undefined && !isFlag(row.enabled)) invalid("enabled");
 		// Only the envelope shape: base64 nonce + ciphertext + tag, no plaintext and no truncated value.
 		if (!isSealedSecretFormat(row.password_encrypted)) invalid("password_encrypted");
-		if (!isOptionalInteger(row.last_synced_at)) invalid("last_synced_at");
-		if (row.last_error !== null && row.last_error !== undefined && (typeof row.last_error !== "string" || row.last_error.length > 4096)) invalid("last_error");
+		if (!isOptionalTimestamp(row.last_synced_at)) invalid("last_synced_at");
+		if (row.last_error !== null && row.last_error !== undefined && (typeof row.last_error !== "string" || row.last_error.length > 4096 || row.last_error.includes("\u0000"))) invalid("last_error");
 		if (!isSyncCursorFormat(row.sync_cursor, row.protocol)) invalid("sync_cursor");
+		if (typeof row.sync_cursor === "string" && row.sync_cursor.includes("\u0000")) invalid("sync_cursor");
 		// NOT NULL with no database default: an omitted value would fail the insert after the teardown.
-		if (!isIntegerInRange(row.created_at, 0, Number.MAX_SAFE_INTEGER)) invalid("created_at");
-		if (!isIntegerInRange(row.updated_at, 0, Number.MAX_SAFE_INTEGER)) invalid("updated_at");
-		// The unique tuple, checked before the teardown rather than by the index afterwards.
-		const identity = JSON.stringify([row.mailbox_id, row.host, row.username]);
-		if (identities.has(identity)) invalid("host");
+		if (!isTimestamp(row.created_at)) invalid("created_at");
+		if (!isTimestamp(row.updated_at)) invalid("updated_at");
+		const identity = JSON.stringify([row.mailbox_id.toLowerCase(), row.host.trimEnd(), row.username.trimEnd()]);
+		if (identities.has(identity)) invalid("username");
 		identities.add(identity);
 	});
 }

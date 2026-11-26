@@ -19,7 +19,10 @@ await build({
 			export { createSession } from "./src/lib/auth/session.ts";
 			export { decryptSecret } from "./src/lib/external-accounts/crypto.ts";
 			export * as accounts from "./src/app/api/mailboxes/[id]/accounts/route.ts";
-			export * as account from "./src/app/api/mailboxes/[id]/accounts/[accountId]/route.ts";\n\t\t\texport * as accountsUtils from "./src/app/api/mailboxes/[id]/accounts/utils.ts";
+			export * as account from "./src/app/api/mailboxes/[id]/accounts/[accountId]/route.ts";
+			export * as accountsUtils from "./src/app/api/mailboxes/[id]/accounts/utils.ts";
+
+			export { isUniqueConstraintError } from "./src/lib/database-errors.ts";
 		`,
 		resolveDir: root,
 		sourcefile: "external-accounts-route-test-entry.ts",
@@ -34,7 +37,7 @@ await build({
 	alias: { "next/headers": "next/headers.js", "next/server": "next/server.js", "cloudflare:workers": "./server/runtime/cloudflare-workers.ts" },
 	logLevel: "silent",
 });
-const { SqliteDatabase, applyMigrations, getDb, createSession, decryptSecret, accounts, account, accountsUtils } = await import(
+const { SqliteDatabase, applyMigrations, getDb, createSession, decryptSecret, accounts, account, accountsUtils, isUniqueConstraintError } = await import(
 	pathToFileURL(join(directory, "entry.mjs")).href
 );
 
@@ -334,6 +337,20 @@ test("a credential-bearing database error is reduced to a code, never rethrown w
 	assert.equal(f.rows().length, 0);
 });
 
+test("a login or host that PostgreSQL or MySQL cannot store portably is refused at the API too", async (t) => {
+	const f = await fixture(t);
+	// A NUL breaks PostgreSQL (22021) and a lone surrogate becomes U+FFFD on MySQL, so neither may be stored.
+	for (const body of [valid({ username: "user\u0000name" }), valid({ username: "user\u0001name" }), valid({ host: "imap\u0000.example.com" }), valid({ username: "user\uD800name" }), valid({ host: "imap\uD800.example.com" })]) {
+		const response = await f.create("owner", "m-personal", body);
+		assert.equal(response.status, 400, JSON.stringify(body).slice(0, 60));
+	}
+	assert.equal(f.rows().length, 0);
+	// A URL-shaped host is still rejected by the same normalisation the restore relies on.
+	assert.equal((await f.create("owner", "m-personal", valid({ host: "imap.example.com:993" }))).status, 400);
+	assert.equal((await f.create("owner", "m-personal", valid({ host: "localhost" }))).status, 400);
+	assert.equal((await f.create("owner", "m-personal", valid({ username: "user@example.com" }))).status, 201);
+});
+
 test("the write guard reports only allowlisted driver codes and classifies duplicates by code", async (t) => {
 	const sealed = "c2VhbGVkLWVudmVsb3BlLXBsYWNlaG9sZGVyLXZhbHVl";
 	const reject = async (error) => {
@@ -372,6 +389,24 @@ test("the write guard reports only allowlisted driver codes and classifies dupli
 	// SQLite reports no driver code, so none is invented.
 	assert.equal(body.driverCode, undefined);
 	assert.equal(f.rows().length, 0);
+});
+
+test("duplicate classification trusts a driver code over the wrapper's wording", () => {
+	const wrapped = (cause, message = "Failed query: insert into external_accounts ... params: duplicate entry") =>
+		Object.assign(new Error(message), { params: ["duplicate entry"], cause });
+	// The wrapper message repeats bound parameters, so wording that looks like a duplicate must not win over the
+	// driver's own code.
+	assert.equal(isUniqueConstraintError(wrapped(Object.assign(new Error("check"), { code: "23514" }))), false);
+	assert.equal(isUniqueConstraintError(wrapped(Object.assign(new Error("not null"), { code: "23502" }))), false);
+	assert.equal(isUniqueConstraintError(wrapped(Object.assign(new Error("duplicate"), { code: "23505" }))), true);
+	assert.equal(isUniqueConstraintError(wrapped(Object.assign(new Error("duplicate"), { errno: 1062 }))), true);
+	assert.equal(isUniqueConstraintError(wrapped(Object.assign(new Error("duplicate"), { code: "ER_DUP_ENTRY" }))), true);
+	assert.equal(isUniqueConstraintError(wrapped(Object.assign(new Error("duplicate"), { code: "SQLITE_CONSTRAINT_UNIQUE" }))), true);
+	// Only an error chain with no code at all falls back to the SQLite/D1 wording.
+	assert.equal(isUniqueConstraintError(new Error("UNIQUE constraint failed: external_accounts.mailbox_id")), true);
+	assert.equal(isUniqueConstraintError(new Error("no such table: external_accounts")), false);
+	// A connection-level code is not a duplicate either.
+	assert.equal(isUniqueConstraintError(Object.assign(new Error("socket hang up"), { code: "ECONNRESET" })), false);
 });
 
 test("external_accounts is backed up, in the accounts group", () => {

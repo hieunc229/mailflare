@@ -89,6 +89,8 @@ class SqlitePreparedStatement {
 
 export class SqliteDatabase {
 	readonly db: Database.Database;
+	/** > 0 while `transaction` is open, so nested `batch` calls join it instead of starting their own. */
+	private transactionDepth = 0;
 
 	constructor(filename: string) {
 		this.db = new Database(filename) as Database.Database & { __statements?: Map<string, Database.Statement> };
@@ -116,16 +118,45 @@ export class SqliteDatabase {
 		return new SqlitePreparedStatement(this.db as Database.Database & { __statements?: Map<string, Database.Statement> }, sql);
 	}
 
-	/** Run statements atomically, like D1's batch. */
+	/**
+	 * Runs `work` inside one transaction: every statement issued through this database while it runs, including
+	 * nested `batch` calls, lands in the same transaction. The restore uses it so a failure part-way through
+	 * puts the rows it already deleted back.
+	 */
+	async transaction<T>(work: () => Promise<T>): Promise<T> {
+		// Nested calls join the outer transaction: SQLite has no nested BEGIN.
+		if (this.transactionDepth > 0) return work();
+		this.db.exec("BEGIN");
+		this.transactionDepth += 1;
+		try {
+			const result = await work();
+			this.db.exec("COMMIT");
+			return result;
+		} catch (error) {
+			this.db.exec("ROLLBACK");
+			throw error;
+		} finally {
+			this.transactionDepth -= 1;
+		}
+	}
+
+	/** Run statements atomically, like D1's batch. Inside `transaction` they join it instead. */
 	async batch<T = Row>(statements: SqlitePreparedStatement[]) {
 		const results: Awaited<ReturnType<SqlitePreparedStatement["all"]>>[] = [];
+		if (this.transactionDepth > 0) {
+			for (const statement of statements) results.push(await statement.all<T>());
+			return results;
+		}
 		this.db.exec("BEGIN");
+		this.transactionDepth += 1;
 		try {
 			for (const statement of statements) results.push(await statement.all<T>());
 			this.db.exec("COMMIT");
 		} catch (error) {
 			this.db.exec("ROLLBACK");
 			throw error;
+		} finally {
+			this.transactionDepth -= 1;
 		}
 		return results;
 	}
