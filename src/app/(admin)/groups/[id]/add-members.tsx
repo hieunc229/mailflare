@@ -23,6 +23,8 @@ export function AddMembers({ groupId, disabled, memberAddresses = [], externalFu
 	const [announcement, setAnnouncement] = useState("");
 	// An external member is a billed send per message: the admin confirms in place before it is added.
 	const [pending, setPending] = useState<AddOption | null>(null);
+	// Addresses that used this group's unsubscribe link before: added as asked, but the admin should know.
+	const [resubscribed, setResubscribed] = useState<string[]>([]);
 
 	useEffect(() => {
 		const timer = setTimeout(() => setQuery(text.trim()), 200);
@@ -39,8 +41,9 @@ export function AddMembers({ groupId, disabled, memberAddresses = [], externalFu
 	const options: AddOption[] = [...(candidates.data?.candidates ?? []), ...(typed ? [{ kind: "external" as const, id: typed, name: typed, address: typed }] : [])];
 
 	const add = useMutation({
-		mutationFn: (candidate: AddOption) => groupsFetch<{ added: unknown[] }>(`/api/groups/${groupId}/members`, t("groups.addFailed"), jsonInit("POST", { members: [memberBody(candidate)] })),
-		onSuccess: (_data, candidate) => {
+		mutationFn: (candidate: AddOption) => groupsFetch<{ added: unknown[]; warnings?: { email: string }[] }>(`/api/groups/${groupId}/members`, t("groups.addFailed"), jsonInit("POST", { members: [memberBody(candidate)] })),
+		onSuccess: (data, candidate) => {
+			setResubscribed(data?.warnings?.map((warning) => warning.email) ?? []);
 			qc.invalidateQueries({ queryKey: ["groups"] });
 			setText("");
 			setQuery("");
@@ -126,6 +129,7 @@ export function AddMembers({ groupId, disabled, memberAddresses = [], externalFu
 				<button type="button" onClick={() => { setPending(null); inputRef.current?.focus(); }} className="min-h-11 rounded-md border border-neutral-300 bg-white px-4 text-sm text-neutral-800">{t("common.cancel")}</button>
 			</div>
 		</div>}
+		{resubscribed.length > 0 && <p data-testid="resubscribed" role="status" className="mt-3 rounded-2xl bg-amber-50 px-4 py-3 text-sm text-amber-900">{resubscribed.map((email) => t("groups.resubscribed", { email })).join(" ")}</p>}
 		<p className="mt-2 text-xs text-neutral-500">{t("groups.addHint")} {externalFull ? t("groups.externalLimit", { max: MAX_EXTERNAL_MEMBERS }) : t("groups.externalHint")}</p>
 		{add.isError && <p role="alert" className="mt-2 text-sm text-red-600">{(add.error as Error).message}</p>}
 		<p className="sr-only" role="status" aria-live="polite">{showList ? status : announcement}</p>

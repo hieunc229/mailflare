@@ -21,6 +21,13 @@ import { WhoCanPostField } from "../who-can-post-field";
 import { fetchGroup, fetchGroups, groupsFetch, isLicenseRequired, isMigrationRequired, jsonInit, MAX_EXTERNAL_MEMBERS, MAX_GROUP_MEMBERS } from "../utils";
 import { AddMembers } from "./add-members";
 
+const CAPPED_KEY = {
+	"group-hour": "groups.relayCappedGroupHour",
+	"group-day": "groups.relayCappedGroupDay",
+	"installation-hour": "groups.relayCappedInstallHour",
+	"installation-day": "groups.relayCappedInstallDay",
+} as const;
+
 function SettingsForm({ detail }: { detail: GroupDetailResponse }) {
 	const { t } = useLanguage();
 	const qc = useQueryClient();
@@ -118,6 +125,8 @@ export default function GroupDetailPage() {
 		<SettingsForm key={info.id} detail={group.data} />
 		<Card><CardHeader><CardTitle>{t("groups.members")}</CardTitle><CardDescription>{t("groups.memberLimitCount", { count: members.length, max: MAX_GROUP_MEMBERS })}</CardDescription></CardHeader><CardContent className="space-y-5">
 			{externalCount > 0 && !info.canSend && <p role="alert" className="flex items-start gap-3 rounded-2xl bg-amber-50 px-4 py-3 text-sm text-amber-900"><AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />{t("groups.cannotSend", { hostname: info.hostname })}</p>}
+			{externalCount > 0 && !group.data.notices.unsubscribeReady && <p role="alert" className="flex items-start gap-3 rounded-2xl bg-amber-50 px-4 py-3 text-sm text-amber-900"><AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />{t("groups.unsubscribeNotReady")}</p>}
+			{group.data.notices.relayCapped && <p role="alert" className="flex items-start gap-3 rounded-2xl bg-red-50 px-4 py-3 text-sm text-red-800"><AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />{t(CAPPED_KEY[`${group.data.notices.relayCapped.scope}-${group.data.notices.relayCapped.period}` as keyof typeof CAPPED_KEY], { limit: group.data.notices.relayCapped.limit })}</p>}
 			{externalCount > 0 && <p role="note" className="rounded-2xl bg-neutral-50 px-4 py-3 text-sm text-neutral-700">{t("groups.externalCostNote", { count: externalCount, max: MAX_EXTERNAL_MEMBERS })}</p>}
 			<AddMembers groupId={info.id} disabled={full} memberAddresses={members.map((member) => member.address)} externalFull={externalCount >= MAX_EXTERNAL_MEMBERS} />
 			{members.length === 0
