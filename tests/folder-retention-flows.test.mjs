@@ -26,12 +26,14 @@ await build({
 		contents: `
 			export * from './server/runtime/sqlite-database';
 			export * from './server/runtime/file-bucket';
+			export * from './src/lib/email/raw-sweeper';
 			export * from './src/lib/email/send';
 			export * from './src/lib/email/trash-retention';
 			export * from './src/lib/import/service';
 			export * from './src/lib/auth/session';
 			export * as retentionRoute from './src/app/api/folders/[id]/retention/route';
 			export * as bulkRoute from './src/app/api/messages/bulk/route';
+			export * as trashSettingsRoute from './src/app/api/settings/trash-retention/route';
 		`,
 	},
 	outfile: join(outDir, "bundle.mjs"),
@@ -54,7 +56,7 @@ await build({
 });
 
 const m = await import(pathToFileURL(join(outDir, "bundle.mjs")).href);
-const { runTrashRetention, sendEmail, sendScheduledMessageNow, importMessagesToMailbox, createSession, retentionRoute, bulkRoute, SqliteDatabase, openFileBucket } = m;
+const { runTrashRetention, sweepOrphanedRawMail, sendEmail, sendScheduledMessageNow, importMessagesToMailbox, createSession, retentionRoute, bulkRoute, trashSettingsRoute, SqliteDatabase, openFileBucket } = m;
 
 const DAY = 86_400_000;
 const NOW = new Date();
@@ -101,6 +103,7 @@ async function fixture(t) {
 	const sessions = { a: await createSession(env, "a"), b: await createSession(env, "b") };
 	const bulk = (token, payload) => bulkRoute.POST(request("POST", token, payload));
 	const setRule = (token, folderId, days) => retentionRoute.PATCH(request("PATCH", token, { days }), { params: Promise.resolve({ id: folderId }) });
+	const setTrashRule = (token, days) => trashSettingsRoute.PATCH(request("PATCH", token, { days }));
 
 	const send = async (subject) => (await sendEmail(env, {
 		userId: "a",
@@ -112,7 +115,7 @@ async function fixture(t) {
 		scheduledAt: new Date(Date.now() + DAY).toISOString(),
 	})).messageId;
 
-	return { env, db, database, bucket, run, message, messageRow, bulk, setRule, send, sessions };
+	return { env, db, database, bucket, run, message, messageRow, bulk, setRule, setTrashRule, send, sessions };
 }
 
 /**
@@ -443,4 +446,113 @@ test("a missing database binding is reported as zero deletions, not a rejection"
 		console.error = original;
 	}
 	assert.match(logged, /database binding is unavailable/);
+});
+
+test("lengthening a folder rule mid-run spares the mail the new rule protects", async (t) => {
+	const f = await fixture(t);
+	f.message("lengthened", { folderId: "news", rawR2Key: "lengthened.eml" });
+	await f.bucket.put("lengthened.eml", "x");
+
+	const paused = pausingDatabase(f.database, async () => {
+		// The real settings route accepts a longer window after the candidate was selected.
+		assert.equal((await f.setRule(f.sessions.a, "news", 365)).status, 200);
+		assert.equal(f.db.prepare("SELECT retention_days FROM folders WHERE id = 'news'").get().retention_days, 365);
+	});
+	assert.equal(await runTrashRetention({ ...f.env, DB: paused }, NOW), 0, "the old 7-day window no longer applies");
+	assert.equal(f.messageRow("lengthened")?.id, "lengthened");
+	assert.ok(await f.bucket.head("lengthened.eml"));
+	assert.equal(await runTrashRetention(f.env, NOW), 0, "90 days old mail is inside the new 365-day window");
+});
+
+test("clearing and re-enabling a folder rule with another value mid-run also defers", async (t) => {
+	const f = await fixture(t);
+	f.message("re-enabled", { folderId: "news", rawR2Key: "re-enabled.eml" });
+	await f.bucket.put("re-enabled.eml", "x");
+
+	const paused = pausingDatabase(f.database, async () => {
+		assert.equal((await f.setRule(f.sessions.a, "news", null)).status, 200);
+		assert.equal((await f.setRule(f.sessions.a, "news", 14)).status, 200);
+	});
+	assert.equal(await runTrashRetention({ ...f.env, DB: paused }, NOW), 0);
+	assert.equal(f.messageRow("re-enabled")?.id, "re-enabled");
+	assert.equal(await runTrashRetention(f.env, NOW), 1, "the next run uses the 14-day rule");
+	assert.equal(f.messageRow("re-enabled"), undefined);
+});
+
+test("changing the owner's Trash rule mid-phase spares the candidates not yet claimed", async (t) => {
+	const f = await fixture(t);
+	assert.equal((await f.setTrashRule(f.sessions.a, 7)).status, 200);
+	for (const id of ["trash-a", "trash-b"]) {
+		f.message(id, { status: "trash", rawR2Key: `${id}.eml` });
+		f.run("UPDATE messages SET trashed_at = ? WHERE id = ?", daysAgo(60), id);
+		await f.bucket.put(`${id}.eml`, "x");
+	}
+
+	const lengthening = {
+		...f.env,
+		BUCKET: {
+			...f.bucket,
+			delete: async (key) => {
+				// The real settings route lengthens the Trash window while the phase is running.
+				if (String(key) === "trash-a.eml") assert.equal((await f.setTrashRule(f.sessions.a, 90)).status, 200);
+				return f.bucket.delete(key);
+			},
+		},
+	};
+
+	assert.equal(await runTrashRetention(lengthening, NOW), 1);
+	assert.equal(f.messageRow("trash-a"), undefined, "already claimed");
+	assert.equal(f.messageRow("trash-b")?.id, "trash-b", "the claim requires the snapshotted days value");
+	assert.ok(await f.bucket.head("trash-b.eml"));
+});
+
+test("a folder moved to another mailbox mid-run cannot delete mail left behind", async (t) => {
+	const f = await fixture(t);
+	f.message("stayed", { folderId: "news", rawR2Key: "stayed.eml" });
+	await f.bucket.put("stayed.eml", "x");
+
+	const paused = pausingDatabase(f.database, async () => {
+		// FK-valid: the folder now belongs to b's mailbox; the message stays in a's shared mailbox.
+		f.run("UPDATE folders SET mailbox_id = 'b1', user_id = 'b' WHERE id = 'news'");
+	});
+	assert.equal(await runTrashRetention({ ...f.env, DB: paused }, NOW), 0);
+	assert.deepEqual(
+		f.db.prepare("SELECT mailbox_id, folder_id FROM messages WHERE id = 'stayed'").get(),
+		{ mailbox_id: "a1", folder_id: "news" },
+		"the claim compares the message's mailbox to the folder's current mailbox",
+	);
+	assert.ok(await f.bucket.head("stayed.eml"));
+});
+
+test("a mailbox that changed owner mid-run defers its ruled mail to the next run", async (t) => {
+	const f = await fixture(t);
+	f.message("owned-elsewhere", { folderId: "news" });
+	f.message("owned-elsewhere-2", { folderId: "news" });
+
+	const paused = pausingDatabase(f.database, async () => {
+		// The mailbox now belongs to b, so the audit actor would no longer be the rule's owner.
+		f.run("UPDATE mailboxes SET user_id = 'b' WHERE id = 'a1'");
+	});
+	assert.equal(await runTrashRetention({ ...f.env, DB: paused }, NOW), 0);
+	assert.equal(f.db.prepare("SELECT count(*) AS n FROM messages").get().n, 2, "nothing is deleted under a stale owner");
+});
+
+test("the raw sweeper reaps retention orphans and keeps referenced objects", async (t) => {
+	const f = await fixture(t);
+	// Objects a retention claim left behind after its row was deleted (crashed or storage failed).
+	await f.bucket.put("imports/msg-orphan.eml", "raw");
+	await f.bucket.put("attachments/msg-orphan/att-1/file.txt", "attachment");
+	// Still referenced: a live message's raw MIME and an attachment row.
+	await f.bucket.put("imports/msg-live.eml", "raw");
+	f.message("live", { rawR2Key: "imports/msg-live.eml" });
+	await f.bucket.put("attachments/msg-live/att-2/keep.txt", "kept");
+	f.run("INSERT INTO message_attachments (id, message_id, filename, content_type, size, disposition, r2_key, created_at) VALUES ('att-2', 'live', 'keep.txt', 'text/plain', 4, 'attachment', 'attachments/msg-live/att-2/keep.txt', ?)", daysAgo(1));
+
+	const tomorrow = new Date(Date.now() + 2 * DAY);
+	await sweepOrphanedRawMail(f.env, tomorrow);
+
+	assert.equal(await f.bucket.head("imports/msg-orphan.eml"), null, "the orphaned raw MIME is reaped");
+	assert.equal(await f.bucket.head("attachments/msg-orphan/att-1/file.txt"), null, "the orphaned attachment object is reaped");
+	assert.ok(await f.bucket.head("imports/msg-live.eml"), "a referenced raw MIME survives");
+	assert.ok(await f.bucket.head("attachments/msg-live/att-2/keep.txt"), "a referenced attachment survives");
 });

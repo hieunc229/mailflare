@@ -67,9 +67,12 @@ type ClaimedRow = {
  * The whole eligibility decision is one conditional `DELETE`: see `destroyClaimedMessages`.
  *
  * Rule timing: both rule sets are read once, before any deletion, so a rule enabled in the middle of a run
- * applies from the next run for every phase alike. A rule *cleared* mid-run stops immediately, because the
- * conditional delete also requires the rule to still be set. Age windows come from the snapshot (a rule
- * lengthened mid-run does not retro-apply), presence comes from the current database state.
+ * applies from the next run for every phase alike. Age windows come from that snapshot, and the conditional
+ * delete only proceeds while the rule still *has* the snapshotted value — so lengthening a rule mid-run spares
+ * the mail the new rule protects, clearing it stops immediately, and every other change (including
+ * disable/enable and clear/re-enable to another value) defers to the next run. The claim also re-reads the
+ * folder's current mailbox and that mailbox's owner, so the mailbox binding and the audit actor are current
+ * truth rather than snapshot values.
  *
  * Budget and fairness: the Trash pass runs first and can spend the whole batch, so a Trash backlog that
  * refills to the cap can starve folder retention indefinitely; within the folder phase, folders are visited
@@ -124,7 +127,7 @@ export async function runTrashRetention(env: CloudflareEnv, now = new Date()): P
 		if (ids.length === 0) continue;
 
 		const result = await destroyClaimedMessages(env, db, ids, budget, (id) => (
-			and(eq(messages.id, id), eligible, currentGlobalRule(db, owner.id))
+			and(eq(messages.id, id), eligible, currentGlobalRule(db, owner.id, days))
 		), owner.id);
 		deleted += result.deleted;
 		budget -= result.used;
@@ -177,7 +180,7 @@ async function runFolderRetention(
 		if (ids.length === 0) continue;
 
 		const result = await destroyClaimedMessages(env, db, ids, remaining, (id) => (
-			and(eq(messages.id, id), eligible, currentFolderRule(db, rule.id))
+			and(eq(messages.id, id), eligible, currentFolderRule(db, rule, days))
 		), rule.ownerUserId);
 		deleted += result.deleted;
 		remaining -= result.used;
@@ -245,6 +248,13 @@ function openDatabase(env: CloudflareEnv): AppDatabase | null {
  * 2. one conditional `DELETE ... RETURNING` that re-expresses the whole eligibility predicate,
  * 3. only when that delete removed the row, clean up the objects and write the audit row.
  *
+ * Step 2 is native on SQLite/D1 and PostgreSQL. MySQL has no `DELETE ... RETURNING`, so the driver shim
+ * (`src/db/compat.ts`) reads the matching row and then runs the same conditional DELETE, returning the
+ * preselection only when `affectedRows > 0`. The decision is still the DELETE's, but the *cleanup payload*
+ * (the raw key and status used for the audit row) can be a moment stale on MySQL if the row is rewritten in
+ * between; the object actually cleaned is the one the preselection saw. Every dialect still deletes objects
+ * only for a row the conditional DELETE removed, which is the guarantee that matters here.
+ *
  * Step 2 is the claim: it is a single atomic statement, so a move to another folder, a rule clear, a status
  * change or a new live send that commits at any point before it makes the delete match nothing. Nothing is
  * deleted from object storage unless the database delete actually removed this row, so a move that wins the
@@ -255,6 +265,9 @@ function openDatabase(env: CloudflareEnv): AppDatabase | null {
  * fails in between, the row is gone and some objects are orphaned. That direction is deliberate — an orphaned
  * object costs storage until it is swept, while the reverse (objects deleted for a message that survived)
  * destroys mail the user still has. Cleanup is therefore idempotent and only ever follows a successful claim.
+ * The daily `sweepOrphanedRawMail` reaps the leftovers: unreferenced raw MIME under `inbound/` and `imports/`
+ * and unreferenced `attachments/` objects that no message, attachment row or Drive item points at, once they
+ * are a day old. That is the durable cleanup for this window — there is no per-message retry queue.
  *
  * One unit of the shared budget is reserved before each claim, and a claim that matches nothing gives it back
  * because nothing was destroyed. A failed claim keeps its unit, so a flaky database still bounds the work a
@@ -317,23 +330,49 @@ async function destroyClaimedMessages(
 	return { deleted, used };
 }
 
-/** True when the owner's Trash/Spam rule is still set right now, whatever the run-start snapshot said. */
-function currentGlobalRule(db: AppDatabase, userId: string) {
+/**
+ * True when the owner's Trash/Spam rule still stands exactly as the snapshot saw it: same owner, same days.
+ *
+ * Presence is not enough. Lengthening a rule (7 -> 365) during a run must spare the mail the new rule protects,
+ * and a clear-and-re-enable lands on a different value in every case except a no-op. So the claim requires
+ * `users.trash_retention_days` to equal the snapshot value the cutoff was computed from; any other value — a
+ * change, a clear, or a disable/enable cycle — makes the conditional delete match nothing and the rule applies
+ * from the next run. A change that puts the value back to exactly the snapshot value is, by definition, the
+ * same rule the cutoff was built for, so proceeding is correct.
+ */
+function currentGlobalRule(db: AppDatabase, userId: string, days: number) {
 	return exists(
 		db
 			.select({ one: sql`1` })
 			.from(users)
-			.where(and(eq(users.id, userId), isNotNull(users.trashRetentionDays))),
+			.where(and(eq(users.id, userId), eq(users.trashRetentionDays, days))),
 	);
 }
 
-/** True when the folder still carries a retention rule right now; clearing it stops the pass immediately. */
-function currentFolderRule(db: AppDatabase, folderId: string) {
+/**
+ * True when the folder rule still stands exactly as the snapshot saw it, bound to *current* truth:
+ *
+ * - the folder still exists and `folders.retention_days` still equals the snapshotted value (a lengthened,
+ *   shortened, cleared or re-enabled rule all defer to the next run); and
+ * - the folder is still in the same mailbox as the message being deleted (`folders.mailbox_id =
+ *   messages.mailbox_id`, read now, not from the snapshot), so a folder moved to another mailbox cannot
+ *   delete mail that stayed behind; and
+ * - that mailbox's owner is still the snapshot owner, so the audit actor is the current owner of the rule
+ *   rather than a stale one; if ownership changed the row waits for the next run, which discovers the new
+ *   owner.
+ */
+function currentFolderRule(db: AppDatabase, rule: FolderRule, days: number) {
 	return exists(
 		db
 			.select({ one: sql`1` })
 			.from(folders)
-			.where(and(eq(folders.id, folderId), isNotNull(folders.retentionDays))),
+			.innerJoin(mailboxes, eq(mailboxes.id, folders.mailboxId))
+			.where(and(
+				eq(folders.id, rule.id),
+				eq(folders.retentionDays, days),
+				eq(folders.mailboxId, messages.mailboxId),
+				eq(mailboxes.userId, rule.ownerUserId),
+			)),
 	);
 }
 

@@ -43,7 +43,10 @@ export async function permanentlyDeleteMessages(
  *
  * The audit row is written before the storage calls: the deletion already happened, so recording it must not
  * depend on storage. A failure here leaves orphaned objects (storage cost) rather than a live message without
- * its mail, and the row is already counted as deleted by the caller.
+ * its mail, and the row is already counted as deleted by the caller. The ordering has one consequence: an
+ * audit write that fails aborts the object cleanup and is logged by the caller as such — the sweep in
+ * `sweepOrphanedRawMail` reaps those objects later, so the audit (and the row) is never rolled back. This is
+ * not an atomic audit-plus-cleanup promise.
  */
 export async function cleanupClaimedMessageObjects(
 	env: CloudflareEnv,
