@@ -8,6 +8,7 @@ import {
 } from "./src/lib/email/inbound";
 import { processOutboundQueue, type OutboundQueueMessage } from "./src/lib/email/send";
 import {
+	isGroupRelayMessage,
 	isImportJobMessage,
 	isInboundQueueMessage,
 	isWebhookRetryMessage,
@@ -22,6 +23,8 @@ import { dailyJobs, frequentJobs, runScheduledJob } from "./src/lib/scheduled/jo
 import { processWebhookRetry, type WebhookRetryMessage } from "./src/lib/email/webhooks";
 import { resolveIncomingMail, forwardMessage } from "./src/lib/email/incoming";
 import { createExpansionBudget } from "./src/lib/groups/expand-utils";
+import { processGroupRelay } from "./src/lib/groups/relay";
+import { createRelayBudget } from "./src/lib/groups/relay-utils";
 import { countReceivedInJoinedValue } from "./src/lib/groups/loop-utils";
 import { createBatchBudget } from "./src/lib/deliverability/ingest";
 import { getUserFromSession } from "./src/lib/auth/session";
@@ -147,6 +150,8 @@ export default {
 		const reportBudget = createBatchBudget();
 		// Likewise group expansion: a batch runs several chunks in one invocation, so later ones are deferred past the budget.
 		const expansionBudget = createExpansionBudget();
+		// And group relays to external members: each is a provider send, so a batch runs only as many as fit.
+		const relayBudget = createRelayBudget();
 		for (const msg of batch.messages) {
 			try {
 				if (isInboundQueueMessage(msg.body)) {
@@ -155,6 +160,8 @@ export default {
 					await processAgentDraftJob(env, (msg.body as { jobId: string }).jobId);
 				} else if (isWebhookRetryMessage(msg.body)) {
 					await processWebhookRetry(env, msg.body as WebhookRetryMessage);
+				} else if (isGroupRelayMessage(msg.body)) {
+					await processGroupRelay(env, msg.body, { budget: relayBudget });
 				} else if (isImportJobMessage(msg.body)) {
 					await processImportJob(env, { ...msg.body, attempt: msg.attempts });
 				} else if (typeof msg.body === "object" && msg.body !== null && (msg.body as { kind?: unknown }).kind === "email.scheduled") {

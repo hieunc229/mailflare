@@ -3,6 +3,7 @@ import { withD1Session } from "./src/lib/d1-session-context";
 import { isMissingColumnError, isMissingTableError } from "./src/lib/database-errors";
 import type { InboundQueueMessage } from "./src/lib/email/inbound";
 import type { WebhookRetryMessage } from "./src/lib/email/webhooks";
+import type { GroupRelayMessage } from "./src/lib/groups/relay-utils";
 import type { ImportJobMessage } from "./src/lib/import/jobs-types";
 
 export function isInboundQueueMessage(payload: unknown): payload is InboundQueueMessage {
@@ -32,6 +33,9 @@ export function isImportJobMessage(payload: unknown): payload is ImportJobMessag
 		typeof (payload as { jobId?: unknown }).jobId === "string"
 	);
 }
+
+export { isGroupRelayMessage } from "./src/lib/groups/relay-utils";
+export type { GroupRelayMessage };
 
 /**
  * The cookie carrying the D1 read-session bookmark between requests. Each response stores the

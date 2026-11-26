@@ -71,8 +71,8 @@ export async function groupCopyKey(digest: string, mailboxId: string): Promise<s
 	return `inbound/${hex(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(`group-copy\0${mailboxId}\0${digest}`)))}.eml`;
 }
 
-/** Subrequests one chunk can use at most: its copies plus the queries, queue sends and cleanup around them. */
-export const EXPANSION_CHUNK_COST = GROUP_EXPANSION_CHUNK + 12;
+/** Subrequests one chunk can use at most: its copies (or relay messages) plus the queries, relay copy, queue sends and cleanup around them. */
+export const EXPANSION_CHUNK_COST = GROUP_EXPANSION_CHUNK + 15;
 /** What expansion may spend in one queue batch: under the 50 subrequests of an invocation on the Free plan. */
 export const EXPANSION_SUBREQUEST_BUDGET = 45;
 
