@@ -1,11 +1,12 @@
 import { and, eq, isNotNull } from "drizzle-orm";
 import { getDb } from "@/db";
-import { conversationNotes, mailboxes, messages, outboundJobs } from "@/db/schema";
+import { conversationNotes, domains, mailboxes, messages, outboundJobs, users } from "@/db/schema";
 import { newId } from "@/lib/ids";
 import { buildSnippet } from "@/lib/email/parse";
 import { dispatchWebhooks } from "@/lib/email/webhooks";
 import { upsertContactsFromAddresses } from "@/lib/contacts/service";
 import { getAuthorizedSenderAddress } from "@/lib/email/sender";
+import { authorizeSendAsGroup } from "@/lib/groups/send-as";
 import { getEmailAddress, getEmailAddressList, joinEmailAddressList, splitEmailAddressList } from "@/lib/email/address";
 import { formatMessageIdHeader, normalizeMessageId, parseMessageIdList } from "@/lib/email/threading";
 import { createAuditLog } from "@/lib/mailboxes/audit";
@@ -214,17 +215,26 @@ async function deliverEmail(env: CloudflareEnv, delivery: PreparedDelivery): Pro
 		const [mailbox] = await db
 			.select({
 				id: mailboxes.id,
+				userId: mailboxes.userId,
+				type: mailboxes.type,
 				domainId: mailboxes.domainId,
 				localPart: mailboxes.localPart,
 				useAllDomains: mailboxes.useAllDomains,
 				disabled: mailboxes.disabled,
+				hostname: domains.hostname,
 			})
 			.from(mailboxes)
+			.innerJoin(domains, eq(mailboxes.domainId, domains.id))
 			.where(eq(mailboxes.id, mailboxId))
 			.limit(1);
 		const fromAddress = getEmailAddress(from).toLowerCase();
-		if (!mailbox || mailbox.disabled || !(await getMailboxDomainAddresses(db, mailbox)).includes(fromAddress)) {
-			throw new Error("The sender address is no longer available for this mailbox");
+		if (!mailbox || mailbox.disabled) throw new Error("The sender address is no longer available for this mailbox");
+		if (!(await getMailboxDomainAddresses(db, mailbox)).includes(fromAddress)) {
+			// A send as a group needs the same grant as at queue time: the flag may have been taken away since.
+			const [actor] = await db.select({ id: users.id, email: users.email, disabled: users.disabled }).from(users).where(eq(users.id, input.userId)).limit(1);
+			if (!actor || !(await authorizeSendAsGroup(env, db, actor, mailbox, fromAddress))) {
+				throw new Error("The sender address is no longer available for this mailbox");
+			}
 		}
 		// Queued sends can outlive the check in sendEmail: an address may have bounced since.
 		const kept = await dropSuppressedRecipients(env, from, { to, cc, bcc });
