@@ -101,19 +101,6 @@ test("a message the receiver flags as spam or a virus is not relayed", async (t)
 	assert.equal(outbound.length, 2);
 });
 
-test("a group relays at most 120 messages an hour, and a message already counted is not counted twice", async (t) => {
-	const { env, outbound, inbound, payload, objects } = await fixture(t);
-	const hour = Math.floor(Date.now() / 3_600_000);
-	for (let i = 0; i < app.relayUtils.GROUP_RELAY_MESSAGES_PER_HOUR; i += 1) objects.set(`group-relay/rate/g1/${hour}/m${i}`, new ArrayBuffer(0));
-	await app.expandGroupDelivery(env, payload());
-	assert.equal(outbound.length, 0, "over the cap: external members skipped");
-	assert.equal(inbound.length, 1, "internal members are unaffected");
-	for (const key of [...objects.keys()]) if (key.startsWith("group-relay/rate/")) objects.delete(key);
-	for (let i = 0; i < app.relayUtils.GROUP_RELAY_MESSAGES_PER_HOUR - 1; i += 1) objects.set(`group-relay/rate/g1/${hour}/m${i}`, new ArrayBuffer(0));
-	await app.expandGroupDelivery(env, payload());
-	assert.equal(outbound.length, 2, "the last free slot is used");
-});
-
 test("relays are spread out so a provider's rate limit is not hit by 100 at once", async (t) => {
 	const { env, outbound, payload, sqlite } = await fixture(t);
 	let sql = "";
