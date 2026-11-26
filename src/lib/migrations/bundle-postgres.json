@@ -621,6 +621,12 @@
         "DROP TRIGGER IF EXISTS dav_changes_calendar_events_au ON calendar_events;",
         "CREATE TRIGGER dav_changes_calendar_events_au AFTER UPDATE ON calendar_events\nFOR EACH ROW WHEN (OLD.user_id <> NEW.user_id OR (OLD.calendar_id, OLD.is_private, OLD.transparent, OLD.mailbox_id, OLD.title, OLD.description, OLD.location, OLD.attendees, OLD.color, OLD.repeat, OLD.repeat_days, OLD.excluded_occurrences, OLD.time_zone, OLD.response_status, OLD.invite_message_id, OLD.invite_sender, OLD.attendee_responses, OLD.repeat_anchor_day, OLD.repeat_until, OLD.starts_at, OLD.ends_at, OLD.reminder_minutes, OLD.invite_sequence, OLD.event_sequence, OLD.repeat_interval, OLD.repeat_weekday, OLD.repeat_week, OLD.updated_at, OLD.rrule, OLD.recurrence_id, OLD.dav_object_id, OLD.all_day) IS DISTINCT FROM (NEW.calendar_id, NEW.is_private, NEW.transparent, NEW.mailbox_id, NEW.title, NEW.description, NEW.location, NEW.attendees, NEW.color, NEW.repeat, NEW.repeat_days, NEW.excluded_occurrences, NEW.time_zone, NEW.response_status, NEW.invite_message_id, NEW.invite_sender, NEW.attendee_responses, NEW.repeat_anchor_day, NEW.repeat_until, NEW.starts_at, NEW.ends_at, NEW.reminder_minutes, NEW.invite_sequence, NEW.event_sequence, NEW.repeat_interval, NEW.repeat_weekday, NEW.repeat_week, NEW.updated_at, NEW.rrule, NEW.recurrence_id, NEW.dav_object_id, NEW.all_day)) EXECUTE FUNCTION mailflare_dav_calendar_changed();"
       ]
+    },
+    {
+      "name": "0031_calendar_org_free_busy.sql",
+      "statements": [
+        "ALTER TABLE \"app_settings\" ADD COLUMN \"calendar_org_free_busy\" boolean DEFAULT false NOT NULL;"
+      ]
     }
   ]
 }

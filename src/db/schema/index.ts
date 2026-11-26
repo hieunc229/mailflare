@@ -1648,6 +1648,8 @@ export const appSettings = sqliteTable("app_settings", {
 	resendEventsWebhookSecret: text("resend_events_webhook_secret"),
 	/** JSON: the SNS topic, URL token and SES identities that feed bounces and complaints (see src/lib/deliverability/ses-feed.ts). */
 	sesFeedback: text("ses_feedback"),
+	/** Everyone with Calendar on sees every other such account's busy times (never details). Team only; off until an administrator turns it on (spec F9 D-10, D-13). */
+	calendarOrgFreeBusy: bool("calendar_org_free_busy").notNull().default(false),
 	updatedAt: timestamp("updated_at")
 		.notNull()
 		.$defaultFn(() => new Date()),
