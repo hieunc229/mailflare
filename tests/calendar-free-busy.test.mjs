@@ -329,3 +329,31 @@ test("busyIntervals: asked about one person alone, the whole budget is theirs", 
 	for (let index = 0; index < Math.ceil(MAX_EXPANSION_BUDGET / 2 / 60); index += 1) event("u1", at(-1, 1), at(-1, 1.5), { repeat: "daily" });
 	assert.deepEqual((await busy(["u1"], at(0), at(62))).get("u1").length, 62, "more than half the budget is fine for one person");
 });
+
+test("busyIntervals: with an occurrence named, only that occurrence is left out, from the series and from each guest's copy of it", async () => {
+	setup();
+	const start = at(0, 9);
+	event("u1", start, start + H, { id: "evt_weekly", repeat: "weekly" });
+	event("u2", start, start + H, { id: copyId("u2", "evt_weekly@mailflare"), repeat: "weekly", response_status: "accepted" });
+	const result = await busyIntervals({}, { userIds: ["u1", "u2"], excludeEventId: "evt_weekly", excludeOccurrence: at(7, 9) }, ...win(at(0), at(15)));
+	const expected = [[at(0, 9), at(0, 10)], [at(14, 9), at(14, 10)]];
+	assert.deepEqual(result.get("u1"), expected);
+	assert.deepEqual(result.get("u2"), expected);
+});
+
+test("busyIntervals: naming an occurrence also leaves out the moved row that replaced it, and keeps every other moved row", async () => {
+	setup();
+	const start = at(-14, 9);
+	const master = event("u1", start, start + H, { id: "evt_series", repeat: "weekly", excluded_occurrences: JSON.stringify([at(0, 9), at(7, 9)]) });
+	event("u1", at(0, 15), at(0, 16), { dav_object_id: master, recurrence_id: secs(at(0, 9)) });
+	event("u1", at(7, 15), at(7, 16), { dav_object_id: master, recurrence_id: secs(at(7, 9)) });
+	const result = await busyIntervals({}, { userIds: ["u1"], excludeEventId: "evt_series", excludeOccurrence: at(0, 9) }, ...win(at(0), at(9)));
+	assert.deepEqual(result.get("u1"), [[at(7, 15), at(7, 16)]]);
+});
+
+test("busyIntervals: without an occurrence the whole series goes, moved rows included", async () => {
+	setup();
+	const master = event("u1", at(-14, 9), at(-14, 10), { id: "evt_all", repeat: "weekly", excluded_occurrences: JSON.stringify([at(0, 9)]) });
+	event("u1", at(0, 15), at(0, 16), { dav_object_id: master, recurrence_id: secs(at(0, 9)) });
+	assert.deepEqual((await busyIntervals({}, { userIds: ["u1"], excludeEventId: "evt_all" }, ...win(at(0), at(9)))).get("u1"), []);
+});
