@@ -11,6 +11,23 @@ export async function loadOrgHostnames(db: AppDatabase): Promise<string[]> {
 }
 
 /**
+ * Whether any of the addresses is an external member of the group. Used for the auto-ack guard: a
+ * helpdesk that is a member answers a relayed copy with `Auto-Submitted: auto-generated` to the group,
+ * which would be relayed again. Exact addresses only (a domain match would also drop every automated
+ * message from gmail.com the moment one member is on it).
+ */
+export async function isExternalMember(db: AppDatabase, groupId: string, addresses: string[]): Promise<boolean> {
+	const wanted = [...new Set(addresses.map((address) => address.trim().toLowerCase()).filter(Boolean))].slice(0, 10);
+	if (!wanted.length) return false;
+	const [row] = await db
+		.select({ id: mailGroupMembers.id })
+		.from(mailGroupMembers)
+		.where(and(eq(mailGroupMembers.groupId, groupId), eq(mailGroupMembers.kind, "external"), inArray(mailGroupMembers.email, wanted)))
+		.limit(1);
+	return !!row;
+}
+
+/**
  * The member addresses relevant to one sender: a set holding the sender's address when it belongs
  * to a member, else empty. Answering for one address takes a handful of queries however large the
  * group is (500 members would otherwise cost thousands of D1 subrequests in the live handler).
