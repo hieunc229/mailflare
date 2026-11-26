@@ -2,6 +2,7 @@ import { and, eq, inArray } from "drizzle-orm";
 import { folders, mailboxes } from "@/db/schema";
 import { listAccessibleMailboxes } from "@/lib/mailboxes/access";
 import { getMailboxDomainAddresses } from "@/lib/mailboxes/domain-addresses";
+import { listSendAsGroupAddresses } from "@/lib/groups/send-as";
 import type { AccessibleMailbox, JmapContext } from "./types";
 
 /** Every Mailflare mailbox the key's user can read, in a JMAP-shaped record. */
@@ -57,5 +58,7 @@ export async function listFoldersByMailbox(ctx: JmapContext, mailboxIds: string[
 export async function listSendableAddresses(ctx: JmapContext, mailbox: AccessibleMailbox): Promise<string[]> {
 	const [row] = await ctx.db.select().from(mailboxes).where(and(eq(mailboxes.id, mailbox.id))).limit(1);
 	if (!row) return [];
-	return getMailboxDomainAddresses(ctx.db, row);
+	// Groups the account may send as (spec D-10) are identities of its primary mailbox.
+	const groups = await listSendAsGroupAddresses(ctx.env, ctx.db, ctx.auth.user, { userId: row.userId, type: row.type, localPart: row.localPart, hostname: mailbox.hostname });
+	return [...(await getMailboxDomainAddresses(ctx.db, row)), ...groups];
 }
