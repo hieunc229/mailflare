@@ -21,7 +21,8 @@ const seed = `
 	INSERT INTO mail_groups (id, domain_id, local_part, name, who_can_post, created_at, updated_at) VALUES ('g1', 'd1', 'team', 'Team', 'members', 1, 1), ('g2', 'd1', 'other', 'Other', 'members', 1, 1);
 	INSERT INTO mail_group_members (id, group_id, kind, user_id, can_send_as, created_at) VALUES ('gm1', 'g1', 'user', 'alice', 1, 1), ('gm2', 'g1', 'user', 'bob', 0, 1);
 	INSERT INTO messages (id, user_id, mailbox_id, direction, from_addr, to_addr, subject, status, read, created_at) VALUES
-		('msg_out1', 'alice', 'm-alice', 'outbound', 'Team <team@example.com>', 'team@example.com', 'Hi', 'sent', 1, 1);
+		('msg_out1', 'alice', 'm-alice', 'outbound', 'Team <team@example.com>', 'team@example.com', 'Hi', 'sent', 1, unixepoch()),
+		('msg_old', 'alice', 'm-alice', 'outbound', 'Team <team@example.com>', 'team@example.com', 'Hi', 'sent', 1, 1);
 `;
 const PASS = { "authentication-results": "mx.cloudflare.net; dmarc=pass header.from=example.com" };
 const group = (over = {}) => ({ action: "group", group: { groupId: "g1", domainId: "d1", address: "team@example.com", name: "Team", whoCanPost: "members", replyTo: "sender", ...over } });
@@ -93,4 +94,28 @@ test("without a valid marker the group's own From gets no self-skip", async (t) 
 	const f = await fixture(t);
 	await app.expandGroupDelivery(f.env, payload(f, headersWith(null)));
 	assert.deepEqual(f.queue.map((m) => m.groupDelivery.mailboxId).sort(), ["m-alice", "m-bob"]);
+});
+
+test("a signed post is admitted once: the same marker is refused the second time", async (t) => {
+	const f = await fixture(t);
+	const marker = await app.signSendAs(f.env, { messageId: "msg_out1", groupId: "g1" });
+	assert.equal((await admit(f, headersWith(marker))).action, "group");
+	assert.equal((await admit(f, headersWith(marker))).action, "reject", "replay");
+	assert.ok([...f.objects.keys()].some((key) => /^group-relay\/\d+\/sendas\/msg_out1$/.test(key)), "the claim sits under the swept group-relay/<day>/ layout");
+});
+
+test("a marker of a message that is unknown or older than the claim records are kept is refused", async (t) => {
+	const f = await fixture(t);
+	for (const messageId of ["msg_old", "msg_missing"]) {
+		const marker = await app.signSendAs(f.env, { messageId, groupId: "g1" });
+		assert.equal((await admit(f, headersWith(marker))).action, "reject", messageId);
+	}
+});
+
+test("the copy skip still works after the post was admitted and its marker used up", async (t) => {
+	const f = await fixture(t);
+	const marker = await app.signSendAs(f.env, { messageId: "msg_out1", groupId: "g1" });
+	assert.equal((await admit(f, headersWith(marker))).action, "group");
+	await app.expandGroupDelivery(f.env, payload(f, headersWith(marker)));
+	assert.deepEqual(f.queue.map((m) => m.groupDelivery.mailboxId), ["m-bob"]);
 });

@@ -6,7 +6,7 @@ import { getEmailAddress, splitEmailAddressList } from "@/lib/email/address";
 import { groupListIdentifier, groupDropReason, isAutomatedMail } from "@/lib/groups/loop-utils";
 import { groupsAllowed } from "@/lib/groups/license";
 import { answersRelayedCopy, recordRelayBounce } from "@/lib/groups/relay-bounces";
-import { isSignedSendAs } from "@/lib/groups/send-as-marker";
+import { claimSendAs, isSignedSendAs } from "@/lib/groups/send-as-marker";
 import { findMemberSenderAddress, isExternalMember, loadOrgHostnames } from "@/lib/groups/policy";
 import { canPost, GROUP_POST_REJECT_REASON } from "@/lib/groups/policy-utils";
 import { readTrustedDmarcResult } from "@/lib/spam/analyzers/authentication";
@@ -113,8 +113,12 @@ export async function admitGroupMail(
 	}
 	if (group.whoCanPost === "anyone") return decision;
 	const senderAddress = input.from ?? headers.from ?? "";
-	// One of our own send-as members posting as the group to the group itself counts as a member (spec D-10).
-	if (await isSignedSendAs(env, { headers, verdicts: input.verdicts, groupId: group.groupId, groupAddress: group.address, from: senderAddress })) return decision;
+	// One of our own send-as members posting as the group to the group itself counts as a member (spec D-10), once
+	// per marker. Only a members-only group needs this: the others admit the post on their own policy.
+	if (group.whoCanPost === "members") {
+		const signed = await isSignedSendAs(env, { headers, verdicts: input.verdicts, groupId: group.groupId, groupAddress: group.address, from: senderAddress });
+		if (signed && await claimSendAs(env, signed.messageId)) return decision;
+	}
 	const allowed = canPost({
 		whoCanPost: group.whoCanPost,
 		senderAddress,

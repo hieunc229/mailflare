@@ -50,8 +50,12 @@ export function getPersonalAddresses(senderAddresses: string[], groupAddresses: 
  * mailbox's own address is whichever of them it can send as.
  */
 export function getOwnAddressForMessage(message: Message, ownAddresses: string[]): string {
-	if (message.direction === "outbound") return getEmailAddress(message.fromAddr);
 	const own = new Set(ownAddresses.map((address) => normalizeEmailAddress(address)));
+	if (message.direction === "outbound") {
+		// Sent as a group: that address is not one of the personal ones, and a reply still defaults to the member's own.
+		const from = getEmailAddress(message.fromAddr);
+		return own.size === 0 || own.has(normalizeEmailAddress(from)) ? from : ownAddresses[0];
+	}
 	const listed = [...getEmailAddressList(message.toAddr), ...getEmailAddressList(message.ccAddr)];
 	return listed.find((address) => own.has(address)) ?? ownAddresses[0] ?? getEmailAddress(message.toAddr);
 }

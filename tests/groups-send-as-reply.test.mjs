@@ -52,7 +52,18 @@ test("reply-all from the personal address keeps the group among the recipients",
 	assert.deepEqual(getReplyRecipients(toTheGroup, senderAddresses, "replyAll").cc, ["carol@example.org"], "the unfiltered list used to drop the group");
 });
 
-test("a reply to a message the member sent as the group keeps that From", () => {
-	const sent = { ...toTheGroup, direction: "outbound", fromAddr: "\"Team\" <team@example.com>", toAddr: "x@ext.com" };
-	assert.equal(getOwnAddressForMessage(sent, getPersonalAddresses(senderAddresses, groupAddresses)), "team@example.com");
+test("a reply to a message the member sent as the group defaults to their own address too", () => {
+	const personal = getPersonalAddresses(senderAddresses, groupAddresses);
+	const sent = { ...toTheGroup, direction: "outbound", fromAddr: "\"Team\" <team@example.com>", toAddr: "x@ext.com, team@example.com", ccAddr: "carol@example.org" };
+	assert.equal(getOwnAddressForMessage(sent, personal), "alice@example.com");
+	assert.equal(getOwnAddressForMessage({ ...sent, fromAddr: "Alice <alias@example.com>" }, personal), "alias@example.com", "an own address still wins");
+	assert.equal(getOwnAddressForMessage(sent, []), "team@example.com", "nothing personal to fall back on");
+});
+
+test("reply-all to a message sent as the group keeps the group among the recipients", () => {
+	const personal = getPersonalAddresses(senderAddresses, groupAddresses);
+	const sent = { ...toTheGroup, direction: "outbound", fromAddr: "\"Team\" <team@example.com>", toAddr: "x@ext.com, team@example.com", ccAddr: "carol@example.org" };
+	const all = getReplyRecipients(sent, personal, "replyAll");
+	assert.deepEqual(all.to, ["x@ext.com", "team@example.com"]);
+	assert.deepEqual(all.cc, ["carol@example.org"]);
 });

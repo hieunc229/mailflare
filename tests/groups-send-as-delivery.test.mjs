@@ -105,7 +105,7 @@ const audit = (raw, action) => raw.prepare("SELECT actor_user_id, mailbox_id, me
 
 test("a send as the group carries a signed marker and writes one send_as_group audit row", async (t) => {
 	const { env, sent, input, raw } = await fixture(t);
-	const { messageId } = await send.sendEmail(env, input());
+	const { messageId } = await send.sendEmail(env, input({ to: "anna@example.org", cc: "Team <team@example.com>" }));
 	const header = Object.entries(sent[0].headers ?? {}).find(([name]) => name.toLowerCase() === "x-mailflare-send-as")?.[1];
 	assert.match(header, new RegExp(`^v1\\.${messageId}\\.g1\\.[0-9a-f]{64}$`));
 	assert.deepEqual(audit(raw, "email.send_as_group"), [{ actor_user_id: "alice", mailbox_id: "m-alice", message_id: messageId, metadata: { groupId: "g1", address: "team@example.com" } }]);
@@ -113,7 +113,7 @@ test("a send as the group carries a signed marker and writes one send_as_group a
 
 test("a scheduled send as the group keeps its marker", async (t) => {
 	const { env, sent, input } = await fixture(t);
-	const { messageId } = await send.sendEmail(env, input({ scheduledAt: new Date(Date.now() + 3600_000).toISOString() }));
+	const { messageId } = await send.sendEmail(env, input({ to: "team@example.com", scheduledAt: new Date(Date.now() + 3600_000).toISOString() }));
 	await send.sendScheduledMessageNow(env, messageId);
 	assert.ok(Object.keys(sent[0].headers ?? {}).some((name) => name.toLowerCase() === "x-mailflare-send-as"));
 });
@@ -132,4 +132,27 @@ test("a group name with control characters cannot split the From header", async 
 	const { messageId } = await send.sendEmail(env, input());
 	assert.doesNotMatch(row(messageId).from_addr, /[\r\n]/);
 	assert.match(row(messageId).from_addr, /<team@example\.com>$/);
+});
+
+const hasMarker = (message) => Object.keys(message.headers ?? {}).some((name) => name.toLowerCase() === "x-mailflare-send-as");
+
+test("the marker is only added when the group is among the recipients; the audit row is written either way", async (t) => {
+	for (const [field, expected] of [["to", true], ["cc", true], ["bcc", true]]) {
+		const { env, sent, input } = await fixture(t);
+		await send.sendEmail(env, input({ to: "anna@example.org", [field]: "Team <TEAM@example.com>" }));
+		assert.equal(hasMarker(sent[0]), expected, field);
+	}
+	const { env, sent, input, raw } = await fixture(t);
+	await send.sendEmail(env, input({ to: "anna@example.org" }));
+	assert.equal(hasMarker(sent[0]), false, "a send that does not name the group needs no marker");
+	assert.equal(audit(raw, "email.send_as_group").length, 1);
+});
+
+test("the send_as_group audit row is written before the job exists: a failing audit leaves nothing behind", async (t) => {
+	const { env, sent, input, raw } = await fixture(t);
+	raw.exec("CREATE TRIGGER no_audit BEFORE INSERT ON audit_logs WHEN NEW.action = 'email.send_as_group' BEGIN SELECT RAISE(ABORT, 'audit down'); END");
+	await assert.rejects(send.sendEmail(env, input()), /audit_logs/);
+	assert.equal(raw.prepare("SELECT count(*) AS n FROM outbound_jobs").get().n, 0);
+	assert.equal(raw.prepare("SELECT count(*) AS n FROM messages").get().n, 0);
+	assert.equal(sent.length, 0);
 });
