@@ -46,7 +46,7 @@ export async function PUT(request: Request) {
 	const enabled = body && typeof body === "object" ? (body as { enabled?: unknown }).enabled : undefined;
 	if (typeof enabled !== "boolean") return Response.json({ error: "Send enabled as true or false" }, { status: 400 });
 	const current = await state(env);
-	if (enabled && !current.available) return Response.json({ error: "Organisation-wide free/busy needs a Team licence" }, { status: 403 });
+	if (enabled && !current.available) return Response.json({ error: "Organisation-wide free/busy needs a Team licence", code: "TEAM_REQUIRED" }, { status: 403 });
 	if (enabled === current.enabled) return Response.json(current, { headers: NO_STORE });
 	try {
 		const values = { calendarOrgFreeBusy: enabled, updatedAt: new Date() };

@@ -59,7 +59,9 @@ test("saving the value it already has changes and audits nothing", async () => {
 
 test("without a Team licence it cannot be turned on (403), but it can still be turned off", async () => {
 	setup({ team: false });
-	assert.equal((await put({ enabled: true })).status, 403);
+	const refused = await put({ enabled: true });
+	assert.equal(refused.status, 403);
+	assert.equal((await refused.json()).code, "TEAM_REQUIRED", "a licence refusal is told apart from a permission one");
 	assert.equal(stored(), 0);
 	assert.equal(audit().length, 0);
 	sqlite.exec("INSERT INTO app_settings (id, calendar_org_free_busy, updated_at) VALUES ('default', 1, 1) ON CONFLICT(id) DO UPDATE SET calendar_org_free_busy = 1");
@@ -70,7 +72,9 @@ test("without a Team licence it cannot be turned on (403), but it can still be t
 
 test("only the primary administrator, from the same origin, with a boolean", async () => {
 	setup({ user: { id: "u", admin: false } });
-	assert.equal((await put({ enabled: true })).status, 403);
+	const forbidden = await put({ enabled: true });
+	assert.equal(forbidden.status, 403);
+	assert.equal((await forbidden.json()).code, undefined, "not a licence matter");
 	assert.equal((await GET(new Request("https://m.test/x"))).status, 403);
 	setup();
 	globalThis.orgFb.origin = false;

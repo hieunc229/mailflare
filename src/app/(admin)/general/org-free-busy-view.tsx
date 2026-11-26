@@ -38,7 +38,7 @@ export function OrgFreeBusyView({ state, enabled, available = true, saving, stat
 				{state === "ready" && <>
 					<div className="flex items-center gap-3"><Switch id="org-free-busy" checked={enabled} onCheckedChange={onChange} disabled={saving} aria-describedby="org-free-busy-hint" /><Label htmlFor="org-free-busy">{t("general.orgFreeBusyEnabled")}</Label></div>
 					<p id="org-free-busy-hint" className="text-sm text-neutral-600">{t("general.orgFreeBusyHint")}</p>
-					{!available && <p className="text-sm text-amber-700">{t("general.orgFreeBusyLapsed")}</p>}
+					{!available && <p className="text-sm text-amber-700">{t(enabled ? "general.orgFreeBusyLapsed" : "general.orgFreeBusyNeedsTeam")}</p>}
 					{status && <p role="status" className="text-sm text-neutral-700">{status}</p>}
 				</>}
 			</CardContent>

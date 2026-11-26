@@ -42,11 +42,28 @@ test("a failed save whose body is not JSON shows the translated generic error, n
 	await unmount();
 });
 
-test("a refusal with a JSON body is also the generic translated error", async () => {
-	globalThis.orgCard.respond = (url, init) => (init?.method === "PUT" ? Response.json({ error: "Organisation-wide free/busy needs a Team licence" }, { status: 403 }) : Response.json({ available: true, enabled: false }));
+test("a refusal caused by the licence says so in the translated words, then the card reloads what is available", async () => {
+	let available = true;
+	globalThis.orgCard.respond = (url, init) => (init?.method === "PUT"
+		? (available = false, Response.json({ error: "Organisation-wide free/busy needs a Team licence", code: "TEAM_REQUIRED" }, { status: 403 }))
+		: Response.json({ available, enabled: false }));
 	await mount();
+	globalThis.orgCard.calls.length = 0;
+	await flip();
+	assert.match(text(), /needs a Team licence\./);
+	assert.deepEqual(globalThis.orgCard.calls.map((call) => call[1]), ["PUT", "GET"], "it asked again what is available");
+	assert.ok(container.querySelector('[role="switch"]'), "the card stays so the message is not lost");
+	assert.match(text(), /Turn on only with a Team licence|needs a Team licence/);
+	await unmount();
+});
+
+test("any other refusal is the generic translated error, and the card reloads too", async () => {
+	globalThis.orgCard.respond = (url, init) => (init?.method === "PUT" ? Response.json({ error: "Forbidden" }, { status: 403 }) : Response.json({ available: true, enabled: false }));
+	await mount();
+	globalThis.orgCard.calls.length = 0;
 	await flip();
 	assert.match(text(), /Could not save this setting\./);
+	assert.deepEqual(globalThis.orgCard.calls.map((call) => call[1]), ["PUT", "GET"]);
 	await unmount();
 });
 
