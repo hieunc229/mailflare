@@ -10,7 +10,7 @@ import { AvailabilityView, type FindState } from "./availability-view";
 const DEBOUNCE_MS = 400;
 const DAY = 86_400_000;
 
-type Answer = { key: string; ok: boolean; results: Record<string, PersonAvailability> };
+type Answer = { key: string; fromMs: number; ok: boolean; results: Record<string, PersonAvailability> };
 type Found = { key: string; at: Date; state: "loading" | "error" | "ready"; busy: string[][][] };
 
 /**
@@ -39,7 +39,7 @@ export function AvailabilityPanel({ guests, startsAt, endsAt, excludeEventId, se
 		let current = true;
 		const timer = setTimeout(() => {
 			void fetchAvailability(addresses, new Date(fromMs), new Date(toMs), excludeEventId).then((result) => {
-				if (current) setAnswer({ key: requestKey, ok: result.ok, results: result.ok ? result.results : {} });
+				if (current) setAnswer({ key: requestKey, fromMs, ok: result.ok, results: result.ok ? result.results : {} });
 			});
 		}, DEBOUNCE_MS);
 		return () => { current = false; clearTimeout(timer); };
@@ -48,7 +48,10 @@ export function AvailabilityPanel({ guests, startsAt, endsAt, excludeEventId, se
 	if (!window) return null;
 	const settled = answer?.key === requestKey ? answer : null;
 	const state = !addresses.length ? "ready" : settled ? (settled.ok ? "ready" : "error") : "loading";
-	const rows = state === "ready" ? addresses.map((address) => ({ address, availability: settled?.results[address] ?? ({ status: "unknown" } as PersonAvailability) })) : [];
+	// While the next answer is awaited the rows of the last one stay (for the same day, whose blocks they still describe), so typing a guest does not blank the list.
+	const previous = !settled && answer?.ok && answer.fromMs === fromMs ? answer : null;
+	const shown = state === "ready" ? settled : previous;
+	const rows = state === "error" ? [] : addresses.flatMap((address) => (state === "ready" ? [{ address, availability: settled?.results[address] ?? ({ status: "unknown" } as PersonAvailability) }] : shown?.results[address] ? [{ address, availability: shown.results[address] }] : []));
 	const durationMs = start && end ? end.getTime() - start.getTime() : 0;
 	const anyVisible = rows.some((row) => row.availability.status === "ok");
 	const current = found && found.key === addressKey ? found : null;
