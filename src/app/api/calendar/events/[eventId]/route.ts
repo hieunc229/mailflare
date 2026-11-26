@@ -1,4 +1,4 @@
-import { and, eq, ne } from "drizzle-orm";
+import { and, eq, ne, sql } from "drizzle-orm";
 import { NextResponse } from "next/server";
 import { getDb } from "@/db";
 import { calendarEvents, davCollections } from "@/db/schema";
@@ -20,6 +20,7 @@ import { authorizeCalendarRequest, calendarKeyCanSendInvitations } from "@/lib/c
 import { readJsonObject } from "@/lib/http/request";
 import { calendarExistsGuard } from "@/lib/calendar/calendars";
 import { getEventAccess, resolveCalendarForWrite, roleAtLeast } from "@/lib/calendar/shares";
+import { requireGuard } from "@/lib/dav/writes";
 import { EVENT_ID_EXISTS, INVITE_REQUIRES_OWNER } from "@/lib/calendar/shares-errors";
 import { calendarCollectionId } from "@/lib/dav/changes";
 import { createAuditLog } from "@/lib/mailboxes/audit";
@@ -83,14 +84,15 @@ export async function PATCH(request: Request, { params }: CalendarEventRoutePara
 	// Undefined keeps the calendar; otherwise the whole series moves, so compare against where it is now.
 	const moveTo = calendar.calendarId !== undefined && calendar.calendarId !== (head.calendarId ?? null) ? calendar.calendarId : undefined;
 	// Writes that put rows into another calendar run as one batch that first checks the calendar still exists (a competing delete refuses it with 409).
-	// A write that puts rows into a named calendar (the one it moves to, or the one it is already in) first checks that the calendar is still there.
-	const guardedCalendar = moveTo !== undefined ? moveTo : existing.calendarId;
-	const guard = typeof guardedCalendar === "string" ? calendarExistsGuard(db, ownerId, guardedCalendar) : [];
+	// A move into a calendar first checks that calendar still exists. Any other batch checks the event's own row is still there: deleteCalendar deletes the
+	// events in its batch, so a competing delete is caught, and an event whose calendar row is missing (a partial restore) stays editable.
+	const guard = typeof moveTo === "string" ? calendarExistsGuard(db, ownerId, moveTo) : requireGuard(db, sql`not exists (select 1 from ${calendarEvents} where ${eq(calendarEvents.id, existing.id)})`);
 	const batched = async (statements: unknown[]): Promise<NextResponse | null> => {
 		try { await db.batch([...guard, ...statements] as never); return null; } catch (error) {
 			if (!isUniqueConstraintError(error)) throw error;
 			// The calendar guard and the stored resource's unique (collection, UID) and (collection, name) keys fail the same way: say which it was.
-			const [still] = typeof guardedCalendar === "string" ? await db.select({ id: davCollections.id }).from(davCollections).where(and(eq(davCollections.id, guardedCalendar), eq(davCollections.userId, ownerId))).limit(1) : [];
+			if (typeof moveTo !== "string") return NextResponse.json({ error: "This event no longer exists" }, { status: 409 });
+			const [still] = await db.select({ id: davCollections.id }).from(davCollections).where(and(eq(davCollections.id, moveTo), eq(davCollections.userId, ownerId))).limit(1);
 			if (!still) return NextResponse.json({ error: "That calendar no longer exists" }, { status: 409 });
 			return NextResponse.json({ error: "An event with the same ID already exists in that calendar", code: EVENT_ID_EXISTS }, { status: 409 });
 		}

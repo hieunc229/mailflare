@@ -24,7 +24,7 @@ after(() => { sqlite?.close(); delete globalThis.calMove; route.dispose(); utils
 function setup() {
 	sqlite?.close();
 	// A competing deleteCalendar: when a write batch reaches its calendar guard, the calendar's row is already gone.
-	const beforeQuery = (query, db) => { if (globalThis.calMove?.race && /insert into "dav_sync_state"/i.test(query)) { globalThis.calMove.race = false; db.exec("DELETE FROM dav_collections WHERE id = 'cal:work'"); } };
+	const beforeQuery = (query, db) => { if (globalThis.calMove?.race && /insert into "dav_sync_state"/i.test(query)) { globalThis.calMove.race = false; db.exec("DELETE FROM calendar_events WHERE calendar_id = 'cal:work'; DELETE FROM dav_collections WHERE id = 'cal:work'"); } };
 	sqlite = installSqlite("calMove", { schema, beforeQuery, extra: { user: { id: "u1", timeZone: "UTC", calendarEnabled: true }, race: false } });
 	globalThis.calMove.db.batch = async (statements) => {
 		sqlite.exec("BEGIN");
@@ -100,4 +100,30 @@ test("moving one past occurrence in a calendar deleted at that moment is 409 and
 	assert.equal(response.status, 409);
 	assert.equal(sqlite.prepare("SELECT count(*) AS n FROM calendar_events").get().n, 1);
 	assert.equal(sqlite.prepare("SELECT excluded_occurrences FROM calendar_events WHERE id = 'w1'").get().excluded_occurrences, "[]");
+});
+
+// An event whose calendar row is missing (a partial restore, spec 8.10) is in the owner's default calendar and stays editable.
+const addDangling = (id, dav = false) => sqlite.prepare("INSERT INTO calendar_events (id, user_id, calendar_id, title, starts_at, ends_at, repeat, dav_object_id, created_at, updated_at) VALUES (?, 'u1', 'cal:gone', 'Weekly', ?, ?, 'weekly', ?, 1, 1)").run(id, Math.floor(Date.parse("2026-01-05T10:00:00Z") / 1000), Math.floor(Date.parse("2026-01-05T11:00:00Z") / 1000), dav ? id : null);
+
+test("a this-and-following edit works on an event whose calendar row is missing", async () => {
+	setup();
+	addDangling("w1");
+	const response = await patchBody("w1", { effectiveFrom: "2026-02-02T10:00:00.000Z", startsAt: "2026-02-02T12:00:00.000Z", endsAt: "2026-02-02T13:00:00.000Z" });
+	assert.equal(response.status, 200);
+	assert.equal(sqlite.prepare("SELECT count(*) AS n FROM calendar_events").get().n, 2);
+});
+
+test("moving one past occurrence works on an event whose calendar row is missing", async () => {
+	setup();
+	addDangling("w1");
+	const occurrence = `w1@${Date.parse("2026-01-12T10:00:00Z")}`;
+	assert.equal((await patchBody(occurrence, { moveOccurrenceToPast: true, startsAt: "2026-01-13T10:00:00.000Z", endsAt: "2026-01-13T11:00:00.000Z" })).status, 200);
+});
+
+test("a privacy change on a CalDAV series whose calendar row is missing works and reaches its moved occurrences", async () => {
+	setup();
+	addDangling("w1", true);
+	sqlite.prepare("INSERT INTO calendar_events (id, user_id, calendar_id, title, starts_at, ends_at, dav_object_id, recurrence_id, created_at, updated_at) VALUES ('o1', 'u1', 'cal:gone', 'Moved', 5000, 6000, 'w1', 3000, 1, 1)").run();
+	assert.equal((await patchBody("w1", { isPrivate: true })).status, 200);
+	assert.deepEqual(sqlite.prepare("SELECT id, is_private FROM calendar_events ORDER BY id").all().map((row) => [row.id, row.is_private]), [["o1", 1], ["w1", 1]]);
 });
