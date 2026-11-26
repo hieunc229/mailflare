@@ -1,0 +1,116 @@
+import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import test, { after } from "node:test";
+import { installSqlite, loadFixture } from "./helpers/fixtures.mjs";
+
+const { migrations } = JSON.parse(readFileSync(new URL("../src/lib/migrations/bundle.json", import.meta.url), "utf8"));
+const schema = "PRAGMA foreign_keys = ON;\n" + migrations.flatMap((migration) => migration.statements).join(";\n");
+const mocks = {
+	"next/server": "export const NextResponse={json:(data,init)=>Response.json(data,init)};",
+	"@/db": "export function getDb(){return globalThis.calFbRt.db}",
+	"@/lib/cloudflare": "export function getEnv(){return {}}",
+	"@/lib/calendar/api-auth": "export async function authorizeCalendarRequest(env,request,scope){const s=globalThis.calFbRt;s.scopes.push(scope);return s.user?{user:s.user,key:s.key??null,error:null}:{user:null,key:null,error:Response.json({error:'Unauthorized'},{status:401})}}",
+	"@/lib/licenses/service": "export async function getLicenseEntitlements(){return {canShareMailboxes:globalThis.calFbRt.team}}",
+};
+const fixture = await loadFixture({ name: "cal-fb-route", entryPoint: "src/app/api/calendar/free-busy/route.ts", mocks });
+const { POST } = await fixture.import();
+let sqlite;
+after(() => { sqlite?.close(); delete globalThis.calFbRt; fixture.dispose(); });
+
+const DAY = 86_400_000;
+const T0 = Date.UTC(2030, 0, 7);
+const iso = (days, hours = 0) => new Date(T0 + days * DAY + hours * 3_600_000).toISOString();
+
+// u1 viewer; u2 shared a calendar with u1 (free/busy); u3 shared nothing; u4 is disabled; u5 has Calendar off.
+function setup() {
+	sqlite?.close();
+	sqlite = installSqlite("calFbRt", { schema, extra: { user: { id: "u1", calendarEnabled: true }, key: null, team: true, scopes: [] } });
+	for (let index = 1; index <= 5; index += 1) sqlite.exec(`INSERT INTO users (id, email, name, password_hash, role, created_at) VALUES ('u${index}', 'u${index}@one.test', 'User ${index}', 'x', 'user', 1)`);
+	sqlite.exec("UPDATE users SET disabled = 1 WHERE id = 'u4'");
+	sqlite.exec("UPDATE users SET calendar_enabled = 0 WHERE id = 'u5'");
+	sqlite.exec("INSERT INTO dav_collections (id, user_id, kind, display_name, created_at, updated_at) VALUES ('cal:work', 'u2', 'calendar', 'Work', 1, 1)");
+	sqlite.exec("INSERT INTO calendar_shares (id, calendar_id, grantee_user_id, role, created_at) VALUES ('g1', 'cal:work', 'u1', 'freebusy', 1)");
+	for (const user of ["u1", "u2", "u3", "u4", "u5"]) sqlite.exec(`INSERT INTO calendar_events (id, user_id, title, starts_at, ends_at, created_at, updated_at) VALUES ('e_${user}', '${user}', 'Private dentist', ${Math.floor((T0 + 9 * 3_600_000) / 1000)}, ${Math.floor((T0 + 10 * 3_600_000) / 1000)}, 1, 1)`);
+}
+const post = (body, raw) => POST(new Request("https://m.test/api/calendar/free-busy", { method: "POST", headers: { "Content-Type": "application/json" }, body: raw ?? JSON.stringify(body) }));
+const ask = async (addresses, extra = {}) => (await post({ addresses, start: iso(0), end: iso(1), ...extra })).json();
+const BUSY = { status: "ok", busy: [[iso(0, 9), iso(0, 10)]] };
+
+test("the caller's own address and a calendar-grantor's address answer with busy intervals; strangers, unknown and external addresses answer exactly alike", async () => {
+	setup();
+	const { results } = await ask(["u1@one.test", "u2@one.test", "u3@one.test", "nobody@one.test", "someone@gmail.com"]);
+	assert.deepEqual(results["u1@one.test"], BUSY);
+	assert.deepEqual(results["u2@one.test"], BUSY);
+	assert.deepEqual(results["u3@one.test"], { status: "unknown" });
+	assert.equal(JSON.stringify(results["u3@one.test"]), JSON.stringify(results["nobody@one.test"]), "no oracle for who has an account");
+	assert.equal(JSON.stringify(results["u3@one.test"]), JSON.stringify(results["someone@gmail.com"]));
+	assert.doesNotMatch(JSON.stringify(results), /dentist/);
+});
+
+test("a free/busy-only grant is enough, and a revoked one is not", async () => {
+	setup();
+	assert.equal((await ask(["u2@one.test"])).results["u2@one.test"].status, "ok");
+	sqlite.exec("DELETE FROM calendar_shares");
+	assert.equal((await ask(["u2@one.test"])).results["u2@one.test"].status, "unknown");
+});
+
+test("organisation-wide free/busy opens every active account with Calendar on, only with the switch and a Team licence", async () => {
+	setup();
+	sqlite.exec("INSERT INTO app_settings (id, calendar_org_free_busy, updated_at) VALUES ('default', 1, 1) ON CONFLICT(id) DO UPDATE SET calendar_org_free_busy = 1");
+	const addresses = ["u3@one.test", "u4@one.test", "u5@one.test"];
+	let { results } = await ask(addresses);
+	assert.equal(results["u3@one.test"].status, "ok");
+	assert.deepEqual(results["u4@one.test"], { status: "unknown" }, "disabled account");
+	assert.deepEqual(results["u5@one.test"], { status: "unknown" }, "Calendar turned off");
+	globalThis.calFbRt.team = false;
+	assert.deepEqual((await ask(["u3@one.test"])).results["u3@one.test"], { status: "unknown" });
+	globalThis.calFbRt.team = true;
+	sqlite.exec("UPDATE app_settings SET calendar_org_free_busy = 0");
+	assert.deepEqual((await ask(["u3@one.test"])).results["u3@one.test"], { status: "unknown" });
+});
+
+test("addresses are matched without regard to case or surrounding space, and answered under that normal form", async () => {
+	setup();
+	const { results } = await ask(["  U2@One.Test ", "u2@one.test"]);
+	assert.deepEqual(Object.keys(results), ["u2@one.test"]);
+	assert.equal(results["u2@one.test"].status, "ok");
+});
+
+test("resourceIds are accepted and ignored for now, and count towards the limit", async () => {
+	setup();
+	const { results } = await ask(["u1@one.test"], { resourceIds: ["res_1"] });
+	assert.deepEqual(Object.keys(results), ["u1@one.test"]);
+	assert.equal((await post({ addresses: ["u1@one.test"], resourceIds: Array.from({ length: 50 }, (_, index) => `r${index}`), start: iso(0), end: iso(1) })).status, 400);
+	assert.equal((await post({ resourceIds: "res_1", start: iso(0), end: iso(1) })).status, 400);
+});
+
+test("the request is bounded: at most 50 addresses, a window of 62 days, valid dates, string addresses", async () => {
+	setup();
+	const many = (count) => Array.from({ length: count }, (_, index) => `p${index}@one.test`);
+	assert.equal((await post({ addresses: many(51), start: iso(0), end: iso(1) })).status, 400);
+	assert.equal((await post({ addresses: many(50), start: iso(0), end: iso(1) })).status, 200);
+	assert.equal((await post({ addresses: ["u1@one.test"], start: iso(0), end: iso(62) })).status, 200);
+	assert.equal((await post({ addresses: ["u1@one.test"], start: iso(0), end: iso(62, 1) })).status, 400);
+	assert.equal((await post({ addresses: ["u1@one.test"], start: iso(1), end: iso(1) })).status, 400);
+	assert.equal((await post({ addresses: ["u1@one.test"], start: iso(2), end: iso(1) })).status, 400);
+	assert.equal((await post({ addresses: ["u1@one.test"], start: "soon", end: iso(1) })).status, 400);
+	assert.equal((await post({ addresses: ["u1@one.test"], end: iso(1) })).status, 400);
+	assert.equal((await post({ addresses: [42], start: iso(0), end: iso(1) })).status, 400);
+	assert.equal((await post({ addresses: "u1@one.test", start: iso(0), end: iso(1) })).status, 400);
+	assert.equal((await post(null, "{nope")).status, 400);
+});
+
+test("no addresses is an empty answer; the answer is never cached; an API key needs calendar:read", async () => {
+	setup();
+	const response = await post({ start: iso(0), end: iso(1) });
+	assert.deepEqual(await response.json(), { results: {} });
+	assert.match(response.headers.get("Cache-Control") ?? "", /no-store/);
+	assert.ok(globalThis.calFbRt.scopes.every((scope) => scope === "calendar:read"));
+	assert.ok(globalThis.calFbRt.scopes.length > 0);
+});
+
+test("an unauthenticated caller is refused", async () => {
+	setup();
+	globalThis.calFbRt.user = null;
+	assert.equal((await post({ addresses: ["u1@one.test"], start: iso(0), end: iso(1) })).status, 401);
+});
