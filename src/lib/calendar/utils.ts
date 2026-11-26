@@ -34,6 +34,8 @@ type CalendarInvitationInput = {
 	excludedOccurrences?: number[];
 	/** Moved or added occurrences; each becomes a VEVENT with RECURRENCE-ID in UTC. */
 	overrides?: { recurrenceId: Date; startsAt: Date; endsAt: Date }[];
+	isPrivate?: boolean;
+	transparent?: boolean;
 };
 
 const INVITE_BYDAY = ["SU", "MO", "TU", "WE", "TH", "FR", "SA"];
@@ -70,6 +72,7 @@ export function createCalendarInvitation(input: CalendarInvitationInput): ArrayB
 	const organizerLine = organizer ? [`ORGANIZER:mailto:${organizer}`] : [];
 	const attendeeLines = organizer ? (input.attendees ?? []).filter((address) => isIcsAddress(address)).map((address) => `ATTENDEE;ROLE=REQ-PARTICIPANT;PARTSTAT=NEEDS-ACTION;RSVP=TRUE:mailto:${address}`) : [];
 	const lines = ["BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//Mailflare//Calendar//EN", "CALSCALE:GREGORIAN", `METHOD:${input.method ?? "REQUEST"}`, "BEGIN:VEVENT", `UID:${input.uid}@mailflare`, `DTSTAMP:${stamp}`, `SEQUENCE:${sequence}`, `DTSTART:${formatIcsUtc(input.startsAt)}`, `DTEND:${formatIcsUtc(input.endsAt)}`, `SUMMARY:${escapeIcsText(input.title)}`, `DESCRIPTION:${escapeIcsText(input.description)}`, `LOCATION:${escapeIcsText(input.location)}`,
+		...(input.isPrivate ? ["CLASS:PRIVATE"] : []), ...(input.transparent ? ["TRANSP:TRANSPARENT"] : []),
 		...(organizerLine),
 		...attendeeLines,
 		...(rule ? [rule] : []),

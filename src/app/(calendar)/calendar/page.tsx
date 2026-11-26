@@ -6,10 +6,11 @@ import { useRouter, useSearchParams } from "next/navigation";
 import type { DragEvent, PointerEvent as ReactPointerEvent } from "react";
 import { createPortal } from "react-dom";
 import toast, { Toaster } from "react-hot-toast";
-import { AlignLeft, CalendarPlus2, Check, ChevronDown, ChevronLeft, ChevronRight, Clock3, MapPin, Palette, Bell, Plus, Repeat2, Trash2, UsersRound, X } from "@/components/icons";
+import { AlignLeft, CalendarClock, CalendarPlus2, Check, ChevronDown, ChevronLeft, ChevronRight, Clock3, LockKeyhole, MapPin, Palette, Bell, Plus, Repeat2, Trash2, UsersRound, X } from "@/components/icons";
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { RouteLoadingBarPortal } from "@/components/route-loading-bar-portal";
 import { authFetch } from "@/lib/auth/client";
@@ -96,6 +97,8 @@ export default function CalendarPage() {
     const seriesId = event.id.includes("@") ? event.id.slice(0, event.id.lastIndexOf("@")) : event.id;
     return overridesRef.current?.get(seriesId) ?? overridesRef.current?.get(event.id);
   }, []);
+  const [isPrivate, setIsPrivate] = useState(false);
+  const [transparent, setTransparent] = useState(false);
   const [startsAt, setStartsAt] = useState("");
   const [endsAt, setEndsAt] = useState("");
   const [durationOptionsOpen, setDurationOptionsOpen] = useState(false);
@@ -225,6 +228,8 @@ export default function CalendarPage() {
     setRepeatWeek(null);
     setMonthlyMode("day");
     setReminderMinutes(null);
+    setIsPrivate(false);
+    setTransparent(false);
     setGuests("");
     setLocation("");
     setDescription("");
@@ -272,7 +277,7 @@ export default function CalendarPage() {
         method: editing ? "PATCH" : "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          title, startsAt: savedStart.toISOString(), endsAt: savedEnd.toISOString(), color, repeat, repeatDays, repeatAnchorDay, repeatInterval: interval, repeatWeekday: weekday, repeatWeek: week, reminderMinutes, effectiveFrom: effectiveFrom?.toISOString(), moveOccurrenceToPast: movingToPast, attendees: guests.split(","),
+          title, startsAt: savedStart.toISOString(), endsAt: savedEnd.toISOString(), color, repeat, repeatDays, repeatAnchorDay, repeatInterval: interval, repeatWeekday: weekday, repeatWeek: week, reminderMinutes, isPrivate, transparent, effectiveFrom: effectiveFrom?.toISOString(), moveOccurrenceToPast: movingToPast, attendees: guests.split(","),
           timeZone: getUserTimeZone(),
           description,
           location,
@@ -327,6 +332,8 @@ export default function CalendarPage() {
     setColor(normalizeCalendarColor(event.color));
     setRepeat(event.repeat);
     setReminderMinutes(event.reminderMinutes ?? null);
+    setIsPrivate(event.isPrivate ?? false);
+    setTransparent(event.transparent ?? false);
     setRepeatDays(event.repeat === "weekdays" ? parseCalendarRepeatDays(event.repeatDays) : DEFAULT_REPEAT_DAYS);
     setRepeatInterval(Number.isInteger(event.repeatInterval) && (event.repeatInterval as number) >= 1 && (event.repeatInterval as number) <= 999 ? event.repeatInterval as number : 1);
     const hasNth = event.repeat === "monthly" && event.repeatWeekday != null && event.repeatWeek != null;
@@ -691,6 +698,26 @@ export default function CalendarPage() {
                     ))}
                   </Select>
                 </div>
+              </div>
+              <div className="grid grid-cols-[24px_minmax(0,1fr)] items-start gap-3">
+                <CalendarClock aria-hidden="true" className="mt-2 h-5 w-5 text-neutral-600" />
+                <div className="relative min-w-0">
+                  <Select value={transparent ? "free" : "busy"} containerClassName="contents" disabled={pendingAction === "save"} onChange={(event) => setTransparent(event.target.value === "free")} aria-label={t("calendar.showAs")}
+                    className="h-9 rounded-md border border-transparent pl-2 pr-2 text-sm text-neutral-700 hover:bg-neutral-50 focus-visible:border-blue-600 focus-visible:bg-white [@media(pointer:coarse)]:h-11">
+                    <option value="busy">{t("calendar.showAs.busy")}</option>
+                    <option value="free">{t("calendar.showAs.free")}</option>
+                  </Select>
+                </div>
+              </div>
+              <div className="grid grid-cols-[24px_minmax(0,1fr)] items-start gap-3">
+                <LockKeyhole aria-hidden="true" className="mt-2 h-5 w-5 text-neutral-600" />
+                <label htmlFor="event-private" className="flex min-h-9 min-w-0 cursor-pointer items-center justify-between gap-3 rounded-md px-2 hover:bg-neutral-50 [@media(pointer:coarse)]:min-h-11">
+                  <span className="min-w-0">
+                    <span className="block text-sm text-neutral-700">{t("calendar.private")}</span>
+                    <span id="event-private-hint" className="block text-xs text-neutral-600">{t("calendar.private.hint")}</span>
+                  </span>
+                  <Switch id="event-private" checked={isPrivate} onCheckedChange={setIsPrivate} disabled={pendingAction === "save"} aria-describedby="event-private-hint" />
+                </label>
               </div>
               <div className="grid grid-cols-[24px_minmax(0,1fr)] items-start gap-3">
                 <Repeat2 aria-hidden="true" className="mt-2 h-5 w-5 text-neutral-600" />

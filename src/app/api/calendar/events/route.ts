@@ -9,6 +9,7 @@ import { sendToAttendees } from "@/lib/calendar/invite-delivery";
 import { assertInviteesAllowed } from "@/lib/deliverability/suppression";
 import { SuppressedRecipientError, suppressedRecipientBody } from "@/lib/deliverability/suppression-utils";
 import { createCalendarInvitation } from "@/lib/calendar/utils";
+import { resolveEventFlags } from "@/lib/calendar/event-flags";
 import { normalizeCalendarColor } from "@/lib/calendar/colors";
 import { normalizeReminderMinutes } from "@/lib/calendar/reminder-utils";
 import { DEFAULT_REPEAT_DAYS, normalizeCalendarRepeat, normalizeCalendarRepeatDays, normalizeRepeatInterval, normalizeRepeatWeek, normalizeRepeatWeekday } from "@/lib/calendar/recurrence";
@@ -77,12 +78,12 @@ export async function POST(request: Request) {
 			throw error;
 		}
 	}
-	const event = { id: newId("evt"), userId: user.id, mailboxId: input.mailboxId ?? null, title: input.title.trim(), description: input.description?.trim() ?? "", location: input.location?.trim() ?? "", attendees: JSON.stringify(attendees), color: normalizeCalendarColor(input.color), repeat, repeatDays: JSON.stringify(repeatDays), repeatAnchorDay: repeat === "monthly" && Number.isInteger(input.repeatAnchorDay) && input.repeatAnchorDay! >= 1 && input.repeatAnchorDay! <= 31 ? input.repeatAnchorDay : null, repeatInterval, repeatWeekday, repeatWeek, eventSequence: 0, reminderMinutes: normalizeReminderMinutes(input.reminderMinutes), startsAt, endsAt };
+	const event = { id: newId("evt"), userId: user.id, mailboxId: input.mailboxId ?? null, title: input.title.trim(), description: input.description?.trim() ?? "", location: input.location?.trim() ?? "", attendees: JSON.stringify(attendees), color: normalizeCalendarColor(input.color), repeat, repeatDays: JSON.stringify(repeatDays), repeatAnchorDay: repeat === "monthly" && Number.isInteger(input.repeatAnchorDay) && input.repeatAnchorDay! >= 1 && input.repeatAnchorDay! <= 31 ? input.repeatAnchorDay : null, repeatInterval, repeatWeekday, repeatWeek, eventSequence: 0, reminderMinutes: normalizeReminderMinutes(input.reminderMinutes), ...resolveEventFlags(null, input), startsAt, endsAt };
 	const savedEvent = { ...event, timeZone: input.timeZone ? normalizeTimeZone(input.timeZone) : getRequestTimeZone(request, user.timeZone) };
 	await getDb(env).insert(calendarEvents).values(savedEvent);
 	let inviteErrors: string[] = [];
 	if (attendees.length && input.mailboxId) {
-		const calendarFile = createCalendarInvitation({ title: event.title, description: event.description, location: event.location, startsAt, endsAt, uid: event.id, organizer: input.from || undefined, attendees, sequence: 0, reminderMinutes: event.reminderMinutes, repeat, repeatDays, repeatAnchorDay: event.repeatAnchorDay, repeatUntil: null, repeatInterval, repeatWeekday, repeatWeek, excludedOccurrences: [], overrides: [] });
+		const calendarFile = createCalendarInvitation({ isPrivate: event.isPrivate, transparent: event.transparent, title: event.title, description: event.description, location: event.location, startsAt, endsAt, uid: event.id, organizer: input.from || undefined, attendees, sequence: 0, reminderMinutes: event.reminderMinutes, repeat, repeatDays, repeatAnchorDay: event.repeatAnchorDay, repeatUntil: null, repeatInterval, repeatWeekday, repeatWeek, excludedOccurrences: [], overrides: [] });
 		inviteErrors = await sendToAttendees(attendees, (to) => sendEmail(env, { userId: user.id, mailboxId: input.mailboxId!, from: input.from ?? "", to, subject: `Invitation: ${event.title}`, text: event.description || `You are invited to ${event.title}.`, attachments: [{ filename: "invite.ics", type: "text/calendar; charset=utf-8", content: calendarFile }] }));
 	}
 	return NextResponse.json(inviteErrors.length ? { event: savedEvent, inviteErrors } : { event: savedEvent });

@@ -30,6 +30,10 @@ export type FeedEvent = {
 	responseStatus?: string | null;
 	/** A DATE value (no time of day) in `timeZone`; the stored instants are midnight to midnight. */
 	allDay?: boolean;
+	/** CLASS:PRIVATE; written only when set, so an ordinary event renders as it always did. */
+	isPrivate?: boolean;
+	/** TRANSP:TRANSPARENT (shown as free); written only when set. */
+	transparent?: boolean;
 	/** Minutes before the start for a reminder; null or absent for none. Written as a VALARM only when `buildVevent` is asked to. */
 	reminderMinutes?: number | null;
 };
@@ -121,6 +125,8 @@ export function buildVevent(event: FeedEvent, options: { stamp: string; recurren
 		for (const excluded of parseExcludedOccurrences(event.excludedOccurrences)) lines.push(dateProperty("EXDATE", new Date(excluded), zone, allDay));
 	}
 	if (event.responseStatus === "tentative") lines.push("STATUS:TENTATIVE");
+	if (event.isPrivate) lines.push("CLASS:PRIVATE");
+	if (event.transparent) lines.push("TRANSP:TRANSPARENT");
 	if (event.updatedAt) lines.push(`LAST-MODIFIED:${utc(event.updatedAt)}`);
 	if (options.alarm && event.reminderMinutes !== null && event.reminderMinutes !== undefined) {
 		lines.push("BEGIN:VALARM", "ACTION:DISPLAY", `DESCRIPTION:${escapeIcsText(event.title || "Reminder")}`, `TRIGGER:${event.reminderMinutes ? `-PT${event.reminderMinutes}M` : "PT0S"}`, "END:VALARM");

@@ -82,6 +82,8 @@ export function inviteEventValues(invite: ParsedInvite, timeZone: string | null,
 		...repeat,
 		excludedOccurrences: mergeExcludedOccurrences(existingExcluded, invite.excludedDates), timeZone,
 		inviteSequence: invite.sequence,
+		// The organiser's current CLASS and TRANSP: a revision that drops them clears them.
+		isPrivate: !!invite.isPrivate, transparent: !!invite.transparent,
 		startsAt: invite.startsAt, endsAt: invite.endsAt, updatedAt: new Date(),
 	};
 }

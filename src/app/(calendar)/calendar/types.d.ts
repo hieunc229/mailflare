@@ -22,6 +22,10 @@ export type CalendarEvent = {
   rrule?: string | null;
   excludedOccurrences: string;
   reminderMinutes?: number | null;
+  /** CLASS:PRIVATE: only the owner (and, later, editors) see the details. */
+  isPrivate?: boolean;
+  /** Shown as free: the event does not make its owner busy. */
+  transparent?: boolean;
   timeZone?: string | null;
   seriesStartsAt?: string;
   /** Set on events created from an emailed invitation: needs-action (pending), tentative or accepted. */

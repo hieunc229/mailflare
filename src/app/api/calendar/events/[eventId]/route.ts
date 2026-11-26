@@ -10,6 +10,7 @@ import type { CalendarEventInput } from "../types";
 import type { CalendarEventRouteParams } from "./types";
 import { normalizeCalendarColor } from "@/lib/calendar/colors";
 import { normalizeReminderMinutes } from "@/lib/calendar/reminder-utils";
+import { resolveEventFlags } from "@/lib/calendar/event-flags";
 import { normalizeRepeatInterval, normalizeRepeatWeek, normalizeRepeatWeekday, parseCalendarOccurrenceId, parseCalendarRepeatDays, parseExcludedOccurrences } from "@/lib/calendar/recurrence";
 import { CUSTOM_DAY_LOCKED, editedTimeZone, endLegacySeries, resolveRepeat, shiftCustomSeries } from "@/lib/calendar/repeat-fields";
 import { limitRrule, rruleEndedBefore } from "@/lib/calendar/rrule";
@@ -51,7 +52,7 @@ export async function PATCH(request: Request, { params }: CalendarEventRoutePara
 		const excluded = parseExcludedOccurrences(existing.excludedOccurrences);
 		if (excluded.includes(occurrence.startsAt.getTime())) return NextResponse.json({ error: "Occurrence already moved" }, { status: 409 });
 		const now = new Date();
-		const moved = { ...existing, id: newId("evt"), eventSequence: 0, title: input.title.trim(), description: input.description?.trim() ?? "", location: input.location?.trim() ?? "", attendees: JSON.stringify(attendees), color: normalizeCalendarColor(input.color ?? existing.color), repeat: "none" as const, repeatDays: "[]", repeatAnchorDay: null, repeatUntil: null, repeatInterval: 1, repeatWeekday: null, repeatWeek: null, excludedOccurrences: "[]", rrule: null,
+		const moved = { ...existing, id: newId("evt"), eventSequence: 0, title: input.title.trim(), description: input.description?.trim() ?? "", location: input.location?.trim() ?? "", attendees: JSON.stringify(attendees), color: normalizeCalendarColor(input.color ?? existing.color), ...resolveEventFlags(existing, input), repeat: "none" as const, repeatDays: "[]", repeatAnchorDay: null, repeatUntil: null, repeatInterval: 1, repeatWeekday: null, repeatWeek: null, excludedOccurrences: "[]", rrule: null,
 			// A moved occurrence of a DAV series stays part of that resource as an override row; otherwise it is a plain one-off.
 			davObjectId: existing.davObjectId === existing.id ? existing.id : null, recurrenceId: existing.davObjectId === existing.id ? occurrence.startsAt : null, startsAt, endsAt, createdAt: now, updatedAt: now };
 		const newExcluded = [...excluded, occurrence.startsAt.getTime()];
@@ -60,10 +61,10 @@ export async function PATCH(request: Request, { params }: CalendarEventRoutePara
 		await db.insert(calendarEvents).values(moved);
 		await db.update(calendarEvents).set({ excludedOccurrences: JSON.stringify(newExcluded), eventSequence: seriesSequence, updatedAt: now }).where(eq(calendarEvents.id, existing.id));
 		if (attendees.length && existing.mailboxId && input.from && !isInboundInvite) {
-			const movedFile = createCalendarInvitation({ title: moved.title, description: moved.description, location: moved.location, startsAt, endsAt, uid: moved.id, organizer: input.from, attendees, sequence: 0, reminderMinutes: moved.reminderMinutes, repeat: "none", repeatDays: [], repeatAnchorDay: null, repeatUntil: null, repeatInterval: 1, repeatWeekday: null, repeatWeek: null, excludedOccurrences: [], overrides: [] });
+			const movedFile = createCalendarInvitation({ isPrivate: moved.isPrivate, transparent: moved.transparent, title: moved.title, description: moved.description, location: moved.location, startsAt, endsAt, uid: moved.id, organizer: input.from, attendees, sequence: 0, reminderMinutes: moved.reminderMinutes, repeat: "none", repeatDays: [], repeatAnchorDay: null, repeatUntil: null, repeatInterval: 1, repeatWeekday: null, repeatWeek: null, excludedOccurrences: [], overrides: [] });
 			// The series keeps its UID: tell guests it dropped this occurrence, with the same repeat/override context a PATCH resend carries.
 			const seriesOverrides = (await db.select().from(calendarEventOverrides).where(eq(calendarEventOverrides.eventId, existing.id))).map((override) => ({ recurrenceId: new Date(override.occurrenceMs), startsAt: override.startsAt, endsAt: override.endsAt }));
-			const seriesFile = createCalendarInvitation({ title: existing.title, description: existing.description, location: existing.location, startsAt: existing.startsAt, endsAt: existing.endsAt, uid: existing.id, organizer: input.from, attendees, sequence: seriesSequence, reminderMinutes: existing.reminderMinutes, repeat: existing.repeat, rrule: existing.rrule, repeatDays: parseCalendarRepeatDays(existing.repeatDays), repeatAnchorDay: existing.repeatAnchorDay, repeatUntil: existing.repeatUntil, repeatInterval: existing.repeat === "weekdays" ? 1 : normalizeRepeatInterval(existing.repeatInterval), repeatWeekday: existing.repeatWeekday, repeatWeek: existing.repeatWeek, excludedOccurrences: newExcluded, overrides: seriesOverrides });
+			const seriesFile = createCalendarInvitation({ isPrivate: existing.isPrivate, transparent: existing.transparent, title: existing.title, description: existing.description, location: existing.location, startsAt: existing.startsAt, endsAt: existing.endsAt, uid: existing.id, organizer: input.from, attendees, sequence: seriesSequence, reminderMinutes: existing.reminderMinutes, repeat: existing.repeat, rrule: existing.rrule, repeatDays: parseCalendarRepeatDays(existing.repeatDays), repeatAnchorDay: existing.repeatAnchorDay, repeatUntil: existing.repeatUntil, repeatInterval: existing.repeat === "weekdays" ? 1 : normalizeRepeatInterval(existing.repeatInterval), repeatWeekday: existing.repeatWeekday, repeatWeek: existing.repeatWeek, excludedOccurrences: newExcluded, overrides: seriesOverrides });
 			inviteErrors.push(...await sendToAttendees(attendees, (to) => sendEmail(env, { userId: user.id, mailboxId: existing.mailboxId!, from: input.from!, to, subject: `Updated invitation: ${moved.title}`, text: moved.description || `This event has been updated: ${moved.title}.`, attachments: [{ filename: "invite.ics", type: "text/calendar; charset=utf-8", content: movedFile }] })));
 			inviteErrors.push(...await sendToAttendees(attendees, (to) => sendEmail(env, { userId: user.id, mailboxId: existing.mailboxId!, from: input.from!, to, subject: `Updated invitation: ${existing.title}`, text: existing.description || `This event has been updated: ${existing.title}.`, attachments: [{ filename: "invite.ics", type: "text/calendar; charset=utf-8", content: seriesFile }] })));
 		}
@@ -83,7 +84,7 @@ export async function PATCH(request: Request, { params }: CalendarEventRoutePara
 		repeatWeek = null;
 	} else if ((repeatWeekday == null) !== (repeatWeek == null)) return NextResponse.json({ error: "Set both a weekday and a week for this repeat" }, { status: 400 });
 	const nextSequence = (existing.eventSequence ?? 0) + 1;
-	const event = { ...existing, timeZone, eventSequence: nextSequence, title: input.title.trim(), description: input.description?.trim() ?? "", location: input.location?.trim() ?? "", attendees: JSON.stringify(attendees), color: normalizeCalendarColor(input.color ?? existing.color), ...repeatFields, repeatInterval, repeatWeekday, repeatWeek, reminderMinutes: input.reminderMinutes === undefined ? existing.reminderMinutes : normalizeReminderMinutes(input.reminderMinutes), lastRemindedStart: null, startsAt, endsAt };
+	const event = { ...existing, timeZone, eventSequence: nextSequence, title: input.title.trim(), description: input.description?.trim() ?? "", location: input.location?.trim() ?? "", attendees: JSON.stringify(attendees), color: normalizeCalendarColor(input.color ?? existing.color), ...repeatFields, repeatInterval, repeatWeekday, repeatWeek, reminderMinutes: input.reminderMinutes === undefined ? existing.reminderMinutes : normalizeReminderMinutes(input.reminderMinutes), lastRemindedStart: null, ...resolveEventFlags(existing, input), startsAt, endsAt };
 	// A kept custom rule is not editable here, so the series may change time of day only: its exclusions and moved occurrences move with it.
 	const shifted = event.repeat === "custom" ? shiftCustomSeries(existing, startsAt, timeZone) : null;
 	if (event.repeat === "custom" && !shifted) return NextResponse.json({ error: CUSTOM_DAY_LOCKED }, { status: 409 });
@@ -105,7 +106,7 @@ export async function PATCH(request: Request, { params }: CalendarEventRoutePara
 			const toOverrides = (rows: typeof stored) => rows.map((override) => ({ recurrenceId: new Date(override.occurrenceMs), startsAt: override.startsAt, endsAt: override.endsAt }));
 			const { truncationFile, forkFile } = buildSplitAnnouncement({
 				original: {
-					uid: existing.id, title: existing.title, description: existing.description, location: existing.location,
+					uid: existing.id, isPrivate: existing.isPrivate, transparent: existing.transparent, title: existing.title, description: existing.description, location: existing.location,
 					startsAt: existing.startsAt, endsAt: existing.endsAt,
 					repeat: existing.repeat, rrule: existing.rrule ? limitRrule(existing.rrule, splitAt, existing.startsAt, existing.timeZone, existing.allDay) : null, repeatDays: parseCalendarRepeatDays(existing.repeatDays), repeatAnchorDay: existing.repeatAnchorDay,
 					repeatUntil: existing.rrule ? null : splitAt, repeatInterval: existing.repeat === "weekdays" ? 1 : normalizeRepeatInterval(existing.repeatInterval),
@@ -115,7 +116,7 @@ export async function PATCH(request: Request, { params }: CalendarEventRoutePara
 					sequence: nextSequence,
 				},
 				fork: {
-					uid: forkId, title: event.title, description: event.description, location: event.location,
+					uid: forkId, isPrivate: event.isPrivate, transparent: event.transparent, title: event.title, description: event.description, location: event.location,
 					startsAt: event.startsAt, endsAt: event.endsAt,
 					repeat: event.repeat, rrule: event.rrule, repeatDays, repeatAnchorDay: event.repeatAnchorDay ?? null,
 					repeatUntil: event.repeatUntil, repeatInterval: event.repeatInterval,
@@ -131,11 +132,11 @@ export async function PATCH(request: Request, { params }: CalendarEventRoutePara
 		}
 		return NextResponse.json(inviteErrors.length ? { ok: true, inviteErrors: [...new Set(inviteErrors)] } : { ok: true });
 	}
-	await db.update(calendarEvents).set({ title: event.title, description: event.description, location: event.location, attendees: event.attendees, color: event.color, repeat: event.repeat, repeatDays: event.repeatDays, repeatAnchorDay: event.repeatAnchorDay, repeatInterval: event.repeatInterval, repeatWeekday: event.repeatWeekday, repeatWeek: event.repeatWeek, repeatUntil: event.repeatUntil, rrule: event.rrule, ...(shifted ? { excludedOccurrences: shifted.excludedOccurrences } : {}), eventSequence: nextSequence, reminderMinutes: event.reminderMinutes, lastRemindedStart: null, timeZone, startsAt, endsAt, updatedAt: new Date() }).where(eq(calendarEvents.id, existing.id));
+	await db.update(calendarEvents).set({ title: event.title, description: event.description, location: event.location, attendees: event.attendees, color: event.color, repeat: event.repeat, repeatDays: event.repeatDays, repeatAnchorDay: event.repeatAnchorDay, repeatInterval: event.repeatInterval, repeatWeekday: event.repeatWeekday, repeatWeek: event.repeatWeek, repeatUntil: event.repeatUntil, rrule: event.rrule, ...(shifted ? { excludedOccurrences: shifted.excludedOccurrences } : {}), eventSequence: nextSequence, reminderMinutes: event.reminderMinutes, isPrivate: event.isPrivate, transparent: event.transparent, lastRemindedStart: null, timeZone, startsAt, endsAt, updatedAt: new Date() }).where(eq(calendarEvents.id, existing.id));
 	if (shifted?.moved) await shiftOverrides(db, user.id, existing.id, shifted.shift);
 	if (attendees.length && existing.mailboxId && input.from && !isInboundInvite) {
 		const overrides = (await db.select().from(calendarEventOverrides).where(eq(calendarEventOverrides.eventId, existing.id))).map((override) => ({ recurrenceId: new Date(override.occurrenceMs), startsAt: override.startsAt, endsAt: override.endsAt }));
-		const file = createCalendarInvitation({ title: event.title, description: event.description, location: event.location, startsAt: event.startsAt, endsAt: event.endsAt, uid: existing.id, organizer: input.from, attendees, sequence: nextSequence, reminderMinutes: event.reminderMinutes, repeat: event.repeat, rrule: event.rrule, repeatDays, repeatAnchorDay: event.repeatAnchorDay, repeatUntil: event.repeatUntil, repeatInterval: event.repeatInterval, repeatWeekday: event.repeatWeekday, repeatWeek: event.repeatWeek, excludedOccurrences: parseExcludedOccurrences(event.excludedOccurrences), overrides });
+		const file = createCalendarInvitation({ isPrivate: event.isPrivate, transparent: event.transparent, title: event.title, description: event.description, location: event.location, startsAt: event.startsAt, endsAt: event.endsAt, uid: existing.id, organizer: input.from, attendees, sequence: nextSequence, reminderMinutes: event.reminderMinutes, repeat: event.repeat, rrule: event.rrule, repeatDays, repeatAnchorDay: event.repeatAnchorDay, repeatUntil: event.repeatUntil, repeatInterval: event.repeatInterval, repeatWeekday: event.repeatWeekday, repeatWeek: event.repeatWeek, excludedOccurrences: parseExcludedOccurrences(event.excludedOccurrences), overrides });
 		inviteErrors.push(...await sendToAttendees(attendees, (to) => sendEmail(env, { userId: user.id, mailboxId: existing.mailboxId!, from: input.from!, to, subject: `Updated invitation: ${event.title}`, text: event.description || `This event has been updated: ${event.title}.`, attachments: [{ filename: "invite.ics", type: "text/calendar; charset=utf-8", content: file }] })));
 	}
 	return NextResponse.json(inviteErrors.length ? { ok: true, inviteErrors: [...new Set(inviteErrors)] } : { ok: true });
@@ -168,7 +169,7 @@ export async function DELETE(request: Request, { params }: CalendarEventRoutePar
 		let attendees: string[] = [];
 		try { attendees = (JSON.parse(existing.attendees || "[]") as string[]).filter((address) => /^\S+@\S+\.\S+$/.test(address)); } catch { attendees = []; }
 		if (attendees.length) {
-			const file = createCalendarInvitation({ title: existing.title, description: existing.description, location: existing.location, startsAt: existing.startsAt, endsAt: existing.endsAt, uid: existing.id, method: "CANCEL", organizer: input.from, attendees, sequence: (existing.eventSequence ?? 0) + 1, reminderMinutes: null, repeat: "none", repeatDays: [], repeatAnchorDay: null, repeatUntil: null, repeatInterval: 1, repeatWeekday: null, repeatWeek: null, excludedOccurrences: [], overrides: [] });
+			const file = createCalendarInvitation({ isPrivate: existing.isPrivate, transparent: existing.transparent, title: existing.title, description: existing.description, location: existing.location, startsAt: existing.startsAt, endsAt: existing.endsAt, uid: existing.id, method: "CANCEL", organizer: input.from, attendees, sequence: (existing.eventSequence ?? 0) + 1, reminderMinutes: null, repeat: "none", repeatDays: [], repeatAnchorDay: null, repeatUntil: null, repeatInterval: 1, repeatWeekday: null, repeatWeek: null, excludedOccurrences: [], overrides: [] });
 			await Promise.all(attendees.map((to) => sendEmail(env, { userId: user.id, mailboxId: existing.mailboxId!, from: input.from!, to, subject: `Cancelled: ${existing.title}`, text: `This event has been cancelled: ${existing.title}.`, attachments: [{ filename: "invite.ics", type: "text/calendar; charset=utf-8", content: file }] })));
 		}
 	}
