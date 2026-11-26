@@ -7,7 +7,7 @@ import { requireUser } from "@/lib/auth/cookies";
 import { getEnv } from "@/lib/cloudflare";
 import { deleteEmailRoutingRuleForAddress, ensureEmailRoutingRuleToWorker } from "@/lib/cloudflare-api";
 import { newId } from "@/lib/ids";
-import { findAddressOwner } from "@/lib/mailboxes/address-owner";
+import { createAddressOwnerLookup } from "@/lib/mailboxes/address-owner";
 import { getMailboxSettingsAccess } from "@/lib/mailboxes/settings-access";
 import { mailboxAliasBodySchema, updateMailboxAliasSchema } from "@/lib/validators";
 import type { MailboxRouteParams } from "../types";
@@ -119,8 +119,7 @@ export async function POST(request: Request, { params }: MailboxRouteParams) {
 	// Routing matches normalized local parts, so conflicts must too: an alias
 	// that only differs by dots or a +suffix would shadow or be shadowed. Another
 	// mailbox receiving this address through "Use all domains" counts as well.
-	const aliasAddressTaken = (localPart: string) =>
-		findAddressOwner(db, domain.id, localPart, { allDomains: { exceptMailboxId: id } });
+	const ownerOf = await createAddressOwnerLookup(db, [domain.id], { allDomains: { exceptMailboxId: id } });
 
 	if (!parsed.data.generate && await isReportAddressReserved(env, domain.id, String(parsed.data.localPart))) {
 		return NextResponse.json({ error: "This address is reserved for DMARC reports" }, { status: 409 });
@@ -136,7 +135,7 @@ export async function POST(request: Request, { params }: MailboxRouteParams) {
 	let createdLocalPart: string | null = null;
 	let conflict: "mailbox" | "alias" | "group" | null = null;
 	for (const localPart of candidates) {
-		const taken = await aliasAddressTaken(localPart);
+		const taken = ownerOf(domain.id, localPart);
 		if (taken) {
 			conflict = taken;
 			continue;
