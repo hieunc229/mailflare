@@ -160,8 +160,8 @@ export function reserveRelay(budget: RelayBudget): boolean {
  */
 export const GROUP_SENDS_PER_HOUR = 300;
 export const GROUP_SENDS_PER_DAY = 1000;
-export const INSTALL_SENDS_PER_HOUR = 1000;
-export const INSTALL_SENDS_PER_DAY = 5000;
+export const INSTALL_SENDS_PER_HOUR = 600;
+export const INSTALL_SENDS_PER_DAY = 2000;
 
 export type RelayCaps = { groupHour: number; groupDay: number; installHour: number; installDay: number };
 export const DEFAULT_RELAY_CAPS: RelayCaps = { groupHour: GROUP_SENDS_PER_HOUR, groupDay: GROUP_SENDS_PER_DAY, installHour: INSTALL_SENDS_PER_HOUR, installDay: INSTALL_SENDS_PER_DAY };

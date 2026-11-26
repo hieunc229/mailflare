@@ -89,7 +89,7 @@ test("pure: rate keys round-trip and the allowance trips on the first scope that
 	assert.deepEqual(u.planRelayAllowance(others, { groupId: "g", hour: 10, day: 0, sends: 1 }), { ok: false, scope: "installation", period: "hour", limit: u.INSTALL_SENDS_PER_HOUR });
 	const days = Array.from({ length: 20 }, (_, i) => entry(`o${i}`, u.INSTALL_SENDS_PER_DAY / 20, i));
 	assert.deepEqual(u.planRelayAllowance(days, { groupId: "g", hour: 30, day: 0, sends: 1 }), { ok: false, scope: "installation", period: "day", limit: u.INSTALL_SENDS_PER_DAY });
-	assert.deepEqual(u.DEFAULT_RELAY_CAPS, { groupHour: 300, groupDay: 1000, installHour: 1000, installDay: 5000 });
+	assert.deepEqual(u.DEFAULT_RELAY_CAPS, { groupHour: 300, groupDay: 1000, installHour: 600, installDay: 2000 });
 });
 
 test("the caps can be overridden from the environment, and bad values fall back", () => {
