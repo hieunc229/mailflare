@@ -23,7 +23,9 @@ after(() => { sqlite?.close(); delete globalThis.calMove; route.dispose(); utils
 
 function setup() {
 	sqlite?.close();
-	sqlite = installSqlite("calMove", { schema, extra: { user: { id: "u1", timeZone: "UTC", calendarEnabled: true } } });
+	// A competing deleteCalendar: when a write batch reaches its calendar guard, the calendar's row is already gone.
+	const beforeQuery = (query, db) => { if (globalThis.calMove?.race && /insert into "dav_sync_state"/i.test(query)) { globalThis.calMove.race = false; db.exec("DELETE FROM dav_collections WHERE id = 'cal:work'"); } };
+	sqlite = installSqlite("calMove", { schema, beforeQuery, extra: { user: { id: "u1", timeZone: "UTC", calendarEnabled: true }, race: false } });
 	globalThis.calMove.db.batch = async (statements) => {
 		sqlite.exec("BEGIN");
 		try { for (const statement of statements) await statement; sqlite.exec("COMMIT"); } catch (error) { sqlite.exec("ROLLBACK"); throw error; }
@@ -75,4 +77,27 @@ test("the editor maps the code to its own message, which every catalog has in En
 	const en = JSON.parse(readFileSync(new URL("../src/lib/i18n/en.json", import.meta.url), "utf8"));
 	assert.equal(en["calendar.calendars.error.eventIdExists"], text);
 	for (const file of ["de", "fr", "ar", "bn"]) assert.equal(JSON.parse(readFileSync(new URL(`../public/locales/${file}.json`, import.meta.url), "utf8"))["calendar.calendars.error.eventIdExists"], text, file);
+});
+
+const addWeekly = (id) => sqlite.prepare("INSERT INTO calendar_events (id, user_id, calendar_id, title, starts_at, ends_at, repeat, created_at, updated_at) VALUES (?, 'u1', 'cal:work', 'Weekly', ?, ?, 'weekly', 1, 1)").run(id, Math.floor(Date.parse("2026-01-05T10:00:00Z") / 1000), Math.floor(Date.parse("2026-01-05T11:00:00Z") / 1000));
+const patchBody = (id, body) => patchEvent(new Request("https://m.test/x", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ title: "Weekly", startsAt: "2026-01-05T10:00:00.000Z", endsAt: "2026-01-05T11:00:00.000Z", repeat: "weekly", ...body }) }), { params: Promise.resolve({ eventId: id }) });
+
+test("a this-and-following edit in a calendar deleted at that moment is 409 and writes nothing", async () => {
+	setup();
+	addWeekly("w1");
+	globalThis.calMove.race = true;
+	const response = await patchBody("w1", { effectiveFrom: "2026-02-02T10:00:00.000Z", startsAt: "2026-02-02T12:00:00.000Z", endsAt: "2026-02-02T13:00:00.000Z" });
+	assert.equal(response.status, 409);
+	assert.equal(sqlite.prepare("SELECT count(*) AS n FROM calendar_events").get().n, 1);
+});
+
+test("moving one past occurrence in a calendar deleted at that moment is 409 and writes nothing", async () => {
+	setup();
+	addWeekly("w1");
+	globalThis.calMove.race = true;
+	const occurrence = `w1@${Date.parse("2026-01-12T10:00:00Z")}`;
+	const response = await patchBody(occurrence, { moveOccurrenceToPast: true, startsAt: "2026-01-13T10:00:00.000Z", endsAt: "2026-01-13T11:00:00.000Z" });
+	assert.equal(response.status, 409);
+	assert.equal(sqlite.prepare("SELECT count(*) AS n FROM calendar_events").get().n, 1);
+	assert.equal(sqlite.prepare("SELECT excluded_occurrences FROM calendar_events WHERE id = 'w1'").get().excluded_occurrences, "[]");
 });
