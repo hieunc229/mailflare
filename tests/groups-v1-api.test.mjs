@@ -79,13 +79,14 @@ test("every v1 route needs the groups scope on an admin key", async (t) => {
 		() => app.item.DELETE(req("DELETE", undefined, "other"), ctxId("x")),
 		() => app.members.POST(req("POST", {}, "other"), ctxId("x")),
 		() => app.members.DELETE(req("DELETE", undefined, "other", "?memberId=m"), ctxId("x")),
+		() => app.members.PATCH(req("PATCH", { canSendAs: false }, "other", "?memberId=m"), ctxId("x")),
 	];
 	for (const call of calls) assert.equal((await call()).status, 401);
 });
 
 test("the accounts licence gates every route with LICENSE_REQUIRED", async (t) => {
 	await ctx(t, { licensed: false });
-	for (const response of [await app.list.GET(req("GET")), await app.list.POST(req("POST", {})), await app.item.GET(req("GET"), ctxId("x")), await app.members.POST(req("POST", {}), ctxId("x"))]) {
+	for (const response of [await app.list.GET(req("GET")), await app.list.POST(req("POST", {})), await app.item.GET(req("GET"), ctxId("x")), await app.item.PATCH(req("PATCH", {}), ctxId("x")), await app.item.DELETE(req("DELETE"), ctxId("x")), await app.members.POST(req("POST", {}), ctxId("x")), await app.members.PATCH(req("PATCH", { canSendAs: false }, "good", "?memberId=m"), ctxId("x")), await app.members.DELETE(req("DELETE", undefined, "good", "?memberId=m"), ctxId("x"))]) {
 		assert.equal(response.status, 403);
 		assert.equal((await response.json()).code, "LICENSE_REQUIRED");
 	}
@@ -109,6 +110,16 @@ test("create, get, update, list and delete go through the shared service and aud
 		{ action: "group.updated", actor_user_id: "admin" },
 		{ action: "group.deleted", actor_user_id: "admin" },
 	]);
+});
+
+test("a group on a domain the key owner does not own is a 404", async (t) => {
+	const { sqlite } = await ctx(t);
+	sqlite.exec("INSERT INTO users (id, email, password_hash, name, role, created_at) VALUES ('other', 'o@else.com', 'hash', 'O', 'admin', 1); INSERT INTO domains (id, user_id, hostname, zone_id, status, receiving_provider, created_at) VALUES ('dx', 'other', 'else.com', 'zx', 'active', 'cloudflare', 1);");
+	assert.equal((await app.list.POST(req("POST", { domainId: "dx", localPart: "team", name: "Team" }))).status, 404);
+	sqlite.exec("INSERT INTO mail_groups (id, domain_id, local_part, name, who_can_post, reply_to, disabled, created_by_user_id, created_at, updated_at) VALUES ('gx', 'dx', 'team', 'Team', 'anyone', 'sender', 0, 'other', 1, 1)");
+	assert.equal((await app.item.GET(req("GET"), ctxId("gx"))).status, 404);
+	assert.equal((await app.item.DELETE(req("DELETE"), ctxId("gx"))).status, 404);
+	assert.equal((await app.members.POST(req("POST", { members: [{ kind: "user", userId: "alice" }] }), ctxId("gx"))).status, 404);
 });
 
 test("members: add, refuse external and canSendAs with 422, remove by memberId", async (t) => {
@@ -162,6 +173,8 @@ test("manage_groups runs every action through the v1 routes", async (t) => {
 	assert.equal((await call({ action: "delete", id })).status, 200);
 	assert.equal((await call({ action: "get" })).isError, true, "id required");
 	assert.equal((await call({ action: "remove_member", id })).isError, true, "memberId required");
-	assert.equal((await call({ action: "bogus" })).isError, true);
+	const unknown = await call({ action: "bogus" });
+	assert.equal(unknown.isError, true);
+	assert.equal(unknown.error, "Unknown action", "an unknown action is named as such even without an id");
 	assert.ok(audit(sqlite).every((row) => row.actor_user_id === "admin"));
 });
