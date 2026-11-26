@@ -100,6 +100,7 @@ export function registerAdminMcpTools(server: McpServer, principal: McpPrincipal
 		inputSchema: adminInput,
 	}, async ({ action, id, data }) => {
 		if (!principal.scopes.includes("groups")) return result({ error: "Permission denied" }, true);
+		if (!["list", "create", "get", "update", "delete", "add_members", "remove_member"].includes(action)) return result({ error: "Unknown action" }, true);
 		if (!["list", "create"].includes(action) && !id) return result({ error: "Group id required" }, true);
 		const path = id ? `/api/v1/groups/${encodeURIComponent(id)}` : "/api/v1/groups";
 		const context = { params: Promise.resolve({ id: id! }) };
