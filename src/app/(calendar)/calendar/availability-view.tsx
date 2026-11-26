@@ -92,13 +92,13 @@ export function AvailabilityView(props: AvailabilityViewProps) {
 				<button type="button" onClick={props.onFind} disabled={!props.canFind || props.find.state === "loading"} className={`rounded-md border border-neutral-200 px-3 py-1.5 text-sm font-medium text-neutral-800 hover:bg-neutral-50 disabled:cursor-not-allowed disabled:opacity-50 ${focus} ${touch}`}>{t("calendar.availability.find")}</button>
 				{props.tooLong && <p className="text-xs text-neutral-600">{t("calendar.availability.findTooLong")}</p>}
 				{props.state === "ready" && !anyVisible && !props.tooLong && <p className="text-xs text-neutral-600">{t("calendar.availability.findNeedsPeople")}</p>}
-				<div aria-live="polite" className="space-y-1">
+				<div className="space-y-1">
 					{props.find.state === "loading" && <p role="status" className="flex items-center gap-2 text-neutral-600"><Loader2 aria-hidden="true" className="h-4 w-4 animate-spin motion-reduce:animate-none" />{t("calendar.availability.finding")}</p>}
 					{props.find.state === "error" && <p role="alert" className="text-red-700">{t("calendar.availability.findFailed")}</p>}
 					{props.find.state === "ready" && props.find.slots.length === 0 && <p role="status" className="text-neutral-600">{t("calendar.availability.findEmpty")}</p>}
 					{props.find.state === "ready" && props.find.slots.length > 0 && (
 						<div role="group" aria-label={t("calendar.availability.suggested")} className="space-y-1">
-							<p className="text-xs font-semibold text-neutral-900">{t("calendar.availability.suggested")}</p>
+							<p role="status" className="text-xs font-semibold text-neutral-900">{t("calendar.availability.suggested")}</p>
 							<ul className="flex flex-wrap gap-2">
 								{props.find.slots.map((slot) => {
 									const label = `${formatUserDate(slot.start, { weekday: "short", month: "short", day: "numeric", timeZone: zone })}, ${t("calendar.availability.range", { from: clock(slot.start, zone), to: clock(slot.end, zone) })}`;
