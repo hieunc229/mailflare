@@ -62,5 +62,5 @@ export async function DELETE(request: Request, { params }: CalendarRouteParams) 
 	const result = await revokeShare(getDb(env), user, calendarId, shareId);
 	if (!result.ok) return refuse(result);
 	await createAuditLog(env, { actorUserId: user.id, targetUserId: result.ownerId, action: "calendar.share_revoked", metadata: { calendarId, shareId: result.share.id, granteeUserId: result.share.userId, role: result.share.role } });
-	return NextResponse.json({ ok: true });
+	return NextResponse.json({ ok: true, self: result.share.userId === user.id });
 }

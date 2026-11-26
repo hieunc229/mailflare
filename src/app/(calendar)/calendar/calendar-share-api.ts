@@ -18,4 +18,15 @@ export const loadShares = (calendarId: string) => call(base(calendarId), undefin
 export const addShare = (calendarId: string, email: string, role: CalendarGrantRole) => call(base(calendarId), json("POST", { email, role }), (body) => ({ share: body.share as ShareEntry }));
 /** The grant comes back under a new id: a role change replaces it (the server's rule for phones). */
 export const changeShareRole = (calendarId: string, id: string, role: CalendarGrantRole) => call(base(calendarId), json("PATCH", { id, role }), (body) => ({ share: body.share as ShareEntry }));
-export const removeShare = (calendarId: string, id: string) => call(base(calendarId), json("DELETE", { id }), () => ({}));
+/** `self` is true when the grant removed was the caller's own: a manager who removes themselves can no longer see the calendar. */
+export const removeShare = (calendarId: string, id: string) => call(base(calendarId), json("DELETE", { id }), (body) => ({ self: body.self === true }));
+
+export type RemoveOutcome = { kind: "cancelled" } | { kind: "removed" } | { kind: "self" } | { kind: "failed"; status: number; code?: string };
+
+/** Ask first, then remove; the dialog's behaviour after each outcome is the caller's. */
+export async function runRemove(deps: { share: ShareEntry; calendarId: string; confirm: (name: string) => Promise<boolean>; remove: (calendarId: string, id: string) => Promise<({ ok: true; self: boolean } | Failed)> }): Promise<RemoveOutcome> {
+	if (!await deps.confirm(deps.share.name || deps.share.email)) return { kind: "cancelled" };
+	const result = await deps.remove(deps.calendarId, deps.share.id);
+	if (!result.ok) return { kind: "failed", status: result.status, code: result.code };
+	return { kind: result.self ? "self" : "removed" };
+}

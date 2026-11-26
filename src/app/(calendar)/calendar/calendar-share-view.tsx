@@ -34,6 +34,7 @@ export function ShareView(props: ShareViewProps) {
 	const { t } = useLanguage();
 	const titleId = useId();
 	const hintId = useId();
+	const emailId = useId();
 	const roleLabel = (role: CalendarGrantRole) => t(`calendar.share.role.${role}` as never);
 	return (
 		<section aria-labelledby={titleId} className="mt-5 space-y-3 border-t border-neutral-100 pt-4 text-sm">
@@ -79,9 +80,12 @@ export function ShareView(props: ShareViewProps) {
 					</ul>
 				))}
 			<form onSubmit={(event) => { event.preventDefault(); if (props.email.trim() && !props.adding) props.onAdd(); }} className="space-y-2">
-				<div className="flex flex-wrap items-center gap-2">
-					<Input type="email" value={props.email} onChange={(event) => props.onEmail(event.target.value)} placeholder={t("calendar.share.emailPlaceholder")} aria-label={t("calendar.share.email")} autoComplete="off" maxLength={254}
-						aria-describedby={hintId} className="min-w-0 flex-1 basis-48 [@media(pointer:coarse)]:min-h-11" />
+				<div className="flex flex-wrap items-end gap-2">
+					<div className="min-w-0 flex-1 basis-48">
+						<label htmlFor={emailId} className="mb-1 block text-xs font-medium text-neutral-800">{t("calendar.share.email")}</label>
+						<Input id={emailId} type="email" value={props.email} onChange={(event) => props.onEmail(event.target.value)} placeholder={t("calendar.share.emailPlaceholder")} autoComplete="off" maxLength={254}
+							aria-describedby={hintId} className="w-full [@media(pointer:coarse)]:min-h-11" />
+					</div>
 					<Select value={props.role} containerClassName="contents" disabled={props.adding} aria-label={t("calendar.share.role")} onChange={(event) => props.onRole(event.target.value as CalendarGrantRole)}
 						className="h-9 min-w-0 max-w-full rounded-md border border-neutral-200 pl-2 pr-2 text-sm text-neutral-700 hover:bg-neutral-50 focus-visible:border-blue-600 [@media(pointer:coarse)]:min-h-11">
 						{ROLES.map((role) => <option key={role} value={role}>{roleLabel(role)}</option>)}

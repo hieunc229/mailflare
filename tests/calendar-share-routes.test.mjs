@@ -154,3 +154,12 @@ test("sharing can only be changed from a signed-in session: an API key is refuse
 	globalThis.calShareRt.key = { scopes: ["calendar:read"] };
 	assert.equal((await listShares(new Request(`${url}/shares`), params("cal:work"))).status, 403);
 });
+
+test("DELETE /shares tells a manager who removed their own grant, so the client can leave the dialog", async () => {
+	setup();
+	as("u5");
+	const own = await (await deleteShare(new Request(`${url}/shares`, json({ id: "g5" }, "DELETE")), params("cal:work"))).json();
+	assert.deepEqual(own, { ok: true, self: true });
+	as("u1");
+	assert.deepEqual(await (await deleteShare(new Request(`${url}/shares`, json({ id: "g2" }, "DELETE")), params("cal:work"))).json(), { ok: true, self: false });
+});
