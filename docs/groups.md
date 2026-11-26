@@ -25,7 +25,17 @@ On domains that receive through Cloudflare, creating a group adds an Email Routi
 - A copy is delivered unchanged, so DKIM and spam signals stay intact, and each member's own spam filter runs on their copy.
 - The sender's own mailbox gets no second copy when they post to a group they belong to (they already have it in Sent).
 - Members' out-of-office replies are not triggered by group copies.
-- Sending as the group arrives in a later change.
+- Only the members you choose can send as the group (see below); everyone else cannot.
+
+## Send as the group
+
+An admin can let chosen account members write mail from the group address (`team@example.com`). On the group page, each account member has a **Can send as group** switch, off by default. Shared mailboxes and external members cannot have it. You can also set it when adding a member through the API (`canSendAs: true`) or change it later; every change is in the audit log (`group.member_added`, `group.member_updated` with `canSendAs`).
+
+- **Where it shows up.** The member picks the group address in the **From** list of the composer, listed under their own primary mailbox. It is also an identity for JMAP mail apps. Shared mailboxes and a member's secondary mailboxes never list it.
+- **What goes out.** The message is sent from the group address with the group's name (`"Team" <team@example.com>`), through the group domain's own sending provider, so it carries that domain's DKIM and aligns for DMARC. The member's own name is not added.
+- **Sent copy.** There is no group mailbox (D-10). The Sent copy is stored in the sender's own mailbox, and replies to the group arrive through the group as usual, so every member gets them.
+- **Who is allowed.** Only an active account that is a user member of an enabled group with the switch on, sending from its own primary mailbox, on an installation with the Pro or Team licence. The address must be the group's exact address (`team+x@` or `te.am@` are not the group). Every way of sending checks this the same way: the web composer and drafts, the `/api/send` and `/api/v1/send` APIs, MCP, and JMAP (`Email/set` drafts and `EmailSubmission/set`). A send that is scheduled or waiting out the undo window is checked again when it is delivered, so turning the switch off, pausing the group, removing the member, disabling the account or losing the licence stops it. Mailflare has no SMTP submission server, so there is no other path.
+- **Pausing or deleting the group** removes the address from the From list at once.
 
 ## External members
 
@@ -66,8 +76,8 @@ These session routes serve the admin page. The same operations are in `/api/v1/g
 | --- | --- |
 | `GET`, `POST /api/groups` | List, create |
 | `GET`, `PATCH`, `DELETE /api/groups/{id}` | Read, update, delete |
-| `POST /api/groups/{id}/members` | Add up to 50 members (`{ members: [{ kind, userId \| mailboxId \| email }] }`) |
-| `PATCH`, `DELETE /api/groups/{id}/members/{memberId}` | Update, remove |
+| `POST /api/groups/{id}/members` | Add up to 50 members (`{ members: [{ kind, userId \| mailboxId \| email, canSendAs? }] }`) |
+| `PATCH`, `DELETE /api/groups/{id}/members/{memberId}` | Update (`{ canSendAs }`, account members only), remove |
 | `GET /api/groups/{id}/candidates?q=` | Search accounts and shared mailboxes to add |
 | `GET`, `POST /api/groups/unsubscribe/{token}` | Public: confirmation page and unsubscribe for an external member (signed token) |
 
