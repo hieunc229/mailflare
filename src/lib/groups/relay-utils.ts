@@ -3,7 +3,7 @@ import { GROUP_HEADER } from "@/lib/groups/loop-utils";
 /**
  * Everything written for relaying lives under `group-relay/<day>/<kind>/...` (`day` = whole days since the epoch):
  * the shared raw copies (`copy`), the Message-IDs of relayed copies (`mid`), send-cap markers (`rate`), chunk
- * markers (`chunk`), spam skips (`skip`) and cap notices (`capnote`). A whole day is deleted by prefix once it is
+ * markers (`chunk`), spam skips (`skip`) and cap notices (`capnote`) and used send-as markers (`sendas`). A whole day is deleted by prefix once it is
  * `GROUP_RELAY_TTL_DAYS` old, so cleaning costs the same however much was written, unlike an age filter over one
  * ever-growing listing.
  */
@@ -13,7 +13,7 @@ export const GROUP_RELAY_TTL_DAYS = 7;
 export const RELAY_MID_LOOKUP_DAYS = GROUP_RELAY_TTL_DAYS;
 
 export const dayOf = (now: Date = new Date()): number => Math.floor(now.getTime() / 86_400_000);
-export type RelayKind = "copy" | "mid" | "rate" | "chunk" | "capnote" | "skip";
+export type RelayKind = "copy" | "mid" | "rate" | "chunk" | "capnote" | "skip" | "sendas";
 export const relayKey = (kind: RelayKind, day: number, rest: string): string => `${GROUP_RELAY_PREFIX}${day}/${kind}/${rest}`;
 /** External members per group: each one is a billed send through the domain's provider. */
 export const MAX_EXTERNAL_MEMBERS = 100;

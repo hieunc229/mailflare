@@ -120,7 +120,10 @@ export async function sendEmail(
 
 	const messageId = newId("msg");
 	// A message sent as a group names its stored copy, so the group can tell its own post when it comes back (spec D-10).
-	const sendAsMarker = sender.group ? await signSendAs(env, { messageId, groupId: sender.group.groupId }) : null;
+	// Only a message addressed to the group can come back to it, so only that one carries the marker.
+	const group = sender.group;
+	const namesGroup = !!group && [...to, ...cc, ...bcc].some((entry) => getEmailAddress(entry).toLowerCase() === group.address);
+	const sendAsMarker = group && namesGroup ? await signSendAs(env, { messageId, groupId: group.groupId }) : null;
 	if (sendAsMarker) headers[SEND_AS_HEADER] = sendAsMarker;
 	const requestedSchedule = input.scheduledAt ? new Date(input.scheduledAt) : null;
 	const userScheduledAt = requestedSchedule && requestedSchedule.getTime() > Date.now()
@@ -151,6 +154,21 @@ export async function sendEmail(
 		inReplyTo,
 		references: references.length ? references.join(" ") : null,
 	});
+	if (sender.group) {
+		// Before the job exists: a send as a group is never queued without its audit row.
+		try {
+			await createAuditLog(env, {
+				actorUserId: input.userId,
+				mailboxId: sender.mailboxId,
+				messageId,
+				action: "email.send_as_group",
+				metadata: { groupId: sender.group.groupId, address: sender.group.address },
+			});
+		} catch (error) {
+			await db.delete(messages).where(eq(messages.id, messageId));
+			throw error;
+		}
+	}
 	try {
 		const stored = await storeMessageAttachments(env, messageId, attachments, { validate: false });
 		stored.forEach((attachment, index) => { attachments[index].storageId = attachment.id; });
@@ -177,16 +195,6 @@ export async function sendEmail(
 		}),
 		scheduledAt,
 	});
-
-	if (sender.group) {
-		await createAuditLog(env, {
-			actorUserId: input.userId,
-			mailboxId: sender.mailboxId,
-			messageId,
-			action: "email.send_as_group",
-			metadata: { groupId: sender.group.groupId, address: sender.group.address },
-		});
-	}
 
 	const delivery: PreparedDelivery = {
 		input: { ...input, attachments: undefined },

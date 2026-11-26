@@ -2,6 +2,10 @@ import { readTrustedDmarcResult } from "@/lib/spam/analyzers/authentication";
 import type { ProviderVerdicts } from "@/lib/spam/types";
 import { getUnsubscribeSecret } from "@/lib/groups/unsubscribe-secret";
 import { singleSenderAddress } from "@/lib/groups/policy-utils";
+import { dayOf, GROUP_RELAY_TTL_DAYS, relayKey } from "@/lib/groups/relay-utils";
+import { getDb } from "@/db";
+import { messages } from "@/db/schema";
+import { eq } from "drizzle-orm";
 
 export const SEND_AS_HEADER = "X-Mailflare-Send-As";
 
@@ -51,4 +55,21 @@ export async function isSignedSendAs(
 	if (singleSenderAddress(input.from ?? "") !== input.groupAddress.toLowerCase()) return null;
 	if (readTrustedDmarcResult(input.headers, input.verdicts) !== "pass") return null;
 	return verifySendAs(env, input.headers[SEND_AS_HEADER.toLowerCase()], input.groupId);
+}
+
+/**
+ * Uses a marker up. A marker admits one post: the first claim writes `group-relay/<day>/sendas/<message id>` (swept
+ * with the other relay records), and any later claim of the same message finds it and is refused. Refused too:
+ * a message that is not stored, or is older than the records are kept, since its claim could have been swept.
+ */
+export async function claimSendAs(env: CloudflareEnv, messageId: string, now: Date = new Date()): Promise<boolean> {
+	const [message] = await getDb(env).select({ createdAt: messages.createdAt }).from(messages).where(eq(messages.id, messageId)).limit(1);
+	if (!message || now.getTime() - new Date(message.createdAt).getTime() >= GROUP_RELAY_TTL_DAYS * 86_400_000) return false;
+	const today = dayOf(now);
+	for (let back = 0; back < GROUP_RELAY_TTL_DAYS; back += 1) {
+		if (await env.BUCKET.get(relayKey("sendas", today - back, messageId))) return false;
+	}
+	// `onlyIf` makes a racing claim lose where the bucket supports it (R2); elsewhere the last writer wins.
+	const written = await env.BUCKET.put(relayKey("sendas", today, messageId), new TextEncoder().encode("1"), { httpMetadata: { contentType: "text/plain" }, onlyIf: { etagDoesNotMatch: "*" } } as R2PutOptions);
+	return written !== null;
 }
