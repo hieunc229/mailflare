@@ -60,7 +60,7 @@ When you add attendees and choose a sending mailbox, Mailflare emails each atten
 | Mailflare route | Purpose |
 | --- | --- |
 | `GET /api/calendar/events?start=&end=` | List events in an ISO 8601 range (default: the next 31 days). Repeating events are returned once, with their rule |
-| `POST /api/calendar/events` | Create an event (`{ title, startsAt, endsAt, description?, location?, attendees?, color?, repeat?, repeatDays?, timeZone?, mailboxId?, from? }`) |
+| `POST /api/calendar/events` | Create an event (`{ title, startsAt, endsAt, description?, location?, attendees?, color?, repeat?, repeatDays?, timeZone?, isPrivate?, transparent?, mailboxId?, from? }`). `isPrivate` writes `CLASS:PRIVATE` and `transparent: true` shows the event as free (`TRANSP:TRANSPARENT`); both must be booleans or the request answers 400, and an omitted flag keeps its stored value on update |
 | `PATCH /api/calendar/events/[eventId]` | Update an event or series. For a repeating event, pass an occurrence ID or `effectiveFrom` to change it from that occurrence onward. An event whose repeat was set in another app has `repeat: "custom"` and an `rrule`; it is edited as a whole series, and sending another `repeat` replaces the rule. Only its time of day may change; a `startsAt` on another day answers 409 |
 | `DELETE /api/calendar/events/[eventId]` | Delete an event, or a series from an occurrence onward |
 

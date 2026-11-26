@@ -660,13 +660,13 @@ export default function CalendarPage() {
               </div>
               <div className="grid grid-cols-[24px_minmax(0,1fr)] items-start gap-3">
                 <LockKeyhole aria-hidden="true" className="mt-2 h-5 w-5 text-neutral-600" />
-                <label htmlFor="event-private" className="flex min-h-9 min-w-0 cursor-pointer items-center justify-between gap-3 rounded-md px-2 hover:bg-neutral-50 [@media(pointer:coarse)]:min-h-11">
+                <div className="flex min-h-9 min-w-0 items-center justify-between gap-3 rounded-md px-2 hover:bg-neutral-50 [@media(pointer:coarse)]:min-h-11">
                   <span className="min-w-0">
-                    <span className="block text-sm text-neutral-700">{t("calendar.private")}</span>
+                    <label htmlFor="event-private" className="block cursor-pointer text-sm text-neutral-700">{t("calendar.private")}</label>
                     <span id="event-private-hint" className="block text-xs text-neutral-600">{t("calendar.private.hint")}</span>
                   </span>
-                  <Switch id="event-private" checked={isPrivate} onCheckedChange={setIsPrivate} disabled={pendingAction === "save"} aria-describedby="event-private-hint" />
-                </label>
+                  <Switch id="event-private" checked={isPrivate} onCheckedChange={setIsPrivate} disabled={pendingAction === "save"} aria-describedby="event-private-hint" className="[@media(pointer:coarse)]:my-2.5" />
+                </div>
               </div>
               <div className="grid grid-cols-[24px_minmax(0,1fr)] items-start gap-3">
                 <Repeat2 aria-hidden="true" className="mt-2 h-5 w-5 text-neutral-600" />

@@ -21,7 +21,7 @@ await build({
 });
 const load = (name) => import(pathToFileURL(join(dir, `${name}.mjs`)).href);
 const { parseInvite } = await load("invite");
-const { inviteEventValues } = await load("store");
+const { inviteEventValues, inviteEventFlags } = await load("store");
 const { buildCalendarFeed, buildVevent } = await load("feed");
 const { createCalendarInvitation } = await load("utils");
 
@@ -47,14 +47,12 @@ test("TRANSP:TRANSPARENT is free, TRANSP:OPAQUE is busy", () => {
 	assert.equal(parseInvite(invite("TRANSP:OPAQUE")).transparent, false);
 });
 
-test("an invitation's flags are written to the calendar columns, and a refresh without them clears them", () => {
+test("an invitation's flags are set for a new event only; a refresh never carries them", () => {
 	const common = { title: "T", description: "", location: "", sequence: 1, rrule: null, startsAt: new Date("2026-11-04T17:00:00Z"), endsAt: new Date("2026-11-04T18:00:00Z"), excludedDates: [] };
-	const flagged = inviteEventValues({ ...common, isPrivate: true, transparent: true }, "UTC", "[]");
-	assert.equal(flagged.isPrivate, true);
-	assert.equal(flagged.transparent, true);
-	const cleared = inviteEventValues(common, "UTC", "[]");
-	assert.equal(cleared.isPrivate, false);
-	assert.equal(cleared.transparent, false);
+	assert.deepEqual(inviteEventFlags({ ...common, isPrivate: true, transparent: true }), { isPrivate: true, transparent: true });
+	assert.deepEqual(inviteEventFlags(common), { isPrivate: false, transparent: false });
+	const refresh = inviteEventValues({ ...common, isPrivate: true, transparent: true }, "UTC", "[]");
+	assert.ok(!("isPrivate" in refresh) && !("transparent" in refresh), "the attendee's own choice survives an organiser update");
 });
 
 test("the VEVENT builder writes CLASS:PRIVATE and TRANSP:TRANSPARENT only when set", () => {

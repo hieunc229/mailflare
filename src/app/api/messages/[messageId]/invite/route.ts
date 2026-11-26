@@ -7,7 +7,7 @@ import { getEnv } from "@/lib/cloudflare";
 import { buildReplyIcs, parseInvite, type InviteResponse, type ParsedInvite } from "@/lib/calendar/invite";
 import { findInviteAttachment, MAX_INVITE_BYTES } from "@/lib/calendar/invite-attachment";
 import { addExcludedOccurrence, normalizeInviteSender, planInviteAnswer } from "@/lib/calendar/invite-rules";
-import { inviteEventId, inviteEventValues, recipientInviteTimeZone, sameInviteSender } from "@/lib/calendar/invite-store";
+import { inviteEventFlags, inviteEventId, inviteEventValues, recipientInviteTimeZone, sameInviteSender } from "@/lib/calendar/invite-store";
 import { hasValidSessionMutationOrigin } from "@/lib/auth/origin";
 import { getEmailAddress, splitEmailAddressList } from "@/lib/email/address";
 import { getAttachmentForUser, listMessageAttachments } from "@/lib/email/attachments";
@@ -106,7 +106,7 @@ export async function POST(request: Request, { params }: InviteRouteParams) {
 			responseStatus: response, inviteMessageId: messageId, inviteSender: sender,
 		};
 		// The colour is chosen only when the row is created, so one the user changed is kept.
-		await db.insert(calendarEvents).values({ id, userId: user.id, mailboxId: message.mailboxId, color: response === "tentative" ? "#7c3aed" : "#2563eb", ...values }).onConflictDoUpdate({ target: calendarEvents.id, set: values });
+		await db.insert(calendarEvents).values({ id, userId: user.id, mailboxId: message.mailboxId, color: response === "tentative" ? "#7c3aed" : "#2563eb", ...inviteEventFlags(invite), ...values }).onConflictDoUpdate({ target: calendarEvents.id, set: values });
 		eventId = id;
 	}
 

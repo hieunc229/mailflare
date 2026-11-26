@@ -1835,7 +1835,7 @@
 	"calendar.reminder": "Reminder",
 	"calendar.reminder.none": "No reminder",
 	"calendar.private": "Private",
-	"calendar.private.hint": "Details are hidden when this calendar is shared.",
+	"calendar.private.hint": "Marked private in invitations and calendar apps.",
 	"calendar.showAs": "Show as",
 	"calendar.showAs.busy": "Busy",
 	"calendar.showAs.free": "Free",
