@@ -231,7 +231,7 @@ async function pruneDavChanges(env: Pick<CloudflareEnv, "DB">, now: Date): Promi
 	const seqs = rows.map((row) => Number(row.seq));
 	await db
 		.insert(davSyncState)
-		.values({ collectionId: rows[0].collection_id, epoch: crypto.randomUUID(), floor: Math.max(...seqs) })
+		.values({ collectionId: rows[0].collection_id, epoch: newEpoch(rows[0].collection_id), floor: Math.max(...seqs) })
 		.onConflictDoUpdate({ target: davSyncState.collectionId, set: { floor: greatest(sql`${davSyncState.floor}`, excluded(davSyncState.floor)) } });
 	await db.delete(davChanges).where(inArray(davChanges.seq, seqs));
 	return seqs.length;

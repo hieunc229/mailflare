@@ -17,6 +17,7 @@ await build({
 			export { clearDavEnabledCache } from "./src/lib/dav/settings.ts";
 			export { generateAppPassword } from "./src/lib/api-keys.ts";
 			export { clearApiKeyVerificationCache } from "./src/lib/api/find-api-key.ts";
+			export { runDavChangeRetention } from "./src/lib/dav/changes.ts";
 			export { deleteCalendar } from "./src/lib/calendar/calendars.ts";
 			export { moveSeriesStatements } from "./src/lib/calendar/series-rows.ts";
 			export { getDb } from "./src/db/index.ts";
@@ -36,7 +37,7 @@ await build({
 	alias: { "cloudflare:workers": "./server/runtime/cloudflare-workers.ts" },
 	logLevel: "silent",
 });
-const { handleDavRequest, clearDavEnabledCache, generateAppPassword, clearApiKeyVerificationCache, deleteCalendar, moveSeriesStatements, getDb, SqliteDatabase, applyMigrations } = await import(pathToFileURL(join(outDir, "entry.mjs")).href);
+const { runDavChangeRetention, handleDavRequest, clearDavEnabledCache, generateAppPassword, clearApiKeyVerificationCache, deleteCalendar, moveSeriesStatements, getDb, SqliteDatabase, applyMigrations } = await import(pathToFileURL(join(outDir, "entry.mjs")).href);
 
 const ORIGIN = "https://mail.example.test";
 const HOME = "/dav/calendars/u1/";
@@ -248,4 +249,12 @@ test("an event whose calendar row is missing (a partial restore) is served in th
 	// Another user's event with the same dangling id is not served to this user.
 	addEvent(sql, "evt_other", "cal:gone", "u2");
 	assert.equal((await call(env, "GET", `${DEFAULT}evt_other.ics`, { key: keys.u1 })).status, 404);
+});
+
+test("a sync state the pruning job creates for a calendar already has a current epoch, so no token is ever refused for it", async (t) => {
+	const { env, sql } = await fixture(t);
+	sql.prepare("INSERT INTO dav_changes (collection_id, object_key, change_type, created_at) VALUES ('cal:work', 'gone', 'destroyed', 1)").run();
+	assert.ok(await runDavChangeRetention(env, new Date()) > 0);
+	const epoch = sql.prepare("SELECT epoch FROM dav_sync_state WHERE collection_id = 'cal:work'").get().epoch;
+	assert.equal(epoch[14], "8");
 });
