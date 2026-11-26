@@ -2612,5 +2612,7 @@
 	"calendar.availability.findEmpty": "No time in the next 14 days when everyone you can see is free during working hours (08:00 to 18:00).",
 	"calendar.availability.findNeedsPeople": "Find a time needs at least one guest whose availability you can see.",
 	"calendar.availability.suggested": "Suggested times",
-	"calendar.availability.use": "Use {time}"
+	"calendar.availability.use": "Use {time}",
+	"general.orgFreeBusyLapsed": "This setting is on but not in effect: it needs a Team licence. Turn it off so it does not come back if a licence is applied again.",
+	"calendar.availability.findTooLong": "Find a time works for events up to 10 hours."
 }

@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { getUserTimeZone, parseUserDateTimeLocal } from "@/lib/time/utils";
 import { fetchAvailability, type PersonAvailability } from "./availability-api";
-import { FIND_DAYS, availabilityWindow, findFreeSlots, parseGuestAddresses } from "./availability-utils";
+import { FIND_DAYS, MAX_FIND_DURATION_MS, availabilityWindow, findFreeSlots, parseGuestAddresses } from "./availability-utils";
 import { AvailabilityView, type FindState } from "./availability-view";
 
 /** The pause after the last keystroke before the server is asked (spec F9 8.6). */
@@ -68,5 +68,5 @@ export function AvailabilityPanel({ guests, startsAt, endsAt, onPick }: { guests
 	}
 
 	return <AvailabilityView zone={zone} guestCount={addresses.length} truncated={truncated} state={state} rows={rows} dayStart={window.dayStart} dayEnd={window.dayEnd} event={{ start, end }}
-		find={find} canFind={state === "ready" && anyVisible && durationMs > 0} onRetry={() => setAttempt((value) => value + 1)} onFind={onFind} onPick={(slot) => onPick(slot.start, slot.end)} />;
+		find={find} canFind={state === "ready" && anyVisible && durationMs > 0 && durationMs <= MAX_FIND_DURATION_MS} tooLong={durationMs > MAX_FIND_DURATION_MS} onRetry={() => setAttempt((value) => value + 1)} onFind={onFind} onPick={(slot) => onPick(slot.start, slot.end)} />;
 }

@@ -12,6 +12,7 @@ export function OrgFreeBusyCard() {
 	const { t } = useLanguage();
 	const [state, setState] = useState<"loading" | "error" | "ready" | "unavailable">("loading");
 	const [enabled, setEnabled] = useState(false);
+	const [available, setAvailable] = useState(true);
 	const [saving, setSaving] = useState(false);
 	const [status, setStatus] = useState("");
 	const [attempt, setAttempt] = useState(0);
@@ -23,7 +24,8 @@ export function OrgFreeBusyCard() {
 			if (!active) return;
 			if (!response.ok) { setState("error"); return; }
 			setEnabled(data.enabled);
-			setState(data.available ? "ready" : "unavailable");
+			setAvailable(data.available);
+			setState(data.available || data.enabled ? "ready" : "unavailable");
 		}).catch(() => { if (active) setState("error"); });
 		return () => { active = false; };
 	}, [attempt]);
@@ -36,11 +38,12 @@ export function OrgFreeBusyCard() {
 			const data = (await response.json()) as Settings;
 			if (!response.ok) throw new Error(data.error ?? t("general.saveFailed"));
 			setEnabled(data.enabled);
+			setAvailable(data.available);
 			setStatus(t("general.orgFreeBusySaved"));
 		} catch (error) {
 			setStatus(error instanceof Error ? error.message : t("general.saveFailed"));
 		} finally { setSaving(false); }
 	}, [t]);
 
-	return <OrgFreeBusyView state={state} enabled={enabled} saving={saving} status={status} onChange={(next) => void change(next)} onRetry={() => { setState("loading"); setAttempt((value) => value + 1); }} />;
+	return <OrgFreeBusyView state={state} enabled={enabled} available={available} saving={saving} status={status} onChange={(next) => void change(next)} onRetry={() => { setState("loading"); setAttempt((value) => value + 1); }} />;
 }

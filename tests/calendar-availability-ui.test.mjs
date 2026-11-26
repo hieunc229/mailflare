@@ -108,3 +108,10 @@ test("touch targets are 44 px on coarse pointers and no control hides its focus 
 		assert.doesNotMatch(button, /outline-none/);
 	}
 });
+
+test("an event too long for the working day says Find a time cannot help, instead of reporting no free time", () => {
+	const html = render({ canFind: false, tooLong: true, rows: [busy(D(1), D(2))] });
+	assert.match(html, /Find a time works for events up to 10 hours/);
+	assert.match(html, /<button[^>]*\sdisabled=""[^>]*>Find a time<\/button>/);
+	assert.doesNotMatch(render({ rows: [busy(D(1), D(2))] }), /up to 10 hours/);
+});

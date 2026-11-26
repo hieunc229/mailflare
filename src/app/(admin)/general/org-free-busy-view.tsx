@@ -10,6 +10,8 @@ export type OrgFreeBusyViewProps = {
 	/** `unavailable`: no Team licence, so the switch is not offered at all. */
 	state: "loading" | "error" | "ready" | "unavailable";
 	enabled: boolean;
+	/** The Team licence is in force. A switch still on without it is shown, so it can be turned off. */
+	available?: boolean;
 	saving: boolean;
 	/** Translated outcome of the last save, or "". */
 	status: string;
@@ -18,7 +20,7 @@ export type OrgFreeBusyViewProps = {
 };
 
 /** Presentation only: the container owns the requests, so every state can be rendered on its own. */
-export function OrgFreeBusyView({ state, enabled, saving, status, onChange, onRetry }: OrgFreeBusyViewProps) {
+export function OrgFreeBusyView({ state, enabled, available = true, saving, status, onChange, onRetry }: OrgFreeBusyViewProps) {
 	const { t } = useLanguage();
 	if (state === "unavailable") return null;
 	return (
@@ -36,6 +38,7 @@ export function OrgFreeBusyView({ state, enabled, saving, status, onChange, onRe
 				{state === "ready" && <>
 					<div className="flex items-center gap-3"><Switch id="org-free-busy" checked={enabled} onCheckedChange={onChange} disabled={saving} aria-describedby="org-free-busy-hint" /><Label htmlFor="org-free-busy">{t("general.orgFreeBusyEnabled")}</Label></div>
 					<p id="org-free-busy-hint" className="text-sm text-neutral-600">{t("general.orgFreeBusyHint")}</p>
+					{!available && <p className="text-sm text-amber-700">{t("general.orgFreeBusyLapsed")}</p>}
 					{status && <p role="status" className="text-sm text-neutral-700">{status}</p>}
 				</>}
 			</CardContent>

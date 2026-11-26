@@ -26,6 +26,8 @@ export type AvailabilityViewProps = {
 	event: { start: Date | null; end: Date | null };
 	find: FindState;
 	canFind: boolean;
+	/** The event is longer than a working day, so no slot could ever fit. */
+	tooLong?: boolean;
 	onRetry: () => void;
 	onFind: () => void;
 	onPick: (slot: { start: Date; end: Date }) => void;
@@ -88,7 +90,8 @@ export function AvailabilityView(props: AvailabilityViewProps) {
 			{props.truncated && <p className="text-xs text-neutral-600">{t("calendar.availability.truncated", { count: MAX_GUESTS })}</p>}
 			<div className="space-y-2 pt-1">
 				<button type="button" onClick={props.onFind} disabled={!props.canFind || props.find.state === "loading"} className={`rounded-md border border-neutral-200 px-3 py-1.5 text-sm font-medium text-neutral-800 hover:bg-neutral-50 disabled:cursor-not-allowed disabled:opacity-50 ${focus} ${touch}`}>{t("calendar.availability.find")}</button>
-				{props.state === "ready" && !anyVisible && <p className="text-xs text-neutral-600">{t("calendar.availability.findNeedsPeople")}</p>}
+				{props.tooLong && <p className="text-xs text-neutral-600">{t("calendar.availability.findTooLong")}</p>}
+				{props.state === "ready" && !anyVisible && !props.tooLong && <p className="text-xs text-neutral-600">{t("calendar.availability.findNeedsPeople")}</p>}
 				<div aria-live="polite" className="space-y-1">
 					{props.find.state === "loading" && <p role="status" className="flex items-center gap-2 text-neutral-600"><Loader2 aria-hidden="true" className="h-4 w-4 animate-spin motion-reduce:animate-none" />{t("calendar.availability.finding")}</p>}
 					{props.find.state === "error" && <p role="alert" className="text-red-700">{t("calendar.availability.findFailed")}</p>}
