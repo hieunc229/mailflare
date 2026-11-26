@@ -2569,5 +2569,12 @@
 	"account.openApps": "アプリメニューを開く",
 	"account.signOutAccountConfirm": "{name} ({email}) をサインアウトしますか？このアカウントを使うには、もう一度サインインする必要があります。",
 	"invite.acceptedLabel": "承諾済み",
-	"invite.declinedLabel": "辞退済み"
+	"invite.declinedLabel": "辞退済み",
+	"general.orgFreeBusy": "Organisation-wide free/busy",
+	"general.orgFreeBusyEnabled": "Let everyone see when everyone else is busy",
+	"general.orgFreeBusyHint": "When someone is invited to an event, the organiser sees when that person is busy, never titles or details. Accounts that are disabled or have Calendar turned off are never shown. Off by default; needs a Team licence.",
+	"general.orgFreeBusyLoading": "Loading...",
+	"general.orgFreeBusyLoadFailed": "Could not load this setting.",
+	"general.orgFreeBusySaved": "Saved",
+	"general.orgFreeBusyRetry": "Try again"
 }

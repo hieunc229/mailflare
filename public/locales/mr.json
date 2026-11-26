@@ -2587,5 +2587,12 @@
 	"account.openApps": "अ‍ॅप्स मेनू उघडा",
 	"account.signOutAccountConfirm": "{name} ({email}) साइन आउट करायचे? हे खाते वापरण्यासाठी तुम्हाला पुन्हा साइन इन करावे लागेल.",
 	"invite.acceptedLabel": "स्वीकारले",
-	"invite.declinedLabel": "नाकारले"
+	"invite.declinedLabel": "नाकारले",
+	"general.orgFreeBusy": "Organisation-wide free/busy",
+	"general.orgFreeBusyEnabled": "Let everyone see when everyone else is busy",
+	"general.orgFreeBusyHint": "When someone is invited to an event, the organiser sees when that person is busy, never titles or details. Accounts that are disabled or have Calendar turned off are never shown. Off by default; needs a Team licence.",
+	"general.orgFreeBusyLoading": "Loading...",
+	"general.orgFreeBusyLoadFailed": "Could not load this setting.",
+	"general.orgFreeBusySaved": "Saved",
+	"general.orgFreeBusyRetry": "Try again"
 }

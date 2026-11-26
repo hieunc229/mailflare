@@ -2587,5 +2587,12 @@
 	"account.openApps": "ಆ್ಯಪ್‌ಗಳ ಮೆನು ತೆರೆಯಿರಿ",
 	"account.signOutAccountConfirm": "{name} ({email}) ಸೈನ್ ಔಟ್ ಮಾಡಬೇಕೇ? ಈ ಖಾತೆಯನ್ನು ಬಳಸಲು ನೀವು ಮತ್ತೆ ಸೈನ್ ಇನ್ ಮಾಡಬೇಕಾಗುತ್ತದೆ.",
 	"invite.acceptedLabel": "ಸ್ವೀಕರಿಸಲಾಗಿದೆ",
-	"invite.declinedLabel": "ತಿರಸ್ಕರಿಸಲಾಗಿದೆ"
+	"invite.declinedLabel": "ತಿರಸ್ಕರಿಸಲಾಗಿದೆ",
+	"general.orgFreeBusy": "Organisation-wide free/busy",
+	"general.orgFreeBusyEnabled": "Let everyone see when everyone else is busy",
+	"general.orgFreeBusyHint": "When someone is invited to an event, the organiser sees when that person is busy, never titles or details. Accounts that are disabled or have Calendar turned off are never shown. Off by default; needs a Team licence.",
+	"general.orgFreeBusyLoading": "Loading...",
+	"general.orgFreeBusyLoadFailed": "Could not load this setting.",
+	"general.orgFreeBusySaved": "Saved",
+	"general.orgFreeBusyRetry": "Try again"
 }

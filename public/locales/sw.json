@@ -2587,5 +2587,12 @@
 	"account.openApps": "Fungua menyu ya programu",
 	"account.signOutAccountConfirm": "Ondoka kwenye {name} ({email})? Utahitaji kuingia tena ili utumie akaunti hii.",
 	"invite.acceptedLabel": "Imekubaliwa",
-	"invite.declinedLabel": "Imekataliwa"
+	"invite.declinedLabel": "Imekataliwa",
+	"general.orgFreeBusy": "Organisation-wide free/busy",
+	"general.orgFreeBusyEnabled": "Let everyone see when everyone else is busy",
+	"general.orgFreeBusyHint": "When someone is invited to an event, the organiser sees when that person is busy, never titles or details. Accounts that are disabled or have Calendar turned off are never shown. Off by default; needs a Team licence.",
+	"general.orgFreeBusyLoading": "Loading...",
+	"general.orgFreeBusyLoadFailed": "Could not load this setting.",
+	"general.orgFreeBusySaved": "Saved",
+	"general.orgFreeBusyRetry": "Try again"
 }

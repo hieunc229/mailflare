@@ -2583,5 +2583,12 @@
 	"account.openApps": "앱 메뉴 열기",
 	"account.signOutAccountConfirm": "{name} ({email}) 계정에서 로그아웃할까요? 이 계정을 사용하려면 다시 로그인해야 합니다.",
 	"invite.acceptedLabel": "수락함",
-	"invite.declinedLabel": "거절함"
+	"invite.declinedLabel": "거절함",
+	"general.orgFreeBusy": "Organisation-wide free/busy",
+	"general.orgFreeBusyEnabled": "Let everyone see when everyone else is busy",
+	"general.orgFreeBusyHint": "When someone is invited to an event, the organiser sees when that person is busy, never titles or details. Accounts that are disabled or have Calendar turned off are never shown. Off by default; needs a Team licence.",
+	"general.orgFreeBusyLoading": "Loading...",
+	"general.orgFreeBusyLoadFailed": "Could not load this setting.",
+	"general.orgFreeBusySaved": "Saved",
+	"general.orgFreeBusyRetry": "Try again"
 }

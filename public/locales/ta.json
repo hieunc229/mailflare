@@ -2587,5 +2587,12 @@
 	"account.openApps": "ஆப்ஸ் மெனுவைத் திற",
 	"account.signOutAccountConfirm": "{name} ({email}) கணக்கிலிருந்து வெளியேறவா? இந்தக் கணக்கைப் பயன்படுத்த மீண்டும் உள்நுழைய வேண்டும்.",
 	"invite.acceptedLabel": "ஏற்கப்பட்டது",
-	"invite.declinedLabel": "நிராகரிக்கப்பட்டது"
+	"invite.declinedLabel": "நிராகரிக்கப்பட்டது",
+	"general.orgFreeBusy": "Organisation-wide free/busy",
+	"general.orgFreeBusyEnabled": "Let everyone see when everyone else is busy",
+	"general.orgFreeBusyHint": "When someone is invited to an event, the organiser sees when that person is busy, never titles or details. Accounts that are disabled or have Calendar turned off are never shown. Off by default; needs a Team licence.",
+	"general.orgFreeBusyLoading": "Loading...",
+	"general.orgFreeBusyLoadFailed": "Could not load this setting.",
+	"general.orgFreeBusySaved": "Saved",
+	"general.orgFreeBusyRetry": "Try again"
 }

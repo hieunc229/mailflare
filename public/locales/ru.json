@@ -2617,5 +2617,12 @@
 	"account.openApps": "Открыть меню приложений",
 	"account.signOutAccountConfirm": "Выйти из аккаунта {name} ({email})? Чтобы пользоваться им, потребуется снова войти.",
 	"invite.acceptedLabel": "Принято",
-	"invite.declinedLabel": "Отклонено"
+	"invite.declinedLabel": "Отклонено",
+	"general.orgFreeBusy": "Organisation-wide free/busy",
+	"general.orgFreeBusyEnabled": "Let everyone see when everyone else is busy",
+	"general.orgFreeBusyHint": "When someone is invited to an event, the organiser sees when that person is busy, never titles or details. Accounts that are disabled or have Calendar turned off are never shown. Off by default; needs a Team licence.",
+	"general.orgFreeBusyLoading": "Loading...",
+	"general.orgFreeBusyLoadFailed": "Could not load this setting.",
+	"general.orgFreeBusySaved": "Saved",
+	"general.orgFreeBusyRetry": "Try again"
 }
