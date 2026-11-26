@@ -53,6 +53,11 @@ export async function POST(request: Request) {
 	if (existing) {
 		return NextResponse.json({ error: "Email already registered" }, { status: 409 });
 	}
+	// A hosted workspace's first administrator is the person who signed up for it.
+	const tenantAdmin = env.MAILFLARE_TENANT?.adminEmail?.trim().toLowerCase();
+	if (tenantAdmin && tenantAdmin !== email) {
+		return NextResponse.json({ error: `Create the first account with the workspace admin address, ${tenantAdmin}` }, { status: 403 });
+	}
 
 	const userId = newId("usr");
 	await db.insert(users).values({

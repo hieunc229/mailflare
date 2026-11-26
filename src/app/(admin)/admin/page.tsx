@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { BadgeDollarSign, Bot, Globe2, KeyRound, Mail, Palette, Users } from "@/components/icons";
+import { BadgeDollarSign, Bot, Building2, Globe2, KeyRound, Mail, Palette, Users } from "@/components/icons";
 import { useLanguage } from "@/components/language-provider";
 import type { TranslationKey } from "@/lib/i18n/types";
 import { AdminUpdateCard } from "@/components/admin-update-card";
@@ -10,13 +10,25 @@ import { useCurrentUser } from "@/hooks/use-current-user";
 
 type AdminSection = {
 	href: string;
-	titleKey: TranslationKey;
-	descriptionKey: TranslationKey;
+	titleKey?: TranslationKey;
+	descriptionKey?: TranslationKey;
+	/** Plain text for cards that exist only on a hosted workspace (not in the translation files). */
+	title?: string;
+	description?: string;
+	hostedOnly?: boolean;
 	icon: typeof Bot;
 	permission?: "primary" | "domains" | "users";
 };
 
 const sections: AdminSection[] = [
+	{
+		href: "/workspace",
+		title: "Workspace",
+		description: "Name, address, plan and billing of this workspace.",
+		icon: Building2,
+		permission: "primary",
+		hostedOnly: true,
+	},
 	{
 		href: "/agent",
 		titleKey: "admin.nav.agent",
@@ -83,6 +95,9 @@ export default function AdminSettingsPage() {
 	const user = useCurrentUser();
 
 	function canSee(section: AdminSection): boolean {
+		// A hosted workspace's licensing is its plan, not something the admin manages.
+		if (section.hostedOnly && !user?.managed) return false;
+		if (user?.managed && section.href === "/licenses") return false;
 		if (!section.permission) return true;
 		if (!user) return false;
 		if (section.permission === "primary") return user.isPrimaryAdmin;
@@ -109,17 +124,17 @@ export default function AdminSettingsPage() {
 									<div className="flex h-10 w-10 items-center justify-center rounded-full bg-blue-100 text-blue-700">
 										<Icon className="h-5 w-5" />
 									</div>
-									<h2 className="text-base font-semibold leading-none">{t(section.titleKey)}</h2>
+									<h2 className="text-base font-semibold leading-none">{section.title ?? t(section.titleKey!)}</h2>
 								</CardHeader>
 								<CardContent className="pt-4">
-									<p className="text-sm text-neutral-500">{t(section.descriptionKey)}</p>
+									<p className="text-sm text-neutral-500">{section.description ?? t(section.descriptionKey!)}</p>
 								</CardContent>
 							</Card>
 						</Link>
 					);
 				})}
 			</div>
-			{user?.isPrimaryAdmin && (
+			{user?.isPrimaryAdmin && !user.managed && (
 				<div className="mt-8">
 					<AdminUpdateCard />
 				</div>

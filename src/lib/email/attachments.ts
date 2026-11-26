@@ -15,6 +15,7 @@ import type {
 import { DEFAULT_OUTBOUND_ATTACHMENT_MAX_MB, outgoingSizeError } from "./attachment-limits";
 import { getOutboundAttachmentMaxMb } from "./attachment-policy";
 import { deleteUnreferencedObjects } from "@/lib/drive/shared-objects";
+import { getStorageLimitError } from "@/lib/tenancy/limits";
 
 export const MAX_ATTACHMENT_SIZE = 25_000_000;
 export const MAX_TOTAL_ATTACHMENT_SIZE = 25_000_000;
@@ -67,9 +68,14 @@ export async function storeMessageAttachments(
 	env: CloudflareEnv,
 	messageId: string,
 	attachments: AttachmentContent[],
-	options?: { validate?: boolean },
+	options?: { validate?: boolean; enforceStorage?: boolean },
 ): Promise<StoredAttachment[]> {
 	if (options?.validate !== false) validateAttachments(attachments, await getOutboundAttachmentMaxMb(env));
+	// A hosted plan's storage cap. Mail that arrives passes `enforceStorage: false`: it is never refused for space.
+	if (options?.enforceStorage !== false) {
+		const storageError = await getStorageLimitError(env, attachments.reduce((total, attachment) => total + attachment.content.byteLength, 0));
+		if (storageError) throw new Error(storageError);
+	}
 	const db = getDb(env);
 	const stored: StoredAttachment[] = [];
 
@@ -125,6 +131,8 @@ export async function copyMessageAttachments(
 ): Promise<AttachmentMetadata[]> {
 	const db = getDb(env);
 	const rows = await db.select().from(messageAttachments).where(and(eq(messageAttachments.messageId, fromMessageId), isNull(messageAttachments.trashedAt)));
+	const storageError = await getStorageLimitError(env, rows.reduce((total, row) => total + row.size, 0));
+	if (storageError) throw new Error(storageError);
 	const copied: AttachmentMetadata[] = [];
 	for (const row of rows) {
 		const object = await env.BUCKET.get(row.r2Key);

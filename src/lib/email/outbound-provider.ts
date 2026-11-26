@@ -3,6 +3,8 @@ import { getDb } from "@/db";
 import { appSettings, domains } from "@/db/schema";
 import { requireAwsConfig } from "@/lib/aws/config";
 import { sendSesEmail } from "@/lib/aws/ses";
+import { isClaimedElsewhere } from "@/lib/tenancy/control";
+import { getSmtp2goApiKey, smtp2goRequest } from "@/lib/tenancy/smtp2go";
 import { getEmailAddress } from "@/lib/email/address";
 import { fetchSentMessageId, resendClient, resendOmittedHeaders, resendSetsMessageId, type ResendClient } from "@/lib/email/resend-api";
 import type { OutboundProviderConfig, OutboundProviderMessage, ResendKeyStatus } from "@/lib/email/outbound-provider-types";
@@ -37,12 +39,19 @@ export async function getResendClient(env: CloudflareEnv): Promise<ResendClient>
 /** The provider for the domain a message is sent from. */
 export async function getOutboundProviderConfig(env: CloudflareEnv, fromAddress: string): Promise<OutboundProviderConfig> {
 	const hostname = getEmailAddress(fromAddress).split("@")[1]?.toLowerCase();
-	const [domain] = hostname
-		? await getDb(env).select({ provider: domains.sendingProvider }).from(domains).where(eq(domains.hostname, hostname)).limit(1)
+	const [row] = hostname
+		? await getDb(env).select().from(domains).where(eq(domains.hostname, hostname)).limit(1)
 		: [];
+	// Hosted workspaces only send through SMTP2GO, and a domain is registered there only once the admin connects it on the Domains page.
+	if (row && env.MAILFLARE_TENANT && row.sendingProvider !== "smtp2go") {
+		throw new Error(`Sending is not set up for ${hostname}. Connect the domain on the Domains page first.`);
+	}
+	if (row && (await isClaimedElsewhere(env, row.hostname))) throw new Error(`${hostname} now belongs to another workspace`);
+	const domain = row ? { provider: row.sendingProvider } : undefined;
 	if (!domain || domain.provider === "none") {
 		throw new Error(`Sending is not set up for ${hostname ?? "this domain"}. Choose a sending provider on the Domains page.`);
 	}
+	if (domain.provider === "smtp2go") return { provider: "smtp2go", apiKey: await getSmtp2goApiKey(env) };
 	if (domain.provider === "resend") return { provider: "resend", apiKey: (await getResendClient(env)).apiKey };
 	if (domain.provider === "ses") return { provider: "ses", config: await requireAwsConfig(env) };
 	return { provider: "cloudflare" };
@@ -111,12 +120,36 @@ async function sendWithResend(
 	return { messageId: (await fetchSentMessageId(client, body.id)) ?? mintedId };
 }
 
+/** SMTP2GO (hosted workspaces). It reports per-recipient failures with HTTP 200, so those are errors too. */
+async function sendWithSmtp2go(apiKey: string, message: OutboundProviderMessage): Promise<{ messageId: string }> {
+	const messageId = message.headers?.["Message-ID"] ?? mintMessageId(message.from);
+	const headers = { ...message.headers, "Message-ID": messageId };
+	const file = (attachment: NonNullable<OutboundProviderMessage["attachments"]>[number], filename: string) => ({ filename, mimetype: attachment.type, fileblob: toBase64(attachment.content) });
+	const attachments = message.attachments ?? [];
+	const data = await smtp2goRequest<{ failed?: number; failures?: unknown[] }>(apiKey, "/email/send", {
+		sender: message.from,
+		to: message.to,
+		...(message.cc?.length ? { cc: message.cc } : {}),
+		...(message.bcc?.length ? { bcc: message.bcc } : {}),
+		subject: message.subject,
+		...(message.html ? { html_body: message.html } : {}),
+		...(message.text ? { text_body: message.text } : {}),
+		custom_headers: Object.entries(headers).map(([header, value]) => ({ header, value })),
+		attachments: attachments.filter((a) => !(a.disposition === "inline" && a.contentId)).map((a) => file(a, a.filename)),
+		// SMTP2GO references inline images as cid:<filename>.
+		inlines: attachments.filter((a) => a.disposition === "inline" && a.contentId).map((a) => file(a, a.contentId!)),
+	});
+	if (data.failed) throw new Error(`Mail delivery: ${JSON.stringify(data.failures ?? "send failed")}`);
+	return { messageId };
+}
+
 export async function sendThroughProvider(
 	env: CloudflareEnv,
 	config: OutboundProviderConfig,
 	message: OutboundProviderMessage,
 	idempotencyKey?: string,
 ): Promise<{ messageId: string }> {
+	if (config.provider === "smtp2go") return sendWithSmtp2go(config.apiKey, message);
 	if (config.provider === "resend") return sendWithResend(env, resendClient(env, config.apiKey), message, idempotencyKey);
 	if (config.provider === "ses") return sendSesEmail(config.config, message);
 	const response = await env.EMAIL.send({

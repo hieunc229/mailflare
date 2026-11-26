@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useIsFetching } from "@tanstack/react-query";
 import { useLanguage } from "@/components/language-provider";
+import { useBranding } from "@/components/branding-provider";
 import { PageLoadingContext } from "@/components/page-loading";
 import { RouteLoadingBar } from "@/components/route-loading-bar";
 import { RouteSkeleton } from "@/components/route-skeleton";
@@ -41,6 +42,10 @@ function rememberSplashSeen() {
 
 export function LoadingTransition({ children, ready }: LoadingTransitionProps) {
 	const { t } = useLanguage();
+	const branding = useBranding();
+	const [splashFailed, setSplashFailed] = useState(false);
+	// A workspace with its own icon shows it on the splash; otherwise (or if it cannot load) the packaged logo.
+	const splashIcon = branding.hasCustomIcon && !splashFailed ? branding.iconUrl : SPLASH_ICON;
 	// Always true on the server and first render so hydration matches; corrected before paint below.
 	const [showInitialLoader, setShowInitialLoader] = useState(true);
 	const [startedAt] = useState(() => Date.now());
@@ -140,8 +145,9 @@ export function LoadingTransition({ children, ready }: LoadingTransitionProps) {
 					<span className="sr-only">{loaderVisible ? t("nav.loading") : ""}</span>
 					<div aria-hidden="true" className="flex w-64 flex-col items-center gap-6">
 						<img
-							src={SPLASH_ICON}
+							src={splashIcon}
 							alt=""
+							onError={() => setSplashFailed(true)}
 							className="h-20 w-20 rounded-2xl object-contain"
 						/>
 						<div className="w-full">

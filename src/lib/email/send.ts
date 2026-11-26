@@ -2,6 +2,7 @@ import { and, eq, isNotNull } from "drizzle-orm";
 import { getDb } from "@/db";
 import { conversationNotes, mailboxes, messages, outboundJobs } from "@/db/schema";
 import { newId } from "@/lib/ids";
+import { getSendQuotaError } from "@/lib/tenancy/limits";
 import { buildSnippet } from "@/lib/email/parse";
 import { dispatchWebhooks } from "@/lib/email/webhooks";
 import { upsertContactsFromAddresses } from "@/lib/contacts/service";
@@ -103,6 +104,8 @@ export async function sendEmail(
 	}
 	// Before anything is stored: a refused send leaves no draft, contact or job behind.
 	await assertNoSuppressedRecipients(env, sender.fromAddr, [...to, ...cc, ...bcc]);
+	const quotaError = await getSendQuotaError(env, input.userId, to.length + cc.length + bcc.length);
+	if (quotaError) throw new Error(quotaError);
 	await upsertContactsFromAddresses(env, input.userId, [...to, ...cc, ...bcc], "outbound");
 
 	const inReplyTo = normalizeMessageId(input.inReplyTo);

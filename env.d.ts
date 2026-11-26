@@ -93,3 +93,24 @@ interface CloudflareEnv {
 	/** Contact URI for VAPID, e.g. mailto:admin@example.com or https://mail.example.com. */
 	VAPID_SUBJECT?: string;
 }
+
+/** Multi-tenant deployment (mailflare-cloud). See src/lib/tenancy. All unset on a normal install. */
+interface CloudflareEnv {
+	/** Control-plane D1 with the `tenants` view. */
+	CONTROL?: D1Database;
+	/** One Durable Object (SQLite) per tenant: that tenant's whole database. */
+	TENANT_DB?: DurableObjectNamespace<import("./src/lib/tenancy/tenant-db").TenantDb>;
+	/** The workspace serving this request (set per request by worker.tenant.ts). */
+	/** Service binding to the cloud app: the only way a workspace reaches SMTP2GO (the cloud app holds the key). */
+	CLOUD?: Fetcher;
+	/** Public URL of the cloud app, for links from the workspace admin to it (billing). Optional. */
+	CLOUD_URL?: string;
+	/** From address of the platform's own mail (password resets, signup reminders); its domain must be verified at SMTP2GO. */
+	SYSTEM_SENDER?: string;
+	/** "1": suspend trials that were never used (see the cloud's tenant Worker). Off by default. */
+	TRIAL_CLEANUP?: string;
+	/** Paymug API key (subscriptions permission) and base URL: lets the primary administrator cancel the plan. */
+	PAYMUG_API_KEY?: string;
+	PAYMUG_URL?: string;
+	MAILFLARE_TENANT?: import("./src/lib/tenancy/types").TenantInfo;
+}

@@ -31,6 +31,8 @@ export default async function HomePage() {
   ]);
   // Signed-in users skip the landing page; the inbox restores their last-used mailbox.
   if (sessionUser && !sessionUser.disabled) redirect("/inbox");
+  // A hosted workspace has no public landing page: its address is its sign-in.
+  if (getEnv().MAILFLARE_TENANT) redirect("/login");
 
   // Render the signed-in account from the server response so the header does not
   // wait for hydration and an /api/auth/me round trip before showing it.

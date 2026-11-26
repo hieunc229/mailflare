@@ -255,12 +255,13 @@ function MessageListRowComponent({
 						</span>
 					</span>
 					<span
+						data-lock-blur
 						className={`mt-1 block truncate text-sm ${unread ? "font-semibold text-neutral-900" : "text-neutral-700"
 							}`}
 					>
 						{message.subject ?? t("list.noSubject")}
 					</span>
-					<span className="mt-0.5 block truncate text-xs leading-5 text-neutral-500">
+					<span data-lock-blur className="mt-0.5 block truncate text-xs leading-5 text-neutral-500">
 						{preview}
 					</span>
 				</Link>
@@ -350,10 +351,10 @@ function MessageListRowComponent({
 					aria-current={active ? "true" : undefined}
 					className="min-w-0 truncate focus-visible:outline-none after:absolute after:inset-0"
 				>
-					<span className={unread ? "font-semibold text-neutral-900" : ""}>
+					<span data-lock-blur className={unread ? "font-semibold text-neutral-900" : ""}>
 						{rowMessage.subject ?? t("list.noSubject")}
 					</span>
-					<span className="text-neutral-500"> - {getMessagePreview(rowMessage, config.folder, t)}</span>
+					<span data-lock-blur className="text-neutral-500"> - {getMessagePreview(rowMessage, config.folder, t)}</span>
 				</Link>
 				{promotionChip}
 			</span>

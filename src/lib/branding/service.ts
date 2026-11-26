@@ -3,12 +3,22 @@ import { getDb } from "@/db";
 import { appSettings } from "@/db/schema";
 import type { Branding } from "./types";
 import { getLicenseEntitlements } from "@/lib/licenses/service";
+import { markCustomIcon } from "@/lib/tenancy/branding-sync";
 
 export const APP_SETTINGS_ID = "default";
 export const DEFAULT_APP_NAME = "Mailflare";
 export const BRANDING_ICON_KEY = "branding/app-icon";
 
+/** A hosted workspace is branded with its name from the control plane; the icon still comes from its own settings. */
 export async function getBranding(env: CloudflareEnv): Promise<Branding> {
+	const branding = await getStoredBranding(env);
+	if (!env.MAILFLARE_TENANT) return branding;
+	// Icons uploaded before the control plane tracked them are picked up the first time the workspace is opened.
+	if (branding.hasCustomIcon) await markCustomIcon(env, true);
+	return { ...branding, appName: env.MAILFLARE_TENANT.name };
+}
+
+async function getStoredBranding(env: CloudflareEnv): Promise<Branding> {
 	const entitlements = await getLicenseEntitlements(env);
 	if (!entitlements.canCustomizeBranding) {
 		return { appName: DEFAULT_APP_NAME, hasCustomIcon: false, canCustomizeBranding: false };
@@ -60,5 +70,6 @@ export async function updateBranding(
 				updatedAt: new Date(),
 			},
 		});
+	if (iconKey) await markCustomIcon(env, false);
 	return getBranding(env);
 }

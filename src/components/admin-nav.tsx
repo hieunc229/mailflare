@@ -2,6 +2,7 @@
 
 import {
   DatabaseBackup,
+  Building2,
   Globe2,
   Activity,
   Mail,
@@ -32,9 +33,13 @@ type AdminLinkPermission = "primary" | "domains" | "users";
 
 type AdminNavLink = {
   href: string;
-  labelKey: TranslationKey;
+  labelKey?: TranslationKey;
+  /** Plain label for links that exist only on a hosted workspace (not in the translation files). */
+  label?: string;
   icon: typeof Settings;
   permission?: AdminLinkPermission;
+  /** Shown only on a hosted workspace. */
+  hostedOnly?: boolean;
 };
 
 // `id` names a section for its remembered open/closed state; it is not shown.
@@ -59,6 +64,7 @@ const sections: { id?: string; labelKey?: TranslationKey; links: AdminNavLink[] 
     id: "Administration",
     labelKey: "admin.nav.administration",
     links: [
+      { href: "/workspace", label: "Workspace", icon: Building2, permission: "primary", hostedOnly: true },
       { href: "/api-keys", labelKey: "admin.nav.apiKeys", icon: KeyRound, permission: "primary" },
       { href: "/general", labelKey: "admin.nav.general", icon: Settings, permission: "primary" },
       { href: "/agent", labelKey: "admin.nav.agent", icon: Bot, permission: "primary" },
@@ -102,6 +108,9 @@ export function AdminNav({ className }: { className?: string }) {
   const user = useCurrentUser();
 
   function canSee(link: AdminNavLink): boolean {
+    // Hosted workspace: licensing and backups belong to the platform (those routes are closed).
+    if (link.hostedOnly && !user?.managed) return false;
+    if (user?.managed && (link.href === "/licenses" || link.href === "/backups")) return false;
     if (!link.permission) return true;
     if (!user) return false;
     if (link.permission === "primary") return user.isPrimaryAdmin;
@@ -113,7 +122,7 @@ export function AdminNav({ className }: { className?: string }) {
     <SidebarScaffold className={className} header={<SidebarHeader href="/inbox" label={t("account.admin")} />} footer={<SidebarFooter />}>
       <div className={cn("space-y-4", minimal && "space-y-2 pl-1")}>
         {sections.map((section, sectionIndex) => {
-          const links = section.links.filter(canSee).map(({ labelKey, ...link }): NavLink => ({ ...link, label: t(labelKey) }));
+          const links = section.links.filter(canSee).map(({ labelKey, label, hostedOnly: _hostedOnly, ...link }): NavLink => ({ ...link, label: label ?? t(labelKey!) }));
           if (links.length === 0) return null;
 
           return (

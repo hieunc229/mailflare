@@ -223,7 +223,7 @@ export function ConversationMessageCard({
 								{expanded && recipients && <span className="text-xs font-normal text-neutral-500">{t("thread.to", { recipients })}</span>}
 							</div>
 							{!expanded && (
-								<span className={clsx(!locallyRead ? "font-semibold" : "text-neutral-500", "block truncate text-[13px]")}>{message.snippet || t("thread.noPreview")}</span>
+								<span data-lock-blur className={clsx(!locallyRead ? "font-semibold" : "text-neutral-500", "block truncate text-[13px]")}>{message.snippet || t("thread.noPreview")}</span>
 							)}
 							{!expanded && <SenderCheckBadge message={message} />}
 						</span>
@@ -260,7 +260,7 @@ export function ConversationMessageCard({
 					</div>
 				)}
 				{expanded && body && (
-					<div className="pb-4 pt-2 sm:pl-[78px]">
+					<div data-lock-blur className="pb-4 pt-2 sm:pl-[78px]">
 						{outbound && <MessageOpenStatus messageId={message.id} />}
 						{outbound && message.status !== "draft" && <MessageFollowUpStatus messageId={message.id} />}
 						{body.html ? (

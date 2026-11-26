@@ -91,7 +91,7 @@ export const domains = sqliteTable(
 			.default("pending"),
 		routingStatus: text("routing_status"),
 		sendingSubdomainTag: text("sending_subdomain_tag"),
-		sendingProvider: text("sending_provider", { enum: ["none", "cloudflare", "resend", "ses"] }).notNull().default("none"),
+		sendingProvider: text("sending_provider", { enum: ["none", "cloudflare", "resend", "ses", "smtp2go"] }).notNull().default("none"),
 		receivingProvider: text("receiving_provider", { enum: ["none", "cloudflare", "resend", "ses"] }).notNull().default("cloudflare"),
 		sendingRequested: bool("sending_requested").notNull().default(false),
 		sendingEnabled: bool("sending_enabled").notNull().default(false),

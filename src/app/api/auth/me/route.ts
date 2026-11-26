@@ -4,6 +4,7 @@ import { getEnv } from "@/lib/cloudflare";
 import { hasPrimaryDomain, userHasMailboxes } from "@/lib/user";
 import { getLicenseEntitlements } from "@/lib/licenses/service";
 import { hasCloudflareCredentials, isNodeRuntime } from "@/lib/runtime";
+import { isTrialExpired, upgradeUrl } from "@/lib/tenancy/limits";
 
 export async function GET(request: Request) {
 	const env = getEnv();
@@ -43,6 +44,11 @@ export async function GET(request: Request) {
 			showFullRecipientAddresses: user.showFullRecipientAddresses,
 			hasAvatar: !!user.avatarKey,
 			mfaEnabled: user.totpEnabled,
+			// A hosted workspace is upgraded by the platform: the admin overview hides the update card.
+			managed: !!env.MAILFLARE_TENANT,
+			// Free trial over and never subscribed: the app shows an upgrade banner and blurs inbound mail; sending and adding things are refused.
+			trialExpired: isTrialExpired(env),
+			upgradeUrl: isTrialExpired(env) && user.isPrimaryAdmin ? upgradeUrl(env) : null,
 		},
 		runtime: isNodeRuntime(env) ? "node" : "cloudflare",
 		managesDns: hasCloudflareCredentials(env),

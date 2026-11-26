@@ -20,6 +20,7 @@ import { SidebarAside, MobileTopBar } from "@/components/sidebar-aside";
 import { SidebarResizeBoundary } from "@/components/sidebar-resize-boundary";
 import { ShortcutsProvider } from "@/components/shortcuts";
 import { RouteTitle } from "@/components/route-title";
+import { TrialExpiredBanner } from "@/components/trial-expired-banner";
 
 const primaryOnlyPrefixes = [
   "/agent",
@@ -67,6 +68,7 @@ export default function DashboardLayout({
             </SidebarAside>
             <div className="flex min-h-0 min-w-0 flex-col">
                             <MobileTopBar title={mobileTitle} />
+              <TrialExpiredBanner />
               <header className="fixed top-2 right-4 flex items-center gap-4 z-90">
                 <LicenseIndicator />
                 <MailboxSelector />

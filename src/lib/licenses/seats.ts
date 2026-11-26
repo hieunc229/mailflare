@@ -2,6 +2,7 @@ import { and, count, eq } from "drizzle-orm";
 import { getDb } from "@/db";
 import { users } from "@/db/schema";
 import { getLicenseEntitlements } from "./service";
+import { isTrialExpired, TRIAL_ENDED_ERROR } from "@/lib/tenancy/limits";
 
 /** Enabled accounts occupy a seat; the primary admin is one of them. */
 export async function countUsedAccountSeats(env: CloudflareEnv): Promise<number> {
@@ -11,6 +12,7 @@ export async function countUsedAccountSeats(env: CloudflareEnv): Promise<number>
 
 /** Returns an error message when no seat is free for one more enabled account, otherwise null. */
 export async function getAccountSeatError(env: CloudflareEnv): Promise<string | null> {
+	if (isTrialExpired(env)) return TRIAL_ENDED_ERROR;
 	const { accountSeatLimit } = await getLicenseEntitlements(env);
 	if (accountSeatLimit === null) return null;
 	const used = await countUsedAccountSeats(env);

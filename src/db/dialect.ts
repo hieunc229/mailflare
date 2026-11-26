@@ -15,7 +15,9 @@ export type DatabaseDriver =
 	| "neon"
 	| "pglite"
 	| "mysql2"
-	| "planetscale";
+	| "planetscale"
+	/** One SQLite database per tenant in a Durable Object (src/lib/tenancy). Not selectable through DATABASE_DRIVER. */
+	| "do-sqlite";
 
 export interface DatabaseConfig {
 	dialect: DatabaseDialect;
@@ -62,6 +64,7 @@ export const DRIVER_DIALECT: Record<DatabaseDriver, DatabaseDialect> = {
 	pglite: "postgres",
 	mysql2: "mysql",
 	planetscale: "mysql",
+	"do-sqlite": "sqlite",
 };
 
 function schemeOf(url: string): string {

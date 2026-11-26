@@ -10,6 +10,7 @@ import { summariseDomainDns } from "@/lib/domains/dns-view";
 import { getDomainProvisioningError } from "@/lib/domains/errors";
 import { mtaStsBlockedResponse } from "@/lib/deliverability/mta-sts-block-response";
 import { hasValidSessionMutationOrigin } from "@/lib/auth/origin";
+import { tenantLimit } from "@/lib/tenancy/limits";
 
 export async function GET(request: NextRequest) {
 	const env = getEnv();
@@ -40,7 +41,8 @@ export async function GET(request: NextRequest) {
 		}));
 	}
 
-	return NextResponse.json({ domains: domainViews, dns: includeDns ? dns : undefined });
+	// Hosted workspaces: the plan's domain cap, so the page can show "x of y" (null = unlimited / self-hosted).
+	return NextResponse.json({ domains: domainViews, dns: includeDns ? dns : undefined, limit: tenantLimit(env, "domains") });
 }
 
 export async function POST(request: Request) {

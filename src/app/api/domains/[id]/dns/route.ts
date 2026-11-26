@@ -1,4 +1,7 @@
 import { NextResponse } from "next/server";
+import { eq } from "drizzle-orm";
+import { getDb } from "@/db";
+import { domains } from "@/db/schema";
 import { getEnv } from "@/lib/cloudflare";
 import { requireUser } from "@/lib/auth/cookies";
 import { getDomainForUser } from "@/lib/domains/service";
@@ -15,8 +18,14 @@ export async function GET(request: Request, { params }: Params) {
 
 	try {
 		const dns = await getDomainDnsView(env, domain);
+		// A domain added with DNS skipped is complete once every public record verifies: clears the dashboard warning.
+		let dnsSkipped = domain.dnsSkipped;
+		if (dnsSkipped && Object.values(dns.audit).every((check) => check.status === "ok")) {
+			await getDb(env).update(domains).set({ dnsSkipped: false }).where(eq(domains.id, domain.id));
+			dnsSkipped = false;
+		}
 		return NextResponse.json({
-			domain: { ...domain, sendingEnabled: dns.sendingEnabled },
+			domain: { ...domain, dnsSkipped, sendingEnabled: dns.sendingEnabled },
 			dns,
 		});
 	} catch (err) {

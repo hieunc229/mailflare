@@ -523,3 +523,10 @@ button {
 	padding-bottom: env(safe-area-inset-bottom);
 	padding-left: env(safe-area-inset-left);
 }
+
+/* Free trial over, never subscribed: inbound mail stays visible but unreadable until the workspace upgrades. */
+html[data-trial-expired] [data-lock-blur] {
+	filter: blur(6px);
+	user-select: none;
+	-webkit-user-select: none;
+}

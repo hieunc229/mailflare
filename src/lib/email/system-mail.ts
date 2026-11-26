@@ -3,6 +3,7 @@ import { getDb } from "@/db";
 import { domains, mailboxes, users } from "@/db/schema";
 import { formatEmailAddress } from "@/lib/email/address";
 import { getOutboundProviderConfig, sendThroughProvider } from "@/lib/email/outbound-provider";
+import { sendPlatformEmail } from "@/lib/tenancy/smtp2go";
 import type { SystemMailInput } from "@/lib/email/system-mail-types";
 
 /**
@@ -15,6 +16,8 @@ import type { SystemMailInput } from "@/lib/email/system-mail-types";
  * send from, and the caller decides what to tell the user.
  */
 export async function sendSystemEmail(env: CloudflareEnv, input: SystemMailInput): Promise<boolean> {
+	// Hosted workspaces: the platform's own sender, which works before any of the workspace's domains does.
+	if (env.MAILFLARE_TENANT && !input.hostname && (await sendPlatformEmail(env, input))) return true;
 	const sender = await pickSystemSender(env, input.hostname);
 	if (!sender) return false;
 

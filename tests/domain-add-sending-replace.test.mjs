@@ -10,6 +10,8 @@ const outDir = mkdtempSync(join(root, "tests", ".tmp-domain-add-sending-"));
 after(() => rmSync(outDir, { recursive: true, force: true }));
 
 const mocks = {
+	"@/lib/tenancy/control": "export const claimTenantDomain=async()=>{},releaseTenantDomain=async()=>{};",
+	"@/lib/tenancy/limits": "export const getDomainLimitError=async()=>null;",
 	"@/lib/deliverability/mta-sts-guard": "export const assertMxChangeAllowed=async()=>{};export const republishMtaStsAfterMxChange=async()=>{};export const assertDomainRemovable=async()=>{};export class ForceDeleteConfirmError extends Error{};export const forceCleanupMtaSts=async()=>({leftovers:[],cachedUntil:null});",
 	"@/lib/mailboxes/audit": "export async function createAuditLog(){}",
 	"drizzle-orm": "export const eq=(c,v)=>({eq:[c,v]});export const and=(...a)=>({and:a});export const ne=(c,v)=>({ne:[c,v]});export const inArray=(c,v)=>({inArray:[c,v]});",

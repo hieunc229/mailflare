@@ -243,7 +243,7 @@ export async function processInboundMessage(
 		}).onConflictDoNothing().returning({ id: messages.id });
 		if (!inserted.length) return;
 
-		await storeMessageAttachments(env, messageId, parsed.attachments);
+		await storeMessageAttachments(env, messageId, parsed.attachments, { enforceStorage: false });
 		if (status !== "spam" && status !== "trash") {
 			await registerInboundInvite(env, { userId: decision.mailbox.userId, mailboxId: decision.mailbox.mailboxId, messageId, senderAddress: fromAddr, attachments: parsed.attachments });
 		}

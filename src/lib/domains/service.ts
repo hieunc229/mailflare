@@ -24,6 +24,8 @@ import { normalizeHostname } from "@/lib/domains/utils";
 import { hasCloudflareCredentials } from "@/lib/runtime";
 import { createAuditLog } from "@/lib/mailboxes/audit";
 import { assertDomainRemovable, assertMxChangeAllowed, ForceDeleteConfirmError, forceCleanupMtaSts, type ForceCleanup, republishMtaStsAfterMxChange } from "@/lib/deliverability/mta-sts-guard";
+import { claimTenantDomain, releaseTenantDomain } from "@/lib/tenancy/control";
+import { getDomainLimitError } from "@/lib/tenancy/limits";
 
 export type DomainDnsView = {
 	routing: { records: CfDnsRecord[]; missing: CfDnsRecord[]; status?: string };
@@ -45,7 +47,7 @@ export async function addDomainForUser(
 	env: CloudflareEnv,
 	userId: string,
 	hostname: string,
-	options?: { enableRouting?: boolean; enableSending?: boolean; replaceMxRecords?: boolean; skipDns?: boolean; receivingProvider?: "none" | "cloudflare" | "resend" | "ses"; sendingProvider?: "none" | "cloudflare" | "resend" | "ses" },
+	options?: { enableRouting?: boolean; enableSending?: boolean; replaceMxRecords?: boolean; skipDns?: boolean; receivingProvider?: "none" | "cloudflare" | "resend" | "ses"; sendingProvider?: "none" | "cloudflare" | "resend" | "ses" | "smtp2go"; skipPlanLimit?: boolean },
 ): Promise<{
 	domain: typeof domains.$inferSelect;
 	dns: DomainDnsView;
@@ -59,6 +61,11 @@ export async function addDomainForUser(
 	}
 	// A re-add provisions the zone again (MX records, Email Routing, receiving provider), so it is an MX change like any other.
 	if (claimedHostname) await assertMxChangeAllowed(env, claimedHostname);
+	if (!claimedHostname && !options?.skipPlanLimit) {
+		const limitError = await getDomainLimitError(env);
+		if (limitError) throw new Error(limitError);
+	}
+	await claimTenantDomain(env, normalizedHostname);
 	if (!options?.skipDns && hasCloudflareCredentials(env)) {
 		const { zone } = await preflightDomain(env, normalizedHostname);
 		const [claimedZone] = await db.select({ userId: domains.userId }).from(domains).where(and(
@@ -260,6 +267,7 @@ export async function removeDomainForUser(
 	}
 
 	await db.delete(domains).where(eq(domains.id, domainId));
+	await releaseTenantDomain(env, domain.hostname);
 	return cleanup;
 }
 

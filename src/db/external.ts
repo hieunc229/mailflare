@@ -98,7 +98,11 @@ function buildDrizzle(config: DatabaseConfig, ctx: ExecutorContext, schema: Reco
 }
 
 export function openExternalDatabase(config: DatabaseConfig, shared: boolean): ExternalDatabase {
-	const base = openExecutor(config, shared);
+	return openDatabaseFromExecutor(openExecutor(config, shared), config);
+}
+
+/** An `env.DB` over an executor the caller built (one Durable Object database per tenant, tests). */
+export function openDatabaseFromExecutor(base: SqlExecutor, config: DatabaseConfig): ExternalDatabase {
 	const ctx: ExecutorContext = { base, tx: null };
 	const compat = new CompatDatabase(config.dialect, base, () => ctx.tx) as ExternalDatabase;
 	Object.defineProperties(compat, {

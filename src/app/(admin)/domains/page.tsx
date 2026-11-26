@@ -20,14 +20,23 @@ import { Switch } from "@/components/ui/switch";
 import { List } from "@/components/ui/list";
 import { CheckCircle2, LoaderCircle, Plus } from "@/components/icons";
 import { authFetch } from "@/lib/auth/client";
+import { useCurrentUser } from "@/hooks/use-current-user";
+import ManagedDomains from "./ManagedDomains";
 import type { DnsAuthRecord, DnsStatusSummary, Domain, DomainDnsCache, DomainDnsView, DomainPreflight, ReceivingProvider, SendingProvider } from "./types";
 import DomainItemCard from "./DomainItemCard";
 import { SectionRowSkeleton } from "@/components/page-skeletons";
 import { checkDomain } from "./utils";
+import { DNS_CHECKED_EVENT } from "@/components/dns-skipped-banner";
 import { confirmMxReplacement, createDomain, isMxConflictError } from "./api";
 import { Select } from "@/components/ui/select";
 
 export default function DomainsPage() {
+  const user = useCurrentUser();
+  if (!user) return null;
+  return user.managed ? <ManagedDomains /> : <FullDomainsPage />;
+}
+
+function FullDomainsPage() {
   const { t } = useLanguage();
   const qc = useQueryClient();
   const [hostname, setHostname] = useState("");
@@ -152,6 +161,7 @@ export default function DomainsPage() {
     }
     const loadedView = { domain: json.domain, dns: json.dns };
     setDnsViews((current) => ({ ...current, [id]: loadedView }));
+    window.dispatchEvent(new Event(DNS_CHECKED_EVENT));
     if (expandedIdRef.current === id) setSetupMessage(null);
   };
 

@@ -7,6 +7,7 @@ import { domains, mailboxAliases, mailboxes, users } from "@/db/schema";
 import { requireUser } from "@/lib/auth/cookies";
 import { newId } from "@/lib/ids";
 import { getLicenseEntitlements } from "@/lib/licenses/service";
+import { getMailboxLimitError } from "@/lib/tenancy/limits";
 import { tracksAccountIdentity } from "@/lib/profile/identity-utils";
 import { mailboxSchema } from "@/lib/validators";
 import { ensureMailboxDomainRouting, getMailboxDomainAddresses } from "@/lib/mailboxes/domain-addresses";
@@ -39,6 +40,8 @@ export async function POST(request: Request) {
 		return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
 	}
 
+	const mailboxLimitError = await getMailboxLimitError(env);
+	if (mailboxLimitError) return NextResponse.json({ error: mailboxLimitError }, { status: 403 });
 	const db = getDb(env);
 	const mailboxType = parsed.data.type ?? "personal";
 	if (mailboxType === "shared") {

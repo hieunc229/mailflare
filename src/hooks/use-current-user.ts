@@ -15,6 +15,12 @@ export type CurrentUser = {
 	calendarEnabled: boolean;
 	driveEnabled: boolean;
 	hasAvatar: boolean;
+	/** Hosted workspace: updates and migrations belong to the platform. */
+	managed?: boolean;
+	/** Hosted workspace whose free trial is over: locked until the owner upgrades. */
+	trialExpired?: boolean;
+	/** Where the owner upgrades (only given to the primary admin). */
+	upgradeUrl?: string | null;
 };
 
 export type SessionInfo = {
