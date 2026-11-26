@@ -44,10 +44,13 @@ const clock = (date: Date, zone: string) => formatUserDate(date, { hour: "numeri
 export function AvailabilityView(props: AvailabilityViewProps) {
 	const { t } = useLanguage();
 	const titleId = useId();
+	const suggestedId = useId();
 	const { zone, dayStart, dayEnd, event } = props;
 	const span = dayStart && dayEnd && event.start && event.end ? busyBlocks([[event.start.toISOString(), event.end.toISOString()]], dayStart, dayEnd)[0] : undefined;
 	if (props.guestCount === 0) return <p className="text-xs text-neutral-600">{t("calendar.availability.hint")}</p>;
 	const dayLabel = dayStart ? formatUserDate(dayStart, { weekday: "short", month: "short", day: "numeric", timeZone: zone }) : "";
+	const announcement = props.find.state === "loading" ? t("calendar.availability.finding") : props.find.state === "ready" ? t(props.find.slots.length ? "calendar.availability.suggested" : "calendar.availability.findEmpty")
+		: props.state === "loading" ? t(props.rows.length ? "calendar.availability.updating" : "calendar.availability.loading") : "";
 	const anyVisible = props.rows.some((row) => row.availability.status === "ok");
 	return (
 		<section aria-labelledby={titleId} className="space-y-2 text-sm">
@@ -55,7 +58,9 @@ export function AvailabilityView(props: AvailabilityViewProps) {
 				<h3 id={titleId} className="flex items-center gap-1.5 text-xs font-semibold text-neutral-900">{t("calendar.availability.title")}{props.state === "loading" && props.rows.length > 0 && <Loader2 aria-hidden="true" className="h-3 w-3 animate-spin motion-reduce:animate-none" />}</h3>
 				{dayLabel && <span className="text-xs text-neutral-600">{t("calendar.availability.day", { date: dayLabel })}</span>}
 			</div>
-			{props.state === "loading" && props.rows.length === 0 && <p role="status" className="flex items-center gap-2 text-neutral-600"><Loader2 aria-hidden="true" className="h-4 w-4 animate-spin motion-reduce:animate-none" />{t("calendar.availability.loading")}</p>}
+			{/* The one live region: always mounted, so its text changing is what gets announced. The visible messages below are plain text. */}
+			<p role="status" className="sr-only">{announcement}</p>
+			{props.state === "loading" && props.rows.length === 0 && <p className="flex items-center gap-2 text-neutral-600"><Loader2 aria-hidden="true" className="h-4 w-4 animate-spin motion-reduce:animate-none" />{t("calendar.availability.loading")}</p>}
 			{props.state === "error" && (
 				<div role="alert" className="flex flex-wrap items-center gap-2 text-red-700">
 					<AlertCircle aria-hidden="true" className="h-4 w-4 shrink-0" />
@@ -95,14 +100,14 @@ export function AvailabilityView(props: AvailabilityViewProps) {
 				{props.tooLong && <p className="text-xs text-neutral-600">{t("calendar.availability.findTooLong")}</p>}
 				{props.state === "ready" && !anyVisible && !props.tooLong && <p className="text-xs text-neutral-600">{t("calendar.availability.findNeedsPeople")}</p>}
 				<div className="space-y-1">
-					{props.find.state === "loading" && <p role="status" className="flex items-center gap-2 text-neutral-600"><Loader2 aria-hidden="true" className="h-4 w-4 animate-spin motion-reduce:animate-none" />{t("calendar.availability.finding")}</p>}
+					{props.find.state === "loading" && <p className="flex items-center gap-2 text-neutral-600"><Loader2 aria-hidden="true" className="h-4 w-4 animate-spin motion-reduce:animate-none" />{t("calendar.availability.finding")}</p>}
 					{props.find.state === "error" && <p role="alert" className="text-red-700">{t("calendar.availability.findFailed")}</p>}
-					{props.find.state === "ready" && props.find.slots.length === 0 && <p role="status" className="text-neutral-600">{t("calendar.availability.findEmpty")}</p>}
+					{props.find.state === "ready" && props.find.slots.length === 0 && <p className="text-neutral-600">{t("calendar.availability.findEmpty")}</p>}
 					{props.find.state === "ready" && props.selfLeftOut && <p className="text-xs text-neutral-600">{t("calendar.availability.findSelfLeftOut")}</p>}
 					{props.find.state === "ready" && props.find.slots.length > 0 && (
-						<div role="group" aria-label={t("calendar.availability.suggested")} className="space-y-1">
-							<p role="status" className="text-xs font-semibold text-neutral-900">{t("calendar.availability.suggested")}</p>
-							<ul className="flex flex-wrap gap-2">
+						<div className="space-y-1">
+							<p id={suggestedId} className="text-xs font-semibold text-neutral-900">{t("calendar.availability.suggested")}</p>
+							<ul aria-labelledby={suggestedId} className="flex flex-wrap gap-2">
 								{props.find.slots.map((slot) => {
 									const label = `${formatUserDate(slot.start, { weekday: "short", month: "short", day: "numeric", timeZone: zone })}, ${t("calendar.availability.range", { from: clock(slot.start, zone), to: clock(slot.end, zone) })}`;
 									return <li key={slot.start.getTime()}><button type="button" aria-label={t("calendar.availability.use", { time: label })} onClick={() => props.onPick(slot)} className={`rounded-full border border-blue-600 px-3 py-1 text-sm text-blue-700 hover:bg-blue-50 ${focus} ${touch}`}>{label}</button></li>;

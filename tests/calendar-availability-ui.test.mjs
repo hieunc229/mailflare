@@ -32,7 +32,8 @@ test("no guests: a hint says what to do, and there is no Find a time", () => {
 
 test("loading is announced politely and shows no rows", () => {
 	const html = render({ state: "loading" });
-	assert.match(html, /role="status"[^>]*>.*Checking availability/);
+	assert.match(html, /<p role="status" class="sr-only">Checking availability\.\.\.<\/p>/);
+	assert.match(html, />Checking availability\.\.\.<\/p>/, "and the same words are visible");
 	assert.doesNotMatch(html, /<li/);
 });
 
@@ -89,12 +90,15 @@ test("Find a time: a button when people can be seen, a reason when not, disabled
 });
 
 test("Find a time: looking, failing, nothing found and the suggestions are each announced; a suggestion is a button that names its time", () => {
-	assert.match(render({ find: { state: "loading", slots: [] } }), /role="status"[^>]*>.*Looking for a time/);
+	assert.match(render({ find: { state: "loading", slots: [] } }), /<p role="status" class="sr-only">Looking for a time\.\.\.<\/p>/);
 	assert.match(render({ find: { state: "error", slots: [] } }), /role="alert"[^>]*>.*Could not look for a time/);
-	assert.match(render({ find: { state: "ready", slots: [] } }), /role="status"[^>]*>No time in the next 14 days/);
+	assert.match(render({ find: { state: "ready", slots: [] } }), /<p role="status" class="sr-only">No time in the next 14 days/);
 	const html = render({ find: { state: "ready", slots: [{ start: D(10), end: D(11) }, { start: D(12), end: D(13) }] } });
-	assert.doesNotMatch(html, /aria-live/, "no wrapper over the status, alert and heading that already announce themselves");
-	assert.match(html, /<p[^>]*role="status"[^>]*>Suggested times<\/p>/);
+	assert.doesNotMatch(html, /aria-live/);
+	assert.match(html, /<p role="status" class="sr-only">Suggested times<\/p>/);
+	assert.equal((html.match(/Suggested times/g) ?? []).length, 2, "the one announcement and the visible heading; the list takes its name from the heading by reference");
+	assert.doesNotMatch(html, /role="group"|aria-label="Suggested times"/, "the heading is not also a second label");
+	assert.match(html, /<ul[^>]*aria-labelledby=/);
 	assert.match(html, /Suggested times/);
 	const buttons = [...html.matchAll(/<button[^>]*aria-label="Use ([^"]+)"[^>]*>([^<]+)</g)];
 	assert.equal(buttons.length, 2);
@@ -117,11 +121,18 @@ test("an event too long for the working day says Find a time cannot help, instea
 	assert.doesNotMatch(render({ rows: [busy(D(1), D(2))] }), /up to 10 hours/);
 });
 
-test("loading again with rows already shown keeps them, dimmed and marked busy, with no new announcement", () => {
+test("loading again with rows already shown keeps them, dimmed and marked busy, and says Updating in the one status", () => {
 	const html = render({ state: "loading", rows: [busy(D(9), D(10))] });
 	assert.match(html, /ann@one\.test/);
 	assert.match(html, /<ul[^>]*aria-busy="true"/);
-	assert.doesNotMatch(html, /role="status"/);
+	assert.match(html, /<p role="status" class="sr-only">Updating availability\.\.\.<\/p>/);
 	assert.match(html, /opacity-60/);
 	assert.doesNotMatch(render({ rows: [busy(D(9), D(10))] }), /aria-busy="true"|opacity-60/);
+});
+
+test("exactly one live status is always mounted while there are guests, whatever the state, and its text is what changes", () => {
+	for (const props of [{}, { state: "loading" }, { state: "loading", rows: [busy(D(9), D(10))] }, { state: "error" }, { find: { state: "loading", slots: [] } }, { find: { state: "ready", slots: [{ start: D(10), end: D(11) }] } }]) {
+		assert.equal((render(props).match(/role="status"/g) ?? []).length, 1, JSON.stringify(Object.keys(props)));
+	}
+	assert.match(render({}), /<p role="status" class="sr-only"><\/p>/, "empty, but there, so the first announcement is heard");
 });
