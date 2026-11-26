@@ -93,7 +93,8 @@ test("Find a time: looking, failing, nothing found and the suggestions are each 
 	assert.match(render({ find: { state: "error", slots: [] } }), /role="alert"[^>]*>.*Could not look for a time/);
 	assert.match(render({ find: { state: "ready", slots: [] } }), /role="status"[^>]*>No time in the next 14 days/);
 	const html = render({ find: { state: "ready", slots: [{ start: D(10), end: D(11) }, { start: D(12), end: D(13) }] } });
-	assert.match(html, /aria-live="polite"/);
+	assert.doesNotMatch(html, /aria-live/, "no wrapper over the status, alert and heading that already announce themselves");
+	assert.match(html, /<p[^>]*role="status"[^>]*>Suggested times<\/p>/);
 	assert.match(html, /Suggested times/);
 	const buttons = [...html.matchAll(/<button[^>]*aria-label="Use ([^"]+)"[^>]*>([^<]+)</g)];
 	assert.equal(buttons.length, 2);
