@@ -30,3 +30,12 @@ export async function shiftOverrides(db: Db, userId: string, masterId: string, s
 		.where(and(eq(calendarEvents.userId, userId), eq(calendarEvents.davObjectId, masterId), isNotNull(calendarEvents.recurrenceId)));
 	for (const row of rows) await db.update(calendarEvents).set({ recurrenceId: shift(row.recurrenceId!) }).where(eq(calendarEvents.id, row.id));
 }
+
+/**
+ * Moves an event and, when it is the master of a DAV resource, every override row that points at it to another calendar
+ * (null is the owner's default). One statement: the change log keys an override under its parent's collection, so moving the
+ * master first would log the overrides against the collection the parent just left.
+ */
+export async function moveSeriesToCalendar(db: Db, userId: string, masterId: string, calendarId: string | null): Promise<void> {
+	await db.update(calendarEvents).set({ calendarId }).where(and(eq(calendarEvents.userId, userId), or(eq(calendarEvents.id, masterId), eq(calendarEvents.davObjectId, masterId))));
+}

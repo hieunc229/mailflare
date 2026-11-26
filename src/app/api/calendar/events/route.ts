@@ -18,6 +18,7 @@ import { getRequestTimeZone, normalizeTimeZone } from "@/lib/time/utils";
 import { chunkIds } from "@/lib/calendar/chunks";
 import { authorizeCalendarRequest, calendarKeyCanSendInvitations } from "@/lib/calendar/api-auth";
 import { readJsonObject } from "@/lib/http/request";
+import { calendarFilter, eventCalendarId, resolveEventCalendar } from "@/lib/calendar/calendars";
 
 export async function GET(request: Request) {
 	const env = getEnv();
