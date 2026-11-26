@@ -3,7 +3,7 @@ import { MAX_FREE_BUSY_DAYS, MAX_FREE_BUSY_IDS } from "./free-busy";
 const DAY = 86_400_000;
 const MAX_ADDRESS = 254;
 
-export type FreeBusyRequest = { addresses: string[]; resourceIds: string[]; start: Date; end: Date };
+export type FreeBusyRequest = { addresses: string[]; resourceIds: string[]; start: Date; end: Date; excludeEventId: string | null };
 
 const strings = (value: unknown): string[] | null => (value === undefined ? [] : Array.isArray(value) && value.every((item) => typeof item === "string") ? (value as string[]) : null);
 
@@ -22,5 +22,7 @@ export function parseFreeBusyRequest(body: Record<string, unknown>): FreeBusyReq
 	const end = new Date(body.end);
 	if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()) || end <= start) return "Give a start before the end";
 	if (end.getTime() - start.getTime() > MAX_FREE_BUSY_DAYS * DAY) return `Ask about at most ${MAX_FREE_BUSY_DAYS} days at a time`;
-	return { addresses: [...new Set(addresses.map((address) => address.trim().toLowerCase().slice(0, MAX_ADDRESS + 1)))], resourceIds, start, end };
+	if (body.excludeEventId !== undefined && (typeof body.excludeEventId !== "string" || body.excludeEventId.length > 200)) return "excludeEventId must be an event id";
+	const excludeEventId = typeof body.excludeEventId === "string" && body.excludeEventId ? body.excludeEventId : null;
+	return { excludeEventId, addresses: [...new Set(addresses.map((address) => address.trim().toLowerCase().slice(0, MAX_ADDRESS + 1)))], resourceIds, start, end };
 }

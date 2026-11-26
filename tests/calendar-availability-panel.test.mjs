@@ -142,3 +142,26 @@ test("an event whose times are not valid yet asks nothing", async () => {
 	assert.equal(globalThis.panelT.calls.length, 0);
 	await teardown();
 });
+
+test("when an existing event is being edited, both the availability read and Find a time name it so it does not clash with itself", async () => {
+	setup();
+	globalThis.panelT.responder = (body) => ok(Object.fromEntries(body.addresses.map((address) => [address, { status: "ok", busy: [] }])));
+	await mount({ guests: "ann@one.test", excludeEventId: "evt_1" });
+	await ticks(400);
+	await ticks(0);
+	await act(async () => { [...container.querySelectorAll("button")].find((button) => button.textContent === "Find a time").click(); });
+	await ticks(0);
+	assert.equal(globalThis.panelT.calls.length, 2);
+	assert.deepEqual(globalThis.panelT.calls.map(({ body }) => body.excludeEventId), ["evt_1", "evt_1"]);
+	await teardown();
+});
+
+test("a new event sends no excludeEventId", async () => {
+	setup();
+	globalThis.panelT.responder = (body) => ok(Object.fromEntries(body.addresses.map((address) => [address, { status: "ok", busy: [] }])));
+	await mount({ guests: "ann@one.test" });
+	await ticks(400);
+	await ticks(0);
+	assert.equal("excludeEventId" in globalThis.panelT.calls[0].body, false);
+	await teardown();
+});

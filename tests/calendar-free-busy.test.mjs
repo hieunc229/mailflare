@@ -252,3 +252,32 @@ test("busyIntervals: series that ended before the window are not even read", asy
 	assert.ok(statements.some((sql) => /where.*repeat_until/is.test(sql)), "the read filters on repeat_until");
 	assert.deepEqual(result.get("u1"), [[at(0, 11), at(0, 12)]]);
 });
+
+// ---- Leaving one event out (editing it) ---------------------------------------------------------------------------------
+
+const { createHash } = await import("node:crypto");
+const copyId = (user, uid) => `inv_${createHash("sha256").update(`${user}\n${uid}`).digest("hex").slice(0, 24)}`;
+
+test("busyIntervals: excludeEventId leaves out the event, its moved occurrences and each guest's copy of its invitation, and nothing else", async () => {
+	setup();
+	const master = event("u1", at(0, 9), at(0, 10), { id: "evt_plan" });
+	event("u1", at(0, 11), at(0, 12), { dav_object_id: master, recurrence_id: secs(at(-7, 11)) });
+	event("u2", at(0, 9), at(0, 10), { id: copyId("u2", "evt_plan@mailflare"), response_status: "accepted" });
+	event("u2", at(0, 13), at(0, 14));
+	event("u1", at(0, 15), at(0, 16));
+	event("u3", at(0, 9), at(0, 10), { id: copyId("u3", "evt_other@mailflare") });
+	const result = await busyIntervals({}, { userIds: ["u1", "u2", "u3"], excludeEventId: "evt_plan" }, ...win(at(0), at(1)));
+	assert.deepEqual(result.get("u1"), [[at(0, 15), at(0, 16)]]);
+	assert.deepEqual(result.get("u2"), [[at(0, 13), at(0, 14)]]);
+	assert.deepEqual(result.get("u3"), [[at(0, 9), at(0, 10)]], "a copy of a different invitation still counts");
+	assert.deepEqual((await busy(["u2"], at(0), at(1))).get("u2"), [[at(0, 9), at(0, 10)], [at(0, 13), at(0, 14)]], "without it, nothing is left out");
+});
+
+test("busyIntervals: an event that came from a CalDAV client is matched by its stored UID", async () => {
+	setup();
+	const master = event("u1", at(0, 9), at(0, 10), { id: "evt_dav" });
+	sqlite.exec(`INSERT INTO dav_calendar_objects (id, user_id, collection_id, name, uid, size, created_at, updated_at) VALUES ('${master}', 'u1', 'cal:u1', 'a.ics', 'uid-from-phone', 0, 1, 1)`);
+	event("u2", at(0, 9), at(0, 10), { id: copyId("u2", "uid-from-phone") });
+	const result = await busyIntervals({}, { userIds: ["u1", "u2"], excludeEventId: "evt_dav" }, ...win(at(0), at(1)));
+	assert.deepEqual([result.get("u1"), result.get("u2")], [[], []]);
+});

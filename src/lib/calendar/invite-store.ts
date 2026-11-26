@@ -5,15 +5,12 @@ import type { AttachmentContent } from "@/lib/email/attachment-types";
 import { inviteRepeat, parseInvite, type ParsedInvite } from "./invite";
 import { legacyRepeatFor, parseRrule } from "./rrule";
 import { findInviteAttachment, MAX_INVITE_BYTES } from "./invite-attachment";
+import { inviteEventId } from "./invite-id";
 import { addExcludedOccurrence, chooseRecipientZone, inboundNeedsRecipientZone, inviteSenderMatches, mergeExcludedOccurrences, normalizeInviteSender, planInboundInvite } from "./invite-rules";
 
 export { findInviteAttachment };
 
-/** One calendar row per (user, invitation UID), so a re-sent or updated invitation edits the same event. */
-export async function inviteEventId(userId: string, uid: string): Promise<string> {
-	const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(`${userId}\n${uid}`));
-	return `inv_${[...new Uint8Array(digest)].slice(0, 12).map((byte) => byte.toString(16).padStart(2, "0")).join("")}`;
-}
+export { inviteEventId };
 
 /**
  * Calendar columns written from an invitation. `timeZone` is the zone the event's clock time belongs to (the invitation's
