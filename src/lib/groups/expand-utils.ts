@@ -71,8 +71,14 @@ export async function groupCopyKey(digest: string, mailboxId: string): Promise<s
 	return `inbound/${hex(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(`group-copy\0${mailboxId}\0${digest}`)))}.eml`;
 }
 
-/** Subrequests one chunk can use at most: its copies (or relay messages) plus the queries, relay copy, queue sends and cleanup around them. */
-export const EXPANSION_CHUNK_COST = GROUP_EXPANSION_CHUNK + 20;
+/**
+ * Subrequests one chunk can use at most: its copies (or relay messages) plus everything around them. The first chunk
+ * of a group's message with external members is the heaviest: group, members, licence and sender lookups (about 12),
+ * who-can-post checks (about 8), the relay path (chunk, skip and rate markers read and written, two listings, domain and
+ * member queries: about 14), the spam analysis (about 15 queries and lookups), the relay copy, one or two queue sends,
+ * and the cleanup. About 65 on top of the per-member copies; later chunks are lighter, so this is the worst case.
+ */
+export const EXPANSION_CHUNK_COST = GROUP_EXPANSION_CHUNK + 65;
 /** What expansion may spend in one queue batch: under the 50 subrequests of an invocation on the Free plan. */
 export const EXPANSION_SUBREQUEST_BUDGET = 45;
 

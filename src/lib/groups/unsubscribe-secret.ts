@@ -6,17 +6,23 @@ export function forgetUnsubscribeSecretCache(): void {
 	cache = new WeakMap();
 }
 
-async function load(env: CloudflareEnv): Promise<string> {
-	const existing = await env.BUCKET.get(KEY);
-	if (existing) {
-		const value = new TextDecoder().decode(await existing.arrayBuffer()).trim();
-		if (value) return value;
-	}
-	const fresh = Array.from(crypto.getRandomValues(new Uint8Array(32)), (byte) => byte.toString(16).padStart(2, "0")).join("");
-	await env.BUCKET.put(KEY, new TextEncoder().encode(fresh), { httpMetadata: { contentType: "text/plain" } });
-	// Read back: if two isolates raced to create it, both settle on whichever write the bucket kept.
+/** How long a creator waits before it reads the key back: long enough for a racing creator's write to have landed. */
+const SETTLE_MS = 300;
+
+async function read(env: CloudflareEnv): Promise<string | null> {
 	const stored = await env.BUCKET.get(KEY);
-	return stored ? new TextDecoder().decode(await stored.arrayBuffer()).trim() || fresh : fresh;
+	return stored ? new TextDecoder().decode(await stored.arrayBuffer()).trim() || null : null;
+}
+
+async function load(env: CloudflareEnv): Promise<string> {
+	const existing = await read(env);
+	if (existing) return existing;
+	const fresh = Array.from(crypto.getRandomValues(new Uint8Array(32)), (byte) => byte.toString(16).padStart(2, "0")).join("");
+	// `onlyIf` makes the write refuse to replace an existing key where the bucket supports it (R2); elsewhere the last writer wins.
+	await env.BUCKET.put(KEY, new TextEncoder().encode(fresh), { httpMetadata: { contentType: "text/plain" }, onlyIf: { etagDoesNotMatch: "*" } } as R2PutOptions).catch(() => null);
+	// Whatever is stored once the writers have settled is the key; nothing is signed with a value that might be overwritten.
+	await new Promise((resolve) => setTimeout(resolve, SETTLE_MS));
+	return (await read(env)) ?? fresh;
 }
 
 /**

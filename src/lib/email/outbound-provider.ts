@@ -121,7 +121,7 @@ export async function sendThroughProvider(
 	if (config.provider === "resend") return sendWithResend(env, resendClient(env, config.apiKey), message, idempotencyKey);
 	if (config.provider === "ses") return sendSesEmail(config.config, message);
 	const response = await env.EMAIL.send({
-		from: message.from,
+		from: message.fromParts ? { name: message.fromParts.name, email: message.fromParts.email } : message.from,
 		to: message.to,
 		...(message.cc?.length ? { cc: message.cc } : {}),
 		...(message.bcc?.length ? { bcc: message.bcc } : {}),

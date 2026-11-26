@@ -3,7 +3,9 @@ import { getDb } from "@/db";
 import { domains, mailGroupMembers, mailGroups } from "@/db/schema";
 import { findSuppressed, getSuppressionMode } from "@/lib/deliverability/suppression";
 import { isMissingTableError } from "@/lib/database-errors";
+import { prepareOutboundAttachments } from "@/lib/email/cloud-attachment-utils";
 import { parseEmailAddressParts } from "@/lib/email/address";
+import { createAuditLog } from "@/lib/mailboxes/audit";
 import { normalizeMessageId } from "@/lib/email/threading";
 import { singleSenderAddress } from "@/lib/groups/policy-utils";
 import { boundParsedEmail } from "@/lib/email/inbound-limits";
@@ -11,7 +13,12 @@ import { getOutboundProviderConfig, sendThroughProvider } from "@/lib/email/outb
 import { MimeLimitError, parseRawMime } from "@/lib/email/parse";
 import { groupsAllowed } from "@/lib/groups/license";
 import {
+	dayOf,
 	isRateLimited,
+	relayFromName,
+	relayKey,
+	relayOriginalFrom,
+	sha256Hex,
 	unsubscribeOrigin,
 	plain,
 	RELAY_DEFER_SECONDS,
@@ -35,6 +42,19 @@ export async function unsubscribeUrl(env: CloudflareEnv, claim: { groupId: strin
 	const origin = unsubscribeOrigin(env);
 	if (!origin) return null;
 	return `${origin}/api/groups/unsubscribe/${await signUnsubscribeToken(await getUnsubscribeSecret(env), claim)}`;
+}
+
+/** A message the provider cannot carry (Cloudflare's 5 MiB, past 25 MB elsewhere) is not sent; the admin is told once per message. */
+async function noteTooLarge(env: CloudflareEnv, group: { id: string }, address: string, rawR2Key: string, error: unknown): Promise<void> {
+	const key = relayKey("skip", dayOf(), `size-${group.id}-${await sha256Hex(rawR2Key)}`);
+	console.warn(`Group ${group.id} relay not sent: ${error instanceof Error ? error.message : "message too large"}`);
+	if (await env.BUCKET.get(key)) return;
+	await env.BUCKET.put(key, new ArrayBuffer(0));
+	await createAuditLog(env, {
+		actorUserId: null,
+		action: "group.relay_skipped",
+		metadata: { groupId: group.id, address, reason: "message_too_large", detail: error instanceof Error ? error.message.slice(0, 200) : "" },
+	});
 }
 
 /**
@@ -115,25 +135,43 @@ export async function processGroupRelay(env: CloudflareEnv, message: GroupRelayM
 		hostname: domain.hostname,
 		replyTo: group.replyTo,
 		senderAddress,
-		originalFrom: parsed.fromAddr,
+		originalFrom: relayOriginalFrom(sender.name, senderAddress),
 		unsubscribeUrl: await unsubscribeUrl(env, { groupId: group.id, memberId: found.member.id }),
 		inReplyTo: parsed.inReplyTo ? `<${parsed.inReplyTo}>` : null,
 		references: references.map((id) => `<${id}>`),
 	});
-	const from = relayFrom({ senderName: sender.name ?? "", senderAddress, groupName: group.name, groupAddress });
+	const fromInput = { senderName: sender.name ?? "", senderAddress, groupName: group.name, groupAddress };
+	const provider = await getOutboundProviderConfig(env, groupAddress);
+	// The same preparation as a normal send: what the provider cannot carry becomes a download link. Relayed files are
+	// not stored, so one that cannot be carried makes the message too large for this provider, and that is reported.
+	let prepared;
+	try {
+		prepared = await prepareOutboundAttachments(env, provider.provider, parsed.attachments, {
+			subject: plain(parsed.subject ?? ""),
+			html: parsed.html ?? undefined,
+			text: parsed.text ?? undefined,
+			headers,
+			publicOrigin: env.APP_URL,
+		});
+	} catch (error) {
+		await noteTooLarge(env, group, groupAddress, message.rawR2Key, error);
+		return "skipped";
+	}
 	let sent: { messageId: string };
 	try {
 		sent = await sendThroughProvider(
 			env,
-			await getOutboundProviderConfig(env, groupAddress),
+			provider,
 			{
-				from,
+				// SES needs non-ASCII names as RFC 2047 words; Resend takes UTF-8; Cloudflare gets name and address apart.
+				from: relayFrom(fromInput, provider.provider === "ses"),
+				fromParts: { name: relayFromName(fromInput), email: groupAddress },
 				to: [email],
 				subject: plain(parsed.subject ?? ""),
-				text: parsed.text ?? undefined,
-				html: parsed.html ?? undefined,
+				text: prepared.text,
+				html: prepared.html,
 				headers,
-				attachments: parsed.attachments.map((attachment) => ({
+				attachments: prepared.attachments.map((attachment) => ({
 					filename: attachment.filename,
 					type: attachment.type,
 					content: attachment.content,

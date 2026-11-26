@@ -9,13 +9,47 @@ const { app } = await loadApp("groups-relay-utils", `
 `);
 const { relay, token, secret: secretKey } = app;
 
-test("the relay copy key is deterministic per group and message and lives under group-relay/", async () => {
-	const a = await relay.relayStorageKey("g1", "abc");
-	assert.equal(a, await relay.relayStorageKey("g1", "abc"));
-	assert.notEqual(a, await relay.relayStorageKey("g2", "abc"));
-	assert.notEqual(a, await relay.relayStorageKey("g1", "abd"));
-	assert.match(a, /^group-relay\/[0-9a-f]{64}\.eml$/);
+test("the relay copy key is deterministic per group and message and lives under its day", async () => {
+	const at = new Date("2026-12-01T10:00:00Z");
+	const day = Math.floor(at / 86400000);
+	const a = await relay.relayStorageKey("g1", "abc", at);
+	assert.equal(a, await relay.relayStorageKey("g1", "abc", at));
+	assert.notEqual(a, await relay.relayStorageKey("g2", "abc", at));
+	assert.notEqual(a, await relay.relayStorageKey("g1", "abd", at));
+	assert.match(a, new RegExp(`^group-relay/${day}/copy/[0-9a-f]{64}\\.eml$`));
 	assert.ok(a.startsWith(relay.GROUP_RELAY_PREFIX));
+	assert.match(await relay.relayChunkKey("g1", "abc", undefined, at), new RegExp(`^group-relay/${day}/chunk/[0-9a-f]{64}$`));
+	assert.match(await relay.relayMessageIdKey("<x@y>", at), new RegExp(`^group-relay/${day}/mid/`));
+	assert.equal((await relay.relayMessageIdKeys("<x@y>", at)).length, relay.RELAY_MID_LOOKUP_DAYS);
+	assert.match(relay.relaySkipKey("g1", "abc", at), new RegExp(`^group-relay/${day}/skip/`));
+});
+
+test("non-ASCII names become RFC 2047 words where a header travels as written, and stay UTF-8 for providers that encode", () => {
+	const input = { senderName: "José Ñandú", senderAddress: "jose@gmail.com", groupName: "Équipe", groupAddress: "team@a.com" };
+	assert.equal(relay.relayFrom(input), `"'José Ñandú <jose@gmail.com>' via Équipe" <team@a.com>`);
+	const encoded = relay.relayFrom(input, true);
+	assert.ok(/^[\x20-\x7e]+$/.test(encoded), encoded);
+	const words = [...encoded.matchAll(/=\?UTF-8\?B\?([A-Za-z0-9+/=]+)\?=/g)].map((m) => m[1]);
+	assert.equal(Buffer.concat(words.map((w) => Buffer.from(w, "base64"))).toString("utf8"), "'José Ñandú <jose@gmail.com>' via Équipe");
+	assert.match(encoded, / <team@a\.com>$/);
+	assert.ok(!encoded.includes('"'), "encoded words are never inside quotes");
+	assert.equal(relay.relayFromName(input), "'José Ñandú <jose@gmail.com>' via Équipe");
+	const headers = relay.relayHeaders({ groupId: "g", groupName: "Équipe", localPart: "team", hostname: "a.com", replyTo: "sender", senderAddress: "jose@gmail.com", originalFrom: relay.relayOriginalFrom("José", "jose@gmail.com"), unsubscribeUrl: null, inReplyTo: null, references: [] });
+	assert.ok(/^[\x20-\x7e]+$/.test(headers["List-Id"]) && /^[\x20-\x7e]+$/.test(headers["X-Original-From"]));
+	assert.match(headers["List-Id"], /^=\?UTF-8\?B\?.+\?= <team\.a\.com>$/);
+	assert.match(headers["X-Original-From"], /^=\?UTF-8\?B\?.+\?= <jose@gmail\.com>$/);
+	assert.equal(relay.relayOriginalFrom("Bob Roe", "bob@gmail.com"), '"Bob Roe" <bob@gmail.com>');
+	assert.equal(relay.relayOriginalFrom(null, "bob@gmail.com"), "bob@gmail.com");
+});
+
+test("encoded words stay under 75 characters and never cut a character in half", () => {
+	const text = "日本語のとても長い名前".repeat(8) + "😀".repeat(20);
+	const encoded = relay.encodeWords(text);
+	const words = encoded.split(" ");
+	assert.ok(words.length > 3);
+	for (const word of words) assert.ok(word.length <= 75, word.length);
+	const decoded = Buffer.concat(words.map((w) => Buffer.from(/=\?UTF-8\?B\?(.+)\?=/.exec(w)[1], "base64"))).toString("utf8");
+	assert.equal(decoded, text);
 });
 
 test("relay queue messages are recognised only when complete", () => {
@@ -91,4 +125,15 @@ test("the unsubscribe secret is generated once, kept in the bucket and survives 
 	secretKey.forgetUnsubscribeSecretCache();
 	assert.equal(await secretKey.getUnsubscribeSecret({ BUCKET: { ...bucket } }), first, "a new isolate reads the stored one");
 	assert.equal(objects.size, 1);
+});
+
+test("the unsubscribe secret adopts whatever is stored once racing creators have settled", async () => {
+	const objects = new Map();
+	const bucket = {
+		get: async (key) => (objects.has(key) ? { arrayBuffer: async () => objects.get(key) } : null),
+		// A second isolate's write lands right after ours and wins.
+		put: async (key, body) => { objects.set(key, body); objects.set(key, new TextEncoder().encode("b".repeat(64)).buffer); },
+	};
+	secretKey.forgetUnsubscribeSecretCache();
+	assert.equal(await secretKey.getUnsubscribeSecret({ BUCKET: bucket }), "b".repeat(64));
 });
