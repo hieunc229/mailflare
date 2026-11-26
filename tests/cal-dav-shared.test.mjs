@@ -361,3 +361,14 @@ test("a delegate's PUT cannot inflate the owner's stored bytes: an update keeps 
 	assert.equal((await put(env, `${SHARED("csh_edit", "u3")}n.ics`, keys.u3, vevent("uid-n", "New", `X-PAD:${"x".repeat(400_000)}\r\n`))).status, 201);
 	assert.equal(total(), owned);
 });
+
+test("a delegate's PUT answers without an ETag, since the stored text is not what it sent (RFC 4791 5.3.4); the owner's PUT still has one", async (t) => {
+	const { env, keys } = await fixture(t);
+	const created = await put(env, `${SHARED("csh_edit", "u3")}n.ics`, keys.u3, vevent("uid-n", "New"));
+	assert.equal(created.status, 201);
+	assert.equal(created.headers.get("ETag"), null);
+	const replaced = await put(env, `${SHARED("csh_edit", "u3")}n.ics`, keys.u3, vevent("uid-n", "New 2"), { "If-Match": (await get(env, `${SHARED("csh_edit", "u3")}n.ics`, keys.u3)).etag });
+	assert.equal(replaced.status, 204);
+	assert.equal(replaced.headers.get("ETag"), null);
+	assert.match((await put(env, "/dav/calendars/u1/c-work/o.ics", keys.u1, vevent("uid-o", "Mine"))).headers.get("ETag"), /^"\d+"$/);
+});
