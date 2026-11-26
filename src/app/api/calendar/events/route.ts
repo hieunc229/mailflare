@@ -18,7 +18,8 @@ import { getRequestTimeZone, normalizeTimeZone } from "@/lib/time/utils";
 import { chunkIds } from "@/lib/calendar/chunks";
 import { authorizeCalendarRequest, calendarKeyCanSendInvitations } from "@/lib/calendar/api-auth";
 import { readJsonObject } from "@/lib/http/request";
-import { calendarFilter, eventCalendarId, listOwnCalendars, resolveEventCalendar } from "@/lib/calendar/calendars";
+import { isUniqueConstraintError } from "@/lib/database-errors";
+import { calendarExistsGuard, calendarFilter, eventCalendarId, ownCalendarIds, resolveEventCalendar } from "@/lib/calendar/calendars";
 
 export async function GET(request: Request) {
 	const env = getEnv();
@@ -31,7 +32,7 @@ export async function GET(request: Request) {
 	const requested = url.searchParams.getAll("calendarIds").flatMap((value) => value.split(",")).map((value) => value.trim()).filter(Boolean);
 	const scope = requested.length ? calendarFilter(user.id, requested) : eq(calendarEvents.userId, user.id);
 	const rows = await db.select().from(calendarEvents).where(and(scope, lt(calendarEvents.startsAt, end), or(gte(calendarEvents.endsAt, start), ne(calendarEvents.repeat, "none")))).orderBy(calendarEvents.startsAt);
-	const known = new Set((await listOwnCalendars(db, user.id)).map((calendar) => calendar.id));
+	const known = new Set(await ownCalendarIds(db, user.id));
 	const events = rows.map((row) => ({ ...row, calendarId: eventCalendarId(row, known) }));
 	// Additive occurrence data for the expanders: moved/extra occurrences and per-occurrence guest replies.
 	const overrides: Record<string, Array<{ occurrenceMs: number; startsAt: Date; endsAt: Date }>> = {};
@@ -89,7 +90,14 @@ export async function POST(request: Request) {
 	}
 	const event = { id: newId("evt"), userId: user.id, mailboxId: input.mailboxId ?? null, calendarId: calendar.calendarId ?? null, title: input.title.trim(), description: input.description?.trim() ?? "", location: input.location?.trim() ?? "", attendees: JSON.stringify(attendees), color: normalizeCalendarColor(input.color), repeat, repeatDays: JSON.stringify(repeatDays), repeatAnchorDay: repeat === "monthly" && Number.isInteger(input.repeatAnchorDay) && input.repeatAnchorDay! >= 1 && input.repeatAnchorDay! <= 31 ? input.repeatAnchorDay : null, repeatInterval, repeatWeekday, repeatWeek, eventSequence: 0, reminderMinutes: normalizeReminderMinutes(input.reminderMinutes), ...flags, startsAt, endsAt };
 	const savedEvent = { ...event, timeZone: input.timeZone ? normalizeTimeZone(input.timeZone) : getRequestTimeZone(request, user.timeZone) };
-	await getDb(env).insert(calendarEvents).values(savedEvent);
+	const db = getDb(env);
+	if (typeof calendar.calendarId === "string") {
+		// The calendar may be deleted between the check above and this write: the batch refuses to write into a calendar that is gone.
+		try { await db.batch([...calendarExistsGuard(db, user.id, calendar.calendarId), db.insert(calendarEvents).values(savedEvent)] as never); } catch (error) {
+			if (isUniqueConstraintError(error)) return NextResponse.json({ error: "That calendar no longer exists" }, { status: 409 });
+			throw error;
+		}
+	} else await db.insert(calendarEvents).values(savedEvent);
 	let inviteErrors: string[] = [];
 	if (attendees.length && input.mailboxId) {
 		const calendarFile = createCalendarInvitation({ isPrivate: event.isPrivate, transparent: event.transparent, title: event.title, description: event.description, location: event.location, startsAt, endsAt, uid: event.id, organizer: input.from || undefined, attendees, sequence: 0, reminderMinutes: event.reminderMinutes, repeat, repeatDays, repeatAnchorDay: event.repeatAnchorDay, repeatUntil: null, repeatInterval, repeatWeekday, repeatWeek, excludedOccurrences: [], overrides: [] });

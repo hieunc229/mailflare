@@ -10,7 +10,7 @@ import { rowsHash } from "./calendar-merge";
 import { parseCalendarObject, type EventFields } from "./calendar-parse";
 import { calendarBytes, findCalendarByName, findUidConflict } from "./calendar-store";
 import type { EventRow } from "./calendar-render";
-import { calendarCollectionId, collectionScope, etagFromSeq, etagSeqs } from "./changes";
+import { calendarCollectionId, calendarScopeIds, collectionScope, etagFromSeq, etagSeqs } from "./changes";
 import { BASE_HEADERS, precondition, text, XML_HEADERS } from "./common";
 import { collectionPath, type DavContext } from "./collections";
 import { escapeXml } from "./xml-writer";
@@ -112,15 +112,16 @@ export async function putCalendarResource(ctx: DavContext, name: string, request
 	const hash = await rowsHash(masterRow, overrideRows.map((row) => ({ ...row, reminderMinutes: null }) as unknown as EventRow));
 
 	const db = getDb(env);
+	const scope = await calendarScopeIds(env, cid);
 	const objectValues = { uid: parsed.uid, name, body, rowsHash: hash, size, updatedAt: now };
-	const statements: unknown[] = existing ? staleGuard(db, calendarEvents, cid, id, userId, { seq: seq ?? null, updatedAt: existing.master.updatedAt }) : [];
+	const statements: unknown[] = existing ? staleGuard(db, calendarEvents, scope, id, userId, { seq: seq ?? null, updatedAt: existing.master.updatedAt }) : [];
 	if (old?.davObjectId === id) statements.push(db.delete(calendarEvents).where(and(eq(calendarEvents.userId, userId), eq(calendarEvents.davObjectId, id), ne(calendarEvents.id, id))));
 	statements.push(existing ? db.update(calendarEvents).set(masterColumns).where(and(eq(calendarEvents.id, id), eq(calendarEvents.userId, userId))) : db.insert(calendarEvents).values({ ...masterColumns, id, userId, color, createdAt: now }));
 	for (let i = 0; i < overrideRows.length; i += ROWS_PER_INSERT) statements.push(db.insert(calendarEvents).values(overrideRows.slice(i, i + ROWS_PER_INSERT)));
 	// A native event written for the first time has no stored resource yet.
 	const hasObject = (await db.select({ id: davCalendarObjects.id }).from(davCalendarObjects).where(eq(davCalendarObjects.id, id)).limit(1)).length > 0;
 	statements.push(hasObject ? db.update(davCalendarObjects).set(objectValues).where(eq(davCalendarObjects.id, id)) : db.insert(davCalendarObjects).values({ ...objectValues, id, userId, collectionId: cid, createdAt: now }));
-	statements.push(db.select({ seq: sql<number | null>`max(${davChanges.seq})` }).from(davChanges).where(and(collectionScope(davChanges.collectionId, cid), eq(davChanges.objectKey, id))));
+	statements.push(db.select({ seq: sql<number | null>`max(${davChanges.seq})` }).from(davChanges).where(and(collectionScope(davChanges.collectionId, scope), eq(davChanges.objectKey, id))));
 	let results: unknown[];
 	try {
 		results = (await db.batch(statements as never)) as unknown[];
@@ -144,7 +145,7 @@ export async function deleteCalendarResource(ctx: DavContext, name: string, requ
 	if (!existing) return text(404, "Not found");
 	const db = getDb(ctx.env);
 	try {
-		await db.batch([...staleGuard(db, calendarEvents, cid, existing.id, ctx.userId, { seq: seq ?? null, updatedAt: existing.master.updatedAt }), db.delete(calendarEvents).where(and(eq(calendarEvents.userId, ctx.userId), or(eq(calendarEvents.id, existing.id), eq(calendarEvents.davObjectId, existing.id))))] as never);
+		await db.batch([...staleGuard(db, calendarEvents, await calendarScopeIds(ctx.env, cid), existing.id, ctx.userId, { seq: seq ?? null, updatedAt: existing.master.updatedAt }), db.delete(calendarEvents).where(and(eq(calendarEvents.userId, ctx.userId), or(eq(calendarEvents.id, existing.id), eq(calendarEvents.davObjectId, existing.id))))] as never);
 	} catch (error) {
 		// Changed or removed since it was read.
 		if (isUniqueConstraintError(error)) return text(412, "Precondition failed");

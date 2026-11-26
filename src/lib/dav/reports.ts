@@ -1,7 +1,7 @@
 import { and } from "drizzle-orm";
 import { CALENDAR_CHUNK, endedBefore, hiddenCalendarNames, isDavMaster, listCalendar, liveCalendarNames, loadCalendarByNames, matchesUid, MAX_LISTED, MAX_QUERY_CANDIDATES, occursInRange, overlapsRange, planCalendarChunks, releaseStored, withOverrides, withStored } from "./calendar-store";
 import { cardMatches, CARD_CHUNK, listCards, liveCardNames, loadCardBodies, loadCardMetaByNames, MAX_CARDS, planCardChunks, type PropFilter, type TextMatch } from "./card-store";
-import { changesSince, currentSeq, ensureSyncState, etagSeqs, formatSyncToken } from "./changes";
+import { changesSince, etagSeqs, formatSyncToken, syncPosition } from "./changes";
 import { calendarMember, cardMember, collectionIdFor, collectionPath, etagOf, listMembers, memberResponse, type Area, type DavContext, type Member } from "./collections";
 import { inChunks, NS, precondition, streamMultistatus, text, wantedProps } from "./common";
 import type { DavElement } from "./xml";
@@ -280,8 +280,7 @@ async function syncCollection(area: Area, ctx: DavContext, root: DavElement, wan
 
 	if (!token) {
 		// First sync: the position is read before the listing, so a change made meanwhile is reported again next time.
-		const { epoch } = await ensureSyncState(ctx.env, cid);
-		const seq = await currentSeq(ctx.env, cid);
+		const { epoch, seq } = await syncPosition(ctx.env, cid);
 		const members = await listMembers(area, ctx);
 		if (members === "truncated") return precondition(507, "number-of-matches-within-limits");
 		const pages = (async function* (): AsyncGenerator<DavResponse[]> {
@@ -305,7 +304,7 @@ async function syncCollection(area: Area, ctx: DavContext, root: DavElement, wan
 		if (row) responses.push(await live({ name: row.name, etag: etagOf(seqs, key, row.updatedAt), lastModified: row.updatedAt, contentType: area === "calendars" ? "text/calendar; charset=utf-8" : "text/vcard; charset=utf-8" }));
 		else responses.push({ href: path + nameOfGone.get(key)!, status: 404 });
 	}
-	const { epoch } = await ensureSyncState(ctx.env, cid);
+	const { epoch } = result;
 	const trailer = () => (result.hasMore ? [{ href: path, status: 507, error: "<D:number-of-matches-within-limits/>" }] : []);
 	return streamMultistatus(inChunks(responses, 90, (chunk) => chunk), { href: path, trailer, syncToken: formatSyncToken(ctx.origin, cid, epoch, result.seq) });
 }

@@ -14,13 +14,14 @@ import { EVENT_FLAGS_ERROR, resolveEventFlags } from "@/lib/calendar/event-flags
 import { normalizeRepeatInterval, normalizeRepeatWeek, normalizeRepeatWeekday, parseCalendarOccurrenceId, parseCalendarRepeatDays, parseExcludedOccurrences } from "@/lib/calendar/recurrence";
 import { CUSTOM_DAY_LOCKED, editedTimeZone, endLegacySeries, resolveRepeat, shiftCustomSeries } from "@/lib/calendar/repeat-fields";
 import { limitRrule, rruleEndedBefore } from "@/lib/calendar/rrule";
-import { deleteOverridesFrom, deleteSeriesRows, moveSeriesStatement, moveSeriesToCalendar, shiftOverrides, splitSeriesRows } from "@/lib/calendar/series-rows";
+import { deleteOverridesFrom, deleteSeriesRows, moveSeriesStatement, shiftOverrides, splitSeriesRows, splitSeriesStatements } from "@/lib/calendar/series-rows";
 import { newId } from "@/lib/ids";
 import { getRequestTimeZone } from "@/lib/time/utils";
 import { authorizeCalendarRequest, calendarKeyCanSendInvitations } from "@/lib/calendar/api-auth";
 import { buildSplitAnnouncement } from "@/lib/calendar/split-announcement";
 import { readJsonObject } from "@/lib/http/request";
-import { resolveEventCalendar } from "@/lib/calendar/calendars";
+import { calendarExistsGuard, resolveEventCalendar } from "@/lib/calendar/calendars";
+import { isUniqueConstraintError } from "@/lib/database-errors";
 
 export async function PATCH(request: Request, { params }: CalendarEventRouteParams) {
 	const env = getEnv();
@@ -39,10 +40,17 @@ export async function PATCH(request: Request, { params }: CalendarEventRoutePara
 	const [existing] = await db.select().from(calendarEvents).where(and(eq(calendarEvents.id, occurrence?.seriesId ?? eventId), eq(calendarEvents.userId, user.id))).limit(1);
 	if (!existing) return NextResponse.json({ error: "Event not found" }, { status: 404 });
 	const calendar = await resolveEventCalendar(db, user.id, input.calendarId, existing.calendarId);
-	let movedWithEdit = false;
 	if (!calendar.ok) return NextResponse.json({ error: calendar.error }, { status: calendar.status });
 	// Undefined keeps the calendar; otherwise the whole series moves, so compare against where it is now.
 	const moveTo = calendar.calendarId !== undefined && calendar.calendarId !== (existing.calendarId ?? null) ? calendar.calendarId : undefined;
+	// Writes that put rows into another calendar run as one batch that first checks the calendar still exists (a competing delete refuses it with 409).
+	const guard = typeof moveTo === "string" ? calendarExistsGuard(db, user.id, moveTo) : [];
+	const batched = async (statements: unknown[]): Promise<NextResponse | null> => {
+		try { await db.batch([...guard, ...statements] as never); return null; } catch (error) {
+			if (isUniqueConstraintError(error)) return NextResponse.json({ error: "That calendar no longer exists" }, { status: 409 });
+			throw error;
+		}
+	};
 	// An invitation received by mail is never re-announced to its guests from here.
 	const isInboundInvite = existing.responseStatus != null || existing.inviteMessageId != null;
 	const timeZone = editedTimeZone(existing, input.repeat, input.timeZone ?? existing.timeZone ?? getRequestTimeZone(request, user.timeZone));
@@ -66,9 +74,12 @@ export async function PATCH(request: Request, { params }: CalendarEventRoutePara
 		const newExcluded = [...excluded, occurrence.startsAt.getTime()];
 		// Guests track revisions per UID, so the series row moves to the sequence this update carries.
 		const seriesSequence = (existing.eventSequence ?? 0) + 1;
-		await db.insert(calendarEvents).values(moved);
-		await db.update(calendarEvents).set({ excludedOccurrences: JSON.stringify(newExcluded), eventSequence: seriesSequence, updatedAt: now }).where(eq(calendarEvents.id, existing.id));
-		if (moveTo !== undefined) await moveSeriesToCalendar(db, user.id, existing.id, moveTo);
+		const insertMoved = db.insert(calendarEvents).values(moved);
+		const excludeOriginal = db.update(calendarEvents).set({ excludedOccurrences: JSON.stringify(newExcluded), eventSequence: seriesSequence, updatedAt: now }).where(eq(calendarEvents.id, existing.id));
+		if (moveTo !== undefined) {
+			const refused = await batched([insertMoved, excludeOriginal, moveSeriesStatement(db, user.id, existing.id, moveTo)]);
+			if (refused) return refused;
+		} else { await insertMoved; await excludeOriginal; }
 		if (attendees.length && existing.mailboxId && input.from && !isInboundInvite) {
 			const movedFile = createCalendarInvitation({ isPrivate: moved.isPrivate, transparent: moved.transparent, title: moved.title, description: moved.description, location: moved.location, startsAt, endsAt, uid: moved.id, organizer: input.from, attendees, sequence: 0, reminderMinutes: moved.reminderMinutes, repeat: "none", repeatDays: [], repeatAnchorDay: null, repeatUntil: null, repeatInterval: 1, repeatWeekday: null, repeatWeek: null, excludedOccurrences: [], overrides: [] });
 			// The series keeps its UID: tell guests it dropped this occurrence, with the same repeat/override context a PATCH resend carries.
@@ -105,7 +116,12 @@ export async function PATCH(request: Request, { params }: CalendarEventRoutePara
 		const now = new Date();
 		const forkId = newId("evt");
 		// The new series is a Mailflare event of its own, never part of the DAV resource it was split from.
-		await splitSeriesRows(db, user.id, existing, splitAt, { ...event, id: forkId, eventSequence: 0, davObjectId: null, recurrenceId: null, ...(moveTo !== undefined ? { calendarId: moveTo } : {}), createdAt: now, updatedAt: now }, existing.rrule ? { rrule: limitRrule(existing.rrule, splitAt, existing.startsAt, existing.timeZone, existing.allDay), eventSequence: nextSequence, updatedAt: now } : { repeatUntil: splitAt, eventSequence: nextSequence, updatedAt: now });
+		const fresh = { ...event, id: forkId, eventSequence: 0, davObjectId: null, recurrenceId: null, ...(moveTo !== undefined ? { calendarId: moveTo } : {}), createdAt: now, updatedAt: now };
+		const endPatch = existing.rrule ? { rrule: limitRrule(existing.rrule, splitAt, existing.startsAt, existing.timeZone, existing.allDay), eventSequence: nextSequence, updatedAt: now } : { repeatUntil: splitAt, eventSequence: nextSequence, updatedAt: now };
+		if (moveTo !== undefined) {
+			const refused = await batched([...splitSeriesStatements(db, user.id, existing, splitAt, fresh, endPatch), moveSeriesStatement(db, user.id, existing.id, moveTo)]);
+			if (refused) return refused;
+		} else await splitSeriesRows(db, user.id, existing, splitAt, fresh, endPatch);
 		// Overrides at or after the split belong to the fork; earlier ones stay on the truncated original.
 		const stored = await db.select().from(calendarEventOverrides).where(eq(calendarEventOverrides.eventId, existing.id));
 		for (const override of stored) {
@@ -143,10 +159,11 @@ export async function PATCH(request: Request, { params }: CalendarEventRoutePara
 	}
 	const edit = db.update(calendarEvents).set({ title: event.title, description: event.description, location: event.location, attendees: event.attendees, color: event.color, repeat: event.repeat, repeatDays: event.repeatDays, repeatAnchorDay: event.repeatAnchorDay, repeatInterval: event.repeatInterval, repeatWeekday: event.repeatWeekday, repeatWeek: event.repeatWeek, repeatUntil: event.repeatUntil, rrule: event.rrule, ...(shifted ? { excludedOccurrences: shifted.excludedOccurrences } : {}), eventSequence: nextSequence, reminderMinutes: event.reminderMinutes, isPrivate: event.isPrivate, transparent: event.transparent, lastRemindedStart: null, timeZone, startsAt, endsAt, updatedAt: new Date() }).where(eq(calendarEvents.id, existing.id));
 	// The edit and the move to another calendar succeed or fail together.
-	if (moveTo !== undefined) { await db.batch([edit, moveSeriesStatement(db, user.id, existing.id, moveTo)] as never); movedWithEdit = true; } else await edit;
+	if (moveTo !== undefined) {
+		const refused = await batched([edit, moveSeriesStatement(db, user.id, existing.id, moveTo)]);
+		if (refused) return refused;
+	} else await edit;
 	if (shifted?.moved) await shiftOverrides(db, user.id, existing.id, shifted.shift);
-	// After the edit above, so the event is written in one place and then the master and its overrides move together.
-	if (moveTo !== undefined && !movedWithEdit) await moveSeriesToCalendar(db, user.id, existing.id, moveTo);
 	if (attendees.length && existing.mailboxId && input.from && !isInboundInvite) {
 		const overrides = (await db.select().from(calendarEventOverrides).where(eq(calendarEventOverrides.eventId, existing.id))).map((override) => ({ recurrenceId: new Date(override.occurrenceMs), startsAt: override.startsAt, endsAt: override.endsAt }));
 		const file = createCalendarInvitation({ isPrivate: event.isPrivate, transparent: event.transparent, title: event.title, description: event.description, location: event.location, startsAt: event.startsAt, endsAt: event.endsAt, uid: existing.id, organizer: input.from, attendees, sequence: nextSequence, reminderMinutes: event.reminderMinutes, repeat: event.repeat, rrule: event.rrule, repeatDays, repeatAnchorDay: event.repeatAnchorDay, repeatUntil: event.repeatUntil, repeatInterval: event.repeatInterval, repeatWeekday: event.repeatWeekday, repeatWeek: event.repeatWeek, excludedOccurrences: parseExcludedOccurrences(event.excludedOccurrences), overrides });

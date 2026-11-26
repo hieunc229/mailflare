@@ -11,6 +11,7 @@ import { openExternalDatabase } from "@/db/external";
 import { staleGuard } from "@/lib/dav/writes";
 import { mirrorCardStatements } from "@/lib/dav/contact-mirror";
 import { seedStep } from "@/lib/dav/contact-seed";
+import { calendarExistsGuard } from "@/lib/calendar/calendars";
 import { applyPendingMigrations, getMigrationStatus } from "@/lib/migrations/service";
 import { buildSearchConditions } from "@/lib/search/conditions";
 import { createBookedCalendarEvents } from "@/lib/booking/create";
@@ -175,6 +176,19 @@ await db.update(calendarEvents).set({ calendarId: moveCalId }).where(and(eq(cale
 check("moving a master and its overrides in one statement logs one move", (await davLog(moveCalId, moveMasterId)).split(",").sort().join(",") === "created,updated" && (await davLog(`cal:${userId}`, moveMasterId)).endsWith(",destroyed") && (await davLog(`cal:${userId}`, moveMasterId)).split("destroyed").length === 2);
 await db.delete(calendarEvents).where(eq(calendarEvents.calendarId, moveCalId));
 await db.delete(davCollections).where(eq(davCollections.id, moveCalId));
+// CS-2: a batch that writes into a calendar whose row is gone fails as a whole, and one into a calendar that exists goes through.
+const guardCalId = `cal:cal_guard_${stamp}`;
+const guardedInsert = (id: string) => db.batch([...calendarExistsGuard(db, userId, guardCalId), db.insert(calendarEvents).values({ id, userId, calendarId: guardCalId, title: "Guarded", ...moveTimes } as never)] as never);
+let calGuardRefused = false;
+try { await guardedInsert(`evt_g1_${stamp}`); } catch { calGuardRefused = true; }
+const [{ guardedrows }] = await db.all<{ guardedrows: number }>(sql`SELECT count(*) AS guardedrows FROM calendar_events WHERE id = ${`evt_g1_${stamp}`}`);
+check("the calendar guard refuses a write into a calendar that is gone", calGuardRefused && Number(guardedrows) === 0);
+await db.insert(davCollections).values({ id: guardCalId, userId, kind: "calendar" } as never);
+await guardedInsert(`evt_g2_${stamp}`);
+const [{ guardrows }] = await db.all<{ guardrows: number }>(sql`SELECT count(*) AS guardrows FROM dav_sync_state WHERE epoch = 'guard'`);
+check("the calendar guard lets a write into an existing calendar through and leaves no guard rows", Number(guardrows) === 0 && (await davLog(guardCalId, `evt_g2_${stamp}`)) === "created");
+await db.delete(calendarEvents).where(eq(calendarEvents.calendarId, guardCalId));
+await db.delete(davCollections).where(eq(davCollections.id, guardCalId));
 const shareId = `csh_${stamp}`;
 await db.insert(calendarShares).values({ id: shareId, calendarId: calId, granteeUserId: userId, role: "read" } as never);
 await db.insert(calendarResources).values({ id: `res_${stamp}`, name: `Room ${stamp}` } as never);
@@ -353,7 +367,7 @@ const guardId = `evt_${stamp}_guard`;
 const guardCollection = `cal:${userId}`;
 await db.insert(calendarEvents).values({ id: guardId, userId, title: "Guard", startsAt: new Date(Date.now() + 3_600_000), endsAt: new Date(Date.now() + 7_200_000) } as never);
 const guardSeq = Number((await db.all<{ seq: number }>(sql`SELECT max(seq) AS seq FROM dav_changes WHERE collection_id = ${guardCollection} AND object_key = ${guardId}`))[0].seq);
-const guarded = (title: string) => db.batch([...staleGuard(db, calendarEvents, guardCollection, guardId, userId, { seq: guardSeq, updatedAt: new Date() }), db.update(calendarEvents).set({ title }).where(eq(calendarEvents.id, guardId))] as never);
+const guarded = (title: string) => db.batch([...staleGuard(db, calendarEvents, [guardCollection], guardId, userId, { seq: guardSeq, updatedAt: new Date() }), db.update(calendarEvents).set({ title }).where(eq(calendarEvents.id, guardId))] as never);
 const guardTitle = async () => (await db.select({ title: calendarEvents.title }).from(calendarEvents).where(eq(calendarEvents.id, guardId)))[0].title;
 await guarded("First writer");
 check("dav write guard lets a batch through while the resource is as it was read", (await guardTitle()) === "First writer");

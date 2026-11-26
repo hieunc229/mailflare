@@ -56,7 +56,7 @@ export async function putCard(ctx: DavContext, name: string, request: Request): 
 	const write = existing ? db.update(davCards).set(values).where(and(eq(davCards.id, id), eq(davCards.userId, userId))) : db.insert(davCards).values({ ...values, id, userId, collectionId: cid, name, createdAt: now });
 	let results: unknown[];
 	try {
-		results = (await db.batch([...(existing ? staleGuard(db, davCards, cid, id, userId, { seq: seq ?? null, updatedAt: existing.updatedAt }) : []), write, ...mirrorCardStatements(db, userId, { id, fn: parsed.fn, emails: parsed.emails, group: parsed.group, own }), db.select({ seq: sql<number | null>`max(${davChanges.seq})` }).from(davChanges).where(and(eq(davChanges.collectionId, cid), eq(davChanges.objectKey, id)))] as never)) as unknown[];
+		results = (await db.batch([...(existing ? staleGuard(db, davCards, [cid], id, userId, { seq: seq ?? null, updatedAt: existing.updatedAt }) : []), write, ...mirrorCardStatements(db, userId, { id, fn: parsed.fn, emails: parsed.emails, group: parsed.group, own }), db.select({ seq: sql<number | null>`max(${davChanges.seq})` }).from(davChanges).where(and(eq(davChanges.collectionId, cid), eq(davChanges.objectKey, id)))] as never)) as unknown[];
 	} catch (error) {
 		// Two writes raced for the same name or UID; the loser is refused like a failed precondition.
 		if (isUniqueConstraintError(error)) return text(412, "Precondition failed");
@@ -76,7 +76,7 @@ export async function deleteCard(ctx: DavContext, name: string, request: Request
 	if (!existing) return text(404, "Not found");
 	const db = getDb(ctx.env);
 	try {
-		await db.batch([...staleGuard(db, davCards, addressBookCollectionId(ctx.userId), existing.id, ctx.userId, { seq: seq ?? null, updatedAt: existing.updatedAt }), db.delete(davCards).where(and(eq(davCards.id, existing.id), eq(davCards.userId, ctx.userId))), unlinkCardStatement(db, ctx.userId, existing.id)] as never);
+		await db.batch([...staleGuard(db, davCards, [addressBookCollectionId(ctx.userId)], existing.id, ctx.userId, { seq: seq ?? null, updatedAt: existing.updatedAt }), db.delete(davCards).where(and(eq(davCards.id, existing.id), eq(davCards.userId, ctx.userId))), unlinkCardStatement(db, ctx.userId, existing.id)] as never);
 	} catch (error) {
 		// Changed or removed since it was read.
 		if (isUniqueConstraintError(error)) return text(412, "Precondition failed");

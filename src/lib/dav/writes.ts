@@ -58,11 +58,11 @@ export type Seen = { seq: number | null; updatedAt: Date };
  *    non-strict MySQL turns into a default value;
  * 3. the removal of the two guard rows, when the guard passed.
  */
-export function staleGuard(db: Db, table: typeof calendarEvents | typeof davCards, collectionId: string, id: string, userId: string, seen: Seen): unknown[] {
+export function staleGuard(db: Db, table: typeof calendarEvents | typeof davCards, collectionIds: string[], id: string, userId: string, seen: Seen): unknown[] {
 	const token = crypto.randomUUID();
 	const [first, second] = [`guard:${token}:a`, `guard:${token}:b`];
 	const there = exists(db.select({ one: sql`1` }).from(table).where(and(eq(table.id, id), eq(table.userId, userId), seen.seq === null ? eq(table.updatedAt, seen.updatedAt) : undefined)));
-	const newest = sql`coalesce((select max(${davChanges.seq}) from ${davChanges} where ${and(collectionScope(davChanges.collectionId, collectionId), eq(davChanges.objectKey, id))}), -1)`;
+	const newest = sql`coalesce((select max(${davChanges.seq}) from ${davChanges} where ${and(collectionScope(davChanges.collectionId, collectionIds), eq(davChanges.objectKey, id))}), -1)`;
 	const stale = sql`not (${there} and ${newest} = ${seen.seq ?? -1})`;
 	return [
 		db.update(table).set({ updatedAt: sql`${table.updatedAt}` } as never).where(and(eq(table.id, id), eq(table.userId, userId))),
