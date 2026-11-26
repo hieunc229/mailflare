@@ -225,6 +225,22 @@ export function openPglite({ url }: OpenOptions): SqlExecutor {
 			},
 			transaction,
 		});
-		return { ...executorFor(db, (fn) => db.transaction((tx) => fn(executorFor(tx as never)))), close: () => db.close() };
+		return {
+			...executorFor(db, (fn) =>
+				db.transaction(async (tx) => {
+					const value = await fn(executorFor(tx as never));
+					// A statement error the callback caught itself leaves PostgreSQL's transaction aborted, and PGlite
+					// then commits it as a silent rollback. Probe the transaction before letting that happen, so a
+					// caller is never told a transaction succeeded when nothing was written.
+					try {
+						await tx.query("SELECT 1");
+					} catch {
+						throw new Error("The database rolled the transaction back (a statement inside it failed).");
+					}
+					return value;
+				}),
+			),
+			close: () => db.close(),
+		};
 	});
 }

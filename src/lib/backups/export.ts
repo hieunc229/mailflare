@@ -1,6 +1,7 @@
 import { dialectOf, listColumnNames, listTableNames, quoteIdentifier } from "@/db/introspect";
 import type { DatabaseDialect } from "@/db/dialect";
 import { isSyncCursorFormat } from "@/lib/external-accounts/cursor";
+import { externalAccountCollations, identityComparator, type ColumnCollations } from "./identity";
 import { hasControlCharacter, isStoredExternalAccountHost, MAX_IDENTITY_LENGTH } from "@/lib/external-accounts/host";
 import { hasUnpairedSurrogate } from "@/lib/external-accounts/text";
 import { isSealedSecretFormat } from "@/lib/external-accounts/crypto";
@@ -365,75 +366,6 @@ function validateDatabaseBackup(document: DatabaseBackupDocument, externalAccoun
 }
 
 const isIntegerInRange = (value: unknown, min: number, max: number) => typeof value === "number" && Number.isInteger(value) && value >= min && value <= max;
-/**
- * How the destination compares the account identity, so the in-document duplicate check sees what its unique
- * index would see.
- *
- * - SQLite, PostgreSQL and D1 compare text byte for byte: exact values.
- * - MySQL compares each column with its own collation, so the collations are read from the database rather than
- *   assumed: a `_ci` column folds case, a `_bin` or `_as_cs` one does not, and only a PAD SPACE collation ignores
- *   trailing ASCII spaces. A column whose collation cannot be read is compared exactly (accepting), because the
- *   index plus the transaction still catch a real collision there.
- */
-type ColumnCollations = Record<"id" | "mailbox_id" | "host" | "username", string | null>;
-
-const exactComparator = {
-	id: (id: string) => id,
-	identity: (mailboxId: string, host: string, username: string) => JSON.stringify([mailboxId, host, username]),
-};
-
-/**
- * What a MySQL collation name promises: `_bin` and `_cs` compare case-sensitively, `_ci` folds it, and anything
- * else (an unknown name) is not narrowed at all. The UCA 9.0.0 collations (`utf8mb4_0900_*`) are NO PAD; the older
- * ones pad with the ASCII space.
- */
-function collationRules(collation: string | null): { foldsCase: boolean; padsSpaces: boolean } | null {
-	if (!collation) return null;
-	const value = collation.toLowerCase();
-	const padsSpaces = !value.includes("_0900_");
-	if (value.endsWith("_bin") || value.endsWith("_cs")) return { foldsCase: false, padsSpaces };
-	if (value.endsWith("_ci")) return { foldsCase: true, padsSpaces };
-	return null;
-}
-
-function identityComparator(dialect: DatabaseDialect, collations: ColumnCollations | null) {
-	if (dialect !== "mysql" || !collations) return exactComparator;
-	const rules = (column: keyof ColumnCollations) => collationRules(collations[column]);
-	const key = (value: string, column: keyof ColumnCollations) => {
-		const rule = rules(column);
-		if (!rule) return value;
-		// Only the ASCII space pads a PAD SPACE collation; `trimEnd()` would also swallow NBSP, which stays significant.
-		return rule.foldsCase ? (rule.padsSpaces ? value.trimEnd().toLowerCase() : value.toLowerCase()) : rule.padsSpaces ? value.replace(/ +$/, "") : value;
-	};
-	return {
-		id: (id: string) => key(id, "id"),
-		identity: (mailboxId: string, host: string, username: string) =>
-			JSON.stringify([key(mailboxId, "mailbox_id"), key(host, "host"), key(username, "username")]),
-	};
-}
-
-/** The collations MySQL gives the four identity columns, or null when they cannot be read. */
-async function externalAccountCollations(db: D1Database): Promise<ColumnCollations | null> {
-	try {
-		const result = await db
-			.prepare(
-				"SELECT COLUMN_NAME AS name, COLLATION_NAME AS collation FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = database() AND TABLE_NAME = 'external_accounts' AND COLUMN_NAME IN ('id', 'mailbox_id', 'host', 'username')",
-			)
-			.all<{ name?: string; NAME?: string; collation?: string; COLLATION?: string }>();
-		const found: Partial<ColumnCollations> = {};
-		for (const row of result.results) {
-			const name = (row.name ?? row.NAME)?.toLowerCase();
-			const collation = row.collation ?? row.COLLATION ?? null;
-			if (name === "id" || name === "mailbox_id" || name === "host" || name === "username") found[name] = collation ? String(collation) : null;
-		}
-		// Every column has to be known: a partial answer would compare some of the tuple with guessed rules.
-		if (!found.id || !found.mailbox_id || !found.host || !found.username) return null;
-		return found as ColumnCollations;
-	} catch {
-		return null;
-	}
-}
-
 /** Backups hold `0`/`1`; a hand-written document may use booleans. */
 const isFlag = (value: unknown) => value === 0 || value === 1 || value === true || value === false;
 const isIdentityText = (value: unknown): value is string => typeof value === "string" && value.length > 0 && value.length <= MAX_IDENTITY_LENGTH;

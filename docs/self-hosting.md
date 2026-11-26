@@ -179,13 +179,14 @@ and the DNS page shows what to set by hand.
   before it wipes anything, so a broken or truncated one is refused up front,
   and on PostgreSQL, MySQL and the self-hosted SQLite file the restore runs in
   one transaction on a connection of its own, so a failure rolls the whole
-  restore back and other requests keep working throughout. **On Cloudflare D1,
-  and on any driver that talks over HTTP (Neon, PlanetScale), there is no
-  interactive transaction:** the checks are then the only protection, and a
-  failure the checks did not foresee can leave the data partly replaced. Take a
-  backup (or a database snapshot) before restoring there, and if a restore fails
-  on those bindings, run it again before using the installation — the error
-  message says the same. A backup is trusted input either way — the check proves
+  restore back and other requests keep working throughout. **On Cloudflare D1 and
+  on the Neon HTTP driver there is no interactive transaction:** the checks are
+  then the only protection, and a failure the checks did not foresee can leave
+  the data partly replaced. (PlanetScale's HTTP API does take a transaction body,
+  so it rolls back like the drivers above; `docs/databases.md` lists every
+  driver.) Take a backup (or a database snapshot) before restoring on a binding
+  without transactions, and if a restore fails there, run it again before using
+  the installation — the error message says the same. A backup is trusted input either way — the check proves
   the shape of those bytes, not who wrote them, so restore only files this
   install (or the same key) produced.
 - **Updates.** Pull the new image and recreate the container; migrations run
