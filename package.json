@@ -85,6 +85,7 @@
     "@simplewebauthn/browser": "^14.0.0",
     "@simplewebauthn/server": "^14.0.3",
     "@tanstack/react-query": "^5.100.11",
+    "@vercel/queue": "^0.11.0",
     "@vinext/cloudflare": "1.0.0-beta.11",
     "ai": "^7.0.113",
     "bcryptjs": "^3.0.3",

@@ -7,37 +7,71 @@ Mailflare. Vercel works, with more services to set up and the [limits](#limits) 
 
 | Service | Used for | Variables |
 | --- | --- | --- |
-| Vercel Hobby or Pro | The app, with 300 s functions. Hobby is for non-commercial use only. | |
-| PostgreSQL, MySQL or Turso ([databases](databases.md)) | All records | `DATABASE_URL` (and `DATABASE_AUTH_TOKEN` for Turso) |
+| Vercel Hobby or Pro | The app, with 300 s functions, and its job queue ([Vercel Queues](https://vercel.com/docs/queues), beta). Hobby is for non-commercial use only. | |
+| PostgreSQL, MySQL or Turso ([databases](databases.md)) | All records and rate limit counters | See [database](#database) |
 | AWS S3 or Backblaze B2 | Raw mail, attachments, Drive, backups | `S3_BUCKET`, `S3_REGION`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY`, or the four `B2_*` |
-| [Upstash QStash](https://upstash.com/docs/qstash) | Job queues | `QSTASH_TOKEN`, `QSTASH_CURRENT_SIGNING_KEY`, `QSTASH_NEXT_SIGNING_KEY` (and `QSTASH_URL` outside the default region) |
-| Upstash Redis | Login and API rate limits | `UPSTASH_REDIS_REST_URL`, `UPSTASH_REDIS_REST_TOKEN` (the `KV_REST_API_*` names work too) |
 | | Protects the cron routes | `CRON_SECRET`: a long random string |
 | | Public address | `APP_URL=https://mail.example.com`; defaults to the project's production domain |
 
-The app refuses to start and lists what is missing until all of these are set.
+The app refuses to start and lists what is missing until the database, storage, `CRON_SECRET` and a public address
+are set.
+
+### Database
+
+Either way works:
+
+- **Connect it in Vercel.** Add Turso from the Vercel Marketplace and press **Connect Project**, keeping the default
+  variable prefix. Vercel sets `TURSO_DATABASE_URL` and `TURSO_AUTH_TOKEN`, and Mailflare reads them. Marketplace
+  databases that set `DATABASE_URL` (such as Neon) work the same way.
+- **Set it yourself.** `DATABASE_URL`, plus `DATABASE_AUTH_TOKEN` for Turso. When both are present, `DATABASE_URL`
+  wins.
 
 A PostgreSQL provider with an HTTP driver (Neon) or a connection pooler suits serverless functions best, because
-each query otherwise opens its own connection.
+each query otherwise opens its own connection. Turso is reached over HTTP.
+
+### Optional: QStash and Upstash Redis
+
+Nothing here is required. Set these only to replace the defaults:
+
+- **[Upstash QStash](https://upstash.com/docs/qstash) instead of Vercel Queues:** `QSTASH_TOKEN`,
+  `QSTASH_CURRENT_SIGNING_KEY`, `QSTASH_NEXT_SIGNING_KEY` (and `QSTASH_URL` outside the default region). Then add
+  the [QStash schedule](#with-qstash).
+- **Upstash Redis instead of database counters for rate limits:** `UPSTASH_REDIS_REST_URL`,
+  `UPSTASH_REDIS_REST_TOKEN` (the `KV_REST_API_*` names work too).
 
 ## Deploy
 
-[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2Fhieunc229%2Fmailflare&env=DATABASE_URL,S3_BUCKET,S3_REGION,S3_ACCESS_KEY_ID,S3_SECRET_ACCESS_KEY,QSTASH_TOKEN,QSTASH_CURRENT_SIGNING_KEY,QSTASH_NEXT_SIGNING_KEY,UPSTASH_REDIS_REST_URL,UPSTASH_REDIS_REST_TOKEN,CRON_SECRET&envDescription=See%20docs%2Fvercel.md&envLink=https%3A%2F%2Fgithub.com%2Fhieunc229%2Fmailflare%2Fblob%2Fmain%2Fdocs%2Fvercel.md)
+[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2Fhieunc229%2Fmailflare&env=S3_BUCKET,S3_REGION,S3_ACCESS_KEY_ID,S3_SECRET_ACCESS_KEY,CRON_SECRET&envDescription=See%20docs%2Fvercel.md&envLink=https%3A%2F%2Fgithub.com%2Fhieunc229%2Fmailflare%2Fblob%2Fmain%2Fdocs%2Fvercel.md)
 
-1. Import the repository and set the variables above. `vercel.json` sets the build command and daily cron jobs.
-2. [Allow browser uploads on the bucket](#bucket-cors).
-3. Turn off Deployment Protection for the production domain: QStash, cron and mail providers must reach it.
-4. Open `/setup`, create the admin account and add your domain.
-5. [Add the five-minute schedule](#five-minute-schedule).
+1. Import the repository and set the variables above. `vercel.json` sets the build command, the queue consumer and
+   the daily cron jobs.
+2. Add the [database](#database), then redeploy so the app sees its variables.
+3. [Allow browser uploads on the bucket](#bucket-cors).
+4. Turn off Deployment Protection for the production domain: the five-minute schedule, cron and mail providers must
+   reach it.
+5. Open `/setup`, create the admin account and add your domain.
+6. [Start the five-minute schedule](#five-minute-schedule).
 
-Preview deployments need their own database, bucket and `APP_URL`; otherwise their queued jobs run on production.
+Preview deployments need their own database, bucket and `APP_URL`.
 
 ### Five-minute schedule
 
 Follow-up and calendar reminders, the import sweep, the promotions backfill, auto-update and other housekeeping are
-meant to run every five minutes. Vercel Hobby only allows daily cron jobs, so `vercel.json` runs them once a day
-(03:00 UTC) as a fallback, and a [QStash schedule](https://upstash.com/docs/qstash/features/schedules) runs them on
-time. Create it once, with your own address and secrets:
+meant to run every five minutes. Vercel Hobby only allows daily cron jobs, so Mailflare schedules the next run
+itself with a delayed message on Vercel Queues. It starts with the first queued job; to start it right after
+deploying:
+
+```bash
+curl https://mail.example.com/api/internal/cron/frequent -H "Authorization: Bearer $CRON_SECRET"
+```
+
+It runs on production only. If it ever stops, the next queued job or the daily cron run in `vercel.json` (03:00 UTC)
+starts it again. It uses a few queue operations every five minutes, from the same quota as the mail queues.
+
+#### With QStash
+
+With QStash as the queue, create a [QStash schedule](https://upstash.com/docs/qstash/features/schedules) instead,
+once, with your own address and secrets:
 
 ```bash
 curl -X POST "https://qstash.upstash.io/v2/schedules/https://mail.example.com/api/internal/cron/frequent" \
@@ -86,7 +120,9 @@ Resend or Amazon SES per domain, `SMTP_URL`, or `CF_ACCOUNT_ID` with `CF_TOKEN`,
   advertises a 4 MB upload limit.
 - **Attachments** stay limited to 25 MB per message.
 - **No IMAP import.** Import `.eml`, `.mbox` or Google Takeout files instead.
-- **Rate limits** fall back to per-instance counting if Redis is unreachable.
+- **Rate limits** fall back to per-instance counting if the database (or Redis) is unreachable.
+- **Vercel Queues is in beta.** A waiting job (scheduled send, retry) runs on the deployment that queued it, so do
+  not delete recent deployments.
 - **Long jobs** (very large backups or imports) must finish a step within 300 seconds.
 - The AI assistant needs `AI_BASE_URL`, `AI_API_KEY` and `AI_MODEL`.
 

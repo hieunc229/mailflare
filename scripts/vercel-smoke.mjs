@@ -37,7 +37,14 @@ function expect(response, ...statuses) {
 
 await check("app answers", async () => void expect(await fetch(`${base}/api/setup/status`), 200));
 await check("cron refuses strangers", async () => void expect(await fetch(`${base}/api/internal/cron/frequent`), 401));
-await check("queue refuses unsigned messages", async () => void expect(await fetch(`${base}/api/internal/queue/inbound`, { method: "POST", body: "{}" }), 401));
+// 401 with QStash; 404 when Vercel Queues is the queue.
+await check("queue refuses unsigned messages", async () => void expect(await fetch(`${base}/api/internal/queue/inbound`, { method: "POST", body: "{}" }), 401, 404));
+// vercel.json's trigger makes this function private. A 2xx would mean strangers can feed the queue consumer.
+await check("queue consumer is not public", async () => {
+	const response = await fetch(`${base}/api/queues`, { method: "POST", body: "{}" });
+	if (response.ok) throw new Error(`expected a refusal, got ${response.status}`);
+	return `${response.status}`;
+});
 await check("uploads need a session", async () => void expect(await fetch(`${base}/api/uploads`, { method: "POST", body: "{}" }), 401));
 for (const path of ["/dav/", "/.well-known/caldav"]) {
 	// 401 means the DAV handler saw it; 404 means it is switched off in Admin settings. 405 means the method never arrived.

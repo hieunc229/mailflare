@@ -30,12 +30,12 @@ export function getSetupRequirementChecks(env: CloudflareEnv): SetupRequirementC
 		];
 	}
 
-	// The Vercel runtime refuses to start without its database, storage, queue and rate limiter, so reaching
-	// this check means they are set; what can still be missing is outbound mail.
+	// The Vercel runtime refuses to start without its database and storage, so reaching this check means they
+	// are set; what can still be missing is outbound mail.
 	if (isVercelRuntime(env)) {
 		const mailer = env.EMAIL as unknown as { configured?: boolean };
 		return [
-			{ key: "Database", configured: !!env.DB, message: "Set DATABASE_URL to PostgreSQL, MySQL or Turso." },
+			{ key: "Database", configured: !!env.DB, message: "Set DATABASE_URL to PostgreSQL, MySQL or Turso, or connect Turso to the Vercel project." },
 			{ key: "Object storage", configured: !!env.BUCKET, message: "Set S3_BUCKET, S3_REGION and credentials, or the four B2_* variables." },
 			// Never blocks setup: Resend and Amazon SES are connected from the Domains page afterwards.
 			{

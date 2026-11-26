@@ -1,3 +1,5 @@
+import type { DatabaseDialect } from "@/db/dialect";
+import { isMissingTableError } from "@/lib/database-errors";
 import { openRateLimiter } from "./misc";
 
 export type UpstashConfig = { url: string; token: string };
@@ -37,6 +39,67 @@ export function openUpstashRateLimiter(config: UpstashConfig, name: string, limi
 				return { success: increment.result <= limit };
 			} catch (error) {
 				console.warn("Upstash rate limiter unavailable, counting in memory", error);
+				return local.limit({ key });
+			}
+		},
+	} as unknown as RateLimit;
+}
+
+/** Created on first use, so only Vercel installations have it. Throwaway counters, left out of backups. */
+const TABLE = "vercel_rate_limits";
+const CREATE_TABLE = `CREATE TABLE IF NOT EXISTS ${TABLE} (bucket VARCHAR(255) NOT NULL PRIMARY KEY, hits BIGINT NOT NULL, expires_at BIGINT NOT NULL)`;
+/** The share of requests that also delete finished windows. */
+const SWEEP_CHANCE = 0.02;
+
+export type RateLimitStore = { db: () => D1Database; dialect: DatabaseDialect };
+
+async function countHit(store: RateLimitStore, bucket: string, expiresAt: number): Promise<number> {
+	const db = store.db();
+	const insert = `INSERT INTO ${TABLE} (bucket, hits, expires_at) VALUES (?, 1, ?)`;
+	let row: { hits: number | string } | null;
+	if (store.dialect === "mysql") {
+		await db.prepare(`${insert} ON DUPLICATE KEY UPDATE hits = hits + 1`).bind(bucket, expiresAt).run();
+		row = await db.prepare(`SELECT hits FROM ${TABLE} WHERE bucket = ?`).bind(bucket).first();
+	} else {
+		row = await db.prepare(`${insert} ON CONFLICT (bucket) DO UPDATE SET hits = ${TABLE}.hits + 1 RETURNING hits`).bind(bucket, expiresAt).first();
+	}
+	// PostgreSQL drivers may hand a bigint back as a string.
+	const hits = Number(row?.hits);
+	if (!Number.isFinite(hits)) throw new Error("The rate limit counter returned no value");
+	return hits;
+}
+
+async function sha256Hex(value: string): Promise<string> {
+	const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(value));
+	return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");
+}
+
+/**
+ * The default limiter on Vercel: the same fixed window, counted in the app's own database so every function
+ * instance shares it without another service. Keys are hashed (they hold client addresses). When the
+ * database cannot be reached it counts in memory, as the Upstash limiter does.
+ */
+export function openDatabaseRateLimiter(store: RateLimitStore, name: string, limit: number, periodSeconds: number): RateLimit {
+	const local = openRateLimiter(limit, periodSeconds);
+	return {
+		async limit({ key }: { key: string }) {
+			const now = Math.floor(Date.now() / 1000);
+			const window = Math.floor(now / periodSeconds);
+			try {
+				const bucket = `${name}:${window}:${await sha256Hex(key)}`;
+				const expiresAt = (window + 2) * periodSeconds;
+				const hits = await countHit(store, bucket, expiresAt).catch(async (error) => {
+					if (!isMissingTableError(error)) throw error;
+					// Two instances creating it at once can make one of them fail; the count below settles it.
+					await store.db().prepare(CREATE_TABLE).run().catch(() => undefined);
+					return countHit(store, bucket, expiresAt);
+				});
+				if (Math.random() < SWEEP_CHANCE) {
+					await store.db().prepare(`DELETE FROM ${TABLE} WHERE expires_at < ?`).bind(now).run().catch(() => undefined);
+				}
+				return { success: hits <= limit };
+			} catch (error) {
+				console.warn("Database rate limiter unavailable, counting in memory", error);
 				return local.limit({ key });
 			}
 		},

@@ -1,11 +1,22 @@
 /**
- * The Queue producer API over Upstash QStash. QStash posts each message back to
- * `/api/internal/queue/<name>`, signed; retries are ours (a re-published message with a higher attempt
+ * What both Vercel queue backends share, and the QStash one. Vercel Queues (vercel-queues.ts) is the default;
+ * setting the QStash variables switches to QStash, which posts each message back to
+ * `/api/internal/queue/<name>`, signed. There retries are ours (a re-published message with a higher attempt
  * number), so the delays and limits match wrangler.jsonc whatever the QStash plan allows.
  */
 export type QueueName = "inbound" | "outbound" | "agent";
 
 export type QueueEnvelope = { body: unknown; attempt: number };
+
+/** What travels on the Vercel Queues topic. `tick` is the five-minute schedule. */
+export type VercelQueueMessage = { queue: QueueName; body: unknown } | { queue: "tick" };
+
+/** The `VERCEL_QUEUES` entry of the Vercel env, present when Vercel Queues is the backend. */
+export type VercelQueues = {
+	handleCallback: (typeof import("@vercel/queue"))["handleCallback"];
+	/** Asks for the next five-minute run. Safe to call often; never throws. */
+	ensureTick: () => Promise<void>;
+};
 
 export type QStashConfig = { token: string; url: string; currentSigningKey: string; nextSigningKey: string };
 
@@ -32,12 +43,30 @@ export function readQStashConfig(vars: Vars): QStashConfig | null {
 	return { token, currentSigningKey, nextSigningKey, url: (vars.QSTASH_URL?.trim() || "https://qstash.upstash.io").replace(/\/+$/, "") };
 }
 
+/**
+ * An IMAP password only ever travels in its queue message; it must not sit in an external queue.
+ * (IMAP import needs Workers sockets, so it could not run here anyway.)
+ */
+export function assertQueueable(body: unknown): void {
+	if (typeof body === "object" && body !== null && "imapPassword" in body) throw new Error("IMAP import is not supported on Vercel");
+}
+
+/** The `Queue` binding's producer methods over one publish call. */
+export function queueProducer(publish: (body: unknown, delaySeconds?: number) => Promise<void>) {
+	const send = (body: unknown, options?: { delaySeconds?: number }) => publish(body, options?.delaySeconds);
+	return {
+		send,
+		async sendBatch(messages: Iterable<{ body: unknown; delaySeconds?: number }>) {
+			for (const message of messages) await send(message.body, { delaySeconds: message.delaySeconds });
+		},
+		async metrics() {
+			return { backlogCount: 0 };
+		},
+	};
+}
+
 export async function publishToQStash(config: QStashConfig, destination: string, envelope: QueueEnvelope, delaySeconds = 0): Promise<void> {
-	// An IMAP password only ever travels in its queue message; it must not sit in a third party's queue.
-	// (IMAP import needs Workers sockets, so it could not run here anyway.)
-	if (typeof envelope.body === "object" && envelope.body !== null && "imapPassword" in envelope.body) {
-		throw new Error("IMAP import is not supported on Vercel");
-	}
+	assertQueueable(envelope.body);
 	const headers: Record<string, string> = {
 		Authorization: `Bearer ${config.token}`,
 		"Content-Type": "application/json",
@@ -54,16 +83,7 @@ export async function publishToQStash(config: QStashConfig, destination: string,
 
 export function openQStashQueue(name: QueueName, config: QStashConfig, appUrl: string) {
 	const destination = queueDestination(appUrl, name);
-	const send = (body: unknown, options?: { delaySeconds?: number }) => publishToQStash(config, destination, { body, attempt: 1 }, options?.delaySeconds);
-	return {
-		send,
-		async sendBatch(messages: Iterable<{ body: unknown; delaySeconds?: number }>) {
-			for (const message of messages) await send(message.body, { delaySeconds: message.delaySeconds });
-		},
-		async metrics() {
-			return { backlogCount: 0 };
-		},
-	};
+	return queueProducer((body, delaySeconds) => publishToQStash(config, destination, { body, attempt: 1 }, delaySeconds));
 }
 
 function base64UrlToBytes(value: string): Uint8Array {

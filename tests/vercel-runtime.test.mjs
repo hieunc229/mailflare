@@ -1,10 +1,11 @@
 import assert from "node:assert/strict";
 import { createHash, createHmac } from "node:crypto";
+import { DatabaseSync } from "node:sqlite";
 import test, { after } from "node:test";
 import { loadFixture } from "./helpers/fixtures.mjs";
 
-const load = async (name, entryPoint) => {
-	const fixture = await loadFixture({ name, entryPoint, mocks: {} });
+const load = async (name, entryPoint, mocks = {}) => {
+	const fixture = await loadFixture({ name, entryPoint, mocks });
 	const module = await fixture.import();
 	after(() => fixture.dispose());
 	return module;
@@ -45,11 +46,81 @@ async function withFetch(handler, run) {
 	}
 }
 
+/** The default setup: no QStash, no Upstash. */
+const defaults = Object.fromEntries(Object.entries(vars).filter(([name]) => !/^(QSTASH|UPSTASH)_/.test(name)));
+
 test("the Vercel runtime refuses to start without its services and names each one", () => {
 	assert.deepEqual(runtimeEnv.vercelConfigProblems(vars), []);
+	assert.deepEqual(runtimeEnv.vercelConfigProblems(defaults), []);
 	const problems = runtimeEnv.vercelConfigProblems({}).join("\n");
-	for (const name of ["DATABASE_URL", "S3_BUCKET", "QSTASH_TOKEN", "UPSTASH_REDIS_REST_URL", "CRON_SECRET", "APP_URL"]) assert.match(problems, new RegExp(name));
+	for (const name of ["DATABASE_URL", "S3_BUCKET", "CRON_SECRET", "APP_URL"]) assert.match(problems, new RegExp(name));
+	assert.doesNotMatch(problems, /QStash|Upstash/i);
 	assert.throws(() => runtimeEnv.createVercelEnv({}), /cannot run on Vercel/);
+});
+
+test("a partly configured QStash is reported", () => {
+	assert.match(runtimeEnv.vercelConfigProblems({ ...defaults, QSTASH_TOKEN: "t" }).join("\n"), /partly configured/);
+});
+
+test("Vercel Queues is the default and QStash replaces it", () => {
+	assert.ok(runtimeEnv.createVercelEnv(defaults).VERCEL_QUEUES);
+	assert.equal(runtimeEnv.createVercelEnv(vars).VERCEL_QUEUES, undefined);
+});
+
+test("the Turso integration's variables stand in for DATABASE_URL", () => {
+	const turso = { ...defaults, DATABASE_URL: undefined, TURSO_DATABASE_URL: "libsql://mail.turso.io", TURSO_AUTH_TOKEN: "turso-token" };
+	const env = runtimeEnv.createVercelEnv(turso);
+	assert.equal(env.DATABASE_URL, "libsql://mail.turso.io");
+	assert.equal(env.DATABASE_AUTH_TOKEN, "turso-token");
+	assert.equal(runtimeEnv.createVercelEnv({ ...turso, DATABASE_URL: vars.DATABASE_URL }).DATABASE_URL, vars.DATABASE_URL);
+});
+
+/** The parts of D1 the database limiter uses, over an in-memory SQLite database. */
+function sqliteD1(sqlite) {
+	const statement = (sql, params = []) => ({
+		bind: (...values) => statement(sql, values),
+		run: async () => void sqlite.prepare(sql).run(...params),
+		first: async () => sqlite.prepare(sql).get(...params) ?? null,
+	});
+	return { prepare: (sql) => statement(sql) };
+}
+
+test("the database limiter creates its table, counts there and falls back to memory", async () => {
+	const sqlite = new DatabaseSync(":memory:");
+	const db = sqliteD1(sqlite);
+	const open = () => limiter.openDatabaseRateLimiter({ db: () => db, dialect: "sqlite" }, "login", 2, 60);
+	const results = [await open().limit({ key: "a" }), await open().limit({ key: "a" }), await open().limit({ key: "a" })];
+	assert.deepEqual(results.map((r) => r.success), [true, true, false]);
+	assert.doesNotMatch(sqlite.prepare("SELECT bucket FROM vercel_rate_limits").get().bucket, /:a$/);
+	await withFetch(globalThis.fetch, async () => {
+		const down = limiter.openDatabaseRateLimiter({ db: () => { throw new Error("down"); }, dialect: "sqlite" }, "login", 1, 60);
+		assert.deepEqual([await down.limit({ key: "a" }), await down.limit({ key: "a" })].map((r) => r.success), [true, false]);
+	});
+});
+
+test("a Vercel Queues send keeps a delayed message long enough, and one tick is asked for per five minutes", async () => {
+	const sent = (globalThis.__queueSends = []);
+	const queues = await load("vercel-queues", "server/runtime/vercel-queues.ts", {
+		"@vercel/queue": "export const send = async (...args) => void globalThis.__queueSends.push(args); export const handleCallback = () => {};",
+	});
+	const outbound = queues.openVercelQueue("outbound");
+	await outbound.send({ kind: "email.scheduled" }, { delaySeconds: 86400 });
+	assert.deepEqual(sent[0], ["mailflare", { queue: "outbound", body: { kind: "email.scheduled" } }, { delaySeconds: 86400, retentionSeconds: 172800 }]);
+	await assert.rejects(outbound.send({ imapPassword: "pw" }), /IMAP/);
+
+	sent.length = 0;
+	let now = 1_000 * 300_000 + 10_000;
+	const schedule = queues.openVercelQueues("production", () => now);
+	await schedule.ensureTick();
+	await schedule.ensureTick();
+	assert.equal(sent.length, 1);
+	assert.deepEqual(sent[0][2], { delaySeconds: 290, idempotencyKey: "tick-1001", retentionSeconds: 3600 });
+	// Slightly before the mark counts as that mark's run.
+	now = 1_001 * 300_000 - 2_000;
+	await schedule.ensureTick();
+	assert.equal(sent[1][2].idempotencyKey, "tick-1002");
+	await queues.openVercelQueues("preview").ensureTick();
+	assert.equal(sent.length, 2);
 });
 
 test("a local database file is refused", () => {
@@ -195,4 +266,6 @@ test("the self-hosted server bundle imports no Next module Node cannot load", as
 	const offenders = Object.entries(result.metafile.inputs).flatMap(([file, input]) =>
 		input.imports.filter((entry) => entry.external && entry.path.startsWith("next/")).map((entry) => `${file} imports ${entry.path}`));
 	assert.deepEqual(offenders, []);
+	// The Vercel queue SDK stays out of every other runtime.
+	assert.equal(Object.values(result.metafile.inputs).some((input) => input.imports.some((entry) => entry.path === "@vercel/queue")), false);
 });

@@ -13,15 +13,16 @@ export const maxDuration = 300;
 const MAX_BODY_BYTES = 1024 * 1024;
 
 /**
- * The queue consumer on Vercel: QStash posts one signed message here. Anything but a 2xx makes QStash deliver
- * it again. Every other runtime consumes its own queues, so this answers 404 there.
+ * The queue consumer when QStash is the queue on Vercel: it posts one signed message here. Anything but a 2xx
+ * makes QStash deliver it again. 404 on every other runtime, and without QStash (see /api/queues).
  */
 export async function POST(request: Request, { params }: { params: Promise<{ name: string }> }) {
 	if (!isVercelRuntime()) return new Response("Not found", { status: 404 });
 	const { name } = await params;
 	if (!isQueueName(name)) return new Response("Not found", { status: 404 });
 	const env = getEnv();
-	const config = readQStashConfig(env as unknown as Record<string, string | undefined>)!;
+	const config = readQStashConfig(env as unknown as Record<string, string | undefined>);
+	if (!config) return new Response("Not found", { status: 404 });
 	let text: string;
 	try {
 		text = new TextDecoder().decode(await readRawBody(request, MAX_BODY_BYTES));

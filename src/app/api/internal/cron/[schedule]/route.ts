@@ -3,6 +3,7 @@ import { getEnv } from "@/lib/cloudflare";
 import { isVercelRuntime } from "@/lib/runtime";
 import { autoUpdateJob } from "@/lib/scheduled/auto-update-job";
 import { dailyJobs, frequentJobs, runScheduledJob } from "@/lib/scheduled/jobs";
+import type { VercelQueues } from "../../../../../../server/runtime/vercel-queue";
 
 export const dynamic = "force-dynamic";
 /** Seconds; the ceiling of a Vercel Pro function. */
@@ -13,7 +14,7 @@ const SCHEDULES = {
 	daily: dailyJobs,
 };
 
-/** Vercel Cron (vercel.json) calls this with `Authorization: Bearer $CRON_SECRET`. 404 on every other runtime. */
+/** Vercel Cron (vercel.json) and the five-minute queue message call this with `Authorization: Bearer $CRON_SECRET`. 404 on every other runtime. */
 export async function GET(request: Request, { params }: { params: Promise<{ schedule: string }> }) {
 	if (!isVercelRuntime()) return new Response("Not found", { status: 404 });
 	const { schedule } = await params;
@@ -23,6 +24,8 @@ export async function GET(request: Request, { params }: { params: Promise<{ sche
 	if (!secret || !timingSafeEqualText(request.headers.get("authorization") ?? "", `Bearer ${secret}`)) {
 		return Response.json({ error: "Unauthorized" }, { status: 401 });
 	}
+	// With Vercel Queues, this asks for the next five-minute run (before the jobs, so a slow one cannot stop it).
+	await (env as unknown as { VERCEL_QUEUES?: VercelQueues }).VERCEL_QUEUES?.ensureTick();
 	const jobs = SCHEDULES[schedule](env, new Date());
 	const results = await Promise.all(jobs.map(runScheduledJob));
 	const failed = jobs.filter((_job, index) => !results[index]).map((job) => job.name);
