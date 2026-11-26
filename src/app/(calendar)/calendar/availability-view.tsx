@@ -26,6 +26,8 @@ export type AvailabilityViewProps = {
 	event: { start: Date | null; end: Date | null };
 	find: FindState;
 	canFind: boolean;
+	/** The list was full, so the organiser's own calendar was left out of the suggestions. */
+	selfLeftOut?: boolean;
 	/** The event is longer than a working day, so no slot could ever fit. */
 	tooLong?: boolean;
 	onRetry: () => void;
@@ -96,6 +98,7 @@ export function AvailabilityView(props: AvailabilityViewProps) {
 					{props.find.state === "loading" && <p role="status" className="flex items-center gap-2 text-neutral-600"><Loader2 aria-hidden="true" className="h-4 w-4 animate-spin motion-reduce:animate-none" />{t("calendar.availability.finding")}</p>}
 					{props.find.state === "error" && <p role="alert" className="text-red-700">{t("calendar.availability.findFailed")}</p>}
 					{props.find.state === "ready" && props.find.slots.length === 0 && <p role="status" className="text-neutral-600">{t("calendar.availability.findEmpty")}</p>}
+					{props.find.state === "ready" && props.selfLeftOut && <p className="text-xs text-neutral-600">{t("calendar.availability.findSelfLeftOut")}</p>}
 					{props.find.state === "ready" && props.find.slots.length > 0 && (
 						<div role="group" aria-label={t("calendar.availability.suggested")} className="space-y-1">
 							<p role="status" className="text-xs font-semibold text-neutral-900">{t("calendar.availability.suggested")}</p>

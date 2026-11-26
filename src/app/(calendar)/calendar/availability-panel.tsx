@@ -11,7 +11,7 @@ const DEBOUNCE_MS = 400;
 const DAY = 86_400_000;
 
 type Answer = { key: string; fromMs: number; ok: boolean; results: Record<string, PersonAvailability> };
-type Found = { key: string; at: Date; state: "loading" | "error" | "ready"; busy: string[][][] };
+type Found = { key: string; at: Date; selfLeftOut?: boolean; state: "loading" | "error" | "ready"; busy: string[][][] };
 
 /**
  * Who is free when the event is: reads the guest field and the event's times, asks `/api/calendar/free-busy` for the event's day
@@ -65,14 +65,17 @@ export function AvailabilityPanel({ guests, startsAt, endsAt, excludeEventId, se
 		setFound({ key: addressKey, at, state: "loading", busy: [] });
 		// The organiser's own calendar counts too, though it is not a row: they are asked for last, and never twice.
 		const self = selfAddress?.trim().toLowerCase();
-		const askFor = self ? [...addresses.filter((address) => address !== self).slice(0, MAX_GUESTS - 1), self] : addresses;
+		// With the list full there is no room for them: a guest's calendar matters more than the organiser's here, and the view says so.
+		const askSelf = !!self && !addresses.includes(self) && addresses.length < MAX_GUESTS;
+		const selfLeftOut = !!self && !addresses.includes(self) && !askSelf;
+		const askFor = askSelf ? [...addresses, self] : addresses;
 		void fetchAvailability(askFor, at, new Date(at.getTime() + (FIND_DAYS + 1) * DAY), excludeEventId).then((result) => {
 			if (token !== finding.current) return;
 			if (!result.ok) { setFound({ key: addressKey, at, state: "error", busy: [] }); return; }
-			setFound({ key: addressKey, at, state: "ready", busy: Object.values(result.results).flatMap((person) => (person.status === "ok" ? [person.busy] : [])) });
+			setFound({ key: addressKey, at, selfLeftOut, state: "ready", busy: Object.values(result.results).flatMap((person) => (person.status === "ok" ? [person.busy] : [])) });
 		});
 	}
 
 	return <AvailabilityView zone={zone} guestCount={addresses.length} truncated={truncated} state={state} rows={rows} dayStart={window.dayStart} dayEnd={window.dayEnd} event={{ start, end }}
-		find={find} canFind={state === "ready" && anyVisible && durationMs > 0 && durationMs <= MAX_FIND_DURATION_MS} tooLong={durationMs > MAX_FIND_DURATION_MS} onRetry={() => setAttempt((value) => value + 1)} onFind={onFind} onPick={(slot) => onPick(slot.start, slot.end)} />;
+		find={find} selfLeftOut={current?.state === "ready" && !!current.selfLeftOut} canFind={state === "ready" && anyVisible && durationMs > 0 && durationMs <= MAX_FIND_DURATION_MS} tooLong={durationMs > MAX_FIND_DURATION_MS} onRetry={() => setAttempt((value) => value + 1)} onFind={onFind} onPick={(slot) => onPick(slot.start, slot.end)} />;
 }

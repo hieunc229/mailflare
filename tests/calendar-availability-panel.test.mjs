@@ -231,3 +231,29 @@ test("moving the event to another day does not keep the old day's rows, which wo
 	assert.match(text(), /Checking availability/);
 	await teardown();
 });
+
+test("with 50 guests Find a time drops the organiser's own calendar, not a guest, and says so", async () => {
+	setup();
+	const guests = Array.from({ length: 50 }, (_, index) => `g${index}@one.test`);
+	globalThis.panelT.responder = (body) => ok(Object.fromEntries(body.addresses.map((address) => [address, { status: "ok", busy: [] }])));
+	await mount({ guests: guests.join(","), selfAddress: "me@one.test" });
+	await ticks(400);
+	await ticks(0);
+	await act(async () => { [...container.querySelectorAll("button")].find((button) => button.textContent === "Find a time").click(); });
+	await ticks(0);
+	assert.deepEqual(globalThis.panelT.calls[1].body.addresses, guests, "all 50 guests, no 51st");
+	assert.match(text(), /your own calendar is not included/);
+	await teardown();
+});
+
+test("with room to spare there is no such note", async () => {
+	setup();
+	globalThis.panelT.responder = (body) => ok(Object.fromEntries(body.addresses.map((address) => [address, { status: "ok", busy: [] }])));
+	await mount({ guests: "ann@one.test", selfAddress: "me@one.test" });
+	await ticks(400);
+	await ticks(0);
+	await act(async () => { [...container.querySelectorAll("button")].find((button) => button.textContent === "Find a time").click(); });
+	await ticks(0);
+	assert.doesNotMatch(text(), /your own calendar is not included/);
+	await teardown();
+});
