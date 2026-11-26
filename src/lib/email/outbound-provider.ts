@@ -104,7 +104,8 @@ async function sendWithResend(
 		body: JSON.stringify(resendPayload(message, setsMessageId ? mintedId : null, resendOmittedHeaders(env))),
 	});
 	const body = (await response.json().catch(() => null)) as { id?: string; message?: string } | null;
-	if (!response.ok) throw new Error(`Resend: ${body?.message ?? `request failed (${response.status})`}`);
+	// The status travels with the error so a caller can tell a rate limit (429) from a refusal.
+	if (!response.ok) throw Object.assign(new Error(`Resend: ${body?.message ?? `request failed (${response.status})`}`), { status: response.status });
 	if (setsMessageId || !body?.id) return { messageId: mintedId };
 	// Without our own header, thread replies against the ID the provider assigned.
 	// It can be missing while the send is still queued; the minted ID is the fallback.

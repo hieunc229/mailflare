@@ -5,7 +5,7 @@ import { loadApp } from "./helpers/real-db.mjs";
 const mocks = {
 	"@/lib/email/outbound-provider": `
 		export async function getOutboundProviderConfig(env, from) { globalThis.relayLog.configs.push(from); return { provider: "resend", apiKey: "k" }; }
-		export async function sendThroughProvider(env, config, message, key) { if (globalThis.relayLog.fail) throw new Error("provider down"); globalThis.relayLog.sent.push({ message, key }); return { messageId: "id" }; }
+		export async function sendThroughProvider(env, config, message, key) { if (globalThis.relayLog.error) throw globalThis.relayLog.error; if (globalThis.relayLog.fail) throw new Error("provider down"); globalThis.relayLog.sent.push({ message, key }); return { messageId: "<provider-" + globalThis.relayLog.sent.length + "@mta.test>" }; }
 	`,
 };
 const { app, newDatabase } = await loadApp("groups-relay", `
@@ -168,7 +168,8 @@ test("a relay sends the sender's mail from the group address to that one member"
 	assert.equal(await app.processGroupRelay(env, relayMessage()), "sent");
 	const [{ message, key }] = globalThis.relayLog.sent;
 	assert.equal(key, "g1:group-relay/x.eml:gm2");
-	assert.equal(message.from, `"'Bob Roe' via Team" <team@example.com>`);
+	assert.equal(message.from, `"'Bob Roe <bob@gmail.com>' via Team" <team@example.com>`);
+	assert.equal(message.headers["X-Original-From"], '"Bob Roe" <bob@gmail.com>');
 	assert.deepEqual(message.to, ["pat@ext.com"]);
 	assert.equal(message.subject, "Hello team");
 	assert.match(message.text, /hi there/);
@@ -177,26 +178,28 @@ test("a relay sends the sender's mail from the group address to that one member"
 	assert.equal(message.headers["List-Post"], "<mailto:team@example.com>");
 	assert.equal(message.headers.Precedence, "list");
 	assert.equal(message.headers["X-Mailflare-Group"], "g1");
-	assert.match(message.headers["X-Mailflare-Forwarded"], /^v1\.[0-9a-f]{64}$/);
+	assert.equal("X-Mailflare-Forwarded" in message.headers, false);
 	assert.equal(message.headers["In-Reply-To"], "<prev@x.test>");
-	assert.equal(message.headers.References, "<root@x.test> <prev@x.test>");
+	assert.equal(message.headers.References, "<root@x.test> <prev@x.test> <abc@x.test>", "the original's Message-ID is kept so replies thread");
 	assert.equal(message.headers["List-Unsubscribe-Post"], "List-Unsubscribe=One-Click");
 	assert.deepEqual(globalThis.relayLog.configs, ["team@example.com"]);
 });
 
 test("the unsubscribe link is signed for exactly this group and member", async (t) => {
-	const { env } = await relayFixture(t);
+	const { env, objects } = await relayFixture(t);
 	await app.processGroupRelay(env, relayMessage());
 	const url = globalThis.relayLog.sent[0].message.headers["List-Unsubscribe"];
 	const match = /^<https:\/\/mail\.example\.com\/api\/groups\/unsubscribe\/([^>]+)>$/.exec(url);
 	assert.ok(match, url);
-	assert.deepEqual(await app.verifyUnsubscribeToken("server-secret", match[1]), { groupId: "g1", memberId: "gm2", email: "pat@ext.com" });
+	const stored = new TextDecoder().decode(objects.get("secrets/group-unsubscribe.key"));
+	assert.deepEqual(await app.verifyUnsubscribeToken(stored, match[1]), { groupId: "g1", memberId: "gm2" });
+	assert.equal(await app.verifyUnsubscribeToken("server-secret", match[1]), null, "not keyed from CF_TOKEN");
 });
 
-test("without a server secret or APP_URL the copy has no unsubscribe headers, and reply-to group is honoured", async (t) => {
+test("without APP_URL the copy has no unsubscribe headers, and reply-to group is honoured", async (t) => {
 	const { env, sqlite } = await relayFixture(t);
 	sqlite.exec("UPDATE mail_groups SET reply_to = 'group'");
-	for (const strip of [{ CF_TOKEN: undefined }, { APP_URL: undefined }]) {
+	for (const strip of [{ APP_URL: undefined }, { APP_URL: "http://insecure.test" }]) {
 		globalThis.relayLog.sent.length = 0;
 		await app.processGroupRelay({ ...env, ...strip }, relayMessage());
 		const { headers } = globalThis.relayLog.sent[0].message;
@@ -259,4 +262,35 @@ test("the daily sweep removes relay copies older than 7 days and keeps newer one
 	env.BUCKET.list = async ({ prefix }) => ({ objects: Object.keys(uploaded).filter((key) => key.startsWith(prefix)).map((key) => ({ key, uploaded: uploaded[key] })), truncated: false });
 	await app.sweepOrphanedRawMail(env, now);
 	assert.deepEqual([...objects.keys()].sort(), ["group-relay/new.eml"]);
+});
+
+test("the provider's Message-ID of every relayed copy is remembered for the member it was sent to", async (t) => {
+	const { env, objects } = await relayFixture(t);
+	await app.processGroupRelay(env, relayMessage());
+	const key = await app.relayUtils.relayMessageIdKey("<provider-1@mta.test>");
+	assert.deepEqual(JSON.parse(new TextDecoder().decode(objects.get(key))), { g: "g1", m: "gm2" });
+	assert.equal(key, await app.relayUtils.relayMessageIdKey("provider-1@MTA.test"), "brackets and case do not matter");
+});
+
+test("a rate-limited send is queued again with a growing delay, and gives up after six", async (t) => {
+	const { env, outbound } = await relayFixture(t);
+	globalThis.relayLog.error = Object.assign(new Error("Resend: Too many requests"), { status: 429 });
+	assert.equal(await app.processGroupRelay(env, relayMessage()), "skipped");
+	assert.deepEqual(outbound.map((m) => [m.body.attempt, m.options.delaySeconds]), [[1, 15]]);
+	await app.processGroupRelay(env, relayMessage({ attempt: 2 }));
+	assert.deepEqual(outbound.at(-1).options.delaySeconds, 60);
+	await assert.rejects(() => app.processGroupRelay(env, relayMessage({ attempt: 6 })), /Too many requests/);
+	globalThis.relayLog.error = new Error("Resend: invalid address");
+	await assert.rejects(() => app.processGroupRelay(env, relayMessage()), /invalid address/);
+});
+
+test("mail with several From addresses is not relayed, and the subject cannot carry a header break", async (t) => {
+	const { env, objects, outbound } = await relayFixture(t);
+	objects.set("group-relay/x.eml", new TextEncoder().encode(MIME("a@x.com, b@y.com")).buffer);
+	assert.equal(await app.processGroupRelay(env, relayMessage()), "skipped");
+	assert.equal(globalThis.relayLog.sent.length, 0);
+	objects.set("group-relay/x.eml", new TextEncoder().encode(MIME().replace("Subject: Hello team", "Subject: =?utf-8?Q?Hi=0D=0ABcc:_evil=40x.com?=")).buffer);
+	await app.processGroupRelay(env, relayMessage());
+	assert.ok(!/[\r\n]/.test(globalThis.relayLog.sent[0].message.subject));
+	void outbound;
 });

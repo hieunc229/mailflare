@@ -5,12 +5,17 @@ import { loadApp } from "./helpers/real-db.mjs";
 const mocks = {
 	"@/lib/cloudflare": "export function getEnv(){return globalThis.unsub.env}",
 };
+const keyStore = () => {
+	const objects = new Map([["secrets/group-unsubscribe.key", new TextEncoder().encode("a".repeat(64)).buffer]]);
+	return { get: async (key) => (objects.has(key) ? { arrayBuffer: async () => objects.get(key) } : null), put: async (key, body) => { objects.set(key, body); }, objects };
+};
 const { app, newDatabase } = await loadApp("groups-unsubscribe", `
 	export * as route from "./src/app/api/groups/unsubscribe/[token]/route.ts";
 	export { signUnsubscribeToken } from "./src/lib/groups/unsubscribe-token.ts";
+	export { forgetUnsubscribeSecretCache } from "./src/lib/groups/unsubscribe-secret.ts";
 `, { mocks });
 
-const SECRET = "server-secret";
+const SECRET = "a".repeat(64);
 const seed = `
 	INSERT INTO users (id, email, password_hash, name, role, created_at) VALUES ('admin', 'admin@example.com', 'hash', 'Admin', 'admin', 1);
 	INSERT INTO domains (id, user_id, hostname, zone_id, status, created_at) VALUES ('d1', 'admin', 'example.com', 'z1', 'active', 1);
@@ -24,11 +29,12 @@ const seed = `
 `;
 async function ctx(t, over = {}) {
 	const database = await newDatabase(t, seed);
-	globalThis.unsub = { env: { ...database.env, CF_TOKEN: SECRET, ...over } };
+	app.forgetUnsubscribeSecretCache();
+	globalThis.unsub = { env: { ...database.env, BUCKET: keyStore(), ...over } };
 	t.after(() => { delete globalThis.unsub; });
 	return database;
 }
-const token = (claim = { groupId: "g1", memberId: "m1", email: "pat@ext.com" }, secret = SECRET) => app.signUnsubscribeToken(secret, claim);
+const token = (claim = { groupId: "g1", memberId: "m1" }, secret = SECRET) => app.signUnsubscribeToken(secret, claim);
 const call = (method, t, body, headers) => app.route[method](new Request(`https://mail.example.com/api/groups/unsubscribe/${t}`, { method, body, headers }), { params: Promise.resolve({ token: t }) });
 const members = (sqlite) => sqlite.prepare("SELECT id FROM mail_group_members ORDER BY id").all().map((r) => r.id);
 const audit = (sqlite) => sqlite.prepare("SELECT action, actor_user_id, metadata FROM audit_logs").all().map((r) => ({ ...r, metadata: JSON.parse(r.metadata) }));
@@ -69,7 +75,7 @@ test("a token that is forged, re-aimed, unsigned or from another secret answers 
 	const [payload] = good.split(".");
 	const wrong = [
 		await token(undefined, "other-secret"),
-		`${Buffer.from("g1\nm2\nsam@ext.com").toString("base64url")}.${good.split(".")[1]}`,
+		`${Buffer.from("g1\nm2").toString("base64url")}.${good.split(".")[1]}`,
 		`${payload}.AAAA`,
 		"garbage",
 		"",
@@ -78,17 +84,15 @@ test("a token that is forged, re-aimed, unsigned or from another secret answers 
 		for (const method of ["GET", "POST"]) assert.equal((await call(method, bad)).status, 404, `${method} ${bad}`);
 	}
 	// Validly signed but not matching a row (wrong group for the member): nothing is deleted.
-	const mismatch = await token({ groupId: "g2", memberId: "m1", email: "pat@ext.com" });
+	const mismatch = await token({ groupId: "g2", memberId: "m1" });
 	assert.equal((await call("POST", mismatch)).status, 200);
-	const wrongEmail = await token({ groupId: "g1", memberId: "m2", email: "pat@ext.com" });
-	assert.equal((await call("POST", wrongEmail)).status, 200);
 	assert.deepEqual(members(sqlite), ["m1", "m2", "m3"]);
 	assert.deepEqual(audit(sqlite), []);
 });
 
 test("an unknown member and a removed one look the same, so addresses cannot be enumerated", async (t) => {
 	await ctx(t);
-	const unknown = await call("POST", await token({ groupId: "g1", memberId: "zz", email: "nobody@ext.com" }));
+	const unknown = await call("POST", await token({ groupId: "g1", memberId: "zz" }));
 	const removed = await call("POST", await token());
 	const again = await call("POST", await token());
 	assert.equal(unknown.status, 200);
@@ -97,8 +101,17 @@ test("an unknown member and a removed one look the same, so addresses cannot be 
 	assert.equal(again.status, 200);
 });
 
-test("without a server secret the route is closed", async (t) => {
-	await ctx(t, { CF_TOKEN: undefined });
-	assert.equal((await call("GET", await token())).status, 404);
-	assert.equal((await call("POST", await token())).status, 404);
+test("rotating CF_TOKEN does not invalidate links already sent", async (t) => {
+	const { sqlite } = await ctx(t, { CF_TOKEN: "one" });
+	const link = await token();
+	globalThis.unsub.env.CF_TOKEN = "two";
+	assert.equal((await call("POST", link)).status, 200);
+	assert.deepEqual(members(sqlite), ["m2", "m3"], "the link still works");
+});
+
+test("a removed member's link still opens, without showing an address", async (t) => {
+	const { sqlite } = await ctx(t);
+	sqlite.exec("DELETE FROM mail_group_members WHERE id = 'm1'");
+	const html = await (await call("GET", await token())).text();
+	assert.ok(!html.includes("pat@ext.com"));
 });

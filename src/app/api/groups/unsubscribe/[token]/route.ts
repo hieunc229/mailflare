@@ -3,8 +3,8 @@ import { getDb } from "@/db";
 import { domains, mailGroupMembers, mailGroups } from "@/db/schema";
 import { getEnv } from "@/lib/cloudflare";
 import { isMissingTableError } from "@/lib/database-errors";
-import { markerSecret } from "@/lib/email/account-forwarding";
 import { unsubscribePage } from "@/lib/groups/unsubscribe-page";
+import { getUnsubscribeSecret } from "@/lib/groups/unsubscribe-secret";
 import { verifyUnsubscribeToken, type UnsubscribeClaim } from "@/lib/groups/unsubscribe-token";
 import { createAuditLog } from "@/lib/mailboxes/audit";
 
@@ -12,9 +12,7 @@ type Context = { params: Promise<{ token: string }> };
 
 /** The claim a link proves, or null. Everything that is not a validly signed token is the same 404. */
 async function claimOf(env: CloudflareEnv, context: Context): Promise<UnsubscribeClaim | null> {
-	const secret = markerSecret(env);
-	if (!secret) return null;
-	return verifyUnsubscribeToken(secret, (await context.params).token);
+	return verifyUnsubscribeToken(await getUnsubscribeSecret(env), (await context.params).token);
 }
 
 const notFound = () => unsubscribePage({ status: 404, title: "Link not valid", message: "This unsubscribe link is not valid." });
@@ -29,16 +27,25 @@ export async function GET(_request: Request, context: Context) {
 	const claim = await claimOf(env, context);
 	if (!claim) return notFound();
 	let name = "this group";
+	let email: string | null = null;
 	try {
-		const [group] = await getDb(env).select({ name: mailGroups.name }).from(mailGroups).where(eq(mailGroups.id, claim.groupId)).limit(1);
-		if (group) name = group.name;
+		const [row] = await getDb(env)
+			.select({ name: mailGroups.name, email: mailGroupMembers.email })
+			.from(mailGroupMembers)
+			.innerJoin(mailGroups, eq(mailGroupMembers.groupId, mailGroups.id))
+			.where(and(eq(mailGroupMembers.id, claim.memberId), eq(mailGroupMembers.groupId, claim.groupId), eq(mailGroupMembers.kind, "external")))
+			.limit(1);
+		if (row) {
+			name = row.name;
+			email = row.email;
+		}
 	} catch (error) {
 		if (!isMissingTableError(error)) throw error;
 	}
 	return unsubscribePage({
 		status: 200,
 		title: "Unsubscribe",
-		message: `Stop receiving mail sent to ${name} at ${claim.email}?`,
+		message: email ? `Stop receiving mail sent to ${name} at ${email}?` : `Stop receiving mail sent to ${name}?`,
 		action: { path: `/api/groups/unsubscribe/${encodeURIComponent((await context.params).token)}`, label: "Unsubscribe" },
 	});
 }
@@ -50,9 +57,9 @@ export async function POST(_request: Request, context: Context) {
 	if (!claim) return notFound();
 	const db = getDb(env);
 	try {
-		// The row must match all three claims, so a validly signed token never touches anyone else's membership.
+		// The row must match both claims, so a validly signed token never touches anyone else's membership.
 		const [row] = await db
-			.select({ id: mailGroupMembers.id, localPart: mailGroups.localPart, hostname: domains.hostname })
+			.select({ id: mailGroupMembers.id, email: mailGroupMembers.email, localPart: mailGroups.localPart, hostname: domains.hostname })
 			.from(mailGroupMembers)
 			.innerJoin(mailGroups, eq(mailGroupMembers.groupId, mailGroups.id))
 			.innerJoin(domains, eq(mailGroups.domainId, domains.id))
@@ -60,7 +67,6 @@ export async function POST(_request: Request, context: Context) {
 				eq(mailGroupMembers.id, claim.memberId),
 				eq(mailGroupMembers.groupId, claim.groupId),
 				eq(mailGroupMembers.kind, "external"),
-				eq(mailGroupMembers.email, claim.email),
 			))
 			.limit(1);
 		if (row) {
@@ -68,7 +74,7 @@ export async function POST(_request: Request, context: Context) {
 			await createAuditLog(env, {
 				actorUserId: null,
 				action: "group.member_unsubscribed",
-				metadata: { groupId: claim.groupId, address: `${row.localPart}@${row.hostname}`.toLowerCase(), kind: "external", email: claim.email },
+				metadata: { groupId: claim.groupId, address: `${row.localPart}@${row.hostname}`.toLowerCase(), kind: "external", email: row.email },
 			});
 		}
 	} catch (error) {
