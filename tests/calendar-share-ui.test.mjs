@@ -113,7 +113,9 @@ test("share view, error: an alert with a retry button", () => {
 test("share view, empty: says so, and the form is still there", () => {
 	const html = view();
 	assert.match(html, /Not shared with anyone yet/);
-	assert.match(html, /aria-label="Email address"/);
+	assert.match(html, /<label[^>]*for="([^"]+)"[^>]*>Email address<\/label>/, "a visible label, not only an aria-label");
+	const labelFor = html.match(/<label[^>]*for="([^"]+)"/)[1];
+	assert.match(html, new RegExp(`<input[^>]*id="${labelFor.replace(/:/g, "\\:")}"`));
 	assert.match(html, /type="email"/);
 	assert.match(html, /<button[^>]*type="submit"[^>]*disabled=""/, "nothing to share until an address is typed");
 });
@@ -169,4 +171,28 @@ test("the read-only event dialog shows what the viewer may see, names the calend
 	assert.match(html, /Room 4/);
 	assert.match(html, /Holidays/);
 	assert.match(html, /You can view this event but not change it/);
+});
+
+test("the free/busy permission says what the person will see and that the view is coming", () => {
+	assert.equal(en["calendar.share.role.freebusy"], "See only when I'm busy (free/busy view coming soon)");
+	assert.ok(en["calendar.share.removeConfirm"]);
+});
+
+const run = async (overrides) => {
+	const log = [];
+	const result = await api.runRemove({ share: person("a", "edit"), calendarId: "cal:work", confirm: async (name) => { log.push(["confirm", name]); return true; }, remove: async () => { log.push(["remove"]); return { ok: true, self: false }; }, ...overrides });
+	return { result, log };
+};
+
+test("removing a person asks first; no answer, no request", async () => {
+	const declined = await run({ confirm: async () => false });
+	assert.deepEqual([declined.result, declined.log], [{ kind: "cancelled" }, []]);
+	const accepted = await run({});
+	assert.deepEqual([accepted.result.kind, accepted.log.map((entry) => entry[0])], ["removed", ["confirm", "remove"]]);
+	assert.equal(accepted.log[0][1], "Person a");
+});
+
+test("a manager who removes their own grant leaves; a failed request reports its status", async () => {
+	assert.equal((await run({ remove: async () => ({ ok: true, self: true }) })).result.kind, "self");
+	assert.deepEqual((await run({ remove: async () => ({ ok: false, status: 404 }) })).result, { kind: "failed", status: 404, code: undefined });
 });

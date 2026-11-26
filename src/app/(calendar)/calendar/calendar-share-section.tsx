@@ -4,7 +4,9 @@ import { useEffect, useState } from "react";
 import toast from "react-hot-toast";
 import { useLanguage } from "@/components/language-provider";
 import type { CalendarGrantRole, ShareEntry } from "@/lib/calendar/shares-types";
-import { addShare, changeShareRole, loadShares, removeShare } from "./calendar-share-api";
+import { confirmDestructive } from "@/components/ui/confirm-dialog";
+import { addShare, changeShareRole, loadShares, removeShare, runRemove } from "./calendar-share-api";
+import { calendarChanged } from "./calendar-state";
 import { ShareView } from "./calendar-share-view";
 import { shareErrorKey } from "./calendar-list-utils";
 
@@ -58,11 +60,14 @@ export function ShareSection({ calendarId }: { calendarId: string }) {
 	async function remove(share: ShareEntry) {
 		setPendingId(share.id);
 		setError("");
-		const result = await removeShare(calendarId, share.id);
+		const outcome = await runRemove({ share, calendarId, confirm: (name) => confirmDestructive(t("calendar.share.removeConfirm", { name })), remove: removeShare });
 		setPendingId(null);
-		if (!result.ok) { setError(t(shareErrorKey(result.status) as never)); if (result.status === 404) void reload(); return; }
-		setShares((current) => current.filter((entry) => entry.id !== share.id));
+		if (outcome.kind === "cancelled") return;
+		if (outcome.kind === "failed") { setError(t(shareErrorKey(outcome.status, outcome.code) as never)); if (outcome.status === 404) void reload(); return; }
 		toast.success(t("calendar.share.removed", { name: share.name || share.email }));
+		// A manager who removed themselves no longer has this calendar's settings: close the dialog and refresh the list.
+		if (outcome.kind === "self") { calendarChanged("updated", calendarId); return; }
+		setShares((current) => current.filter((entry) => entry.id !== share.id));
 	}
 
 	return <ShareView state={state} shares={shares} pendingId={pendingId} email={email} role={role} adding={adding} error={error}
