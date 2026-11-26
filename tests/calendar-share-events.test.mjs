@@ -285,6 +285,27 @@ test("PATCH by an editor on a series: a past occurrence moved and a this-and-fol
 	assert.equal(audit().filter((entry) => entry.action === "calendar.event_updated_by_delegate").length, 2);
 });
 
+test("PATCH by an editor dragging one past occurrence of a series with guests sends nothing and keeps the guest list", async () => {
+	setup();
+	sqlite.prepare("INSERT INTO calendar_events (id, user_id, calendar_id, mailbox_id, title, attendees, starts_at, ends_at, repeat, dav_object_id, created_at, updated_at) VALUES ('s1', 'u1', 'cal:work', 'mbx_owner', 'Weekly', '[\"g@x.co\"]', ?, ?, 'weekly', 's1', 1, 1)").run(sec("2026-01-05T10:00:00Z"), sec("2026-01-05T11:00:00Z"));
+	as("u2");
+	const occurrence = `s1@${Date.parse("2026-01-12T10:00:00Z")}`;
+	const response = await patch(occurrence, { moveOccurrenceToPast: true, attendees: ["g@x.co"], from: "owner@one.test", mailboxId: "mbx_owner", startsAt: "2026-01-13T10:00:00.000Z", endsAt: "2026-01-13T11:00:00.000Z" });
+	assert.equal(response.status, 200);
+	assert.equal(sent().length, 0, "the owner's mailbox sends nothing for a delegate");
+	assert.deepEqual(sqlite.prepare("SELECT DISTINCT attendees FROM calendar_events").all().map((entry) => entry.attendees), ['["g@x.co"]']);
+	assert.equal(audit().length, 1);
+});
+
+test("PATCH by an editor on an event whose stored guest is not a plain address is not locked out", async () => {
+	setup();
+	sqlite.exec("INSERT INTO calendar_events (id, user_id, calendar_id, title, attendees, starts_at, ends_at, created_at, updated_at) VALUES ('w1', 'u1', 'cal:work', 'Imported', '[\"room@localhost\"]', 1000, 2000, 1, 1)");
+	as("u2");
+	assert.equal((await patch("w1", { title: "Moved", attendees: ["room@localhost"] })).status, 200);
+	assert.deepEqual([row("w1").title, row("w1").attendees], ["Moved", '["room@localhost"]']);
+	assert.equal((await patch("w1", { attendees: ["room@localhost", "new@x.co"] })).status, 403);
+});
+
 // ---- delete ---------------------------------------------------------------------------------------------------------
 
 test("DELETE by an editor removes the owner's event and its override rows, and audits the delegate", async () => {

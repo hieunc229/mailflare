@@ -44,8 +44,10 @@ async function loadEditableEvent(db: Db, user: { id: string }, id: string): Prom
 
 /** The guests an invitation lists, as a comparable set. */
 const guestSet = (list: string[]) => [...new Set(list.map((email) => email.trim().toLowerCase()).filter(Boolean))].sort().join(",");
+/** The guests of a stored event, through the same filter a request's list goes through, so a value the filter drops (imported by a phone) cannot make the two differ. */
+const GUEST_ADDRESS = /^\S+@\S+\.\S+$/;
 function storedGuests(raw: string | null): string[] {
-	try { const parsed: unknown = JSON.parse(raw || "[]"); return Array.isArray(parsed) ? parsed.filter((entry): entry is string => typeof entry === "string") : []; } catch { return []; }
+	try { const parsed: unknown = JSON.parse(raw || "[]"); return Array.isArray(parsed) ? parsed.filter((entry): entry is string => typeof entry === "string" && GUEST_ADDRESS.test(entry.trim())) : []; } catch { return []; }
 }
 
 const auditDelegate = (env: CloudflareEnv, user: Pick<SessionUser, "id">, existing: EventRow, action: string, calendarId: string | null | undefined) =>
@@ -93,14 +95,16 @@ export async function PATCH(request: Request, { params }: CalendarEventRoutePara
 	const requestedGuests = (input.attendees ?? []).map((email) => email.trim()).filter((email) => /^\S+@\S+\.\S+$/.test(email));
 	// v1: only the owner invites. A delegate may save an event with its guest list as it is, never change it, and sends nothing.
 	if (delegate && guestSet(requestedGuests) !== guestSet(storedGuests(existing.attendees))) return NextResponse.json({ error: "Only the calendar's owner can change who is invited", code: INVITE_REQUIRES_OWNER }, { status: 403 });
+	// A delegate's save keeps the stored list byte for byte: nothing is re-serialised, filtered or sent.
 	const attendees = delegate ? storedGuests(existing.attendees) : requestedGuests;
+	const keptGuests = delegate ? existing.attendees : JSON.stringify(attendees);
 	if (!delegate && attendees.length && existing.mailboxId && input.from && !calendarKeyCanSendInvitations(key, existing.mailboxId)) return NextResponse.json({ error: "Sending invitations requires mail send permission for this mailbox" }, { status: 403 });
 	if (input.moveOccurrenceToPast) {
 		if (!occurrence || existing.repeat === "none" || startsAt >= new Date()) return NextResponse.json({ error: "Choose a past time for this occurrence" }, { status: 400 });
 		const excluded = parseExcludedOccurrences(existing.excludedOccurrences);
 		if (excluded.includes(occurrence.startsAt.getTime())) return NextResponse.json({ error: "Occurrence already moved" }, { status: 409 });
 		const now = new Date();
-		const moved = { ...existing, id: newId("evt"), title: input.title.trim(), description: input.description?.trim() ?? "", location: input.location?.trim() ?? "", attendees: JSON.stringify(attendees), color: normalizeCalendarColor(input.color ?? existing.color), ...flags, ...(moveTo !== undefined ? { calendarId: moveTo } : {}), repeat: "none" as const, repeatDays: "[]", repeatAnchorDay: null, repeatUntil: null, rrule: null, excludedOccurrences: "[]",
+		const moved = { ...existing, id: newId("evt"), title: input.title.trim(), description: input.description?.trim() ?? "", location: input.location?.trim() ?? "", attendees: keptGuests, color: normalizeCalendarColor(input.color ?? existing.color), ...flags, ...(moveTo !== undefined ? { calendarId: moveTo } : {}), repeat: "none" as const, repeatDays: "[]", repeatAnchorDay: null, repeatUntil: null, rrule: null, excludedOccurrences: "[]",
 			// A moved occurrence of a DAV series stays part of that resource as an override row; otherwise it is a plain one-off.
 			davObjectId: existing.davObjectId === existing.id ? existing.id : null, recurrenceId: existing.davObjectId === existing.id ? occurrence.startsAt : null, startsAt, endsAt, createdAt: now, updatedAt: now };
 		const insertMoved = db.insert(calendarEvents).values(moved);
@@ -109,13 +113,13 @@ export async function PATCH(request: Request, { params }: CalendarEventRoutePara
 			const refused = await batched([insertMoved, excludeOriginal, moveSeriesStatement(db, ownerId, existing.id, moveTo)]);
 			if (refused) return refused;
 		} else { await insertMoved; await excludeOriginal; }
-		if (attendees.length && existing.mailboxId && input.from) { const file = createCalendarInvitation({ ...moved, uid: moved.id, organizer: input.from, attendees }); await Promise.all(attendees.map((to) => sendEmail(env, { userId: user.id, mailboxId: existing.mailboxId!, from: input.from!, to, subject: `Updated invitation: ${moved.title}`, text: moved.description || `This event has been updated: ${moved.title}.`, attachments: [{ filename: "invite.ics", type: "text/calendar; charset=utf-8", content: file }] }))); }
+		if (!delegate && attendees.length && existing.mailboxId && input.from) { const file = createCalendarInvitation({ ...moved, uid: moved.id, organizer: input.from, attendees }); await Promise.all(attendees.map((to) => sendEmail(env, { userId: user.id, mailboxId: existing.mailboxId!, from: input.from!, to, subject: `Updated invitation: ${moved.title}`, text: moved.description || `This event has been updated: ${moved.title}.`, attachments: [{ filename: "invite.ics", type: "text/calendar; charset=utf-8", content: file }] }))); }
 		if (delegate) await auditDelegate(env, user, existing, "calendar.event_updated_by_delegate", moveTo);
 		return NextResponse.json({ ok: true });
 	}
 	const repeatFields = resolveRepeat(existing, input);
 	if (!repeatFields) return NextResponse.json({ error: "Choose at least one weekday" }, { status: 400 });
-	const event = { ...existing, timeZone, title: input.title.trim(), description: input.description?.trim() ?? "", location: input.location?.trim() ?? "", attendees: JSON.stringify(attendees), color: normalizeCalendarColor(input.color ?? existing.color), ...repeatFields, reminderMinutes: delegate || input.reminderMinutes === undefined ? existing.reminderMinutes : normalizeReminderMinutes(input.reminderMinutes), lastRemindedStart: null, ...flags, startsAt, endsAt };
+	const event = { ...existing, timeZone, title: input.title.trim(), description: input.description?.trim() ?? "", location: input.location?.trim() ?? "", attendees: keptGuests, color: normalizeCalendarColor(input.color ?? existing.color), ...repeatFields, reminderMinutes: delegate || input.reminderMinutes === undefined ? existing.reminderMinutes : normalizeReminderMinutes(input.reminderMinutes), lastRemindedStart: null, ...flags, startsAt, endsAt };
 	// A kept custom rule is not editable here, so the series may change time of day only: its exclusions and moved occurrences move with it.
 	const shifted = event.repeat === "custom" ? shiftCustomSeries(existing, startsAt, timeZone) : null;
 	if (event.repeat === "custom" && !shifted) return NextResponse.json({ error: CUSTOM_DAY_LOCKED }, { status: 409 });

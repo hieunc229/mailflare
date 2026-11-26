@@ -100,7 +100,8 @@ test("POST /shares grants a role by email and audits it; errors are statuses, no
 	const { share } = await ok.json();
 	assert.deepEqual([share.userId, share.role], ["u6", "read"]);
 	assert.deepEqual([audit()[0].action, audit()[0].actorUserId, audit()[0].targetUserId, audit()[0].metadata.calendarId, audit()[0].metadata.granteeUserId, audit()[0].metadata.role, audit()[0].metadata.shareId], ["calendar.share_granted", "u1", "u1", "cal:work", "u6", "read", share.id]);
-	assert.equal((await post({ email: "u6@one.test", role: "edit" })).status, 409);
+	const again = await post({ email: "u6@one.test", role: "edit" });
+	assert.deepEqual([again.status, (await again.json()).code], [409, "ALREADY_SHARED"]);
 	assert.equal((await post({ email: "ghost@one.test", role: "edit" })).status, 404);
 	assert.equal((await post({ email: "u1@one.test", role: "edit" })).status, 400);
 	assert.equal((await post({ email: "u3@one.test", role: "root" })).status, 400);

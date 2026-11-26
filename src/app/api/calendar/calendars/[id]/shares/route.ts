@@ -8,7 +8,7 @@ import { readJsonObject } from "@/lib/http/request";
 import { createAuditLog } from "@/lib/mailboxes/audit";
 import type { CalendarRouteParams } from "../types";
 
-const refuse = (result: { status: number; error: string }) => NextResponse.json({ error: result.error }, { status: result.status });
+const refuse = (result: { status: number; error: string; code?: string }) => NextResponse.json({ error: result.error, ...(result.code ? { code: result.code } : {}) }, { status: result.status });
 
 export async function GET(request: Request, { params }: CalendarRouteParams) {
 	const env = getEnv();

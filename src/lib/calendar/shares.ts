@@ -27,7 +27,7 @@ export const isGrantRole = (value: unknown): value is CalendarGrantRole => typeo
 /** True when `role` is at least `minimum` (null, the answer for a calendar the user cannot see, is never enough). */
 export const roleAtLeast = (role: CalendarRole | null | undefined, minimum: CalendarRole): boolean => !!role && RANK[role] >= RANK[minimum];
 
-const fail = (status: ShareFailure["status"], error: string): ShareFailure => ({ ok: false, status, error });
+const fail = (status: ShareFailure["status"], error: string, code?: ShareFailure["code"]): ShareFailure => ({ ok: false, status, error, ...(code ? { code } : {}) });
 
 type Access = { role: CalendarRole; ownerId: string };
 
@@ -137,8 +137,9 @@ async function findAccount(db: Db, raw: unknown): Promise<string | null> {
 export async function listShares(db: Db, actor: Actor, calendarId: string): Promise<ShareListResult> {
 	const access = await requireManager(db, actor, calendarId);
 	if (isFailure(access)) return access;
-	const rows = await db.select().from(calendarShares).where(eq(calendarShares.calendarId, calendarId)).orderBy(asc(calendarShares.createdAt), asc(calendarShares.id)).limit(MAX_SHARES + 1);
-	return { ok: true, ownerId: access.ownerId, role: access.role, shares: await Promise.all(rows.map((row) => shareEntry(db, row as never))) };
+	const rows = await db.select({ id: calendarShares.id, granteeUserId: calendarShares.granteeUserId, role: calendarShares.role, createdAt: calendarShares.createdAt, name: users.name, email: users.email }).from(calendarShares)
+		.innerJoin(users, eq(users.id, calendarShares.granteeUserId)).where(eq(calendarShares.calendarId, calendarId)).orderBy(asc(calendarShares.createdAt), asc(calendarShares.id)).limit(MAX_SHARES + 1);
+	return { ok: true, ownerId: access.ownerId, role: access.role, shares: rows.map((row) => ({ id: row.id, userId: row.granteeUserId ?? "", name: row.name, email: row.email, role: row.role, createdAt: row.createdAt.toISOString() })) };
 }
 
 const countShares = async (db: Db, calendarId: string) => Number((await db.select({ n: count() }).from(calendarShares).where(eq(calendarShares.calendarId, calendarId)))[0].n);
@@ -151,7 +152,7 @@ export async function grantShare(db: Db, actor: Actor, calendarId: string, input
 	const targetId = await findAccount(db, input.email);
 	if (!targetId) return fail(404, "No account uses that address");
 	if (targetId === access.ownerId || targetId === actor.id) return fail(400, "That person already has full access");
-	if (await countShares(db, calendarId) >= MAX_SHARES) return fail(409, `A calendar can be shared with up to ${MAX_SHARES} people`);
+	if (await countShares(db, calendarId) >= MAX_SHARES) return fail(409, `A calendar can be shared with up to ${MAX_SHARES} people`, "SHARE_LIMIT");
 	const now = new Date();
 	// The default calendar's row is created on the first share (D-1); only its owner can get here without one.
 	if (calendarId === calendarCollectionId(access.ownerId)) {
@@ -159,13 +160,13 @@ export async function grantShare(db: Db, actor: Actor, calendarId: string, input
 	}
 	const row = { id: newId("csh"), calendarId, granteeUserId: targetId, role: input.role, createdByUserId: actor.id, createdAt: now };
 	try { await db.insert(calendarShares).values(row); } catch (error) {
-		if (isUniqueConstraintError(error)) return fail(409, "This calendar is already shared with that person");
+		if (isUniqueConstraintError(error)) return fail(409, "This calendar is already shared with that person", "ALREADY_SHARED");
 		throw error;
 	}
 	// The count and the insert are not one step; give the place back when a concurrent grant took the last one.
 	if (await countShares(db, calendarId) > MAX_SHARES) {
 		await db.delete(calendarShares).where(eq(calendarShares.id, row.id));
-		return fail(409, `A calendar can be shared with up to ${MAX_SHARES} people`);
+		return fail(409, `A calendar can be shared with up to ${MAX_SHARES} people`, "SHARE_LIMIT");
 	}
 	return { ok: true, ownerId: access.ownerId, share: await shareEntry(db, row) };
 }

@@ -1,7 +1,7 @@
 import { authFetch } from "@/lib/auth/client";
 import type { CalendarGrantRole, ShareEntry } from "@/lib/calendar/shares-types";
 
-export type Failed = { ok: false; status: number };
+export type Failed = { ok: false; status: number; code?: string };
 
 const base = (calendarId: string) => `/api/calendar/calendars/${encodeURIComponent(calendarId)}/shares`;
 const json = (method: string, body: unknown): RequestInit => ({ method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
@@ -9,7 +9,7 @@ const json = (method: string, body: unknown): RequestInit => ({ method, headers:
 async function call<T>(url: string, init: RequestInit | undefined, pick: (body: Record<string, unknown>) => T): Promise<({ ok: true } & T) | Failed> {
 	try {
 		const response = await authFetch(url, init);
-		if (!response.ok) return { ok: false, status: response.status };
+		if (!response.ok) return { ok: false, status: response.status, code: ((await response.json().catch(() => ({}))) as { code?: string }).code };
 		return { ok: true, ...pick(await response.json().catch(() => ({})) as Record<string, unknown>) };
 	} catch { return { ok: false, status: 0 }; }
 }
