@@ -7,7 +7,7 @@ import { countCalendar, LIST_PAGE, MAX_LISTED, pageCalendar } from "./calendar-s
 import type { CalendarCollection, CalendarListing } from "./calendar-collections";
 import { roleAtLeast } from "@/lib/calendar/shares";
 import { defaultScope } from "./calendar-scope";
-import { etagFromSeq, formatSyncToken, syncPosition, addressBookCollectionId, calendarCollectionId } from "./changes";
+import { etagFromSeq, formatSyncToken, syncPosition, addressBookCollectionId } from "./changes";
 import { collection, el, href, NS, precondition, selectProps, streamMultistatus, XML_HEADERS, type ListedRow, type Property } from "./common";
 import { countCards, pageCards, type CardMeta, type Card } from "./card-store";
 import type { DavElement } from "./xml";

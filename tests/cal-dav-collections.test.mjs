@@ -215,3 +215,24 @@ test("a PROPFIND over 50 calendars with CTags stays within a small statement bud
 	assert.ok(stats.queries <= 20, `${stats.queries} statements`);
 	assert.ok(stats.maxParams <= 100, `${stats.maxParams} bound parameters`);
 });
+
+test("a web edit of an event in c-work/ moves its ETag, so a phone's PUT with the old one is 412", async (t) => {
+	const { env, keys, sql } = await fixture(t);
+	assert.equal((await put(env, `${WORK}e.ics`, keys.u1, vevent("uid-e", "One"), { "If-None-Match": "*" })).status, 201);
+	const id = sql.prepare("SELECT id FROM dav_calendar_objects WHERE name = 'e.ics'").get().id;
+	const etag = (await call(env, "GET", `${WORK}e.ics`, { key: keys.u1 })).headers.get("ETag");
+	sql.prepare("UPDATE calendar_events SET title = 'Edited on the web', updated_at = updated_at + 1 WHERE id = ?").run(id);
+	assert.notEqual((await call(env, "GET", `${WORK}e.ics`, { key: keys.u1 })).headers.get("ETag"), etag);
+	assert.equal((await put(env, `${WORK}e.ics`, keys.u1, vevent("uid-e", "Phone"), { "If-Match": etag })).status, 412);
+	assert.equal(sql.prepare("SELECT title FROM calendar_events WHERE id = ?").get(id).title, "Edited on the web");
+});
+
+test("replacing a series in c-work/ keeps its override rows in that calendar", async (t) => {
+	const { env, keys, sql } = await fixture(t);
+	const series = (title) => `BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//Apple Inc.//iOS 26//EN\r\nBEGIN:VEVENT\r\nUID:uid-s\r\nDTSTAMP:20261101T000000Z\r\nDTSTART:20261102T090000Z\r\nDTEND:20261102T100000Z\r\nRRULE:FREQ=WEEKLY\r\nSUMMARY:${title}\r\nEND:VEVENT\r\nBEGIN:VEVENT\r\nUID:uid-s\r\nDTSTAMP:20261101T000000Z\r\nRECURRENCE-ID:20261109T090000Z\r\nDTSTART:20261109T100000Z\r\nDTEND:20261109T110000Z\r\nSUMMARY:${title} moved\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n`;
+	assert.equal((await put(env, `${WORK}s.ics`, keys.u1, series("One"), { "If-None-Match": "*" })).status, 201);
+	const etag = (await call(env, "GET", `${WORK}s.ics`, { key: keys.u1 })).headers.get("ETag");
+	assert.equal((await put(env, `${WORK}s.ics`, keys.u1, series("Two"), { "If-Match": etag })).status, 204);
+	const rows = sql.prepare("SELECT title, calendar_id FROM calendar_events ORDER BY recurrence_id IS NOT NULL").all();
+	assert.deepEqual(rows.map((row) => [row.title, row.calendar_id]), [["Two", "cal:work"], ["Two moved", "cal:work"]]);
+});

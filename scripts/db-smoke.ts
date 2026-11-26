@@ -3,12 +3,14 @@
  * (insert/select/update, returning, onConflict*, raw sql, batch), the triggers and search.
  * Run with `npm run db:smoke -- <DATABASE_URL> [driver]`; PGlite needs no server (`pglite://memory`).
  */
-import { and, eq, sql } from "drizzle-orm";
+import { and, eq, inArray, sql } from "drizzle-orm";
 import { createDb } from "@/db";
-import { users, domains, mailboxes, messages, folders, jmapChanges, calendarEvents, calendarShares, davChanges, calendarResources, calendarResourceBookings, davCalendarObjects, davCards, davCollections, appSettings, webhooks, spamTokenStats, spamReputation } from "@/db/schema";
+import { users, domains, mailboxes, messages, folders, jmapChanges, calendarEvents, calendarShares, davChanges, calendarResources, calendarResourceBookings, davCalendarObjects, davCards, davCollections, davSyncState, appSettings, webhooks, spamTokenStats, spamReputation } from "@/db/schema";
 import { getDatabaseConfig } from "@/db/with-database";
 import { openExternalDatabase } from "@/db/external";
-import { staleGuard } from "@/lib/dav/writes";
+import { requireGuard, staleGuard } from "@/lib/dav/writes";
+import { syncPositions } from "@/lib/dav/changes";
+import { moveSeriesStatements } from "@/lib/calendar/series-rows";
 import { calendarExistsGuard } from "@/lib/calendar/calendars";
 import { listVisibleEvents } from "@/lib/calendar/event-list";
 import { calendarScopes, changeShare, getCalendarRole, grantShare, listVisibleCalendars, revokeShare } from "@/lib/calendar/shares";
@@ -267,6 +269,29 @@ try {
 check("dav write guard fails the whole batch once the resource changed", guardRefused && (await guardTitle()) === "First writer");
 const guardRows = await db.all<{ n: number }>(sql`SELECT count(*) AS n FROM dav_sync_state WHERE collection_id LIKE 'guard:%'`);
 check("dav write guard leaves no rows behind", Number(guardRows[0].n) === 0);
+// CS-4: a web move batch keeps the stored CalDAV resource in the collection the event is in, on every dialect.
+const objectCollection = async () => (await db.select({ collectionId: davCalendarObjects.collectionId }).from(davCalendarObjects).where(eq(davCalendarObjects.id, guardId)))[0]?.collectionId;
+await db.insert(davCalendarObjects).values({ id: guardId, userId, collectionId: guardCollection, name: `${guardId}.ics`, uid: `${guardId}@smoke`, size: 1 } as never);
+await db.batch(moveSeriesStatements(db, userId, guardId, moveCalId) as never);
+const movedTo = await objectCollection();
+await db.batch(moveSeriesStatements(db, userId, guardId, null) as never);
+check("a move batch carries the stored resource to the new collection and back", movedTo === moveCalId && (await objectCollection()) === guardCollection);
+await db.delete(davCalendarObjects).where(eq(davCalendarObjects.id, guardId));
+// CS-4: the grant guard refuses a batch while its condition holds and lets it through otherwise.
+const requireWrite = (missing: ReturnType<typeof sql>) => db.batch([...requireGuard(db, missing), db.update(calendarEvents).set({ title: "Required" }).where(eq(calendarEvents.id, guardId))] as never);
+await requireWrite(sql`not exists (select 1 from users where id = ${userId})`);
+const passedRequire = (await guardTitle()) === "Required";
+let requireRefused = false;
+try { await requireWrite(sql`not exists (select 1 from users where id = ${`nobody_${stamp}`})`); } catch (error) { requireRefused = isUniqueConstraintError(error); }
+const requireRows = await db.all<{ n: number }>(sql`SELECT count(*) AS n FROM dav_sync_state WHERE collection_id LIKE 'guard:%'`);
+check("the require guard passes when nothing is missing, refuses when it is, and leaves no rows", passedRequire && requireRefused && Number(requireRows[0].n) === 0);
+// CS-4: sync positions of many collections come from a few statements; a calendar epoch from before per-calendar logs is renewed (version 8), others are kept.
+const staleCal = `cal:cal_epoch_${stamp}`;
+await db.insert(davSyncState).values({ collectionId: staleCal, epoch: crypto.randomUUID(), floor: 0 } as never);
+const positions = await syncPositions(env, [guardCollection, staleCal, `cal:cal_fresh_${stamp}`, `card:${userId}`]);
+check("syncPositions reads the newest change of each collection and creates missing state", positions.get(guardCollection)!.seq === guardSeq || positions.get(guardCollection)!.seq > guardSeq);
+check("calendar sync epochs are renewed to version 8 once, card epochs are untouched", positions.get(staleCal)!.epoch[14] === "8" && positions.get(`cal:cal_fresh_${stamp}`)!.epoch[14] === "8" && positions.get(`card:${userId}`)!.epoch[14] === "4" && (await syncPositions(env, [staleCal])).get(staleCal)!.epoch === positions.get(staleCal)!.epoch);
+await db.delete(davSyncState).where(inArray(davSyncState.collectionId, [staleCal, `cal:cal_fresh_${stamp}`, `card:${userId}`]));
 await db.delete(calendarEvents).where(eq(calendarEvents.id, davEventId));
 check("dav trigger logs a deleted event", (await davLog(`cal:${userId}`, davEventId)).endsWith("destroyed"));
 
