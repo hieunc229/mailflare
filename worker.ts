@@ -21,6 +21,7 @@ import { autoUpdateJob } from "./src/lib/scheduled/auto-update-job";
 import { dailyJobs, frequentJobs, runScheduledJob } from "./src/lib/scheduled/jobs";
 import { processWebhookRetry, type WebhookRetryMessage } from "./src/lib/email/webhooks";
 import { resolveIncomingMail, forwardMessage } from "./src/lib/email/incoming";
+import { createExpansionBudget } from "./src/lib/groups/expand-utils";
 import { countReceivedInJoinedValue } from "./src/lib/groups/loop-utils";
 import { createBatchBudget } from "./src/lib/deliverability/ingest";
 import { getUserFromSession } from "./src/lib/auth/session";
@@ -144,10 +145,12 @@ export default {
 		const env = withDatabase(withStorage(rawEnv));
 		// One budget per batch, so the reverse lookups of every DMARC report in it stay within the invocation's subrequests.
 		const reportBudget = createBatchBudget();
+		// Likewise group expansion: a batch runs several chunks in one invocation, so later ones are deferred past the budget.
+		const expansionBudget = createExpansionBudget();
 		for (const msg of batch.messages) {
 			try {
 				if (isInboundQueueMessage(msg.body)) {
-					await processInboundMessage(env, msg.body, { reportBudget });
+					await processInboundMessage(env, msg.body, { reportBudget, expansionBudget });
 				} else if (typeof msg.body === "object" && msg.body !== null && (msg.body as { kind?: unknown }).kind === "agent.draft" && typeof (msg.body as { jobId?: unknown }).jobId === "string") {
 					await processAgentDraftJob(env, (msg.body as { jobId: string }).jobId);
 				} else if (isWebhookRetryMessage(msg.body)) {

@@ -3,14 +3,19 @@ import type { AppDatabase } from "@/db";
 import { getDb } from "@/db";
 import { domains, mailGroupMembers, mailGroups, mailboxes, users } from "@/db/schema";
 import type { InboundQueueMessage } from "@/lib/email/inbound";
+import { inboundStorageKey } from "@/lib/email/inbound-id";
 import { resolveMailboxForAddress, toResolvedMailbox, type ResolvedMailbox } from "@/lib/email/routing";
 import { readTrustedDmarcResult } from "@/lib/spam/analyzers/authentication";
 import { isMissingTableError } from "@/lib/database-errors";
 import { groupsAllowed } from "@/lib/groups/license";
 import { singleSenderAddress } from "@/lib/groups/policy-utils";
 import {
+	EXPANSION_DEFER_SECONDS,
 	GROUP_EXPANSION_CHUNK,
+	contentDigest,
 	groupCopyKey,
+	reserveExpansion,
+	type ExpansionBudget,
 	isAccountPrimaryAddress,
 	planChunk,
 	planDeliveries,
@@ -94,9 +99,18 @@ export async function resolveGroupDelivery(
  * a cursor for the next. Every key and message is deterministic, so a redelivered chunk is harmless.
  * Internal members only: external members are relayed by a later change.
  */
-export async function expandGroupDelivery(env: CloudflareEnv, payload: InboundQueueMessage): Promise<void> {
+export async function expandGroupDelivery(
+	env: CloudflareEnv,
+	payload: InboundQueueMessage,
+	options: { budget?: ExpansionBudget } = {},
+): Promise<void> {
 	const expansion = payload.groupExpansion;
 	if (!expansion) return;
+	// Over this batch's subrequest budget: offer the same chunk again shortly instead of failing it.
+	if (options.budget && !reserveExpansion(options.budget)) {
+		await env.INBOUND_QUEUE.send(payload, { delaySeconds: EXPANSION_DEFER_SECONDS });
+		return;
+	}
 	const db = getDb(env);
 	const dropRaw = () => env.BUCKET.delete(payload.rawR2Key).catch((error) => console.error(`Raw cleanup failed for ${payload.rawR2Key}`, error));
 
@@ -135,11 +149,12 @@ export async function expandGroupDelivery(env: CloudflareEnv, payload: InboundQu
 			return;
 		}
 		const bytes = await raw.arrayBuffer();
+		const digest = await contentDigest(bytes);
 		const { groupExpansion: _expansion, ...base } = payload;
 		void _expansion;
 		const messages: { body: InboundQueueMessage }[] = [];
 		for (const mailboxId of mailboxIds) {
-			const rawR2Key = await groupCopyKey(payload.rawR2Key, mailboxId);
+			const rawR2Key = await groupCopyKey(digest, mailboxId);
 			await env.BUCKET.put(rawR2Key, bytes, { httpMetadata: { contentType: "message/rfc822" }, customMetadata: { from: payload.from, to: payload.to } });
 			messages.push({ body: { ...base, rawR2Key, groupDelivery: { groupId: group.id, mailboxId } } });
 		}
@@ -153,4 +168,23 @@ export async function expandGroupDelivery(env: CloudflareEnv, payload: InboundQu
 		return;
 	}
 	await dropRaw();
+}
+
+/**
+ * Copies group mail to the group's own raw key before it is expanded. The queued key can be shared
+ * with other recipients of the message (intake keys it per mailbox, and a failed routing lookup
+ * left it unscoped), and the last chunk deletes the original. Idempotent: a retry rewrites the same key.
+ * Returns null when the raw object is gone.
+ */
+export async function scopeRawToGroup(
+	env: CloudflareEnv,
+	payload: InboundQueueMessage,
+	groupId: string,
+): Promise<{ payload: InboundQueueMessage; bytes: ArrayBuffer } | null> {
+	const raw = await env.BUCKET.get(payload.rawR2Key);
+	if (!raw) return null;
+	const bytes = await raw.arrayBuffer();
+	const rawR2Key = await inboundStorageKey(bytes, `group:${groupId}`);
+	await env.BUCKET.put(rawR2Key, bytes, { httpMetadata: { contentType: "message/rfc822" }, customMetadata: { from: payload.from, to: payload.to } });
+	return { payload: { ...payload, rawR2Key, groupExpansion: { groupId } }, bytes };
 }

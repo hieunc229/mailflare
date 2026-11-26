@@ -119,4 +119,8 @@ test("SMTP: a disabled group is refused at RCPT TO; a post policy refusal drops 
 	queued.length = 0;
 	await assert.rejects(transport.sendMail({ from: "a@ext.test", to: "staff@one.test", subject: "hi", text: "body" }), /5\.7\.1 You are not allowed to post to this group/);
 	assert.deepEqual(queued, []);
+
+	// Every recipient is a group that refused the post: nothing is stored, so say so.
+	await assert.rejects(transport.sendMail({ from: "a@ext.test", to: ["staff@one.test", "staff+two@one.test"], subject: "hi", text: "body" }), /5\.7\.1 You are not allowed to post to this group/);
+	assert.deepEqual(queued, []);
 });
