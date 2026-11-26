@@ -3118,5 +3118,12 @@
 	"domains.forceRemoveConfirm": "{reason}\n\nRemover {host} à força mesmo assim? O Mailflare vai tentar remover os registros DNS _mta-sts e _smtp._tls e depois excluir o domínio, todas as caixas de e-mail dele e todas as mensagens, mesmo que a remoção dos registros falhe. Os servidores de e-mail podem continuar aplicando por um tempo a política MTA-STS em cache. Depois você recebe a lista de registros DNS para remover manualmente.\n\nDigite {host} para confirmar.",
 	"domains.forceRemoved": "{host} removido",
 	"domains.forceRemovedRecords": "Remova estes registros DNS por conta própria:",
-	"domains.forceRemovedCache": "Os servidores de e-mail podem continuar aplicando a política MTA-STS antiga até {date}."
+	"domains.forceRemovedCache": "Os servidores de e-mail podem continuar aplicando a política MTA-STS antiga até {date}.",
+	"general.orgFreeBusy": "Organisation-wide free/busy",
+	"general.orgFreeBusyEnabled": "Let everyone see when everyone else is busy",
+	"general.orgFreeBusyHint": "When someone is invited to an event, the organiser sees when that person is busy, never titles or details. Accounts that are disabled or have Calendar turned off are never shown. Off by default; needs a Team licence.",
+	"general.orgFreeBusyLoading": "Loading...",
+	"general.orgFreeBusyLoadFailed": "Could not load this setting.",
+	"general.orgFreeBusySaved": "Saved",
+	"general.orgFreeBusyRetry": "Try again"
 }

@@ -3181,5 +3181,12 @@
 	"domains.forceRemoveConfirm": "{reason}\n\nهل تريد حذف {host} بالقوة رغم ذلك؟ سيحاول Mailflare إزالة سجلَّي DNS ‏_mta-sts و_smtp._tls، ثم يحذف النطاق وجميع صناديق البريد فيه وكل رسائلها، حتى لو فشلت هذه الإزالة. قد تواصل خوادم البريد تطبيق سياسة MTA-STS المخزنة مؤقتًا لبعض الوقت. بعد ذلك ستحصل على سجلات DNS التي عليك إزالتها يدويًا.\n\nاكتب {host} للتأكيد.",
 	"domains.forceRemoved": "تمت إزالة {host}",
 	"domains.forceRemovedRecords": "أزل سجلات DNS هذه بنفسك:",
-	"domains.forceRemovedCache": "قد تواصل خوادم البريد تطبيق سياسة MTA-STS القديمة حتى {date}."
+	"domains.forceRemovedCache": "قد تواصل خوادم البريد تطبيق سياسة MTA-STS القديمة حتى {date}.",
+	"general.orgFreeBusy": "Organisation-wide free/busy",
+	"general.orgFreeBusyEnabled": "Let everyone see when everyone else is busy",
+	"general.orgFreeBusyHint": "When someone is invited to an event, the organiser sees when that person is busy, never titles or details. Accounts that are disabled or have Calendar turned off are never shown. Off by default; needs a Team licence.",
+	"general.orgFreeBusyLoading": "Loading...",
+	"general.orgFreeBusyLoadFailed": "Could not load this setting.",
+	"general.orgFreeBusySaved": "Saved",
+	"general.orgFreeBusyRetry": "Try again"
 }

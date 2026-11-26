@@ -7,6 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
+import { OrgFreeBusyCard } from "./org-free-busy-card";
 import { loadGeneralSettings, saveGeneralSettings } from "./utils";
 
 export default function GeneralSettingsPage() {
@@ -102,5 +103,6 @@ export default function GeneralSettingsPage() {
 				<Button type="submit" disabled={!loaded || davSaving}>{davSaving ? t("common.saving") : t("general.save")}</Button>
 			</form></CardContent>
 		</Card>
+		<OrgFreeBusyCard />
 	</div>;
 }

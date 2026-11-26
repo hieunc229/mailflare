@@ -3097,5 +3097,12 @@
 	"domains.forceRemoveConfirm": "{reason}\n\n{host} trotzdem erzwungen entfernen? Mailflare versucht, die DNS-Einträge _mta-sts und _smtp._tls zu entfernen, und löscht dann die Domain, alle ihre Postfächer und sämtliche Nachrichten darin, auch wenn das Entfernen fehlschlägt. Mailserver wenden die zwischengespeicherte MTA-STS-Richtlinie möglicherweise noch eine Weile an. Danach erhalten Sie die DNS-Einträge, die Sie von Hand entfernen müssen.\n\nGeben Sie zur Bestätigung {host} ein.",
 	"domains.forceRemoved": "{host} wurde entfernt",
 	"domains.forceRemovedRecords": "Entfernen Sie diese DNS-Einträge selbst:",
-	"domains.forceRemovedCache": "Mailserver wenden die alte MTA-STS-Richtlinie möglicherweise noch bis zum {date} an."
+	"domains.forceRemovedCache": "Mailserver wenden die alte MTA-STS-Richtlinie möglicherweise noch bis zum {date} an.",
+	"general.orgFreeBusy": "Organisation-wide free/busy",
+	"general.orgFreeBusyEnabled": "Let everyone see when everyone else is busy",
+	"general.orgFreeBusyHint": "When someone is invited to an event, the organiser sees when that person is busy, never titles or details. Accounts that are disabled or have Calendar turned off are never shown. Off by default; needs a Team licence.",
+	"general.orgFreeBusyLoading": "Loading...",
+	"general.orgFreeBusyLoadFailed": "Could not load this setting.",
+	"general.orgFreeBusySaved": "Saved",
+	"general.orgFreeBusyRetry": "Try again"
 }

@@ -3088,5 +3088,12 @@
 	"domains.forceRemoveConfirm": "{reason}\n\n그래도 {host}을(를) 강제로 삭제할까요? Mailflare는 DNS 레코드 _mta-sts와 _smtp._tls 제거를 시도한 다음, 레코드 제거에 실패하더라도 도메인과 모든 메일함, 그 안의 모든 메시지를 삭제합니다. 메일 서버는 캐시된 MTA-STS 정책을 한동안 계속 적용할 수 있습니다. 삭제 후에는 직접 제거해야 하는 DNS 레코드 목록이 표시됩니다.\n\n확인하려면 {host}을(를) 입력하세요.",
 	"domains.forceRemoved": "{host}을(를) 삭제했습니다",
 	"domains.forceRemovedRecords": "다음 DNS 레코드는 직접 제거하세요:",
-	"domains.forceRemovedCache": "메일 서버는 {date}까지 이전 MTA-STS 정책을 계속 적용할 수 있습니다."
+	"domains.forceRemovedCache": "메일 서버는 {date}까지 이전 MTA-STS 정책을 계속 적용할 수 있습니다.",
+	"general.orgFreeBusy": "Organisation-wide free/busy",
+	"general.orgFreeBusyEnabled": "Let everyone see when everyone else is busy",
+	"general.orgFreeBusyHint": "When someone is invited to an event, the organiser sees when that person is busy, never titles or details. Accounts that are disabled or have Calendar turned off are never shown. Off by default; needs a Team licence.",
+	"general.orgFreeBusyLoading": "Loading...",
+	"general.orgFreeBusyLoadFailed": "Could not load this setting.",
+	"general.orgFreeBusySaved": "Saved",
+	"general.orgFreeBusyRetry": "Try again"
 }

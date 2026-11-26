@@ -3074,5 +3074,12 @@
 	"domains.forceRemoveConfirm": "{reason}\n\nそれでも {host} を強制削除しますか？ Mailflare は DNS レコード _mta-sts と _smtp._tls の削除を試み、その後、ドメイン、そのすべてのメールボックスとすべてのメッセージを、削除に失敗した場合でも削除します。メールサーバーはキャッシュされた MTA-STS ポリシーをしばらく適用し続ける場合があります。削除後に、手動で削除する DNS レコードの一覧が表示されます。\n\n確認のため {host} と入力してください。",
 	"domains.forceRemoved": "{host} を削除しました",
 	"domains.forceRemovedRecords": "次の DNS レコードは手動で削除してください:",
-	"domains.forceRemovedCache": "メールサーバーは {date} まで古い MTA-STS ポリシーを適用し続ける場合があります。"
+	"domains.forceRemovedCache": "メールサーバーは {date} まで古い MTA-STS ポリシーを適用し続ける場合があります。",
+	"general.orgFreeBusy": "Organisation-wide free/busy",
+	"general.orgFreeBusyEnabled": "Let everyone see when everyone else is busy",
+	"general.orgFreeBusyHint": "When someone is invited to an event, the organiser sees when that person is busy, never titles or details. Accounts that are disabled or have Calendar turned off are never shown. Off by default; needs a Team licence.",
+	"general.orgFreeBusyLoading": "Loading...",
+	"general.orgFreeBusyLoadFailed": "Could not load this setting.",
+	"general.orgFreeBusySaved": "Saved",
+	"general.orgFreeBusyRetry": "Try again"
 }

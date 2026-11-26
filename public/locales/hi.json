@@ -3097,5 +3097,12 @@
 	"domains.forceRemoveConfirm": "{reason}\n\nफिर भी {host} को जबरन हटाना है? Mailflare पहले इसके _mta-sts और _smtp._tls DNS रिकॉर्ड हटाने की कोशिश करेगा, फिर डोमेन, उसके सभी मेलबॉक्स और उनके सभी संदेश मिटा देगा, भले ही रिकॉर्ड हटाना विफल हो जाए। मेल सर्वर कुछ समय तक कैश की गई MTA-STS नीति लागू करते रह सकते हैं। इसके बाद आपको हाथ से हटाने वाले DNS रिकॉर्ड की सूची मिलेगी।\n\nपुष्टि के लिए {host} टाइप करें।",
 	"domains.forceRemoved": "{host} हटा दिया गया",
 	"domains.forceRemovedRecords": "इन DNS रिकॉर्ड को खुद हटाएँ:",
-	"domains.forceRemovedCache": "मेल सर्वर {date} तक पुरानी MTA-STS नीति लागू करते रह सकते हैं।"
+	"domains.forceRemovedCache": "मेल सर्वर {date} तक पुरानी MTA-STS नीति लागू करते रह सकते हैं।",
+	"general.orgFreeBusy": "Organisation-wide free/busy",
+	"general.orgFreeBusyEnabled": "Let everyone see when everyone else is busy",
+	"general.orgFreeBusyHint": "When someone is invited to an event, the organiser sees when that person is busy, never titles or details. Accounts that are disabled or have Calendar turned off are never shown. Off by default; needs a Team licence.",
+	"general.orgFreeBusyLoading": "Loading...",
+	"general.orgFreeBusyLoadFailed": "Could not load this setting.",
+	"general.orgFreeBusySaved": "Saved",
+	"general.orgFreeBusyRetry": "Try again"
 }
