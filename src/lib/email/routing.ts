@@ -37,6 +37,8 @@ export type RoutingDecision = {
 	/** Forward rules drop the message unless the rule also keeps a copy in the mailbox. */
 	keepCopy?: boolean;
 	rejectReason?: string;
+	/** A reject because the sender may not post to a group, as opposed to a rule or an unavailable group. */
+	groupPolicy?: boolean;
 	/** Set when a domain-scope rule produced this decision, so the caller can record a match. */
 	ruleId?: string;
 };

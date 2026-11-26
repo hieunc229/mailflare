@@ -9,6 +9,7 @@ const { app, newDatabase } = await loadApp("groups-expand", `
 	export * as utils from "./src/lib/groups/expand-utils.ts";
 	export { expandGroupDelivery } from "./src/lib/groups/expand.ts";
 	export { processInboundMessage } from "./src/lib/email/inbound.ts";
+	export { intakeIncomingMail } from "./src/lib/email/intake.ts";
 `, { mocks });
 
 test("planChunk splits ordered members after a cursor and reports the next cursor", () => {
@@ -17,7 +18,7 @@ test("planChunk splits ordered members after a cursor and reports the next curso
 	assert.deepEqual(app.utils.planChunk(rows.slice(0, 3), 2), { chunk: rows.slice(0, 2), nextCursor: "m1" });
 	assert.deepEqual(app.utils.planChunk(rows.slice(0, 2), 2), { chunk: rows.slice(0, 2), nextCursor: null });
 	assert.deepEqual(app.utils.planChunk([], 2), { chunk: [], nextCursor: null });
-	assert.equal(app.utils.GROUP_EXPANSION_CHUNK, 40);
+	assert.equal(app.utils.GROUP_EXPANSION_CHUNK, 20);
 });
 
 test("planDeliveries de-duplicates by mailbox and skips the sender's own mailbox", () => {
@@ -109,7 +110,7 @@ const drain = async (env, queue, handler) => {
 	return invocations;
 };
 
-test("120 members are expanded over 3 invocations, one copy each, original deleted after the last", async (t) => {
+test("120 members are expanded over 6 invocations, one copy each, original deleted after the last", async (t) => {
 	const { env, objects, queue, payload, sqlite } = await fixture(t);
 	let expansions = 0;
 	const deliveries = [];
@@ -121,13 +122,13 @@ test("120 members are expanded over 3 invocations, one copy each, original delet
 		assert.equal(objects.has("inbound/orig.eml"), true, "original is kept until the last chunk");
 		await app.expandGroupDelivery(env, message);
 	}
-	assert.equal(expansions, 3);
+	assert.equal(expansions, 6);
 	assert.equal(deliveries.length, 120);
 	assert.equal(new Set(deliveries.map((d) => d.groupDelivery.mailboxId)).size, 120);
 	assert.equal(new Set(deliveries.map((d) => d.rawR2Key)).size, 120);
 	assert.ok(deliveries.every((d) => d.to === "team@example.com" && !d.groupExpansion && objects.has(d.rawR2Key)));
 	assert.equal(objects.has("inbound/orig.eml"), false);
-	assert.deepEqual(env.batches, [40, 40, 40]);
+	assert.deepEqual(env.batches, [20, 20, 20, 20, 20, 20]);
 	void sqlite;
 });
 
@@ -142,8 +143,8 @@ test("a redelivered chunk re-copies to the same keys and every member still gets
 	await app.expandGroupDelivery(env, secondChunk); // chunk 2 runs
 	await app.expandGroupDelivery(env, secondChunk); // ...and is redelivered
 	const redelivered = queue.filter((m) => m.groupDelivery);
-	assert.equal(redelivered.length, 80);
-	assert.equal(new Set(redelivered.map((m) => m.rawR2Key)).size, 40);
+	assert.equal(redelivered.length, 40);
+	assert.equal(new Set(redelivered.map((m) => m.rawR2Key)).size, 20);
 	// Consumer side: both copies of a duplicate message store one row.
 	const duplicates = redelivered.filter((m) => m.groupDelivery.mailboxId === redelivered[0].groupDelivery.mailboxId);
 	assert.equal(duplicates.length, 2);
@@ -224,11 +225,46 @@ test("expansion stops for a disabled group, a lapsed licence and a missing group
 	assert.equal(queue.length, 0);
 });
 
-test("group mail the live handler did not admit is dropped, never expanded", async (t) => {
-	const { env, queue, sqlite, objects } = await fixture(t, 2);
-	objects.set("inbound/unadmitted.eml", new TextEncoder().encode(MIME()).buffer);
-	await app.processInboundMessage(env, { from: "bob@gmail.com", to: "team@example.com", rawR2Key: "inbound/unadmitted.eml", headers: {} });
+test("two groups addressed in one message each get their own raw object and both deliver", async (t) => {
+	const { env, objects, queue, sqlite } = await fixture(t, 2);
+	sqlite.exec(`
+		INSERT INTO mail_groups (id, domain_id, local_part, name, who_can_post, reply_to, disabled, created_at, updated_at) VALUES ('g2', 'd1', 'sales', 'Sales', 'anyone', 'sender', 0, 1, 1);
+		INSERT INTO mail_group_members (id, group_id, kind, mailbox_id, can_send_as, created_at) VALUES ('gs1', 'g2', 'mailbox', 'm-support', 0, 1);
+	`);
+	const raw = new TextEncoder().encode(MIME()).buffer;
+	const input = (to) => ({ from: "bob@gmail.com", to, raw, headers: { from: "Bob <bob@gmail.com>" } });
+	const first = await app.intakeIncomingMail(env, input("team@example.com"), {});
+	const second = await app.intakeIncomingMail(env, input("sales@example.com"), {});
+	assert.notEqual(first.rawR2Key, second.rawR2Key);
+	assert.deepEqual(queue.map((m) => m.groupExpansion.groupId), ["g1", "g2"]);
+	await drain(env, queue, async (message) => {
+		if (message.groupExpansion) await app.expandGroupDelivery(env, message);
+		else await app.processInboundMessage(env, message);
+	});
+	const rows = sqlite.prepare("SELECT mailbox_id FROM messages ORDER BY mailbox_id").all().map((r) => r.mailbox_id);
+	assert.deepEqual(rows, ["m-support", "mb000", "mb001"]);
+	void objects;
+});
+
+test("group mail stored after a live routing failure is admitted and expanded by the consumer", async (t) => {
+	const { env, queue, payload, sqlite } = await fixture(t, 2);
+	const stored = payload({ groupExpansion: undefined });
+	await app.processInboundMessage(env, stored);
+	assert.deepEqual(queue.filter((m) => m.groupDelivery).map((m) => m.groupDelivery.mailboxId), ["mb000", "mb001"]);
+	// A restricted group still refuses what the live handler would have refused.
+	queue.length = 0;
+	sqlite.exec("UPDATE mail_groups SET who_can_post = 'org'");
+	await app.processInboundMessage(env, payload({ groupExpansion: undefined }));
 	assert.equal(queue.length, 0);
-	assert.equal(sqlite.prepare("SELECT COUNT(*) AS n FROM messages").get().n, 0);
-	assert.equal(objects.has("inbound/unadmitted.eml"), false);
+	// And a loop is still dropped.
+	sqlite.exec("UPDATE mail_groups SET who_can_post = 'anyone'");
+	await app.processInboundMessage(env, payload({ groupExpansion: undefined, headers: { from: "Bob <bob@gmail.com>", "x-mailflare-group": "g1" } }));
+	assert.equal(queue.length, 0);
+});
+
+test("a multi-address From never counts as the poster for the self-skip", async (t) => {
+	const { env, queue, payload } = await fixture(t, 3);
+	const headers = { "authentication-results": "mx.cloudflare.net; dmarc=pass header.from=example.com", from: "u001@example.com, x@y.com" };
+	await app.expandGroupDelivery(env, payload({ headers }));
+	assert.deepEqual(queue.map((m) => m.groupDelivery.mailboxId), ["mb000", "mb001", "mb002"]);
 });

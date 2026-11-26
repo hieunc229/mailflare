@@ -59,14 +59,14 @@ export async function resolveIncomingMail(
 	}
 	// Outside the try: a failure while checking who may post must not let the message through. It
 	// throws, the handler fails the delivery, and the sender retries.
-	return decision?.action === "group" ? admitGroupMail(env, decision, headers) : decision;
+	return decision?.action === "group" ? admitGroupMail(env, decision, { ...headers, envelopeFrom: from }) : decision;
 }
 
 /** Group mail is dropped (loops), rejected (not allowed to post) or admitted unchanged. */
-async function admitGroupMail(
+export async function admitGroupMail(
 	env: CloudflareEnv,
 	decision: RoutingDecision,
-	input: { all?: Record<string, string>; verdicts?: ProviderVerdicts; receivedHops?: number; from?: string | null } = {},
+	input: { all?: Record<string, string>; verdicts?: ProviderVerdicts; receivedHops?: number; from?: string | null; envelopeFrom?: string } = {},
 ): Promise<IncomingDecision> {
 	const group = decision.group;
 	if (!group) return decision;
@@ -77,6 +77,7 @@ async function admitGroupMail(
 		listIdentifier: groupListIdentifier(group.address.slice(0, group.address.lastIndexOf("@")), hostname),
 		headers,
 		receivedHops: input.receivedHops ?? 0,
+		envelopeFrom: input.envelopeFrom,
 	});
 	if (dropReason) {
 		console.warn(`Dropped mail to group ${group.address}: ${dropReason}`);
@@ -94,7 +95,7 @@ async function admitGroupMail(
 	});
 	if (allowed) return decision;
 	console.warn(`Refused post to group ${group.address}`);
-	return { action: "reject", rejectReason: GROUP_POST_REJECT_REASON };
+	return { action: "reject", rejectReason: GROUP_POST_REJECT_REASON, groupPolicy: true };
 }
 
 /**
