@@ -2,12 +2,12 @@ import { and, asc, eq, gt, inArray, or } from "drizzle-orm";
 import type { AppDatabase } from "@/db";
 import { getDb } from "@/db";
 import { domains, mailGroupMembers, mailGroups, mailboxes, users } from "@/db/schema";
-import { getEmailAddress } from "@/lib/email/address";
 import type { InboundQueueMessage } from "@/lib/email/inbound";
 import { resolveMailboxForAddress, toResolvedMailbox, type ResolvedMailbox } from "@/lib/email/routing";
 import { readTrustedDmarcResult } from "@/lib/spam/analyzers/authentication";
 import { isMissingTableError } from "@/lib/database-errors";
 import { groupsAllowed } from "@/lib/groups/license";
+import { singleSenderAddress } from "@/lib/groups/policy-utils";
 import {
 	GROUP_EXPANSION_CHUNK,
 	groupCopyKey,
@@ -121,7 +121,7 @@ export async function expandGroupDelivery(env: CloudflareEnv, payload: InboundQu
 	const { chunk, nextCursor } = planChunk(rows, GROUP_EXPANSION_CHUNK);
 
 	// The poster already has a Sent copy; only a trusted DMARC pass says the From really is theirs.
-	const fromAddress = getEmailAddress(payload.headers?.from ?? "");
+	const fromAddress = singleSenderAddress(payload.headers?.from);
 	const senderMailbox = fromAddress && readTrustedDmarcResult(payload.headers, payload.verdicts) === "pass"
 		? await resolveMailboxForAddress(db, fromAddress)
 		: null;

@@ -27,7 +27,7 @@ export async function intakeIncomingMail(env: CloudflareEnv, input: IntakeInput,
 
 	if (decision?.action === "reject") {
 		const reason = decision.rejectReason ?? "Message rejected by routing rule";
-		await actions.reject?.(reason);
+		await actions.reject?.(reason, { groupPolicy: decision.groupPolicy === true });
 		return { action: "reject", reason };
 	}
 
@@ -46,7 +46,9 @@ export async function intakeIncomingMail(env: CloudflareEnv, input: IntakeInput,
 
 	// A relay retry replays the same bytes, so key the object on a content hash
 	// (scoped by mailbox): the consumer dedupes by `(mailboxId, rawR2Key)`.
-	const rawR2Key = await inboundStorageKey(input.raw, decision && decision.action !== "report" ? decision.mailbox?.mailboxId : undefined);
+	// Two groups addressed in one message must not share a raw object: each expansion deletes its original.
+	const scope = decision?.action === "group" && decision.group ? `group:${decision.group.groupId}` : decision && decision.action !== "report" ? decision.mailbox?.mailboxId : undefined;
+	const rawR2Key = await inboundStorageKey(input.raw, scope);
 	await env.BUCKET.put(rawR2Key, input.raw, {
 		httpMetadata: { contentType: "message/rfc822" },
 		customMetadata: { from: input.from, to: input.to },

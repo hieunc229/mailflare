@@ -3,6 +3,7 @@ import { SMTPServer } from "smtp-server";
 import type { SMTPServerSession } from "smtp-server";
 import { intakeIncomingMail } from "@/lib/email/intake";
 import { inboundAttachmentLimitReasonFromRaw } from "@/lib/email/inbound-attachments";
+import { groupsAllowed } from "@/lib/groups/license";
 import { recordRuleMatch, resolveInboundAddress } from "@/lib/email/routing";
 import { isPublicIpv4 } from "@/lib/spam/domain-utils";
 import { getDb } from "@/db";
@@ -122,7 +123,10 @@ export function startSmtpListener(
 						env,
 						{ from, to: recipient.address, raw: toArrayBuffer(raw), headers, senderIp, verdicts },
 						{
-							reject: (reason) => {
+							reject: (reason, info) => {
+								// A 550 at DATA bounces the message for every recipient, including those already stored.
+								// Refusing one group's post must not do that: with several recipients, drop it silently.
+								if (info?.groupPolicy && session.envelope.rcptTo.length > 1) return;
 								rejectReason = reason;
 							},
 							forward: async (destination, extra) => mailer.sendRaw(from, destination, prependHeaders(raw, extra)),
@@ -162,7 +166,7 @@ async function recipientRejectReason(env: CloudflareEnv, from: string, to: strin
 	const hostname = to.slice(to.lastIndexOf("@") + 1).toLowerCase();
 	const [domain] = await db.select({ id: domains.id }).from(domains).where(eq(domains.hostname, hostname)).limit(1);
 	if (!domain) return "Relay access denied";
-	const decision = await resolveInboundAddress(db, to, from);
+	const decision = await resolveInboundAddress(db, to, from, { allowGroups: groupsAllowed(env) });
 	if (decision?.action !== "reject") return null;
 	if (decision.ruleId) await recordRuleMatch(db, decision.ruleId).catch(() => undefined);
 	return decision.rejectReason ?? "Message rejected by routing rule";

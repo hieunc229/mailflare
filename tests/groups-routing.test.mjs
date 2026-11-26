@@ -9,6 +9,7 @@ const { app, newDatabase } = await loadApp("groups-routing", `
 	export { resolveInboundAddress } from "./src/lib/email/routing.ts";
 	export { resolveIncomingMail } from "./src/lib/email/incoming.ts";
 	export { getMailboxDomainAddresses } from "./src/lib/mailboxes/domain-addresses.ts";
+	export { getAccountForwardingDestination } from "./src/lib/email/account-forwarding.ts";
 `);
 
 const seed = (plan = "team") => `
@@ -117,7 +118,15 @@ test("loop guards drop on group marker, list id, auto-submitted and hop count", 
 	assert.ok(drop({ "list-id": "Team <team.example.com>" }));
 	assert.equal(drop({ "list-id": "Other <other.example.com>" }), null);
 	assert.ok(drop({ "auto-submitted": "auto-replied" }));
-	assert.ok(drop({ "Auto-Submitted": "auto-generated" }));
+	assert.ok(drop({ "Auto-Submitted": "Auto-Replied" }));
+	// Alerts, invoices and tickets (auto-generated) must reach alerts@/billing@ groups.
+	assert.equal(drop({ "Auto-Submitted": "auto-generated" }), null);
+	// Bounces: multipart/report, a null Return-Path, or a null envelope sender.
+	assert.ok(drop({ "content-type": 'multipart/report; report-type=delivery-status; boundary="x"' }));
+	assert.ok(drop({ "return-path": "<>" }));
+	assert.ok(app.loop.groupDropReason({ ...guard, headers: {}, receivedHops: 1, envelopeFrom: "" }));
+	assert.ok(app.loop.groupDropReason({ ...guard, headers: {}, receivedHops: 1, envelopeFrom: "<>" }));
+	assert.equal(app.loop.groupDropReason({ ...guard, headers: {}, receivedHops: 1, envelopeFrom: "bob@gmail.com" }), null);
 	assert.ok(drop({}, 31));
 	assert.equal(drop({}, 30), null);
 	assert.equal(app.loop.groupListIdentifier("Team", "Example.com"), "team.example.com");
@@ -139,8 +148,14 @@ test("resolveIncomingMail accepts, rejects or drops group mail", async (t) => {
 	assert.equal((await incoming(db, env, "team@example.com")).action, "group");
 	// org: spoofed internal From without a pass is rejected.
 	const spoof = await incoming(db, env, "org@example.com", { from: "ceo@example.com" });
-	assert.deepEqual(spoof, { action: "reject", rejectReason: "5.7.1 You are not allowed to post to this group" });
+	assert.deepEqual(spoof, { action: "reject", rejectReason: "5.7.1 You are not allowed to post to this group", groupPolicy: true });
 	assert.equal((await incoming(db, env, "org@example.com", { from: "ceo@example.com", ...pass })).action, "group");
+	// A From header with several addresses never counts as an insider.
+	assert.equal((await incoming(db, env, "org@example.com", { from: "bob@gmail.com, ceo@example.com", ...pass })).action, "reject");
+	assert.equal((await incoming(db, env, "org@example.com", { from: "Bob <bob@gmail.com>, CEO <ceo@example.com>", ...pass })).action, "reject");
+	assert.equal((await incoming(db, env, "staff@example.com", { from: "bob@gmail.com, alice@example.com", ...pass })).action, "reject");
+	assert.equal((await incoming(db, env, "staff@example.com", { from: "alice@example.com, bob@gmail.com", ...pass })).action, "reject");
+	assert.equal((await incoming(db, env, "org@example.com", { from: "bob@gmail.com", ...pass }, {})).groupPolicy, true);
 	// members: member passes, stranger rejected.
 	assert.equal((await incoming(db, env, "staff@example.com", { from: "alice@example.com", ...pass })).action, "group");
 	assert.equal((await incoming(db, env, "staff@example.com", { from: "ally@example.com", ...pass })).action, "group");
@@ -151,10 +166,31 @@ test("resolveIncomingMail accepts, rejects or drops group mail", async (t) => {
 	// loops: dropped silently, not rejected.
 	assert.deepEqual(await incoming(db, env, "team@example.com", { "x-mailflare-group": "g-team" }), { action: "drop" });
 	assert.deepEqual(await incoming(db, env, "team@example.com", { "auto-submitted": "auto-replied" }), { action: "drop" });
+	assert.equal((await incoming(db, env, "team@example.com", { "auto-submitted": "auto-generated" })).action, "group");
+	assert.deepEqual(await app.resolveIncomingMail(env, "", "team@example.com", { all: {} }), { action: "drop" });
 	assert.deepEqual(await incoming(db, env, "team@example.com", {}, { receivedHops: 31 }), { action: "drop" });
 	// verdicts (SES / SMTP) count as trusted too.
 	assert.equal((await incoming(db, env, "org@example.com", { from: "ceo@example.com" }, { verdicts: { dmarc: "PASS" } })).action, "group");
 	// without the licence a group address is an unknown address.
 	sqlite.exec("UPDATE license_settings SET plan = 'community'");
 	assert.equal(await incoming(db, env, "team@example.com"), null);
+});
+
+test("a policy refusal is flagged so SMTP can drop it when other recipients share the message", async (t) => {
+	const { db, env } = await newDatabase(t, seed());
+	const refused = await incoming(db, env, "org@example.com", { from: "bob@gmail.com" });
+	assert.equal(refused.action, "reject");
+	assert.equal(refused.groupPolicy, true);
+	const unavailable = await app.resolveInboundAddress(db, "off@example.com", "x@y.com", allow);
+	assert.equal(unavailable.groupPolicy, undefined);
+});
+
+test("account forwarding never forwards group mail, even past a catch-all", async (t) => {
+	const { sqlite, env } = await newDatabase(t, seed());
+	sqlite.exec(`
+		UPDATE users SET forwarding_email = 'away@ext.com' WHERE id = 'alice';
+		INSERT INTO routing_rules (id, user_id, domain_id, mailbox_id, scope, action, pattern, match_field, match_operator, priority, enabled, created_at) VALUES ('r2','admin','d1','m-alice','domain','store','*','recipient','contains',0,1,1);
+	`);
+	assert.equal(await app.getAccountForwardingDestination(env, "nobody@example.com"), "away@ext.com");
+	assert.equal(await app.getAccountForwardingDestination(env, "staff@example.com"), null);
 });
