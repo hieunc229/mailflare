@@ -3,12 +3,12 @@ import { isReportAddressReserved } from "@/lib/deliverability/report-address";
 import { and, eq, or } from "drizzle-orm";
 import { getEnv } from "@/lib/cloudflare";
 import { getDb } from "@/db";
-import { domains, mailboxAliases, mailboxes, users } from "@/db/schema";
+import { domains, mailboxes, users } from "@/db/schema";
 import { authenticateAdminApiKey, canShareAdminMailboxes } from "@/lib/api/admin-auth";
 import { newId } from "@/lib/ids";
 import { mailboxSchema } from "@/lib/validators";
 import { ensureMailboxDomainRouting } from "@/lib/mailboxes/domain-addresses";
-import { normalizeRecipientLocalPart } from "@/lib/email/recipient-address";
+import { findAddressOwner } from "@/lib/mailboxes/address-owner";
 
 export async function GET(request: Request) {
 	const env = getEnv();
@@ -43,13 +43,9 @@ export async function POST(request: Request) {
 	const localPart = parsed.data.localPart.toLowerCase();
 	if (await isReportAddressReserved(env, domain.id, localPart)) return NextResponse.json({ error: "This address is reserved for DMARC reports" }, { status: 409 });
 	// Inbound routing resolves normalized local parts, so conflicts must too.
-	const [domainMailboxes, domainAliases] = await Promise.all([
-		db.select({ localPart: mailboxes.localPart }).from(mailboxes).where(eq(mailboxes.domainId, domain.id)),
-		db.select({ localPart: mailboxAliases.localPart }).from(mailboxAliases).where(eq(mailboxAliases.domainId, domain.id)),
-	]);
-	const normalized = normalizeRecipientLocalPart(localPart);
-	if (domainMailboxes.some((row) => normalizeRecipientLocalPart(row.localPart) === normalized)) return NextResponse.json({ error: "Mailbox already exists" }, { status: 409 });
-	if (domainAliases.some((row) => normalizeRecipientLocalPart(row.localPart) === normalized)) return NextResponse.json({ error: "An alias already uses this address" }, { status: 409 });
+	const owner = await findAddressOwner(db, domain.id, localPart);
+	if (owner === "mailbox") return NextResponse.json({ error: "Mailbox already exists" }, { status: 409 });
+	if (owner === "alias") return NextResponse.json({ error: "An alias already uses this address" }, { status: 409 });
 	const id = newId("mbx");
 	await db.insert(mailboxes).values({ id, userId: ownerUserId, domainId: domain.id, localPart, displayName: parsed.data.displayName, type: mailboxType });
 	try {
