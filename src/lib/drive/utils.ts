@@ -7,6 +7,8 @@ import type { DriveCrumb, DriveRole, DriveRow } from "./types";
  * file at about 640 GB. Lowering the part size shrinks that cap; raising it needs a plan with larger request bodies.
  */
 export const DRIVE_PART_BYTES = 64 * 1024 * 1024;
+/** On Vercel a part is read back from storage into a function's memory, so it is smaller. */
+export const DRIVE_VERCEL_PART_BYTES = 16 * 1024 * 1024;
 /** How long an interrupted upload can be resumed. The bucket should be set to abort incomplete multipart uploads after about as long. */
 export const DRIVE_UPLOAD_RESUME_MS = 3 * 24 * 60 * 60 * 1000;
 export const DRIVE_MAX_PARTS = 10_000;

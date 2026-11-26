@@ -9,7 +9,7 @@ import { apiKeyLookupPrefix } from "@/lib/api-keys";
 import { isListedAsAppPassword } from "@/lib/auth/app-password-utils";
 import { getClientIp } from "@/lib/auth/client-ip";
 import { isDavEnabled } from "@/lib/dav/settings";
-import { isNodeRuntime } from "@/lib/runtime";
+import { isNodeRuntime, isVercelRuntime } from "@/lib/runtime";
 
 export type AppPasswordProtocol = "jmap" | "caldav" | "carddav" | "imap" | "submission";
 export type AppPasswordCheck = { secret: string; protocol: AppPasswordProtocol; clientIp: string | null };
@@ -64,6 +64,8 @@ function isLoopback(ip: string | null): boolean {
  * and is not trustworthy on Workers, which is why it is only read there.
  */
 export function isSecureAppPasswordTransport(env: Pick<CloudflareEnv, "MAILFLARE_RUNTIME">, request: Request): boolean {
+	// Vercel terminates TLS and overwrites x-forwarded-proto.
+	if (isVercelRuntime(env)) return request.headers.get("x-forwarded-proto")?.split(",")[0]?.trim().toLowerCase() === "https";
 	if (!isNodeRuntime(env)) return new URL(request.url).protocol === "https:";
 	const trustProxy = ["1", "true", "yes"].includes((process.env.TRUST_PROXY ?? "").toLowerCase());
 	const hop = request.headers.get("x-forwarded-proto")?.split(",").at(-1)?.trim().toLowerCase();

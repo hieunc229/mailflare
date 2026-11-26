@@ -1,4 +1,4 @@
-import { getNodeEnv } from "@/lib/runtime";
+import { getNodeEnv, isVercelRuntime } from "@/lib/runtime";
 
 /**
  * The origin browsers use to reach this app, which a same-origin request must carry.
@@ -11,6 +11,17 @@ import { getNodeEnv } from "@/lib/runtime";
 export function expectedRequestOrigin(request: Request): string {
 	const env = getNodeEnv();
 	const url = new URL(request.url);
+	// Vercel routes by Host and sets x-forwarded-proto itself, so both describe the address the browser used,
+	// including preview deployments and extra custom domains.
+	if (isVercelRuntime()) {
+		const vercelHost = request.headers.get("host")?.trim();
+		const proto = request.headers.get("x-forwarded-proto")?.split(",")[0]?.trim() === "http" ? "http" : "https";
+		try {
+			return vercelHost ? new URL(`${proto}://${vercelHost}`).origin : url.origin;
+		} catch {
+			return url.origin;
+		}
+	}
 	if (env?.MAILFLARE_RUNTIME !== "node") return url.origin;
 	const appUrl = env.APP_URL?.trim();
 	if (appUrl) {

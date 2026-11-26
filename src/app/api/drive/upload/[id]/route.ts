@@ -3,7 +3,8 @@ import { NextResponse } from "next/server";
 import { driveItems, driveUploadParts } from "@/db/schema";
 import { authorizeDrive } from "@/lib/drive/auth";
 import { getDriveItem, getDriveRole, toDriveItemDtos } from "@/lib/drive/access";
-import { canEditDrive, DRIVE_MAX_PARTS, driveObjectKey } from "@/lib/drive/utils";
+import { canEditDrive, DRIVE_MAX_PARTS, DRIVE_PART_BYTES, driveObjectKey } from "@/lib/drive/utils";
+import { resolveUploadedRequest } from "@/lib/uploads/direct";
 import type { DriveItemParams } from "../../items/[id]/types";
 
 async function loadPending(request: Request, params: DriveItemParams["params"]) {
@@ -22,14 +23,15 @@ export async function PUT(request: Request, { params }: DriveItemParams) {
 	const ctx = await loadPending(request, params);
 	if (ctx.error) return ctx.error;
 	const partNumber = Number(new URL(request.url).searchParams.get("part"));
-	const length = Number(request.headers.get("content-length"));
+	const body = await resolveUploadedRequest(ctx.env, request, ctx.user.id, DRIVE_PART_BYTES);
+	const length = Number(body.headers.get("content-length"));
 	const partSize = ctx.item.uploadPartSize ?? 0;
 	const total = partSize ? Math.ceil(ctx.item.size / partSize) : 0;
 	if (!Number.isInteger(partNumber) || partNumber < 1 || partNumber > Math.min(total, DRIVE_MAX_PARTS)) return NextResponse.json({ error: "Invalid part number" }, { status: 400 });
 	// R2 needs every part but the last to be the same size, and the size the client declared must add up.
 	const expected = partNumber < total ? partSize : ctx.item.size - (total - 1) * partSize;
-	if (!request.body || length !== expected) return NextResponse.json({ error: "Invalid part size" }, { status: 400 });
-	const part = await ctx.upload.uploadPart(partNumber, request.body);
+	if (!body.body || length !== expected) return NextResponse.json({ error: "Invalid part size" }, { status: 400 });
+	const part = await ctx.upload.uploadPart(partNumber, body.body);
 	await ctx.db.insert(driveUploadParts).values({ itemId: ctx.item.id, partNumber, etag: part.etag }).onConflictDoUpdate({ target: [driveUploadParts.itemId, driveUploadParts.partNumber], set: { etag: part.etag } });
 	await ctx.db.update(driveItems).set({ updatedAt: new Date() }).where(eq(driveItems.id, ctx.item.id));
 	return NextResponse.json({ partNumber, etag: part.etag });

@@ -1,6 +1,7 @@
 "use client";
 
 import { authFetch } from "@/lib/auth/client";
+import { prepareUpload } from "@/lib/uploads/client";
 import { getMailboxFolders, invalidateFolderCache } from "@/lib/folders/client";
 import type { TakeoutBatchMessage, TakeoutImportSummary, TakeoutUploadResponse } from "@/lib/import/gmail-takeout-types";
 import { listZipEntries, openZipEntry } from "@/lib/import/zip-utils";
@@ -45,7 +46,8 @@ export function createTakeoutUploader(mailboxId: string) {
 		for (const message of messages) {
 			form.append("files", new Blob([message.raw as BlobPart], { type: "message/rfc822" }), message.filename);
 		}
-		const response = await authFetch("/api/import/messages", { method: "POST", body: form, signal });
+		const upload = await prepareUpload(form, { signal });
+		const response = await authFetch("/api/import/messages", { method: "POST", ...upload, signal });
 		const data = (await response.json().catch(() => ({ error: `HTTP ${response.status}` }))) as TakeoutUploadResponse["data"];
 		return { status: response.status, data };
 	};

@@ -122,6 +122,7 @@ A schema change needs a migration for each database type. See [Databases](docs/d
 ## Documentation
 
 - [Deployment and configuration](docs/deployment.md)
+- [Deploying to Vercel (experimental)](docs/vercel.md)
 - [Databases](docs/databases.md)
 - [Sending and receiving providers](docs/providers.md)
 - [API and integrations](docs/api.md)

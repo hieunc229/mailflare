@@ -13,7 +13,7 @@ await build({
 	outfile: join(directory, "utils.mjs"), bundle: true, platform: "node", format: "esm", logLevel: "silent",
 	plugins: [{ name: "mock-auth", setup(builder) {
 		builder.onResolve({ filter: /^@\/lib\/auth\/client$/ }, () => ({ path: "auth", namespace: "mock" }));
-		builder.onLoad({ filter: /.*/, namespace: "mock" }, () => ({ contents: `export function getAuthHeaders(){return new Headers();}`, loader: "js" }));
+		builder.onLoad({ filter: /.*/, namespace: "mock" }, () => ({ contents: `export function getAuthHeaders(){return new Headers();} export function authFetch(){throw new Error("not used for a small upload");}`, loader: "js" }));
 	} }],
 });
 const utils = await import(pathToFileURL(join(directory, "utils.mjs")).href);

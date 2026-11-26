@@ -8,17 +8,17 @@ import {
 	getEmailRoutingCatchAll,
 } from "@/lib/domains/catch-all-routing";
 import { isZoneApex, normalizeHostname } from "@/lib/domains/utils";
-import { hasCloudflareCredentials, isNodeRuntime } from "@/lib/runtime";
+import { hasCloudflareCredentials, isOffWorkers } from "@/lib/runtime";
 import type { DomainProvisioningChanges, DomainProvisioningResult } from "@/lib/domains/types";
 import { removeMxRecords } from "@/lib/domains/mx-records";
 import { rollbackDomainProvisioning } from "@/lib/domains/rollback";
 import { ensureSendingSubdomain } from "@/lib/domains/sending-subdomain";
 
-/** Node/Docker has no Email Worker; a catch-all PUT to one 404s (CF 2016). */
+/** Node/Docker and Vercel have no Email Worker; a catch-all PUT to one 404s (CF 2016). */
 export function shouldBindEmailCatchAllToWorker(
 	env?: Pick<CloudflareEnv, "MAILFLARE_RUNTIME">,
 ): boolean {
-	return !isNodeRuntime(env);
+	return !isOffWorkers(env);
 }
 
 /**

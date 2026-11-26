@@ -10,6 +10,16 @@
  * hop is the least attacker-controlled entry.
  */
 export function getClientIp(request: Request): string | null {
+	// On Vercel only the headers the platform overwrites count: nothing strips a client-sent cf-connecting-ip
+	// there, and trusting it would let a caller pick its own rate-limit bucket.
+	if (process.env.MAILFLARE_RUNTIME === "vercel") {
+		return (
+			headerValue(request, "x-vercel-forwarded-for")?.split(",")[0]?.trim() ||
+			headerValue(request, "x-real-ip") ||
+			headerValue(request, "x-forwarded-for")?.split(",")[0]?.trim() ||
+			null
+		);
+	}
 	return (
 		// cf-connecting-ip first: on Workers it is platform-set and unforgeable,
 		// and checking it before x-mailflare-client-ip keeps a client-injected

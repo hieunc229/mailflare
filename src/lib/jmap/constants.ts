@@ -3,7 +3,8 @@ export const CAPABILITY_MAIL = "urn:ietf:params:jmap:mail";
 export const CAPABILITY_SUBMISSION = "urn:ietf:params:jmap:submission";
 
 export const LIMITS = {
-	maxSizeUpload: 10 * 1024 * 1024,
+	// A Vercel function refuses request bodies over 4.5 MB, and JMAP clients upload straight to the app.
+	maxSizeUpload: process.env.MAILFLARE_RUNTIME === "vercel" ? 4 * 1024 * 1024 : 10 * 1024 * 1024,
 	maxSizeRequest: 10 * 1024 * 1024,
 	maxCallsInRequest: 32,
 	maxObjectsInGet: 200,

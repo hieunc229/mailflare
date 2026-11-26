@@ -61,3 +61,19 @@ export async function verifyInboundSignatureV2(
 	for (let index = 0; index < expected.length; index += 1) diff |= expected.charCodeAt(index) ^ signature.charCodeAt(index);
 	return diff === 0;
 }
+
+async function uploadHmac(secret: string, size: number, timestamp: string): Promise<string> {
+	const key = await crypto.subtle.importKey("raw", new TextEncoder().encode(secret), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
+	return hex(await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(`upload\n${timestamp}\n${size}`)));
+}
+
+/** The relay's request for somewhere to put a message too large to post (Vercel). Shared with the relay Worker. */
+export async function verifyUploadRequestSignature(secret: string, signature: string, size: number, timestamp: string, nowSeconds = Math.floor(Date.now() / 1000)): Promise<boolean> {
+	const sentAt = Number(timestamp);
+	if (!Number.isFinite(sentAt) || Math.abs(nowSeconds - sentAt) > INBOUND_SIGNATURE_MAX_AGE_SECONDS) return false;
+	const expected = await uploadHmac(secret, size, timestamp);
+	if (expected.length !== signature.length) return false;
+	let diff = 0;
+	for (let index = 0; index < expected.length; index += 1) diff |= expected.charCodeAt(index) ^ signature.charCodeAt(index);
+	return diff === 0;
+}

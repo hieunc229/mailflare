@@ -15,12 +15,12 @@ function stripComments(src) {
 	return src.replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/.*$/gm, "");
 }
 
-test("shouldBindEmailCatchAllToWorker inverts isNodeRuntime (issue #42)", () => {
+test("shouldBindEmailCatchAllToWorker is false off Workers (issue #42)", () => {
 	const src = provisionSrc();
 	assert.match(
 		src,
-		/export function shouldBindEmailCatchAllToWorker\s*\(\s*env[^)]*\)[\s\S]*?\{\s*return !isNodeRuntime\(env\);\s*\}/,
-		"provision.ts must export shouldBindEmailCatchAllToWorker as !isNodeRuntime(env)",
+		/export function shouldBindEmailCatchAllToWorker\s*\(\s*env[^)]*\)[\s\S]*?\{\s*return !isOffWorkers\(env\);\s*\}/,
+		"provision.ts must export shouldBindEmailCatchAllToWorker as !isOffWorkers(env)",
 	);
 
 	const runtime = read("src/lib/runtime.ts");
@@ -29,6 +29,7 @@ test("shouldBindEmailCatchAllToWorker inverts isNodeRuntime (issue #42)", () => 
 		/MAILFLARE_RUNTIME === "node"/,
 		"isNodeRuntime must keep detecting MAILFLARE_RUNTIME=node",
 	);
+	assert.match(runtime, /return isNodeRuntime\(env\) \|\| isVercelRuntime\(env\);/, "off Workers means Node or Vercel");
 
 	const isNodeRuntime = (env) => (env ?? undefined)?.MAILFLARE_RUNTIME === "node";
 	const shouldBindEmailCatchAllToWorker = (env) => !isNodeRuntime(env);
@@ -39,12 +40,12 @@ test("shouldBindEmailCatchAllToWorker inverts isNodeRuntime (issue #42)", () => 
 	assert.equal(shouldBindEmailCatchAllToWorker(undefined), true);
 });
 
-test("provision.ts imports isNodeRuntime next to hasCloudflareCredentials", () => {
+test("provision.ts imports isOffWorkers next to hasCloudflareCredentials", () => {
 	const src = provisionSrc();
 	assert.match(
 		src,
-		/import\s*\{[^}]*isNodeRuntime[^}]*\}\s*from\s*"@\/lib\/runtime"/,
-		"isNodeRuntime must be imported from @/lib/runtime",
+		/import\s*\{[^}]*isOffWorkers[^}]*\}\s*from\s*"@\/lib\/runtime"/,
+		"isOffWorkers must be imported from @/lib/runtime",
 	);
 	assert.match(
 		src,

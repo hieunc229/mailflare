@@ -32,7 +32,7 @@ There is no test script in `package.json`; the checks under `tests/` are `node:t
 
 ## Architecture
 
-Next.js App Router APIs running on Cloudflare Workers via vinext. Drizzle ORM over D1 by default (or PostgreSQL, MySQL, libSQL via `DATABASE_URL`), R2 for raw MIME, attachments, and record backups, Queues for async mail processing, a Durable Object for realtime, and a cron trigger for scheduled backups.
+Next.js App Router APIs running on Cloudflare Workers via vinext. Drizzle ORM over D1 by default (or PostgreSQL, MySQL, libSQL via `DATABASE_URL`), R2 for raw MIME, attachments, and record backups, Queues for async mail processing, a Durable Object for realtime, and a cron trigger for scheduled backups. The same app also runs self-hosted (Node/Docker) and on Vercel.
 
 ### worker.ts is the entrypoint
 
@@ -119,6 +119,10 @@ The setup path only ever initializes an empty database — it refuses to touch o
 ### Object storage is `env.BUCKET`, from R2, Backblaze B2 or AWS S3
 
 Every blob (raw MIME, attachments, Drive, avatars, branding icon, JMAP uploads, backups) goes through `env.BUCKET` with the R2 API. `withStorage` (`src/lib/storage/index.ts`) swaps `BUCKET` for `B2Bucket` (`b2-bucket.ts`, S3 API signed with the shared SigV4 client; it serves AWS S3 too) when `getObjectStorageConfig` finds all of `B2_*` (Backblaze, wins) or `S3_BUCKET`/`S3_REGION`/credentials (AWS S3, credentials falling back to `AWS_*`); otherwise the R2 binding (or the Node file bucket) is untouched. It is applied in `getEnv()`, at the top of each `worker.ts` handler (which receive the raw env) and in the Node runtime env. `B2Bucket` implements only what the app calls (`get` with range, `head`, `put`, `delete`, multipart); if new code needs another R2 method, add it there. Do not read `cloudflare:workers` env directly for storage. `GET/POST /api/v1/storage` and the `manage_storage` MCP tool (admin scope `storage`) report and test it.
+
+### Vercel is a third runtime (experimental)
+
+`MAILFLARE_RUNTIME=vercel` (set by `next.config.ts` when `VERCEL` is set; build with `npm run build:vercel`) aliases `cloudflare:workers` to `server/runtime/cloudflare-workers-vercel.ts`, which assembles the env lazily (`vercel-env.ts`) and throws, listing what is missing, without a hosted `DATABASE_URL`, S3/B2, QStash, Upstash Redis and `CRON_SECRET`. There is no server entrypoint, so what `worker.ts` / `server/index.ts` do outside Next lives elsewhere: queues publish to QStash and are consumed by `/api/internal/queue/[name]` (signed; retries are re-published with `attempt + 1`, `vercel-queue-consumer.ts` must dispatch the same message kinds as `worker.ts`), cron is `/api/internal/cron/[schedule]`, DAV (PROPFIND/REPORT) is `server/runtime/vercel-dav-page.ts`, mounted as a Pages Router route that `scripts/build-vercel.mjs` writes for the Vercel build only (never commit `src/pages`: it breaks `tsc` and adds a second router to the other builds), reached by rewrites, the `mta-sts.*` guard is a host rewrite, realtime is polling. Request bodies over 4 MB go through object storage (`src/lib/uploads/`): a browser upload route must call `resolveUploadedRequest` after authenticating, and its client `prepareUpload`. All of it is inert on the other runtimes. Check code that branches on the runtime with `isOffWorkers` / `isVercelRuntime` (`src/lib/runtime.ts`), not just `isNodeRuntime`. Recurring jobs for every runtime are listed in `src/lib/scheduled/jobs.ts`; add new ones there. User docs: `docs/vercel.md`.
 
 ### Two runtimes, one code path
 

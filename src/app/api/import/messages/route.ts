@@ -9,14 +9,15 @@ import { getImportMessageUserId } from "@/lib/import/destination";
 import { createFileImportJob } from "@/lib/import/jobs";
 import { importMessagesToMailbox } from "@/lib/import/service";
 import { getMailboxAccessLevel } from "@/lib/mailboxes/access";
-import { parseImportForm } from "./utils";
+import { resolveUploadedRequest } from "@/lib/uploads/direct";
+import { MAX_IMPORT_REQUEST_SIZE, parseImportForm } from "./utils";
 
 export async function POST(request: Request) {
 	const env = getEnv();
 	const user = await requireUser(env, request);
 	let input: Awaited<ReturnType<typeof parseImportForm>>;
 	try {
-		input = await parseImportForm(request);
+		input = await parseImportForm(await resolveUploadedRequest(env, request, user.id, MAX_IMPORT_REQUEST_SIZE));
 	} catch (error) {
 		const status = error instanceof RequestBodyTooLargeError ? 413 : 400;
 		return NextResponse.json({ error: "Invalid import upload" }, { status });

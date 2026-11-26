@@ -25,6 +25,7 @@ import { FollowUpMenu } from "@/components/follow-ups/follow-up-menu";
 import { followUpOptionKey } from "@/components/follow-ups/follow-up-client-utils";
 import { formatScheduledSendTime } from "@/components/messages/scheduled-send-utils";
 import { buildSendFormData, fetchDraft, formatAttachmentSize } from "./utils";
+import { prepareUpload } from "@/lib/uploads/client";
 import { RecipientInput } from "./recipient-input";
 import { RichTextEditor } from "./rich-text-editor";
 import { ScheduleSendMenu } from "./schedule-send-menu";
@@ -305,7 +306,8 @@ export function ComposeForm({
 				if (agentRevisionRef.current !== null || pending.length === 0) return;
 				const form = new FormData();
 				for (const attachment of pending) form.append("attachments", attachment.file);
-				const uploaded = await authFetch(`/api/drafts/${data.draft.id}/attachments`, { method: "POST", body: form });
+				const prepared = await prepareUpload(form);
+				const uploaded = await authFetch(`/api/drafts/${data.draft.id}/attachments`, { method: "POST", ...prepared });
 				const result = (await uploaded.json()) as { attachments?: ComposeStoredAttachment[]; error?: string };
 				if (!uploaded.ok) {
 					for (const attachment of pending) rejectedFiles.current.add(attachment.file);
@@ -370,7 +372,8 @@ export function ComposeForm({
 				if (attachments.length > 0) {
 					const form = new FormData();
 					for (const attachment of attachments) form.append("attachments", attachment.file);
-					const uploaded = await authFetch(`/api/drafts/${draftId}/attachments`, { method: "POST", body: form });
+					const prepared = await prepareUpload(form);
+					const uploaded = await authFetch(`/api/drafts/${draftId}/attachments`, { method: "POST", ...prepared });
 					const result = await uploaded.json() as { attachments?: ComposeStoredAttachment[]; error?: string };
 					if (!uploaded.ok) throw new Error(result.error || t("compose.error.draftAttachments"));
 					setStoredAttachments((current) => [...current, ...(result.attachments ?? [])]);
@@ -395,26 +398,24 @@ export function ComposeForm({
 		let res: Response;
 		let data: SendResult & { error?: string; code?: string; addresses?: string[] };
 		try {
-			res = await authFetch("/api/send", {
-				method: "POST",
-				body: buildSendFormData({
-					attachments: unsentAttachments,
-					from: fromAddr,
-					to: recipientsToHeader(to),
-					cc: recipientsToHeader(cc),
-					bcc: recipientsToHeader(bcc),
-					subject,
-					text: htmlToPlainText(fullHtml),
-					html: fullHtml,
-					mailboxId: selectedMailbox?.id,
-					threading: threading ?? undefined,
-					draftId: currentDraftId,
-					scheduledAt,
-					undoSend: true,
-					trackOpens,
-					followUpDays,
-				}),
-			});
+			const prepared = await prepareUpload(buildSendFormData({
+				attachments: unsentAttachments,
+				from: fromAddr,
+				to: recipientsToHeader(to),
+				cc: recipientsToHeader(cc),
+				bcc: recipientsToHeader(bcc),
+				subject,
+				text: htmlToPlainText(fullHtml),
+				html: fullHtml,
+				mailboxId: selectedMailbox?.id,
+				threading: threading ?? undefined,
+				draftId: currentDraftId,
+				scheduledAt,
+				undoSend: true,
+				trackOpens,
+				followUpDays,
+			}));
+			res = await authFetch("/api/send", { method: "POST", ...prepared });
 			data = (await res.json()) as SendResult & { error?: string; code?: string; addresses?: string[] };
 		} catch {
 			setLoading(false);

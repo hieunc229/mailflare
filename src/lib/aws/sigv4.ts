@@ -29,6 +29,60 @@ export type SignInput = {
 	now?: Date;
 };
 
+function canonicalQueryString(url: URL): string {
+	return [...url.searchParams.entries()]
+		.map(([name, value]) => [rfc3986(name), rfc3986(value)] as const)
+		.sort(([a, av], [b, bv]) => (a < b ? -1 : a > b ? 1 : av < bv ? -1 : av > bv ? 1 : 0))
+		.map(([name, value]) => `${name}=${value}`)
+		.join("&");
+}
+
+async function signingSignature(secretAccessKey: string, dateStamp: string, region: string, service: string, stringToSign: string): Promise<string> {
+	const kDate = await hmac(encoder.encode(`AWS4${secretAccessKey}`), dateStamp);
+	const kRegion = await hmac(kDate, region);
+	const kService = await hmac(kRegion, service);
+	const kSigning = await hmac(kService, "aws4_request");
+	return hex(await hmac(kSigning, stringToSign));
+}
+
+export type PresignInput = {
+	method: string;
+	url: URL;
+	/** Headers besides `host` the caller must send with exactly these values. */
+	headers?: Record<string, string>;
+	region: string;
+	credentials: AwsCredentials;
+	expiresSeconds: number;
+	now?: Date;
+};
+
+/** A presigned S3 URL (query-string signature, unsigned payload), so a browser can transfer an object itself. */
+export async function presignS3Url(input: PresignInput): Promise<string> {
+	const { method, region, credentials } = input;
+	const url = new URL(input.url);
+	const amzDate = (input.now ?? new Date()).toISOString().replace(/[:-]|\.\d{3}/g, "");
+	const dateStamp = amzDate.slice(0, 8);
+	const scope = `${dateStamp}/${region}/s3/aws4_request`;
+	const normalized = Object.entries({ ...input.headers, host: url.host })
+		.map(([name, value]) => [name.toLowerCase(), value.trim().replace(/\s+/g, " ")] as const)
+		.sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0));
+	const signedHeaders = normalized.map(([name]) => name).join(";");
+
+	url.searchParams.set("X-Amz-Algorithm", "AWS4-HMAC-SHA256");
+	url.searchParams.set("X-Amz-Credential", `${credentials.accessKeyId}/${scope}`);
+	url.searchParams.set("X-Amz-Date", amzDate);
+	url.searchParams.set("X-Amz-Expires", String(input.expiresSeconds));
+	url.searchParams.set("X-Amz-SignedHeaders", signedHeaders);
+	if (credentials.sessionToken) url.searchParams.set("X-Amz-Security-Token", credentials.sessionToken);
+
+	const query = canonicalQueryString(url);
+	const canonicalHeaders = normalized.map(([name, value]) => `${name}:${value}\n`).join("");
+	const canonicalRequest = [method, url.pathname || "/", query, canonicalHeaders, signedHeaders, "UNSIGNED-PAYLOAD"].join("\n");
+	const stringToSign = ["AWS4-HMAC-SHA256", amzDate, scope, await sha256Hex(canonicalRequest)].join("\n");
+	const signature = await signingSignature(credentials.secretAccessKey, dateStamp, region, "s3", stringToSign);
+	return `${url.origin}${url.pathname}?${query}&X-Amz-Signature=${signature}`;
+}
+
 /**
  * AWS Signature Version 4. Returns the headers to send, including Authorization.
  * Web Crypto only, so it runs on Workers and in the Node build alike.
@@ -53,21 +107,13 @@ export async function signAwsRequest(input: SignInput): Promise<Record<string, s
 	const canonicalPath = service === "s3"
 		? url.pathname || "/"
 		: (url.pathname || "/").split("/").map((segment) => rfc3986(decodeURIComponent(segment))).join("/");
-	const canonicalQuery = [...url.searchParams.entries()]
-		.map(([name, value]) => [rfc3986(name), rfc3986(value)] as const)
-		.sort(([a, av], [b, bv]) => (a < b ? -1 : a > b ? 1 : av < bv ? -1 : av > bv ? 1 : 0))
-		.map(([name, value]) => `${name}=${value}`)
-		.join("&");
+	const canonicalQuery = canonicalQueryString(url);
 
 	const canonicalRequest = [method, canonicalPath, canonicalQuery, canonicalHeaders, signedHeaders, payloadHash].join("\n");
 	const scope = `${dateStamp}/${region}/${service}/aws4_request`;
 	const stringToSign = ["AWS4-HMAC-SHA256", amzDate, scope, await sha256Hex(canonicalRequest)].join("\n");
 
-	const kDate = await hmac(encoder.encode(`AWS4${credentials.secretAccessKey}`), dateStamp);
-	const kRegion = await hmac(kDate, region);
-	const kService = await hmac(kRegion, service);
-	const kSigning = await hmac(kService, "aws4_request");
-	const signature = hex(await hmac(kSigning, stringToSign));
+	const signature = await signingSignature(credentials.secretAccessKey, dateStamp, region, service, stringToSign);
 
 	return {
 		...headers,
