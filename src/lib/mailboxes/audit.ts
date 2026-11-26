@@ -7,19 +7,22 @@ export async function createAuditLog(env: CloudflareEnv, input: AuditLogInput): 
 	await createAuditLogs(env, [input]);
 }
 
+/** The row an audit entry is stored as, for a caller that writes it inside a batch of its own (so the action and its record succeed together). */
+export const auditLogRow = (input: AuditLogInput) => ({
+	id: newId("aud"),
+	actorUserId: input.actorUserId ?? null,
+	targetUserId: input.targetUserId ?? null,
+	mailboxId: input.mailboxId ?? null,
+	messageId: input.messageId ?? null,
+	action: input.action,
+	metadata: input.metadata ? JSON.stringify(input.metadata) : null,
+});
+
 export async function createAuditLogs(env: CloudflareEnv, inputs: AuditLogInput[]): Promise<void> {
 	if (inputs.length === 0) return;
 	const db = getDb(env);
 	// Keep each insert well under the dialects' bound-parameter limits.
 	for (let index = 0; index < inputs.length; index += 10) {
-		await db.insert(auditLogs).values(inputs.slice(index, index + 10).map((input) => ({
-			id: newId("aud"),
-			actorUserId: input.actorUserId ?? null,
-			targetUserId: input.targetUserId ?? null,
-			mailboxId: input.mailboxId ?? null,
-			messageId: input.messageId ?? null,
-			action: input.action,
-			metadata: input.metadata ? JSON.stringify(input.metadata) : null,
-		})));
+		await db.insert(auditLogs).values(inputs.slice(index, index + 10).map(auditLogRow));
 	}
 }

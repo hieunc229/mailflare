@@ -1,15 +1,16 @@
 import { eq } from "drizzle-orm";
 import { getDb } from "@/db";
-import { domains, mailboxes } from "@/db/schema";
+import { domains, mailboxes, users } from "@/db/schema";
 import { authenticateAppPasswordRequest } from "@/lib/auth/app-passwords";
 import { getSecurityHeaders } from "@/lib/security/headers";
 import { loadCalendarByNames } from "./calendar-store";
 import { deleteCalendarResource, putCalendarResource } from "./calendar-write";
 import { deleteCard, putCard } from "./card-write";
 import { loadCardBodies, loadCardMetaByNames } from "./card-store";
+import { roleAtLeast } from "@/lib/calendar/shares";
 import { listCalendarCollections, resolveCalendarCollection, CALENDAR_SEGMENT } from "./calendar-collections";
 import { calendarMember, calendarOf, cardMember, collectionIdFor, collectionProperties, collectionPath, memberResponse, pathOf, propfindCollection, type Area, type DavContext } from "./collections";
-import { BASE_HEADERS, collection, el, etagListed, etagMatches, href, NS, precondition, readXmlBody, selectProps, text, wantedProps, XML_HEADERS, type Property } from "./common";
+import { BASE_HEADERS, collection, el, etagListed, etagMatches, href, needPrivileges, NS, precondition, readXmlBody, selectProps, text, wantedProps, XML_HEADERS, type Property } from "./common";
 import { etagSeqs, syncPositions } from "./changes";
 import { ensureSeeded } from "./contact-seed";
 import { handleReport } from "./reports";
@@ -61,6 +62,12 @@ function locate(pathname: string, userId: string): Target | null {
 }
 
 type DavUser = { id: string; email: string; name: string };
+
+/** The calendar owner's own addresses, which tell their ATTENDEE line from a guest's when someone writes into their calendar. */
+async function ownerAddresses(env: CloudflareEnv, ownerId: string): Promise<string[]> {
+	const [owner] = await getDb(env).select({ id: users.id, email: users.email, name: users.name }).from(users).where(eq(users.id, ownerId)).limit(1);
+	return owner ? userAddresses(env, owner) : [];
+}
 
 async function userAddresses(env: CloudflareEnv, user: DavUser): Promise<string[]> {
 	const owned = await getDb(env)
@@ -229,9 +236,11 @@ async function route(request: Request, env: CloudflareEnv): Promise<Response | n
 		if (!(await withinWriteBudget(env, auth.userId))) return text(503, "Too many requests", { "Retry-After": "30" });
 		const put = request.method === "PUT";
 		if (target.area === "addressbooks") return put ? putCard(ctx, target.name, request) : deleteCard(ctx, target.name, request);
-		return put ? putCalendarResource(ctx, target.name, request, () => userAddresses(env, user)) : deleteCalendarResource(ctx, target.name, request);
+		return put ? putCalendarResource(ctx, target.name, request, () => (calendarOf(ctx).role === "owner" ? userAddresses(env, user) : ownerAddresses(env, calendarOf(ctx).ownerId))) : deleteCalendarResource(ctx, target.name, request);
 	}
 
+	// PROPPATCH is not served (no collection property is writable over DAV yet). Someone who could not change a shared calendar's name or colour in any case is told so, not "not allowed".
+	if (request.method === "PROPPATCH" && target.kind === "collection" && target.area === "calendars" && !roleAtLeast(calendarOf(ctx).role, "manage")) return needPrivileges(pathOf("calendars", ctx), "write-properties");
 	if (request.method !== "PROPFIND") return text(405, "Method not allowed", { Allow: ALLOW });
 
 	const depth = request.headers.get("Depth")?.trim().toLowerCase();

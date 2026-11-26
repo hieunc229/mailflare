@@ -25,6 +25,11 @@ export function precondition(status: number, element: string, ns: "D" | "C" | "C
 	return new Response(`<?xml version="1.0" encoding="utf-8"?>\n<D:error xmlns:D="DAV:" xmlns:C="urn:ietf:params:xml:ns:caldav" xmlns:CR="urn:ietf:params:xml:ns:carddav"><${ns}:${element}/></D:error>`, { status, headers: XML_HEADERS });
 }
 
+/** 403 `DAV:need-privileges` (RFC 3744 section 7.1.1): the user may see the resource but not do this to it. */
+export function needPrivileges(resourceHref: string, privilege: "write-content" | "unbind" | "bind" | "write-properties") {
+	return new Response(`<?xml version="1.0" encoding="utf-8"?>\n<D:error xmlns:D="DAV:"><D:need-privileges><D:resource><D:href>${escapeXml(resourceHref)}</D:href><D:privilege><D:${privilege}/></D:privilege></D:resource></D:need-privileges></D:error>`, { status: 403, headers: XML_HEADERS });
+}
+
 /** A resource as a listing page carries it: name and ETag, no body. */
 export type ListedRow = { name: string; etag: string; updatedAt: Date; /** Known without the body (a stored card). */ size?: number };
 

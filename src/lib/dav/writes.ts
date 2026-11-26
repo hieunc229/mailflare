@@ -1,4 +1,4 @@
-import { and, eq, exists, inArray, sql } from "drizzle-orm";
+import { and, eq, exists, inArray, sql, type SQL } from "drizzle-orm";
 import type { getDb } from "@/db";
 import { calendarEvents, davCards, davChanges, davSyncState } from "@/db/schema";
 import { collectionScope } from "./changes";
@@ -36,6 +36,23 @@ export function failedPrecondition(request: Request, etag: string | null): Respo
 	if (ifMatch !== null && (etag === null || !etagMatches(ifMatch, etag))) return text(412, "Precondition failed", etag ? { ETag: etag } : {});
 	if (ifNoneMatch !== null && etag !== null && etagListed(ifNoneMatch, etag)) return text(412, "Precondition failed", { ETag: etag });
 	return null;
+}
+
+/**
+ * The first statements of a batch that must not run when a condition holds (`missing`): a two-row insert into `dav_sync_state` whose
+ * second key equals the first exactly then, so the duplicate key fails the whole batch (the caller maps `isUniqueConstraintError`).
+ * The same device as `staleGuard`, for a fact that can change between the request's checks and its write (a grant revoked meanwhile).
+ */
+export function requireGuard(db: Db, missing: SQL): unknown[] {
+	const token = crypto.randomUUID();
+	const [first, second] = [`guard:${token}:a`, `guard:${token}:b`];
+	return [
+		db.insert(davSyncState).values([
+			{ collectionId: first, epoch: "guard", floor: 0 },
+			{ collectionId: sql`case when ${missing} then ${first} else ${second} end` as unknown as string, epoch: "guard", floor: 0 },
+		]),
+		db.delete(davSyncState).where(inArray(davSyncState.collectionId, [first, second])),
+	];
 }
 
 export const created = (etag: string) => new Response(null, { status: 201, headers: { ...BASE_HEADERS, ETag: etag } });
