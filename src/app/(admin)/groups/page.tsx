@@ -58,12 +58,13 @@ function CreateGroupDialog({ open, onOpenChange, domains }: { open: boolean; onO
 					<div className="space-y-2">
 						<Label htmlFor="group-local-part">{t("groups.address")}</Label>
 						<div className="flex h-10 overflow-hidden rounded-md border border-neutral-200 bg-white shadow-sm shadow-neutral-200/50 focus-within:border-blue-600 pointer-coarse:h-11">
-							<Input id="group-local-part" value={localPart} onChange={(event) => setLocalPart(event.target.value)} placeholder={t("groups.localPlaceholder")} autoComplete="off" required maxLength={64} aria-invalid={!!addressError} aria-describedby={addressError ? "group-create-error" : undefined} className="h-full min-w-0 flex-1 rounded-none border-0 shadow-none focus-visible:border-0" />
+							<Input id="group-local-part" value={localPart} onChange={(event) => setLocalPart(event.target.value)} placeholder={t("groups.localPlaceholder")} autoComplete="off" required maxLength={64} pattern="[a-zA-Z0-9._%+\-]+" title={t("groups.localPartHint")} aria-invalid={!!addressError} aria-describedby={addressError ? "group-local-hint group-create-error" : "group-local-hint"} className="h-full min-w-0 flex-1 rounded-none border-0 shadow-none focus-visible:border-0" />
 							<span className="flex items-center text-sm text-neutral-500" aria-hidden="true">@</span>
 							<Select aria-label={t("accounts.domain")} value={domainId || domains[0]?.id || ""} onChange={(event) => setDomainId(event.target.value)} containerClassName="max-w-[55%] rounded-none border-0 p-0" className="h-full rounded-none border-0 bg-transparent px-3 text-sm text-neutral-700 shadow-none">
 								{domains.map((domain) => <option key={domain.id} value={domain.id}>{domain.hostname}</option>)}
 							</Select>
 						</div>
+						<p id="group-local-hint" className="text-xs text-neutral-500">{t("groups.localPartHint")}</p>
 					</div>
 					<div className="space-y-2"><Label htmlFor="group-name">{t("common.name")}</Label><Input id="group-name" value={name} onChange={(event) => setName(event.target.value)} placeholder={t("groups.namePlaceholder")} required maxLength={100} className="pointer-coarse:h-11" /></div>
 					<div className="space-y-2"><Label htmlFor="group-description">{t("groups.descriptionLabel")}</Label><Textarea id="group-description" value={description} onChange={(event) => setDescription(event.target.value)} maxLength={500} rows={2} /></div>

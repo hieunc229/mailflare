@@ -11,6 +11,7 @@ import { isManualZone } from "@/lib/domains/provision";
 import { listDomainMx, MxConflictError } from "@/lib/domains/receiving-dns";
 import { removeResendReceiving, setupResendReceiving, hasResendReceivingConfig } from "@/lib/domains/resend-receiving";
 import { hasSesReceivingConfig, removeSesReceiving, setupSesReceiving } from "@/lib/aws/ses-receiving";
+import { ensureGroupDomainRouting } from "@/lib/groups/routing";
 import { ensureMailboxDomainRouting } from "@/lib/mailboxes/domain-addresses";
 import { assertMxChangeAllowed, republishMtaStsAfterMxChange } from "@/lib/deliverability/mta-sts-guard";
 import type { CfDnsRecord } from "@/lib/cloudflare-api.types";
@@ -44,7 +45,7 @@ export async function setupCloudflareReceiving(env: CloudflareEnv, skippedDomain
 		return restoreMxRecordsAfterFailure(env, domain.zoneId, deletedMx, error);
 	}
 
-	// Cleaning up Cloudflare receiving deletes the per-address Worker routes; put them back.
+	// Cleaning up Cloudflare receiving deletes the per-address Worker routes (mailboxes and groups); put them back.
 	const db = getDb(env);
 	const mailboxRows = await db
 		.select({ id: mailboxes.id, domainId: mailboxes.domainId, localPart: mailboxes.localPart, useAllDomains: mailboxes.useAllDomains })
@@ -53,6 +54,7 @@ export async function setupCloudflareReceiving(env: CloudflareEnv, skippedDomain
 		.where(and(eq(domains.userId, domain.userId), or(eq(mailboxes.domainId, domain.id), eq(mailboxes.useAllDomains, true))));
 	const ruleCache: EmailRoutingRuleCache = new Map();
 	await Promise.allSettled(mailboxRows.map((mailbox) => ensureMailboxDomainRouting(env, db, { ...mailbox, useAllDomains: true }, undefined, ruleCache)));
+	await ensureGroupDomainRouting(env, db, domain, ruleCache);
 }
 
 export async function removeCloudflareReceiving(env: CloudflareEnv, domain: DomainRow): Promise<void> {

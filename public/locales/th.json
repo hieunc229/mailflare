@@ -3012,7 +3012,7 @@
 	"groups.post.orgHint": "เฉพาะผู้ส่งจากโดเมนของคุณเอง",
 	"groups.post.members": "เฉพาะสมาชิกกลุ่ม",
 	"groups.post.membersHint": "เฉพาะที่อยู่ของสมาชิก",
-	"groups.post.dmarcNote": "โดเมนของผู้ส่งต้องผ่าน DMARC เมลที่ไม่ผ่านจะถูกปฏิเสธและตีกลับ",
+	"groups.post.dmarcNote": "โดเมนของผู้ส่งต้องผ่าน DMARC เมลที่ไม่ผ่านจะถูกปฏิเสธและตีกลับ หรือถูกทิ้งโดยไม่แจ้งหากโดเมนของคุณรับเมลผ่าน Resend หรือ Amazon SES",
 	"groups.back": "กลับไปที่กลุ่ม",
 	"groups.notFound": "ไม่มีกลุ่มนี้อีกต่อไป",
 	"groups.settings": "การตั้งค่า",
@@ -3043,5 +3043,6 @@
 	"groups.delete": "ลบกลุ่ม",
 	"groups.deleteTitle": "ลบกลุ่มนี้ไหม",
 	"groups.deleteConfirm": "เมลที่ส่งถึง {address} จะถูกตีกลับหลังจากนี้ การดำเนินการนี้ย้อนกลับไม่ได้",
-	"groups.deleteFailed": "ลบกลุ่มไม่ได้"
+	"groups.deleteFailed": "ลบกลุ่มไม่ได้",
+	"groups.localPartHint": "เฉพาะตัวอักษร ตัวเลข และ . _ % + - เท่านั้น"
 }

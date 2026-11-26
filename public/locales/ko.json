@@ -3012,7 +3012,7 @@
 	"groups.post.orgHint": "내 도메인의 발신자만 가능합니다.",
 	"groups.post.members": "그룹 멤버만",
 	"groups.post.membersHint": "멤버에 속한 주소만 가능합니다.",
-	"groups.post.dmarcNote": "발신자의 도메인이 DMARC를 통과해야 합니다. 통과하지 못한 메일은 반송과 함께 거부됩니다.",
+	"groups.post.dmarcNote": "발신자의 도메인이 DMARC를 통과해야 합니다. 통과하지 못한 메일은 반송과 함께 거부되며, 도메인이 Resend 또는 Amazon SES를 통해 수신하는 경우에는 알림 없이 삭제됩니다.",
 	"groups.back": "그룹으로 돌아가기",
 	"groups.notFound": "이 그룹은 더 이상 존재하지 않습니다.",
 	"groups.settings": "설정",
@@ -3043,5 +3043,6 @@
 	"groups.delete": "그룹 삭제",
 	"groups.deleteTitle": "이 그룹을 삭제하시겠습니까?",
 	"groups.deleteConfirm": "이후 {address}로 보낸 메일은 반송됩니다. 이 작업은 실행취소할 수 없습니다.",
-	"groups.deleteFailed": "그룹을 삭제할 수 없습니다"
+	"groups.deleteFailed": "그룹을 삭제할 수 없습니다",
+	"groups.localPartHint": "영문자, 숫자, . _ % + - 만 사용할 수 있습니다."
 }

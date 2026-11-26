@@ -3021,7 +3021,7 @@
 	"groups.post.orgHint": "فقط فرستنده‌هایی از دامنه‌های خودتان.",
 	"groups.post.members": "فقط اعضای گروه",
 	"groups.post.membersHint": "فقط نشانی‌هایی که متعلق به یک عضو هستند.",
-	"groups.post.dmarcNote": "دامنه فرستنده باید DMARC را بگذراند. نامه‌ای که رد شود با پیام بازگشتی رد می‌شود.",
+	"groups.post.dmarcNote": "دامنه فرستنده باید DMARC را بگذراند. نامه‌ای که رد شود با پیام بازگشتی رد می‌شود، یا اگر دامنه شما از طریق Resend یا Amazon SES دریافت می‌کند بی‌صدا دور ریخته می‌شود.",
 	"groups.back": "بازگشت به گروه‌ها",
 	"groups.notFound": "این گروه دیگر وجود ندارد.",
 	"groups.settings": "تنظیمات",
@@ -3052,5 +3052,6 @@
 	"groups.delete": "حذف گروه",
 	"groups.deleteTitle": "این گروه حذف شود؟",
 	"groups.deleteConfirm": "پس از این، نامه‌های ارسالی به {address} برگشت می‌خورند. این کار قابل بازگشت نیست.",
-	"groups.deleteFailed": "حذف گروه ممکن نشد"
+	"groups.deleteFailed": "حذف گروه ممکن نشد",
+	"groups.localPartHint": "فقط حروف، اعداد و . _ % + -"
 }

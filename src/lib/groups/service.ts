@@ -13,6 +13,7 @@ import { createAuditLog, createAuditLogs } from "@/lib/mailboxes/audit";
 import { findAddressOwner } from "@/lib/mailboxes/address-owner";
 import type { AuditLogInput } from "@/lib/mailboxes/types";
 import {
+	CAN_SEND_AS_UNAVAILABLE,
 	MAX_GROUPS_PER_DOMAIN,
 	MAX_GROUP_MEMBERS,
 	MEMBER_INSERT_CHUNK,
@@ -79,11 +80,22 @@ async function countMembers(db: AppDatabase, groupId: string): Promise<number> {
 	return Number(row?.n ?? 0);
 }
 
-/** Why an address cannot become a group's, or null. `exceptGroup` is the group asking, whose own address is free to keep. */
+/** Why an address cannot become a group's, or null. */
 async function addressConflict(env: CloudflareEnv, db: AppDatabase, domain: DomainRow, localPart: string): Promise<string | null> {
 	if (await isReportAddressReserved(env, domain.id, localPart)) return "This address is reserved for DMARC reports";
 	const owner = await findAddressOwner(db, domain.id, localPart, { allDomains: {} });
 	return owner ? OWNER_MESSAGES[owner] : null;
+}
+
+/**
+ * Another group on the domain whose normalized address equals this one (john and j.ohn route alike). The
+ * pre-insert check cannot see a concurrent request, so create and update look again once their own row
+ * is stored and the loser backs out; two racing requests may both back out, and a retry then succeeds.
+ */
+async function normalizedClash(db: AppDatabase, domainId: string, localPart: string, exceptId: string): Promise<boolean> {
+	const wanted = normalizeRecipientLocalPart(localPart);
+	const rows = await db.select({ id: mailGroups.id, localPart: mailGroups.localPart }).from(mailGroups).where(eq(mailGroups.domainId, domainId));
+	return rows.some((row) => row.id !== exceptId && normalizeRecipientLocalPart(row.localPart) === wanted);
 }
 
 async function rollbackRules(env: CloudflareEnv, changes: CfEmailRoutingRuleChange[]) {
@@ -202,6 +214,11 @@ export async function createGroup(env: CloudflareEnv, db: AppDatabase, actor: Gr
 		await db.delete(mailGroups).where(eq(mailGroups.id, id));
 		return fail(502, error instanceof Error ? error.message : "Failed to create Cloudflare routing rule");
 	}
+	if (await normalizedClash(db, domain.id, localPart, id)) {
+		await rollbackRules(env, changes);
+		await db.delete(mailGroups).where(eq(mailGroups.id, id));
+		return fail(409, OWNER_MESSAGES.group);
+	}
 	await createAuditLog(env, { actorUserId: actor.id, action: "group.created", metadata: { groupId: id, address } });
 	const [row] = await db.select().from(mailGroups).where(eq(mailGroups.id, id)).limit(1);
 	return ok(summarize(row, domain, 0));
@@ -267,8 +284,17 @@ export async function updateGroup(env: CloudflareEnv, db: AppDatabase, actor: Gr
 		if (isUniqueConstraintError(error)) return fail(409, OWNER_MESSAGES.group);
 		throw error;
 	}
+	if (addressChanged && !sameClaim && (await normalizedClash(db, domain.id, localPart, id))) {
+		await db.update(mailGroups).set({ localPart: group.localPart, domainId: group.domainId, updatedAt: group.updatedAt }).where(eq(mailGroups.id, id));
+		await rollbackRules(env, changes);
+		return fail(409, OWNER_MESSAGES.group);
+	}
 	if (addressChanged) await removeRule(env, oldDomain, oldAddress);
-	await createAuditLog(env, { actorUserId: actor.id, action: "group.updated", metadata: { groupId: id, address, changed } });
+	await createAuditLog(env, {
+		actorUserId: actor.id,
+		action: "group.updated",
+		metadata: { groupId: id, address, ...(addressChanged ? { previousAddress: oldAddress } : {}), changed },
+	});
 	const [row] = await db.select().from(mailGroups).where(eq(mailGroups.id, id)).limit(1);
 	return ok(summarize(row, domain, await countMembers(db, id)));
 }
@@ -277,8 +303,8 @@ export async function deleteGroup(env: CloudflareEnv, db: AppDatabase, actor: Gr
 	const found = await loadOwnedGroup(db, actor, id);
 	if (!found) return fail(404, "Group not found");
 	const address = groupAddress(found.group.localPart, found.domain.hostname);
-	await db.delete(mailGroupMembers).where(eq(mailGroupMembers.groupId, id));
-	await db.delete(mailGroups).where(eq(mailGroups.id, id));
+	// One batch, so a failure never leaves a group without its members.
+	await db.batch([db.delete(mailGroupMembers).where(eq(mailGroupMembers.groupId, id)), db.delete(mailGroups).where(eq(mailGroups.id, id))] as never);
 	await removeRule(env, found.domain, address);
 	await createAuditLog(env, { actorUserId: actor.id, action: "group.deleted", metadata: { groupId: id, address } });
 	return ok({ id });
@@ -355,10 +381,16 @@ export async function addMembers(env: CloudflareEnv, db: AppDatabase, actor: Gro
 		createdByUserId: actor.id,
 	}));
 	try {
-		for (const part of chunk(rows, MEMBER_INSERT_CHUNK)) await db.insert(mailGroupMembers).values(part);
+		// One batch, so a conflict part-way through stores none of them.
+		await db.batch(chunk(rows, MEMBER_INSERT_CHUNK).map((part) => db.insert(mailGroupMembers).values(part)) as never);
 	} catch (error) {
 		if (isUniqueConstraintError(error)) return fail(409, "A member was added at the same time; reload and try again");
 		throw error;
+	}
+	// The cap check above cannot see a concurrent add, so count again and back out if this one overflowed it.
+	if ((await countMembers(db, id)) > MAX_GROUP_MEMBERS) {
+		for (const part of chunk(rows.map((row) => row.id), IN_CHUNK)) await db.delete(mailGroupMembers).where(inArray(mailGroupMembers.id, part));
+		return fail(422, `A group holds at most ${MAX_GROUP_MEMBERS} members`);
 	}
 	const stored: MemberRow[] = [];
 	for (const part of chunk(rows.map((row) => row.id), IN_CHUNK)) stored.push(...(await db.select().from(mailGroupMembers).where(inArray(mailGroupMembers.id, part))));
@@ -383,6 +415,7 @@ async function loadMember(db: AppDatabase, actor: GroupActor, id: string, member
 export async function updateMember(env: CloudflareEnv, db: AppDatabase, actor: GroupActor, id: string, memberId: string, input: { canSendAs: boolean }) {
 	const found = await loadMember(db, actor, id, memberId);
 	if (!found) return fail(404, "Member not found");
+	if (input.canSendAs) return fail(422, CAN_SEND_AS_UNAVAILABLE);
 	if (found.member.kind !== "user") return fail(422, "Only account members can be allowed to send as the group");
 	await db.update(mailGroupMembers).set({ canSendAs: input.canSendAs }).where(eq(mailGroupMembers.id, memberId));
 	await createAuditLog(env, {

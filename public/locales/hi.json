@@ -3021,7 +3021,7 @@
 	"groups.post.orgHint": "केवल आपके अपने डोमेन के प्रेषक।",
 	"groups.post.members": "केवल समूह के सदस्य",
 	"groups.post.membersHint": "केवल वे पते जो किसी सदस्य के हैं।",
-	"groups.post.dmarcNote": "प्रेषक के डोमेन को DMARC पास करना होगा। विफल होने वाला मेल बाउंस के साथ अस्वीकार कर दिया जाता है।",
+	"groups.post.dmarcNote": "प्रेषक के डोमेन को DMARC पास करना होगा। विफल होने वाला मेल बाउंस के साथ अस्वीकार कर दिया जाता है, या आपका डोमेन Resend या Amazon SES से मेल पाता हो तो चुपचाप छोड़ दिया जाता है।",
 	"groups.back": "समूहों पर वापस जाएँ",
 	"groups.notFound": "यह समूह अब मौजूद नहीं है।",
 	"groups.settings": "सेटिंग",
@@ -3052,5 +3052,6 @@
 	"groups.delete": "समूह हटाएँ",
 	"groups.deleteTitle": "यह समूह हटाएँ?",
 	"groups.deleteConfirm": "इसके बाद {address} पर भेजा गया मेल बाउंस हो जाएगा। इसे पहले जैसा नहीं किया जा सकता।",
-	"groups.deleteFailed": "समूह हटाया नहीं जा सका"
+	"groups.deleteFailed": "समूह हटाया नहीं जा सका",
+	"groups.localPartHint": "केवल अक्षर, अंक और . _ % + -"
 }

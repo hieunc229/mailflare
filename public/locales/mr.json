@@ -3021,7 +3021,7 @@
 	"groups.post.orgHint": "फक्त तुमच्या स्वतःच्या डोमेनमधील प्रेषक.",
 	"groups.post.members": "फक्त गटाचे सदस्य",
 	"groups.post.membersHint": "फक्त सदस्याचे असलेले पत्ते.",
-	"groups.post.dmarcNote": "प्रेषकाचे डोमेन DMARC उत्तीर्ण झाले पाहिजे. अयशस्वी झालेला मेल बाउन्ससह नाकारला जातो.",
+	"groups.post.dmarcNote": "प्रेषकाचे डोमेन DMARC उत्तीर्ण झाले पाहिजे. अयशस्वी झालेला मेल बाउन्ससह नाकारला जातो, किंवा तुमचे डोमेन Resend किंवा Amazon SES मार्फत मेल स्वीकारत असल्यास शांतपणे टाकून दिला जातो.",
 	"groups.back": "गटांकडे परत जा",
 	"groups.notFound": "हा गट आता अस्तित्वात नाही.",
 	"groups.settings": "सेटिंग्ज",
@@ -3052,5 +3052,6 @@
 	"groups.delete": "गट हटवा",
 	"groups.deleteTitle": "हा गट हटवायचा?",
 	"groups.deleteConfirm": "यानंतर {address} वर पाठवलेला मेल बाउन्स होईल. हे पूर्ववत करता येणार नाही.",
-	"groups.deleteFailed": "गट हटवता आला नाही"
+	"groups.deleteFailed": "गट हटवता आला नाही",
+	"groups.localPartHint": "फक्त अक्षरे, अंक आणि . _ % + - वापरता येतात."
 }

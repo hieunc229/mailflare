@@ -3042,7 +3042,7 @@
 	"groups.post.orgHint": "Solo mittenti dei tuoi domini.",
 	"groups.post.members": "Solo membri del gruppo",
 	"groups.post.membersHint": "Solo indirizzi appartenenti a un membro.",
-	"groups.post.dmarcNote": "Il dominio del mittente deve superare DMARC. La posta che non lo supera viene rifiutata con un messaggio di mancato recapito.",
+	"groups.post.dmarcNote": "Il dominio del mittente deve superare DMARC. La posta che non lo supera viene rifiutata con un messaggio di mancato recapito, oppure scartata silenziosamente quando il tuo dominio riceve tramite Resend o Amazon SES.",
 	"groups.back": "Torna ai gruppi",
 	"groups.notFound": "Questo gruppo non esiste più.",
 	"groups.settings": "Impostazioni",
@@ -3073,5 +3073,6 @@
 	"groups.delete": "Elimina gruppo",
 	"groups.deleteTitle": "Eliminare questo gruppo?",
 	"groups.deleteConfirm": "La posta inviata a {address} verrà respinta da ora in poi. L'operazione non può essere annullata.",
-	"groups.deleteFailed": "Impossibile eliminare il gruppo"
+	"groups.deleteFailed": "Impossibile eliminare il gruppo",
+	"groups.localPartHint": "Solo lettere, numeri e . _ % + -"
 }

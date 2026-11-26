@@ -3021,7 +3021,7 @@
 	"groups.post.orgHint": "Watumaji kutoka vikoa vyako pekee.",
 	"groups.post.members": "Wanachama wa kikundi pekee",
 	"groups.post.membersHint": "Anwani za wanachama pekee.",
-	"groups.post.dmarcNote": "Kikoa cha mtumaji lazima kipitishe DMARC. Barua isiyopita hukataliwa na kurudishwa.",
+	"groups.post.dmarcNote": "Kikoa cha mtumaji lazima kipitishe DMARC. Barua isiyopita hukataliwa na kurudishwa, au hutupwa kimya kimya ikiwa kikoa chako kinapokea kupitia Resend au Amazon SES.",
 	"groups.back": "Rudi kwa vikundi",
 	"groups.notFound": "Kikundi hiki hakipo tena.",
 	"groups.settings": "Mipangilio",
@@ -3052,5 +3052,6 @@
 	"groups.delete": "Futa kikundi",
 	"groups.deleteTitle": "Futa kikundi hiki?",
 	"groups.deleteConfirm": "Barua inayotumwa kwa {address} itarudi baada ya hili. Haiwezi kutenduliwa.",
-	"groups.deleteFailed": "Imeshindwa kufuta kikundi"
+	"groups.deleteFailed": "Imeshindwa kufuta kikundi",
+	"groups.localPartHint": "Herufi, nambari na . _ % + - pekee."
 }

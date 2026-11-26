@@ -3021,7 +3021,7 @@
 	"groups.post.orgHint": "Masu aikawa daga domains ɗinku kawai.",
 	"groups.post.members": "Membobin ƙungiya kawai",
 	"groups.post.membersHint": "Adireshin da ke na memba kawai.",
-	"groups.post.dmarcNote": "Dole domain ɗin mai aikawa ya ci DMARC. Ana ƙin saƙon da bai ci ba tare da bounce.",
+	"groups.post.dmarcNote": "Dole domain ɗin mai aikawa ya ci DMARC. Ana ƙin saƙon da bai ci ba tare da bounce, ko a yar da shi a hankali idan domain ɗinku yana karɓa ta Resend ko Amazon SES.",
 	"groups.back": "Koma zuwa ƙungiyoyi",
 	"groups.notFound": "Wannan ƙungiyar ba ta wanzu kuma.",
 	"groups.settings": "Saituna",
@@ -3052,5 +3052,6 @@
 	"groups.delete": "Share ƙungiya",
 	"groups.deleteTitle": "Share wannan ƙungiyar?",
 	"groups.deleteConfirm": "Saƙon da aka aika zuwa {address} zai koma (bounce) bayan wannan. Ba za a iya mayar da wannan ba.",
-	"groups.deleteFailed": "An kasa share ƙungiyar"
+	"groups.deleteFailed": "An kasa share ƙungiyar",
+	"groups.localPartHint": "Haruffa, lambobi da . _ % + - kawai."
 }

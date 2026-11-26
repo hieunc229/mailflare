@@ -15,6 +15,8 @@ Open **Admin → Groups**. You need the permission to manage users, and you can 
 - **Change the address.** Mail sent to the old address bounces once you save. Mailflare creates the new Cloudflare Email Routing rule before it removes the old one.
 - **Delete.** Removes the address, its members and its Cloudflare routing rule. Mail sent to it bounces afterwards. Members keep their own mailboxes.
 
+If you switch a domain's receiving to Cloudflare (or turn Cloudflare receiving off and on again), Mailflare recreates the routing rules of its mailboxes and groups. Groups created while another provider received get their rule at that point.
+
 On domains that receive through Cloudflare, creating a group adds an Email Routing rule that sends the address to Mailflare, the same as for a mailbox. If Cloudflare refuses the rule the group is not created.
 
 ## What the group does not do

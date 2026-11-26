@@ -3021,7 +3021,7 @@
 	"groups.post.orgHint": "ਸਿਰਫ਼ ਤੁਹਾਡੇ ਆਪਣੇ ਡੋਮੇਨਾਂ ਦੇ ਭੇਜਣ ਵਾਲੇ।",
 	"groups.post.members": "ਸਿਰਫ਼ ਸਮੂਹ ਦੇ ਮੈਂਬਰ",
 	"groups.post.membersHint": "ਸਿਰਫ਼ ਉਹ ਪਤੇ ਜੋ ਕਿਸੇ ਮੈਂਬਰ ਦੇ ਹਨ।",
-	"groups.post.dmarcNote": "ਭੇਜਣ ਵਾਲੇ ਦਾ ਡੋਮੇਨ DMARC ਪਾਸ ਕਰਨਾ ਚਾਹੀਦਾ ਹੈ। ਫੇਲ੍ਹ ਹੋਣ ਵਾਲੀ ਮੇਲ ਬਾਊਂਸ ਨਾਲ ਰੱਦ ਕਰ ਦਿੱਤੀ ਜਾਂਦੀ ਹੈ।",
+	"groups.post.dmarcNote": "ਭੇਜਣ ਵਾਲੇ ਦਾ ਡੋਮੇਨ DMARC ਪਾਸ ਕਰਨਾ ਚਾਹੀਦਾ ਹੈ। ਫੇਲ੍ਹ ਹੋਣ ਵਾਲੀ ਮੇਲ ਬਾਊਂਸ ਨਾਲ ਰੱਦ ਕਰ ਦਿੱਤੀ ਜਾਂਦੀ ਹੈ, ਜਾਂ ਜੇ ਤੁਹਾਡਾ ਡੋਮੇਨ Resend ਜਾਂ Amazon SES ਰਾਹੀਂ ਮੇਲ ਪ੍ਰਾਪਤ ਕਰਦਾ ਹੈ ਤਾਂ ਚੁੱਪਚਾਪ ਛੱਡ ਦਿੱਤੀ ਜਾਂਦੀ ਹੈ।",
 	"groups.back": "ਸਮੂਹਾਂ 'ਤੇ ਵਾਪਸ ਜਾਓ",
 	"groups.notFound": "ਇਹ ਸਮੂਹ ਹੁਣ ਮੌਜੂਦ ਨਹੀਂ ਹੈ।",
 	"groups.settings": "ਸੈਟਿੰਗਾਂ",
@@ -3052,5 +3052,6 @@
 	"groups.delete": "ਸਮੂਹ ਮਿਟਾਓ",
 	"groups.deleteTitle": "ਇਹ ਸਮੂਹ ਮਿਟਾਉਣਾ ਹੈ?",
 	"groups.deleteConfirm": "ਇਸ ਤੋਂ ਬਾਅਦ {address} 'ਤੇ ਭੇਜੀ ਮੇਲ ਬਾਊਂਸ ਹੋ ਜਾਵੇਗੀ। ਇਸਨੂੰ ਵਾਪਸ ਨਹੀਂ ਕੀਤਾ ਜਾ ਸਕਦਾ।",
-	"groups.deleteFailed": "ਸਮੂਹ ਮਿਟਾਇਆ ਨਹੀਂ ਜਾ ਸਕਿਆ"
+	"groups.deleteFailed": "ਸਮੂਹ ਮਿਟਾਇਆ ਨਹੀਂ ਜਾ ਸਕਿਆ",
+	"groups.localPartHint": "ਸਿਰਫ਼ ਅੱਖਰ, ਅੰਕ ਅਤੇ . _ % + -।"
 }

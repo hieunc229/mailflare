@@ -3042,7 +3042,7 @@
 	"groups.post.orgHint": "Somente remetentes dos seus próprios domínios.",
 	"groups.post.members": "Somente membros do grupo",
 	"groups.post.membersHint": "Somente endereços que pertencem a um membro.",
-	"groups.post.dmarcNote": "O domínio do remetente precisa passar no DMARC. E-mails que falharem são recusados com uma devolução.",
+	"groups.post.dmarcNote": "O domínio do remetente precisa passar no DMARC. E-mails que falharem são recusados com uma devolução, ou descartados silenciosamente quando seu domínio recebe pelo Resend ou pela Amazon SES.",
 	"groups.back": "Voltar para grupos",
 	"groups.notFound": "Este grupo não existe mais.",
 	"groups.settings": "Configurações",
@@ -3073,5 +3073,6 @@
 	"groups.delete": "Excluir grupo",
 	"groups.deleteTitle": "Excluir este grupo?",
 	"groups.deleteConfirm": "Os e-mails enviados para {address} serão devolvidos a partir de agora. Esta ação não pode ser desfeita.",
-	"groups.deleteFailed": "Não foi possível excluir o grupo"
+	"groups.deleteFailed": "Não foi possível excluir o grupo",
+	"groups.localPartHint": "Somente letras, números e . _ % + -."
 }

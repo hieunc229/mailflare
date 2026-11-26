@@ -3021,7 +3021,7 @@
 	"groups.post.orgHint": "Only senders from your own domains.",
 	"groups.post.members": "Group members only",
 	"groups.post.membersHint": "Only addresses that belong to a member.",
-	"groups.post.dmarcNote": "The sender's domain must pass DMARC. Mail that fails is refused with a bounce.",
+	"groups.post.dmarcNote": "The sender's domain must pass DMARC. Mail that fails is refused with a bounce, or dropped silently when your domain receives through Resend or Amazon SES.",
 	"groups.back": "Back to groups",
 	"groups.notFound": "This group no longer exists.",
 	"groups.settings": "Settings",
@@ -3052,5 +3052,6 @@
 	"groups.delete": "Delete group",
 	"groups.deleteTitle": "Delete this group?",
 	"groups.deleteConfirm": "Mail sent to {address} will bounce after this. This cannot be undone.",
-	"groups.deleteFailed": "Unable to delete the group"
+	"groups.deleteFailed": "Unable to delete the group",
+	"groups.localPartHint": "Letters, numbers and . _ % + - only."
 }

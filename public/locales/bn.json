@@ -3021,7 +3021,7 @@
 	"groups.post.orgHint": "শুধুমাত্র আপনার নিজস্ব ডোমেইনের প্রেরক।",
 	"groups.post.members": "শুধুমাত্র গ্রুপের সদস্যরা",
 	"groups.post.membersHint": "শুধুমাত্র যেসব ঠিকানা কোনো সদস্যের।",
-	"groups.post.dmarcNote": "প্রেরকের ডোমেইনকে DMARC পাস করতে হবে। যে মেইল ব্যর্থ হবে তা বাউন্সসহ প্রত্যাখ্যান করা হবে।",
+	"groups.post.dmarcNote": "প্রেরকের ডোমেইনকে DMARC পাস করতে হবে। যে মেইল ব্যর্থ হবে তা বাউন্সসহ প্রত্যাখ্যান করা হয়, অথবা আপনার ডোমেইন Resend বা Amazon SES-এর মাধ্যমে মেইল পেলে নীরবে বাদ দেওয়া হয়।",
 	"groups.back": "গ্রুপে ফিরে যান",
 	"groups.notFound": "এই গ্রুপটি আর নেই।",
 	"groups.settings": "সেটিংস",
@@ -3052,5 +3052,6 @@
 	"groups.delete": "গ্রুপ মুছুন",
 	"groups.deleteTitle": "এই গ্রুপটি মুছবেন?",
 	"groups.deleteConfirm": "এরপর {address} ঠিকানায় পাঠানো মেইল বাউন্স হবে। এটি পূর্বাবস্থায় ফেরানো যাবে না।",
-	"groups.deleteFailed": "গ্রুপ মুছে ফেলা যায়নি"
+	"groups.deleteFailed": "গ্রুপ মুছে ফেলা যায়নি",
+	"groups.localPartHint": "শুধুমাত্র অক্ষর, সংখ্যা এবং . _ % + -।"
 }

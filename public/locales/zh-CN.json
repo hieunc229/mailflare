@@ -2998,7 +2998,7 @@
 	"groups.post.orgHint": "仅限来自您自己域名的发件人。",
 	"groups.post.members": "仅限群组成员",
 	"groups.post.membersHint": "仅限属于成员的地址。",
-	"groups.post.dmarcNote": "发件人的域名必须通过 DMARC 验证。未通过的邮件将被拒收并退回。",
+	"groups.post.dmarcNote": "发件人的域名必须通过 DMARC 验证。未通过的邮件将被拒收并退回；如果您的域名通过 Resend 或 Amazon SES 接收邮件，则会被静默丢弃。",
 	"groups.back": "返回群组",
 	"groups.notFound": "此群组已不存在。",
 	"groups.settings": "设置",
@@ -3029,5 +3029,6 @@
 	"groups.delete": "删除群组",
 	"groups.deleteTitle": "删除此群组？",
 	"groups.deleteConfirm": "此后发送到 {address} 的邮件将被退回。此操作无法撤销。",
-	"groups.deleteFailed": "无法删除群组"
+	"groups.deleteFailed": "无法删除群组",
+	"groups.localPartHint": "仅限字母、数字以及 . _ % + - 字符。"
 }

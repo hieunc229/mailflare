@@ -1,7 +1,6 @@
-import { NextResponse } from "next/server";
 import { deleteGroup, getGroup, updateGroup } from "@/lib/groups/service";
 import { updateGroupSchema } from "@/lib/validators";
-import { readJson, requireGroupsAdmin, respond } from "../utils";
+import { readJson, requireGroupsAdmin, respond, validationError } from "../utils";
 
 type Context = { params: Promise<{ id: string }> };
 
@@ -16,7 +15,7 @@ export async function PATCH(request: Request, { params }: Context) {
 	const access = await requireGroupsAdmin(request, { mutation: true });
 	if (access.error) return access.error;
 	const parsed = updateGroupSchema.safeParse(await readJson(request));
-	if (!parsed.success) return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
+	if (!parsed.success) return validationError(parsed.error);
 	const { id } = await params;
 	return respond(() => updateGroup(access.env, access.db, access.user, id, parsed.data), { map: (group) => ({ group }) });
 }

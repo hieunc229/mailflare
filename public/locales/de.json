@@ -3021,7 +3021,7 @@
 	"groups.post.orgHint": "Nur Absender mit deinen eigenen Domains.",
 	"groups.post.members": "Nur Gruppenmitglieder",
 	"groups.post.membersHint": "Nur Adressen, die zu einem Mitglied gehören.",
-	"groups.post.dmarcNote": "Die Domain des Absenders muss DMARC bestehen. Nachrichten, die durchfallen, werden mit einer Unzustellbarkeitsmeldung abgelehnt.",
+	"groups.post.dmarcNote": "Die Domain des Absenders muss DMARC bestehen. Nachrichten, die durchfallen, werden mit einer Unzustellbarkeitsmeldung abgelehnt oder stillschweigend verworfen, wenn deine Domain über Resend oder Amazon SES empfängt.",
 	"groups.back": "Zurück zu Gruppen",
 	"groups.notFound": "Diese Gruppe existiert nicht mehr.",
 	"groups.settings": "Einstellungen",
@@ -3052,5 +3052,6 @@
 	"groups.delete": "Gruppe löschen",
 	"groups.deleteTitle": "Diese Gruppe löschen?",
 	"groups.deleteConfirm": "An {address} gesendete E-Mails werden danach zurückgewiesen. Dies kann nicht rückgängig gemacht werden.",
-	"groups.deleteFailed": "Die Gruppe konnte nicht gelöscht werden"
+	"groups.deleteFailed": "Die Gruppe konnte nicht gelöscht werden",
+	"groups.localPartHint": "Nur Buchstaben, Ziffern und . _ % + -"
 }
