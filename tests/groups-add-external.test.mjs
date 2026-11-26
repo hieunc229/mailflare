@@ -13,7 +13,7 @@ const stubs = {
 	"@tanstack/react-query": `
 		export function useQueryClient() { return { invalidateQueries() {} }; }
 		export function useQuery() { return { data: { candidates: [] }, isFetching: false, isError: false }; }
-		export function useMutation(options) { return { mutate(c) { globalThis.__added.push(c); options.onSuccess?.({}, c); }, isPending: false, isError: false }; }`,
+		export function useMutation(options) { return { mutate(c) { globalThis.__added.push(c); options.onSuccess?.(globalThis.__response ?? {}, c); }, isPending: false, isError: false }; }`,
 };
 const { AddMembers } = await loadComponent("src/app/(admin)/groups/[id]/add-members.tsx", stubs);
 const utils = await loadComponent("src/app/(admin)/groups/utils.ts", { "@/lib/auth/client": `export async function authFetch() {}` });
@@ -83,4 +83,16 @@ test("externalOption recognises plain addresses only, and the members body carri
 	assert.deepEqual(utils.memberBody({ kind: "user", id: "u1", name: "A", address: "a@x" }), { kind: "user", userId: "u1" });
 	assert.deepEqual(utils.memberBody({ kind: "mailbox", id: "m1", name: "A", address: "a@x" }), { kind: "mailbox", mailboxId: "m1" });
 	assert.equal(utils.MAX_EXTERNAL_MEMBERS, 100);
+});
+
+test("adding someone who unsubscribed from this group before tells the admin", async (t) => {
+	const container = await mount(t);
+	globalThis.__response = { added: [{}], warnings: [{ email: "pat@ext.com", reason: "previously_unsubscribed" }] };
+	t.after(() => { delete globalThis.__response; });
+	await type(container, "pat@ext.com");
+	await act(async () => { options(container)[0].dispatchEvent(new window.MouseEvent("mousedown", { bubbles: true, cancelable: true })); });
+	await act(async () => { container.querySelector('[data-testid="external-confirm"] button').click(); });
+	const warning = container.querySelector('[data-testid="resubscribed"]');
+	assert.ok(warning);
+	assert.match(warning.textContent, /groups\.resubscribed.*pat@ext\.com/);
 });
