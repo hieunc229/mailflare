@@ -124,3 +124,21 @@ test("ensurePersonalMailbox leaves an address that an alias already owns alone",
 	await app.ensurePersonalMailbox(globalThis.ownerEnv, db, { id: "u3", email: "billing@example.com", name: "Bill", role: "user" });
 	assert.equal(sqlite.prepare("SELECT COUNT(*) AS n FROM mailboxes WHERE user_id = 'u3'").get().n, 0);
 });
+
+test("every address route refuses an address a group already uses", async (t) => {
+	const { sqlite } = await ctx(t);
+	sqlite.exec("INSERT INTO mail_groups (id, domain_id, local_part, name, created_at, updated_at) VALUES ('g1', 'd1', 'team', 'Team', 1, 1)");
+	const expected = { error: "A group already uses this address" };
+	for (const [label, response] of [
+		["mailboxes", await app.mailboxesRoute.POST(post({ domainId: "d1", localPart: "te.am" }))],
+		["v1 mailboxes", await app.v1Mailboxes.POST(post({ domainId: "d1", localPart: "team" }))],
+		["aliases", await app.aliasesRoute.POST(post({ domainId: "d1", localPart: "team" }), idParams("m-admin"))],
+	]) {
+		assert.equal(response.status, 409, label);
+		assert.deepEqual(await response.json(), expected, label);
+	}
+	const actor = { id: "admin", canManageMailboxes: true, createdByUserId: null };
+	const account = await app.createAccountResponse(globalThis.ownerEnv, actor, { username: "team", password: "pw-long-enough-1", role: "user", domainId: "d1", aliases: [], useAllDomains: false });
+	assert.equal(account.status, 409);
+	assert.deepEqual(await account.json(), expected);
+});

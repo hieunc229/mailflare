@@ -46,6 +46,7 @@ export async function POST(request: Request) {
 	const owner = await findAddressOwner(db, domain.id, localPart);
 	if (owner === "mailbox") return NextResponse.json({ error: "Mailbox already exists" }, { status: 409 });
 	if (owner === "alias") return NextResponse.json({ error: "An alias already uses this address" }, { status: 409 });
+	if (owner === "group") return NextResponse.json({ error: "A group already uses this address" }, { status: 409 });
 	const id = newId("mbx");
 	await db.insert(mailboxes).values({ id, userId: ownerUserId, domainId: domain.id, localPart, displayName: parsed.data.displayName, type: mailboxType });
 	try {

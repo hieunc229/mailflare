@@ -553,6 +553,27 @@
         "CREATE TABLE \"contact_details\" (\n\t\"contact_id\" text PRIMARY KEY NOT NULL,\n\t\"details\" text DEFAULT '{}' NOT NULL,\n\t\"updated_at\" bigint NOT NULL\n);",
         "ALTER TABLE \"contact_details\" ADD CONSTRAINT \"contact_details_contact_id_contacts_id_fk\" FOREIGN KEY (\"contact_id\") REFERENCES \"public\".\"contacts\"(\"id\") ON DELETE cascade ON UPDATE no action;"
       ]
+    },
+    {
+      "name": "0027_mail_groups.sql",
+      "statements": [
+        "CREATE TABLE \"mail_groups\" (\n\t\"id\" text PRIMARY KEY NOT NULL,\n\t\"domain_id\" text NOT NULL,\n\t\"local_part\" text NOT NULL,\n\t\"name\" text NOT NULL,\n\t\"description\" text,\n\t\"who_can_post\" text DEFAULT 'anyone' NOT NULL,\n\t\"reply_to\" text DEFAULT 'sender' NOT NULL,\n\t\"disabled\" boolean DEFAULT false NOT NULL,\n\t\"created_by_user_id\" text,\n\t\"created_at\" bigint NOT NULL,\n\t\"updated_at\" bigint NOT NULL\n);",
+        "ALTER TABLE \"mail_groups\" ADD CONSTRAINT \"mail_groups_domain_id_domains_id_fk\" FOREIGN KEY (\"domain_id\") REFERENCES \"public\".\"domains\"(\"id\") ON DELETE cascade ON UPDATE no action;",
+        "ALTER TABLE \"mail_groups\" ADD CONSTRAINT \"mail_groups_created_by_user_id_users_id_fk\" FOREIGN KEY (\"created_by_user_id\") REFERENCES \"public\".\"users\"(\"id\") ON DELETE set null ON UPDATE no action;",
+        "CREATE UNIQUE INDEX \"mail_groups_address_idx\" ON \"mail_groups\" USING btree (\"domain_id\",\"local_part\");",
+        "CREATE INDEX \"mail_groups_created_by_idx\" ON \"mail_groups\" USING btree (\"created_by_user_id\");",
+        "CREATE TABLE \"mail_group_members\" (\n\t\"id\" text PRIMARY KEY NOT NULL,\n\t\"group_id\" text NOT NULL,\n\t\"kind\" text NOT NULL,\n\t\"user_id\" text,\n\t\"mailbox_id\" text,\n\t\"email\" text,\n\t\"can_send_as\" boolean DEFAULT false NOT NULL,\n\t\"created_by_user_id\" text,\n\t\"created_at\" bigint NOT NULL\n);",
+        "CREATE UNIQUE INDEX \"mail_group_members_group_user_idx\" ON \"mail_group_members\" USING btree (\"group_id\",\"user_id\");",
+        "CREATE UNIQUE INDEX \"mail_group_members_group_mailbox_idx\" ON \"mail_group_members\" USING btree (\"group_id\",\"mailbox_id\");",
+        "CREATE UNIQUE INDEX \"mail_group_members_group_email_idx\" ON \"mail_group_members\" USING btree (\"group_id\",\"email\");",
+        "CREATE INDEX \"mail_group_members_user_idx\" ON \"mail_group_members\" USING btree (\"user_id\");",
+        "CREATE INDEX \"mail_group_members_mailbox_idx\" ON \"mail_group_members\" USING btree (\"mailbox_id\");",
+        "CREATE INDEX \"mail_group_members_created_by_idx\" ON \"mail_group_members\" USING btree (\"created_by_user_id\");",
+        "ALTER TABLE \"mail_group_members\" ADD CONSTRAINT \"mail_group_members_group_id_mail_groups_id_fk\" FOREIGN KEY (\"group_id\") REFERENCES \"public\".\"mail_groups\"(\"id\") ON DELETE cascade ON UPDATE no action;",
+        "ALTER TABLE \"mail_group_members\" ADD CONSTRAINT \"mail_group_members_user_id_users_id_fk\" FOREIGN KEY (\"user_id\") REFERENCES \"public\".\"users\"(\"id\") ON DELETE cascade ON UPDATE no action;",
+        "ALTER TABLE \"mail_group_members\" ADD CONSTRAINT \"mail_group_members_mailbox_id_mailboxes_id_fk\" FOREIGN KEY (\"mailbox_id\") REFERENCES \"public\".\"mailboxes\"(\"id\") ON DELETE cascade ON UPDATE no action;",
+        "ALTER TABLE \"mail_group_members\" ADD CONSTRAINT \"mail_group_members_created_by_user_id_users_id_fk\" FOREIGN KEY (\"created_by_user_id\") REFERENCES \"public\".\"users\"(\"id\") ON DELETE set null ON UPDATE no action;"
+      ]
     }
   ]
 }
