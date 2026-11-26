@@ -158,6 +158,7 @@ and the DNS page shows what to set by hand.
 | `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_REGION` | unset | Amazon SES credentials; override ones saved in the app |
 | `INBOUND_WEBHOOK_SECRET` | unset | Enables `/api/inbound` for the relay Worker |
 | `INBOUND_REQUIRE_SIGNED_HEADERS` | unset | Set to `1` once the relay Worker is updated: refuses relays that do not sign the header map with a timestamp (older relays stay accepted without it, and their requests can be replayed) |
+| `MAILFLARE_ENCRYPTION_KEY` | unset | Key for credentials Mailflare stores encrypted (external IMAP/POP3 account passwords). Generate once with `openssl rand -base64 32` — or `npx wrangler secret put MAILFLARE_ENCRYPTION_KEY` on Workers — and keep it: without it those passwords cannot be stored or read, and nothing falls back to plaintext. Changing it makes passwords already stored unreadable, so re-enter them after a rotation |
 | `TURNSTILE_SECRET_KEY` | unset | Bot protection on login and reset forms (`NEXT_PUBLIC_TURNSTILE_SITE_KEY` at build time) |
 | `VAPID_PUBLIC_KEY` | unset | Public Web Push application-server key |
 | `VAPID_PRIVATE_KEY` | unset | Secret Web Push application-server key |

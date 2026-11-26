@@ -5,6 +5,11 @@ import { isValidHostname, normalizeHostname } from "@/lib/domains/utils";
 import { getEmailAddress, splitEmailAddressList } from "@/lib/email/address";
 import { normalizeRecipientLocalPart } from "@/lib/email/recipient-address";
 import { DEFAULT_FOLDER_COLOR, FOLDER_COLOR_VALUES } from "@/lib/folders/colors";
+import {
+	DEFAULT_EXTERNAL_ACCOUNT_TLS_MODE,
+	EXTERNAL_ACCOUNT_PROTOCOLS,
+	EXTERNAL_ACCOUNT_TLS_MODES,
+} from "@/lib/external-accounts/protocols";
 import { MAX_FOLLOW_UP_DAYS } from "@/lib/follow-ups/follow-up-utils";
 import { isValidBase64 } from "@/lib/email/base64";
 import { MAIL_TYPE_BULK, MAIL_TYPE_UNSAFE_ACTION } from "@/lib/email/mail-type-rule";
@@ -545,3 +550,46 @@ export const webhookUpdateSchema = z.object({
 	maxAttempts: z.number().int().min(1).max(10).optional(),
 	rotateSecret: z.literal(true).optional(),
 });
+
+/** IPv4 literal, allowed alongside hostnames for a mail server on a LAN (see externalAccountHostSchema). */
+const IPV4_PATTERN = /^(?:(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)\.){3}(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)$/;
+
+/**
+ * A host a poller can dial: a DNS name or an IPv4 literal. No scheme, port or path — those have their own
+ * fields — and no IPv6 literal yet, which needs brackets to be unambiguous in a URL.
+ */
+const externalAccountHostSchema = z
+	.string()
+	.trim()
+	.min(1)
+	.max(253)
+	.transform(normalizeHostname)
+	.refine((host) => IPV4_PATTERN.test(host) || isValidHostname(host), {
+		message: "Enter a mail server hostname such as imap.example.com",
+	});
+
+/** Shared by create and update; a password is required to create and optional (absent = unchanged) to update. */
+const externalAccountFields = {
+	protocol: z.enum(EXTERNAL_ACCOUNT_PROTOCOLS),
+	host: externalAccountHostSchema,
+	port: z.number().int().min(1).max(65535),
+	tlsMode: z.enum(EXTERNAL_ACCOUNT_TLS_MODES).default(DEFAULT_EXTERNAL_ACCOUNT_TLS_MODE),
+	username: z.string().trim().min(1).max(320),
+	// A mail password, not a Mailflare one: any character, long, never trimmed.
+	password: z.string().min(1).max(1024),
+	enabled: z.boolean().default(true),
+};
+
+export const externalAccountSchema = z.object(externalAccountFields);
+
+export const updateExternalAccountSchema = z
+	.object({
+		protocol: externalAccountFields.protocol.optional(),
+		host: externalAccountHostSchema.optional(),
+		port: externalAccountFields.port.optional(),
+		tlsMode: z.enum(EXTERNAL_ACCOUNT_TLS_MODES).optional(),
+		username: externalAccountFields.username.optional(),
+		password: externalAccountFields.password.optional(),
+		enabled: z.boolean().optional(),
+	})
+	.refine((value) => Object.values(value).some((item) => item !== undefined), { message: "Nothing to update" });

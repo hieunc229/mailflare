@@ -78,6 +78,12 @@ interface CloudflareEnv {
 	MAILFLARE_RUNTIME?: "node" | "vercel";
 	/** Shared secret the Cloudflare email relay signs inbound webhooks with (self-hosted only). */
 	INBOUND_WEBHOOK_SECRET?: string;
+	/**
+	 * Operator key for credentials Mailflare stores encrypted (external IMAP/POP3 account passwords).
+	 * HKDF-derived per purpose (see src/lib/external-accounts/crypto.ts); unset means those features refuse
+	 * to store or read a password rather than falling back to plaintext.
+	 */
+	MAILFLARE_ENCRYPTION_KEY?: string;
 	/** "1" refuses relays that do not sign the header map with a timestamp (relay Worker v2). */
 	INBOUND_REQUIRE_SIGNED_HEADERS?: string;
 	/** Cloudflare account id, needed for the Email Sending REST API off Workers. */

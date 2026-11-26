@@ -553,6 +553,17 @@
         "CREATE TABLE \"contact_details\" (\n\t\"contact_id\" text PRIMARY KEY NOT NULL,\n\t\"details\" text DEFAULT '{}' NOT NULL,\n\t\"updated_at\" bigint NOT NULL\n);",
         "ALTER TABLE \"contact_details\" ADD CONSTRAINT \"contact_details_contact_id_contacts_id_fk\" FOREIGN KEY (\"contact_id\") REFERENCES \"public\".\"contacts\"(\"id\") ON DELETE cascade ON UPDATE no action;"
       ]
+    },
+    {
+      "name": "0035_external_accounts.sql",
+      "statements": [
+        "CREATE TABLE \"external_accounts\" (\n\t\"id\" text PRIMARY KEY NOT NULL,\n\t\"mailbox_id\" text NOT NULL,\n\t\"user_id\" text NOT NULL,\n\t\"protocol\" text NOT NULL,\n\t\"host\" text NOT NULL,\n\t\"port\" bigint NOT NULL,\n\t\"tls_mode\" text DEFAULT 'implicit-tls' NOT NULL,\n\t\"username\" text NOT NULL,\n\t\"password_encrypted\" text NOT NULL,\n\t\"enabled\" boolean DEFAULT true NOT NULL,\n\t\"last_synced_at\" bigint,\n\t\"last_error\" text,\n\t\"sync_cursor\" text,\n\t\"created_at\" bigint NOT NULL,\n\t\"updated_at\" bigint NOT NULL\n);",
+        "ALTER TABLE \"external_accounts\" ADD CONSTRAINT \"external_accounts_mailbox_id_mailboxes_id_fk\" FOREIGN KEY (\"mailbox_id\") REFERENCES \"public\".\"mailboxes\"(\"id\") ON DELETE cascade ON UPDATE no action;",
+        "ALTER TABLE \"external_accounts\" ADD CONSTRAINT \"external_accounts_user_id_users_id_fk\" FOREIGN KEY (\"user_id\") REFERENCES \"public\".\"users\"(\"id\") ON DELETE cascade ON UPDATE no action;",
+        "CREATE UNIQUE INDEX \"external_accounts_mailbox_host_user_idx\" ON \"external_accounts\" USING btree (\"mailbox_id\",\"host\",\"username\");",
+        "CREATE INDEX \"external_accounts_poll_idx\" ON \"external_accounts\" USING btree (\"enabled\",\"last_synced_at\");",
+        "CREATE INDEX \"external_accounts_user_idx\" ON \"external_accounts\" USING btree (\"user_id\");"
+      ]
     }
   ]
 }

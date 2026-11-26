@@ -879,6 +879,60 @@ export const mailboxSenderPreferences = sqliteTable(
 	],
 );
 
+/**
+ * An external IMAP/POP3 account a mailbox pulls mail from (fetchmail-style). The pollers themselves are later
+ * slices; this table only holds the credentials and the state a poller needs.
+ *
+ * `password_encrypted` is the output of `encryptSecret` (src/lib/external-accounts/crypto.ts): base64 of a
+ * 96-bit nonce, the AES-256-GCM ciphertext and its 16-byte tag. Nothing in the app ever reads it back into a
+ * response, a log or an export; only the future poller decrypts it, in memory.
+ */
+export const externalAccounts = sqliteTable(
+	"external_accounts",
+	{
+		id: text("id").primaryKey(),
+		// The account dies with the mailbox it fetches into, and with the user who owns that mailbox.
+		mailboxId: text("mailbox_id")
+			.notNull()
+			.references(() => mailboxes.id, { onDelete: "cascade" }),
+		/** Redundant (the mailbox already has an owner) but indexed, like mailboxes.userId, so a poller can scope by owner. */
+		userId: text("user_id")
+			.notNull()
+			.references(() => users.id, { onDelete: "cascade" }),
+		protocol: text("protocol", { enum: ["imap", "pop3"] }).notNull(),
+		host: text("host").notNull(),
+		port: integer("port").notNull(),
+		/** implicit-tls (993/995) and starttls upgrade the connection; none is plaintext and only for localhost-style hosts. */
+		tlsMode: text("tls_mode", { enum: ["implicit-tls", "starttls", "none"] })
+			.notNull()
+			.default("implicit-tls"),
+		username: text("username").notNull(),
+		/** AES-256-GCM, see the table comment. Never selected into a response. */
+		passwordEncrypted: text("password_encrypted").notNull(),
+		/** Off keeps the row (and its state) but the poller skips it. */
+		enabled: bool("enabled").notNull().default(true),
+		/** Last completed sync; null means never fetched. */
+		lastSyncedAt: timestamp("last_synced_at"),
+		/** The last fetch failure, shown to the user and cleared on the next success. Never holds a credential. */
+		lastError: text("last_error"),
+		/**
+		 * Protocol cursor as JSON, so a poller can keep whatever it needs without a migration:
+		 * IMAP `{"uidValidity":123,"lastUid":456}`, POP3 `{"uidls":["…"],"lastCheckedAt":"…"}` (a capped,
+		 * hashed list of already-imported UIDLs). Null until the first sync.
+		 */
+		syncCursor: text("sync_cursor"),
+		createdAt: timestamp("created_at").notNull().$defaultFn(() => new Date()),
+		updatedAt: timestamp("updated_at").notNull().$defaultFn(() => new Date()),
+	},
+	(t) => [
+		// The same host and user cannot be fetched twice into one mailbox.
+		uniqueIndex("external_accounts_mailbox_host_user_idx").on(t.mailboxId, t.host, t.username),
+		// The future poller scan: enabled accounts, least recently synced first.
+		index("external_accounts_poll_idx").on(t.enabled, t.lastSyncedAt),
+		index("external_accounts_user_idx").on(t.userId),
+	],
+);
+
 export const emailTemplates = sqliteTable(
 	"email_templates",
 	{
@@ -1789,6 +1843,7 @@ export const schema = {
 	mailboxAliases,
 	autoReplyDeliveries,
 	mailboxAccess,
+	externalAccounts,
 	contacts,
 	contactDetails,
 	folders,
