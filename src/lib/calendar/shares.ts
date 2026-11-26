@@ -84,6 +84,19 @@ export async function listVisibleCalendars(db: Db, user: Actor): Promise<Calenda
 	return [...own, ...shared];
 }
 
+/** A calendar shared with a user as `read` or better, with what a CalDAV home lists of it: the grant's id (the `shared-<id>` collection name, D-5, D-12) and the collection's own properties. */
+export type SharedGrant = { grantId: string; calendarId: string; role: "read" | "edit" | "manage"; ownerId: string; ownerName: string; displayName: string | null; color: string | null; description: string | null; sortOrder: number | null };
+
+/** What a CalDAV home lists besides the user's own calendars (D-12): grants of `read` or better, owner active with Calendar on; a `freebusy` grant is not a calendar. Oldest first. The role of one request is decided by `getCalendarAccess`, never by this listing. */
+export async function listSharedGrants(db: Db, userId: string): Promise<SharedGrant[]> {
+	const rows = await db.select({ grantId: calendarShares.id, calendarId: davCollections.id, role: calendarShares.role, ownerId: users.id, ownerName: users.name, ownerEmail: users.email, displayName: davCollections.displayName, color: davCollections.color, description: davCollections.description, sortOrder: davCollections.sortOrder }).from(calendarShares)
+		.innerJoin(davCollections, eq(davCollections.id, calendarShares.calendarId))
+		.innerJoin(users, eq(users.id, davCollections.userId))
+		.where(and(eq(calendarShares.granteeUserId, userId), inArray(calendarShares.role, ["read", "edit", "manage"]), eq(davCollections.kind, "calendar"), eq(users.disabled, false), eq(users.calendarEnabled, true)))
+		.orderBy(asc(calendarShares.createdAt), asc(calendarShares.id)).limit(MAX_GRANTS_READ);
+	return rows.map(({ ownerName, ownerEmail, role, ...row }) => ({ ...row, role: role as SharedGrant["role"], ownerName: ownerName || ownerEmail }));
+}
+
 /**
  * Conditions selecting events of the given shared calendars: `calendar_id IN (...)`, plus the owner's events without a calendar
  * for a default calendar (their id is the owner's). Chunked so each statement binds at most 2 x SCOPE_CHUNK ids; the caller runs

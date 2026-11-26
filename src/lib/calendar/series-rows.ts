@@ -1,6 +1,7 @@
 import { and, eq, gte, isNotNull, or } from "drizzle-orm";
 import type { getDb } from "@/db";
-import { calendarEvents } from "@/db/schema";
+import { calendarEvents, davCalendarObjects } from "@/db/schema";
+import { calendarCollectionId } from "@/lib/dav/changes";
 
 type Db = ReturnType<typeof getDb>;
 
@@ -47,6 +48,15 @@ export function moveSeriesStatement(db: Db, userId: string, masterId: string, ca
 	return db.update(calendarEvents).set({ calendarId }).where(and(eq(calendarEvents.userId, userId), or(eq(calendarEvents.id, masterId), eq(calendarEvents.davObjectId, masterId))));
 }
 
+/**
+ * The statements that move a resource to another calendar: the rows, then its stored CalDAV resource, which names the collection it is
+ * served from (unique per collection by name and UID, so it must follow in the same batch).
+ */
+export function moveSeriesStatements(db: Db, userId: string, masterId: string, calendarId: string | null) {
+	return [moveSeriesStatement(db, userId, masterId, calendarId), db.update(davCalendarObjects).set({ collectionId: calendarId ?? calendarCollectionId(userId) }).where(eq(davCalendarObjects.id, masterId))];
+}
+
+/** Only the rows: a caller that has to keep the stored CalDAV resource in step (a web move does) uses `moveSeriesStatements` in its batch. */
 export async function moveSeriesToCalendar(db: Db, userId: string, masterId: string, calendarId: string | null): Promise<void> {
 	await moveSeriesStatement(db, userId, masterId, calendarId);
 }

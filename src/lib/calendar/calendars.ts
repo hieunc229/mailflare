@@ -1,7 +1,7 @@
 import { and, asc, count, eq, inArray, isNull, ne, or, sql, type SQL } from "drizzle-orm";
 import type { getDb } from "@/db";
 import { calendarEvents, calendarShares, davChanges, davCollections, davSyncState } from "@/db/schema";
-import { excluded, greatest, matchNothing } from "@/db/sql";
+import { matchNothing } from "@/db/sql";
 import { calendarCollectionId } from "@/lib/dav/changes";
 import { DEFAULT_FOLDER_COLOR, FOLDER_COLOR_VALUES } from "@/lib/folders/colors";
 import { newId } from "@/lib/ids";
@@ -110,9 +110,8 @@ export async function updateCalendar(db: Db, userId: string, calendarId: string,
 /**
  * Deletes a calendar and its events, in one batch. The events go first, by statement, so the change log writes a destroyed entry
  * for each (a foreign-key cascade would not fire the triggers on MySQL); a series goes with its override rows even when one lost
- * its calendar id (deleted by master id, in chunks, never by a subquery on the same table). The log rows written under the
- * calendar are then filed under the user's default calendar, which is what a phone sees as `default/` until CalDAV serves each
- * calendar itself, so the phone still learns of the deletions. The collection row cascades its grants.
+ * its calendar id (deleted by master id, in chunks, never by a subquery on the same table). The calendar is its own CalDAV collection:
+ * it disappears from the phone's home, so its log and sync state go with it. The collection row cascades its grants.
  */
 export async function deleteCalendar(db: Db, userId: string, calendarId: string): Promise<CalendarDeleteResult> {
 	const defaultId = calendarCollectionId(userId);
@@ -121,20 +120,11 @@ export async function deleteCalendar(db: Db, userId: string, calendarId: string)
 	if (!existing) return fail(404, "Calendar not found");
 	const [{ events }] = await db.select({ events: count() }).from(calendarEvents).where(and(eq(calendarEvents.calendarId, calendarId), eq(calendarEvents.userId, userId)));
 	const masters = (await db.select({ id: calendarEvents.id }).from(calendarEvents).where(and(eq(calendarEvents.calendarId, calendarId), eq(calendarEvents.userId, userId), eq(calendarEvents.davObjectId, calendarEvents.id)))).map((row) => row.id);
-	const [calendarState] = await db.select({ floor: davSyncState.floor }).from(davSyncState).where(eq(davSyncState.collectionId, calendarId)).limit(1);
 	const statements: unknown[] = [];
 	for (let index = 0; index < masters.length; index += DELETE_CHUNK) statements.push(db.delete(calendarEvents).where(and(eq(calendarEvents.userId, userId), inArray(calendarEvents.davObjectId, masters.slice(index, index + DELETE_CHUNK)))));
 	statements.push(
 		db.delete(calendarEvents).where(and(eq(calendarEvents.calendarId, calendarId), eq(calendarEvents.userId, userId))),
-		db.update(davChanges).set({ collectionId: defaultId }).where(eq(davChanges.collectionId, calendarId)),
-	);
-	// The default calendar's floor is the highest among the user's calendars, so removing this one must not lower it: an offline
-	// phone whose token lies between the floors would otherwise be accepted after the rows that say what it missed are pruned.
-	if (calendarState && Number(calendarState.floor) > 0) {
-		statements.push(db.insert(davSyncState).values({ collectionId: defaultId, epoch: crypto.randomUUID(), floor: Number(calendarState.floor) })
-			.onConflictDoUpdate({ target: davSyncState.collectionId, set: { floor: greatest(sql`${davSyncState.floor}`, excluded(davSyncState.floor)) } }));
-	}
-	statements.push(
+		db.delete(davChanges).where(eq(davChanges.collectionId, calendarId)),
 		db.delete(davSyncState).where(eq(davSyncState.collectionId, calendarId)),
 		db.delete(davCollections).where(and(eq(davCollections.id, calendarId), eq(davCollections.userId, userId))),
 	);

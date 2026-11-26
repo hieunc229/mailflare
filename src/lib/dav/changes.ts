@@ -1,6 +1,6 @@
-import { and, eq, gt, inArray, or, sql, type AnyColumn, type SQL } from "drizzle-orm";
+import { and, eq, gt, inArray, sql, type AnyColumn, type SQL } from "drizzle-orm";
 import { getDb } from "@/db";
-import { davChanges, davCollections, davSyncState } from "@/db/schema";
+import { davChanges, davSyncState } from "@/db/schema";
 import { excluded, greatest } from "@/db/sql";
 import { isMissingTableError } from "@/lib/database-errors";
 
@@ -12,24 +12,6 @@ import { isMissingTableError } from "@/lib/database-errors";
 
 export const calendarCollectionId = (userId: string) => `cal:${userId}`;
 export const addressBookCollectionId = (userId: string) => `card:${userId}`;
-
-/**
- * The collection ids whose change-log rows make up `collectionId`'s log. The default calendar `cal:<user>` is what a phone sees
- * as `default/` and lists every event of the user, so its log covers all of the user's calendar collections (events in other
- * calendars are logged under their own collection ids by the triggers); any other collection is itself. Sequence numbers are
- * global, so one token and one ETag order changes across them. This holds until CalDAV serves each calendar as its own
- * collection (CS-4). One query, at most 50 ids (the calendar cap); readers match them with `IN (...)` so the
- * `(collection_id, seq)` index is used.
- */
-export async function calendarScopeIds(env: Pick<CloudflareEnv, "DB">, collectionId: string): Promise<string[]> {
-	if (!collectionId.startsWith("cal:")) return [collectionId];
-	const rows = await getDb(env).select({ id: davCollections.id, userId: davCollections.userId }).from(davCollections)
-		.where(and(eq(davCollections.kind, "calendar"), or(eq(davCollections.userId, collectionId.slice(4)), eq(davCollections.id, collectionId))));
-	const self = rows.find((row) => row.id === collectionId);
-	// A calendar that is not its owner's default one (`cal:<owner>`) is only itself.
-	if (self && self.id !== calendarCollectionId(self.userId)) return [collectionId];
-	return [...new Set([collectionId, ...rows.map((row) => row.id)])];
-}
 
 export const collectionScope = (column: AnyColumn, ids: string[]): SQL => (ids.length === 1 ? eq(column, ids[0]) : inArray(column, ids));
 
@@ -70,33 +52,84 @@ export function parseSyncToken(token: string): SyncToken | null {
 	return { collectionId, epoch: parts[4], seq };
 }
 
-/** The collection's sync epoch and pruning floor (for the default calendar the highest among its scope); the epoch is generated on first use and never changes after. */
-export async function ensureSyncState(env: Pick<CloudflareEnv, "DB">, collectionId: string, scope?: string[]): Promise<{ epoch: string; floor: number }> {
+/**
+ * A sync epoch. A calendar's is a version 8 (custom) UUID: until CalDAV served each calendar as its own collection (spec F9 CS-4) the
+ * log of `default/` covered every calendar of the user, so a token from then must not be honoured now (the phone still holds events
+ * that `default/` no longer lists). `ensureSyncState` replaces an older (random, version 4) calendar epoch by one of this kind, so the
+ * old token is refused as an unknown epoch: the clean RFC 6578 403 `valid-sync-token` and a full resync (ETags are unchanged, so
+ * nothing that is still the same is downloaded again). No migration is needed and the token keeps its shape.
+ */
+const newEpoch = (collectionId: string) => {
+	const id = crypto.randomUUID();
+	return collectionId.startsWith("cal:") ? `${id.slice(0, 14)}8${id.slice(15)}` : id;
+};
+const currentEpoch = (collectionId: string, epoch: string) => !collectionId.startsWith("cal:") || epoch[14] === "8";
+
+/** The collection's sync epoch and pruning floor; the epoch is generated on first use and never changes after (but see `newEpoch`). */
+export async function ensureSyncState(env: Pick<CloudflareEnv, "DB">, collectionId: string): Promise<{ epoch: string; floor: number }> {
 	const db = getDb(env);
-	const ids = scope ?? await calendarScopeIds(env, collectionId);
-	const floor = ids.length > 1 ? sql<number>`coalesce((select max(${davSyncState.floor}) from ${davSyncState} where ${collectionScope(davSyncState.collectionId, ids)}), 0)` : davSyncState.floor;
-	const read = async () => (await db.select({ epoch: davSyncState.epoch, floor }).from(davSyncState).where(eq(davSyncState.collectionId, collectionId)).limit(1))[0];
-	const existing = await read();
+	const read = async () => (await db.select({ epoch: davSyncState.epoch, floor: davSyncState.floor }).from(davSyncState).where(eq(davSyncState.collectionId, collectionId)).limit(1))[0];
+	let existing = await read();
+	if (existing && !currentEpoch(collectionId, existing.epoch)) {
+		// Conditional on the old value, so two requests renewing at once agree on the winner's epoch.
+		await db.update(davSyncState).set({ epoch: newEpoch(collectionId) }).where(and(eq(davSyncState.collectionId, collectionId), eq(davSyncState.epoch, existing.epoch)));
+		existing = await read();
+	}
 	if (existing) return { epoch: existing.epoch, floor: Number(existing.floor) };
-	const [made] = await db.insert(davSyncState).values({ collectionId, epoch: crypto.randomUUID(), floor: 0 }).onConflictDoNothing().returning();
-	// A collection with no siblings has floor 0 for the row just made; otherwise (or after losing the race) read it back.
-	if (made && ids.length === 1) return { epoch: made.epoch, floor: 0 };
+	const [made] = await db.insert(davSyncState).values({ collectionId, epoch: newEpoch(collectionId), floor: 0 }).onConflictDoNothing().returning();
+	if (made) return { epoch: made.epoch, floor: 0 };
 	const created = (await read())!;
 	return { epoch: created.epoch, floor: Number(created.floor) };
 }
 
-/** The newest change position of the scope: the largest of each collection's own newest (an index lookup per collection), or the floor. */
-async function newestSeq(env: Pick<CloudflareEnv, "DB">, ids: string[], floor: number): Promise<number> {
-	const rows = await getDb(env).select({ seq: sql<number | null>`max(${davChanges.seq})` }).from(davChanges).where(collectionScope(davChanges.collectionId, ids)).groupBy(davChanges.collectionId);
-	// After a prune an empty log still has a position: the floor, so the token handed out is never already stale.
-	return Math.max(floor, ...rows.map((row) => Number(row.seq ?? 0)));
+/** The newest change position of the collection (an index lookup), or the floor: after a prune an empty log still has a position, so the token handed out is never already stale. */
+async function newestSeq(env: Pick<CloudflareEnv, "DB">, collectionId: string, floor: number): Promise<number> {
+	const [row] = await getDb(env).select({ seq: sql<number | null>`max(${davChanges.seq})` }).from(davChanges).where(eq(davChanges.collectionId, collectionId));
+	return Math.max(floor, Number(row?.seq ?? 0));
 }
 
 /** The epoch (created on first use, so a fresh collection has its state row before the position is taken) and the position to put in the collection's sync token / CTag right now. */
 export async function syncPosition(env: Pick<CloudflareEnv, "DB">, collectionId: string): Promise<{ epoch: string; seq: number }> {
-	const ids = await calendarScopeIds(env, collectionId);
-	const { epoch, floor } = await ensureSyncState(env, collectionId, ids);
-	return { epoch, seq: await newestSeq(env, ids, floor) };
+	const { epoch, floor } = await ensureSyncState(env, collectionId);
+	return { epoch, seq: await newestSeq(env, collectionId, floor) };
+}
+
+/** Ids per statement when reading the positions of many collections: well under D1's 100 bound parameters. */
+const POSITION_CHUNK = 90;
+/** State rows per insert (three bound values each). */
+const STATE_ROWS_PER_INSERT = 25;
+
+/**
+ * `syncPosition` for many collections in a handful of statements (a calendar home lists up to 550): the state rows in chunks, the
+ * missing ones created together, and the newest change of each collection in one grouped read per chunk.
+ */
+export async function syncPositions(env: Pick<CloudflareEnv, "DB">, collectionIds: string[]): Promise<Map<string, { epoch: string; seq: number }>> {
+	const db = getDb(env);
+	const states = new Map<string, { epoch: string; floor: number }>();
+	const readStates = async (ids: string[]) => {
+		for (let i = 0; i < ids.length; i += POSITION_CHUNK) {
+			for (const row of await db.select().from(davSyncState).where(inArray(davSyncState.collectionId, ids.slice(i, i + POSITION_CHUNK)))) states.set(row.collectionId, { epoch: row.epoch, floor: Number(row.floor) });
+		}
+	};
+	await readStates(collectionIds);
+	const stale = [...states].filter(([id, state]) => !currentEpoch(id, state.epoch));
+	for (const [id, state] of stale) {
+		await db.update(davSyncState).set({ epoch: newEpoch(id) }).where(and(eq(davSyncState.collectionId, id), eq(davSyncState.epoch, state.epoch)));
+		states.delete(id);
+	}
+	const missing = collectionIds.filter((id) => !states.has(id));
+	for (let i = 0; i < missing.length; i += STATE_ROWS_PER_INSERT) await db.insert(davSyncState).values(missing.slice(i, i + STATE_ROWS_PER_INSERT).map((collectionId) => ({ collectionId, epoch: newEpoch(collectionId), floor: 0 }))).onConflictDoNothing();
+	// A concurrent request may have created a row first (its epoch wins), so what was missing is read back.
+	if (missing.length) await readStates(missing);
+	const newest = new Map<string, number>();
+	for (let i = 0; i < collectionIds.length; i += POSITION_CHUNK) {
+		const rows = await db.select({ id: davChanges.collectionId, seq: sql<number | null>`max(${davChanges.seq})` }).from(davChanges).where(inArray(davChanges.collectionId, collectionIds.slice(i, i + POSITION_CHUNK))).groupBy(davChanges.collectionId);
+		for (const row of rows) newest.set(row.id, Number(row.seq ?? 0));
+	}
+	return new Map(collectionIds.map((id) => {
+		const state = states.get(id)!;
+		return [id, { epoch: state.epoch, seq: Math.max(state.floor, newest.get(id) ?? 0) }];
+	}));
 }
 
 /** Position to put in the collection's sync token / CTag right now. */
@@ -118,19 +151,18 @@ export type DavChanges = { changes: DavChange[]; hasMore: boolean; seq: number; 
 export async function changesSince(env: Pick<CloudflareEnv, "DB">, collectionId: string, token: string): Promise<DavChanges | "invalid"> {
 	const parsed = parseSyncToken(token);
 	if (!parsed || parsed.collectionId !== collectionId) return "invalid";
-	const ids = await calendarScopeIds(env, collectionId);
-	const state = await ensureSyncState(env, collectionId, ids);
+	const state = await ensureSyncState(env, collectionId);
 	const floor = Number(state.floor);
 	if (parsed.epoch !== state.epoch || parsed.seq < floor) return "invalid";
 	const rows = await getDb(env)
 		.select({ seq: davChanges.seq, objectKey: davChanges.objectKey, type: davChanges.changeType, name: davChanges.resourceName })
 		.from(davChanges)
-		.where(and(collectionScope(davChanges.collectionId, ids), gt(davChanges.seq, parsed.seq)))
+		.where(and(eq(davChanges.collectionId, collectionId), gt(davChanges.seq, parsed.seq)))
 		// `seq + 0` is the same order but not the table's rowid order, so the planner reads the matching collections through
 		// `dav_changes_collection_seq_idx` (and sorts that small result) instead of walking every user's rows after the token.
 		.orderBy(sql`${davChanges.seq} + 0`)
 		.limit(MAX_SYNC_CHANGES + 1);
-	if (!rows.length && parsed.seq > (await newestSeq(env, ids, floor))) return "invalid";
+	if (!rows.length && parsed.seq > (await newestSeq(env, collectionId, floor))) return "invalid";
 	const hasMore = rows.length > MAX_SYNC_CHANGES;
 	const page = hasMore ? rows.slice(0, MAX_SYNC_CHANGES) : rows;
 	const latest = new Map<string, DavChange>();
@@ -146,15 +178,13 @@ export async function changesSince(env: Pick<CloudflareEnv, "DB">, collectionId:
 /** ETag source: the newest change seq of each object. Chunked under D1's 100 bound parameters. */
 export async function etagSeqs(env: Pick<CloudflareEnv, "DB">, collectionId: string, objectKeys: string[]): Promise<Map<string, number>> {
 	const db = getDb(env);
-	const ids = await calendarScopeIds(env, collectionId);
-	// Keys and collection ids share D1's 100 bound parameters.
-	const chunk = Math.max(10, Math.min(DELETE_CHUNK, 95 - ids.length));
+	const chunk = DELETE_CHUNK;
 	const result = new Map<string, number>();
 	for (let i = 0; i < objectKeys.length; i += chunk) {
 		const rows = await db
 			.select({ key: davChanges.objectKey, seq: sql<number>`max(${davChanges.seq})` })
 			.from(davChanges)
-			.where(and(collectionScope(davChanges.collectionId, ids), inArray(davChanges.objectKey, objectKeys.slice(i, i + chunk))))
+			.where(and(eq(davChanges.collectionId, collectionId), inArray(davChanges.objectKey, objectKeys.slice(i, i + chunk))))
 			.groupBy(davChanges.objectKey);
 		for (const row of rows) result.set(row.key, Number(row.seq));
 	}

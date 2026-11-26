@@ -14,7 +14,7 @@ import { EVENT_FLAGS_ERROR, resolveEventFlags } from "@/lib/calendar/event-flags
 import { normalizeRepeatInterval, normalizeRepeatWeek, normalizeRepeatWeekday, parseCalendarOccurrenceId, parseCalendarRepeatDays, parseExcludedOccurrences } from "@/lib/calendar/recurrence";
 import { CUSTOM_DAY_LOCKED, editedTimeZone, endLegacySeries, resolveRepeat, shiftCustomSeries } from "@/lib/calendar/repeat-fields";
 import { limitRrule, rruleEndedBefore } from "@/lib/calendar/rrule";
-import { deleteOverridesFrom, deleteSeriesRows, moveSeriesStatement, shiftOverrides, splitSeriesRows, splitSeriesStatements } from "@/lib/calendar/series-rows";
+import { deleteOverridesFrom, deleteSeriesRows, moveSeriesStatements, shiftOverrides, splitSeriesRows, splitSeriesStatements } from "@/lib/calendar/series-rows";
 import { newId } from "@/lib/ids";
 import { getRequestTimeZone } from "@/lib/time/utils";
 import { authorizeCalendarRequest, calendarKeyCanSendInvitations } from "@/lib/calendar/api-auth";
@@ -120,7 +120,7 @@ export async function PATCH(request: Request, { params }: CalendarEventRoutePara
 		const insertMoved = db.insert(calendarEvents).values(moved);
 		const excludeOriginal = db.update(calendarEvents).set({ excludedOccurrences: JSON.stringify(newExcluded), eventSequence: seriesSequence, updatedAt: now }).where(eq(calendarEvents.id, existing.id));
 		if (moveTo !== undefined) {
-			const refused = await batched([insertMoved, excludeOriginal, moveSeriesStatement(db, ownerId, existing.id, moveTo)]);
+			const refused = await batched([insertMoved, excludeOriginal, ...moveSeriesStatements(db, ownerId, existing.id, moveTo)]);
 			if (refused) return refused;
 		} else { await insertMoved; await excludeOriginal; }
 		if (attendees.length && existing.mailboxId && input.from && !isInboundInvite) {
@@ -163,7 +163,7 @@ export async function PATCH(request: Request, { params }: CalendarEventRoutePara
 		const fresh = { ...event, id: forkId, eventSequence: 0, davObjectId: null, recurrenceId: null, ...(moveTo !== undefined ? { calendarId: moveTo } : {}), createdAt: now, updatedAt: now };
 		const endPatch = existing.rrule ? { rrule: limitRrule(existing.rrule, splitAt, existing.startsAt, existing.timeZone, existing.allDay), eventSequence: nextSequence, updatedAt: now } : { repeatUntil: splitAt, eventSequence: nextSequence, updatedAt: now };
 		if (moveTo !== undefined) {
-			const refused = await batched([...splitSeriesStatements(db, ownerId, existing, splitAt, fresh, endPatch), moveSeriesStatement(db, ownerId, existing.id, moveTo)]);
+			const refused = await batched([...splitSeriesStatements(db, ownerId, existing, splitAt, fresh, endPatch), ...moveSeriesStatements(db, ownerId, existing.id, moveTo)]);
 			if (refused) return refused;
 		} else await splitSeriesRows(db, ownerId, existing, splitAt, fresh, endPatch);
 		// Overrides at or after the split belong to the fork; earlier ones stay on the truncated original.
@@ -209,7 +209,7 @@ export async function PATCH(request: Request, { params }: CalendarEventRoutePara
 		? [db.update(calendarEvents).set({ isPrivate: flags.isPrivate }).where(and(eq(calendarEvents.userId, ownerId), eq(calendarEvents.davObjectId, existing.id), ne(calendarEvents.id, existing.id)))]
 		: [];
 	if (moveTo !== undefined || propagate.length) {
-		const refused = await batched([edit, ...propagate, ...(moveTo !== undefined ? [moveSeriesStatement(db, ownerId, existing.id, moveTo)] : [])]);
+		const refused = await batched([edit, ...propagate, ...(moveTo !== undefined ? moveSeriesStatements(db, ownerId, existing.id, moveTo) : [])]);
 		if (refused) return refused;
 	} else await edit;
 	if (shifted?.moved) await shiftOverrides(db, ownerId, existing.id, shifted.shift);
