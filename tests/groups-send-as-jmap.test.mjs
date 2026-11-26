@@ -45,6 +45,13 @@ test("Identity/get offers the group to a flagged member on their primary mailbox
 	assert.deepEqual(await emails("bob"), ["bob@example.com"]);
 });
 
+test("the group identity carries the group's name, the personal one the mailbox's", async (t) => {
+	const f = await fixture(t);
+	f.sqlite.exec("UPDATE mailboxes SET display_name = 'Alice Doe' WHERE id = 'm-alice'");
+	const list = (await app.identityGet(f.context("alice"), {})).list;
+	assert.deepEqual(list.map((item) => [item.email, item.name]), [["alice@example.com", "Alice Doe"], ["team@example.com", "Team"]]);
+});
+
 test("EmailSubmission/set sends as the group for a flagged member and refuses everyone else", async (t) => {
 	const f = await fixture(t);
 	const ok = await submit(f, "alice", "d-alice", "m-alice", "team@example.com");

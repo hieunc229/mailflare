@@ -48,26 +48,35 @@ export function isOwnPrimaryMailbox(
 	return mailbox.type === "personal" && mailbox.userId === actor.id && isPrimaryMailbox(mailbox, actor.email);
 }
 
-/** Group addresses the actor may add to the primary mailbox's From list (empty elsewhere, without the licence or before the migration). */
+/** Groups the actor may add to the primary mailbox's From list (none elsewhere, without the licence or before the migration). */
+export async function listSendAsGroups(
+	env: CloudflareEnv,
+	db: AppDatabase,
+	actor: { id: string; email: string },
+	mailbox: { userId: string; type: string; localPart: string; hostname: string },
+): Promise<{ address: string; name: string }[]> {
+	if (!isOwnPrimaryMailbox(actor, mailbox) || !(await groupsAllowed(env)())) return [];
+	try {
+		const rows = await db
+			.select({ localPart: mailGroups.localPart, name: mailGroups.name, hostname: domains.hostname })
+			.from(mailGroupMembers)
+			.innerJoin(mailGroups, eq(mailGroupMembers.groupId, mailGroups.id))
+			.innerJoin(domains, eq(mailGroups.domainId, domains.id))
+			.where(and(eq(mailGroupMembers.userId, actor.id), eq(mailGroupMembers.kind, "user"), eq(mailGroupMembers.canSendAs, true), eq(mailGroups.disabled, false)));
+		return rows.map((row) => ({ address: `${row.localPart}@${row.hostname}`.toLowerCase(), name: row.name })).sort((a, b) => a.address.localeCompare(b.address));
+	} catch (error) {
+		if (isMissingTableError(error)) return [];
+		throw error;
+	}
+}
+
 export async function listSendAsGroupAddresses(
 	env: CloudflareEnv,
 	db: AppDatabase,
 	actor: { id: string; email: string },
 	mailbox: { userId: string; type: string; localPart: string; hostname: string },
 ): Promise<string[]> {
-	if (!isOwnPrimaryMailbox(actor, mailbox) || !(await groupsAllowed(env)())) return [];
-	try {
-		const rows = await db
-			.select({ localPart: mailGroups.localPart, hostname: domains.hostname })
-			.from(mailGroupMembers)
-			.innerJoin(mailGroups, eq(mailGroupMembers.groupId, mailGroups.id))
-			.innerJoin(domains, eq(mailGroups.domainId, domains.id))
-			.where(and(eq(mailGroupMembers.userId, actor.id), eq(mailGroupMembers.kind, "user"), eq(mailGroupMembers.canSendAs, true), eq(mailGroups.disabled, false)));
-		return rows.map((row) => `${row.localPart}@${row.hostname}`.toLowerCase()).sort();
-	} catch (error) {
-		if (isMissingTableError(error)) return [];
-		throw error;
-	}
+	return (await listSendAsGroups(env, db, actor, mailbox)).map((group) => group.address);
 }
 
 /**
