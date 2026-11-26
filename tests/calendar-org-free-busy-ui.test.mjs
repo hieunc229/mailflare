@@ -40,3 +40,11 @@ test("while saving the switch is disabled", () => {
 test("without a Team licence nothing is shown", () => {
 	assert.equal(render({ state: "unavailable" }), "");
 });
+
+test("a switch left on after the licence lapsed stays visible, says it is not in effect, and can be turned off", () => {
+	const html = render({ enabled: true, available: false });
+	assert.match(html, /role="switch"/);
+	assert.match(html, /aria-checked="true"/);
+	assert.match(html, /not in effect/);
+	assert.doesNotMatch(render({ enabled: true }), /not in effect/);
+});

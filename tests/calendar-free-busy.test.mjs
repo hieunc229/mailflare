@@ -242,3 +242,13 @@ test("resolveFreeBusyAddresses: 50 addresses resolve in statements under 100 bou
 	assert.equal(map.get("p7@corp.test"), "u32");
 	assert.ok(Math.max(...paramCounts()) <= 100, `most parameters in one statement: ${Math.max(...paramCounts())}`);
 });
+
+test("busyIntervals: series that ended before the window are not even read", async () => {
+	setup();
+	event("u1", at(-70, 9), at(-70, 10), { repeat: "weekly", repeat_until: secs(at(-10)) });
+	event("u1", at(-70, 11), at(-70, 12), { repeat: "weekly" });
+	statements.length = 0;
+	const result = await busy(["u1"], at(0), at(1));
+	assert.ok(statements.some((sql) => /where.*repeat_until/is.test(sql)), "the read filters on repeat_until");
+	assert.deepEqual(result.get("u1"), [[at(0, 11), at(0, 12)]]);
+});

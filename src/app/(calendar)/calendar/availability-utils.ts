@@ -7,6 +7,8 @@ const EMAIL = /^[^\s@,;]+@[^\s@,;]+\.[^\s@,;]+$/;
 export const WORK_START_HOUR = 8;
 export const WORK_END_HOUR = 18;
 export const FIND_DAYS = 14;
+/** The longest event a working-day slot can hold. */
+export const MAX_FIND_DURATION_MS = (WORK_END_HOUR - WORK_START_HOUR) * 3_600_000;
 const STEP_MS = 30 * 60_000;
 
 /** The guest field's addresses: split on commas, semicolons and spaces, lower-cased, valid and unique; the first 50 only. */
@@ -53,7 +55,7 @@ export function overlapsAny(busy: string[][], start: Date, end: Date): boolean {
  */
 export function findFreeSlots(options: { busyByPerson: string[][][]; durationMs: number; now: Date; zone: string; limit?: number }): { start: Date; end: Date }[] {
 	const { busyByPerson, durationMs, now, zone, limit = 3 } = options;
-	if (!(durationMs > 0) || durationMs > (WORK_END_HOUR - WORK_START_HOUR) * 3_600_000) return [];
+	if (!(durationMs > 0) || durationMs > MAX_FIND_DURATION_MS) return [];
 	const busy = busyByPerson.flat().map(([from, to]) => [new Date(from).getTime(), new Date(to).getTime()] as const).filter(([from, to]) => to > from).sort((a, b) => a[0] - b[0]);
 	const today = zonedDateFields(now, zone);
 	const slots: { start: Date; end: Date }[] = [];

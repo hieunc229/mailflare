@@ -1,4 +1,4 @@
-import { and, gt, inArray, lt, ne, or } from "drizzle-orm";
+import { and, gt, inArray, isNull, lt, ne, or } from "drizzle-orm";
 import { getDb } from "@/db";
 import { calendarEvents } from "@/db/schema";
 import { expandEvent } from "./rrule";
@@ -50,7 +50,7 @@ export async function busyIntervals(env: CloudflareEnv, targets: FreeBusyTargets
 			userId: calendarEvents.userId, startsAt: calendarEvents.startsAt, endsAt: calendarEvents.endsAt, timeZone: calendarEvents.timeZone, repeat: calendarEvents.repeat, rrule: calendarEvents.rrule,
 			repeatDays: calendarEvents.repeatDays, repeatAnchorDay: calendarEvents.repeatAnchorDay, repeatUntil: calendarEvents.repeatUntil, excludedOccurrences: calendarEvents.excludedOccurrences,
 			transparent: calendarEvents.transparent, responseStatus: calendarEvents.responseStatus,
-		}).from(calendarEvents).where(and(inArray(calendarEvents.userId, ids.slice(index, index + USER_CHUNK)), lt(calendarEvents.startsAt, end), or(gt(calendarEvents.endsAt, start), ne(calendarEvents.repeat, "none"))));
+		}).from(calendarEvents).where(and(inArray(calendarEvents.userId, ids.slice(index, index + USER_CHUNK)), lt(calendarEvents.startsAt, end), or(gt(calendarEvents.endsAt, start), and(ne(calendarEvents.repeat, "none"), or(isNull(calendarEvents.repeatUntil), gt(calendarEvents.repeatUntil, start))))));
 		for (const row of rows) {
 			if (!isBusyEvent(row)) continue;
 			const duration = row.endsAt.getTime() - row.startsAt.getTime();
