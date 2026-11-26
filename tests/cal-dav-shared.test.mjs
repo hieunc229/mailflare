@@ -397,3 +397,15 @@ test("an event that becomes hidden (declined) is reported gone to a reader and t
 	assert.match(await (await syncSince(env, SHARED(), keys.u2, readerToken)).text(), /evt_h\.ics<\/D:href><D:status>HTTP\/1\.1 404/);
 	assert.match(await (await syncSince(env, "/dav/calendars/u1/c-work/", keys.u1, ownerToken)).text(), /evt_h\.ics<\/D:href><D:status>HTTP\/1\.1 404/);
 });
+
+test("a delegate's PUT to a name a hidden invitation holds is refused like a UID clash, whatever UID it carries (no 412 oracle, no two rows with one name)", async (t) => {
+	const { env, keys, sql } = await fixture(t);
+	addEvent(sql, "evt_h");
+	sql.prepare("INSERT INTO dav_calendar_objects (id, user_id, collection_id, name, uid, size, created_at, updated_at) VALUES ('evt_h', 'u1', 'cal:work', 'held.ics', 'held-uid', 1, 1, 1)").run();
+	sql.prepare("UPDATE calendar_events SET response_status = 'declined' WHERE id = 'evt_h'").run();
+	const response = await put(env, `${SHARED("csh_edit", "u3")}held.ics`, keys.u3, vevent("another-uid", "Other"));
+	assert.equal(response.status, 403);
+	assert.doesNotMatch(await response.text(), /held|evt_h/);
+	assert.equal(sql.prepare("SELECT count(*) AS n FROM calendar_events").get().n, 1);
+	assert.equal((await put(env, `${SHARED("csh_edit", "u3")}free.ics`, keys.u3, vevent("another-uid", "Other"))).status, 201, "other names are free");
+});

@@ -129,9 +129,9 @@ export async function loadCalendarByNames(env: Env, calendar: CalendarScope | st
  * The resource served under a name whether or not it is visible: a PUT onto the name of a hidden (cancelled, declined)
  * resource replaces it, and DELETE removes it. Hidden resources are the owner's alone: for anyone else they are not there. Without the stored body and overrides: a write replaces both.
  */
-export async function findCalendarByName(env: Env, calendar: CalendarScope | string, name: string): Promise<CalendarResource | undefined> {
+export async function findCalendarByName(env: Env, calendar: CalendarScope | string, name: string, withHidden = false): Promise<CalendarResource | undefined> {
 	const scope = scopeOf(calendar);
-	const rows = await joined(env).where(and(inCalendar(scope), isMaster, !scope.role || scope.role === "owner" ? undefined : visible, or(eq(davCalendarObjects.name, name), eq(calendarEvents.id, name.replace(/\.ics$/, "")))));
+	const rows = await joined(env).where(and(inCalendar(scope), isMaster, withHidden || !scope.role || scope.role === "owner" ? undefined : visible, or(eq(davCalendarObjects.name, name), eq(calendarEvents.id, name.replace(/\.ics$/, "")))));
 	return rows.map(toResource(scope)).find((resource) => resource.name === name);
 }
 
