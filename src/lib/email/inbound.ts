@@ -10,6 +10,8 @@ import { boundParsedEmail } from "@/lib/email/inbound-limits";
 import { resolveInboundAddress, resolveInboxRuleDestination, type RoutingDecision } from "@/lib/email/routing";
 import { expandGroupDelivery, resolveGroupDelivery } from "@/lib/groups/expand";
 import { groupsAllowed } from "@/lib/groups/license";
+import { admitGroupMail } from "@/lib/email/incoming";
+import { countReceivedInJoinedValue } from "@/lib/groups/loop-utils";
 import { dispatchWebhooks } from "@/lib/email/webhooks";
 import { getMessageContactNames, upsertContactFromAddress } from "@/lib/contacts/service";
 import { getEmailAddress } from "@/lib/email/address";
@@ -95,11 +97,21 @@ export async function processInboundMessage(
 		return;
 	}
 
-	// Group mail that reaches here without `groupExpansion` skipped the live handler's checks
-	// (a routing failure there stored it anyway); fail closed rather than fan it out.
-	if (decision.action === "group") {
-		console.warn(`Dropped unadmitted group mail to ${payload.to}`);
-		await dropRaw();
+	// Group mail reaches here without `groupExpansion` when the live handler's routing failed and stored
+	// it anyway. Run the checks it skipped (loops, who may post) now, then expand or drop.
+	if (decision.action === "group" && decision.group) {
+		const admitted = await admitGroupMail(env, decision, {
+			all: payload.headers,
+			verdicts: payload.verdicts,
+			receivedHops: countReceivedInJoinedValue(payload.headers?.received),
+			envelopeFrom: payload.from,
+		});
+		if (admitted.action !== "group") {
+			console.warn(`Dropped group mail to ${payload.to}: ${admitted.action}`);
+			await dropRaw();
+			return;
+		}
+		await expandGroupDelivery(env, { ...payload, groupExpansion: { groupId: decision.group.groupId } });
 		return;
 	}
 

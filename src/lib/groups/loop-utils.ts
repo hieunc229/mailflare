@@ -18,6 +18,8 @@ export type GroupDropInput = {
 	listIdentifier: string;
 	headers: Record<string, string>;
 	receivedHops: number;
+	/** The SMTP envelope sender; empty or `<>` is a bounce. Omit when unknown. */
+	envelopeFrom?: string;
 };
 
 /**
@@ -31,8 +33,13 @@ export function groupDropReason(input: GroupDropInput): string | null {
 		const identifier = (/<([^<>]*)>\s*$/.exec(listId.trim())?.[1] ?? listId).trim().toLowerCase();
 		if (identifier === input.listIdentifier.toLowerCase()) return "own list id";
 	}
-	const autoSubmitted = header(input.headers, "auto-submitted")?.trim().toLowerCase();
-	if (autoSubmitted && autoSubmitted !== "no") return "auto-submitted";
+	// Auto-replies (out of office) drop; "auto-generated" does not, because alerts, invoices and
+	// tickets are exactly what alerts@ and billing@ groups exist to receive.
+	if (header(input.headers, "auto-submitted")?.trim().toLowerCase().startsWith("auto-replied")) return "auto-reply";
+	// Bounces and delivery reports: a DSN to a group that bounces again would loop.
+	if (input.envelopeFrom !== undefined && ["", "<>"].includes(input.envelopeFrom.trim())) return "null sender";
+	if (header(input.headers, "return-path")?.trim() === "<>") return "null return path";
+	if (/^\s*multipart\/report\b/i.test(header(input.headers, "content-type") ?? "")) return "delivery report";
 	if (input.receivedHops > MAX_RECEIVED_HOPS) return "too many hops";
 	return null;
 }

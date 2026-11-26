@@ -1,7 +1,7 @@
 import { and, eq, inArray, or } from "drizzle-orm";
 import type { AppDatabase } from "@/db";
 import { domains, mailGroupMembers, users } from "@/db/schema";
-import { getEmailAddress } from "@/lib/email/address";
+import { singleSenderAddress } from "@/lib/groups/policy-utils";
 import { resolveMailboxForAddress } from "@/lib/email/routing";
 
 /** Hostnames of every active domain of this installation, for the `org` policy. */
@@ -19,9 +19,9 @@ export async function loadOrgHostnames(db: AppDatabase): Promise<string[]> {
  * members' addresses (including aliases), and external members' emails.
  */
 export async function findMemberSenderAddress(db: AppDatabase, groupId: string, senderHeader: string): Promise<Set<string>> {
-	const sender = getEmailAddress(senderHeader).trim().toLowerCase();
+	const sender = singleSenderAddress(senderHeader);
 	const found = new Set<string>();
-	if (!sender.includes("@")) return found;
+	if (!sender) return found;
 
 	const [external] = await db
 		.select({ id: mailGroupMembers.id })

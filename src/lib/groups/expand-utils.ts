@@ -1,5 +1,8 @@
-/** Members expanded per queue invocation, so one message stays within Worker subrequest limits. */
-export const GROUP_EXPANSION_CHUNK = 40;
+/**
+ * Members expanded per queue invocation. Each member costs an R2 put, and a chunk adds about ten
+ * queries, so 20 stays under the 50 subrequests of an invocation on the Free plan.
+ */
+export const GROUP_EXPANSION_CHUNK = 20;
 
 /** Cloudflare Queues: at most 100 messages and 256 KB per `sendBatch`; keep margin under the byte cap. */
 export const QUEUE_BATCH_MAX_COUNT = 100;
