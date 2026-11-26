@@ -1,7 +1,8 @@
 /**
  * Exercises the database layer against any DATABASE_URL: migrations, the query shapes the app relies on
  * (insert/select/update, returning, onConflict*, raw sql, batch), the triggers and search.
- * Run with `npm run db:smoke -- <DATABASE_URL> [driver]`; PGlite needs no server (`pglite://memory`).
+ * Run with `npm run db:smoke -- <DATABASE_URL> [driver]`; PGlite needs no server (`pglite://memory`), and SQLite runs in memory with
+ * `file::memory:` (`sqlite://file::memory:` is a file literally named `file::memory:` in the working directory).
  */
 import { and, eq, inArray, sql } from "drizzle-orm";
 import { createDb } from "@/db";
