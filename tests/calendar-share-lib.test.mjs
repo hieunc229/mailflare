@@ -197,25 +197,32 @@ test("grantShare: a manager cannot hand out more than their own role; the cap is
 	assert.equal(sqlite.prepare("SELECT count(*) AS n FROM calendar_shares").get().n, 100);
 });
 
-test("changeShare: a role change deletes the grant and inserts a new one with a new id, in one batch", async () => {
+test("changeShare: a role change gives the grant a new id and the new role in one statement", async () => {
 	const { sqlite, orm, statements, calendar, grant } = setup();
 	calendar("cal:work"); grant("g1", "cal:work", "u2", "edit");
-	let batched = 0;
-	const original = orm.batch;
-	orm.batch = async (list) => { batched += 1; return original(list); };
 	const result = await shares.changeShare(orm, u("u1"), "cal:work", { id: "g1", role: "read" });
 	assert.equal(result.ok, true);
-	assert.equal(batched, 1);
 	assert.equal(result.previousRole, "edit");
 	assert.notEqual(result.share.id, "g1");
+	assert.equal(statements.filter((entry) => /^update "calendar_shares"/i.test(entry.query)).length, 1);
+	assert.equal(statements.filter((entry) => /^(insert|delete)/i.test(entry.query) && /calendar_shares/.test(entry.query)).length, 0, "no window in which the person has no grant or two");
 	assert.deepEqual(sqlite.prepare("SELECT id, role, grantee_user_id AS u FROM calendar_shares").all().map((row) => [row.role, row.u, row.id === "g1"]), [["read", "u2", false]]);
 	assert.equal((await shares.changeShare(orm, u("u1"), "cal:work", { id: "g1", role: "read" })).status, 404, "the old id is gone");
 	assert.equal((await shares.changeShare(orm, u("u1"), "cal:work", { id: result.share.id, role: "bogus" })).status, 400);
-	// Same role: nothing to do, the id stays.
 	const same = await shares.changeShare(orm, u("u1"), "cal:work", { id: result.share.id, role: "read" });
 	assert.equal(same.ok, true);
 	assert.equal(same.share.id, result.share.id);
-	void statements;
+});
+
+test("changeShare: a grant revoked between the check and the write is not brought back", async () => {
+	const { sqlite, orm, calendar, grant } = setup();
+	calendar("cal:work"); grant("g1", "cal:work", "u2", "edit");
+	const update = orm.update.bind(orm);
+	orm.update = (...args) => { sqlite.prepare("DELETE FROM calendar_shares WHERE id = 'g1'").run(); return update(...args); };
+	const result = await shares.changeShare(orm, u("u1"), "cal:work", { id: "g1", role: "read" });
+	assert.equal(result.status, 404);
+	assert.equal(sqlite.prepare("SELECT count(*) AS n FROM calendar_shares").get().n, 0);
+	assert.equal(await shares.getCalendarRole(orm, u("u2"), "cal:work"), null);
 });
 
 test("changeShare and revokeShare: only on this calendar's grants, only by a manager or the owner", async () => {
