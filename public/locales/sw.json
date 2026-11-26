@@ -3071,6 +3071,7 @@
 	"groups.canSendAs": "Anaweza kutuma kama kikundi",
 	"groups.canSendAsFailed": "Imeshindikana kubadilisha mpangilio huu",
 	"groups.canSendAsHint": "Wanachama wanaoruhusiwa kutuma kama kikundi wanaweza kuchagua {address} kwenye orodha ya Kutoka wanapoandika barua. Ujumbe huhifadhiwa kwenye folda yao ya Zilizotumwa.",
+	"groups.noPrimaryMailbox": "Akaunti hii haina kisanduku cha barua kwenye anwani yake yenyewe, kwa hivyo kikundi hakitaonekana kwenye orodha yake ya Kutoka.",
 	"groups.dangerZone": "Futa kikundi",
 	"groups.deleteHint": "Kufuta kikundi huondoa anwani yake na orodha ya wanachama. Wanachama hubaki na visanduku vyao vya barua.",
 	"groups.delete": "Futa kikundi",

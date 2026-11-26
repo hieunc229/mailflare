@@ -3092,6 +3092,7 @@
 	"groups.canSendAs": "Peut envoyer en tant que groupe",
 	"groups.canSendAsFailed": "Impossible de modifier ce réglage",
 	"groups.canSendAsHint": "Les membres autorisés à envoyer en tant que groupe peuvent choisir {address} dans la liste De en écrivant un message. Le message est conservé dans leur propre dossier Envoyés.",
+	"groups.noPrimaryMailbox": "Ce compte n'a pas de boîte à sa propre adresse : le groupe n'apparaîtra pas dans sa liste De.",
 	"groups.dangerZone": "Supprimer le groupe",
 	"groups.deleteHint": "Supprimer un groupe retire son adresse et sa liste de membres. Les membres conservent leurs propres boîtes.",
 	"groups.delete": "Supprimer le groupe",

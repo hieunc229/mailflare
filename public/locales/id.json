@@ -3048,6 +3048,7 @@
 	"groups.canSendAs": "Dapat mengirim sebagai grup",
 	"groups.canSendAsFailed": "Tidak dapat mengubah pengaturan ini",
 	"groups.canSendAsHint": "Anggota yang dapat mengirim sebagai grup bisa memilih {address} di daftar Dari saat menulis surel. Pesan disimpan di folder Terkirim mereka sendiri.",
+	"groups.noPrimaryMailbox": "Akun ini tidak punya kotak surat di alamatnya sendiri, jadi grup tidak akan muncul di daftar Dari miliknya.",
 	"groups.dangerZone": "Hapus grup",
 	"groups.deleteHint": "Menghapus grup akan menghapus alamat dan daftar anggotanya. Anggota tetap memiliki kotak surat sendiri.",
 	"groups.delete": "Hapus grup",

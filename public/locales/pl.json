@@ -3117,6 +3117,7 @@
 	"groups.canSendAs": "Może wysyłać jako grupa",
 	"groups.canSendAsFailed": "Nie można zmienić tego ustawienia",
 	"groups.canSendAsHint": "Członkowie, którzy mogą wysyłać jako grupa, mogą wybrać {address} na liście Od podczas pisania wiadomości. Wiadomość jest zapisywana w ich własnym folderze Wysłane.",
+	"groups.noPrimaryMailbox": "To konto nie ma skrzynki pod własnym adresem, więc grupa nie pojawi się na jego liście Od.",
 	"groups.dangerZone": "Usuń grupę",
 	"groups.deleteHint": "Usunięcie grupy usuwa jej adres i listę członków. Członkowie zachowują własne skrzynki.",
 	"groups.delete": "Usuń grupę",

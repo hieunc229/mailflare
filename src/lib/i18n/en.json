@@ -3071,6 +3071,7 @@
 	"groups.canSendAs": "Can send as group",
 	"groups.canSendAsFailed": "Unable to change this setting",
 	"groups.canSendAsHint": "Members who can send as the group can pick {address} in the From list when writing mail. The message is stored in their own Sent folder.",
+	"groups.noPrimaryMailbox": "This account has no mailbox at its own address, so the group will not appear in their From list.",
 	"groups.dangerZone": "Delete group",
 	"groups.deleteHint": "Deleting a group removes its address and its member list. Members keep their own mailboxes.",
 	"groups.delete": "Delete group",
