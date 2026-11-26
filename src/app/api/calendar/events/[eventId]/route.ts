@@ -1,4 +1,4 @@
-import { eq } from "drizzle-orm";
+import { and, eq, ne } from "drizzle-orm";
 import { NextResponse } from "next/server";
 import { getDb } from "@/db";
 import { calendarEvents } from "@/db/schema";
@@ -136,9 +136,13 @@ export async function PATCH(request: Request, { params }: CalendarEventRoutePara
 		} else await splitSeriesRows(db, ownerId, existing, splitAt, fresh, endPatch);
 	} else {
 		const edit = db.update(calendarEvents).set({ title: event.title, description: event.description, location: event.location, attendees: event.attendees, color: event.color, repeat: event.repeat, repeatDays: event.repeatDays, repeatAnchorDay: event.repeatAnchorDay, repeatUntil: event.repeatUntil, rrule: event.rrule, ...(shifted ? { excludedOccurrences: shifted.excludedOccurrences } : {}), reminderMinutes: event.reminderMinutes, isPrivate: event.isPrivate, transparent: event.transparent, lastRemindedStart: null, timeZone, startsAt, endsAt, updatedAt: new Date() }).where(eq(calendarEvents.id, existing.id));
+		// Privacy belongs to the series: the moved occurrences carry the same flag, written in the same batch so no reader sees them apart.
+		const propagate = existing.davObjectId === existing.id && flags.isPrivate !== existing.isPrivate
+			? [db.update(calendarEvents).set({ isPrivate: flags.isPrivate }).where(and(eq(calendarEvents.userId, ownerId), eq(calendarEvents.davObjectId, existing.id), ne(calendarEvents.id, existing.id)))]
+			: [];
 		// The edit and the move to another calendar succeed or fail together.
-		if (moveTo !== undefined) {
-			const refused = await batched([edit, moveSeriesStatement(db, ownerId, existing.id, moveTo)]);
+		if (moveTo !== undefined || propagate.length) {
+			const refused = await batched([edit, ...propagate, ...(moveTo !== undefined ? [moveSeriesStatement(db, ownerId, existing.id, moveTo)] : [])]);
 			if (refused) return refused;
 		} else await edit;
 		if (shifted?.moved) await shiftOverrides(db, ownerId, existing.id, shifted.shift);

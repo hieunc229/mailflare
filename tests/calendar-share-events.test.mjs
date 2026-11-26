@@ -112,6 +112,43 @@ test("GET leaves the owner's unanswered, declined and cancelled invitations out 
 	assert.equal((await list()).length, 5, "the owner still sees all of them");
 });
 
+// ---- private series ----
+
+function privateSeries(extraMaster = "1") {
+	sqlite.prepare(`INSERT INTO calendar_events (id, user_id, calendar_id, title, description, attendees, starts_at, ends_at, repeat, dav_object_id, is_private, created_at, updated_at) VALUES ('ps', 'u1', 'cal:work', 'Therapy', 'notes', '[]', ?, ?, 'weekly', 'ps', ${extraMaster}, 1, 1)`).run(sec("2026-12-01T10:00:00Z"), sec("2026-12-01T11:00:00Z"));
+	sqlite.prepare("INSERT INTO calendar_events (id, user_id, calendar_id, title, description, attendees, starts_at, ends_at, dav_object_id, recurrence_id, is_private, created_at, updated_at) VALUES ('po', 'u1', 'cal:work', 'Therapy', 'notes', '[]', ?, ?, 'ps', ?, 0, 1, 1)").run(sec("2026-12-09T10:00:00Z"), sec("2026-12-09T11:00:00Z"), sec("2026-12-08T10:00:00Z"));
+}
+
+test("GET redacts a moved occurrence of a private series for readers and free/busy grantees, and leaves it whole for editors and the owner", async () => {
+	setup();
+	privateSeries();
+	as("u3");
+	const reader = Object.fromEntries((await list()).map((event) => [event.id, event]));
+	assert.deepEqual([reader.ps.title, reader.po.title, reader.po.description, reader.po.redacted], ["Busy", "Busy", "", true]);
+	as("u4");
+	const blocks = Object.fromEntries((await list("&calendarIds=cal:work")).map((event) => [event.id, event]));
+	assert.deepEqual([blocks.po.title, blocks.po.description], ["Busy", ""]);
+	for (const user of ["u2", "u1", "u5"]) {
+		as(user);
+		assert.equal((await list()).find((event) => event.id === "po").title, "Therapy", user);
+	}
+	// A moved occurrence of a public series stays visible to a reader.
+	sqlite.exec("UPDATE calendar_events SET is_private = 0 WHERE id = 'ps'");
+	as("u3");
+	assert.equal((await list()).find((event) => event.id === "po").title, "Therapy");
+});
+
+test("editing isPrivate on a series master writes it to the moved occurrences in the same request", async () => {
+	setup();
+	privateSeries("0");
+	as("u1");
+	assert.equal((await patch("ps", { effectiveFrom: "2026-12-01T10:00:00.000Z", startsAt: "2026-12-01T10:00:00.000Z", endsAt: "2026-12-01T11:00:00.000Z", repeat: "weekly", isPrivate: true })).status, 200);
+	assert.deepEqual(sqlite.prepare("SELECT id, is_private AS p FROM calendar_events ORDER BY id").all().map((entry) => [entry.id, entry.p]), [["po", 1], ["ps", 1]]);
+	as("u2");
+	assert.equal((await patch("ps", { effectiveFrom: "2026-12-01T10:00:00.000Z", startsAt: "2026-12-01T10:00:00.000Z", endsAt: "2026-12-01T11:00:00.000Z", repeat: "weekly", isPrivate: false })).status, 200);
+	assert.deepEqual(sqlite.prepare("SELECT id, is_private AS p FROM calendar_events ORDER BY id").all().map((entry) => [entry.id, entry.p]), [["po", 0], ["ps", 0]]);
+});
+
 // ---- create ---------------------------------------------------------------------------------------------------------
 
 test("POST by an editor writes into the owner's calendar as the owner's row, audits the delegate, and sets no reminder or mailbox", async () => {

@@ -1,14 +1,15 @@
-import { and, eq, gte, lt, ne, or } from "drizzle-orm";
+import { and, eq, gte, inArray, lt, ne, or } from "drizzle-orm";
 import type { getDb } from "@/db";
 import { calendarEvents } from "@/db/schema";
 import { calendarCollectionId } from "@/lib/dav/changes";
 import { isOffCalendarResponse } from "./response-status";
 import { calendarFilter, eventCalendarId, ownCalendarIds } from "./calendars";
-import { calendarScopes, grantedCalendars } from "./shares";
+import { calendarScopes, grantedCalendars, roleAtLeast } from "./shares";
 import type { CalendarRole } from "./shares-types";
 import { isBusyEvent, redactEvent } from "./visibility";
 
 type Db = ReturnType<typeof getDb>;
+const MASTER_CHUNK = 90;
 
 /**
  * Events in a range that `user` may read: their own, and those of calendars shared with them, each redacted for the role
@@ -35,8 +36,21 @@ export async function listVisibleEvents(db: Db, user: { id: string }, range: { s
 				if (!role || !grants.some((grant) => grant.id === calendarId && grant.ownerId === row.userId)) continue;
 				// Invitations the owner has not answered, and declined or cancelled ones, are not on the calendar for anyone else.
 				if (isOffCalendarResponse(row.responseStatus) || (role === "freebusy" && !isBusyEvent(row))) continue;
-				shared.push({ ...redactEvent(row, role), calendarId, role });
+				shared.push({ ...(row as typeof row), calendarId, role });
 			}
+		}
+		// A moved occurrence is a row of its own, but it belongs to its series: private when the series is. Only readers need to know,
+		// and only for override rows, fetched by id in chunks well under D1's 100 bound parameters.
+		const overrideOf = (row: (typeof shared)[number]) => (row.davObjectId && row.davObjectId !== row.id ? row.davObjectId : null);
+		const masters = [...new Set(shared.filter((row) => row.role !== "owner" && !roleAtLeast(row.role, "edit") && !row.isPrivate).map(overrideOf).filter((id): id is string => !!id))];
+		const privateMasters = new Set<string>();
+		for (let index = 0; index < masters.length; index += MASTER_CHUNK) {
+			for (const master of await db.select({ id: calendarEvents.id }).from(calendarEvents).where(and(inArray(calendarEvents.id, masters.slice(index, index + MASTER_CHUNK)), eq(calendarEvents.isPrivate, true)))) privateMasters.add(master.id);
+		}
+		for (let index = 0; index < shared.length; index += 1) {
+			const row = shared[index];
+			const master = overrideOf(row);
+			shared[index] = { ...redactEvent(master && privateMasters.has(master) ? { ...row, isPrivate: true } : row, row.role), isPrivate: row.isPrivate, calendarId: row.calendarId, role: row.role };
 		}
 	}
 	return [...own, ...shared].sort((a, b) => a.startsAt.getTime() - b.startsAt.getTime());
