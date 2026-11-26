@@ -1,13 +1,14 @@
 import { and, asc, eq, gt, inArray, or } from "drizzle-orm";
 import type { AppDatabase } from "@/db";
 import { getDb } from "@/db";
-import { domains, mailGroupMembers, mailGroups, mailboxes, users } from "@/db/schema";
+import { domains, mailGroupMembers, mailGroups, mailboxes, messages, users } from "@/db/schema";
 import type { InboundQueueMessage } from "@/lib/email/inbound";
 import { inboundStorageKey } from "@/lib/email/inbound-id";
 import { resolveMailboxForAddress, toResolvedMailbox, type ResolvedMailbox } from "@/lib/email/routing";
 import { readTrustedDmarcResult } from "@/lib/spam/analyzers/authentication";
 import { isMissingColumnError, isMissingTableError } from "@/lib/database-errors";
 import { groupsAllowed } from "@/lib/groups/license";
+import { isSignedSendAs } from "@/lib/groups/send-as-marker";
 import { queueRelays } from "@/lib/groups/relay-queue";
 import { findMemberSenderAddress, loadOrgHostnames } from "@/lib/groups/policy";
 import { canPost, externalsMayReceive, singleSenderAddress } from "@/lib/groups/policy-utils";
@@ -152,10 +153,17 @@ export async function expandGroupDelivery(
 	// The poster already has a Sent copy; only a trusted DMARC pass says the From really is theirs.
 	const fromAddress = singleSenderAddress(payload.headers?.from);
 	const dmarcPass = readTrustedDmarcResult(payload.headers, payload.verdicts) === "pass";
-	const senderMailbox = fromAddress && dmarcPass
-		? await resolveMailboxForAddress(db, fromAddress)
-		: null;
-	const mailboxIds = planDeliveries(await resolveMemberMailboxIds(db, chunk), senderMailbox?.id ?? null);
+	let senderMailboxId = fromAddress && dmarcPass ? (await resolveMailboxForAddress(db, fromAddress))?.id ?? null : null;
+	// A member who sent as the group has the Sent copy in their own mailbox, which the signed marker names (spec D-10).
+	if (payload.headers?.["x-mailflare-send-as"]) {
+		const [domain] = await db.select({ hostname: domains.hostname }).from(domains).where(eq(domains.id, group.domainId)).limit(1);
+		const signed = domain ? await isSignedSendAs(env, { headers: payload.headers, verdicts: payload.verdicts, groupId: group.id, groupAddress: `${group.localPart}@${domain.hostname}`, from: payload.headers.from }) : null;
+		if (signed) {
+			const [sent] = await db.select({ id: messages.mailboxId }).from(messages).where(eq(messages.id, signed.messageId)).limit(1);
+			if (sent?.id) senderMailboxId = sent.id;
+		}
+	}
+	const mailboxIds = planDeliveries(await resolveMemberMailboxIds(db, chunk), senderMailboxId);
 	// External members get a re-sent copy, and only of mail whose sender the receiver authenticated (spec D-7): relaying
 	// spam or a spoof from our domain would hurt its sending reputation. The poster does not get their own post back.
 	const externalIds = chunk.flatMap((member) => (member.kind === "external" && member.email && !(dmarcPass && member.email === fromAddress) ? [member.id] : []));

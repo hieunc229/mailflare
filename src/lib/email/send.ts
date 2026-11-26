@@ -7,6 +7,7 @@ import { dispatchWebhooks } from "@/lib/email/webhooks";
 import { upsertContactsFromAddresses } from "@/lib/contacts/service";
 import { getAuthorizedSenderAddress } from "@/lib/email/sender";
 import { authorizeSendAsGroup } from "@/lib/groups/send-as";
+import { SEND_AS_HEADER, signSendAs } from "@/lib/groups/send-as-marker";
 import { getEmailAddress, getEmailAddressList, joinEmailAddressList, splitEmailAddressList } from "@/lib/email/address";
 import { formatMessageIdHeader, normalizeMessageId, parseMessageIdList } from "@/lib/email/threading";
 import { createAuditLog } from "@/lib/mailboxes/audit";
@@ -118,6 +119,9 @@ export async function sendEmail(
 	}
 
 	const messageId = newId("msg");
+	// A message sent as a group names its stored copy, so the group can tell its own post when it comes back (spec D-10).
+	const sendAsMarker = sender.group ? await signSendAs(env, { messageId, groupId: sender.group.groupId }) : null;
+	if (sendAsMarker) headers[SEND_AS_HEADER] = sendAsMarker;
 	const requestedSchedule = input.scheduledAt ? new Date(input.scheduledAt) : null;
 	const userScheduledAt = requestedSchedule && requestedSchedule.getTime() > Date.now()
 		? requestedSchedule
@@ -163,6 +167,7 @@ export async function sendEmail(
 		status: "queued",
 		payload: JSON.stringify({
 			...input,
+			...(sendAsMarker ? { headers: { ...input.headers, [SEND_AS_HEADER]: sendAsMarker } } : {}),
 			from: sender.fromAddr,
 			to,
 			cc,
@@ -172,6 +177,16 @@ export async function sendEmail(
 		}),
 		scheduledAt,
 	});
+
+	if (sender.group) {
+		await createAuditLog(env, {
+			actorUserId: input.userId,
+			mailboxId: sender.mailboxId,
+			messageId,
+			action: "email.send_as_group",
+			metadata: { groupId: sender.group.groupId, address: sender.group.address },
+		});
+	}
 
 	const delivery: PreparedDelivery = {
 		input: { ...input, attachments: undefined },
