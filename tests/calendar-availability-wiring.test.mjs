@@ -16,3 +16,9 @@ test("the event editor shows availability under the guests, never for a delegate
 	assert.ok(page.indexOf("AvailabilityPanel guests") > page.indexOf('aria-label={t("calendar.guestsLabel")}'), "after the guests field");
 	assert.ok(page.indexOf("AvailabilityPanel guests") < page.indexOf('aria-label={t("calendar.location")}'), "before the location field");
 });
+
+test("the panel is never shown for a calendar the user does not own, so the signed-in user is always the calendar's owner when it is", () => {
+	assert.match(page, /const delegate = selectedCalendar \? selectedCalendar\.role !== "owner" : !!editing\?\.role && editing\.role !== "owner";/);
+	assert.equal([...page.matchAll(/<AvailabilityPanel /g)].length, 1);
+	assert.match(page, /\{!delegate && <div[^>]*>\s*<div \/>\s*<AvailabilityPanel /);
+});

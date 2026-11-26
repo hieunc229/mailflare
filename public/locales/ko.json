@@ -3120,5 +3120,6 @@
 	"calendar.availability.use": "Use {time}",
 	"general.orgFreeBusyLapsed": "This setting is on but not in effect: it needs a Team licence. Turn it off so it does not come back if a licence is applied again.",
 	"calendar.availability.findTooLong": "Find a time works for events up to 10 hours.",
-	"general.orgFreeBusySaveFailed": "Could not save this setting."
+	"general.orgFreeBusySaveFailed": "Could not save this setting.",
+	"calendar.availability.findSelfLeftOut": "With 50 guests, your own calendar is not included in these suggestions."
 }
