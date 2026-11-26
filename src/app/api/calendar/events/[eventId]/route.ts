@@ -52,8 +52,9 @@ function storedGuests(raw: string | null): string[] {
 	try { const parsed: unknown = JSON.parse(raw || "[]"); return Array.isArray(parsed) ? parsed.filter((entry): entry is string => typeof entry === "string" && GUEST_ADDRESS.test(entry.trim())) : []; } catch { return []; }
 }
 
+/** `calendarId` is where the event went (null: the owner's default); undefined when it did not move. */
 const auditDelegate = (env: CloudflareEnv, user: Pick<SessionUser, "id">, existing: EventRow, action: string, calendarId: string | null | undefined) =>
-	createAuditLog(env, { actorUserId: user.id, targetUserId: existing.userId, action, metadata: { calendarId: calendarId ?? existing.calendarId ?? calendarCollectionId(existing.userId), eventId: existing.id } });
+	createAuditLog(env, { actorUserId: user.id, targetUserId: existing.userId, action, metadata: { calendarId: (calendarId === undefined ? existing.calendarId : calendarId) ?? calendarCollectionId(existing.userId), eventId: existing.id } });
 
 export async function PATCH(request: Request, { params }: CalendarEventRouteParams) {
 	const env = getEnv();
