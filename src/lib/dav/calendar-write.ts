@@ -10,9 +10,10 @@ import { rowsHash } from "./calendar-merge";
 import { parseCalendarObject, type EventFields } from "./calendar-parse";
 import { calendarBytes, findCalendarByName, findUidConflict } from "./calendar-store";
 import type { EventRow } from "./calendar-render";
-import { calendarCollectionId, calendarScopeIds, collectionScope, etagFromSeq, etagSeqs } from "./changes";
+import { calendarExistsGuard } from "@/lib/calendar/calendars";
+import { collectionScope, etagFromSeq, etagSeqs } from "./changes";
 import { BASE_HEADERS, precondition, text, XML_HEADERS } from "./common";
-import { collectionPath, type DavContext } from "./collections";
+import { calendarOf, pathOf, type DavContext } from "./collections";
 import { escapeXml } from "./xml-writer";
 import { created, failedPrecondition, insufficientStorage, MAX_CALENDAR_BYTES, readPutBody, replaced, staleGuard } from "./writes";
 
@@ -52,17 +53,19 @@ export async function putCalendarResource(ctx: DavContext, name: string, request
 	const parsed = parseCalendarObject(body, ctx.timeZone, await addresses());
 	if ("error" in parsed) return precondition(403, parsed.error, "C");
 
-	const { env, userId } = ctx;
-	const cid = calendarCollectionId(userId);
-	const atName = await findCalendarByName(env, userId, name);
+	const { env } = ctx;
+	// The rows are the calendar owner's, whoever writes (D-2); the collection says which calendar they are in.
+	const calendar = calendarOf(ctx);
+	const { id: cid, ownerId: userId } = calendar;
+	const atName = await findCalendarByName(env, calendar, name);
 	const atNameSeq = atName ? (await etagSeqs(env, cid, [atName.id])).get(atName.id) : undefined;
 	const refused = failedPrecondition(request, atName ? etagFromSeq(atNameSeq, atName.master.updatedAt) : null);
 	if (refused) return refused;
-	const other = await findUidConflict(env, userId, parsed.uid, atName?.id ?? null);
+	const other = await findUidConflict(env, calendar, parsed.uid, atName?.id ?? null);
 	const hidden = !!other && !!other.master.responseStatus && (OFF_CALENDAR_RESPONSES as readonly string[]).includes(other.master.responseStatus);
-	if (other && !hidden) return conflict(collectionPath("calendars", userId) + other.name);
+	if (other && !hidden) return conflict(pathOf("calendars", ctx) + other.name);
 	// A resource keeps its UID (RFC 4791 5.3.2.1): the one at this name is refused a different one, with its own href.
-	if (atName && atName.uid !== parsed.uid) return conflict(collectionPath("calendars", userId) + atName.name);
+	if (atName && atName.uid !== parsed.uid) return conflict(pathOf("calendars", ctx) + atName.name);
 	// The UID is held by a hidden (cancelled, declined) resource, which a client cannot see or name: the new name takes it over.
 	const existing = atName ?? other;
 	const seq = existing === atName ? atNameSeq : existing ? (await etagSeqs(env, cid, [existing.id])).get(existing.id) : undefined;
@@ -103,7 +106,7 @@ export async function putCalendarResource(ctx: DavContext, name: string, request
 		recurrenceId: fields.recurrenceId,
 		davObjectId: id,
 		// An override lives in its master's calendar, or a series with a moved master would be split across calendars.
-		calendarId: old?.calendarId ?? null,
+		calendarId: old ? old.calendarId : calendar.isDefault ? null : cid,
 		createdAt: now,
 	}));
 	// The rows as they will be read back, for the hash the stored body is valid against.
@@ -112,11 +115,12 @@ export async function putCalendarResource(ctx: DavContext, name: string, request
 	const hash = await rowsHash(masterRow, overrideRows.map((row) => ({ ...row, reminderMinutes: null }) as unknown as EventRow));
 
 	const db = getDb(env);
-	const scope = await calendarScopeIds(env, cid);
+	const scope = [cid];
 	const objectValues = { uid: parsed.uid, name, body, rowsHash: hash, size, updatedAt: now };
-	const statements: unknown[] = existing ? staleGuard(db, calendarEvents, scope, id, userId, { seq: seq ?? null, updatedAt: existing.master.updatedAt }) : [];
+	// A calendar deleted meanwhile refuses the batch instead of taking rows for a collection that is gone.
+	const statements: unknown[] = [...(calendar.isDefault ? [] : calendarExistsGuard(db, userId, cid)), ...(existing ? staleGuard(db, calendarEvents, scope, id, userId, { seq: seq ?? null, updatedAt: existing.master.updatedAt }) : [])];
 	if (old?.davObjectId === id) statements.push(db.delete(calendarEvents).where(and(eq(calendarEvents.userId, userId), eq(calendarEvents.davObjectId, id), ne(calendarEvents.id, id))));
-	statements.push(existing ? db.update(calendarEvents).set(masterColumns).where(and(eq(calendarEvents.id, id), eq(calendarEvents.userId, userId))) : db.insert(calendarEvents).values({ ...masterColumns, id, userId, color, createdAt: now }));
+	statements.push(existing ? db.update(calendarEvents).set(masterColumns).where(and(eq(calendarEvents.id, id), eq(calendarEvents.userId, userId))) : db.insert(calendarEvents).values({ ...masterColumns, id, userId, color, calendarId: calendar.isDefault ? null : cid, createdAt: now }));
 	for (let i = 0; i < overrideRows.length; i += ROWS_PER_INSERT) statements.push(db.insert(calendarEvents).values(overrideRows.slice(i, i + ROWS_PER_INSERT)));
 	// A native event written for the first time has no stored resource yet.
 	const hasObject = (await db.select({ id: davCalendarObjects.id }).from(davCalendarObjects).where(eq(davCalendarObjects.id, id)).limit(1)).length > 0;
@@ -137,15 +141,16 @@ export async function putCalendarResource(ctx: DavContext, name: string, request
 
 /** DELETE of one calendar resource: the master row and its override rows in one statement, guarded like a PUT (the stored body goes with the master by cascade). */
 export async function deleteCalendarResource(ctx: DavContext, name: string, request: Request): Promise<Response> {
-	const cid = calendarCollectionId(ctx.userId);
-	const existing = await findCalendarByName(ctx.env, ctx.userId, name);
+	const calendar = calendarOf(ctx);
+	const cid = calendar.id;
+	const existing = await findCalendarByName(ctx.env, calendar, name);
 	const seq = existing ? (await etagSeqs(ctx.env, cid, [existing.id])).get(existing.id) : undefined;
 	const refused = failedPrecondition(request, existing ? etagFromSeq(seq, existing.master.updatedAt) : null);
 	if (refused) return refused;
 	if (!existing) return text(404, "Not found");
 	const db = getDb(ctx.env);
 	try {
-		await db.batch([...staleGuard(db, calendarEvents, await calendarScopeIds(ctx.env, cid), existing.id, ctx.userId, { seq: seq ?? null, updatedAt: existing.master.updatedAt }), db.delete(calendarEvents).where(and(eq(calendarEvents.userId, ctx.userId), or(eq(calendarEvents.id, existing.id), eq(calendarEvents.davObjectId, existing.id))))] as never);
+		await db.batch([...staleGuard(db, calendarEvents, [cid], existing.id, calendar.ownerId, { seq: seq ?? null, updatedAt: existing.master.updatedAt }), db.delete(calendarEvents).where(and(eq(calendarEvents.userId, calendar.ownerId), or(eq(calendarEvents.id, existing.id), eq(calendarEvents.davObjectId, existing.id))))] as never);
 	} catch (error) {
 		// Changed or removed since it was read.
 		if (isUniqueConstraintError(error)) return text(412, "Precondition failed");

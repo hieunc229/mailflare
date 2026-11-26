@@ -2,6 +2,8 @@ import type { calendarEvents } from "@/db/schema";
 import { buildVevent, eventZone, type FeedEvent } from "@/lib/calendar/feed";
 import { formatIcsUtc, joinIcsLines } from "@/lib/calendar/ics";
 import { buildVtimezone } from "@/lib/calendar/vtimezone";
+import { redactEvent } from "@/lib/calendar/visibility";
+import type { CalendarRole } from "@/lib/calendar/shares-types";
 import { feedRow, mergeCalendarBody } from "./calendar-merge";
 
 export type EventRow = typeof calendarEvents.$inferSelect;
@@ -17,6 +19,8 @@ export type CalendarResource = {
 	size?: number;
 	/** The iCalendar text a client PUT, for a resource a DAV client wrote; `fresh` when no row changed since (see rowsHash). */
 	stored?: { body: string; fresh: boolean };
+	/** The viewer's role in the collection; anything but the owner is served a body generated from the rows and redacted for it (D-6, D-12). */
+	role?: CalendarRole;
 };
 
 /** The href segment of a resource: the stored name of a DAV-created one, `<id>.ics` for a native event. */
@@ -37,6 +41,7 @@ export function resourceUpdatedAt(resource: CalendarResource): Date {
  * VALARM (spec 7.3), and an all-day event that has no zone of its own gets its dates in `userZone`.
  */
 export function renderCalendarObject(resource: CalendarResource, userZone?: string | null): string {
+	if (resource.role && resource.role !== "owner") resource = viewedBy(resource, resource.role);
 	if (resource.stored?.fresh) return resource.stored.body;
 	// A Mailflare-side edit of a DAV event: the mapped properties are rewritten into what the client sent (spec 7.3).
 	const merged = resource.stored && mergeCalendarBody(resource.stored.body, resource, userZone);
@@ -57,6 +62,16 @@ export function renderCalendarObject(resource: CalendarResource, userZone?: stri
 	for (const { event, recurrenceId } of parts) lines.push(...buildVevent(event, { stamp: formatIcsUtc(event.updatedAt ?? master.updatedAt), recurrenceId, uid, fallbackZone: userZone, alarm: true }));
 	lines.push("END:VCALENDAR");
 	return joinIcsLines(lines);
+}
+
+/**
+ * What a viewer other than the owner gets of a resource (D-6, D-12): every row through `redactEvent`, rendered per request, and never the
+ * body a client PUT (it can hold the owner's alarms and private text). A moved occurrence belongs to its series, so it is private when the
+ * series is, as in the events API.
+ */
+function viewedBy(resource: CalendarResource, role: CalendarRole): CalendarResource {
+	const view = (row: EventRow): EventRow => redactEvent({ ...row, isPrivate: row.isPrivate || resource.master.isPrivate }, role);
+	return { ...resource, stored: undefined, master: redactEvent(resource.master, role), overrides: resource.overrides.map(view) };
 }
 
 /** A VCALENDAR holding only the VTIMEZONE of a zone, the value of `C:calendar-timezone`. */

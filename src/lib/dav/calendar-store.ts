@@ -3,10 +3,11 @@ import { getDb } from "@/db";
 import { calendarEvents, davCalendarObjects } from "@/db/schema";
 import { OFF_CALENDAR_RESPONSES } from "@/lib/calendar/response-status";
 import { expandEvent, rruleEndedBefore } from "@/lib/calendar/rrule";
-import { calendarScopeIds, etagFromSeq, newestSeqOf } from "./changes";
+import { etagFromSeq, newestSeqOf } from "./changes";
 import type { ListedRow } from "./common";
 import { rowsHash } from "./calendar-merge";
 import { nativeResourceName, nativeUid, type CalendarResource, type EventRow } from "./calendar-render";
+import { inCalendar, scopeOf, type CalendarScope } from "./calendar-scope";
 
 type Env = Pick<CloudflareEnv, "DB">;
 
@@ -35,7 +36,8 @@ const joined = (env: Env) =>
 
 type Joined = { event: EventRow; name: string | null; uid: string | null; size: number | null };
 
-const toResource = ({ event, name, uid, size }: Joined): CalendarResource => ({ id: event.id, name: name ?? nativeResourceName(event.id), uid: uid ?? nativeUid(event.id), master: event, overrides: [], size: size ?? undefined });
+/** A resource of a collection; `role` is the viewer's, which decides what the rendered body shows (D-6). */
+const toResource = (scope: CalendarScope) => ({ event, name, uid, size }: Joined): CalendarResource => ({ id: event.id, name: name ?? nativeResourceName(event.id), uid: uid ?? nativeUid(event.id), master: event, overrides: [], size: size ?? undefined, role: scope.role });
 
 /** A response is cut into groups whose stored bodies add up to at most this many bytes (always at least one resource), so bodies never sit in memory together. */
 const CHUNK_BYTES = 8 * 1024 * 1024;
@@ -89,7 +91,8 @@ export async function withOverrides(env: Env, userId: string, resources: Calenda
  * no row changed since it was written. Kept apart from withOverrides because only the resources that are answered need it.
  */
 export async function withStored(env: Env, userId: string, resources: CalendarResource[]): Promise<CalendarResource[]> {
-	const byId = new Map(resources.filter(isDavMaster).map((resource) => [resource.id, resource]));
+	// Only the owner is served what a client PUT: everyone else gets a body generated from the rows, redacted for their role (D-12).
+	const byId = new Map(resources.filter((resource) => isDavMaster(resource) && (!resource.role || resource.role === "owner")).map((resource) => [resource.id, resource]));
 	const ids = [...byId.keys()];
 	for (let i = 0; i < ids.length; i += OVERRIDE_CHUNK) {
 		const rows = await getDb(env).select({ id: davCalendarObjects.id, body: davCalendarObjects.body, rowsHash: davCalendarObjects.rowsHash }).from(davCalendarObjects).where(and(eq(davCalendarObjects.userId, userId), inArray(davCalendarObjects.id, ids.slice(i, i + OVERRIDE_CHUNK))));
@@ -110,38 +113,42 @@ export function releaseStored(resources: CalendarResource[]): void {
  * The visible resources behind a set of href names, in one query per chunk (`bodies` false: without the stored bodies, which the caller loads with `withStored` in planned chunks). A name only matches the resource that
  * is served under exactly that name: `<id>.ics` for a native event, the stored name for a DAV-created one.
  */
-export async function loadCalendarByNames(env: Env, userId: string, names: string[], bodies = true): Promise<CalendarResource[]> {
+export async function loadCalendarByNames(env: Env, calendar: CalendarScope | string, names: string[], bodies = true): Promise<CalendarResource[]> {
 	if (!names.length) return [];
+	const scope = scopeOf(calendar);
 	const wanted = new Set(names);
 	const rows = await joined(env)
-		.where(and(eq(calendarEvents.userId, userId), isMaster, visible, or(inArray(calendarEvents.id, names.map((name) => name.replace(/\.ics$/, ""))), inArray(davCalendarObjects.name, names))))
+		.where(and(inCalendar(scope), isMaster, visible, or(inArray(calendarEvents.id, names.map((name) => name.replace(/\.ics$/, ""))), inArray(davCalendarObjects.name, names))))
 		.orderBy(asc(calendarEvents.id));
-	const resources = await withOverrides(env, userId, rows.map(toResource).filter((resource) => wanted.has(resource.name)));
-	return bodies ? withStored(env, userId, resources) : resources;
+	const resources = await withOverrides(env, scope.ownerId, rows.map(toResource(scope)).filter((resource) => wanted.has(resource.name)));
+	return bodies ? withStored(env, scope.ownerId, resources) : resources;
 }
 
 /**
  * The resource served under a name whether or not it is visible: a PUT onto the name of a hidden (cancelled, declined)
  * resource replaces it, and DELETE removes it. Without the stored body and overrides: a write replaces both.
  */
-export async function findCalendarByName(env: Env, userId: string, name: string): Promise<CalendarResource | undefined> {
-	const rows = await joined(env).where(and(eq(calendarEvents.userId, userId), isMaster, or(eq(davCalendarObjects.name, name), eq(calendarEvents.id, name.replace(/\.ics$/, "")))));
-	return rows.map(toResource).find((resource) => resource.name === name);
+export async function findCalendarByName(env: Env, calendar: CalendarScope | string, name: string): Promise<CalendarResource | undefined> {
+	const scope = scopeOf(calendar);
+	const rows = await joined(env).where(and(inCalendar(scope), isMaster, or(eq(davCalendarObjects.name, name), eq(calendarEvents.id, name.replace(/\.ics$/, "")))));
+	return rows.map(toResource(scope)).find((resource) => resource.name === name);
 }
 
-/** Another resource of this user that already has this UID (a stored UID, or `<id>@mailflare` of a native event), hidden ones included. */
-export async function findUidConflict(env: Env, userId: string, uid: string, exceptId: string | null): Promise<CalendarResource | undefined> {
-	const rows = await joined(env).where(and(eq(calendarEvents.userId, userId), isMaster, matchesUid(uid), exceptId === null ? undefined : ne(calendarEvents.id, exceptId)));
-	return rows.map(toResource).find((resource) => resource.uid === uid);
+/** Another resource of this calendar that already has this UID (a stored UID, or `<id>@mailflare` of a native event), hidden ones included. A UID is unique per collection. */
+export async function findUidConflict(env: Env, calendar: CalendarScope | string, uid: string, exceptId: string | null): Promise<CalendarResource | undefined> {
+	const scope = scopeOf(calendar);
+	const rows = await joined(env).where(and(inCalendar(scope), isMaster, matchesUid(uid), exceptId === null ? undefined : ne(calendarEvents.id, exceptId)));
+	return rows.map(toResource(scope)).find((resource) => resource.uid === uid);
 }
 
 /** Visible resources in id order after `after`, one more than `limit` so the caller can tell it was cut. Without overrides: `withOverrides` adds them to the rows that need them. */
-export async function listCalendar(env: Env, userId: string, limit: number, where?: ReturnType<typeof and>, after?: string): Promise<CalendarResource[]> {
+export async function listCalendar(env: Env, calendar: CalendarScope | string, limit: number, where?: ReturnType<typeof and>, after?: string): Promise<CalendarResource[]> {
+	const scope = scopeOf(calendar);
 	const rows = await joined(env)
-		.where(and(eq(calendarEvents.userId, userId), isMaster, visible, where, after === undefined ? undefined : gt(calendarEvents.id, after)))
+		.where(and(inCalendar(scope), isMaster, visible, where, after === undefined ? undefined : gt(calendarEvents.id, after)))
 		.orderBy(asc(calendarEvents.id))
 		.limit(limit + 1);
-	return rows.map(toResource);
+	return rows.map(toResource(scope));
 }
 
 /**
@@ -177,54 +184,56 @@ export function occursInRange(resource: CalendarResource, start: Date, end: Date
 }
 
 /** Name and update time of the visible resources among some event ids (the master rows), for sync-collection. */
-export async function liveCalendarNames(env: Env, userId: string, ids: string[]): Promise<Map<string, { name: string; updatedAt: Date }>> {
+export async function liveCalendarNames(env: Env, calendar: CalendarScope | string, ids: string[]): Promise<Map<string, { name: string; updatedAt: Date }>> {
+	const scope = scopeOf(calendar);
 	const live = new Map<string, { name: string; updatedAt: Date }>();
 	for (let i = 0; i < ids.length; i += 90) {
 		const rows = await getDb(env)
 			.select({ id: calendarEvents.id, name: davCalendarObjects.name, updatedAt: calendarEvents.updatedAt })
 			.from(calendarEvents)
 			.leftJoin(davCalendarObjects, eq(davCalendarObjects.id, calendarEvents.id))
-			.where(and(eq(calendarEvents.userId, userId), isMaster, visible, inArray(calendarEvents.id, ids.slice(i, i + 90))));
+			.where(and(inCalendar(scope), isMaster, visible, inArray(calendarEvents.id, ids.slice(i, i + 90))));
 		for (const row of rows) live.set(row.id, { name: row.name ?? nativeResourceName(row.id), updatedAt: row.updatedAt });
 	}
 	return live;
 }
 
 /** Names of masters that exist but are not served (needs-action, declined, cancelled), so sync can still report them gone by name. */
-export async function hiddenCalendarNames(env: Env, userId: string, ids: string[]): Promise<Map<string, string>> {
+export async function hiddenCalendarNames(env: Env, calendar: CalendarScope | string, ids: string[]): Promise<Map<string, string>> {
+	const scope = scopeOf(calendar);
 	const names = new Map<string, string>();
 	for (let i = 0; i < ids.length; i += 90) {
 		const rows = await getDb(env)
 			.select({ id: calendarEvents.id, name: davCalendarObjects.name })
 			.from(calendarEvents)
 			.leftJoin(davCalendarObjects, eq(davCalendarObjects.id, calendarEvents.id))
-			.where(and(eq(calendarEvents.userId, userId), isMaster, inArray(calendarEvents.id, ids.slice(i, i + 90))));
+			.where(and(inCalendar(scope), isMaster, inArray(calendarEvents.id, ids.slice(i, i + 90))));
 		for (const row of rows) names.set(row.id, row.name ?? nativeResourceName(row.id));
 	}
 	return names;
 }
 
-const listing = (env: Env, userId: string, scope: string[], after: string) =>
+const listing = (env: Env, scope: CalendarScope, after: string) =>
 	getDb(env)
-		.select({ id: calendarEvents.id, name: davCalendarObjects.name, updatedAt: calendarEvents.updatedAt, seq: newestSeqOf(scope, calendarEvents.id) })
+		.select({ id: calendarEvents.id, name: davCalendarObjects.name, updatedAt: calendarEvents.updatedAt, seq: newestSeqOf([scope.id], calendarEvents.id) })
 		.from(calendarEvents)
 		.leftJoin(davCalendarObjects, eq(davCalendarObjects.id, calendarEvents.id))
-		.where(and(eq(calendarEvents.userId, userId), isMaster, visible, gt(calendarEvents.id, after)))
+		.where(and(inCalendar(scope), isMaster, visible, gt(calendarEvents.id, after)))
 		.orderBy(asc(calendarEvents.id))
 		.limit(LIST_PAGE);
 
 /** How many visible resources the calendar has. */
-export async function countCalendar(env: Env, userId: string): Promise<number> {
-	const [row] = await getDb(env).select({ count: sql<number>`count(*)` }).from(calendarEvents).where(and(eq(calendarEvents.userId, userId), isMaster, visible));
+export async function countCalendar(env: Env, calendar: CalendarScope | string): Promise<number> {
+	const [row] = await getDb(env).select({ count: sql<number>`count(*)` }).from(calendarEvents).where(and(inCalendar(scopeOf(calendar)), isMaster, visible));
 	return Number(row?.count ?? 0);
 }
 
 /** Every visible resource's name and ETag, in pages of LIST_PAGE by id (keyset): one statement a page, for PROPFIND depth 1 and the first sync. Stops at MAX_LISTED. */
-export async function* pageCalendar(env: Env, userId: string, cid: string): AsyncGenerator<ListedRow[]> {
-	const scope = await calendarScopeIds(env, cid);
+export async function* pageCalendar(env: Env, calendar: CalendarScope | string): AsyncGenerator<ListedRow[]> {
+	const scope = scopeOf(calendar);
 	let after = "";
 	for (let listed = 0; listed < MAX_LISTED; ) {
-		const rows = await listing(env, userId, scope, after);
+		const rows = await listing(env, scope, after);
 		if (!rows.length) return;
 		yield rows.map((row) => ({ name: row.name ?? nativeResourceName(row.id), etag: etagFromSeq(row.seq, row.updatedAt), updatedAt: row.updatedAt }));
 		if (rows.length < LIST_PAGE) return;

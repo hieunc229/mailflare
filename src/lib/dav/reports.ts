@@ -2,11 +2,10 @@ import { and } from "drizzle-orm";
 import { CALENDAR_CHUNK, endedBefore, hiddenCalendarNames, isDavMaster, listCalendar, liveCalendarNames, loadCalendarByNames, matchesUid, MAX_LISTED, MAX_QUERY_CANDIDATES, occursInRange, overlapsRange, planCalendarChunks, releaseStored, withOverrides, withStored } from "./calendar-store";
 import { cardMatches, CARD_CHUNK, listCards, liveCardNames, loadCardBodies, loadCardMetaByNames, MAX_CARDS, planCardChunks, type PropFilter, type TextMatch } from "./card-store";
 import { changesSince, etagSeqs, formatSyncToken, syncPosition } from "./changes";
-import { calendarMember, cardMember, collectionIdFor, collectionPath, etagOf, listMembers, memberResponse, type Area, type DavContext, type Member } from "./collections";
+import { calendarMember, calendarOf, cardMember, collectionIdFor, pathOf, etagOf, listMembers, memberResponse, type Area, type DavContext, type Member } from "./collections";
 import { inChunks, NS, precondition, streamMultistatus, text, wantedProps } from "./common";
 import type { DavElement } from "./xml";
 import type { DavResponse } from "./xml-writer";
-import { calendarCollectionId } from "./changes";
 import type { CalendarResource } from "./calendar-render";
 
 /** Hrefs one multiget may name; more is 403 `number-of-matches-within-limits`. */
@@ -32,7 +31,7 @@ export function memberNameFromHref(raw: string, area: Area, ctx: DavContext): st
 	} catch {
 		return null;
 	}
-	const base = collectionPath(area, ctx.userId);
+	const base = pathOf(area, ctx);
 	// Same host, any scheme: behind a TLS proxy the request URL may say http while the client addresses https.
 	if (url.host !== new URL(ctx.origin).host || !url.pathname.startsWith(base)) return null;
 	let name: string;
@@ -54,7 +53,7 @@ function unsupportedData(wanted: DavElement | undefined, area: Area): boolean {
 	return area === "calendars" ? (!!type && type !== "text/calendar") || (!!version && version !== "2.0") : (!!type && !["text/vcard", "text/x-vcard"].includes(type));
 }
 
-const notFound = (area: Area, ctx: DavContext, name: string): DavResponse => ({ href: collectionPath(area, ctx.userId) + name, status: 404 });
+const notFound = (area: Area, ctx: DavContext, name: string): DavResponse => ({ href: pathOf(area, ctx) + name, status: 404 });
 
 /** `YYYYMMDDTHHMMSSZ` as an instant, or null. */
 function utcValue(value: string | undefined): number | null {
@@ -133,7 +132,7 @@ export async function* respondCalendar(ctx: DavContext, resources: CalendarResou
 	if (!resources.length) yield [];
 	const bodies = wantsCalendarBody(wanted);
 	for (const plan of planCalendarChunks(resources)) {
-		if (bodies) await withStored(ctx.env, ctx.userId, plan);
+		if (bodies) await withStored(ctx.env, calendarOf(ctx).ownerId, plan);
 		yield await Promise.all(plan.map((resource) => memberResponse("calendars", ctx, calendarMember(resource, seqs, ctx.timeZone), wanted)));
 		releaseStored(plan);
 	}
@@ -162,13 +161,13 @@ async function multiget(area: Area, ctx: DavContext, root: DavElement, wanted: D
 		for (let i = 0; i < requested.length; i += size) {
 			const slice = requested.slice(i, i + size);
 			if (area === "calendars") {
-				const resources = await loadCalendarByNames(ctx.env, ctx.userId, slice, false);
-				const seqs = await etagSeqs(ctx.env, collectionIdFor(area, ctx.userId), resources.map((resource) => resource.id));
+				const resources = await loadCalendarByNames(ctx.env, calendarOf(ctx), slice, false);
+				const seqs = await etagSeqs(ctx.env, collectionIdFor(area, ctx), resources.map((resource) => resource.id));
 				for (const resource of resources) found.add(resource.name);
 				for await (const part of respondCalendar(ctx, resources, seqs, wanted)) yield part;
 			} else {
 				const metas = await loadCardMetaByNames(ctx.env, ctx.userId, slice);
-				const seqs = await etagSeqs(ctx.env, collectionIdFor(area, ctx.userId), metas.map((card) => card.id));
+				const seqs = await etagSeqs(ctx.env, collectionIdFor(area, ctx), metas.map((card) => card.id));
 				const out: DavResponse[] = [];
 				for (const plan of planCardChunks(metas)) for (const card of wantsData(wanted, area) ? await loadCardBodies(ctx.env, ctx.userId, plan) : plan) {
 					found.add(card.name);
@@ -180,7 +179,7 @@ async function multiget(area: Area, ctx: DavContext, root: DavElement, wanted: D
 	}
 	// Hrefs that are not this user's resources, are not there or are hidden all look the same: a 404 of their own.
 	const trailer = () => [...requested.filter((name) => !found.has(name)).map((name) => notFound(area, ctx, name)), ...invalid.map((href): DavResponse => ({ href, status: 404 }))];
-	return streamMultistatus(chunks(), { href: collectionPath(area, ctx.userId), trailer });
+	return streamMultistatus(chunks(), { href: pathOf(area, ctx), trailer });
 }
 
 async function calendarQuery(ctx: DavContext, root: DavElement, wanted: DavElement | undefined): Promise<Response> {
@@ -188,7 +187,7 @@ async function calendarQuery(ctx: DavContext, root: DavElement, wanted: DavEleme
 	const query = parseCalendarFilter(root);
 	if (query === "invalid") return invalidFilter(area);
 	if (!query) return unsupportedFilter(area);
-	const href = collectionPath(area, ctx.userId);
+	const href = pathOf(area, ctx);
 	if (query.comp === "other") return streamMultistatus(respond(area, ctx, [], wanted), { href });
 	const range = query.range ? { start: new Date(query.range.start), end: new Date(query.range.end) } : null;
 	const where = and(range ? overlapsRange(range.start, range.end) : undefined, query.uid ? matchesUid(query.uid) : undefined);
@@ -197,7 +196,7 @@ async function calendarQuery(ctx: DavContext, root: DavElement, wanted: DavEleme
 	const rows: CalendarResource[] = [];
 	let truncated = false;
 	for (let after: string | undefined, scanned = 0; ; ) {
-		const page = await listCalendar(ctx.env, ctx.userId, MAX_QUERY_CANDIDATES, where, after);
+		const page = await listCalendar(ctx.env, calendarOf(ctx), MAX_QUERY_CANDIDATES, where, after);
 		const cut = page.length > MAX_QUERY_CANDIDATES;
 		const taken = cut ? page.slice(0, MAX_QUERY_CANDIDATES) : page;
 		scanned += taken.length;
@@ -216,7 +215,7 @@ async function calendarQuery(ctx: DavContext, root: DavElement, wanted: DavEleme
 	let verdicts = range ? candidates.map((resource) => occursInRange(resource, range.start, range.end)) : [];
 	if (range) {
 		const undecided = candidates.filter((resource, i) => !verdicts[i].match && !verdicts[i].exhausted && isDavMaster(resource));
-		await withOverrides(ctx.env, ctx.userId, undecided);
+		await withOverrides(ctx.env, calendarOf(ctx).ownerId, undecided);
 		for (const resource of undecided) loaded.add(resource.id);
 		verdicts = candidates.map((resource, i) => (loaded.has(resource.id) ? occursInRange(resource, range.start, range.end) : verdicts[i]));
 	}
@@ -235,8 +234,8 @@ async function calendarQuery(ctx: DavContext, root: DavElement, wanted: DavEleme
 		}
 		matched.push(resource);
 	}
-	await withOverrides(ctx.env, ctx.userId, matched.filter((resource) => !loaded.has(resource.id)));
-	const seqs = await etagSeqs(ctx.env, calendarCollectionId(ctx.userId), matched.map((resource) => resource.id));
+	await withOverrides(ctx.env, calendarOf(ctx).ownerId, matched.filter((resource) => !loaded.has(resource.id)));
+	const seqs = await etagSeqs(ctx.env, calendarOf(ctx).id, matched.map((resource) => resource.id));
 	return streamMultistatus(respondCalendar(ctx, matched, seqs, wanted), { href, trailer: () => (truncated ? [{ href, status: 507, error: "<D:number-of-matches-within-limits/>" }] : []) });
 }
 
@@ -245,7 +244,7 @@ async function addressBookQuery(ctx: DavContext, root: DavElement, wanted: DavEl
 	const query = parseCardFilter(root);
 	if (query === "invalid") return invalidFilter(area);
 	if (!query) return unsupportedFilter(area);
-	const href = collectionPath(area, ctx.userId);
+	const href = pathOf(area, ctx);
 	const cards = await listCards(ctx.env, ctx.userId, MAX_CARDS);
 	let truncated = cards.length > MAX_CARDS;
 	let matched = cards.slice(0, MAX_CARDS).filter((card) => cardMatches(card, query.filters, query.allOf));
@@ -254,7 +253,7 @@ async function addressBookQuery(ctx: DavContext, root: DavElement, wanted: DavEl
 		matched = matched.slice(0, cap);
 		truncated = true;
 	}
-	const seqs = await etagSeqs(ctx.env, collectionIdFor(area, ctx.userId), matched.map((card) => card.id));
+	const seqs = await etagSeqs(ctx.env, collectionIdFor(area, ctx), matched.map((card) => card.id));
 	const wantsBody = wantsData(wanted, area);
 	async function* chunks(): AsyncGenerator<DavResponse[]> {
 		if (!matched.length) yield [];
@@ -273,8 +272,8 @@ async function syncCollection(area: Area, ctx: DavContext, root: DavElement, wan
 	const tokenElement = children(root, NS.dav, "sync-token")[0];
 	if (!tokenElement || !wanted || wanted.name !== "prop") return text(400, "sync-token and prop are required");
 	const token = tokenElement.text.trim();
-	const cid = collectionIdFor(area, ctx.userId);
-	const path = collectionPath(area, ctx.userId);
+	const cid = collectionIdFor(area, ctx);
+	const path = pathOf(area, ctx);
 	const lightWanted = wanted;
 	const live = (member: Omit<Member, "body">) => memberResponse(area, ctx, member, lightWanted);
 
@@ -291,12 +290,12 @@ async function syncCollection(area: Area, ctx: DavContext, root: DavElement, wan
 	const result = await changesSince(ctx.env, cid, token);
 	if (result === "invalid") return precondition(403, "valid-sync-token");
 	const keys = result.changes.map((change) => change.objectKey);
-	const names = area === "calendars" ? await liveCalendarNames(ctx.env, ctx.userId, keys) : await liveCardNames(ctx.env, ctx.userId, keys);
+	const names = area === "calendars" ? await liveCalendarNames(ctx.env, calendarOf(ctx), keys) : await liveCardNames(ctx.env, ctx.userId, keys);
 	const seqs = await etagSeqs(ctx.env, cid, [...names.keys()]);
 	const suffix = area === "calendars" ? ".ics" : ".vcf";
 	// Gone or hidden: a destroyed resource carries the name it had in the change log, a hidden one still has its row.
 	const gone = result.changes.filter((change) => !names.has(change.objectKey));
-	const hidden = area === "calendars" ? await hiddenCalendarNames(ctx.env, ctx.userId, gone.filter((change) => change.type !== "destroyed").map((change) => change.objectKey)) : new Map<string, string>();
+	const hidden = area === "calendars" ? await hiddenCalendarNames(ctx.env, calendarOf(ctx), gone.filter((change) => change.type !== "destroyed").map((change) => change.objectKey)) : new Map<string, string>();
 	const nameOfGone = new Map(gone.map((change) => [change.objectKey, change.name ?? hidden.get(change.objectKey) ?? `${change.objectKey}${suffix}`]));
 	const responses: DavResponse[] = [];
 	for (const key of keys) {

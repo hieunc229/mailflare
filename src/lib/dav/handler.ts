@@ -7,9 +7,10 @@ import { loadCalendarByNames } from "./calendar-store";
 import { deleteCalendarResource, putCalendarResource } from "./calendar-write";
 import { deleteCard, putCard } from "./card-write";
 import { loadCardBodies, loadCardMetaByNames } from "./card-store";
-import { calendarMember, cardMember, collectionIdFor, collectionProperties, collectionPath, memberResponse, propfindCollection, type Area, type DavContext } from "./collections";
+import { listCalendarCollections, resolveCalendarCollection, CALENDAR_SEGMENT } from "./calendar-collections";
+import { calendarMember, calendarOf, cardMember, collectionIdFor, collectionProperties, collectionPath, memberResponse, pathOf, propfindCollection, type Area, type DavContext } from "./collections";
 import { BASE_HEADERS, collection, el, etagListed, etagMatches, href, NS, precondition, readXmlBody, selectProps, text, wantedProps, XML_HEADERS, type Property } from "./common";
-import { etagSeqs } from "./changes";
+import { etagSeqs, syncPositions } from "./changes";
 import { handleReport } from "./reports";
 import { isDavEnabled } from "./settings";
 import type { DavElement } from "./xml";
@@ -27,8 +28,8 @@ export function isDavPath(pathname: string): boolean {
 
 type Target =
 	| { kind: "root" | "principal" | "home"; area?: Area }
-	| { kind: "collection"; area: Area }
-	| { kind: "resource"; area: Area; name: string }
+	| { kind: "collection"; area: Area; segment: string }
+	| { kind: "resource"; area: Area; segment: string; name: string }
 	| { kind: "bad-name" };
 
 /**
@@ -50,11 +51,12 @@ function locate(pathname: string, userId: string): Target | null {
 	if (area === "principals") return segments.length === 3 ? { kind: "principal" } : null;
 	if (area !== "calendars" && area !== "addressbooks") return null;
 	if (segments.length === 3) return { kind: "home", area };
-	if (name !== "default") return null;
-	if (segments.length === 4) return { kind: "collection", area };
+	// An address book is always `default`; a calendar is `default`, `c-<id>` or `shared-<grant>` (spec F9 D-12).
+	if (area === "addressbooks" ? name !== "default" : !CALENDAR_SEGMENT.test(name)) return null;
+	if (segments.length === 4) return { kind: "collection", area, segment: name };
 	const extension = area === "calendars" ? ".ics" : ".vcf";
 	if (!member.endsWith(extension)) return { kind: "bad-name" };
-	return MEMBER_NAME.test(member) ? { kind: "resource", area, name: member } : { kind: "bad-name" };
+	return MEMBER_NAME.test(member) ? { kind: "resource", area, segment: name, name: member } : { kind: "bad-name" };
 }
 
 type DavUser = { id: string; email: string; name: string };
@@ -131,11 +133,11 @@ async function withinWriteBudget(env: CloudflareEnv, userId: string): Promise<bo
 
 /** GET and HEAD of one resource: the stored body or its generated text, with its ETag. */
 async function getResource(area: Area, ctx: DavContext, name: string, request: Request): Promise<Response> {
-	const cid = collectionIdFor(area, ctx.userId);
+	const cid = collectionIdFor(area, ctx);
 	let body: string;
 	let member;
 	if (area === "calendars") {
-		const [resource] = await loadCalendarByNames(ctx.env, ctx.userId, [name]);
+		const [resource] = await loadCalendarByNames(ctx.env, calendarOf(ctx), [name]);
 		if (!resource) return text(404, "Not found");
 		member = calendarMember(resource, await etagSeqs(ctx.env, cid, [resource.id]), ctx.timeZone);
 		body = member.body!();
@@ -198,6 +200,12 @@ async function route(request: Request, env: CloudflareEnv): Promise<Response | n
 
 	const user: DavUser = { id: auth.userId, email: auth.user.email, name: auth.user.name };
 	const ctx: DavContext = { env, userId: auth.userId, email: auth.user.email, name: auth.user.name, timeZone: auth.user.timeZone ?? null, origin: url.origin };
+	// The calendar a path names is decided on every request, so a revoked grant or a calendar turned off closes it at once (D-12). Not theirs or not there: 404.
+	if ((target.kind === "collection" || target.kind === "resource") && target.area === "calendars") {
+		const calendar = await resolveCalendarCollection(env, user, target.segment);
+		if (!calendar) return text(404, "Not found");
+		ctx.calendar = calendar;
+	}
 
 	if ((request.method === "GET" || request.method === "HEAD") && target.kind === "resource") return getResource(target.area, ctx, target.name, request);
 
@@ -236,17 +244,29 @@ async function route(request: Request, env: CloudflareEnv): Promise<Response | n
 
 	const addresses = target.kind === "principal" ? await userAddresses(env, user) : [];
 	const responses = [await selectProps(wanted, properties(target.kind, target.area, user, addresses))];
-	// The home set's one child is the collection itself.
-	if (target.kind === "home" && depth === "1") responses.push(await selectProps(wanted, { href: collectionPath(target.area!, ctx.userId), props: collectionProperties(target.area!, ctx) }));
+	if (target.kind === "home" && depth === "1") {
+		if (target.area === "calendars") {
+			// Every calendar is a child (D-12). Their properties and sync positions are read for all of them at once: a statement per calendar would spend a Worker's subrequests.
+			const calendars = await listCalendarCollections(env, user);
+			const positions = wantsPosition(wanted) ? await syncPositions(env, calendars.map((calendar) => calendar.id)) : undefined;
+			for (const calendar of calendars) {
+				const child: DavContext = { ...ctx, calendar };
+				responses.push(await selectProps(wanted, { href: pathOf("calendars", child), props: collectionProperties("calendars", child, { listing: calendar, positions }) }));
+			}
+		} else responses.push(await selectProps(wanted, { href: collectionPath(target.area!, ctx.userId), props: collectionProperties(target.area!, ctx) }));
+	}
 	return new Response(multistatus(responses), { status: 207, headers: XML_HEADERS });
 }
 
+/** Whether a PROPFIND asks for a sync position (allprop does: it lists the light properties, the sync token among them). */
+const wantsPosition = (wanted: DavElement | undefined) => !wanted || wanted.name !== "prop" || wanted.children.some((child) => (child.ns === NS.dav && child.name === "sync-token") || (child.ns === NS.cs && child.name === "getctag"));
+
 /** PROPFIND on one resource (Depth 0 or 1 alike: it has no children). */
 async function propfindResource(ctx: DavContext, target: { area: Area; name: string }, wanted: DavElement | undefined): Promise<Response> {
-	const cid = collectionIdFor(target.area, ctx.userId);
+	const cid = collectionIdFor(target.area, ctx);
 	let member;
 	if (target.area === "calendars") {
-		const [resource] = await loadCalendarByNames(ctx.env, ctx.userId, [target.name]);
+		const [resource] = await loadCalendarByNames(ctx.env, calendarOf(ctx), [target.name]);
 		member = resource && calendarMember(resource, await etagSeqs(ctx.env, cid, [resource.id]), ctx.timeZone);
 	} else {
 		const [meta] = await loadCardMetaByNames(ctx.env, ctx.userId, [target.name]);

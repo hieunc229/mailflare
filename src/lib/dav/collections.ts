@@ -1,9 +1,12 @@
 import { eq } from "drizzle-orm";
 import { getDb } from "@/db";
-import { davCollections } from "@/db/schema";
+import { davCollections, users } from "@/db/schema";
 import { validTimeZone } from "@/lib/calendar/feed";
 import { calendarTimezoneObject, renderCalendarObject, resourceUpdatedAt, type CalendarResource } from "./calendar-render";
 import { countCalendar, LIST_PAGE, MAX_LISTED, pageCalendar } from "./calendar-store";
+import type { CalendarCollection, CalendarListing } from "./calendar-collections";
+import { roleAtLeast } from "@/lib/calendar/shares";
+import { defaultScope } from "./calendar-scope";
 import { etagFromSeq, formatSyncToken, syncPosition, addressBookCollectionId, calendarCollectionId } from "./changes";
 import { collection, el, href, NS, precondition, selectProps, streamMultistatus, XML_HEADERS, type ListedRow, type Property } from "./common";
 import { countCards, pageCards, type CardMeta, type Card } from "./card-store";
@@ -11,10 +14,16 @@ import type { DavElement } from "./xml";
 import { escapeXml, multistatus, type DavResponse } from "./xml-writer";
 
 export type Area = "calendars" | "addressbooks";
-export type DavContext = { env: CloudflareEnv; userId: string; email: string; name: string; timeZone: string | null; origin: string };
+/** `userId` is the requesting user; `calendar` the calendar collection the path names (absent: their default calendar). */
+export type DavContext = { env: CloudflareEnv; userId: string; email: string; name: string; timeZone: string | null; origin: string; calendar?: CalendarCollection };
 
-export const collectionPath = (area: Area, userId: string) => `/dav/${area}/${userId}/default/`;
-export const collectionIdFor = (area: Area, userId: string) => (area === "calendars" ? calendarCollectionId(userId) : addressBookCollectionId(userId));
+/** The calendar a context serves: the collection its path names, else the user's default calendar. */
+export const calendarOf = (ctx: Pick<DavContext, "userId" | "calendar">): CalendarCollection => ctx.calendar ?? { ...defaultScope(ctx.userId), role: "owner", segment: "default", grantId: null };
+
+export const collectionPath = (area: Area, userId: string, segment = "default") => `/dav/${area}/${userId}/${segment}/`;
+/** The path of the collection a request is about. */
+export const pathOf = (area: Area, ctx: Pick<DavContext, "userId" | "calendar">) => collectionPath(area, ctx.userId, area === "calendars" ? calendarOf(ctx).segment : "default");
+export const collectionIdFor = (area: Area, ctx: Pick<DavContext, "userId" | "calendar">) => (area === "calendars" ? calendarOf(ctx).id : addressBookCollectionId(ctx.userId));
 
 const RESOURCE_LIMIT = 1_048_576;
 const REPORTS: Record<Area, string[]> = {
@@ -23,6 +32,7 @@ const REPORTS: Record<Area, string[]> = {
 };
 // PROPPATCH is not served, so write-properties is not claimed.
 const PRIVILEGES = ["read", "write", "write-content", "bind", "unbind", "read-current-user-privilege-set"];
+const READ_PRIVILEGES = ["read", "read-current-user-privilege-set"];
 
 /** A resource as the report and PROPFIND code sees it: what the live properties need, with the body produced on demand. */
 export type Member = { name: string; etag: string; lastModified: Date; contentType: string; /** Known without the body (a stored card), so the length is cheap. */ size?: number; body?: () => string };
@@ -69,27 +79,40 @@ export function memberProperties(area: Area, member: Member): Property[] {
 	return props;
 }
 
-export const memberResponse = (area: Area, ctx: DavContext, member: Member, wanted: DavElement | undefined) => selectProps(wanted, { href: collectionPath(area, ctx.userId) + member.name, props: memberProperties(area, member) });
+export const memberResponse = (area: Area, ctx: DavContext, member: Member, wanted: DavElement | undefined) => selectProps(wanted, { href: pathOf(area, ctx) + member.name, props: memberProperties(area, member) });
 
-const privilegeSet = () => el(NS.dav, "current-user-privilege-set", PRIVILEGES.map((name) => `<D:privilege><D:${name}/></D:privilege>`).join(""));
+/** Read-only for a `read` grant, what F6 serves for everyone who may write (D-12). */
+const privilegeSet = (writable: boolean) => el(NS.dav, "current-user-privilege-set", (writable ? PRIVILEGES : READ_PRIVILEGES).map((name) => `<D:privilege><D:${name}/></D:privilege>`).join(""));
+
+/** What a home listing has read already: the collection's own properties and, for the whole home at once, the sync positions. */
+export type CollectionPreload = { listing?: CalendarListing; positions?: Map<string, { epoch: string; seq: number }> };
 
 /** Live properties of the calendar or address book collection. The expensive ones (stored settings, sync position) are read once and only when asked for. */
-export function collectionProperties(area: Area, ctx: DavContext): Property[] {
-	const cid = collectionIdFor(area, ctx.userId);
-	const settings = once(async () => (await getDb(ctx.env).select().from(davCollections).where(eq(davCollections.id, cid)).limit(1))[0]);
+export function collectionProperties(area: Area, ctx: DavContext, preload: CollectionPreload = {}): Property[] {
+	const cid = collectionIdFor(area, ctx);
+	const calendarRole = area === "calendars" ? calendarOf(ctx) : null;
+	const shared = !!calendarRole && calendarRole.ownerId !== ctx.userId;
+	const settings = once(async () => preload.listing ?? (await getDb(ctx.env).select().from(davCollections).where(eq(davCollections.id, cid)).limit(1))[0]);
 	const token = once(async () => {
 		// The epoch is read first so a fresh collection gets its state row before the position is taken.
-		const { epoch, seq } = await syncPosition(ctx.env, cid);
+		const { epoch, seq } = preload.positions?.get(cid) ?? (await syncPosition(ctx.env, cid));
 		return formatSyncToken(ctx.origin, cid, epoch, seq);
 	});
+	// A shared calendar is told apart from the user's own by its owner's name; the owner's principal is not one this server serves, so `owner` stays the user's own.
+	const calendarName = async () => {
+		const base = (await settings())?.displayName || "Mailflare";
+		if (!shared) return base;
+		const [owner] = preload.listing ? [{ name: preload.listing.ownerName }] : await getDb(ctx.env).select({ name: users.name }).from(users).where(eq(users.id, calendarRole!.ownerId)).limit(1);
+		return owner?.name ? `${base} (${owner.name})` : base;
+	};
 	const principal = `/dav/principals/${ctx.userId}/`;
 	const calendar = area === "calendars";
 	const props: Property[] = [
 		{ ns: NS.dav, name: "resourcetype", value: () => collection(calendar ? el(NS.caldav, "calendar") : el(NS.carddav, "addressbook")) },
-		{ ns: NS.dav, name: "displayname", value: async () => el(NS.dav, "displayname", escapeXml((await settings())?.displayName || (calendar ? "Mailflare" : "Contacts"))) },
+		{ ns: NS.dav, name: "displayname", value: async () => el(NS.dav, "displayname", escapeXml(calendar ? await calendarName() : (await settings())?.displayName || "Contacts")) },
 		{ ns: NS.dav, name: "owner", value: () => el(NS.dav, "owner", href(principal)) },
 		{ ns: NS.dav, name: "current-user-principal", value: () => el(NS.dav, "current-user-principal", href(principal)) },
-		{ ns: NS.dav, name: "current-user-privilege-set", value: privilegeSet },
+		{ ns: NS.dav, name: "current-user-privilege-set", value: () => privilegeSet(!calendarRole || roleAtLeast(calendarRole.role, "edit")) },
 		{ ns: NS.dav, name: "supported-report-set", value: () => el(NS.dav, "supported-report-set", REPORTS[area].map((report) => `<D:supported-report><D:report>${report}</D:report></D:supported-report>`).join("")) },
 		{ ns: NS.dav, name: "sync-token", value: async () => el(NS.dav, "sync-token", escapeXml(await token())) },
 		{ ns: NS.cs, name: "getctag", value: async () => el(NS.cs, "getctag", escapeXml(await token())) },
@@ -125,8 +148,8 @@ export function collectionProperties(area: Area, ctx: DavContext): Property[] {
  */
 export async function listMembers(area: Area, ctx: DavContext): Promise<AsyncGenerator<Member[]> | "truncated"> {
 	const calendar = area === "calendars";
-	if ((await (calendar ? countCalendar(ctx.env, ctx.userId) : countCards(ctx.env, ctx.userId))) > MAX_LISTED) return "truncated";
-	const pages = calendar ? pageCalendar(ctx.env, ctx.userId, collectionIdFor(area, ctx.userId)) : pageCards(ctx.env, ctx.userId, LIST_PAGE, MAX_LISTED);
+	if ((await (calendar ? countCalendar(ctx.env, calendarOf(ctx)) : countCards(ctx.env, ctx.userId))) > MAX_LISTED) return "truncated";
+	const pages = calendar ? pageCalendar(ctx.env, calendarOf(ctx)) : pageCards(ctx.env, ctx.userId, LIST_PAGE, MAX_LISTED);
 	const contentType = calendar ? "text/calendar; charset=utf-8" : "text/vcard; charset=utf-8";
 	return (async function* () {
 		for await (const page of pages) yield page.map((row: ListedRow) => ({ name: row.name, etag: row.etag, lastModified: row.updatedAt, contentType, size: row.size }));
@@ -135,7 +158,7 @@ export async function listMembers(area: Area, ctx: DavContext): Promise<AsyncGen
 
 /** PROPFIND on the collection itself and, at depth 1, on every member, streamed. */
 export async function propfindCollection(area: Area, ctx: DavContext, wanted: DavElement | undefined, depth: "0" | "1"): Promise<Response> {
-	const path = collectionPath(area, ctx.userId);
+	const path = pathOf(area, ctx);
 	const self = await selectProps(wanted, { href: path, props: collectionProperties(area, ctx) });
 	if (depth === "0") return new Response(multistatus([self]), { status: 207, headers: XML_HEADERS });
 	const members = await listMembers(area, ctx);
