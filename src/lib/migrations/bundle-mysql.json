@@ -511,6 +511,23 @@
         "CREATE TABLE `contact_details` (\n\t`contact_id` varchar(191) NOT NULL,\n\t`details` longtext NOT NULL DEFAULT ('{}'),\n\t`updated_at` bigint NOT NULL,\n\tCONSTRAINT `contact_details_contact_id` PRIMARY KEY(`contact_id`)\n);",
         "ALTER TABLE `contact_details` ADD CONSTRAINT `contact_details_contact_id_contacts_id_fk` FOREIGN KEY (`contact_id`) REFERENCES `contacts`(`id`) ON DELETE cascade ON UPDATE no action;"
       ]
+    },
+    {
+      "name": "0027_mail_groups.sql",
+      "statements": [
+        "CREATE TABLE `mail_groups` (\n\t`id` varchar(191) NOT NULL,\n\t`domain_id` varchar(191) NOT NULL,\n\t`local_part` varchar(191) NOT NULL,\n\t`name` longtext NOT NULL,\n\t`description` longtext,\n\t`who_can_post` varchar(64) NOT NULL DEFAULT 'anyone',\n\t`reply_to` varchar(64) NOT NULL DEFAULT 'sender',\n\t`disabled` boolean NOT NULL DEFAULT false,\n\t`created_by_user_id` varchar(191),\n\t`created_at` bigint NOT NULL,\n\t`updated_at` bigint NOT NULL,\n\tCONSTRAINT `mail_groups_id` PRIMARY KEY(`id`),\n\tCONSTRAINT `mail_groups_address_idx` UNIQUE(`domain_id`,`local_part`)\n);",
+        "ALTER TABLE `mail_groups` ADD CONSTRAINT `mail_groups_domain_id_domains_id_fk` FOREIGN KEY (`domain_id`) REFERENCES `domains`(`id`) ON DELETE cascade ON UPDATE no action;",
+        "ALTER TABLE `mail_groups` ADD CONSTRAINT `mail_groups_created_by_user_id_users_id_fk` FOREIGN KEY (`created_by_user_id`) REFERENCES `users`(`id`) ON DELETE set null ON UPDATE no action;",
+        "CREATE INDEX `mail_groups_created_by_idx` ON `mail_groups` (`created_by_user_id`);",
+        "CREATE TABLE `mail_group_members` (\n\t`id` varchar(191) NOT NULL,\n\t`group_id` varchar(191) NOT NULL,\n\t`kind` varchar(64) NOT NULL,\n\t`user_id` varchar(191),\n\t`mailbox_id` varchar(191),\n\t`email` varchar(320),\n\t`can_send_as` boolean NOT NULL DEFAULT false,\n\t`created_by_user_id` varchar(191),\n\t`created_at` bigint NOT NULL,\n\tCONSTRAINT `mail_group_members_id` PRIMARY KEY(`id`),\n\tCONSTRAINT `mail_group_members_group_user_idx` UNIQUE(`group_id`,`user_id`),\n\tCONSTRAINT `mail_group_members_group_mailbox_idx` UNIQUE(`group_id`,`mailbox_id`),\n\tCONSTRAINT `mail_group_members_group_email_idx` UNIQUE(`group_id`,`email`)\n);",
+        "CREATE INDEX `mail_group_members_user_idx` ON `mail_group_members` (`user_id`);",
+        "CREATE INDEX `mail_group_members_mailbox_idx` ON `mail_group_members` (`mailbox_id`);",
+        "CREATE INDEX `mail_group_members_created_by_idx` ON `mail_group_members` (`created_by_user_id`);",
+        "ALTER TABLE `mail_group_members` ADD CONSTRAINT `mail_group_members_group_id_mail_groups_id_fk` FOREIGN KEY (`group_id`) REFERENCES `mail_groups`(`id`) ON DELETE cascade ON UPDATE no action;",
+        "ALTER TABLE `mail_group_members` ADD CONSTRAINT `mail_group_members_user_id_users_id_fk` FOREIGN KEY (`user_id`) REFERENCES `users`(`id`) ON DELETE cascade ON UPDATE no action;",
+        "ALTER TABLE `mail_group_members` ADD CONSTRAINT `mail_group_members_mailbox_id_mailboxes_id_fk` FOREIGN KEY (`mailbox_id`) REFERENCES `mailboxes`(`id`) ON DELETE cascade ON UPDATE no action;",
+        "ALTER TABLE `mail_group_members` ADD CONSTRAINT `mail_group_members_created_by_user_id_users_id_fk` FOREIGN KEY (`created_by_user_id`) REFERENCES `users`(`id`) ON DELETE set null ON UPDATE no action;"
+      ]
     }
   ]
 }

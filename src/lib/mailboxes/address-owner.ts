@@ -1,10 +1,11 @@
 import { and, eq, ne } from "drizzle-orm";
 import type { AppDatabase } from "@/db";
-import { domains, mailboxAliases, mailboxes } from "@/db/schema";
+import { domains, mailGroups, mailboxAliases, mailboxes } from "@/db/schema";
+import { isMissingTableError } from "@/lib/database-errors";
 import { normalizeRecipientLocalPart, parseRecipientAddress } from "@/lib/email/recipient-address";
 import { getMailboxDomainAddresses } from "./domain-addresses";
 
-export type AddressOwner = "mailbox" | "alias";
+export type AddressOwner = "mailbox" | "alias" | "group";
 
 export type FindAddressOwnerOptions = {
 	/**
@@ -33,10 +34,22 @@ export async function findAddressOwner(
 	]);
 	if (domainMailboxes.some((row) => normalizeRecipientLocalPart(row.localPart) === normalized)) return "mailbox";
 	if (domainAliases.some((row) => normalizeRecipientLocalPart(row.localPart) === normalized)) return "alias";
+	if (await domainHasGroupAt(db, domainId, normalized)) return "group";
 	if (options.allDomains && (await findAllDomainsMailboxFor(db, domainId, localPart, options.allDomains.exceptMailboxId))) {
 		return "mailbox";
 	}
 	return null;
+}
+
+/** A group is optional: before its migration is applied no address belongs to one. */
+async function domainHasGroupAt(db: AppDatabase, domainId: string, normalized: string): Promise<boolean> {
+	try {
+		const rows = await db.select({ localPart: mailGroups.localPart }).from(mailGroups).where(eq(mailGroups.domainId, domainId));
+		return rows.some((row) => normalizeRecipientLocalPart(row.localPart) === normalized);
+	} catch (error) {
+		if (isMissingTableError(error)) return false;
+		throw error;
+	}
 }
 
 /** Another mailbox that receives this address through "Use all domains", which a new address would silently take over. */
