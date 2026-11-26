@@ -186,6 +186,8 @@ export async function putCalendarResource(ctx: DavContext, name: string, request
 	}
 	const [last] = results[results.length - 1] as { seq: number | null }[];
 	const etag = etagFromSeq(last?.seq, now);
+	// What a delegate sent is not what the server keeps (RFC 4791 5.3.4): no ETag, the client fetches the resource to learn it.
+	if (delegate) return new Response(null, { status: atName ? 204 : 201, headers: BASE_HEADERS });
 	return atName ? replaced(etag) : created(etag);
 }
 
