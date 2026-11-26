@@ -13,6 +13,17 @@ function header(headers: Record<string, string>, name: string): string | undefin
 	return undefined;
 }
 
+/**
+ * Machine-sent mail: `Auto-Submitted` other than `no` (RFC 3834), or `Precedence: auto_reply`.
+ * Alerts and invoices are automated too, so this alone never drops group mail; it only triggers the
+ * check against external members (see `externalAutoAck` in `admitGroupMail`).
+ */
+export function isAutomatedMail(headers: Record<string, string>): boolean {
+	const submitted = header(headers, "auto-submitted")?.trim().toLowerCase();
+	if (submitted && submitted !== "no") return true;
+	return header(headers, "precedence")?.trim().toLowerCase() === "auto_reply";
+}
+
 export type GroupDropInput = {
 	groupId: string;
 	listIdentifier: string;

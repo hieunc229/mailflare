@@ -2,9 +2,10 @@ import { getDb } from "@/db";
 import { recordRuleMatch, resolveInboundAddress, type RoutingDecision } from "@/lib/email/routing";
 import { matchReportAddress } from "@/lib/deliverability/report-address";
 import { forwardedMarker, MAILFLARE_FORWARDED_HEADER } from "@/lib/email/account-forwarding";
-import { groupListIdentifier, groupDropReason } from "@/lib/groups/loop-utils";
+import { getEmailAddress, splitEmailAddressList } from "@/lib/email/address";
+import { groupListIdentifier, groupDropReason, isAutomatedMail } from "@/lib/groups/loop-utils";
 import { groupsAllowed } from "@/lib/groups/license";
-import { findMemberSenderAddress, loadOrgHostnames } from "@/lib/groups/policy";
+import { findMemberSenderAddress, isExternalMember, loadOrgHostnames } from "@/lib/groups/policy";
 import { canPost, GROUP_POST_REJECT_REASON } from "@/lib/groups/policy-utils";
 import { readTrustedDmarcResult } from "@/lib/spam/analyzers/authentication";
 import type { ProviderVerdicts } from "@/lib/spam/types";
@@ -83,8 +84,17 @@ export async function admitGroupMail(
 		console.warn(`Dropped mail to group ${group.address}: ${dropReason}`);
 		return { action: "drop" };
 	}
-	if (group.whoCanPost === "anyone") return decision;
 	const db = getDb(env);
+	// An external member's auto-ack to a relayed copy is `auto-generated`, which the guard above lets through for
+	// alerts and invoices. Without a marker on it, only the sender tells it apart: drop automated mail from a member.
+	if (isAutomatedMail(headers)) {
+		const senders = [input.envelopeFrom, ...splitEmailAddressList(input.from ?? headers.from).map((entry) => getEmailAddress(entry))].filter((value): value is string => !!value);
+		if (await isExternalMember(db, group.groupId, senders)) {
+			console.warn(`Dropped mail to group ${group.address}: automated mail from an external member`);
+			return { action: "drop" };
+		}
+	}
+	if (group.whoCanPost === "anyone") return decision;
 	const senderAddress = input.from ?? headers.from ?? "";
 	const allowed = canPost({
 		whoCanPost: group.whoCanPost,
