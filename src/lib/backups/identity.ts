@@ -96,4 +96,3 @@ export async function collationPadAttributes(db: D1Database, names: string[]): P
 		return new Map();
 	}
 }
-
