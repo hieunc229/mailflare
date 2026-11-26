@@ -301,3 +301,17 @@ test("same UID in a shared collection and in the delegate's own calendar are sep
 	assert.equal((await put(env, "/dav/calendars/u3/default/a.ics", keys.u3, vevent("same", "Mine"))).status, 201);
 	assert.equal((await put(env, `${SHARED("csh_edit", "u3")}a.ics`, keys.u3, vevent("same", "Theirs"))).status, 201);
 });
+
+test("documented limit: a read grantee's ETag and sync report move when the owner edits a private event, which tells them that it changed and when, never what", async (t) => {
+	const { env, keys, sql } = await fixture(t);
+	addEvent(sql, "evt_p", { isPrivate: 1, description: "Secret notes" });
+	const path = `${SHARED()}evt_p.ics`;
+	const before = await get(env, path, keys.u2);
+	assert.match(before.etag, /^"\d+"$/, "an ETag is a change number: no hash or text of the event is in it");
+	sql.prepare("UPDATE calendar_events SET description = 'Other secret', updated_at = updated_at + 1 WHERE id = 'evt_p'").run();
+	const after = await get(env, path, keys.u2);
+	assert.notEqual(after.etag, before.etag);
+	const stamps = (text) => text.replace(/(DTSTAMP|LAST-MODIFIED):\d+T\d+Z/g, "");
+	assert.equal(stamps(after.text), stamps(before.text), "the redacted body shows no change but its time stamps");
+	assert.doesNotMatch(after.text, /secret/i);
+});
