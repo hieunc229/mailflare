@@ -92,6 +92,8 @@ export async function putCalendarResource(ctx: DavContext, name: string, request
 	// An editor or manager writes the owner's rows (D-2) and never changes who is invited, answers for the owner or sends mail (v1, spec Non-goals).
 	const delegate = calendar.role !== "owner";
 	const atName = await findCalendarByName(env, calendar, name);
+	// A name a hidden invitation holds is the owner's: to anyone else it is refused as a clash, whatever UID the body carries, so there is neither a 412 to read nor two rows with one name.
+	if (delegate && !atName && (await findCalendarByName(env, calendar, name, true))) return precondition(403, "no-uid-conflict", "C");
 	const atNameSeq = atName ? (await etagSeqs(env, cid, [atName.id])).get(atName.id) : undefined;
 	const refused = failedPrecondition(request, atName ? etagFromSeq(atNameSeq, atName.master.updatedAt) : null);
 	if (refused) return refused;
