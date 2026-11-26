@@ -12,7 +12,7 @@ const DIALECTS = [
 ];
 
 for (const [dialect, directory, tag] of DIALECTS) {
-	test(`${dialect}: the calendar columns migration exists, is journalled last, and is bundled`, () => {
+	test(`${dialect}: the calendar columns migration exists, is journalled in order, and is bundled`, () => {
 		const entries = journal(directory);
 		// Later migrations follow it, so it is found by tag rather than at the end of the journal.
 		const at = entries.findIndex((entry) => entry.tag === tag);
