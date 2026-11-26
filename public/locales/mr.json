@@ -1621,6 +1621,8 @@
 	"adminKeys.perm.mailboxesDesc": "मेलबॉक्स तयार करा, अद्यतनित करा आणि काढा.",
 	"adminKeys.perm.storage": "स्टोरेज तपासा",
 	"adminKeys.perm.storageDesc": "कोणते ऑब्जेक्ट स्टोरेज वापरात आहे (R2, Backblaze B2, AWS S3 किंवा स्थानिक फाइल्स) ते पहा आणि ते काम करते का ते तपासा.",
+	"adminKeys.perm.groups": "गट व्यवस्थापित करा",
+	"adminKeys.perm.groupsDesc": "गट (अनेक लोकांना पोहोचवणारे शेअर्ड पत्ते) आणि त्यांचे सदस्य तयार करा, बदला आणि हटवा. Pro किंवा Team परवाना आवश्यक आहे.",
 	"adminKeys.namePlaceholder": "प्रोडक्शन अ‍ॅप",
 	"adminKeys.allowMcpHint": "ही की MCP क्लायंटसह फक्त खाली निवडलेली अ‍ॅडमिन क्षेत्रे व्यवस्थापित करण्यासाठी वापरा. ती मेल वाचू किंवा पाठवू शकत नाही.",
 	"adminKeys.createKey": "की तयार करा",

@@ -1612,6 +1612,8 @@
 	"adminKeys.perm.mailboxesDesc": "メールボックスの作成、更新、削除を行います。",
 	"adminKeys.perm.storage": "ストレージを確認",
 	"adminKeys.perm.storageDesc": "使用中のオブジェクトストレージ（R2、Backblaze B2、AWS S3、ローカルファイル）を確認し、動作をテストします。",
+	"adminKeys.perm.groups": "グループを管理",
+	"adminKeys.perm.groupsDesc": "グループ（複数人に配信される共有アドレス）とそのメンバーを作成・変更・削除します。Pro または Team ライセンスが必要です。",
 	"adminKeys.namePlaceholder": "本番アプリ",
 	"adminKeys.allowMcpHint": "このキーを MCP クライアントで使用すると、下で選択した管理領域のみを管理できます。メールの読み取りや送信はできません。",
 	"adminKeys.createKey": "キーを作成",
