@@ -3071,6 +3071,7 @@
 	"groups.canSendAs": "Grup olarak gönderebilir",
 	"groups.canSendAsFailed": "Bu ayar değiştirilemedi",
 	"groups.canSendAsHint": "Grup olarak göndermesine izin verilen üyeler, ileti yazarken Kimden listesinden {address} adresini seçebilir. İleti kendi Gönderilenler klasörlerinde saklanır.",
+	"groups.noPrimaryMailbox": "Bu hesabın kendi adresinde bir posta kutusu yok, bu yüzden grup Kimden listesinde görünmez.",
 	"groups.dangerZone": "Grubu sil",
 	"groups.deleteHint": "Bir grubu silmek adresini ve üye listesini kaldırır. Üyeler kendi posta kutularını korur.",
 	"groups.delete": "Grubu sil",

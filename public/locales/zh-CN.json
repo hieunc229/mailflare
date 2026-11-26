@@ -3048,6 +3048,7 @@
 	"groups.canSendAs": "可以以群组名义发送",
 	"groups.canSendAsFailed": "无法更改此设置",
 	"groups.canSendAsHint": "可以以群组名义发送的成员在写邮件时，可以在发件人列表中选择 {address}。邮件保存在其自己的已发送文件夹中。",
+	"groups.noPrimaryMailbox": "此账户在其自身地址上没有邮箱，因此群组不会出现在其发件人列表中。",
 	"groups.dangerZone": "删除群组",
 	"groups.deleteHint": "删除群组会移除其地址和成员列表。成员仍保留各自的邮箱。",
 	"groups.delete": "删除群组",

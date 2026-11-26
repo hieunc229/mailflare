@@ -3048,6 +3048,7 @@
 	"groups.canSendAs": "Có thể gửi với tư cách nhóm",
 	"groups.canSendAsFailed": "Không thể thay đổi cài đặt này",
 	"groups.canSendAsHint": "Thành viên được phép gửi với tư cách nhóm có thể chọn {address} trong danh sách Từ khi soạn thư. Thư được lưu trong thư mục Đã gửi của chính họ.",
+	"groups.noPrimaryMailbox": "Tài khoản này không có hộp thư ở địa chỉ riêng, nên nhóm sẽ không xuất hiện trong danh sách Từ của họ.",
 	"groups.dangerZone": "Xóa nhóm",
 	"groups.deleteHint": "Xóa nhóm sẽ gỡ địa chỉ và danh sách thành viên của nhóm. Thành viên vẫn giữ hộp thư riêng.",
 	"groups.delete": "Xóa nhóm",

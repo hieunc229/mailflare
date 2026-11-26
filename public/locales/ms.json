@@ -3062,6 +3062,7 @@
 	"groups.canSendAs": "Boleh menghantar sebagai kumpulan",
 	"groups.canSendAsFailed": "Tidak dapat menukar tetapan ini",
 	"groups.canSendAsHint": "Ahli yang boleh menghantar sebagai kumpulan boleh memilih {address} dalam senarai Daripada semasa menulis mel. Mesej disimpan dalam folder Dihantar mereka sendiri.",
+	"groups.noPrimaryMailbox": "Akaun ini tiada peti mel pada alamatnya sendiri, jadi kumpulan tidak akan muncul dalam senarai Daripada miliknya.",
 	"groups.dangerZone": "Padam kumpulan",
 	"groups.deleteHint": "Memadam kumpulan akan mengalih keluar alamat dan senarai ahlinya. Ahli mengekalkan peti mel mereka sendiri.",
 	"groups.delete": "Padam kumpulan",

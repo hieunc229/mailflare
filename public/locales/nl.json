@@ -3071,6 +3071,7 @@
 	"groups.canSendAs": "Kan als groep verzenden",
 	"groups.canSendAsFailed": "Deze instelling kon niet worden gewijzigd",
 	"groups.canSendAsHint": "Leden die als groep mogen verzenden, kunnen bij het schrijven {address} kiezen in de Van-lijst. Het bericht wordt bewaard in hun eigen map Verzonden.",
+	"groups.noPrimaryMailbox": "Dit account heeft geen postvak op het eigen adres, dus de groep verschijnt niet in zijn Van-lijst.",
 	"groups.dangerZone": "Groep verwijderen",
 	"groups.deleteHint": "Als je een groep verwijdert, worden het adres en de ledenlijst verwijderd. Leden behouden hun eigen mailboxen.",
 	"groups.delete": "Groep verwijderen",

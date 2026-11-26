@@ -3071,6 +3071,7 @@
 	"groups.canSendAs": "Yana iya aika a matsayin ƙungiyar",
 	"groups.canSendAsFailed": "Ba a iya canza wannan saitin ba",
 	"groups.canSendAsHint": "Membobin da za su iya aika a matsayin ƙungiyar za su iya zaɓar {address} a jerin mai aikawa yayin rubuta saƙo. Ana adana saƙon a babban fayil ɗin da suka aika na kansu.",
+	"groups.noPrimaryMailbox": "Wannan asusun ba shi da akwatin saƙo a adireshinsa, don haka ba zai bayyana a jerin mai aikawa nasa ba.",
 	"groups.dangerZone": "Share ƙungiya",
 	"groups.deleteHint": "Share ƙungiya yana cire adireshinta da jerin membobinta. Membobi suna riƙe akwatunan saƙonsu.",
 	"groups.delete": "Share ƙungiya",

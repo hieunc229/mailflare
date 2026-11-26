@@ -3092,6 +3092,7 @@
 	"groups.canSendAs": "Pode enviar como o grupo",
 	"groups.canSendAsFailed": "Não foi possível alterar esta definição",
 	"groups.canSendAsHint": "Os membros que podem enviar como o grupo podem escolher {address} na lista De ao escrever uma mensagem. A mensagem fica guardada na pasta Enviados do próprio membro.",
+	"groups.noPrimaryMailbox": "Esta conta não tem uma caixa no próprio endereço, por isso o grupo não aparecerá na lista De.",
 	"groups.dangerZone": "Eliminar grupo",
 	"groups.deleteHint": "Eliminar um grupo remove o endereço e a lista de membros. Os membros mantêm as suas próprias caixas de correio.",
 	"groups.delete": "Eliminar grupo",

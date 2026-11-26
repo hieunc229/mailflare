@@ -3048,6 +3048,7 @@
 	"groups.canSendAs": "グループとして送信できる",
 	"groups.canSendAsFailed": "この設定を変更できません",
 	"groups.canSendAsHint": "グループとして送信できるメンバーは、メール作成時の差出人リストで {address} を選べます。メッセージはそのメンバー自身の送信済みフォルダーに保存されます。",
+	"groups.noPrimaryMailbox": "このアカウントには自身のアドレスのメールボックスがないため、差出人リストにグループは表示されません。",
 	"groups.dangerZone": "グループを削除",
 	"groups.deleteHint": "グループを削除すると、そのアドレスとメンバーリストが削除されます。メンバーのメールボックスは残ります。",
 	"groups.delete": "グループを削除",
