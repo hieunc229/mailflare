@@ -11,6 +11,7 @@ import { removeMailboxDomainRouting } from "@/lib/mailboxes/domain-addresses";
 import { avatarKeyFor } from "@/app/api/profile/avatar/utils";
 import { getAccountPurgeCutoff } from "./deletion-utils";
 import type { DeleteAccountsInput, DeleteAccountsResult } from "./deletion-types";
+import { transferCalendars } from "@/lib/calendar/calendars";
 import { deleteUnreferencedObjects } from "@/lib/drive/shared-objects";
 
 const CHUNK = 50;
@@ -22,7 +23,7 @@ function chunks<T>(items: T[], size = CHUNK): T[][] {
 }
 
 /**
- * Moves Drive files (documents included) and calendar events from one account to another. Drive items that sat at
+ * Moves Drive files (documents included), calendars and their events from one account to another. Drive items that sat at
  * the top level go into a folder on the receiving account so they do not mix with its own files.
  */
 export async function transferAccountData(env: CloudflareEnv, fromId: string, fromName: string, toId: string): Promise<void> {
@@ -39,6 +40,8 @@ export async function transferAccountData(env: CloudflareEnv, fromId: string, fr
 		for (const ids of chunks(rootIds)) await db.update(driveItems).set({ parentId: folderId }).where(inArray(driveItems.id, ids));
 		await db.update(driveItems).set({ ownerId: toId }).where(and(eq(driveItems.ownerId, fromId), isNull(driveItems.uploadId)));
 	}
+	// Extra calendars change owner first, so their events (moved next) are never owned by someone other than their calendar.
+	await transferCalendars(db, fromId, toId);
 	await db.update(calendarEvents).set({ userId: toId }).where(eq(calendarEvents.userId, fromId));
 }
 

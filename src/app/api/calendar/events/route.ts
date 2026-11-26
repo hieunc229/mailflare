@@ -14,6 +14,7 @@ import type { CalendarEventInput } from "./types";
 import { getRequestTimeZone, normalizeTimeZone } from "@/lib/time/utils";
 import { authorizeCalendarRequest, calendarKeyCanSendInvitations } from "@/lib/calendar/api-auth";
 import { readJsonObject } from "@/lib/http/request";
+import { calendarFilter, eventCalendarId, resolveEventCalendar } from "@/lib/calendar/calendars";
 
 export async function GET(request: Request) {
 	const env = getEnv();
@@ -22,7 +23,10 @@ export async function GET(request: Request) {
 	const url = new URL(request.url);
 	const start = new Date(url.searchParams.get("start") ?? Date.now());
 	const end = new Date(url.searchParams.get("end") ?? start.getTime() + 31 * 86_400_000);
-	const events = await getDb(env).select().from(calendarEvents).where(and(eq(calendarEvents.userId, user.id), lt(calendarEvents.startsAt, end), or(gte(calendarEvents.endsAt, start), ne(calendarEvents.repeat, "none")))).orderBy(calendarEvents.startsAt);
+	const requested = url.searchParams.getAll("calendarIds").flatMap((value) => value.split(",")).map((value) => value.trim()).filter(Boolean);
+	const scope = requested.length ? calendarFilter(user.id, requested) : eq(calendarEvents.userId, user.id);
+	const rows = await getDb(env).select().from(calendarEvents).where(and(scope, lt(calendarEvents.startsAt, end), or(gte(calendarEvents.endsAt, start), ne(calendarEvents.repeat, "none")))).orderBy(calendarEvents.startsAt);
+	const events = rows.map((row) => ({ ...row, calendarId: eventCalendarId(row) }));
 	return NextResponse.json({ events });
 }
 
@@ -39,14 +43,16 @@ export async function POST(request: Request) {
 	if (!repeatFields) return NextResponse.json({ error: "Choose at least one weekday" }, { status: 400 });
 	const flags = resolveEventFlags(null, input);
 	if (!flags) return NextResponse.json({ error: EVENT_FLAGS_ERROR }, { status: 400 });
+	const calendar = await resolveEventCalendar(getDb(env), user.id, input.calendarId);
+	if (!calendar.ok) return NextResponse.json({ error: calendar.error }, { status: calendar.status });
 	const attendees = (input.attendees ?? []).map((email) => email.trim()).filter((email) => /^\S+@\S+\.\S+$/.test(email));
 	if (attendees.length && input.mailboxId && !calendarKeyCanSendInvitations(key, input.mailboxId)) return NextResponse.json({ error: "Sending invitations requires mail send permission for this mailbox" }, { status: 403 });
-	const event = { id: newId("evt"), userId: user.id, mailboxId: input.mailboxId ?? null, title: input.title.trim(), description: input.description?.trim() ?? "", location: input.location?.trim() ?? "", attendees: JSON.stringify(attendees), color: normalizeCalendarColor(input.color), repeat: repeatFields.repeat, repeatDays: repeatFields.repeatDays, repeatAnchorDay: repeatFields.repeatAnchorDay, reminderMinutes: normalizeReminderMinutes(input.reminderMinutes), ...flags, startsAt, endsAt };
+	const event = { id: newId("evt"), userId: user.id, mailboxId: input.mailboxId ?? null, calendarId: calendar.calendarId ?? null, title: input.title.trim(), description: input.description?.trim() ?? "", location: input.location?.trim() ?? "", attendees: JSON.stringify(attendees), color: normalizeCalendarColor(input.color), repeat: repeatFields.repeat, repeatDays: repeatFields.repeatDays, repeatAnchorDay: repeatFields.repeatAnchorDay, reminderMinutes: normalizeReminderMinutes(input.reminderMinutes), ...flags, startsAt, endsAt };
 	const savedEvent = { ...event, timeZone: input.timeZone ? normalizeTimeZone(input.timeZone) : getRequestTimeZone(request, user.timeZone) };
 	await getDb(env).insert(calendarEvents).values(savedEvent);
 	if (attendees.length && input.mailboxId) {
 		const calendarFile = createCalendarInvitation({ ...event, uid: event.id, organizer: input.from || undefined, attendees });
 		await Promise.all(attendees.map((to) => sendEmail(env, { userId: user.id, mailboxId: input.mailboxId!, from: input.from ?? "", to, subject: `Invitation: ${event.title}`, text: event.description || `You are invited to ${event.title}.`, attachments: [{ filename: "invite.ics", type: "text/calendar; charset=utf-8", content: calendarFile }] })));
 	}
-	return NextResponse.json({ event: savedEvent });
+	return NextResponse.json({ event: { ...savedEvent, calendarId: eventCalendarId(savedEvent) } });
 }

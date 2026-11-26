@@ -20,5 +20,7 @@ export type CalendarEventInput = {
 	startsAt: string;
 	endsAt: string;
 	mailboxId?: string | null;
+	/** The calendar to write into: an owned calendar id, the default calendar's id or null for it. Omitted keeps the stored calendar (PATCH) or uses the default (POST). */
+	calendarId?: string | null;
 	from?: string;
 };
