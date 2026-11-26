@@ -12,7 +12,7 @@ const mocks = {
 };
 const service = await loadFixture({ name: "cal-fb-service", entryPoint: "src/lib/calendar/free-busy.ts", mocks });
 const access = await loadFixture({ name: "cal-fb-access", entryPoint: "src/lib/calendar/free-busy-access.ts", mocks });
-const { busyIntervals, mergeBusy, MAX_FREE_BUSY_IDS, MAX_FREE_BUSY_DAYS } = await service.import();
+const { busyIntervals, mergeBusy, MAX_FREE_BUSY_IDS, MAX_FREE_BUSY_DAYS, MAX_EXPANSION_BUDGET } = await service.import();
 const { isOrgFreeBusyEnabled, resolveFreeBusyAddresses, viewableFreeBusyUsers } = await access.import();
 let sqlite;
 after(() => { sqlite?.close(); delete globalThis.calFb; service.dispose(); access.dispose(); });
@@ -290,4 +290,17 @@ test("busyIntervals: the last occurrence of a series that ended before the windo
 	// One that ended a whole duration earlier is still not read as busy.
 	event("u2", at(-5, 22), at(-4, 3), { repeat: "daily", repeat_until: secs(at(-3, 23)) });
 	assert.deepEqual((await busy(["u2"], at(0), at(1))).get("u2"), []);
+});
+
+test("busyIntervals: one request has a total expansion budget; past it the person's whole window is busy, not free", async () => {
+	setup();
+	assert.equal(typeof MAX_EXPANSION_BUDGET, "number");
+	const rows = Math.ceil(MAX_EXPANSION_BUDGET / 60) + 50;
+	sqlite.exec("BEGIN");
+	for (let index = 0; index < rows; index += 1) event("u1", at(-1, 1), at(-1, 1.5), { repeat: "daily" });
+	event("u2", at(0, 9), at(0, 10));
+	sqlite.exec("COMMIT");
+	const result = await busy(["u1"], at(0), at(62));
+	assert.deepEqual(result.get("u1"), [[at(0), at(62)]]);
+	assert.deepEqual((await busy(["u2"], at(0), at(1))).get("u2"), [[at(0, 9), at(0, 10)]], "a person with a few events is unaffected");
 });
