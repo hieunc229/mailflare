@@ -12,6 +12,7 @@ import { MimeLimitError, parseRawMime } from "@/lib/email/parse";
 import { groupsAllowed } from "@/lib/groups/license";
 import {
 	isRateLimited,
+	unsubscribeOrigin,
 	plain,
 	RELAY_DEFER_SECONDS,
 	RELAY_MAX_RATE_LIMIT_ATTEMPTS,
@@ -28,12 +29,6 @@ import {
 import { domainCanSend } from "@/lib/groups/sending";
 import { getUnsubscribeSecret } from "@/lib/groups/unsubscribe-secret";
 import { signUnsubscribeToken } from "@/lib/groups/unsubscribe-token";
-
-/** Whether unsubscribe links can be built: they need a public HTTPS origin to point at. */
-export function unsubscribeOrigin(env: CloudflareEnv): string | null {
-	const origin = env.APP_URL?.trim().replace(/\/+$/, "");
-	return origin && /^https:\/\//i.test(origin) ? origin : null;
-}
 
 /** The public unsubscribe URL for one member, or null when there is no public origin to link to. */
 export async function unsubscribeUrl(env: CloudflareEnv, claim: { groupId: string; memberId: string }): Promise<string | null> {
