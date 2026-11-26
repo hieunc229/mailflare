@@ -203,6 +203,16 @@ async function describeMembers(db: AppDatabase, domainId: string, rows: MemberRo
 			.where(inArray(mailboxes.id, part));
 		for (const row of found) mailboxRows.set(row.id, { name: row.displayName || row.localPart, address: groupAddress(row.localPart, row.hostname) });
 	}
+	// Send-as shows up in the composer only under the account's own primary mailbox (the one at its address).
+	const withMailbox = new Set<string>();
+	for (const part of chunk(userIds, IN_CHUNK)) {
+		const found = await db
+			.select({ userId: mailboxes.userId, localPart: mailboxes.localPart, hostname: domains.hostname })
+			.from(mailboxes)
+			.innerJoin(domains, eq(mailboxes.domainId, domains.id))
+			.where(and(inArray(mailboxes.userId, part), eq(mailboxes.type, "personal"), eq(mailboxes.disabled, false)));
+		for (const row of found) if (userRows.get(row.userId)?.email.toLowerCase() === groupAddress(row.localPart, row.hostname)) withMailbox.add(row.userId);
+	}
 	const suppressed = await suppressedAmong(db, domainId, rows.flatMap((row) => (row.kind === "external" && row.email ? [row.email] : [])));
 	return rows.map((row) => {
 		const account = row.userId ? userRows.get(row.userId) : undefined;
@@ -214,6 +224,7 @@ async function describeMembers(db: AppDatabase, domainId: string, rows: MemberRo
 			mailboxId: row.mailboxId,
 			email: row.email,
 			canSendAs: row.canSendAs,
+			hasPrimaryMailbox: row.kind !== "user" || (!!row.userId && withMailbox.has(row.userId)),
 			name: account?.name ?? mailbox?.name ?? row.email ?? "",
 			address: account?.email ?? mailbox?.address ?? row.email ?? "",
 			disabled: account?.disabled ?? false,
@@ -525,6 +536,8 @@ export async function updateMember(env: CloudflareEnv, db: AppDatabase, actor: G
 	const found = await loadMember(db, actor, id, memberId);
 	if (!found) return fail(404, "Member not found");
 	if (found.member.kind !== "user") return fail(422, CAN_SEND_AS_USERS_ONLY);
+	// Saving the value it already has changes nothing, so it is not an event worth auditing.
+	if (found.member.canSendAs === input.canSendAs) return ok((await describeMembers(db, found.group.domainId, [found.member]))[0]);
 	await db.update(mailGroupMembers).set({ canSendAs: input.canSendAs }).where(eq(mailGroupMembers.id, memberId));
 	await createAuditLog(env, {
 		actorUserId: actor.id,
