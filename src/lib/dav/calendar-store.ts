@@ -3,7 +3,7 @@ import { getDb } from "@/db";
 import { calendarEvents, davCalendarObjects } from "@/db/schema";
 import { OFF_CALENDAR_RESPONSES } from "@/lib/calendar/response-status";
 import { expandEvent, rruleEndedBefore } from "@/lib/calendar/rrule";
-import { etagFromSeq, newestSeqOf } from "./changes";
+import { calendarScopeIds, etagFromSeq, newestSeqOf } from "./changes";
 import type { ListedRow } from "./common";
 import { rowsHash } from "./calendar-merge";
 import { nativeResourceName, nativeUid, type CalendarResource, type EventRow } from "./calendar-render";
@@ -204,9 +204,9 @@ export async function hiddenCalendarNames(env: Env, userId: string, ids: string[
 	return names;
 }
 
-const listing = (env: Env, userId: string, cid: string, after: string) =>
+const listing = (env: Env, userId: string, scope: string[], after: string) =>
 	getDb(env)
-		.select({ id: calendarEvents.id, name: davCalendarObjects.name, updatedAt: calendarEvents.updatedAt, seq: newestSeqOf(cid, calendarEvents.id) })
+		.select({ id: calendarEvents.id, name: davCalendarObjects.name, updatedAt: calendarEvents.updatedAt, seq: newestSeqOf(scope, calendarEvents.id) })
 		.from(calendarEvents)
 		.leftJoin(davCalendarObjects, eq(davCalendarObjects.id, calendarEvents.id))
 		.where(and(eq(calendarEvents.userId, userId), isMaster, visible, gt(calendarEvents.id, after)))
@@ -221,9 +221,10 @@ export async function countCalendar(env: Env, userId: string): Promise<number> {
 
 /** Every visible resource's name and ETag, in pages of LIST_PAGE by id (keyset): one statement a page, for PROPFIND depth 1 and the first sync. Stops at MAX_LISTED. */
 export async function* pageCalendar(env: Env, userId: string, cid: string): AsyncGenerator<ListedRow[]> {
+	const scope = await calendarScopeIds(env, cid);
 	let after = "";
 	for (let listed = 0; listed < MAX_LISTED; ) {
-		const rows = await listing(env, userId, cid, after);
+		const rows = await listing(env, userId, scope, after);
 		if (!rows.length) return;
 		yield rows.map((row) => ({ name: row.name ?? nativeResourceName(row.id), etag: etagFromSeq(row.seq, row.updatedAt), updatedAt: row.updatedAt }));
 		if (rows.length < LIST_PAGE) return;

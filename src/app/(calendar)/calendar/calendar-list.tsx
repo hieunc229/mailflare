@@ -1,5 +1,6 @@
 "use client";
 
+import { useId } from "react";
 import { AlertCircle, Loader2, Plus, Settings } from "@/components/icons";
 import { useLanguage } from "@/components/language-provider";
 import { openCalendarSettings, retryCalendars, toggleCalendar, useCalendarState } from "./calendar-state";
@@ -10,10 +11,11 @@ const touch = "[@media(pointer:coarse)]:min-h-11 [@media(pointer:coarse)]:min-w-
 export function CalendarList() {
 	const { t } = useLanguage();
 	const { calendars, state, hidden } = useCalendarState();
+	const titleId = useId();
 	return (
-		<section aria-labelledby="calendar-list-title" className="mb-6 border-b border-neutral-100 pb-4">
+		<section aria-labelledby={titleId} className="mb-6 border-b border-neutral-100 pb-4">
 			<div className="mb-1 flex items-center justify-between gap-2">
-				<h2 id="calendar-list-title" className="text-sm font-semibold text-neutral-900">{t("calendar.calendars.title")}</h2>
+				<h2 id={titleId} className="text-sm font-semibold text-neutral-900">{t("calendar.calendars.title")}</h2>
 				<button type="button" onClick={() => openCalendarSettings("new")} aria-label={t("calendar.calendars.add")} title={t("calendar.calendars.add")}
 					className={`flex h-8 w-8 items-center justify-center rounded-full text-neutral-600 hover:bg-neutral-100 focus-visible:outline-2 focus-visible:outline-blue-600 ${touch}`}><Plus aria-hidden="true" className="h-4 w-4" /></button>
 			</div>

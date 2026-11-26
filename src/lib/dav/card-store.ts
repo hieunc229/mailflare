@@ -47,7 +47,7 @@ export async function* pageCards(env: Env, userId: string, page: number, max: nu
 	let after = "";
 	for (let listed = 0; listed < max; ) {
 		const rows = await getDb(env)
-			.select({ name: davCards.name, size: davCards.size, updatedAt: davCards.updatedAt, seq: newestSeqOf(addressBookCollectionId(userId), davCards.id) })
+			.select({ name: davCards.name, size: davCards.size, updatedAt: davCards.updatedAt, seq: newestSeqOf([addressBookCollectionId(userId)], davCards.id) })
 			.from(davCards)
 			.where(and(mine(userId), gt(davCards.name, after)))
 			.orderBy(asc(davCards.name))

@@ -14,7 +14,8 @@ import type { CalendarEventInput } from "./types";
 import { getRequestTimeZone, normalizeTimeZone } from "@/lib/time/utils";
 import { authorizeCalendarRequest, calendarKeyCanSendInvitations } from "@/lib/calendar/api-auth";
 import { readJsonObject } from "@/lib/http/request";
-import { calendarFilter, eventCalendarId, listOwnCalendars, resolveEventCalendar } from "@/lib/calendar/calendars";
+import { isUniqueConstraintError } from "@/lib/database-errors";
+import { calendarExistsGuard, calendarFilter, eventCalendarId, ownCalendarIds, resolveEventCalendar } from "@/lib/calendar/calendars";
 
 export async function GET(request: Request) {
 	const env = getEnv();
@@ -26,7 +27,7 @@ export async function GET(request: Request) {
 	const requested = url.searchParams.getAll("calendarIds").flatMap((value) => value.split(",")).map((value) => value.trim()).filter(Boolean);
 	const scope = requested.length ? calendarFilter(user.id, requested) : eq(calendarEvents.userId, user.id);
 	const rows = await getDb(env).select().from(calendarEvents).where(and(scope, lt(calendarEvents.startsAt, end), or(gte(calendarEvents.endsAt, start), ne(calendarEvents.repeat, "none")))).orderBy(calendarEvents.startsAt);
-	const known = new Set((await listOwnCalendars(getDb(env), user.id)).map((calendar) => calendar.id));
+	const known = new Set(await ownCalendarIds(getDb(env), user.id));
 	const events = rows.map((row) => ({ ...row, calendarId: eventCalendarId(row, known) }));
 	return NextResponse.json({ events });
 }
@@ -50,7 +51,14 @@ export async function POST(request: Request) {
 	if (attendees.length && input.mailboxId && !calendarKeyCanSendInvitations(key, input.mailboxId)) return NextResponse.json({ error: "Sending invitations requires mail send permission for this mailbox" }, { status: 403 });
 	const event = { id: newId("evt"), userId: user.id, mailboxId: input.mailboxId ?? null, calendarId: calendar.calendarId ?? null, title: input.title.trim(), description: input.description?.trim() ?? "", location: input.location?.trim() ?? "", attendees: JSON.stringify(attendees), color: normalizeCalendarColor(input.color), repeat: repeatFields.repeat, repeatDays: repeatFields.repeatDays, repeatAnchorDay: repeatFields.repeatAnchorDay, reminderMinutes: normalizeReminderMinutes(input.reminderMinutes), ...flags, startsAt, endsAt };
 	const savedEvent = { ...event, timeZone: input.timeZone ? normalizeTimeZone(input.timeZone) : getRequestTimeZone(request, user.timeZone) };
-	await getDb(env).insert(calendarEvents).values(savedEvent);
+	const db = getDb(env);
+	if (typeof calendar.calendarId === "string") {
+		// The calendar may be deleted between the check above and this write: the batch refuses to write into a calendar that is gone.
+		try { await db.batch([...calendarExistsGuard(db, user.id, calendar.calendarId), db.insert(calendarEvents).values(savedEvent)] as never); } catch (error) {
+			if (isUniqueConstraintError(error)) return NextResponse.json({ error: "That calendar no longer exists" }, { status: 409 });
+			throw error;
+		}
+	} else await db.insert(calendarEvents).values(savedEvent);
 	if (attendees.length && input.mailboxId) {
 		const calendarFile = createCalendarInvitation({ ...event, uid: event.id, organizer: input.from || undefined, attendees });
 		await Promise.all(attendees.map((to) => sendEmail(env, { userId: user.id, mailboxId: input.mailboxId!, from: input.from ?? "", to, subject: `Invitation: ${event.title}`, text: event.description || `You are invited to ${event.title}.`, attachments: [{ filename: "invite.ics", type: "text/calendar; charset=utf-8", content: calendarFile }] })));

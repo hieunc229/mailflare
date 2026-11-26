@@ -14,6 +14,7 @@ import { DEFAULT_FOLDER_COLOR, FOLDER_COLOR_OPTIONS } from "@/lib/folders/colors
 import { folderColorKeys } from "@/lib/folders/color-keys";
 import type { CalendarSummary } from "@/lib/calendar/calendars-types";
 import { calendarErrorKey, nextColor } from "./calendar-list-utils";
+import { saveCalendar } from "./calendar-save";
 import { calendarChanged, closeCalendarSettings, useCalendarState } from "./calendar-state";
 
 const COLOR_VALUES = FOLDER_COLOR_OPTIONS.map((option) => option.value);
@@ -67,15 +68,12 @@ function SettingsForm({ target }: { target: CalendarSummary | "new" }) {
 	async function save() {
 		setPending("save");
 		setError("");
-		// Only what changed is sent, so saving never overwrites a colour a phone set that is not in this palette.
-		const payload = calendar
-			? { ...(name.trim() && name.trim() !== (calendar.name ?? "") ? { name: name.trim() } : {}), ...(color !== calendar.color ? { color } : {}), ...(description.trim() !== calendar.description ? { description } : {}) }
-			: { name: name.trim(), color, description };
-		const body = await request(calendar ? `/api/calendar/calendars/${encodeURIComponent(calendar.id)}` : "/api/calendar/calendars", { method: calendar ? "PATCH" : "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) }, "save");
+		const result = await saveCalendar(calendar, { name, color, description });
 		setPending(null);
-		if (!body) return;
+		if (!result.ok) { setError(t(calendarErrorKey("save", result.status) as never)); return; }
+		if (result.unchanged) { closeCalendarSettings(); return; }
 		toast.success(t(calendar ? "calendar.calendars.saved" : "calendar.calendars.created"));
-		calendarChanged(calendar ? "updated" : "created", (body.calendar as CalendarSummary).id);
+		calendarChanged(calendar ? "updated" : "created", result.calendar.id);
 	}
 
 	async function remove() {

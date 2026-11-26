@@ -4,7 +4,7 @@ import { davCollections } from "@/db/schema";
 import { validTimeZone } from "@/lib/calendar/feed";
 import { calendarTimezoneObject, renderCalendarObject, resourceUpdatedAt, type CalendarResource } from "./calendar-render";
 import { countCalendar, LIST_PAGE, MAX_LISTED, pageCalendar } from "./calendar-store";
-import { ensureSyncState, etagFromSeq, formatSyncToken, currentSeq, addressBookCollectionId, calendarCollectionId } from "./changes";
+import { etagFromSeq, formatSyncToken, syncPosition, addressBookCollectionId, calendarCollectionId } from "./changes";
 import { collection, el, href, NS, precondition, selectProps, streamMultistatus, XML_HEADERS, type ListedRow, type Property } from "./common";
 import { countCards, pageCards, type CardMeta, type Card } from "./card-store";
 import type { DavElement } from "./xml";
@@ -79,8 +79,8 @@ export function collectionProperties(area: Area, ctx: DavContext): Property[] {
 	const settings = once(async () => (await getDb(ctx.env).select().from(davCollections).where(eq(davCollections.id, cid)).limit(1))[0]);
 	const token = once(async () => {
 		// The epoch is read first so a fresh collection gets its state row before the position is taken.
-		const { epoch } = await ensureSyncState(ctx.env, cid);
-		return formatSyncToken(ctx.origin, cid, epoch, await currentSeq(ctx.env, cid));
+		const { epoch, seq } = await syncPosition(ctx.env, cid);
+		return formatSyncToken(ctx.origin, cid, epoch, seq);
 	});
 	const principal = `/dav/principals/${ctx.userId}/`;
 	const calendar = area === "calendars";

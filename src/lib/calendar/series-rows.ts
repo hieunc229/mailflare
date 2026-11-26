@@ -17,6 +17,13 @@ export async function deleteOverridesFrom(db: Db, userId: string, masterId: stri
 	await db.delete(calendarEvents).where(and(eq(calendarEvents.userId, userId), eq(calendarEvents.davObjectId, masterId), gte(calendarEvents.recurrenceId, from)));
 }
 
+/** The statements of a "this and following" edit, for a caller that runs them inside a batch of its own. */
+export function splitSeriesStatements(db: Db, userId: string, existing: { id: string; davObjectId: string | null }, splitAt: Date, fresh: typeof calendarEvents.$inferInsert, endPatch: Partial<typeof calendarEvents.$inferInsert>) {
+	const statements = [db.insert(calendarEvents).values(fresh), db.update(calendarEvents).set(endPatch).where(eq(calendarEvents.id, existing.id))];
+	if (existing.davObjectId === existing.id) statements.push(db.delete(calendarEvents).where(and(eq(calendarEvents.userId, userId), eq(calendarEvents.davObjectId, existing.id), gte(calendarEvents.recurrenceId, splitAt))) as never);
+	return statements;
+}
+
 /** "This and following" edit: the new series takes over from `splitAt`, the old one is ended by `endPatch`, and the old series' overrides at or after the split are cut off with it. */
 export async function splitSeriesRows(db: Db, userId: string, existing: { id: string; davObjectId: string | null }, splitAt: Date, fresh: typeof calendarEvents.$inferInsert, endPatch: Partial<typeof calendarEvents.$inferInsert>): Promise<void> {
 	await db.insert(calendarEvents).values(fresh);

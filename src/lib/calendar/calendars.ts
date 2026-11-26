@@ -1,7 +1,7 @@
 import { and, asc, count, eq, inArray, isNull, ne, or, sql, type SQL } from "drizzle-orm";
 import type { getDb } from "@/db";
-import { calendarEvents, calendarShares, davChanges, davCollections } from "@/db/schema";
-import { matchNothing } from "@/db/sql";
+import { calendarEvents, calendarShares, davChanges, davCollections, davSyncState } from "@/db/schema";
+import { excluded, greatest, matchNothing } from "@/db/sql";
 import { calendarCollectionId } from "@/lib/dav/changes";
 import { DEFAULT_FOLDER_COLOR, FOLDER_COLOR_VALUES } from "@/lib/folders/colors";
 import { newId } from "@/lib/ids";
@@ -27,6 +27,12 @@ function paletteColor(value: string | null): string {
 
 function summarize(userId: string, row: typeof davCollections.$inferSelect | undefined, eventCount = 0, id = row?.id ?? calendarCollectionId(userId)): CalendarSummary {
 	return { id, name: row?.displayName ?? null, color: paletteColor(row?.color ?? null), description: row?.description ?? "", isDefault: id === calendarCollectionId(userId), role: "owner", eventCount };
+}
+
+/** Ids of the user's calendars, the default one always among them (its row is lazy). A cheap read for labelling events in a range. */
+export async function ownCalendarIds(db: Db, userId: string): Promise<string[]> {
+	const rows = await db.select({ id: davCollections.id }).from(davCollections).where(and(eq(davCollections.userId, userId), eq(davCollections.kind, "calendar")));
+	return [...new Set([calendarCollectionId(userId), ...rows.map((row) => row.id)])];
 }
 
 /** The default calendar first (synthesised until it has a row), then the others oldest first. */
@@ -74,6 +80,7 @@ export async function createCalendar(db: Db, userId: string, input: CalendarInpu
 	const row = { id, userId, kind: "calendar" as const, displayName: parsed.name!, color: parsed.color ?? DEFAULT_FOLDER_COLOR, description: parsed.description ?? "", sortOrder: null, deadProps: "{}", seededAt: null, createdAt: now, updatedAt: now };
 	await db.insert(davCollections).values(row);
 	// The count above and this insert are not one step; a concurrent create may have taken the last place, so count again and give the place back.
+	// Two creates racing for the last place may both be refused (each sees the other's row); the user retries, and the cap is never exceeded.
 	const [{ after }] = await db.select({ after: count() }).from(davCollections).where(and(eq(davCollections.userId, userId), eq(davCollections.kind, "calendar"), ne(davCollections.id, calendarCollectionId(userId))));
 	if (Number(after) + 1 > MAX_CALENDARS) {
 		await db.delete(davCollections).where(eq(davCollections.id, id));
@@ -114,11 +121,21 @@ export async function deleteCalendar(db: Db, userId: string, calendarId: string)
 	if (!existing) return fail(404, "Calendar not found");
 	const [{ events }] = await db.select({ events: count() }).from(calendarEvents).where(and(eq(calendarEvents.calendarId, calendarId), eq(calendarEvents.userId, userId)));
 	const masters = (await db.select({ id: calendarEvents.id }).from(calendarEvents).where(and(eq(calendarEvents.calendarId, calendarId), eq(calendarEvents.userId, userId), eq(calendarEvents.davObjectId, calendarEvents.id)))).map((row) => row.id);
+	const [calendarState] = await db.select({ floor: davSyncState.floor }).from(davSyncState).where(eq(davSyncState.collectionId, calendarId)).limit(1);
 	const statements: unknown[] = [];
 	for (let index = 0; index < masters.length; index += DELETE_CHUNK) statements.push(db.delete(calendarEvents).where(and(eq(calendarEvents.userId, userId), inArray(calendarEvents.davObjectId, masters.slice(index, index + DELETE_CHUNK)))));
 	statements.push(
 		db.delete(calendarEvents).where(and(eq(calendarEvents.calendarId, calendarId), eq(calendarEvents.userId, userId))),
 		db.update(davChanges).set({ collectionId: defaultId }).where(eq(davChanges.collectionId, calendarId)),
+	);
+	// The default calendar's floor is the highest among the user's calendars, so removing this one must not lower it: an offline
+	// phone whose token lies between the floors would otherwise be accepted after the rows that say what it missed are pruned.
+	if (calendarState && Number(calendarState.floor) > 0) {
+		statements.push(db.insert(davSyncState).values({ collectionId: defaultId, epoch: crypto.randomUUID(), floor: Number(calendarState.floor) })
+			.onConflictDoUpdate({ target: davSyncState.collectionId, set: { floor: greatest(sql`${davSyncState.floor}`, excluded(davSyncState.floor)) } }));
+	}
+	statements.push(
+		db.delete(davSyncState).where(eq(davSyncState.collectionId, calendarId)),
 		db.delete(davCollections).where(and(eq(davCollections.id, calendarId), eq(davCollections.userId, userId))),
 	);
 	await db.batch(statements as never);
@@ -173,4 +190,24 @@ export async function transferCalendars(db: Db, fromId: string, toId: string): P
 		await db.delete(calendarShares).where(and(inArray(calendarShares.calendarId, group), eq(calendarShares.granteeUserId, toId)));
 	}
 	return ids;
+}
+
+/**
+ * Statements for the start of a write batch that puts rows into `calendarId`: they fail the whole batch (a duplicate key, which
+ * SQLite, D1, PostgreSQL and MySQL all refuse in any mode) when the calendar row is gone, so a concurrent `deleteCalendar` cannot
+ * leave events that name a missing calendar. The caller maps `isUniqueConstraintError` to 409. Same device as `staleGuard` in
+ * `dav/writes.ts`. Nothing else guards `calendar_id`: it has no foreign key (the default calendar's row is lazy), and a partial
+ * restore that would leave dangling ids is refused by the backup importer, so no read path has to cope with them.
+ */
+export function calendarExistsGuard(db: Db, userId: string, calendarId: string): unknown[] {
+	const token = crypto.randomUUID();
+	const [first, second] = [`guard:${token}:a`, `guard:${token}:b`];
+	const missing = sql`not exists (select 1 from ${davCollections} where ${and(eq(davCollections.id, calendarId), eq(davCollections.userId, userId), eq(davCollections.kind, "calendar"))})`;
+	return [
+		db.insert(davSyncState).values([
+			{ collectionId: first, epoch: "guard", floor: 0 },
+			{ collectionId: sql`case when ${missing} then ${first} else ${second} end` as unknown as string, epoch: "guard", floor: 0 },
+		]),
+		db.delete(davSyncState).where(inArray(davSyncState.collectionId, [first, second])),
+	];
 }

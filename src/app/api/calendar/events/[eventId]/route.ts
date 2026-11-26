@@ -13,12 +13,13 @@ import { EVENT_FLAGS_ERROR, resolveEventFlags } from "@/lib/calendar/event-flags
 import { parseCalendarOccurrenceId, parseExcludedOccurrences } from "@/lib/calendar/recurrence";
 import { CUSTOM_DAY_LOCKED, editedTimeZone, endLegacySeries, resolveRepeat, shiftCustomSeries } from "@/lib/calendar/repeat-fields";
 import { limitRrule, rruleEndedBefore } from "@/lib/calendar/rrule";
-import { deleteOverridesFrom, deleteSeriesRows, moveSeriesStatement, moveSeriesToCalendar, shiftOverrides, splitSeriesRows } from "@/lib/calendar/series-rows";
+import { deleteOverridesFrom, deleteSeriesRows, moveSeriesStatement, shiftOverrides, splitSeriesRows, splitSeriesStatements } from "@/lib/calendar/series-rows";
 import { newId } from "@/lib/ids";
 import { getRequestTimeZone } from "@/lib/time/utils";
 import { authorizeCalendarRequest, calendarKeyCanSendInvitations } from "@/lib/calendar/api-auth";
 import { readJsonObject } from "@/lib/http/request";
-import { resolveEventCalendar } from "@/lib/calendar/calendars";
+import { calendarExistsGuard, resolveEventCalendar } from "@/lib/calendar/calendars";
+import { isUniqueConstraintError } from "@/lib/database-errors";
 
 export async function PATCH(request: Request, { params }: CalendarEventRouteParams) {
 	const env = getEnv();
@@ -40,6 +41,14 @@ export async function PATCH(request: Request, { params }: CalendarEventRoutePara
 	if (!calendar.ok) return NextResponse.json({ error: calendar.error }, { status: calendar.status });
 	// Undefined keeps the calendar; otherwise the whole series moves, so compare against where it is now.
 	const moveTo = calendar.calendarId !== undefined && calendar.calendarId !== (existing.calendarId ?? null) ? calendar.calendarId : undefined;
+	// Writes that put rows into another calendar run as one batch that first checks the calendar still exists (a competing delete refuses it with 409).
+	const guard = typeof moveTo === "string" ? calendarExistsGuard(db, user.id, moveTo) : [];
+	const batched = async (statements: unknown[]): Promise<NextResponse | null> => {
+		try { await db.batch([...guard, ...statements] as never); return null; } catch (error) {
+			if (isUniqueConstraintError(error)) return NextResponse.json({ error: "That calendar no longer exists" }, { status: 409 });
+			throw error;
+		}
+	};
 	const timeZone = editedTimeZone(existing, input.repeat, input.timeZone ?? existing.timeZone ?? getRequestTimeZone(request, user.timeZone));
 	if (occurrence && (existing.repeat === "none" || occurrence.startsAt < existing.startsAt || (existing.repeatUntil && occurrence.startsAt >= existing.repeatUntil))) return NextResponse.json({ error: "Occurrence not found" }, { status: 404 });
 	if (existing.repeat !== "none" && effectiveFrom && existing.repeatUntil && effectiveFrom >= existing.repeatUntil) return NextResponse.json({ error: "No future occurrences remain" }, { status: 404 });
@@ -57,9 +66,12 @@ export async function PATCH(request: Request, { params }: CalendarEventRoutePara
 		const moved = { ...existing, id: newId("evt"), title: input.title.trim(), description: input.description?.trim() ?? "", location: input.location?.trim() ?? "", attendees: JSON.stringify(attendees), color: normalizeCalendarColor(input.color ?? existing.color), ...flags, ...(moveTo !== undefined ? { calendarId: moveTo } : {}), repeat: "none" as const, repeatDays: "[]", repeatAnchorDay: null, repeatUntil: null, rrule: null, excludedOccurrences: "[]",
 			// A moved occurrence of a DAV series stays part of that resource as an override row; otherwise it is a plain one-off.
 			davObjectId: existing.davObjectId === existing.id ? existing.id : null, recurrenceId: existing.davObjectId === existing.id ? occurrence.startsAt : null, startsAt, endsAt, createdAt: now, updatedAt: now };
-		await db.insert(calendarEvents).values(moved);
-		await db.update(calendarEvents).set({ excludedOccurrences: JSON.stringify([...excluded, occurrence.startsAt.getTime()]), updatedAt: now }).where(eq(calendarEvents.id, existing.id));
-		if (moveTo !== undefined) await moveSeriesToCalendar(db, user.id, existing.id, moveTo);
+		const insertMoved = db.insert(calendarEvents).values(moved);
+		const excludeOriginal = db.update(calendarEvents).set({ excludedOccurrences: JSON.stringify([...excluded, occurrence.startsAt.getTime()]), updatedAt: now }).where(eq(calendarEvents.id, existing.id));
+		if (moveTo !== undefined) {
+			const refused = await batched([insertMoved, excludeOriginal, moveSeriesStatement(db, user.id, existing.id, moveTo)]);
+			if (refused) return refused;
+		} else { await insertMoved; await excludeOriginal; }
 		if (attendees.length && existing.mailboxId && input.from) { const file = createCalendarInvitation({ ...moved, uid: moved.id, organizer: input.from, attendees }); await Promise.all(attendees.map((to) => sendEmail(env, { userId: user.id, mailboxId: existing.mailboxId!, from: input.from!, to, subject: `Updated invitation: ${moved.title}`, text: moved.description || `This event has been updated: ${moved.title}.`, attachments: [{ filename: "invite.ics", type: "text/calendar; charset=utf-8", content: file }] }))); }
 		return NextResponse.json({ ok: true });
 	}
@@ -70,20 +82,25 @@ export async function PATCH(request: Request, { params }: CalendarEventRoutePara
 	const shifted = event.repeat === "custom" ? shiftCustomSeries(existing, startsAt, timeZone) : null;
 	if (event.repeat === "custom" && !shifted) return NextResponse.json({ error: CUSTOM_DAY_LOCKED }, { status: 409 });
 	// A custom rule that is kept is edited as a whole series: "this and following" cannot split a rule Mailflare cannot express.
-	let movedWithEdit = false;
 	const splitAt = existing.repeat !== "none" && event.repeat !== "custom" ? effectiveFrom : null;
 	if (splitAt && splitAt > existing.startsAt) {
 		const now = new Date();
 		// The new series is a Mailflare event of its own, never part of the DAV resource it was split from.
-		await splitSeriesRows(db, user.id, existing, splitAt, { ...event, id: newId("evt"), davObjectId: null, recurrenceId: null, ...(moveTo !== undefined ? { calendarId: moveTo } : {}), createdAt: now, updatedAt: now }, existing.rrule ? { rrule: limitRrule(existing.rrule, splitAt, existing.startsAt, existing.timeZone, existing.allDay), updatedAt: now } : { repeatUntil: splitAt, updatedAt: now });
+		const fresh = { ...event, id: newId("evt"), davObjectId: null, recurrenceId: null, ...(moveTo !== undefined ? { calendarId: moveTo } : {}), createdAt: now, updatedAt: now };
+		const endPatch = existing.rrule ? { rrule: limitRrule(existing.rrule, splitAt, existing.startsAt, existing.timeZone, existing.allDay), updatedAt: now } : { repeatUntil: splitAt, updatedAt: now };
+		if (moveTo !== undefined) {
+			const refused = await batched([...splitSeriesStatements(db, user.id, existing, splitAt, fresh, endPatch), moveSeriesStatement(db, user.id, existing.id, moveTo)]);
+			if (refused) return refused;
+		} else await splitSeriesRows(db, user.id, existing, splitAt, fresh, endPatch);
 	} else {
 		const edit = db.update(calendarEvents).set({ title: event.title, description: event.description, location: event.location, attendees: event.attendees, color: event.color, repeat: event.repeat, repeatDays: event.repeatDays, repeatAnchorDay: event.repeatAnchorDay, repeatUntil: event.repeatUntil, rrule: event.rrule, ...(shifted ? { excludedOccurrences: shifted.excludedOccurrences } : {}), reminderMinutes: event.reminderMinutes, isPrivate: event.isPrivate, transparent: event.transparent, lastRemindedStart: null, timeZone, startsAt, endsAt, updatedAt: new Date() }).where(eq(calendarEvents.id, existing.id));
 		// The edit and the move to another calendar succeed or fail together.
-		if (moveTo !== undefined) { await db.batch([edit, moveSeriesStatement(db, user.id, existing.id, moveTo)] as never); movedWithEdit = true; } else await edit;
+		if (moveTo !== undefined) {
+			const refused = await batched([edit, moveSeriesStatement(db, user.id, existing.id, moveTo)]);
+			if (refused) return refused;
+		} else await edit;
 		if (shifted?.moved) await shiftOverrides(db, user.id, existing.id, shifted.shift);
 	}
-	// After the edit above, so the event is written in one place and then the master and its overrides move together.
-	if (moveTo !== undefined && !movedWithEdit) await moveSeriesToCalendar(db, user.id, existing.id, moveTo);
 	if (attendees.length && existing.mailboxId && input.from) { const file = createCalendarInvitation({ ...event, uid: existing.id, organizer: input.from, attendees }); await Promise.all(attendees.map((to) => sendEmail(env, { userId: user.id, mailboxId: existing.mailboxId!, from: input.from!, to, subject: `Updated invitation: ${event.title}`, text: event.description || `This event has been updated: ${event.title}.`, attachments: [{ filename: "invite.ics", type: "text/calendar; charset=utf-8", content: file }] }))); }
 	return NextResponse.json({ ok: true });
 }
