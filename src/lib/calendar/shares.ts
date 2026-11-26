@@ -172,7 +172,7 @@ export async function grantShare(db: Db, actor: Actor, calendarId: string, input
 }
 
 /**
- * A role change deletes the grant and inserts a new one under a new id, in one batch (D-5): phones see a new collection and
+ * A role change gives the grant a new id and its new role in one conditional update (D-5): phones see a new collection and
  * resync, so a full body cached under a higher role is dropped. A change to the role the grant already has changes nothing.
  */
 export async function changeShare(db: Db, actor: Actor, calendarId: string, input: { id?: unknown; role?: unknown }): Promise<ShareChangeResult> {
@@ -183,8 +183,13 @@ export async function changeShare(db: Db, actor: Actor, calendarId: string, inpu
 	if (!existing || !existing.granteeUserId) return fail(404, "Share not found");
 	if (RANK[input.role] > RANK[access.role] || RANK[existing.role] > RANK[access.role]) return fail(403, "You cannot give more access than you have");
 	if (existing.role === input.role) return { ok: true, ownerId: access.ownerId, share: await shareEntry(db, existing), previousRole: existing.role };
-	const row = { id: newId("csh"), calendarId, granteeUserId: existing.granteeUserId, role: input.role, createdByUserId: actor.id, createdAt: new Date() };
-	await db.batch([db.delete(calendarShares).where(eq(calendarShares.id, existing.id)), db.insert(calendarShares).values(row)] as never);
+	// One conditional statement: a grant revoked after the read above matches nothing, so a revoke is never undone by a role change
+	// (an insert-then-delete pair cannot do this: the unique (calendar, grantee) index forbids the insert while the old row exists).
+	// The primary key is the "new id" of D-5: phones see a new collection and resync.
+	const id = newId("csh");
+	await db.update(calendarShares).set({ id, role: input.role, createdByUserId: actor.id }).where(and(eq(calendarShares.id, existing.id), eq(calendarShares.calendarId, calendarId)));
+	const [row] = await db.select().from(calendarShares).where(and(eq(calendarShares.id, id), eq(calendarShares.calendarId, calendarId))).limit(1);
+	if (!row) return fail(404, "Share not found");
 	return { ok: true, ownerId: access.ownerId, share: await shareEntry(db, row), previousRole: existing.role };
 }
 
