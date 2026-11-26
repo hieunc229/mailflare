@@ -50,10 +50,10 @@ export function AvailabilityView(props: AvailabilityViewProps) {
 	return (
 		<section aria-labelledby={titleId} className="space-y-2 text-sm">
 			<div className="flex flex-wrap items-baseline justify-between gap-x-3">
-				<h3 id={titleId} className="text-xs font-semibold text-neutral-900">{t("calendar.availability.title")}</h3>
+				<h3 id={titleId} className="flex items-center gap-1.5 text-xs font-semibold text-neutral-900">{t("calendar.availability.title")}{props.state === "loading" && props.rows.length > 0 && <Loader2 aria-hidden="true" className="h-3 w-3 animate-spin motion-reduce:animate-none" />}</h3>
 				{dayLabel && <span className="text-xs text-neutral-600">{t("calendar.availability.day", { date: dayLabel })}</span>}
 			</div>
-			{props.state === "loading" && <p role="status" className="flex items-center gap-2 text-neutral-600"><Loader2 aria-hidden="true" className="h-4 w-4 animate-spin motion-reduce:animate-none" />{t("calendar.availability.loading")}</p>}
+			{props.state === "loading" && props.rows.length === 0 && <p role="status" className="flex items-center gap-2 text-neutral-600"><Loader2 aria-hidden="true" className="h-4 w-4 animate-spin motion-reduce:animate-none" />{t("calendar.availability.loading")}</p>}
 			{props.state === "error" && (
 				<div role="alert" className="flex flex-wrap items-center gap-2 text-red-700">
 					<AlertCircle aria-hidden="true" className="h-4 w-4 shrink-0" />
@@ -61,8 +61,8 @@ export function AvailabilityView(props: AvailabilityViewProps) {
 					<button type="button" onClick={props.onRetry} className={`rounded-md px-2 font-medium text-blue-700 underline hover:bg-blue-50 ${focus} ${touch}`}>{t("calendar.availability.retry")}</button>
 				</div>
 			)}
-			{props.state === "ready" && (
-				<ul className="space-y-2">
+			{(props.state === "ready" || (props.state === "loading" && props.rows.length > 0)) && (
+				<ul aria-busy={props.state === "loading" ? true : undefined} className={`space-y-2 ${props.state === "loading" ? "opacity-60" : ""}`}>
 					{props.rows.map(({ address, availability }) => {
 						const blocks = availability.status === "ok" && dayStart && dayEnd ? busyBlocks(availability.busy, dayStart, dayEnd) : [];
 						const clash = availability.status === "ok" && event.start && event.end ? overlapsAny(availability.busy, event.start, event.end) : false;

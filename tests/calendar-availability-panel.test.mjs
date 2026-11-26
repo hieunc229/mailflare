@@ -195,3 +195,39 @@ test("the organiser who is also on the guest list is asked for once", async () =
 	assert.deepEqual(globalThis.panelT.calls[1].body.addresses, ["ann@one.test", "me@one.test"]);
 	await teardown();
 });
+
+test("changing the guests keeps the rows already shown until the new answer arrives, and announces nothing new", async () => {
+	setup();
+	globalThis.panelT.responder = (body) => ok(Object.fromEntries(body.addresses.map((address) => [address, { status: "ok", busy: [] }])));
+	const view = await mount({ guests: "ann@one.test" });
+	await ticks(400);
+	await ticks(0);
+	assert.match(text(), /ann@one\.test/);
+	let release;
+	globalThis.panelT.responder = () => new Promise((resolve) => { release = () => resolve(ok({ "ann@one.test": { status: "ok", busy: [] }, "bob@one.test": { status: "ok", busy: [] } })); });
+	await view.update({ guests: "ann@one.test, bob@one.test" });
+	await ticks(400);
+	assert.match(text(), /ann@one\.test/, "the row stays while the next answer is awaited");
+	assert.doesNotMatch(text(), /bob@one\.test/, "a new address has no row until it is answered");
+	assert.equal(container.querySelectorAll('[role="status"]').length, 0, "no new announcement");
+	assert.equal(container.querySelector("ul")?.getAttribute("aria-busy"), "true");
+	await act(async () => { release(); await Promise.resolve(); });
+	await ticks(0);
+	assert.match(text(), /bob@one\.test/);
+	assert.equal(container.querySelector("ul")?.getAttribute("aria-busy"), null);
+	await teardown();
+});
+
+test("moving the event to another day does not keep the old day's rows, which would read as free", async () => {
+	setup();
+	globalThis.panelT.responder = (body) => ok(Object.fromEntries(body.addresses.map((address) => [address, { status: "ok", busy: [] }])));
+	const view = await mount({ guests: "ann@one.test" });
+	await ticks(400);
+	await ticks(0);
+	globalThis.panelT.responder = () => new Promise(() => {});
+	await view.update({ startsAt: "2030-03-20T09:00", endsAt: "2030-03-20T10:00" });
+	await ticks(400);
+	assert.doesNotMatch(text(), /ann@one\.test/);
+	assert.match(text(), /Checking availability/);
+	await teardown();
+});

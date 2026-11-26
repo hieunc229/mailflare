@@ -115,3 +115,12 @@ test("an event too long for the working day says Find a time cannot help, instea
 	assert.match(html, /<button[^>]*\sdisabled=""[^>]*>Find a time<\/button>/);
 	assert.doesNotMatch(render({ rows: [busy(D(1), D(2))] }), /up to 10 hours/);
 });
+
+test("loading again with rows already shown keeps them, dimmed and marked busy, with no new announcement", () => {
+	const html = render({ state: "loading", rows: [busy(D(9), D(10))] });
+	assert.match(html, /ann@one\.test/);
+	assert.match(html, /<ul[^>]*aria-busy="true"/);
+	assert.doesNotMatch(html, /role="status"/);
+	assert.match(html, /opacity-60/);
+	assert.doesNotMatch(render({ rows: [busy(D(9), D(10))] }), /aria-busy="true"|opacity-60/);
+});
