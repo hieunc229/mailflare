@@ -2323,6 +2323,7 @@
 	"calendar.calendars.error.limit": "You have reached the limit of 50 calendars.",
 	"calendar.calendars.error.invalid": "Check the name, color and description and try again.",
 	"calendar.calendars.error.notFound": "This calendar no longer exists.",
+	"calendar.calendars.error.eventIdExists": "An event with the same ID already exists in that calendar.",
 	"calendar.calendars.error.defaultCalendar": "The default calendar cannot be deleted.",
 	"calendar.calendars.pick": "Calendar",
 	"calendar.busy": "Busy",
