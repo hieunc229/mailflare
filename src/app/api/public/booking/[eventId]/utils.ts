@@ -5,6 +5,7 @@ import { parseBookingTimeRanges, parseBookingWeekdays } from "@/lib/booking/util
 import type { BookingEventRecord } from "@/lib/booking/types";
 import { getEnv } from "@/lib/cloudflare";
 import { parseBookingHostIds } from "@/lib/booking/hosts";
+import { parseBookingResourceIds } from "@/lib/booking/rooms";
 
 export function parseBookingGuestEmails(value: unknown, bookerEmail: string): string[] | null {
 	if (value === undefined || value === "") return [];
@@ -23,5 +24,5 @@ export async function loadPublicBookingEvent(eventId: string, username?: string 
 	const hostIds = parseBookingHostIds(event.hostIds, event.userId);
 	const hosts = await db.select({ id: users.id, name: users.name }).from(users).where(and(inArray(users.id, hostIds), eq(users.disabled, false), eq(users.calendarEnabled, true)));
 	if (hosts.length !== hostIds.length) return null;
-	return { event: { ...event, hostIds, weekdays: parseBookingWeekdays(event.weekdays), timeRanges: parseBookingTimeRanges(event.timeRanges, { startTime: event.startTime, endTime: event.endTime }) } as BookingEventRecord, hostName: hostIds.map((id) => hosts.find((host) => host.id === id)?.name).join(", ") };
+	return { event: { ...event, hostIds, resourceIds: parseBookingResourceIds(event.resourceIds), weekdays: parseBookingWeekdays(event.weekdays), timeRanges: parseBookingTimeRanges(event.timeRanges, { startTime: event.startTime, endTime: event.endTime }) } as BookingEventRecord, hostName: hostIds.map((id) => hosts.find((host) => host.id === id)?.name).join(", ") };
 }
