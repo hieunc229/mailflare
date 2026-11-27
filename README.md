@@ -3,9 +3,9 @@
 
 # Mailflare
 
-A self-hosted alternative to Google Workspace. Setup **custom domain Emails**, **Calendar, Drive, Booking** and **built-in AI agents**. Deploy it to Cloudflare, Docker or Vercel
+Self-hosted alternative to Google Workspace: **custom-domain email**, **Calendar, Drive, Booking** and **built-in AI agents**. Runs on Cloudflare, Docker or Vercel.
 
-**Try [Mailflare Cloud](https://cloud.mailflare.co?ref=github)** with high-deliverable emails without managing your deployments
+**[Mailflare Cloud](https://cloud.mailflare.co?ref=github)**: hosted, high-deliverability email, nothing to manage.
 
 [![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/hieunc229/mailflare) 
 <a href="https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2Fhieunc229%2Fmailflare&amp;env=CRON_SECRET&amp;envDescription=See%20docs%2Fvercel.md&amp;envLink=https%3A%2F%2Fgithub.com%2Fhieunc229%2Fmailflare%2Fblob%2Fmain%2Fdocs%2Fvercel.md" rel="nofollow"><img src="https://camo.githubusercontent.com/ff0e5692ba93a62d065d9523e5a7e15ed5e2e15a2866758b3276a4f7b77eaac6/68747470733a2f2f76657263656c2e636f6d2f627574746f6e" alt="Deploy with Vercel" data-canonical-src="https://vercel.com/button" style="max-width: 100%;height: 39px;"></a>
@@ -45,16 +45,16 @@ A self-hosted alternative to Google Workspace. Setup **custom domain Emails**, *
 - **Admin**: Users, API keys, webhooks, audit logs and backups.
 - **Import**: Bring in mail from IMAP, Gmail Takeout, `.eml` and `.mbox` files, and Google Calendar events, Google Contacts and Google Drive files from Takeout. See [Importing from Google Takeout](docs/import.md).
 
-Mailflare currently supports 34 languages, including English, Português (Brasil), Português (Portugal), Español, Français, Deutsch, Italiano, Nederlands, Polski, Українська, Русский, Türkçe, 中文（简体）, 日本語, 한국어, Bahasa Indonesia, Bahasa Melayu, Tiếng Việt, ไทย, हिन्दी, বাংলা, मराठी, తెలుగు, தமிழ், ગુજરાતી, ಕನ್ನಡ, മലയാളം, ਪੰਜਾਬੀ, සිංහල, Kiswahili, Hausa, plus العربية, اردو and فارسی (right-to-left).
+34 languages: English, Português (Brasil), Português (Portugal), Español, Français, Deutsch, Italiano, Nederlands, Polski, Українська, Русский, Türkçe, 中文（简体）, 日本語, 한국어, Bahasa Indonesia, Bahasa Melayu, Tiếng Việt, ไทย, हिन्दी, বাংলা, मराठी, తెలుగు, தமிழ், ગુજરાતી, ಕನ್ನಡ, മലയാളം, ਪੰਜਾਬੀ, සිංහල, Kiswahili, Hausa, plus العربية, اردو and فارسی (right-to-left).
 
 ## Cost
 
-You can receive and send mail for free.
+Receiving and sending can both be free.
 
 - **Receiving**: Cloudflare Email Routing is free.
 - **Sending**: Use the free tier of Resend (3,000 emails a month) or Amazon SES. Cloudflare's own sending needs the $5/month Paid Worker plan.
 
-New Amazon SES accounts start in a sandbox. Ask AWS for production access to lift it. Prices change, so check [Resend](https://resend.com/pricing), [Amazon SES](https://aws.amazon.com/ses/pricing/) and [Cloudflare](https://developers.cloudflare.com/workers/platform/pricing/).
+New Amazon SES accounts start in a sandbox; ask AWS for production access. Prices change: check [Resend](https://resend.com/pricing), [Amazon SES](https://aws.amazon.com/ses/pricing/) and [Cloudflare](https://developers.cloudflare.com/workers/platform/pricing/).
 
 ## Deploy
 
@@ -93,7 +93,7 @@ Token permissions and more options: [deployment guide](docs/deployment.md#deploy
 
 ### Self-host with Docker
 
-Runs as one container on any server, with SQLite and local files.
+One container, SQLite and local files.
 
 ```bash
 cp .env.docker.example .env.docker
@@ -121,7 +121,7 @@ npm run db:migrate:local
 npm run dev
 ```
 
-Add your Cloudflare credentials to `.dev.vars`, then open [localhost:3000](http://localhost:3000). Run `npm run db:seed` to load sample data.
+Add Cloudflare credentials to `.dev.vars`, then open [localhost:3000](http://localhost:3000). Run `npm run db:seed` to load sample data.
 
 - `npm run build`: build the Worker
 - `npm run deploy`: build and deploy
