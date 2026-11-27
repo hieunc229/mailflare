@@ -75,7 +75,7 @@ test("a failed room list shows the section so it can be retried", () => {
 });
 
 const catalogs = [["en", en], ...readdirSync(new URL("../public/locales", import.meta.url)).filter((file) => file.endsWith(".json")).map((file) => [file, read(`public/locales/${file}`)])];
-const KEYS = ["booking.editor.rooms", "booking.editor.roomsHint", "booking.editor.roomsNone", "booking.editor.roomsSummary", "booking.editor.roomsLoading", "booking.editor.roomsOff", "booking.editor.roomsNeedTeam"];
+const KEYS = ["booking.editor.rooms", "booking.editor.roomsHint", "booking.editor.roomsNone", "booking.editor.roomsSummary", "booking.editor.roomsLoading", "booking.editor.roomsOff", "booking.editor.roomsNeedTeam", "calendar.rooms.notLoaded"];
 
 test("every catalog (34) carries the booking rooms strings, in English, with the same placeholders", () => {
 	assert.equal(catalogs.length, 34);

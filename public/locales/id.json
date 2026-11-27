@@ -3189,6 +3189,7 @@
 	"calendar.rooms.add": "Add a room",
 	"calendar.rooms.remove": "Remove {name}",
 	"calendar.rooms.removedRoom": "A room that no longer exists",
+	"calendar.rooms.notLoaded": "A room (name not loaded)",
 	"calendar.rooms.booked": "Booked",
 	"calendar.rooms.declined": "Declined: not free",
 	"calendar.rooms.declinedOn": "Declined: taken on {date}",

@@ -91,3 +91,18 @@ test("a room named twice is attached once", async () => {
 	assert.equal((await send(POST, body({ resourceIds: ["r1", "r1"] }))).status, 200);
 	assert.deepEqual(stored(), ['["r1"]']);
 });
+
+test("a type whose stored rooms cannot be read is not silently reset by a save that names none; choosing rooms again repairs it", async () => {
+	setup();
+	const created = await (await send(POST, body({ resourceIds: ["r1"] }))).json();
+	const context = { params: Promise.resolve({ eventId: created.event.id }) };
+	sqlite.exec("UPDATE booking_events SET resource_ids = 'garbage'");
+	for (const payload of [body(), body({ resourceIds: [] })]) {
+		const refused = await send(PATCH, payload, context);
+		assert.equal(refused.status, 409);
+		assert.match((await refused.json()).error, /could not be read/);
+	}
+	assert.deepEqual(stored(), ["garbage"], "nothing was written");
+	assert.equal((await send(PATCH, body({ resourceIds: ["r2"] }), context)).status, 200);
+	assert.deepEqual(stored(), ['["r2"]']);
+});
