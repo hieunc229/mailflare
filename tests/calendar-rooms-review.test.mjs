@@ -144,7 +144,7 @@ test("if the room check fails after an event was saved, its bookings are decline
 	db.batch = real;
 	await book(db, a, ["r1"]);
 	db.batch = async (list) => { if (list.length > 3) throw new Error("database busy"); return real(list); };
-	await rebookEvents(db, [a]);
+	await rebookEvents(db, [a], async () => true);
 	assert.deepEqual(bookingsOf(a), [["r1", "declined"]]);
 });
 

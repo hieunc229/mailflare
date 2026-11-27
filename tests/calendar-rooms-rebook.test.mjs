@@ -31,7 +31,7 @@ test("an event changed outside the web editor is checked again: moved onto anoth
 	event("b", 5, 6); book("b", "accepted");
 	event("plain", 1, 2);
 	sqlite.prepare("UPDATE calendar_events SET starts_at = ?, ends_at = ? WHERE id = 'b'").run(secs(T0 + 1.5 * H), secs(T0 + 2.5 * H));
-	await rebookEvents(db, ["b", "plain"]);
+	await rebookEvents(db, ["b", "plain"], async () => true);
 	assert.deepEqual([status("a"), status("b"), status("plain")], ["accepted", "declined", undefined]);
 	assert.equal(sqlite.prepare("SELECT count(*) AS n FROM calendar_resource_bookings").get().n, 2);
 });
@@ -40,11 +40,11 @@ test("a failure to check never throws to the caller that already saved the event
 	const db = setup();
 	event("a", 1, 2); book("a", "accepted");
 	db.batch = async () => { throw new Error("database busy"); };
-	await assert.doesNotReject(() => rebookEvents(db, ["a"]));
+	await assert.doesNotReject(() => rebookEvents(db, ["a"], async () => true));
 });
 
 test("the CalDAV write and the MCP update tool re-check rooms after saving", () => {
 	const read = (path) => readFileSync(new URL(`../${path}`, import.meta.url), "utf8");
-	assert.match(read("src/lib/dav/calendar-write.ts"), /rebookEvents\(db, \[id\]\)/);
-	assert.match(read("src/lib/calendar/tools.ts"), /rebookEvents\(db, ids\)/);
+	assert.match(read("src/lib/dav/calendar-write.ts"), /rebookEvents\(db, \[id\], roomsBookable\(ctx\.env\)\)/);
+	assert.match(read("src/lib/calendar/tools.ts"), /rebookEvents\(db, ids, roomsBookable\(context\.env\)\)/);
 });

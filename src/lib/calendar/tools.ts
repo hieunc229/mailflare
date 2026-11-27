@@ -1,5 +1,6 @@
 import { and, eq, gte, inArray, lt, ne, or } from "drizzle-orm";
 import { declineBookingsStatement, rebookEvents } from "./room-save";
+import { roomsBookable } from "./room-licence";
 import { z } from "zod";
 import { getDb } from "@/db";
 import { calendarEventOverrides, calendarEvents } from "@/db/schema";
@@ -177,7 +178,7 @@ export async function runCalendarTool(context: CalendarToolContext, name: Calend
 			await db.batch([db.update(calendarEvents).set({ title: item.title ?? row.title, description: item.description ?? row.description, location: item.location ?? row.location, startsAt, endsAt, timeZone, color: item.color ? normalizeCalendarColor(item.color) : row.color, ...repeatFields, repeatInterval: effectiveInterval, repeatWeekday: effectiveWeekday, repeatWeek: effectiveWeek, ...(shifted ? { excludedOccurrences: shifted.excludedOccurrences } : {}), attendees: item.attendees ? JSON.stringify(item.attendees) : row.attendees, updatedAt: new Date() }).where(and(eq(calendarEvents.id, row.id), eq(calendarEvents.userId, context.user.id))), declineBookingsStatement(db, row.id)] as never);
 			if (shifted?.moved) await shiftOverrides(db, context.user.id, row.id, shifted.shift);
 		}
-		await rebookEvents(db, ids);
+		await rebookEvents(db, ids, roomsBookable(context.env));
 		return { eventIds: ids, status: "updated" };
 	}
 	const ids = input.eventIds as string[];
