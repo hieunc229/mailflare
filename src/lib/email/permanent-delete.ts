@@ -27,16 +27,17 @@ export async function permanentlyDeleteMessages(
 	for (let index = 0; index < rows.length; index += PERMANENT_DELETE_CHUNK) {
 		const chunk = rows.slice(index, index + PERMANENT_DELETE_CHUNK);
 		const items = chunk.map((row) => ({ id: row.id, rawR2Key: row.rawR2Key }));
-		// Objects first, then the row delete and its audit rows in one batch (one D1 call).
+		// Objects first, then the audit rows and the row deletes in one batch (one D1 call). Audit
+		// precedes the deletes so a non-atomic driver that fails midway over-logs instead of losing rows.
 		await deleteMessageObjects(env, items);
 		await db.batch([
-			...buildMessageDeletes(db, items.map((item) => item.id)),
 			...buildAuditLogInserts(db, chunk.map((row) => ({
 				actorUserId,
 				mailboxId: row.mailboxId,
 				action: "email.delete",
 				metadata: { permanent: true, source, messageId: row.id, previousStatus: row.status },
 			}))),
+			...buildMessageDeletes(db, items.map((item) => item.id)),
 		] as never);
 	}
 	return rows.length;

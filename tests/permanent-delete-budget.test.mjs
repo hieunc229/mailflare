@@ -14,16 +14,17 @@ const seed = `
 
 // The bulk route accepts 5000 ids and the platform allows 1000 subrequests per request, so the
 // D1 calls (a batch counts as one) plus R2 calls must stay well under that.
-test("5000 permanent deletes stay under the subrequest cap, with every row and object gone", async (t) => {
+for (const attachmentsPerMessage of [1, 5]) test(`5000 permanent deletes with ${attachmentsPerMessage} attachment(s) each stay under the subrequest cap, with every row and object gone`, async (t) => {
 	const { env, sqlite, db } = await newDatabase(t, seed);
 	const MESSAGES = 5000;
+	const PER = attachmentsPerMessage;
 	sqlite.exec(`
 		WITH RECURSIVE n(i) AS (SELECT 0 UNION ALL SELECT i + 1 FROM n WHERE i + 1 < ${MESSAGES})
 		INSERT INTO messages (id, mailbox_id, user_id, direction, from_addr, to_addr, subject, status, raw_r2_key, created_at)
 		SELECT 'm' || i, 'mb', 'u', 'inbound', 'a@b.test', 'me@example.com', 's', 'trash', 'raw/m' || i, 1 FROM n;
-		WITH RECURSIVE n(i) AS (SELECT 0 UNION ALL SELECT i + 1 FROM n WHERE i + 1 < ${MESSAGES})
+		WITH RECURSIVE n(i) AS (SELECT 0 UNION ALL SELECT i + 1 FROM n WHERE i + 1 < ${MESSAGES * PER})
 		INSERT INTO message_attachments (id, message_id, filename, content_type, size, r2_key, created_at)
-		SELECT 'a' || i, 'm' || i, 'a.pdf', 'application/pdf', 3, 'att/m' || i, 1 FROM n;
+		SELECT 'a' || i, 'm' || (i / ${PER}), 'a.pdf', 'application/pdf', 3, 'att/' || i, 1 FROM n;
 	`);
 	const rows = Array.from({ length: MESSAGES }, (_, i) => ({ id: `m${i}`, mailboxId: "mb", rawR2Key: `raw/m${i}`, status: "trash" }));
 
@@ -62,5 +63,5 @@ test("5000 permanent deletes stay under the subrequest cap, with every row and o
 	assert.ok(maxParams <= 100, `max params ${maxParams}`);
 	assert.equal(sqlite.prepare("SELECT COUNT(*) AS n FROM messages").get().n, 0);
 	assert.equal(sqlite.prepare("SELECT COUNT(*) AS n FROM audit_logs").get().n, MESSAGES);
-	assert.equal(deleted.length, MESSAGES * 2);
+	assert.equal(deleted.length, MESSAGES * (1 + PER));
 });
