@@ -47,7 +47,7 @@ test("a daily all-day series across the spring clock change ends each day at its
 	assert.deepEqual(result.map(([from, to]) => [new Date(from).toISOString(), new Date(to).toISOString()]).slice(0, 2), [["2030-03-08T05:00:00.000Z", "2030-03-09T05:00:00.000Z"], ["2030-03-15T04:00:00.000Z", "2030-03-16T04:00:00.000Z"]]);
 });
 
-test("an all-day series with no zone of its own (a floating invitation) keeps midnight in the owner's zone across a clock change", async () => {
+test("an all-day series with no zone of its own (a legacy row, which the calendar view expands in the owner's own zone) keeps midnight in that zone across a clock change", async () => {
 	setup("America/New_York");
 	const start = Date.UTC(2030, 10, 1, 4);
 	allDay("a", start, start + 24 * H, { zone: null, repeat: "daily", until: Date.UTC(2030, 10, 8, 5) });
