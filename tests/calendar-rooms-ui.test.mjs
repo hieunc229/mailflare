@@ -138,7 +138,7 @@ test("the editor wires the picker, the room rows and the sidebar", () => {
 	const page = read("src/app/(calendar)/calendar/page.tsx");
 	assert.match(page, /<RoomsPicker /);
 	assert.match(page, /resourceIds: roomIds/);
-	assert.match(page, /rooms=\{roomIds\.flatMap/);
+	assert.match(page, /<AvailabilityRoomsContext\.Provider value=\{roomRows\}>/);
 	assert.match(page, /&resourceIds=\$\{encodeURIComponent\(shownRoomsKey\)\}/);
 	assert.match(read("src/app/(calendar)/upcoming-sidebar.tsx"), /<RoomList \/>/);
 });

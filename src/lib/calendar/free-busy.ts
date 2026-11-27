@@ -1,6 +1,6 @@
-import { and, eq, gt, inArray, isNull, lt, ne, or, sql } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import { getDb } from "@/db";
-import { calendarEvents, calendarResources, davCalendarObjects, users } from "@/db/schema";
+import { calendarEvents, calendarResources, davCalendarObjects } from "@/db/schema";
 import { inviteEventId } from "./invite-id";
 import { expandRowBusy, loadOwnerZones, mergeBusy, needsOwnerZone, overlapsWindow, USER_CHUNK, type BusyInterval } from "./busy-expand";
 import { roomBusyIntervals } from "./room-busy";

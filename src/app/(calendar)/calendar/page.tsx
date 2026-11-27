@@ -37,6 +37,7 @@ import { calendarLabel, canWriteEvents, eventErrorKey, movesSeries, visibleCalen
 import { EventViewDialog } from "./event-view-dialog";
 import { AvailabilityPanel } from "./availability-panel";
 import { RoomsPicker } from "./rooms-picker";
+import { AvailabilityRoomsContext } from "./availability-rooms";
 import { useRoomState, retryRooms } from "./room-state";
 import { activeShownRooms, roomSaveErrorKey, roomScheduleEvents } from "./room-utils";
 import type { RoomScheduleEvent } from "./room-types";
@@ -127,6 +128,8 @@ export default function CalendarPage() {
   const [roomIds, setRoomIds] = useState<string[]>([]);
   const roomStore = useRoomState();
   const shownRoomsKey = activeShownRooms(roomStore.shown, roomStore.rooms).join(",");
+  // The rooms chosen for the event, by name, for the availability rows below the guests.
+  const roomRows = useMemo(() => roomIds.flatMap((id) => { const room = roomStore.rooms.find((item) => item.id === id); return room ? [{ id, name: room.name }] : []; }), [roomIds, roomStore.rooms]);
   const [location, setLocation] = useState("");
   const [description, setDescription] = useState("");
   const [editing, setEditing] = useState<CalendarEvent | null>(null);
@@ -729,6 +732,7 @@ export default function CalendarPage() {
                 className="min-w-0 flex-1 rounded-md border border-transparent bg-transparent px-2 py-1 text-2xl font-medium text-neutral-900 outline-none placeholder:text-neutral-500 hover:bg-white/60 focus:border-blue-600 focus:bg-white" />
               <button type="button" aria-label={t("calendar.closeEditor")} disabled={pendingAction === "save"} onClick={() => setClosingEventEditor(true)} className="shrink-0 rounded-full p-1 text-neutral-600 hover:bg-neutral-200 disabled:opacity-50"><X className="h-5 w-5" /></button>
             </div>
+            <AvailabilityRoomsContext.Provider value={roomRows}>
             <div className="mt-4 space-y-2">
               <div className="grid grid-cols-[24px_minmax(0,1fr)] items-start gap-3">
                 <Clock3 aria-hidden="true" className="mt-2 h-5 w-5 text-neutral-600" />
@@ -885,9 +889,9 @@ export default function CalendarPage() {
                 <RoomsPicker rooms={roomStore.rooms} state={roomStore.state} canBook={roomStore.canBook} selected={roomIds} saved={editing?.rooms ?? []} disabled={pendingAction === "save"}
                   onAdd={(id) => setRoomIds((current) => current.includes(id) ? current : [...current, id])} onRemove={(id) => setRoomIds((current) => current.filter((item) => item !== id))} onRetry={retryRooms} />
               </div>}
-              {(!delegate || roomIds.length > 0) && <div className="grid grid-cols-[24px_minmax(0,1fr)] items-start gap-3">
+              {!delegate && <div className="grid grid-cols-[24px_minmax(0,1fr)] items-start gap-3">
                 <div />
-                <AvailabilityPanel guests={delegate ? "" : guests} rooms={roomIds.flatMap((id) => { const room = roomStore.rooms.find((item) => item.id === id); return room ? [{ id, name: room.name }] : []; })} excludeEventId={editing?.id} selfAddress={currentUser?.email} startsAt={startsAt} endsAt={endsAt} onPick={(start, end) => { setStartsAt(formatLocalDateTime(start)); setEndsAt(formatLocalDateTime(end)); }} />
+                <AvailabilityPanel guests={guests} excludeEventId={editing?.id} selfAddress={currentUser?.email} startsAt={startsAt} endsAt={endsAt} onPick={(start, end) => { setStartsAt(formatLocalDateTime(start)); setEndsAt(formatLocalDateTime(end)); }} />
               </div>}
               <div className="grid grid-cols-[24px_minmax(0,1fr)] items-center gap-3">
                 <MapPin aria-hidden="true" className="h-5 w-5 text-neutral-600" />
@@ -936,6 +940,7 @@ export default function CalendarPage() {
                 </div>
               </div>
             </div>
+            </AvailabilityRoomsContext.Provider>
           </DialogFrame>
         </div>,
         document.body,
