@@ -77,9 +77,9 @@ export async function removeMx(env: CloudflareEnv, domain: DomainRow, matches: (
 
 export const isInboundSmtpMx = (content: string) => /inbound-smtp\.[a-z0-9-]+\.amazonaws\.com\.?$/i.test(content.trim());
 
-/** Resend inbound MX: the SES-style host, or the newer `receive-<region>.forge.rmta.net` host. */
+/** Resend inbound MX: the SES-style host, or the newer `receive[-<region>].forge.rmta.net` host. */
 export const isResendInboundMx = (content: string) =>
-	isInboundSmtpMx(content) || /^receive-[a-z0-9-]+\.forge\.rmta\.net\.?$/i.test(content.trim());
+	isInboundSmtpMx(content) || /^receive(-[a-z0-9-]+)?\.forge\.rmta\.net\.?$/i.test(content.trim());
 
 /**
  * Whether public DNS already sends this domain's mail to its receiving service. A domain with none selected
