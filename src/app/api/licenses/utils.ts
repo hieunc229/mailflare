@@ -19,7 +19,7 @@ export async function requireLicenseAdmin(env: CloudflareEnv, request: Request):
 }
 
 export async function parseLicenseKeyRequest(request: Request): Promise<LicenseKeyRequest> {
-	return licenseKeySchema.parse(await request.json());
+	return licenseKeySchema.parse(await request.json().catch(() => null));
 }
 
 export function getLicenseInstanceUrl(request: Request): string {
