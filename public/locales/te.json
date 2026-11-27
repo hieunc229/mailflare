@@ -695,6 +695,7 @@
 	"appPasswords.createdTitle": "యాప్ పాస్‌వర్డ్ సృష్టించబడింది",
 	"appPasswords.shownOnce": "ఈ పాస్‌వర్డ్‌ను ఇప్పుడే కాపీ చేయండి. ఇది ఒక్కసారి మాత్రమే చూపబడుతుంది, మరియు దీన్ని కింది జాబితా నుండి రద్దు చేయవచ్చు.",
 	"appPasswords.jmapDiscovery": "JMAP సెషన్ డిస్కవరీ {url} వద్ద ఉంది.",
+	"appPasswords.jmapSessionUrl": "JMAP సెషన్ URL",
 	"appPasswords.listTitle": "మీ యాప్ పాస్‌వర్డ్‌లు",
 	"appPasswords.empty": "ఇంకా యాప్ పాస్‌వర్డ్‌లు లేవు.",
 	"appPasswords.loadFailed": "యాప్ పాస్‌వర్డ్‌లను లోడ్ చేయలేకపోయాం",

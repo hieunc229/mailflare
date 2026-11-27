@@ -697,6 +697,7 @@
 	"appPasswords.createdTitle": "ਐਪ ਪਾਸਵਰਡ ਬਣ ਗਿਆ",
 	"appPasswords.shownOnce": "ਇਹ ਪਾਸਵਰਡ ਹੁਣੇ ਕਾਪੀ ਕਰੋ। ਇਹ ਸਿਰਫ਼ ਇੱਕ ਵਾਰ ਦਿਖਾਇਆ ਜਾਂਦਾ ਹੈ, ਅਤੇ ਤੁਸੀਂ ਇਸਨੂੰ ਹੇਠਾਂ ਦਿੱਤੀ ਸੂਚੀ ਵਿੱਚੋਂ ਰੱਦ ਕਰ ਸਕਦੇ ਹੋ।",
 	"appPasswords.jmapDiscovery": "JMAP ਸੈਸ਼ਨ ਖੋਜ {url} 'ਤੇ ਹੈ।",
+	"appPasswords.jmapSessionUrl": "JMAP ਸੈਸ਼ਨ URL",
 	"appPasswords.listTitle": "ਤੁਹਾਡੇ ਐਪ ਪਾਸਵਰਡ",
 	"appPasswords.empty": "ਹਾਲੇ ਕੋਈ ਐਪ ਪਾਸਵਰਡ ਨਹੀਂ।",
 	"appPasswords.loadFailed": "ਐਪ ਪਾਸਵਰਡ ਲੋਡ ਨਹੀਂ ਹੋ ਸਕੇ",

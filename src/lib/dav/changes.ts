@@ -6,7 +6,7 @@ import { isMissingTableError } from "@/lib/database-errors";
 
 /**
  * Reading side of the CalDAV/CardDAV change log. The log itself is written only by
- * the `dav_changes_*` triggers (migration 0102 and its PostgreSQL/MySQL twins), so
+ * the `dav_changes_*` triggers (migration 0098 and its PostgreSQL/MySQL twins), so
  * every writer of `calendar_events` and `dav_cards` is covered; never insert here.
  */
 
@@ -131,7 +131,7 @@ export async function runDavChangeRetention(env: Pick<CloudflareEnv, "DB">, now:
 	try {
 		return await pruneDavChanges(env, now);
 	} catch (error) {
-		// Migration 0102 is applied later from Admin settings on some installations; nothing to prune before it.
+		// Migration 0098 is applied later from Admin settings on some installations; nothing to prune before it.
 		if (isMissingTableError(error)) return 0;
 		throw error;
 	}

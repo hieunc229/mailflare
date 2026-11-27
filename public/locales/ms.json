@@ -696,6 +696,7 @@
 	"appPasswords.createdTitle": "Kata laluan apl dicipta",
 	"appPasswords.shownOnce": "Salin kata laluan ini sekarang. Ia dipaparkan sekali sahaja, dan anda boleh membatalkannya daripada senarai di bawah.",
 	"appPasswords.jmapDiscovery": "Penemuan sesi JMAP berada di {url}.",
+	"appPasswords.jmapSessionUrl": "URL sesi JMAP",
 	"appPasswords.listTitle": "Kata laluan apl anda",
 	"appPasswords.empty": "Belum ada kata laluan apl.",
 	"appPasswords.loadFailed": "Tidak dapat memuatkan kata laluan apl",

@@ -704,6 +704,7 @@
 	"appPasswords.createdTitle": "App password created",
 	"appPasswords.shownOnce": "Copy this password now. It is shown only once, and you can revoke it from the list below.",
 	"appPasswords.jmapDiscovery": "JMAP session discovery is at {url}.",
+	"appPasswords.jmapSessionUrl": "JMAP session URL",
 	"appPasswords.listTitle": "Your app passwords",
 	"appPasswords.empty": "No app passwords yet.",
 	"appPasswords.loadFailed": "Could not load app passwords",

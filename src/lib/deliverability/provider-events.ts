@@ -14,6 +14,8 @@ export const MAX_EVENT_BYTES = 256 * 1024;
 export type EventResult = { status: number; body: Record<string, unknown> };
 
 const bytes = (text: string) => new TextEncoder().encode(text).byteLength;
+/** Replay markers for handled Resend events; the daily raw sweep removes old ones. */
+export const RESEND_EVENT_MARKER_PREFIX = "provider-events/resend/";
 const markerKey = (prefix: string, id: string) => `${prefix}${id.replace(/[^A-Za-z0-9_-]/g, "")}`;
 
 export async function getResendEventsSecret(env: CloudflareEnv): Promise<string | null> {
@@ -42,7 +44,7 @@ export async function processResendEvent(
 
 	if (await getSuppressionMode(env) === "off") return { status: 200, body: { recorded: 0 } };
 
-	const seen = request.headers.id ? markerKey("provider-events/resend/", request.headers.id) : null;
+	const seen = request.headers.id ? markerKey(RESEND_EVENT_MARKER_PREFIX, request.headers.id) : null;
 	if (seen && await env.BUCKET.head(seen)) return { status: 200, body: { ignored: "Already processed" } };
 
 	let event: unknown;

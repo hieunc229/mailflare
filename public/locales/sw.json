@@ -697,6 +697,7 @@
 	"appPasswords.createdTitle": "Nenosiri la programu limeundwa",
 	"appPasswords.shownOnce": "Nakili nenosiri hili sasa. Linaonyeshwa mara moja tu, na unaweza kulibatilisha kutoka kwenye orodha iliyo hapa chini.",
 	"appPasswords.jmapDiscovery": "Ugunduzi wa kipindi cha JMAP uko {url}.",
+	"appPasswords.jmapSessionUrl": "URL ya kipindi cha JMAP",
 	"appPasswords.listTitle": "Nenosiri zako za programu",
 	"appPasswords.empty": "Bado hakuna nenosiri za programu.",
 	"appPasswords.loadFailed": "Imeshindwa kupakia nenosiri za programu",

@@ -702,6 +702,7 @@
 	"appPasswords.createdTitle": "Palavra-passe de aplicação criada",
 	"appPasswords.shownOnce": "Copie esta palavra-passe agora. É apresentada uma única vez e pode revogá-la na lista abaixo.",
 	"appPasswords.jmapDiscovery": "A descoberta de sessão JMAP fica em {url}.",
+	"appPasswords.jmapSessionUrl": "URL da sessão JMAP",
 	"appPasswords.listTitle": "As suas palavras-passe de aplicação",
 	"appPasswords.empty": "Ainda não há palavras-passe de aplicação.",
 	"appPasswords.loadFailed": "Não foi possível carregar as palavras-passe de aplicação",

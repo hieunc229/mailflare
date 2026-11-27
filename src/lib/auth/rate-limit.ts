@@ -22,14 +22,20 @@ export async function allowDeviceLoginAttempt(env: CloudflareEnv, request: Reque
 	}
 }
 
-/** Public booking submissions send mail from the host's address, so they get a per-client budget of their own. */
+/**
+ * Public booking submissions send mail from the host's address, so they get a per-client budget of their own.
+ * Unlike sign-in, this fails closed: with no limiter bound, or one that errors, nobody can trigger that mail.
+ */
 export async function allowBookingAttempt(env: CloudflareEnv, request: Request): Promise<boolean> {
-	if (!env.LOGIN_RATE_LIMIT) return true;
+	if (!env.LOGIN_RATE_LIMIT) {
+		console.warn("Booking refused: LOGIN_RATE_LIMIT is not bound");
+		return false;
+	}
 	try {
 		return (await env.LOGIN_RATE_LIMIT.limit({ key: `booking:${clientRateLimitKey(request)}` })).success;
 	} catch (error) {
 		console.warn("Booking rate limiter unavailable", error);
-		return true;
+		return false;
 	}
 }
 

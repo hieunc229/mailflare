@@ -707,6 +707,7 @@
 	"appPasswords.createdTitle": "Пароль приложения создан",
 	"appPasswords.shownOnce": "Скопируйте этот пароль сейчас. Он показывается только один раз, а отозвать его можно в списке ниже.",
 	"appPasswords.jmapDiscovery": "Обнаружение сеанса JMAP находится по адресу {url}.",
+	"appPasswords.jmapSessionUrl": "URL-адрес сеанса JMAP",
 	"appPasswords.listTitle": "Ваши пароли приложений",
 	"appPasswords.empty": "Паролей приложений пока нет.",
 	"appPasswords.loadFailed": "Не удалось загрузить пароли приложений",

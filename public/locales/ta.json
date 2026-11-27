@@ -697,6 +697,7 @@
 	"appPasswords.createdTitle": "ஆப் கடவுச்சொல் உருவாக்கப்பட்டது",
 	"appPasswords.shownOnce": "இந்தக் கடவுச்சொல்லை இப்போதே நகலெடுக்கவும். இது ஒரு முறை மட்டுமே காட்டப்படும், கீழுள்ள பட்டியலிலிருந்து இதைத் திரும்பப்பெறலாம்.",
 	"appPasswords.jmapDiscovery": "JMAP அமர்வுக் கண்டறிதல் {url} இல் உள்ளது.",
+	"appPasswords.jmapSessionUrl": "JMAP அமர்வு URL",
 	"appPasswords.listTitle": "உங்கள் ஆப் கடவுச்சொற்கள்",
 	"appPasswords.empty": "இன்னும் ஆப் கடவுச்சொற்கள் இல்லை.",
 	"appPasswords.loadFailed": "ஆப் கடவுச்சொற்களை ஏற்ற இயலவில்லை",
