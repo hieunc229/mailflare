@@ -6,12 +6,11 @@ import { installSqlite, loadFixture } from "./helpers/fixtures.mjs";
 const { migrations } = JSON.parse(readFileSync(new URL("../src/lib/migrations/bundle.json", import.meta.url), "utf8"));
 const schema = "PRAGMA foreign_keys = ON;\n" + migrations.flatMap((migration) => migration.statements).join(";\n");
 const fixture = await loadFixture({ name: "cal-pub-review", entryPoint: "src/lib/calendar/free-busy-publish.ts", mocks: { "@/db": "export function getDb(){return globalThis.calPubRev.db}" } });
-const { publishWindow, publishedBusy, buildFreeBusyIcs, buildFreeBusyIfb } = await fixture.import();
+const { publishWindow, publishedBusy, buildFreeBusyIcs } = await fixture.import();
 let sqlite;
 after(() => { sqlite?.close(); delete globalThis.calPubRev; fixture.dispose(); });
 
 const DAY = 86_400_000;
-const H = 3_600_000;
 
 test("the window starts and ends at UTC midnight and does not move during the day", () => {
 	const morning = publishWindow(new Date(Date.UTC(2030, 0, 15, 1, 23, 17, 456)));
