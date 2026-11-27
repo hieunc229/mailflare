@@ -1,4 +1,4 @@
-# Deploying Mailflare to Vercel (experimental)
+# Deploying Mailflare to Vercel
 
 Cloudflare Workers (see [deployment](deployment.md)) and [Docker](self-hosting.md) are the recommended ways to run
 Mailflare. Vercel works, with more services to set up and the [limits](#limits) below.

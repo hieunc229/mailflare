@@ -1,6 +1,6 @@
 # Deployment and configuration
 
-This guide covers Cloudflare deployment, runtime configuration, database backups, and application updates. To run Mailflare elsewhere, see [Docker](self-hosting.md) or [Vercel](vercel.md) (experimental).
+This guide covers Cloudflare deployment, runtime configuration, database backups, and application updates. To run Mailflare elsewhere, see [Docker](self-hosting.md) or [Vercel](vercel.md).
 
 ## Overview
 

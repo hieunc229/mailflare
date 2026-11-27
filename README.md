@@ -3,12 +3,13 @@
 
 # Mailflare
 
-A self-hosted alternative to Google Workspace. Setup **custom domain Emails**, **Calendar, Drive, Booking** and **built-in AI agents**.
+A self-hosted alternative to Google Workspace. Setup **custom domain Emails**, **Calendar, Drive, Booking** and **built-in AI agents**. Deploy it to Cloudflare, Docker or Vercel
 
-Self-host it on Cloudflare, Docker or Vercel (experimental). **Or try [Mailflare Cloud](https://cloud.mailflare.co?ref=github) with high-deliverable emails** from $4​
+**Try [Mailflare Cloud](https://cloud.mailflare.co?ref=github)** with high-deliverable emails without managing your deployments
 
-[![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/hieunc229/mailflare)
-[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2Fhieunc229%2Fmailflare&env=CRON_SECRET&envDescription=See%20docs%2Fvercel.md&envLink=https%3A%2F%2Fgithub.com%2Fhieunc229%2Fmailflare%2Fblob%2Fmain%2Fdocs%2Fvercel.md)
+[![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/hieunc229/mailflare) 
+<a href="https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2Fhieunc229%2Fmailflare&amp;env=CRON_SECRET&amp;envDescription=See%20docs%2Fvercel.md&amp;envLink=https%3A%2F%2Fgithub.com%2Fhieunc229%2Fmailflare%2Fblob%2Fmain%2Fdocs%2Fvercel.md" rel="nofollow"><img src="https://camo.githubusercontent.com/ff0e5692ba93a62d065d9523e5a7e15ed5e2e15a2866758b3276a4f7b77eaac6/68747470733a2f2f76657263656c2e636f6d2f627574746f6e" alt="Deploy with Vercel" data-canonical-src="https://vercel.com/button" style="max-width: 100%;height: 39px;"></a>
+
 
 ## Screenshots
 
@@ -40,7 +41,7 @@ Self-host it on Cloudflare, Docker or Vercel (experimental). **Or try [Mailflare
 
 - **Databases**: Cloudflare D1 (default), PostgreSQL, MySQL, Turso / libSQL, or a local SQLite file. Set `DATABASE_URL` to switch. Works with Supabase, Neon, PlanetScale, TiDB and more. See [Databases](docs/databases.md).
 - **File storage**: Cloudflare R2, Backblaze B2 or AWS S3.
-- **Hosting**: Cloudflare Workers, a single Docker container, or Vercel (experimental).
+- **Hosting**: Cloudflare Workers, a single Docker container, or Vercel.
 - **Admin**: Users, API keys, webhooks, audit logs and backups.
 - **Import**: Bring in mail from IMAP, Gmail Takeout, `.eml` and `.mbox` files, and Google Calendar events, Google Contacts and Google Drive files from Takeout. See [Importing from Google Takeout](docs/import.md).
 
@@ -103,7 +104,7 @@ Or skip the build and run the prebuilt image: `docker compose -f docker-compose.
 
 See [self-hosting](docs/self-hosting.md).
 
-### Deploy to Vercel (experimental)
+### Deploy to Vercel
 
 [![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2Fhieunc229%2Fmailflare&env=CRON_SECRET&envDescription=See%20docs%2Fvercel.md&envLink=https%3A%2F%2Fgithub.com%2Fhieunc229%2Fmailflare%2Fblob%2Fmain%2Fdocs%2Fvercel.md)
 
@@ -131,7 +132,7 @@ A schema change needs a migration for each database type. See [Databases](docs/d
 ## Documentation
 
 - [Deployment and configuration](docs/deployment.md)
-- [Deploying to Vercel (experimental)](docs/vercel.md)
+- [Deploying to Vercel](docs/vercel.md)
 - [Databases](docs/databases.md)
 - [Sending and receiving providers](docs/providers.md)
 - [API and integrations](docs/api.md)

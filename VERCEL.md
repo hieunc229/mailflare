@@ -1,6 +1,6 @@
 # Deploying Mailflare to Vercel — plan
 
-Status: **implemented (experimental)**, 2026-11-27. User docs: [docs/vercel.md](docs/vercel.md). Not yet run on real Vercel, Vercel Queues, Turso, Neon, S3, QStash or Upstash.
+Status: **implemented**, 2026-11-27. User docs: [docs/vercel.md](docs/vercel.md). Not yet run on real Vercel, Vercel Queues, Turso, Neon, S3, QStash or Upstash.
 
 ## What was built, where it differs from the plan
 
@@ -95,7 +95,7 @@ Mailflare already runs off Cloudflare in the self-hosted Node runtime (`server/i
 
 If demand is real (users asking, not guessing), do it in this order and stop at whatever is enough:
 1. Phase 3's shared cron function and Phase 2's queue abstraction — useful for all runtimes anyway.
-2. A minimal "Vercel + Neon + S3 + QStash + Upstash, inbound via Resend" tier with polling realtime, uploads ≤ 4.5 MB and no DAV, labelled experimental.
+2. A minimal "Vercel + Neon + S3 + QStash + Upstash, inbound via Resend" tier with polling realtime, uploads ≤ 4.5 MB and no DAV.
 3. Direct-to-S3 uploads and DAV only if that tier gets used.
 
 Rough effort: minimal tier ~1–2 weeks; full parity (uploads, DAV, hosted realtime) ~3–4 weeks.
