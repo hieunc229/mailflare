@@ -6,6 +6,7 @@ import { loadMessageAttachmentContents } from "@/lib/email/attachments";
 import { deleteMessageWithObjects } from "@/lib/email/message-cleanup";
 import { decodeIdentityId, identityId } from "./ids";
 import { listJmapMailboxes, listSendableAddresses } from "./access";
+import { setKey } from "./safe-map";
 import { getEmailState } from "./state";
 import { JmapError } from "./errors";
 import type { JmapContext, JmapMethodHandler } from "./types";
@@ -61,12 +62,21 @@ export const identitySet: JmapMethodHandler = async (ctx, args) => ({
  */
 export const emailSubmissionSet: JmapMethodHandler = async (ctx, args) => {
 	const oldState = await getEmailState(ctx);
-	const created: Record<string, unknown> = {};
-	const notCreated: Record<string, unknown> = {};
+	// Client-controlled keys: a null-prototype map keeps "__proto__" an own property.
+	const created: Record<string, unknown> = Object.create(null);
+	const notCreated: Record<string, unknown> = Object.create(null);
 	const destroyedEmails: string[] = [];
 
 	for (const [creationId, value] of Object.entries((args.create ?? {}) as Record<string, Record<string, unknown>>)) {
-		const emailId = ctx.createdIds[String(value.emailId).replace(/^#/, "")] ?? String(value.emailId ?? "");
+		// String() on a non-string id would invoke the value's own toString and
+		// can throw mid-loop; a malformed reference just cannot match a draft.
+		const emailIdRef = typeof value.emailId === "string" ? value.emailId : "";
+		const ref = emailIdRef.replace(/^#/, "");
+		// An inherited property like "constructor" is not a creation id: reading
+		// it as a map would substitute a Function into the draft lookup and throw
+		// a bind error after earlier submissions already went out.
+		const mapped = Object.prototype.hasOwnProperty.call(ctx.createdIds, ref) ? ctx.createdIds[ref] : undefined;
+		const emailId = typeof mapped === "string" ? mapped : emailIdRef;
 		const identity = typeof value.identityId === "string" ? decodeIdentityId(value.identityId) : null;
 		const accessible = await listJmapMailboxes(ctx);
 		if (!identity || !accessible.some((mailbox) => mailbox.id === identity.mailboxId && mailbox.permission !== "read_only")) {
@@ -110,7 +120,8 @@ export const emailSubmissionSet: JmapMethodHandler = async (ctx, args) => {
 				console.error(`Failed to clean up submitted draft ${draft.id}`, error);
 			}
 			destroyedEmails.push(draft.id);
-			ctx.createdIds[creationId] = result.messageId;
+			// A "__proto__" creation id is still a key the client may resolve later.
+			setKey(ctx.createdIds, creationId, result.messageId);
 			created[creationId] = {
 				id: result.messageId,
 				identityId: value.identityId,
@@ -136,10 +147,12 @@ export const emailSubmissionSet: JmapMethodHandler = async (ctx, args) => {
 		accountId: ctx.accountId,
 		oldState,
 		newState: await getEmailState(ctx),
-		created,
+		// Spread back to a plain object so a "__proto__" id survives as an own
+		// property without changing the response's object shape for callers.
+		created: { ...created },
 		updated: {},
 		destroyed: [],
-		notCreated,
+		notCreated: { ...notCreated },
 		notUpdated: Object.fromEntries(Object.keys((args.update ?? {}) as object).map((id) => [id, { type: "forbidden" }])),
 		notDestroyed: Object.fromEntries(((args.destroy ?? []) as string[]).map((id) => [id, { type: "forbidden" }])),
 		// Surfaced so the processor can append the implicit Email/set response.
