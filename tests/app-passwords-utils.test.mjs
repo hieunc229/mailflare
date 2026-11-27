@@ -9,7 +9,7 @@ const fixture = await loadFixture({
 		"@/lib/auth/client": "export async function authFetch(url, init){globalThis.appPwUtils.calls.push({url, init}); return globalThis.appPwUtils.respond(url, init)}",
 	},
 });
-const { appPasswordProtocolName, createAppPassword, groupAppPassword, loadAppPasswords, revokeAppPassword } = await fixture.import();
+const { copyAnnouncement, davConnectionUrls, appPasswordProtocolName, createAppPassword, groupAppPassword, loadAppPasswords, revokeAppPassword } = await fixture.import();
 after(() => { delete globalThis.appPwUtils; fixture.dispose(); });
 
 function respond(status, body) {
@@ -47,7 +47,7 @@ test("a failed create keeps the server's code so the dialog can translate it", a
 });
 
 test("loading and revoking use the app password routes", async () => {
-	respond(200, { appPasswords: [{ id: "k1" }], availableProtocols: ["jmap"] });
+	respond(200, { appPasswords: [{ id: "k1" }], availableProtocols: ["jmap"], dav: { enabled: false } });
 	assert.deepEqual((await loadAppPasswords()).availableProtocols, ["jmap"]);
 	assert.equal(globalThis.appPwUtils.calls[0].url, "/api/app-passwords");
 	respond(200, { ok: true });
@@ -58,4 +58,29 @@ test("loading and revoking use the app password routes", async () => {
 	await assert.rejects(revokeAppPassword("nope"), /not found/);
 	respond(500, {});
 	await assert.rejects(loadAppPasswords());
+});
+
+test("loading passes the calendar sync status through", async () => {
+	const dav = { enabled: true, userId: "u1", email: "a@b.test", calendarEnabled: true, isAdmin: false };
+	respond(200, { appPasswords: [], availableProtocols: ["jmap", "dav"], dav });
+	assert.deepEqual((await loadAppPasswords()).dav, dav);
+	respond(200, { appPasswords: [], availableProtocols: ["jmap"] });
+	await assert.rejects(loadAppPasswords());
+});
+
+test("connection addresses follow the shape the DAV server answers on", () => {
+	assert.deepEqual(davConnectionUrls("https://mail.example.com", "u1"), {
+		base: "https://mail.example.com/dav/",
+		caldav: "https://mail.example.com/dav/calendars/u1/default/",
+		carddav: "https://mail.example.com/dav/addressbooks/u1/default/",
+		host: "mail.example.com",
+	});
+	// The id is a path segment, never able to add more of the path.
+	assert.equal(davConnectionUrls("https://mail.example.com", "a/../b").caldav, "https://mail.example.com/dav/calendars/a%2F..%2Fb/default/");
+});
+
+test("a repeated copy changes the announced text so a screen reader says it again", () => {
+	assert.notEqual(copyAnnouncement("Copied Server", 1), copyAnnouncement("Copied Server", 2));
+	assert.equal(copyAnnouncement("Copied Server", 1), copyAnnouncement("Copied Server", 3));
+	assert.equal(copyAnnouncement("Copied Server", 1).trim(), "Copied Server");
 });

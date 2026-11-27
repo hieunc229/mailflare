@@ -3,6 +3,8 @@ import type { CalendarEvent, CalendarEventTimes, EventGroup, EventResizeEdge } f
 import type { FolderColor } from "@/lib/folders/types";
 import type { CalendarRepeat } from "@/lib/calendar/types";
 import { parseCalendarRepeatDays, parseExcludedOccurrences } from "@/lib/calendar/recurrence";
+import { expandEventOccurrences, expandEventStarts } from "@/lib/calendar/rrule";
+import { isInactiveCalendarResponse } from "@/lib/calendar/response-status";
 import { dateFromZonedFields, formatUserDate, getDisplayLocale, formatUserDateTimeLocal, getUserTimeZone, parseUserDateTimeLocal, zonedDateFields } from "@/lib/time/utils";
 
 export const CALENDAR_START_HOUR = 0;
@@ -152,11 +154,23 @@ function recurrenceStartIndex(first: Date, repeat: CalendarRepeat, after: Date, 
   return Math.max(0, Math.floor((end.getTime() - start.getTime()) / (86_400_000 * (repeat === "weekly" ? 7 : 1) * interval)) - 1);
 }
 
+/** The row shape the shared recurrence code reads, from a calendar event as the API sends it. */
+function recurringEvent(event: CalendarEvent, startsAt = new Date(event.startsAt)) {
+  return { startsAt, endsAt: new Date(startsAt.getTime() + new Date(event.endsAt).getTime() - new Date(event.startsAt).getTime()), timeZone: event.timeZone ?? calendarTimeZone(event), repeat: event.repeat, rrule: event.rrule, excludedOccurrences: event.excludedOccurrences };
+}
+
 export function expandCalendarEvents(events: CalendarEvent[], rangeStart: Date, rangeEnd: Date, overrides?: Map<string, CalendarOccurrenceOverride[]>): CalendarEvent[] {
   const occurrences: CalendarEvent[] = [];
   for (const event of events) {
+    if (isInactiveCalendarResponse(event.responseStatus)) continue;
     const first = new Date(event.startsAt);
     const duration = new Date(event.endsAt).getTime() - first.getTime();
+    if (event.repeat === "custom") {
+      for (const startsAt of expandEventOccurrences(recurringEvent(event), rangeStart, rangeEnd, 2000)) {
+        occurrences.push({ ...event, id: `${event.id}@${startsAt.getTime()}`, seriesStartsAt: event.startsAt, startsAt: startsAt.toISOString(), endsAt: new Date(startsAt.getTime() + duration).toISOString() });
+      }
+      continue;
+    }
     if (event.repeat === "none") {
       if (first < rangeEnd && first.getTime() + duration > rangeStart.getTime()) occurrences.push(event);
       continue;
@@ -195,6 +209,7 @@ export function expandCalendarEvents(events: CalendarEvent[], rangeStart: Date, 
 
 export function nextCalendarOccurrence(event: CalendarEvent, after: Date, overrides?: CalendarOccurrenceOverride[]): Date | null {
   const first = new Date(event.seriesStartsAt ?? event.startsAt);
+  if (event.repeat === "custom") return expandEventStarts(recurringEvent(event, first), after, new Date(after.getTime() + 50 * 366 * 86_400_000), 1)[0] ?? null;
   const until = event.repeatUntil ? new Date(event.repeatUntil).getTime() : Infinity;
   const repeatDays = parseCalendarRepeatDays(event.repeatDays);
   const excluded = new Set(parseExcludedOccurrences(event.excludedOccurrences));

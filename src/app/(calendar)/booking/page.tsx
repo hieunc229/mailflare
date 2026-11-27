@@ -14,15 +14,20 @@ import { authFetch } from "@/lib/auth/client";
 import { getUserTimeZone } from "@/lib/time/utils";
 import { useSidebar } from "@/components/sidebar-state";
 import { UpcomingSidebar } from "../upcoming-sidebar";
+import { useBookingRooms } from "./room-options";
+import { BookingPageNotice } from "./page-notice";
+import { bookingRoomsProblem } from "./room-problem";
+import { parseBookingResourceIds } from "@/lib/booking/resource-ids";
 import { BookingEditor } from "./booking-editor";
 import { BookingListSkeleton } from "./booking-list-skeleton";
 import { visibleBookingEvents } from "./default-events";
 import type { BookingEvent, BookingForm, BookingHost } from "./types";
-import { availabilityLabel, durationLabel, emptyBookingForm, formFromEvent } from "./utils";
+import { availabilityLabel, bookingSaveErrorKey, durationLabel, emptyBookingForm, formFromEvent } from "./utils";
 
 export default function BookingsPage() {
 	const { t } = useLanguage();
 	const { minimal: sidebarMinimal, mobile } = useSidebar();
+	const { store: roomStore, retry: retryRooms } = useBookingRooms();
 	const minimal = sidebarMinimal || mobile;
 	const [events, setEvents] = useState<BookingEvent[]>([]);
 	const [username, setUsername] = useState("");
@@ -72,8 +77,8 @@ export default function BookingsPage() {
 		setSaving(true);
 		try {
 			const response = await authFetch(editingId ? `/api/booking/${editingId}` : "/api/booking", { method: editingId ? "PATCH" : "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(form) });
-			const data = await response.json() as { event?: BookingEvent; error?: string };
-			if (!response.ok || !data.event) { toast.error(data.error ?? t("booking.saveFailed")); return; }
+			const data = await response.json() as { event?: BookingEvent; error?: string; code?: string };
+			if (!response.ok || !data.event) { const key = bookingSaveErrorKey(data.code); toast.error(key ? t(key) : data.error ?? t("booking.saveFailed")); return; }
 			setEvents((current) => editingId ? current.map((item) => item.id === editingId ? data.event! : item) : [...current, data.event!]);
 			closeEditor();
 			toast.success(editingId ? t("booking.saved") : t("booking.created"));
@@ -136,14 +141,14 @@ export default function BookingsPage() {
 							</div>
 
 							{loading ? <BookingListSkeleton /> : listEvents.length === 0 ? <div className="rounded-2xl border border-dashed border-neutral-300 bg-white px-6 py-12 text-center"><CalendarDays className="mx-auto mb-3 h-8 w-8 text-neutral-400" /><h2 className="font-medium text-neutral-900">{t("booking.none")}</h2><p className="mt-1 text-sm text-neutral-500">{t("booking.noneHint")}</p></div> : listEvents.map((event, i) => <article key={event.id} className={clsx(!event.enabled && "opacity-65", `relative flex flex-wrap items-center gap-4 rounded-md bg-white px-5 py-5 max-md:gap-3 max-md:rounded-none max-md:border-b max-md:border-neutral-100 max-md:px-0 max-md:py-4 max-md:last:border-b-0`, i === 0 && "rounded-t-3xl")}>
-								<div className="flex min-w-0 flex-1 items-start gap-4"><span className={`mt-1 flex h-5 w-5 shrink-0 items-center justify-center rounded-md border ${event.enabled ? "border-blue-600 bg-blue-600 text-white" : "border-neutral-300"}`}>{event.enabled && <Check className="h-3.5 w-3.5" />}</span><div className="min-w-0"><button type="button" onClick={() => startEdit(event)} className="text-left text-lg font-semibold text-neutral-900 hover:text-blue-700 max-md:text-base">{event.name}</button>{event.description && <p className="mt-1 line-clamp-2 whitespace-pre-wrap text-sm text-neutral-600">{event.description}</p>}<p className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-neutral-500"><span className="inline-flex items-center gap-1"><Clock3 className="h-3.5 w-3.5" />{durationLabel(event.durationMinutes, t)}</span><span>·</span><span className="inline-flex items-center gap-1"><MapPin className="h-3.5 w-3.5" />{event.location || t("booking.noLocation")}</span></p><p className="mt-2 text-sm text-neutral-500">{availabilityLabel(event, t)}</p></div></div>
+								<div className="flex min-w-0 flex-1 items-start gap-4"><span className={`mt-1 flex h-5 w-5 shrink-0 items-center justify-center rounded-md border ${event.enabled ? "border-blue-600 bg-blue-600 text-white" : "border-neutral-300"}`}>{event.enabled && <Check className="h-3.5 w-3.5" />}</span><div className="min-w-0"><button type="button" onClick={() => startEdit(event)} className="text-left text-lg font-semibold text-neutral-900 hover:text-blue-700 max-md:text-base">{event.name}</button>{event.description && <p className="mt-1 line-clamp-2 whitespace-pre-wrap text-sm text-neutral-600">{event.description}</p>}<p className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-neutral-500"><span className="inline-flex items-center gap-1"><Clock3 className="h-3.5 w-3.5" />{durationLabel(event.durationMinutes, t)}</span><span>·</span><span className="inline-flex items-center gap-1"><MapPin className="h-3.5 w-3.5" />{event.location || t("booking.noLocation")}</span></p><p className="mt-2 text-sm text-neutral-500">{availabilityLabel(event, t)}</p>{event.enabled && !event.isTemplate && <BookingPageNotice problem={bookingRoomsProblem(parseBookingResourceIds(event.resourceIds) ?? [], roomStore.rooms, roomStore.canBook, roomStore.state)} />}</div></div>
 								<div className="ml-auto flex items-center gap-2 max-md:ml-9 max-md:w-full">{event.enabled ? <><Button type="button" variant="outline" onClick={() => void copyLink(event)} className="h-9 rounded-full px-3"><Copy className="h-4 w-4" />{t("booking.copyLink")}</Button>{username && <Link href={`/c/${username}/${event.slug}`} target="_blank" aria-label={t("booking.openPage", { name: event.name })} className="rounded-full p-2 text-neutral-600 hover:bg-neutral-100"><ExternalLink className="h-4 w-4" /></Link>}</> : <Button type="button" variant="outline" disabled={event.isTemplate && savingTemplateId !== null} onClick={() => void setEnabled(event, true)} className="h-9 rounded-full px-3">{savingTemplateId === event.id ? t("booking.turningOn") : t("booking.turnOn")}</Button>}
 									{!event.isTemplate && <div className="relative"><button type="button" aria-label={t("booking.moreOptions", { name: event.name })} aria-expanded={menuId === event.id} onClick={() => setMenuId(menuId === event.id ? null : event.id)} className="rounded-full p-2 text-neutral-600 hover:bg-neutral-100"><MoreHorizontal className="h-5 w-5" /></button>{menuId === event.id && <div className="absolute right-0 top-10 z-10 w-36 rounded-xl border border-neutral-200 bg-white p-1 shadow-lg"><button type="button" onClick={() => startEdit(event)} className="block w-full rounded-lg px-3 py-2 text-left text-sm hover:bg-neutral-100">{t("booking.edit")}</button><button type="button" onClick={() => void setEnabled(event, !event.enabled)} className="block w-full rounded-lg px-3 py-2 text-left text-sm hover:bg-neutral-100">{event.enabled ? t("booking.turnOff") : t("booking.turnOn")}</button><button type="button" onClick={() => void remove(event)} className="block w-full rounded-lg px-3 py-2 text-left text-sm text-red-600 hover:bg-red-50">{t("common.delete")}</button></div>}</div>}</div>
 							</article>)}
 						</section>
 					</div>
 				</div>
-				{form && <BookingEditor form={form} open={panelOpen} editingId={editingId} username={username} hosts={hosts} canManageHosts={canManageHosts} currentUserId={currentUserId} saving={saving} onChange={setForm} onClose={closeEditor} onSave={() => void save()} onDelete={() => { const event = events.find((item) => item.id === editingId); if (event) void remove(event); }} onToggleEnabled={() => { const event = events.find((item) => item.id === editingId); if (event) void setEnabled(event, !event.enabled); }} onClosed={() => { if (!panelOpen) { setForm(null); setEditingId(null); } }} />}
+				{form && <BookingEditor roomStore={roomStore} onRetryRooms={retryRooms} form={form} open={panelOpen} editingId={editingId} username={username} hosts={hosts} canManageHosts={canManageHosts} currentUserId={currentUserId} saving={saving} onChange={setForm} onClose={closeEditor} onSave={() => void save()} onDelete={() => { const event = events.find((item) => item.id === editingId); if (event) void remove(event); }} onToggleEnabled={() => { const event = events.find((item) => item.id === editingId); if (event) void setEnabled(event, !event.enabled); }} onClosed={() => { if (!panelOpen) { setForm(null); setEditingId(null); } }} />}
 			</div>
 		</section>
 	</div>;

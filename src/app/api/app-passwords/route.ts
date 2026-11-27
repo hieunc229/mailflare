@@ -4,6 +4,7 @@ import { getDb } from "@/db";
 import { apiKeys, mcpKeyMailboxes } from "@/db/schema";
 import { generateAppPassword, parseScopes, scopesToJson } from "@/lib/api-keys";
 import { requireSessionUser } from "@/lib/api/auth";
+import { isAdmin } from "@/lib/auth/admin";
 import { recordAuthActivity } from "@/lib/auth/activity";
 import { availableAppPasswordProtocols } from "@/lib/auth/app-passwords";
 import { isListedAsAppPassword } from "@/lib/auth/app-password-utils";
@@ -40,7 +41,12 @@ export async function GET(request: Request) {
 	const appPasswords = rows
 		.filter(isListedAsAppPassword)
 		.map(({ kind, scopes, ...row }) => ({ ...row, legacy: kind !== "app", protocols: parseScopes(scopes) }));
-	return NextResponse.json({ appPasswords, availableProtocols: await availableAppPasswordProtocols(env) }, { headers: NO_STORE });
+	const availableProtocols = await availableAppPasswordProtocols(env);
+	// What the page needs to explain calendar and contacts sync and to build its addresses.
+	// The origin is the configured public address when there is one: behind a proxy the browser's own origin can differ.
+	const origin = env.APP_URL?.trim().replace(/\/+$/, "") || new URL(request.url).origin;
+	const dav = { enabled: availableProtocols.includes("dav"), userId: auth.user.id, email: auth.user.email, calendarEnabled: auth.user.calendarEnabled, isAdmin: isAdmin(auth.user), origin };
+	return NextResponse.json({ appPasswords, availableProtocols, dav }, { headers: NO_STORE });
 }
 
 /**

@@ -25,6 +25,10 @@ export type ParsedInvite = {
 	excludedDates: Date[];
 	/** RDATE instants of a recurring series (at most the first 1000 values); stored as overrides by the inbound path, never materialized here. */
 	rdateDates: Date[];
+	/** CLASS:PRIVATE or CLASS:CONFIDENTIAL. */
+	isPrivate: boolean;
+	/** TRANSP:TRANSPARENT: the event does not make the attendee busy. */
+	transparent: boolean;
 	/** The zone floating, all-day and unresolvable-TZID times were read in (the `timeZone` option, else UTC). */
 	recipientZone: string;
 	/** True when any time in the event was read in `recipientZone` rather than from the file itself. */
@@ -420,6 +424,8 @@ function readInvite(text: string, options: ParseInviteOptions): ParsedInvite | n
 		recurrenceId: recurrence?.date ?? null,
 		sequence: Number.isSafeInteger(sequence) && sequence >= 0 ? sequence : 0,
 		alarmMinutes: parseAlarmTrigger(alarmTriggers[eventIndex >= 0 ? eventIndex : 0]),
+		isPrivate: ["PRIVATE", "CONFIDENTIAL"].includes(find("CLASS")?.value.trim().toUpperCase() ?? ""),
+		transparent: find("TRANSP")?.value.trim().toUpperCase() === "TRANSPARENT",
 		excludedDates: exdates.map((date) => date.date),
 		rdateDates: rdates.map((date) => date.date),
 		attendees: event.filter((property) => property.name === "ATTENDEE" && property.value.length <= MAX_ICS_ADDRESS + 16).map((property) => ({ email: property.value.trim().replace(/^mailto:/i, "").toLowerCase(), status: (property.params.PARTSTAT ?? "NEEDS-ACTION").toUpperCase() })),

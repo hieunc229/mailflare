@@ -1,21 +1,22 @@
 import { and, desc, eq, isNotNull, isNull } from "drizzle-orm";
+import { declineBookingsStatement, rebookEvents } from "./room-save";
+import { roomsBookable } from "./room-licence";
 import { getDb } from "@/db";
 import { calendarEventOverrides, calendarEvents, calendarInviteTombstones, calendarOccurrenceResponses, users } from "@/db/schema";
 import { newId } from "@/lib/ids";
 import type { AttachmentContent } from "@/lib/email/attachment-types";
 import { inviteAttendeeAddresses, inviteRepeat, parseInvite, type ParsedInvite } from "./invite";
+import { legacyRepeatFor, parseRrule, repeatMatchesRule } from "./rrule";
 import { isIcsAddress } from "./ics";
 import { getEmailAddress } from "@/lib/email/address";
+import type { CalendarRepeat } from "./types";
 import { findInviteAttachment, MAX_INVITE_BYTES } from "./invite-attachment";
+import { inviteEventId } from "./invite-id";
 import { addExcludedOccurrence, chooseRecipientZone, inboundNeedsRecipientZone, inviteSenderMatches, mergeExcludedOccurrences, normalizeInviteSender, planInboundInvite } from "./invite-rules";
 
 export { findInviteAttachment };
 
-/** One calendar row per (user, invitation UID), so a re-sent or updated invitation edits the same event. */
-export async function inviteEventId(userId: string, uid: string): Promise<string> {
-	const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(`${userId}\n${uid}`));
-	return `inv_${[...new Uint8Array(digest)].slice(0, 12).map((byte) => byte.toString(16).padStart(2, "0")).join("")}`;
-}
+export { inviteEventId };
 
 /** Latest RSVP per guest per occurrence: the same hash scheme as inviteEventId over event, occurrence and guest. */
 export async function occurrenceResponseId(eventId: string, occurrenceMs: number, guest: string): Promise<string> {
@@ -72,17 +73,45 @@ async function mergeRdateOverrides(db: ReturnType<typeof getDb>, eventId: string
  * own zone, else the recipient's); `existingExcluded` keeps occurrences already excluded when the series is refreshed.
  */
 export function inviteEventValues(invite: ParsedInvite, timeZone: string | null, existingExcluded?: string | null) {
-	const repeat = inviteRepeat(invite.rrule, invite.startsAt, timeZone);
+	const repeat = inviteRepeatFields(invite, timeZone);
 	return {
 		title: invite.title, description: invite.description, location: invite.location,
 		// Flat address list only (organizer plus attendees); guest statuses stay on the message card.
 		attendees: JSON.stringify(inviteAttendeeAddresses(invite)),
-		repeat: repeat.repeat, repeatDays: JSON.stringify(repeat.repeatDays), repeatAnchorDay: repeat.repeatAnchorDay, repeatUntil: repeat.repeatUntil,
-		repeatInterval: repeat.repeatInterval, repeatWeekday: repeat.repeatWeekday, repeatWeek: repeat.repeatWeek,
+		...repeat,
 		excludedOccurrences: mergeExcludedOccurrences(existingExcluded, invite.excludedDates), timeZone,
 		inviteSequence: invite.sequence,
 		startsAt: invite.startsAt, endsAt: invite.endsAt, updatedAt: new Date(),
 	};
+}
+
+/**
+ * The invitation's CLASS and TRANSP, for a new event only. Once the event exists the attendee owns these two choices,
+ * so an organiser's update or a re-answered invitation never writes them.
+ */
+export function inviteEventFlags(invite: ParsedInvite) {
+	return { isPrivate: !!invite.isPrivate, transparent: !!invite.transparent };
+}
+
+/**
+ * The repeat columns for an invitation's rule. A rule the legacy columns express exactly (legacyRepeatFor compares the
+ * occurrences) uses them; a rule the parser reads but they cannot hold (every 2 weeks, the 2nd Tuesday, yearly) is kept as
+ * a custom repeat, so a refresh neither drops it nor clears one; a rule the parser rejects keeps inviteRepeat's mapping,
+ * which downgrades what it cannot store.
+ */
+function inviteRepeatFields(invite: ParsedInvite, timeZone: string | null) {
+	const zone = timeZone ?? undefined;
+	const native = inviteRepeat(invite.rrule, invite.startsAt, timeZone);
+	const columns = (repeat: { repeat: string; repeatDays: number[]; repeatAnchorDay: number | null; repeatUntil: Date | null; repeatInterval?: number | null; repeatWeekday?: number | null; repeatWeek?: number | null }) => ({
+		repeat: repeat.repeat as Exclude<CalendarRepeat, "custom">, rrule: null, repeatDays: JSON.stringify(repeat.repeatDays), repeatAnchorDay: repeat.repeatAnchorDay, repeatUntil: repeat.repeatUntil,
+		repeatInterval: repeat.repeatInterval ?? 1, repeatWeekday: repeat.repeatWeekday ?? null, repeatWeek: repeat.repeatWeek ?? null,
+	});
+	if (!invite.rrule || !parseRrule(invite.rrule, zone)) return columns(native);
+	const legacy = legacyRepeatFor(invite.rrule, invite.startsAt, zone);
+	if (legacy) return columns(legacy);
+	// The mapper stores intervals, yearly and nth-weekday rules itself; keep that only when it reproduces the rule exactly.
+	if (native.repeat !== "none" && repeatMatchesRule(invite.rrule, native as Parameters<typeof repeatMatchesRule>[1], invite.startsAt, zone)) return columns(native);
+	return { repeat: "custom" as const, rrule: invite.rrule.replace(/^RRULE:/i, ""), repeatDays: "[]", repeatAnchorDay: null, repeatUntil: null, repeatInterval: 1, repeatWeekday: null, repeatWeek: null };
 }
 
 /**
@@ -184,7 +213,9 @@ export async function registerInboundInvite(env: CloudflareEnv, input: { userId:
 		}
 		if (plan.action === "exclude") {
 			if (!existing) return;
-			await db.update(calendarEvents).set({ excludedOccurrences: addExcludedOccurrence(existing.excludedOccurrences, plan.occurrence), inviteSender: existing.inviteSender || sender, updatedAt: new Date() }).where(where);
+			// An event with rooms is declined in the same batch and checked again after it (a stop in between leaves none accepted unchecked).
+			await db.batch([declineBookingsStatement(db, id), db.update(calendarEvents).set({ excludedOccurrences: addExcludedOccurrence(existing.excludedOccurrences, plan.occurrence), inviteSender: existing.inviteSender || sender, updatedAt: new Date() }).where(where)] as never);
+			await rebookEvents(db, [id], roomsBookable(env));
 			return;
 		}
 		if (plan.action === "upsert-override") {
@@ -196,17 +227,18 @@ export async function registerInboundInvite(env: CloudflareEnv, input: { userId:
 		const values = { ...inviteEventValues(invite, invite.timeZone ?? userZone, existing?.excludedOccurrences), inviteSender: sender };
 		if (plan.action === "insert" || !existing) {
 			// The reminder is written once on insert; the event editor stays the only later overwriter.
-			await db.insert(calendarEvents).values({ id, userId: input.userId, mailboxId: input.mailboxId, color: "#2563eb", responseStatus: "needs-action", inviteMessageId: input.messageId, ...values, ...(invite.alarmMinutes != null ? { reminderMinutes: invite.alarmMinutes } : {}) });
+			await db.insert(calendarEvents).values({ id, userId: input.userId, mailboxId: input.mailboxId, color: "#2563eb", responseStatus: "needs-action", inviteMessageId: input.messageId, ...inviteEventFlags(invite), ...values, ...(invite.alarmMinutes != null ? { reminderMinutes: invite.alarmMinutes } : {}) });
 			await mergeRdateOverrides(db, id, invite);
 			return;
 		}
 		const moved = existing.startsAt.getTime() !== invite.startsAt.getTime() || existing.endsAt.getTime() !== invite.endsAt.getTime();
-		await db.update(calendarEvents).set({
+		await db.batch([declineBookingsStatement(db, id), db.update(calendarEvents).set({
 			...values, inviteMessageId: input.messageId,
 			responseStatus: moved ? "needs-action" : existing.responseStatus,
 			// Fill in a reminder only when the row has none; never overwrite the user's own setting.
 			...(existing?.reminderMinutes == null && invite.alarmMinutes != null ? { reminderMinutes: invite.alarmMinutes } : {}),
-		}).where(where);
+		}).where(where)] as never);
+		await rebookEvents(db, [id], roomsBookable(env));
 		// A refreshed series keeps its per-occurrence edits; new RDATEs join them, dropped ones stay.
 		await mergeRdateOverrides(db, id, invite);
 	} catch (error) {

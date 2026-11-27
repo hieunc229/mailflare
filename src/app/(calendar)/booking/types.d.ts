@@ -8,6 +8,8 @@ export type BookingEvent = {
 	description: string;
 	color: string;
 	hostIds: string;
+	/** JSON list of room ids; absent on the default (not yet saved) events. */
+	resourceIds?: string;
 	durationMinutes: number;
 	location: string;
 	weekdays: string;
@@ -28,6 +30,7 @@ export type BookingForm = {
 	description: string;
 	color: string;
 	hostIds: string[];
+	resourceIds: string[];
 	durationMinutes: number;
 	location: string;
 	weekdays: number[];
@@ -46,4 +49,4 @@ export type BookingHostAvatarProps = { host: BookingHost; currentUserId: string;
 
 export type BookingHostMatch = { host: BookingHost | null; error: string };
 
-export type BookingEditorSection = "event" | "duration" | "location" | "availability" | "host" | "confirmation" | null;
+export type BookingEditorSection = "event" | "duration" | "location" | "availability" | "host" | "rooms" | "confirmation" | null;

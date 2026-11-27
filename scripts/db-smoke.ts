@@ -1,18 +1,31 @@
 /**
  * Exercises the database layer against any DATABASE_URL: migrations, the query shapes the app relies on
  * (insert/select/update, returning, onConflict*, raw sql, batch), the triggers and search.
- * Run with `npm run db:smoke -- <DATABASE_URL> [driver]`; PGlite needs no server (`pglite://memory`).
+ * Run with `npm run db:smoke -- <DATABASE_URL> [driver]`; PGlite needs no server (`pglite://memory`), and SQLite runs in memory with
+ * `file::memory:` (`sqlite://file::memory:` is a file literally named `file::memory:` in the working directory).
  */
-import { and, eq, sql } from "drizzle-orm";
+import { and, eq, inArray, sql } from "drizzle-orm";
 import { createDb } from "@/db";
-import { users, domains, mailboxes, messages, calendarEvents, contacts, contactDetails, davCards, davCollections, folders, jmapChanges, appSettings, webhooks, spamTokenStats, spamReputation, mailboxPromotionSettings, emailSuppressions, domainDeliverability } from "@/db/schema";
+import { users, domains, mailboxes, messages, calendarEvents, calendarShares, davChanges, calendarResources, calendarResourceBookings, contacts, contactDetails, davCalendarObjects, davCards, davSyncState, davCollections, folders, jmapChanges, appSettings, webhooks, spamTokenStats, spamReputation, mailboxPromotionSettings, emailSuppressions, domainDeliverability } from "@/db/schema";
 import { getDatabaseConfig } from "@/db/with-database";
 import { openExternalDatabase } from "@/db/external";
+import { mirrorCardStatements } from "@/lib/dav/contact-mirror";
+import { seedStep } from "@/lib/dav/contact-seed";
+import { requireGuard, staleGuard } from "@/lib/dav/writes";
+import { syncPositions } from "@/lib/dav/changes";
+import { moveSeriesStatements } from "@/lib/calendar/series-rows";
+import { calendarExistsGuard } from "@/lib/calendar/calendars";
+import { listVisibleEvents } from "@/lib/calendar/event-list";
+import { busyIntervals } from "@/lib/calendar/free-busy";
+import { bookRooms } from "@/lib/calendar/room-booking";
+import { isOrgFreeBusyEnabled, resolveFreeBusyAddresses, viewableFreeBusyUsers } from "@/lib/calendar/free-busy-access";
+import { calendarScopes, changeShare, getCalendarRole, grantShare, listVisibleCalendars, revokeShare } from "@/lib/calendar/shares";
 import { applyPendingMigrations, getMigrationStatus } from "@/lib/migrations/service";
 import { buildSearchConditions } from "@/lib/search/conditions";
 import { createBookedCalendarEvents } from "@/lib/booking/create";
 import { importCalendarGroups } from "@/lib/calendar/import-store";
 import { importContacts } from "@/lib/contacts/import-store";
+import { reserveBooking } from "@/lib/booking/reserve";
 import { exportDatabaseRecords, restoreDatabaseRecords } from "@/lib/backups/export";
 import { getSearchIndexStatus } from "@/lib/search/index-admin";
 import { recordReputationObservation } from "@/lib/spam/repository";
@@ -116,6 +129,24 @@ const startsAt = new Date(Date.now() + 86_400_000).toISOString();
 const endsAt = new Date(Date.now() + 86_400_000 + 1_800_000).toISOString();
 check("booking inserts", (await createBookedCalendarEvents(env, event, "Guest", "g@example.com", startsAt, endsAt)) === true);
 check("booking refuses a busy slot", (await createBookedCalendarEvents(env, event, "Guest", "g@example.com", startsAt, endsAt)) === false);
+// CS-8: an event marked free does not stop a booking write (`is not true` on a boolean column, on every dialect), and an event type's room is
+// reserved with the booking and given back when the booking is lost.
+const deskStart = new Date(Date.now() + 2 * 86_400_000);
+const deskEnd = new Date(deskStart.getTime() + 1_800_000);
+await db.insert(calendarResources).values({ id: `res_book_${stamp}`, name: `Booking room ${stamp}`, publicBooking: true } as never);
+await db.insert(calendarEvents).values({ id: `evt_free_${stamp}`, userId, title: "Lunch", startsAt: deskStart, endsAt: deskEnd, transparent: true } as never);
+const roomEvent = { hostIds: [userId], resourceIds: [`res_book_${stamp}`], name: "Desk", location: "", color: "blue", timeZone: "UTC", weekdays: [0, 1, 2, 3, 4, 5, 6], timeRanges: [{ startTime: "00:00", endTime: "23:45" }], durationMinutes: 30 } as never;
+check("a booking with a room reserves it", (await reserveBooking(env, roomEvent, "Roomer", "r@example.com", deskStart.toISOString(), deskEnd.toISOString())) === true);
+const [{ room_rows }] = await db.all<{ room_rows: number }>(sql`SELECT count(*) AS room_rows FROM calendar_resource_bookings WHERE resource_id = ${`res_book_${stamp}`} AND status = 'accepted'`);
+check("the booked room is accepted once", Number(room_rows) === 1);
+await db.insert(users).values({ id: `usr_b_${stamp}`, email: `b${stamp}@example.com`, passwordHash: "x", name: "B" });
+check("a second visitor for the same room and time, with a free host, is refused by the room", (await reserveBooking(env, { ...(roomEvent as object), hostIds: [`usr_b_${stamp}`] } as never, "Late", "l@example.com", deskStart.toISOString(), deskEnd.toISOString())) === false);
+const [{ late_events }] = await db.all<{ late_events: number }>(sql`SELECT count(*) AS late_events FROM calendar_events WHERE user_id = ${`usr_b_${stamp}`} AND title = 'Desk with Late'`);
+check("and leaves no event behind", Number(late_events) === 0);
+await db.run(sql`DELETE FROM calendar_events WHERE title LIKE 'Desk with %' AND user_id IN (${userId}, ${`usr_b_${stamp}`})`);
+await db.delete(calendarEvents).where(eq(calendarEvents.id, `evt_free_${stamp}`));
+await db.delete(calendarResources).where(eq(calendarResources.id, `res_book_${stamp}`));
+await db.delete(users).where(eq(users.id, `usr_b_${stamp}`));
 
 const importGroups = Array.from({ length: 9 }, (_, n) => ["BEGIN:VEVENT", `UID:smoke-${n}@google.com`, "DTSTART:20261104T090000Z", "RRULE:FREQ=DAILY", `SUMMARY:Imported ${n}`, "END:VEVENT"].join("\r\n"));
 const importInput = { userId, userZone: "UTC", ownAddresses: [], color: "#16a34a", reminders: true, skipDeclined: true, groups: importGroups };
@@ -135,6 +166,112 @@ check("dav trigger sees a case-only title change", (await davLog(`cal:${userId}`
 await db.update(calendarEvents).set({ lastRemindedStart: new Date() }).where(eq(calendarEvents.id, davEventId));
 await db.update(calendarEvents).set({ title: "standup" }).where(eq(calendarEvents.id, davEventId));
 check("dav trigger ignores reminder bookkeeping and no-op updates", (await davLog(`cal:${userId}`, davEventId)) === "created,updated");
+// F6-2: an override row is part of its parent's DAV resource, and a master and its override leave no stray change after the master is destroyed.
+const davOverrideId = `${davEventId}_o`;
+const davBase = { userId, title: "Series", startsAt: new Date(Date.now() + 3_600_000), endsAt: new Date(Date.now() + 7_200_000) };
+await db.insert(calendarEvents).values({ ...davBase, id: davEventId + "_m", davObjectId: davEventId + "_m", rrule: "FREQ=WEEKLY;INTERVAL=2", repeat: "custom" } as never);
+await db.insert(calendarEvents).values({ ...davBase, id: davOverrideId, davObjectId: davEventId + "_m", recurrenceId: new Date(Date.now() + 3_600_000) } as never);
+check("dav trigger keys an override row under its parent", (await davLog(`cal:${userId}`, davEventId + "_m")) === "created,updated" && (await davLog(`cal:${userId}`, davOverrideId)) === "");
+await db.update(calendarEvents).set({ allDay: true }).where(eq(calendarEvents.id, davOverrideId));
+check("dav trigger watches the new calendar columns", (await davLog(`cal:${userId}`, davEventId + "_m")) === "created,updated,updated");
+await db.delete(calendarEvents).where(eq(calendarEvents.id, davOverrideId));
+check("dav trigger reports a deleted override as an update of its parent", (await davLog(`cal:${userId}`, davEventId + "_m")) === "created,updated,updated,updated");
+await db.delete(calendarEvents).where(eq(calendarEvents.id, davEventId + "_m"));
+check("dav trigger destroys a deleted master", (await davLog(`cal:${userId}`, davEventId + "_m")).endsWith(",destroyed"));
+// F9 8.2: an event in another calendar is logged under that calendar's collection, and moving it destroys it in the old one.
+const calId = `cal:cal_${stamp}`;
+const calEventId = `evt_cal_${stamp}`;
+await db.insert(davCollections).values({ id: calId, userId, kind: "calendar" } as never);
+await db.insert(calendarEvents).values({ id: calEventId, userId, calendarId: calId, title: "Work", startsAt: new Date(Date.now() + 3_600_000), endsAt: new Date(Date.now() + 7_200_000) } as never);
+check("dav trigger logs an event in another calendar under its collection", (await davLog(calId, calEventId)) === "created" && (await davLog(`cal:${userId}`, calEventId)) === "");
+await db.update(calendarEvents).set({ isPrivate: true }).where(eq(calendarEvents.id, calEventId));
+await db.update(calendarEvents).set({ transparent: true }).where(eq(calendarEvents.id, calEventId));
+check("dav trigger watches is_private and transparent", (await davLog(calId, calEventId)) === "created,updated,updated");
+await db.update(calendarEvents).set({ calendarId: null }).where(eq(calendarEvents.id, calEventId));
+check("dav trigger moves an event between calendars", (await davLog(calId, calEventId)) === "created,updated,updated,destroyed" && (await davLog(`cal:${userId}`, calEventId)) === "created");
+await db.update(calendarEvents).set({ calendarId: calId }).where(eq(calendarEvents.id, calEventId));
+await db.delete(calendarEvents).where(eq(calendarEvents.calendarId, calId));
+check("dav trigger logs a calendar's events deleted by statement", (await davLog(calId, calEventId)).endsWith(",destroyed"));
+// CS-2: a master and its override rows move together in one statement; the old collection sees the master destroyed once, the new one created once.
+const moveCalId = `cal:cal_move_${stamp}`;
+const moveMasterId = `evt_mv_${stamp}`;
+await db.insert(davCollections).values({ id: moveCalId, userId, kind: "calendar" } as never);
+const moveTimes = { startsAt: new Date(Date.now() + 3_600_000), endsAt: new Date(Date.now() + 7_200_000) };
+await db.insert(calendarEvents).values({ id: moveMasterId, userId, title: "Series", davObjectId: moveMasterId, ...moveTimes } as never);
+await db.insert(calendarEvents).values({ id: `${moveMasterId}_o`, userId, title: "Moved occurrence", davObjectId: moveMasterId, recurrenceId: moveTimes.startsAt, ...moveTimes } as never);
+await db.update(calendarEvents).set({ calendarId: moveCalId }).where(and(eq(calendarEvents.userId, userId), sql`(${calendarEvents.id} = ${moveMasterId} OR ${calendarEvents.davObjectId} = ${moveMasterId})`));
+check("moving a master and its overrides in one statement logs one move", (await davLog(moveCalId, moveMasterId)).split(",").sort().join(",") === "created,updated" && (await davLog(`cal:${userId}`, moveMasterId)).endsWith(",destroyed") && (await davLog(`cal:${userId}`, moveMasterId)).split("destroyed").length === 2);
+await db.delete(calendarEvents).where(eq(calendarEvents.calendarId, moveCalId));
+await db.delete(davCollections).where(eq(davCollections.id, moveCalId));
+// CS-2: a batch that writes into a calendar whose row is gone fails as a whole, and one into a calendar that exists goes through.
+const guardCalId = `cal:cal_guard_${stamp}`;
+const guardedInsert = (id: string) => db.batch([...calendarExistsGuard(db, userId, guardCalId), db.insert(calendarEvents).values({ id, userId, calendarId: guardCalId, title: "Guarded", ...moveTimes } as never)] as never);
+let calGuardRefused = false;
+try { await guardedInsert(`evt_g1_${stamp}`); } catch { calGuardRefused = true; }
+const [{ guardedrows }] = await db.all<{ guardedrows: number }>(sql`SELECT count(*) AS guardedrows FROM calendar_events WHERE id = ${`evt_g1_${stamp}`}`);
+check("the calendar guard refuses a write into a calendar that is gone", calGuardRefused && Number(guardedrows) === 0);
+await db.insert(davCollections).values({ id: guardCalId, userId, kind: "calendar" } as never);
+await guardedInsert(`evt_g2_${stamp}`);
+const [{ guardrows }] = await db.all<{ guardrows: number }>(sql`SELECT count(*) AS guardrows FROM dav_sync_state WHERE epoch = 'guard'`);
+check("the calendar guard lets a write into an existing calendar through and leaves no guard rows", Number(guardrows) === 0 && (await davLog(guardCalId, `evt_g2_${stamp}`)) === "created");
+await db.delete(calendarEvents).where(eq(calendarEvents.calendarId, guardCalId));
+await db.delete(davCollections).where(eq(davCollections.id, guardCalId));
+// The sync report orders by `seq + 0` (not the rowid order) so the collection index serves it; the expression must be valid and ordered on every dialect.
+const orderedSeqs = (await db.select({ seq: davChanges.seq }).from(davChanges).orderBy(sql`${davChanges.seq} + 0`).limit(20)).map((row) => Number(row.seq));
+check("the change log can be ordered by seq + 0", orderedSeqs.length > 1 && orderedSeqs.every((seq, index) => index === 0 || seq > orderedSeqs[index - 1]));
+// CS-3: roles, the role-change batch, redacted reads and revoke work the same on every dialect.
+const sharee = `usr_sh_${stamp}`;
+const shareeEmail = `sh${stamp}@example.com`;
+await db.insert(users).values({ id: sharee, email: shareeEmail, passwordHash: "x", name: "Sharee" });
+const sharedCal = `cal:cal_sh_${stamp}`;
+await db.insert(davCollections).values({ id: sharedCal, userId, kind: "calendar", displayName: "Shared" } as never);
+await db.insert(calendarEvents).values({ id: `evt_sh_${stamp}`, userId, calendarId: sharedCal, title: "Plan", location: "Room 1", isPrivate: true, startsAt: new Date(Date.now() + 3_600_000), endsAt: new Date(Date.now() + 7_200_000) } as never);
+const readRange = { start: new Date(Date.now() - 86_400_000), end: new Date(Date.now() + 3 * 86_400_000) };
+const sharedDb = db as never;
+const granted = await grantShare(sharedDb, { id: userId }, sharedCal, { email: shareeEmail.toUpperCase(), role: "read" });
+check("a calendar is shared with an account by address, and only that account gets the role", granted.ok && (await getCalendarRole(sharedDb, { id: sharee }, sharedCal)) === "read" && (await getCalendarRole(sharedDb, { id: `usr_none_${stamp}` }, sharedCal)) === null);
+check("the sharee lists the calendar, with the owner's name", (await listVisibleCalendars(sharedDb, { id: sharee })).some((entry) => entry.id === sharedCal && entry.role === "read" && entry.ownerName === "A"));
+const readerView = await listVisibleEvents(sharedDb, { id: sharee }, readRange, []);
+check("a reader gets a private event as Busy with no location", readerView.length === 1 && readerView[0].title === "Busy" && readerView[0].location === "" && readerView[0].role === "read");
+const regranted = granted.ok ? await changeShare(sharedDb, { id: userId }, sharedCal, { id: granted.share.id, role: "edit" }) : null;
+const [{ grantRows }] = await db.all<{ grantRows: number }>(sql`SELECT count(*) AS "grantRows" FROM calendar_shares WHERE calendar_id = ${sharedCal}`);
+check("a role change replaces the grant under a new id", !!regranted?.ok && granted.ok && regranted.share.id !== granted.share.id && regranted.share.role === "edit" && Number(grantRows) === 1);
+check("an editor sees the private event whole", (await listVisibleEvents(sharedDb, { id: sharee }, readRange, [sharedCal]))[0]?.title === "Plan");
+for (const scope of calendarScopes(Array.from({ length: 130 }, (_, index) => ({ id: `cal:smoke_${index}`, ownerId: userId })))) await db.select({ id: calendarEvents.id }).from(calendarEvents).where(scope).limit(1);
+check("130 shared calendars read in chunked statements", calendarScopes(Array.from({ length: 130 }, (_, index) => ({ id: `cal:smoke_${index}`, ownerId: userId }))).length === 4);
+const revoked = regranted?.ok ? await revokeShare(sharedDb, { id: userId }, sharedCal, regranted.share.id) : null;
+check("revoking removes the role at once", !!revoked?.ok && (await getCalendarRole(sharedDb, { id: sharee }, sharedCal)) === null && (await listVisibleEvents(sharedDb, { id: sharee }, readRange, [sharedCal])).length === 0);
+await db.delete(calendarEvents).where(eq(calendarEvents.calendarId, sharedCal));
+await db.delete(davCollections).where(eq(davCollections.id, sharedCal));
+const shareId = `csh_${stamp}`;
+await db.insert(calendarShares).values({ id: shareId, calendarId: calId, granteeUserId: userId, role: "read" } as never);
+await db.insert(calendarResources).values({ id: `res_${stamp}`, name: `Room ${stamp}` } as never);
+await db.insert(calendarEvents).values({ id: `evt_room_${stamp}`, userId, title: "Booked", startsAt: new Date(Date.now() + 3_600_000), endsAt: new Date(Date.now() + 7_200_000) } as never);
+await db.insert(calendarResourceBookings).values({ id: `crb_${stamp}`, resourceId: `res_${stamp}`, eventId: `evt_room_${stamp}`, status: "accepted" } as never);
+await db.delete(davCollections).where(eq(davCollections.id, calId));
+const [{ shares }] = await db.all<{ shares: number }>(sql`SELECT count(*) AS shares FROM calendar_shares WHERE id = ${shareId}`);
+check("deleting a calendar removes its grants", Number(shares) === 0);
+await db.delete(calendarEvents).where(eq(calendarEvents.id, `evt_room_${stamp}`));
+const [{ bookings }] = await db.all<{ bookings: number }>(sql`SELECT count(*) AS bookings FROM calendar_resource_bookings WHERE id = ${`crb_${stamp}`}`);
+check("deleting an event removes its room booking", Number(bookings) === 0);
+await db.delete(calendarResources).where(eq(calendarResources.id, `res_${stamp}`));
+// Rooms: two saves for one slot at once end with one accepted (the compare-and-swap token), and the room's busy time is the winner's.
+await db.insert(calendarResources).values({ id: `res2_${stamp}`, name: `Room2 ${stamp}` } as never);
+const roomSlot = new Date(Date.now() + 3 * 86_400_000);
+for (const name of ["a", "b"]) await db.insert(calendarEvents).values({ id: `evt_${name}_${stamp}`, userId, title: "Race", startsAt: roomSlot, endsAt: new Date(roomSlot.getTime() + 3_600_000) } as never);
+// Two separate connections, so a real server (PostgreSQL, MySQL) races for real. An in-memory database exists only on its own connection, and SQLite is a
+// single-writer file the app opens once (a second connection in one process only finds "database is locked"), so those share one.
+const secondDb = /memory/i.test(url) || config.dialect === "sqlite" ? db : createDb(openExternalDatabase(config, false) as unknown as D1Database);
+const raced = await Promise.all([bookRooms(db as never, `evt_a_${stamp}`, [`res2_${stamp}`]), bookRooms(secondDb as never, `evt_b_${stamp}`, [`res2_${stamp}`])]);
+check("two bookings of one room slot at once leave exactly one accepted", raced.map((result) => result.rooms[0].status).sort().join() === "accepted,declined");
+const [{ accepted_rooms }] = await db.all<{ accepted_rooms: number }>(sql`SELECT count(*) AS accepted_rooms FROM calendar_resource_bookings WHERE resource_id = ${`res2_${stamp}`} AND status = 'accepted'`);
+check("exactly one accepted booking row is stored", Number(accepted_rooms) === 1);
+const roomBusy = await busyIntervals(env, { userIds: [], resourceIds: [`res2_${stamp}`] }, new Date(roomSlot.getTime() - 3_600_000), new Date(roomSlot.getTime() + 7_200_000));
+check("the room is busy for the accepted booking only", roomBusy.get(`res2_${stamp}`)?.length === 1 && roomBusy.get(`res2_${stamp}`)![0][0] === Math.floor(roomSlot.getTime() / 1000) * 1000);
+await db.delete(calendarEvents).where(inArray(calendarEvents.id, [`evt_a_${stamp}`, `evt_b_${stamp}`]));
+const freed = await busyIntervals(env, { userIds: [], resourceIds: [`res2_${stamp}`] }, new Date(roomSlot.getTime() - 3_600_000), new Date(roomSlot.getTime() + 7_200_000));
+check("deleting the events frees the room", freed.get(`res2_${stamp}`)?.length === 0);
+await db.delete(calendarResources).where(eq(calendarResources.id, `res2_${stamp}`));
 await db.insert(davCollections).values({ id: `card:${userId}`, userId, kind: "addressbook" } as never);
 await db.insert(davCards).values({ id: `card_${stamp}`, userId, collectionId: `card:${userId}`, name: "a.vcf", uid: "uid-1", body: "BEGIN:VCARD", version: "3.0", size: 11 } as never);
 await db.update(davCards).set({ body: "BEGIN:VCARD\nEND:VCARD" }).where(eq(davCards.id, `card_${stamp}`));
@@ -287,12 +424,114 @@ check("backup restores", afterRestore?.subject === "Quarterly Report" && afterRe
 
 const davAfterRestore = await db.all<{ n: number }>(sql`SELECT count(*) AS n FROM dav_cards WHERE id = ${`card_${stamp}`}`);
 check("backup restores dav cards and collections", Number(davAfterRestore[0].n) === 1 && exported.tables.dav_cards.length === 1 && exported.tables.dav_collections.length === 1 && !("dav_changes" in exported.tables));
+// F6-5: a destroyed DAV resource keeps the name it was served under (the cascade removes dav_calendar_objects with the event).
+const davNameOf = async (collection: string, key: string) => (await db.all<{ resource_name: string | null }>(sql`SELECT resource_name FROM dav_changes WHERE collection_id = ${collection} AND object_key = ${key} AND change_type = 'destroyed'`)).map((row) => row.resource_name).join(",");
+const namedId = `evt_${stamp}_named`;
+await db.insert(calendarEvents).values({ id: namedId, userId, title: "Phone made", startsAt: new Date(Date.now() + 3_600_000), endsAt: new Date(Date.now() + 7_200_000), davObjectId: namedId } as never);
+await db.insert(davCalendarObjects).values({ id: namedId, userId, collectionId: `cal:${userId}`, name: "phone-made.ics", uid: `uid-${stamp}`, size: 1 } as never);
+await db.delete(calendarEvents).where(eq(calendarEvents.id, namedId));
+check("dav trigger records the name of a destroyed DAV event", (await davNameOf(`cal:${userId}`, namedId)) === "phone-made.ics");
+await db.delete(davCards).where(eq(davCards.id, `card_${stamp}`));
+check("dav trigger records the name of a destroyed card", (await davNameOf(`card:${userId}-moved`, `card_${stamp}`)) === "a.vcf");
+// F6-5: the write guard fails a whole batch when the resource is no longer as it was read, on every dialect, and leaves no rows behind.
+const guardId = `evt_${stamp}_guard`;
+const guardCollection = `cal:${userId}`;
+await db.insert(calendarEvents).values({ id: guardId, userId, title: "Guard", startsAt: new Date(Date.now() + 3_600_000), endsAt: new Date(Date.now() + 7_200_000) } as never);
+const guardSeq = Number((await db.all<{ seq: number }>(sql`SELECT max(seq) AS seq FROM dav_changes WHERE collection_id = ${guardCollection} AND object_key = ${guardId}`))[0].seq);
+const guarded = (title: string) => db.batch([...staleGuard(db, calendarEvents, [guardCollection], guardId, userId, { seq: guardSeq, updatedAt: new Date() }), db.update(calendarEvents).set({ title }).where(eq(calendarEvents.id, guardId))] as never);
+const guardTitle = async () => (await db.select({ title: calendarEvents.title }).from(calendarEvents).where(eq(calendarEvents.id, guardId)))[0].title;
+await guarded("First writer");
+check("dav write guard lets a batch through while the resource is as it was read", (await guardTitle()) === "First writer");
+let guardRefused = false;
+try {
+	await guarded("Second writer");
+} catch (error) {
+	guardRefused = isUniqueConstraintError(error);
+}
+check("dav write guard fails the whole batch once the resource changed", guardRefused && (await guardTitle()) === "First writer");
+const guardRows = await db.all<{ n: number }>(sql`SELECT count(*) AS n FROM dav_sync_state WHERE collection_id LIKE 'guard:%'`);
+check("dav write guard leaves no rows behind", Number(guardRows[0].n) === 0);
+// CS-4: a web move batch keeps the stored CalDAV resource in the collection the event is in, on every dialect.
+const objectCollection = async () => (await db.select({ collectionId: davCalendarObjects.collectionId }).from(davCalendarObjects).where(eq(davCalendarObjects.id, guardId)))[0]?.collectionId;
+await db.insert(davCalendarObjects).values({ id: guardId, userId, collectionId: guardCollection, name: `${guardId}.ics`, uid: `${guardId}@smoke`, size: 1 } as never);
+await db.batch(moveSeriesStatements(db, userId, guardId, moveCalId) as never);
+const movedTo = await objectCollection();
+await db.batch(moveSeriesStatements(db, userId, guardId, null) as never);
+check("a move batch carries the stored resource to the new collection and back", movedTo === moveCalId && (await objectCollection()) === guardCollection);
+await db.delete(davCalendarObjects).where(eq(davCalendarObjects.id, guardId));
+// CS-4: the grant guard refuses a batch while its condition holds and lets it through otherwise.
+const requireWrite = (missing: ReturnType<typeof sql>) => db.batch([...requireGuard(db, missing), db.update(calendarEvents).set({ title: "Required" }).where(eq(calendarEvents.id, guardId))] as never);
+await requireWrite(sql`not exists (select 1 from users where id = ${userId})`);
+const passedRequire = (await guardTitle()) === "Required";
+let requireRefused = false;
+try { await requireWrite(sql`not exists (select 1 from users where id = ${`nobody_${stamp}`})`); } catch (error) { requireRefused = isUniqueConstraintError(error); }
+const requireRows = await db.all<{ n: number }>(sql`SELECT count(*) AS n FROM dav_sync_state WHERE collection_id LIKE 'guard:%'`);
+check("the require guard passes when nothing is missing, refuses when it is, and leaves no rows", passedRequire && requireRefused && Number(requireRows[0].n) === 0);
+// CS-4: sync positions of many collections come from a few statements; a calendar epoch from before per-calendar logs is renewed (version 8), others are kept.
+const staleCal = `cal:cal_epoch_${stamp}`;
+await db.insert(davSyncState).values({ collectionId: staleCal, epoch: crypto.randomUUID(), floor: 0 } as never);
+const positions = await syncPositions(env, [guardCollection, staleCal, `cal:cal_fresh_${stamp}`, `card:${userId}`]);
+check("syncPositions reads the newest change of each collection and creates missing state", positions.get(guardCollection)!.seq === guardSeq || positions.get(guardCollection)!.seq > guardSeq);
+check("calendar sync epochs are renewed to version 8 once, card epochs are untouched", positions.get(staleCal)!.epoch[14] === "8" && positions.get(`cal:cal_fresh_${stamp}`)!.epoch[14] === "8" && positions.get(`card:${userId}`)!.epoch[14] === "4" && (await syncPositions(env, [staleCal])).get(staleCal)!.epoch === positions.get(staleCal)!.epoch);
+await db.delete(davSyncState).where(inArray(davSyncState.collectionId, [staleCal, `cal:cal_fresh_${stamp}`, `card:${userId}`]));
 await db.delete(calendarEvents).where(eq(calendarEvents.id, davEventId));
 check("dav trigger logs a deleted event", (await davLog(`cal:${userId}`, davEventId)).endsWith("destroyed"));
 reportObjects.set("raw5", reportMime(`r5_${stamp}`));
 await ingestReportMail(reportEnv, reportTarget, { rawR2Key: "raw5", authenticated: true, from: "r@google.com" }, { lookupPtr: async () => null });
 const afterRestoreStats = await getDmarcStats(reportEnv, reportTarget.domainId, { days: 7 });
 check("dmarc ingest keeps working after a restore (sequence not behind the rows)", afterRestoreStats.series.reduce((sum, day) => sum + day.pass, 0) === 80);
+
+// F6-6: a card mirrors into contacts in one batch: upsert with the first-link-wins name rule, promotion to manual, unlink of removed addresses.
+const mirrorOf = (email: string) => db.select({ name: contacts.displayName, source: contacts.source, card: contacts.davCardId, blocked: contacts.blocked }).from(contacts).where(and(eq(contacts.userId, userId), eq(contacts.email, email))).then((rows) => rows[0]);
+await db.insert(contacts).values({ id: `${userId}:old@example.com`, userId, email: "old@example.com", displayName: "Heard", source: "inbound", blocked: true } as never);
+await db.batch(mirrorCardStatements(db, userId, { id: "card_a", fn: "Card A", emails: ["old@example.com", "both@example.com"], group: false, own: new Set<string>() }) as never);
+await db.batch(mirrorCardStatements(db, userId, { id: "card_b", fn: "Card B", emails: ["both@example.com", "only-b@example.com"], group: false, own: new Set<string>() }) as never);
+const [mirrorOld, mirrorBoth, mirrorOnlyB] = [await mirrorOf("old@example.com"), await mirrorOf("both@example.com"), await mirrorOf("only-b@example.com")];
+check("card mirror promotes and links a contact without touching blocked", mirrorOld?.source === "manual" && mirrorOld.name === "Card A" && mirrorOld.card === "card_a" && mirrorOld.blocked === true);
+check("card mirror: the first card to link an address keeps it and its name", mirrorBoth?.card === "card_a" && mirrorBoth.name === "Card A" && mirrorOnlyB?.card === "card_b" && mirrorOnlyB.name === "Card B");
+await db.batch(mirrorCardStatements(db, userId, { id: "card_a", fn: "Card A", emails: ["both@example.com"], group: false, own: new Set<string>() }) as never);
+check("card mirror unlinks an address taken off its card and keeps the contact", (await mirrorOf("old@example.com"))?.card === null && (await mirrorOf("old@example.com"))?.source === "manual");
+
+// F6-6: seeding copies unlinked manual contacts into cards in one batch (multi-row insert plus one CASE update) and finishes the address book.
+await db.insert(contacts).values([{ id: `${userId}:seed1@example.com`, userId, email: "seed1@example.com", displayName: "Seed One", source: "manual" }, { id: `${userId}:seed2@example.com`, userId, email: "seed2@example.com", source: "manual" }] as never);
+await db.insert(davCollections).values({ id: `card:${userId}`, userId, kind: "addressbook" } as never).onConflictDoNothing();
+// An address already on some card gets no second card (the LIKE over the card's JSON addresses, with the UID list in one OR).
+await db.insert(contacts).values({ id: `${userId}:seed3@example.com`, userId, email: "seed3@example.com", source: "manual" } as never);
+await db.insert(davCards).values({ id: "card_listed", userId, collectionId: `card:${userId}`, name: "listed.vcf", uid: "listed", body: "x", version: "3.0", fn: "Listed", emails: JSON.stringify(["seed3@example.com"]), size: 1 } as never);
+const seeded = await seedStep(env, userId);
+const seedLinks = await db.select({ email: contacts.email, card: contacts.davCardId }).from(contacts).where(and(eq(contacts.userId, userId), sql`${contacts.email} like 'seed%'`));
+const seedCards = await db.all<{ n: number }>(sql`SELECT count(*) AS n FROM dav_cards WHERE user_id = ${userId} AND uid LIKE 'mf-%'`);
+const seedDone = await db.all<{ at: number | null }>(sql`SELECT seeded_at AS at FROM dav_collections WHERE id = ${`card:${userId}`}`);
+check("contact seeding links each manual contact to its own card and finishes", seeded === "done" && seedLinks.filter((row) => row.card).length === 2 && seedLinks.filter((row) => row.card).every((row) => row.card?.startsWith("card_")) && Number(seedCards[0].n) >= 2 && seedDone[0].at !== null);
+check("contact seeding skips an address that is already on a card", seedLinks.find((row) => row.email === "seed3@example.com")?.card === null);
+
+// Free/busy (CS-5): busy intervals, address resolution, access by grant, and the org switch column on every dialect.
+const fbUser = `usr_fb_${stamp}`;
+const fbCal = `cal:fb_${stamp}`;
+const fbDay = new Date(Math.ceil(Date.now() / 86_400_000) * 86_400_000 + 86_400_000);
+await db.insert(users).values({ id: fbUser, email: `fb${stamp}@example.com`, passwordHash: "x", name: "Fb" });
+await db.insert(calendarEvents).values([
+	{ id: `evt_fb1_${stamp}`, userId: fbUser, title: "Weekly", startsAt: new Date(fbDay.getTime() + 9 * 3_600_000), endsAt: new Date(fbDay.getTime() + 10 * 3_600_000), repeat: "weekly", isPrivate: true },
+	{ id: `evt_fb3_${stamp}`, userId: fbUser, title: "Daily", startsAt: new Date(fbDay.getTime() + 20 * 3_600_000), endsAt: new Date(fbDay.getTime() + 21 * 3_600_000), repeat: "daily", repeatUntil: new Date(fbDay.getTime() + 5 * 86_400_000) },
+	// Began before the window and ended (repeat_until) before it, but its last occurrence, 22:00 the evening before, runs on until 02:00: only repeat_until + duration reaches the window.
+	{ id: `evt_fb4_${stamp}`, userId: fbUser, title: "Ended", startsAt: new Date(fbDay.getTime() - 3 * 86_400_000 + 22 * 3_600_000), endsAt: new Date(fbDay.getTime() - 3 * 86_400_000 + 26 * 3_600_000), repeat: "daily", repeatUntil: new Date(fbDay.getTime() - 3_600_000) },
+	{ id: `evt_fb2_${stamp}`, userId: fbUser, title: "Free", startsAt: new Date(fbDay.getTime() + 12 * 3_600_000), endsAt: new Date(fbDay.getTime() + 13 * 3_600_000), transparent: true },
+] as never);
+const fbBusy = await busyIntervals(env, { userIds: [fbUser, userId] }, fbDay, new Date(fbDay.getTime() + 15 * 86_400_000));
+check("free/busy expands a private weekly series and a daily one that ends, and skips a free event", fbBusy.get(fbUser)?.length === 9 && fbBusy.get(fbUser)![1][0] === fbDay.getTime() + 9 * 3_600_000 && fbBusy.get(userId)?.length !== undefined);
+check("free/busy keeps the last occurrence of a series that ended before the window but runs into it", fbBusy.get(fbUser)![0][0] === fbDay.getTime() && fbBusy.get(fbUser)![0][1] === fbDay.getTime() + 2 * 3_600_000);
+const fbResolved = await resolveFreeBusyAddresses(env, [`FB${stamp}@example.com`, "nobody@example.com"]);
+check("free/busy resolves an address regardless of case and drops unknown ones", fbResolved.get(`fb${stamp}@example.com`) === fbUser && fbResolved.size === 1);
+check("free/busy: a stranger sees nobody, and org free/busy is off without the switch", (await viewableFreeBusyUsers(env, userId, [fbUser])).size === 0 && (await isOrgFreeBusyEnabled(env)) === false);
+await db.insert(davCollections).values({ id: fbCal, userId: fbUser, kind: "calendar", displayName: "Fb" } as never);
+await db.insert(calendarShares).values({ id: `csh_fb_${stamp}`, calendarId: fbCal, granteeUserId: userId, role: "freebusy" } as never);
+check("free/busy: any grant on the owner's calendar opens it", (await viewableFreeBusyUsers(env, userId, [fbUser])).has(fbUser));
+await db.insert(appSettings).values({ id: "default", calendarOrgFreeBusy: true } as never).onConflictDoUpdate({ target: appSettings.id, set: { calendarOrgFreeBusy: true } });
+const [orgOn] = await db.select({ on: appSettings.calendarOrgFreeBusy }).from(appSettings).where(eq(appSettings.id, "default"));
+check("app_settings.calendar_org_free_busy stores a boolean, and without Team the switch still counts as off", orgOn?.on === true && (await isOrgFreeBusyEnabled(env)) === false);
+await db.update(appSettings).set({ calendarOrgFreeBusy: false }).where(eq(appSettings.id, "default"));
+await db.delete(davCollections).where(eq(davCollections.id, fbCal));
+await db.delete(users).where(eq(users.id, fbUser));
 
 const [settings] = await db.select().from(appSettings).where(eq(appSettings.id, "default"));
 check("seed rows present", settings?.appName === "Mailflare");

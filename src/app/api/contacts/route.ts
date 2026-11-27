@@ -7,6 +7,7 @@ import { deleteAvatarImages } from "@/lib/avatar-images";
 import { getEnv } from "@/lib/cloudflare";
 import { normalizeEmailAddress } from "@/lib/email/address";
 import { importGravatarAvatar } from "@/lib/contacts/gravatar";
+import { mirrorContactDeleted, mirrorContactSaved } from "@/lib/dav/contact-hooks";
 import { getMailboxAccessLevel } from "@/lib/mailboxes/access";
 import { getPersonalIdentityForAddress, syncPersonalIdentity } from "@/lib/profile/sync";
 import { parseAddress } from "@/lib/utils";
@@ -114,6 +115,8 @@ export async function POST(request: Request) {
 		email,
 		displayName,
 	});
+	// A user with an address book (CalDAV/CardDAV set up) also gets the contact as a card on their devices.
+	if (saved) await mirrorContactSaved(env, access.mailbox.userId, saved);
 	if (!existing && saved) {
 		const avatarKey = await importGravatarAvatar(env, access.mailbox.userId, email);
 		if (avatarKey) {
@@ -151,12 +154,13 @@ export async function PATCH(request: Request) {
 			avatarKey: account.avatarKey,
 		});
 	}
-	const contact = toContactDetails(await saveManualContact(db, {
+	const renamed = await saveManualContact(db, {
 		userId: access.mailbox.userId,
 		email,
 		displayName,
-	}));
-	return NextResponse.json({ contact });
+	});
+	if (renamed) await mirrorContactSaved(env, access.mailbox.userId, renamed);
+	return NextResponse.json({ contact: toContactDetails(renamed) });
 }
 
 export async function DELETE(request: Request) {
@@ -181,6 +185,10 @@ export async function DELETE(request: Request) {
 		return NextResponse.json({ error: "Only the account owner can change this contact" }, { status: 403 });
 	}
 	const existing = await getContactByEmail(db, access.mailbox.userId, email);
+	// The card goes first: when it cannot be changed the contact stays, and the user can try again.
+	if (existing && !(await mirrorContactDeleted(env, access.mailbox.userId, existing))) {
+		return NextResponse.json({ error: "The address book could not be updated. Try again." }, { status: 409 });
+	}
 	if (existing?.avatarKey) {
 		await deleteAvatarImages(env.BUCKET, existing.avatarKey);
 	}

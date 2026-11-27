@@ -21,6 +21,7 @@ await build({
 				CONTACTS_LIST_MAX_LIMIT,
 				listContacts,
 				saveManualContact,
+				toContactDetails,
 			} from "./src/app/api/contacts/utils.ts";
 			export { filterContactSuggestions, formatContactSuggestion } from "./src/components/compose/recipient-suggestions-utils.ts";
 			export { mergeRecipients } from "./src/components/compose/recipient-utils.ts";
@@ -47,6 +48,7 @@ const {
 	CONTACTS_LIST_MAX_LIMIT,
 	listContacts,
 	saveManualContact,
+	toContactDetails,
 	filterContactSuggestions,
 	formatContactSuggestion,
 	mergeRecipients,
@@ -197,4 +199,10 @@ test("blocking again after the generated rule was edited updates it instead of f
 	await blockContact(env, { ...input, userId: "second" });
 	const rules = database.db.prepare("SELECT action, enabled, user_id FROM routing_rules").all();
 	assert.deepEqual(rules.map((rule) => [rule.action, rule.enabled, rule.user_id]), [["trash", 1, "owner"]]);
+});
+
+test("the CardDAV link of a contact is internal: the API shape does not carry it", () => {
+	const details = toContactDetails({ id: "u:a@b.test", userId: "u", email: "a@b.test", displayName: "A", avatarKey: "k", source: "manual", blocked: false, remoteContentAllowed: false, lastSeenAt: null, davCardId: "card_1", createdAt: new Date(0) });
+	assert.equal("davCardId" in details, false);
+	assert.equal(details.hasAvatar, true);
 });

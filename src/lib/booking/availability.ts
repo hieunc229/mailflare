@@ -1,12 +1,12 @@
-import { and, inArray, isNull, lt, or, gt, ne } from "drizzle-orm";
-import { getDb } from "@/db";
-import { calendarEventOverrides, calendarEvents } from "@/db/schema";
-import { chunkIds } from "@/lib/calendar/chunks";
 import { dateFromZonedFields, zonedDateFields } from "@/lib/time/utils";
 import { parseCalendarRepeatDays, parseExcludedOccurrences } from "@/lib/calendar/recurrence";
+import { expandEvent, expandEventOccurrences } from "@/lib/calendar/rrule";
+import { busyIntervals, MAX_FREE_BUSY_DAYS, mergeBusy, type BusyInterval } from "@/lib/calendar/free-busy";
+import { bookingRoomsUsable } from "./rooms";
 import { slotFromLocalDate, timeToMinutes } from "./utils";
 import type { BookingEventRecord, ExistingCalendarEvent } from "./types";
 
+/** @deprecated Booking reads `busyIntervals` now (D-9). Kept because tests still exercise it (rules, overrides); delete with them. */
 function validBookingInterval(value: unknown): number {
 	return Number.isInteger(value) && (value as number) >= 1 && (value as number) <= 999 ? (value as number) : 1;
 }
@@ -57,7 +57,8 @@ function ruleOccursOnDay(event: ExistingCalendarEvent, day: Date, firstWall: Dat
 	return false;
 }
 
-function repeatsDuring(event: ExistingCalendarEvent, start: Date, end: Date, overrides?: BookingOverride[]): boolean {
+export function repeatsDuring(event: ExistingCalendarEvent, start: Date, end: Date, overrides?: BookingOverride[]): boolean {
+	if (event.repeat === "custom") return expandEventOccurrences(event, start, end, 1).length > 0;
 	const first = event.startsAt;
 	const duration = event.endsAt.getTime() - first.getTime();
 	if (event.repeat === "none") return first < end && event.endsAt > start;
@@ -94,25 +95,55 @@ function repeatsDuring(event: ExistingCalendarEvent, start: Date, end: Date, ove
 	return false;
 }
 
+/** @deprecated See `repeatsDuring`.
+ *
+ * `(start, end) => busy` for a request that tests many slots against the same events: a custom rule is expanded once for
+ * [from, to), so each slot only compares numbers instead of walking the rule again.
+ */
+export function busyCheck(events: ExistingCalendarEvent[], from: Date, to: Date, overridesById?: Map<string, BookingOverride[]>): (start: Date, end: Date) => boolean {
+	// A rule whose walk hit the work budget may have occurrences we did not see: it counts as busy for the whole window (null).
+	const custom = new Map<ExistingCalendarEvent, Date[] | null>();
+	for (const event of events) if (event.repeat === "custom") { const { starts, exhausted } = expandEvent(event, new Date(from.getTime() - (event.endsAt.getTime() - event.startsAt.getTime())), to, 2000); custom.set(event, exhausted ? null : starts); }
+	return (start, end) => events.some((event) => {
+		const starts = custom.get(event);
+		if (starts === null) return true;
+		if (!starts) return repeatsDuring(event, start, end, overridesById?.get(event.id));
+		const duration = event.endsAt.getTime() - event.startsAt.getTime();
+		return starts.some((at) => at < end && at.getTime() + duration > start.getTime());
+	});
+}
+
+/** The last day a public page may ask for: `busyIntervals` reads at most 62 days, and the window is the page plus two days. */
+export const MAX_BOOKING_DAYS = MAX_FREE_BUSY_DAYS - 2;
+
+/** Whether `[start, end)` touches any of the merged, sorted intervals. */
+function overlapsAny(busy: BusyInterval[], start: number, end: number): boolean {
+	let low = 0;
+	let high = busy.length;
+	while (low < high) {
+		const middle = (low + high) >> 1;
+		if (busy[middle][1] <= start) low = middle + 1;
+		else high = middle;
+	}
+	return low < busy.length && busy[low][0] < end;
+}
+
+/**
+ * The start times a visitor may pick (D-9): the host's and every attached room's busy time come from the one free/busy service, so
+ * a booking page and the calendar editor cannot disagree about what "busy" means. A slot is offered only when the hosts and all
+ * rooms are free. Rooms are Team-only (D-13), so rooms that are gone, turned off or no longer licensed offer nothing at all, and
+ * a calendar or room too heavy to read is busy for the whole window (unknown is never free).
+ */
 export async function availableBookingSlots(env: CloudflareEnv, event: BookingEventRecord, days = 14) {
 	const now = new Date();
 	const today = zonedDateFields(now, event.timeZone);
 	today.setUTCHours(0, 0, 0, 0);
+	days = Math.min(days, MAX_BOOKING_DAYS);
 	const end = new Date(now.getTime() + (days + 2) * 86_400_000);
-	const existing = await getDb(env).select().from(calendarEvents).where(and(inArray(calendarEvents.userId, event.hostIds), lt(calendarEvents.startsAt, end), or(gt(calendarEvents.endsAt, now), ne(calendarEvents.repeat, "none")), or(isNull(calendarEvents.responseStatus), ne(calendarEvents.responseStatus, "needs-action"))));
-	// Moved/extra occurrences block at their override time: one map for the whole host set, in D1-safe chunks.
-	const overridesById = new Map<string, BookingOverride[]>();
-	if (existing.length) {
-		const db = getDb(env);
-		for (const chunk of chunkIds(existing.map((row) => row.id))) {
-			const rows = await db.select().from(calendarEventOverrides).where(inArray(calendarEventOverrides.eventId, chunk));
-			for (const row of rows) {
-				const list = overridesById.get(row.eventId) ?? [];
-				list.push({ occurrenceMs: row.occurrenceMs, startsAt: row.startsAt, endsAt: row.endsAt });
-				overridesById.set(row.eventId, list);
-			}
-		}
-	}
+	const resourceIds = event.resourceIds ?? [];
+	if (resourceIds.length && !(await bookingRoomsUsable(env, resourceIds, event.hostIds.length))) return [];
+	const intervals = await busyIntervals(env, { userIds: event.hostIds, resourceIds }, now, end);
+	const busy = mergeBusy([...intervals.values()].flat());
 	const slots: { startsAt: string; endsAt: string; localDate: string; time: string }[] = [];
 	for (let offset = 0; offset < days; offset++) {
 		const day = new Date(today);
@@ -123,7 +154,7 @@ export async function availableBookingSlots(env: CloudflareEnv, event: BookingEv
 			const time = `${String(Math.floor(minute / 60)).padStart(2, "0")}:${String(minute % 60).padStart(2, "0")}`;
 			const slot = slotFromLocalDate(event, localDate, time);
 			if (!slot || slot.startsAt.getTime() < now.getTime() + 60 * 60_000) continue;
-			if (existing.some((calendarEvent) => repeatsDuring(calendarEvent, slot.startsAt, slot.endsAt, overridesById.get(calendarEvent.id)))) continue;
+			if (overlapsAny(busy, slot.startsAt.getTime(), slot.endsAt.getTime())) continue;
 			slots.push({ startsAt: slot.startsAt.toISOString(), endsAt: slot.endsAt.toISOString(), localDate, time });
 		}
 	}

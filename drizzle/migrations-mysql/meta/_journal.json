@@ -190,6 +190,55 @@
       "when": 1795027668151,
       "tag": "0026_contact_details",
       "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "5",
+      "when": 1795027669151,
+      "tag": "0027_calendar_event_rrule",
+      "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "5",
+      "when": 1795027670151,
+      "tag": "0028_dav_change_names",
+      "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "5",
+      "when": 1795027671151,
+      "tag": "0029_contacts_dav_card",
+      "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "6",
+      "when": 1795027672151,
+      "tag": "0030_calendar_columns",
+      "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "6",
+      "when": 1795027673151,
+      "tag": "0031_calendar_org_free_busy",
+      "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "6",
+      "when": 1795027674151,
+      "tag": "0032_calendar_room_booking_guard",
+      "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "6",
+      "when": 1795027675151,
+      "tag": "0033_booking_event_resources",
+      "breakpoints": true
     }
   ]
 }

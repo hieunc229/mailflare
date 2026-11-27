@@ -22,6 +22,7 @@ import { Button } from "@/components/ui/button";
 import clsx from "clsx";
 import { CalendarLogoBlock } from "./calendar-logo-block";
 import { CalendarMobileUpcoming } from "./calendar-mobile-upcoming";
+import { CalendarSettingsDialog } from "./calendar/calendar-settings-dialog";
 import { useDashboardState } from "../(dashboard)/dashboard-state";
 import { useAssistantAvailability } from "../(dashboard)/use-assistant-availability";
 import { RouteTitle } from "@/components/route-title";
@@ -80,6 +81,7 @@ export default function CalendarLayout({ children }: { children: React.ReactNode
                     </aside>
                   </div>
                 </div>
+                <CalendarSettingsDialog />
                 <FloatingComposer />
               </div>
               </ShortcutsProvider>

@@ -1,19 +1,28 @@
 import { NextResponse } from "next/server";
 import { availableBookingSlots } from "@/lib/booking/availability";
 import { getEnv } from "@/lib/cloudflare";
-import { createBookedCalendarEvents } from "@/lib/booking/create";
+import { cachedJson } from "@/lib/http/edge-cache";
+import { toPublicBookingEvent } from "@/lib/booking/public-event";
+import { reserveBooking } from "@/lib/booking/reserve";
+import { bookingRoomsUsable, locationWithRooms } from "@/lib/booking/rooms";
 import { sendBookingConfirmation } from "@/lib/booking/confirmation";
 import { allowBookingAttempt } from "@/lib/auth/rate-limit";
 import { pickGuestLocale } from "@/lib/booking/confirmation-utils";
 import type { PublicBookingRouteContext, PublicBookingSubmission } from "./types";
 import { loadPublicBookingEvent, parseBookingGuestEmails } from "./utils";
 
+/** How long a slot list is kept (30 to 60 seconds). */
+const SLOT_CACHE_SECONDS = 45;
+
 export async function GET(request: Request, { params }: PublicBookingRouteContext) {
 	const { eventId } = await params;
 	const found = await loadPublicBookingEvent(eventId, new URL(request.url).searchParams.get("username"));
 	if (!found) return NextResponse.json({ error: "Booking event not found" }, { status: 404 });
-	const slots = await availableBookingSlots(getEnv(), found.event, 60);
-	return NextResponse.json({ event: found.event, hostName: found.hostName, slots });
+	// The slot list is the expensive read and the same for everyone: kept for 45 seconds per event type, last edit and day (an owner's change shows at once). It is only a view: a booking is
+	// always decided live in the POST, so a slot taken in that time is refused there ("no longer available").
+	const slots = await cachedJson(`booking-slots/${found.event.id}/${new Date(found.event.updatedAt ?? 0).getTime()}/${new Date().toISOString().slice(0, 10)}/60`, SLOT_CACHE_SECONDS, () => availableBookingSlots(getEnv(), found.event, 60));
+	// The visitor gets times and nothing else: not which rooms the event type holds, nor why a time is gone.
+	return NextResponse.json({ event: toPublicBookingEvent(found.event), hostName: found.hostName, slots });
 }
 
 export async function POST(request: Request, { params }: PublicBookingRouteContext) {
@@ -28,11 +37,14 @@ export async function POST(request: Request, { params }: PublicBookingRouteConte
 	const guestEmails = parseBookingGuestEmails(body?.guestEmails, email);
 	const notes = typeof body?.notes === "string" ? body.notes.trim() : "";
 	if (!guestEmails || notes.length > 2000 || (body?.notes !== undefined && typeof body.notes !== "string")) return NextResponse.json({ error: "Check the guest emails and meeting notes." }, { status: 400 });
+	// Rooms are Team-only (D-13): without a licence, or with a room gone or turned off, nothing new is booked (as CS-7's save refuses with 403).
+	if (!(await bookingRoomsUsable(getEnv(), found.event.resourceIds ?? [], found.event.hostIds.length))) return NextResponse.json({ error: "Booking is not available right now." }, { status: 403 });
 	const slots = await availableBookingSlots(getEnv(), found.event, 60);
 	const slot = slots.find((item) => item.startsAt === body.startsAt);
 	if (!slot) return NextResponse.json({ error: "That time is no longer available." }, { status: 409 });
-	if (!(await createBookedCalendarEvents(getEnv(), found.event, name, email, slot.startsAt, slot.endsAt, guestEmails, notes))) return NextResponse.json({ error: "That time is no longer available." }, { status: 409 });
+	if (!(await reserveBooking(getEnv(), found.event, name, email, slot.startsAt, slot.endsAt, guestEmails, notes))) return NextResponse.json({ error: "That time is no longer available." }, { status: 409 });
 	const locale = pickGuestLocale(/(?:^|;\s*)mailflare-locale=([^;]+)/.exec(request.headers.get("cookie") ?? "")?.[1], request.headers.get("accept-language"));
-	await sendBookingConfirmation(getEnv(), { event: found.event, hostName: found.hostName, guestName: name, guestEmail: email, notes, startsAt: slot.startsAt, endsAt: slot.endsAt, locale, publicOrigin: new URL(request.url).origin });
+	const { resourceIds = [], ...published } = found.event;
+	await sendBookingConfirmation(getEnv(), { event: { ...published, location: await locationWithRooms(getEnv(), published.location, resourceIds) }, hostName: found.hostName, guestName: name, guestEmail: email, notes, startsAt: slot.startsAt, endsAt: slot.endsAt, locale, publicOrigin: new URL(request.url).origin });
 	return NextResponse.json({ booked: true, startsAt: slot.startsAt, endsAt: slot.endsAt });
 }

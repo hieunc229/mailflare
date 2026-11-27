@@ -19,6 +19,10 @@ export type BookingTimeRange = { startTime: string; endTime: string };
 export type BookingEventRecord = BookingEventInput & {
 	id: string;
 	userId: string;
+	/** Rooms the event type reserves (Team); a slot is offered only when they are free too. */
+	resourceIds?: string[];
+	/** The stored row's last edit: part of the public slot cache key. */
+	updatedAt?: Date | number;
 };
 
 export type ExistingCalendarEvent = typeof import("@/db/schema").calendarEvents.$inferSelect;

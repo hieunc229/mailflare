@@ -69,3 +69,4 @@ skills-lock.json
 
 # Written for the length of `npm run build:vercel` by scripts/build-vercel.mjs
 /src/pages/
+/file:*

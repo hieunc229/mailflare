@@ -21,7 +21,7 @@ import { ClientRequestError } from "@/lib/http/client-error";
 import type { ManagedApiKey, McpKeyScope } from "./api-keys-settings-types";
 import { useSecurityStatus } from "./security-status-store";
 import { StepUpDialog } from "./step-up-dialog";
-import { createManagedApiKey, keyPermissions, loadManagedApiKeys, MCP_KEY_SCOPES, revokeManagedApiKey, STANDARD_KEY_SCOPES } from "./api-keys-settings-utils";
+import { createManagedApiKey, keyDisplayName, keyPermissions, loadManagedApiKeys, MCP_KEY_SCOPES, revokeManagedApiKey, STANDARD_KEY_SCOPES } from "./api-keys-settings-utils";
 
 export function ApiKeysSettings() {
 	const { t } = useLanguage();
@@ -130,7 +130,7 @@ export function ApiKeysSettings() {
 				{keys.map((key) => <ListRow key={key.id} className="px-5 py-4">
 					<span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-blue-100 text-blue-700"><KeyRound className="h-5 w-5" /></span>
 					<span className="min-w-0 flex-1 space-y-2">
-						<span className="flex min-w-0 flex-wrap items-center gap-2"><strong className="truncate text-sm font-semibold text-neutral-900">{key.name}</strong>{key.kind === "mcp" && <Badge variant="outline">MCP</Badge>}</span>
+						<span className="flex min-w-0 flex-wrap items-center gap-2"><strong className="truncate text-sm font-semibold text-neutral-900">{keyDisplayName(key, t)}</strong>{key.kind === "mcp" && <Badge variant="outline">MCP</Badge>}</span>
 						<span className="block truncate no-font-mono text-sm text-neutral-500">{key.prefix}… · {t("apiKeys.createdOn", { date: formatUserDate(key.createdAt, { dateStyle: "short" }) })} · {key.lastUsedAt ? t("apiKeys.lastUsed", { date: formatUserDate(key.lastUsedAt, { dateStyle: "short" }) }) : t("apiKeys.neverUsed")}</span>
 						<span className="flex flex-wrap gap-1">{keyPermissions(key).map((scope) => <Badge key={scope} variant="outline">{scope}</Badge>)}</span>
 						<span className="block text-xs text-neutral-500">{t("apiKeys.mailboxesLabel", { list: key.mailboxScopeEnabled || key.kind === "mcp" ? key.mailboxIds.map((id) => { const mailbox = mailboxes.find((item) => item.id === id); return mailbox ? `${mailbox.localPart}@${mailbox.hostname}` : id; }).join(", ") || t("common.none") : t("apiKeys.allAccessible") })}</span>

@@ -10,6 +10,8 @@ import { getEnv } from "@/lib/cloudflare";
 import { calendarAccessError } from "@/lib/calendar/api-auth";
 import type { BookingEventRouteContext } from "./types";
 import { validBookingHostIds } from "@/lib/booking/hosts";
+import { parseBookingResourceIds } from "@/lib/booking/resource-ids";
+import { resolveBookingRooms } from "@/lib/booking/rooms";
 import { getLicenseEntitlements } from "@/lib/licenses/service";
 import { ConfirmationTemplatesUnavailableError, saveConfirmationTemplate, withConfirmationTemplates } from "@/lib/booking/confirmation-templates";
 import { parseConfirmationTemplateInput } from "@/lib/booking/confirmation-utils";
@@ -31,10 +33,18 @@ export async function PATCH(request: Request, { params }: BookingEventRouteConte
 	const canManageHosts = user.role === "admin" && (await getLicenseEntitlements(env)).canShareMailboxes;
 	const hostIds = await validBookingHostIds(db, user.id, input.hostIds, canManageHosts);
 	if (!hostIds) return NextResponse.json({ error: "Choose users from the host list." }, { status: 400 });
+	const [current] = await db.select({ resourceIds: bookingEvents.resourceIds }).from(bookingEvents).where(and(eq(bookingEvents.id, eventId), eq(bookingEvents.userId, user.id))).limit(1);
+	if (!current) return NextResponse.json({ error: "Booking event not found" }, { status: 404 });
+	const storedRooms = parseBookingResourceIds(current.resourceIds);
+	// A list that cannot be read is not "no rooms": a save (or the on/off switch) that names no rooms must not quietly turn the checks off. Naming
+	// the list, even an empty one, is a choice the owner made, and it repairs the type.
+	if (!storedRooms && !Array.isArray((body as { resourceIds?: unknown } | null)?.resourceIds)) return NextResponse.json({ error: "The saved rooms for this booking page could not be read. Choose the rooms again (or none) before saving." }, { status: 409 });
+	const rooms = await resolveBookingRooms(db, body, { booked: storedRooms ?? [], canBook: (await getLicenseEntitlements(env)).canShareMailboxes, hostCount: hostIds.length });
+	if (!rooms.ok) return NextResponse.json({ error: rooms.error, ...(rooms.code ? { code: rooms.code } : {}) }, { status: rooms.status });
 	const [taken] = await db.select({ id: bookingEvents.id }).from(bookingEvents).where(and(eq(bookingEvents.userId, user.id), eq(bookingEvents.slug, input.slug))).limit(1);
 	if (taken && taken.id !== eventId) return NextResponse.json({ error: "This event link is already in use." }, { status: 409 });
 	try {
-		const [event] = await db.update(bookingEvents).set({ ...input, hostIds: JSON.stringify(hostIds), weekdays: JSON.stringify(input.weekdays), timeRanges: JSON.stringify(input.timeRanges), updatedAt: new Date() }).where(and(eq(bookingEvents.id, eventId), eq(bookingEvents.userId, user.id))).returning();
+		const [event] = await db.update(bookingEvents).set({ ...input, hostIds: JSON.stringify(hostIds), resourceIds: JSON.stringify(rooms.ids), weekdays: JSON.stringify(input.weekdays), timeRanges: JSON.stringify(input.timeRanges), updatedAt: new Date() }).where(and(eq(bookingEvents.id, eventId), eq(bookingEvents.userId, user.id))).returning();
 		if (!event) return NextResponse.json({ error: "Booking event not found" }, { status: 404 });
 		if (confirmation) await saveConfirmationTemplate(db, event.id, confirmation);
 		const [saved] = await withConfirmationTemplates(db, [event]);

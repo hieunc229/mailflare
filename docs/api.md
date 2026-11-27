@@ -57,11 +57,13 @@ Each user has a personal calendar at **Calendar** in the dashboard. Events have 
 
 When you add attendees and choose a sending mailbox, Mailflare emails each attendee an invitation with a calendar (`.ics`) file from that mailbox, and sends updates and cancellations the same way. Events created through MCP tools or the assistant record attendees but do not send invitations.
 
+The calendar also syncs both ways with phone and desktop calendar apps over CalDAV (and contacts over CardDAV) once an administrator turns it on; see [Calendar and contacts sync](caldav-carddav.md).
+
 | Mailflare route | Purpose |
 | --- | --- |
 | `GET /api/calendar/events?start=&end=` | List events in an ISO 8601 range (default: the next 31 days). Repeating events are returned once, with their rule |
-| `POST /api/calendar/events` | Create an event (`{ title, startsAt, endsAt, description?, location?, attendees?, color?, repeat?, repeatDays?, timeZone?, mailboxId?, from? }`). If the event is saved but some invitations fail to send, the response is still successful and includes `inviteErrors`, the list of attendee addresses that were not emailed |
-| `PATCH /api/calendar/events/[eventId]` | Update an event or series. For a repeating event, pass an occurrence ID or `effectiveFrom` to change it from that occurrence onward. Like `POST`, the response carries `inviteErrors` when some updated invitations could not be sent |
+| `POST /api/calendar/events` | Create an event (`{ title, startsAt, endsAt, description?, location?, attendees?, color?, repeat?, repeatDays?, timeZone?, isPrivate?, transparent?, mailboxId?, from? }`). If the event is saved but some invitations fail to send, the response is still successful and includes `inviteErrors`, the list of attendee addresses that were not emailed. `isPrivate` writes `CLASS:PRIVATE` and `transparent: true` shows the event as free (`TRANSP:TRANSPARENT`); both must be booleans or the request answers 400, and an omitted flag keeps its stored value on update |
+| `PATCH /api/calendar/events/[eventId]` | Update an event or series. For a repeating event, pass an occurrence ID or `effectiveFrom` to change it from that occurrence onward. An event whose repeat was set in another app has `repeat: "custom"` and an `rrule`; it is edited as a whole series, and sending another `repeat` replaces the rule. Only its time of day may change; a `startsAt` on another day answers 409. Like `POST`, the response carries `inviteErrors` when some updated invitations could not be sent |
 | `DELETE /api/calendar/events/[eventId]` | Delete an event, or a series from an occurrence onward |
 
 These routes accept the dashboard session or an API key (`Authorization: Bearer <key>`) with the **Read calendar** (`calendar:read`) or **Manage calendar** (`calendar:write`) scope, which you choose when creating the key in **Settings → API keys**. A key can only send invitations if it also has the `send` scope for the chosen mailbox. MCP and the assistant use separate calendar tools, described in [Email assistant and MCP](email-assistant-and-mcp.md).

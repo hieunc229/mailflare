@@ -9,7 +9,7 @@ after(() => {
 	writerFixture.dispose();
 });
 const { parseDavXml, DavXmlError } = await parserFixture.import();
-const { escapeXml, multistatus } = await writerFixture.import();
+const { escapeXml, multistatus, multistatusHead, multistatusResponse, multistatusTail } = await writerFixture.import();
 
 const DAV = "DAV:";
 
@@ -65,10 +65,25 @@ test("writer escapes text and attribute values", () => {
 
 test("multistatus builds a declared, escaped document", () => {
 	const xml = multistatus([{ href: "/dav/a&b/", propstats: [{ status: 200, props: ["<D:displayname>x</D:displayname>"] }, { status: 404, props: ["<D:foo/>"] }] }]);
-	assert.match(xml, /^<\?xml version="1\.0" encoding="utf-8"\?>\n<D:multistatus xmlns:D="DAV:" xmlns:C="urn:ietf:params:xml:ns:caldav" xmlns:CR="urn:ietf:params:xml:ns:carddav" xmlns:CS="http:\/\/calendarserver\.org\/ns\/">/);
+	assert.match(xml, /^<\?xml version="1\.0" encoding="utf-8"\?>\n<D:multistatus xmlns:D="DAV:" xmlns:C="urn:ietf:params:xml:ns:caldav" xmlns:CR="urn:ietf:params:xml:ns:carddav" xmlns:CS="http:\/\/calendarserver\.org\/ns\/" xmlns:ICAL="http:\/\/apple\.com\/ns\/ical\/">/);
 	assert.match(xml, /<D:href>\/dav\/a&amp;b\/<\/D:href>/);
 	assert.match(xml, /<D:status>HTTP\/1\.1 200 OK<\/D:status>/);
 	assert.match(xml, /<D:status>HTTP\/1\.1 404 Not Found<\/D:status>/);
 	// The writer's own output must be accepted by the parser.
 	assert.equal(parseDavXml(xml).name, "multistatus");
+});
+
+test("a status-only response, a sync token and streamed pieces make the same document", () => {
+	const responses = [
+		{ href: "/dav/x/1.ics", propstats: [{ status: 200, props: ["<D:getetag>&quot;1&quot;</D:getetag>"] }] },
+		{ href: "/dav/x/2.ics", status: 404 },
+		{ href: "/dav/x/", status: 507, error: "<D:number-of-matches-within-limits/>" },
+	];
+	const whole = multistatus(responses, "https://h/dav/sync/a/b/3");
+	assert.equal(multistatusHead() + responses.map(multistatusResponse).join("") + multistatusTail("https://h/dav/sync/a/b/3"), whole);
+	assert.match(whole, /<D:response><D:href>\/dav\/x\/2\.ics<\/D:href><D:status>HTTP\/1\.1 404 Not Found<\/D:status><\/D:response>/);
+	assert.match(whole, /<D:status>HTTP\/1\.1 507 Insufficient Storage<\/D:status><D:error><D:number-of-matches-within-limits\/><\/D:error><\/D:response>/);
+	assert.match(whole, /<D:sync-token>https:\/\/h\/dav\/sync\/a\/b\/3<\/D:sync-token><\/D:multistatus>$/);
+	assert.equal(parseDavXml(whole).name, "multistatus");
+	assert.doesNotMatch(multistatus([]), /sync-token/);
 });

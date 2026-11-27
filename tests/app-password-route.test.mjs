@@ -9,7 +9,7 @@ const schema = "PRAGMA foreign_keys = OFF;\n" + migrations.flatMap((migration) =
 const mocks = {
 	"next/server": "export const NextResponse={json:(data,init)=>Response.json(data,init)};",
 	"@/db": "export function getDb(){return globalThis.appPwRoute.db}",
-	"@/lib/cloudflare": "export function getEnv(){return {}}",
+	"@/lib/cloudflare": "export function getEnv(){return globalThis.appPwRoute.env ?? {}}",
 	"@/lib/api/auth": "export async function requireSessionUser(){const s=globalThis.appPwRoute;return s.user?{user:s.user,error:null}:{user:null,error:Response.json({error:'Unauthorized'},{status:401})}}",
 	"@/lib/auth/cookies": "export async function requireUser(){return globalThis.appPwRoute.user}",
 	"@/lib/auth/session": "export function getSessionTokenFromRequestHeaders(){return 'session-1'} export async function hashSessionToken(token){return 'hash-'+token}",
@@ -251,4 +251,25 @@ test("a calendar-and-contacts password needs no mailbox, and only exists while D
 	const off = await post(valid(await grant(), { protocols: ["dav"], mailboxIds: [] }));
 	assert.equal(off.status, 400);
 	assert.equal(keys().length, 0);
+});
+
+test("the list says whether calendar sync is on and what the user needs to build the addresses", async () => {
+	setup({ user: { id: "u1", email: "u1@one.test", role: "user", calendarEnabled: true, securityVersion: 0 } });
+	let body = await (await GET(new Request("https://mail.test/api/app-passwords"))).json();
+	assert.deepEqual(body.dav, { enabled: false, userId: "u1", email: "u1@one.test", calendarEnabled: true, isAdmin: false, origin: "https://mail.test" });
+
+	globalThis.appPwRoute.protocols = ["jmap", "dav"];
+	globalThis.appPwRoute.user = { id: "u1", email: "u1@one.test", role: "admin", calendarEnabled: false, securityVersion: 0 };
+	body = await (await GET(new Request("https://mail.test/api/app-passwords"))).json();
+	assert.deepEqual(body.dav, { enabled: true, userId: "u1", email: "u1@one.test", calendarEnabled: false, isAdmin: true, origin: "https://mail.test" });
+});
+
+test("the address origin is APP_URL when set, else the request's own origin", async () => {
+	setup({ user: { id: "u1", email: "u1@one.test", role: "user", calendarEnabled: true, securityVersion: 0 } });
+	globalThis.appPwRoute.env = { APP_URL: " https://mail.example.com/ " };
+	let body = await (await GET(new Request("http://internal:3000/api/app-passwords"))).json();
+	assert.equal(body.dav.origin, "https://mail.example.com");
+	globalThis.appPwRoute.env = {};
+	body = await (await GET(new Request("http://internal:3000/api/app-passwords"))).json();
+	assert.equal(body.dav.origin, "http://internal:3000");
 });

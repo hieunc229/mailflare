@@ -220,7 +220,7 @@ test("one retention run prunes at most 90 rows of one collection, in at most 3 q
 	assert.deepEqual([left("cal:u1"), left("cal:u2")], [1, 1]);
 });
 
-test("retention before migration 0102 is applied does nothing instead of failing the cron", async (t) => {
+test("retention before migration 0098 is applied does nothing instead of failing the cron", async (t) => {
 	const { env, sql } = await fixture(t);
 	sql.exec("DROP TABLE dav_changes");
 	assert.equal(await dav.runDavChangeRetention(env, NOW), 0);

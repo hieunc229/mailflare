@@ -5,6 +5,7 @@ import { getEnv } from "@/lib/cloudflare";
 import { authenticateApiKeyValue } from "@/lib/api/key-auth";
 import { buildCalendarFeed, type FeedOccurrenceOverride } from "@/lib/calendar/feed";
 import { chunkIds } from "@/lib/calendar/chunks";
+import { isOffCalendarResponse } from "@/lib/calendar/response-status";
 
 /**
  * Read-only iCalendar subscription. Google Calendar, Outlook and Apple Calendar fetch a URL without
@@ -19,8 +20,8 @@ export async function GET(request: Request) {
 	// nothing but read the calendar is accepted here (exact match: hasScope would also let a "*" key through). A mail, JMAP or write key in this position is refused.
 	if (!key || key.scopes.length !== 1 || key.scopes[0] !== "calendar:read") return new Response("Unauthorized", { status: 401, headers: { "Cache-Control": "no-store" } });
 	const events = await getDb(env).select().from(calendarEvents).where(eq(calendarEvents.userId, key.user.id)).orderBy(calendarEvents.startsAt);
-	// Invitations still waiting for an answer are not on the calendar yet, so other apps do not see them.
-	const visible = events.filter((event) => event.responseStatus !== "needs-action").map((event) => ({ ...event, repeat: event.repeat }));
+	// Invitations still waiting for an answer, and declined or cancelled events, are not on the calendar, so other apps do not see them.
+	const visible = events.filter((event) => !isOffCalendarResponse(event.responseStatus)).map((event) => ({ ...event, repeat: event.repeat }));
 	const overrides = new Map<string, FeedOccurrenceOverride[]>();
 	if (visible.length) {
 		for (const chunk of chunkIds(visible.map((event) => event.id))) {

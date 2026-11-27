@@ -1,6 +1,7 @@
 import type { TranslationKey } from "@/lib/i18n/types";
 import { authFetch } from "@/lib/auth/client";
 import { requestError } from "@/lib/http/client-error";
+import { FREEBUSY_KEY_PREFIX } from "@/lib/calendar/free-busy-key-id";
 import type { ApiKeyScope } from "@/lib/api/scopes";
 import type { ManagedApiKey, McpKeyScope } from "./api-keys-settings-types";
 
@@ -22,6 +23,11 @@ export const STANDARD_KEY_SCOPES: { value: ApiKeyScope; labelKey: TranslationKey
 
 async function responseData(response: Response): Promise<{ error?: unknown; key?: string; apiKeys?: ManagedApiKey[] }> {
 	return response.json().catch(() => ({})) as Promise<{ error?: unknown; key?: string; apiKeys?: ManagedApiKey[] }>;
+}
+
+/** The name a key is listed under. The publish link's key is made by the calendar, not named by the user, so its name is the interface language's. */
+export function keyDisplayName(key: Pick<ManagedApiKey, "id" | "name">, t: (key: "calendar.publish.keyName") => string): string {
+	return key.id.startsWith(FREEBUSY_KEY_PREFIX) ? t("calendar.publish.keyName") : key.name;
 }
 
 export function keyPermissions(key: ManagedApiKey): string[] {

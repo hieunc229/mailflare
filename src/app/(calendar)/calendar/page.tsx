@@ -6,10 +6,11 @@ import { useRouter, useSearchParams } from "next/navigation";
 import type { DragEvent, PointerEvent as ReactPointerEvent } from "react";
 import { createPortal } from "react-dom";
 import toast, { Toaster } from "react-hot-toast";
-import { AlignLeft, CalendarPlus2, Check, ChevronDown, ChevronLeft, ChevronRight, Clock3, MapPin, Palette, Bell, Plus, Repeat2, Trash2, UsersRound, X } from "@/components/icons";
+import { AlignLeft, Building2, CalendarClock, CalendarDays, CalendarPlus2, Check, ChevronDown, ChevronLeft, ChevronRight, Clock3, LockKeyhole, MapPin, Palette, Bell, Plus, Repeat2, Trash2, UsersRound, X } from "@/components/icons";
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { RouteLoadingBarPortal } from "@/components/route-loading-bar-portal";
 import { authFetch } from "@/lib/auth/client";
@@ -17,6 +18,7 @@ import { formatUserDate, getUserTimeZone, parseUserDateTimeLocal } from "@/lib/t
 import { normalizeCalendarColor } from "@/lib/calendar/colors";
 import { REMINDER_MINUTE_OPTIONS } from "@/lib/calendar/reminder-utils";
 import { DEFAULT_REPEAT_DAYS, parseCalendarRepeatDays } from "@/lib/calendar/recurrence";
+import { sameZonedDay } from "@/lib/calendar/repeat-fields";
 import { DEFAULT_FOLDER_COLOR, FOLDER_COLOR_OPTIONS } from "@/lib/folders/colors";
 import type { TranslationKey } from "@/lib/i18n/types";
 import type { CalendarRepeat } from "@/lib/calendar/types";
@@ -27,8 +29,21 @@ import { useSidebar } from "@/components/sidebar-state";
 import { UpcomingSidebar } from "../upcoming-sidebar";
 import { DayEvents } from "./day-events";
 import { MonthGrid } from "./month-grid";
+import { PublishDialog } from "./publish-dialog";
 import { CalendarSubscribeDialog } from "./subscribe-dialog";
 import { InviteResponseDialog } from "./invite-response-dialog";
+import { CalendarList } from "./calendar-list";
+import { calendarLabel, canWriteEvents, eventErrorKey, movesSeries, visibleCalendarEvents, writableCalendars } from "./calendar-list-utils";
+import { EventViewDialog } from "./event-view-dialog";
+import { AvailabilityPanel } from "./availability-panel";
+import { RoomsPicker } from "./rooms-picker";
+import { AvailabilityRoomsContext } from "./availability-rooms";
+import { useRoomState, retryRooms } from "./room-state";
+import { activeShownRooms, roomSaveErrorKey, roomScheduleEvents, roomsAreLocked } from "./room-utils";
+import type { RoomScheduleEvent } from "./room-types";
+import { useCurrentUser } from "@/hooks/use-current-user";
+import { useCalendarState } from "./calendar-state";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import type { CalendarEvent, CalendarView, EventDragPreview, EventResizeEdge, EventResizeSession } from "./types";
 import {
   addDays, addMonths, calendarAnchorDay, CALENDAR_END_HOUR, CALENDAR_HOUR_HEIGHT, CALENDAR_START_HOUR,
@@ -62,13 +77,20 @@ export default function CalendarPage() {
     } catch { /* storage can be blocked; the default view is fine */ }
     return "week";
   });
+  const { calendars, hidden: hiddenCalendars, revision: calendarsRevision } = useCalendarState();
+  const [calendarsOpen, setCalendarsOpen] = useState(false);
+  const [calendarId, setCalendarId] = useState("");
+  const defaultCalendar = calendars.find((calendar) => calendar.isDefault);
   const [pendingInvite, setPendingInvite] = useState<CalendarEvent | null>(null);
+  // An event of a calendar shared as view-only opens here, for reading, instead of in the editor.
+  const [viewing, setViewing] = useState<CalendarEvent | null>(null);
   function chooseView(next: CalendarView) {
     setView(next);
     try { window.localStorage.setItem("mailflare.calendar.view", next); } catch { /* not remembered */ }
   }
   const [monthPickerOpen, setMonthPickerOpen] = useState(false);
   const [subscribeOpen, setSubscribeOpen] = useState(false);
+  const [publishOpen, setPublishOpen] = useState(false);
   const [pickerMonth, setPickerMonth] = useState(() => new Date());
   const monthPickerRef = useRef<HTMLDivElement | null>(null);
   const monthPickerPopupRef = useRef<HTMLDivElement | null>(null);
@@ -95,15 +117,28 @@ export default function CalendarPage() {
     const seriesId = event.id.includes("@") ? event.id.slice(0, event.id.lastIndexOf("@")) : event.id;
     return overridesRef.current?.get(seriesId) ?? overridesRef.current?.get(event.id);
   }, []);
+  const [isPrivate, setIsPrivate] = useState(false);
+  const [transparent, setTransparent] = useState(false);
   const [startsAt, setStartsAt] = useState("");
   const [endsAt, setEndsAt] = useState("");
   const [durationOptionsOpen, setDurationOptionsOpen] = useState(false);
   const [adding, setAdding] = useState(false);
   const [closingEventEditor, setClosingEventEditor] = useState(false);
   const [guests, setGuests] = useState("");
+  const [roomIds, setRoomIds] = useState<string[]>([]);
+  // The rooms switched on in the sidebar have more bookings in this period than one answer carries.
+  const [roomsTruncated, setRoomsTruncated] = useState(false);
+  // Bookings that a change left waiting for their check: the server settles a few with each load, so this counts down.
+  const [roomsPending, setRoomsPending] = useState(0);
+  const roomStore = useRoomState();
+  const shownRoomsKey = activeShownRooms(roomStore.shown, roomStore.rooms).join(",");
+  // The rooms chosen for the event, by name, for the availability rows below the guests.
+  const roomRows = useMemo(() => roomIds.flatMap((id) => { const room = roomStore.rooms.find((item) => item.id === id); return room ? [{ id, name: room.name }] : []; }), [roomIds, roomStore.rooms]);
   const [location, setLocation] = useState("");
   const [description, setDescription] = useState("");
   const [editing, setEditing] = useState<CalendarEvent | null>(null);
+  // A moved occurrence of a CalDAV series has its series' rooms: shown, not editable, and not sent.
+  const roomsLocked = roomsAreLocked(editing);
   const guestReplies = (() => {
     try {
       const responses = JSON.parse(editing?.attendeeResponses || "{}") as Record<string, string>;
@@ -127,6 +162,7 @@ export default function CalendarPage() {
   const router = useRouter();
   const eventFromUrl = useSearchParams().get("event");
   const { selectedMailbox } = useSelectedMailbox();
+  const currentUser = useCurrentUser();
   const { minimal: sidebarMinimal, mobile } = useSidebar();
   const minimal = sidebarMinimal || mobile;
 
@@ -173,9 +209,10 @@ export default function CalendarPage() {
   }, [monthPickerOpen]);
 
   // Every refetch shows the loading bar until it settles.
-  const [loadingFor, setLoadingFor] = useState({ today, visibleDate, view, eventsVersion, t });
-  if (loadingFor.today !== today || loadingFor.visibleDate !== visibleDate || loadingFor.view !== view || loadingFor.eventsVersion !== eventsVersion || loadingFor.t !== t) {
-    setLoadingFor({ today, visibleDate, view, eventsVersion, t });
+  const fetchVersion = eventsVersion + calendarsRevision;
+  const [loadingFor, setLoadingFor] = useState({ today, visibleDate, view, eventsVersion: fetchVersion, t });
+  if (loadingFor.today !== today || loadingFor.visibleDate !== visibleDate || loadingFor.view !== view || loadingFor.eventsVersion !== fetchVersion || loadingFor.t !== t) {
+    setLoadingFor({ today, visibleDate, view, eventsVersion: fetchVersion, t });
     setLoading(true);
   }
 
@@ -184,22 +221,30 @@ export default function CalendarPage() {
     const monthDates = view === "month" ? monthGridDates(visibleDate) : null;
     const start = new Date(Math.min(today.getTime(), weekStart.getTime(), startOfDay(visibleDate).getTime(), monthDates?.[0].getTime() ?? Infinity));
     const end = new Date(Math.max(addDays(today, 90).getTime(), addDays(weekStart, 7).getTime(), addDays(visibleDate, 1).getTime(), monthDates ? addDays(monthDates[41], 1).getTime() : 0));
-    void authFetch(`/api/calendar/events?start=${start.toISOString()}&end=${end.toISOString()}`)
+    // Rooms whose schedules are switched on in the sidebar come with the same request.
+    const asked = shownRoomsKey ? `&resourceIds=${encodeURIComponent(shownRoomsKey)}` : "";
+    void authFetch(`/api/calendar/events?start=${start.toISOString()}&end=${end.toISOString()}${asked}`)
       .then((response) => {
         if (!response.ok) throw new Error(t("calendar.loadFailed"));
-        return response.json() as Promise<{ events?: Parameters<typeof expandCalendarEvents>[0]; overrides?: CalendarOverridesInput; occurrenceResponses?: Record<string, CalendarOccurrenceResponse[]> }>;
+        return response.json() as Promise<{ events?: Parameters<typeof expandCalendarEvents>[0]; overrides?: CalendarOverridesInput; occurrenceResponses?: Record<string, CalendarOccurrenceResponse[]>; roomEvents?: RoomScheduleEvent[]; roomEventsTruncated?: boolean; roomsPending?: number }>;
       })
       .then((data) => {
         if (!active) return;
         const overrides = toCalendarOverrides(data.overrides);
         overridesRef.current = overrides;
         setOccurrenceResponses(data.occurrenceResponses ?? {});
-        setEvents(expandCalendarEvents(data.events ?? [], start, end, overrides));
+        setRoomsTruncated(data.roomEventsTruncated === true);
+        setRoomsPending(data.roomsPending ?? 0);
+        const own = (data.events ?? []).map((event) => (event.redacted ? { ...event, title: t("calendar.busy") } : event));
+        const booked = roomScheduleEvents(data.roomEvents ?? [], roomStore.rooms, new Set(own.map((event) => event.id)), t("calendar.busy"));
+        setEvents(expandCalendarEvents([...own, ...booked], start, end, overrides));
       })
       .catch(() => { if (active) toast.error(t("calendar.loadFailed")); })
       .finally(() => { if (active) setLoading(false); });
     return () => { active = false; };
-  }, [today, visibleDate, weekStart, view, eventsVersion, t]);
+  }, [today, visibleDate, weekStart, view, fetchVersion, t, shownRoomsKey, roomStore.rooms]);
+
+  const shownEvents = useMemo(() => visibleCalendarEvents(events, hiddenCalendars, defaultCalendar?.id), [events, hiddenCalendars, defaultCalendar?.id]);
 
   useEffect(() => {
     if (!eventFromUrl) { openedEventFromUrl.current = null; return; }
@@ -224,6 +269,10 @@ export default function CalendarPage() {
     setRepeatWeek(null);
     setMonthlyMode("day");
     setReminderMinutes(null);
+    setIsPrivate(false);
+    setTransparent(false);
+    setCalendarId(defaultCalendar?.id ?? "");
+    setRoomIds([]);
     setGuests("");
     setLocation("");
     setDescription("");
@@ -234,6 +283,23 @@ export default function CalendarPage() {
     setAdding(true);
   }
 
+  // Writing into someone else's calendar (as an editor or manager) is delegating: no guests, no reminder (the owner's), no invitations.
+  const selectedCalendar = calendars.find((calendar) => calendar.id === calendarId);
+  const delegate = selectedCalendar ? selectedCalendar.role !== "owner" : !!editing?.role && editing.role !== "owner";
+  const calendarChoices = writableCalendars(calendars, editing);
+
+  type SavedRooms = { rooms?: { resourceId: string; name: string; status: string }[]; resourceConflicts?: { resourceId: string; occurrences: string[] }[] };
+  // A declined room is not an error: the event is saved. Say which room and the first date it clashed.
+  function announceDeclinedRooms(saved: SavedRooms | null) {
+    for (const room of (saved?.rooms ?? []).filter((item) => item.status === "declined" || item.status === "unconfirmed")) {
+      const first = saved?.resourceConflicts?.find((item) => item.resourceId === room.resourceId)?.occurrences[0];
+      // "Declined" says the room clashed; "unconfirmed" says nothing clashed but the room could not be won or checked, so saving again may work.
+      const message = room.status === "unconfirmed" ? t("calendar.rooms.unconfirmedToast", { room: room.name })
+        : first ? t("calendar.rooms.declinedToast", { room: room.name, date: formatUserDate(new Date(first), { dateStyle: "medium" }) }) : t("calendar.rooms.declinedToastNoDate", { room: room.name });
+      toast(message, { duration: 10_000 });
+    }
+  }
+
   async function addEvent() {
     setPendingAction("save");
     try {
@@ -241,9 +307,18 @@ export default function CalendarPage() {
       const editedEnd = editing && endsAt === formatLocalDateTime(new Date(editing.endsAt)) ? new Date(editing.endsAt) : parseUserDateTimeLocal(endsAt);
       if (!editedStart || !editedEnd || editedEnd <= editedStart) { toast.error(t("calendar.invalidTimes")); return; }
       const movingToPast = Boolean(editing && editing.repeat !== "none" && editedStart.getTime() < Date.now() && editedStart.getTime() !== new Date(editing.startsAt).getTime());
-      const effectiveFrom = editing && editing.repeat !== "none" && !movingToPast ? new Date() : null;
+      // A custom repeat that stays custom is edited as a whole series (it cannot be split), so the edit moves the series by the same amount.
+      const keepsCustom = editing?.repeat === "custom" && repeat === "custom";
+      const effectiveFrom = editing && editing.repeat !== "none" && !movingToPast && !keepsCustom ? new Date() : null;
       let savedStart = editedStart;
       let savedEnd = editedEnd;
+      if (editing && keepsCustom && !movingToPast) {
+        if (!sameZonedDay(editedStart, new Date(editing.startsAt), getUserTimeZone())) { toast.error(t("calendar.repeat.customDayLocked")); return; }
+        const shift = editedStart.getTime() - new Date(editing.startsAt).getTime();
+        const seriesStart = new Date(editing.seriesStartsAt ?? editing.startsAt).getTime();
+        savedStart = new Date(seriesStart + shift);
+        savedEnd = new Date(seriesStart + shift + editedEnd.getTime() - editedStart.getTime());
+      }
       if (editing && effectiveFrom) {
         const next = rescheduleCalendarOccurrence(editing, editedStart, editedEnd, effectiveFrom, overridesFor(editing));
         if (!next) { toast.error(t("calendar.noFuture")); return; }
@@ -262,8 +337,9 @@ export default function CalendarPage() {
         method: editing ? "PATCH" : "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          title, startsAt: savedStart.toISOString(), endsAt: savedEnd.toISOString(), color, repeat, repeatDays, repeatAnchorDay, repeatInterval: interval, repeatWeekday: weekday, repeatWeek: week, reminderMinutes, effectiveFrom: effectiveFrom?.toISOString(), moveOccurrenceToPast: movingToPast, attendees: guests.split(","),
+          title, startsAt: savedStart.toISOString(), endsAt: savedEnd.toISOString(), color, repeat, repeatDays, repeatAnchorDay, repeatInterval: interval, repeatWeekday: weekday, repeatWeek: week, reminderMinutes, isPrivate, transparent, ...(calendarId ? { calendarId } : {}), effectiveFrom: effectiveFrom?.toISOString(), moveOccurrenceToPast: movingToPast, attendees: delegate && !editing ? [] : guests.split(","),
           timeZone: getUserTimeZone(),
+          ...(!roomsLocked && (roomStore.rooms.length > 0 || roomIds.length > 0) ? { resourceIds: roomIds } : {}),
           description,
           location,
           mailboxId: selectedMailbox?.id,
@@ -272,13 +348,15 @@ export default function CalendarPage() {
         }),
       });
       if (response.ok) {
-        const result = (await response.json().catch(() => ({}))) as { inviteErrors?: string[] };
-        if (result.inviteErrors?.length) toast.error(t("calendar.inviteFailed"));
+        const saved = (await response.json().catch(() => ({}))) as { inviteErrors?: string[] } & SavedRooms;
+        if (saved.inviteErrors?.length) toast.error(t("calendar.inviteFailed"));
+        announceDeclinedRooms(saved as SavedRooms);
         setEventsVersion((version) => version + 1);
         setClosingEventEditor(true);
       } else {
-        const result = (await response.json()) as { error?: string };
-        toast.error(result.error ?? t("calendar.saveFailed"));
+        const result = (await response.json()) as { error?: string; code?: string };
+        const refused = roomSaveErrorKey(response.status, result.code) ?? eventErrorKey(response.status, result.code);
+        toast.error(refused ? t(refused as never) : result.error ?? t("calendar.saveFailed"));
       }
     } catch {
       toast.error(t("calendar.saveFailed"));
@@ -300,8 +378,9 @@ export default function CalendarPage() {
         setEventsVersion((version) => version + 1);
         setClosingEventEditor(true);
       } else {
-        const result = (await response.json()) as { error?: string };
-        toast.error(result.error ?? t("calendar.deleteFailed"));
+        const result = (await response.json()) as { error?: string; code?: string };
+        const refused = eventErrorKey(response.status, result.code);
+        toast.error(refused ? t(refused as never) : result.error ?? t("calendar.deleteFailed"));
       }
     } catch {
       toast.error(t("calendar.deleteFailed"));
@@ -312,11 +391,15 @@ export default function CalendarPage() {
 
   function editEvent(event: CalendarEvent) {
     if (isPendingInvite(event)) { setPendingInvite(event); return; }
+    if (!canWriteEvents(event.role)) { setViewing(event); return; }
     setEditing(event);
     setTitle(event.title);
     setColor(normalizeCalendarColor(event.color));
     setRepeat(event.repeat);
     setReminderMinutes(event.reminderMinutes ?? null);
+    setCalendarId(event.calendarId ?? defaultCalendar?.id ?? "");
+    setIsPrivate(event.isPrivate ?? false);
+    setTransparent(event.transparent ?? false);
     setRepeatDays(event.repeat === "weekdays" ? parseCalendarRepeatDays(event.repeatDays) : DEFAULT_REPEAT_DAYS);
     setRepeatInterval(Number.isInteger(event.repeatInterval) && (event.repeatInterval as number) >= 1 && (event.repeatInterval as number) <= 999 ? event.repeatInterval as number : 1);
     const hasNth = event.repeat === "monthly" && event.repeatWeekday != null && event.repeatWeek != null;
@@ -329,6 +412,7 @@ export default function CalendarPage() {
     setEndsAt(formatLocalDateTime(new Date(event.endsAt)));
     setDurationOptionsOpen(false);
     setGuests(JSON.parse(event.attendees || "[]").join(", "));
+    setRoomIds((event.rooms ?? []).map((room) => room.resourceId));
     setClosingEventEditor(false);
     setAdding(true);
   }
@@ -349,9 +433,17 @@ export default function CalendarPage() {
     let saved = false;
     try {
       const movingToPast = event.repeat !== "none" && startsAt.getTime() < Date.now();
-      const effectiveFrom = event.repeat !== "none" && !movingToPast ? new Date() : null;
+      const effectiveFrom = event.repeat !== "none" && event.repeat !== "custom" && !movingToPast ? new Date() : null;
       let savedStart = startsAt;
       let savedEnd = endsAt;
+      if (event.repeat === "custom" && !movingToPast) {
+        // A custom repeat cannot be split, so dragging one occurrence moves the whole series by the same amount, within its day.
+        if (!sameZonedDay(startsAt, new Date(event.startsAt), getUserTimeZone())) { toast.error(t("calendar.repeat.customDayLocked")); return; }
+        const shift = startsAt.getTime() - new Date(event.startsAt).getTime();
+        const seriesStart = new Date(event.seriesStartsAt ?? event.startsAt).getTime();
+        savedStart = new Date(seriesStart + shift);
+        savedEnd = new Date(seriesStart + shift + endsAt.getTime() - startsAt.getTime());
+      }
       if (effectiveFrom) {
         const next = rescheduleCalendarOccurrence(event, startsAt, endsAt, effectiveFrom, overridesFor(event));
         if (!next) { toast.error(t("calendar.noFuture")); return; }
@@ -389,6 +481,7 @@ export default function CalendarPage() {
         return;
       }
       saved = true;
+      announceDeclinedRooms((await response.json().catch(() => null)) as SavedRooms | null);
       setEventsVersion((version) => version + 1);
     } catch {
       toast.error(t("calendar.updateTimeFailed"));
@@ -408,7 +501,7 @@ export default function CalendarPage() {
   }
 
   function startResize(pointerEvent: ReactPointerEvent<HTMLButtonElement>, event: CalendarEvent, day: Date, edge: EventResizeEdge) {
-    if (pendingAction !== null) return;
+    if (pendingAction !== null || !canWriteEvents(event.role)) return;
     const column = pointerEvent.currentTarget.parentElement;
     if (!column) return;
     pointerEvent.preventDefault();
@@ -460,6 +553,7 @@ export default function CalendarPage() {
   const onResizeEnd = useCallback((pointerEvent: ReactPointerEvent<HTMLButtonElement>) => handlers.current.finishResize(pointerEvent), []);
   const onResizeCancel = useCallback(() => handlers.current.cancelResize(), []);
   const onEventDragStart = useCallback((dragEvent: DragEvent<HTMLButtonElement>, event: CalendarEvent) => {
+    if (!canWriteEvents(event.role)) { dragEvent.preventDefault(); return; }
     dragOffsetPixels.current = dragEvent.clientY - dragEvent.currentTarget.getBoundingClientRect().top;
     dragEvent.dataTransfer.setData("text/plain", event.id);
     dragEvent.dataTransfer.effectAllowed = "move";
@@ -538,7 +632,9 @@ export default function CalendarPage() {
                 <DropdownMenu.Portal>
                   <DropdownMenu.Content align="end" sideOffset={4} className="z-[130] min-w-48 rounded-xl border border-neutral-200 bg-white p-1 text-sm shadow-xl">
                     <DropdownMenu.Item onSelect={() => setVisibleDate(new Date())} className="cursor-pointer rounded-lg px-3 py-2 text-neutral-700 outline-none data-[highlighted]:bg-neutral-100 md:hidden">{t("calendar.today")}</DropdownMenu.Item>
+                    <DropdownMenu.Item onSelect={() => setCalendarsOpen(true)} className="cursor-pointer rounded-lg px-3 py-2 text-neutral-700 outline-none data-[highlighted]:bg-neutral-100 [@media(pointer:coarse)]:py-3">{t("calendar.calendars.manage")}</DropdownMenu.Item>
                     <DropdownMenu.Item onSelect={() => setSubscribeOpen(true)} className="cursor-pointer rounded-lg px-3 py-2 text-neutral-700 outline-none data-[highlighted]:bg-neutral-100">{t("calendar.subscribe")}</DropdownMenu.Item>
+                    <DropdownMenu.Item onSelect={() => setPublishOpen(true)} className="cursor-pointer rounded-lg px-3 py-2 text-neutral-700 outline-none data-[highlighted]:bg-neutral-100 [@media(pointer:coarse)]:py-3">{t("calendar.publish")}</DropdownMenu.Item>
                     <DropdownMenu.Separator className="my-1 h-px bg-neutral-100" />
                     <DropdownMenu.Label className="px-3 pb-1 pt-2 text-xs font-medium text-neutral-500">{t("calendar.view")}</DropdownMenu.Label>
                     {(["month", "week", "day"] as const).map((option) => <DropdownMenu.Item key={option} onSelect={() => chooseView(option)} className="flex cursor-pointer items-center gap-2 rounded-lg px-3 py-2 text-neutral-700 outline-none data-[highlighted]:bg-neutral-100"><span className="flex h-4 w-4 shrink-0 items-center justify-center">{view === option && <Check className="h-4 w-4 text-blue-600" />}</span>{t(`calendar.${option}`)}</DropdownMenu.Item>)}
@@ -553,9 +649,11 @@ export default function CalendarPage() {
       <UpcomingSidebar events={events} onSelect={editEvent} />
 
       <section aria-busy={loading} className="min-h-0 min-w-0 flex-1 rounded-t-3xl bg-white flex flex-col overflow-hidden">
+        {roomsPending > 0 && <p role="status" className="shrink-0 bg-blue-50 px-4 py-2 text-xs text-blue-900">{t("calendar.rooms.pending", { count: roomsPending })}</p>}
+        {roomsTruncated && shownRoomsKey && <p role="status" className="shrink-0 bg-amber-50 px-4 py-2 text-xs text-amber-900">{t("calendar.rooms.truncated")}</p>}
         <div className="min-h-0 min-w-0 flex-1 overflow-auto overscroll-contain">
           {view === "month" ? (
-            <MonthGrid month={visibleDate} today={today} events={events} currentTime={currentTime}
+            <MonthGrid month={visibleDate} today={today} events={shownEvents} currentTime={currentTime}
               onSelectDay={(day) => openNewEvent(day)} onOpenDay={(day) => { setVisibleDate(day); setView("day"); }} onEdit={onEditEvent} />
           ) : (
           <div className={clsx("w-full", view === "week" ? "min-w-190" : "min-w-90")}>
@@ -593,7 +691,7 @@ export default function CalendarPage() {
                 }}
                 style={{ backgroundImage: "linear-gradient(to bottom, transparent calc(100% - 1px), var(--color-neutral-100) calc(100% - 1px))", backgroundSize: `100% ${CALENDAR_HOUR_HEIGHT}px` }}>
                 <button type="button" aria-label={t("calendar.addEventOn", { date: formatUserDate(day, { dateStyle: "short" }) })} onClick={(event) => openNewEvent(day, dropStartForPosition(day, event.nativeEvent.offsetY))} className="absolute inset-0 z-0 cursor-crosshair" />
-                <DayEvents day={day} events={events} currentTime={currentTime} busy={busy} activeEventId={activeEventId}
+                <DayEvents day={day} events={shownEvents} currentTime={currentTime} busy={busy} activeEventId={activeEventId}
                   onEdit={onEditEvent} onDragStart={onEventDragStart} onDragEnd={onEventDragEnd}
                   onResizeStart={onResizeStart} onResizeMove={onResizeMove} onResizeEnd={onResizeEnd} onResizeCancel={onResizeCancel} />
                 {dragPreview && previewEvent && previewPosition && dateKey(dragPreview.day) === dateKey(day) && (
@@ -620,6 +718,17 @@ export default function CalendarPage() {
       </section>
 
       <CalendarSubscribeDialog open={subscribeOpen} onOpenChange={setSubscribeOpen} />
+      <PublishDialog open={publishOpen} onOpenChange={setPublishOpen} />
+      <Dialog open={calendarsOpen} onOpenChange={setCalendarsOpen}>
+        <DialogContent className="max-h-[calc(100vh-4rem)] w-[min(420px,calc(100vw-32px))] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>{t("calendar.calendars.title")}</DialogTitle>
+            <DialogDescription className="sr-only">{t("calendar.calendars.manageDescription")}</DialogDescription>
+          </DialogHeader>
+          <CalendarList />
+        </DialogContent>
+      </Dialog>
+      <EventViewDialog event={viewing} roomName={roomStore.rooms.find((room) => room.id === viewing?.roomId)?.name} calendarName={(() => { const calendar = calendars.find((item) => item.id === viewing?.calendarId); return calendar ? calendarLabel(calendar, t as never) : ""; })()} onClose={() => setViewing(null)} />
       <InviteResponseDialog event={pendingInvite} onClose={() => setPendingInvite(null)} onAnswered={() => setEventsVersion((version) => version + 1)} />
 
       {adding && createPortal(
@@ -636,6 +745,7 @@ export default function CalendarPage() {
                 className="min-w-0 flex-1 rounded-md border border-transparent bg-transparent px-2 py-1 text-2xl font-medium text-neutral-900 outline-none placeholder:text-neutral-500 hover:bg-white/60 focus:border-blue-600 focus:bg-white" />
               <button type="button" aria-label={t("calendar.closeEditor")} disabled={pendingAction === "save"} onClick={() => setClosingEventEditor(true)} className="shrink-0 rounded-full p-1 text-neutral-600 hover:bg-neutral-200 disabled:opacity-50"><X className="h-5 w-5" /></button>
             </div>
+            <AvailabilityRoomsContext.Provider value={roomRows}>
             <div className="mt-4 space-y-2">
               <div className="grid grid-cols-[24px_minmax(0,1fr)] items-start gap-3">
                 <Clock3 aria-hidden="true" className="mt-2 h-5 w-5 text-neutral-600" />
@@ -662,7 +772,7 @@ export default function CalendarPage() {
                   </div>}
                 </div>
               </div>
-              <div className="grid grid-cols-[24px_minmax(0,1fr)] items-start gap-3">
+              {!delegate && <div className="grid grid-cols-[24px_minmax(0,1fr)] items-start gap-3">
                 <Bell aria-hidden="true" className="mt-2 h-5 w-5 text-neutral-600" />
                 <div className="relative min-w-0">
                   <Select value={reminderMinutes ?? ""} containerClassName="contents" onChange={(event) => setReminderMinutes(event.target.value === "" ? null : Number(event.target.value))} aria-label={t("calendar.reminder")}
@@ -672,6 +782,26 @@ export default function CalendarPage() {
                       <option key={minutes} value={minutes}>{t(`calendar.reminder.m${minutes}` as TranslationKey)}</option>
                     ))}
                   </Select>
+                </div>
+              </div>}
+              <div className="grid grid-cols-[24px_minmax(0,1fr)] items-start gap-3">
+                <CalendarClock aria-hidden="true" className="mt-2 h-5 w-5 text-neutral-600" />
+                <div className="relative min-w-0">
+                  <Select value={transparent ? "free" : "busy"} containerClassName="contents" disabled={pendingAction === "save"} onChange={(event) => setTransparent(event.target.value === "free")} aria-label={t("calendar.showAs")}
+                    className="h-9 rounded-md border border-transparent pl-2 pr-2 text-sm text-neutral-700 hover:bg-neutral-50 focus-visible:border-blue-600 focus-visible:bg-white [@media(pointer:coarse)]:h-11">
+                    <option value="busy">{t("calendar.showAs.busy")}</option>
+                    <option value="free">{t("calendar.showAs.free")}</option>
+                  </Select>
+                </div>
+              </div>
+              <div className="grid grid-cols-[24px_minmax(0,1fr)] items-start gap-3">
+                <LockKeyhole aria-hidden="true" className="mt-2 h-5 w-5 text-neutral-600" />
+                <div className="flex min-h-9 min-w-0 items-center justify-between gap-3 rounded-md px-2 hover:bg-neutral-50 [@media(pointer:coarse)]:min-h-11">
+                  <span className="min-w-0">
+                    <label htmlFor="event-private" className="block cursor-pointer text-sm text-neutral-700">{t("calendar.private")}</label>
+                    <span id="event-private-hint" className="block text-xs text-neutral-600">{t("calendar.private.hint")}</span>
+                  </span>
+                  <Switch id="event-private" checked={isPrivate} onCheckedChange={setIsPrivate} disabled={pendingAction === "save"} aria-describedby="event-private-hint" className="[@media(pointer:coarse)]:my-2.5" />
                 </div>
               </div>
               <div className="grid grid-cols-[24px_minmax(0,1fr)] items-start gap-3">
@@ -686,6 +816,7 @@ export default function CalendarPage() {
                     <option value="monthly">{t("calendar.repeat.monthly")}</option>
                     <option value="yearly">{t("calendar.repeat.yearly")}</option>
                     <option value="weekdays">{t("calendar.repeat.weekdays")}</option>
+                    {editing?.repeat === "custom" && <option value="custom">{t("calendar.repeat.custom")}</option>}
                     </Select>
                   </div>
                   {repeat !== "none" && (
@@ -755,12 +886,26 @@ export default function CalendarPage() {
                   )}
                 </div>
               </div>
-              <div className="grid grid-cols-[24px_minmax(0,1fr)] items-center gap-3">
+              {delegate
+                ? <div className="grid grid-cols-[24px_minmax(0,1fr)] items-start gap-3">
+                  <UsersRound aria-hidden="true" className="mt-0.5 h-5 w-5 text-neutral-600" />
+                  <p className="px-2 text-xs text-neutral-600">{t("calendar.share.ownerOnly")}</p>
+                </div>
+                : <div className="grid grid-cols-[24px_minmax(0,1fr)] items-center gap-3">
                 <UsersRound aria-hidden="true" className="h-5 w-5 text-neutral-600" />
                 <Input value={guests} onChange={(event) => setGuests(event.target.value)} placeholder={t("calendar.addGuests")} aria-label={t("calendar.guestsLabel")} className={eventFieldClass} />
                 {guestReplies && <p className="mt-1 px-2 text-xs text-neutral-600">{t("calendar.guestResponses", { list: guestReplies })}</p>}
                 {occurrenceReplies && <p className="mt-1 px-2 text-xs text-neutral-600">{t("calendar.occurrenceResponses", { list: occurrenceReplies })}</p>}
-              </div>
+              </div>}
+              {(roomStore.rooms.length > 0 || roomIds.length > 0 || roomStore.state === "error") && <div className="grid grid-cols-[24px_minmax(0,1fr)] items-start gap-3">
+                <Building2 aria-hidden="true" className="mt-2 h-5 w-5 text-neutral-600" />
+                <RoomsPicker rooms={roomStore.rooms} state={roomStore.state} canBook={roomStore.canBook} selected={roomIds} saved={editing?.rooms ?? []} disabled={pendingAction === "save"} readOnly={roomsLocked}
+                  onAdd={(id) => setRoomIds((current) => current.includes(id) ? current : [...current, id])} onRemove={(id) => setRoomIds((current) => current.filter((item) => item !== id))} onRetry={retryRooms} />
+              </div>}
+              {!delegate && <div className="grid grid-cols-[24px_minmax(0,1fr)] items-start gap-3">
+                <div />
+                <AvailabilityPanel guests={guests} excludeEventId={editing?.id} selfAddress={currentUser?.email} startsAt={startsAt} endsAt={endsAt} onPick={(start, end) => { setStartsAt(formatLocalDateTime(start)); setEndsAt(formatLocalDateTime(end)); }} />
+              </div>}
               <div className="grid grid-cols-[24px_minmax(0,1fr)] items-center gap-3">
                 <MapPin aria-hidden="true" className="h-5 w-5 text-neutral-600" />
                 <Input value={location} onChange={(event) => setLocation(event.target.value)} placeholder={t("calendar.addLocation")} aria-label={t("calendar.location")} className={eventFieldClass} />
@@ -769,6 +914,25 @@ export default function CalendarPage() {
                 <AlignLeft aria-hidden="true" className="mt-2 h-5 w-5 text-neutral-600" />
                 <Textarea value={description} onChange={(event) => setDescription(event.target.value)} placeholder={t("calendar.addDescription")} aria-label={t("calendar.description")} rows={Math.max(1, description.split("\n").length)} className={clsx("min-h-9 border-transparent bg-transparent px-2 py-2 shadow-none hover:bg-white/60 focus:min-h-24 focus:resize-y focus:border-blue-600 focus:bg-white focus-visible:ring-0", description ? "min-h-24 resize-y" : "resize-none")} />
               </div>
+              {calendarChoices.length > 1 && (
+                <div className="grid grid-cols-[24px_minmax(0,1fr)] items-center gap-3">
+                  <CalendarDays aria-hidden="true" className="h-5 w-5 text-neutral-600" />
+                  <div className="flex items-center gap-2">
+                    <span aria-hidden="true" className="h-3 w-3 shrink-0 rounded-full" style={{ backgroundColor: calendars.find((calendar) => calendar.id === calendarId)?.color }} />
+                    <Select value={calendarId} containerClassName="contents" disabled={pendingAction === "save"} aria-label={t("calendar.calendars.pick")}
+                      onChange={(event) => {
+                        const next = calendars.find((calendar) => calendar.id === event.target.value);
+                        setCalendarId(event.target.value);
+                        // A new event takes its calendar's colour until the colour is chosen by hand.
+                        if (!editing && next) setColor(normalizeCalendarColor(next.color));
+                      }}
+                      className="h-9 min-w-0 rounded-md border border-transparent pl-2 pr-2 text-sm text-neutral-700 hover:bg-neutral-50 focus-visible:border-blue-600 focus-visible:bg-white [@media(pointer:coarse)]:h-11">
+                      {calendarChoices.map((calendar) => <option key={calendar.id} value={calendar.id}>{calendarLabel(calendar, t as never)}{calendar.role !== "owner" ? ` (${calendar.ownerName ?? ""})` : ""}</option>)}
+                    </Select>
+                  </div>
+                  {editing && movesSeries(editing) && calendarId !== (editing.calendarId ?? defaultCalendar?.id) && <p className="col-start-2 -mt-1 px-5 text-xs text-neutral-600">{t("calendar.calendars.seriesMoves")}</p>}
+                </div>
+              )}
               <div className="grid grid-cols-[24px_minmax(0,1fr)] items-center gap-3">
                 <Palette aria-hidden="true" className="h-5 w-5 text-neutral-600" />
                 <div role="radiogroup" aria-label={t("calendar.eventColor")} className="flex flex-wrap items-center gap-1.5 px-2">
@@ -789,6 +953,7 @@ export default function CalendarPage() {
                 </div>
               </div>
             </div>
+            </AvailabilityRoomsContext.Provider>
           </DialogFrame>
         </div>,
         document.body,

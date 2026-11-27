@@ -1,7 +1,7 @@
 "use client";
 
-import { useRef, useState } from "react";
-import { CalendarDays, ChevronDown, Clock3, Mail, MapPin, MoreHorizontal, Plus, Trash2, UserRound } from "@/components/icons";
+import { useId, useRef, useState } from "react";
+import { AlertCircle, Building2, CalendarDays, ChevronDown, Clock3, Mail, MapPin, MoreHorizontal, Plus, Trash2, UserRound } from "@/components/icons";
 import { BOOKING_TEMPLATE_PLACEHOLDERS, CONFIRMATION_BODY_MAX, CONFIRMATION_SUBJECT_MAX, DEFAULT_CONFIRMATION_BODY, DEFAULT_CONFIRMATION_SUBJECT } from "@/lib/booking/confirmation-utils";
 import clsx from "clsx";
 import { useLanguage } from "@/components/language-provider";
@@ -17,8 +17,10 @@ import type { BookingEditorSection } from "./types";
 import { bookingFormWithName, durationLabel, formAvailabilityLabel, matchBookingHost, nextBookingTimeRange, WEEKDAYS } from "./utils";
 import { BookingHostAvatar } from "./booking-host-avatar";
 import { Select } from "@/components/ui/select";
+import { RoomsPicker } from "../calendar/rooms-picker";
+import { bookingRoomsProblem } from "./room-problem";
 
-export function BookingEditor({ form, open, editingId, username, hosts, canManageHosts, currentUserId, saving, onChange, onClose, onSave, onDelete, onToggleEnabled, onClosed }: BookingEditorProps) {
+export function BookingEditor({ roomStore, onRetryRooms, form, open, editingId, username, hosts, canManageHosts, currentUserId, saving, onChange, onClose, onSave, onDelete, onToggleEnabled, onClosed }: BookingEditorProps) {
 	const { t } = useLanguage();
 	const [activeSection, setActiveSection] = useState<BookingEditorSection>(null);
 	const [nameEditing, setNameEditing] = useState(false);
@@ -34,6 +36,14 @@ export function BookingEditor({ form, open, editingId, username, hosts, canManag
 	const sectionClass = "border-b border-neutral-200 px-5 py-5";
 	const headingClass = "flex w-full items-center justify-between gap-3 text-left text-base font-semibold text-neutral-900";
 	const fieldClass = "h-10 w-full rounded-xl border border-neutral-200 bg-white px-3 text-sm";
+	// A room is only called deleted once the list has loaded: before that, or if it failed, nothing is known about it.
+	const roomsReady = roomStore.state === "ready";
+	const roomsProblem = bookingRoomsProblem(form.resourceIds, roomStore.rooms, roomStore.canBook, roomStore.state);
+	const roomsProblemText = roomsProblem === "off" ? t("booking.editor.roomsOff") : roomsProblem === "private" ? t("booking.editor.roomsPrivate") : roomsProblem === "licence" ? t("booking.editor.roomsNeedTeam") : "";
+	const roomsProblemId = useId();
+	const roomName = (id: string) => { const room = roomStore.rooms.find((item) => item.id === id); return !room ? t("calendar.rooms.removedRoom") : room.state === "off" ? t("booking.editor.roomTurnedOff", { name: room.name }) : room.state === "private" ? t("booking.editor.roomNotPublic", { name: room.name }) : room.name; };
+	const roomNotes: Record<string, string> = Object.fromEntries(roomStore.rooms.flatMap((room) => room.state === "off" ? [[room.id, t("booking.editor.statusOff")]] : room.state === "private" ? [[room.id, t("booking.editor.statusPrivate")]] : []));
+	const roomsSummary = !form.resourceIds.length ? t("booking.editor.roomsNone") : !roomsReady ? t(roomStore.state === "error" ? "calendar.rooms.loadFailed" : "booking.editor.roomsLoading") : t("booking.editor.roomsSummary", { rooms: form.resourceIds.map(roomName).join(", ") });
 	const toggle = (section: BookingEditorSection) => setActiveSection((current) => current === section ? null : section);
 	const confirmationBodyRef = useRef<HTMLTextAreaElement>(null);
 	// Placeholder chips go where the cursor is in the message, or at its end.
@@ -73,6 +83,15 @@ export function BookingEditor({ form, open, editingId, username, hosts, canManag
 						{canManageHosts && <form onSubmit={(event) => { event.preventDefault(); const match = matchBookingHost(hosts, hostQuery, t); if (!match.host) { setHostError(match.error); return; } if (form.hostIds.includes(match.host.id)) { setHostError(t("booking.editor.alreadyHost")); return; } if (form.hostIds.length >= 20) { setHostError(t("booking.editor.maxHosts")); return; } onChange({ ...form, hostIds: [...form.hostIds, match.host.id] }); setHostQuery(""); setHostError(""); }}><label htmlFor="booking-host-input" className="block text-sm font-medium text-neutral-700">{t("booking.editor.addHost")}</label><div className="mt-2 flex gap-2"><Input id="booking-host-input" value={hostQuery} onChange={(event) => { setHostQuery(event.target.value); setHostError(""); }} placeholder={t("booking.editor.nameOrEmail")} autoComplete="off" aria-invalid={!!hostError} aria-describedby={hostError ? "booking-host-error" : undefined} className="min-w-0 flex-1" /><Button type="submit" variant="outline" className="shrink-0 rounded-full">{t("booking.editor.add")}</Button></div>{hostError && <p id="booking-host-error" role="alert" className="mt-2 text-xs text-red-600">{hostError}</p>}</form>}
 					</div> : <button type="button" onClick={() => toggle("host")} className="mt-2 flex w-full items-center gap-2 text-left text-sm text-neutral-500"><span className="flex shrink-0 -space-x-1">{form.hostIds.slice(0, 3).map((id) => { const host = hosts.find((item) => item.id === id); return host ? <BookingHostAvatar key={id} host={host} currentUserId={currentUserId} size="small" /> : <span key={id} className="flex h-5 w-5 items-center justify-center rounded-full bg-neutral-200"><UserRound className="h-3 w-3" /></span>; })}</span><span className="truncate">{form.hostIds.map((id) => hosts.find((host) => host.id === id)?.name ?? t("booking.editor.userFallback")).join(", ")}</span></button>}
 				</section>
+				{(roomStore.rooms.length > 0 || form.resourceIds.length > 0 || roomStore.state === "error") && <section className={sectionClass}>
+					<button type="button" onClick={() => toggle("rooms")} aria-expanded={activeSection === "rooms"} aria-describedby={roomsProblemText ? roomsProblemId : undefined} className={headingClass}><span>{t("booking.editor.rooms")}</span><ChevronDown className={clsx("h-5 w-5 text-neutral-500 transition-transform", activeSection === "rooms" && "rotate-180")} /></button>
+					{roomsProblemText && <p id={roomsProblemId} className="mt-2 flex items-start gap-2 text-sm text-red-700"><AlertCircle aria-hidden="true" className="mt-0.5 h-4 w-4 shrink-0" />{roomsProblemText}</p>}
+					{activeSection === "rooms" ? <div className="mt-4 space-y-3">
+						<p className="text-xs text-neutral-500">{t("booking.editor.roomsHint")}</p>
+						<RoomsPicker rooms={roomStore.rooms} isOffered={(room) => (room as { state?: string }).state === "available"} notes={roomNotes} state={roomStore.state} canBook={roomStore.canBook} selected={form.resourceIds} saved={[]} disabled={saving}
+							onAdd={(id) => onChange({ ...form, resourceIds: form.resourceIds.includes(id) ? form.resourceIds : [...form.resourceIds, id] })} onRemove={(id) => onChange({ ...form, resourceIds: form.resourceIds.filter((item) => item !== id) })} onRetry={onRetryRooms} />
+					</div> : <button type="button" onClick={() => toggle("rooms")} className="mt-2 flex w-full items-center gap-2 text-left text-sm text-neutral-500"><Building2 aria-hidden="true" className="h-4 w-4 shrink-0" /><span className="min-w-0 truncate">{roomsSummary}</span></button>}
+				</section>}
 				<section className={sectionClass}>
 					<button type="button" onClick={() => toggle("confirmation")} aria-expanded={activeSection === "confirmation"} className={headingClass}><span>{t("booking.editor.confirmation")}</span><ChevronDown className={clsx("h-5 w-5 text-neutral-500 transition-transform", activeSection === "confirmation" && "rotate-180")} /></button>
 					{activeSection === "confirmation" ? <div className="mt-4 space-y-4">

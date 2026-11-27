@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import QRCode from "qrcode";
-import { Copy, KeyRound } from "@/components/icons";
+import { Download, KeyRound } from "@/components/icons";
 import { useLanguage } from "@/components/language-provider";
 import { useSelectedMailbox } from "@/components/mailbox-provider";
 import { Button } from "@/components/ui/button";
@@ -10,10 +10,13 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { confirmDestructive } from "@/components/ui/confirm-dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { buildAppleProfile, APPLE_PROFILE_FILE_NAME } from "@/lib/dav/apple-profile-utils";
 import { ClientRequestError } from "@/lib/http/client-error";
 import { formatUserDate } from "@/lib/time/utils";
 import type { AppPasswordList, AppPasswordSummary, CreatedAppPassword } from "./app-passwords-types";
-import { appPasswordProtocolName, createAppPassword, groupAppPassword, loadAppPasswords, revokeAppPassword } from "./app-passwords-utils";
+import { Field } from "./app-password-field";
+import { DavSyncPanel } from "./dav-sync-panel";
+import { appPasswordProtocolName, copyAnnouncement, createAppPassword, groupAppPassword, loadAppPasswords, revokeAppPassword } from "./app-passwords-utils";
 import { buildSignInQrPayload } from "./sign-in-qr-utils";
 import { useSecurityStatus } from "./security-status-store";
 import { StepUpDialog } from "./step-up-dialog";
@@ -46,9 +49,12 @@ export function AppPasswordsSettings() {
 	const [confirming, setConfirming] = useState(false);
 	const [created, setCreated] = useState<Created | null>(null);
 	const [error, setError] = useState<string | null>(null);
-	const [copied, setCopied] = useState<string | null>(null);
+	const [copied, setCopied] = useState<{ id: string; label: string; count: number } | null>(null);
+	const [copyFailed, setCopyFailed] = useState(false);
 	const [qr, setQr] = useState<string | null>(null);
 	const server = typeof window !== "undefined" ? window.location.origin : "";
+	// What devices should be given: the configured public address, not whatever address this tab happens to use.
+	const davOrigin = list?.dav.origin ?? "";
 
 	const protocols = chosenProtocols ?? list?.availableProtocols ?? [];
 	const mailboxIds = chosenMailboxIds ?? (mailboxes.length <= MAX_KEY_MAILBOXES ? mailboxes.map((mailbox) => mailbox.id) : [selectedMailbox?.id ?? mailboxes[0]?.id].filter((id): id is string => !!id));
@@ -78,7 +84,7 @@ export function AppPasswordsSettings() {
 			const made = await createAppPassword({ name: name.trim() || t("emailClients.defaultName"), protocols, mailboxIds: mailboxScoped ? mailboxIds : [] }, stepUpToken);
 			// The server ignores the username, but mail apps want an email address there.
 			const first = mailboxes.find((mailbox) => mailbox.id === made.mailboxIds[0]);
-			setCreated({ ...made, username: first ? `${first.localPart}@${first.hostname}` : "" });
+			setCreated({ ...made, username: first ? `${first.localPart}@${first.hostname}` : list?.dav.email ?? "" });
 			setName("");
 			setError(null);
 			refresh();
@@ -99,8 +105,35 @@ export function AppPasswordsSettings() {
 		}
 	}
 
-	function copy(label: string, value: string) {
-		void navigator.clipboard.writeText(value).then(() => setCopied(label));
+	function copy(id: string, label: string, value: string) {
+		navigator.clipboard.writeText(value).then(() => { setCopyFailed(false); setCopied((prev) => ({ id, label, count: (prev?.count ?? 0) + 1 })); }, () => { setCopied(null); setCopyFailed(true); });
+	}
+
+	// The "Copied" mark and its announcement last about two seconds.
+	useEffect(() => {
+		if (!copied) return;
+		const timer = setTimeout(() => setCopied(null), 2000);
+		return () => clearTimeout(timer);
+	}, [copied]);
+
+	// Built here from the one-time reveal and never sent anywhere.
+	function downloadProfile() {
+		if (!created || !list) return;
+		const xml = buildAppleProfile({ origin: davOrigin, userId: list.dav.userId, username: list.dav.email, password: created.key, calendar: list.dav.calendarEnabled, uuid: () => crypto.randomUUID() });
+		const url = URL.createObjectURL(new Blob([xml], { type: "application/x-apple-aspen-config" }));
+		const link = document.createElement("a");
+		link.href = url;
+		link.download = APPLE_PROFILE_FILE_NAME;
+		// Some browsers (Firefox, Safari) ignore a click on a link that is not in the page.
+		document.body.appendChild(link);
+		link.click();
+		link.remove();
+		setTimeout(() => URL.revokeObjectURL(url), 60_000);
+	}
+
+	function startDavPassword() {
+		setChosenProtocols(["dav"]);
+		document.getElementById("app-password-name")?.focus();
 	}
 
 	function toggle<T>(current: T[], value: T, on: boolean) {
@@ -125,14 +158,23 @@ export function AppPasswordsSettings() {
 			{created ? (
 				<div className="space-y-3 rounded-2xl bg-neutral-50 p-4">
 					<h2 className="text-sm font-semibold text-neutral-900">{t("appPasswords.createdTitle")}</h2>
-					<Field label={t("emailClients.server")} value={server} onCopy={copy} copied={copied} />
-					<Field label={t("emailClients.username")} value={created.username || t("emailClients.anyValue")} onCopy={copy} copied={copied} />
-					<Field label={t("emailClients.passwordApiKey")} value={groupAppPassword(created.key)} copyValue={created.key} onCopy={copy} copied={copied} mono />
+					<Field id="new-server" label={t("emailClients.server")} value={server} onCopy={copy} copied={copied?.id ?? null} />
+					<Field id="new-username" label={t("emailClients.username")} value={created.username || t("emailClients.anyValue")} onCopy={copy} copied={copied?.id ?? null} />
+					<Field id="new-password" label={t("emailClients.passwordApiKey")} value={groupAppPassword(created.key)} copyValue={created.key} onCopy={copy} copied={copied?.id ?? null} mono />
 					{qr && createdKey && (
 						<div className="flex flex-col items-center gap-2 rounded-xl bg-white p-4">
 							{/* eslint-disable-next-line @next/next/no-img-element */}
 							<img src={qr} alt={t("emailClients.qrAlt")} width={240} height={240} />
 							<p className="text-center text-xs text-neutral-500">{t("emailClients.qrHint")}</p>
+						</div>
+					)}
+					{created.protocols.includes("dav") && davOrigin.startsWith("https:") && (
+						<div className="space-y-1">
+							<Button type="button" variant="outline" onClick={downloadProfile}>
+								<Download className="h-4 w-4" aria-hidden="true" />
+								{t("appPasswords.dav.profileDownload")}
+							</Button>
+							<p className="text-xs text-neutral-500">{t("appPasswords.dav.profileHint")}</p>
 						</div>
 					)}
 					<p className="text-xs text-neutral-500">{t("appPasswords.shownOnce")}</p>
@@ -184,6 +226,11 @@ export function AppPasswordsSettings() {
 				</form>
 			)}
 			{error && <p role="alert" className="text-sm text-red-600">{error}</p>}
+			<p role="status" className={copyFailed ? "text-sm text-red-600" : "sr-only"}>
+				{copyFailed ? t("appPasswords.dav.copyFailed") : copied ? copyAnnouncement(t("appPasswords.dav.copied", { label: copied.label }), copied.count) : ""}
+			</p>
+
+			{list && <DavSyncPanel dav={list.dav} origin={davOrigin} hasPassword={!!created || list.appPasswords.some((item) => item.protocols.includes("dav"))} onCreate={startDavPassword} onCopy={copy} copied={copied?.id ?? null} />}
 
 			<section aria-labelledby="app-passwords-list-title" className="space-y-3">
 				<h2 id="app-passwords-list-title" className="text-sm font-semibold text-neutral-900">{t("appPasswords.listTitle")}</h2>
@@ -228,20 +275,6 @@ export function AppPasswordsSettings() {
 				onOpenChange={setConfirming}
 				onAuthorized={authorized}
 			/>
-		</div>
-	);
-}
-
-function Field({ label, value, copyValue, onCopy, copied, mono }: { label: string; value: string; copyValue?: string; onCopy: (label: string, value: string) => void; copied: string | null; mono?: boolean }) {
-	const { t } = useLanguage();
-	return (
-		<div className="flex items-center gap-3">
-			<span className="w-36 shrink-0 text-xs font-medium uppercase tracking-wide text-neutral-500">{label}</span>
-			<code className={`min-w-0 flex-1 truncate rounded-md bg-white px-2 py-1 text-sm ${mono ? "font-mono" : "font-sans"}`}>{value}</code>
-			<Button type="button" variant="ghost" size="sm" onClick={() => onCopy(label, copyValue ?? value)} aria-label={t("common.copyLabel", { label })}>
-				<Copy className="h-4 w-4" />
-				{copied === label ? t("common.copied") : t("common.copy")}
-			</Button>
 		</div>
 	);
 }
