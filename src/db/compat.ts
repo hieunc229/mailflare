@@ -87,7 +87,7 @@ export function wrapDatabase<T extends object>(db: T, dialect: DatabaseDialect, 
 		get(target, property) {
 			// False for a driver that runs `batch` as separate statements (Neon over HTTP: no transaction to hold open); code that needs
 			// a batch to be all-or-nothing can then add its own re-check. Absent on D1, whose batch is atomic.
-			if (property === "batchIsAtomic") return !!ctx.base.transaction;
+			if (property === "batchIsAtomic") return ctx.base.atomicBatch !== false;
 			if (typeof property === "string" && property in overrides) return overrides[property];
 			const value = Reflect.get(target, property, target);
 			return typeof value === "function" ? value.bind(target) : value;

@@ -20,6 +20,8 @@ export interface SqlExecutor {
 	/** Run `fn` atomically on one connection. Absent for HTTP drivers that cannot hold a transaction open. */
 	transaction?<T>(fn: (tx: SqlExecutor) => Promise<T>): Promise<T>;
 	close?(): Promise<void>;
+	/** `false`: `batch` runs as separate statements (no transaction can be held open), so a batch is not all-or-nothing. Unset means it is. */
+	readonly atomicBatch?: boolean;
 }
 
 export interface OpenOptions {
@@ -74,7 +76,7 @@ export function toObjects(columns: string[], rows: unknown[][]): Record<string, 
 }
 
 /** Lazily open a driver the first time it is needed so unused drivers are never imported. */
-export function lazyExecutor(dialect: DatabaseDialect, open: () => Promise<SqlExecutor>): SqlExecutor {
+export function lazyExecutor(dialect: DatabaseDialect, open: () => Promise<SqlExecutor>, options: { atomicBatch?: boolean } = {}): SqlExecutor {
 	let pending: Promise<SqlExecutor> | undefined;
 	const ready = () => (pending ??= open().catch((error) => {
 		pending = undefined;
@@ -82,6 +84,7 @@ export function lazyExecutor(dialect: DatabaseDialect, open: () => Promise<SqlEx
 	}));
 	return {
 		dialect,
+		...(options.atomicBatch === undefined ? {} : { atomicBatch: options.atomicBatch }),
 		query: async (sql, params, mode) => (await ready()).query(sql, params, mode),
 		transaction: async (fn) => {
 			const inner = await ready();

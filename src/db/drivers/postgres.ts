@@ -176,7 +176,7 @@ export function openNeon({ url }: OpenOptions): SqlExecutor {
 			},
 			// The HTTP protocol has no interactive transaction; batches fall back to sequential statements.
 		};
-	});
+	}, { atomicBatch: false });
 }
 
 // ---- PGlite (in-process Postgres on WASM; Node only) ----
