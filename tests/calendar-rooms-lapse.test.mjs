@@ -54,13 +54,22 @@ test("a lapsed licence: saving the event keeps the accepted room accepted and th
 	assert.deepEqual(statuses(), [["r1", "declined"], ["r2", "accepted"]]);
 });
 
-test("a lapsed licence: asking for the declined room again is refused, and nothing changes", async () => {
+test("a lapsed licence: the editor sends every room the event has, declined ones included, and the save goes through with the declined room still declined", async () => {
 	setup();
 	globalThis.roomLp.team = false;
-	const refused = await patch({ resourceIds: ["r1", "r2"] });
+	const saved = await patch({ title: "Edited in the editor", resourceIds: ["r1", "r2"] });
+	assert.equal(saved.status, 200, "naming rooms the event already has is not a new booking");
+	assert.deepEqual(statuses(), [["r1", "declined"], ["r2", "accepted"]], "the declined room did not flip");
+});
+
+test("a lapsed licence: a room the event does not have is still refused, and dropping the declined room is always possible", async () => {
+	setup();
+	sqlite.exec("INSERT INTO calendar_resources (id, name, created_at, updated_at) VALUES ('r3', 'Room r3', 1, 1)");
+	globalThis.roomLp.team = false;
+	const refused = await patch({ resourceIds: ["r1", "r2", "r3"] });
 	assert.deepEqual([refused.status, (await refused.json()).code], [403, "TEAM_REQUIRED"]);
 	assert.deepEqual(statuses(), [["r1", "declined"], ["r2", "accepted"]]);
-	assert.equal((await patch({ resourceIds: ["r2"] })).status, 200, "dropping the declined room is always possible");
+	assert.equal((await patch({ resourceIds: ["r2"] })).status, 200);
 	assert.deepEqual(statuses(), [["r2", "accepted"]]);
 });
 
