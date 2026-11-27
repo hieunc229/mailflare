@@ -31,3 +31,12 @@ test("one that is not in the journal and comes after the last journalled one sti
 	assert.deepEqual((await applyMigrations({ db }, dir)).at(-1), "0004_hand_written.sql");
 	db.close();
 });
+
+test("files are ordered by their leading number, then by name, as wrangler does", async () => {
+	const numbered = mkdtempSync(join(tmpdir(), "mailflare-migrate-numeric-"));
+	for (const name of ["0010_b.sql", "9_a.sql", "0010_a.sql", "100_z.sql"]) writeFileSync(join(numbered, name), "SELECT 1;");
+	const db = new DatabaseSync(":memory:");
+	assert.deepEqual(await applyMigrations({ db }, numbered), ["9_a.sql", "0010_a.sql", "0010_b.sql", "100_z.sql"]);
+	db.close();
+	rmSync(numbered, { recursive: true, force: true });
+});
