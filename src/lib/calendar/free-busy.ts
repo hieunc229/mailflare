@@ -25,6 +25,9 @@ const DAY = 86_400_000;
 /** A stored zone is data from outside (CalDAV, invitations): one that is empty or not a zone counts as missing, so it cannot make an expansion throw. */
 const validZone = (zone: string | null | undefined): zone is string => !!zone && isValidTimeZone(zone);
 
+/** A row that repeats, or an all-day one, with no usable zone of its own: the calendar view expands it in the viewer's zone (`calendarTimeZone`), which for the owner is `users.time_zone`. */
+const needsOwnerZone = (row: { timeZone: string | null; allDay: boolean; repeat: string }) => !validZone(row.timeZone) && (row.allDay || row.repeat !== "none");
+
 export type BusyInterval = [startMs: number, endMs: number];
 /** Rooms and equipment are CS-7; until they exist `resourceIds` is accepted and ignored. */
 export type FreeBusyTargets = {
@@ -88,10 +91,10 @@ export async function busyIntervals(env: CloudflareEnv, targets: FreeBusyTargets
 			repeatDays: calendarEvents.repeatDays, repeatAnchorDay: calendarEvents.repeatAnchorDay, repeatUntil: calendarEvents.repeatUntil, excludedOccurrences: calendarEvents.excludedOccurrences,
 			recurrenceId: calendarEvents.recurrenceId, transparent: calendarEvents.transparent, responseStatus: calendarEvents.responseStatus, allDay: calendarEvents.allDay,
 		}).from(calendarEvents).where(and(inArray(calendarEvents.userId, ids.slice(index, index + USER_CHUNK)), lt(calendarEvents.startsAt, end), or(gt(calendarEvents.endsAt, start), and(ne(calendarEvents.repeat, "none"), or(isNull(calendarEvents.repeatUntil), sql`${calendarEvents.repeatUntil} + (${calendarEvents.endsAt} - ${calendarEvents.startsAt} + ${DAY / 1000}) > ${Math.floor(from / 1000)}`)))));
-		// An all-day event is stored as the instants of its midnights. A row with no zone of its own is a legacy one, and the calendar view expands
+		// An all-day event is stored as the instants of its midnights. A repeating or all-day row with no zone of its own is a legacy one, and the calendar view expands
 		// those in the viewer's own zone (`calendarTimeZone` in the calendar's utils.ts, the user's setting), which for the owner is `users.time_zone`; so this does too, and the two agree.
 		const ownerZones = new Map<string, string>();
-		if (rows.some((row) => row.allDay && !validZone(row.timeZone))) for (const owner of await db.select({ id: users.id, timeZone: users.timeZone }).from(users).where(inArray(users.id, ids.slice(index, index + USER_CHUNK)))) if (validZone(owner.timeZone)) ownerZones.set(owner.id, owner.timeZone);
+		if (rows.some((row) => needsOwnerZone(row))) for (const owner of await db.select({ id: users.id, timeZone: users.timeZone }).from(users).where(inArray(users.id, ids.slice(index, index + USER_CHUNK)))) if (validZone(owner.timeZone)) ownerZones.set(owner.id, owner.timeZone);
 		for (const row of rows) {
 			if (!isBusyEvent(row)) continue;
 			// The event being edited: all of it, or (with an occurrence named) that occurrence and the moved row that replaced it.
@@ -106,11 +109,11 @@ export async function busyIntervals(env: CloudflareEnv, targets: FreeBusyTargets
 			const limit = Math.min(MAX_OCCURRENCES, share - used);
 			if (limit <= 0) { list.push([from, to]); continue; }
 			// A day of an all-day series ends at the next midnight of its zone, so on a 23- or 25-hour day it is not 24 hours long.
-			const zone = row.allDay ? (validZone(row.timeZone) ? row.timeZone : ownerZones.get(row.userId) ?? "UTC") : null;
+			const zone = row.allDay || needsOwnerZone(row) ? (validZone(row.timeZone) ? row.timeZone : ownerZones.get(row.userId) ?? "UTC") : null;
 			const days = Math.max(1, Math.round(duration / DAY));
-			const lengthAt = (start: number) => zone ? addZonedDays(new Date(start), days, zone).getTime() - start : duration;
+			const lengthAt = (start: number) => zone && row.allDay ? addZonedDays(new Date(start), days, zone).getTime() - start : duration;
 			// Its last day can be a day longer than the row (a 25-hour day against 24), so look back one day further than its length.
-			const lookback = zone ? (days + 1) * DAY : duration;
+			const lookback = zone && row.allDay ? (days + 1) * DAY : duration;
 			const { starts, exhausted } = expandEvent(zone ? { ...row, timeZone: zone } : row, new Date(from - lookback), end, limit);
 			spent.set(row.userId, used + 1 + starts.length);
 			if (exhausted || starts.length >= limit) { list.push([from, to]); continue; }
