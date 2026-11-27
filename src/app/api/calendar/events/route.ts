@@ -19,6 +19,7 @@ import { chunkIds } from "@/lib/calendar/chunks";
 import { authorizeCalendarRequest, calendarKeyCanSendInvitations } from "@/lib/calendar/api-auth";
 import { readJsonObject } from "@/lib/http/request";
 import { isUniqueConstraintError } from "@/lib/database-errors";
+import { listRoomEvents, MAX_SCHEDULE_ROOMS, roomsByEvent } from "@/lib/calendar/room-schedule";
 import { resolveBookableRooms } from "@/lib/calendar/resources";
 import { bookAndSummarize, invitationLocation, roomResponse, type RoomsSummary } from "@/lib/calendar/room-save";
 import { getLicenseEntitlements } from "@/lib/licenses/service";
@@ -38,7 +39,12 @@ export async function GET(request: Request) {
 	const end = new Date(url.searchParams.get("end") ?? start.getTime() + 31 * 86_400_000);
 	const db = getDb(env);
 	const requested = url.searchParams.getAll("calendarIds").flatMap((value) => value.split(",")).map((value) => value.trim()).filter(Boolean);
-	const events = await listVisibleEvents(db, user, { start, end }, requested);
+	const roomIds = url.searchParams.getAll("resourceIds").flatMap((value) => value.split(",")).map((value) => value.trim()).filter(Boolean);
+	if (new Set(roomIds).size > MAX_SCHEDULE_ROOMS) return NextResponse.json({ error: `Ask for at most ${MAX_SCHEDULE_ROOMS} rooms at a time` }, { status: 400 });
+	const visible = await listVisibleEvents(db, user, { start, end }, requested);
+	// An event shows its rooms to whoever can read it in full; a redacted one hides them with the rest.
+	const booked = await roomsByEvent(db, visible.filter((event) => !event.redacted).map((event) => event.id));
+	const events = visible.map((event) => booked.has(event.id) ? { ...event, rooms: booked.get(event.id) } : event);
 	// Additive occurrence data for the expanders: moved/extra occurrences and per-occurrence guest replies.
 	const overrides: Record<string, Array<{ occurrenceMs: number; startsAt: Date; endsAt: Date }>> = {};
 	const occurrenceResponses: Record<string, Array<{ occurrenceMs: number; guest: string; status: string }>> = {};
@@ -57,7 +63,7 @@ export async function GET(request: Request) {
 		for (const row of overrideRows) (overrides[row.eventId] ??= []).push({ occurrenceMs: row.occurrenceMs, startsAt: row.startsAt, endsAt: row.endsAt });
 		for (const row of responseRows) (occurrenceResponses[row.eventId] ??= []).push({ occurrenceMs: row.occurrenceMs, guest: row.guest, status: row.status });
 	}
-	return NextResponse.json({ events, overrides, occurrenceResponses });
+	return NextResponse.json(roomIds.length ? { events, overrides, occurrenceResponses, roomEvents: await listRoomEvents(db, user, roomIds, { start, end }) } : { events, overrides, occurrenceResponses });
 }
 
 export async function POST(request: Request) {
