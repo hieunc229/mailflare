@@ -140,3 +140,10 @@ test("the editor wires the picker, the room rows and the sidebar", () => {
 	assert.match(page, /&resourceIds=\$\{encodeURIComponent\(shownRoomsKey\)\}/);
 	assert.match(read("src/app/(calendar)/upcoming-sidebar.tsx"), /<RoomList \/>/);
 });
+
+test("an unconfirmed room has its own message, distinct from a declined one", () => {
+	const page = readFileSync(new URL("../src/app/(calendar)/calendar/page.tsx", import.meta.url), "utf8");
+	assert.match(page, /room\.status === "unconfirmed" \? t\("calendar\.rooms\.unconfirmedToast"/);
+	assert.match(en["calendar.rooms.unconfirmedToast"], /save it again/);
+	assert.doesNotMatch(en["calendar.rooms.unconfirmedToast"], /declined|not free/i);
+});

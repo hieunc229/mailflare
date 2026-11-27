@@ -195,15 +195,21 @@ test("a competing booking written between this one's read and its write makes th
 	assert.equal(statusOf(b), "declined");
 });
 
-test("when every attempt loses the race the room is not given: the booking is declined, never accepted unchecked", async () => {
+test("when every attempt loses the race the room is not given: the answer says it could not be confirmed, and what is stored is declined, never accepted unchecked", async () => {
 	const db = setup();
 	const a = event("u1", at(0, 9), at(0, 10));
 	let attempts = 0;
 	beforeBatch = (database) => { attempts += 1; database.exec(`UPDATE calendar_resources SET booking_token = 'moved-${attempts}' WHERE id = 'r1'`); };
-	const result = await book(db, a, ["r1"]);
+	const waits = [];
+	const realSetTimeout = globalThis.setTimeout;
+	globalThis.setTimeout = (fn, delay) => { waits.push(delay); return realSetTimeout(fn, 0); };
+	let result;
+	try { result = await book(db, a, ["r1"]); } finally { globalThis.setTimeout = realSetTimeout; }
 	assert.equal(attempts, MAX_ROOM_ATTEMPTS);
-	assert.equal(result.rooms[0].status, "declined");
+	assert.equal(result.rooms[0].status, "unconfirmed", "not 'declined': nothing clashed, the room was just busy being booked");
 	assert.equal(statusOf(a), "declined");
+	assert.equal(waits.length, MAX_ROOM_ATTEMPTS, "each lost race waits before the next try");
+	assert.ok(waits.every((delay, index) => delay >= 0 && delay <= 20 * (index + 1)), `waits grow and stay bounded: ${waits}`);
 });
 
 test("every statement binds at most 100 parameters, with five rooms and a long series", async () => {

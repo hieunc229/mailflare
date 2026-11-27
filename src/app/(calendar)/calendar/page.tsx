@@ -283,9 +283,12 @@ export default function CalendarPage() {
   type SavedRooms = { rooms?: { resourceId: string; name: string; status: string }[]; resourceConflicts?: { resourceId: string; occurrences: string[] }[] };
   // A declined room is not an error: the event is saved. Say which room and the first date it clashed.
   function announceDeclinedRooms(saved: SavedRooms | null) {
-    for (const room of (saved?.rooms ?? []).filter((item) => item.status === "declined")) {
+    for (const room of (saved?.rooms ?? []).filter((item) => item.status === "declined" || item.status === "unconfirmed")) {
       const first = saved?.resourceConflicts?.find((item) => item.resourceId === room.resourceId)?.occurrences[0];
-      toast(first ? t("calendar.rooms.declinedToast", { room: room.name, date: formatUserDate(new Date(first), { dateStyle: "medium" }) }) : t("calendar.rooms.declinedToastNoDate", { room: room.name }), { duration: 10_000 });
+      // "Declined" says the room clashed; "unconfirmed" says nothing clashed but the room could not be won or checked, so saving again may work.
+      const message = room.status === "unconfirmed" ? t("calendar.rooms.unconfirmedToast", { room: room.name })
+        : first ? t("calendar.rooms.declinedToast", { room: room.name, date: formatUserDate(new Date(first), { dateStyle: "medium" }) }) : t("calendar.rooms.declinedToastNoDate", { room: room.name });
+      toast(message, { duration: 10_000 });
     }
   }
 
