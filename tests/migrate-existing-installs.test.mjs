@@ -37,21 +37,32 @@ test("a database migrated in the old order runs only a newly added file", async 
 	db.close();
 });
 
-test("the repository's own migrations: an install made in the old order re-runs nothing, and a fresh one applies them all", async () => {
+/** Main's last migration when the runner changed. Later files are new to an install made then, whatever order the old runner would have put them in. */
+const LAST_APPLIED_BEFORE = 102;
+const numberOf = (name) => Number(/^(\d+)/.exec(name)[1]);
+
+test("the repository's own migrations: an install made in the old order up to main's last file re-runs nothing and gets only the later files", async () => {
 	const real = join(process.cwd(), "drizzle", "migrations");
 	const old = new DatabaseSync(":memory:");
-	await applyMigrationsInOldOrder(old, real);
+	await applyMigrationsInOldOrder(old, real, (name) => numberOf(name) <= LAST_APPLIED_BEFORE);
+	const later = readdirSync(real).filter((name) => name.endsWith(".sql") && numberOf(name) > LAST_APPLIED_BEFORE).sort();
+	assert.deepEqual(await applyMigrations({ db: old }, real), later, "only the files added since, in name order, and none of the earlier ones twice");
 	assert.deepEqual(await applyMigrations({ db: old }, real), []);
+	old.close();
+});
+
+test("a fresh install applies every migration in file-name order", async () => {
+	const real = join(process.cwd(), "drizzle", "migrations");
 	const fresh = new DatabaseSync(":memory:");
 	const ran = await applyMigrations({ db: fresh }, real);
 	assert.equal(ran.length, readdirSync(real).filter((name) => name.endsWith(".sql")).length);
 	assert.deepEqual(ran, [...ran].sort());
-	old.close(); fresh.close();
+	fresh.close();
 });
 
-async function applyMigrationsInOldOrder(db, migrationsDir) {
+async function applyMigrationsInOldOrder(db, migrationsDir, include) {
 	db.exec("CREATE TABLE d1_migrations (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT UNIQUE, applied_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP)");
-	for (const name of oldOrder(migrationsDir)) {
+	for (const name of oldOrder(migrationsDir).filter(include)) {
 		const statements = readFileSync(join(migrationsDir, name), "utf8").split(/-->\s*statement-breakpoint/g).map((statement) => statement.replace(/^\s*--.*$/gm, "").trim()).filter(Boolean);
 		for (const statement of statements) db.exec(statement);
 		db.prepare("INSERT INTO d1_migrations (name) VALUES (?)").run(name);
