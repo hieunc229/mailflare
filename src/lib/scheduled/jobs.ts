@@ -4,6 +4,7 @@ import { purgeExpiredAuthRows } from "@/lib/auth/purge";
 import { runScheduledDatabaseBackup } from "@/lib/backups/runner";
 import { runCalendarReminders } from "@/lib/calendar/reminders";
 import { runDavChangeRetention } from "@/lib/dav/changes";
+import { runContactSeeding } from "@/lib/dav/contact-seed";
 import { runDeliverabilityDaily } from "@/lib/deliverability/daily";
 import { runDriveTrashRetention } from "@/lib/drive/retention";
 import { sweepOrphanedRawMail } from "@/lib/email/raw-sweeper";
@@ -35,6 +36,8 @@ export function frequentJobs(env: CloudflareEnv, now: Date): ScheduledJob[] {
 		{ name: "Undo claim prune", run: () => pruneExpiredMessageActionUndoClaims(env, now) },
 		// Takes a small slice per run (one collection, 90 rows), so it runs on every tick.
 		{ name: "DAV change retention", run: () => runDavChangeRetention(env, now) },
+		// Seeds the address book from existing contacts in slices (one step of 24 contacts per run, only while the switch is on); the budget assumes one run per five minutes.
+		{ name: "DAV contact seeding", run: () => runContactSeeding(env), everyFiveMinutes: true },
 	];
 }
 

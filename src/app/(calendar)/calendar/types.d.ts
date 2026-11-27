@@ -18,6 +18,8 @@ export type CalendarEvent = {
   /** Weekday (0-6) and week (1-5, -1 = last) of an nth-weekday monthly repeat. */
   repeatWeekday?: number | null;
   repeatWeek?: number | null;
+  /** RFC 5545 rule of a custom repeat (set in another app); present exactly when `repeat` is "custom". */
+  rrule?: string | null;
   excludedOccurrences: string;
   reminderMinutes?: number | null;
   timeZone?: string | null;

@@ -1,6 +1,7 @@
 import { sql } from "drizzle-orm";
 import { getDb } from "@/db";
 import { calendarEvents } from "@/db/schema";
+import { OFF_CALENDAR_RESPONSES } from "@/lib/calendar/response-status";
 import { newId } from "@/lib/ids";
 import type { BookingEventRecord } from "./types";
 
@@ -21,6 +22,8 @@ export async function createBookedCalendarEvents(env: CloudflareEnv, event: Book
 	const nowSeconds = Math.floor(Date.now() / 1000);
 	const requested = sql.join(hostIds.map((id) => sql`select ${id} as host_id, ${newId("evt")} as event_id`), sql` union all `);
 	const hostList = sql.join(hostIds.map((id) => sql`${id}`), sql`, `);
+	// The same events availableBookingSlots ignores: declined, cancelled and not-yet-answered ones are not on the calendar.
+	const offCalendar = sql.join(OFF_CALENDAR_RESPONSES.map((status) => sql`${status}`), sql`, `);
 	const columns = sql.join(COLUMNS.map((name) => sql.identifier(name)), sql`, `);
 	const description = [`Booked by ${guestName} (${guestEmail})`, notes].filter(Boolean).join("\n\n");
 	const result = await getDb(env).run(sql`insert into ${calendarEvents} (${columns})
@@ -28,7 +31,7 @@ export async function createBookedCalendarEvents(env: CloudflareEnv, event: Book
 			${JSON.stringify([guestEmail, ...guestEmails])}, ${event.color}, 'none', '[]', '[]', ${event.timeZone}, ${startSeconds}, ${endSeconds}, ${nowSeconds}, ${nowSeconds}
 		from (${requested}) requested_hosts
 		where (select count(*) from ${calendarEvents} busy where busy.${sql.identifier("user_id")} in (${hostList}) and busy.${sql.identifier("repeat")} = 'none'
-			and (busy.${sql.identifier("response_status")} is null or busy.${sql.identifier("response_status")} <> 'needs-action')
+			and (busy.${sql.identifier("response_status")} is null or busy.${sql.identifier("response_status")} not in (${offCalendar}))
 			and busy.${sql.identifier("starts_at")} < ${endSeconds} and busy.${sql.identifier("ends_at")} > ${startSeconds}) = 0`);
 	return (result as unknown as { meta: { changes: number } }).meta.changes === hostIds.length;
 }

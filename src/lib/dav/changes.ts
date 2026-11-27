@@ -1,4 +1,4 @@
-import { and, asc, eq, gt, inArray, sql } from "drizzle-orm";
+import { and, asc, eq, gt, inArray, sql, type AnyColumn } from "drizzle-orm";
 import { getDb } from "@/db";
 import { davChanges, davSyncState } from "@/db/schema";
 import { excluded, greatest } from "@/db/sql";
@@ -6,7 +6,7 @@ import { isMissingTableError } from "@/lib/database-errors";
 
 /**
  * Reading side of the CalDAV/CardDAV change log. The log itself is written only by
- * the `dav_changes_*` triggers (migration 0102 and its PostgreSQL/MySQL twins), so
+ * the `dav_changes_*` triggers (migration 0098 and its PostgreSQL/MySQL twins), so
  * every writer of `calendar_events` and `dav_cards` is covered; never insert here.
  */
 
@@ -72,7 +72,8 @@ export async function currentSeq(env: Pick<CloudflareEnv, "DB">, collectionId: s
 	return newestSeq(env, collectionId, floor);
 }
 
-export type DavChange = { objectKey: string; type: "created" | "updated" | "destroyed" };
+/** `name` is what a destroyed resource was served under (null for a native event, whose name is derived from its id). */
+export type DavChange = { objectKey: string; type: "created" | "updated" | "destroyed"; name: string | null };
 export type DavChanges = { changes: DavChange[]; hasMore: boolean; seq: number };
 
 /**
@@ -88,7 +89,7 @@ export async function changesSince(env: Pick<CloudflareEnv, "DB">, collectionId:
 	const state = await ensureSyncState(env, collectionId);
 	if (parsed.epoch !== state.epoch || parsed.seq < state.floor) return "invalid";
 	const rows = await getDb(env)
-		.select({ seq: davChanges.seq, objectKey: davChanges.objectKey, type: davChanges.changeType })
+		.select({ seq: davChanges.seq, objectKey: davChanges.objectKey, type: davChanges.changeType, name: davChanges.resourceName })
 		.from(davChanges)
 		.where(and(eq(davChanges.collectionId, collectionId), gt(davChanges.seq, parsed.seq)))
 		.orderBy(asc(davChanges.seq))
@@ -96,10 +97,10 @@ export async function changesSince(env: Pick<CloudflareEnv, "DB">, collectionId:
 	if (!rows.length && parsed.seq > (await newestSeq(env, collectionId, state.floor))) return "invalid";
 	const hasMore = rows.length > MAX_SYNC_CHANGES;
 	const page = hasMore ? rows.slice(0, MAX_SYNC_CHANGES) : rows;
-	const latest = new Map<string, DavChange["type"]>();
-	for (const row of page) latest.set(row.objectKey, row.type);
+	const latest = new Map<string, DavChange>();
+	for (const row of page) latest.set(row.objectKey, { objectKey: row.objectKey, type: row.type, name: row.name ?? null });
 	return {
-		changes: [...latest].map(([objectKey, type]) => ({ objectKey, type })),
+		changes: [...latest.values()],
 		hasMore,
 		seq: page.length ? page[page.length - 1].seq : parsed.seq,
 	};
@@ -120,6 +121,13 @@ export async function etagSeqs(env: Pick<CloudflareEnv, "DB">, collectionId: str
 	return result;
 }
 
+/** `"<seq>"`; a row the change log has no entry for (it should have one) falls back to its update time. */
+export const etagFromSeq = (seq: number | null | undefined, updatedAt: Date) => `"${seq ?? `t${Math.floor(updatedAt.getTime() / 1000)}`}"`;
+
+/** The newest change seq of the object with this key, as a column: lets a listing carry ETags without a second query. */
+export const newestSeqOf = (collectionId: string, key: AnyColumn) =>
+	sql<number | null>`(select max(${davChanges.seq}) from ${davChanges} where ${davChanges.collectionId} = ${collectionId} and ${davChanges.objectKey} = ${key})`;
+
 /**
  * Prune, run by the 5-minute cron. Removes rows older than 30 days except the newest row of each object
  * that still exists (ETags derive from it), raises the collection's floor to its highest pruned seq before
@@ -131,7 +139,7 @@ export async function runDavChangeRetention(env: Pick<CloudflareEnv, "DB">, now:
 	try {
 		return await pruneDavChanges(env, now);
 	} catch (error) {
-		// Migration 0102 is applied later from Admin settings on some installations; nothing to prune before it.
+		// Migration 0098 is applied later from Admin settings on some installations; nothing to prune before it.
 		if (isMissingTableError(error)) return 0;
 		throw error;
 	}

@@ -2,7 +2,8 @@ import type { CalendarRepeat } from "./types";
 
 export const DEFAULT_REPEAT_DAYS = [1, 2, 3, 4, 5];
 
-export function normalizeCalendarRepeat(value: string | undefined): CalendarRepeat {
+/** Never "custom": only an existing rule can be kept, see `resolveRepeat`. */
+export function normalizeCalendarRepeat(value: string | undefined): Exclude<CalendarRepeat, "custom"> {
   return value === "daily" || value === "weekly" || value === "monthly" || value === "weekdays" || value === "yearly" ? value : "none";
 }
 

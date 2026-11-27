@@ -25,6 +25,11 @@ rate limits are shared by all users. Leave it unset when the container is
 exposed directly. Passkeys also bind to this
 origin, so they need `APP_URL` (or a direct HTTPS connection) to work.
 
+Calendar and contacts sync (CalDAV and CardDAV) needs this proxy too: Mailflare
+refuses app passwords over plain HTTP, so set `TRUST_PROXY` so the proxy's
+`X-Forwarded-Proto: https` is believed, and let `PROPFIND`, `PROPPATCH`,
+`REPORT` and `OPTIONS` through. See [Calendar and contacts sync](caldav-carddav.md).
+
 ### Prebuilt image (no build)
 
 Every push to `main` publishes a multi-arch (`linux/amd64`, `linux/arm64`)

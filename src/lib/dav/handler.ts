@@ -3,45 +3,41 @@ import { getDb } from "@/db";
 import { domains, mailboxes } from "@/db/schema";
 import { authenticateAppPasswordRequest } from "@/lib/auth/app-passwords";
 import { getSecurityHeaders } from "@/lib/security/headers";
-import { MAX_XML_BODY, readBodyText } from "./body";
+import { loadCalendarByNames } from "./calendar-store";
+import { deleteCalendarResource, putCalendarResource } from "./calendar-write";
+import { deleteCard, putCard } from "./card-write";
+import { loadCardBodies, loadCardMetaByNames } from "./card-store";
+import { calendarMember, cardMember, collectionIdFor, collectionProperties, collectionPath, memberResponse, propfindCollection, type Area, type DavContext } from "./collections";
+import { BASE_HEADERS, collection, el, etagListed, etagMatches, href, NS, precondition, readXmlBody, selectProps, text, wantedProps, XML_HEADERS, type Property } from "./common";
+import { etagSeqs } from "./changes";
+import { ensureSeeded } from "./contact-seed";
+import { handleReport } from "./reports";
 import { isDavEnabled } from "./settings";
-import { DavXmlError, parseDavXml, type DavElement } from "./xml";
-import { escapeXml, multistatus, type DavPropstat, type DavResponse } from "./xml-writer";
-
-const NS = {
-	dav: "DAV:",
-	caldav: "urn:ietf:params:xml:ns:caldav",
-	carddav: "urn:ietf:params:xml:ns:carddav",
-	cs: "http://calendarserver.org/ns/",
-};
-const PREFIX: Record<string, string> = { [NS.dav]: "D", [NS.caldav]: "C", [NS.carddav]: "CR", [NS.cs]: "CS" };
+import type { DavElement } from "./xml";
+import { escapeXml, multistatus } from "./xml-writer";
 
 const DAV_CLASSES = "1, 3, calendar-access, addressbook";
-const ALLOW = "OPTIONS, PROPFIND";
-const BASE_HEADERS = { "Cache-Control": "no-store" };
-const XML_HEADERS = { ...BASE_HEADERS, "Content-Type": "application/xml; charset=utf-8" };
+const ALLOW = "OPTIONS, PROPFIND, REPORT, GET, HEAD, PUT, DELETE";
 const MAX_ADDRESSES = 50;
+const MEMBER_NAME = /^[A-Za-z0-9._~@+=-]{1,200}$/;
 
 /** `/dav`, `/dav/*` and the two well-known discovery paths. */
 export function isDavPath(pathname: string): boolean {
 	return pathname === "/dav" || pathname.startsWith("/dav/") || pathname === "/.well-known/caldav" || pathname === "/.well-known/carddav";
 }
 
-function text(status: number, message: string, headers: Record<string, string> = {}) {
-	return new Response(message, { status, headers: { ...BASE_HEADERS, "Content-Type": "text/plain; charset=utf-8", ...headers } });
-}
-
-/** A DAV precondition error body (RFC 4918 section 16). */
-function precondition(status: number, element: string) {
-	return new Response(`<?xml version="1.0" encoding="utf-8"?>\n<D:error xmlns:D="DAV:"><D:${element}/></D:error>`, { status, headers: XML_HEADERS });
-}
+type Target =
+	| { kind: "root" | "principal" | "home"; area?: Area }
+	| { kind: "collection"; area: Area }
+	| { kind: "resource"; area: Area; name: string }
+	| { kind: "bad-name" };
 
 /**
- * Where a request path points: the root, a principal, or a home set. Anything
- * else (including other users' ids, which must look the same as ids that do
- * not exist) is null.
+ * Where a request path points: the root, a principal, a home set, the one
+ * collection in it or a resource of that collection. Anything else (including
+ * other users' ids, which must look the same as ids that do not exist) is null.
  */
-function locate(pathname: string, userId: string): { kind: "root" | "principal" | "calendars" | "addressbooks" } | null {
+function locate(pathname: string, userId: string): Target | null {
 	let segments: string[];
 	try {
 		segments = pathname.split("/").filter(Boolean).map(decodeURIComponent);
@@ -50,17 +46,19 @@ function locate(pathname: string, userId: string): { kind: "root" | "principal" 
 	}
 	if (segments[0] !== "dav") return null;
 	if (segments.length === 1) return { kind: "root" };
-	const [, area, id] = segments;
-	if (segments.length !== 3 || id !== userId) return null;
-	return area === "principals" || area === "calendars" || area === "addressbooks" ? { kind: area === "principals" ? "principal" : area } : null;
+	const [, area, id, name, member] = segments;
+	if (segments.length < 3 || segments.length > 5 || id !== userId) return null;
+	if (area === "principals") return segments.length === 3 ? { kind: "principal" } : null;
+	if (area !== "calendars" && area !== "addressbooks") return null;
+	if (segments.length === 3) return { kind: "home", area };
+	if (name !== "default") return null;
+	if (segments.length === 4) return { kind: "collection", area };
+	const extension = area === "calendars" ? ".ics" : ".vcf";
+	if (!member.endsWith(extension)) return { kind: "bad-name" };
+	return MEMBER_NAME.test(member) ? { kind: "resource", area, name: member } : { kind: "bad-name" };
 }
 
-type Property = { ns: string; name: string; value: () => string };
 type DavUser = { id: string; email: string; name: string };
-
-const el = (ns: string, name: string, inner = "") => (inner ? `<${PREFIX[ns]}:${name}>${inner}</${PREFIX[ns]}:${name}>` : `<${PREFIX[ns]}:${name}/>`);
-const href = (path: string) => `<D:href>${escapeXml(path)}</D:href>`;
-const collection = (...extra: string[]) => el(NS.dav, "resourcetype", `<D:collection/>${extra.join("")}`);
 
 async function userAddresses(env: CloudflareEnv, user: DavUser): Promise<string[]> {
 	const owned = await getDb(env)
@@ -72,7 +70,7 @@ async function userAddresses(env: CloudflareEnv, user: DavUser): Promise<string[
 	return [...new Set([user.email, ...owned.map((row) => `${row.localPart}@${row.hostname}`)].map((address) => address.toLowerCase()))];
 }
 
-function properties(kind: "root" | "principal" | "calendars" | "addressbooks", user: DavUser, addresses: string[]): { href: string; props: Property[] } {
+function properties(kind: "root" | "principal" | "home", area: Area | undefined, user: DavUser, addresses: string[]): { href: string; props: Property[] } {
 	const principal = `/dav/principals/${user.id}/`;
 	const currentUser: Property = { ns: NS.dav, name: "current-user-principal", value: () => el(NS.dav, "current-user-principal", href(principal)) };
 	if (kind === "root") return { href: "/dav/", props: [{ ns: NS.dav, name: "resourcetype", value: () => collection() }, currentUser] };
@@ -91,51 +89,20 @@ function properties(kind: "root" | "principal" | "calendars" | "addressbooks", u
 		};
 	}
 	return {
-		href: `/dav/${kind}/${user.id}/`,
+		href: `/dav/${area}/${user.id}/`,
 		props: [
 			{ ns: NS.dav, name: "resourcetype", value: () => collection() },
-			{ ns: NS.dav, name: "displayname", value: () => el(NS.dav, "displayname", kind === "calendars" ? "Calendars" : "Contacts") },
+			{ ns: NS.dav, name: "displayname", value: () => el(NS.dav, "displayname", area === "calendars" ? "Calendars" : "Contacts") },
 			{ ns: NS.dav, name: "owner", value: () => el(NS.dav, "owner", href(principal)) },
 			currentUser,
 		],
 	};
 }
 
-/** A requested property the server does not have, written in its own namespace. */
-const unknownProperty = (ns: string, name: string) => `<${name} xmlns="${escapeXml(ns)}"/>`;
-
-function propfindResponse(request: DavElement | null, resource: { href: string; props: Property[] }): DavResponse {
-	const wanted = request?.children.find((child) => child.ns === NS.dav);
-	const mode = wanted?.name ?? "allprop";
-	if (mode === "propname") return { href: resource.href, propstats: [{ status: 200, props: resource.props.map((prop) => el(prop.ns, prop.name)) }] };
-	if (mode === "allprop") return { href: resource.href, propstats: [{ status: 200, props: resource.props.map((prop) => prop.value()) }] };
-	const found: string[] = [];
-	const missing: string[] = [];
-	for (const requested of wanted!.children) {
-		const prop = resource.props.find((candidate) => candidate.ns === requested.ns && candidate.name === requested.name);
-		if (prop) found.push(prop.value());
-		else missing.push(unknownProperty(requested.ns, requested.name));
-	}
-	const propstats: DavPropstat[] = [];
-	if (found.length || !missing.length) propstats.push({ status: 200, props: found });
-	if (missing.length) propstats.push({ status: 404, props: missing });
-	return { href: resource.href, propstats };
-}
-
-/** The PROPFIND body as a tree: null for an empty body (allprop), a DavXmlError response otherwise. */
+/** The PROPFIND body as a tree: null for an empty body (allprop), a response for a bad one. */
 async function readPropfindBody(request: Request): Promise<DavElement | null | Response> {
-	const body = await readBodyText(request, MAX_XML_BODY);
-	if (body === null) return text(413, "Request body too large");
-	if (!body.trim()) return null;
-	const contentType = request.headers.get("content-type");
-	if (contentType && !/^(application|text)\/xml(\s*;|$)/i.test(contentType.trim())) return text(415, "Unsupported media type");
-	let root: DavElement;
-	try {
-		root = parseDavXml(body);
-	} catch (error) {
-		if (error instanceof DavXmlError) return text(400, "Invalid XML");
-		throw error;
-	}
+	const root = await readXmlBody(request);
+	if (root === null || root instanceof Response) return root;
 	const choice = root.children.filter((child) => child.ns === NS.dav);
 	if (root.ns !== NS.dav || root.name !== "propfind" || choice.length !== 1 || !["prop", "allprop", "propname"].includes(choice[0].name)) return text(400, "Not a PROPFIND request");
 	return root;
@@ -150,6 +117,43 @@ async function withinKeyBudget(env: CloudflareEnv, keyId: string): Promise<boole
 		console.warn("DAV rate limiter unavailable", error);
 		return true;
 	}
+}
+
+/** Spend one write from the user's budget (120 per minute on their own limiter, apart from the request limiter), so a client looping on PUT cannot fill the change log. */
+async function withinWriteBudget(env: CloudflareEnv, userId: string): Promise<boolean> {
+	if (!env.DAV_WRITE_RATE_LIMIT) return true;
+	try {
+		return (await env.DAV_WRITE_RATE_LIMIT.limit({ key: `dav-write:${userId}` })).success;
+	} catch (error) {
+		console.warn("DAV write limiter unavailable", error);
+		return true;
+	}
+}
+
+/** GET and HEAD of one resource: the stored body or its generated text, with its ETag. */
+async function getResource(area: Area, ctx: DavContext, name: string, request: Request): Promise<Response> {
+	const cid = collectionIdFor(area, ctx.userId);
+	let body: string;
+	let member;
+	if (area === "calendars") {
+		const [resource] = await loadCalendarByNames(ctx.env, ctx.userId, [name]);
+		if (!resource) return text(404, "Not found");
+		member = calendarMember(resource, await etagSeqs(ctx.env, cid, [resource.id]), ctx.timeZone);
+		body = member.body!();
+	} else {
+		const [meta] = await loadCardMetaByNames(ctx.env, ctx.userId, [name]);
+		const [card] = meta ? await loadCardBodies(ctx.env, ctx.userId, [meta]) : [];
+		if (!card) return text(404, "Not found");
+		member = cardMember(card, await etagSeqs(ctx.env, cid, [card.id]));
+		body = card.body;
+	}
+	const headers = { ...BASE_HEADERS, ETag: member.etag, "Last-Modified": member.lastModified.toUTCString() };
+	const ifMatch = request.headers.get("If-Match");
+	if (ifMatch && !etagMatches(ifMatch, member.etag)) return text(412, "Precondition failed", headers);
+	const ifNoneMatch = request.headers.get("If-None-Match");
+	if (ifNoneMatch && etagListed(ifNoneMatch, member.etag)) return new Response(null, { status: 304, headers });
+	const size = String(new TextEncoder().encode(body).byteLength);
+	return new Response(request.method === "HEAD" ? null : body, { status: 200, headers: { ...headers, "Content-Type": member.contentType, "Content-Length": size } });
 }
 
 /**
@@ -190,7 +194,35 @@ async function route(request: Request, env: CloudflareEnv): Promise<Response | n
 	if (request.method === "MKCALENDAR" || request.method === "MKCOL") return text(403, "Collections cannot be created");
 	const target = locate(pathname, auth.userId);
 	if (!target) return text(404, "Not found");
-	if (target.kind === "calendars" && !auth.user.calendarEnabled) return text(403, "Calendar is turned off for this account");
+	if ("area" in target && target.area === "calendars" && !auth.user.calendarEnabled) return text(403, "Calendar is turned off for this account");
+	if (target.kind === "bad-name") return text(400, "Invalid resource name");
+
+	const user: DavUser = { id: auth.userId, email: auth.user.email, name: auth.user.name };
+	const ctx: DavContext = { env, userId: auth.userId, email: auth.user.email, name: auth.user.name, timeZone: auth.user.timeZone ?? null, origin: url.origin };
+
+	// A read of the address book brings the user's manual contacts along as cards (spec 8.4): one bounded step, the cron continues. A PUT or DELETE seeds nothing.
+	if ("area" in target && target.area === "addressbooks" && ["PROPFIND", "REPORT", "GET"].includes(request.method)) await ensureSeeded(env, auth.userId);
+
+	if ((request.method === "GET" || request.method === "HEAD") && target.kind === "resource") return getResource(target.area, ctx, target.name, request);
+
+	if (request.method === "REPORT" && target.kind === "collection") {
+		const depth = request.headers.get("Depth")?.trim().toLowerCase();
+		if (depth === "infinity") return precondition(403, "propfind-finite-depth");
+		if (depth !== undefined && depth !== "0" && depth !== "1") return text(400, "Invalid Depth header");
+		const root = await readXmlBody(request);
+		if (root instanceof Response) return root;
+		if (!root) return text(400, "A REPORT needs a request body");
+		return handleReport(target.area, ctx, root);
+	}
+
+	if (request.method === "PUT" || request.method === "DELETE") {
+		if (target.kind === "collection" && request.method === "DELETE") return text(403, "A collection cannot be deleted");
+		if (target.kind !== "resource") return text(405, "Method not allowed", { Allow: ALLOW });
+		if (!(await withinWriteBudget(env, auth.userId))) return text(503, "Too many requests", { "Retry-After": "30" });
+		const put = request.method === "PUT";
+		if (target.area === "addressbooks") return put ? putCard(ctx, target.name, request) : deleteCard(ctx, target.name, request);
+		return put ? putCalendarResource(ctx, target.name, request, () => userAddresses(env, user)) : deleteCalendarResource(ctx, target.name, request);
+	}
 
 	if (request.method !== "PROPFIND") return text(405, "Method not allowed", { Allow: ALLOW });
 
@@ -199,9 +231,31 @@ async function route(request: Request, env: CloudflareEnv): Promise<Response | n
 	if (depth !== "0" && depth !== "1") return text(400, "Invalid Depth header");
 	const parsed = await readPropfindBody(request);
 	if (parsed instanceof Response) return parsed;
+	const wanted = parsed ? wantedProps(parsed) : undefined;
 
-	const user: DavUser = { id: auth.userId, email: auth.user.email, name: auth.user.name };
+	if (target.kind === "collection") {
+		return propfindCollection(target.area, ctx, wanted, depth);
+	}
+	if (target.kind === "resource") return propfindResource(ctx, target, wanted);
+
 	const addresses = target.kind === "principal" ? await userAddresses(env, user) : [];
-	// No collections exist below the home sets yet, so depth 1 has nothing more to list.
-	return new Response(multistatus([propfindResponse(parsed, properties(target.kind, user, addresses))]), { status: 207, headers: XML_HEADERS });
+	const responses = [await selectProps(wanted, properties(target.kind, target.area, user, addresses))];
+	// The home set's one child is the collection itself.
+	if (target.kind === "home" && depth === "1") responses.push(await selectProps(wanted, { href: collectionPath(target.area!, ctx.userId), props: collectionProperties(target.area!, ctx) }));
+	return new Response(multistatus(responses), { status: 207, headers: XML_HEADERS });
+}
+
+/** PROPFIND on one resource (Depth 0 or 1 alike: it has no children). */
+async function propfindResource(ctx: DavContext, target: { area: Area; name: string }, wanted: DavElement | undefined): Promise<Response> {
+	const cid = collectionIdFor(target.area, ctx.userId);
+	let member;
+	if (target.area === "calendars") {
+		const [resource] = await loadCalendarByNames(ctx.env, ctx.userId, [target.name]);
+		member = resource && calendarMember(resource, await etagSeqs(ctx.env, cid, [resource.id]), ctx.timeZone);
+	} else {
+		const [meta] = await loadCardMetaByNames(ctx.env, ctx.userId, [target.name]);
+		member = meta && cardMember(meta, await etagSeqs(ctx.env, cid, [meta.id]));
+	}
+	if (!member) return text(404, "Not found");
+	return new Response(multistatus([await memberResponse(target.area, ctx, member, wanted)]), { status: 207, headers: XML_HEADERS });
 }

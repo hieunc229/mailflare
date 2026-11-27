@@ -32,6 +32,7 @@ A self-hosted alternative to Google Workspace. Setup **custom domain Emails**, *
 - **Email**: Custom domain mailboxes, personal or shared, with access you control. Send and receive with Cloudflare Email, Resend or Amazon SES.
 - **Routing rules**: Store, forward, reject or sort incoming mail, including a one-rule filter for newsletters and promotions.
 - **Calendar**: Repeating events with time zones. Attendees get email invitations.
+- **Calendar and contacts sync**: Two-way CalDAV and CardDAV with iPhone, Mac, Android (DAVx5) and Thunderbird, behind an admin switch. See [Calendar and contacts sync](docs/caldav-carddav.md).
 - **Booking**: Share a public link so anyone can book a free time on your calendar.
 - **Drive**: Store and share files.
 - **AI agents**: Search mail, draft replies and manage events. Connect other AI tools over MCP.
@@ -135,6 +136,7 @@ A schema change needs a migration for each database type. See [Databases](docs/d
 - [Databases](docs/databases.md)
 - [Sending and receiving providers](docs/providers.md)
 - [API and integrations](docs/api.md)
+- [Calendar and contacts sync](docs/caldav-carddav.md)
 - [Email assistant and MCP](docs/email-assistant-and-mcp.md)
 - [Importing from Google Takeout](docs/import.md)
 - [Adding a language](docs/localization.md)

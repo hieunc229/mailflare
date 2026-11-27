@@ -5,9 +5,12 @@
  */
 import { and, eq, sql } from "drizzle-orm";
 import { createDb } from "@/db";
-import { users, domains, mailboxes, messages, calendarEvents, contacts, contactDetails, davCards, davCollections, folders, jmapChanges, appSettings, webhooks, spamTokenStats, spamReputation, mailboxPromotionSettings, emailSuppressions, domainDeliverability } from "@/db/schema";
+import { users, domains, mailboxes, messages, calendarEvents, contacts, contactDetails, davCalendarObjects, davCards, davCollections, folders, jmapChanges, appSettings, webhooks, spamTokenStats, spamReputation, mailboxPromotionSettings, emailSuppressions, domainDeliverability } from "@/db/schema";
 import { getDatabaseConfig } from "@/db/with-database";
 import { openExternalDatabase } from "@/db/external";
+import { staleGuard } from "@/lib/dav/writes";
+import { mirrorCardStatements } from "@/lib/dav/contact-mirror";
+import { seedStep } from "@/lib/dav/contact-seed";
 import { applyPendingMigrations, getMigrationStatus } from "@/lib/migrations/service";
 import { buildSearchConditions } from "@/lib/search/conditions";
 import { createBookedCalendarEvents } from "@/lib/booking/create";
@@ -135,6 +138,18 @@ check("dav trigger sees a case-only title change", (await davLog(`cal:${userId}`
 await db.update(calendarEvents).set({ lastRemindedStart: new Date() }).where(eq(calendarEvents.id, davEventId));
 await db.update(calendarEvents).set({ title: "standup" }).where(eq(calendarEvents.id, davEventId));
 check("dav trigger ignores reminder bookkeeping and no-op updates", (await davLog(`cal:${userId}`, davEventId)) === "created,updated");
+// F6-2: an override row is part of its parent's DAV resource, and a master and its override leave no stray change after the master is destroyed.
+const davOverrideId = `${davEventId}_o`;
+const davBase = { userId, title: "Series", startsAt: new Date(Date.now() + 3_600_000), endsAt: new Date(Date.now() + 7_200_000) };
+await db.insert(calendarEvents).values({ ...davBase, id: davEventId + "_m", davObjectId: davEventId + "_m", rrule: "FREQ=WEEKLY;INTERVAL=2", repeat: "custom" } as never);
+await db.insert(calendarEvents).values({ ...davBase, id: davOverrideId, davObjectId: davEventId + "_m", recurrenceId: new Date(Date.now() + 3_600_000) } as never);
+check("dav trigger keys an override row under its parent", (await davLog(`cal:${userId}`, davEventId + "_m")) === "created,updated" && (await davLog(`cal:${userId}`, davOverrideId)) === "");
+await db.update(calendarEvents).set({ allDay: true }).where(eq(calendarEvents.id, davOverrideId));
+check("dav trigger watches the new calendar columns", (await davLog(`cal:${userId}`, davEventId + "_m")) === "created,updated,updated");
+await db.delete(calendarEvents).where(eq(calendarEvents.id, davOverrideId));
+check("dav trigger reports a deleted override as an update of its parent", (await davLog(`cal:${userId}`, davEventId + "_m")) === "created,updated,updated,updated");
+await db.delete(calendarEvents).where(eq(calendarEvents.id, davEventId + "_m"));
+check("dav trigger destroys a deleted master", (await davLog(`cal:${userId}`, davEventId + "_m")).endsWith(",destroyed"));
 await db.insert(davCollections).values({ id: `card:${userId}`, userId, kind: "addressbook" } as never);
 await db.insert(davCards).values({ id: `card_${stamp}`, userId, collectionId: `card:${userId}`, name: "a.vcf", uid: "uid-1", body: "BEGIN:VCARD", version: "3.0", size: 11 } as never);
 await db.update(davCards).set({ body: "BEGIN:VCARD\nEND:VCARD" }).where(eq(davCards.id, `card_${stamp}`));
@@ -287,12 +302,63 @@ check("backup restores", afterRestore?.subject === "Quarterly Report" && afterRe
 
 const davAfterRestore = await db.all<{ n: number }>(sql`SELECT count(*) AS n FROM dav_cards WHERE id = ${`card_${stamp}`}`);
 check("backup restores dav cards and collections", Number(davAfterRestore[0].n) === 1 && exported.tables.dav_cards.length === 1 && exported.tables.dav_collections.length === 1 && !("dav_changes" in exported.tables));
+// F6-5: a destroyed DAV resource keeps the name it was served under (the cascade removes dav_calendar_objects with the event).
+const davNameOf = async (collection: string, key: string) => (await db.all<{ resource_name: string | null }>(sql`SELECT resource_name FROM dav_changes WHERE collection_id = ${collection} AND object_key = ${key} AND change_type = 'destroyed'`)).map((row) => row.resource_name).join(",");
+const namedId = `evt_${stamp}_named`;
+await db.insert(calendarEvents).values({ id: namedId, userId, title: "Phone made", startsAt: new Date(Date.now() + 3_600_000), endsAt: new Date(Date.now() + 7_200_000), davObjectId: namedId } as never);
+await db.insert(davCalendarObjects).values({ id: namedId, userId, collectionId: `cal:${userId}`, name: "phone-made.ics", uid: `uid-${stamp}`, size: 1 } as never);
+await db.delete(calendarEvents).where(eq(calendarEvents.id, namedId));
+check("dav trigger records the name of a destroyed DAV event", (await davNameOf(`cal:${userId}`, namedId)) === "phone-made.ics");
+await db.delete(davCards).where(eq(davCards.id, `card_${stamp}`));
+check("dav trigger records the name of a destroyed card", (await davNameOf(`card:${userId}-moved`, `card_${stamp}`)) === "a.vcf");
+// F6-5: the write guard fails a whole batch when the resource is no longer as it was read, on every dialect, and leaves no rows behind.
+const guardId = `evt_${stamp}_guard`;
+const guardCollection = `cal:${userId}`;
+await db.insert(calendarEvents).values({ id: guardId, userId, title: "Guard", startsAt: new Date(Date.now() + 3_600_000), endsAt: new Date(Date.now() + 7_200_000) } as never);
+const guardSeq = Number((await db.all<{ seq: number }>(sql`SELECT max(seq) AS seq FROM dav_changes WHERE collection_id = ${guardCollection} AND object_key = ${guardId}`))[0].seq);
+const guarded = (title: string) => db.batch([...staleGuard(db, calendarEvents, guardCollection, guardId, userId, { seq: guardSeq, updatedAt: new Date() }), db.update(calendarEvents).set({ title }).where(eq(calendarEvents.id, guardId))] as never);
+const guardTitle = async () => (await db.select({ title: calendarEvents.title }).from(calendarEvents).where(eq(calendarEvents.id, guardId)))[0].title;
+await guarded("First writer");
+check("dav write guard lets a batch through while the resource is as it was read", (await guardTitle()) === "First writer");
+let guardRefused = false;
+try {
+	await guarded("Second writer");
+} catch (error) {
+	guardRefused = isUniqueConstraintError(error);
+}
+check("dav write guard fails the whole batch once the resource changed", guardRefused && (await guardTitle()) === "First writer");
+const guardRows = await db.all<{ n: number }>(sql`SELECT count(*) AS n FROM dav_sync_state WHERE collection_id LIKE 'guard:%'`);
+check("dav write guard leaves no rows behind", Number(guardRows[0].n) === 0);
 await db.delete(calendarEvents).where(eq(calendarEvents.id, davEventId));
 check("dav trigger logs a deleted event", (await davLog(`cal:${userId}`, davEventId)).endsWith("destroyed"));
 reportObjects.set("raw5", reportMime(`r5_${stamp}`));
 await ingestReportMail(reportEnv, reportTarget, { rawR2Key: "raw5", authenticated: true, from: "r@google.com" }, { lookupPtr: async () => null });
 const afterRestoreStats = await getDmarcStats(reportEnv, reportTarget.domainId, { days: 7 });
 check("dmarc ingest keeps working after a restore (sequence not behind the rows)", afterRestoreStats.series.reduce((sum, day) => sum + day.pass, 0) === 80);
+
+// F6-6: a card mirrors into contacts in one batch: upsert with the first-link-wins name rule, promotion to manual, unlink of removed addresses.
+const mirrorOf = (email: string) => db.select({ name: contacts.displayName, source: contacts.source, card: contacts.davCardId, blocked: contacts.blocked }).from(contacts).where(and(eq(contacts.userId, userId), eq(contacts.email, email))).then((rows) => rows[0]);
+await db.insert(contacts).values({ id: `${userId}:old@example.com`, userId, email: "old@example.com", displayName: "Heard", source: "inbound", blocked: true } as never);
+await db.batch(mirrorCardStatements(db, userId, { id: "card_a", fn: "Card A", emails: ["old@example.com", "both@example.com"], group: false, own: new Set<string>() }) as never);
+await db.batch(mirrorCardStatements(db, userId, { id: "card_b", fn: "Card B", emails: ["both@example.com", "only-b@example.com"], group: false, own: new Set<string>() }) as never);
+const [mirrorOld, mirrorBoth, mirrorOnlyB] = [await mirrorOf("old@example.com"), await mirrorOf("both@example.com"), await mirrorOf("only-b@example.com")];
+check("card mirror promotes and links a contact without touching blocked", mirrorOld?.source === "manual" && mirrorOld.name === "Card A" && mirrorOld.card === "card_a" && mirrorOld.blocked === true);
+check("card mirror: the first card to link an address keeps it and its name", mirrorBoth?.card === "card_a" && mirrorBoth.name === "Card A" && mirrorOnlyB?.card === "card_b" && mirrorOnlyB.name === "Card B");
+await db.batch(mirrorCardStatements(db, userId, { id: "card_a", fn: "Card A", emails: ["both@example.com"], group: false, own: new Set<string>() }) as never);
+check("card mirror unlinks an address taken off its card and keeps the contact", (await mirrorOf("old@example.com"))?.card === null && (await mirrorOf("old@example.com"))?.source === "manual");
+
+// F6-6: seeding copies unlinked manual contacts into cards in one batch (multi-row insert plus one CASE update) and finishes the address book.
+await db.insert(contacts).values([{ id: `${userId}:seed1@example.com`, userId, email: "seed1@example.com", displayName: "Seed One", source: "manual" }, { id: `${userId}:seed2@example.com`, userId, email: "seed2@example.com", source: "manual" }] as never);
+await db.insert(davCollections).values({ id: `card:${userId}`, userId, kind: "addressbook" } as never).onConflictDoNothing();
+// An address already on some card gets no second card (the LIKE over the card's JSON addresses, with the UID list in one OR).
+await db.insert(contacts).values({ id: `${userId}:seed3@example.com`, userId, email: "seed3@example.com", source: "manual" } as never);
+await db.insert(davCards).values({ id: "card_listed", userId, collectionId: `card:${userId}`, name: "listed.vcf", uid: "listed", body: "x", version: "3.0", fn: "Listed", emails: JSON.stringify(["seed3@example.com"]), size: 1 } as never);
+const seeded = await seedStep(env, userId);
+const seedLinks = await db.select({ email: contacts.email, card: contacts.davCardId }).from(contacts).where(and(eq(contacts.userId, userId), sql`${contacts.email} like 'seed%'`));
+const seedCards = await db.all<{ n: number }>(sql`SELECT count(*) AS n FROM dav_cards WHERE user_id = ${userId} AND uid LIKE 'mf-%'`);
+const seedDone = await db.all<{ at: number | null }>(sql`SELECT seeded_at AS at FROM dav_collections WHERE id = ${`card:${userId}`}`);
+check("contact seeding links each manual contact to its own card and finishes", seeded === "done" && seedLinks.filter((row) => row.card).length === 2 && seedLinks.filter((row) => row.card).every((row) => row.card?.startsWith("card_")) && Number(seedCards[0].n) >= 2 && seedDone[0].at !== null);
+check("contact seeding skips an address that is already on a card", seedLinks.find((row) => row.email === "seed3@example.com")?.card === null);
 
 const [settings] = await db.select().from(appSettings).where(eq(appSettings.id, "default"));
 check("seed rows present", settings?.appName === "Mailflare");

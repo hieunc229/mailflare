@@ -190,6 +190,27 @@
       "when": 1795027631043,
       "tag": "0026_contact_details",
       "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1795027632043,
+      "tag": "0027_calendar_event_rrule",
+      "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1795027633043,
+      "tag": "0028_dav_change_names",
+      "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1795027634043,
+      "tag": "0029_contacts_dav_card",
+      "breakpoints": true
     }
   ]
 }

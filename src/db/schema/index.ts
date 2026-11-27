@@ -224,6 +224,8 @@ export const contacts = sqliteTable(
 		// Set when the user allows remote content from this sender; "new_sender" mode loads it without asking afterwards.
 		remoteContentAllowed: bool("remote_content_allowed").notNull().default(false),
 		lastSeenAt: timestamp("last_seen_at"),
+		/** The CardDAV card (`dav_cards.id`) that owns this contact's name; no foreign key, the DAV code keeps it in step (spec 8.2). */
+		davCardId: text("dav_card_id"),
 		createdAt: timestamp("created_at")
 			.notNull()
 			.$defaultFn(() => new Date()),
@@ -231,6 +233,7 @@ export const contacts = sqliteTable(
 	(t) => [
 		uniqueIndex("contacts_user_email_idx").on(t.userId, t.email),
 		index("contacts_user_idx").on(t.userId),
+		index("contacts_dav_card_idx").on(t.davCardId),
 	],
 );
 
@@ -904,7 +907,8 @@ export const calendarEvents = sqliteTable(
 		location: text("location").notNull().default(""),
 		attendees: text("attendees").notNull().default("[]"),
 		color: text("color").notNull().default("blue"),
-		repeat: text("repeat", { enum: ["none", "daily", "weekly", "monthly", "weekdays", "yearly"] }).notNull().default("none"),
+		/** "custom" means `rrule` holds the rule; every other value uses the repeat_* columns and `rrule` is null. */
+		repeat: text("repeat", { enum: ["none", "daily", "weekly", "monthly", "weekdays", "yearly", "custom"] }).notNull().default("none"),
 		repeatDays: text("repeat_days").notNull().default("[]"),
 		repeatAnchorDay: integer("repeat_anchor_day"),
 		repeatUntil: timestamp("repeat_until"),
@@ -933,12 +937,21 @@ export const calendarEvents = sqliteTable(
 		eventSequence: integer("event_sequence").notNull().default(0),
 		/** JSON map of guest address to accepted, tentative or declined, filled from their replies to an invitation this user sent. */
 		attendeeResponses: text("attendee_responses"),
+		/** Raw RFC 5545 RRULE value for a repeat the repeat_* columns cannot express; set exactly when `repeat` is "custom". */
+		rrule: text("rrule"),
+		/** On an override row (one moved occurrence of a DAV series): the original start it replaces. */
+		recurrenceId: timestamp("recurrence_id"),
+		/** Id of the master row of the CalDAV resource this row belongs to; null for events made in Mailflare. */
+		davObjectId: text("dav_object_id"),
+		/** The CalDAV client sent a date without a time. Times are still stored midnight to midnight in the event zone. */
+		allDay: bool("all_day").notNull().default(false),
 		createdAt: timestamp("created_at").notNull().$defaultFn(() => new Date()),
 		updatedAt: timestamp("updated_at").notNull().$defaultFn(() => new Date()),
 	},
 	(t) => [
 		index("calendar_events_user_starts_idx").on(t.userId, t.startsAt),
 		index("calendar_events_mailbox_idx").on(t.mailboxId),
+		index("calendar_events_dav_object_idx").on(t.davObjectId),
 	],
 );
 
@@ -1038,6 +1051,10 @@ export const davCollections = sqliteTable(
 		deadProps: text("dead_props").notNull().default("{}"),
 		/** Address book only: when the user's manual contacts were copied in as cards. */
 		seededAt: timestamp("seeded_at"),
+		/** Address book only: when seeding began. Only contacts created before it are copied in; later ones are carded by the Contacts API hooks. */
+		seedStartedAt: timestamp("seed_started_at"),
+		/** Address book only: the last contact id seeding has dealt with. Seeding only moves forward, so a card deleted on a phone is not made again. */
+		seedCursor: text("seed_cursor"),
 		createdAt: timestamp("created_at").notNull().$defaultFn(() => new Date()),
 		updatedAt: timestamp("updated_at").notNull().$defaultFn(() => new Date()),
 	},
@@ -1064,7 +1081,7 @@ export const davCalendarObjects = sqliteTable(
 	(t) => [
 		uniqueIndex("dav_calendar_objects_name_idx").on(t.collectionId, t.name),
 		uniqueIndex("dav_calendar_objects_uid_idx").on(t.collectionId, t.uid),
-		index("dav_calendar_objects_user_idx").on(t.userId),
+		index("dav_calendar_objects_user_size_idx").on(t.userId, t.size),
 	],
 );
 
@@ -1089,7 +1106,7 @@ export const davCards = sqliteTable(
 	(t) => [
 		uniqueIndex("dav_cards_name_idx").on(t.collectionId, t.name),
 		uniqueIndex("dav_cards_uid_idx").on(t.collectionId, t.uid),
-		index("dav_cards_user_idx").on(t.userId),
+		index("dav_cards_user_size_idx").on(t.userId, t.size),
 	],
 );
 
@@ -1106,6 +1123,8 @@ export const davChanges = sqliteTable(
 		collectionId: text("collection_id").notNull(),
 		objectKey: text("object_key").notNull(),
 		changeType: text("change_type", { enum: ["created", "updated", "destroyed"] }).notNull(),
+		/** The name a destroyed resource was served under (a DAV-named event or a card); null for other rows and for native events, whose name is derived from the id. */
+		resourceName: text("resource_name"),
 		createdAt: integer("created_at").notNull().default(nowSeconds),
 	},
 	(t) => [
