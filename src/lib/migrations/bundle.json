@@ -986,6 +986,18 @@
       "statements": [
         "CREATE TABLE `contact_details` (\n\t`contact_id` text PRIMARY KEY NOT NULL,\n\t`details` text DEFAULT '{}' NOT NULL,\n\t`updated_at` integer NOT NULL,\n\tFOREIGN KEY (`contact_id`) REFERENCES `contacts`(`id`) ON UPDATE no action ON DELETE cascade\n);"
       ]
+    },
+    {
+      "name": "0103_contact_groups.sql",
+      "statements": [
+        "CREATE TABLE `contact_groups` (\n\t`id` text PRIMARY KEY NOT NULL,\n\t`user_id` text NOT NULL,\n\t`name` text NOT NULL,\n\t`created_at` integer NOT NULL,\n\tFOREIGN KEY (`user_id`) REFERENCES `users`(`id`) ON UPDATE no action ON DELETE cascade\n);",
+        "CREATE TABLE `contact_group_members` (\n\t`id` text PRIMARY KEY NOT NULL,\n\t`group_id` text NOT NULL,\n\t`contact_id` text NOT NULL,\n\t`created_at` integer NOT NULL,\n\tFOREIGN KEY (`group_id`) REFERENCES `contact_groups`(`id`) ON UPDATE no action ON DELETE cascade,\n\tFOREIGN KEY (`contact_id`) REFERENCES `contacts`(`id`) ON UPDATE no action ON DELETE cascade\n);",
+        "CREATE UNIQUE INDEX `contact_groups_user_name_idx` ON `contact_groups` (`user_id`,`name`);",
+        "CREATE INDEX `contact_groups_user_idx` ON `contact_groups` (`user_id`);",
+        "CREATE UNIQUE INDEX `contact_group_members_group_contact_idx` ON `contact_group_members` (`group_id`,`contact_id`);",
+        "CREATE INDEX `contact_group_members_group_idx` ON `contact_group_members` (`group_id`);",
+        "CREATE INDEX `contact_group_members_contact_idx` ON `contact_group_members` (`contact_id`);"
+      ]
     }
   ]
 }

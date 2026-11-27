@@ -1782,6 +1782,32 @@ export const importJobs = sqliteTable("import_jobs", {
 	finishedAt: timestamp("finished_at"),
 }, (t) => [index("import_jobs_user_idx").on(t.userId, t.createdAt), index("import_jobs_status_idx").on(t.status, t.updatedAt)]);
 
+export const contactGroups = sqliteTable(
+	"contact_groups",
+	{
+		id: text("id").primaryKey(),
+		userId: text("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+		name: text("name").notNull(),
+		createdAt: timestamp("created_at").notNull().$defaultFn(() => new Date()),
+	},
+	(t) => [uniqueIndex("contact_groups_user_name_idx").on(t.userId, t.name), index("contact_groups_user_idx").on(t.userId)],
+);
+
+export const contactGroupMembers = sqliteTable(
+	"contact_group_members",
+	{
+		id: text("id").primaryKey(),
+		groupId: text("group_id").notNull().references(() => contactGroups.id, { onDelete: "cascade" }),
+		contactId: text("contact_id").notNull().references(() => contacts.id, { onDelete: "cascade" }),
+		createdAt: timestamp("created_at").notNull().$defaultFn(() => new Date()),
+	},
+	(t) => [
+		uniqueIndex("contact_group_members_group_contact_idx").on(t.groupId, t.contactId),
+		index("contact_group_members_group_idx").on(t.groupId),
+		index("contact_group_members_contact_idx").on(t.contactId),
+	],
+);
+
 export const schema = {
 	users,
 	domains,
@@ -1828,4 +1854,6 @@ export const schema = {
 	agentSendApprovals,
 	mcpKeyMailboxes,
 	importJobs,
+	contactGroups,
+	contactGroupMembers,
 };

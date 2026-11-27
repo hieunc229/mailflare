@@ -511,6 +511,19 @@
         "CREATE TABLE `contact_details` (\n\t`contact_id` varchar(191) NOT NULL,\n\t`details` longtext NOT NULL DEFAULT ('{}'),\n\t`updated_at` bigint NOT NULL,\n\tCONSTRAINT `contact_details_contact_id` PRIMARY KEY(`contact_id`)\n);",
         "ALTER TABLE `contact_details` ADD CONSTRAINT `contact_details_contact_id_contacts_id_fk` FOREIGN KEY (`contact_id`) REFERENCES `contacts`(`id`) ON DELETE cascade ON UPDATE no action;"
       ]
+    },
+    {
+      "name": "0027_contact_groups.sql",
+      "statements": [
+        "CREATE TABLE `contact_groups` (\n\t`id` varchar(191) NOT NULL,\n\t`user_id` varchar(191) NOT NULL,\n\t`name` varchar(255) NOT NULL,\n\t`created_at` bigint NOT NULL,\n\tCONSTRAINT `contact_groups_id` PRIMARY KEY(`id`),\n\tCONSTRAINT `contact_groups_user_name_idx` UNIQUE(`user_id`,`name`)\n);",
+        "CREATE TABLE `contact_group_members` (\n\t`id` varchar(191) NOT NULL,\n\t`group_id` varchar(191) NOT NULL,\n\t`contact_id` varchar(191) NOT NULL,\n\t`created_at` bigint NOT NULL,\n\tCONSTRAINT `contact_group_members_id` PRIMARY KEY(`id`),\n\tCONSTRAINT `contact_group_members_group_contact_idx` UNIQUE(`group_id`,`contact_id`)\n);",
+        "ALTER TABLE `contact_groups` ADD CONSTRAINT `contact_groups_user_id_users_id_fk` FOREIGN KEY (`user_id`) REFERENCES `users`(`id`) ON DELETE cascade ON UPDATE no action;",
+        "ALTER TABLE `contact_group_members` ADD CONSTRAINT `contact_group_members_group_id_contact_groups_id_fk` FOREIGN KEY (`group_id`) REFERENCES `contact_groups`(`id`) ON DELETE cascade ON UPDATE no action;",
+        "ALTER TABLE `contact_group_members` ADD CONSTRAINT `contact_group_members_contact_id_contacts_id_fk` FOREIGN KEY (`contact_id`) REFERENCES `contacts`(`id`) ON DELETE cascade ON UPDATE no action;",
+        "CREATE INDEX `contact_groups_user_idx` ON `contact_groups` (`user_id`);",
+        "CREATE INDEX `contact_group_members_group_idx` ON `contact_group_members` (`group_id`);",
+        "CREATE INDEX `contact_group_members_contact_idx` ON `contact_group_members` (`contact_id`);"
+      ]
     }
   ]
 }
