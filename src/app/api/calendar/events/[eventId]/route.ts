@@ -27,7 +27,8 @@ import { createAuditLog } from "@/lib/mailboxes/audit";
 import type { SessionUser } from "@/lib/auth/types";
 import { isUniqueConstraintError } from "@/lib/database-errors";
 import { resolveBookableRooms } from "@/lib/calendar/resources";
-import { bookAndSummarize, bookedRooms, declineBookingsStatement, invitationLocation, roomResponse, type RoomsSummary } from "@/lib/calendar/room-save";
+import { roomsBookable } from "@/lib/calendar/room-licence";
+import { bookAndSummarize, bookedRooms, declineBookingsStatement, invitationLocation, rebookEvents, roomResponse, type RoomsSummary } from "@/lib/calendar/room-save";
 import { getLicenseEntitlements } from "@/lib/licenses/service";
 
 type Db = ReturnType<typeof getDb>;
@@ -93,6 +94,9 @@ export async function PATCH(request: Request, { params }: CalendarEventRoutePara
 	const batched = async (statements: unknown[]): Promise<NextResponse | null> => {
 		try { await db.batch([...guard, ...statements] as never); return null; } catch (error) {
 			if (!isUniqueConstraintError(error)) throw error;
+			// On a driver whose batch is separate statements the decline that came first has already run though the write was refused: the rooms are
+			// checked again at the time the event still has, so they do not stay waiting (an atomic driver rolled it back; this only rewrites the same answer).
+			if (declineRooms.length) await rebookEvents(db, [head.id], roomsBookable(env));
 			// The calendar guard and the stored resource's unique (collection, UID) and (collection, name) keys fail the same way: say which it was.
 			if (typeof moveTo !== "string") return NextResponse.json({ error: "This event no longer exists" }, { status: 409 });
 			const [still] = await db.select({ id: davCollections.id }).from(davCollections).where(and(eq(davCollections.id, moveTo), eq(davCollections.userId, ownerId))).limit(1);
