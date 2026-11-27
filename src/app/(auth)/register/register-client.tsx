@@ -36,6 +36,8 @@ export function RegisterClient() {
   const [enableSending, setEnableSending] = useState(false);
   const [setupEnableSending, setSetupEnableSending] = useState(false);
   const [skipDns, setSkipDns] = useState(false);
+  // False without Cloudflare credentials: there is no zone to check, so DNS is set by hand.
+  const [managesDns, setManagesDns] = useState(true);
   const [setupSkipDns, setSetupSkipDns] = useState(false);
   const [step, setStep] = useState<1 | 2 | 3>(1);
   const [checks, setChecks] = useState<SetupRequirementCheck[]>([]);
@@ -67,16 +69,17 @@ export function RegisterClient() {
   ) {
     setMxCheckFor({ step, accountDomain, mxCheckRevision, setupSkipDns, t });
     if (step === 3 && accountDomain) {
-      // DNS is skipped, so there is nothing on the zone to check.
-      setMxChecking(!setupSkipDns);
-      setMxRecordsExist(setupSkipDns ? false : null);
+      // DNS is skipped or managed by hand, so there is nothing on the zone to check.
+      const noZoneCheck = setupSkipDns || !managesDns;
+      setMxChecking(!noZoneCheck);
+      setMxRecordsExist(noZoneCheck ? false : null);
       setReplaceMxRecords(false);
       setError(null);
     }
   }
 
   useEffect(() => {
-    if (step !== 3 || !accountDomain || setupSkipDns) return;
+    if (step !== 3 || !accountDomain || setupSkipDns || !managesDns) return;
 
     let active = true;
     void checkExistingMx(accountDomain)
@@ -98,7 +101,7 @@ export function RegisterClient() {
     return () => {
       active = false;
     };
-  }, [step, accountDomain, mxCheckRevision, setupSkipDns, t]);
+  }, [step, accountDomain, mxCheckRevision, setupSkipDns, managesDns, t]);
 
   async function runPreparation() {
     setLoading(true);
@@ -119,6 +122,7 @@ export function RegisterClient() {
       setHasPrimaryDomain(data.hasPrimaryDomain);
       setPrimaryDomain(data.primaryDomain?.hostname ?? null);
       setPrimaryDomainSendingRequested(data.primaryDomain?.sendingRequested ?? null);
+      setManagesDns(data.managesDns ?? true);
       setPreparationComplete(true);
     } catch (error) {
       setError(error instanceof Error ? error.message : t("setup.prepFailed"));
@@ -159,7 +163,7 @@ export function RegisterClient() {
         return;
       }
       setSetupDomain(data.domain.hostname);
-      setSetupEnableSending(usedCachedCheck ? enableSending : false);
+      setSetupEnableSending(managesDns ? usedCachedCheck && enableSending : true);
       setStep(3);
     } catch {
       setError(t("auth.serverUnreachable"));
@@ -170,7 +174,7 @@ export function RegisterClient() {
 
   async function onDomainBlur(e: React.FocusEvent<HTMLInputElement>) {
     const hostname = e.currentTarget.value.toLowerCase().trim();
-    if (skipDns || hostname.length < 3 || domainCheck?.hostname === hostname) return;
+    if (!managesDns || skipDns || hostname.length < 3 || domainCheck?.hostname === hostname) return;
 
     setDomainChecking(true);
     setError(null);
@@ -367,7 +371,7 @@ export function RegisterClient() {
               }}
             />
             <p className="text-xs leading-5 text-neutral-500">
-              {t("setup.zoneHint")}
+              {managesDns ? t("setup.zoneHint") : t("domains.manualDnsNote")}
             </p>
           </div>
           <div className="flex items-center justify-between gap-4 rounded-2xl bg-neutral-50 px-4 py-3">
@@ -386,7 +390,7 @@ export function RegisterClient() {
               }}
             />
           </div>
-          {!skipDns && (
+          {managesDns && !skipDns && (
           <div className="flex items-center justify-between gap-4 rounded-2xl bg-neutral-50 px-4 py-3">
             <div>
               <Label htmlFor="setup-enable-sending">{t("setup.enableSending")}</Label>
@@ -408,7 +412,7 @@ export function RegisterClient() {
             />
           </div>
           )}
-          {domainCheck && !skipDns && (
+          {managesDns && domainCheck && !skipDns && (
             <div className="flex items-center gap-3 rounded-2xl bg-green-50 px-4 py-3 text-sm text-green-700">
               <CheckCircle2 className="h-4 w-4" />
               {t("setup.domainFound", { zone: domainCheck.zone.name })}
@@ -435,7 +439,7 @@ export function RegisterClient() {
 							{t("setup.checkingMx")}
 						</div>
 					)}
-					{mxRecordsExist === false && !setupSkipDns && (
+					{mxRecordsExist === false && !setupSkipDns && managesDns && (
 						<div className="flex items-center gap-3 rounded-2xl bg-green-50 px-4 py-3 text-sm text-green-700">
 							<CheckCircle2 className="h-4 w-4" />
 							{t("setup.noMx")}
@@ -459,6 +463,10 @@ export function RegisterClient() {
 							</span>
 						</label>
 					)}
+          <div className="space-y-2">
+            <Label htmlFor="name">{t("setup.name")}</Label>
+            <Input id="name" name="name" placeholder={t("setup.namePlaceholder")} autoComplete="name" maxLength={100} required />
+          </div>
           <div className="space-y-2">
             <Label htmlFor="username">{t("setup.username")}</Label>
             <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2 relative">

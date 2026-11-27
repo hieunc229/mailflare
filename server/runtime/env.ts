@@ -3,7 +3,7 @@ import { join, resolve } from "node:path";
 import { getDatabaseConfig, withDatabase } from "@/db/with-database";
 import { withStorage } from "@/lib/storage";
 import { openFileBucket } from "./file-bucket";
-import { openMailer, type Mailer, type MailerConfig } from "./mailer";
+import { mailerConfigFromEnv, openMailer, type Mailer } from "./mailer";
 import { openAssets, openRateLimiter } from "./misc";
 import { openQueue, type InProcessQueue } from "./queue";
 import { RealtimeHubRegistry } from "./realtime";
@@ -13,15 +13,6 @@ import type { NodeRuntime } from "./types";
 function optional(name: string): string | undefined {
 	const value = process.env[name]?.trim();
 	return value || undefined;
-}
-
-function mailerConfig(): MailerConfig {
-	const smtp = optional("SMTP_URL");
-	if (smtp) return { kind: "smtp", url: smtp };
-	const accountId = optional("CF_ACCOUNT_ID");
-	const token = optional("CF_TOKEN");
-	if (accountId && token) return { kind: "cloudflare", accountId, token };
-	return { kind: "none" };
 }
 
 /**
@@ -36,7 +27,7 @@ export function createNodeRuntime(): NodeRuntime {
 	// DATABASE_URL moves the data to PostgreSQL, MySQL or libSQL; otherwise it lives in a local SQLite file.
 	const database = getDatabaseConfig({}).driver === "d1" ? openSqliteDatabase(join(dataDir, "mailflare.sqlite")) : undefined;
 	const bucket = openFileBucket(join(dataDir, "blobs"));
-	const mailer = openMailer(mailerConfig());
+	const mailer = openMailer(mailerConfigFromEnv());
 	const inboundQueue = openQueue("mailflare-inbound");
 	const outboundQueue = openQueue("mailflare-outbound");
 	const agentQueue = openQueue("mailflare-agent");

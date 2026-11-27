@@ -4,6 +4,8 @@ import { hasActivePushSubscription } from "@/lib/push/client";
 import { formatSenderLabel } from "@/lib/email/sender-label";
 
 export const REALTIME_FALLBACK_INTERVAL_MS = 60_000;
+/** Where there is no WebSocket at all (Vercel), the lists refresh this often instead. */
+export const REALTIME_POLL_INTERVAL_MS = 30_000;
 export const REALTIME_HEARTBEAT_INTERVAL_MS = 25_000;
 export const REALTIME_RECONNECT_MAX_MS = 30_000;
 const BROWSER_NOTIFICATIONS_ENABLED_KEY = "mailflare:browser-notifications-enabled";
@@ -18,6 +20,11 @@ export function areBrowserNotificationsEnabled(): boolean {
 
 export function setBrowserNotificationsEnabled(enabled: boolean): void {
 	window.localStorage.setItem(BROWSER_NOTIFICATIONS_ENABLED_KEY, String(enabled));
+}
+
+/** False in builds whose server cannot hold a WebSocket (set by next.config.ts). */
+export function isRealtimeSocketAvailable(): boolean {
+	return process.env.NEXT_PUBLIC_MAILFLARE_REALTIME !== "poll";
 }
 
 export function getRealtimeWebSocketUrl(): string {

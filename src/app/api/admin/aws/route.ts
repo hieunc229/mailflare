@@ -35,6 +35,9 @@ export async function PUT(request: Request) {
 	if (access.error) return access.error;
 	const parsed = schema.safeParse(await request.json().catch(() => null));
 	if (!parsed.success) return Response.json({ error: parsed.error.issues[0]?.message ?? "Enter an access key ID, secret and region" }, { status: 400 });
+	if ((await getAwsConfigStatus(access.env)).source === "environment") {
+		return Response.json({ error: "AWS credentials are set by the AWS_* environment variables" }, { status: 409 });
+	}
 	try {
 		const report = await validateAwsConfig(parsed.data);
 		if (!report.sending && !report.receiving) {

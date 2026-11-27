@@ -15,13 +15,15 @@ import { eq } from "drizzle-orm";
 import { loadMessageAttachmentContents } from "@/lib/email/attachments";
 import { userOwnsDraft } from "@/app/api/drafts/utils";
 import { getRequestLocale } from "@/lib/i18n/server";
+import { resolveUploadedRequest } from "@/lib/uploads/direct";
 
 export async function POST(request: Request) {
 	const env = getEnv();
 	const user = await requireUser(env, request);
 	let input;
 	try {
-		input = await parseSendRequest(request, requestBodyLimit(await getOutboundAttachmentMaxMb(env)));
+		const limit = requestBodyLimit(await getOutboundAttachmentMaxMb(env));
+		input = await parseSendRequest(await resolveUploadedRequest(env, request, user.id, limit), limit);
 	} catch (error) {
 		const status = error instanceof RequestBodyTooLargeError ? 413 : 400;
 		return NextResponse.json({ error: "Invalid send request" }, { status });

@@ -1,6 +1,7 @@
 export type SetupStatus = {
 	hasAdminAccount: boolean;
 	hasPrimaryDomain: boolean;
+	managesDns?: boolean;
 	primaryDomain?: { hostname: string; sendingRequested: boolean } | null;
 	error?: string;
 };

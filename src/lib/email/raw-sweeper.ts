@@ -5,6 +5,7 @@ import { INBOUND_SIGNATURE_MAX_AGE_SECONDS } from "@/lib/email/intake-signature"
 import { SNS_MAX_AGE_MS } from "@/lib/aws/sns-signature";
 import { UPLOAD_PREFIX } from "@/lib/jmap/blobs";
 import { sweepStaleObjects } from "@/lib/email/stale-objects";
+import { REQUEST_UPLOAD_PREFIX } from "@/lib/uploads/constants";
 
 const PREFIX = "inbound/";
 const MIN_AGE_MS = 24 * 60 * 60 * 1000;
@@ -21,6 +22,8 @@ const STALE_PREFIXES: Array<{ prefix: string; maxAgeMs: number }> = [
 	{ prefix: "sns-seen/", maxAgeMs: 2 * SNS_MAX_AGE_MS + HOUR_MS },
 	// JMAP uploads an Email/set create has claimed are copied into the draft; unclaimed ones are abandoned.
 	{ prefix: `${UPLOAD_PREFIX}/`, maxAgeMs: 7 * 24 * HOUR_MS },
+	// Direct uploads (Vercel) are deleted once their request reads them; the rest were abandoned.
+	{ prefix: `${REQUEST_UPLOAD_PREFIX}/`, maxAgeMs: 24 * HOUR_MS },
 ];
 /** D1 allows 100 bound parameters per statement. */
 const LOOKUP_BATCH = 50;

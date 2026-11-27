@@ -86,7 +86,7 @@ function ToastBody({ toast, text }: { toast: PromotionToastEntry; text: string }
 			className={cn(
 				"fixed z-30 flex w-[calc(100vw-3rem)] items-start gap-3 rounded-xl px-3 py-2.5 text-sm font-medium text-white shadow-lg ring-1 ring-black/10 backdrop-blur-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/80",
 				"inset-x-6 bottom-[max(5rem,calc(env(safe-area-inset-bottom,0px)+4.5rem))]",
-				"md:bottom-6 md:w-[min(26rem,calc(100vw-var(--sidebar-width,260px)-3rem))] md:[inset-inline-end:auto] md:[inset-inline-start:calc(var(--sidebar-width,260px)+1.5rem)]",
+				"md:bottom-6 md:w-[min(26rem,calc(100vw-3rem))] md:[inset-inline-end:auto] md:[inset-inline-start:1.5rem]",
 				toast.tone === "error" ? "bg-red-700" : toast.tone === "warn" ? "bg-amber-800" : "bg-neutral-900/95",
 			)}
 		>

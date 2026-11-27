@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { getEnv } from "@/lib/cloudflare";
 import { requireUser } from "@/lib/auth/cookies";
 import { getDomainForUser } from "@/lib/domains/service";
-import { getDomainDnsView } from "@/lib/domains/dns-view";
+import { getDomainDnsView, isDomainDnsReady } from "@/lib/domains/dns-view";
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -14,7 +14,10 @@ export async function GET(request: Request, { params }: Params) {
 	if (!domain) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
 	try {
-		const dns = await getDomainDnsView(env, domain);
+		// The last check is served until the caller asks for a new one.
+		const saved = new URL(request.url).searchParams.get("recheck") !== "true";
+		const dns = await getDomainDnsView(env, domain, { saved });
+		if (!saved) await isDomainDnsReady(env, domain);
 		return NextResponse.json({
 			domain: { ...domain, sendingEnabled: dns.sendingEnabled },
 			dns,

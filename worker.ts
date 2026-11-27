@@ -1,4 +1,3 @@
-import { runAutoUpdate } from "@/lib/update/auto-update";
 import { withDatabase } from "./src/db/with-database";
 import { withStorage } from "./src/lib/storage";
 import vinextHandler from "vinext/server/fetch-handler";
@@ -17,9 +16,9 @@ import {
 	withD1ReadSession,
 } from "./worker-utils";
 import { runWithD1Session } from "./src/lib/d1-session-context";
-import { sweepOrphanedRawMail } from "./src/lib/email/raw-sweeper";
-import { pruneExpiredMessageActionUndoClaims } from "./src/lib/messages/actions/claims";
-import { processImportJob, sweepImportJobs } from "./src/lib/import/jobs";
+import { processImportJob } from "./src/lib/import/jobs";
+import { autoUpdateJob } from "./src/lib/scheduled/auto-update-job";
+import { dailyJobs, frequentJobs, runScheduledJob } from "./src/lib/scheduled/jobs";
 import { processWebhookRetry, type WebhookRetryMessage } from "./src/lib/email/webhooks";
 import { resolveIncomingMail, forwardMessage } from "./src/lib/email/incoming";
 import { createBatchBudget } from "./src/lib/deliverability/ingest";
@@ -32,20 +31,8 @@ import {
 	isForwardedMarkerValid,
 	MAILFLARE_FORWARDED_HEADER,
 } from "./src/lib/email/account-forwarding";
-import { runScheduledDatabaseBackup } from "./src/lib/backups/runner";
 import { processAgentDraftJob } from "./src/lib/agent/jobs/utils";
-import { runAgentMaintenance } from "./src/lib/agent/maintenance";
-import { runTrashRetention } from "./src/lib/email/trash-retention";
-import { runDriveTrashRetention } from "./src/lib/drive/retention";
-import { runAccountRetention } from "./src/lib/accounts/deletion";
-import { purgeExpiredAuthRows } from "./src/lib/auth/purge";
-import { runJmapChangeRetention } from "./src/lib/jmap/changes";
-import { runDavChangeRetention } from "./src/lib/dav/changes";
-import { runFollowUpReminders } from "./src/lib/follow-ups/service";
-import { runPromotionsBackfill } from "@/lib/promotions/backfill";
-import { runCalendarReminders } from "./src/lib/calendar/reminders";
 import { handleDavRequest, isDavPath } from "./src/lib/dav/handler";
-import { runDeliverabilityDaily } from "./src/lib/deliverability/daily";
 import { guardMtaStsHost, isMtaStsHost } from "./src/lib/deliverability/mta-sts";
 export { RealtimeHub } from "./src/lib/realtime/hub";
 
@@ -182,23 +169,10 @@ export default {
 
 	async scheduled(controller: ScheduledController, rawEnv: CloudflareEnv, ctx: ExecutionContext) {
 		const env = withDatabase(withStorage(rawEnv));
-		if (controller.cron === "0 2 * * *") ctx.waitUntil(runScheduledDatabaseBackup(env, new Date(controller.scheduledTime)));
-		ctx.waitUntil(runAgentMaintenance(env));
-		ctx.waitUntil(runAutoUpdate(env));
-		ctx.waitUntil(runTrashRetention(env, new Date(controller.scheduledTime)));
-		ctx.waitUntil(runFollowUpReminders(env, new Date(controller.scheduledTime)));
-		ctx.waitUntil(runCalendarReminders(env, new Date(controller.scheduledTime)));
-		ctx.waitUntil(runPromotionsBackfill(env, new Date(controller.scheduledTime)).catch((error) => console.error("Promotions backfill failed", error)));
-		ctx.waitUntil(sweepImportJobs(env, new Date(controller.scheduledTime)));
-		ctx.waitUntil(pruneExpiredMessageActionUndoClaims(env, new Date(controller.scheduledTime)));
-		// DAV log retention takes a small slice per run (one collection, 90 rows, 3 queries), so it runs on every cron tick.
-		ctx.waitUntil(runDavChangeRetention(env, new Date(controller.scheduledTime)).catch((error) => console.error("DAV change retention failed", error)));
-		if (controller.cron === "0 2 * * *") ctx.waitUntil(runAccountRetention(env, new Date(controller.scheduledTime)));
-		if (controller.cron === "0 2 * * *") ctx.waitUntil(purgeExpiredAuthRows(env, new Date(controller.scheduledTime)));
-		// Drive trash is emptied once a day, with the 02:00 UTC cron; the 5-minute cron is for queue-like upkeep.
-		if (controller.cron === "0 2 * * *") ctx.waitUntil(runDriveTrashRetention(env, new Date(controller.scheduledTime)));
-		if (controller.cron === "0 2 * * *") ctx.waitUntil(runJmapChangeRetention(env, new Date(controller.scheduledTime)));
-		if (controller.cron === "0 2 * * *") ctx.waitUntil(runDeliverabilityDaily(env, new Date(controller.scheduledTime)).catch((error) => console.error("Deliverability daily job failed", error)));
-		if (controller.cron === "0 2 * * *") ctx.waitUntil(sweepOrphanedRawMail(env, new Date(controller.scheduledTime)).catch((error) => console.error("Raw mail sweep failed", error)));
+		const now = new Date(controller.scheduledTime);
+		// Both crons run the frequent jobs; the daily ones belong to 02:00 UTC alone. The lists are shared with
+		// the self-hosted scheduler and the Vercel cron routes (src/lib/scheduled/jobs.ts).
+		const jobs = [...frequentJobs(env, now), autoUpdateJob(env), ...(controller.cron === "0 2 * * *" ? dailyJobs(env, now) : [])];
+		for (const job of jobs) ctx.waitUntil(runScheduledJob(job));
 	},
 } satisfies ExportedHandler<CloudflareEnv>;

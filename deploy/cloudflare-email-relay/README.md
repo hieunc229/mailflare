@@ -17,6 +17,10 @@ reject rules and forwarding rules still act at Cloudflare's edge. If the server
 is unreachable or answers with an error, the Worker throws, so Email Routing
 returns a temporary failure and the sender's mail server retries later.
 
+A server on Vercel (see [docs/vercel.md](../../docs/vercel.md)) cannot receive more than 4.5 MB in one request,
+so the Worker puts larger messages in the server's object storage through `/api/inbound/upload` first. Other
+servers answer 404 there and get the message directly.
+
 When a message needs more than one forward (a forwarding rule that keeps a
 copy plus account forwarding), the server lists them all in `forwardToAll` and
 the Worker forwards to each. A relay deployed before that only reads

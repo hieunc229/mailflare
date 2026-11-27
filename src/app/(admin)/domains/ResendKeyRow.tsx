@@ -1,11 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { confirmDestructive } from "@/components/ui/confirm-dialog";
 import { useLanguage } from "@/components/language-provider";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { postJson } from "./api";
+import { postJson, requestJson } from "./api";
 import { StatusRow } from "./status-row";
 
 type Props = {
@@ -21,7 +21,17 @@ export default function ResendKeyRow({ configured, onChanged, onError }: Props) 
 	const [apiKey, setApiKey] = useState("");
 	const [editing, setEditing] = useState(false);
 	const [busy, setBusy] = useState(false);
+	const [fromEnvironment, setFromEnvironment] = useState(false);
 	const showForm = configured === false || editing;
+
+	useEffect(() => {
+		let active = true;
+		requestJson<{ source: string | null }>("/api/admin/resend-key", "GET")
+			.then((data) => { if (active) setFromEnvironment(data.source === "environment"); })
+			// Only the primary administrator can read the source.
+			.catch(() => undefined);
+		return () => { active = false; };
+	}, [configured]);
 
 	async function run(action: () => Promise<void>) {
 		setBusy(true);
@@ -47,7 +57,7 @@ export default function ResendKeyRow({ configured, onChanged, onError }: Props) 
 				ok={!!configured && !editing}
 				title={t("resend.key")}
 				hint={t("resend.keyHint")}
-				action={configured && !editing ? (
+				action={configured && !editing && !fromEnvironment ? (
 					<>
 						<Button size="sm" variant="outline" className="bg-white" disabled={busy} onClick={() => setEditing(true)}>{t("resend.replace")}</Button>
 						<Button size="sm" variant="outline" className="bg-white" disabled={busy} onClick={() => void remove()}>{t("resend.remove")}</Button>
@@ -60,7 +70,7 @@ export default function ResendKeyRow({ configured, onChanged, onError }: Props) 
 						<Button type="submit" size="sm" disabled={!apiKey.trim() || busy}>{busy ? t("domains.checking") : t("resend.saveKey")}</Button>
 						{editing && <Button type="button" size="sm" variant="outline" className="bg-white" onClick={() => { setEditing(false); setApiKey(""); }}>{t("common.cancel")}</Button>}
 					</form>
-				) : configured ? t("resend.keySaved") : t("domains.checking")}
+				) : configured ? t(fromEnvironment ? "resend.keyFromEnv" : "resend.keySaved") : t("domains.checking")}
 			</StatusRow>
 			{showForm && <li className="list-none px-1 text-xs text-neutral-500">{t("resend.keyInstructions")}</li>}
 		</>

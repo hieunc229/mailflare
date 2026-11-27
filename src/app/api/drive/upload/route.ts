@@ -5,7 +5,8 @@ import { newId } from "@/lib/ids";
 import { authorizeDrive } from "@/lib/drive/auth";
 import { getDriveItem, getDriveRole, toDriveItemDtos } from "@/lib/drive/access";
 import { getDriveStorageLimit, getDriveStorageUsed } from "@/lib/drive/storage";
-import { canEditDrive, DRIVE_MAX_FILE_BYTES, DRIVE_PART_BYTES, DRIVE_UPLOAD_RESUME_MS, driveObjectKey, normalizeDriveName } from "@/lib/drive/utils";
+import { isVercelRuntime } from "@/lib/runtime";
+import { canEditDrive, DRIVE_MAX_FILE_BYTES, DRIVE_MAX_PARTS, DRIVE_PART_BYTES, DRIVE_UPLOAD_RESUME_MS, DRIVE_VERCEL_PART_BYTES, driveObjectKey, normalizeDriveName } from "@/lib/drive/utils";
 
 /**
  * Starts an upload. The file itself is then sent as raw (non multipart/form-data) PUT requests, because the runtime
@@ -19,7 +20,8 @@ export async function POST(request: Request) {
 	const size = typeof body.size === "number" && Number.isInteger(body.size) && body.size >= 0 ? body.size : null;
 	const name = normalizeDriveName(body.name) ?? "Untitled";
 	if (size === null) return NextResponse.json({ error: "Invalid file size" }, { status: 400 });
-	if (size > DRIVE_MAX_FILE_BYTES) return NextResponse.json({ error: "File is too large" }, { status: 413 });
+	const newPartBytes = isVercelRuntime(env) ? DRIVE_VERCEL_PART_BYTES : DRIVE_PART_BYTES;
+	if (size > DRIVE_MAX_FILE_BYTES || Math.ceil(size / newPartBytes) > DRIVE_MAX_PARTS) return NextResponse.json({ error: "File is too large" }, { status: 413 });
 
 	let ownerId = user.id;
 	let parentId: string | null = null;
@@ -72,9 +74,9 @@ export async function POST(request: Request) {
 
 	const upload = await env.BUCKET.createMultipartUpload(key, { httpMetadata: { contentType } });
 	row.uploadId = upload.uploadId;
-	row.uploadPartSize = DRIVE_PART_BYTES;
+	row.uploadPartSize = newPartBytes;
 	row.uploadFingerprint = fingerprint || null;
 	try { await db.insert(driveItems).values(row); }
 	catch (error) { await upload.abort(); throw error; }
-	return NextResponse.json({ id, partSize: DRIVE_PART_BYTES, parts: Math.ceil(size / DRIVE_PART_BYTES), uploaded: [] });
+	return NextResponse.json({ id, partSize: newPartBytes, parts: Math.ceil(size / newPartBytes), uploaded: [] });
 }

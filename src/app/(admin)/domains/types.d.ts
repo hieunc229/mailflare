@@ -69,6 +69,8 @@ export type DomainDnsView = {
 export type DomainDnsCache = Record<string, { domain: Domain; dns: DomainDnsView }>;
 
 export type DomainDnsDetailsProps = {
+	/** False without Cloudflare credentials. */
+	managesDns?: boolean;
 	domain: Domain;
 	dns: DomainDnsView;
 	onSendingProviderChange?: (provider: SendingProvider) => void;
@@ -78,13 +80,14 @@ export type DomainDnsDetailsProps = {
 	receivingProviderBusy?: boolean;
 	receivingProviderMessage?: string | null;
 	/** Reload the DNS view after a setup that changed the zone. */
-	onDnsChanged?: () => void;
+	onDnsChanged?: () => void | Promise<void>;
 	onSetup?: (record: DnsAuthRecord) => void;
 	setupRecord?: DnsAuthRecord | null;
 	setupMessage?: string | null;
 };
 
 export type DomainItemCardProps = {
+	managesDns?: boolean;
 	item: Domain;
 	dns?: DnsStatusSummary;
 	dnsDetails?: DomainDnsView;
@@ -94,7 +97,7 @@ export type DomainItemCardProps = {
 	onReceivingProviderChange?: (provider: ReceivingProvider) => void;
 	receivingProviderBusy?: boolean;
 	receivingProviderMessage?: string | null;
-	onDnsChanged?: () => void;
+	onDnsChanged?: () => void | Promise<void>;
 	dnsLoading?: boolean;
 	dnsError?: string | null;
 	expanded?: boolean;

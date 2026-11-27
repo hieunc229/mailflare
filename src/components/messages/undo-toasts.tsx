@@ -324,7 +324,7 @@ export function UndoToasts() {
 					className={cn(
 						"pointer-events-none fixed z-30 flex max-h-[calc(100dvh-6rem)] w-[calc(100vw-3rem)] flex-col gap-2 overflow-y-auto overscroll-contain rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600/60",
 						"inset-x-6 bottom-[max(5rem,calc(env(safe-area-inset-bottom,0px)+4.5rem))]",
-						"md:bottom-6 md:w-[min(24rem,calc(100vw-var(--sidebar-width,260px)-3rem))] md:[inset-inline-end:auto] md:[inset-inline-start:calc(var(--sidebar-width,260px)+1.5rem)]",
+						"md:bottom-6 md:w-[min(24rem,calc(100vw-3rem))] md:[inset-inline-end:auto] md:[inset-inline-start:1.5rem]",
 					)}
 				>
 					{toasts.map((entry) => {

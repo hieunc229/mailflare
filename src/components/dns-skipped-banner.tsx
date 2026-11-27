@@ -8,53 +8,61 @@ import { useCurrentUser } from "@/hooks/use-current-user";
 import { useLanguage } from "@/components/language-provider";
 import { Button } from "@/components/ui/button";
 
-type SkippedDomain = { id: string; hostname: string; dnsSkipped?: boolean };
+type CheckedDomain = { id: string; hostname: string; dnsSkipped?: boolean; dnsReady?: boolean | null };
 
-async function fetchSkippedDomains(): Promise<SkippedDomain[] | null> {
+async function fetchCheckedDomains(): Promise<CheckedDomain[] | null> {
 	try {
-		const res = await authFetch("/api/domains", { redirectOnUnauthorized: false });
+		const res = await authFetch("/api/domains?dnsStatus=true", { redirectOnUnauthorized: false });
 		if (!res.ok) return null;
-		const data = (await res.json()) as { domains?: SkippedDomain[] };
-		return (data.domains ?? []).filter((domain) => domain.dnsSkipped);
+		return ((await res.json()) as { domains?: CheckedDomain[] }).domains ?? [];
 	} catch {
 		// The banner is advisory; a failed read just hides it.
 		return null;
 	}
 }
 
+/** A failed lookup says nothing, so only a domain added with DNS skipped is still warned about then. */
+const needsDns = (domain: CheckedDomain) => domain.dnsReady === false || (domain.dnsReady !== true && !!domain.dnsSkipped);
+
+function patchDomain(id: string, body: { dnsSkipped: false; verify?: boolean }) {
+	return authFetch(`/api/domains/${id}`, {
+		method: "PATCH",
+		headers: { "Content-Type": "application/json" },
+		body: JSON.stringify(body),
+	});
+}
+
 export function DnsSkippedBanner() {
 	const { t } = useLanguage();
 	const user = useCurrentUser();
-	const [domains, setDomains] = useState<SkippedDomain[]>([]);
+	const [domains, setDomains] = useState<CheckedDomain[]>([]);
 	const [busy, setBusy] = useState(false);
-
-	const applyDomains = useCallback((next: SkippedDomain[] | null) => {
-		if (next) setDomains(next);
-	}, []);
-
-	const load = useCallback(async () => {
-		applyDomains(await fetchSkippedDomains());
-	}, [applyDomains]);
-
-	useEffect(() => {
-		void fetchSkippedDomains().then(applyDomains);
-	}, [applyDomains]);
-
-	if (domains.length === 0) return null;
 	const canManage = !!user && (user.isPrimaryAdmin || (user.role === "admin" && user.canManageDomains));
 
-	async function markDone() {
+	const load = useCallback(async () => {
+		const next = await fetchCheckedDomains();
+		if (!next) return;
+		// A domain added with DNS skipped becomes active once its DNS is in place.
+		if (canManage) {
+			await Promise.allSettled(
+				next.filter((domain) => domain.dnsSkipped && domain.dnsReady === true).map((domain) => patchDomain(domain.id, { dnsSkipped: false })),
+			);
+		}
+		setDomains(next.filter(needsDns));
+	}, [canManage]);
+
+	useEffect(() => {
+		// eslint-disable-next-line react-hooks/set-state-in-effect -- state is set after the request resolves
+		if (user) void load();
+	}, [user, load]);
+
+	if (domains.length === 0) return null;
+
+	/** `verify` looks DNS up again; without it the operator's word is taken. */
+	async function update(verify: boolean) {
 		setBusy(true);
 		try {
-			await Promise.all(
-				domains.map((domain) =>
-					authFetch(`/api/domains/${domain.id}`, {
-						method: "PATCH",
-						headers: { "Content-Type": "application/json" },
-						body: JSON.stringify({ dnsSkipped: false }),
-					}),
-				),
-			);
+			await Promise.all(domains.map((domain) => patchDomain(domain.id, { dnsSkipped: false, verify })));
 		} finally {
 			setBusy(false);
 			await load();
@@ -68,7 +76,8 @@ export function DnsSkippedBanner() {
 			{canManage && (
 				<>
 					<Link href="/domains" className="font-semibold underline underline-offset-2">{t("dnsSkipped.review")}</Link>
-					<Button type="button" size="sm" variant="outline" disabled={busy} onClick={() => void markDone()}>{t("dnsSkipped.markDone")}</Button>
+					<Button type="button" size="sm" variant="outline" disabled={busy} onClick={() => void update(true)}>{t("dnsSkipped.recheck")}</Button>
+					<Button type="button" size="sm" variant="outline" disabled={busy} onClick={() => void update(false)}>{t("dnsSkipped.markDone")}</Button>
 				</>
 			)}
 		</div>

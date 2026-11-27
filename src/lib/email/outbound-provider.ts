@@ -10,8 +10,8 @@ import type { OutboundProviderConfig, OutboundProviderMessage, ResendKeyStatus }
 /**
  * Each domain picks its own sender: Cloudflare Email Sending, Resend, or none
  * (receive-only). Receiving and storage always stay on Cloudflare. The Resend key
- * is shared by every domain; it comes from the admin setting, falling back to a
- * RESEND_API_KEY secret so it can be provisioned outside the database.
+ * is shared by every domain; a RESEND_API_KEY secret wins, so it never has to be
+ * stored in the database, and the admin setting is used without one.
  */
 export async function getResendKeyStatus(env: CloudflareEnv): Promise<ResendKeyStatus & { apiKey: string | null }> {
 	const [settings] = await getDb(env)
@@ -22,9 +22,9 @@ export async function getResendKeyStatus(env: CloudflareEnv): Promise<ResendKeyS
 	const saved = settings?.resendApiKey?.trim();
 	const fromEnv = (env as { RESEND_API_KEY?: string }).RESEND_API_KEY?.trim();
 	return {
-		configured: !!(saved || fromEnv),
-		source: saved ? "settings" : fromEnv ? "environment" : null,
-		apiKey: saved || fromEnv || null,
+		configured: !!(fromEnv || saved),
+		source: fromEnv ? "environment" : saved ? "settings" : null,
+		apiKey: fromEnv || saved || null,
 	};
 }
 

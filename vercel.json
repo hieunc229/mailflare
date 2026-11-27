@@ -1,0 +1,15 @@
+{
+	"$schema": "https://openapi.vercel.sh/vercel.json",
+	"framework": "nextjs",
+	"installCommand": "npm ci",
+	"buildCommand": "npm run build:vercel",
+	"functions": {
+		"src/app/api/queues/route.ts": {
+			"experimentalTriggers": [{ "type": "queue/v2beta", "topic": "mailflare", "retryAfterSeconds": 60 }]
+		}
+	},
+	"crons": [
+		{ "path": "/api/internal/cron/frequent", "schedule": "0 3 * * *" },
+		{ "path": "/api/internal/cron/daily", "schedule": "0 2 * * *" }
+	]
+}

@@ -4,6 +4,7 @@ import { requireUser } from "@/lib/auth/cookies";
 import { restoreDatabaseRecords } from "@/lib/backups/export";
 import { getEnv } from "@/lib/cloudflare";
 import { hasValidSessionMutationOrigin } from "@/lib/auth/origin";
+import { MAX_UPLOAD_BYTES, resolveUploadedRequest } from "@/lib/uploads/direct";
 
 export async function POST(request: Request) {
 	const env = getEnv();
@@ -11,7 +12,7 @@ export async function POST(request: Request) {
 		const user = await requireUser(env, request);
 		assertPrimaryAdmin(user);
 		if (!hasValidSessionMutationOrigin(request)) return NextResponse.json({ error: "Invalid origin" }, { status: 403 });
-		const form = await request.formData();
+		const form = await (await resolveUploadedRequest(env, request, user.id, MAX_UPLOAD_BYTES)).formData();
 		const file = form.get("backup");
 		if (!(file instanceof File)) return NextResponse.json({ error: "Choose a backup file" }, { status: 400 });
 		await restoreDatabaseRecords(env.DB, await file.arrayBuffer());

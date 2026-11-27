@@ -26,6 +26,7 @@
     "migrate": "wrangler d1 migrations apply DB",
     "db:seed": "curl -X POST http://localhost:3000/api/seed",
     "build:node": "npm run db:bundle && MAILFLARE_RUNTIME=node next build && node scripts/build-server.mjs",
+    "build:vercel": "npm run db:bundle && node scripts/build-vercel.mjs",
     "start:node": "MAILFLARE_RUNTIME=node NODE_ENV=production node dist/server.mjs",
     "dev:node": "npm run db:bundle && node scripts/build-server.mjs && MAILFLARE_RUNTIME=node node dist/server.mjs",
     "test:e2e": "playwright test"
@@ -84,6 +85,8 @@
     "@simplewebauthn/browser": "^14.0.0",
     "@simplewebauthn/server": "^14.0.3",
     "@tanstack/react-query": "^5.100.11",
+    "@vercel/blob": "^2.9.0",
+    "@vercel/queue": "^0.11.0",
     "@vinext/cloudflare": "1.0.0-beta.11",
     "ai": "^7.0.113",
     "bcryptjs": "^3.0.3",

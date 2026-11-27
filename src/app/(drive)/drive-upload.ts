@@ -1,5 +1,6 @@
 import { authFetch, getAuthHeaders } from "@/lib/auth/client";
 import { parseRetryAfter, sleepFor } from "@/lib/import/takeout-calendar-utils";
+import { needsDirectUpload, prepareUpload } from "@/lib/uploads/client";
 
 /** Tries for one request (starting, one part, completing). */
 const TRIES = 5;
@@ -45,13 +46,19 @@ async function sendWithRetry(send: () => Promise<Response>, sleep: NonNullable<D
 
 // XMLHttpRequest rather than fetch, because only it reports upload progress. Browsers that do not
 // compute the length still finish the part; progress then moves once per part.
-function putPart(url: string, chunk: Blob, onBytes: (loaded: number) => void, signal?: AbortSignal): Promise<void> {
+async function putPart(url: string, chunk: Blob, onBytes: (loaded: number) => void, signal?: AbortSignal): Promise<void> {
+	if (!needsDirectUpload(chunk)) return sendPart(url, chunk, {}, onBytes, signal);
+	const upload = await prepareUpload(chunk, { onProgress: onBytes, signal });
+	return sendPart(url, upload.body, upload.headers, () => {}, signal);
+}
+
+function sendPart(url: string, chunk: Blob | undefined, extraHeaders: Record<string, string>, onBytes: (loaded: number) => void, signal?: AbortSignal): Promise<void> {
 	return new Promise((resolve, reject) => {
 		const request = new XMLHttpRequest();
 		const abort = () => request.abort();
 		signal?.addEventListener("abort", abort, { once: true });
 		request.open("PUT", url);
-		getAuthHeaders({ "Content-Type": "application/octet-stream" }).forEach((value, name) => request.setRequestHeader(name, value));
+		getAuthHeaders(chunk ? { "Content-Type": "application/octet-stream" } : extraHeaders).forEach((value, name) => request.setRequestHeader(name, value));
 		request.upload.onprogress = (event) => { if (event.lengthComputable) onBytes(event.loaded); };
 		request.onload = () => {
 			signal?.removeEventListener("abort", abort);
@@ -62,7 +69,7 @@ function putPart(url: string, chunk: Blob, onBytes: (loaded: number) => void, si
 		};
 		request.onerror = () => { signal?.removeEventListener("abort", abort); reject(new Error("Upload failed: network error")); };
 		request.onabort = () => { signal?.removeEventListener("abort", abort); reject(new Error("Upload cancelled")); };
-		request.send(chunk);
+		request.send(chunk ?? null);
 	});
 }
 

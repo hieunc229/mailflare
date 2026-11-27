@@ -4,7 +4,7 @@ import type { ImportDestination } from "@/lib/import/destination-types";
 import { splitMboxBytes } from "@/lib/import/mbox";
 import type { ImportMessageInput } from "@/lib/import/types";
 
-const MAX_IMPORT_REQUEST_SIZE = 25 * 1024 * 1024;
+export const MAX_IMPORT_REQUEST_SIZE = 25 * 1024 * 1024;
 /** Without `background`, the request imports inline (the Takeout uploader), so it stays small. */
 const MAX_INLINE_IMPORT_MESSAGES = 100;
 const MAX_BACKGROUND_IMPORT_MESSAGES = 5000;

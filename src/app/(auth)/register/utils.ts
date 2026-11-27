@@ -59,6 +59,7 @@ export async function submitRegistration(
 		body: JSON.stringify(
 			payload.firstRun
 				? {
+						name: String(form.get("name") ?? ""),
 						domain: payload.domain,
 						enableSending: payload.enableSending,
 						replaceMxRecords: payload.replaceMxRecords,

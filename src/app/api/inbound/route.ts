@@ -6,8 +6,12 @@ import { inboundAttachmentLimitReasonFromRaw } from "@/lib/email/inbound-attachm
 import { RequestBodyTooLargeError } from "@/lib/http/errors";
 import { readRawBody } from "@/lib/http/request";
 import { readHeaderMap } from "@/lib/email/provider-trace";
+import { RELAY_UPLOAD_OWNER, UPLOAD_KEY_HEADER } from "@/lib/uploads/constants";
+import { directUploadsEnabled, readUpload } from "@/lib/uploads/direct";
 
 export const dynamic = "force-dynamic";
+
+const MAX_RELAY_BYTES = 25 * 1024 * 1024;
 
 /**
  * Inbound mail from the Cloudflare email relay Worker (deploy/cloudflare-email-relay).
@@ -22,9 +26,13 @@ export async function POST(request: Request) {
 
 	// Unsigned requests are refused before the body is read; the body is then read with a hard cap.
 	if (!request.headers.get("x-mailflare-signature")) return NextResponse.json({ error: "Invalid signature" }, { status: 401 });
+	// A Vercel function cannot receive a large body, so the relay puts such a message in storage first.
+	const uploadKey = directUploadsEnabled(env) ? request.headers.get(UPLOAD_KEY_HEADER) : null;
 	let raw: ArrayBuffer;
 	try {
-		raw = await readRawBody(request, 25 * 1024 * 1024);
+		raw = uploadKey
+			? await readUpload(env, uploadKey, RELAY_UPLOAD_OWNER, MAX_RELAY_BYTES)
+			: await readRawBody(request, MAX_RELAY_BYTES);
 	} catch (error) {
 		if (error instanceof RequestBodyTooLargeError) return NextResponse.json({ error: "Message exceeds the 25 MiB receiving limit" }, { status: 413 });
 		throw error;
@@ -42,6 +50,8 @@ export async function POST(request: Request) {
 			? await verifyInboundSignatureV2(secret, signature, raw, from, to, headerMap, timestamp)
 			: env.INBOUND_REQUIRE_SIGNED_HEADERS !== "1" && await verifyInboundSignature(secret, signature, raw, from, to);
 	if (!valid) return NextResponse.json({ error: "Invalid signature" }, { status: 401 });
+	// Only a signed request may consume the stored message.
+	if (uploadKey) await env.BUCKET.delete(uploadKey);
 	if (timestamp) {
 		const seenKey = `relay-seen/${signature}`;
 		if (await env.BUCKET.head(seenKey)) return NextResponse.json({ error: "Replayed request" }, { status: 409 });

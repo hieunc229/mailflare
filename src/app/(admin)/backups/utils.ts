@@ -1,6 +1,7 @@
 import { authFetch } from "@/lib/auth/client";
 import { formatUserDate } from "@/lib/time/utils";
 import type { BackupItem, BackupsResponse, BackupSettings } from "./types";
+import { prepareUpload } from "@/lib/uploads/client";
 
 export const WEEKDAYS = [
 	{ value: 0, labelKey: "weekday.0" as const },
@@ -44,7 +45,8 @@ export async function removeBackup(id: string): Promise<void> {
 export async function restoreBackup(file: File): Promise<void> {
 	const form = new FormData();
 	form.set("backup", file);
-	const response = await authFetch("/api/backups/restore", { method: "POST", body: form });
+	const upload = await prepareUpload(form);
+	const response = await authFetch("/api/backups/restore", { method: "POST", ...upload });
 	const data = (await response.json()) as { error?: string };
 	if (!response.ok) throw new Error(data.error ?? "Failed to restore backup");
 }

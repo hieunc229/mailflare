@@ -66,6 +66,7 @@ const hostnameField = z
 
 export const firstRunRegisterSchema = z
 	.object({
+		name: z.string().trim().max(100).optional(),
 		domain: hostnameField,
 		enableSending: z.boolean().optional(),
 		replaceMxRecords: z.boolean().optional(),

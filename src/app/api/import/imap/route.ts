@@ -7,6 +7,7 @@ import { getEnv } from "@/lib/cloudflare";
 import { RequestBodyTooLargeError } from "@/lib/http/errors";
 import { readJsonBody } from "@/lib/http/request";
 import { assertSafeImapHost } from "@/lib/import/imap-utils";
+import { isVercelRuntime } from "@/lib/runtime";
 import { createImapImportJob } from "@/lib/import/jobs";
 import { getMailboxAccessLevel } from "@/lib/mailboxes/access";
 import type { ImapImportRequest } from "./types";
@@ -15,6 +16,8 @@ import { parseImapImportRequest } from "./utils";
 export async function POST(request: Request) {
 	const env = getEnv();
 	const user = await requireUser(env, request);
+	// IMAP needs Workers sockets, and the password would otherwise sit in the external queue.
+	if (isVercelRuntime(env)) return NextResponse.json({ error: "IMAP import is not supported on Vercel" }, { status: 400 });
 	let input: ReturnType<typeof parseImapImportRequest>;
 	try {
 		const body = await readJsonBody<ImapImportRequest>(request, 64 * 1024);

@@ -82,7 +82,7 @@ function ComposeNoticeToast({ notice }: { notice: ComposeNotice }) {
 			aria-atomic="false"
 			className={cn(
 				"fixed z-[60] flex max-w-[calc(100vw-3rem)] items-center gap-4 rounded-lg px-4 py-3 text-sm font-medium text-white shadow-lg",
-				"inset-x-6 bottom-[max(5rem,calc(env(safe-area-inset-bottom,0px)+4.5rem))] md:bottom-6 md:[inset-inline-end:auto] md:[inset-inline-start:calc(var(--sidebar-width,260px)+1.5rem)]",
+				"inset-x-6 bottom-[max(5rem,calc(env(safe-area-inset-bottom,0px)+4.5rem))] md:bottom-6 md:[inset-inline-end:auto] md:[inset-inline-start:1.5rem]",
 				notice.tone === "error" ? "bg-red-600" : notice.tone === "loading" ? "bg-neutral-800" : "bg-green-600",
 			)}
 		>

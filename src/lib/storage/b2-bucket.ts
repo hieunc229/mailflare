@@ -1,4 +1,5 @@
 import { awsRequest, AwsError } from "@/lib/aws/client";
+import { presignS3Url } from "@/lib/aws/sigv4";
 import { xmlBlocks, xmlTag } from "@/lib/aws/xml";
 import type { AwsConfig } from "@/lib/aws/aws-types";
 import type { B2Config, B2HttpMetadata } from "@/lib/storage/b2-types";
@@ -187,6 +188,19 @@ export class B2Bucket {
 			},
 		};
 	}
+}
+
+/** A URL that lets the holder PUT exactly `size` bytes to `key`, straight to the bucket. */
+export function presignPutUrl(config: B2Config, key: string, size: number, expiresSeconds: number): Promise<string> {
+	assertPlainKey(key);
+	return presignS3Url({
+		method: "PUT",
+		url: new URL(`https://${config.bucket}.${config.endpoint}${encodePath(key)}`),
+		headers: { "content-length": String(size) },
+		region: config.region,
+		credentials: { accessKeyId: config.keyId, secretAccessKey: config.applicationKey },
+		expiresSeconds,
+	});
 }
 
 export function openB2Bucket(config: B2Config): R2Bucket {

@@ -38,6 +38,6 @@ export function trustedResetOrigin(env: { APP_URL?: string; MAILFLARE_RUNTIME?: 
 			return null;
 		}
 	}
-	if (env.MAILFLARE_RUNTIME === "node") return null;
+	if (env.MAILFLARE_RUNTIME === "node" || env.MAILFLARE_RUNTIME === "vercel") return null;
 	return new URL(requestUrl).origin;
 }

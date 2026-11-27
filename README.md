@@ -5,9 +5,10 @@
 
 A self-hosted alternative to Google Workspace. Setup **custom domain Emails**, **Calendar, Drive, Booking** and **built-in AI agents**.
 
-Self-host it on Cloudflare or Docker. **Or try [Mailflare Cloud](https://cloud.mailflare.co?ref=github) with high-deliverable emails** from $4​
+Self-host it on Cloudflare, Docker or Vercel (experimental). **Or try [Mailflare Cloud](https://cloud.mailflare.co?ref=github) with high-deliverable emails** from $4​
 
 [![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/hieunc229/mailflare)
+[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2Fhieunc229%2Fmailflare&env=CRON_SECRET&envDescription=See%20docs%2Fvercel.md&envLink=https%3A%2F%2Fgithub.com%2Fhieunc229%2Fmailflare%2Fblob%2Fmain%2Fdocs%2Fvercel.md)
 
 ## Screenshots
 
@@ -39,7 +40,7 @@ Self-host it on Cloudflare or Docker. **Or try [Mailflare Cloud](https://cloud.m
 
 - **Databases**: Cloudflare D1 (default), PostgreSQL, MySQL, Turso / libSQL, or a local SQLite file. Set `DATABASE_URL` to switch. Works with Supabase, Neon, PlanetScale, TiDB and more. See [Databases](docs/databases.md).
 - **File storage**: Cloudflare R2, Backblaze B2 or AWS S3.
-- **Hosting**: Cloudflare Workers or a single Docker container.
+- **Hosting**: Cloudflare Workers, a single Docker container, or Vercel (experimental).
 - **Admin**: Users, API keys, webhooks, audit logs and backups.
 - **Import**: Bring in mail from IMAP, Gmail Takeout, `.eml` and `.mbox` files, and Google Calendar events, Google Contacts and Google Drive files from Takeout. See [Importing from Google Takeout](docs/import.md).
 
@@ -102,6 +103,14 @@ Or skip the build and run the prebuilt image: `docker compose -f docker-compose.
 
 See [self-hosting](docs/self-hosting.md).
 
+### Deploy to Vercel (experimental)
+
+[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2Fhieunc229%2Fmailflare&env=CRON_SECRET&envDescription=See%20docs%2Fvercel.md&envLink=https%3A%2F%2Fgithub.com%2Fhieunc229%2Fmailflare%2Fblob%2Fmain%2Fdocs%2Fvercel.md)
+
+Vercel needs a hosted database (such as Turso, connected from the Vercel Marketplace) and storage: a Vercel Blob store (**it must be private**), AWS S3 or Backblaze B2 (check the [Blob free limits](docs/vercel.md#storage) for mail); queues use Vercel Queues (beta). Mail arrives through the [email relay Worker](deploy/cloudflare-email-relay/README.md), Resend or Amazon SES. The Hobby plan works for non-commercial use. After deploying, add the database and storage, and start the [five-minute schedule](docs/vercel.md#five-minute-schedule). Keep the database in the same region as the functions: the [first setup](docs/vercel.md#first-setup) can otherwise take many minutes.
+
+Setup steps, variables and limits: [Vercel guide](docs/vercel.md).
+
 ## Local development
 
 ```bash
@@ -122,6 +131,7 @@ A schema change needs a migration for each database type. See [Databases](docs/d
 ## Documentation
 
 - [Deployment and configuration](docs/deployment.md)
+- [Deploying to Vercel (experimental)](docs/vercel.md)
 - [Databases](docs/databases.md)
 - [Sending and receiving providers](docs/providers.md)
 - [API and integrations](docs/api.md)

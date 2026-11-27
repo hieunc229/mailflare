@@ -66,3 +66,6 @@ mailflare-landing
 skills-lock.json
 /dist/
 /tests/.tmp-*
+
+# Written for the length of `npm run build:vercel` by scripts/build-vercel.mjs
+/src/pages/

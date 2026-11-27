@@ -6,7 +6,7 @@ import { domains } from "@/db/schema";
 import { requireUser } from "@/lib/auth/cookies";
 import { canManageDomains } from "@/lib/auth/admin";
 import { getDomainForUser } from "@/lib/domains/service";
-import { getDomainDnsView } from "@/lib/domains/dns-view";
+import { getDomainDnsView, isDomainDnsReady } from "@/lib/domains/dns-view";
 import type { DnsAuthRecord } from "@/lib/domains/dns-audit";
 import { adoptCloudflareZone } from "@/lib/domains/adopt-zone";
 import { setupDomainDnsRecord } from "@/lib/domains/dns-setup";
@@ -38,6 +38,7 @@ export async function POST(request: Request, { params }: Params) {
 		domain = await adoptCloudflareZone(env, domain);
 		await setupDomainDnsRecord(env, domain, record, { replaceMx: body.replaceMx === true });
 		const dns = await getDomainDnsView(env, domain);
+		await isDomainDnsReady(env, domain);
 		const [updated] = await getDb(env)
 			.select()
 			.from(domains)

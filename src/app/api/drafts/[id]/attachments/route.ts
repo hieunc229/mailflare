@@ -9,6 +9,7 @@ import { outgoingSizeError, requestBodyLimit } from "@/lib/email/attachment-limi
 import { getOutboundAttachmentMaxMb } from "@/lib/email/attachment-policy";
 import { readFormDataBody } from "@/lib/http/request";
 import { RequestBodyTooLargeError } from "@/lib/http/errors";
+import { resolveUploadedRequest } from "@/lib/uploads/direct";
 import { userOwnsDraft } from "../../utils";
 import type { DraftAttachmentUploadParams } from "./types";
 
@@ -23,7 +24,10 @@ export async function POST(request: Request, { params }: DraftAttachmentUploadPa
 	if (!userOwnsDraft(draft, user.id)) return Response.json({ error: "Draft not found" }, { status: 404 });
 	const maxMb = await getOutboundAttachmentMaxMb(env);
 	let form: FormData;
-	try { form = await readFormDataBody(request, requestBodyLimit(maxMb)); }
+	try {
+		const limit = requestBodyLimit(maxMb);
+		form = await readFormDataBody(await resolveUploadedRequest(env, request, user.id, limit), limit);
+	}
 	catch (error) { return Response.json({ error: "Invalid attachment request" }, { status: error instanceof RequestBodyTooLargeError ? 413 : 400 }); }
 	const files = form.getAll("attachments").filter((value): value is File => value instanceof File && value.size > 0);
 	if (!files.length) return Response.json({ error: "No attachments provided" }, { status: 400 });

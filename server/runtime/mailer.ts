@@ -129,6 +129,17 @@ function toBuffer(content: ArrayBuffer | ArrayBufferView | string): Buffer {
 	return Buffer.from(content.buffer, content.byteOffset, content.byteLength);
 }
 
+/** SMTP_URL wins; otherwise Cloudflare Email Sending when the account id and token are both set. */
+export function mailerConfigFromEnv(): MailerConfig {
+	const read = (name: string) => process.env[name]?.trim() || undefined;
+	const smtp = read("SMTP_URL");
+	if (smtp) return { kind: "smtp", url: smtp };
+	const accountId = read("CF_ACCOUNT_ID");
+	const token = read("CF_TOKEN");
+	if (accountId && token) return { kind: "cloudflare", accountId, token };
+	return { kind: "none" };
+}
+
 export function openMailer(config: MailerConfig): SendEmail & Mailer {
 	return new Mailer(config) as unknown as SendEmail & Mailer;
 }

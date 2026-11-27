@@ -56,6 +56,8 @@ export const INTERNAL_TABLES = [
 	// Web-push subscriptions are saved again by each client whenever it resolves
 	// its push state, and they reference sessions whose rows a restore replaces.
 	"push_subscriptions",
+	// Rate limit counters the Vercel runtime creates for itself; they expire within minutes.
+	"vercel_rate_limits",
 	// Import jobs are transient progress records tied to staged objects that a backup does not carry.
 	"import_jobs",
 	// WebAuthn ceremonies, step-up grants and enrolment links are short-lived,
