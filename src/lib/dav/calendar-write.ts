@@ -174,11 +174,12 @@ export async function putCalendarResource(ctx: DavContext, name: string, request
 	const objectValues = delegate ? { uid: parsed.uid, name, rowsHash: null, size, updatedAt: now } : { uid: parsed.uid, name, body, rowsHash: hash, size, updatedAt: now };
 	// A calendar deleted meanwhile refuses the batch instead of taking rows for a collection that is gone.
 	const statements: unknown[] = [...writeGuards(db, ctx), ...(existing ? staleGuard(db, calendarEvents, scope, id, userId, { seq: seq ?? null, updatedAt: existing.master.updatedAt }) : [])];
+	// The event may now happen at another time: its room bookings are declined in this batch, first after the guards (on a driver whose batch is separate
+	// statements a crash between two of them then fails closed), and booked again after it.
+	if (existing) statements.push(declineBookingsStatement(db, id));
 	if (old?.davObjectId === id) statements.push(db.delete(calendarEvents).where(and(eq(calendarEvents.userId, userId), eq(calendarEvents.davObjectId, id), ne(calendarEvents.id, id))));
 	statements.push(existing ? db.update(calendarEvents).set(masterColumns).where(and(eq(calendarEvents.id, id), eq(calendarEvents.userId, userId))) : db.insert(calendarEvents).values({ ...masterColumns, id, userId, color, calendarId: calendar.isDefault ? null : cid, createdAt: now }));
 	for (let i = 0; i < overrideRows.length; i += ROWS_PER_INSERT) statements.push(db.insert(calendarEvents).values(overrideRows.slice(i, i + ROWS_PER_INSERT)));
-	// The event may now happen at another time: its room bookings are declined in this batch and booked again after it, so a stop in between leaves none accepted unchecked.
-	if (existing) statements.push(declineBookingsStatement(db, id));
 	// A native event written for the first time has no stored resource yet.
 	const hasObject = (await db.select({ id: davCalendarObjects.id }).from(davCalendarObjects).where(eq(davCalendarObjects.id, id)).limit(1)).length > 0;
 	statements.push(hasObject ? db.update(davCalendarObjects).set(objectValues).where(eq(davCalendarObjects.id, id)) : db.insert(davCalendarObjects).values({ ...objectValues, body: delegate ? null : body, id, userId, collectionId: cid, createdAt: now }));
