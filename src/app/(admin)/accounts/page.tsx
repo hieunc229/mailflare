@@ -1,7 +1,7 @@
 "use client";
 
 import { mobilePrimaryActionClass } from "@/components/page-header-utils";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Plus } from "@/components/icons";
 import { useLanguage } from "@/components/language-provider";
 import { Button } from "@/components/ui/button";
@@ -10,6 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
 import { authFetch } from "@/lib/auth/client";
+import { createLatestRequestGate } from "@/lib/client/latest-request";
 import { LicenseRequiredOverlay } from "@/components/license-required-overlay";
 import { useCurrentUser } from "@/hooks/use-current-user";
 import { defaultTranslator } from "@/lib/i18n/utils";
@@ -47,17 +48,25 @@ export default function AccountsPage() {
 	const [selected, setSelected] = useState<Set<string>>(new Set());
 	const [deleteOpen, setDeleteOpen] = useState(false);
 	const [restoringId, setRestoringId] = useState<string | null>(null);
+	// Every mutation reloads the list, so two reloads can overlap: only the newest
+	// one may write, otherwise the older snapshot puts back a created or restored row.
+	const accountsGate = useMemo(() => createLatestRequestGate(), []);
 
 	async function loadAccounts() {
+		const token = accountsGate.begin();
 		const data = await fetchAccounts();
+		if (!accountsGate.isCurrent(token)) return;
 		setAccounts(data.accounts ?? []);
 		setSeats(data.seats ?? null);
 	}
 
 	useEffect(() => {
+		const token = accountsGate.begin();
 		fetchAccounts().then(async (list) => {
-			setAccounts(list.accounts ?? []);
-			setSeats(list.seats ?? null);
+			if (accountsGate.isCurrent(token)) {
+				setAccounts(list.accounts ?? []);
+				setSeats(list.seats ?? null);
+			}
 			const response = await authFetch("/api/domains");
 			const data = (await response.json()) as { domains?: Domain[]; error?: string };
 			if (!response.ok) throw new Error(data.error ?? t("accounts.domainsFailed"));
@@ -68,7 +77,7 @@ export default function AccountsPage() {
 			setTeamRequired(/(pro|team) license/i.test(text) && !/seats/i.test(text));
 			setMessage(text);
 		}).finally(() => setLoading(false));
-	}, []);
+	}, [accountsGate, t]);
 
 	async function createAccount(event: React.FormEvent<HTMLFormElement>) {
 		event.preventDefault();

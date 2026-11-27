@@ -2,7 +2,7 @@
 
 import { mobilePrimaryActionAboveNavClass } from "@/components/page-header-utils";
 import { confirmDestructive } from "@/components/ui/confirm-dialog";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Copy, KeyRound, Plus, Trash2 } from "@/components/icons";
 import { useLanguage } from "@/components/language-provider";
 import { useSelectedMailbox } from "@/components/mailbox-provider";
@@ -17,6 +17,7 @@ import { SectionRowSkeleton } from "@/components/page-skeletons";
 import { formatUserDate } from "@/lib/time/utils";
 import { McpAgentInstructions } from "@/components/settings/mcp-agent-instructions";
 import type { ApiKeyScope } from "@/lib/api/scopes";
+import { createLatestRequestGate } from "@/lib/client/latest-request";
 import { ClientRequestError } from "@/lib/http/client-error";
 import type { ManagedApiKey, McpKeyScope } from "./api-keys-settings-types";
 import { useSecurityStatus } from "./security-status-store";
@@ -42,14 +43,20 @@ export function ApiKeysSettings() {
 	const [mailboxIds, setMailboxIds] = useState<string[]>([]);
 	const [newKey, setNewKey] = useState<string | null>(null);
 	const [copied, setCopied] = useState(false);
+	// The mount read, a create's own reload and the change event can all be on the
+	// wire at once; only the newest read, or a mutation's own result, may write.
+	const keysGate = useMemo(() => createLatestRequestGate(), []);
 
 	useEffect(() => {
 		let cancelled = false;
-		const refresh = () => void loadManagedApiKeys().then((items) => { if (!cancelled) { setKeys(items); setError(null); } }).catch((cause) => { if (!cancelled) setError(cause instanceof Error ? cause.message : t("apiKeys.loadFailed")); }).finally(() => { if (!cancelled) setLoading(false); });
+		const refresh = () => {
+			const token = keysGate.begin();
+			void loadManagedApiKeys().then((items) => { if (!cancelled && keysGate.isCurrent(token)) { setKeys(items); setError(null); } }).catch((cause) => { if (!cancelled && keysGate.isCurrent(token)) setError(cause instanceof Error ? cause.message : t("apiKeys.loadFailed")); }).finally(() => { if (!cancelled) setLoading(false); });
+		};
 		refresh();
 		window.addEventListener("mailflare:api-keys-changed", refresh);
 		return () => { cancelled = true; window.removeEventListener("mailflare:api-keys-changed", refresh); };
-	}, [t]);
+	}, [keysGate, t]);
 
 	// A jmap key signs in like an app password, so it needs the same fresh confirmation first.
 	const needsStepUp = !mcpAllowed && standardScopes.includes("jmap");
@@ -70,6 +77,8 @@ export function ApiKeysSettings() {
 			setCopied(false);
 			setName("");
 			setKeys(await loadManagedApiKeys());
+			// A read that left before this create must not put the list back as it was.
+			keysGate.invalidate();
 		} catch (cause) {
 			// A refused confirmation is the dialog's to explain; anything else belongs on the form.
 			if (cause instanceof ClientRequestError && cause.code) throw cause;
@@ -84,6 +93,7 @@ export function ApiKeysSettings() {
 		try {
 			await revokeManagedApiKey(key.id);
 			setKeys((current) => current.filter((item) => item.id !== key.id));
+			keysGate.invalidate();
 		} catch (cause) {
 			setError(cause instanceof Error ? cause.message : t("apiKeys.revokeFailed"));
 		} finally { setRevokingId(null); }

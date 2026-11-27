@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Select } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { authFetch } from "@/lib/auth/client";
+import { createLatestRequestGate, type LatestRequestGate } from "@/lib/client/latest-request";
 import { dispatchMessagesChanged } from "@/lib/messages/change-events";
 import {
 	canManagePromotions,
@@ -55,16 +56,32 @@ export function PromotionsSettings() {
 		}));
 	}, []);
 
+	// One gate per mailbox: a read for one row must not retire another row's read.
+	const gates = useRef(new Map<string, LatestRequestGate>());
+	const gateFor = useCallback((id: string) => {
+		let gate = gates.current.get(id);
+		if (!gate) {
+			gate = createLatestRequestGate();
+			gates.current.set(id, gate);
+		}
+		return gate;
+	}, []);
+
 	const load = useCallback(async (id: string, quiet = false) => {
+		const gate = gateFor(id);
+		const token = gate.begin();
 		try {
 			const response = await authFetch(`/api/mailboxes/${id}/promotions`);
 			const data = (await response.json().catch(() => ({}))) as PromotionsResponse;
 			if (!response.ok || !data.mode) throw new Error(data.error ?? "load failed");
+			// A poll read that left before a mode change would otherwise repaint the old
+			// mode, and its stale backfill status would stop the poll that follows the sort.
+			if (!gate.isCurrent(token)) return;
 			patch(id, { status: "ready", mode: data.mode, backfill: data.backfill ?? null, ...(quiet ? {} : { error: null }) });
 		} catch {
-			if (!quiet) patch(id, { status: "error" });
+			if (!quiet && gate.isCurrent(token)) patch(id, { status: "error" });
 		}
-	}, [patch]);
+	}, [gateFor, patch]);
 
 	useEffect(() => {
 		// eslint-disable-next-line react-hooks/set-state-in-effect -- loads each mailbox's setting from the server; setState runs after the request resolves.
@@ -98,6 +115,7 @@ export function PromotionsSettings() {
 				return;
 			}
 			patch(id, { saving: false, mode: data.mode, backfill: data.backfill ?? null });
+			gateFor(id).invalidate();
 			// The nav entry, counts and Inbox contents all depend on the mode.
 			dispatchMessagesChanged();
 		} catch {
