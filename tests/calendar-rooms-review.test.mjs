@@ -83,27 +83,42 @@ test("a booking is not declined because the room is busy elsewhere in the year: 
 	assert.deepEqual(declined.rooms[0].occurrences, [new Date(at(3, 10.5)).toISOString()]);
 });
 
-test("a booking written by a slow writer after this one's compare-and-swap is caught by the re-read: the earlier booking wins and the later one is declined", async () => {
+test("Neon HTTP: a booking that stalls after its token swap while another books the room ends with at most one accepted (both may decline)", async () => {
 	const db = setup();
-	const early = event("u2", at(0, 9), at(0, 10));
-	const late = event("u1", at(0, 9.5), at(0, 10.5));
-	// What a non-atomic driver allows: the other booking's insert lands after this one read the room and swapped the token.
-	beforeBatch = (database) => { database.prepare("INSERT INTO calendar_resource_bookings (id, resource_id, event_id, status, created_at) VALUES ('crb_early', 'r1', ?, 'accepted', 1)").run(early); beforeBatch = null; };
-	const result = await book(db, late, ["r1"]);
-	assert.equal(result.rooms[0].status, "declined");
-	assert.deepEqual(bookingsOf(late), [["r1", "declined"]]);
-	assert.deepEqual(bookingsOf(early), [["r1", "accepted"]], "the earlier booking is left alone");
+	db.batchIsAtomic = false;
+	// No transaction: statements run one by one, and the first writer pauses after its guards while the second one books the room completely.
+	const a = event("u1", at(0, 9), at(0, 10));
+	const b = event("u2", at(0, 9.5), at(0, 10.5));
+	let stalled = false;
+	let second;
+	db.batch = async (list) => {
+		let index = 0;
+		if (!stalled && list.length > 3) {
+			stalled = true;
+			for (; index < 3; index += 1) await list[index];
+			second = await bookRooms(db, b, ["r1"], { now: NOW });
+		}
+		for (; index < list.length; index += 1) await list[index];
+	};
+	const first = await book(db, a, ["r1"]);
+	assert.equal(second.rooms[0].status, "accepted", "the second writer read the room before the first one's insert");
+	const accepted = sqlite.prepare("SELECT count(*) AS n FROM calendar_resource_bookings WHERE status = 'accepted'").get().n;
+	assert.equal(accepted <= 1, true, "never two accepted for overlapping times");
+	assert.equal(first.rooms[0].status, "declined", "the writer whose insert landed last saw the other and gave way");
+	assert.deepEqual(bookingsOf(a), [["r1", "declined"]]);
 });
 
-test("two bookings that both slipped in are told apart by (created_at, id): exactly one stays accepted", async () => {
+test("Neon HTTP: whichever of two overlapping accepted bookings checks last sees the other, whatever their creation order", async () => {
 	const db = setup();
+	db.batchIsAtomic = false;
 	const a = event("u1", at(0, 9), at(0, 10));
 	const b = event("u2", at(0, 9), at(0, 10));
-	sqlite.prepare("INSERT INTO calendar_resource_bookings (id, resource_id, event_id, status, created_at) VALUES ('crb_a', 'r1', ?, 'accepted', 1)").run(a);
-	sqlite.prepare("INSERT INTO calendar_resource_bookings (id, resource_id, event_id, status, created_at) VALUES ('crb_b', 'r1', ?, 'accepted', 1)").run(b);
-	await book(db, b, ["r1"]);
-	assert.equal(bookingsOf(a)[0][1] === "accepted" || bookingsOf(b)[0][1] === "accepted", true);
-	assert.equal(sqlite.prepare("SELECT count(*) AS n FROM calendar_resource_bookings WHERE status = 'accepted'").get().n <= 1, true, "never two accepted for one slot");
+	// b was created first and is already accepted; a's own write lands with an older created_at than b's.
+	sqlite.prepare("INSERT INTO calendar_resource_bookings (id, resource_id, event_id, status, created_at) VALUES ('crb_b', 'r1', ?, 'accepted', 100)").run(b);
+	beforeBatch = null;
+	const result = await book(db, a, ["r1"]);
+	assert.equal(result.rooms[0].status, "declined", "the pre-check already sees b");
+	assert.equal(bookingsOf(b)[0][1], "accepted");
 });
 
 test("a room deleted between the list check and the booking does not throw", async () => {
