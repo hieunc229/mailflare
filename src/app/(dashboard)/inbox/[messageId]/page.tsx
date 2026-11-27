@@ -41,6 +41,7 @@ import { splitEmailAddressList } from "@/lib/email/address";
 import { findInviteAttachment } from "@/lib/calendar/invite-attachment";
 import { formatRecipientAddressList, type RecipientAddressStyle } from "@/lib/email/recipient-display";
 import { RecipientList } from "@/components/messages/recipient-list";
+import { RecipientTagBadge } from "@/components/messages/recipient-tag-badge";
 import { useShowFullRecipientAddresses } from "@/components/messages/use-show-full-recipient-addresses";
 import type { MessageAttachment, MessageDetailResponse } from "./types";
 import {
@@ -434,6 +435,7 @@ function MessageDetailContent({ messageId }: { messageId: string }) {
                       style={showFullRecipientAddresses ? "full" : "address"}
                     />
                   </p>
+                  <RecipientTagBadge toAddr={message.toAddr} />
                   <MessageDetailsPopover message={message} open={detailsOpen} onOpenChange={setDetailsOpen} />
                 </div>
                 <div className="sm:hidden flex items-center gap-2 text-xs text-neutral-500">

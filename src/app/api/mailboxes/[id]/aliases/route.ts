@@ -54,7 +54,7 @@ function canCreateAddressesOn(user: Awaited<ReturnType<typeof requireUser>>, dom
 
 /** Another mailbox that receives this address through "Use all domains", which an alias would silently take over. */
 async function findAllDomainsMailboxFor(db: ReturnType<typeof getDb>, mailboxId: string, address: string) {
-	const target = parseRecipientAddress(address)?.normalizedAddress;
+	const target = parseRecipientAddress(address)?.normalizedBaseAddress;
 	if (!target) return null;
 	const candidates = await db
 		.select({ id: mailboxes.id, domainId: mailboxes.domainId, localPart: mailboxes.localPart, useAllDomains: mailboxes.useAllDomains })
@@ -62,7 +62,7 @@ async function findAllDomainsMailboxFor(db: ReturnType<typeof getDb>, mailboxId:
 		.where(and(eq(mailboxes.useAllDomains, true), ne(mailboxes.id, mailboxId)));
 	for (const candidate of candidates) {
 		const addresses = await getMailboxDomainAddresses(db, candidate);
-		if (addresses.some((item) => parseRecipientAddress(item)?.normalizedAddress === target)) return candidate;
+		if (addresses.some((item) => parseRecipientAddress(item)?.normalizedBaseAddress === target)) return candidate;
 	}
 	return null;
 }

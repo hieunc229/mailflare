@@ -46,7 +46,7 @@ export async function getMailboxAliasForAddress(
 			...(includeDisabled ? [] : [eq(mailboxAliases.enabled, true)]),
 			eq(domains.hostname, parsed.domain),
 		));
-	const row = rows.find((item) => normalizeRecipientLocalPart(item.localPart) === parsed.localPart);
+	const row = rows.find((item) => normalizeRecipientLocalPart(item.localPart) === parsed.baseLocalPart);
 	return row ? { label: row.label, masked: row.masked, enabled: row.enabled } : null;
 }
 

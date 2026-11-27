@@ -51,6 +51,7 @@ export function getRuleFieldLabel(field: string, t: Translator = defaultTranslat
 	if (field === "content") return t("rules.field.content");
 	if (field === "title") return t("rules.field.title");
 	if (field === "mail_type") return t("rules.field.mailType");
+	if (field === "tag") return t("rules.field.tag");
 	return t("rules.field.email");
 }
 
