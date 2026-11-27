@@ -80,7 +80,7 @@ export type DomainDnsDetailsProps = {
 	receivingProviderBusy?: boolean;
 	receivingProviderMessage?: string | null;
 	/** Reload the DNS view after a setup that changed the zone. */
-	onDnsChanged?: () => void;
+	onDnsChanged?: () => void | Promise<void>;
 	onSetup?: (record: DnsAuthRecord) => void;
 	setupRecord?: DnsAuthRecord | null;
 	setupMessage?: string | null;
@@ -97,7 +97,7 @@ export type DomainItemCardProps = {
 	onReceivingProviderChange?: (provider: ReceivingProvider) => void;
 	receivingProviderBusy?: boolean;
 	receivingProviderMessage?: string | null;
-	onDnsChanged?: () => void;
+	onDnsChanged?: () => void | Promise<void>;
 	dnsLoading?: boolean;
 	dnsError?: string | null;
 	expanded?: boolean;

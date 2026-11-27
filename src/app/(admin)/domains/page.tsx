@@ -140,8 +140,8 @@ export default function DomainsPage() {
     onError: (error) => void alertDialog(error.message),
   });
 
-  const loadDns = async (id: string) => {
-    const res = await authFetch(`/api/domains/${id}/dns`);
+  const loadDns = async (id: string, recheck = false) => {
+    const res = await authFetch(`/api/domains/${id}/dns${recheck ? "?recheck=true" : ""}`);
     const json = (await res.json()) as {
       domain?: Domain;
       dns?: DomainDnsView;
@@ -208,7 +208,7 @@ export default function DomainsPage() {
       if (await confirmMxReplacement(res, json)) ({ res, json } = await put(true));
       if (!res.ok) throw new Error(json.error ?? t("domains.sendingChangeFailed"));
       if (json.warning) setSendingMessage(json.warning);
-      await loadDns(id);
+      await loadDns(id, true);
       qc.invalidateQueries({ queryKey: ["domains"] });
     } catch (error) {
       setSendingMessage(error instanceof Error ? error.message : t("domains.sendingChangeFailed"));
@@ -233,7 +233,7 @@ export default function DomainsPage() {
       });
       const json = (await res.json()) as { error?: string };
       if (!res.ok) throw new Error(json.error ?? t("domains.receivingChangeFailed"));
-      await loadDns(id);
+      await loadDns(id, true);
       qc.invalidateQueries({ queryKey: ["domains"] });
     } catch (error) {
       setReceivingMessage(error instanceof Error ? error.message : t("domains.receivingChangeFailed"));
@@ -242,9 +242,13 @@ export default function DomainsPage() {
     }
   };
 
-  const refreshExpandedDns = () => {
+  const refreshExpandedDns = async () => {
     if (!expandedDomainId) return;
-    void loadDns(expandedDomainId).catch(() => undefined);
+    try {
+      await loadDns(expandedDomainId, true);
+    } catch (error) {
+      setSetupMessage(error instanceof Error ? error.message : t("domains.dnsLoadFailed"));
+    }
     qc.invalidateQueries({ queryKey: ["domains"] });
   };
 
@@ -281,7 +285,7 @@ export default function DomainsPage() {
           ...current,
           [dnsView.domain.id]: updatedView,
         }));
-      } else await loadDns(dnsView.domain.id);
+      } else await loadDns(dnsView.domain.id, true);
       qc.invalidateQueries({ queryKey: ["domains"] });
     } catch (error) {
       setSetupMessage(error instanceof Error ? error.message : t("domains.dnsSetupFailed"));

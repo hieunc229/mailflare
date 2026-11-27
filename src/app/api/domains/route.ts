@@ -6,7 +6,7 @@ import { addDomainSchema } from "@/lib/validators";
 import { addDomainForUser, listUserDomains } from "@/lib/domains/service";
 import { domainListOwnerIds } from "@/lib/domains/utils";
 import type { DnsStatusSummary } from "@/lib/dns-status";
-import { summariseDomainDns } from "@/lib/domains/dns-view";
+import { isDomainDnsReady, summariseDomainDns } from "@/lib/domains/dns-view";
 import { getDomainProvisioningError } from "@/lib/domains/errors";
 import { mtaStsBlockedResponse } from "@/lib/deliverability/mta-sts-block-response";
 import { hasValidSessionMutationOrigin } from "@/lib/auth/origin";
@@ -23,7 +23,7 @@ export async function GET(request: NextRequest) {
 	if (includeDns) {
 		const results = await Promise.allSettled(
 			domains.map(async (domain) => {
-				const { summary, sendingEnabled } = await summariseDomainDns(env, domain);
+				const { summary, sendingEnabled } = await summariseDomainDns(env, domain, { saved: true });
 				return { id: domain.id, summary, sendingEnabled };
 			}),
 		);
@@ -38,6 +38,18 @@ export async function GET(request: NextRequest) {
 			...domain,
 			sendingEnabled: sendingEnabledByDomain.get(domain.id) ?? domain.sendingEnabled,
 		}));
+	}
+
+	if (request.nextUrl.searchParams.get("dnsStatus") === "true") {
+		domainViews = await Promise.all(
+			domainViews.map(async (domain) => ({
+				...domain,
+				// A domain that receives nothing, by choice, has no inbound DNS to miss.
+				dnsReady: domain.receivingProvider === "none" && !domain.dnsSkipped
+					? true
+					: await isDomainDnsReady(env, domain, { saved: true }),
+			})),
+		);
 	}
 
 	return NextResponse.json({ domains: domainViews, dns: includeDns ? dns : undefined });

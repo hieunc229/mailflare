@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { useLanguage } from "@/components/language-provider";
 import { Button } from "@/components/ui/button";
 import { dnsAuthDescriptions, getDnsAuthItemClass } from "./utils";
@@ -25,6 +26,11 @@ export default function DomainDnsDetails({
 }: DomainDnsDetailsProps) {
 	const { t } = useLanguage();
 	const audit = dns.audit;
+	const [rechecking, setRechecking] = useState(false);
+	async function recheck() {
+		setRechecking(true);
+		try { await onDnsChanged?.(); } finally { setRechecking(false); }
+	}
 	const manual = domain.zoneId === "manual" && !domain.dnsSkipped;
 	// Nothing can create records for these, so list them instead of offering a setup button.
 	const byHand = domain.zoneId === "manual" && (!domain.dnsSkipped || !managesDns);
@@ -91,7 +97,12 @@ export default function DomainDnsDetails({
 		<div className="px-4 pb-4 pt-4 sm:px-5 sm:pb-5">
 			{audit && (
 				<section>
-					<h2 className="text-base font-semibold text-neutral-900">{t("domains.setupTitle")}</h2>
+					<div className="flex items-center justify-between gap-3">
+						<h2 className="text-base font-semibold text-neutral-900">{t("domains.setupTitle")}</h2>
+						<Button variant="outline" size="sm" disabled={rechecking} onClick={() => void recheck()}>
+							{rechecking ? t("domains.checking") : t("domains.recheckDns")}
+						</Button>
+					</div>
 					<p className="mt-0.5 text-sm text-neutral-500">
 						{t("domains.setupDescription")}
 					</p>

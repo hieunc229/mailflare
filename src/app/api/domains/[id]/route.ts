@@ -7,7 +7,7 @@ import { requireUser } from "@/lib/auth/cookies";
 import { canManageDomains } from "@/lib/auth/admin";
 import { dnsSkippedUpdate, getDomainForUser, removeDomainForUser } from "@/lib/domains/service";
 import { hasValidSessionMutationOrigin } from "@/lib/auth/origin";
-import { isInboundMxPublished } from "@/lib/domains/receiving-dns";
+import { getDomainDnsView, isDomainDnsReady, markDomainDnsReady } from "@/lib/domains/dns-view";
 import { mtaStsBlockedResponse } from "@/lib/deliverability/mta-sts-block-response";
 
 type Params = { params: Promise<{ id: string }> };
@@ -23,7 +23,7 @@ export async function GET(request: Request, { params }: Params) {
 
 /**
  * Clears the "DNS skipped" warning once the operator has set the records themselves (activating a manual domain).
- * With `verify`, it is cleared only when public DNS shows the domain's MX.
+ * With `verify`, DNS is checked again and the warning is cleared only when it shows the domain's MX.
  */
 export async function PATCH(request: Request, { params }: Params) {
 	const { id } = await params;
@@ -37,8 +37,12 @@ export async function PATCH(request: Request, { params }: Params) {
 	}
 	const domain = await getDomainForUser(env, user.id, id);
 	if (!domain) return NextResponse.json({ error: "Not found" }, { status: 404 });
-	if (body.verify === true && !(await isInboundMxPublished(domain))) {
-		return NextResponse.json({ domain, verified: false });
+	if (body.verify === true) {
+		// Refresh the records the Domains page shows too; a failure there does not decide the warning.
+		await getDomainDnsView(env, domain).catch((error) => console.warn("Failed to recheck DNS records", error));
+		if ((await isDomainDnsReady(env, domain)) !== true) return NextResponse.json({ domain, verified: false });
+	} else if (!body.dnsSkipped) {
+		await markDomainDnsReady(env, domain);
 	}
 	const update = dnsSkippedUpdate(domain, body.dnsSkipped);
 	await getDb(env).update(domains).set(update).where(eq(domains.id, id));

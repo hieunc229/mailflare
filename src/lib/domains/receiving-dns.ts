@@ -82,17 +82,19 @@ export const isResendInboundMx = (content: string) =>
 	isInboundSmtpMx(content) || /^receive(-[a-z0-9-]+)?\.forge\.rmta\.net\.?$/i.test(content.trim());
 
 /**
- * Whether public DNS already sends this domain's mail to its receiving service. A domain with none selected
- * counts when its MX is the self-hosted mail host, Cloudflare's relay, Resend or SES.
+ * Whether public DNS sends this domain's mail to its receiving service; null when it cannot be checked. With no
+ * service selected, or on a manual zone left on the Cloudflare default, the self-hosted mail host, Cloudflare's
+ * relay, Resend and SES all count.
  */
-export async function isInboundMxPublished(domain: Pick<DomainRow, "hostname" | "receivingProvider">): Promise<boolean> {
+export async function isInboundMxPublished(domain: Pick<DomainRow, "hostname" | "receivingProvider" | "zoneId">): Promise<boolean | null> {
 	const mailHost = process.env.MAIL_HOSTNAME?.trim() || `mail.${domain.hostname}`;
 	const isCloudflare = (target: string) => /\.mx\.cloudflare\.net\.?$/i.test(target.trim());
+	const isAny = (target: string) => same(target, mailHost) || isCloudflare(target) || isResendInboundMx(target);
 	const matchers = {
-		cloudflare: isCloudflare,
+		cloudflare: isManualZone(domain.zoneId) ? isAny : isCloudflare,
 		resend: isResendInboundMx,
 		ses: isInboundSmtpMx,
-		none: (target: string) => same(target, mailHost) || isCloudflare(target) || isResendInboundMx(target),
+		none: isAny,
 	};
-	return (await hasPublicMx(domain.hostname, matchers[domain.receivingProvider])) === true;
+	return hasPublicMx(domain.hostname, matchers[domain.receivingProvider]);
 }
