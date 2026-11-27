@@ -39,7 +39,8 @@ export async function disableFreeBusyLink(db: AppDatabase, userId: string): Prom
  * is the same null, so the answer cannot be used to probe accounts. The scope must be exactly this one: hasScope would let a "*" key through.
  */
 export async function authenticateFreeBusyKey(env: CloudflareEnv, secret: string): Promise<{ userId: string; keyId: string } | null> {
-	const key = await authenticateApiKeyValue(env, secret, { scope: FREEBUSY_SCOPE });
-	if (!key || key.scopes.length !== 1 || key.scopes[0] !== FREEBUSY_SCOPE || !key.user.calendarEnabled) return null;
+	// Exact scope: hasScope would let a "*" key through. Checked before the key is recorded as used.
+	const key = await authenticateApiKeyValue(env, secret, { scope: FREEBUSY_SCOPE, accept: ({ scopes, user }) => scopes.length === 1 && scopes[0] === FREEBUSY_SCOPE && user.calendarEnabled });
+	if (!key) return null;
 	return { userId: key.userId, keyId: key.keyId };
 }

@@ -16,10 +16,10 @@ export type ApiKeyUsage = { protocol: string; ip: string | null };
  * Resolve an API key to its user and scopes. Framework-free so it can run in
  * `worker.ts` as well as route handlers. `lastUsedAt` is refreshed at most
  * once a minute per key, since protocol clients make many small calls; `usage`
- * is stored with it. `kind` and `scope` narrow what counts as a match, and a
+ * is stored with it. `kind`, `scope` and `accept` narrow what counts as a match, and a
  * key refused for them is not recorded as used.
  */
-export async function authenticateApiKeyValue(env: CloudflareEnv, key: string, options?: { kind?: ApiAuthResult["keyKind"]; scope?: string; usage?: ApiKeyUsage }): Promise<ApiAuthResult | null> {
+export async function authenticateApiKeyValue(env: CloudflareEnv, key: string, options?: { kind?: ApiAuthResult["keyKind"]; scope?: string; usage?: ApiKeyUsage; accept?: (candidate: { scopes: string[]; user: typeof users.$inferSelect }) => boolean }): Promise<ApiAuthResult | null> {
 	const trimmed = key.trim();
 	if (!trimmed) return null;
 	// Authentication reads the primary: a lagging read replica could still honour a key that was just revoked.
@@ -29,6 +29,8 @@ export async function authenticateApiKeyValue(env: CloudflareEnv, key: string, o
 	if (options?.scope && !parseScopes(candidate.scopes).includes(options.scope)) return null;
 	const [user] = await db.select().from(users).where(eq(users.id, candidate.userId)).limit(1);
 	if (!user || user.disabled) return null;
+	// A key the caller turns away is not recorded as used either, so a refused key does not look alive in the key list.
+	if (options?.accept && !options.accept({ scopes: parseScopes(candidate.scopes), user })) return null;
 
 	const stale = new Date(Date.now() - LAST_USED_WRITE_INTERVAL_MS);
 	await db
