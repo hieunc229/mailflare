@@ -15,7 +15,7 @@ async function bundle(entry, outfile) {
 	return import(pathToFileURL(join(outDir, outfile)).href);
 }
 
-const { getS3Config, getObjectStorageConfig, describeB2Problem, storageStartupProblem } = await bundle("src/lib/storage/b2-config.ts", "config.mjs");
+const { getS3Config, describeB2Problem, storageStartupProblem } = await bundle("src/lib/storage/b2-config.ts", "config.mjs");
 const { withStorage } = await bundle("src/lib/storage/index.ts", "index.mjs");
 const { B2Bucket } = await bundle("src/lib/storage/b2-bucket.ts", "bucket.mjs");
 

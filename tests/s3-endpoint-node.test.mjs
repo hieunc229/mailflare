@@ -16,7 +16,7 @@ function withVars(vars, run) {
 	const saved = Object.fromEntries(NAMES.map((name) => [name, process.env[name]]));
 	for (const name of NAMES) delete process.env[name];
 	Object.assign(process.env, { DATA_DIR: data }, vars);
-	try { return run(); } finally { for (const [name, value] of Object.entries(saved)) value === undefined ? delete process.env[name] : (process.env[name] = value); }
+	try { return run(); } finally { for (const [name, value] of Object.entries(saved)) { if (value === undefined) delete process.env[name]; else process.env[name] = value; } }
 }
 
 const bucketVars = { S3_BUCKET: "mailbox", S3_REGION: "fsn1", S3_ACCESS_KEY_ID: "AK", S3_SECRET_ACCESS_KEY: "sk" };
