@@ -15,6 +15,8 @@ import { isListedAsAppPassword } from "@/lib/auth/app-password-utils";
 import { getSessionTokenFromRequestHeaders } from "@/lib/auth/session";
 import { consumeStepUpGrant } from "@/lib/auth/webauthn/grants";
 import { authError } from "@/lib/http/auth-error";
+import { freeBusyKeyId } from "@/lib/calendar/free-busy-link";
+import { createAuditLog } from "@/lib/mailboxes/audit";
 
 const createKeySchema = z.object({
 	name: z.string().trim().min(1).max(100),
@@ -95,5 +97,7 @@ export async function DELETE(request: Request) {
 	if (parseScopes(key.scopes).some((scope) => (ADMIN_API_KEY_SCOPES as readonly string[]).includes(scope))) return NextResponse.json({ error: "Manage this key in Admin API keys" }, { status: 403 });
 	await db.update(agentSendApprovals).set({ status: "cancelled" }).where(and(eq(agentSendApprovals.requestKeyId, id), eq(agentSendApprovals.status, "pending")));
 	await db.delete(apiKeys).where(and(eq(apiKeys.id, id), eq(apiKeys.userId, user.id)));
+	// The published free/busy link is one of these keys: cutting it here is the same act as turning it off on the calendar (spec D-14).
+	if (id === freeBusyKeyId(user.id)) await createAuditLog(env, { actorUserId: user.id, targetUserId: user.id, action: "calendar.freebusy_unpublished" });
 	return NextResponse.json({ ok: true });
 }
