@@ -278,7 +278,7 @@ test("refresh keeps the current filters and page, and preserves the selection", 
 		],
 		counts: [() => jsonResponse(countsBody())],
 	});
-	const { container, cleanup } = await renderPage(true);
+	const { container, cleanup } = await renderPage();
 	t.after(cleanup);
 
 	await act(async () => {

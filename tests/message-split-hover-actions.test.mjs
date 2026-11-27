@@ -20,6 +20,11 @@ for (const key of ["window", "document", "HTMLElement", "Element", "Node", "Even
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 globalThis.requestAnimationFrame = dom.window.requestAnimationFrame.bind(dom.window);
 globalThis.cancelAnimationFrame = dom.window.cancelAnimationFrame.bind(dom.window);
+globalThis.ResizeObserver = class {
+	observe() {}
+	unobserve() {}
+	disconnect() {}
+};
 globalThis.localStorage = dom.window.localStorage;
 globalThis.sessionStorage = dom.window.sessionStorage;
 
@@ -273,7 +278,7 @@ test("the compact rail keeps a small primary set and reaches the rest from overf
 		compact: true,
 		active: false,
 	});
-	assert.match(container.querySelector("div.absolute").className, /(^|\s)bg-neutral-50(\s|$)/, "a normal row uses the row surface");
+	assert.match(container.querySelector("div.absolute").className, /(^|\s)bg-\(--row-bg\)(\s|$)/, "a normal row's rail still paints the row surface; the row picks the colour through --row-bg");
 	assert.ok(menuItem(container, "common.markUnread"), "the overflow action follows the current read state");
 });
 
@@ -641,7 +646,7 @@ function actionApiResponse(input, init) {
 	return jsonResponse({ ok: true });
 }
 
-async function renderFolderPage({ config = inboxFolderConfig, selectedMessageId, messages, desktop = true, mobile = false, hover = true, grouped = false } = {}) {
+async function renderFolderPage({ config = inboxFolderConfig, selectedMessageId, messages, desktop = true, mobile = false, hover = true, grouped = false, compact = true } = {}) {
 	globalThis.__isDesktop = desktop;
 	globalThis.__isMobile = mobile;
 	globalThis.__hasHover = hover;
@@ -662,7 +667,7 @@ async function renderFolderPage({ config = inboxFolderConfig, selectedMessageId,
 	await act(async () => {
 		reactRoot.render(createElement(MessageFolderPage, {
 			config,
-			compact: true,
+			compact,
 			selectedMessageId,
 		}));
 	});
@@ -673,7 +678,7 @@ async function renderFolderPage({ config = inboxFolderConfig, selectedMessageId,
 			await act(async () => {
 				reactRoot.render(createElement(MessageFolderPage, {
 					config,
-					compact: true,
+					compact,
 					selectedMessageId: nextSelectedMessageId,
 				}));
 			});
@@ -701,23 +706,26 @@ test("the compact list exposes actions only beside an open desktop reader", asyn
 	const activeActions = rowActions(open.container, "m1");
 	assert.ok(activeActions, "the open row keeps its hover actions in the split list");
 	assert.equal(activeActions.dataset.compact, "true");
-	assert.equal(activeActions.dataset.active, "true");
+	// The rail no longer takes an `active` prop: it inherits the row surface through --row-bg.
+	assert.match(activeActions.parentElement.className, /\[--row-bg:var\(--color-blue-50\)\]/, "the open row paints the active surface that its rail inherits");
 	assert.ok(rowActions(open.container, "m2"), "every eligible row can be acted on from the list");
 	assert.match(
 		rowActions(open.container, "m2").parentElement.className,
-		/focus-within:bg-neutral-50/,
+		/focus-within:\[--row-bg:var\(--color-neutral-50\)\]/,
 		"keyboard focus uses the same row surface as the rail",
 	);
 
-	const hidden = await renderFolderPage({ selectedMessageId: "m1", desktop: false });
+	// Whether the list is the split (compact) one is decided by the layout from the container width;
+	// a list that is not compact, such as a tablet in single-column reading, gets no hover rail.
+	const hidden = await renderFolderPage({ selectedMessageId: "m1", compact: false });
 	t.after(hidden.cleanup);
-	assert.equal(rowActions(hidden.container, "m1"), null, "the hidden tablet list does not add desktop hover actions");
+	assert.equal(rowActions(hidden.container, "m1"), null, "a single-column list does not add desktop hover actions");
 
 	const coarse = await renderFolderPage({ selectedMessageId: "m1", hover: false });
 	t.after(coarse.cleanup);
 	assert.equal(rowActions(coarse.container, "m1"), null, "wide touch screens get no invisible hover-only rail");
 
-	const mobile = await renderFolderPage({ selectedMessageId: "m1", desktop: false, mobile: true });
+	const mobile = await renderFolderPage({ selectedMessageId: "m1", desktop: false, mobile: true, compact: false });
 	t.after(mobile.cleanup);
 	assert.equal(rowActions(mobile.container, "m1"), null, "mobile keeps its swipe-only rows");
 
