@@ -26,6 +26,12 @@ Either way works:
 - **Set it yourself.** `DATABASE_URL`, plus `DATABASE_AUTH_TOKEN` for Turso. When both are present, `DATABASE_URL`
   wins.
 
+**Turn database branching off.** If the Turso connection has **Create database branch for deployment** enabled, each
+deployment gets its own copy of the database, and anything saved in the previous deployment's branch (including
+first setup) is missing from the next one. Leave it unchecked, at least for Production, when you connect the
+project. To change an existing connection, disconnect the database from the project, connect it again without that
+option, and redeploy. Records already saved in a branch are not copied back.
+
 A PostgreSQL provider with an HTTP driver (Neon) or a connection pooler suits serverless functions best, because
 each query otherwise opens its own connection. Turso is reached over HTTP.
 
