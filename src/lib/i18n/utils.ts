@@ -42,14 +42,21 @@ export function translate(messages: Partial<Messages>, key: TranslationKey, vars
 // uses the locale's CLDR category and falls back to the bare key when no variant exists.
 export function createTranslator(locale: Locale, messages: Partial<Messages> = en): Translator {
 	const rules = new Intl.PluralRules(locale);
-	const known = (key: string) => key in messages || key in en;
+	const enRules = new Intl.PluralRules(DEFAULT_LOCALE);
 	return (key, vars) => {
 		const count = vars?.count;
 		if (typeof count === "number") {
-			for (const category of [rules.select(count), "other"]) {
-				const variant = `${key}.${category}`;
-				if (known(variant)) return translate(messages, variant as TranslationKey, vars);
-			}
+			const localVariant = `${key}.${rules.select(count)}`;
+			if (localVariant in messages) return translate(messages, localVariant as TranslationKey, vars);
+			const localOther = `${key}.other`;
+			if (localOther in messages) return translate(messages, localOther as TranslationKey, vars);
+			const englishVariant = `${key}.${enRules.select(count)}`;
+			if (englishVariant in en) return translate(messages, englishVariant as TranslationKey, vars);
+			const englishOther = `${key}.other`;
+			if (englishOther in en) return translate(messages, englishOther as TranslationKey, vars);
+			if (key in messages) return translate(messages, key as TranslationKey, vars);
+			if (key in en) return translate(messages, key as TranslationKey, vars);
+			return key;
 		}
 		return translate(messages, key as TranslationKey, vars);
 	};
