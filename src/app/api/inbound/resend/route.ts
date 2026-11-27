@@ -39,6 +39,7 @@ export async function POST(request: Request) {
 
 	let event: ReceivedEvent;
 	try { event = JSON.parse(body) as ReceivedEvent; } catch { return NextResponse.json({ error: "Invalid body" }, { status: 400 }); }
+	if (!event || typeof event !== "object" || Array.isArray(event)) return NextResponse.json({ error: "Invalid body" }, { status: 400 });
 	if (event.type !== "email.received") return NextResponse.json({ ignored: true });
 	const emailId = event.data?.email_id ?? event.data?.id;
 	if (!emailId) return NextResponse.json({ error: "Missing email id" }, { status: 400 });
