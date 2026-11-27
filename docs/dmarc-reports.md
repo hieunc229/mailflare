@@ -1,12 +1,12 @@
 # DMARC aggregate reports
 
-Mailbox providers (Google, Microsoft, Yahoo and others) send a daily summary of the mail they received that claims to be from your domain, if your DMARC record asks for it with a `rua=` address. Mailflare can be that address: it reads the reports, keeps daily totals and shows who is sending as you and whether your own mail passes DMARC. It is **off by default**, per sending domain. Nothing changes until a domain admin turns it on under **Admin → Email → Deliverability → DMARC reports**.
+Mailbox providers (Google, Microsoft, Yahoo and others) send a daily summary of mail claiming to be from your domain, if your DMARC record has a `rua=` address. Mailflare can be that address: it reads the reports, keeps daily totals and shows who sends as you and whether your own mail passes DMARC. **Off by default**, per sending domain; a domain admin turns it on under **Admin → Email → Deliverability → DMARC reports**.
 
 ## Turning it on
 
-"Turn on DMARC reports" for a domain:
+"Turn on DMARC reports":
 
-1. **Report address.** `mailflare-reports@<your domain>`, the same local part on every domain. It is not a mailbox and cannot be renamed. It is refused if a mailbox or alias on that domain already uses `mailflare-reports`. Using an address on your own domain means no extra "external destination" DNS record is needed.
+1. **Report address.** `mailflare-reports@<your domain>`, the same local part on every domain. It is not a mailbox and cannot be renamed. It is refused if a mailbox or alias on that domain already uses `mailflare-reports`. Being on your own domain, it needs no "external destination" DNS record.
 2. **Receiving.** On Cloudflare receiving, an Email Routing rule sends the address to the Worker. With Resend or SES receiving, and with the self-hosted SMTP listener, every recipient on the domain already arrives, so no rule is created. A domain with receiving off cannot turn reports on.
 3. **`_dmarc` record.** The page shows the current and the new record and changes nothing until you confirm.
    - No record: `v=DMARC1; p=none; rua=mailto:<address>` is created. For a subdomain, the new record copies its organisation's effective policy instead of `p=none` (the organisation's `sp`, else `p`, with `adkim`, `aspf` and `pct` kept), because a subdomain without a record inherits that policy and enabling reports must not change what receivers do with its mail. The organisation's own record is looked up first; if that lookup fails nothing is changed.
@@ -14,11 +14,11 @@ Mailbox providers (Google, Microsoft, Yahoo and others) send a daily summary of 
    - More than one DMARC record at `_dmarc`: refused, remove the extra ones first.
    - A zone that Mailflare does not manage (`manual`): the new value is shown so you can publish it yourself.
 
-Confirming applies exactly the record shown: the dialog sends the previewed before and after values, and the server refuses (`DMARC_CHANGED`) if `_dmarc` is different by then. If the DNS step fails after the routing rule was created, the rule is removed again and reporting stays off.
+Confirming applies exactly the record shown: the dialog sends the previewed before and after values, and the server refuses (`DMARC_CHANGED`) if `_dmarc` changed meanwhile. If the DNS step fails after the routing rule was created, the rule is removed again and reporting stays off.
 
 "Turn off" removes only our address from `rua` (and the tag if it becomes empty), deletes the routing rule and keeps the stored data until it is 180 days old. If turning on created the `_dmarc` record (there was none) and it still reads exactly as we wrote it, turning off deletes the record again; if it was edited since, only our address is removed. The created text is stored in `domain_deliverability.dmarc_created_record`. While reporting is on, a mailbox or alias named `mailflare-reports` cannot be created on that domain.
 
-The policy (`p=none`, `quarantine`, `reject`) is yours to change. Mailflare never raises it.
+The policy (`p=none`, `quarantine`, `reject`) is yours to change; Mailflare never raises it.
 
 ## How a report is handled
 
@@ -26,12 +26,12 @@ Report mail is not stored in any mailbox. `resolveIncomingMail` answers `{ actio
 
 ### Who is believed
 
-Anyone can email the address, and anyone can claim to be Google. A report is a **verified reporter's** only when both hold:
+Anyone can email the address and claim to be Google. A report is a **verified reporter's** only when both hold:
 
 1. the report mail's own `From` domain passed DMARC (same trust rules as spam analysis: `Authentication-Results` written by Cloudflare, SES or Resend verdicts, or the self-hosted listener's own check), and
 2. the organisational domain of that `From` equals the organisational domain of the contact `email` inside the report's `report_metadata`.
 
-So an attacker's own domain can pass DMARC, but it cannot pass itself off as `google.com`: the report would have to be sent from `google.com`. Organisational domains come from the Public Suffix List (`tldts`, private suffixes included), so `example.co.uk`, `example.eu.org` and `alice.github.io` are each their own organisation and tenants of a shared suffix never count as one.
+An attacker's own domain can pass DMARC but cannot pass as `google.com`: the report would have to be sent from `google.com`. Organisational domains come from the Public Suffix List (`tldts`, private suffixes included), so `example.co.uk`, `example.eu.org` and `alice.github.io` are each their own organisation and tenants of a shared suffix never count as one.
 
 Only verified reports write aggregate rows. Every other report is stored as one row (`status = unverified`) and shown as a count on the page; it contributes no totals, no source rows and no alert input, and it does not reset the no-reports alert. The report key includes whether the report was verified and who the verified reporter is, and aggregate rows carry the verified reporter's domain (not the `org_name` the XML claims), so an unverified report can never claim a verified report's key and two reporters' rows never merge.
 
@@ -78,7 +78,7 @@ A daily job (02:00 UTC cron on Workers, the daily block of the Node scheduler) l
 | A source started failing | A source at 90% pass or better over at least 50 messages in the prior 30 days that fell below 50% pass on at least 10 messages yesterday, same reporter. |
 | No reports | Reporting on for at least 3 days and no verified report for 7 days. At most one alert a week. |
 
-Known limitation: the no-reports alert is domain-wide, so a report from *any* verified reporter (including an attacker who owns a DMARC-passing domain and names a contact in it) resets it. The attacker gains nothing else, but they can keep that one alert from firing. Evaluating it per expected reporter would need a list of who should report, which is not known.
+Known limitation: the no-reports alert is domain-wide, so a report from *any* verified reporter (including an attacker who owns a DMARC-passing domain and names a contact in it) resets it. The attacker gains nothing else but can keep that one alert from firing. Per-reporter evaluation would need a list of expected reporters, which is not known.
 
 Alerts appear on the page until acknowledged. A re-run never duplicates one. Optionally (off by default, per domain) the domain owner also gets a plain English email through the system mail sender, which needs a domain that can send.
 
@@ -100,6 +100,4 @@ Domain admins see the page and its routes (`/api/deliverability/[domainId]`, `/r
 - **Yahoo.** Yahoo may send from `dmarc.yahoo.com` with a report contact at `yahooinc.com`; those organisations differ, so its reports would show as unverified. Not confirmed without a real Yahoo report.
 - **Alert email volume.** One verified attacker can trigger at most one alert email per kind per day (alerts are deduplicated by domain, kind and day).
 - **Budget races.** The daily budgets are counts read before writing, not atomic counters; concurrent consumers can overshoot a little.
-- **Extra report caps.** Reports that pass DMARC are also capped at 300 per sending organisation and 2,000 in total per domain per day.
-- **Alert evaluation.** Only reporters seen yesterday are evaluated, at most 20, history first.
 - **Verified is about the sender, not the numbers.** A verified reporter can still send false counts about its own view of your mail; they are limited to their own buckets and budgets.
