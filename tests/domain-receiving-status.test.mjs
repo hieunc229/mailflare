@@ -29,6 +29,7 @@ const mocks = {
 	"@/lib/domains/resend-receiving": "export async function setupResendReceiving(){}export async function removeResendReceiving(){}export async function hasResendReceivingConfig(){return false;}",
 	"@/lib/aws/ses-receiving": "export async function setupSesReceiving(){}export async function removeSesReceiving(){}export async function hasSesReceivingConfig(){return false;}",
 	"@/lib/mailboxes/domain-addresses": "export async function ensureMailboxDomainRouting(){}",
+	"@/lib/groups/routing": "export async function ensureGroupDomainRouting(){}",
 };
 
 await build({

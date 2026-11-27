@@ -2,6 +2,7 @@ import { and, eq, inArray } from "drizzle-orm";
 import { folders, mailboxes } from "@/db/schema";
 import { listAccessibleMailboxes } from "@/lib/mailboxes/access";
 import { getMailboxDomainAddresses } from "@/lib/mailboxes/domain-addresses";
+import { listSendAsGroups } from "@/lib/groups/send-as";
 import type { AccessibleMailbox, JmapContext } from "./types";
 
 /** Every Mailflare mailbox the key's user can read, in a JMAP-shaped record. */
@@ -53,9 +54,19 @@ export async function listFoldersByMailbox(ctx: JmapContext, mailboxIds: string[
 	return result;
 }
 
-/** Addresses each mailbox may send from, for Identity objects. */
-export async function listSendableAddresses(ctx: JmapContext, mailbox: AccessibleMailbox): Promise<string[]> {
+/** Addresses each mailbox may send from, with the name a group address carries (null for the mailbox's own). */
+export async function listSendableIdentities(ctx: JmapContext, mailbox: AccessibleMailbox): Promise<Array<{ address: string; groupName: string | null }>> {
 	const [row] = await ctx.db.select().from(mailboxes).where(and(eq(mailboxes.id, mailbox.id))).limit(1);
 	if (!row) return [];
-	return getMailboxDomainAddresses(ctx.db, row);
+	// Groups the account may send as (spec D-10) are identities of its primary mailbox.
+	const groups = await listSendAsGroups(ctx.env, ctx.db, ctx.auth.user, { userId: row.userId, type: row.type, localPart: row.localPart, hostname: mailbox.hostname });
+	return [
+		...(await getMailboxDomainAddresses(ctx.db, row)).map((address) => ({ address, groupName: null })),
+		...groups.map((group) => ({ address: group.address, groupName: group.name })),
+	];
+}
+
+/** Addresses each mailbox may send from, for Identity objects. */
+export async function listSendableAddresses(ctx: JmapContext, mailbox: AccessibleMailbox): Promise<string[]> {
+	return (await listSendableIdentities(ctx, mailbox)).map((identity) => identity.address);
 }

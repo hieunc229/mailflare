@@ -104,7 +104,8 @@ async function sendWithResend(
 		body: JSON.stringify(resendPayload(message, setsMessageId ? mintedId : null, resendOmittedHeaders(env))),
 	});
 	const body = (await response.json().catch(() => null)) as { id?: string; message?: string } | null;
-	if (!response.ok) throw new Error(`Resend: ${body?.message ?? `request failed (${response.status})`}`);
+	// The status travels with the error so a caller can tell a rate limit (429) from a refusal.
+	if (!response.ok) throw Object.assign(new Error(`Resend: ${body?.message ?? `request failed (${response.status})`}`), { status: response.status });
 	if (setsMessageId || !body?.id) return { messageId: mintedId };
 	// Without our own header, thread replies against the ID the provider assigned.
 	// It can be missing while the send is still queued; the minted ID is the fallback.
@@ -120,7 +121,7 @@ export async function sendThroughProvider(
 	if (config.provider === "resend") return sendWithResend(env, resendClient(env, config.apiKey), message, idempotencyKey);
 	if (config.provider === "ses") return sendSesEmail(config.config, message);
 	const response = await env.EMAIL.send({
-		from: message.from,
+		from: message.fromParts ? { name: message.fromParts.name, email: message.fromParts.email } : message.from,
 		to: message.to,
 		...(message.cc?.length ? { cc: message.cc } : {}),
 		...(message.bcc?.length ? { bcc: message.bcc } : {}),

@@ -3,14 +3,15 @@ import { isReportAddressReserved } from "@/lib/deliverability/report-address";
 import { and, eq } from "drizzle-orm";
 import { getEnv } from "@/lib/cloudflare";
 import { getDb } from "@/db";
-import { domains, mailboxAliases, mailboxes, users } from "@/db/schema";
+import { domains, mailboxes, users } from "@/db/schema";
 import { requireUser } from "@/lib/auth/cookies";
 import { newId } from "@/lib/ids";
 import { getLicenseEntitlements } from "@/lib/licenses/service";
 import { tracksAccountIdentity } from "@/lib/profile/identity-utils";
 import { mailboxSchema } from "@/lib/validators";
 import { ensureMailboxDomainRouting, getMailboxDomainAddresses } from "@/lib/mailboxes/domain-addresses";
-import { normalizeRecipientLocalPart } from "@/lib/email/recipient-address";
+import { findAddressOwner } from "@/lib/mailboxes/address-owner";
+import { listSendAsGroupAddresses } from "@/lib/groups/send-as";
 import { ensurePersonalMailbox } from "./utils";
 
 export async function GET(request: Request) {
@@ -20,13 +21,18 @@ export async function GET(request: Request) {
 	const rows = await ensurePersonalMailbox(env, db, user);
 	const entitlements = await getLicenseEntitlements(env);
 	return NextResponse.json({
-		mailboxes: await Promise.all(rows.map(async (mailbox) => ({
-			...mailbox,
-			...(mailbox.userId === user.id && tracksAccountIdentity(mailbox, user.email)
-				? { displayName: user.name, hasAvatar: !!user.avatarKey }
-				: {}),
-			senderAddresses: await getMailboxDomainAddresses(db, mailbox),
-		}))),
+		mailboxes: await Promise.all(rows.map(async (mailbox) => {
+			// Groups this account may send as sit under its primary mailbox (spec D-10).
+			const groupSenderAddresses = await listSendAsGroupAddresses(env, db, user, mailbox);
+			return {
+				...mailbox,
+				...(mailbox.userId === user.id && tracksAccountIdentity(mailbox, user.email)
+					? { displayName: user.name, hasAvatar: !!user.avatarKey }
+					: {}),
+				senderAddresses: [...await getMailboxDomainAddresses(db, mailbox), ...groupSenderAddresses],
+				groupSenderAddresses,
+			};
+		})),
 		canCreateShared: user.role === "admin" && entitlements.canShareMailboxes,
 	});
 }
@@ -76,17 +82,10 @@ export async function POST(request: Request) {
 	if (await isReportAddressReserved(env, domain.id, localPart)) return NextResponse.json({ error: "This address is reserved for DMARC reports" }, { status: 409 });
 	// Inbound routing resolves normalized local parts, so a mailbox that only
 	// differs by dots or a +tag would shadow the existing address either way.
-	const [domainMailboxes, domainAliases] = await Promise.all([
-		db.select({ localPart: mailboxes.localPart }).from(mailboxes).where(eq(mailboxes.domainId, domain.id)),
-		db.select({ localPart: mailboxAliases.localPart }).from(mailboxAliases).where(eq(mailboxAliases.domainId, domain.id)),
-	]);
-	const normalized = normalizeRecipientLocalPart(localPart);
-	if (domainMailboxes.some((row) => normalizeRecipientLocalPart(row.localPart) === normalized)) {
-		return NextResponse.json({ error: "Mailbox already exists" }, { status: 409 });
-	}
-	if (domainAliases.some((row) => normalizeRecipientLocalPart(row.localPart) === normalized)) {
-		return NextResponse.json({ error: "An alias already uses this address" }, { status: 409 });
-	}
+	const owner = await findAddressOwner(db, domain.id, localPart);
+	if (owner === "mailbox") return NextResponse.json({ error: "Mailbox already exists" }, { status: 409 });
+	if (owner === "alias") return NextResponse.json({ error: "An alias already uses this address" }, { status: 409 });
+	if (owner === "group") return NextResponse.json({ error: "A group already uses this address" }, { status: 409 });
 
 	const id = newId("mbx");
 	await db.insert(mailboxes).values({

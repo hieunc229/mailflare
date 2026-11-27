@@ -50,6 +50,7 @@ import {
   getMessageBodyDisplay,
   getMessageHeaderParties,
   getOwnAddressForMessage,
+  getPersonalAddresses,
   resolveInlineAttachmentUrls,
 } from "./utils";
 import { extractCloudAttachments } from "./cloud-attachment-utils";
@@ -248,7 +249,7 @@ function MessageDetailContent({ messageId }: { messageId: string }) {
   const fromAddress = headerParties?.fromAddress ?? "";
   const ownAddresses = messageMailbox
     ? messageMailbox.senderAddresses?.length
-      ? messageMailbox.senderAddresses
+      ? getPersonalAddresses(messageMailbox.senderAddresses, messageMailbox.groupSenderAddresses)
       : [`${messageMailbox.localPart}@${messageMailbox.hostname}`]
     : [];
   const ownAddress = message ? getOwnAddressForMessage(message, ownAddresses) : "";

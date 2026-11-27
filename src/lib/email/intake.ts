@@ -1,6 +1,7 @@
 import { forwardedMarker, getAccountForwardingDestination, isForwardedMarkerValid, MAILFLARE_FORWARDED_HEADER } from "@/lib/email/account-forwarding";
 import { resolveIncomingMail } from "@/lib/email/incoming";
 import { inboundStorageKey } from "@/lib/email/inbound-id";
+import { countReceivedHeaders } from "@/lib/groups/loop-utils";
 import type { InboundQueueMessage } from "@/lib/email/inbound";
 import type { IntakeActions, IntakeInput, IntakeResult } from "@/lib/email/intake-types";
 
@@ -18,11 +19,16 @@ export async function intakeIncomingMail(env: CloudflareEnv, input: IntakeInput,
 		from: input.headers.from,
 		alreadyForwarded,
 		all: input.headers,
+		verdicts: input.verdicts,
+		receivedHops: countReceivedHeaders(input.raw),
+		loadRaw: async () => input.raw,
 	});
+
+	if (decision?.action === "drop") return { action: "drop" };
 
 	if (decision?.action === "reject") {
 		const reason = decision.rejectReason ?? "Message rejected by routing rule";
-		await actions.reject?.(reason);
+		await actions.reject?.(reason, { groupPolicy: decision.groupPolicy === true });
 		return { action: "reject", reason };
 	}
 
@@ -41,12 +47,14 @@ export async function intakeIncomingMail(env: CloudflareEnv, input: IntakeInput,
 
 	// A relay retry replays the same bytes, so key the object on a content hash
 	// (scoped by mailbox): the consumer dedupes by `(mailboxId, rawR2Key)`.
-	const rawR2Key = await inboundStorageKey(input.raw, decision && decision.action !== "report" ? decision.mailbox?.mailboxId : undefined);
+	// Two groups addressed in one message must not share a raw object: each expansion deletes its original.
+	const scope = decision?.action === "group" && decision.group ? `group:${decision.group.groupId}` : decision && decision.action !== "report" ? decision.mailbox?.mailboxId : undefined;
+	const rawR2Key = await inboundStorageKey(input.raw, scope);
 	await env.BUCKET.put(rawR2Key, input.raw, {
 		httpMetadata: { contentType: "message/rfc822" },
 		customMetadata: { from: input.from, to: input.to },
 	});
-	const payload: InboundQueueMessage = { from: input.from, to: input.to, rawR2Key, headers: input.headers, verdicts: input.verdicts, senderIp: input.senderIp };
+	const payload: InboundQueueMessage = { from: input.from, to: input.to, rawR2Key, headers: input.headers, verdicts: input.verdicts, senderIp: input.senderIp, ...(decision?.action === "group" && decision.group ? { groupExpansion: { groupId: decision.group.groupId } } : {}) };
 	await env.INBOUND_QUEUE.send(payload);
 	return { action: "store", rawR2Key, forwardedTo };
 }

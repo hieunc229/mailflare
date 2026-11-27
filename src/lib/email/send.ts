@@ -1,11 +1,13 @@
 import { and, eq, isNotNull } from "drizzle-orm";
 import { getDb } from "@/db";
-import { conversationNotes, mailboxes, messages, outboundJobs } from "@/db/schema";
+import { conversationNotes, domains, mailboxes, messages, outboundJobs, users } from "@/db/schema";
 import { newId } from "@/lib/ids";
 import { buildSnippet } from "@/lib/email/parse";
 import { dispatchWebhooks } from "@/lib/email/webhooks";
 import { upsertContactsFromAddresses } from "@/lib/contacts/service";
 import { getAuthorizedSenderAddress } from "@/lib/email/sender";
+import { authorizeSendAsGroup } from "@/lib/groups/send-as";
+import { SEND_AS_HEADER, signSendAs } from "@/lib/groups/send-as-marker";
 import { getEmailAddress, getEmailAddressList, joinEmailAddressList, splitEmailAddressList } from "@/lib/email/address";
 import { formatMessageIdHeader, normalizeMessageId, parseMessageIdList } from "@/lib/email/threading";
 import { createAuditLog } from "@/lib/mailboxes/audit";
@@ -117,6 +119,12 @@ export async function sendEmail(
 	}
 
 	const messageId = newId("msg");
+	// A message sent as a group names its stored copy, so the group can tell its own post when it comes back (spec D-10).
+	// Only a message addressed to the group can come back to it, so only that one carries the marker.
+	const group = sender.group;
+	const namesGroup = !!group && [...to, ...cc, ...bcc].some((entry) => getEmailAddress(entry).toLowerCase() === group.address);
+	const sendAsMarker = group && namesGroup ? await signSendAs(env, { messageId, groupId: group.groupId }) : null;
+	if (sendAsMarker) headers[SEND_AS_HEADER] = sendAsMarker;
 	const requestedSchedule = input.scheduledAt ? new Date(input.scheduledAt) : null;
 	const userScheduledAt = requestedSchedule && requestedSchedule.getTime() > Date.now()
 		? requestedSchedule
@@ -146,6 +154,21 @@ export async function sendEmail(
 		inReplyTo,
 		references: references.length ? references.join(" ") : null,
 	});
+	if (sender.group) {
+		// Before the job exists: a send as a group is never queued without its audit row.
+		try {
+			await createAuditLog(env, {
+				actorUserId: input.userId,
+				mailboxId: sender.mailboxId,
+				messageId,
+				action: "email.send_as_group",
+				metadata: { groupId: sender.group.groupId, address: sender.group.address },
+			});
+		} catch (error) {
+			await db.delete(messages).where(eq(messages.id, messageId));
+			throw error;
+		}
+	}
 	try {
 		const stored = await storeMessageAttachments(env, messageId, attachments, { validate: false });
 		stored.forEach((attachment, index) => { attachments[index].storageId = attachment.id; });
@@ -162,6 +185,7 @@ export async function sendEmail(
 		status: "queued",
 		payload: JSON.stringify({
 			...input,
+			...(sendAsMarker ? { headers: { ...input.headers, [SEND_AS_HEADER]: sendAsMarker } } : {}),
 			from: sender.fromAddr,
 			to,
 			cc,
@@ -214,17 +238,26 @@ async function deliverEmail(env: CloudflareEnv, delivery: PreparedDelivery): Pro
 		const [mailbox] = await db
 			.select({
 				id: mailboxes.id,
+				userId: mailboxes.userId,
+				type: mailboxes.type,
 				domainId: mailboxes.domainId,
 				localPart: mailboxes.localPart,
 				useAllDomains: mailboxes.useAllDomains,
 				disabled: mailboxes.disabled,
+				hostname: domains.hostname,
 			})
 			.from(mailboxes)
+			.innerJoin(domains, eq(mailboxes.domainId, domains.id))
 			.where(eq(mailboxes.id, mailboxId))
 			.limit(1);
 		const fromAddress = getEmailAddress(from).toLowerCase();
-		if (!mailbox || mailbox.disabled || !(await getMailboxDomainAddresses(db, mailbox)).includes(fromAddress)) {
-			throw new Error("The sender address is no longer available for this mailbox");
+		if (!mailbox || mailbox.disabled) throw new Error("The sender address is no longer available for this mailbox");
+		if (!(await getMailboxDomainAddresses(db, mailbox)).includes(fromAddress)) {
+			// A send as a group needs the same grant as at queue time: the flag may have been taken away since.
+			const [actor] = await db.select({ id: users.id, email: users.email, disabled: users.disabled }).from(users).where(eq(users.id, input.userId)).limit(1);
+			if (!actor || !(await authorizeSendAsGroup(env, db, actor, mailbox, fromAddress))) {
+				throw new Error("The sender address is no longer available for this mailbox");
+			}
 		}
 		// Queued sends can outlive the check in sendEmail: an address may have bounced since.
 		const kept = await dropSuppressedRecipients(env, from, { to, cc, bcc });

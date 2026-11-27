@@ -1,0 +1,167 @@
+import assert from "node:assert/strict";
+import test from "node:test";
+import { loadApp } from "./helpers/real-db.mjs";
+
+const mocks = {
+	"next/server": "export const NextResponse={json:(data,init)=>Response.json(data,init)};",
+	"@/lib/cloudflare": "export function getEnv(){return globalThis.grp.env}",
+	"@/lib/api/auth": "export async function requireSessionUser(){return {user:globalThis.grp.user,error:null}}",
+	"@/lib/auth/origin": "export function hasValidSessionMutationOrigin(){return true}",
+	"@/lib/licenses/service": "export async function getLicenseEntitlements(){return {canManageAccounts:true}}",
+	"@/lib/deliverability/report-address": "export async function isReportAddressReserved(){return false}",
+	"@/lib/cloudflare-api": "export async function ensureEmailRoutingRuleToWorker(){} export async function deleteEmailRoutingRuleForAddress(){} export async function rollbackEmailRoutingRuleChanges(){}",
+};
+const { app, newDatabase } = await loadApp("groups-external-members", `
+	export * as members from "./src/app/api/groups/[id]/members/route.ts";
+	export * as item from "./src/app/api/groups/[id]/route.ts";
+	export * as list from "./src/app/api/groups/route.ts";
+	export * as utils from "./src/lib/groups/members-utils.ts";
+`, { mocks });
+
+const admin = { id: "admin", role: "admin", isPrimaryAdmin: true, canManageUsers: true, canManageMailboxes: true, createdByUserId: null, email: "admin@example.com" };
+const seed = `
+	INSERT INTO users (id, email, password_hash, name, role, is_primary_admin, can_manage_users, created_at) VALUES ('admin', 'admin@example.com', 'hash', 'Admin', 'admin', 1, 1, 1);
+	INSERT INTO domains (id, user_id, hostname, zone_id, status, receiving_provider, sending_provider, sending_enabled, created_at) VALUES
+		('d1', 'admin', 'example.com', 'z1', 'active', 'cloudflare', 'resend', 0, 1),
+		('d2', 'admin', 'other.com', 'z2', 'active', 'cloudflare', 'none', 0, 1);
+	INSERT INTO mail_groups (id, domain_id, local_part, name, who_can_post, reply_to, disabled, created_at, updated_at) VALUES
+		('g1', 'd1', 'team', 'Team', 'anyone', 'sender', 0, 1, 1),
+		('g2', 'd2', 'team', 'Team', 'anyone', 'sender', 0, 1, 1);
+`;
+async function ctx(t) {
+	const database = await newDatabase(t, seed);
+	globalThis.grp = { env: database.env, user: admin };
+	t.after(() => { delete globalThis.grp; });
+	return database;
+}
+const req = (body, method = "POST") => new Request("https://x.test/api/groups", { method, headers: { "content-type": "application/json" }, body: body === undefined ? undefined : JSON.stringify(body) });
+const ids = (id) => ({ params: Promise.resolve({ id }) });
+const add = (members, id = "g1") => app.members.POST(req({ members }), ids(id));
+
+test("an external member is stored lower-cased and trimmed, and a repeat is skipped", async (t) => {
+	const { sqlite } = await ctx(t);
+	const response = await add([{ kind: "external", email: "  Pat@Ext.COM " }]);
+	assert.equal(response.status, 200, JSON.stringify(await response.clone().json()));
+	const body = await response.json();
+	assert.equal(body.added[0].kind, "external");
+	assert.equal(body.added[0].email, "pat@ext.com");
+	assert.equal(body.added[0].suppressed, false);
+	assert.equal(sqlite.prepare("SELECT email, user_id, mailbox_id, can_send_as FROM mail_group_members").get().email, "pat@ext.com");
+	const again = await (await add([{ kind: "external", email: "PAT@ext.com" }, { kind: "external", email: "pat@ext.com" }])).json();
+	assert.equal(again.added.length, 0);
+	assert.deepEqual(again.skipped.map((item) => item.reason), ["already_member", "already_member"]);
+	const log = sqlite.prepare("SELECT action, metadata FROM audit_logs ORDER BY rowid").all();
+	assert.deepEqual(log.map((row) => row.action), ["group.member_added"]);
+	assert.deepEqual(JSON.parse(log[0].metadata), { groupId: "g1", address: "team@example.com", kind: "external", email: "pat@ext.com" });
+});
+
+test("an external may be in several groups, and external and internal members mix in one call", async (t) => {
+	const { sqlite } = await ctx(t);
+	sqlite.exec("INSERT INTO users (id, email, password_hash, name, role, created_at) VALUES ('alice', 'alice@example.com', 'hash', 'Alice', 'user', 1)");
+	assert.equal((await add([{ kind: "external", email: "pat@ext.com" }, { kind: "user", userId: "alice" }])).status, 200);
+	assert.equal((await add([{ kind: "external", email: "pat@ext.com" }], "g2")).status, 200);
+});
+
+test("invalid externals are refused as a whole", async (t) => {
+	const { sqlite } = await ctx(t);
+	const attempt = async (member, status, pattern) => {
+		const response = await add([{ kind: "external", email: "ok@ext.com" }, member]);
+		assert.equal(response.status, status, JSON.stringify(member));
+		assert.match((await response.json()).error, pattern);
+	};
+	await attempt({ kind: "external", email: "not-an-address" }, 422, /valid email/i);
+	await attempt({ kind: "external", email: "a b@ext.com" }, 422, /valid email/i);
+	await attempt({ kind: "external", email: "A <a@ext.com>" }, 422, /valid email/i);
+	await attempt({ kind: "external", email: "x@ext.com", canSendAs: true }, 422, /only account members/i);
+	await attempt({ kind: "external", email: "x@Example.com" }, 422, /domain/i);
+	await attempt({ kind: "external", email: "x@other.com" }, 422, /domain/i);
+	await attempt({ kind: "external", email: "TEAM@example.com" }, 422, /group's own address/i);
+	await attempt({ kind: "external" }, 400, /email/i);
+	await attempt({ kind: "external", email: "x@ext.com", userId: "alice" }, 400, /email/i);
+	assert.equal(sqlite.prepare("SELECT count(*) AS n FROM mail_group_members").get().n, 0);
+});
+
+test("a group holds at most 100 external members", async (t) => {
+	const { sqlite } = await ctx(t);
+	let sql = "";
+	for (let i = 0; i < 99; i += 1) sql += `INSERT INTO mail_group_members (id, group_id, kind, email, can_send_as, created_at) VALUES ('gx${i}', 'g1', 'external', 'x${i}@ext.com', 0, 1);`;
+	sqlite.exec(sql);
+	assert.equal((await add([{ kind: "external", email: "last@ext.com" }])).status, 200);
+	const over = await add([{ kind: "external", email: "over@ext.com" }]);
+	assert.equal(over.status, 422);
+	assert.match((await over.json()).error, /100 external/);
+	assert.equal(sqlite.prepare("SELECT count(*) AS n FROM mail_group_members WHERE group_id = 'g1'").get().n, 100);
+});
+
+test("the group view flags suppressed externals and whether the domain can send", async (t) => {
+	const { sqlite } = await ctx(t);
+	await add([{ kind: "external", email: "bad@ext.com" }, { kind: "external", email: "good@ext.com" }, { kind: "external", email: "maybe@ext.com" }]);
+	sqlite.exec(`INSERT INTO email_suppressions (id, domain_id, email, reason, source, confirmed, first_event_at, last_event_at) VALUES
+		('s1', 'd1', 'bad@ext.com', 'hard_bounce', 'resend', 1, 1, 1),
+		('s2', 'd1', 'maybe@ext.com', 'hard_bounce', 'dsn', 0, 1, 1),
+		('s3', 'd2', 'good@ext.com', 'complaint', 'resend', 1, 1, 1);`);
+	const view = await (await app.item.GET(req(undefined, "GET"), ids("g1"))).json();
+	assert.deepEqual(Object.fromEntries(view.members.map((m) => [m.email, m.suppressed])), { "bad@ext.com": true, "good@ext.com": false, "maybe@ext.com": false });
+});
+
+test("canSend is false only when the domain has no sending provider", async (t) => {
+	await ctx(t);
+	assert.equal((await (await app.item.GET(req(undefined, "GET"), ids("g1"))).json()).group.canSend, true);
+	assert.equal((await (await app.item.GET(req(undefined, "GET"), ids("g2"))).json()).group.canSend, false);
+});
+
+const unsubscribed = (sqlite, email, group = "g1") => sqlite.prepare("INSERT INTO audit_logs (id, action, metadata, created_at) VALUES (?, 'group.member_unsubscribed', ?, ?)").run(`a-${email}-${group}`, JSON.stringify({ groupId: group, address: "team@example.com", kind: "external", email }), Math.floor(Date.now() / 1000));
+
+test("re-adding an address that unsubscribed from this group still works but warns the admin", async (t) => {
+	const { sqlite } = await ctx(t);
+	unsubscribed(sqlite, "pat@ext.com");
+	unsubscribed(sqlite, "kim@ext.com", "g2");
+	const body = await (await add([{ kind: "external", email: "Pat@ext.com" }, { kind: "external", email: "kim@ext.com" }, { kind: "external", email: "new@ext.com" }])).json();
+	assert.equal(body.added.length, 3);
+	assert.deepEqual(body.warnings, [{ email: "pat@ext.com", reason: "previously_unsubscribed" }]);
+	assert.deepEqual((await (await add([{ kind: "external", email: "other@ext.com" }])).json()).warnings, []);
+});
+
+test("the group view says whether unsubscribe links can be built and whether a cap stopped relays", async (t) => {
+	const { sqlite } = await ctx(t);
+	const view = async () => (await (await app.item.GET(req(undefined, "GET"), ids("g1"))).json()).notices;
+	assert.deepEqual(await view(), { unsubscribeReady: false, relayCapped: null });
+	globalThis.grp.env = { ...globalThis.grp.env, APP_URL: "https://mail.example.com" };
+	assert.equal((await view()).unsubscribeReady, true);
+	globalThis.grp.env = { ...globalThis.grp.env, APP_URL: "http://plain.test" };
+	assert.equal((await view()).unsubscribeReady, false, "links need https");
+	const row = (id, group, at) => sqlite.prepare("INSERT INTO audit_logs (id, action, metadata, created_at) VALUES (?, 'group.relay_capped', ?, ?)").run(id, JSON.stringify({ groupId: group, address: "team@example.com", scope: "installation", period: "day", limit: 2000 }), Math.floor(at / 1000));
+	row("c0", "g1", Date.now() - 3 * 86_400_000);
+	row("c1", "g2", Date.now() - 1000);
+	assert.equal((await view()).relayCapped, null, "only this group's, and only the last day");
+	row("c2", "g1", Date.now() - 60_000);
+	const capped = (await view()).relayCapped;
+	assert.deepEqual({ scope: capped.scope, period: capped.period, limit: capped.limit }, { scope: "installation", period: "day", limit: 2000 });
+	assert.ok(Number.isFinite(Date.parse(capped.at)));
+});
+
+test("the outside-posts toggle defaults off, is set on create and update, is audited, and shows in the group view", async (t) => {
+	const { sqlite } = await ctx(t);
+	const create = (body) => app.list.POST(req({ domainId: "d1", localPart: "sales", name: "Sales", ...body }));
+	const off = await (await create({})).json();
+	assert.equal(off.group.relayOutsidePosts, false);
+	const on = await (await create({ localPart: "ops", relayOutsidePosts: true })).json();
+	assert.equal(on.group.relayOutsidePosts, true);
+	assert.equal(sqlite.prepare("SELECT relay_outside_posts AS v FROM mail_groups WHERE id = ?").get(on.group.id).v, 1);
+	const patched = await app.item.PATCH(req({ relayOutsidePosts: true }, "PATCH"), ids("g1"));
+	assert.equal((await patched.json()).group.relayOutsidePosts, true);
+	assert.equal((await (await app.item.GET(req(undefined, "GET"), ids("g1"))).json()).group.relayOutsidePosts, true);
+	const audit = sqlite.prepare("SELECT metadata FROM audit_logs WHERE action = 'group.updated'").all().map((r) => JSON.parse(r.metadata));
+	assert.deepEqual(audit[0].changed, ["relayOutsidePosts"]);
+	assert.equal((await app.item.PATCH(req({ relayOutsidePosts: true }, "PATCH"), ids("g1"))).status, 200);
+	assert.equal(sqlite.prepare("SELECT count(*) AS n FROM audit_logs WHERE action = 'group.updated'").get().n, 1, "no change, no audit");
+	assert.equal((await app.item.PATCH(req({ relayOutsidePosts: "yes" }, "PATCH"), ids("g1"))).status, 400);
+});
+
+test("without the migration the admin routes answer MIGRATION_REQUIRED", async (t) => {
+	const { sqlite } = await ctx(t);
+	sqlite.exec("ALTER TABLE mail_groups DROP COLUMN relay_outside_posts");
+	const response = await app.item.GET(req(undefined, "GET"), ids("g1"));
+	assert.equal(response.status, 503);
+	assert.equal((await response.json()).code, "MIGRATION_REQUIRED");
+});

@@ -1,10 +1,11 @@
-import { and, eq } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import type { AppDatabase } from "@/db";
 import { domains, mailboxes } from "@/db/schema";
 import { ensureEmailRoutingRuleToWorker } from "@/lib/cloudflare-api";
 import { ensureMailboxDomainRouting } from "@/lib/mailboxes/domain-addresses";
 import { newId } from "@/lib/ids";
 import { listAccessibleMailboxes } from "@/lib/mailboxes/access";
+import { findAddressOwner } from "@/lib/mailboxes/address-owner";
 import { isReportAddressReserved } from "@/lib/deliverability/report-address";
 import type { SessionUser } from "@/lib/auth/types";
 
@@ -19,12 +20,7 @@ export async function ensurePersonalMailbox(env: CloudflareEnv, db: AppDatabase,
 	// A domain that receives DMARC reports at this local part has no mailbox there; the address would only swallow them.
 	if (await isReportAddressReserved(env, domain.id, localPart)) return current;
 
-	const [existing] = await db
-		.select({ id: mailboxes.id })
-		.from(mailboxes)
-		.where(and(eq(mailboxes.domainId, domain.id), eq(mailboxes.localPart, localPart)))
-		.limit(1);
-	if (existing) return current;
+	if (await findAddressOwner(db, domain.id, localPart)) return current;
 
 	try {
 		await ensureEmailRoutingRuleToWorker(env, domain.zoneId, user.email);

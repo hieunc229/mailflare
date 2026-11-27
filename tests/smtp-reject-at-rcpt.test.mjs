@@ -36,7 +36,7 @@ await build({
 			builder.onResolve({ filter: /^\.\/smtp-auth$/ }, () => ({ path: "smtp-auth", namespace: "mock" }));
 			builder.onResolve({ filter: /^@\/lib\/licenses\/service$/ }, () => ({ path: "licenses", namespace: "mock" }));
 			builder.onLoad({ filter: /^smtp-auth$/, namespace: "mock" }, () => ({ loader: "js", contents: "export async function verifySmtpAuthentication() { return undefined; }" }));
-			builder.onLoad({ filter: /^licenses$/, namespace: "mock" }, () => ({ loader: "js", contents: "export async function getLicenseEntitlements() { return { canForwardEmail: true }; }" }));
+			builder.onLoad({ filter: /^licenses$/, namespace: "mock" }, () => ({ loader: "js", contents: "export async function getLicenseEntitlements() { return { canForwardEmail: true, canManageAccounts: true }; }" }));
 		},
 	}],
 });
@@ -77,4 +77,50 @@ test("a recipient blocked by a reject rule is refused at RCPT TO and the others 
 	// Every recipient blocked: nodemailer gives up before DATA.
 	await assert.rejects(transport.sendMail({ from: "a@ext.test", to: "blocked@one.test", subject: "hi", text: "body" }), /No mail for this address/);
 	assert.deepEqual(queued, ["me@one.test"]);
+});
+
+test("SMTP: a disabled group is refused at RCPT TO; a post policy refusal drops silently when other recipients share the message", async (t) => {
+	t.mock.method(console, "log", () => {});
+	t.mock.method(console, "warn", () => {});
+	const database = new SqliteDatabase(":memory:");
+	t.after(() => database.db.close());
+	await applyMigrations(database, join(root, "drizzle/migrations"));
+	database.db.exec(`
+		INSERT INTO users (id, email, password_hash, name, role, is_primary_admin, created_at) VALUES ('admin', 'owner@one.test', 'hash', 'Owner', 'admin', 1, 1);
+		INSERT INTO domains (id, user_id, hostname, zone_id, status, created_at) VALUES ('one', 'admin', 'one.test', 'z', 'active', 1);
+		INSERT INTO mailboxes (id, user_id, domain_id, local_part, created_at) VALUES ('me', 'admin', 'one', 'me', 1);
+		INSERT INTO mail_groups (id, domain_id, local_part, name, who_can_post, reply_to, disabled, created_at, updated_at) VALUES
+			('g-off', 'one', 'off', 'Off', 'anyone', 'sender', 1, 1, 1),
+			('g-org', 'one', 'staff', 'Staff', 'org', 'sender', 0, 1, 1);
+	`);
+	const queued = [];
+	const env = {
+		DB: database,
+		BUCKET: { put: async () => {} },
+		INBOUND_QUEUE: { send: async (payload) => { queued.push(payload.to); } },
+	};
+	const server = startSmtpListener(env, { sendRaw: async () => true }, { port: 0, host: "127.0.0.1", maxSize: 1e6, hostname: "mx.test", tls: null });
+	t.after(() => server.close());
+	if (!server.server.listening) await once(server.server, "listening");
+	const transport = nodemailer.createTransport({ host: "127.0.0.1", port: server.server.address().port, secure: false, ignoreTLS: true });
+
+	const info = await transport.sendMail({ from: "a@ext.test", to: ["me@one.test", "off@one.test"], subject: "hi", text: "body" });
+	assert.deepEqual(info.rejected, ["off@one.test"]);
+	assert.match(info.rejectedErrors[0].response, /^550 Group unavailable/);
+	assert.deepEqual(queued, ["me@one.test"]);
+
+	// Several recipients: the refused group post vanishes, the message is still accepted for the rest.
+	queued.length = 0;
+	const shared = await transport.sendMail({ from: "a@ext.test", to: ["me@one.test", "staff@one.test"], subject: "hi", text: "body" });
+	assert.deepEqual(shared.accepted.sort(), ["me@one.test", "staff@one.test"]);
+	assert.deepEqual(queued, ["me@one.test"]);
+
+	// A single recipient may still be told.
+	queued.length = 0;
+	await assert.rejects(transport.sendMail({ from: "a@ext.test", to: "staff@one.test", subject: "hi", text: "body" }), /5\.7\.1 You are not allowed to post to this group/);
+	assert.deepEqual(queued, []);
+
+	// Every recipient is a group that refused the post: nothing is stored, so say so.
+	await assert.rejects(transport.sendMail({ from: "a@ext.test", to: ["staff@one.test", "staff+two@one.test"], subject: "hi", text: "body" }), /5\.7\.1 You are not allowed to post to this group/);
+	assert.deepEqual(queued, []);
 });

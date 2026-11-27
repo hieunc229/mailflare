@@ -2,13 +2,14 @@ import { eq } from "drizzle-orm";
 import { getDb } from "@/db";
 import { users } from "@/db/schema";
 import { getEmailAddress } from "@/lib/email/address";
+import { groupsAllowed } from "@/lib/groups/license";
 import { resolveInboundAddress } from "@/lib/email/routing";
 import { getLicenseEntitlements } from "@/lib/licenses/service";
 
 export const MAILFLARE_FORWARDED_HEADER = "X-Mailflare-Forwarded";
 
 /** Server-only secrets the loop-guard marker can be keyed with, in order of preference. */
-function markerSecret(env: CloudflareEnv): string | null {
+export function markerSecret(env: CloudflareEnv): string | null {
 	return env.CF_TOKEN || env.CF_API_KEY || env.INBOUND_WEBHOOK_SECRET || null;
 }
 
@@ -46,7 +47,8 @@ export async function getAccountForwardingDestination(
 ): Promise<string | null> {
 	if (!(await getLicenseEntitlements(env)).canForwardEmail) return null;
 	const db = getDb(env);
-	const decision = await resolveInboundAddress(db, recipient);
+	// Groups must resolve here too: skipping one would fall through to a catch-all and forward group mail away.
+	const decision = await resolveInboundAddress(db, recipient, undefined, { allowGroups: groupsAllowed(env) });
 	if (!decision?.mailbox) return null;
 	const [account] = await db
 		.select({ forwardingEmail: users.forwardingEmail })

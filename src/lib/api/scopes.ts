@@ -7,7 +7,7 @@ export const API_KEY_SCOPES = ["send", "read", "jmap", "calendar:read", "calenda
 
 export type ApiKeyScope = (typeof API_KEY_SCOPES)[number];
 
-export const ADMIN_API_KEY_SCOPES = ["domains", "accounts", "mailboxes", "storage"] as const;
+export const ADMIN_API_KEY_SCOPES = ["domains", "accounts", "mailboxes", "storage", "groups"] as const;
 
 /**
  * What an app password (`api_keys.kind = 'app'`) can be limited to. Kept apart from

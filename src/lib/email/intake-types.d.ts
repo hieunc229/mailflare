@@ -16,7 +16,7 @@ export type IntakeInput = {
 
 export type IntakeActions = {
 	/** Refuse the message at the edge; the SMTP listener answers 550, the relay tells the Worker to setReject. */
-	reject?: (reason: string) => Promise<void> | void;
+	reject?: (reason: string, info?: { groupPolicy: boolean }) => Promise<void> | void;
 	/** Relay the raw message to another address; returns whether it went out. */
 	forward?: (destination: string, headers: Record<string, string>) => Promise<boolean>;
 };
@@ -24,4 +24,6 @@ export type IntakeActions = {
 export type IntakeResult =
 	| { action: "reject"; reason: string }
 	| { action: "forward"; forwardedTo: string | null }
+	/** Group mail that would loop: accepted and discarded, never bounced. */
+	| { action: "drop" }
 	| { action: "store"; rawR2Key: string; forwardedTo: string | null };

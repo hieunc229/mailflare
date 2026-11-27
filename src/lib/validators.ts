@@ -550,3 +550,48 @@ export const webhookUpdateSchema = z.object({
 	maxAttempts: z.number().int().min(1).max(10).optional(),
 	rotateSecret: z.literal(true).optional(),
 });
+
+const groupLocalPart = z.string().trim().min(1, "Enter the part before the @").max(64, "The part before the @ can have at most 64 characters").regex(/^[a-zA-Z0-9._%+-]+$/, "Use only letters, numbers and . _ % + - before the @").refine((value) => normalizeRecipientLocalPart(value).length > 0, { message: "The address needs at least one letter or number" });
+const groupSettings = {
+	// No control characters: the name lands in From headers.
+	name: z.string().trim().min(1, "Enter a name").max(100, "The name can have at most 100 characters").refine((value) => !/[\u0000-\u001f\u007f]/.test(value), { message: "The name cannot contain control characters" }),
+	description: z.string().trim().max(500, "The description can have at most 500 characters").nullable().optional(),
+	whoCanPost: z.enum(["anyone", "org", "members"]),
+	replyTo: z.enum(["sender", "group"]),
+};
+
+export const createGroupSchema = z.object({
+	domainId: z.string().min(1),
+	localPart: groupLocalPart,
+	name: groupSettings.name,
+	description: groupSettings.description,
+	whoCanPost: groupSettings.whoCanPost.default("anyone"),
+	replyTo: groupSettings.replyTo.default("sender"),
+	relayOutsidePosts: z.boolean().default(false),
+});
+
+export const updateGroupSchema = z.object({
+	domainId: z.string().min(1).optional(),
+	localPart: groupLocalPart.optional(),
+	name: groupSettings.name.optional(),
+	description: groupSettings.description,
+	whoCanPost: groupSettings.whoCanPost.optional(),
+	replyTo: groupSettings.replyTo.optional(),
+	relayOutsidePosts: z.boolean().optional(),
+	disabled: z.boolean().optional(),
+});
+
+const groupMemberSchema = z.object({
+	kind: z.enum(["user", "mailbox", "external"]),
+	userId: z.string().min(1).optional(),
+	mailboxId: z.string().min(1).optional(),
+	email: z.string().max(320).optional(),
+	canSendAs: z.boolean().optional(),
+});
+
+export const addGroupMembersSchema = z.union([
+	z.object({ members: z.array(groupMemberSchema).min(1).max(50) }),
+	groupMemberSchema.transform((member) => ({ members: [member] })),
+]);
+
+export const updateGroupMemberSchema = z.object({ canSendAs: z.boolean() });

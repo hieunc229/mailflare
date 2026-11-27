@@ -986,6 +986,27 @@
       "statements": [
         "CREATE TABLE `contact_details` (\n\t`contact_id` text PRIMARY KEY NOT NULL,\n\t`details` text DEFAULT '{}' NOT NULL,\n\t`updated_at` integer NOT NULL,\n\tFOREIGN KEY (`contact_id`) REFERENCES `contacts`(`id`) ON UPDATE no action ON DELETE cascade\n);"
       ]
+    },
+    {
+      "name": "0103_mail_groups.sql",
+      "statements": [
+        "CREATE TABLE `mail_groups` (\n\t`id` text PRIMARY KEY NOT NULL,\n\t`domain_id` text NOT NULL,\n\t`local_part` text NOT NULL,\n\t`name` text NOT NULL,\n\t`description` text,\n\t`who_can_post` text DEFAULT 'anyone' NOT NULL,\n\t`reply_to` text DEFAULT 'sender' NOT NULL,\n\t`disabled` integer DEFAULT false NOT NULL,\n\t`created_by_user_id` text,\n\t`created_at` integer NOT NULL,\n\t`updated_at` integer NOT NULL,\n\tFOREIGN KEY (`domain_id`) REFERENCES `domains`(`id`) ON UPDATE no action ON DELETE cascade,\n\tFOREIGN KEY (`created_by_user_id`) REFERENCES `users`(`id`) ON UPDATE no action ON DELETE set null\n);",
+        "CREATE UNIQUE INDEX `mail_groups_address_idx` ON `mail_groups` (`domain_id`,`local_part`);",
+        "CREATE INDEX `mail_groups_created_by_idx` ON `mail_groups` (`created_by_user_id`);",
+        "CREATE TABLE `mail_group_members` (\n\t`id` text PRIMARY KEY NOT NULL,\n\t`group_id` text NOT NULL,\n\t`kind` text NOT NULL,\n\t`user_id` text,\n\t`mailbox_id` text,\n\t`email` text,\n\t`can_send_as` integer DEFAULT false NOT NULL,\n\t`created_by_user_id` text,\n\t`created_at` integer NOT NULL,\n\tFOREIGN KEY (`group_id`) REFERENCES `mail_groups`(`id`) ON UPDATE no action ON DELETE cascade,\n\tFOREIGN KEY (`user_id`) REFERENCES `users`(`id`) ON UPDATE no action ON DELETE cascade,\n\tFOREIGN KEY (`mailbox_id`) REFERENCES `mailboxes`(`id`) ON UPDATE no action ON DELETE cascade,\n\tFOREIGN KEY (`created_by_user_id`) REFERENCES `users`(`id`) ON UPDATE no action ON DELETE set null\n);",
+        "CREATE UNIQUE INDEX `mail_group_members_group_user_idx` ON `mail_group_members` (`group_id`,`user_id`);",
+        "CREATE UNIQUE INDEX `mail_group_members_group_mailbox_idx` ON `mail_group_members` (`group_id`,`mailbox_id`);",
+        "CREATE UNIQUE INDEX `mail_group_members_group_email_idx` ON `mail_group_members` (`group_id`,`email`);",
+        "CREATE INDEX `mail_group_members_user_idx` ON `mail_group_members` (`user_id`);",
+        "CREATE INDEX `mail_group_members_mailbox_idx` ON `mail_group_members` (`mailbox_id`);",
+        "CREATE INDEX `mail_group_members_created_by_idx` ON `mail_group_members` (`created_by_user_id`);"
+      ]
+    },
+    {
+      "name": "0104_relay_outside_posts.sql",
+      "statements": [
+        "ALTER TABLE `mail_groups` ADD `relay_outside_posts` integer DEFAULT false NOT NULL;"
+      ]
     }
   ]
 }

@@ -8,6 +8,7 @@ import {
 } from "./src/lib/email/inbound";
 import { processOutboundQueue, type OutboundQueueMessage } from "./src/lib/email/send";
 import {
+	isGroupRelayMessage,
 	isImportJobMessage,
 	isInboundQueueMessage,
 	isWebhookRetryMessage,
@@ -21,6 +22,10 @@ import { autoUpdateJob } from "./src/lib/scheduled/auto-update-job";
 import { dailyJobs, frequentJobs, runScheduledJob } from "./src/lib/scheduled/jobs";
 import { processWebhookRetry, type WebhookRetryMessage } from "./src/lib/email/webhooks";
 import { resolveIncomingMail, forwardMessage } from "./src/lib/email/incoming";
+import { createExpansionBudget } from "./src/lib/groups/expand-utils";
+import { processGroupRelay } from "./src/lib/groups/relay";
+import { createRelayBudget } from "./src/lib/groups/relay-utils";
+import { countReceivedInJoinedValue } from "./src/lib/groups/loop-utils";
 import { createBatchBudget } from "./src/lib/deliverability/ingest";
 import { getUserFromSession } from "./src/lib/auth/session";
 import { getSessionTokenFromRequest } from "./src/lib/realtime/utils";
@@ -92,7 +97,13 @@ export default {
 				from: message.headers.get("from"),
 				alreadyForwarded,
 				all: headerMap,
+				receivedHops: countReceivedInJoinedValue(headerMap.received),
+				// Read only for a bounce to a group, which is dropped afterwards, so the one-shot stream is not needed again.
+				loadRaw: () => new Response(message.raw).arrayBuffer(),
 			});
+
+			// Group mail that would loop is accepted and discarded: a bounce would feed the loop.
+			if (decision?.action === "drop") return;
 
 			if (decision?.action === "reject") {
 				message.setReject(decision.rejectReason ?? "Message rejected by routing rule");
@@ -125,6 +136,7 @@ export default {
 				to: message.to,
 				rawR2Key,
 				headers: headerMap,
+				...(decision?.action === "group" && decision.group ? { groupExpansion: { groupId: decision.group.groupId } } : {}),
 			};
 			await env.INBOUND_QUEUE.send(payload);
 		} catch (err) {
@@ -138,14 +150,20 @@ export default {
 		const env = withDatabase(withStorage(rawEnv));
 		// One budget per batch, so the reverse lookups of every DMARC report in it stay within the invocation's subrequests.
 		const reportBudget = createBatchBudget();
+		// Likewise group expansion: a batch runs several chunks in one invocation, so later ones are deferred past the budget.
+		const expansionBudget = createExpansionBudget();
+		// And group relays to external members: each is a provider send, so a batch runs only as many as fit.
+		const relayBudget = createRelayBudget();
 		for (const msg of batch.messages) {
 			try {
 				if (isInboundQueueMessage(msg.body)) {
-					await processInboundMessage(env, msg.body, { reportBudget });
+					await processInboundMessage(env, msg.body, { reportBudget, expansionBudget });
 				} else if (typeof msg.body === "object" && msg.body !== null && (msg.body as { kind?: unknown }).kind === "agent.draft" && typeof (msg.body as { jobId?: unknown }).jobId === "string") {
 					await processAgentDraftJob(env, (msg.body as { jobId: string }).jobId);
 				} else if (isWebhookRetryMessage(msg.body)) {
 					await processWebhookRetry(env, msg.body as WebhookRetryMessage);
+				} else if (isGroupRelayMessage(msg.body)) {
+					await processGroupRelay(env, msg.body, { budget: relayBudget });
 				} else if (isImportJobMessage(msg.body)) {
 					await processImportJob(env, { ...msg.body, attempt: msg.attempts });
 				} else if (typeof msg.body === "object" && msg.body !== null && (msg.body as { kind?: unknown }).kind === "email.scheduled") {

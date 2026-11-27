@@ -7,7 +7,12 @@ import { matchReportAddress } from "@/lib/deliverability/report-address";
 import { ingestReportMail, type BatchBudget } from "@/lib/deliverability/ingest";
 import { readTrustedDmarcResult } from "@/lib/spam/analyzers/authentication";
 import { boundParsedEmail } from "@/lib/email/inbound-limits";
-import { resolveInboundAddress, resolveInboxRuleDestination } from "@/lib/email/routing";
+import { resolveInboundAddress, resolveInboxRuleDestination, type RoutingDecision } from "@/lib/email/routing";
+import { expandGroupDelivery, resolveGroupDelivery, scopeRawToGroup } from "@/lib/groups/expand";
+import { groupsAllowed } from "@/lib/groups/license";
+import { admitGroupMail } from "@/lib/email/incoming";
+import { countReceivedHeaders } from "@/lib/groups/loop-utils";
+import type { ExpansionBudget } from "@/lib/groups/expand-utils";
 import { dispatchWebhooks } from "@/lib/email/webhooks";
 import { getMessageContactNames, upsertContactFromAddress } from "@/lib/contacts/service";
 import { getEmailAddress } from "@/lib/email/address";
@@ -47,13 +52,17 @@ export type InboundQueueMessage = {
 	headers?: Record<string, string>;
 	verdicts?: ProviderVerdicts;
 	senderIp?: string;
+	/** Set by intake for mail to a group it admitted: the consumer expands it, from `cursor` on for later chunks. */
+	groupExpansion?: { groupId: string; cursor?: string };
+	/** One member's copy of group mail: stored in that mailbox without resolving the address again. */
+	groupDelivery?: { groupId: string; mailboxId: string };
 };
 
 /** True when the address is a mailbox or alias owned by the user, so their own mail never counts as unread. */
 export async function processInboundMessage(
 	env: CloudflareEnv,
 	payload: InboundQueueMessage,
-	options: { reportBudget?: BatchBudget } = {},
+	options: { reportBudget?: BatchBudget; expansionBudget?: ExpansionBudget } = {},
 ): Promise<void> {
 	const db = getDb(env);
 	// DMARC aggregate reports bypass mailboxes entirely (see report-address.ts); they are parsed into stats and discarded.
@@ -64,16 +73,55 @@ export async function processInboundMessage(
 		await ingestReportMail(env, reportTarget, { rawR2Key: payload.rawR2Key, authenticated: readTrustedDmarcResult(payload.headers, payload.verdicts) === "pass", from }, { batchBudget: options.reportBudget });
 		return;
 	}
-	// The sender is passed so that sender-based block rules resolve the same way here as they
-	// do in the Worker email handler.
-	const decision = await resolveInboundAddress(db, payload.to, payload.from, { headers: payload.headers });
-
 	// Nothing references the raw object on these paths, so keep it from piling up in storage.
 	const dropRaw = () => env.BUCKET.delete(payload.rawR2Key).catch((error) => console.error(`Raw cleanup failed for ${payload.rawR2Key}`, error));
 
+	// Group mail was admitted (who may post, loops) by the live handler. This consumer fans it out into one
+	// copy per member mailbox, and each copy comes back here with `groupDelivery`.
+	if (payload.groupExpansion) {
+		await expandGroupDelivery(env, payload, { budget: options.expansionBudget });
+		return;
+	}
+	let decision: RoutingDecision | null;
+	if (payload.groupDelivery) {
+		const mailbox = await resolveGroupDelivery(db, payload.groupDelivery);
+		decision = mailbox ? { action: "store", mailbox } : null;
+	} else {
+		// The sender is passed so that sender-based block rules resolve the same way here as they
+		// do in the Worker email handler.
+		decision = await resolveInboundAddress(db, payload.to, payload.from, { headers: payload.headers, allowGroups: groupsAllowed(env) });
+	}
+
 	if (!decision) {
 		console.warn(`No routing for inbound address: ${payload.to}`);
-		await dropRaw();
+		// A group copy's object can be the same for a mailbox's copies from two groups; the sweeper removes strays.
+		if (!payload.groupDelivery) await dropRaw();
+		return;
+	}
+
+	// Group mail reaches here without `groupExpansion` when the live handler's routing failed and stored
+	// it anyway. Run the checks it skipped (loops, who may post) now, then expand or drop.
+	if (decision.action === "group" && decision.group) {
+		const raw = await env.BUCKET.get(payload.rawR2Key);
+		if (!raw) {
+			console.error(`Missing R2 object: ${payload.rawR2Key}`);
+			return;
+		}
+		const admitted = await admitGroupMail(env, decision, {
+			all: payload.headers,
+			verdicts: payload.verdicts,
+			// The header map has no Received headers (they are untrusted and stripped), so count them in the raw message.
+			receivedHops: countReceivedHeaders(await raw.arrayBuffer()),
+			envelopeFrom: payload.from,
+			loadRaw: async () => (await env.BUCKET.get(payload.rawR2Key))!.arrayBuffer(),
+		});
+		if (admitted.action !== "group") {
+			// The queued key may be shared with other recipients of the message, so leave it to the raw sweeper.
+			console.warn(`Dropped group mail to ${payload.to}: ${admitted.action}`);
+			return;
+		}
+		const scoped = await scopeRawToGroup(env, payload, decision.group.groupId);
+		if (scoped) await expandGroupDelivery(env, scoped.payload, { budget: options.expansionBudget });
 		return;
 	}
 
@@ -272,7 +320,8 @@ export async function processInboundMessage(
 		console.error(`Bounce recording failed for ${messageId}`, error);
 	}
 
-	if (status === "received") {
+	// RFC 3834: list mail gets no auto-reply.
+	if (status === "received" && !payload.groupDelivery) {
 		try {
 			await sendMailboxAutoReply(env, {
 				mailboxId: decision.mailbox.mailboxId,

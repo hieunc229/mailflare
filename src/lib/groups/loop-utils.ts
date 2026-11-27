@@ -1,0 +1,74 @@
+export const GROUP_HEADER = "X-Mailflare-Group";
+/** More hops than this means the message is going around in a loop. */
+export const MAX_RECEIVED_HOPS = 30;
+
+/** The `List-Id` identifier of a group, lower-cased: `local.hostname`. */
+export function groupListIdentifier(localPart: string, hostname: string): string {
+	return `${localPart}.${hostname}`.toLowerCase();
+}
+
+function header(headers: Record<string, string>, name: string): string | undefined {
+	const wanted = name.toLowerCase();
+	for (const [key, value] of Object.entries(headers)) if (key.toLowerCase() === wanted) return value;
+	return undefined;
+}
+
+/**
+ * Machine-sent mail: `Auto-Submitted` other than `no` (RFC 3834), an auto-reply header, or a `Precedence` of
+ * auto_reply, bulk or junk. Alerts and invoices are automated too, so this alone never drops group mail; it
+ * only matters together with the sender (an external member, see `admitGroupMail`).
+ */
+export function isAutomatedMail(headers: Record<string, string>): boolean {
+	const submitted = header(headers, "auto-submitted")?.trim().toLowerCase();
+	if (submitted && submitted !== "no") return true;
+	if (header(headers, "x-autoreply") !== undefined || header(headers, "x-autorespond") !== undefined) return true;
+	return ["auto_reply", "bulk", "junk"].includes(header(headers, "precedence")?.trim().toLowerCase() ?? "");
+}
+
+export type GroupDropInput = {
+	groupId: string;
+	listIdentifier: string;
+	headers: Record<string, string>;
+	receivedHops: number;
+	/** The SMTP envelope sender; empty or `<>` is a bounce. Omit when unknown. */
+	envelopeFrom?: string;
+};
+
+/**
+ * Why inbound mail to a group must be dropped silently (never rejected: a bounce would feed the
+ * loop), or null. Silence is the point: it ends group, external, group loops and auto-reply storms.
+ */
+export function groupDropReason(input: GroupDropInput): string | null {
+	if (header(input.headers, GROUP_HEADER)?.trim() === input.groupId) return "group marker";
+	const listId = header(input.headers, "list-id");
+	if (listId) {
+		const identifier = (/<([^<>]*)>\s*$/.exec(listId.trim())?.[1] ?? listId).trim().toLowerCase();
+		if (identifier === input.listIdentifier.toLowerCase()) return "own list id";
+	}
+	// Auto-replies (out of office) drop; "auto-generated" does not, because alerts, invoices and
+	// tickets are exactly what alerts@ and billing@ groups exist to receive.
+	if (header(input.headers, "auto-submitted")?.trim().toLowerCase().startsWith("auto-replied")) return "auto-reply";
+	// Bounces and delivery reports: a DSN to a group that bounces again would loop.
+	if (input.envelopeFrom !== undefined && ["", "<>"].includes(input.envelopeFrom.trim())) return "null sender";
+	if (header(input.headers, "return-path")?.trim() === "<>") return "null return path";
+	if (/^\s*multipart\/report\b/i.test(header(input.headers, "content-type") ?? "")) return "delivery report";
+	if (input.receivedHops > MAX_RECEIVED_HOPS) return "too many hops";
+	return null;
+}
+
+/** Counts `Received` headers in the header block of a raw message (first 256 KiB). */
+export function countReceivedHeaders(raw: ArrayBuffer): number {
+	const text = new TextDecoder("latin1").decode(new Uint8Array(raw, 0, Math.min(raw.byteLength, 256 * 1024)));
+	const end = text.search(/\r?\n\r?\n/);
+	const block = end >= 0 ? text.slice(0, end) : text;
+	return block.split(/\r?\n/).filter((line) => /^received:/i.test(line)).length;
+}
+
+/**
+ * Counts hops in a `Received` value that a header map joined with ", " (the Worker handler's
+ * `Object.fromEntries(headers)`): every Received line ends with "; <date>".
+ */
+export function countReceivedInJoinedValue(value: string | undefined): number {
+	if (!value) return 0;
+	return value.match(/;\s*(?:[A-Za-z]{3},\s*)?\d{1,2}\s+[A-Za-z]{3}\s+\d{4}/g)?.length ?? 0;
+}
