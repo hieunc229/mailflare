@@ -3218,7 +3218,7 @@
 	"calendar.rooms.error.invalid": "One of those rooms cannot be booked.",
 	"calendar.rooms.eventRoom": "Booked room: {name}",
 	"calendar.rooms.unconfirmedToast": "{room} could not be confirmed because the room was being booked at the same time. The event is saved; save it again to book the room.",
-	"calendar.rooms.seriesNote": "Rooms belong to the whole series, so they cannot be changed from one occurrence.",
+	"calendar.rooms.seriesNote": "This occurrence was moved on its own. Rooms belong to the whole series and cannot be changed here.",
 	"calendar.rooms.truncated": "Some bookings of the rooms you are showing are left out because there are too many in this period. Hide a room or look at a shorter period.",
 	"rooms.capacityInvalid": "Enter a whole number from 1 to 100000, or leave it empty."
 }

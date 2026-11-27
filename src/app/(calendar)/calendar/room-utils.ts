@@ -46,6 +46,12 @@ export function roomScheduleEvents(schedule: RoomScheduleEvent[], rooms: RoomOpt
 	}));
 }
 
+/**
+ * Only one moved occurrence of a CalDAV series (an override row) has its rooms locked in the editor: they are its series'. A repeating event's rooms stay
+ * editable, though the editor opens one of its expanded occurrences: saving it names the rooms of the series (or, for "this and following", of the new series).
+ */
+export const roomsAreLocked = (event: { id: string; davObjectId?: string | null } | null | undefined): boolean => !!event && !!event.davObjectId && event.davObjectId !== event.id;
+
 /** The translation key for a refused booking, by status and code, so the server's English text is never shown. */
 export function roomSaveErrorKey(_status: number, code?: string): string | null {
 	// Only a refusal that is about the rooms; every other 400 and 403 keeps the editor's own message.
