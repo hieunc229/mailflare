@@ -266,6 +266,27 @@ test("deleteUserSessions revokes app passwords, device keys and JMAP-only keys, 
 	assert.deepEqual(keyIds(database), ["api-cal", "api-read", "mcp", "old-mixed", "other-app", "other-jmap"]);
 });
 
+test("revoking more than D1's 100 bound parameters of app passwords still ends every session", async (t) => {
+	const { database, env } = await fixture(t);
+	const insert = database.db.prepare("INSERT INTO api_keys (id, user_id, name, prefix, key_hash, key_sha256, kind, scopes, created_at) VALUES (?, 'u1', 'k', ?, 'h', ?, 'app', '[\"dav\"]', 1)");
+	for (let index = 0; index < 150; index += 1) insert.run(`app-${index}`, `p${index}`, `sha-${index}`);
+	database.db.prepare("INSERT INTO sessions (id, user_id, token_hash, expires_at, created_at) VALUES ('s1', 'u1', 'th', 4102444800, 1)").run();
+	// D1 refuses a statement with more than 100 bound parameters; the in-memory SQLite does not.
+	const prepare = database.prepare.bind(database);
+	database.prepare = (sql) => {
+		const statement = prepare(sql);
+		const bind = statement.bind.bind(statement);
+		statement.bind = (...values) => {
+			if (values.length > 100) throw new Error(`D1: too many SQL variables (${values.length})`);
+			return bind(...values);
+		};
+		return statement;
+	};
+	await deleteUserSessions(env, "u1");
+	assert.deepEqual(keyIds(database), []);
+	assert.equal(database.db.prepare("SELECT count(*) AS n FROM sessions WHERE user_id = 'u1'").get().n, 0);
+});
+
 test("revoking everything for a user with no keys is a no-op", async (t) => {
 	const { database, env } = await fixture(t);
 	await revokeAllAppPasswords(env, "u1");

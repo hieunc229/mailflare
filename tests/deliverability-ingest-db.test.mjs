@@ -391,3 +391,11 @@ test("the reserved local part is refused for a mailbox or alias only while repor
 	assert.equal(await isReportAddressReserved(off.env, "d1", "mailflare-reports"), false);
 	assert.equal(await isReportAddressReserved({ DB: { prepare() { throw new Error("no such table: domain_deliverability"); } } }, "d1", "mailflare-reports"), false);
 });
+
+test("a report whose placeholder cannot be inserted yet is rethrown with the raw mail kept", async (t) => {
+	const f = await fixture(t);
+	f.raw.exec("ALTER TABLE deliverability_reports DROP COLUMN sender_domain");
+	await assert.rejects(f.ingest("raw/early2", mime({ attachment: gz(google) })));
+	assert.deepEqual(f.deleted, []);
+	assert.ok(f.objects.has("raw/early2"));
+});

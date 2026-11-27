@@ -1,8 +1,8 @@
 import { and, eq, inArray, lt } from "drizzle-orm";
 import { getDb } from "@/db";
 import { backups } from "@/db/schema";
-import { exportDatabaseRecords } from "./export";
-import { createScheduledBackupIfDue, getBackupSettings } from "./service";
+import { writeDatabaseBackup } from "./export";
+import { createScheduledBackupIfDue, failStuckBackups, getBackupSettings } from "./service";
 import { BACKUP_PREFIX, createBackupFilename } from "./utils";
 
 export async function runDatabaseBackup(env: CloudflareEnv, backupId: string): Promise<void> {
@@ -14,13 +14,9 @@ export async function runDatabaseBackup(env: CloudflareEnv, backupId: string): P
 			.where(eq(backups.id, backupId));
 
 		const settings = await getBackupSettings(env);
-		const content = await exportDatabaseRecords(env.DB, settings?.excludedTableGroups ?? []);
 		const filename = createBackupFilename(new Date());
 		const r2Key = `${BACKUP_PREFIX}/${backupId}/${filename}`;
-		const object = await env.BUCKET.put(r2Key, content, {
-			httpMetadata: { contentType: "application/json" },
-			customMetadata: { backupId },
-		});
+		const size = await writeDatabaseBackup(env.DB, env.BUCKET, r2Key, settings?.excludedTableGroups ?? [], { customMetadata: { backupId } });
 
 		await db
 			.update(backups)
@@ -28,7 +24,7 @@ export async function runDatabaseBackup(env: CloudflareEnv, backupId: string): P
 				status: "completed",
 				filename,
 				r2Key,
-				size: object.size,
+				size,
 				completedAt: new Date(),
 				error: null,
 			})
@@ -45,6 +41,7 @@ export async function runDatabaseBackup(env: CloudflareEnv, backupId: string): P
 }
 
 export async function runScheduledDatabaseBackup(env: CloudflareEnv, now: Date): Promise<void> {
+	await failStuckBackups(env, now);
 	const backupId = await createScheduledBackupIfDue(env, now);
 	if (backupId) {
 		await runDatabaseBackup(env, backupId);

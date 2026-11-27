@@ -4,6 +4,7 @@ import { dirname, join } from "node:path";
 import test, { after } from "node:test";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { build } from "esbuild";
+import { memoryBucket } from "./helpers/memory-bucket.mjs";
 import Database from "better-sqlite3";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
@@ -21,6 +22,7 @@ await build({
 	banner: { js: 'import { createRequire } from "node:module"; const require = createRequire(import.meta.url);' },
 });
 const { exportDatabaseRecords, restoreDatabaseRecords } = await import(pathToFileURL(join(outDir, "backup.mjs")).href);
+const restoreWithBucket = (db, content) => restoreDatabaseRecords(db, content, { bucket: memoryBucket() });
 const { migrations } = JSON.parse(readFileSync(join(root, "src/lib/migrations/bundle.json"), "utf8"));
 
 function d1(sqlite) {
@@ -62,7 +64,7 @@ test("restoring ignores an id in the stats rows (older documents) and keeps the 
 	const sqlite = database();
 	const document = JSON.parse(new TextDecoder().decode(await exportDatabaseRecords(d1(sqlite))));
 	document.tables.dmarc_daily_stats[0].id = 9000;
-	await restoreDatabaseRecords(d1(sqlite), buffer(new TextEncoder().encode(JSON.stringify(document))));
+	await restoreWithBucket(d1(sqlite), buffer(new TextEncoder().encode(JSON.stringify(document))));
 	const [row] = sqlite.prepare("SELECT id, message_count FROM dmarc_daily_stats").all();
 	assert.equal(row.message_count, 9);
 	assert.notEqual(row.id, 9000);

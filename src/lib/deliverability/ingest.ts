@@ -1,7 +1,7 @@
 import { and, eq, gte, sql } from "drizzle-orm";
 import { getDb } from "@/db";
 import { deliverabilityReports, dmarcDailyStats, domainDeliverability, tlsDailyStats } from "@/db/schema";
-import { isMissingColumnError, isUniqueConstraintError } from "@/lib/database-errors";
+import { isUniqueConstraintError } from "@/lib/database-errors";
 import { queryDns, reverseName } from "@/lib/dns-query";
 import { parseRawMime } from "@/lib/email/parse";
 import { addressOrganisation } from "./org-domain";
@@ -92,8 +92,8 @@ const sum = (value: unknown) => Number(value ?? 0);
  * Report mail is attacker-controlled. A report is a "verified reporter" only when the mail passed DMARC AND its
  * From organisation equals the organisation of the contact email inside the report; only verified reports write
  * aggregates, under daily row budgets, and everything else is just a row for the page. A bad report is recorded
- * as `failed`/`rejected` and never thrown (a retry would repeat the same work); only a database error before
- * anything is written throws, so the queue retries it.
+ * as `failed`/`rejected` and never thrown (a retry would repeat the same work); a database error throws (after
+ * undoing the placeholder row, with the raw object kept), so the queue retries it.
  *
  * Order: counted against the daily caps, a `processing` row is committed under the raw object's key, then the
  * mail is parsed (the expensive, killable step), then the row is completed under the report's own key (unique
@@ -130,24 +130,17 @@ export async function ingestReportMail(env: CloudflareEnv, target: Target, input
 	}
 
 	const reportId = crypto.randomUUID();
-	let placeholder: { id: string } | undefined;
-	try {
-		[placeholder] = await db.insert(reports).values({
-			id: reportId,
-			domainId: target.domainId,
-			reportKey: await rawReportKey(input.rawR2Key),
-			authenticated: input.authenticated,
-			senderDomain,
-			status: "processing",
-			receivedAt: now,
-		}).onConflictDoNothing({ target: [reports.domainId, reports.reportKey] }).returning({ id: reports.id });
-	} catch (error) {
-		// The `kind` column arrives with migration 0100. Until it is applied a report cannot be recorded; providers send them again.
-		if (!isMissingColumnError(error)) throw error;
-		console.warn(`Report for ${target.hostname} dropped: apply the pending database migration`);
-		await dropRaw();
-		return;
-	}
+	// A write error here (for example a column from a migration that is not applied yet) propagates so the queue retries
+	// the message with its raw object intact; see INBOUND_SCHEMA_RETRY_DELAY_SECONDS in worker-utils.ts.
+	const [placeholder] = await db.insert(reports).values({
+		id: reportId,
+		domainId: target.domainId,
+		reportKey: await rawReportKey(input.rawR2Key),
+		authenticated: input.authenticated,
+		senderDomain,
+		status: "processing",
+		receivedAt: now,
+	}).onConflictDoNothing({ target: [reports.domainId, reports.reportKey] }).returning({ id: reports.id });
 	if (!placeholder) {
 		// A previous run for this very mail was killed before it finished. It may have written some aggregates, so it is not repeated.
 		await db.update(reports).set({ status: "failed", error: "Processing was interrupted" }).where(and(eq(reports.domainId, target.domainId), eq(reports.reportKey, await rawReportKey(input.rawR2Key)), eq(reports.status, "processing")));
@@ -202,9 +195,13 @@ export async function ingestReportMail(env: CloudflareEnv, target: Target, input
 		}).where(eq(reports.id, reportId));
 	} catch (error) {
 		await db.delete(reports).where(eq(reports.id, reportId));
-		await dropRaw();
 		// The same report (or a redelivery) already holds this key.
-		if (isUniqueConstraintError(error)) return;
+		if (isUniqueConstraintError(error)) {
+			await dropRaw();
+			return;
+		}
+		// Anything else (notably a missing `kind` column before migration 0101) is retried with the raw object kept, so
+		// the report is processed once the migration lands instead of being deleted unread.
 		throw error;
 	}
 	// Only a verified DMARC reporter's mail counts as "a report arrived", so a forger cannot silence the no-reports alert.

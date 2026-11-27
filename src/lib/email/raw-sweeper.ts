@@ -31,7 +31,7 @@ const LOOKUP_BATCH = 50;
 /**
  * Deletes raw MIME under `inbound/` that no stored message refers to and that is old enough
  * that its queue message is long finished. This catches what the early-return cleanup in
- * `processInboundMessage` cannot: messages dropped after their final failed retry and
+ * `processInboundMessage` cannot: messages whose job was lost (final failures are moved to `dead/` first) and
  * mail accepted for addresses that never resolved to a mailbox. Afterwards it removes stale relay/SNS dedupe objects and old JMAP uploads.
  */
 export async function sweepOrphanedRawMail(env: CloudflareEnv, now = new Date()): Promise<number> {

@@ -13,7 +13,32 @@ export const BACKUP_TABLES: DatabaseBackupTable[] = ["users", "user_compose_pref
 /** Added by migrations 0068 and later; databases that have not applied them yet back up and restore without them. */
 const LATER_MIGRATION_TABLES: DatabaseBackupTable[] = ["domain_tracking_hosts", "message_tracking", "message_opens", "follow_ups", "conversation_notes", "user_compose_preferences", "booking_confirmation_templates", "mailbox_promotion_settings", "mailbox_sender_preferences", "dav_collections", "dav_cards", "dav_calendar_objects", "email_suppressions", "domain_deliverability", "deliverability_reports", "dmarc_daily_stats", "deliverability_alerts", "tls_daily_stats", "contact_details"];
 const REQUIRED_BACKUP_TABLES: DatabaseBackupTable[] = ["users", "domains", "mailboxes", "mailbox_access", "contacts", "folders", "mailbox_promotion_settings", "mailbox_sender_preferences", "api_keys", "messages", "message_attachments", "outbound_jobs", "routing_rules", "webhooks", "webhook_deliveries", "sessions", "audit_logs", "backup_settings", "backups", "app_settings", "license_settings"];
-const INSERT_BATCH_SIZE = 50;
+/**
+ * Insert batches: one `db.batch` is one D1 query and one transaction, so rows go in as large batches, bounded by
+ * statements (D1 runs a batch well inside its 30 s cap at this size) and by the bytes of the values, so a mailbox of
+ * large messages is not sent as one huge batch. Each statement stays under D1's 100 bound parameters.
+ */
+const INSERT_BATCH_STATEMENTS = 500;
+const INSERT_BATCH_BYTES = 4 * 1024 * 1024;
+const MAX_BOUND_PARAMETERS = 100;
+const approximateRowBytes = (row: DatabaseRecord) => Object.values(row).reduce<number>((total, value) => total + (typeof value === "string" ? value.length : 8), 0);
+function insertBatches(rows: DatabaseRecord[]): DatabaseRecord[][] {
+	const batches: DatabaseRecord[][] = [];
+	let current: DatabaseRecord[] = [];
+	let bytes = 0;
+	for (const row of rows) {
+		const size = approximateRowBytes(row);
+		if (current.length && (current.length >= INSERT_BATCH_STATEMENTS || bytes + size > INSERT_BATCH_BYTES)) {
+			batches.push(current);
+			current = [];
+			bytes = 0;
+		}
+		current.push(row);
+		bytes += size;
+	}
+	if (current.length) batches.push(current);
+	return batches;
+}
 /**
  * Serial ids that are never backed up or restored: on PostgreSQL an explicit id does not advance the sequence,
  * so the next insert after a restore would collide. The row's identity is its unique key, not the id.
@@ -98,29 +123,230 @@ export async function assertBackupTablesCoverDatabase(db: D1Database): Promise<S
 	return new Set(names);
 }
 
-export async function exportDatabaseRecords(db: D1Database, excludedGroups: BackupTableGroupId[] = []): Promise<Uint8Array> {
+/** Rows per query for ordinary tables. */
+const EXPORT_PAGE_ROWS = 500;
+/**
+ * Every D1/SQLite table with a text or blob column is read by bytes, not rows: a message body runs to 1.3 MB, a
+ * sent mail's payload in outbound_jobs holds its whole HTML, a vCard or calendar object up to 128K characters, and a
+ * fixed 500-row page of those would not fit the isolate's memory. D1 also allows only 1000 queries per invocation, so
+ * small rows must not get small pages either. Row sizes come from a cheap index query (`EXPORT_INDEX_ROWS` rows per
+ * page, summing the length of every text/blob column), then rowid ranges of about `EXPORT_PAGE_BYTES` are read.
+ * The column list comes from the live schema, so a table or column added later is covered without a code change.
+ * Queries: 1 (schema) + per table one index query and one range read per index page, plus bytes / 4 MiB for
+ * oversize ranges; about 2 * tables + 2 * rows / 2000 + bytes / 4 MiB.
+ */
+const EXPORT_INDEX_ROWS = 2000;
+const EXPORT_PAGE_BYTES = 4 * 1024 * 1024;
+const TEXT_TYPE = /TEXT|CHAR|CLOB|BLOB|^$/i;
+/** Text and blob columns of every table, in one query; PRAGMA table_info per table if the table-valued form is refused. */
+async function textColumnsByTable(db: D1Database, tables: string[]): Promise<{ columns: Map<string, string[]>; queries: number }> {
+	const columns = new Map<string, string[]>();
+	const add = (table: string, column: string, type: string) => {
+		if (TEXT_TYPE.test(type)) columns.set(table, [...(columns.get(table) ?? []), column]);
+	};
+	let queries = 1;
+	try {
+		const rows = (await db.prepare("SELECT m.name AS tbl, p.name AS col, p.type AS type FROM sqlite_master m JOIN pragma_table_info(m.name) p WHERE m.type = 'table'").all<{ tbl: string; col: string; type: string }>()).results;
+		for (const row of rows) add(row.tbl, row.col, row.type ?? "");
+	} catch {
+		for (const table of tables) {
+			queries += 1;
+			for (const row of (await db.prepare(`PRAGMA table_info(${table})`).all<{ name: string; type: string }>()).results) add(table, row.name, row.type ?? "");
+		}
+	}
+	return { columns, queries };
+}
+const rowBytesSql = (columns: string[]) => columns.map((column) => `COALESCE(LENGTH(CAST(${quoteIdentifier("sqlite", column)} AS BLOB)), 0)`).join(" + ");
+
+/**
+ * Upper bound of the D1 queries `writeDatabaseBackup` will use on this database, from one count-and-bytes query over
+ * the tables. `own` is what the estimate itself cost. D1/SQLite only.
+ */
+export async function estimateBackupQueries(db: D1Database, excludedGroups: BackupTableGroupId[] = [], paging: BackupPaging = {}): Promise<{ queries: number; own: number }> {
+	const existing = await listTableNames(db);
+	const selected = getSelectedBackupTables(excludedGroups);
+	const tables = BACKUP_TABLES.filter((table) => selected.has(table) && existing.has(table));
+	const { columns, queries: schemaQueries } = await textColumnsByTable(db, tables);
+	const stats = (await db.prepare(tables.map((table) => `SELECT '${table}' AS t, COUNT(*) AS n, ${columns.get(table)?.length ? `COALESCE(SUM(${rowBytesSql(columns.get(table) as string[])}), 0)` : "0"} AS b FROM ${table}`).join(" UNION ALL ")).all<{ t: string; n: number; b: number }>()).results;
+	const pageRows = paging.pageSize ?? EXPORT_PAGE_ROWS;
+	const indexRows = paging.indexRows ?? EXPORT_INDEX_ROWS;
+	const pageBytes = paging.pageBytes ?? EXPORT_PAGE_BYTES;
+	// The backup run itself: the table list and the schema read, then per table the reads counted below.
+	let queries = 1 + schemaQueries;
+	for (const { t, n, b } of stats) {
+		const rows = Number(n);
+		if (columns.get(t)?.length) {
+			const pages = Math.floor(rows / indexRows) + 1;
+			queries += pages + (rows ? Math.ceil(rows / indexRows) + Math.floor(Number(b) / pageBytes) : 0);
+		} else queries += Math.floor(rows / pageRows) + 1;
+	}
+	return { queries, own: 2 + schemaQueries };
+}
+type BackupPaging = { pageSize?: number; pageBytes?: number; indexRows?: number };
+/** R2 multipart parts must all be the same size (5 MiB minimum) except the last. */
+const UPLOAD_PART_BYTES = 8 * 1024 * 1024;
+
+/**
+ * Yields the backup document as JSON text in pieces, one table page at a time, so the whole database never sits in
+ * memory. D1/SQLite is read by `rowid` keyset pages; PostgreSQL and MySQL (self-hosted, with ordinary memory) read
+ * one table per query and emit it in pieces.
+ */
+async function* backupDocumentPieces(db: D1Database, excludedGroups: BackupTableGroupId[], paging: BackupPaging = {}): AsyncGenerator<string> {
 	const dialect = dialectOf(db);
 	const databaseTables = await assertBackupTablesCoverDatabase(db);
 	const selected = getSelectedBackupTables(excludedGroups);
 	const includedTables = BACKUP_TABLES.filter((table) => selected.has(table));
 	if (!includedTables.length) throw new Error("Select at least one backup table group");
-	const tables: DatabaseBackupDocument["tables"] = {};
+	yield `{"format":"mailflare-database-backup","version":2,"createdAt":${JSON.stringify(new Date().toISOString())},"includedTables":${JSON.stringify(includedTables)},"tables":{`;
+	const textColumns = dialect === "sqlite" ? (await textColumnsByTable(db, includedTables)).columns : new Map<string, string[]>();
+	let firstTable = true;
 	for (const table of includedTables) {
+		yield `${firstTable ? "" : ","}${JSON.stringify(table)}:[`;
+		firstTable = false;
 		if ((table === "shared_attachment_links" || table === "booking_events" || table === "passkey_credentials" || table.startsWith("drive_") || LATER_MIGRATION_TABLES.includes(table)) && !databaseTables.has(table)) {
-			tables[table] = [];
+			yield "]";
 			continue;
 		}
-		const result = await db.prepare(`SELECT * FROM ${table}`).all<DatabaseRecord>();
-		// Backups hold SQLite-style values whichever database wrote them, so they restore anywhere.
-		const rows = dialect === "sqlite" ? result.results : result.results.map(toPortableRecord);
 		const omitted = OMITTED_COLUMNS[table];
-		tables[table] = omitted ? rows.map((row) => Object.fromEntries(Object.entries(row).filter(([column]) => !omitted.includes(column)))) : rows;
+		const limit = paging.pageSize ?? EXPORT_PAGE_ROWS;
+		// Backups hold SQLite-style values whichever database wrote them, so they restore anywhere.
+		const toRow = (record: DatabaseRecord) => {
+			const row = dialect === "sqlite" ? record : toPortableRecord(record);
+			return omitted ? Object.fromEntries(Object.entries(row).filter(([column]) => !omitted.includes(column))) : row;
+		};
+		let first = true;
+		const emit = (rows: DatabaseRecord[]) => {
+			const text = rows.map((row) => JSON.stringify(toRow(row))).join(",");
+			const piece = text && !first ? `,${text}` : text;
+			if (text) first = false;
+			return piece;
+		};
+		const sizeColumns = textColumns.get(table);
+		if (sizeColumns?.length) {
+			const bytesSql = rowBytesSql(sizeColumns);
+			const pageBytes = paging.pageBytes ?? EXPORT_PAGE_BYTES;
+			const indexRows = paging.indexRows ?? EXPORT_INDEX_ROWS;
+			let after = Number.MIN_SAFE_INTEGER;
+			for (;;) {
+				const index = (await db.prepare(`SELECT rowid AS r, ${bytesSql} AS bytes FROM ${table} WHERE rowid > ? ORDER BY rowid LIMIT ?`).bind(after, indexRows).all<{ r: number; bytes: number }>()).results;
+				if (!index.length) break;
+				// Cut the index page into rowid ranges of about pageBytes; a single larger message is its own range.
+				let rangeStart = after;
+				let rangeBytes = 0;
+				for (let position = 0; position < index.length; position += 1) {
+					rangeBytes += Number(index[position].bytes);
+					if (rangeBytes < pageBytes && position < index.length - 1) continue;
+					const rangeEnd = Number(index[position].r);
+					const rows = (await db.prepare(`SELECT rowid AS __rowid, * FROM ${table} WHERE rowid > ? AND rowid <= ? ORDER BY rowid`).bind(rangeStart, rangeEnd).all<DatabaseRecord & { __rowid: number }>()).results;
+					const piece = emit(rows.map(({ __rowid, ...row }) => row));
+					if (piece) yield piece;
+					rangeStart = rangeEnd;
+					rangeBytes = 0;
+				}
+				after = Number(index[index.length - 1].r);
+				if (index.length < indexRows) break;
+			}
+		} else if (dialect === "sqlite") {
+			let after = Number.MIN_SAFE_INTEGER;
+			for (;;) {
+				const result = await db.prepare(`SELECT rowid AS __rowid, * FROM ${table} WHERE rowid > ? ORDER BY rowid LIMIT ?`).bind(after, limit).all<DatabaseRecord & { __rowid: number }>();
+				if (!result.results.length) break;
+				after = Number(result.results[result.results.length - 1].__rowid);
+				const piece = emit(result.results.map(({ __rowid, ...row }) => row));
+				if (piece) yield piece;
+				if (result.results.length < limit) break;
+			}
+		} else {
+			const rows = (await db.prepare(`SELECT * FROM ${table}`).all<DatabaseRecord>()).results;
+			for (let index = 0; index < rows.length; index += limit) {
+				const piece = emit(rows.slice(index, index + limit));
+				if (piece) yield piece;
+			}
+		}
+		yield "]";
 	}
-	const document: DatabaseBackupDocument = { format: "mailflare-database-backup", version: 2, createdAt: new Date().toISOString(), includedTables, tables };
-	return new TextEncoder().encode(JSON.stringify(document));
+	yield "}}";
 }
 
-export async function restoreDatabaseRecords(db: D1Database, content: ArrayBuffer): Promise<void> {
+export async function exportDatabaseRecords(db: D1Database, excludedGroups: BackupTableGroupId[] = []): Promise<Uint8Array> {
+	const encoder = new TextEncoder();
+	let text = "";
+	for await (const piece of backupDocumentPieces(db, excludedGroups)) text += piece;
+	return encoder.encode(text);
+}
+
+/**
+ * Writes the backup document to `key` without holding it whole: pieces are cut into equal parts of a multipart
+ * upload, so memory stays near one part plus one page of rows. A document smaller than one part is a plain put.
+ * Returns the stored size.
+ */
+export async function writeDatabaseBackup(
+	db: D1Database,
+	bucket: R2Bucket,
+	key: string,
+	excludedGroups: BackupTableGroupId[],
+	options: { customMetadata?: Record<string, string>; partSize?: number } & BackupPaging = {},
+): Promise<number> {
+	const partSize = options.partSize ?? UPLOAD_PART_BYTES;
+	const encoder = new TextEncoder();
+	const putOptions = { httpMetadata: { contentType: "application/json" }, customMetadata: options.customMetadata };
+	let pending: Uint8Array[] = [];
+	let pendingBytes = 0;
+	let upload: R2MultipartUpload | null = null;
+	const parts: R2UploadedPart[] = [];
+	// Takes exactly `size` bytes off the front of the pending chunks.
+	const take = (size: number) => {
+		const out = new Uint8Array(size);
+		let offset = 0;
+		while (offset < size) {
+			const chunk = pending[0];
+			const used = Math.min(chunk.length, size - offset);
+			out.set(chunk.subarray(0, used), offset);
+			offset += used;
+			if (used === chunk.length) pending.shift();
+			else pending[0] = chunk.subarray(used);
+		}
+		pendingBytes -= size;
+		return out.buffer as ArrayBuffer;
+	};
+	try {
+		for await (const piece of backupDocumentPieces(db, excludedGroups, options)) {
+			const bytes = encoder.encode(piece);
+			pending.push(bytes);
+			pendingBytes += bytes.length;
+			while (pendingBytes >= partSize) {
+				upload ??= await bucket.createMultipartUpload(key, putOptions);
+				parts.push(await upload.uploadPart(parts.length + 1, take(partSize)));
+			}
+		}
+		if (!upload) return (await bucket.put(key, take(pendingBytes), putOptions)).size;
+		if (pendingBytes) parts.push(await upload.uploadPart(parts.length + 1, take(pendingBytes)));
+		return (await upload.complete(parts)).size;
+	} catch (error) {
+		await upload?.abort().catch(() => undefined);
+		throw error;
+	} finally {
+		pending = [];
+	}
+}
+
+/** Where the copy of the current database goes before a restore wipes it. Not under `backups/database/`, which holds the listed backups. */
+export const PRE_RESTORE_BACKUP_PREFIX = "backups/pre-restore";
+
+/** `maxQueries`: refuse before touching anything when the restore would need more database queries than this (D1: 1000 per invocation). */
+export type RestoreOptions = { bucket: R2Bucket; now?: Date; maxQueries?: number };
+export type RestoreResult = { safetyBackupKey: string };
+
+/**
+ * Replaces the database with the backup's contents. Order matters because D1 cannot run the whole restore as one
+ * transaction (a batch is capped at 30 s, and a large mailbox does not fit): every row is validated first, then the
+ * current database is written to R2 as a safety backup, and only then are tables emptied and refilled in chunks. A
+ * failure after the teardown therefore names the safety backup, which restores the previous state. Rows are checked for
+ * shape only (a scalar value per column, known columns for the tables that gained some); a foreign key or constraint
+ * violation inside the document still fails after the teardown. With `maxQueries` the whole restore is costed first,
+ * because a restore that runs out of queries halfway leaves a partly restored database.
+ */
+export async function restoreDatabaseRecords(db: D1Database, content: ArrayBuffer, options: RestoreOptions): Promise<RestoreResult> {
 	const document = parseDatabaseBackup(content);
 	// Format 1 predates the drive group, so its writers could not have named its
 	// tables in includedTables; only format 2 documents must cover every group.
@@ -156,38 +382,64 @@ export async function restoreDatabaseRecords(db: D1Database, content: ArrayBuffe
 	// database drops them here instead of failing after the teardown.
 	const deliverabilityColumns = new Map<string, Set<string>>();
 	for (const table of ["domain_deliverability", "deliverability_reports"]) if (existing.has(table)) deliverabilityColumns.set(table, await listColumnNames(db, table));
-	// Mark users deleted before removing them: the passkey trigger permits the
-	// cascade to remove the last credential only for an account that is being
-	// purged. Deleting users first also empties the table the restore inserts
-	// into last, so the rest of the teardown has no live accounts to protect.
-	await db.prepare("UPDATE users SET deleted_at = ?").bind(Math.floor(Date.now() / 1000)).run();
-	await db.prepare("DELETE FROM users").run();
-	for (const table of [...restoreTables].reverse()) {
-		if (table === "users") continue;
-		await db.prepare(`DELETE FROM ${table}`).run();
-	}
-	// Derived DAV state of the old data: the triggers rebuild the log as rows are restored, and a new epoch makes every
-	// client resync. Explicit because MySQL does not fire triggers for FK cascades, so the teardown above leaves stale rows there.
-	for (const table of ["dav_changes", "dav_sync_state"]) if (existing.has(table)) await db.prepare(`DELETE FROM ${table}`).run();
+	const columnsFor = (table: DatabaseBackupTable) => table === "users"
+		? userColumns
+		: table === "booking_events"
+			? bookingColumns
+			: table === "passkey_credentials"
+				? passkeyColumns
+				: table === "messages"
+					? messageColumns
+					: table === "mailbox_promotion_settings"
+						? promotionSettingColumns
+						: deliverabilityColumns.get(table) ?? null;
+	// Every row of every table is checked now, while nothing has been deleted; building the statement is what rejects a bad row.
 	for (const table of restoreTables) {
-		const rows = document.tables[table] ?? [];
-		for (let index = 0; index < rows.length; index += INSERT_BATCH_SIZE) {
-			const columns = table === "users"
-				? userColumns
-				: table === "booking_events"
-					? bookingColumns
-					: table === "passkey_credentials"
-						? passkeyColumns
-						: table === "messages"
-							? messageColumns
-							: table === "mailbox_promotion_settings"
-								? promotionSettingColumns
-								: deliverabilityColumns.get(table) ?? null;
-			const statements = rows.slice(index, index + INSERT_BATCH_SIZE).map((row) => createInsertStatement(db, dialect, table, row, columns));
-			// MySQL checks foreign keys per statement, so the batch suspends them for its own connection.
-			if (statements.length > 0) await db.batch(dialect === "mysql" ? [db.prepare("SET FOREIGN_KEY_CHECKS = 0"), ...statements, db.prepare("SET FOREIGN_KEY_CHECKS = 1")] : statements);
-		}
+		const columns = columnsFor(table);
+		for (const row of document.tables[table] ?? []) createInsertStatement(db, dialect, table, row, columns);
 	}
+	if (options.maxQueries !== undefined) {
+		const safety = await estimateBackupQueries(db);
+		const inserts = restoreTables.reduce((total, table) => total + insertBatches(document.tables[table] ?? []).length, 0);
+		const teardown = restoreTables.length + 4;
+		// Table and column lookups above, the estimate itself and a margin for the audit entry that follows.
+		const total = 12 + safety.own + safety.queries + teardown + inserts;
+		if (total > options.maxQueries) throw new Error(`Restore refused: it needs about ${total} database queries (safety backup ${safety.queries}, teardown ${teardown}, inserts ${inserts}) and at most ${options.maxQueries} are allowed per request. Nothing was changed.`);
+	}
+	const safetyBackupKey = `${PRE_RESTORE_BACKUP_PREFIX}/${(options.now ?? new Date()).toISOString().replace(/[:.]/g, "-")}.json`;
+	try {
+		await writeDatabaseBackup(db, options.bucket, safetyBackupKey, [], { customMetadata: { kind: "pre-restore" } });
+	} catch (error) {
+		throw new Error(`Restore not started: the safety backup of the current data could not be written (${error instanceof Error ? error.message : String(error)}). Nothing was changed.`);
+	}
+	try {
+		// Mark users deleted before removing them: the passkey trigger permits the
+		// cascade to remove the last credential only for an account that is being
+		// purged. Deleting users first also empties the table the restore inserts
+		// into last, so the rest of the teardown has no live accounts to protect.
+		await db.prepare("UPDATE users SET deleted_at = ?").bind(Math.floor(Date.now() / 1000)).run();
+		await db.prepare("DELETE FROM users").run();
+		for (const table of [...restoreTables].reverse()) {
+			if (table === "users") continue;
+			await db.prepare(`DELETE FROM ${table}`).run();
+		}
+		// Derived DAV state of the old data: the triggers rebuild the log as rows are restored, and a new epoch makes every
+		// client resync. Explicit because MySQL does not fire triggers for FK cascades, so the teardown above leaves stale rows there.
+		for (const table of ["dav_changes", "dav_sync_state"]) if (existing.has(table)) await db.prepare(`DELETE FROM ${table}`).run();
+		for (const table of restoreTables) {
+			const rows = document.tables[table] ?? [];
+			const columns = columnsFor(table);
+			for (const chunk of insertBatches(rows)) {
+				const statements = chunk.map((row) => createInsertStatement(db, dialect, table, row, columns));
+				// MySQL checks foreign keys per statement, so the batch suspends them for its own connection.
+				if (statements.length > 0) await db.batch(dialect === "mysql" ? [db.prepare("SET FOREIGN_KEY_CHECKS = 0"), ...statements, db.prepare("SET FOREIGN_KEY_CHECKS = 1")] : statements);
+			}
+		}
+	} catch (error) {
+		console.error("Backup restore failed after the teardown began", { safetyBackupKey, error });
+		throw new Error(`${error instanceof Error ? error.message : String(error)}. The database may be partly restored; restore the safety backup ${safetyBackupKey} to recover the previous data.`);
+	}
+	return { safetyBackupKey };
 }
 
 function parseDatabaseBackup(content: ArrayBuffer): DatabaseBackupDocument {
@@ -214,7 +466,9 @@ function isDatabaseBackupDocument(value: unknown): value is DatabaseBackupDocume
 function createInsertStatement(db: D1Database, dialect: DatabaseDialect, table: DatabaseBackupTable, row: DatabaseRecord, availableColumns: Set<string> | null = null) {
 	const omitted = OMITTED_COLUMNS[table] ?? [];
 	const columns = Object.keys(row).filter((column) => !omitted.includes(column) && (!availableColumns || availableColumns.has(column)));
-	if (columns.length === 0) throw new Error(`Backup contains an invalid ${table} record`);
+	if (columns.length === 0 || columns.length > MAX_BOUND_PARAMETERS) throw new Error(`Backup contains an invalid ${table} record`);
+	// A bound value must be a scalar; D1 rejects anything else, and that must surface before the restore deletes data.
+	if (columns.some((column) => row[column] !== null && typeof row[column] === "object")) throw new Error(`Backup contains an invalid ${table} record`);
 	const placeholders = columns.map(() => "?").join(", ");
 	const identifiers = columns.map((column) => quoteIdentifier(dialect, column)).join(", ");
 	return db.prepare(`INSERT INTO ${table} (${identifiers}) VALUES (${placeholders})`).bind(...columns.map((column) => row[column]));
