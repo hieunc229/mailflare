@@ -10,6 +10,8 @@ import type {
 
 const SESSION_STORAGE_KEY = "mailflare-session-token";
 export const AUTH_SESSION_CHANGED_EVENT = "mailflare:auth-session-changed";
+const MIGRATION_REQUIRED_PATH = "/migration-required.html";
+let migrationRedirectPending = false;
 
 function dispatchAuthSessionChanged(authenticated: boolean): void {
 	if (typeof window === "undefined") return;
@@ -60,6 +62,36 @@ export async function authFetch(input: RequestInfo | URL, init: AuthFetchOptions
 	if (response.status === 401 && redirectOnUnauthorized && typeof window !== "undefined") {
 		clearClientSessionToken();
 		window.location.assign("/login");
+	}
+
+	// The server's digest channel can carry a status without an error body.
+	// Ordinary JSON conflicts (including MIGRATION_REQUIRED) belong to callers.
+	if (
+		response.status === 409 &&
+		typeof window !== "undefined" &&
+		!migrationRedirectPending
+	) {
+		// Inspect a clone: headers alone cannot prove emptiness, and callers must
+		// retain the original response body. An unreadable body is not empty.
+		let empty = response.body === null;
+		if (!empty) {
+			try {
+				empty = await response.clone().text() === "";
+			} catch {
+				// A failed inspection must not replace the caller's response.
+			}
+		}
+		if (
+			empty &&
+			!migrationRedirectPending &&
+			window.location.pathname !== MIGRATION_REQUIRED_PATH &&
+			window.location.pathname !== "/migration-required"
+		) {
+			migrationRedirectPending = true;
+			// This static document must bypass Next.js and database-backed layouts.
+			// oxlint-disable-next-line nextjs-js/no-location-assign-relative-destination
+			window.location.assign(MIGRATION_REQUIRED_PATH);
+		}
 	}
 
 	return response;

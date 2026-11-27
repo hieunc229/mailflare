@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+<head>
+	<meta charset="utf-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<meta name="robots" content="noindex, nofollow">
+	<title>Database migrations required</title>
+	<style>
+		:root { color-scheme: light dark; font-family: system-ui, sans-serif; background: #f6f8fc; color: #202124; }
+		body { margin: 0; padding: 4rem 1.5rem; }
+		main { max-width: 42rem; margin: 8vh auto; }
+		h1 { font-size: clamp(1.75rem, 5vw, 2.5rem); line-height: 1.2; text-wrap: balance; }
+		p { line-height: 1.6; }
+		a { color: #174ea6; text-underline-offset: 0.2em; }
+		a:hover { text-decoration-thickness: 2px; }
+		a:focus-visible { outline: 2px solid currentColor; outline-offset: 4px; }
+		@media (prefers-color-scheme: dark) {
+			:root { background: #202124; color: #e8eaed; }
+			a { color: #a8c7fa; }
+		}
+	</style>
+</head>
+<body>
+	<main>
+		<h1>This deployment needs database migrations</h1>
+		<p>The application has been updated, but its database is not ready yet. Ask the deployment administrator to apply the database migrations for this version.</p>
+		<p>You have not been signed out. Once the migrations are complete, you can return to your inbox.</p>
+		<p><a href="/inbox">Try the inbox again</a></p>
+	</main>
+</body>
+</html>
