@@ -7,8 +7,10 @@ export const PUBLISH_FUTURE_DAYS = 56;
 const DAY = 86_400_000;
 const PRODID = "PRODID:-//Mailflare//Free Busy//EN";
 
+/** Whole UTC days, so the file does not change shape during the day: an interval cut off at the start keeps its start (and UID) until midnight. */
 export function publishWindow(now: Date): { start: Date; end: Date } {
-	return { start: new Date(now.getTime() - PUBLISH_PAST_DAYS * DAY), end: new Date(now.getTime() + PUBLISH_FUTURE_DAYS * DAY) };
+	const today = Math.floor(now.getTime() / DAY) * DAY;
+	return { start: new Date(today - PUBLISH_PAST_DAYS * DAY), end: new Date(today + PUBLISH_FUTURE_DAYS * DAY) };
 }
 
 /**
@@ -35,7 +37,7 @@ export function buildFreeBusyIfb(intervals: BusyInterval[], { uid, now, start, e
 	]);
 }
 
-/** The same times as busy-only events, for calendar apps that subscribe to a URL (Google, Apple). UIDs depend on the time, not on when the file is fetched. */
+/** The same times as busy-only events, for calendar apps that subscribe to a URL (Google, Apple). A UID is the link's plus the start of the busy time, so it holds from fetch to fetch; only an interval cut off by the window's start (midnight UTC) changes, once a day. */
 export function buildFreeBusyIcs(intervals: BusyInterval[], { uid, now }: Render): string {
 	return joinIcsLines([
 		"BEGIN:VCALENDAR", "VERSION:2.0", PRODID, "CALSCALE:GREGORIAN", "METHOD:PUBLISH", "X-WR-CALNAME:Busy",

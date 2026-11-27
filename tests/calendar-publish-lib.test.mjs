@@ -26,10 +26,10 @@ function event(id, user, startMs, endMs, extra = "") {
 	sqlite.exec(`INSERT INTO calendar_events (${cols.join(",")}) VALUES (${vals.join(",")})`);
 }
 
-test("the window is the past week and the next eight weeks: 63 days, which one service call (62 days at most) cannot cover", () => {
+test("the window is about the past week and the next eight weeks: 63 days, which one service call (62 days at most) cannot cover", () => {
 	const { start, end } = publishWindow(NOW);
-	assert.equal(start.getTime(), NOW.getTime() - 7 * DAY);
-	assert.equal(end.getTime(), NOW.getTime() + 56 * DAY);
+	assert.equal(NOW.getTime() - start.getTime(), 7.5 * DAY, "7 days back from midnight");
+	assert.equal(end.getTime() - NOW.getTime(), 55.5 * DAY);
 	assert.ok(end.getTime() - start.getTime() > 62 * DAY);
 });
 
