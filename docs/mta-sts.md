@@ -1,11 +1,11 @@
 # MTA-STS and TLS reports
 
-Two features that help other mail servers deliver to you over TLS and tell you when they could not. Both are **off by default**, per domain, and nothing changes until a domain admin turns them on under **Admin → Email → Deliverability** (the **TLS reports** and **MTA-STS** tabs).
+Two features that make other mail servers deliver to you over TLS and tell you when they could not. Both **off by default**, per domain; a domain admin turns them on under **Admin → Email → Deliverability** (the **TLS reports** and **MTA-STS** tabs).
 
 - **TLS reports (TLS-RPT, RFC 8460).** Mail servers that send to you report each day how many TLS connections worked, how many failed and why. Mailflare reads these reports and shows daily totals.
 - **MTA-STS (RFC 8461).** A policy file that tells senders to deliver to you only over TLS, and only to the mail servers it lists. Mailflare publishes the file and the DNS record.
 
-Both are only for domain admins (the same permission as the DMARC page).
+Domain admins only (same permission as the DMARC page).
 
 ## TLS reports
 
@@ -74,11 +74,11 @@ Senders fetch `https://mta-sts.<domain>/.well-known/mta-sts.txt`. **Mailflare do
 
   The proxy must pass the `Host` header on (Caddy's `reverse_proxy` does).
 
-The **Check the host** button fetches the policy from your browser and compares it with what Mailflare expects. A redirect counts as a failure (RFC 8461 forbids redirects). The result is recorded as "checked on <date>"; it is informational and changes nothing that is served.
+**Check the host** fetches the policy from your browser and compares it with what Mailflare expects. A redirect is a failure (RFC 8461 forbids redirects). The result is recorded as "checked on <date>"; informational only, changes nothing served.
 
 ### What the host serves
 
-The same app serves every host, so `mta-sts.*` hosts are guarded (`guardMtaStsHost` in `worker.ts` and `server/index.ts`): on such a host only `GET` and `HEAD` of `/.well-known/mta-sts.txt` reach the app; every other path is a 404 and every other method a 405, so the login page and the APIs are never served there. The policy is answered only for `mta-sts.<domain>` where `<domain>` is a managed domain with a published policy (testing, enforce, or the removal period below); any other host, including the app's own, gets a 404. The body is built from stored values that are validated again on every request (mode, MX host names, `max_age`) and never contains anything from the request. The response is `text/plain; charset=utf-8`, `Cache-Control: public, max-age=300`, `Access-Control-Allow-Origin: *` (public data; the browser check needs it) and `X-Content-Type-Options: nosniff`, and it never redirects. On Workers that host opens no database read session, so the answer carries no cookie.
+One app serves every host, so `mta-sts.*` hosts are guarded (`guardMtaStsHost` in `worker.ts` and `server/index.ts`): on such a host only `GET` and `HEAD` of `/.well-known/mta-sts.txt` reach the app; every other path is a 404 and every other method a 405, so the login page and the APIs are never served there. The policy is answered only for `mta-sts.<domain>` where `<domain>` is a managed domain with a published policy (testing, enforce, or the removal period below); any other host, including the app's own, gets a 404. The body is built from stored values that are validated again on every request (mode, MX host names, `max_age`) and never contains anything from the request. The response is `text/plain; charset=utf-8`, `Cache-Control: public, max-age=300`, `Access-Control-Allow-Origin: *` (public data; the browser check needs it) and `X-Content-Type-Options: nosniff`, and it never redirects. On Workers that host opens no database read session, so the answer carries no cookie.
 
 ### Turning it off
 
@@ -86,7 +86,7 @@ RFC 8461 asks for a removal period: "Turn off MTA-STS" publishes a policy with `
 
 ## Data
 
-Columns on `domain_deliverability` (`tls_rpt_enabled`, `mta_sts_mode`, `mta_sts_policy_id`, `mta_sts_mx`, `mta_sts_max_age`, `mta_sts_served_max_age`, `mta_sts_verified_at`, `mta_sts_retire_after`), a `kind` column on `deliverability_reports` (`dmarc` or `tlsrpt`) and the table `tls_daily_stats` (migration sqlite `0100`, PostgreSQL and MySQL `0024`). `tls_daily_stats` has one row per day, verified reporter, policy type, mail server and result type, with integer counts, and is backed up without its serial `id` like `dmarc_daily_stats`. Retention is 180 days. Backups from a migrated database restore onto a database that has not applied the migration yet (the unknown columns are dropped).
+Columns on `domain_deliverability` (`tls_rpt_enabled`, `mta_sts_mode`, `mta_sts_policy_id`, `mta_sts_mx`, `mta_sts_max_age`, `mta_sts_served_max_age`, `mta_sts_verified_at`, `mta_sts_retire_after`), a `kind` column on `deliverability_reports` (`dmarc` or `tlsrpt`) and the table `tls_daily_stats` (migration sqlite `0101`, PostgreSQL and MySQL `0025`). `tls_daily_stats` has one row per day, verified reporter, policy type, mail server and result type, with integer counts, and is backed up without its serial `id` like `dmarc_daily_stats`. Retention is 180 days. Backups from a migrated database restore onto a database that has not applied the migration yet (the unknown columns are dropped).
 
 Before the migration is applied, report mail is dropped with a log line (providers send reports again), the policy host answers 404 and the routes answer 409 `MIGRATION_REQUIRED`.
 

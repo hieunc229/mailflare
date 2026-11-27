@@ -1,32 +1,32 @@
 # Sending and receiving providers
 
-Mailflare keeps your mail data in your own D1 database and R2 bucket, Backblaze B2 or AWS S3 (or SQLite and local files when self-hosted). What carries mail over the wire is a choice you make **per domain**, separately for receiving and for sending:
+Mail data stays in your own D1 database and R2 bucket, Backblaze B2 or AWS S3 (or SQLite and local files when self-hosted). The wire provider is chosen **per domain**, separately for receiving and sending:
 
 | | Cloudflare | Resend | Amazon SES |
 |---|---|---|---|
 | **Receiving** | Email Routing (the default) | `email.received` webhook | S3 + SNS notification |
 | **Sending** | Cloudflare Email Sending | Resend API | SESv2 API |
 
-DNS stays on Cloudflare for every combination: Mailflare writes the records for whichever provider you pick. A domain can also be **receive-only** (sending: Not selected) or **send-only** (receiving: Not selected).
+DNS stays on Cloudflare for every combination; Mailflare writes the records for the chosen provider. A domain can be **receive-only** (sending: Not selected) or **send-only** (receiving: Not selected).
 
-Open **Admin → Domains**, expand a domain, and use the **Setup receiving email** and **Setup sending email** sections. Each provider is a card with a switch. Turning a switch on selects that provider and shows its setup; the icon on the left is a green check when it is fully set up and an amber triangle when it is not.
+**Admin → Domains**, expand a domain, use **Setup receiving email** and **Setup sending email**. Each provider is a card with a switch: on selects it and shows its setup. Icon: green check = fully set up, amber triangle = not.
 
-> Selecting a provider does not change DNS. The Setup button inside the provider's card does. This lets you prepare a new provider while the old one keeps working.
+> Selecting a provider does not change DNS; the Setup button in its card does. This lets you prepare a new provider while the old one keeps working.
 
 ## Choosing at add time
 
-**New domain** asks which service receives the domain's mail (**Receive mail with**) and which sends it (**Send mail with**), each a dropdown of Cloudflare, Resend, Amazon SES or Not selected. Cloudflare Email Routing and the Cloudflare sending subdomain are only enabled on the zone for the Cloudflare choice. For Resend or SES the domain is added without touching either; finish from the domain page once the credentials are in. The same choices are available over the API as `receivingProvider` and `sendingProvider` (see [API](api.md#domain-management)).
+**New domain** has **Receive mail with** and **Send mail with** dropdowns (Cloudflare, Resend, Amazon SES, Not selected). Cloudflare Email Routing and the Cloudflare sending subdomain are enabled on the zone only for the Cloudflare choice. For Resend or SES the domain is added without touching either; finish from the domain page once credentials are in. API equivalents: `receivingProvider` and `sendingProvider` (see [API](api.md#domain-management)).
 
 ## Resend
 
-Resend uses one **API key**, shared by every domain that uses it. Create it at [resend.com/api-keys](https://resend.com/api-keys).
+One **API key**, shared by every Resend domain. Create it at [resend.com/api-keys](https://resend.com/api-keys).
 
 - A **full-access** key lets Mailflare add the domain to Resend, write its DNS records to the Cloudflare zone, verify it, and (for receiving) register the webhook.
-- A **sending-only** key can send, but Resend refuses it for domain and webhook management, so you add the domain at [resend.com/domains](https://resend.com/domains), create its records yourself, and use **Send test email** to confirm. Mailflare says so in the card instead of failing.
+- A **sending-only** key can send, but Resend refuses it for domain and webhook management: add the domain at [resend.com/domains](https://resend.com/domains), create its records yourself, and confirm with **Send test email**. The card says so instead of failing.
 
-The key is checked against Resend when you save it. It can also come from the `RESEND_API_KEY` secret, which takes priority over a key saved in the app. Only the primary administrator can change it.
+The key is checked against Resend on save. `RESEND_API_KEY` takes priority over a saved key. Only the primary administrator can change it.
 
-A service with a Resend-compatible API works the same way: set `RESEND_BASE_URL` to its API address and use its key. Every Resend call (sending, domains, webhooks, received mail) goes to that address. If the service refuses a custom `Message-ID` header, set `RESEND_CUSTOM_MESSAGE_ID=false`: Mailflare then sends without it and threads replies on the Message-ID the service reports for the sent email (`message_id` from `GET /emails/{id}`), falling back to its own when none is reported yet. If it refuses other headers Mailflare sets, such as `Auto-Submitted` on system mail and auto-replies, list them in `RESEND_OMIT_HEADERS` (comma-separated) and they are left out of every send.
+A Resend-compatible service works the same way: set `RESEND_BASE_URL` to its API address and use its key. Every Resend call (sending, domains, webhooks, received mail) goes there. If the service refuses a custom `Message-ID` header, set `RESEND_CUSTOM_MESSAGE_ID=false`: Mailflare then sends without it and threads replies on the Message-ID the service reports for the sent email (`message_id` from `GET /emails/{id}`), falling back to its own when none is reported yet. If it refuses other headers Mailflare sets, such as `Auto-Submitted` on system mail and auto-replies, list them in `RESEND_OMIT_HEADERS` (comma-separated) and they are left out of every send.
 
 **Sending.** Setup creates the domain in Resend, publishes its DKIM and SPF records, and asks Resend to verify. Verification is Resend's own status: it can stay `pending` for a few minutes after the DNS is added, and **Check status** re-asks Resend without creating anything new. Replies thread correctly because Mailflare sets its own `Message-ID`.
 
@@ -34,9 +34,9 @@ A service with a Resend-compatible API works the same way: set `RESEND_BASE_URL`
 
 ## Amazon SES
 
-Create an IAM user with programmatic access, then enter its **access key ID**, **secret access key** and **region** in the SES card. Mailflare validates them before saving: it proves the identity with STS, then makes a harmless call to each service it needs, and lists every permission the key lacks. Credentials can also come from `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY` and `AWS_REGION`, which take priority over saved ones.
+Create an IAM user with programmatic access; enter its **access key ID**, **secret access key** and **region** in the SES card. Validation before saving: identity via STS, then a harmless call to each needed service; every missing permission is listed. `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY` and `AWS_REGION` take priority over saved ones.
 
-The key needs this policy (the card shows it too, with only the missing parts called out):
+Required policy (the card shows it too, calling out only the missing parts):
 
 ```json
 {
@@ -65,13 +65,13 @@ Each message is read from your own bucket, handed to the normal inbound pipeline
 
 ## Bounces and complaints
 
-Resend and SES can report permanent bounces and spam complaints back to Mailflare, which keeps a per-domain suppression list. It is off by default; see [deliverability.md](deliverability.md).
+Resend and SES can report permanent bounces and spam complaints back; Mailflare keeps a per-domain suppression list. Off by default; see [deliverability.md](deliverability.md).
 
 ## MX records and switching receiving provider
 
 Only one service can own a domain's MX records. When a provider's Setup finds MX records for something else (including Cloudflare Email Routing's), it stops and shows them, and replaces them only after you confirm. Confirming means the previous service stops receiving mail for that domain.
 
-Per-address routes to the Mailflare Worker are only created for domains that receive through Cloudflare, and are recreated when you set Cloudflare up again.
+Per-address routes to the Mailflare Worker exist only for domains receiving through Cloudflare, and are recreated when Cloudflare is set up again.
 
 ## Cleaning up the provider you left
 
@@ -102,4 +102,4 @@ You cannot clean up the provider that is currently selected.
 | `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_REGION` | SES credentials; override ones saved in the app |
 | `APP_URL` | Public HTTPS address; required for Resend and SES receiving, because the providers call this app |
 
-Settings saved in the app take precedence over these variables. Keys saved in the app are stored as plain text in the `app_settings` table (as the AI provider key already is), so protect database backups accordingly.
+Environment variables take precedence over saved settings; the saved value is used only when the variable is unset. Keys saved in the app are stored as plain text in the `app_settings` table (as the AI provider key already is): protect database backups accordingly.

@@ -3,9 +3,9 @@
 
 # Mailflare
 
-A self-hosted alternative to Google Workspace. Setup **custom domain Emails**, **Calendar, Drive, Booking** and **built-in AI agents**. Deploy it to Cloudflare, Docker or Vercel
+Self-hosted alternative to Google Workspace: **custom-domain email**, **Calendar, Drive, Booking** and **built-in AI agents**. Runs on Cloudflare, Docker or Vercel.
 
-**Try [Mailflare Cloud](https://mailflare.co?ref=github)** with high-deliverable emails without managing your deployments
+**[Mailflare Cloud](https://mailflare.co?ref=github)**: hosted, high-deliverability email, nothing to manage.
 
 [![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/hieunc229/mailflare) 
 <a href="https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2Fhieunc229%2Fmailflare&amp;env=CRON_SECRET&amp;envDescription=See%20docs%2Fvercel.md&amp;envLink=https%3A%2F%2Fgithub.com%2Fhieunc229%2Fmailflare%2Fblob%2Fmain%2Fdocs%2Fvercel.md" rel="nofollow"><img src="https://camo.githubusercontent.com/ff0e5692ba93a62d065d9523e5a7e15ed5e2e15a2866758b3276a4f7b77eaac6/68747470733a2f2f76657263656c2e636f6d2f627574746f6e" alt="Deploy with Vercel" data-canonical-src="https://vercel.com/button" style="max-width: 100%;height: 39px;"></a>
@@ -44,16 +44,17 @@ A self-hosted alternative to Google Workspace. Setup **custom domain Emails**, *
 - **Admin**: Users, API keys, webhooks, audit logs and backups.
 - **Import**: Bring in mail from IMAP, Gmail Takeout, `.eml` and `.mbox` files, and Google Calendar events, Google Contacts and Google Drive files from Takeout. See [Importing from Google Takeout](docs/import.md).
 
-Mailflare currently supports 34 languages, including English, Português (Brasil), Português (Portugal), Español, Français, Deutsch, Italiano, Nederlands, Polski, Українська, Русский, Türkçe, 中文（简体）, 日本語, 한국어, Bahasa Indonesia, Bahasa Melayu, Tiếng Việt, ไทย, हिन्दी, বাংলা, मराठी, తెలుగు, தமிழ், ગુજરાતી, ಕನ್ನಡ, മലയാളം, ਪੰਜਾਬੀ, සිංහල, Kiswahili, Hausa, plus العربية, اردو and فارسی (right-to-left).
+34 languages: English, Português (Brasil), Português (Portugal), Español, Français, Deutsch, Italiano, Nederlands, Polski, Українська, Русский, Türkçe, 中文（简体）, 日本語, 한국어, Bahasa Indonesia, Bahasa Melayu, Tiếng Việt, ไทย, हिन्दी, বাংলা, मराठी, తెలుగు, தமிழ், ગુજરાતી, ಕನ್ನಡ, മലയാളം, ਪੰਜਾਬੀ, සිංහල, Kiswahili, Hausa, plus العربية, اردو and فارسی (right-to-left).
 
 ## Cost
 
-You can receive and send mail for free.
+Receiving is free; sending is free on Resend's tier, or $5/month on Cloudflare.
 
 - **Receiving**: Cloudflare Email Routing is free.
-- **Sending**: Use the free tier of Resend (3,000 emails a month) or Amazon SES. Cloudflare's own sending needs the $5/month Paid Worker plan.
+- **Sending**: Use Cloudflare Email Sending first. It is on the same account as the rest of Mailflare, with no extra vendor and no sandbox, and it is the default for new domains. Workers Paid ($5/month) includes 3,000 emails a month, then $0.35 per 1,000. Workers Free can only send to verified addresses. Email Sending is in beta, and new accounts start with a low daily quota that grows over time.
+- **Alternatives**: Resend (free tier, 3,000 a month) or Amazon SES ($0.10 per 1,000; new accounts start in a sandbox). Switch per domain in Admin → Domains. See [docs/providers.md](docs/providers.md).
 
-New Amazon SES accounts start in a sandbox. Ask AWS for production access to lift it. Prices change, so check [Resend](https://resend.com/pricing), [Amazon SES](https://aws.amazon.com/ses/pricing/) and [Cloudflare](https://developers.cloudflare.com/workers/platform/pricing/).
+Prices change, so check [Resend](https://resend.com/pricing), [Amazon SES](https://aws.amazon.com/ses/pricing/) and [Cloudflare](https://developers.cloudflare.com/workers/platform/pricing/).
 
 ## Deploy
 
@@ -63,8 +64,8 @@ New Amazon SES accounts start in a sandbox. Ask AWS for production access to lif
 
 > **`CF_TOKEN` is required.** Create a scoped [Cloudflare API token](https://github.com/hieunc229/mailflare/issues/24#issuecomment-5523686105) with these permissions:
 >
-> - All accounts: Email Sending:Edit, DNS Settings:Edit, Email Routing Addresses:Edit
-> - All zones: DNS Settings:Edit, Email Routing Rules:Edit, Zone Settings:Edit, DNS:Edit
+> - All zones: Zone:Read, DNS:Edit, Zone Settings:Edit, Email Routing Rules:Edit
+> - All accounts, only if Mailflare will send through Cloudflare: Email Sending:Edit
 
 More options: [deployment guide](docs/deployment.md).
 
@@ -92,7 +93,7 @@ Token permissions and more options: [deployment guide](docs/deployment.md#deploy
 
 ### Self-host with Docker
 
-Runs as one container on any server, with SQLite and local files.
+One container, SQLite and local files.
 
 ```bash
 cp .env.docker.example .env.docker
@@ -120,7 +121,7 @@ npm run db:migrate:local
 npm run dev
 ```
 
-Add your Cloudflare credentials to `.dev.vars`, then open [localhost:3000](http://localhost:3000). Run `npm run db:seed` to load sample data.
+Add Cloudflare credentials to `.dev.vars`, then open [localhost:3000](http://localhost:3000). Run `npm run db:seed` to load sample data.
 
 - `npm run build`: build the Worker
 - `npm run deploy`: build and deploy

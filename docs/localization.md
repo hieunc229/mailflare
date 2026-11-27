@@ -1,6 +1,6 @@
 # Interface languages
 
-Mailflare defaults to English and ships 34 interface languages. Visitors switch language from the homepage or sign-in page, and signed-in users can set it under **Settings → Account → General**, next to their time zone.
+Default English; 34 interface languages. Visitors switch on the homepage or sign-in page; signed-in users under **Settings → Account → General**, next to time zone.
 
 ## Current coverage
 
@@ -12,13 +12,13 @@ Mailflare defaults to English and ships 34 interface languages. Visitors switch 
 | East and Southeast Asia | 中文（简体）(`zh-CN`), 日本語 (`ja`), 한국어 (`ko`), Bahasa Indonesia (`id`), Bahasa Melayu (`ms`), Tiếng Việt (`vi`), ไทย (`th`) |
 | Africa | Kiswahili (`sw`), Hausa (`ha`) |
 
-Every catalog covers the whole interface. Email content, custom folder and mailbox names stay user content, and selecting a language does not change routes, system-folder identifiers or date/time formatting. Catalogs for languages added most recently were translated without native-speaker review, so wording may need polish; corrections are welcome as pull requests.
+Every catalog covers the whole interface. Email content and custom folder and mailbox names stay user content. Language choice does not change routes, system-folder identifiers or date/time formatting. The most recently added catalogs have no native-speaker review; corrections welcome as pull requests.
 
 ## Preference and rendering
 
-The selection applies immediately and is saved in the host-only `mailflare-locale` cookie for one year (`Path=/`, `SameSite=Lax`, `Secure` on HTTPS). It is a browser preference shared across accounts on the same installation. If cookies are blocked, the current selection works until the page is reloaded.
+The selection applies immediately and is saved in the host-only `mailflare-locale` cookie for one year (`Path=/`, `SameSite=Lax`, `Secure` on HTTPS), a browser preference shared across accounts of this installation in the same browser. With cookies blocked, it lasts until reload.
 
-The root layout reads the cookie with `await cookies()`, validates it against the locale registry, and uses the same value for `<html lang>` and the client language provider. This makes pages use request-time rendering, including otherwise static pages. A missing or unsupported cookie selects English. Client navigation preserves the provider state; reloading or opening a new tab restores the cookie selection. This version does not synchronize changes into tabs that are already open.
+The root layout reads the cookie with `await cookies()`, validates it against the locale registry, and uses the value for `<html lang>` and the client language provider. This forces request-time rendering, including otherwise static pages. A missing or unsupported cookie selects English. Client navigation preserves the provider state; reload or a new tab restores the cookie selection. Changes are not synchronized into already-open tabs.
 
 ## Adding translations
 
@@ -34,10 +34,9 @@ To add another language:
    es: { label: "Español" },
    ```
 
-That is the only registration point. The `Locale` type, supported-locale validation, cookie handling, server-rendered HTML and selector options all derive from it. No provider, layout, selector or utility changes are needed. English remains the default. For a right-to-left language add `dir: "rtl"` to the entry; the layout and provider then set `<html dir>`. English ships in the main bundle; every other catalog is a static asset loaded on demand (the browser fetches `/locales/<code>.json`, server rendering reads it through the `ASSETS` binding), so catalogs do not count toward the Worker's 3 MiB Free-plan size limit. Locale-specific date formatting is not part of this system.
+That is the only registration point: no provider, layout, selector or utility changes are needed. The `Locale` type, validation, cookie handling, server-rendered HTML and selector options derive from it. For a right-to-left language add `dir: "rtl"` to the entry; the layout and provider then set `<html dir>`. English remains the default and ships in the main bundle; every other catalog is a static asset loaded on demand (the browser fetches `/locales/<code>.json`, server rendering reads it through the `ASSETS` binding), so they do not count toward the Worker's 3 MiB Free-plan size limit. Locale-specific date formatting is not part of this system.
 
 Client components use `useLanguage().t(key, vars?)`; server code uses `createTranslator(locale)` from `src/lib/i18n/utils.ts`, which returns the same function. Strings interpolate `{name}` placeholders from `vars`. For plurals, add `key.one`, `key.other` (and any other CLDR categories the language needs, such as `few` for Polish, Ukrainian and Arabic) to the catalog, then call `t("key", { count })`; the variant is picked with `Intl.PluralRules`, falling back to the bare key. The dialog close button uses the translated `navigation.close` automatically.
 
- Keep routes, storage keys, permission checks, API values and user content independent of translated display text. Extend coverage gradually rather than replacing strings throughout the app in one change.
-
-Run `node --test tests/i18n.test.mjs` for catalog parity, fallback, cookie attributes, selector labels, server rendering and root-layout locale agreement. An isolated test registers an extra language and verifies that resolution, translations, cookie persistence, selector options and SSR pick it up without changing any consumers. Also run lint, `npx tsc --noEmit` and the applicable build when changing the integration.
+Keep routes, storage keys, permission checks, API values and user content independent of translated display text.  Extend coverage gradually rather than replacing strings throughout the app in one change.
+Run `node --test tests/i18n.test.mjs` for catalog parity, fallback, cookie attributes, selector labels, server rendering and root-layout locale agreement. An isolated test registers an extra language and verifies resolution, translations, cookie persistence, selector options and SSR pick it up without changing any consumers. Also run lint, `npx tsc --noEmit` and the applicable build when changing the integration.
