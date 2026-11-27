@@ -22,7 +22,7 @@ Cloudflare deployment, configuration, backups and updates. Elsewhere: [Docker](s
 3. To send mail: add another policy and select `Entire Account`, and configure these permissions:
     1. Email & Messaging > Email Sending > Select `Edit` Access
 4. Go to `Compute` → `Email Service` → `Email Sending`
-    1. A paid Workers plan is required
+    1. Workers Paid is needed to send to any address; on Workers Free, Email Sending only delivers to verified addresses
     2. Select On-board domain and follow the prompts
     3. After Mailflare setup, expand the domain on Admin > domains to configure DKIM and DMARC records
 

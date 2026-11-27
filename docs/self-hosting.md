@@ -73,7 +73,7 @@ Optional: `SMTP_TLS_KEY` and `SMTP_TLS_CERT` (paths inside the container) enable
 
 **Any SMTP relay.** `SMTP_URL=smtps://user:pass@host:465` (or `smtp://` with STARTTLS). Works with your hosting provider's relay, Amazon SES, Postmark, Mailgun or your own Postfix. Set `SMTP_TLS_REJECT_UNAUTHORIZED=false` only for a relay with a self-signed certificate on a private network.
 
-**Cloudflare Email Sending.** `CF_ACCOUNT_ID` plus a `CF_TOKEN` with Email Sending: Edit. The domain must be a Cloudflare zone with Email Sending set up; Mailflare calls the REST API, no Workers plan needed.
+**Cloudflare Email Sending.** `CF_ACCOUNT_ID` plus a `CF_TOKEN` with Email Sending: Edit. The domain must be a Cloudflare zone with Email Sending set up; Mailflare calls the REST API, so no Worker has to be deployed (Email Sending still bills on the account's Workers plan).
 
 **Resend or Amazon SES, per domain.** Instead of one global relay, once Mailflare can manage the domain's DNS with `CF_TOKEN`, each domain can send and receive through the Resend or SES APIs, no SMTP involved. Add credentials on the domain page, or set `RESEND_API_KEY` / `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY` and `AWS_REGION`. Receiving needs `APP_URL` set to your public HTTPS address. See [Sending and receiving providers](providers.md). SES as a plain SMTP relay through `SMTP_URL` still works and needs none of this.
 

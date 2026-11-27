@@ -48,7 +48,7 @@ Self-hosted alternative to Google Workspace: **custom-domain email**, **Calendar
 
 ## Cost
 
-Receiving and sending can both be free.
+Receiving is free; sending is free on Resend's tier, or $5/month on Cloudflare.
 
 - **Receiving**: Cloudflare Email Routing is free.
 - **Sending**: Use Cloudflare Email Sending first. It is on the same account as the rest of Mailflare, with no extra vendor and no sandbox, and it is the default for new domains. Workers Paid ($5/month) includes 3,000 emails a month, then $0.35 per 1,000. Workers Free can only send to verified addresses. Email Sending is in beta, and new accounts start with a low daily quota that grows over time.
