@@ -20,6 +20,9 @@ import { calendarExistsGuard, eventCalendarId } from "@/lib/calendar/calendars";
 import { listVisibleEvents } from "@/lib/calendar/event-list";
 import { resolveCalendarForWrite } from "@/lib/calendar/shares";
 import { createAuditLog } from "@/lib/mailboxes/audit";
+import { resolveBookableRooms } from "@/lib/calendar/resources";
+import { bookAndSummarize, invitationLocation, roomResponse, type RoomsSummary } from "@/lib/calendar/room-save";
+import { getLicenseEntitlements } from "@/lib/licenses/service";
 
 export async function GET(request: Request) {
 	const env = getEnv();
@@ -53,6 +56,13 @@ export async function POST(request: Request) {
 	const attendees = (input.attendees ?? []).map((email) => email.trim()).filter((email) => /^\S+@\S+\.\S+$/.test(email));
 	if (delegate && attendees.length) return NextResponse.json({ error: "Only the calendar's owner can invite guests to its events", code: INVITE_REQUIRES_OWNER }, { status: 403 });
 	if (attendees.length && input.mailboxId && !calendarKeyCanSendInvitations(key, input.mailboxId)) return NextResponse.json({ error: "Sending invitations requires mail send permission for this mailbox" }, { status: 403 });
+	// Rooms are checked before anything is written: a bad list or a lapsed licence saves nothing.
+	let roomIds: string[] = [];
+	if (input.resourceIds !== undefined) {
+		const rooms = await resolveBookableRooms(getDb(env), input.resourceIds, { booked: [], canBook: (await getLicenseEntitlements(env)).canShareMailboxes });
+		if (!rooms.ok) return NextResponse.json({ error: rooms.error, ...(rooms.code ? { code: rooms.code } : {}) }, { status: rooms.status });
+		roomIds = rooms.ids;
+	}
 	const event = { id: newId("evt"), userId: calendar.ownerId, mailboxId: delegate ? null : input.mailboxId ?? null, calendarId: calendar.calendarId ?? null, title: input.title.trim(), description: input.description?.trim() ?? "", location: input.location?.trim() ?? "", attendees: JSON.stringify(attendees), color: normalizeCalendarColor(input.color), repeat: repeatFields.repeat, repeatDays: repeatFields.repeatDays, repeatAnchorDay: repeatFields.repeatAnchorDay, reminderMinutes: delegate ? null : normalizeReminderMinutes(input.reminderMinutes), ...flags, startsAt, endsAt };
 	const savedEvent = { ...event, timeZone: input.timeZone ? normalizeTimeZone(input.timeZone) : getRequestTimeZone(request, user.timeZone) };
 	const db = getDb(env);
@@ -64,9 +74,10 @@ export async function POST(request: Request) {
 		}
 	} else await db.insert(calendarEvents).values(savedEvent);
 	if (delegate) await createAuditLog(env, { actorUserId: user.id, targetUserId: calendar.ownerId, action: "calendar.event_created_by_delegate", metadata: { calendarId: calendar.calendarId ?? calendarCollectionId(calendar.ownerId), eventId: event.id } });
+	const rooms: RoomsSummary | null = roomIds.length ? await bookAndSummarize(db, event.id, roomIds) : null;
 	if (attendees.length && input.mailboxId) {
-		const calendarFile = createCalendarInvitation({ ...event, uid: event.id, organizer: input.from || undefined, attendees });
+		const calendarFile = createCalendarInvitation({ ...event, location: invitationLocation(event.location, rooms?.acceptedNames ?? []), uid: event.id, organizer: input.from || undefined, attendees });
 		await Promise.all(attendees.map((to) => sendEmail(env, { userId: user.id, mailboxId: input.mailboxId!, from: input.from ?? "", to, subject: `Invitation: ${event.title}`, text: event.description || `You are invited to ${event.title}.`, attachments: [{ filename: "invite.ics", type: "text/calendar; charset=utf-8", content: calendarFile }] })));
 	}
-	return NextResponse.json({ event: { ...savedEvent, calendarId: eventCalendarId(savedEvent) } });
+	return NextResponse.json({ event: { ...savedEvent, calendarId: eventCalendarId(savedEvent) }, ...roomResponse(rooms) });
 }

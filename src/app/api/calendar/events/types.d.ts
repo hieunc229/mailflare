@@ -23,4 +23,6 @@ export type CalendarEventInput = {
 	/** The calendar to write into: an owned calendar id, the default calendar's id or null for it. Omitted keeps the stored calendar (PATCH) or uses the default (POST). */
 	calendarId?: string | null;
 	from?: string;
+	/** Rooms and equipment to book for the event (at most five). Omitted keeps the stored bookings (PATCH) or books none (POST); an empty list removes them. */
+	resourceIds?: string[];
 };
