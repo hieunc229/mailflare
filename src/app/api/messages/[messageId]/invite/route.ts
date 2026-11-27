@@ -7,6 +7,7 @@ import { getEnv } from "@/lib/cloudflare";
 import { buildReplyIcs, parseInvite, type InviteResponse, type ParsedInvite } from "@/lib/calendar/invite";
 import { findInviteAttachment, MAX_INVITE_BYTES } from "@/lib/calendar/invite-attachment";
 import { addExcludedOccurrence, normalizeInviteSender, planInviteAnswer } from "@/lib/calendar/invite-rules";
+import { declineBookingsStatement, rebookEvents } from "@/lib/calendar/room-save";
 import { inviteEventFlags, inviteEventId, inviteEventValues, recipientInviteTimeZone, sameInviteSender } from "@/lib/calendar/invite-store";
 import { hasValidSessionMutationOrigin } from "@/lib/auth/origin";
 import { getEmailAddress, splitEmailAddressList } from "@/lib/email/address";
@@ -92,7 +93,8 @@ export async function POST(request: Request, { params }: InviteRouteParams) {
 	if (plan.action === "delete") {
 		await db.delete(calendarEvents).where(where);
 	} else if (plan.action === "exclude" && existing) {
-		await db.update(calendarEvents).set({ excludedOccurrences: addExcludedOccurrence(existing.excludedOccurrences, plan.occurrence), inviteSender: existing.inviteSender || sender, updatedAt: new Date() }).where(where);
+		await db.batch([db.update(calendarEvents).set({ excludedOccurrences: addExcludedOccurrence(existing.excludedOccurrences, plan.occurrence), inviteSender: existing.inviteSender || sender, updatedAt: new Date() }).where(where), declineBookingsStatement(db, id)] as never);
+		await rebookEvents(db, [id]);
 		eventId = existing.id;
 	} else if (plan.action === "none") {
 		eventId = existing?.id ?? null;
@@ -106,7 +108,9 @@ export async function POST(request: Request, { params }: InviteRouteParams) {
 			responseStatus: response, inviteMessageId: messageId, inviteSender: sender,
 		};
 		// The colour is chosen only when the row is created, so one the user changed is kept.
-		await db.insert(calendarEvents).values({ id, userId: user.id, mailboxId: message.mailboxId, color: response === "tentative" ? "#7c3aed" : "#2563eb", ...inviteEventFlags(invite), ...values }).onConflictDoUpdate({ target: calendarEvents.id, set: values });
+		const write = db.insert(calendarEvents).values({ id, userId: user.id, mailboxId: message.mailboxId, color: response === "tentative" ? "#7c3aed" : "#2563eb", ...inviteEventFlags(invite), ...values }).onConflictDoUpdate({ target: calendarEvents.id, set: values });
+		// An answered update can move an event that has rooms: declined in the same batch, checked again after it.
+		if (existing) { await db.batch([write, declineBookingsStatement(db, id)] as never); await rebookEvents(db, [id]); } else await write;
 		eventId = id;
 	}
 

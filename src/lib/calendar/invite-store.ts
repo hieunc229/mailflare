@@ -1,4 +1,5 @@
 import { and, desc, eq, isNotNull, isNull } from "drizzle-orm";
+import { declineBookingsStatement, rebookEvents } from "./room-save";
 import { getDb } from "@/db";
 import { calendarEvents, users } from "@/db/schema";
 import type { AttachmentContent } from "@/lib/email/attachment-types";
@@ -122,7 +123,9 @@ export async function registerInboundInvite(env: CloudflareEnv, input: { userId:
 		}
 		if (plan.action === "exclude") {
 			if (!existing) return;
-			await db.update(calendarEvents).set({ excludedOccurrences: addExcludedOccurrence(existing.excludedOccurrences, plan.occurrence), inviteSender: existing.inviteSender || sender, updatedAt: new Date() }).where(where);
+			// An event with rooms is declined in the same batch and checked again after it (a stop in between leaves none accepted unchecked).
+			await db.batch([db.update(calendarEvents).set({ excludedOccurrences: addExcludedOccurrence(existing.excludedOccurrences, plan.occurrence), inviteSender: existing.inviteSender || sender, updatedAt: new Date() }).where(where), declineBookingsStatement(db, id)] as never);
+			await rebookEvents(db, [id]);
 			return;
 		}
 		const values = { ...inviteEventValues(invite, invite.timeZone ?? userZone, existing?.excludedOccurrences), inviteSender: sender };
@@ -131,10 +134,11 @@ export async function registerInboundInvite(env: CloudflareEnv, input: { userId:
 			return;
 		}
 		const moved = existing.startsAt.getTime() !== invite.startsAt.getTime() || existing.endsAt.getTime() !== invite.endsAt.getTime();
-		await db.update(calendarEvents).set({
+		await db.batch([db.update(calendarEvents).set({
 			...values, inviteMessageId: input.messageId,
 			responseStatus: moved ? "needs-action" : existing.responseStatus,
-		}).where(where);
+		}).where(where), declineBookingsStatement(db, id)] as never);
+		await rebookEvents(db, [id]);
 	} catch (error) {
 		console.error(`Invitation registration failed for ${input.messageId}`, error);
 	}
