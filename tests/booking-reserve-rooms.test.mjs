@@ -103,19 +103,27 @@ test("a rival who wins the room between the check and the write wins; the visito
 	assert.deepEqual(sqlite.prepare("SELECT event_id, status FROM calendar_resource_bookings").all().map((row) => ({ ...row })), [{ event_id: "racer", status: "accepted" }], "only the winner holds the room");
 });
 
-test("all of the hosts' events go when the room is lost, and none stays", async () => {
+test("rooms need a single host: reserveBooking refuses a multi-host type with rooms on its own, and writes nothing", async () => {
 	setup();
-	rival("r1", at(9), at(10));
+	const before = tokens();
 	assert.equal(await reserve({ ...type, hostIds: ["h1", "h2"] }), false);
-	assert.deepEqual(guestEvents(), []);
+	assert.deepEqual(counts(), { events: 0, bookings: 0 });
+	assert.deepEqual(tokens(), before);
 });
 
-test("a multi-host booking holds the room on the first host's event only", async () => {
+test("several hosts without rooms still book every host's event", async () => {
 	setup();
-	assert.equal(await reserve({ ...type, hostIds: ["h1", "h2"] }), true);
-	const events = guestEvents();
-	assert.equal(events.length, 2);
-	assert.deepEqual(bookings().map((row) => row.event_id), [events.find((row) => row.user_id === "h1").id]);
+	assert.equal(await reserve({ ...type, hostIds: ["h1", "h2"], resourceIds: [] }), true);
+	assert.deepEqual(guestEvents().map((row) => row.user_id), ["h1", "h2"]);
+});
+
+test("a booking of five rooms reserves all five in one go; a sixth is refused", async () => {
+	setup();
+	for (const id of ["r3", "r4", "r5", "r6"]) sqlite.exec(`INSERT INTO calendar_resources (id, name, public_booking, created_at, updated_at) VALUES ('${id}', 'Room ${id}', 1, 1, 1)`);
+	assert.equal(await reserve({ ...type, resourceIds: ["r1", "r2", "r3", "r4", "r5"] }), true);
+	assert.deepEqual(bookings().map((row) => row.resource_id).sort(), ["r1", "r2", "r3", "r4", "r5"]);
+	assert.equal(await reserve({ ...type, resourceIds: ["r1", "r2", "r3", "r4", "r5", "r6"] }, at(11), at(11, 30)), false);
+	assert.equal(guestEvents().length, 1, "the refused one left nothing");
 });
 
 test("a host who is busy still fails the booking before any room is touched", async () => {
