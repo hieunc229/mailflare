@@ -15,6 +15,22 @@ const BASE_STYLE = `
 .email-quote-toggle > summary::before { content:'•••'; }
 .email-quote-content { display:flow-root; }
 :host(.mf-dense) p { margin-top:0; }
+/* Print: paper is light, so drop the dark-mode inversion and the paint
+	containment that would clip the email to the first page. The per-document
+	rules (white background, dark text, width cap) are appended with the mail's
+	own tags below. The outer print stylesheet cannot reach inside the shadow
+	root, which is why these rules live here. */
+@media print {
+	:host { filter:none !important; contain:none !important; overflow:visible !important; }
+	:host(.mf-dark) { filter:none !important; }
+	:host(.mf-dark) img, :host(.mf-dark) video, :host(.mf-dark) picture { filter:none !important; }
+	/* Only the ••• toggle affordance hides: the attribution and blockquote
+	   live inside the details (quote-collapse-utils.ts), so an expanded
+	   quote must keep printing its content. */
+	.email-quote-toggle > summary { display:none !important; }
+	img, video { max-width:100% !important; }
+	a { text-decoration:underline !important; }
+}
 `;
 
 export function EmailHtmlRenderer({ html, className, dense = false, preserveLeadingQuote = false, autoAllowRemote = false, onAllowRemote }: {
@@ -54,7 +70,7 @@ export function EmailHtmlRenderer({ html, className, dense = false, preserveLead
 		});
 		setHasRemote(prepared.hasRemote);
 		const base = document.createElement("style");
-		base.textContent = `${BASE_STYLE}\n${prepared.rootTag} { display:block; font:14px/1.5 Arial,sans-serif; color:#202124; background:#fff; color-scheme:light; }\n${prepared.bodyTag} { display:block; }\n:host(.mf-dark) ${prepared.rootTag} { background:transparent; }\n:host(.mf-dense) ${prepared.rootTag} { background:transparent; }`;
+		base.textContent = `${BASE_STYLE}\n${prepared.rootTag} { display:block; font:14px/1.5 Arial,sans-serif; color:#202124; background:#fff; color-scheme:light; }\n${prepared.bodyTag} { display:block; }\n:host(.mf-dark) ${prepared.rootTag} { background:transparent; }\n:host(.mf-dense) ${prepared.rootTag} { background:transparent; }\n@media print {\n\t:host ${prepared.rootTag}, :host(.mf-dark) ${prepared.rootTag} { background:#fff !important; color:#111 !important; max-width:100% !important; overflow:visible !important; }\n}`;
 		const content = document.createElement("template");
 		content.innerHTML = collapseQuotedEmailHtml(prepared.html, preserveLeadingQuote, quoteToggleLabel) ?? "";
 		root.replaceChildren(base, content.content);
@@ -77,8 +93,10 @@ export function EmailHtmlRenderer({ html, className, dense = false, preserveLead
 		root.addEventListener("click", navigate);
 		return () => root.removeEventListener("click", navigate);
 	}, [html, allowRemote, preserveLeadingQuote, quoteToggleLabel]);
-	return <div className={`min-w-0 max-w-full ${className ?? ""}`}>
-		{hasRemote && !allowRemote && <div className="mb-2 flex justify-end">
+	// email-html-* classes are print hooks (src/app/globals.css @media print);
+	// the outer stylesheet cannot reach inside the shadow root.
+	return <div className={`email-html-renderer min-w-0 max-w-full ${className ?? ""}`}>
+		{hasRemote && !allowRemote && <div className="email-html-remote mb-2 flex justify-end">
 			<button type="button" aria-pressed={allowRemote} className="rounded px-2 py-1 text-xs text-blue-600 hover:bg-blue-50"
 				onClick={() => {
 					if (!allowRemote) onAllowRemote?.();
@@ -87,6 +105,6 @@ export function EmailHtmlRenderer({ html, className, dense = false, preserveLead
 				{t("message.allowRemote")}
 			</button>
 		</div>}
-		<div className={`max-w-full overflow-x-auto${dense ? " mf-dense" : ""}`} ref={host} />
+		<div className={`email-html-host max-w-full overflow-x-auto${dense ? " mf-dense" : ""}`} ref={host} />
 	</div>;
 }

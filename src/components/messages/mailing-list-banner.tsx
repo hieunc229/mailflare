@@ -13,7 +13,8 @@ import { MessageUnsubscribeButton } from "./unsubscribe-button";
 export function MailingListBanner({ messageId, onDismiss }: { messageId: string; onDismiss: () => void }) {
 	const { t } = useLanguage();
 	return (
-		<div className="mx-4 mb-3 flex items-center gap-3 rounded-lg border border-neutral-200 bg-neutral-100 px-4 py-2.5 text-sm text-neutral-700 sm:mx-0 sm:ml-[var(--reader-indent,30px)]">
+		// data-print-hide: the unsubscribe affordance is screen-only chrome.
+		<div data-print-hide className="mx-4 mb-3 flex items-center gap-3 rounded-lg border border-neutral-200 bg-neutral-100 px-4 py-2.5 text-sm text-neutral-700 sm:mx-0 sm:ml-[var(--reader-indent,30px)]">
 			<Mail className="h-4 w-4 shrink-0 text-neutral-500" aria-hidden="true" />
 			<span className="min-w-0 flex-1">{t("message.mailingListNotice")}</span>
 			<MessageUnsubscribeButton messageId={messageId} variant="row" />

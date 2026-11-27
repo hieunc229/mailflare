@@ -137,6 +137,209 @@ pre {
 	animation: route-loading-bar 1.1s ease-in-out infinite;
 }
 
+@media print {
+	/* Named reader page: the 16mm margin applies only to pages that opt in
+	   via page: reader (html:has below). Every other route — booking,
+	   calendar, admin — keeps the browser's default print page. */
+	@page reader {
+		margin: 16mm;
+	}
+
+	/* The page property on the root element applies to the whole document,
+	   so every reader-route page uses the reader page type. */
+	html:has([data-message-id]) {
+		page: reader;
+	}
+
+	/* Root resets are gated on the reader marker: non-reader print output
+	   keeps its own background, colors and font size. */
+	body:has([data-message-id]) {
+		background: #fff !important;
+		color: #111 !important;
+		height: auto !important;
+		min-height: 0 !important;
+		font-size: 11pt;
+	}
+
+	/* ------------------------------------------------------------------
+	 * Mail reader print styles.
+	 *
+	 * Every rule is scoped to the reader route with body:has([data-message-id]):
+	 * that attribute is rendered by the reader article
+	 * (src/app/(dashboard)/inbox/[messageId]/page.tsx) and by the thread cards
+	 * (src/components/messages/conversation-thread.tsx) and nowhere else, so
+	 * booking, calendar, admin and list pages keep the browser's default print
+	 * output. Elements are matched through semantic hooks owned by their own
+	 * components — data-print-* attributes, the mf-print-* classes, ARIA roles,
+	 * react-hot-toast's [data-rht-toaster], Tailwind's .fixed utility — with no
+	 * :nth-child or deep div chains.
+	 *
+	 * HTML mail renders inside EmailHtmlRenderer's shadow root
+	 * (src/components/messages/email-html-renderer.tsx); the outer stylesheet
+	 * cannot reach it, so its print rules (light canvas, no dark-mode
+	 * inversion, no paint containment, width cap) live in that component.
+	 * ------------------------------------------------------------------ */
+
+	/* App chrome around the message: dashboard sidebar + nav + header, reader
+	   toolbar and folder list pane (data-print-hide), the list resize handle
+	   ([role="separator"]), dialogs, non-modal compose surfaces, menus,
+	   tooltips, toasts/live regions and every fixed-position overlay. */
+	body:has([data-message-id]) :is(aside, nav, header, [data-print-hide], [data-mobile-menu], [role="separator"], [role="dialog"], [role="menu"], [role="tooltip"], [role="region"], [role="status"], [role="alert"], [data-compose-surface], [data-rht-toaster], .fixed) {
+		display: none !important;
+	}
+
+	/* Form controls never print. */
+	body:has([data-message-id]) :is(input, select, textarea) {
+		display: none !important;
+	}
+
+	/* Unbreak the app shell — every div between <body> and <main> (the
+	   LoadingTransition wrappers, SidebarProvider, the dashboard grid and its
+	   flex shells), the split-layout grid + reader section (data-print-reset)
+	   and the reader scroller (data-print-scroll) — so the message spans the
+	   page and paginates instead of clipping inside overflow containers. The
+	   reader section defines --reader-indent (the avatar gutter); zeroing it
+	   here flattens every sm:pl-/sm:ml-[var(--reader-indent)] surface at once. */
+	body:has([data-message-id]) div:has(main#main-content),
+	body:has([data-message-id]) [data-print-reset],
+	body:has([data-message-id]) [data-print-scroll] {
+		display: block !important;
+		position: static !important;
+		height: auto !important;
+		min-height: 0 !important;
+		max-height: none !important;
+		overflow: visible !important;
+		grid-template-columns: none !important;
+		--reader-indent: 0 !important;
+	}
+
+	body:has([data-message-id]) main#main-content {
+		display: block !important;
+		width: 100% !important;
+		height: auto !important;
+		min-height: 0 !important;
+		overflow: visible !important;
+		margin: 0 !important;
+		padding: 0 !important;
+	}
+
+	/* Ink-friendly canvas: light theme on paper even when the screen theme is
+	   dark (the .dark palette remaps bg-white/text-neutral-* to dark values).
+	   Scoped to the reader's light DOM, so the shadow-DOM email keeps its own
+	   inline styling. */
+	body:has([data-message-id]) main#main-content,
+	body:has([data-message-id]) main#main-content * {
+		background: transparent !important;
+		color: #111 !important;
+		box-shadow: none !important;
+		text-shadow: none !important;
+	}
+
+	/* Drop the avatar gutter (the remaining hardcoded sm:pl-[78px] header rows
+	   and the avatar's sm:-ml-12; the var(--reader-indent) surfaces are zeroed
+	   by the reset above) and the right padding: on paper the message text
+	   starts at the page margin. */
+	body:has([data-message-id]) .sm\:pl-\[78px\] {
+		padding-left: 0 !important;
+	}
+
+	body:has([data-message-id]) .sm\:pr-6 {
+		padding-right: 0 !important;
+	}
+
+	body:has([data-message-id]) .sm\:-ml-12 {
+		margin-left: 0 !important;
+	}
+
+	body:has([data-message-id]) article[data-message-id],
+	body:has([data-message-id]) article[data-message-id] > div {
+		width: 100% !important;
+		max-width: none !important;
+	}
+
+	/* Controls off, text stays. Every interactive control inside the printed
+	   region is a <button>; the exceptions below re-add the ones whose text
+	   content is the message itself. */
+	body:has([data-message-id]) button {
+		display: none !important;
+	}
+
+	/* Sender/recipient names render as buttons on screen; print them as text. */
+	body:has([data-message-id]) button.mf-print-text {
+		display: inline !important;
+		background: none !important;
+		border: 0 !important;
+		margin: 0 !important;
+		padding: 0 !important;
+		font: inherit !important;
+		text-align: left !important;
+	}
+
+	/* Collapsed thread-card headers and attachment cards keep their row layout,
+	   stripped of button chrome. The thread header is a div[role="button"]
+	   (a <button> cannot contain the details chevron), so mf-print-card is
+	   matched on the class alone. */
+	body:has([data-message-id]) .mf-print-card,
+	body:has([data-message-id]) button.mf-print-attachment {
+		display: flex !important;
+		width: 100% !important;
+		background: none !important;
+		border: 0 !important;
+		margin: 0 !important;
+		padding: 0.25em 0 !important;
+		text-align: left !important;
+	}
+
+	/* Attachment previews print as a compact text list without thumbnails,
+	   and the "load remote content" affordance is screen-only. */
+	body:has([data-message-id]) :is(.mf-print-thumb, .email-html-remote) {
+		display: none !important;
+	}
+
+	/* Quoted-history toggles (light DOM): only the ••• summary hides. An
+	   expanded quote keeps printing its attribution + blockquote, a collapsed
+	   one prints nothing (details semantics). The shadow-DOM toggles get the
+	   same rule inside email-html-renderer.tsx. */
+	body:has([data-message-id]) .email-quote-toggle > summary {
+		display: none !important;
+	}
+
+	/* Links stay recognizable without color. */
+	body:has([data-message-id]) main#main-content a[href] {
+		text-decoration: underline !important;
+	}
+
+	body:has([data-message-id]) img,
+	body:has([data-message-id]) video {
+		max-width: 100% !important;
+		max-height: 180mm !important;
+	}
+
+	/* Long unbroken lines in the plaintext branch must wrap, not clip. */
+	body:has([data-message-id]) pre {
+		white-space: pre-wrap !important;
+		overflow-wrap: anywhere !important;
+	}
+
+	/* Pagination: the message itself may span pages; its header and body rows,
+	   collapsed thread cards and attachment rows must not be split. */
+	body:has([data-message-id]) article[data-message-id] {
+		break-inside: auto;
+		padding-bottom: 1.5rem !important;
+		border: 0 !important;
+	}
+
+	body:has([data-message-id]) main#main-content h1 {
+		break-after: avoid;
+	}
+
+	body:has([data-message-id]) .mf-print-card,
+	body:has([data-message-id]) button.mf-print-attachment,
+	body:has([data-message-id]) article[data-message-id] a[href*="/attachments/"] {
+		break-inside: avoid;
+	}
+}
+
 @media (prefers-reduced-motion: reduce) {
 	.dialog-overlay,
 	.dialog-content {

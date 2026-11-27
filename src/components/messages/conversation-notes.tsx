@@ -51,7 +51,8 @@ export function ConversationNotes({ className }: ConversationNotesProps) {
 	if (!visible) return null;
 
 	return (
-		<div className="w-full pb-3">
+		// data-print-hide: internal notes are not part of the printed message.
+		<div data-print-hide className="w-full pb-3">
 			<div inert={!visible} className={rowClass} style={{ gridTemplateRows: visible ? "1fr" : "0fr" }}>
 				<div className="min-h-0 overflow-hidden">
 					<div className={className}>

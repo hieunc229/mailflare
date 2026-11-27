@@ -21,18 +21,19 @@ export function MessageAttachmentCard({
 		<button
 			type="button"
 			onClick={() => onPreview(attachment)}
-			className="group flex w-full items-center gap-3 rounded-lg border border-neutral-200 p-2.5 text-left transition-colors hover:border-blue-200 hover:bg-blue-50/40"
+			// mf-print-* hooks: print stylesheet keeps the filename row, drops thumbnails.
+			className="group mf-print-attachment flex w-full items-center gap-3 rounded-lg border border-neutral-200 p-2.5 text-left transition-colors hover:border-blue-200 hover:bg-blue-50/40"
 		>
 			{visual.thumbnail === "image" && (
 				<img
 					src={previewUrl}
 					alt=""
 					loading="lazy"
-					className="h-14 w-14 shrink-0 rounded-md bg-neutral-100 object-cover"
+					className="mf-print-thumb h-14 w-14 shrink-0 rounded-md bg-neutral-100 object-cover"
 				/>
 			)}
 			{visual.thumbnail === "video" && (
-				<span className="relative h-14 w-14 shrink-0 overflow-hidden rounded-md bg-neutral-900">
+				<span className="mf-print-thumb relative h-14 w-14 shrink-0 overflow-hidden rounded-md bg-neutral-900">
 					<video
 						src={previewUrl}
 						muted
@@ -46,7 +47,7 @@ export function MessageAttachmentCard({
 				</span>
 			)}
 			{visual.thumbnail === null && (
-				<span className={`flex h-14 w-14 shrink-0 items-center justify-center rounded-md ${visual.iconClassName}`}>
+				<span className={`mf-print-thumb flex h-14 w-14 shrink-0 items-center justify-center rounded-md ${visual.iconClassName}`}>
 					<Icon className="h-6 w-6" />
 				</span>
 			)}

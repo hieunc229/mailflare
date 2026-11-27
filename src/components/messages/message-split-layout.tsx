@@ -117,8 +117,9 @@ export function MessageSplitLayout({
 
 	return (
 		<MessageListStateContext.Provider value={listState}>
-			<div ref={containerRef} className={`h-full min-h-0 overflow-hidden ${twoColumns ? "grid" : ""}`} style={twoColumns ? { gridTemplateColumns: `${renderedListWidth}px minmax(0,1fr)` } : undefined}>
+			<div ref={containerRef} data-print-reset className={`h-full min-h-0 overflow-hidden ${twoColumns ? "grid" : ""}`} style={twoColumns ? { gridTemplateColumns: `${renderedListWidth}px minmax(0,1fr)` } : undefined}>
 				<div
+					data-print-hide
 					className={`relative h-full min-h-0 min-w-0 overflow-hidden bg-white ${listHidden ? "hidden" : twoColumns ? "border-r border-neutral-200" : ""}`}
 					aria-hidden={listHidden || undefined}
 					inert={listHidden || undefined}
@@ -148,7 +149,7 @@ export function MessageSplitLayout({
 					<MessageListVisibilityContext.Provider value={{ visible: twoColumns, singleColumn: !twoColumns, backHref: config.hrefPrefix, backLabel: config.titleKey ? t(config.titleKey) : config.title }}>
 						<MessageDetailNavigationProvider config={config} currentMessageId={selectedMessageId}>
 							{/* Where the reader's text starts: under the avatar beside the list, past it when alone on a wide screen. */}
-							<section className={`min-h-0 min-w-0 overflow-hidden bg-white flex flex-col h-full [--reader-indent:30px] ${twoColumns ? "" : "lg:[--reader-indent:78px]"}`}>
+							<section data-print-reset className={`min-h-0 min-w-0 overflow-hidden bg-white flex flex-col h-full [--reader-indent:30px] ${twoColumns ? "" : "lg:[--reader-indent:78px]"}`}>
 								{showBulkBar && (
 									<BulkMessageActionBar
 										folder={config.folderId ? undefined : config.folder}
