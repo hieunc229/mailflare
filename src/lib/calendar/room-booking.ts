@@ -61,11 +61,12 @@ function clashes(mine: BusyInterval[], others: BusyInterval[]): number[] {
  * booking reads the room once more after writing and gives way to any overlapping accepted booking (D-8, failing closed: both
  * may decline). After `MAX_ROOM_ATTEMPTS` lost races the booking is declined without a clash date and reported as `unconfirmed`: never accepted unchecked.
  */
-export async function bookRooms(db: Db, eventId: string, resourceIds: string[], options: { now?: Date } = {}): Promise<BookingResult> {
+export async function bookRooms(db: Db, eventId: string, resourceIds: string[], options: { now?: Date; /** Rooms written `declined` without being checked: a booking that was declined stays so (a lapsed licence books nothing new). */ declined?: string[] } = {}): Promise<BookingResult> {
 	const [row] = await db.select().from(calendarEvents).where(eq(calendarEvents.id, eventId)).limit(1);
 	if (!row) throw new Error("Event not found");
-	const wanted = [...new Set(resourceIds)];
-	if (!wanted.length) {
+	const frozen = new Set(options.declined ?? []);
+	const wanted = [...new Set(resourceIds)].filter((id) => !frozen.has(id));
+	if (!wanted.length && !frozen.size) {
 		await db.delete(calendarResourceBookings).where(eq(calendarResourceBookings.eventId, eventId));
 		return { rooms: [] };
 	}
@@ -88,9 +89,10 @@ export async function bookRooms(db: Db, eventId: string, resourceIds: string[], 
 	};
 	for (let attempt = 0; attempt < MAX_ROOM_ATTEMPTS; attempt += 1) {
 		// The token first: anything written after this read moves it, so a stale check cannot commit.
-		const tokens = new Map((await db.select({ id: calendarResources.id, token: calendarResources.bookingToken }).from(calendarResources).where(inArray(calendarResources.id, wanted))).map((room) => [room.id, room.token]));
+		const tokens = new Map((await db.select({ id: calendarResources.id, token: calendarResources.bookingToken }).from(calendarResources).where(inArray(calendarResources.id, [...wanted, ...frozen]))).map((room) => [room.id, room.token]));
 		const ids = wanted.filter((id) => tokens.has(id));
-		if (!ids.length) { await write([], []); return { rooms: [] }; }
+		const held = [...frozen].filter((id) => tokens.has(id)).map((id) => outcome(id, "declined", []));
+		if (!ids.length) { await write(held, []); return { rooms: held }; }
 		const others = mine.length ? await roomBusyIntervals(db, ids, new Date(spanStart), new Date(spanEnd), { excludeEventId: eventId, budget: ROOM_CHECK_BUDGET, roomCap: ROOM_CHECK_BUDGET }) : new Map<string, RoomBusy>();
 		const rooms = ids.map((id) => {
 			const taken = others.get(id);
@@ -107,7 +109,7 @@ export async function bookRooms(db: Db, eventId: string, resourceIds: string[], 
 				...requireGuard(db, sql`not exists (select 1 from ${calendarResources} where ${and(eq(calendarResources.id, id), eq(calendarResources.bookingToken, next))})`),
 			];
 		});
-		try { await write(rooms, guards); } catch (error) {
+		try { await write([...rooms, ...held], guards); } catch (error) {
 			if (!isUniqueConstraintError(error)) throw error;
 			// Two saves that lost to each other would lose again together: wait a little, differently each time.
 			await new Promise((resolve) => setTimeout(resolve, Math.random() * 20 * (attempt + 1)));
@@ -128,10 +130,10 @@ export async function bookRooms(db: Db, eventId: string, resourceIds: string[], 
 				await db.update(calendarResourceBookings).set({ status: "declined", conflictAt: room.conflictAt }).where(and(eq(calendarResourceBookings.eventId, eventId), eq(calendarResourceBookings.resourceId, room.resourceId)));
 			}
 		}
-		return { rooms };
+		return { rooms: [...rooms, ...held] };
 	}
-	const known = new Set((await db.select({ id: calendarResources.id }).from(calendarResources).where(inArray(calendarResources.id, wanted))).map((room) => room.id));
-	const rooms = wanted.filter((id) => known.has(id)).map((id) => outcome(id, "unconfirmed", []));
+	const known = new Set((await db.select({ id: calendarResources.id }).from(calendarResources).where(inArray(calendarResources.id, [...wanted, ...frozen]))).map((room) => room.id));
+	const rooms = [...wanted.filter((id) => known.has(id)).map((id) => outcome(id, "unconfirmed", [])), ...[...frozen].filter((id) => known.has(id)).map((id) => outcome(id, "declined", []))];
 	await write(rooms, []);
 	return { rooms };
 }
