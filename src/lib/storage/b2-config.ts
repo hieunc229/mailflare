@@ -57,7 +57,8 @@ export function parseS3Endpoint(value: string, runtime?: string): S3EndpointResu
 	let url: URL;
 	try { url = new URL(scheme ? raw : `https://${raw}`); } catch { return { ok: false, reason: "invalid" }; }
 	if (url.pathname !== "/" || url.username || url.password || !url.hostname) return { ok: false, reason: "invalid" };
-	const ipLiteral = url.hostname.startsWith("[") || /^\d+\.\d+\.\d+\.\d+$/.test(url.hostname);
+	// No DNS name to hang a bucket on: an IP address or a single label such as "minio".
+	const ipLiteral = url.hostname.startsWith("[") || /^\d+\.\d+\.\d+\.\d+$/.test(url.hostname) || !url.hostname.includes(".");
 	if (!ipLiteral && !url.hostname.split(".").every((label) => HOST_LABEL.test(label))) return { ok: false, reason: "invalid" };
 	if (url.port === "0") return { ok: false, reason: "invalid" };
 	const loopback = LOOPBACK_HOSTS.has(url.hostname);

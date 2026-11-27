@@ -22,6 +22,14 @@ function optional(name: string): string | undefined {
  * so application code does not know which platform it runs on.
  */
 export function createNodeRuntime(): NodeRuntime {
+	// Files under /data/blobs would silently take mail meant for the bucket, so refuse to start.
+	const storageProblem = storageStartupProblem({
+		MAILFLARE_RUNTIME: "node",
+		B2_KEY_ID: optional("B2_KEY_ID"), B2_APPLICATION_KEY: optional("B2_APPLICATION_KEY"), B2_BUCKET: optional("B2_BUCKET"), B2_ENDPOINT: optional("B2_ENDPOINT"),
+		S3_BUCKET: optional("S3_BUCKET"), S3_REGION: optional("S3_REGION"), S3_ENDPOINT: optional("S3_ENDPOINT"), S3_FORCE_PATH_STYLE: optional("S3_FORCE_PATH_STYLE"),
+		S3_ACCESS_KEY_ID: optional("S3_ACCESS_KEY_ID"), S3_SECRET_ACCESS_KEY: optional("S3_SECRET_ACCESS_KEY"),
+	});
+	if (storageProblem) throw new Error(`Mailflare cannot start: ${storageProblem}`);
 	const dataDir = resolve(optional("DATA_DIR") ?? "./data");
 	mkdirSync(join(dataDir, "blobs"), { recursive: true });
 
@@ -58,11 +66,12 @@ export function createNodeRuntime(): NodeRuntime {
 		B2_BUCKET: optional("B2_BUCKET"),
 		B2_ENDPOINT: optional("B2_ENDPOINT"),
 		S3_BUCKET: optional("S3_BUCKET"),
-		S3_REGION: optional("S3_REGION") ?? optional("AWS_REGION"),
+		// Raw: getS3Config falls back to AWS_* only when S3_ENDPOINT is unset.
+		S3_REGION: optional("S3_REGION"),
 		S3_ENDPOINT: optional("S3_ENDPOINT"),
 		S3_FORCE_PATH_STYLE: optional("S3_FORCE_PATH_STYLE"),
-		S3_ACCESS_KEY_ID: optional("S3_ACCESS_KEY_ID") ?? optional("AWS_ACCESS_KEY_ID"),
-		S3_SECRET_ACCESS_KEY: optional("S3_SECRET_ACCESS_KEY") ?? optional("AWS_SECRET_ACCESS_KEY"),
+		S3_ACCESS_KEY_ID: optional("S3_ACCESS_KEY_ID"),
+		S3_SECRET_ACCESS_KEY: optional("S3_SECRET_ACCESS_KEY"),
 		CF_TOKEN: optional("CF_TOKEN"),
 		CF_API_KEY: optional("CF_API_KEY"),
 		CF_EMAIL: optional("CF_EMAIL"),
@@ -102,9 +111,6 @@ export function createNodeRuntime(): NodeRuntime {
 		APNS_PRIVATE_KEY: optional("APNS_PRIVATE_KEY"),
 		APNS_RELAY_URL: optional("APNS_RELAY_URL"),
 	} as unknown as CloudflareEnv;
-	// Files under /data/blobs would silently take mail meant for the bucket.
-	const storageProblem = storageStartupProblem(env);
-	if (storageProblem) throw new Error(`Mailflare cannot start: ${storageProblem}`);
 	const storageEnv = withDatabase(withStorage(env));
 	realtime.bindEnv(storageEnv);
 

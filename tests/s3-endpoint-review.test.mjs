@@ -76,3 +76,7 @@ test("withStorage logs a broken S3_ENDPOINT instead of silently using R2", () =>
 	assert.match(logged[0], /S3_ENDPOINT must use https/);
 	assert.doesNotMatch(logged[0], /sk\b|AK\b/);
 });
+
+test("a single-label host such as minio takes path style", () => {
+	assert.equal(getS3Config(env({ S3_ENDPOINT: "https://minio:9000" }))?.pathStyle, true);
+});
