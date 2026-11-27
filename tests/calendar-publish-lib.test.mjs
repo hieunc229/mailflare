@@ -68,7 +68,7 @@ test(".ifb is a VFREEBUSY with one FREEBUSY period per interval and nothing else
 	assert.ok(body.endsWith("\r\n"));
 	assert.ok(!/[^\r]\n/.test(body), "only CRLF line breaks");
 	assert.deepEqual(body.split("\r\n").slice(0, -1), [
-		"BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//Mailflare//Free Busy//EN", "CALSCALE:GREGORIAN", "METHOD:PUBLISH",
+		"BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//Mailflare//Free Busy//EN", "CALSCALE:GREGORIAN",
 		"BEGIN:VFREEBUSY", "UID:abc123@mailflare", "DTSTAMP:20300115T120000Z", "DTSTART:20300108T120000Z", "DTEND:20300312T120000Z",
 		"FREEBUSY;FBTYPE=BUSY:20300116T090000Z/20300116T100000Z", "FREEBUSY;FBTYPE=BUSY:20300117T090000Z/20300117T100000Z",
 		"END:VFREEBUSY", "END:VCALENDAR",

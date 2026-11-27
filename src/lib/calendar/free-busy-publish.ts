@@ -27,10 +27,10 @@ export async function publishedBusy(env: CloudflareEnv, userId: string, now: Dat
 
 type Render = { uid: string; now: Date };
 
-/** `text/calendar` VFREEBUSY (.ifb): periods only, no organiser, attendee or text of any event. */
+/** `text/calendar` VFREEBUSY (.ifb): periods only, no organiser, attendee or text of any event. No METHOD either: RFC 5546 asks for an ORGANIZER with PUBLISH, and we do not put the owner's address in a public file. */
 export function buildFreeBusyIfb(intervals: BusyInterval[], { uid, now, start, end }: Render & { start: Date; end: Date }): string {
 	return joinIcsLines([
-		"BEGIN:VCALENDAR", "VERSION:2.0", PRODID, "CALSCALE:GREGORIAN", "METHOD:PUBLISH",
+		"BEGIN:VCALENDAR", "VERSION:2.0", PRODID, "CALSCALE:GREGORIAN",
 		"BEGIN:VFREEBUSY", `UID:${escapeIcsText(uid)}@mailflare`, `DTSTAMP:${formatIcsUtc(now)}`, `DTSTART:${formatIcsUtc(start)}`, `DTEND:${formatIcsUtc(end)}`,
 		...intervals.map(([from, to]) => `FREEBUSY;FBTYPE=BUSY:${formatIcsUtc(new Date(from))}/${formatIcsUtc(new Date(to))}`),
 		"END:VFREEBUSY", "END:VCALENDAR",
