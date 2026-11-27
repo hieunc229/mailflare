@@ -126,3 +126,13 @@ test("a request needs a signed-in user and keeps the 50-id limit across people a
 	globalThis.roomFb.user = { id: "u1" };
 	assert.equal((await post({ addresses: Array.from({ length: 30 }, (_, i) => `a${i}@x.test`), resourceIds: Array.from({ length: 21 }, (_, i) => `r${i}`), start: iso(0), end: iso(1) })).status, 400);
 });
+
+test("editing a moved occurrence leaves that row out of its room's busy time, though the booking is its series'", async () => {
+	setup();
+	const series = booked("r1", at(0, 9), at(0, 10), { repeat: "weekly", excluded_occurrences: JSON.stringify([at(7, 9)]) });
+	const moved = booked(null, at(7, 14), at(7, 15), { dav_object_id: series, recurrence_id: secs(at(7, 9)) });
+	const all = (await rooms(["r1"], at(0), at(14))).get("r1");
+	assert.deepEqual(all.map(([from]) => from), [at(0, 9), at(7, 14), at(14, 9)].filter((from) => from < at(14)));
+	const editing = (await rooms(["r1"], at(0), at(14), { excludeEventId: moved })).get("r1");
+	assert.deepEqual(editing.map(([from]) => from), [at(0, 9)], "the occurrence being edited does not clash with itself; the rest of the series still counts");
+});
