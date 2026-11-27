@@ -97,7 +97,7 @@ export default function DashboardLayout({
                   </div>
                   <FloatingComposer showButton />
                   <UndoToasts />
-                  <Toaster position="bottom-right" containerClassName="text-sm" />
+                  <Toaster position="bottom-left" containerClassName="text-sm" />
                   <PromotionToast />
                 </div>
               </ShortcutsProvider>
