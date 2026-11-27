@@ -18,6 +18,10 @@ export type RoomBusy = {
 	truncated: boolean;
 };
 export type RoomBusyOptions = {
+	/** Work one room may cost (default `ROOM_WORK_BUDGET`): the booking check, which must read a room in full, is given more than a view. */
+	budget?: number;
+	/** Only bookings made before these (per room: the booking's own creation second and id): the re-read after a write asks who came first. */
+	before?: Map<string, { createdAt: Date; id: string }>;
 	/** An event being edited: its booking is left out so it does not clash with itself. */
 	excludeEventId?: string;
 	/** Start (ms) of the occurrence of that event whose save splits the series: it and every later one are left out. */
@@ -40,7 +44,7 @@ export async function roomBusyIntervals(db: Db, resourceIds: string[], start: Da
 		const filters = [inArray(calendarResourceBookings.resourceId, ids.slice(index, index + ROOM_CHUNK)), eq(calendarResourceBookings.status, "accepted"), overlapsWindow(start, end)];
 		if (options.excludeEventId && options.excludeOccurrence === undefined) filters.push(ne(calendarResourceBookings.eventId, options.excludeEventId));
 		const rows = await db.select({
-			resourceId: calendarResourceBookings.resourceId, bookedEventId: calendarResourceBookings.eventId,
+			resourceId: calendarResourceBookings.resourceId, bookedEventId: calendarResourceBookings.eventId, bookingId: calendarResourceBookings.id, bookingCreatedAt: calendarResourceBookings.createdAt,
 			id: calendarEvents.id, userId: calendarEvents.userId, startsAt: calendarEvents.startsAt, endsAt: calendarEvents.endsAt, timeZone: calendarEvents.timeZone, repeat: calendarEvents.repeat, rrule: calendarEvents.rrule,
 			repeatDays: calendarEvents.repeatDays, repeatAnchorDay: calendarEvents.repeatAnchorDay, repeatUntil: calendarEvents.repeatUntil, excludedOccurrences: calendarEvents.excludedOccurrences,
 			recurrenceId: calendarEvents.recurrenceId, allDay: calendarEvents.allDay,
@@ -50,12 +54,14 @@ export async function roomBusyIntervals(db: Db, resourceIds: string[], start: Da
 		if (rows.length > MAX_ROOM_ROWS) for (const id of ids.slice(index, index + ROOM_CHUNK)) truncated.add(id);
 		const zones = rows.some((row) => needsOwnerZone(row)) ? await loadOwnerZones(db, [...new Set(rows.map((row) => row.userId))]) : new Map<string, string>();
 		for (const row of rows.slice(0, MAX_ROOM_ROWS)) {
+			const mark = options.before?.get(row.resourceId);
+			if (mark && !(row.bookingCreatedAt.getTime() < mark.createdAt.getTime() || (row.bookingCreatedAt.getTime() === mark.createdAt.getTime() && row.bookingId < mark.id))) continue;
 			const edited = options.excludeEventId !== undefined && row.bookedEventId === options.excludeEventId;
 			// The edited series' later occurrences, and the moved rows that replaced them, are about to change with the save.
 			if (edited && row.id !== row.bookedEventId && (row.recurrenceId === null || row.recurrenceId.getTime() >= options.excludeOccurrence!)) continue;
 			if (row.endsAt.getTime() - row.startsAt.getTime() <= 0) continue;
 			const used = spent.get(row.resourceId) ?? 0;
-			const limit = Math.min(MAX_OCCURRENCES, ROOM_WORK_BUDGET - used);
+			const limit = Math.min(MAX_OCCURRENCES, (options.budget ?? ROOM_WORK_BUDGET) - used);
 			if (limit <= 0) { truncated.add(row.resourceId); continue; }
 			const walked = expandRowBusy(row, zones.get(row.userId), from, to, limit, edited && row.id === row.bookedEventId ? options.excludeOccurrence : undefined);
 			spent.set(row.resourceId, used + walked.used);

@@ -41,17 +41,21 @@ export type RoomEventView = {
 export async function listRoomEvents(db: Db, user: { id: string }, resourceIds: string[], range: { start: Date; end: Date }): Promise<RoomEventView[]> {
 	const ids = [...new Set(resourceIds)];
 	if (!ids.length) return [];
-	const rows = await db.select({ resourceId: calendarResourceBookings.resourceId, event: calendarEvents }).from(calendarResourceBookings)
+	const rows = await db.select({ resourceId: calendarResourceBookings.resourceId, bookedEventId: calendarResourceBookings.eventId, event: calendarEvents }).from(calendarResourceBookings)
 		.innerJoin(calendarEvents, or(eq(calendarEvents.id, calendarResourceBookings.eventId), eq(calendarEvents.davObjectId, calendarResourceBookings.eventId)))
 		.where(and(inArray(calendarResourceBookings.resourceId, ids), eq(calendarResourceBookings.status, "accepted"), overlapsWindow(range.start, range.end))).limit(MAX_SCHEDULE_ROWS);
+	// A moved occurrence is private when its series is, whatever CLASS it carries itself (as in the calendar lists).
+	const booked = [...new Set(rows.map((row) => row.bookedEventId))];
+	const privateSeries = new Set<string>();
+	for (let index = 0; index < booked.length; index += BOOKING_CHUNK) for (const row of await db.select({ id: calendarEvents.id }).from(calendarEvents).where(and(inArray(calendarEvents.id, booked.slice(index, index + BOOKING_CHUNK)), eq(calendarEvents.isPrivate, true)))) privateSeries.add(row.id);
 	// One role lookup per calendar, not per event.
 	const roles = new Map<string, Awaited<ReturnType<typeof getEventAccess>>>();
 	const views: RoomEventView[] = [];
-	for (const { resourceId, event } of rows) {
+	for (const { resourceId, bookedEventId, event } of rows) {
 		const key = `${event.userId}|${event.calendarId ?? ""}`;
 		if (!roles.has(key)) roles.set(key, await getEventAccess(db, user, event));
 		const role = roles.get(key);
-		const shown = redactEvent(event, role && role !== "freebusy" ? role : "freebusy");
+		const shown = redactEvent(privateSeries.has(bookedEventId) ? { ...event, isPrivate: true } : event, role && role !== "freebusy" ? role : "freebusy");
 		views.push({
 			id: event.id, resourceId, title: shown.title, startsAt: event.startsAt, endsAt: event.endsAt, repeat: event.repeat, repeatDays: event.repeatDays, repeatAnchorDay: event.repeatAnchorDay, repeatUntil: event.repeatUntil,
 			rrule: event.rrule, excludedOccurrences: event.excludedOccurrences, timeZone: event.timeZone, allDay: event.allDay, davObjectId: event.davObjectId, recurrenceId: event.recurrenceId,

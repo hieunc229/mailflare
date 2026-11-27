@@ -74,15 +74,13 @@ test("loading is announced and a failed list is an alert with a retry; saving is
 	assert.match(failed, /Try again/);
 });
 
-test("the sidebar section lists each room with a labelled checkbox and shows nothing when there are no rooms", () => {
-	const render = (props) => renderToStaticMarkup(createElement(RoomListView, { rooms, state: "ready", shown: ["r1"], onToggle: noop, onRetry: noop, ...props }));
+test("the sidebar section lists each room with a labelled checkbox and shows nothing until there are rooms: not while loading, not when it failed", () => {
+	const render = (props) => renderToStaticMarkup(createElement(RoomListView, { rooms, state: "ready", shown: ["r1"], onToggle: noop, ...props }));
 	const html = render();
 	assert.match(html, /<input[^>]*type="checkbox"[^>]*aria-label="Show Boardroom"[^>]*checked=""|<input[^>]*type="checkbox"[^>]*checked=""[^>]*aria-label="Show Boardroom"/);
 	assert.match(html, /aria-label="Show Annex"/);
 	assert.doesNotMatch(html, /aria-label="Show Annex"[^>]*checked/);
-	assert.equal(render({ rooms: [] }), "");
-	assert.match(render({ rooms: [], state: "error" }), /role="alert"/);
-	assert.match(render({ rooms: [], state: "loading" }), /role="status"/);
+	for (const props of [{ rooms: [] }, { rooms: [], state: "error" }, { rooms: [], state: "loading" }, { state: "loading" }, { state: "error" }]) assert.equal(render(props), "");
 });
 
 test("schedules on are remembered up to 20, and a room that no longer exists drops out", () => {
