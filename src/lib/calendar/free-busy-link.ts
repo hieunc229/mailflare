@@ -3,15 +3,16 @@ import type { AppDatabase } from "@/db";
 import { apiKeys } from "@/db/schema";
 import { generateApiKey, scopesToJson } from "@/lib/api-keys";
 import { authenticateApiKeyValue } from "@/lib/api/key-auth";
+import { freeBusyKeyId } from "./free-busy-key-id";
 
 /** The one scope of a publish key (spec F9 D-11). It is never offered by the general key route, so this module is the only way to get one. */
 export const FREEBUSY_SCOPE = "calendar:freebusy";
 
 /**
- * A user's publish key has an id of its own making, so "one per user" is the primary key's job: two requests turning it on at once
+ * A user's publish key has an id of its own making (`freeBusyKeyId`), so "one per user" is the primary key's job: two requests turning it on at once
  * cannot both insert (no schema change, no lock); `enableFreeBusyLink` tells the winner from the loser on every database.
  */
-export const freeBusyKeyId = (userId: string) => `freebusy_${userId}`;
+export { freeBusyKeyId };
 
 export async function getFreeBusyLink(db: AppDatabase, userId: string): Promise<{ enabled: false } | { enabled: true; createdAt: Date; lastUsedAt: Date | null }> {
 	const [row] = await db.select({ createdAt: apiKeys.createdAt, lastUsedAt: apiKeys.lastUsedAt, scopes: apiKeys.scopes }).from(apiKeys).where(and(eq(apiKeys.id, freeBusyKeyId(userId)), eq(apiKeys.userId, userId))).limit(1);
