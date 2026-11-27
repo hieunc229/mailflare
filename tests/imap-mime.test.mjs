@@ -295,6 +295,21 @@ test("synthesizeMessage cannot be made to add headers or break structure", async
 	assert.equal(parsed.attachments.length, 1);
 });
 
+/**
+ * Attachment file names as an RFC 2231-aware reader (imapkit) sees them. postal-mime 4 lets a plain `filename="..."`
+ * fallback win over `filename*=`, so it would report the ASCII fallback rather than the real name.
+ */
+function attachmentNames(bytes) {
+	const structure = bodystructure(parseTree(normalizeLineBreaks(decode(bytes))));
+	return structure
+		.filter((part) => Array.isArray(part) && Array.isArray(part[8]) && part[8][0] === "attachment")
+		.map((part) => {
+			const parameters = part[8][1] ?? [];
+			const at = parameters.indexOf("filename");
+			return Buffer.from(parameters[at + 1], "latin1").toString("utf8");
+		});
+}
+
 test("synthesizeMessage encodes non-ASCII subjects, names and file names", async () => {
 	const subject = "Grüße ".repeat(20) + "日本語";
 	const bytes = synth({ subject, fromAddr: '"Zoë Ünal" <zoe@example.test>', textBody: "ünïcode\ntwo" }, [
@@ -306,7 +321,7 @@ test("synthesizeMessage encodes non-ASCII subjects, names and file names", async
 	assert.equal(parsed.subject, subject);
 	assert.equal(parsed.from.name, "Zoë Ünal");
 	assert.equal(parsed.text.replace(/\r\n/g, "\n").trim(), "ünïcode\ntwo");
-	assert.equal(parsed.attachments[0].filename, 'résumé "v2".pdf');
+	assert.deepEqual(attachmentNames(bytes), ['résumé "v2".pdf']);
 });
 
 test("synthesizeMessage keeps long reference chains within header line limits and never yields a message/* base64 part", async () => {
@@ -348,7 +363,7 @@ test("synthesizeMessage keeps attachment headers short however long the file nam
 	assert.ok(text.split("\r\n").every((line) => line.length <= 998), "no line over 998");
 	assert.ok([...bytes].every((byte) => byte < 128));
 	const parsed = await PostalMime.parse(bytes);
-	assert.deepEqual(parsed.attachments.map((attachment) => attachment.filename), names);
+	assert.deepEqual(attachmentNames(bytes), names);
 	assert.ok(parsed.attachments.every((attachment) => attachment.mimeType === "application/octet-stream"), "an absurd content type is sent as opaque data");
 });
 
