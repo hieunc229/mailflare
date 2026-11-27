@@ -41,7 +41,7 @@ checkout. `docker-compose.yml` still builds from source.
 | Tag | Meaning |
 | --- | --- |
 | `latest` | Newest build of `main`. |
-| `0.5.5` (the `package.json` version) | Newest build of `main` with that version. It moves while the version stays the same. |
+| `<version>` (the `package.json` version, e.g. `0.5.6`) | Newest build of `main` with that version. It moves while the version stays the same. |
 | `sha-abc1234` | One exact commit. Never moves; pin this to roll back or hold a version. |
 
 **Upgrade (NAS or server).**
