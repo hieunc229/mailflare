@@ -204,3 +204,18 @@ test("the publish key is refused by the calendar feed, the events API scopes and
 		assert.equal((await GET(new Request(`https://m.test/api/calendar/feed?key=${key}`))).status, 401);
 	} finally { feedFixture.dispose(); }
 });
+
+test("another kind of key sent here is refused without being recorded as used, and a new link has a new UID", async () => {
+	setup();
+	const { createHash } = await import("node:crypto");
+	sqlite.exec(`INSERT INTO api_keys (id, user_id, name, prefix, key_hash, key_sha256, scopes, created_at) VALUES ('kr', 'u1', 'k', 'ep_', 'x', '${createHash("sha256").update("readkey").digest("hex")}', '["calendar:read"]', 1)`);
+	assert.equal((await fetchFeed("readkey")).status, 401);
+	assert.equal(sqlite.prepare("SELECT last_used_at AS at FROM api_keys WHERE id = 'kr'").get().at, null);
+	const uidOf = async (key) => (await (await fetchFeed(key)).text()).match(/^UID:(.+)@mailflare/m)[1];
+	const first = await publish();
+	const firstUid = await uidOf(first.key);
+	assert.equal(await uidOf(first.key), firstUid, "stable for one link");
+	await call("DELETE");
+	const second = await (await call("POST")).json();
+	assert.notEqual(await uidOf(second.key), firstUid, "a new link is not linkable to the old one");
+});

@@ -17,8 +17,8 @@ export async function GET(request: Request) {
 	if (format !== "ifb" && format !== "ics") return new Response("Unknown format", { status: 400, headers: { "Cache-Control": "no-store" } });
 	const now = new Date();
 	const intervals = await publishedBusy(env, owner.userId, now);
-	// A UID that is stable for this link but says nothing about the key or the account.
-	const uid = (await hashApiKey(`freebusy:${owner.keyId}`)).slice(0, 32);
+	// A UID that is stable for this link, differs for a new one, and cannot be worked out from anything but the secret in the URL.
+	const uid = (await hashApiKey(`freebusy-uid:${url.searchParams.get("key")}`)).slice(0, 32);
 	const body = format === "ics" ? buildFreeBusyIcs(intervals, { uid, now }) : buildFreeBusyIfb(intervals, { uid, now, ...publishWindow(now) });
 	return new Response(body, { headers: {
 		"Content-Type": "text/calendar; charset=utf-8",
