@@ -52,7 +52,7 @@ export default function ReceivingProviderConfig({ domainId, provider, onReady }:
 			.catch((err) => { if (active) setError(err instanceof Error ? err.message : t("domains.providerUnreachable")); })
 			.finally(() => { if (active) setLoading(false); });
 		return () => { active = false; };
-	}, [domainId, provider, reload]);
+	}, [domainId, provider, reload, t]);
 
 	useEffect(() => { if (!loading) onReady?.(view ? view.ready : credentials === false ? false : null); }, [loading, view, credentials, onReady]);
 

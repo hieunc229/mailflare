@@ -68,7 +68,7 @@ export default function AccountsPage() {
 			setTeamRequired(/(pro|team) license/i.test(text) && !/seats/i.test(text));
 			setMessage(text);
 		}).finally(() => setLoading(false));
-	}, []);
+	}, [t]);
 
 	async function createAccount(event: React.FormEvent<HTMLFormElement>) {
 		event.preventDefault();

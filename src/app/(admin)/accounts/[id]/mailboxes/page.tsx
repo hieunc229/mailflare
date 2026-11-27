@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { Plus, Trash2 } from "@/components/icons";
@@ -29,20 +29,18 @@ export default function AccountMailboxesPage() {
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
 
-  function fetchAll() {
-    return Promise.all([
-      fetchManagedAccount(id),
-      fetchManagedMailboxes(id),
-      fetchManagedDomains(),
-    ]);
-  }
+  const fetchAll = useCallback(() => Promise.all([
+    fetchManagedAccount(id),
+    fetchManagedMailboxes(id),
+    fetchManagedDomains(),
+  ]), [id]);
 
-  function applyLoaded([nextAccount, nextMailboxes, nextDomains]: Awaited<ReturnType<typeof fetchAll>>) {
+  const applyLoaded = useCallback(([nextAccount, nextMailboxes, nextDomains]: Awaited<ReturnType<typeof fetchAll>>) => {
     setAccount(nextAccount);
     setMailboxes(nextMailboxes);
     setDomains(nextDomains);
     setDomainId((current) => current || nextDomains[0]?.id || "");
-  }
+  }, []);
 
   async function load() {
     applyLoaded(await fetchAll());
@@ -54,7 +52,7 @@ export default function AccountMailboxesPage() {
         error instanceof Error ? error.message : t("account.mailboxes.loadFailed"),
       ),
     );
-  }, [id, t]);
+  }, [fetchAll, applyLoaded, t]);
 
   async function addMailbox(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();

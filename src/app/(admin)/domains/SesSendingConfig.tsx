@@ -39,7 +39,7 @@ export default function SesSendingConfig({ domainId, onStatus }: { domainId: str
 		setError("");
 		setNotice("");
 		try { await action(); } catch (err) { setError(err instanceof Error ? err.message : t("domains.requestFailed")); } finally { setBusy(null); }
-	}, []);
+	}, [t]);
 
 	const domainAction = (action: "setup" | "verify") => run(action, async () => {
 		const data = await requestJson<SesResponse>(`/api/domains/${domainId}/ses`, "POST", { action });

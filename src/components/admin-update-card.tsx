@@ -59,7 +59,7 @@ export function AdminUpdateCard() {
 		return () => {
 			isActive = false;
 		};
-	}, []);
+	}, [t]);
 
 	async function handleUpdate() {
 		setError("");
