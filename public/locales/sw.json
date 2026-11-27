@@ -2991,5 +2991,10 @@
 	"domains.forceRemoveConfirm": "{reason}\n\nBado unataka kuondoa {host} kwa nguvu? Mailflare itajaribu kuondoa rekodi zake za DNS za _mta-sts na _smtp._tls, kisha itafuta kikoa, visanduku vyake vyote vya barua na jumbe zake zote, hata kama kuondoa rekodi kutashindwa. Seva za barua zinaweza kuendelea kutumia sera ya MTA-STS iliyohifadhiwa kwa muda. Baadaye utapata orodha ya rekodi za DNS za kuondoa mwenyewe.\n\nAndika {host} ili kuthibitisha.",
 	"domains.forceRemoved": "{host} imeondolewa",
 	"domains.forceRemovedRecords": "Ondoa rekodi hizi za DNS mwenyewe:",
-	"domains.forceRemovedCache": "Seva za barua zinaweza kuendelea kutumia sera ya zamani ya MTA-STS hadi {date}."
+	"domains.forceRemovedCache": "Seva za barua zinaweza kuendelea kutumia sera ya zamani ya MTA-STS hadi {date}.",
+	"dnsSkipped.recheck": "Recheck",
+	"setup.name": "Your name",
+	"setup.namePlaceholder": "Jane Doe",
+	"domains.recheckDns": "Recheck DNS",
+	"resend.keyFromEnv": "Set by RESEND_API_KEY"
 }

@@ -2968,5 +2968,10 @@
 	"domains.forceRemoveConfirm": "{reason}\n\nTetap hapus paksa {host}? Mailflare akan mencoba menghapus rekaman DNS _mta-sts dan _smtp._tls, lalu menghapus domain, semua kotak surat di dalamnya, dan semua pesannya, meskipun penghapusan rekaman gagal. Server email mungkin masih menerapkan kebijakan MTA-STS yang tersimpan di cache untuk beberapa waktu. Setelah itu Anda akan mendapat daftar rekaman DNS yang harus dihapus secara manual.\n\nKetik {host} untuk mengonfirmasi.",
 	"domains.forceRemoved": "{host} dihapus",
 	"domains.forceRemovedRecords": "Hapus sendiri rekaman DNS berikut:",
-	"domains.forceRemovedCache": "Server email mungkin masih menerapkan kebijakan MTA-STS lama hingga {date}."
+	"domains.forceRemovedCache": "Server email mungkin masih menerapkan kebijakan MTA-STS lama hingga {date}.",
+	"dnsSkipped.recheck": "Recheck",
+	"setup.name": "Your name",
+	"setup.namePlaceholder": "Jane Doe",
+	"domains.recheckDns": "Recheck DNS",
+	"resend.keyFromEnv": "Set by RESEND_API_KEY"
 }
