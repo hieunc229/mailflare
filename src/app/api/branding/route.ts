@@ -19,7 +19,12 @@ export async function PUT(request: Request) {
 		return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 	}
 
-	const form = await request.formData();
+	let form: FormData;
+	try {
+		form = await request.formData();
+	} catch {
+		return NextResponse.json({ error: "Expected multipart form data" }, { status: 400 });
+	}
 	const appName = String(form.get("appName") ?? "").trim();
 	const iconValue = form.get("icon");
 	if (!appName || appName.length > 60) {
