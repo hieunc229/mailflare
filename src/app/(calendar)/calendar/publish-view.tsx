@@ -24,7 +24,7 @@ export type PublishViewProps = {
 	/** A dialog around the card already has this title; saying it twice makes a screen reader read it twice. */
 	hideTitle?: boolean;
 	/** Where focus goes once the button that was pressed has been replaced: the first link, or the button that now offers the opposite action. */
-	focus?: "urls" | "action" | null;
+	focus?: "urls" | "action" | "retry" | null;
 };
 
 function UrlRow({ label, hint, value, copyLabel, onCopy }: { label: string; hint: string; value: string; copyLabel: string; onCopy: () => void }) {
@@ -50,9 +50,11 @@ export function PublishView(props: PublishViewProps) {
 	const on = props.state === "on";
 	const section = useRef<HTMLElement>(null);
 	const action = useRef<HTMLButtonElement>(null);
+	const retry = useRef<HTMLButtonElement>(null);
 	useEffect(() => {
 		if (props.focus === "urls") section.current?.querySelector("input")?.focus();
 		else if (props.focus === "action") action.current?.focus();
+		else if (props.focus === "retry") retry.current?.focus();
 	}, [props.focus, props.state, props.urls]);
 	return (
 		<section ref={section} aria-labelledby={props.hideTitle ? undefined : titleId} className="space-y-3 text-sm text-neutral-700">
@@ -69,7 +71,7 @@ export function PublishView(props: PublishViewProps) {
 				<div role="alert" className="flex items-start gap-2 text-red-700">
 					<AlertCircle aria-hidden="true" className="mt-0.5 h-4 w-4 shrink-0" />
 					<span className="min-w-0 flex-1">{t("calendar.publish.loadFailed")}</span>
-					<button type="button" onClick={props.onRetry} className={`rounded-md px-2 font-medium text-blue-700 underline hover:bg-blue-50 ${touch}`}>{t("calendar.publish.retry")}</button>
+					<button ref={retry} type="button" onClick={props.onRetry} className={`rounded-md px-2 font-medium text-blue-700 underline hover:bg-blue-50 ${touch}`}>{t("calendar.publish.retry")}</button>
 				</div>
 			)}
 			{props.state === "off" && (
