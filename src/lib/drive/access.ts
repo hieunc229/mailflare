@@ -1,6 +1,7 @@
 import { and, eq, inArray } from "drizzle-orm";
 import { getDb } from "@/db";
 import { driveItems, driveShares, driveUploadParts, users } from "@/db/schema";
+import { selectInBatches } from "@/lib/db-params";
 import { DRIVE_MAX_DEPTH, driveObjectKey } from "./utils";
 import type { DriveItemDto, DriveRole, DriveRow } from "./types";
 import { deleteUnreferencedObjects } from "@/lib/drive/shared-objects";
@@ -56,7 +57,8 @@ export async function getPublicDriveItem(db: Db, token: string, itemId?: string 
 export async function toDriveItemDtos(db: Db, rows: DriveRow[], userId: string, roleFor?: (row: DriveRow) => DriveRole): Promise<DriveItemDto[]> {
 	if (!rows.length) return [];
 	const ownerIds = [...new Set(rows.map((row) => row.ownerId))];
-	const owners = await db.select({ id: users.id, name: users.name, email: users.email, avatarKey: users.avatarKey }).from(users).where(inArray(users.id, ownerIds));
+	// Shared views can mix more owners than one statement can bind.
+	const owners = await selectInBatches(ownerIds, (batch) => db.select({ id: users.id, name: users.name, email: users.email, avatarKey: users.avatarKey }).from(users).where(inArray(users.id, batch)));
 	const ownerNames = new Map(owners.map((owner) => [owner.id, owner.name || owner.email]));
 	const ownerAvatars = new Map(owners.map((owner) => [owner.id, !!owner.avatarKey]));
 	const sharedIds = new Set<string>();
