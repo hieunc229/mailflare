@@ -57,7 +57,8 @@ export function MessageDetailNavigationProvider({ children, config, currentMessa
 		const messageId = takeOpenedUnreadMessage();
 		// eslint-disable-next-line react-hooks/set-state-in-effect -- consumes a one-shot sessionStorage handoff, a side effect that cannot run during render.
 		if (messageId) recordUnread(messageId);
-	}, [recordUnread]);
+		// The provider is already mounted when a message is opened beside the empty reader.
+	}, [recordUnread, currentMessageId]);
 
 	// Re-anchor if the open message falls outside the loaded window.
 	const currentIndex = snapshot.key === key && currentMessageId
@@ -187,8 +188,8 @@ export function MessageDetailNavigation({ messageId, unread }: MessageDetailNavi
 			<Tooltip label={t("message.nav.newer")}>
 				<Button
 					type="button"
-					variant="ghost"
-					size="roundedSM"
+					variant="round"
+					size="round"
 					aria-label={t("message.nav.newer")}
 					disabled={!previousId}
 					onPointerEnter={() => prefetchMessage(previousId)}
@@ -205,8 +206,8 @@ export function MessageDetailNavigation({ messageId, unread }: MessageDetailNavi
 			<Tooltip label={t("message.nav.older")}>
 				<Button
 					type="button"
-					variant="ghost"
-					size="roundedSM"
+					variant="round"
+					size="round"
 					aria-label={t("message.nav.older")}
 					disabled={!nextId}
 					onPointerEnter={() => prefetchMessage(nextId)}

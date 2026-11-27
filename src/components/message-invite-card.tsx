@@ -3,8 +3,9 @@
 import { useEffect, useRef, useState } from "react";
 import clsx from "clsx";
 import toast from "react-hot-toast";
-import { CalendarDays, Check, X } from "@/components/icons";
+import { CalendarDays, Check, ChevronDown, Clock, MoreVerticalCircle01, UserMultiple02, X } from "@/components/icons";
 import { useLanguage } from "@/components/language-provider";
+import { MessageActionMenu, MessageActionMenuItem } from "@/components/message-actions/action-menu";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -17,11 +18,7 @@ import { formatUserDate } from "@/lib/time/utils";
 const SEND_DELAY_MS = 8000;
 const NOTIFY_KEY = "invite-notify-default";
 
-type Receipt =
-	| { kind: "rsvp"; action: InviteResponse; notified: boolean; at: Date; note: string | null; prev: InviteResponse | null }
-	| { kind: "proposal"; rsvp: InviteResponse; at: Date; proposedStart: Date; proposedEnd: Date; note: string | null; prev: InviteResponse | null };
-
-type Snapshot = { answered: InviteResponse | null; eventId: string | null; receipt: Receipt | null };
+type Snapshot = { answered: InviteResponse | null; eventId: string | null };
 
 type SendIntent = {
 	response: InviteResponse;
@@ -48,8 +45,6 @@ export function MessageInviteCard({ messageId, hasCalendarAttachment, className 
 	const [invite, setInvite] = useState<InviteView | null>(initial?.invite ?? null);
 	const [eventId, setEventId] = useState<string | null>(initial?.eventId ?? null);
 	const [answered, setAnswered] = useState<InviteResponse | null>(initial?.response ?? null);
-	const [answeredAt, setAnsweredAt] = useState<string | null>(initial?.answeredAt ?? null);
-	const [receipt, setReceipt] = useState<Receipt | null>(null);
 	const [loading, setLoading] = useState(initial === undefined);
 	const [inFlight, setInFlight] = useState<InviteResponse | null>(null);
 	const [menuOpen, setMenuOpen] = useState(false);
@@ -73,7 +68,7 @@ export function MessageInviteCard({ messageId, hasCalendarAttachment, className 
 	// Guard so the timer, unmount flush, pagehide flush and storage resume can never send the same intent twice.
 	const sentRef = useRef(false);
 	const didResumeRef = useRef(false);
-	const confirmedRef = useRef<Snapshot>({ answered: initial?.response ?? null, eventId: initial?.eventId ?? null, receipt: null });
+	const confirmedRef = useRef<Snapshot>({ answered: initial?.response ?? null, eventId: initial?.eventId ?? null });
 	const storageKey = `invite-pending:${messageId}`;
 
 	function buildIntentBody(intent: SendIntent) {
@@ -96,10 +91,6 @@ export function MessageInviteCard({ messageId, hasCalendarAttachment, className 
 		return response === "accepted" ? t("invite.acceptedLabel") : response === "declined" ? t("invite.declinedLabel") : t("invite.maybe");
 	}
 
-	function formatTime(value: Date): string {
-		return formatUserDate(value, { dateStyle: "medium", timeStyle: "short" });
-	}
-
 	function undoSend() {
 		const pending = pendingRef.current;
 		if (timerRef.current) clearTimeout(timerRef.current);
@@ -110,7 +101,6 @@ export function MessageInviteCard({ messageId, hasCalendarAttachment, className 
 		toast.dismiss(pending.toastId);
 		setAnswered(pending.prev.answered);
 		setEventId(pending.prev.eventId);
-		setReceipt(pending.prev.receipt);
 	}
 
 	async function fireSend() {
@@ -125,12 +115,10 @@ export function MessageInviteCard({ messageId, hasCalendarAttachment, className 
 		try {
 			const body = buildIntentBody(pending);
 			const result = await authFetch(`/api/messages/${messageId}/invite`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
-			const data = await result.json().catch(() => ({})) as { error?: string; eventId?: string | null; replySent?: boolean };
+			const data = await result.json().catch(() => ({})) as { error?: string; eventId?: string | null };
 			if (!result.ok) throw new Error(data.error ?? (pending.counter ? t("invite.counterFailed") : t("invite.failed")));
 			const nextEventId = data.eventId ?? null;
 			setEventId(nextEventId);
-			const nowIso = new Date().toISOString();
-			setAnsweredAt(nowIso);
 			const currentInvite = invite;
 			if (currentInvite) {
 				cacheAnsweredInvite(messageId, {
@@ -138,22 +126,10 @@ export function MessageInviteCard({ messageId, hasCalendarAttachment, className 
 					eventId: nextEventId,
 					response: pending.response,
 					canRespond: currentInvite.method === "REQUEST" || currentInvite.method === "PUBLISH",
-					answeredAt: nowIso,
+					answeredAt: new Date().toISOString(),
 				});
 			}
-			// The server reports whether the reply email actually went out; correct the optimistic "notified" claim.
-			const notified = pending.sendReply && data.replySent !== false;
-			const trimmedNote = pending.note.trim() ? pending.note.trim() : null;
-			if (!pending.counter) {
-				setReceipt((prev) => (prev && prev.kind === "rsvp" ? { ...prev, notified } : prev));
-			}
-			confirmedRef.current = {
-				answered: pending.response,
-				eventId: nextEventId,
-				receipt: pending.counter
-					? { kind: "proposal", rsvp: pending.response, at: new Date(), proposedStart: new Date(pending.counter.startsAt), proposedEnd: new Date(pending.counter.endsAt), note: trimmedNote, prev: confirmedRef.current.answered }
-					: { kind: "rsvp", action: pending.response, notified, at: new Date(), note: trimmedNote, prev: confirmedRef.current.answered },
-			};
+			confirmedRef.current = { answered: pending.response, eventId: nextEventId };
 			toast.dismiss(pending.toastId);
 			if (pending.counter) toast.success(t("invite.proposalSent"));
 			else toast.success(pending.response === "declined" ? t("invite.declined") : t("invite.added"));
@@ -162,7 +138,6 @@ export function MessageInviteCard({ messageId, hasCalendarAttachment, className 
 			const confirmed = confirmedRef.current;
 			setAnswered(confirmed.answered);
 			setEventId(confirmed.eventId);
-			setReceipt(confirmed.receipt);
 			toast.error(error instanceof Error ? error.message : (pending.counter ? t("invite.counterFailed") : t("invite.failed")));
 		} finally {
 			setInFlight(null);
@@ -201,13 +176,8 @@ export function MessageInviteCard({ messageId, hasCalendarAttachment, className 
 						sentRef.current = true;
 						try { window.sessionStorage.removeItem(storageKey); } catch { /* private mode */ }
 						const prev: Snapshot = { ...confirmedRef.current };
-						const trimmedNote = intent.note.trim() ? intent.note.trim() : null;
-						const now = new Date();
 						setAnswered(intent.response);
 						if (!intent.counter && intent.response === "declined") setEventId(null);
-						setReceipt(intent.counter
-							? { kind: "proposal", rsvp: intent.response, at: now, proposedStart: new Date(intent.counter.startsAt), proposedEnd: new Date(intent.counter.endsAt), note: trimmedNote, prev: prev.answered }
-							: { kind: "rsvp", action: intent.response, notified: intent.sendReply, at: now, note: trimmedNote, prev: prev.answered });
 						pendingRef.current = { ...intent, prev, toastId: "" };
 						void fireRef.current();
 					} else if (age >= 60_000) {
@@ -245,18 +215,13 @@ export function MessageInviteCard({ messageId, hasCalendarAttachment, className 
 	}, [messageId]);
 
 	function scheduleSend(intent: SendIntent) {
-		const prev: Snapshot = { answered, eventId, receipt };
+		const prev: Snapshot = { answered, eventId };
 		sentRef.current = false;
 		if (timerRef.current) { clearTimeout(timerRef.current); timerRef.current = null; }
 		if (pendingRef.current) toast.dismiss(pendingRef.current.toastId);
 		setAnswered(intent.response);
 		// A decline removes the event, so the calendar link hides at once; anything else keeps it.
 		if (!intent.counter && intent.response === "declined") setEventId(null);
-		const trimmedNote = intent.note.trim() ? intent.note.trim() : null;
-		const now = new Date();
-		setReceipt(intent.counter
-			? { kind: "proposal", rsvp: intent.response, at: now, proposedStart: new Date(intent.counter.startsAt), proposedEnd: new Date(intent.counter.endsAt), note: trimmedNote, prev: prev.answered }
-			: { kind: "rsvp", action: intent.response, notified: intent.sendReply, at: now, note: trimmedNote, prev: prev.answered });
 		const actionWord = intent.counter ? t("invite.proposalSent") : actionLabel(intent.response);
 		const toastId = toast(() => (
 			<span className="flex items-center gap-2">
@@ -323,8 +288,7 @@ export function MessageInviteCard({ messageId, hasCalendarAttachment, className 
 				setInvite(data?.invite ?? null);
 				setEventId(data?.eventId ?? null);
 				setAnswered(data?.response ?? null);
-				setAnsweredAt(data?.answeredAt ?? null);
-				confirmedRef.current = { answered: data?.response ?? null, eventId: data?.eventId ?? null, receipt: null };
+					confirmedRef.current = { answered: data?.response ?? null, eventId: data?.eventId ?? null };
 				setLoading(false);
 			})
 			.catch(() => { if (active) setLoading(false); });
@@ -379,81 +343,95 @@ export function MessageInviteCard({ messageId, hasCalendarAttachment, className 
 		? formatUserDate(start, { dateStyle: "full" }) === formatUserDate(lastDay, { dateStyle: "full" })
 			? formatUserDate(start, { dateStyle: "full" })
 			: `${formatUserDate(start, { dateStyle: "full" })} - ${formatUserDate(lastDay, { dateStyle: "full" })}`
-		: `${formatUserDate(start, { dateStyle: "full", timeStyle: "short" })} - ${formatUserDate(end, { timeStyle: "short" })}`;
+		// An end on another day carries its date, so the range is not misread.
+		: `${formatUserDate(start, { dateStyle: "full" })} • ${formatUserDate(start, { timeStyle: "short" })} – ${formatUserDate(end, formatUserDate(start, { dateStyle: "full" }) === formatUserDate(end, { dateStyle: "full" }) ? { timeStyle: "short" } : { dateStyle: "medium", timeStyle: "short" })}`;
 
 	const choiceKey = { accepted: "invite.choice.accepted", tentative: "invite.choice.tentative", declined: "invite.choice.declined" }[dialogChoice] as Parameters<typeof t>[0];
 	const sendLabel = dialogNotify ? t("invite.sendChoice", { choice: t(choiceKey) }) : t("invite.saveQuietly");
-	const snippet = (note: string) => note.length > 80 ? `${note.slice(0, 80)}…` : note;
-	const receiptLine = receipt
-		? receipt.kind === "proposal"
-			? `${t("invite.proposed", { time: formatTime(receipt.proposedStart) })} · ${t("invite.awaitingOrganizer")}`
-			: `${actionLabel(receipt.action)} · ${receipt.notified ? t("invite.notified") : t("invite.calendarOnly")} · ${formatTime(receipt.at)}`
-		: answered !== null
-			? answeredAt ? `${actionLabel(answered)} · ${formatTime(new Date(answeredAt))}` : actionLabel(answered)
-			: null;
-	const receiptNote = receipt?.note ?? null;
-	const receiptPrev = receipt?.prev ?? null;
+	const organizer = currentInvite.organizer?.toLowerCase() ?? null;
+	const statusLabel = (status: string) => status === "ACCEPTED" ? t("invite.acceptedLabel") : status === "DECLINED" ? t("invite.declinedLabel") : status === "TENTATIVE" ? t("invite.maybe") : t("invite.needsConfirmation");
+	const people = [
+		...(currentInvite.organizer ? [{ email: currentInvite.organizer, role: t("invite.organizerRole") }] : []),
+		...(currentInvite.attendees ?? []).filter((attendee) => attendee.email.toLowerCase() !== organizer).map((attendee) => ({ email: attendee.email, role: statusLabel(attendee.status) })),
+	];
+	const responses = [
+		{ value: "accepted", label: t("invite.accept"), selectedLabel: t("invite.acceptedLabel"), icon: <Check className="h-4 w-4" /> },
+		{ value: "tentative", label: t("invite.maybe"), selectedLabel: t("invite.maybe"), icon: <Clock className="h-4 w-4" /> },
+		{ value: "declined", label: t("invite.decline"), selectedLabel: t("invite.declinedLabel"), icon: <X className="h-4 w-4" /> },
+	] as const;
+	const selectedResponse = responses.find((option) => option.value === answered);
+	const respond = (response: InviteResponse) => scheduleSend({ response, sendReply: readNotifyDefault(), note: "", counter: null });
 
 	return (
-		<section className={clsx("rounded-xl bg-[#f0f4f8] p-4", className)}>
-			<div className="flex items-start gap-3">
-				<CalendarDays className="mt-0.5 h-5 w-5 shrink-0 text-blue-600" />
-				<div className="min-w-0 flex-1">
-					<p className="text-[11px] font-medium uppercase text-neutral-500">{cancelled ? t("invite.cancelled") : t("invite.heading")}</p>
-					<h2 className="mt-0.5 break-words text-sm font-semibold text-neutral-900">{currentInvite.title}</h2>
-					<p className="mt-1 text-xs text-neutral-700">{when}</p>
+		<section className={clsx("relative rounded-xl bg-[#f0f4f8] p-4", className)}>
+			{!cancelled && (
+				<div className="absolute right-2 top-2" ref={menuRef}>
+					<Button ref={overflowBtnRef} type="button" variant="round" size="round" aria-label={t("invite.moreOptions")} title={t("invite.moreOptions")} aria-haspopup="menu" aria-expanded={menuOpen} disabled={inFlight !== null} onClick={() => setMenuOpen((open) => !open)} className="text-neutral-600 before:hidden">
+						<MoreVerticalCircle01 size={16} aria-hidden="true" />
+					</Button>
+					{menuOpen && (
+						<div role="menu" className="absolute right-0 top-full z-10 mt-1 min-w-44 overflow-hidden rounded-xl border border-neutral-200 bg-white py-1 shadow-lg">
+							<button ref={firstMenuItemRef} type="button" role="menuitem" onClick={openNoteDialog} className="flex w-full items-center px-4 py-2 text-left text-sm text-neutral-800 hover:bg-neutral-100 focus:bg-neutral-100 focus:outline-none">{t("invite.respondWithNote")}</button>
+							<button type="button" role="menuitem" onClick={openProposeDialog} className="flex w-full items-center px-4 py-2 text-left text-sm text-neutral-800 hover:bg-neutral-100 focus:bg-neutral-100 focus:outline-none">{t("invite.proposeNewTime")}</button>
+						</div>
+					)}
+				</div>
+			)}
+			<div>
+				<div className="min-w-0">
+					{cancelled && <p className="text-[11px] font-medium uppercase text-neutral-500">{t("invite.cancelled")}</p>}
+					<p className="pr-10 text-xs font-semibold text-neutral-900">{when}</p>
+					<h2 className="mt-0.5 break-words pr-10 text-xl text-neutral-900">{currentInvite.title}</h2>
 					{currentInvite.recurrenceId && (
 						<p className="mt-1 text-xs text-neutral-600">{t("invite.singleInstance", { date: formatUserDate(new Date(currentInvite.recurrenceId), { dateStyle: "full" }) })}</p>
 					)}
 					{currentInvite.location && <p className="mt-0.5 break-words text-xs text-neutral-600">{currentInvite.location}</p>}
-					{currentInvite.organizer && <p className="mt-0.5 text-xs text-neutral-600">{t("invite.organizer", { organizer: currentInvite.organizer })}</p>}
-					{currentInvite.attendees && currentInvite.attendees.length > 0 && (
-						<p className="mt-0.5 break-words text-xs text-neutral-600">
-							{currentInvite.attendees.slice(0, 5).map((attendee) => { const status = attendee.status || "NEEDS-ACTION"; return `${attendee.email} (${status.charAt(0)}${status.slice(1).toLowerCase()})`; }).join(", ")}
-							{currentInvite.attendees.length > 5 ? ` +${currentInvite.attendees.length - 5} more` : ""}
-						</p>
+					{people.length > 0 && (
+						<div className="mt-2 grid grid-cols-[auto_minmax(0,1fr)] gap-3 text-sm">
+							<UserMultiple02 size={15} aria-hidden="true" className="mt-0.5" />
+							<ul className="space-y-1">
+								{people.slice(0, 5).map((person) => (
+									<li key={person.email} className="break-words text-neutral-900">
+										{person.email} <span className="text-neutral-500 lowercase">({person.role})</span>
+									</li>
+								))}
+								{people.length > 5 && <li className="text-neutral-500">{t("invite.moreGuests", { count: people.length - 5 })}</li>}
+							</ul>
+						</div>
 					)}
 					<div className="mt-3 flex flex-wrap items-center gap-2">
 						{cancelled ? (
 							<Button size="sm" disabled={inFlight !== null || !eventId} onClick={() => scheduleSend({ response: "declined", sendReply: readNotifyDefault(), note: "", counter: null })} variant="outline" className="rounded-full border-0 bg-white text-neutral-700 hover:bg-neutral-50">{t("invite.removeFromCalendar")}</Button>
 						) : (
 							<>
-								{(["accepted", "tentative", "declined"] as const).map((option) => {
-									const selected = answered === option;
-									const primary = answered === null && option === "accepted";
-									const label = {
-										accepted: selected ? t("invite.acceptedLabel") : t("invite.accept"),
-										tentative: t("invite.maybe"),
-										declined: selected ? t("invite.declinedLabel") : t("invite.decline"),
-									}[option];
-									const selectedColor = { accepted: "text-green-600", tentative: "text-orange-400", declined: "text-red-600" }[option];
-									return <Button key={option} size="sm" disabled={inFlight !== null} onClick={() => scheduleSend({ response: option, sendReply: readNotifyDefault(), note: "", counter: null })} variant={primary ? "default" : "outline"} aria-pressed={selected} className={clsx("rounded-full", !primary && "border-0 bg-white hover:bg-neutral-50", selected ? clsx("font-semibold", selectedColor) : primary ? "text-white" : "text-neutral-700", answered !== null && !selected && "opacity-50")}>{selected && option === "accepted" && <Check className="h-4 w-4" />}{selected && option === "declined" && <X className="h-4 w-4" />}{label}</Button>;
+								{selectedResponse ? (
+									<MessageActionMenu
+										label={t("invite.changeResponse")}
+										className="w-40"
+										trigger={
+											<Button size="sm" disabled={inFlight !== null} className="rounded-full text-white">
+												{selectedResponse.selectedLabel}
+												<ChevronDown className="h-4 w-4" aria-hidden="true" />
+											</Button>
+										}
+									>
+										{responses.map((option) => {
+											const selected = option.value === answered;
+											return (
+												<MessageActionMenuItem key={option.value} icon={option.icon} onSelect={() => { if (!selected) respond(option.value); }}>
+													<span aria-current={selected || undefined} className={clsx(selected && "font-semibold text-blue-700")}>{selected ? option.selectedLabel : option.label}</span>
+												</MessageActionMenuItem>
+											);
+										})}
+									</MessageActionMenu>
+								) : responses.map((option) => {
+									const primary = option.value === "accepted";
+									return <Button key={option.value} size="sm" disabled={inFlight !== null} onClick={() => respond(option.value)} variant={primary ? "default" : "outline"} className={clsx("rounded-full", primary ? "text-white" : "border-0 bg-white text-neutral-700 hover:bg-neutral-50")}>{option.label}</Button>;
 								})}
-								{!cancelled && (
-									<div className="relative" ref={menuRef}>
-										<Button ref={overflowBtnRef} size="sm" variant="outline" aria-label={t("invite.moreOptions")} title={t("invite.moreOptions")} aria-haspopup="menu" aria-expanded={menuOpen} disabled={inFlight !== null} onClick={() => setMenuOpen((open) => !open)} className="rounded-full border-0 bg-white px-3 text-neutral-700 hover:bg-neutral-50">…</Button>
-										{menuOpen && (
-											<div role="menu" className="absolute right-0 top-full z-10 mt-1 min-w-44 overflow-hidden rounded-xl border border-neutral-200 bg-white py-1 shadow-lg">
-												<button ref={firstMenuItemRef} type="button" role="menuitem" onClick={openNoteDialog} className="flex w-full items-center px-4 py-2 text-left text-sm text-neutral-800 hover:bg-neutral-100 focus:bg-neutral-100 focus:outline-none">{t("invite.respondWithNote")}</button>
-												<button type="button" role="menuitem" onClick={openProposeDialog} className="flex w-full items-center px-4 py-2 text-left text-sm text-neutral-800 hover:bg-neutral-100 focus:bg-neutral-100 focus:outline-none">{t("invite.proposeNewTime")}</button>
-											</div>
-										)}
-									</div>
-								)}
 							</>
 						)}
 						{eventId && answered !== "declined" && <a href={`/calendar?event=${eventId}`} className="ml-auto text-xs font-medium text-blue-700 hover:underline">{t("invite.viewOnCalendar")}</a>}
 					</div>
-					{!cancelled && receiptLine && (
-						<div className="mt-2 space-y-1">
-							<p className="text-xs text-neutral-600">
-								{receiptLine}
-								{receiptNote && <> · <span>“{snippet(receiptNote)}”</span></>}
-								{receiptPrev && <> {t("invite.wasPrev", { action: actionLabel(receiptPrev) })}</>}
-							</p>
-							<p className="text-[11px] text-neutral-500">{t("invite.changeHint")}</p>
-						</div>
-					)}
 				</div>
 			</div>
 			<Dialog open={noteOpen} onOpenChange={setNoteOpen}>

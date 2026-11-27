@@ -10,6 +10,13 @@ import type { MessageFolderConfig } from "./types";
 export function useCustomFolderConfig(folderId: string): MessageFolderConfig {
 	const { selectedMailbox } = useSelectedMailbox();
 	const [folderName, setFolderName] = useState("Folder");
+	const [revision, setRevision] = useState(0);
+
+	useEffect(() => {
+		const reload = () => setRevision((value) => value + 1);
+		window.addEventListener("mailflare:folders-changed", reload);
+		return () => window.removeEventListener("mailflare:folders-changed", reload);
+	}, []);
 
 	useEffect(() => {
 		if (!selectedMailbox?.id) return;
@@ -25,7 +32,7 @@ export function useCustomFolderConfig(folderId: string): MessageFolderConfig {
 		return () => {
 			cancelled = true;
 		};
-	}, [folderId, selectedMailbox?.id]);
+	}, [folderId, selectedMailbox?.id, revision]);
 
 	return useMemo(
 		() => ({

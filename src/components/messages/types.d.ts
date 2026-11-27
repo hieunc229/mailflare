@@ -50,8 +50,6 @@ export type MessageListRowActionsProps = {
 	onAction: (action: RowMessageAction) => Promise<void>;
 	/** Tighter rail for the split-view message list. */
 	compact?: boolean;
-	/** The row holds the open message, so its rail uses the active-row surface. */
-	active?: boolean;
 	onSnoozeChange?: (messageId: string, snoozed: boolean) => void;
 	/** Where "Move to ..." would send this message; undefined hides the action (Promotions off, no full access, wrong folder). */
 	promotionTarget?: "promotions" | "inbox";
@@ -69,9 +67,12 @@ export type MessageSplitLayoutProps = {
 	config: MessageFolderConfig;
 };
 
+export type EmptyMessagePaneProps = {
+	folder: MessageFolder;
+};
+
 export type MessageListVisibility = {
 	visible: boolean;
-	toggle: () => void;
 	singleColumn: boolean;
 	backHref: string;
 	backLabel: string;
@@ -88,7 +89,7 @@ export type BulkMessageToolbarProps = {
 	folder?: MessageFolder;
 };
 
-export type SelectedMessage = Pick<Message, "id" | "read">;
+export type SelectedMessage = Pick<Message, "id" | "read" | "threadMessageIds">;
 
 export type MessageListStateControl = {
 	selectedMessages: SelectedMessage[];
@@ -103,12 +104,6 @@ export type BulkMessageActionBarProps = {
 	folder?: MessageFolder;
 	selectedMessages: SelectedMessage[];
 	onClearSelection: () => void;
-};
-
-export type PageRange = {
-	start: number;
-	end: number;
-	total: number;
 };
 
 export type EmailPageTitleInput = {

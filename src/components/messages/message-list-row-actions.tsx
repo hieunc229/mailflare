@@ -2,7 +2,6 @@
 
 import { memo, useState } from "react";
 import type { ReactNode } from "react";
-import clsx from "clsx";
 import { Archive, ArchiveRestore, Clock, Inbox, Mail, MailOpen, MoreVertical, ShieldCheck, Tag, Trash2, Undo2 } from "@/components/icons";
 import { MessageActionMenu, MessageActionMenuItem, MessageActionMenuSeparator } from "@/components/message-actions/action-menu";
 import { useLanguage } from "@/components/language-provider";
@@ -24,7 +23,7 @@ type PrimaryAction = {
 	disabled?: boolean;
 };
 
-function MessageListRowActionsComponent({ message, folder = "inbox", folderId, onAction, compact = false, active = false, onSnoozeChange, promotionTarget, onPromotionMove }: MessageListRowActionsProps) {
+function MessageListRowActionsComponent({ message, folder = "inbox", folderId, onAction, compact = false, onSnoozeChange, promotionTarget, onPromotionMove }: MessageListRowActionsProps) {
 	const { t } = useLanguage();
 	const [snoozeOpen, setSnoozeOpen] = useState(false);
 	const [snoozedUntil, setSnoozedUntil] = useState("");
@@ -33,7 +32,6 @@ function MessageListRowActionsComponent({ message, folder = "inbox", folderId, o
 	const [error, setError] = useState<string | null>(null);
 	const snoozed = isMessageSnoozed(message.snoozedUntil);
 	const readAction = message.read ? "unread" : "read";
-	const compactButtonClassName = "h-7 w-7 shrink-0 px-0";
 	// The row leaves these folders through a state change, so offering the same
 	// move as a secondary action would be a no-op or a misleading duplicate.
 	const canMarkRead = folder !== "spam" && folder !== "trash";
@@ -124,21 +122,15 @@ function MessageListRowActionsComponent({ message, folder = "inbox", folderId, o
 	return (
 		<>
 			{compact ? (
-				<div
-					className={clsx(
-						"pointer-events-none absolute right-2 top-1/2 z-10 flex h-8 -translate-y-1/2 items-center gap-0.5 rounded-full p-0.5 opacity-0 shadow-sm ring-1 ring-black/5 transition-opacity group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100 has-[[data-state=open]]:opacity-100",
-						active ? "bg-blue-50" : "bg-neutral-50",
-					)}
-				>
+				<div className="pointer-events-none absolute bottom-0 right-0 z-10 flex items-center gap-2 bg-(--row-bg) pb-2 pl-4 pr-2 opacity-0 transition-opacity before:absolute before:inset-y-0 before:right-full before:w-8 before:bg-linear-to-r before:from-transparent before:to-(--row-bg) group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100 has-[[data-state=open]]:opacity-100 h-14">
 					{message.hasUnsubscribe && (
 						<MessageUnsubscribeButton key={message.id} messageId={message.id} variant="row" iconOnly />
 					)}
 					<Tooltip label={primaryAction.label}>
 						<Button
 							type="button"
-							variant="ghost"
-							size="sm"
-							className={compactButtonClassName}
+							variant="round"
+							size="round"
 							disabled={primaryAction.disabled}
 							onClick={primaryAction.onClick}
 							aria-label={primaryAction.label}
@@ -149,7 +141,7 @@ function MessageListRowActionsComponent({ message, folder = "inbox", folderId, o
 					<MessageActionMenu
 						label={t("common.moreActions")}
 						trigger={
-							<Button type="button" variant="ghost" size="sm" className={compactButtonClassName} aria-label={t("common.moreActions")}>
+							<Button type="button" variant="round" size="round" aria-label={t("common.moreActions")}>
 								<MoreVertical className="h-4 w-4" />
 							</Button>
 						}
@@ -205,8 +197,8 @@ function MessageListRowActionsComponent({ message, folder = "inbox", folderId, o
 					<Tooltip label={primaryAction.label}>
 						<Button
 							type="button"
-							variant="ghost"
-							size="sm"
+							variant="round"
+							size="round"
 							disabled={primaryAction.disabled}
 							onClick={primaryAction.onClick}
 							aria-label={primaryAction.label}
@@ -216,42 +208,42 @@ function MessageListRowActionsComponent({ message, folder = "inbox", folderId, o
 					</Tooltip>
 					{canArchive && (
 						<Tooltip label={t("common.archive")}>
-							<Button type="button" variant="ghost" size="sm" onClick={() => void onAction("archive")} aria-label={t("common.archive")}>
+							<Button type="button" variant="round" size="round" onClick={() => void onAction("archive")} aria-label={t("common.archive")}>
 								<Archive className="h-4 w-4" />
 							</Button>
 						</Tooltip>
 					)}
 					{canTrash && (
 						<Tooltip label={t("common.trash")}>
-							<Button type="button" variant="ghost" size="sm" onClick={() => void onAction("trash")} aria-label={t("common.trash")}>
+							<Button type="button" variant="round" size="round" onClick={() => void onAction("trash")} aria-label={t("common.trash")}>
 								<Trash2 className="h-4 w-4" />
 							</Button>
 						</Tooltip>
 					)}
 					{canDeleteForever && (
 						<Tooltip label={t("common.deleteForever")}>
-							<Button type="button" variant="ghost" size="sm" className="text-red-600 hover:text-red-700" onClick={() => void handleDeleteForever()} aria-label={t("common.deleteForever")}>
+							<Button type="button" variant="round" size="round" className="text-red-600 hover:text-red-700" onClick={() => void handleDeleteForever()} aria-label={t("common.deleteForever")}>
 								<Trash2 className="h-4 w-4" />
 							</Button>
 						</Tooltip>
 					)}
 					{canMarkRead && (
 						<Tooltip label={readAction === "read" ? t("common.markRead") : t("common.markUnread")}>
-							<Button type="button" variant="ghost" size="sm" onClick={() => void onAction(readAction)} aria-label={readAction === "read" ? t("common.markRead") : t("common.markUnread")}>
+							<Button type="button" variant="round" size="round" onClick={() => void onAction(readAction)} aria-label={readAction === "read" ? t("common.markRead") : t("common.markUnread")}>
 								{readAction === "read" ? <MailOpen className="h-4 w-4" /> : <Mail className="h-4 w-4" />}
 							</Button>
 						</Tooltip>
 					)}
 					{canMoveCategory && (
 						<Tooltip label={moveCategoryLabel}>
-							<Button type="button" variant="ghost" size="sm" onClick={onPromotionMove} aria-label={moveCategoryLabel}>
+							<Button type="button" variant="round" size="round" onClick={onPromotionMove} aria-label={moveCategoryLabel}>
 								<MoveCategoryIcon className="h-4 w-4" />
 							</Button>
 						</Tooltip>
 					)}
 					{canSnooze && (
 						<Tooltip label={snoozed ? t("common.unsnooze") : t("common.snooze")}>
-							<Button type="button" variant="ghost" size="sm" disabled={snoozing} onClick={() => {
+							<Button type="button" variant="round" size="round" disabled={snoozing} onClick={() => {
 								if (snoozed) {
 									void handleUnsnooze();
 									return;

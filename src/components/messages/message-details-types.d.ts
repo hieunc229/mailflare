@@ -14,8 +14,8 @@ export type MessageDetailsMessage = Pick<
 	| "createdAt"
 >;
 
-export type MessageDetailsPanelProps = {
+export type MessageDetailsPopoverProps = {
 	message: MessageDetailsMessage;
-	onClose?: () => void;
-	className?: string;
+	open: boolean;
+	onOpenChange: (open: boolean) => void;
 };

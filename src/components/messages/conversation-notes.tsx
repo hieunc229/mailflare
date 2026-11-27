@@ -213,19 +213,18 @@ function NoteItem({ note }: { note: ConversationNote }) {
 				{error && <p role="alert" className="mt-1 text-xs text-red-600">{error}</p>}
 			</div>
 			{!editing && (note.canEdit || note.canDelete) && (
-				<span className="absolute bottom-2 right-3 flex gap-0.5 rounded-md bg-amber-50/90 transition-opacity [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-focus-within:opacity-100 [@media(hover:hover)]:group-hover:opacity-100">
+				<span className="absolute bottom-2 right-3 flex gap-0.5 rounded-full bg-amber-50/90 transition-opacity [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-focus-within:opacity-100 [@media(hover:hover)]:group-hover:opacity-100">
 					{note.canEdit && (
 						<Tooltip label={t("note.edit")}>
 							<Button
 								type="button"
-								variant="ghost"
-								size="sm"
+								variant="round"
+								size="round"
 								disabled={pending}
 								aria-label={t("note.edit")}
 								onClick={() => { notes.setEditDraft(note.id, note.html); setError(null); }}
-								className="h-6 w-6 px-0"
 							>
-								<PenLine className="h-3.5 w-3.5" />
+								<PenLine className="h-4 w-4" />
 							</Button>
 						</Tooltip>
 					)}
@@ -233,14 +232,14 @@ function NoteItem({ note }: { note: ConversationNote }) {
 						<Tooltip label={t("note.delete")}>
 							<Button
 								type="button"
-								variant="ghost"
-								size="sm"
+								variant="round"
+								size="round"
 								disabled={pending}
 								aria-label={t("note.delete")}
 								onClick={() => void remove()}
-								className="h-6 w-6 px-0 hover:bg-red-50 hover:text-red-600 active:bg-red-100"
+								className="before:bg-red-50 hover:text-red-600"
 							>
-								<Trash2 className="h-3.5 w-3.5" />
+								<Trash2 className="h-4 w-4" />
 							</Button>
 						</Tooltip>
 					)}

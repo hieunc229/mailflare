@@ -102,7 +102,7 @@ function methodStatus(section: string | null, method: "spf" | "dkim" | "dmarc"):
 /** A domain from either `d=`/`smtp.mailfrom=` (a domain) or `i=` (a mailbox). */
 function domainFromIdentity(value: string | null): string | null {
 	if (!value) return null;
-	const cleaned = value.replace(/^@/, "").replace(/^<|>$/g, "").trim().toLowerCase();
+	const cleaned = value.replace(/^@/, "").replace(/^["<]+|[">]+$/g, "").trim().toLowerCase();
 	const at = cleaned.lastIndexOf("@");
 	const domain = at >= 0 ? cleaned.slice(at + 1) : cleaned;
 	return domain || null;
@@ -130,7 +130,23 @@ export function readSesAuthentication(raw: ArrayBuffer, fromAddress: string): Me
 	if (!leading) return null;
 	const results = headerValue(leading, "authentication-results");
 	if (!results || !/^amazonses\.com\s*;/i.test(results)) return null;
+	return parseAuthentication(results, headerValue(leading, "received"), fromAddress);
+}
 
+/**
+ * Authentication results for a message Cloudflare Email Routing received. Only the topmost
+ * `Authentication-Results` header counts, and only under Cloudflare's exact authserv-id: anything a
+ * sender wrote sits below the one Cloudflare prepends. Callers must only pass mail that arrived
+ * through Cloudflare, since elsewhere the sender could have written that topmost header.
+ */
+export function readCloudflareAuthentication(raw: ArrayBuffer, fromAddress: string): MessageAuthentication | null {
+	const headers = readHeaderLines(raw);
+	const results = headerValue(headers, "authentication-results");
+	if (!results || !/^mx\.cloudflare\.net\s*;/i.test(results)) return null;
+	return parseAuthentication(results, headerValue(headers, "received"), fromAddress);
+}
+
+function parseAuthentication(results: string, received: string | undefined, fromAddress: string): MessageAuthentication | null {
 	const sections = splitResults(results);
 	const spfSections = methodSections(sections, "spf");
 	const dkimSections = methodSections(sections, "dkim");
@@ -180,7 +196,6 @@ export function readSesAuthentication(raw: ArrayBuffer, fromAddress: string): Me
 
 	const method = (status: string | null, detail: string | null): MessageAuthenticationMethod | null =>
 		status ? { status, detail } : null;
-	const received = headerValue(leading, "received");
 	const senderIp = spfIp ?? (received ? extractSenderIp({ received }) : null);
 
 	return {

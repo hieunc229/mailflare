@@ -3,6 +3,7 @@
 import { useCallback, useSyncExternalStore } from "react";
 
 const mobileQuery = "(max-width: 767px)";
+const singleColumnQuery = "(max-width: 768px)";
 const desktopQuery = "(min-width: 1024px)";
 const hoverQuery = "(hover: hover) and (pointer: fine)";
 
@@ -22,6 +23,11 @@ export function isMobileViewport(): boolean {
 
 export function useIsMobile(): boolean {
 	return useMediaQuery(mobileQuery);
+}
+
+/** Whether the viewport is too narrow for the list and reader to sit side by side. */
+export function useIsSingleColumnViewport(): boolean {
+	return useMediaQuery(singleColumnQuery);
 }
 
 /** Whether the split message list is actually rendered beside the reader. */

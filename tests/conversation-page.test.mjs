@@ -63,8 +63,8 @@ test("equal timestamps select one head per thread before applying the offset", a
 	const first = await loadConversationPage({ db: fixture.db, where: fixture.where, offset: 0, limit: 1 });
 	const second = await loadConversationPage({ db: fixture.db, where: fixture.where, offset: 1, limit: 1 });
 
-	assert.deepEqual(first, { ids: ["c"], total: 2 });
-	assert.deepEqual(second, { ids: ["b"], total: 2 });
+	assert.deepEqual(first, { ids: ["c"], total: 2, messageTotal: 3 });
+	assert.deepEqual(second, { ids: ["b"], total: 2, messageTotal: 3 });
 });
 
 test("counts and conversation heads share mailbox and status filters", async (t) => {
@@ -77,7 +77,7 @@ test("counts and conversation heads share mailbox and status filters", async (t)
 	t.after(() => fixture.database.db.close());
 	const page = await loadConversationPage({ db: fixture.db, where: fixture.where, offset: 0, limit: 25 });
 
-	assert.deepEqual(page, { ids: ["visible"], total: 1 });
+	assert.deepEqual(page, { ids: ["visible"], total: 1, messageTotal: 1 });
 });
 
 test("an offset past the end returns no heads and retains the real total", async (t) => {
@@ -86,5 +86,5 @@ test("an offset past the end returns no heads and retains the real total", async
 	const page = await loadConversationPage({ db: fixture.db, where: fixture.where, offset: 50, limit: 25 });
 
 	assert.equal(fixture.queryCount(), 2);
-	assert.deepEqual(page, { ids: [], total: 1 });
+	assert.deepEqual(page, { ids: [], total: 1, messageTotal: 1 });
 });

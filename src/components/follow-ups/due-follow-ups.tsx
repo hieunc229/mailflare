@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { BellRing, Check } from "@/components/icons";
 import { useLanguage } from "@/components/language-provider";
+import { Button } from "@/components/ui/button";
 import { Tooltip } from "@/components/ui/tooltip";
 import type { DueFollowUp } from "@/lib/follow-ups/types";
 import { formatUserDate } from "@/lib/time/utils";
@@ -11,7 +12,7 @@ import { FollowUpMenu } from "./follow-up-menu";
 import { fetchDueFollowUps, FOLLOW_UPS_CHANGED_EVENT, updateDueFollowUp } from "./follow-up-client-utils";
 
 const DATE_FORMAT: Intl.DateTimeFormatOptions = { month: "short", day: "2-digit" };
-const ACTION_CLASS = "rounded-md p-1.5 text-neutral-500 hover:bg-neutral-100 hover:text-neutral-900";
+const ACTION_CLASS = "text-neutral-500 hover:text-neutral-900";
 
 /** Sent messages still waiting for a reply after their reminder came due, pinned above the inbox. */
 export function DueFollowUps({ mailboxId }: { mailboxId?: string | null }) {
@@ -80,16 +81,16 @@ export function DueFollowUps({ mailboxId }: { mailboxId?: string | null }) {
 						</Link>
 						<FollowUpMenu
 							trigger={
-								<button type="button" aria-label={t("followUp.remindAgain")} className={ACTION_CLASS}>
+								<Button type="button" variant="round" size="round" aria-label={t("followUp.remindAgain")} className={ACTION_CLASS}>
 									<BellRing className="h-4 w-4" />
-								</button>
+								</Button>
 							}
 							onPick={(days) => update(item.id, { action: "snooze", days })}
 						/>
 						<Tooltip label={t("followUp.done")}>
-							<button type="button" aria-label={t("followUp.done")} onClick={() => update(item.id, { action: "dismiss" })} className={ACTION_CLASS}>
+							<Button type="button" variant="round" size="round" aria-label={t("followUp.done")} onClick={() => update(item.id, { action: "dismiss" })} className={ACTION_CLASS}>
 								<Check className="h-4 w-4" />
-							</button>
+							</Button>
 						</Tooltip>
 					</li>
 				))}

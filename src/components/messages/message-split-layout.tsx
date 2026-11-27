@@ -4,21 +4,24 @@ import { usePathname } from "next/navigation";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useLanguage } from "@/components/language-provider";
 import { useSidebar } from "@/components/sidebar-state";
-import { useAssistantOpen } from "@/components/agent/assistant-open-state";
+import { useIsSingleColumnViewport } from "@/components/sidebar-mobile-utils";
 import { useMailSearch } from "@/components/mail-search/mail-search-context";
 import { useSelectedMailbox } from "@/components/mailbox-provider";
-import { useIsDesktop } from "@/components/sidebar-mobile-utils";
 import { readColumnWidth, readInitialColumnWidth, saveColumnWidth } from "@/components/column-width-preferences";
 import { ResizeHandle } from "@/components/ui/resize-handle";
 import { BulkMessageActionBar } from "./bulk-message-action-bar";
+import { EmptyMessagePane } from "./empty-message-pane";
 import { MessageFolderPage } from "./message-folder-page";
 import { MessageDetailNavigationProvider } from "./message-detail-navigation";
 import { MessageListStateContext } from "./message-list-state";
 import { MessageListVisibilityContext } from "./message-list-visibility";
-import { readInitialMessageListVisible, saveMessageListVisible } from "./message-list-visibility-utils";
 import { useConversationView } from "./use-conversation-view";
 import { useTwoColumnReading } from "./use-two-column-reading";
 import type { MessageListStateControl, MessageSplitLayoutProps, SelectedMessage } from "./types";
+
+/** Below this width there is no room for both columns. */
+const TWO_COLUMN_MIN_WIDTH = 700;
+const READER_MIN_WIDTH = 400;
 
 export function MessageSplitLayout({
 	children,
@@ -32,23 +35,20 @@ export function MessageSplitLayout({
 	const [offset, setOffset] = useState(0);
 	const [unreadOnly, setUnreadOnly] = useState(false);
 	const [listWidth, setListWidth] = useState(360);
-	const [widthReady, setWidthReady] = useState(false);
 	const [containerWidth, setContainerWidth] = useState(0);
-	const [manualListVisible, setManualListVisible] = useState(true);
 	const [twoColumnReading] = useTwoColumnReading();
 	const containerRef = useRef<HTMLDivElement>(null);
+	const narrowViewport = useIsSingleColumnViewport();
 	const startWidth = useRef(listWidth);
 	const resizedWidth = useRef(listWidth);
 	const { t } = useLanguage();
 	const { userId, setForcedMinimal } = useSidebar();
-	const isDesktop = useIsDesktop();
-	const assistantOpen = useAssistantOpen();
-	const listVisible = twoColumnReading && !assistantOpen && manualListVisible;
 	const detailPrefix = `${config.hrefPrefix}/`;
 	const selectedMessageId = pathname.startsWith(detailPrefix)
 		? pathname.slice(detailPrefix.length).split("/")[0]
 		: undefined;
-	const renderedListWidth = Math.max(250, Math.min(listWidth, (containerWidth || 1000) - 280));
+	const twoColumns = twoColumnReading && !narrowViewport && containerWidth >= TWO_COLUMN_MIN_WIDTH;
+	const renderedListWidth = Math.max(250, Math.min(listWidth, (containerWidth || 1000) - READER_MIN_WIDTH));
 	const hasSelectedMessage = Boolean(selectedMessageId);
 	const grouped = conversationView && config.folder !== "drafts";
 	const listState = useMemo<MessageListStateControl>(() => ({
@@ -67,7 +67,7 @@ export function MessageSplitLayout({
 	const previousViewKey = useRef(viewKey);
 	const folderKey = `${config.folder}\u0000${config.folderId ?? ""}`;
 	const previousFolderKey = useRef(folderKey);
-	const showBulkBar = selectedMessages.length > 0 && twoColumnReading && isDesktop;
+	const showBulkBar = selectedMessages.length > 0 && twoColumns;
 
 	useEffect(() => {
 		if (previousViewKey.current === viewKey) return;
@@ -85,9 +85,6 @@ export function MessageSplitLayout({
 	useLayoutEffect(() => {
 		// eslint-disable-next-line react-hooks/set-state-in-effect -- localStorage is client-only; restoring it in a lazy initialiser would mismatch the server-rendered markup.
 		setListWidth(readInitialColumnWidth("message-list", 360, 250, 1200));
-		setManualListVisible(readInitialMessageListVisible());
-		const frame = requestAnimationFrame(() => setWidthReady(true));
-		return () => cancelAnimationFrame(frame);
 	}, []);
 
 	useEffect(() => {
@@ -99,73 +96,59 @@ export function MessageSplitLayout({
 	}, [userId]);
 
 	useLayoutEffect(() => {
-		if (!selectedMessageId) {
-			setForcedMinimal(false);
-			return;
-		}
 		const container = containerRef.current;
 		if (!container) return;
 		setContainerWidth(container.clientWidth);
 		const observer = new ResizeObserver(() => setContainerWidth(container.clientWidth));
 		observer.observe(container);
 		return () => observer.disconnect();
-	}, [selectedMessageId, setForcedMinimal]);
+	}, []);
+
+	useEffect(() => {
+		if (!twoColumns) setForcedMinimal(false);
+	}, [twoColumns, setForcedMinimal]);
 
 	useEffect(() => () => setForcedMinimal(false), [setForcedMinimal]);
 
 	// The list lives in the layout, not in a route page, so opening and closing a
 	// message never unmounts it. That keeps its state (and its paint) intact when
 	// an action sends the reader back to the folder.
-	const sidebarList = hasSelectedMessage && twoColumnReading;
-	const listHidden = hasSelectedMessage && (!twoColumnReading || !listVisible);
-	const gridTemplateColumns = hasSelectedMessage
-		? twoColumnReading
-			? `${listVisible ? renderedListWidth : 0}px minmax(0,1fr)`
-			: "minmax(0,1fr)"
-		: "minmax(0,1fr)";
+	const listHidden = hasSelectedMessage && !twoColumns;
 
 	return (
 		<MessageListStateContext.Provider value={listState}>
-			<div ref={containerRef} className="h-full min-h-0 overflow-hidden lg:grid lg:transition-[grid-template-columns] lg:ease-in-out motion-reduce:transition-none" style={{ gridTemplateColumns, transitionDuration: widthReady ? "300ms" : "0ms" }}>
+			<div ref={containerRef} className={`h-full min-h-0 overflow-hidden ${twoColumns ? "grid" : ""}`} style={twoColumns ? { gridTemplateColumns: `${renderedListWidth}px minmax(0,1fr)` } : undefined}>
 				<div
-					className={`relative h-full min-h-0 min-w-0 overflow-hidden bg-white ${
-						!hasSelectedMessage
-							? "block"
-							: sidebarList
-								? `hidden lg:block ${listVisible ? "border-r border-neutral-200" : "pointer-events-none"}`
-								: "hidden"
-					}`}
+					className={`relative h-full min-h-0 min-w-0 overflow-hidden bg-white ${listHidden ? "hidden" : twoColumns ? "border-r border-neutral-200" : ""}`}
 					aria-hidden={listHidden || undefined}
 					inert={listHidden || undefined}
 				>
-					<div
-						className={`h-full overflow-hidden transition-transform duration-300 ease-in-out motion-reduce:transition-none ${sidebarList ? (listVisible ? "translate-x-0" : "-translate-x-full") : "translate-x-0"}`}
-						style={{ width: sidebarList ? renderedListWidth : "100%" }}
-					>
+					<div className="h-full overflow-hidden">
 						<MessageFolderPage
 							config={config}
-							compact={sidebarList}
+							compact={twoColumns}
 							selectedMessageId={selectedMessageId}
 						/>
 					</div>
-					{sidebarList && listVisible && (
+					{twoColumns && (
 						<ResizeHandle
 							label={t("list.resize")}
 							onResizeStart={() => { startWidth.current = listWidth; resizedWidth.current = listWidth; }}
 							onResize={(delta) => {
 								const requestedWidth = startWidth.current + delta;
 								setForcedMinimal(requestedWidth < 250);
-								resizedWidth.current = Math.max(250, Math.min(requestedWidth, Math.max(250, (containerRef.current?.clientWidth ?? 1000) - 280)));
+								resizedWidth.current = Math.max(250, Math.min(requestedWidth, Math.max(250, (containerRef.current?.clientWidth ?? 1000) - READER_MIN_WIDTH)));
 								setListWidth(resizedWidth.current);
 							}}
 							onResizeEnd={() => saveColumnWidth(userId, "message-list", resizedWidth.current)}
 						/>
 					)}
 				</div>
-				{selectedMessageId && (
-					<MessageListVisibilityContext.Provider value={{ visible: listVisible, toggle: () => { const visible = !manualListVisible; setManualListVisible(visible); saveMessageListVisible(visible); }, singleColumn: !twoColumnReading, backHref: config.hrefPrefix, backLabel: config.titleKey ? t(config.titleKey) : config.title }}>
+				{(selectedMessageId || twoColumns) && (
+					<MessageListVisibilityContext.Provider value={{ visible: twoColumns, singleColumn: !twoColumns, backHref: config.hrefPrefix, backLabel: config.titleKey ? t(config.titleKey) : config.title }}>
 						<MessageDetailNavigationProvider config={config} currentMessageId={selectedMessageId}>
-							<section className="min-h-0 min-w-0 overflow-hidden bg-white flex flex-col h-full">
+							{/* Where the reader's text starts: under the avatar beside the list, past it when alone on a wide screen. */}
+							<section className={`min-h-0 min-w-0 overflow-hidden bg-white flex flex-col h-full [--reader-indent:30px] ${twoColumns ? "" : "lg:[--reader-indent:78px]"}`}>
 								{showBulkBar && (
 									<BulkMessageActionBar
 										folder={config.folderId ? undefined : config.folder}
@@ -173,7 +156,7 @@ export function MessageSplitLayout({
 										onClearSelection={() => setSelectedMessages([])}
 									/>
 								)}
-								{children}
+								{selectedMessageId ? children : <EmptyMessagePane folder={config.folder} />}
 							</section>
 						</MessageDetailNavigationProvider>
 					</MessageListVisibilityContext.Provider>

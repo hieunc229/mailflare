@@ -130,6 +130,7 @@ export function DashboardNav({ className }: { className?: string }) {
   const [addingFolder, setAddingFolder] = useState(false);
   const [folderDialogOpen, setFolderDialogOpen] = useState(false);
   const [folderError, setFolderError] = useState<string | null>(null);
+  const [editingFolderId, setEditingFolderId] = useState<string | null>(null);
   const promotionsOn = hasActivePromotions(counts.promotionModes);
   const linksWithCounts: NavLink[] = links.filter((link) => (link.href !== "/scheduled" || counts.folders.scheduled.total > 0) && (link.href !== "/promotions" || promotionsOn) && (link.href !== "/subscriptions" || promotionsOn)).map(({ labelKey, ...rest }): NavLink => {
     const link = { ...rest, label: t(labelKey) };
@@ -222,7 +223,15 @@ export function DashboardNav({ className }: { className?: string }) {
     };
   }, [selectedMailbox?.id]);
 
-  async function createFolder(event: FormEvent<HTMLFormElement>) {
+  function openFolderDialog(folder?: CustomFolder) {
+    setEditingFolderId(folder?.id ?? null);
+    setNewFolderName(folder?.name ?? "");
+    setNewFolderColor(FOLDER_COLOR_OPTIONS.find((option) => option.value === folder?.color)?.value ?? DEFAULT_FOLDER_COLOR);
+    setFolderError(null);
+    setFolderDialogOpen(true);
+  }
+
+  async function saveFolder(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!selectedMailbox?.id || !newFolderName.trim()) return;
 
@@ -230,9 +239,10 @@ export function DashboardNav({ className }: { className?: string }) {
     setFolderError(null);
     try {
       const response = await authFetch("/api/folders", {
-        method: "POST",
+        method: editingFolderId ? "PATCH" : "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          id: editingFolderId ?? undefined,
           mailboxId: selectedMailbox.id,
           name: newFolderName,
           color: newFolderColor,
@@ -240,14 +250,15 @@ export function DashboardNav({ className }: { className?: string }) {
       });
       if (!response.ok) {
         const body = (await response.json().catch(() => null)) as { error?: unknown } | null;
-        setFolderError(typeof body?.error === "string" ? body.error : t("navigation.createFolderFailed"));
+        setFolderError(typeof body?.error === "string" ? body.error : t(editingFolderId ? "navigation.updateFolderFailed" : "navigation.createFolderFailed"));
         return;
       }
       const folder = (await response.json()) as CustomFolder;
       invalidateFolderCache();
       setFolders((items) =>
-        [...items, folder].sort((a, b) => a.name.localeCompare(b.name)),
+        [...items.filter((item) => item.id !== folder.id), folder].sort((a, b) => a.name.localeCompare(b.name)),
       );
+      window.dispatchEvent(new Event("mailflare:folders-changed"));
       setNewFolderName("");
       setNewFolderColor(DEFAULT_FOLDER_COLOR);
       setFolderDialogOpen(false);
@@ -279,7 +290,7 @@ export function DashboardNav({ className }: { className?: string }) {
       {!minimal && (
         <NavSectionHeader label={t("navigation.folders")} open={foldersSectionOpen} onToggle={toggleFoldersSection}>
           {selectedMailbox && (
-            <Dialog open={folderDialogOpen} onOpenChange={(open) => { setFolderDialogOpen(open); if (!open) setFolderError(null); }}>
+            <Dialog open={folderDialogOpen} onOpenChange={(open) => { if (open) openFolderDialog(); else { setFolderDialogOpen(false); setFolderError(null); } }}>
               <DialogTrigger asChild>
                 <button
                   type="button"
@@ -291,12 +302,12 @@ export function DashboardNav({ className }: { className?: string }) {
               </DialogTrigger>
               <DialogContent>
                 <DialogHeader>
-                  <DialogTitle>{t("navigation.createFolder")}</DialogTitle>
+                  <DialogTitle>{t(editingFolderId ? "navigation.editFolder" : "navigation.createFolder")}</DialogTitle>
                   <DialogDescription>
-                    {t("navigation.folderDescription")}
+                    {t(editingFolderId ? "navigation.editFolderDescription" : "navigation.folderDescription")}
                   </DialogDescription>
                 </DialogHeader>
-                <form onSubmit={createFolder} className="space-y-4">
+                <form onSubmit={saveFolder} className="space-y-4">
                   <div className="space-y-2">
                     <Label htmlFor="folderName">{t("navigation.folderName")}</Label>
                     <Input
@@ -338,7 +349,9 @@ export function DashboardNav({ className }: { className?: string }) {
                     type="submit"
                     disabled={addingFolder || !newFolderName.trim()}
                   >
-                    {addingFolder ? t("navigation.creating") : t("navigation.createFolder")}
+                    {editingFolderId
+                      ? t(addingFolder ? "common.saving" : "common.save")
+                      : t(addingFolder ? "navigation.creating" : "navigation.createFolder")}
                   </Button>
                 </form>
               </DialogContent>
@@ -368,6 +381,9 @@ export function DashboardNav({ className }: { className?: string }) {
             node: (
               <NavItem
                 wrap
+                boldActive={false}
+                onEdit={() => openFolderDialog(folder)}
+                editLabel={t("navigation.editFolder")}
                 link={{
                   href: `/folders/${folder.id}`,
                   label: folder.name,

@@ -54,7 +54,7 @@ export function MessageUnsubscribeButton({ messageId, variant = "header", iconOn
 					<span
 						role="status"
 						aria-label={t("actions.unsubscribed")}
-						className="flex h-7 w-7 items-center justify-center text-green-700"
+						className="flex h-8 w-8 items-center justify-center text-green-700"
 					>
 						<MailCheck className="h-4 w-4" aria-hidden="true" />
 					</span>
@@ -71,9 +71,9 @@ export function MessageUnsubscribeButton({ messageId, variant = "header", iconOn
 	const trigger = (
 		<Button
 			type="button"
-			variant="ghost"
-			size="sm"
-			className={iconOnly ? "h-7 w-7 shrink-0 px-0" : row ? "h-5 border border-neutral-300 px-2 text-xs" : "h-5 px-2 text-xs text-[var(--primary)] hover:text-[var(--primary)]"}
+			variant={iconOnly ? "round" : "ghost"}
+			size={iconOnly ? "round" : "sm"}
+			className={iconOnly ? undefined : row ? "h-5 border border-neutral-300 px-2 text-xs" : "h-5 px-2 text-xs text-[var(--primary)] hover:text-[var(--primary)]"}
 			disabled={pending}
 			aria-label={iconOnly ? t("actions.unsubscribe") : undefined}
 			onClick={(event) => {

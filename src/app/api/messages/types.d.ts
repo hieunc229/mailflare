@@ -15,5 +15,8 @@ export type ConversationPageInput = {
 
 export type ConversationPage = {
 	ids: string[];
+	/** Matching conversations, which pagination counts. */
 	total: number;
+	/** Matching messages across all those conversations. */
+	messageTotal: number;
 };

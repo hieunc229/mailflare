@@ -25,13 +25,15 @@ export function BulkMessageActionBar({
 
 	async function runAction(action: BulkMessageAction, folderId?: string) {
 		if (selectedMessages.length === 0) return;
-		if (action === "delete" && !await confirmDestructive(getPermanentDeleteConfirmText(selectedMessages.length, t))) return;
+		// A conversation row stands for every message of its thread in this folder.
+		const ids = selectedMessages.flatMap((message) => message.threadMessageIds ?? [message.id]);
+		if (action === "delete" && !await confirmDestructive(getPermanentDeleteConfirmText(ids.length, t))) return;
 
 		setPending(true);
 		setError(null);
 		try {
 			await runBulkMessageAction(
-				selectedMessages.map((message) => message.id),
+				ids,
 				action,
 				true,
 				folderId,

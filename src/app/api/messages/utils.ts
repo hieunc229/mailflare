@@ -1,4 +1,4 @@
-import { countDistinct, desc, eq, getTableColumns, sql } from "drizzle-orm";
+import { count, countDistinct, desc, eq, getTableColumns, sql } from "drizzle-orm";
 import { messages } from "@/db/schema";
 import type { ConversationPage, ConversationPageInput, MessageListColumns } from "./types";
 
@@ -58,8 +58,8 @@ export async function loadConversationPage({ db, where, offset, limit }: Convers
 	if (!exhausted && headIds.length < needed) {
 		return loadConversationPageWindowed({ db, where, offset, limit });
 	}
-	const [totals] = await db.select({ total: countDistinct(threadKey) }).from(messages).where(where);
-	return { ids: headIds.slice(offset, offset + limit), total: totals?.total ?? 0 };
+	const [totals] = await db.select({ total: countDistinct(threadKey), messageTotal: count() }).from(messages).where(where);
+	return { ids: headIds.slice(offset, offset + limit), total: totals?.total ?? 0, messageTotal: totals?.messageTotal ?? 0 };
 }
 
 async function loadConversationPageWindowed({ db, where, offset, limit }: ConversationPageInput): Promise<ConversationPage> {
@@ -76,7 +76,7 @@ async function loadConversationPageWindowed({ db, where, offset, limit }: Conver
 
 	// Always two queries, even for deep pages or threads with many messages.
 	const [totals, heads] = await Promise.all([
-		db.select({ total: countDistinct(threadKey) }).from(messages).where(where),
+		db.select({ total: countDistinct(threadKey), messageTotal: count() }).from(messages).where(where),
 		db
 			.select({ id: ranked.id })
 			.from(ranked)
@@ -86,5 +86,5 @@ async function loadConversationPageWindowed({ db, where, offset, limit }: Conver
 			.offset(offset),
 	]);
 
-	return { ids: heads.map((head) => head.id), total: totals[0]?.total ?? 0 };
+	return { ids: heads.map((head) => head.id), total: totals[0]?.total ?? 0, messageTotal: totals[0]?.messageTotal ?? 0 };
 }

@@ -6,8 +6,9 @@ import { getCurrentUser } from "@/lib/auth/cookies";
 import { getEnv } from "@/lib/cloudflare";
 import { getEmailAddress } from "@/lib/email/address";
 import { isOthersDraft } from "@/lib/email/draft-access";
-import { readSesAuthentication } from "@/lib/email/provider-trace";
+import { readCloudflareAuthentication, readSesAuthentication } from "@/lib/email/provider-trace";
 import { getMailboxAccessLevel } from "@/lib/mailboxes/access";
+import { isOffWorkers } from "@/lib/runtime";
 import type { MessageAuthenticationResponse } from "@/lib/email/authentication-types";
 import type { MessageAuthenticationRouteParams } from "./types";
 
@@ -51,7 +52,12 @@ export async function GET(request: Request, { params }: MessageAuthenticationRou
 
 	const object = await env.BUCKET.get(message.rawR2Key, { range: { offset: 0, length: HEADER_SCAN_BYTES } });
 	if (!object) return unavailable("unavailable");
-	const authentication = readSesAuthentication(await object.arrayBuffer(), getEmailAddress(message.fromAddr));
+	const raw = await object.arrayBuffer();
+	const fromAddress = getEmailAddress(message.fromAddr);
+	// Imported mail and self-hosted SMTP keep whatever headers the sender wrote.
+	const receivedByWorker = !isOffWorkers(env) && message.rawR2Key.startsWith("inbound/");
+	const authentication = readSesAuthentication(raw, fromAddress)
+		?? (receivedByWorker ? readCloudflareAuthentication(raw, fromAddress) : null);
 	if (!authentication) return unavailable("untrusted");
 
 	const response: MessageAuthenticationResponse = { available: true, ...authentication };

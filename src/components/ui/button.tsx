@@ -11,6 +11,8 @@ const buttonVariants = cva(
 				default: "bg-blue-600 text-white hover:bg-blue-700",
 				outline: "border border-neutral-200 bg-white hover:bg-neutral-100",
 				ghost: "hover:bg-neutral-100",
+				// Icon button whose hover background grows from the centre.
+				round: "relative isolate rounded-full before:absolute before:inset-0 before:-z-10 before:rounded-full before:bg-neutral-100 before:scale-0 before:opacity-0 before:transition-[scale,opacity] before:duration-150 before:ease-out hover:before:scale-100 hover:before:opacity-100 focus-visible:before:scale-100 focus-visible:before:opacity-100 data-[state=open]:before:scale-100 data-[state=open]:before:opacity-100 motion-reduce:before:transition-none",
 				destructive: "bg-red-600 text-white hover:bg-red-700",
 				secondary: "bg-neutral-100"
 			},
@@ -20,6 +22,7 @@ const buttonVariants = cva(
 				lg: "h-11 rounded-xl px-8",
 				roundedSM: "rounded-full p-2 text-xs",
 				icon: "",
+				round: "h-8 w-8 shrink-0 rounded-full p-0 text-xs",
 			},
 		},
 		defaultVariants: {

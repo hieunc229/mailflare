@@ -4,7 +4,8 @@ import type { SQL } from "drizzle-orm";
 import { getEnv } from "@/lib/cloudflare";
 import { getCurrentUser } from "@/lib/auth/cookies";
 import { getDb } from "@/db";
-import { messages, outboundJobs } from "@/db/schema";
+import { messageAttachments, messages, outboundJobs } from "@/db/schema";
+import { isInviteAttachment } from "@/lib/calendar/invite-attachment";
 import { getContactDisplayNameMap } from "@/lib/contacts/service";
 import { getPartyDisplayName } from "@/lib/contacts/utils";
 import { getFirstEmailAddressEntry, normalizeEmailAddress } from "@/lib/email/address";
@@ -124,6 +125,8 @@ export async function GET(request: Request) {
 	const messageListColumns = getMessageListColumns();
 
 	let total = 0;
+	// Messages behind those rows; differs from `total` when rows are conversations.
+	let messageTotal = 0;
 	let rows: ListMessage[];
 	// Which stored messages each visible row stands for, so acting on a
 	// conversation row acts on the whole conversation within this folder.
@@ -134,6 +137,7 @@ export async function GET(request: Request) {
 	if (groupByThread) {
 		const page = await loadConversationPage({ db, where, offset, limit });
 		total = page.total;
+		messageTotal = page.messageTotal;
 		rows = page.ids.length
 			? await selectInBatches(page.ids, (batch) => db.select(messageListColumns).from(messages).where(and(where, inArray(messages.id, batch))))
 			: [];
@@ -167,6 +171,7 @@ export async function GET(request: Request) {
 				.offset(offset),
 		]);
 		total = totals[0]?.total ?? 0;
+		messageTotal = total;
 		rows = pageRows;
 	}
 	// Conversation sizes for the rows on this page, so the list can show "(3)"
@@ -178,7 +183,7 @@ export async function GET(request: Request) {
 			? inArray(messages.mailboxId, accessibleMailboxIds)
 			: eq(messages.userId, user.id);
 	// These enrichments depend only on the selected page, not on each other.
-	const [countRows, jobs, openCounts, noteSummaries, contactMaps] = await Promise.all([
+	const [countRows, jobs, openCounts, noteSummaries, contactMaps, attachmentRows] = await Promise.all([
 		threadIds.length > 0
 			? selectInBatches(threadIds, (batch) => db
 				.select({
@@ -214,7 +219,13 @@ export async function GET(request: Request) {
 				),
 			] as const),
 		),
+		// A conversation row shows the invitation of any message it stands for.
+		selectInBatches(rows.flatMap((row) => threadMessageIds.get(row.threadId ?? row.id) ?? [row.id]), (batch) => db
+			.select({ messageId: messageAttachments.messageId, type: messageAttachments.contentType, filename: messageAttachments.filename })
+			.from(messageAttachments)
+			.where(inArray(messageAttachments.messageId, batch))),
 	]);
+	const inviteMessageIds = new Set(attachmentRows.filter(isInviteAttachment).map((row) => row.messageId));
 	const threadCounts = new Map<string, { total: number; unread: number }>();
 	for (const row of countRows) {
 		if (row.threadId) threadCounts.set(row.threadId, { total: row.total, unread: Number(row.unread ?? 0) });
@@ -245,6 +256,7 @@ export async function GET(request: Request) {
 			...message,
 			snippet: message.snippet,
 			...(scheduledAtByMessageId.has(message.id) ? { scheduledAt: scheduledAtByMessageId.get(message.id) } : {}),
+			...((threadMessageIds.get(message.threadId ?? message.id) ?? [message.id]).some((id) => inviteMessageIds.has(id)) ? { hasInvite: true } : {}),
 			...(openCounts.has(message.id) ? { openCount: openCounts.get(message.id) } : {}),
 			...(noteSummaries.has(message.id) ? { noteCount: noteSummaries.get(message.id)!.count, notePreview: noteSummaries.get(message.id)!.preview } : {}),
 			fromContactName:
@@ -259,5 +271,5 @@ export async function GET(request: Request) {
 		};
 	});
 
-	return NextResponse.json({ messages: enrichedRows, total, limit, offset, grouped: groupByThread });
+	return NextResponse.json({ messages: enrichedRows, total, messageTotal, limit, offset, grouped: groupByThread });
 }

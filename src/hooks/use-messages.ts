@@ -53,12 +53,13 @@ function patchThreadRow(
 type MessageListState = {
 	messages: Message[];
 	total: number;
+	messageTotal: number;
 	limit: number;
 	offset: number;
 };
 
 type MessageListAction =
-	| { type: "loaded"; messages: Message[]; total: number; limit: number; offset: number }
+	| { type: "loaded"; messages: Message[]; total: number; messageTotal: number; limit: number; offset: number }
 	| { type: "update"; updater: (messages: Message[]) => Message[] }
 	| { type: "removed"; ids: Set<string> }
 	| { type: "restored"; rows: RestoredRow[] };
@@ -85,7 +86,7 @@ function withoutRemovedIds(message: Message, ids: Set<string>): Message | null {
 
 function messageListReducer(state: MessageListState, action: MessageListAction): MessageListState {
 	if (action.type === "loaded") {
-		return { messages: action.messages, total: action.total, limit: action.limit, offset: action.offset };
+		return { messages: action.messages, total: action.total, messageTotal: action.messageTotal, limit: action.limit, offset: action.offset };
 	}
 	if (action.type === "update") {
 		return { ...state, messages: action.updater(state.messages) };
@@ -93,6 +94,7 @@ function messageListReducer(state: MessageListState, action: MessageListAction):
 	if (action.type === "restored") {
 		const messages = [...state.messages];
 		let added = 0;
+		let addedMessages = 0;
 		for (const entry of action.rows) {
 			const identity = identityOf(entry.row);
 			const existing = messages.findIndex((message) => identityOf(message) === identity);
@@ -101,6 +103,7 @@ function messageListReducer(state: MessageListState, action: MessageListAction):
 				if (!current.threadMessageIds?.length || !entry.row.threadMessageIds?.length) continue;
 				const missing = entry.row.threadMessageIds.filter((id) => !current.threadMessageIds?.includes(id));
 				if (missing.length === 0) continue;
+				addedMessages += missing.length;
 				messages[existing] = {
 					...current,
 					threadMessageIds: [...current.threadMessageIds, ...missing],
@@ -110,9 +113,10 @@ function messageListReducer(state: MessageListState, action: MessageListAction):
 			}
 			messages.splice(Math.min(Math.max(0, entry.index), messages.length), 0, entry.row);
 			added += 1;
+			addedMessages += entry.row.threadMessageIds?.length ?? 1;
 		}
 		if (added === 0 && messages.every((message, index) => message === state.messages[index])) return state;
-		return { ...state, messages, total: state.total + added };
+		return { ...state, messages, total: state.total + added, messageTotal: state.messageTotal + addedMessages };
 	}
 	const messages = state.messages.flatMap((message) => {
 		const next = withoutRemovedIds(message, action.ids);
@@ -120,7 +124,12 @@ function messageListReducer(state: MessageListState, action: MessageListAction):
 	});
 	const removed = state.messages.length - messages.length;
 	if (!removed && messages.every((message, index) => message === state.messages[index])) return state;
-	return { ...state, messages, total: Math.max(0, state.total - removed) };
+	const removedMessages = countMessages(state.messages) - countMessages(messages);
+	return { ...state, messages, total: Math.max(0, state.total - removed), messageTotal: Math.max(0, state.messageTotal - removedMessages) };
+}
+
+function countMessages(rows: Message[]): number {
+	return rows.reduce((sum, row) => sum + (row.threadMessageIds?.length || 1), 0);
 }
 
 function membershipFieldsOf(message: Message): MessageMembershipFields {
@@ -206,10 +215,12 @@ export function useMessages(
 	const [list, dispatch] = useReducer(messageListReducer, {
 		messages: initialPage?.messages ?? [],
 		total: initialPage?.total ?? 0,
+		messageTotal: initialPage?.messageTotal ?? initialPage?.total ?? 0,
 		limit: initialPage?.limit ?? filters?.limit ?? 25,
 		offset: initialPage?.offset ?? filters?.offset ?? 0,
 	});
-	const [isLoading, setIsLoading] = useState(enabled && !initialPage);
+	// Loading until the first request settles, so a disabled list never reads as empty.
+	const [isLoading, setIsLoading] = useState(!initialPage);
 	const listRef = useRef(list);
 	useEffect(() => {
 		listRef.current = list;
@@ -237,6 +248,7 @@ export function useMessages(
 						type: "loaded",
 						messages: applyPendingToMessages(data.messages ?? []),
 						total: data.total ?? 0,
+						messageTotal: data.messageTotal ?? data.total ?? 0,
 						limit: data.limit ?? filters?.limit ?? 25,
 						offset: data.offset ?? filters?.offset ?? 0,
 					});
@@ -388,5 +400,5 @@ export function useMessages(
 		};
 	}, [enabled, filters?.group, filters?.limit, filters?.offset, filters?.query, filters?.read, filters?.title, folder, folderId, mailboxId]);
 
-	return { messages: list.messages, unreadCount, isLoading, total: list.total, limit: list.limit, offset: list.offset, updateMessages };
+	return { messages: list.messages, unreadCount, isLoading, total: list.total, messageTotal: list.messageTotal, limit: list.limit, offset: list.offset, updateMessages };
 }

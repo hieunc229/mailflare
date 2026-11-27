@@ -9,6 +9,7 @@ import {
 	ArrowDownIcon as HugeArrowDownIcon,
 	ArrowDownToLineIcon as HugeArrowDownToLineIcon,
 	ArrowLeftIcon as HugeArrowLeftIcon,
+	ArrowLeft02Icon as HugeArrowLeft02Icon,
 	ArrowRightIcon as HugeArrowRightIcon,
 	ArrowUpIcon as HugeArrowUpIcon,
 	AtSignIcon as HugeAtSignIcon,
@@ -21,6 +22,7 @@ import {
 	BotIcon as HugeBotIcon,
 	Building02Icon as HugeBuilding02Icon,
 	CalendarAdd02Icon as HugeCalendarAdd02Icon,
+	Calendar04Icon as HugeCalendar04Icon,
 	CalendarClockIcon as HugeCalendarClockIcon,
 	CalendarDaysIcon as HugeCalendarDaysIcon,
 	CameraIcon as HugeCameraIcon,
@@ -101,6 +103,7 @@ import {
 	PauseIcon as HugePauseIcon,
 	Note01Icon as HugeNote01Icon,
 	PenLineIcon as HugePenLineIcon,
+	Edit02Icon as HugeEdit02Icon,
 	Edit04Icon as HugeEdit04Icon,
 	PencilIcon as HugePencilIcon,
 	PlayIcon as HugePlayIcon,
@@ -108,6 +111,7 @@ import {
 	PresentationIcon as HugePresentationIcon,
 	QuoteIcon as HugeQuoteIcon,
 	RefreshCwIcon as HugeRefreshCwIcon,
+	Refresh01Icon as HugeRefresh01Icon,
 	RemoveFormattingIcon as HugeRemoveFormattingIcon,
 	RepeatIcon as HugeRepeatIcon,
 	ReplyAllIcon as HugeReplyAllIcon,
@@ -139,6 +143,8 @@ import {
 	Undo02Icon as HugeUndo02Icon,
 	UnfoldMoreIcon as HugeUnfoldMoreIcon,
 	UploadIcon as HugeUploadIcon,
+	MoreVerticalCircle01Icon as HugeMoreVerticalCircle01Icon,
+	UserMultiple02Icon as HugeUserMultiple02Icon,
 	UserIcon as HugeUserIcon,
 	UserPlusIcon as HugeUserPlusIcon,
 	UserRoundIcon as HugeUserRoundIcon,
@@ -194,6 +200,7 @@ export const ArchiveRestore = createIcon(HugeArchiveRestoreIcon, "ArchiveRestore
 export const ArrowDown = createIcon(HugeArrowDownIcon, "ArrowDown");
 export const ArrowDownToLine = createIcon(HugeArrowDownToLineIcon, "ArrowDownToLine");
 export const ArrowLeft = createIcon(HugeArrowLeftIcon, "ArrowLeft");
+export const ArrowLeft02 = createIcon(HugeArrowLeft02Icon, "ArrowLeft02");
 export const ArrowRight = createIcon(HugeArrowRightIcon, "ArrowRight");
 export const ArrowUp = createIcon(HugeArrowUpIcon, "ArrowUp");
 export const AtSign = createIcon(HugeAtSignIcon, "AtSign");
@@ -205,6 +212,7 @@ export const BellRing = createIcon(HugeBellRingIcon, "BellRing");
 export const Bold = createIcon(HugeBoldIcon, "Bold");
 export const Bot = createIcon(HugeBotIcon, "Bot");
 export const Building2 = createIcon(HugeBuilding02Icon, "Building2");
+export const Calendar04 = createIcon(HugeCalendar04Icon, "Calendar04");
 export const CalendarClock = createIcon(HugeCalendarClockIcon, "CalendarClock");
 export const CalendarDays = createIcon(HugeCalendarDaysIcon, "CalendarDays");
 export const CalendarPlus2 = createIcon(HugeCalendarAdd02Icon, "CalendarPlus2");
@@ -289,6 +297,7 @@ export const Pause = createIcon(HugePauseIcon, "Pause");
 export const PauseCircle = createIcon(HugePauseCircleIcon, "PauseCircle");
 export const Note = createIcon(HugeNote01Icon, "Note");
 export const PenLine = createIcon(HugePenLineIcon, "PenLine");
+export const Edit02 = createIcon(HugeEdit02Icon, "Edit02");
 export const Edit04 = createIcon(HugeEdit04Icon, "Edit04");
 export const Pencil = createIcon(HugePencilIcon, "Pencil");
 export const Play = createIcon(HugePlayIcon, "Play");
@@ -296,6 +305,7 @@ export const Plus = createIcon(HugePlusIcon, "Plus");
 export const Presentation = createIcon(HugePresentationIcon, "Presentation");
 export const Quote = createIcon(HugeQuoteIcon, "Quote");
 export const RefreshCw = createIcon(HugeRefreshCwIcon, "RefreshCw");
+export const Refresh01 = createIcon(HugeRefresh01Icon, "Refresh01");
 export const RemoveFormatting = createIcon(HugeRemoveFormattingIcon, "RemoveFormatting");
 export const Repeat2 = createIcon(HugeRepeatIcon, "Repeat2");
 export const Reply = createIcon(HugeReplyIcon, "Reply");
@@ -329,6 +339,8 @@ export const UploadCloud = createIcon(HugeCloudUploadIcon, "UploadCloud");
 export const User = createIcon(HugeUserIcon, "User");
 export const UserPlus = createIcon(HugeUserPlusIcon, "UserPlus");
 export const UserRound = createIcon(HugeUserRoundIcon, "UserRound");
+export const MoreVerticalCircle01 = createIcon(HugeMoreVerticalCircle01Icon, "MoreVerticalCircle01");
+export const UserMultiple02 = createIcon(HugeUserMultiple02Icon, "UserMultiple02");
 export const Users = createIcon(HugeUsersIcon, "Users");
 export const UsersRound = createIcon(HugeUsersRoundIcon, "UsersRound");
 export const Webhook = createIcon(HugeWebhookIcon, "Webhook");

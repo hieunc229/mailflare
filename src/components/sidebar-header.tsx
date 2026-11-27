@@ -16,7 +16,7 @@ export function SidebarHeader({ href, label }: SidebarHeaderProps) {
 		{minimal ? <img src={branding.iconUrl} height={32} width={32} alt="" /> : <Menu size={20} />}
 	</button>;
 	return (
-		<div className={`mb-3 flex h-10 items-center ${minimal ? "" : "gap-2 px-1"}`}>
+		<div className={`flex h-10 items-center ${minimal ? "" : "gap-2 px-1"}`}>
 			{minimal ? <Tooltip label={t("navigation.expandMenu")} placement="right">{toggleButton}</Tooltip> : toggleButton}
 			{!minimal && <Link href={href} className="flex min-w-0 items-center gap-3"><img src={branding.iconUrl} height={32} width={32} alt="" /><span className="truncate text-lg font-semibold text-neutral-800">{label ?? branding.appName}</span></Link>}
 		</div>

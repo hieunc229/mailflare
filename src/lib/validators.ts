@@ -371,6 +371,11 @@ export const folderSchema = z.object({
 	color: z.enum(FOLDER_COLOR_VALUES).default(DEFAULT_FOLDER_COLOR),
 });
 
+export const folderUpdateSchema = folderSchema.extend({
+	id: z.string().min(1),
+	color: z.enum(FOLDER_COLOR_VALUES),
+});
+
 /** Proof of identity for changing where password-reset or forwarded mail goes. */
 const recoveryProofFields = {
 	password: z.string().min(1).max(1024).optional(),

@@ -5,7 +5,7 @@ import { confirmDestructive, alertDialog } from "@/components/ui/confirm-dialog"
 import { useRouter } from "next/navigation";
 import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { MouseEvent } from "react";
-import { Archive, ChevronLeft, ChevronRight, ListFilter, Mail, MailOpen, Trash2 } from "@/components/icons";
+import { Archive, Calendar04, ChevronLeft, ChevronRight, ListFilter, Mail, MailOpen, Trash2 } from "@/components/icons";
 import { useLanguage } from "@/components/language-provider";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -14,7 +14,7 @@ import { useMailSearch } from "@/components/mail-search/mail-search-context";
 import { useSelectedMailbox } from "@/components/mailbox-provider";
 import { usePageLoading } from "@/components/page-loading";
 import { formatScheduledSendTime } from "./scheduled-send-utils";
-import { useHasHover, useIsDesktop, useIsMobile } from "@/components/sidebar-mobile-utils";
+import { useHasHover, useIsMobile } from "@/components/sidebar-mobile-utils";
 import { useMessageCounts } from "@/hooks/use-message-counts";
 import { useMessages } from "@/hooks/use-messages";
 import type { BulkMessageAction } from "@/app/api/messages/bulk/types";
@@ -23,6 +23,9 @@ import { setMessageDragData } from "@/lib/messages/drag-utils";
 import { BulkMessageToolbar } from "./bulk-message-toolbar";
 import { MessageListRefreshButton } from "./message-list-refresh-button";
 import { useMessageListState } from "./message-list-state";
+import { MessageListPages } from "./message-list-pages";
+import { MessageListSkeleton } from "./message-list-skeleton";
+import type { MessageListPageData } from "./message-list-pages-types";
 import { getEmptyPageOffset } from "./page-offset";
 import { SwipeableRow } from "./swipeable-row";
 import { MessageListRowActions } from "./message-list-row-actions";
@@ -35,7 +38,6 @@ import { MessageNotesPopover, NoteBadge } from "./message-notes-popover";
 import type { MessageFolderConfig, MessageFolderPageProps, MessageListRowProps, RowMessageAction } from "./types";
 import {
 	formatMessageListTimestamp,
-	getPageRange,
 	getMessageParty,
 	getMessagePartyClassName,
 	getMessagePreview,
@@ -209,11 +211,11 @@ function MessageListRowComponent({
 		const compactRow = (
 			<div
 				role={swipeable ? undefined : "listitem"}
-				className={`group relative grid grid-cols-[20px_minmax(0,1fr)] gap-3 border-l-2 px-4 py-3 transition-colors ${active || opening
-					? "border-l-blue-600 bg-blue-50"
+				className={`group relative grid grid-cols-[20px_minmax(0,1fr)] gap-3 border-l-2 px-4 py-3 bg-(--row-bg) transition-colors ${active || opening
+					? "border-l-blue-600 [--row-bg:var(--color-blue-50)]"
 					: selected
-						? "border-l-transparent bg-neutral-50"
-						: "border-l-transparent hover:bg-neutral-50 focus-within:bg-neutral-50"
+						? "border-l-transparent [--row-bg:var(--color-neutral-50)]"
+						: "border-l-transparent [--row-bg:var(--color-white)] hover:[--row-bg:var(--color-neutral-50)] focus-within:[--row-bg:var(--color-neutral-50)]"
 					} ${draggable ? "cursor-grab active:cursor-grabbing" : ""}`}
 				draggable={draggable}
 				onDragStart={(event) => {
@@ -239,7 +241,7 @@ function MessageListRowComponent({
 					className="min-w-0"
 				>
 					<span className="flex items-baseline justify-between gap-3">
-						<span className={clsx(unread && "font-semibold",getMessagePartyClassName(rowMessage, config.folder))}>
+						<span className={clsx(unread && "font-semibold", getMessagePartyClassName(rowMessage, config.folder))}>
 							{unread && <span className="sr-only">{t("list.unread")} </span>}
 							{party}
 
@@ -249,8 +251,9 @@ function MessageListRowComponent({
 							<NoteBadge count={message.noteCount} className="ml-2" />
 							{promotionChip}
 						</span>
-						<span className={clsx(unread ?"font-medium":"text-neutral-500","shrink-0 text-[11px]")}>
+						<span className={clsx(unread ? "font-medium" : "text-neutral-500", "shrink-0 text-[11px]", "flex flex-row items-center gap-2")}>
 							<OpenedIndicator count={message.openCount} />
+							{message.hasInvite && <Calendar04 role="img" aria-label={t("list.hasInvite")} className="inline-block align-text-bottom" size={12} />}
 							{message.scheduledAt ? formatScheduledSendTime(message.scheduledAt, t) : formatMessageListTimestamp(message.createdAt, todayKey)}
 						</span>
 					</span>
@@ -271,7 +274,6 @@ function MessageListRowComponent({
 						folderId={config.folderId}
 						onAction={runRowAction}
 						compact
-						active={active || opening}
 						onSnoozeChange={onSnoozeChange}
 						promotionTarget={promotionTarget}
 						onPromotionMove={moveToCategory}
@@ -310,8 +312,8 @@ function MessageListRowComponent({
 				<Tooltip label={starred ? t("list.starred") : t("list.notStarred")}>
 					<Button
 						type="button"
-						variant="ghost"
-						size="sm"
+						variant="round"
+						size="round"
 						className="relative z-10"
 						onClick={() => {
 							void toggleMessageStar(message.id, !starred).then((result) => setStarred(result.starred)).catch(() => alertDialog(t("message.error.star")));
@@ -363,6 +365,7 @@ function MessageListRowComponent({
 					}`}
 			>
 				<OpenedIndicator count={message.openCount} />
+				{message.hasInvite && <Calendar04 role="img" aria-label={t("list.hasInvite")} className="mr-1 inline-block h-3.5 w-3.5 align-text-bottom" />}
 				{message.scheduledAt ? formatScheduledSendTime(message.scheduledAt, t) : formatMessageListTimestamp(message.createdAt, todayKey)}
 			</time>
 		</>
@@ -427,9 +430,8 @@ export function MessageFolderPage({
 	const { query } = useMailSearch();
 	const router = useRouter();
 	const isMobile = useIsMobile();
-	const isDesktop = useIsDesktop();
 	const hasHover = useHasHover();
-	const compactRowActions = compact && isDesktop && hasHover;
+	const compactRowActions = compact && hasHover;
 	// Row actions can resolve after the reader has moved. Compare against the
 	// message that is open now, not the one that was open when the request began.
 	const selectedMessageIdRef = useRef(selectedMessageId);
@@ -469,13 +471,41 @@ export function MessageFolderPage({
 	const setSelectedMessages = listState?.setSelectedMessages ?? setInternalSelectedMessages;
 	const unreadOnly = listState?.unreadOnly ?? internalUnreadOnly;
 	const setUnreadOnly = listState?.setUnreadOnly ?? setInternalUnreadOnly;
-	const { messages, isLoading, total, limit, updateMessages } = useMessages(config.folder, selectedMailbox?.id, {
+	// The split-view list scrolls continuously; the full-width list is paged.
+	const lazy = compact;
+	const listFilters = {
 		query,
 		limit: pageSize,
-		offset,
-		read: unreadOnly ? "unread" : "all",
-		group: grouped ? "thread" : undefined,
-	}, !mailboxesLoading, config.folderId);
+		offset: lazy ? 0 : offset,
+		read: unreadOnly ? "unread" as const : "all" as const,
+		group: grouped ? "thread" as const : undefined,
+	};
+	const { messages: firstPage, isLoading, total, messageTotal, limit, updateMessages: updateFirstPage } = useMessages(config.folder, selectedMailbox?.id, listFilters, !mailboxesLoading, config.folderId);
+	const viewKey = [query, selectedMailbox?.id ?? "", config.folder, config.folderId ?? "", grouped, unreadOnly].join("\u0000");
+	const [loadedPages, setLoadedPages] = useState<{ key: string; pages: Record<number, MessageListPageData> }>({ key: viewKey, pages: {} });
+	const pages = useMemo(() => lazy && loadedPages.key === viewKey ? loadedPages.pages : {}, [lazy, loadedPages, viewKey]);
+	const setPageData = useCallback((index: number, data: MessageListPageData | null) => {
+		setLoadedPages((current) => {
+			const next = { ...(current.key === viewKey ? current.pages : {}) };
+			if (data) next[index] = data;
+			else delete next[index];
+			return { key: viewKey, pages: next };
+		});
+	}, [viewKey]);
+	/** Every loaded message. A page boundary can briefly repeat a row while pages refetch. */
+	const messages = useMemo(() => {
+		const later = Object.keys(pages).map(Number).sort((a, b) => a - b).flatMap((index) => pages[index].messages);
+		if (later.length === 0) return firstPage;
+		return Array.from(new Map([...firstPage, ...later].map((message) => [message.id, message])).values());
+	}, [firstPage, pages]);
+	const updateMessages = useCallback((updater: (current: Message[]) => Message[]) => {
+		updateFirstPage(updater);
+		for (const page of Object.values(pages)) page.updateMessages(updater);
+	}, [updateFirstPage, pages]);
+	const [scrollElement, setScrollElement] = useState<HTMLDivElement | null>(null);
+	useEffect(() => {
+		if (scrollElement) scrollElement.scrollTop = 0;
+	}, [viewKey, scrollElement]);
 	const { counts, isLoading: countsLoading } = useMessageCounts(selectedMailbox?.id, !mailboxesLoading);
 	const { mailboxes: accessibleMailboxes } = useSelectedMailbox();
 	const getPromotionMode = useCallback((message: Message): "show" | "separate" | undefined => counts.promotionModes?.[message.mailboxId ?? ""], [counts.promotionModes]);
@@ -498,7 +528,6 @@ export function MessageFolderPage({
 	const titleUnread = folderCount?.unread ?? 0;
 	const mailboxAddress = getMailboxAddress(selectedMailbox);
 	const currentAccountName = selectedMailbox?.displayName ?? selectedMailbox?.localPart;
-	const pageRange = getPageRange(offset, messages.length, total);
 	const selectedIds = useMemo(
 		() => selectedMessages.map((message) => message.id),
 		[selectedMessages],
@@ -557,11 +586,11 @@ export function MessageFolderPage({
 	}, [messages, isLoading, setSelectedMessages]);
 
 	useEffect(() => {
-		if (isLoading || messages.length > 0) return;
+		if (lazy || isLoading || messages.length > 0) return;
 		const nextOffset = getEmptyPageOffset(offset, total, limit);
 		if (nextOffset === null) return;
 		setOffset(nextOffset);
-	}, [isLoading, offset, messages.length, total, limit, setOffset]);
+	}, [lazy, isLoading, offset, messages.length, total, limit, setOffset]);
 
 	const updateSelectedMessage = useCallback((messageId: string, selected: boolean) => {
 		const message = messages.find((item) => item.id === messageId);
@@ -570,7 +599,7 @@ export function MessageFolderPage({
 		setSelectedMessages((current) => {
 			if (!selected) return current.filter((item) => item.id !== messageId);
 			if (current.some((item) => item.id === messageId)) return current;
-			return [...current, { id: message.id, read: message.read && !(message.threadUnread ?? 0) }];
+			return [...current, { id: message.id, read: message.read && !(message.threadUnread ?? 0), threadMessageIds: message.threadMessageIds }];
 		});
 	}, [messages, setSelectedMessages]);
 
@@ -606,7 +635,7 @@ export function MessageFolderPage({
 
 			const next = new Map(current.map((message) => [message.id, message]));
 			for (const message of messages) {
-				next.set(message.id, { id: message.id, read: message.read && !(message.threadUnread ?? 0) });
+				next.set(message.id, { id: message.id, read: message.read && !(message.threadUnread ?? 0), threadMessageIds: message.threadMessageIds });
 			}
 			return Array.from(next.values());
 		});
@@ -708,21 +737,43 @@ export function MessageFolderPage({
 		/>
 	);
 
+	const renderRow = (message: Message) => (
+		<MessageListRow
+			key={message.id}
+			message={message}
+			config={config}
+			selected={selectedIdSet.has(message.id)}
+			active={message.id === selectedMessageId}
+			opening={message.id === visibleOpeningMessageId}
+			onOpening={markMessageOpening}
+			compact={compact || isMobile}
+			currentAccountName={currentAccountName}
+			onSelectedChange={updateSelectedMessage}
+			onMessageAction={handleMessageAction}
+			onSnoozeChange={handleSnoozeChange}
+			showCompactRowActions={compactRowActions}
+			dragMessageIds={selectedIdSet.has(message.id) ? selectedDragIds : undefined}
+			todayKey={todayKey}
+			promotionMode={getPromotionMode(message)}
+			canMovePromotions={canMovePromotions(message)}
+		/>
+	);
+
 	return (
 		<div className="flex h-full min-h-0 flex-col">
-			<div className={`flex h-14 shrink-0 items-center justify-between border-b border-neutral-200 ${compact ? "px-4" : "px-4.5 md:px-6"}`}>
+			<div className={`flex h-12 shrink-0 items-center justify-between border-b border-neutral-200 ${compact ? "px-4" : "px-4.5 md:px-6"}`}>
 				{selectedMessageId ? <h2 className="sr-only">{title}</h2> : <h1 className="sr-only">{title}</h1>}
-				<div className="flex items-center gap-3 w-full">
+				<div className="flex min-w-0 flex-1 items-center gap-2">
 					<Tooltip label={t("list.selectAll")}>
 						<Checkbox
 							checked={allVisibleSelected}
 							disabled={messages.length === 0}
 							onChange={(event) => toggleAllVisible(event.target.checked)}
-							className="h-4 w-4 rounded border-neutral-300"
+							className="h-4 w-4 shrink-0 rounded border-neutral-300 mr-1"
 							aria-label={t("list.selectAll")}
 						/>
 					</Tooltip>
-					{!compact && refreshButton}
+					{/* {!compact && refreshButton} */}
 					{selectedIds.length > 0 && !compact ? (
 						<BulkMessageToolbar
 							selectedCount={selectedIds.length}
@@ -734,48 +785,54 @@ export function MessageFolderPage({
 						/>
 					) : (
 						(compact || isMobile) && (
-							<p aria-hidden="true" className="truncate font-semibold text-neutral-900 pl-1">{title}</p>
+							<p aria-hidden="true" className="min-w-0 truncate font-semibold text-neutral-900 pl-1">{title}</p>
 						)
 					)}
+					{refreshButton}
 				</div>
 				{(selectedIds.length === 0 || compact) && (
-					<div className="flex items-center gap-2 text-neutral-500">
-						<span className="text-xs text-neutral-500 whitespace-nowrap">
-							{t("list.range", { start: pageRange.start, end: pageRange.end, total: pageRange.total })}
-						</span>
-						{compact && refreshButton}
-						<Tooltip label={t("list.previousPage")}>
-							<Button
-								variant="ghost"
-								size="sm"
-								disabled={offset === 0 || isLoading}
-								onClick={() => setOffset(Math.max(offset - limit, 0))}
-								aria-label={t("list.previousPage")}
-							>
-								<ChevronLeft className="h-4 w-4" />
-							</Button>
-						</Tooltip>
-						<Tooltip label={t("list.nextPage")}>
-							<Button
-								variant="ghost"
-								size="sm"
-								disabled={offset + messages.length >= total || isLoading}
-								onClick={() => setOffset(offset + limit)}
-								aria-label={t("list.nextPage")}
-							>
-								<ChevronRight className="h-4 w-4" />
-							</Button>
-						</Tooltip>
+					<div className="flex shrink-0 items-center gap-1 pl-2 text-neutral-500">
+						{!(isLoading && messageTotal === 0) && (
+							<span className="text-xs text-neutral-500 whitespace-nowrap">
+								{messageTotal === 1 ? t("list.totalOne") : t("list.total", { total: messageTotal })}
+							</span>
+						)}
+						{!lazy && (
+							<>
+								<Tooltip label={t("list.previousPage")}>
+									<Button
+										variant="round"
+										size="round"
+										disabled={offset === 0 || isLoading}
+										onClick={() => setOffset(Math.max(offset - limit, 0))}
+										aria-label={t("list.previousPage")}
+									>
+										<ChevronLeft size={18} />
+									</Button>
+								</Tooltip>
+								<Tooltip label={t("list.nextPage")}>
+									<Button
+										variant="round"
+										size="round"
+										disabled={offset + messages.length >= total || isLoading}
+										onClick={() => setOffset(offset + limit)}
+										aria-label={t("list.nextPage")}
+									>
+										<ChevronRight size={18} />
+									</Button>
+								</Tooltip>
+							</>
+						)}
 						{config.folder === "inbox" && (
 							<Tooltip label={unreadOnly ? t("list.showingUnread") : t("list.showUnreadOnly")}>
 								<Button
 									type="button"
-									variant="ghost"
-									size="sm"
+									variant="round"
+									size="round"
 									aria-label={t("list.showUnreadOnly")}
 									aria-pressed={unreadOnly}
 									onClick={() => setUnreadOnly((current) => !current)}
-									className={unreadOnly ? "bg-blue-100 text-blue-700 hover:bg-blue-100" : undefined}
+									className={unreadOnly ? "text-blue-700 before:scale-100 before:bg-blue-100 before:opacity-100" : undefined}
 								>
 									<ListFilter className="h-4 w-4" />
 								</Button>
@@ -785,12 +842,12 @@ export function MessageFolderPage({
 							<Tooltip label={getEmptyFolderLabel(permanentDeleteFolder, t)}>
 								<Button
 									type="button"
-									variant="ghost"
-									size="sm"
+									variant="round"
+									size="round"
 									aria-label={getEmptyFolderLabel(permanentDeleteFolder, t)}
 									disabled={emptyingFolder || isLoading || total === 0}
 									onClick={() => void emptyFolder()}
-									className="gap-1.5 text-xs font-medium text-red-600 hover:text-red-700"
+									className={clsx("gap-1.5 font-medium text-red-600 hover:text-red-700", !compact && "md:w-auto md:px-3")}
 								>
 									<Trash2 className="h-4 w-4" />
 									{!compact && <span className="max-md:hidden">{emptyingFolder ? t("list.emptying") : getEmptyFolderLabel(permanentDeleteFolder, t)}</span>}
@@ -810,31 +867,25 @@ export function MessageFolderPage({
 				</p>
 			)}
 
-			<div className="min-h-0 flex-1 overflow-y-auto overscroll-contain scrollbar-gutter-stable">
-				{config.folder === "inbox" && !config.folderId && offset === 0 && !mailboxesLoading && <DueFollowUps mailboxId={selectedMailbox?.id} />}
+			<div ref={setScrollElement} className="min-h-0 flex-1 overflow-y-auto overscroll-contain scrollbar-gutter-stable">
+				{config.folder === "inbox" && !config.folderId && (lazy || offset === 0) && !mailboxesLoading && <DueFollowUps mailboxId={selectedMailbox?.id} />}
 				<div role="list" aria-label={title} className="divide-y divide-neutral-100">
-					{messages.map((message) => (
-						<MessageListRow
-							key={message.id}
-							message={message}
-							config={config}
-							selected={selectedIdSet.has(message.id)}
-							active={message.id === selectedMessageId}
-							opening={message.id === visibleOpeningMessageId}
-							onOpening={markMessageOpening}
-							compact={compact || isMobile}
-							currentAccountName={currentAccountName}
-							onSelectedChange={updateSelectedMessage}
-							onMessageAction={handleMessageAction}
-							onSnoozeChange={handleSnoozeChange}
-							showCompactRowActions={compactRowActions}
-							dragMessageIds={selectedIdSet.has(message.id) ? selectedDragIds : undefined}
-							todayKey={todayKey}
-							promotionMode={getPromotionMode(message)}
-							canMovePromotions={canMovePromotions(message)}
+					{lazy ? (
+						<MessageListPages
+							key={viewKey}
+							query={{ folder: config.folder, mailboxId: selectedMailbox?.id, folderId: config.folderId, filters: listFilters, enabled: !mailboxesLoading }}
+							pageSize={pageSize}
+							total={total}
+							firstPage={firstPage}
+							pages={pages}
+							onPageData={setPageData}
+							selectedIds={selectedIdSet}
+							scrollElement={scrollElement}
+							renderRow={renderRow}
 						/>
-					))}
+					) : messages.map(renderRow)}
 				</div>
+				{isLoading && messages.length === 0 && <MessageListSkeleton compact={compact || isMobile} />}
 				{!isLoading && messages.length === 0 && promotionsOff && (
 					<p className="px-6 py-4 text-sm text-neutral-500">
 						{t("folder.empty.promotionsOff")}{" "}

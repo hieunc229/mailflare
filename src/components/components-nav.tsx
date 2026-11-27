@@ -9,6 +9,7 @@ import { useMailSearch } from "@/components/mail-search/mail-search-context";
 import { useConversationView } from "@/components/messages/use-conversation-view";
 import { useSelectedMailbox } from "./mailbox-provider";
 import { useSidebar } from "./sidebar-state";
+import { Edit02 } from "./icons";
 import { useCompose } from "./compose/compose-context";
 import { Tooltip } from "./ui/tooltip";
 import { FULL_ROUTE_PREFETCH } from "@/lib/navigation/prefetch";
@@ -19,9 +20,13 @@ type Props = {
   link: NavLink,
   iconClassName?: string,
   labelClassName?: string,
-  wrap?: boolean
+  wrap?: boolean,
+  /** Shows an edit button on hover. */
+  onEdit?: () => void,
+  editLabel?: string,
+  boldActive?: boolean
 }
-export function NavItem({ link, iconClassName, labelClassName, wrap }: Props) {
+export function NavItem({ link, iconClassName, labelClassName, wrap, onEdit, editLabel, boldActive = true }: Props) {
   const pathname = usePathname();
   const router = useRouter();
   const { openComposer } = useCompose();
@@ -42,7 +47,9 @@ export function NavItem({ link, iconClassName, labelClassName, wrap }: Props) {
   const classes = cn(
     "flex h-9 items-center gap-3 rounded-r-full text-sm text-neutral-700 transition-colors max-md:min-h-11 max-md:text-base",
     minimal && "relative mx-auto w-10 justify-center rounded-full px-0",
-    active ? "bg-blue-100 text-blue-900 font-semibold" : "hover:bg-neutral-200/60",
+    active ? cn("bg-blue-100 text-blue-900", boldActive && "font-semibold") : "hover:bg-neutral-200/60",
+    onEdit && "group-hover/nav:bg-neutral-200/60",
+    onEdit && active && "group-hover/nav:bg-blue-100",
     dragOver && "bg-blue-50 text-blue-900 ring-1 ring-blue-200",
     link.primary &&
     "mb-3 h-12 w-fit rounded-2xl bg-blue-100 px-5 text-blue-950 shadow-sm hover:bg-blue-200",
@@ -116,7 +123,7 @@ export function NavItem({ link, iconClassName, labelClassName, wrap }: Props) {
       onFocus={prefetch}
       aria-current={active ? "page" : undefined}
       aria-label={minimal ? (typeof link.count === "number" && link.count > 0 ? `${link.label}, ${link.count}` : link.label) : undefined}
-      className={cn(!minimal && "pl-6", classes)}
+      className={cn(!minimal && "pl-6", classes, onEdit && !minimal && !link.count && "[@media(hover:hover)]:pr-11")}
       {...dropProps}
     >
       <Icon
@@ -128,7 +135,7 @@ export function NavItem({ link, iconClassName, labelClassName, wrap }: Props) {
       />
       {!minimal && <span className={cn("flex-1", wrap && "min-w-0 break-words leading-5 max-md:leading-6", labelClassName, typeof link.count === "number" && link.count > 0 && "font-semibold")}>{link.label}</span>}
       {!minimal && typeof link.count === "number" && link.count > 0 && (
-        <span className={cn("ml-auto mr-3 rounded-full px-2 py-0.5 text-sm font-semibold text-neutral-700", wrap && "shrink-0 py-0 leading-5")}>
+        <span className={cn("ml-auto mr-3 rounded-full px-2 py-0.5 text-sm font-semibold text-neutral-700", wrap && "shrink-0 py-0 leading-5", onEdit && "[@media(hover:hover)]:group-focus-within/nav:invisible [@media(hover:hover)]:group-hover/nav:invisible")}>
           {link.count > 99 ? "99+" : link.count}
         </span>
       )}
@@ -139,6 +146,24 @@ export function NavItem({ link, iconClassName, labelClassName, wrap }: Props) {
       )}
     </Link>
   );
+
+  if (onEdit && !minimal) {
+    // The button sits beside the link, since a link cannot contain a button.
+    return (
+      <div className="group/nav relative">
+        {navLink}
+        <button
+          type="button"
+          onClick={onEdit}
+          aria-label={editLabel}
+          title={editLabel}
+          className="pointer-events-none absolute right-2 top-1/2 flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-full text-neutral-600 opacity-0 hover:bg-white hover:text-neutral-900 focus-visible:pointer-events-auto focus-visible:opacity-100 group-hover/nav:pointer-events-auto group-hover/nav:opacity-100 [@media(hover:none)]:hidden"
+        >
+          <Edit02 size={14} aria-hidden="true" />
+        </button>
+      </div>
+    );
+  }
 
   return (
     <>

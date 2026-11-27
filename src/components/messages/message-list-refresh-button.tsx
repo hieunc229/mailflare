@@ -1,7 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { RefreshCw } from "@/components/icons";
+import { Refresh01 } from "@/components/icons";
 import { useLanguage } from "@/components/language-provider";
 import { Button } from "@/components/ui/button";
 import { Tooltip } from "@/components/ui/tooltip";
@@ -35,14 +35,14 @@ export function MessageListRefreshButton({ disabled = false, onError }: {
 			<Tooltip label={label}>
 				<Button
 					type="button"
-					variant="ghost"
-					size="sm"
+					variant="round"
+					size="round"
 					disabled={disabled || refreshing}
 					aria-label={label}
 					aria-busy={refreshing}
 					onClick={() => void refresh()}
 				>
-					<RefreshCw className={`h-4 w-4 ${refreshing ? "animate-spin" : ""}`} aria-hidden="true" />
+					<Refresh01 size={14} className={refreshing ? "animate-spin" : ""} aria-hidden="true" />
 				</Button>
 			</Tooltip>
 			<span role="status" aria-live="polite" className="sr-only">

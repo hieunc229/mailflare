@@ -8,7 +8,6 @@ import { formatUserDate, getUserTimeZone, zonedDateFields } from "@/lib/time/uti
 import type { MailboxOption } from "@/components/mailbox-provider";
 import type { EmailPageTitleInput } from "./types";
 import type { MessageFolderConfig } from "./types";
-import type { PageRange } from "./types";
 import { defaultTranslator, type Translator } from "@/lib/i18n/utils";
 import type { PermanentDeleteFolder } from "@/app/api/messages/bulk/types";
 import { throwIfDeleteSkipped } from "@/lib/messages/permanent-delete-utils";
@@ -68,16 +67,6 @@ export function formatMessageListTimestamp(createdAt: string, todayKey: string):
 	if (date.toISOString().slice(0, 10) === todayKey) return formatUserDate(createdAt, { hour: "2-digit", minute: "2-digit" });
 	if (date.getUTCFullYear().toString() === todayKey.slice(0, 4)) return formatUserDate(createdAt, { month: "short", day: "2-digit" });
 	return formatUserDate(createdAt, { month: "short", day: "2-digit", year: "numeric" });
-}
-
-export function getPageRange(offset: number, count: number, total: number): PageRange {
-	if (total === 0 || count === 0) return { start: 0, end: 0, total };
-
-	return {
-		start: offset + 1,
-		end: Math.min(offset + count, total),
-		total,
-	};
 }
 
 export function getMailboxAddress(mailbox: Pick<MailboxOption, "localPart" | "hostname"> | null | undefined): string | null {

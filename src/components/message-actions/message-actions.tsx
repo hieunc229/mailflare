@@ -476,9 +476,9 @@ export function MessageActions({
 							<Tooltip label={tooltip}>
 								<Button
 									type="button"
-									variant="ghost"
-									size="roundedSM"
-									className={cn("h-8 w-8 shrink-0 p-0", action.destructive && "text-red-600 hover:text-red-700")}
+									variant="round"
+									size="round"
+									className={cn(action.destructive && "text-red-600 hover:text-red-700")}
 									aria-label={action.label}
 									disabled={disabled}
 									onClick={action.onSelect}
@@ -495,9 +495,8 @@ export function MessageActions({
 					trigger={
 						<Button
 							type="button"
-							variant="ghost"
-							size="roundedSM"
-							className="h-8 w-8 shrink-0 p-0"
+							variant="round"
+							size="round"
 							aria-label={t("common.moreActions")}
 							disabled={disabled}
 						>

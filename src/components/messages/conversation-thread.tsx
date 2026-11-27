@@ -14,7 +14,7 @@ import { useLanguage } from "@/components/language-provider";
 import { cn } from "@/lib/utils";
 import type { ConversationMessageCardProps, ConversationThreadProps } from "./conversation-thread-types";
 import { ThreadMessageActions } from "./thread-message-actions";
-import { MessageDetailsPanel } from "./message-details-panel";
+import { MessageDetailsPopover } from "./message-details-panel";
 import { SenderCheckBadge, SenderCheckNotice } from "./sender-check-notice";
 import { MessageOpenStatus } from "./message-open-status";
 import { MessageFollowUpStatus } from "@/components/follow-ups/message-follow-up-status";
@@ -25,6 +25,7 @@ import {
 	partitionThread,
 } from "./conversation-thread-utils";
 import clsx from "clsx";
+import { Button } from "@/components/ui/button";
 import { useMessageListVisibility } from "./message-list-visibility";
 import { useAssistantOpen } from "../agent/assistant-open-state";
 
@@ -97,15 +98,17 @@ export function ConversationThread({
 					<li className="flex items-center justify-center gap-1 py-2 text-center border-y border-neutral-100 h-px my-4">
 						<span className="bg-white px-6 flex flex-row items-center gap-2">
 							<span className="text-sm font-medium text-neutral-600">{collapsedLabel}</span>
-							<button
+							<Button
 								type="button"
 								onClick={() => onExpandedAllChange(true)}
 								aria-label={t("thread.expand", { label: collapsedLabel })}
 								title={t("thread.expand", { label: collapsedLabel })}
-								className="inline-flex h-6 w-6 items-center justify-center rounded-full text-neutral-500 hover:bg-neutral-100 hover:text-neutral-900"
+								variant="round"
+								size="round"
+								className="text-neutral-500 hover:text-neutral-900"
 							>
 								<ChevronsUpDown className="h-4 w-4" />
-							</button>
+							</Button>
 						</span>
 					</li>
 				) : (
@@ -193,9 +196,16 @@ export function ConversationMessageCard({
 	return (
 		<article data-message-id={message.id} className={cn("bg-white transition-colors px-3 sm:pl-0 sm:pr-6", !expanded && "hover:bg-neutral-50")}>
 			<div className="w-full">
-				<div className="flex w-full flex-wrap items-start gap-x-3 py-3 sm:pl-[78px]">
-					<button
-						type="button"
+				<div className="flex w-full items-start gap-x-3 py-3 sm:pl-[78px]">
+					{/* A div, because a button cannot contain the details chevron. */}
+					<div
+						role="button"
+						tabIndex={0}
+						onKeyDown={(event) => {
+							if (event.target !== event.currentTarget || (event.key !== "Enter" && event.key !== " ")) return;
+							event.preventDefault();
+							event.currentTarget.click();
+						}}
 						onClick={() => {
 							const shouldExpand = !locallyExpanded;
 							setLocallyExpanded(shouldExpand);
@@ -204,7 +214,7 @@ export function ConversationMessageCard({
 							void runSingleMessageAction(message.id, "read", { undo: false }).catch(() => setLocallyRead(false));
 						}}
 						aria-expanded={expanded}
-						className="flex min-w-0 flex-1 basis-40 items-center gap-3 text-left cursor-pointer"
+						className="flex min-w-0 flex-1 items-center gap-3 text-left cursor-pointer"
 					>
 						<ContactAvatar
 							mailboxId={mailboxId}
@@ -220,14 +230,23 @@ export function ConversationMessageCard({
 									{sender}
 									{expanded && <span className="hidden sm:inline text-xs ml-1 opacity-50 font-normal">&lt;{senderEmail}&gt;</span>}
 								</span>
-								{expanded && recipients && <span className="text-xs font-normal text-neutral-500">{t("thread.to", { recipients })}</span>}
+								{expanded && (
+									<span className="flex min-w-0 items-center gap-1 text-xs font-normal text-neutral-500">
+										{recipients && <span className="truncate">{t("thread.to", { recipients })}</span>}
+										<MessageDetailsPopover message={message} open={detailsOpen} onOpenChange={setDetailsOpen} />
+									</span>
+								)}
 							</div>
 							{!expanded && (
 								<span className={clsx(!locallyRead ? "font-semibold" : "text-neutral-500", "block truncate text-[13px]")}>{message.snippet || t("thread.noPreview")}</span>
 							)}
+							<span className={clsx("flex items-center gap-2 text-xs sm:hidden", locallyRead ? "font-normal text-neutral-500" : "font-semibold text-neutral-700")}>
+								{attachments.length > 0 && <Paperclip className="h-3.5 w-3.5" aria-label={t("thread.attachmentCount", { count: attachments.length })} />}
+								{formatUserDate(message.createdAt, { month: "short", day: "2-digit", year: "numeric" })}
+							</span>
 							{!expanded && <SenderCheckBadge message={message} />}
 						</span>
-					</button>
+					</div>
 					<span className={clsx(!locallyRead ? "font-semibold" : "", "shrink-0 items-center gap-2 text-xs mr-2 mt-2", "hidden sm:flex")}>
 						{attachments.length > 0 && <Paperclip className="h-3.5 w-3.5" aria-label={t("thread.attachmentCount", { count: attachments.length })} />}
 						{formatUserDate(message.createdAt, { month: "short", day: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" })}
@@ -238,29 +257,18 @@ export function ConversationMessageCard({
 						ownAddress={ownAddress}
 						ownAddresses={ownAddresses}
 						starOnly={!expanded}
-						detailsOpen={detailsOpen}
-						onToggleDetails={() => setDetailsOpen((open) => !open)}
 					/>
-					<div className={clsx("sm:hidden flex w-full items-center gap-2 pl-12 text-xs", locallyRead ? "text-neutral-500" : "font-semibold text-neutral-700")}>
-						{attachments.length > 0 && <Paperclip className="h-3.5 w-3.5" aria-label={t("thread.attachmentCount", { count: attachments.length })} />}
-						<span>{formatUserDate(message.createdAt, { month: "short", day: "2-digit", year: "numeric" })}</span>
-					</div>
 				</div>
 				{expanded && (
 					<SenderCheckNotice
 						message={message}
 						detailsOpen={detailsOpen}
 						onViewDetails={() => setDetailsOpen((open) => !open)}
-						className="mb-3 sm:ml-[78px]"
+						className="mb-3 sm:ml-[var(--reader-indent,30px)]"
 					/>
 				)}
-				{detailsOpen && (
-					<div className="mb-3 sm:pl-[78px]">
-						<MessageDetailsPanel message={message} onClose={() => setDetailsOpen(false)} />
-					</div>
-				)}
 				{expanded && body && (
-					<div className="pb-4 pt-2 sm:pl-[78px]">
+					<div className="pb-4 pt-2 sm:pl-[var(--reader-indent,30px)]">
 						{outbound && <MessageOpenStatus messageId={message.id} />}
 						{outbound && message.status !== "draft" && <MessageFollowUpStatus messageId={message.id} />}
 						{body.html ? (

@@ -5,11 +5,11 @@
 
 A self-hosted alternative to Google Workspace. Setup **custom domain Emails**, **Calendar, Drive, Booking** and **built-in AI agents**. Deploy it to Cloudflare, Docker or Vercel
 
-**Try [Mailflare Cloud](https://cloud.mailflare.co?ref=github)** with high-deliverable emails without managing your deployments
+**Try [Mailflare Cloud](https://mailflare.co?ref=github)** with high-deliverable emails without managing your deployments
 
 [![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/hieunc229/mailflare) 
 <a href="https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2Fhieunc229%2Fmailflare&amp;env=CRON_SECRET&amp;envDescription=See%20docs%2Fvercel.md&amp;envLink=https%3A%2F%2Fgithub.com%2Fhieunc229%2Fmailflare%2Fblob%2Fmain%2Fdocs%2Fvercel.md" rel="nofollow"><img src="https://camo.githubusercontent.com/ff0e5692ba93a62d065d9523e5a7e15ed5e2e15a2866758b3276a4f7b77eaac6/68747470733a2f2f76657263656c2e636f6d2f627574746f6e" alt="Deploy with Vercel" data-canonical-src="https://vercel.com/button" style="max-width: 100%;height: 39px;"></a>
-
+[![Deploy to Coolify](https://shields.io)](https://coolify.io/docs/deploy-your-first-app)
 
 ## Screenshots
 
