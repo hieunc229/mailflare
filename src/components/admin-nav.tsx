@@ -14,6 +14,7 @@ import {
   KeyRound,
   Bot,
   ShieldCheck,
+  Building2,
 } from "@/components/icons";
 import { cn } from "@/lib/utils";
 import { useLanguage } from "./language-provider";
@@ -61,6 +62,7 @@ const sections: { id?: string; labelKey?: TranslationKey; links: AdminNavLink[] 
       { href: "/general", labelKey: "admin.nav.general", icon: Settings, permission: "primary" },
       { href: "/agent", labelKey: "admin.nav.agent", icon: Bot, permission: "primary" },
       { href: "/accounts", labelKey: "admin.nav.accounts", icon: Users },
+      { href: "/rooms", labelKey: "admin.nav.rooms", icon: Building2, permission: "primary" },
       { href: "/activity", labelKey: "admin.nav.activity", icon: Activity, permission: "primary" },
       { href: "/backups", labelKey: "admin.nav.backups", icon: DatabaseBackup, permission: "primary" },
     ],
