@@ -83,7 +83,7 @@ test("with an endpoint the region may be any short lowercase label", () => {
 		assert.equal(getS3Config(env({ S3_REGION: region })), null, region);
 	}
 	assert.match(describeB2Problem(env({ S3_REGION: "US East" })), /S3_REGION.*S3_ENDPOINT|S3_ENDPOINT.*S3_REGION/);
-	assert.equal(getS3Config(env({ S3_REGION: undefined, AWS_REGION: "us-east-1" }))?.region, "us-east-1");
+	assert.equal(getS3Config(env({ S3_REGION: undefined, AWS_REGION: "us-east-1" })), null, "AWS_REGION is not borrowed");
 });
 
 // --- Path style -----------------------------------------------------------------------------------------------

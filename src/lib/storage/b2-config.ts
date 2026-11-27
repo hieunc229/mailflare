@@ -35,10 +35,12 @@ const COMPATIBLE_REGION_PATTERN = /^[a-z0-9][a-z0-9-]{0,62}$/;
 /** A bucket usable as a DNS label (bucket.endpoint). Dots are refused: they break the wildcard certificate. */
 const DNS_BUCKET_PATTERN = /^[a-z0-9][a-z0-9-]{1,61}[a-z0-9]$/;
 const PATH_BUCKET_PATTERN = /^[A-Za-z0-9._-]{1,255}$/;
+/** One DNS label of a host name: letters, digits, hyphens (and underscores some providers use), no edge hyphens. */
+const HOST_LABEL = /^[a-z0-9_]([a-z0-9_-]{0,61}[a-z0-9_])?$/;
 const LOOPBACK_HOSTS = new Set(["localhost", "127.0.0.1", "[::1]"]);
 
 export type S3EndpointResult =
-	| { ok: true; host: string; protocol: "https" | "http"; loopback: boolean }
+	| { ok: true; host: string; protocol: "https" | "http"; loopback: boolean; ipLiteral: boolean }
 	| { ok: false; reason: "invalid" | "insecure" };
 
 /**
@@ -55,9 +57,12 @@ export function parseS3Endpoint(value: string, runtime?: string): S3EndpointResu
 	let url: URL;
 	try { url = new URL(scheme ? raw : `https://${raw}`); } catch { return { ok: false, reason: "invalid" }; }
 	if (url.pathname !== "/" || url.username || url.password || !url.hostname) return { ok: false, reason: "invalid" };
+	const ipLiteral = url.hostname.startsWith("[") || /^\d+\.\d+\.\d+\.\d+$/.test(url.hostname);
+	if (!ipLiteral && !url.hostname.split(".").every((label) => HOST_LABEL.test(label))) return { ok: false, reason: "invalid" };
+	if (url.port === "0") return { ok: false, reason: "invalid" };
 	const loopback = LOOPBACK_HOSTS.has(url.hostname);
 	if (url.protocol === "http:" && !(loopback && runtime === "node")) return { ok: false, reason: "insecure" };
-	return { ok: true, host: url.host, protocol: url.protocol === "https:" ? "https" : "http", loopback };
+	return { ok: true, host: url.host, protocol: url.protocol === "https:" ? "https" : "http", loopback, ipLiteral };
 }
 
 type S3Resolution = { config: B2Config } | { problem: string } | null;
@@ -68,10 +73,11 @@ function enabled(value: string | undefined): boolean {
 
 function resolveS3(env: B2Env): S3Resolution {
 	const bucket = env.S3_BUCKET?.trim();
-	const region = (env.S3_REGION ?? env.AWS_REGION ?? env.AWS_DEFAULT_REGION)?.trim();
-	const keyId = (env.S3_ACCESS_KEY_ID ?? env.AWS_ACCESS_KEY_ID)?.trim();
-	const applicationKey = (env.S3_SECRET_ACCESS_KEY ?? env.AWS_SECRET_ACCESS_KEY)?.trim();
 	const endpointValue = env.S3_ENDPOINT?.trim();
+	// The AWS_* variables belong to AWS (SES): never sign a request to another provider with them.
+	const region = (endpointValue ? env.S3_REGION : (env.S3_REGION ?? env.AWS_REGION ?? env.AWS_DEFAULT_REGION))?.trim();
+	const keyId = (endpointValue ? env.S3_ACCESS_KEY_ID : (env.S3_ACCESS_KEY_ID ?? env.AWS_ACCESS_KEY_ID))?.trim();
+	const applicationKey = (endpointValue ? env.S3_SECRET_ACCESS_KEY : (env.S3_SECRET_ACCESS_KEY ?? env.AWS_SECRET_ACCESS_KEY))?.trim();
 	if (!endpointValue) {
 		if (!bucket || !region || !keyId || !applicationKey || !S3_REGION_PATTERN.test(region)) return null;
 		return { config: { keyId, applicationKey, bucket, region, endpoint: `s3.${region}.amazonaws.com` } };
@@ -88,14 +94,14 @@ function resolveS3(env: B2Env): S3Resolution {
 	if (!COMPATIBLE_REGION_PATTERN.test(region)) {
 		return { problem: "With S3_ENDPOINT, S3_REGION must be lowercase letters, digits and hyphens (up to 63), the region your provider documents, such as auto, fsn1 or eu-central-2." };
 	}
-	// A loopback host cannot take a bucket subdomain.
-	const pathStyle = enabled(env.S3_FORCE_PATH_STYLE) || endpoint.loopback;
+	// An IP address or localhost cannot take a bucket subdomain.
+	const pathStyle = enabled(env.S3_FORCE_PATH_STYLE) || endpoint.ipLiteral || endpoint.loopback;
 	if (pathStyle ? !PATH_BUCKET_PATTERN.test(bucket) || bucket === "." || bucket === ".." : !DNS_BUCKET_PATTERN.test(bucket)) {
 		return { problem: pathStyle
 			? "S3_BUCKET may contain only letters, digits, dots, hyphens and underscores."
 			: "S3_BUCKET is not DNS-safe (3 to 63 lowercase letters, digits and hyphens, no dots), so bucket.endpoint cannot be used. Set S3_FORCE_PATH_STYLE=true to address the bucket by path." };
 	}
-	return { config: { keyId, applicationKey, bucket, region, endpoint: endpoint.host, protocol: endpoint.protocol, pathStyle } };
+	return { config: { keyId, applicationKey, bucket, region, endpoint: endpoint.host, protocol: endpoint.protocol, pathStyle, compatible: true } };
 }
 
 /**
@@ -132,8 +138,7 @@ export function getStorageStatus(env: B2Env): StorageStatus {
 
 /** Names the variables that are set without exposing values, so a half-finished setup can be diagnosed. */
 export function describeB2Problem(env: B2Env): string | null {
-	const hasB2 = !!(env.B2_KEY_ID || env.B2_APPLICATION_KEY || env.B2_BUCKET || env.B2_ENDPOINT);
-	if (env.S3_ENDPOINT?.trim() && !hasB2) {
+	if (env.S3_ENDPOINT?.trim() && !getB2Config(env)) {
 		const resolved = resolveS3(env);
 		return resolved && "problem" in resolved ? resolved.problem : null;
 	}
@@ -145,4 +150,13 @@ export function describeB2Problem(env: B2Env): string | null {
 	if (getS3Config(env)) return null;
 	if (present < 4) return "Backblaze B2 needs B2_KEY_ID, B2_APPLICATION_KEY, B2_BUCKET and B2_ENDPOINT together.";
 	return "B2_ENDPOINT must look like s3.us-west-004.backblazeb2.com.";
+}
+
+/**
+ * A broken S3_ENDPOINT setup, for the runtimes that would otherwise quietly keep using R2 or local files.
+ * Null when it is fine, unset, or Backblaze is in use.
+ */
+export function storageStartupProblem(env: B2Env): string | null {
+	if (!env.S3_ENDPOINT?.trim() || getB2Config(env) || getS3Config(env)) return null;
+	return describeB2Problem(env);
 }

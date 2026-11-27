@@ -2,6 +2,7 @@ import { mkdirSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { getDatabaseConfig, withDatabase } from "@/db/with-database";
 import { withStorage } from "@/lib/storage";
+import { storageStartupProblem } from "@/lib/storage/b2-config";
 import { openFileBucket } from "./file-bucket";
 import { mailerConfigFromEnv, openMailer, type Mailer } from "./mailer";
 import { openAssets, openRateLimiter } from "./misc";
@@ -101,6 +102,9 @@ export function createNodeRuntime(): NodeRuntime {
 		APNS_PRIVATE_KEY: optional("APNS_PRIVATE_KEY"),
 		APNS_RELAY_URL: optional("APNS_RELAY_URL"),
 	} as unknown as CloudflareEnv;
+	// Files under /data/blobs would silently take mail meant for the bucket.
+	const storageProblem = storageStartupProblem(env);
+	if (storageProblem) throw new Error(`Mailflare cannot start: ${storageProblem}`);
 	const storageEnv = withDatabase(withStorage(env));
 	realtime.bindEnv(storageEnv);
 

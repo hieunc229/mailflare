@@ -26,11 +26,12 @@ Set `S3_BUCKET`, `S3_REGION`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY` and `S3
 - `S3_REGION` is whatever the provider documents (`auto`, `fsn1`, `eu-central-1`). Lowercase letters, digits and hyphens.
 - Buckets are addressed as `bucket.endpoint`, so the bucket name must be DNS-safe (lowercase, no dots). Set `S3_FORCE_PATH_STYLE=true` to use `endpoint/bucket` instead, which MinIO and some providers need. Loopback endpoints always use path style. `S3_FORCE_PATH_STYLE` has no effect on AWS S3.
 - Requests to a custom endpoint do not follow redirects.
-- If B2 is also configured, B2 wins. A wrong `S3_ENDPOINT` never falls back to AWS: the setup is reported as broken.
+- With `S3_ENDPOINT`, only the `S3_*` credentials and region are used, never `AWS_*`. If B2 is also configured, B2 wins. A wrong `S3_ENDPOINT` never falls back to AWS. Vercel and Docker refuse to start; on Workers the problem is logged and R2 stays in use, so check `GET /api/v1/storage`.
+- An IP address as endpoint uses path style automatically.
 
 | Provider | `S3_ENDPOINT` | `S3_REGION` | Docs |
 | --- | --- | --- | --- |
-| Hetzner Object Storage | `fsn1.your-objectstorage.com` (the location is part of the host; `nbg1` also exists) | `fsn1` | [Hetzner](https://docs.hetzner.com/storage/object-storage/getting-started/using-s3-api-tools) |
+| Hetzner Object Storage | `fsn1.your-objectstorage.com` (the location is part of the host; `nbg1` and `hel1` also exist) | `fsn1` | [Hetzner](https://docs.hetzner.com/storage/object-storage/getting-started/using-s3-api-tools) |
 | IDrive e2 | the endpoint your dashboard shows for the bucket's region, such as `s3.us-west-1.idrivee2.com`; each account gets its own list | the region code in that host, `us-west-1` | [IDrive e2](https://www.idrive.com/e2/region-endpoints) |
 | Wasabi | `s3.eu-central-1.wasabisys.com`: use the host of the bucket's own region, or writes fail | `eu-central-1` | [Wasabi](https://docs.wasabi.com/docs/what-are-the-service-urls-for-wasabis-different-storage-regions) |
 

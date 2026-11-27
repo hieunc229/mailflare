@@ -11,6 +11,8 @@ export type B2Config = {
 	protocol?: "https" | "http";
 	/** S3_ENDPOINT only: address `endpoint/bucket/key` instead of `bucket.endpoint/key`. */
 	pathStyle?: boolean;
+	/** Set for S3_ENDPOINT: an admin-chosen host, so signed requests never follow redirects. */
+	compatible?: true;
 };
 
 export type StorageStatus = {

@@ -95,7 +95,7 @@ export class B2Bucket {
 
 	constructor(private readonly config: B2Config) {
 		this.credentials = { accessKeyId: config.keyId, secretAccessKey: config.applicationKey, region: config.region };
-		this.custom = config.protocol !== undefined;
+		this.custom = config.compatible === true;
 	}
 
 	private request(key: string | null, init: { method?: string; query?: Record<string, string>; body?: string | ArrayBuffer; headers?: Record<string, string> } = {}) {
