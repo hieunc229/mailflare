@@ -72,3 +72,25 @@ test("if that reload fails, the card says so instead of showing a date it does n
 	assert.doesNotMatch(text(), /since/);
 	await unmount();
 });
+
+test("the card's own heading is left out when a dialog already titles it, so a screen reader hears the name once; alone it keeps its heading", async () => {
+	reset();
+	globalThis.pubUiR.respond = server();
+	container = document.createElement("div");
+	document.body.append(container);
+	root = createRoot(container);
+	await act(async () => root.render(createElement(PublishCard, { hideTitle: true })));
+	await act(settle);
+	assert.equal(container.querySelectorAll("h3").length, 0);
+	assert.doesNotMatch(text(), /Publish free\/busy/);
+	assert.ok(button("Turn on"), "everything else is there");
+	await unmount();
+	await mount();
+	assert.equal(container.querySelectorAll("h3").length, 1);
+	await unmount();
+});
+
+test("the dialog hides the card's heading", () => {
+	const dialog = readFileSync(new URL("../src/app/(calendar)/calendar/publish-dialog.tsx", import.meta.url), "utf8");
+	assert.match(dialog, /<PublishCard hideTitle \/>/);
+});

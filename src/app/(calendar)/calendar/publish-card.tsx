@@ -8,7 +8,7 @@ import { loadPublishStatus, publishUrls, turnOffPublish, turnOnPublish } from ".
 import { PublishView } from "./publish-view";
 
 /** The "Publish free/busy" card (spec F9 D-11): a private link to the owner's busy times. */
-export function PublishCard() {
+export function PublishCard({ hideTitle = false }: { hideTitle?: boolean }) {
 	const { t } = useLanguage();
 	const [state, setState] = useState<"loading" | "error" | "off" | "on">("loading");
 	const [since, setSince] = useState("");
@@ -61,5 +61,5 @@ export function PublishCard() {
 		}
 	}
 
-	return <PublishView state={state} urls={urls} since={since} pending={pending} error={error} onTurnOn={() => void turnOn()} onTurnOff={() => void turnOff()} onCopy={(url) => void copy(url)} onRetry={() => { setState("loading"); setAttempt((value) => value + 1); }} />;
+	return <PublishView state={state} urls={urls} since={since} pending={pending} error={error} onTurnOn={() => void turnOn()} onTurnOff={() => void turnOff()} onCopy={(url) => void copy(url)} onRetry={() => { setState("loading"); setAttempt((value) => value + 1); }} hideTitle={hideTitle} />;
 }
