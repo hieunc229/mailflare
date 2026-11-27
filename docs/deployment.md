@@ -1,89 +1,78 @@
 # Deployment and configuration
 
-This guide covers Cloudflare deployment, runtime configuration, database backups, and application updates. To run Mailflare elsewhere, see [Docker](self-hosting.md) or [Vercel](vercel.md).
+Cloudflare deployment, configuration, backups and updates. Elsewhere: [Docker](self-hosting.md), [Vercel](vercel.md).
 
 ## Overview
 
-Set up Mailflare in three steps:
-
-1. **Deploy the app:** use the Deploy to Cloudflare button, set the app name to `mailflare`, and provide the required `CF_TOKEN`.
-2. **Complete setup:** open the deployed app and follow `/setup` to check the installation and create the first admin account.
-3. **Connect your domain:** add a domain managed by the same Cloudflare account and choose which service receives its mail. Mailflare configures email routing and, when available and selected, email sending before helping you create the first mailbox. Resend and Amazon SES are alternatives to Cloudflare for receiving and sending; see [Sending and receiving providers](providers.md).
-
+1. **Deploy the app:** Deploy to Cloudflare button, app name `mailflare`, required `CF_TOKEN`.
+2. **Complete setup:** open the app, follow `/setup`, create the first admin account.
+3. **Connect your domain:** a domain on the same Cloudflare account; choose which service receives its mail. Mailflare configures email routing and (when available and selected) email sending, then helps create the first mailbox. Resend and Amazon SES are alternatives for receiving and sending; see [Sending and receiving providers](providers.md).
 
 ## Step 1: Setup CF_TOKEN
-To configure your `CF_TOKEN` (which is a scoped Cloudflare API Token with specific permissions), follow the below steps.
+`CF_TOKEN` is a scoped Cloudflare API token.
 
 1. In your Cloudflare account, navigate to `Manage Account` → `Account API Tokens` and create a new token.
-2. At the top of the Policy window, select `Specified Domains` for all domains that you plan to connect
+2. At the top of the Policy window, select `Specified Domains` for all domains you plan to connect
     1. Then configure these permissions
         1. DNS & Zones > DNS > Select `Edit` Access
             1. This allows the confirmed setup flow to replace conflicting MX records
         2. DNS & Zones > Zone > Select `Read` Access
         3. DNS & Zones → Zone Settings → Select `Edit` Access
         4. Email & Messaging > Email Routing Rules > Select `Edit` Access
-3. If mailflare will send emails: Add another policy and select `Entire Account`, and configure these permissions:
+3. To send mail: add another policy and select `Entire Account`, and configure these permissions:
     1. Email & Messaging > Email Sending > Select `Edit` Access
-4. After your token is setup, go to `Compute` → `Email Service` → `Email Sending`
-    1. You will need to purchase a paid workers plan if you don't already have one
+4. Go to `Compute` → `Email Service` → `Email Sending`
+    1. A paid Workers plan is required
     2. Select On-board domain and follow the prompts
-    3. After this is done, and after you have setup Mailflare, on the Admin > domains page, when you expand the domain you can then configure DKIM and DMARC records
+    3. After Mailflare setup, expand the domain on Admin > domains to configure DKIM and DMARC records
 
 Optionally, add `Workers AI` > `Read` on the account so the assistant can list Workers AI models; without it a built-in list is shown.
 
-Paste only the token secret into the `CF_TOKEN` field in step 2. Do not include the word `Bearer` and do not use the token ID. The token must belong to the same Cloudflare account as the domains you connect.
+Paste only the token secret into the `CF_TOKEN` field in step 2: no `Bearer`, not the token ID. The token must belong to the same Cloudflare account as the domains you connect.
 
 ## Step 2: Deploy mailflare
 
-1. Click **Deploy to Cloudflare** and sign in to Cloudflare if prompted.
+1. Click **Deploy to Cloudflare**; sign in if prompted.
 
 [![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/hieunc229/mailflare)
 
-2. Choose the Cloudflare account that owns the domain you want to use.
-3. Set the app name to exactly `mailflare`. Do not rename it. 
-4. Add `CF_TOKEN` when Cloudflare asks for the app's runtime variables or secrets. This is different from the CF_TOKEN that Cloudflare uses to deploy the app.
-5. Start the deployment and wait for Cloudflare to finish provisioning and deploying the Worker.
+2. Choose the Cloudflare account that owns the domain.
+3. Set the app name to exactly `mailflare`. Do not rename it.
+4. Add `CF_TOKEN` when asked for runtime variables or secrets (distinct from the token Cloudflare uses to deploy).
+5. Start the deployment and wait for the Worker to deploy.
 
 
 ### Optional Web Push configuration
 
-To enable background new-mail notifications, run `npm run push:keys` once and
-store `VAPID_PRIVATE_KEY` as a Worker secret. Configure `VAPID_PUBLIC_KEY` and
-`VAPID_SUBJECT` as Worker variables; the subject must be a `mailto:` URI or the
-public HTTPS URL of the installation. The same VAPID key pair should be kept
-across deployments so existing browser subscriptions remain valid.
+For background new-mail notifications, run `npm run push:keys` once. Store `VAPID_PRIVATE_KEY` as a Worker secret; set `VAPID_PUBLIC_KEY` and `VAPID_SUBJECT` as Worker variables. The subject is a `mailto:` URI or the installation's public HTTPS URL. Keep the same key pair across deployments so existing browser subscriptions stay valid.
 
 ## Step 3: Complete mailflare setup
 
 1. Open the URL of the deployed `mailflare` Worker.
 2. Go to `/setup` if Mailflare does not take you there automatically.
-3. Let Mailflare check the required Cloudflare configuration and initialize the empty D1 database.
+3. Mailflare checks the Cloudflare configuration and initializes the empty D1 database, applying the committed migrations through the Worker's D1 binding.
 4. Create the first admin account when prompted.
 
-Setup applies the committed migrations through the Worker's D1 binding before creating the first admin account.
-
-To store data in PostgreSQL, MySQL, Turso/libSQL or another database instead of D1, set `DATABASE_URL` (and `DATABASE_DRIVER` when it cannot be inferred) as a Worker variable or secret before running setup. The same setup and **Update database** flow then applies that database's migrations. See [Databases](databases.md).
+For PostgreSQL, MySQL, Turso/libSQL or another database instead of D1, set `DATABASE_URL` (and `DATABASE_DRIVER` when it cannot be inferred) as a Worker variable or secret before setup. Setup and **Update database** then apply that database's migrations. See [Databases](databases.md).
 
 ## Step 4: Connect your primary domain and create an account
 
-1. Enter a domain that already uses Cloudflare DNS on the same account as your `CF_TOKEN`.
-2. Continue while Mailflare enables Email Routing and configures the required routing and sending DNS.
-3. Choose the address for your first mailbox and finish setup.
+1. Enter a domain on Cloudflare DNS in the same account as your `CF_TOKEN`.
+2. Continue; Mailflare enables Email Routing and configures routing and sending DNS.
+3. Choose the first mailbox address and finish setup.
 4. Open the inbox and send a test message to the new address.
 
-To connect more domains later, open **Admin → Domains**, select **New domain**, enter the hostname and choose the receiving service. With Cloudflare, Mailflare configures Email Routing and Email Sending automatically. With Resend or Amazon SES, add the provider's credentials and run its setup from the domain page; see [Sending and receiving providers](providers.md). The `CF_TOKEN` is still needed in every case, because Cloudflare manages the domain's DNS.
+More domains: **Admin → Domains** → **New domain**, enter the hostname, choose the receiving service. Cloudflare: Email Routing and Email Sending are configured automatically. Resend or Amazon SES: add the provider's credentials and run its setup from the domain page; see [Sending and receiving providers](providers.md). `CF_TOKEN` is needed in every case, because Cloudflare manages the domain's DNS.
 
-Resend and SES receive mail by calling your app, so set `APP_URL` to the app's public HTTPS address before setting them up for receiving.
-
-Your inbox should be ready to send and receive emails
+Resend and SES receive mail by calling your app: set `APP_URL` to the public HTTPS address before setting them up for receiving.
 
 ---
 
 ## Deploy with an AI coding agent
 
-Paste the prompt below into an agent with terminal access. Give it your Cloudflare account ID and **two separate scoped API tokens** through the agent's secret input. Never put them in a public chat, repository, or committed file.
+Paste the prompt below into an agent with terminal access. Give it your Cloudflare account ID and **two separate scoped API tokens** through the agent's secret input. Never put them in a public chat, repository or committed file.
 
-- **Deployment token** (Wrangler uses it as `CLOUDFLARE_API_TOKEN`): scope it to the target account with **Workers Scripts Edit** (or **Workers Admin** if you see Cloudflare's newer roles), **D1 Edit**, **Workers R2 Storage Edit**, **Queues Edit**, and **Account Settings Read**. Add **Workers Routes Edit** for the target zone only if the agent should attach a custom domain or route. See Cloudflare's [token permissions](https://developers.cloudflare.com/fundamentals/api/reference/permissions/) and [Workers roles](https://developers.cloudflare.com/workers/authorization/workers/).
+- **Deployment token** (Wrangler's `CLOUDFLARE_API_TOKEN`): target account, with **Workers Scripts Edit** (or **Workers Admin** if you see Cloudflare's newer roles), **D1 Edit**, **Workers R2 Storage Edit**, **Queues Edit**, and **Account Settings Read**. Add **Workers Routes Edit** (target zone only) if the agent should attach a custom domain or route. See Cloudflare's [token permissions](https://developers.cloudflare.com/fundamentals/api/reference/permissions/) and [Workers roles](https://developers.cloudflare.com/workers/authorization/workers/).
 - **Runtime token** (stored as the Worker secret `CF_TOKEN`): use the domain permissions above. Add **Email Sending Edit** to send mail. It must cover the zones you will connect in Mailflare.
 
 ```text
@@ -114,19 +103,19 @@ npm install
 npm run deploy:local
 ```
 
-The local deploy command builds with vinext and uploads the complete Worker with Wrangler. The Cloudflare Vite plugin generates `dist/server/wrangler.json` and redirects Wrangler to that build. It does not modify D1. The complete Worker is required because `worker.ts` also handles inbound email, queues, scheduled backups, and the real-time Durable Object.
+This builds with vinext and uploads the complete Worker with Wrangler. The Cloudflare Vite plugin generates `dist/server/wrangler.json` and redirects Wrangler to that build. It does not modify D1. The complete Worker is required because `worker.ts` also handles inbound email, queues, scheduled backups and the real-time Durable Object.
 
-For manual recovery, pending migrations can still be applied with:
+Manual recovery for pending migrations:
 
 ```bash
 npm run db:migrate:remote
 ```
 
-Remote migrations require the target account's `database_id` in your local `wrangler.jsonc`. Do not commit an account-specific database ID to a reusable repository.
+Needs the target account's `database_id` in your local `wrangler.jsonc`. Do not commit it to a reusable repository.
 
 ## Object storage (R2, Backblaze B2 or AWS S3)
 
-Raw mail, attachments, Drive files, avatars, branding icons, JMAP uploads and backups all live in one bucket. By default that is the `BUCKET` R2 binding in `wrangler.jsonc`. To use Backblaze B2 instead, set four Worker variables (as secrets, or in `.dev.vars` locally):
+Raw mail, attachments, Drive files, avatars, branding icons, JMAP uploads and backups live in one bucket: by default the `BUCKET` R2 binding in `wrangler.jsonc`. For Backblaze B2, set four Worker variables (secrets, or `.dev.vars` locally):
 
 | Variable | Example | Purpose |
 | --- | --- | --- |
@@ -142,34 +131,34 @@ npx wrangler secret put B2_BUCKET
 npx wrangler secret put B2_ENDPOINT
 ```
 
-To use AWS S3 instead, set `S3_BUCKET`, `S3_REGION` and credentials: `S3_ACCESS_KEY_ID` and `S3_SECRET_ACCESS_KEY`, which fall back to `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY` so one IAM user can serve SES and storage. The bucket must be private and in the named region; the IAM user needs `s3:GetObject`, `s3:PutObject`, `s3:DeleteObject` and `s3:AbortMultipartUpload` on `arn:aws:s3:::<bucket>/*`. If both are configured, B2 wins.
+For AWS S3, set `S3_BUCKET`, `S3_REGION` and credentials: `S3_ACCESS_KEY_ID` and `S3_SECRET_ACCESS_KEY`, which fall back to `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY` so one IAM user can serve SES and storage. The bucket must be private and in the named region; the IAM user needs `s3:GetObject`, `s3:PutObject`, `s3:DeleteObject` and `s3:AbortMultipartUpload` on `arn:aws:s3:::<bucket>/*`. If both are configured, B2 wins.
 
-When all four B2 variables (or the S3 ones) are present that storage replaces R2 everywhere; with any missing, R2 stays in use (a partial setup is reported by `GET /api/v1/storage`). The R2 binding can stay in `wrangler.jsonc` and is simply unused. Use a bucket-restricted application key with read and write access, and keep the bucket private. Notes:
+With all four B2 variables (or the S3 ones) present, that storage replaces R2 everywhere; with any missing, R2 stays in use (`GET /api/v1/storage` reports a partial setup). The R2 binding can stay in `wrangler.jsonc`, unused. Use a bucket-restricted application key with read and write access; keep the bucket private.
 
 - **Switching does not copy data.** Objects already in R2 are not moved; copy them to the bucket first (for example with `rclone`, keeping the same keys) or old mail bodies, attachments and Drive files will report as missing.
-- **Drive upload parts** are buffered one at a time in the Worker (64 MB each). B2 and S3 require every part but the last to be at least 5 MB, which holds.
-- **Lifecycle.** Set the bucket's lifecycle rule to keep only the last version and to delete unfinished large files after a few days, as R2 would abort incomplete multipart uploads.
+- **Drive upload parts** are buffered one at a time in the Worker (64 MiB each). B2 and S3 require every part but the last to be at least 5 MiB, which holds.
+- **Lifecycle.** Set the bucket's lifecycle rule to keep only the last version and delete unfinished large files after a few days (R2 aborts incomplete multipart uploads itself).
 - **Test it** with `POST /api/v1/storage` (admin key with the `storage` scope), or the `manage_storage` MCP tool with `action: "test"`; it writes, reads and deletes a small object.
 
 ## Database backups
 
-Mailflare exports its D1 records as JSON and stores the backup files in the configured storage bucket (R2, or Backblaze B2 when configured). A cron trigger in `wrangler.jsonc` runs daily at 02:00 UTC and applies the schedule selected under **Admin → Backups**. Manual backups run the same record export directly from the admin API.
+D1 records are exported as JSON into the configured storage bucket (R2, or Backblaze B2 when configured). A cron trigger in `wrangler.jsonc` runs daily at 02:00 UTC and applies the schedule selected under **Admin → Backups**. Manual backups run the same export from the admin API.
 
 Deploy the complete Worker with `npm run deploy` whenever the cron trigger is added or changed.
 
-After upgrading an existing installation and confirming the cron trigger is active, the old Workflow can be removed with `npx wrangler workflows delete mailflare-database-backup`. Deleting it also removes its historical Workflow instances; backup files in storage and rows in Mailflare's backup history are unaffected.
+After upgrading an existing installation and confirming the cron trigger is active, remove the old Workflow with `npx wrangler workflows delete mailflare-database-backup`. This also removes its historical Workflow instances; backup files and backup history rows are unaffected.
 
 ## Email assistant and MCP
 
-The assistant uses the Workers AI `AI` binding and a separate `mailflare-agent` queue. Provision the queue in the Cloudflare account before deploying a configuration that declares it, and apply migration `0032_add_agentic_mail.sql` before opening the new UI on an existing database. The five-minute cron recovers pending auto-draft work; the 02:00 UTC cron still runs backups.
+Uses the Workers AI `AI` binding and a separate `mailflare-agent` queue. Provision the queue before deploying a configuration that declares it, and apply migration `0032_add_agentic_mail.sql` before opening the new UI on an existing database. The five-minute cron recovers pending auto-draft work; the 02:00 UTC cron still runs backups.
 
-In the inbox, open **Assistant → Settings** for a mailbox, select its reviewer, and enable the assistant. Auto-drafting is a separate opt-in. It skips spam, automated mail, and mailboxes with out-of-office replies enabled. Generated replies appear as ordinary drafts assigned to the reviewer. The reviewer must open the draft and confirm the exact content before delivery.
+Inbox → **Assistant → Settings** for a mailbox: select its reviewer, enable the assistant. Auto-drafting is a separate opt-in; it skips spam, automated mail and mailboxes with out-of-office replies enabled. Generated replies are ordinary drafts assigned to the reviewer, who must open the draft and confirm the exact content before delivery.
 
-The assistant panel no longer exposes MCP key management. External MCP clients can still connect to `https://<your-mailflare-origin>/mcp` with a mailbox-scoped Bearer key. Create it in **Settings → API keys** with **Allow MCP access** enabled; the page calls `/api/agent/mcp-keys`, which also lists and revokes MCP keys. A new key is shown only once. The server uses Streamable HTTP and accepts clients that can set a Bearer header. Its `request_send` tool returns a Mailflare review URL; the MCP key cannot confirm or deliver messages directly. MCP does not require Workers AI for read and draft tools.
+The assistant panel does not manage MCP keys. External MCP clients connect to `https://<your-mailflare-origin>/mcp` with a mailbox-scoped Bearer key. Create it in **Settings → API keys** with **Allow MCP access** enabled; the page calls `/api/agent/mcp-keys`, which also lists and revokes MCP keys. A new key is shown only once. The server uses Streamable HTTP and needs a client that can set a Bearer header. Its `request_send` tool returns a Mailflare review URL; the MCP key cannot confirm or deliver messages directly. MCP does not require Workers AI for read and draft tools.
 
 ## Updating Mailflare
 
-The **Update Mailflare** button in the admin dashboard dispatches `.github/workflows/deploy-update.yml` in the installation repository. The workflow replaces the installation branch's complete tracked tree with the latest upstream source, commits that replacement, and pushes it. This avoids merge conflicts between independently created installation and upstream histories. Target-only committed files and code changes are intentionally removed; repository variables, secrets, and other GitHub or Cloudflare configuration remain unchanged. A connected Cloudflare Git integration then builds and deploys the change.
+The admin dashboard's **Update Mailflare** button dispatches `.github/workflows/deploy-update.yml` in the installation repository. The workflow replaces the installation branch's whole tracked tree with the latest upstream source, commits and pushes it (no merge conflicts between independent histories). Target-only committed files and code changes are intentionally removed; repository variables, secrets and other GitHub or Cloudflare configuration are unchanged. A connected Cloudflare Git integration then builds and deploys.
 
 ### Auto update
 
@@ -181,7 +170,7 @@ Create a fine-grained personal access token for the installation repository with
 | Contents | Read and write | Committing and pushing the upstream source into the installation repository |
 | Workflows | Read and write | Replacing files inside `.github/workflows` during an update |
 
-Configure the token and repository details in both Cloudflare and GitHub:
+Configure in both Cloudflare and GitHub:
 
 | Location | Name | Type | Value |
 | --- | --- | --- | --- |
@@ -193,21 +182,21 @@ Configure the token and repository details in both Cloudflare and GitHub:
 
 The same token can be used for `GITHUB_UPDATE_TOKEN` and `MAILFLARE_UPDATE_TOKEN` when it has all three permissions above. Keep both values secret and limit the token's repository access to the installation repository.
 
-Make sure `.github/workflows/deploy-update.yml` exists on the installation branch. If it is missing, create the file and copy its contents from the [canonical Mailflare update workflow](https://github.com/hieunc229/mailflare/blob/main/.github/workflows/deploy-update.yml). If an older installation has a different updater, replace it with the latest canonical workflow once. A running workflow cannot create or replace itself until the current workflow has been installed manually.
+`.github/workflows/deploy-update.yml` must exist on the installation branch. If missing, create it from the [canonical Mailflare update workflow](https://github.com/hieunc229/mailflare/blob/main/.github/workflows/deploy-update.yml). An older installation with a different updater needs the canonical workflow installed once; a running workflow cannot create or replace itself until the current one is installed manually.
 
-After the GitHub Action completes successfully, wait for the connected Cloudflare deployment to finish before refreshing Mailflare or applying pending database migrations. The workflow updates the repository first; the new application version is not live until Cloudflare completes its deployment.
+After the GitHub Action succeeds, wait for the connected Cloudflare deployment to finish before refreshing Mailflare or applying migrations: the new version is not live until Cloudflare completes its deployment.
 
-Deployment and database migration are separate. After Cloudflare deploys a repository push or an admin-triggered update, open or refresh **Admin settings**. The application update card shows any pending database migrations. Select **Update database** to apply them through the Worker's D1 binding. The same runner initializes a new database during setup.
+Deployment and database migration are separate. After Cloudflare deploys, open or refresh **Admin settings**; the application update card shows pending database migrations. Select **Update database** to apply them through the Worker's D1 binding (the same runner initializes a new database during setup).
 
 If the Cloudflare dashboard has a custom deploy command containing `wrangler d1 migrations apply DB --remote`, remove that part and use `npm run deploy`.
 
-Each migration and its `d1_migrations` history entry run in one D1 batch. If a migration fails, its changes are rolled back, the failed filename is shown, and it can be retried after the problem is corrected. Wrangler remains available as a manual recovery tool.
+Each migration and its `d1_migrations` entry run in one D1 batch. A failed migration is rolled back, its filename shown, and it can be retried after the fix. Wrangler remains available for manual recovery.
 
 If mail arrives after a deploy but before its migrations are applied and the new code needs a column or table that does not exist yet, the inbound queue retries that message every 5 minutes, up to 12 times (about an hour), instead of dropping it. Applying the migrations inside that hour, from **Update database** or with automatic updates enabled (the 5-minute cron applies them), delivers the held mail. Mail still failing after that is lost from the queue and its raw copy in R2 is deleted by the daily sweep, so apply migrations promptly after a deploy. The self-hosted Node server applies migrations at startup before it consumes mail, so it does not hit this.
 
-New application releases must remain compatible with the previous schema until an administrator applies their migrations. Prefer additive changes, keep old columns during the transition, and avoid making authentication or the admin settings page depend immediately on a newly added column. Plan a maintenance window for an incompatible schema change.
+Releases must stay compatible with the previous schema until an administrator applies their migrations: prefer additive changes, keep old columns during the transition, and do not make authentication or the admin settings page depend immediately on a new column. Plan a maintenance window for an incompatible schema change.
 
-When adding a schema change, create a new uniquely named SQL file in `drizzle/migrations` and do not edit an applied migration. Build and development commands generate the Worker migration bundle from those files. `npm run db:bundle` can generate it explicitly.
+Schema change: add a new uniquely named SQL file in `drizzle/migrations`; never edit an applied migration. Build and dev commands generate the Worker migration bundle from those files; `npm run db:bundle` generates it explicitly.
 
 ## Branding license
 
