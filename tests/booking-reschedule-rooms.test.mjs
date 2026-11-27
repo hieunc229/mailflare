@@ -34,7 +34,7 @@ function setup() {
 		return next;
 	};
 	for (const id of ["h1", "o"]) sqlite.exec(`INSERT INTO users (id, email, name, password_hash, role, created_at) VALUES ('${id}', '${id}@one.test', 'U', 'x', 'user', 1)`);
-	sqlite.exec("INSERT INTO calendar_resources (id, name, created_at, updated_at) VALUES ('r1', 'Room 1', 1, 1)");
+	sqlite.exec("INSERT INTO calendar_resources (id, name, public_booking, created_at, updated_at) VALUES ('r1', 'Room 1', 1, 1, 1)");
 	return db;
 }
 const book = (start, end) => reserveBooking({}, type, "Guest", "g@x.test", iso(start), iso(end));
