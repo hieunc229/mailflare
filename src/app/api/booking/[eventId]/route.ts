@@ -35,7 +35,7 @@ export async function PATCH(request: Request, { params }: BookingEventRouteConte
 	if (!hostIds) return NextResponse.json({ error: "Choose users from the host list." }, { status: 400 });
 	const [current] = await db.select({ resourceIds: bookingEvents.resourceIds }).from(bookingEvents).where(and(eq(bookingEvents.id, eventId), eq(bookingEvents.userId, user.id))).limit(1);
 	if (!current) return NextResponse.json({ error: "Booking event not found" }, { status: 404 });
-	const rooms = await resolveBookingRooms(db, body, { booked: parseBookingResourceIds(current.resourceIds), canBook: (await getLicenseEntitlements(env)).canShareMailboxes });
+	const rooms = await resolveBookingRooms(db, body, { booked: parseBookingResourceIds(current.resourceIds) ?? [], canBook: (await getLicenseEntitlements(env)).canShareMailboxes });
 	if (!rooms.ok) return NextResponse.json({ error: rooms.error }, { status: rooms.status });
 	const [taken] = await db.select({ id: bookingEvents.id }).from(bookingEvents).where(and(eq(bookingEvents.userId, user.id), eq(bookingEvents.slug, input.slug))).limit(1);
 	if (taken && taken.id !== eventId) return NextResponse.json({ error: "This event link is already in use." }, { status: 409 });

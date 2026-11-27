@@ -1,7 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { Building2, CalendarDays, ChevronDown, Clock3, Mail, MapPin, MoreHorizontal, Plus, Trash2, UserRound } from "@/components/icons";
+import { AlertCircle, Building2, CalendarDays, ChevronDown, Clock3, Mail, MapPin, MoreHorizontal, Plus, Trash2, UserRound } from "@/components/icons";
 import { BOOKING_TEMPLATE_PLACEHOLDERS, CONFIRMATION_BODY_MAX, CONFIRMATION_SUBJECT_MAX, DEFAULT_CONFIRMATION_BODY, DEFAULT_CONFIRMATION_SUBJECT } from "@/lib/booking/confirmation-utils";
 import clsx from "clsx";
 import { useLanguage } from "@/components/language-provider";
@@ -35,6 +35,11 @@ export function BookingEditor({ roomStore, onRetryRooms, form, open, editingId, 
 	const sectionClass = "border-b border-neutral-200 px-5 py-5";
 	const headingClass = "flex w-full items-center justify-between gap-3 text-left text-base font-semibold text-neutral-900";
 	const fieldClass = "h-10 w-full rounded-xl border border-neutral-200 bg-white px-3 text-sm";
+	// A room is only called deleted once the list has loaded: before that, or if it failed, nothing is known about it.
+	const roomsReady = roomStore.state === "ready";
+	const roomsOff = roomsReady && form.resourceIds.some((id) => !roomStore.rooms.some((room) => room.id === id));
+	const roomsProblem = roomsOff ? t("booking.editor.roomsOff") : roomsReady && form.resourceIds.length > 0 && !roomStore.canBook ? t("booking.editor.roomsNeedTeam") : "";
+	const roomsSummary = !form.resourceIds.length ? t("booking.editor.roomsNone") : !roomsReady ? t(roomStore.state === "error" ? "calendar.rooms.loadFailed" : "booking.editor.roomsLoading") : t("booking.editor.roomsSummary", { rooms: form.resourceIds.map((id) => roomStore.rooms.find((room) => room.id === id)?.name ?? t("calendar.rooms.removedRoom")).join(", ") });
 	const toggle = (section: BookingEditorSection) => setActiveSection((current) => current === section ? null : section);
 	const confirmationBodyRef = useRef<HTMLTextAreaElement>(null);
 	// Placeholder chips go where the cursor is in the message, or at its end.
@@ -76,11 +81,12 @@ export function BookingEditor({ roomStore, onRetryRooms, form, open, editingId, 
 				</section>
 				{(roomStore.rooms.length > 0 || form.resourceIds.length > 0 || roomStore.state === "error") && <section className={sectionClass}>
 					<button type="button" onClick={() => toggle("rooms")} aria-expanded={activeSection === "rooms"} className={headingClass}><span>{t("booking.editor.rooms")}</span><ChevronDown className={clsx("h-5 w-5 text-neutral-500 transition-transform", activeSection === "rooms" && "rotate-180")} /></button>
+					{roomsProblem && <p role="alert" className="mt-2 flex items-start gap-2 text-sm text-red-700"><AlertCircle aria-hidden="true" className="mt-0.5 h-4 w-4 shrink-0" />{roomsProblem}</p>}
 					{activeSection === "rooms" ? <div className="mt-4 space-y-3">
 						<p className="text-xs text-neutral-500">{t("booking.editor.roomsHint")}</p>
 						<RoomsPicker rooms={roomStore.rooms} state={roomStore.state} canBook={roomStore.canBook} selected={form.resourceIds} saved={[]} disabled={saving}
 							onAdd={(id) => onChange({ ...form, resourceIds: form.resourceIds.includes(id) ? form.resourceIds : [...form.resourceIds, id] })} onRemove={(id) => onChange({ ...form, resourceIds: form.resourceIds.filter((item) => item !== id) })} onRetry={onRetryRooms} />
-					</div> : <button type="button" onClick={() => toggle("rooms")} className="mt-2 flex w-full items-center gap-2 text-left text-sm text-neutral-500"><Building2 aria-hidden="true" className="h-4 w-4 shrink-0" /><span className="min-w-0 truncate">{form.resourceIds.length ? t("booking.editor.roomsSummary", { rooms: form.resourceIds.map((id) => roomStore.rooms.find((room) => room.id === id)?.name ?? t("calendar.rooms.removedRoom")).join(", ") }) : t("booking.editor.roomsNone")}</span></button>}
+					</div> : <button type="button" onClick={() => toggle("rooms")} className="mt-2 flex w-full items-center gap-2 text-left text-sm text-neutral-500"><Building2 aria-hidden="true" className="h-4 w-4 shrink-0" /><span className="min-w-0 truncate">{roomsSummary}</span></button>}
 				</section>}
 				<section className={sectionClass}>
 					<button type="button" onClick={() => toggle("confirmation")} aria-expanded={activeSection === "confirmation"} className={headingClass}><span>{t("booking.editor.confirmation")}</span><ChevronDown className={clsx("h-5 w-5 text-neutral-500 transition-transform", activeSection === "confirmation" && "rotate-180")} /></button>

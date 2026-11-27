@@ -46,6 +46,26 @@ test("chosen rooms are listed by name; a room that no longer exists is said so r
 	assert.match(render({ form: form({ resourceIds: ["gone"] }), roomStore: { rooms: [], canBook: true, state: "ready", shown: [] } }), /Reserves A room that no longer exists/);
 });
 
+test("while the room list is loading or failed, a chosen room is not called deleted", () => {
+	for (const state of ["loading", "error"]) {
+		const html = render({ form: form({ resourceIds: ["r1"] }), roomStore: { rooms: [], canBook: false, state, shown: [] } });
+		assert.doesNotMatch(html, /no longer exists/, state);
+		assert.doesNotMatch(html, /turned off or deleted/, state);
+		assert.match(html, state === "error" ? /Rooms could not be loaded/ : /Loading rooms/, state);
+	}
+});
+
+test("a chosen room that is turned off or deleted warns that the page offers no times, whether or not the section is open", () => {
+	const html = render({ form: form({ resourceIds: ["r1", "gone"] }) });
+	assert.match(html, /role="alert"[^>]*>.*?<\/svg>A room here is turned off or deleted/);
+	assert.doesNotMatch(render({ form: form({ resourceIds: ["r1"] }) }), /turned off or deleted/);
+});
+
+test("rooms chosen without a Team licence warn that the page offers no times", () => {
+	assert.match(render({ form: form({ resourceIds: ["r1"] }), roomStore: { rooms, canBook: false, state: "ready", shown: [] } }), /role="alert"[^>]*>.*?<\/svg>Booking rooms needs a Team licence/);
+	assert.doesNotMatch(render({ form: form({ resourceIds: ["r1"] }) }), /needs a Team licence/);
+});
+
 test("with no room in the installation and none chosen the section is absent", () => {
 	assert.doesNotMatch(render({ roomStore: { rooms: [], canBook: false, state: "ready", shown: [] } }), /<span>Rooms<\/span>/);
 });
@@ -55,7 +75,7 @@ test("a failed room list shows the section so it can be retried", () => {
 });
 
 const catalogs = [["en", en], ...readdirSync(new URL("../public/locales", import.meta.url)).filter((file) => file.endsWith(".json")).map((file) => [file, read(`public/locales/${file}`)])];
-const KEYS = ["booking.editor.rooms", "booking.editor.roomsHint", "booking.editor.roomsNone", "booking.editor.roomsSummary"];
+const KEYS = ["booking.editor.rooms", "booking.editor.roomsHint", "booking.editor.roomsNone", "booking.editor.roomsSummary", "booking.editor.roomsLoading", "booking.editor.roomsOff", "booking.editor.roomsNeedTeam"];
 
 test("every catalog (34) carries the booking rooms strings, in English, with the same placeholders", () => {
 	assert.equal(catalogs.length, 34);

@@ -56,7 +56,7 @@ export function RoomsPicker({ rooms, state, canBook, selected, saved, disabled, 
 			{chips.length > 0 && (
 				<ul className="flex flex-wrap gap-2 px-2">
 					{chips.map(({ id, room, booking }) => {
-						const name = room?.name ?? t("calendar.rooms.removedRoom");
+						const name = room?.name ?? (state === "ready" ? t("calendar.rooms.removedRoom") : t("calendar.rooms.loading"));
 						const declined = booking?.status === "declined";
 						const status = !booking ? "" : declined
 							? booking.conflictAt ? t("calendar.rooms.declinedOn", { date: formatUserDate(new Date(booking.conflictAt), { dateStyle: "medium" }) }) : t("calendar.rooms.declined")

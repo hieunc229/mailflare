@@ -19,7 +19,7 @@ export function emptyBookingForm(timeZone: string, currentUserId: string): Booki
 export function formFromEvent(event: BookingEvent): BookingForm {
 	let weekdays: number[] = [];
 	try { weekdays = JSON.parse(event.weekdays) as number[]; } catch { /* An invalid saved schedule remains editable. */ }
-	return { name: event.name, slug: event.slug, description: event.description ?? "", color: normalizeCalendarColor(event.color), hostIds: parseBookingHostIds(event.hostIds, event.userId), resourceIds: parseBookingResourceIds(event.resourceIds), durationMinutes: event.durationMinutes, location: event.location, weekdays, startTime: event.startTime, endTime: event.endTime, timeRanges: parseBookingTimeRanges(event.timeRanges, { startTime: event.startTime, endTime: event.endTime }), timeZone: event.timeZone, enabled: event.enabled, confirmationSubject: event.confirmationSubject ?? "", confirmationBody: event.confirmationBody ?? "" };
+	return { name: event.name, slug: event.slug, description: event.description ?? "", color: normalizeCalendarColor(event.color), hostIds: parseBookingHostIds(event.hostIds, event.userId), resourceIds: parseBookingResourceIds(event.resourceIds) ?? [], durationMinutes: event.durationMinutes, location: event.location, weekdays, startTime: event.startTime, endTime: event.endTime, timeRanges: parseBookingTimeRanges(event.timeRanges, { startTime: event.startTime, endTime: event.endTime }), timeZone: event.timeZone, enabled: event.enabled, confirmationSubject: event.confirmationSubject ?? "", confirmationBody: event.confirmationBody ?? "" };
 }
 
 export function bookingFormWithName(form: BookingForm, name: string): BookingForm {

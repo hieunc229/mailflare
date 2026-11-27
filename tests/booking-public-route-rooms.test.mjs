@@ -112,3 +112,17 @@ test("the booking attempt limit still applies before anything is read", async ()
 	assert.equal((await post()).status, 429);
 	assert.deepEqual(guestEvents(), []);
 });
+
+test("an event type whose stored room list cannot be read is not offered at all: unknown rooms are never treated as no rooms", async () => {
+	for (const stored of ["garbage", '["r1","r1"]', '["a","b","c","d","e","f"]', '[1]', '{"0":"r1"}']) {
+		setup({ rooms: stored });
+		assert.equal((await get()).status, 404, stored);
+		assert.equal((await post()).status, 404, stored);
+		assert.deepEqual(guestEvents(), []);
+	}
+});
+
+test("an event type that predates rooms (the default list) is unchanged", async () => {
+	setup({ rooms: "[]" });
+	assert.equal((await get()).status, 200);
+});

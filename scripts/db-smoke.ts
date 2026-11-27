@@ -139,12 +139,14 @@ const roomEvent = { hostIds: [userId], resourceIds: [`res_book_${stamp}`], name:
 check("a booking with a room reserves it", (await reserveBooking(env, roomEvent, "Roomer", "r@example.com", deskStart.toISOString(), deskEnd.toISOString())) === true);
 const [{ room_rows }] = await db.all<{ room_rows: number }>(sql`SELECT count(*) AS room_rows FROM calendar_resource_bookings WHERE resource_id = ${`res_book_${stamp}`} AND status = 'accepted'`);
 check("the booked room is accepted once", Number(room_rows) === 1);
-check("a second visitor for the same room and time is refused", (await reserveBooking(env, { ...(roomEvent as object), hostIds: [userId] } as never, "Late", "l@example.com", deskStart.toISOString(), deskEnd.toISOString())) === false);
-const [{ late_events }] = await db.all<{ late_events: number }>(sql`SELECT count(*) AS late_events FROM calendar_events WHERE user_id = ${userId} AND title = 'Desk with Late'`);
+await db.insert(users).values({ id: `usr_b_${stamp}`, email: `b${stamp}@example.com`, passwordHash: "x", name: "B" });
+check("a second visitor for the same room and time, with a free host, is refused by the room", (await reserveBooking(env, { ...(roomEvent as object), hostIds: [`usr_b_${stamp}`] } as never, "Late", "l@example.com", deskStart.toISOString(), deskEnd.toISOString())) === false);
+const [{ late_events }] = await db.all<{ late_events: number }>(sql`SELECT count(*) AS late_events FROM calendar_events WHERE user_id = ${`usr_b_${stamp}`} AND title = 'Desk with Late'`);
 check("and leaves no event behind", Number(late_events) === 0);
-await db.run(sql`DELETE FROM calendar_events WHERE title LIKE 'Desk with %'`);
+await db.run(sql`DELETE FROM calendar_events WHERE title LIKE 'Desk with %' AND user_id IN (${userId}, ${`usr_b_${stamp}`})`);
 await db.delete(calendarEvents).where(eq(calendarEvents.id, `evt_free_${stamp}`));
 await db.delete(calendarResources).where(eq(calendarResources.id, `res_book_${stamp}`));
+await db.delete(users).where(eq(users.id, `usr_b_${stamp}`));
 
 const importGroups = Array.from({ length: 9 }, (_, n) => ["BEGIN:VEVENT", `UID:smoke-${n}@google.com`, "DTSTART:20261104T090000Z", "RRULE:FREQ=DAILY", `SUMMARY:Imported ${n}`, "END:VEVENT"].join("\r\n"));
 const importInput = { userId, userZone: "UTC", ownAddresses: [], color: "#16a34a", reminders: true, skipDeclined: true, groups: importGroups };
