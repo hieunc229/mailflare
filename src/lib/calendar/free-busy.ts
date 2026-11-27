@@ -1,17 +1,14 @@
 import { and, eq, gt, inArray, isNull, lt, ne, or, sql } from "drizzle-orm";
 import { getDb } from "@/db";
-import { calendarEvents, davCalendarObjects, users } from "@/db/schema";
-import { isValidTimeZone } from "@/lib/time/utils";
-import { addZonedDays } from "./invite";
+import { calendarEvents, calendarResources, davCalendarObjects, users } from "@/db/schema";
 import { inviteEventId } from "./invite-id";
-import { expandEvent } from "./rrule";
+import { expandRowBusy, loadOwnerZones, mergeBusy, needsOwnerZone, overlapsWindow, USER_CHUNK, type BusyInterval } from "./busy-expand";
+import { roomBusyIntervals } from "./room-busy";
 import { isBusyEvent } from "./visibility";
 
 /** People per request and the longest window (spec F9 section 5, D-9). */
 export const MAX_FREE_BUSY_IDS = 50;
 export const MAX_FREE_BUSY_DAYS = 62;
-/** People per statement: far under D1's 100 bound parameters with the three range conditions. */
-const USER_CHUNK = 40;
 /** Occurrences read per series in one window; a daily series needs 63. */
 const MAX_OCCURRENCES = 2000;
 /**
@@ -22,16 +19,11 @@ const MAX_OCCURRENCES = 2000;
 export const MAX_EXPANSION_BUDGET = 20_000;
 const DAY = 86_400_000;
 
-/** A stored zone is data from outside (CalDAV, invitations): one that is empty or not a zone counts as missing, so it cannot make an expansion throw. */
-const validZone = (zone: string | null | undefined): zone is string => !!zone && isValidTimeZone(zone);
+export { mergeBusy, type BusyInterval };
 
-/** A row that repeats, or an all-day one, with no usable zone of its own: the calendar view expands it in the viewer's zone (`calendarTimeZone`), which for the owner is `users.time_zone`. */
-const needsOwnerZone = (row: { timeZone: string | null; allDay: boolean; repeat: string }) => !validZone(row.timeZone) && (row.allDay || row.repeat !== "none");
-
-export type BusyInterval = [startMs: number, endMs: number];
-/** Rooms and equipment are CS-7; until they exist `resourceIds` is accepted and ignored. */
 export type FreeBusyTargets = {
 	userIds: string[];
+	/** Rooms and equipment: answered from their accepted bookings (D-7), keyed by resource id in the result. */
 	resourceIds?: string[];
 	/** An event being edited: it, its moved occurrences and every guest's copy of its invitation are left out, so it does not clash with itself. The caller must have checked the right to edit it. */
 	excludeEventId?: string;
@@ -43,55 +35,6 @@ export type FreeBusyTargets = {
 	 */
 	excludeStoredUid?: boolean;
 };
-
-/** Sorts, then joins intervals that overlap or touch; empty ones are dropped. */
-export function mergeBusy(intervals: BusyInterval[]): BusyInterval[] {
-	const merged: BusyInterval[] = [];
-	for (const [start, end] of [...intervals].filter(([from, to]) => to > from).sort((a, b) => a[0] - b[0] || a[1] - b[1])) {
-		const last = merged[merged.length - 1];
-		if (last && start <= last[1]) last[1] = Math.max(last[1], end);
-		else merged.push([start, end]);
-	}
-	return merged;
-}
-
-type ExpandableRow = Parameters<typeof expandEvent>[0] & { allDay: boolean; userId: string };
-
-/**
- * One row's occurrences as intervals clamped to [from, to] (ms), expanded the way the calendar view does (an all-day day ends at
- * the next midnight of its zone, a zoneless repeating or all-day row uses `ownerZone`). `limit` bounds the walk; `used` is the work
- * it cost (one per series plus one per occurrence found) and `truncated` says the limit ended it, so occurrences may be missing.
- * `cutoff` leaves out occurrences starting at or after it.
- */
-export function expandRowBusy(row: ExpandableRow, ownerZone: string | undefined, from: number, to: number, limit: number, cutoff?: number): { busy: BusyInterval[]; used: number; truncated: boolean } {
-	const duration = row.endsAt.getTime() - row.startsAt.getTime();
-	// A day of an all-day series ends at the next midnight of its zone, so on a 23- or 25-hour day it is not 24 hours long.
-	const zone = row.allDay || needsOwnerZone(row) ? (validZone(row.timeZone) ? row.timeZone : ownerZone ?? "UTC") : null;
-	const days = Math.max(1, Math.round(duration / DAY));
-	const lengthAt = (start: number) => zone && row.allDay ? addZonedDays(new Date(start), days, zone).getTime() - start : duration;
-	// Its last day can be a day longer than the row (a 25-hour day against 24), so look back one day further than its length.
-	const lookback = zone && row.allDay ? (days + 1) * DAY : duration;
-	const { starts, exhausted } = expandEvent(zone ? { ...row, timeZone: zone } : row, new Date(from - lookback), new Date(to), limit);
-	const busy: BusyInterval[] = [];
-	for (const at of starts) {
-		if (cutoff !== undefined && at.getTime() >= cutoff) continue;
-		const occurrenceEnd = at.getTime() + lengthAt(at.getTime());
-		if (occurrenceEnd > from && at.getTime() < to) busy.push([Math.max(at.getTime(), from), Math.min(occurrenceEnd, to)]);
-	}
-	return { busy, used: 1 + starts.length, truncated: exhausted || starts.length >= limit };
-}
-
-/** Rows that can be in [start, end): they start before it ends and end after it starts, or repeat on into it. */
-export const overlapsWindow = (start: Date, end: Date) => and(lt(calendarEvents.startsAt, end), or(gt(calendarEvents.endsAt, start), and(ne(calendarEvents.repeat, "none"), or(isNull(calendarEvents.repeatUntil), sql`${calendarEvents.repeatUntil} + (${calendarEvents.endsAt} - ${calendarEvents.startsAt} + ${DAY / 1000}) > ${Math.floor(start.getTime() / 1000)}`))));
-
-/** The time zone of each account in `ids` that has a usable one (chunked: D1 binds at most 100 parameters). */
-export async function loadOwnerZones(db: ReturnType<typeof getDb>, ids: string[]): Promise<Map<string, string>> {
-	const zones = new Map<string, string>();
-	for (let index = 0; index < ids.length; index += USER_CHUNK) for (const owner of await db.select({ id: users.id, timeZone: users.timeZone }).from(users).where(inArray(users.id, ids.slice(index, index + USER_CHUNK)))) if (validZone(owner.timeZone)) zones.set(owner.id, owner.timeZone);
-	return zones;
-}
-
-export { needsOwnerZone };
 
 /**
  * The one answer to "when is this person busy" (D-9): the editor, the publish URL and CalDAV all read it, so they cannot disagree.
@@ -106,7 +49,8 @@ export async function busyIntervals(env: CloudflareEnv, targets: FreeBusyTargets
 	const to = end.getTime();
 	const db = getDb(env);
 	const ids = [...new Set(targets.userIds)];
-	if (ids.length > MAX_FREE_BUSY_IDS) throw new RangeError(`Free/busy covers at most ${MAX_FREE_BUSY_IDS} people at a time`);
+	const roomIds = [...new Set(targets.resourceIds ?? [])];
+	if (ids.length + roomIds.length > MAX_FREE_BUSY_IDS) throw new RangeError(`Free/busy covers at most ${MAX_FREE_BUSY_IDS} people and rooms at a time`);
 	if (!Number.isFinite(from) || !Number.isFinite(to) || to <= from) throw new RangeError("Choose a start before the end");
 	if (to - from > MAX_FREE_BUSY_DAYS * DAY) throw new RangeError(`Free/busy covers at most ${MAX_FREE_BUSY_DAYS} days at a time`);
 	// The event being edited and each guest's copy of its invitation, which carries UID `<id>@mailflare` (and the CalDAV client's own UID when the owner asks).
@@ -150,5 +94,9 @@ export async function busyIntervals(env: CloudflareEnv, targets: FreeBusyTargets
 			else list.push(...walked.busy);
 		}
 	}
+	// A room is taken when an accepted booking says so, whatever its organiser shows as; one that cannot be read in full is busy all window, never free.
+	// Only rooms that exist get an entry: an id that names nothing is left out, as it was before rooms existed.
+	const known = roomIds.length ? (await db.select({ id: calendarResources.id }).from(calendarResources).where(inArray(calendarResources.id, roomIds))).map((room) => room.id) : [];
+	if (known.length) for (const [id, room] of await roomBusyIntervals(db, known, start, end, { excludeEventId: targets.excludeEventId, excludeOccurrence: targets.excludeOccurrence })) collected.set(id, room.truncated ? [[from, to]] : room.busy);
 	return new Map([...collected].map(([id, list]) => [id, mergeBusy(list)]));
 }
