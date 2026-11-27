@@ -150,17 +150,19 @@ const tokens = () => sqlite.prepare("SELECT id, booking_token FROM calendar_reso
 const counts = () => ({ events: sqlite.prepare("SELECT count(*) AS n FROM calendar_events WHERE title LIKE '% with Guest'").get().n, bookings: sqlite.prepare("SELECT count(*) AS n FROM calendar_resource_bookings WHERE event_id NOT LIKE 'rival%'").get().n });
 
 test("I-1: the process dying between any two statements of the reservation writes nothing (atomic batch)", async () => {
-	for (let at = 0; at < 8; at += 1) {
+	let crashed = 0;
+	for (let at = 0; at < 9; at += 1) {
 		setup();
 		const before = tokens();
 		crashAt = at;
 		let outcome;
 		try { outcome = await reserve(); } catch (error) { outcome = error; }
-		if (outcome === true) break; // past the last statement of the batch: nothing left to crash
 		assert.ok(outcome instanceof Error, `statement ${at}`);
+		crashed += 1;
 		assert.deepEqual(counts(), { events: 0, bookings: 0 }, `a crash before statement ${at} leaves no event and no room booking`);
 		assert.deepEqual(tokens(), before, `and the room's token is unchanged (${at})`);
 	}
+	assert.equal(crashed, 9, "every statement of the batch (swap, its guard, busy guard, events, rows guard, room booking) was crashed before");
 });
 
 test("I-1: the event and its room are written by one batch: no host event exists without its room booking", async () => {
@@ -221,7 +223,7 @@ test("Neon (no transaction): a rival that books the room between our swap and ou
 test("Neon: a batch that fails part-way has its events taken back", async () => {
 	setup();
 	globalThis.reserve.db.batchIsAtomic = false;
-	crashAt = 5;
+	crashAt = 8; // the events are written, the room booking is the statement that never runs
 	await assert.rejects(reserve());
 	assert.deepEqual(counts(), { events: 0, bookings: 0 });
 });
