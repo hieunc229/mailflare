@@ -41,7 +41,7 @@ slows every page, and [first setup](#first-setup) most of all.
 
 ### Storage
 
-Pick one:
+Pick one (see [Choosing storage](storage.md) for prices):
 
 - **Vercel Blob. The store must be private.** In the project's Storage tab, create a Blob store, choose **Private**
   access and connect it, keeping the default variable prefix. Mailflare writes private files only, so a public store
