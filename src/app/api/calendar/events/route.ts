@@ -20,6 +20,8 @@ import { authorizeCalendarRequest, calendarKeyCanSendInvitations } from "@/lib/c
 import { readJsonObject } from "@/lib/http/request";
 import { isUniqueConstraintError } from "@/lib/database-errors";
 import { listRoomEvents, MAX_SCHEDULE_ROOMS, roomsByEvent } from "@/lib/calendar/room-schedule";
+import { roomsBookable } from "@/lib/calendar/room-licence";
+import { recheckWaitingOnLoad } from "@/lib/calendar/room-save";
 import { resolveBookableRooms } from "@/lib/calendar/resources";
 import { bookAndSummarize, invitationLocation, roomResponse, type RoomsSummary } from "@/lib/calendar/room-save";
 import { getLicenseEntitlements } from "@/lib/licenses/service";
@@ -39,6 +41,9 @@ export async function GET(request: Request) {
 	const end = new Date(url.searchParams.get("end") ?? start.getTime() + 31 * 86_400_000);
 	const db = getDb(env);
 	const requested = url.searchParams.getAll("calendarIds").flatMap((value) => value.split(",")).map((value) => value.trim()).filter(Boolean);
+	// Bookings left waiting for their check are settled a few at a time as their owner loads the calendar (before the list is read, so it shows the result); a small count lets the page say so.
+	const roomsPending = await recheckWaitingOnLoad(db, user.id, roomsBookable(env));
+	const extra = roomsPending > 0 ? { roomsPending } : {};
 	const roomIds = url.searchParams.getAll("resourceIds").flatMap((value) => value.split(",")).map((value) => value.trim()).filter(Boolean);
 	if (new Set(roomIds).size > MAX_SCHEDULE_ROOMS) return NextResponse.json({ error: `Ask for at most ${MAX_SCHEDULE_ROOMS} rooms at a time` }, { status: 400 });
 	const visible = await listVisibleEvents(db, user, { start, end }, requested);
@@ -65,9 +70,9 @@ export async function GET(request: Request) {
 		for (const row of overrideRows) (overrides[row.eventId] ??= []).push({ occurrenceMs: row.occurrenceMs, startsAt: row.startsAt, endsAt: row.endsAt });
 		for (const row of responseRows) (occurrenceResponses[row.eventId] ??= []).push({ occurrenceMs: row.occurrenceMs, guest: row.guest, status: row.status });
 	}
-	if (!roomIds.length) return NextResponse.json({ events, overrides, occurrenceResponses });
+	if (!roomIds.length) return NextResponse.json({ events, overrides, occurrenceResponses, ...extra });
 	const schedule = await listRoomEvents(db, user, roomIds, { start, end });
-	return NextResponse.json({ events, overrides, occurrenceResponses, roomEvents: schedule.events, ...(schedule.truncated ? { roomEventsTruncated: true } : {}) });
+	return NextResponse.json({ events, overrides, occurrenceResponses, ...extra, roomEvents: schedule.events, ...(schedule.truncated ? { roomEventsTruncated: true } : {}) });
 }
 
 export async function POST(request: Request) {
