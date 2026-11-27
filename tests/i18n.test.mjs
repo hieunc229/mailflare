@@ -113,6 +113,22 @@ test("every registered catalog has the English keys and nonempty messages and la
 	}
 });
 
+// A plural variant is only reachable when the locale's own CLDR rules can select its category:
+// `createTranslator` asks `Intl.PluralRules(locale).select(count)` and falls back to `.other`.
+// A catalog carrying, say, `.one` for Korean stores a translation no count can ever reach.
+// `update.availableCommits.one` survives in these four catalogs because the open contributor PRs
+// #408 and #417 append keys straight after that line and #415 carries it in a hunk, so deleting it
+// here would turn a clean merge into a delete/modify conflict. Drop these four with that line.
+const pendingOpenPr = new Set(["id:update.availableCommits.one", "ja:update.availableCommits.one", "vi:update.availableCommits.one", "zh-CN:update.availableCommits.one"]);
+test("catalogs carry no plural variant their locale's CLDR rules never select", async () => {
+	for (const code of [...Object.keys(i18n.locales), "en"]) {
+		const categories = new Intl.PluralRules(code).resolvedOptions().pluralCategories;
+		const catalog = code === "en" ? en : await i18n.loadMessages(code);
+		const unreachable = Object.keys(catalog).filter((key) => isPluralKey(key) && !categories.includes(categoryOf(key)) && !pendingOpenPr.has(`${code}:${key}`));
+		assert.deepEqual(unreachable, [], `${code} never selects these plural categories (reachable: ${categories.join(", ")})`);
+	}
+});
+
 test("missing, invalid and unsupported locale values fall back to English", () => {
 	for (const value of [undefined, null, "", "not-a-registered-locale", "pt-BR; Path=/", {}]) assert.equal(i18n.resolveLocale(value), "en");
 	assert.equal(i18n.resolveLocale("en"), "en");
