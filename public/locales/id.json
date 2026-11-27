@@ -2688,5 +2688,6 @@
 	"calendar.rooms.error.team": "Booking rooms needs a Team licence.",
 	"calendar.rooms.error.invalid": "One of those rooms cannot be booked.",
 	"calendar.rooms.eventRoom": "Booked room: {name}",
-	"calendar.rooms.unconfirmedToast": "{room} could not be confirmed because the room was being booked at the same time. The event is saved; save it again to book the room."
+	"calendar.rooms.unconfirmedToast": "{room} could not be confirmed because the room was being booked at the same time. The event is saved; save it again to book the room.",
+	"calendar.rooms.seriesNote": "Rooms belong to the whole series, so they cannot be changed from one occurrence."
 }
