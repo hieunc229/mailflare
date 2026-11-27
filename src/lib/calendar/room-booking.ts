@@ -51,6 +51,19 @@ function clashes(mine: BusyInterval[], others: BusyInterval[]): number[] {
 }
 
 /**
+ * The compare-and-swap on a room's token: the swap only matches while the token is still the one that was read (and, with `open`, while the room is
+ * on and open to public booking pages), and the guard after it fails the whole batch when it matched nothing.
+ */
+function tokenSwap(db: Db, id: string, token: string, open = false): unknown[] {
+	const next = crypto.randomUUID();
+	const where = and(eq(calendarResources.id, id), eq(calendarResources.bookingToken, token), ...(open ? [eq(calendarResources.disabled, false), eq(calendarResources.publicBooking, true)] : []));
+	return [
+		db.update(calendarResources).set({ bookingToken: next }).where(where),
+		...requireGuard(db, sql`not exists (select 1 from ${calendarResources} where ${and(eq(calendarResources.id, id), eq(calendarResources.bookingToken, next))})`),
+	];
+}
+
+/**
  * Books `resourceIds` for an event (spec F9 D-8, section 8.5), replacing whatever it was booked for before: a room left out loses
  * its booking, a room named gets `accepted` when free over the event's occurrences and `declined` (the whole series, with the
  * first clashing dates) when any occurrence overlaps another accepted booking. First booking wins: a declined event holds nothing.
@@ -107,13 +120,7 @@ export async function bookRooms(db: Db, eventId: string, resourceIds: string[], 
 			return outcome(id, found.length ? "declined" : "accepted", found);
 		});
 		// Only a room that ends up accepted needs its token swapped: a decline holds nothing, so a stale one is harmless.
-		const guards = rooms.filter((room) => room.status === "accepted").flatMap(({ resourceId: id }) => {
-			const next = crypto.randomUUID();
-			return [
-				db.update(calendarResources).set({ bookingToken: next }).where(and(eq(calendarResources.id, id), eq(calendarResources.bookingToken, tokens.get(id)!))),
-				...requireGuard(db, sql`not exists (select 1 from ${calendarResources} where ${and(eq(calendarResources.id, id), eq(calendarResources.bookingToken, next))})`),
-			];
-		});
+		const guards = rooms.filter((room) => room.status === "accepted").flatMap(({ resourceId: id }) => tokenSwap(db, id, tokens.get(id)!));
 		try { await write([...rooms, ...held], guards); } catch (error) {
 			if (!isUniqueConstraintError(error)) throw error;
 			// Two saves that lost to each other would lose again together: wait a little, differently each time.
@@ -144,4 +151,56 @@ export async function bookRooms(db: Db, eventId: string, resourceIds: string[], 
 	const rooms = [...wanted.filter((id) => known.has(id)).map((id) => ({ ...outcome(id, "unconfirmed", []), conflictAt: held.has(id) ? PENDING_RECHECK : null })), ...[...frozen].filter((id) => known.has(id)).map((id) => outcome(id, "declined", []))];
 	await write(rooms, []);
 	return { rooms };
+}
+
+export type ReservationInput = {
+	/** The event that holds the room bookings (it is created by `create`, in the same batch). */
+	eventId: string;
+	resourceIds: string[];
+	/** The one interval to hold. */
+	start: Date;
+	end: Date;
+	/** The statements that create the event(s) and refuse the batch when a host is busy: written after the room swaps and before the bookings, in the same batch. */
+	create: unknown[];
+	/** After a failed batch: whether the caller's own guard (a busy host) was why, so retrying the rooms is pointless. */
+	createRefused: () => Promise<boolean>;
+	/** Takes back what a batch without a transaction wrote before it stopped, or that a rival then outranked. */
+	undo: () => Promise<void>;
+	now?: Date;
+};
+
+/**
+ * Reserves rooms for one new event over one interval, in ONE `db.batch` with the event's own creation (spec CS-8): read each room's token and
+ * its busy time over [start, end); then send the token swaps (each only while the room is on and open to public booking pages) with their
+ * guards, the caller's `create` statements, and the `accepted` bookings. If anything fails (a rival moved a token, a room was turned off, a host
+ * was busy) the whole batch is rolled back, so no event ever exists without its room, and a crash between the statements writes nothing.
+ * Returns `booked`, `refused` (the caller's guard failed: a host is busy) or `lost` (a room is taken, off, closed, too heavy to read, or the
+ * race was lost `MAX_ROOM_ATTEMPTS` times: never booked unchecked). Where `batchIsAtomic` is false (Neon over HTTP) the batch can stop part-way
+ * and two writers can interleave, so `undo` runs after a failure and the room is read once more after the write: an overlapping rival wins.
+ */
+export async function reserveRoomsWithEvent(db: Db, input: ReservationInput): Promise<"booked" | "refused" | "lost"> {
+	const wanted = [...new Set(input.resourceIds)];
+	const nonAtomic = (db as { batchIsAtomic?: boolean }).batchIsAtomic === false;
+	for (let attempt = 0; attempt < MAX_ROOM_ATTEMPTS; attempt += 1) {
+		const rooms = await db.select({ id: calendarResources.id, token: calendarResources.bookingToken, disabled: calendarResources.disabled, publicBooking: calendarResources.publicBooking }).from(calendarResources).where(inArray(calendarResources.id, wanted));
+		if (rooms.length !== wanted.length || rooms.some((room) => room.disabled || !room.publicBooking)) return "lost";
+		const busy = await roomBusyIntervals(db, wanted, input.start, input.end, { excludeEventId: input.eventId, budget: ROOM_CHECK_BUDGET, roomCap: ROOM_CHECK_BUDGET });
+		if (wanted.some((id) => busy.get(id)?.truncated || busy.get(id)?.busy.length)) return "lost";
+		const bookings = wanted.map((resourceId) => ({ id: newId("crb"), resourceId, eventId: input.eventId, status: "accepted" as const, conflictAt: null, createdAt: input.now ?? new Date() }));
+		const batch = [...rooms.flatMap((room) => tokenSwap(db, room.id, room.token, true)), ...input.create, db.insert(calendarResourceBookings).values(bookings)];
+		try { await db.batch(batch as never); } catch (error) {
+			if (!isUniqueConstraintError(error)) { if (nonAtomic) await input.undo(); throw error; }
+			if (nonAtomic) await input.undo();
+			if (await input.createRefused()) return "refused";
+			// A rival moved a token, or a room was just turned off: read again, and wait a little, differently each time.
+			await new Promise((resolve) => setTimeout(resolve, Math.random() * 20 * (attempt + 1)));
+			continue;
+		}
+		if (nonAtomic) {
+			const rivals = await roomBusyIntervals(db, wanted, input.start, input.end, { excludeEventId: input.eventId, budget: ROOM_CHECK_BUDGET, roomCap: ROOM_CHECK_BUDGET });
+			if (wanted.some((id) => rivals.get(id)?.truncated || rivals.get(id)?.busy.length)) { await input.undo(); return "lost"; }
+		}
+		return "booked";
+	}
+	return "lost";
 }

@@ -13,6 +13,8 @@ const fixture = await loadFixture({ name: "booking-reserve", entryPoint: "src/li
 const { reserveBooking } = await fixture.import();
 let sqlite;
 let beforeBatch = null;
+let betweenStatements = null;
+let crashAt = -1;
 after(() => { sqlite?.close(); delete globalThis.reserve; fixture.dispose(); });
 
 const H = 3_600_000;
@@ -33,16 +35,24 @@ function setup() {
 	let tail = Promise.resolve();
 	db.batch = (list) => {
 		const next = tail.then(async () => {
+			// The room-and-event batch is the only one with more than three statements.
 			if (list.length > 3) beforeBatch?.(sqlite);
+			if (db.batchIsAtomic === false) {
+				// No transaction (Neon over HTTP): each statement stands alone, and a failure leaves the earlier ones written.
+				for (const [index, statement] of list.entries()) { if (list.length > 3) betweenStatements?.(index, sqlite); if (crashAt === index) throw new Error("process died"); await statement; }
+				return;
+			}
 			sqlite.exec("BEGIN");
-			try { for (const statement of list) await statement; sqlite.exec("COMMIT"); } catch (error) { sqlite.exec("ROLLBACK"); throw error; }
+			try { for (const [index, statement] of list.entries()) { if (list.length > 3 && crashAt === index) throw new Error("process died"); await statement; } sqlite.exec("COMMIT"); } catch (error) { sqlite.exec("ROLLBACK"); throw error; }
 		});
 		tail = next.catch(() => {});
 		return next;
 	};
 	beforeBatch = null;
+	betweenStatements = null;
+	crashAt = -1;
 	for (const id of ["h1", "h2", "o"]) sqlite.exec(`INSERT INTO users (id, email, name, password_hash, role, created_at) VALUES ('${id}', '${id}@one.test', 'U', 'x', 'user', 1)`);
-	for (const id of ["r1", "r2"]) sqlite.exec(`INSERT INTO calendar_resources (id, name, created_at, updated_at) VALUES ('${id}', 'Room ${id}', 1, 1)`);
+	for (const id of ["r1", "r2"]) sqlite.exec(`INSERT INTO calendar_resources (id, name, public_booking, created_at, updated_at) VALUES ('${id}', 'Room ${id}', 1, 1, 1)`);
 }
 function rival(room, start, end, extra = {}) {
 	const id = `rival${++counter}`;
@@ -134,4 +144,84 @@ test("a failure while booking the room removes the event and is not swallowed", 
 	sqlite.exec("CREATE TABLE calendar_resource_bookings (id text)");
 	await assert.rejects(reserve());
 	assert.deepEqual(guestEvents(), []);
+});
+
+const tokens = () => sqlite.prepare("SELECT id, booking_token FROM calendar_resources ORDER BY id").all().map((row) => ({ ...row }));
+const counts = () => ({ events: sqlite.prepare("SELECT count(*) AS n FROM calendar_events WHERE title LIKE '% with Guest'").get().n, bookings: sqlite.prepare("SELECT count(*) AS n FROM calendar_resource_bookings WHERE event_id NOT LIKE 'rival%'").get().n });
+
+test("I-1: the process dying between any two statements of the reservation writes nothing (atomic batch)", async () => {
+	for (let at = 0; at < 8; at += 1) {
+		setup();
+		const before = tokens();
+		crashAt = at;
+		let outcome;
+		try { outcome = await reserve(); } catch (error) { outcome = error; }
+		if (outcome === true) break; // past the last statement of the batch: nothing left to crash
+		assert.ok(outcome instanceof Error, `statement ${at}`);
+		assert.deepEqual(counts(), { events: 0, bookings: 0 }, `a crash before statement ${at} leaves no event and no room booking`);
+		assert.deepEqual(tokens(), before, `and the room's token is unchanged (${at})`);
+	}
+});
+
+test("I-1: the event and its room are written by one batch: no host event exists without its room booking", async () => {
+	setup();
+	const seen = [];
+	betweenStatements = null;
+	const original = globalThis.reserve.db.batch;
+	globalThis.reserve.db.batch = (list) => { seen.push(list.length); return original(list); };
+	assert.equal(await reserve(), true);
+	assert.ok(seen.some((length) => length > 3), "one batch carries the swap, the guards, the events and the booking");
+	assert.deepEqual(counts(), { events: 1, bookings: 1 });
+});
+
+test("a room turned off between the check and the write is not booked, and nothing is written", async () => {
+	setup();
+	beforeBatch = (db) => { beforeBatch = null; db.exec("UPDATE calendar_resources SET disabled = 1"); };
+	assert.equal(await reserve(), false);
+	assert.deepEqual(counts(), { events: 0, bookings: 0 });
+});
+
+test("a room closed to public booking pages between the check and the write is not booked either", async () => {
+	setup();
+	beforeBatch = (db) => { beforeBatch = null; db.exec("UPDATE calendar_resources SET public_booking = 0"); };
+	assert.equal(await reserve(), false);
+	assert.deepEqual(counts(), { events: 0, bookings: 0 });
+});
+
+test("a room that is not open to public booking pages is refused from the start", async () => {
+	setup();
+	sqlite.exec("UPDATE calendar_resources SET public_booking = 0");
+	assert.equal(await reserve(), false);
+	assert.deepEqual(counts(), { events: 0, bookings: 0 });
+});
+
+test("a host who becomes busy between the check and the write loses the booking whole: no event, no room, token unchanged", async () => {
+	setup();
+	const before = tokens();
+	beforeBatch = (db) => { beforeBatch = null; db.exec(`INSERT INTO calendar_events (id, user_id, title, starts_at, ends_at, created_at, updated_at, time_zone) VALUES ('late', 'h1', 'Late meeting', ${secs(at(9))}, ${secs(at(10))}, 1, 1, 'UTC')`); };
+	assert.equal(await reserve(), false);
+	assert.deepEqual(counts(), { events: 0, bookings: 0 });
+	assert.deepEqual(tokens(), before);
+});
+
+test("Neon (no transaction): a rival that books the room between our swap and our booking makes us give way, and our events are taken back", async () => {
+	setup();
+	globalThis.reserve.db.batchIsAtomic = false;
+	betweenStatements = (index, db) => {
+		// Just before the last statement (our room booking) a rival finishes its own reservation of the same room and time.
+		if (index !== 6) return;
+		betweenStatements = null;
+		db.exec(`INSERT INTO calendar_events (id, user_id, title, starts_at, ends_at, created_at, updated_at, time_zone) VALUES ('rival_n', 'o', 'Rival', ${secs(at(9))}, ${secs(at(9, 30))}, 1, 1, 'UTC'); INSERT INTO calendar_resource_bookings (id, resource_id, event_id, status, created_at) VALUES ('brival_n', 'r1', 'rival_n', 'accepted', 1);`);
+	};
+	assert.equal(await reserve(), false);
+	assert.deepEqual(counts(), { events: 0, bookings: 0 }, "only the rival's booking remains");
+	assert.deepEqual(sqlite.prepare("SELECT event_id FROM calendar_resource_bookings").all().map((row) => row.event_id), ["rival_n"]);
+});
+
+test("Neon: a batch that fails part-way has its events taken back", async () => {
+	setup();
+	globalThis.reserve.db.batchIsAtomic = false;
+	crashAt = 5;
+	await assert.rejects(reserve());
+	assert.deepEqual(counts(), { events: 0, bookings: 0 });
 });

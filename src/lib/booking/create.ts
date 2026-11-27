@@ -22,18 +22,36 @@ export async function createBookedCalendarEvents(env: CloudflareEnv, event: Book
 	const endSeconds = Math.floor(new Date(endsAt).getTime() / 1000);
 	const nowSeconds = Math.floor(Date.now() / 1000);
 	const requested = sql.join(hostIds.map((id, index) => sql`select ${id} as host_id, ${eventIds?.[index] ?? newId("evt")} as event_id`), sql` union all `);
-	const hostList = sql.join(hostIds.map((id) => sql`${id}`), sql`, `);
-	// The same events availableBookingSlots ignores (D-6): declined, cancelled and not-yet-answered ones are not on the calendar, nor are those marked free.
-	const offCalendar = sql.join(OFF_CALENDAR_RESPONSES.map((status) => sql`${status}`), sql`, `);
+	const busyCount = hostBusyCount(hostIds, startSeconds, endSeconds);
 	const columns = sql.join(COLUMNS.map((name) => sql.identifier(name)), sql`, `);
 	const description = [`Booked by ${guestName} (${guestEmail})`, notes].filter(Boolean).join("\n\n");
 	const result = await getDb(env).run(sql`insert into ${calendarEvents} (${columns})
 		select requested_hosts.event_id, requested_hosts.host_id, null, ${`${event.name} with ${guestName}`}, ${description}, ${event.location},
 			${JSON.stringify([guestEmail, ...guestEmails])}, ${event.color}, 'none', '[]', '[]', ${event.timeZone}, ${startSeconds}, ${endSeconds}, ${nowSeconds}, ${nowSeconds}
 		from (${requested}) requested_hosts
-		where (select count(*) from ${calendarEvents} busy where busy.${sql.identifier("user_id")} in (${hostList}) and busy.${sql.identifier("repeat")} = 'none'
-			and busy.${sql.identifier("transparent")} is not true
-			and (busy.${sql.identifier("response_status")} is null or busy.${sql.identifier("response_status")} not in (${offCalendar}))
-			and busy.${sql.identifier("starts_at")} < ${endSeconds} and busy.${sql.identifier("ends_at")} > ${startSeconds}) = 0`);
+		where ${busyCount} = 0`);
 	return (result as unknown as { meta: { changes: number } }).meta.changes === hostIds.length;
+}
+
+/**
+ * `(select count(*) ...)`: the one-off events that make any of `hostIds` busy over the interval (seconds). The same events availableBookingSlots
+ * ignores (D-6): declined, cancelled and not-yet-answered ones are not on the calendar, nor are those marked free. Repeating events are not
+ * counted here (the slot list already left their times out); only the race between two visitors is closed by this.
+ */
+export function hostBusyCount(hostIds: string[], startSeconds: number, endSeconds: number) {
+	const hostList = sql.join(hostIds.map((id) => sql`${id}`), sql`, `);
+	const offCalendar = sql.join(OFF_CALENDAR_RESPONSES.map((status) => sql`${status}`), sql`, `);
+	return sql`(select count(*) from ${calendarEvents} busy where busy.${sql.identifier("user_id")} in (${hostList}) and busy.${sql.identifier("repeat")} = 'none'
+		and busy.${sql.identifier("transparent")} is not true
+		and (busy.${sql.identifier("response_status")} is null or busy.${sql.identifier("response_status")} not in (${offCalendar}))
+		and busy.${sql.identifier("starts_at")} < ${endSeconds} and busy.${sql.identifier("ends_at")} > ${startSeconds})`;
+}
+
+/** The rows a booking creates, one per host, for a drizzle insert (the room path writes them in a batch; the plain path uses one INSERT ... SELECT). */
+export function bookedEventRows(event: BookingEventRecord, ids: string[], guestName: string, guestEmail: string, startsAt: string, endsAt: string, guestEmails: string[], notes: string, now = new Date()) {
+	const description = [`Booked by ${guestName} (${guestEmail})`, notes].filter(Boolean).join("\n\n");
+	return event.hostIds.map((userId, index) => ({
+		id: ids[index], userId, mailboxId: null, title: `${event.name} with ${guestName}`, description, location: event.location, attendees: JSON.stringify([guestEmail, ...guestEmails]), color: event.color,
+		repeat: "none" as const, repeatDays: "[]", excludedOccurrences: "[]", timeZone: event.timeZone, startsAt: new Date(startsAt), endsAt: new Date(endsAt), createdAt: now, updatedAt: now,
+	}));
 }
