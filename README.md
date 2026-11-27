@@ -64,8 +64,8 @@ Prices change, so check [Resend](https://resend.com/pricing), [Amazon SES](https
 
 > **`CF_TOKEN` is required.** Create a scoped [Cloudflare API token](https://github.com/hieunc229/mailflare/issues/24#issuecomment-5523686105) with these permissions:
 >
-> - All accounts: Email Sending:Edit, DNS Settings:Edit, Email Routing Addresses:Edit
-> - All zones: DNS Settings:Edit, Email Routing Rules:Edit, Zone Settings:Edit, DNS:Edit
+> - All zones: Zone:Read, DNS:Edit, Zone Settings:Edit, Email Routing Rules:Edit
+> - All accounts, only if Mailflare will send through Cloudflare: Email Sending:Edit
 
 More options: [deployment guide](docs/deployment.md).
 

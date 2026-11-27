@@ -29,6 +29,8 @@ To configure your `CF_TOKEN` (which is a scoped Cloudflare API Token with specif
     2. Select On-board domain and follow the prompts
     3. After this is done, and after you have setup Mailflare, on the Admin > domains page, when you expand the domain you can then configure DKIM and DMARC records
 
+Optionally, add `Workers AI` > `Read` on the account so the assistant can list Workers AI models; without it a built-in list is shown.
+
 Paste only the token secret into the `CF_TOKEN` field in step 2. Do not include the word `Bearer` and do not use the token ID. The token must belong to the same Cloudflare account as the domains you connect.
 
 ## Step 2: Deploy mailflare
