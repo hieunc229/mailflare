@@ -15,7 +15,11 @@ export function getSessionTokenFromRequest(request: Request): string | undefined
 		const [name, ...valueParts] = part.trim().split("=");
 		if (name === "ep_session") {
 			const value = valueParts.join("=");
-			return value ? decodeURIComponent(value) : undefined;
+			try {
+				return value ? decodeURIComponent(value) : undefined;
+			} catch {
+				return undefined;
+			}
 		}
 	}
 
