@@ -53,7 +53,7 @@ async function changeCard(env: CloudflareEnv, userId: string, cardId: string, ed
 		const [row] = await db.select().from(davCards).where(and(eq(davCards.id, cardId), eq(davCards.userId, userId), eq(davCards.collectionId, cid))).limit(1);
 		if (!row) return "missing";
 		const seq = (await etagSeqs(env, cid, [cardId])).get(cardId);
-		const guard = staleGuard(db, davCards, cid, cardId, userId, { seq: seq ?? null, updatedAt: row.updatedAt });
+		const guard = staleGuard(db, davCards, [cid], cardId, userId, { seq: seq ?? null, updatedAt: row.updatedAt });
 		const body = edit({ body: row.body });
 		let statements: unknown[];
 		if (body === null) statements = [...guard, db.delete(davCards).where(and(eq(davCards.id, cardId), eq(davCards.userId, userId))), unlinkCardStatement(db, userId, cardId)];

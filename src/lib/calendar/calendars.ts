@@ -77,7 +77,7 @@ export async function createCalendar(db: Db, userId: string, input: CalendarInpu
 	if (Number(owned) + 1 >= MAX_CALENDARS) return fail(409, `You can have up to ${MAX_CALENDARS} calendars`);
 	const id = `cal:${newId("cal")}`;
 	const now = new Date();
-	const row = { id, userId, kind: "calendar" as const, displayName: parsed.name!, color: parsed.color ?? DEFAULT_FOLDER_COLOR, description: parsed.description ?? "", sortOrder: null, deadProps: "{}", seededAt: null, createdAt: now, updatedAt: now };
+	const row = { id, userId, kind: "calendar" as const, displayName: parsed.name!, color: parsed.color ?? DEFAULT_FOLDER_COLOR, description: parsed.description ?? "", sortOrder: null, deadProps: "{}", seededAt: null, seedStartedAt: null, seedCursor: null, createdAt: now, updatedAt: now };
 	await db.insert(davCollections).values(row);
 	// The count above and this insert are not one step; a concurrent create may have taken the last place, so count again and give the place back.
 	// Two creates racing for the last place may both be refused (each sees the other's row); the user retries, and the cap is never exceeded.
@@ -102,7 +102,7 @@ export async function updateCalendar(db: Db, userId: string, calendarId: string,
 		await db.update(davCollections).set({ ...patch, updatedAt: now }).where(eq(davCollections.id, calendarId));
 		return { ok: true, calendar: summarize(userId, { ...existing, ...patch }) };
 	}
-	const row = { id: calendarId, userId, kind: "calendar" as const, displayName: null, color: null, description: null, sortOrder: null, deadProps: "{}", seededAt: null, createdAt: now, updatedAt: now, ...patch };
+	const row = { id: calendarId, userId, kind: "calendar" as const, displayName: null, color: null, description: null, sortOrder: null, deadProps: "{}", seededAt: null, seedStartedAt: null, seedCursor: null, createdAt: now, updatedAt: now, ...patch };
 	await db.insert(davCollections).values(row).onConflictDoUpdate({ target: davCollections.id, set: { ...patch, updatedAt: now } });
 	return { ok: true, calendar: summarize(userId, row) };
 }
