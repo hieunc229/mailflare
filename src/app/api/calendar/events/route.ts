@@ -19,6 +19,9 @@ import { chunkIds } from "@/lib/calendar/chunks";
 import { authorizeCalendarRequest, calendarKeyCanSendInvitations } from "@/lib/calendar/api-auth";
 import { readJsonObject } from "@/lib/http/request";
 import { isUniqueConstraintError } from "@/lib/database-errors";
+import { resolveBookableRooms } from "@/lib/calendar/resources";
+import { bookAndSummarize, invitationLocation, roomResponse, type RoomsSummary } from "@/lib/calendar/room-save";
+import { getLicenseEntitlements } from "@/lib/licenses/service";
 import { calendarExistsGuard, eventCalendarId } from "@/lib/calendar/calendars";
 import { listVisibleEvents } from "@/lib/calendar/event-list";
 import { resolveCalendarForWrite } from "@/lib/calendar/shares";
@@ -70,6 +73,13 @@ export async function POST(request: Request) {
 	if (!flags) return NextResponse.json({ error: EVENT_FLAGS_ERROR }, { status: 400 });
 	const calendar = await resolveCalendarForWrite(getDb(env), user, input.calendarId);
 	if (!calendar.ok) return NextResponse.json({ error: calendar.error }, { status: calendar.status });
+	// Rooms are checked before anything is written: a bad list or a lapsed licence saves nothing.
+	let roomIds: string[] = [];
+	if (input.resourceIds !== undefined) {
+		const checked = await resolveBookableRooms(getDb(env), input.resourceIds, { booked: [], canBook: (await getLicenseEntitlements(env)).canShareMailboxes });
+		if (!checked.ok) return NextResponse.json({ error: checked.error, ...(checked.code ? { code: checked.code } : {}) }, { status: checked.status });
+		roomIds = checked.ids;
+	}
 	const repeat = normalizeCalendarRepeat(input.repeat);
 	const repeatDays = repeat === "weekdays" ? normalizeCalendarRepeatDays(input.repeatDays ?? DEFAULT_REPEAT_DAYS) : [];
 	if (repeat === "weekdays" && repeatDays.length === 0) return NextResponse.json({ error: "Choose at least one weekday" }, { status: 400 });
@@ -103,12 +113,13 @@ export async function POST(request: Request) {
 			throw error;
 		}
 	} else await db.insert(calendarEvents).values(savedEvent);
+	const rooms: RoomsSummary | null = roomIds.length ? await bookAndSummarize(db, event.id, roomIds) : null;
 	let inviteErrors: string[] = [];
 	if (attendees.length && input.mailboxId) {
-		const calendarFile = createCalendarInvitation({ isPrivate: event.isPrivate, transparent: event.transparent, title: event.title, description: event.description, location: event.location, startsAt, endsAt, uid: event.id, organizer: input.from || undefined, attendees, sequence: 0, reminderMinutes: event.reminderMinutes, repeat, repeatDays, repeatAnchorDay: event.repeatAnchorDay, repeatUntil: null, repeatInterval, repeatWeekday, repeatWeek, excludedOccurrences: [], overrides: [] });
+		const calendarFile = createCalendarInvitation({ isPrivate: event.isPrivate, transparent: event.transparent, title: event.title, description: event.description, location: invitationLocation(event.location, rooms?.acceptedNames ?? []), startsAt, endsAt, uid: event.id, organizer: input.from || undefined, attendees, sequence: 0, reminderMinutes: event.reminderMinutes, repeat, repeatDays, repeatAnchorDay: event.repeatAnchorDay, repeatUntil: null, repeatInterval, repeatWeekday, repeatWeek, excludedOccurrences: [], overrides: [] });
 		inviteErrors = await sendToAttendees(attendees, (to) => sendEmail(env, { userId: user.id, mailboxId: input.mailboxId!, from: input.from ?? "", to, subject: `Invitation: ${event.title}`, text: event.description || `You are invited to ${event.title}.`, attachments: [{ filename: "invite.ics", type: "text/calendar; charset=utf-8", content: calendarFile }] }));
 	}
 	if (delegate) await createAuditLog(env, { actorUserId: user.id, targetUserId: calendar.ownerId, action: "calendar.event_created_by_delegate", metadata: { calendarId: calendar.calendarId ?? calendarCollectionId(calendar.ownerId), eventId: event.id } });
 	const responseEvent = { ...savedEvent, calendarId: eventCalendarId(savedEvent) };
-	return NextResponse.json(inviteErrors.length ? { event: responseEvent, inviteErrors } : { event: responseEvent });
+	return NextResponse.json({ event: responseEvent, ...(inviteErrors.length ? { inviteErrors } : {}), ...roomResponse(rooms) });
 }

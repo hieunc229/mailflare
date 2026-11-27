@@ -20,6 +20,9 @@ import { getRequestTimeZone } from "@/lib/time/utils";
 import { authorizeCalendarRequest, calendarKeyCanSendInvitations } from "@/lib/calendar/api-auth";
 import { buildSplitAnnouncement } from "@/lib/calendar/split-announcement";
 import { readJsonObject } from "@/lib/http/request";
+import { resolveBookableRooms } from "@/lib/calendar/resources";
+import { bookAndSummarize, bookedRoomIds, invitationLocation, roomResponse, type RoomsSummary } from "@/lib/calendar/room-save";
+import { getLicenseEntitlements } from "@/lib/licenses/service";
 import { calendarExistsGuard } from "@/lib/calendar/calendars";
 import { getEventAccess, resolveCalendarForWrite, roleAtLeast } from "@/lib/calendar/shares";
 import { requireGuard } from "@/lib/dav/writes";
@@ -116,6 +119,18 @@ export async function PATCH(request: Request, { params }: CalendarEventRoutePara
 	const attendees = delegate ? storedGuests(existing.attendees) : requestedGuests;
 	const keptGuests = delegate ? existing.attendees : JSON.stringify(attendees);
 	if (!delegate && attendees.length && existing.mailboxId && input.from && !calendarKeyCanSendInvitations(key, existing.mailboxId)) return NextResponse.json({ error: "Sending invitations requires mail send permission for this mailbox" }, { status: 403 });
+	// Rooms follow the series, not the occurrence row: the master's bookings. Named rooms replace them; a save that names none keeps them and re-checks them.
+	const bookedNow = await bookedRoomIds(db, head.id);
+	let requestedRooms: string[] | null = null;
+	if (input.resourceIds !== undefined) {
+		const checked = await resolveBookableRooms(db, input.resourceIds, { booked: bookedNow, canBook: (await getLicenseEntitlements(env)).canShareMailboxes });
+		if (!checked.ok) return NextResponse.json({ error: checked.error, ...(checked.code ? { code: checked.code } : {}) }, { status: checked.status });
+		requestedRooms = checked.ids;
+	}
+	const roomsAfter = requestedRooms ?? bookedNow;
+	// Settling the rooms is a no-op for an event that has none and names none.
+	const settleRooms = (eventId: string, ids: string[], hadRooms: boolean): Promise<RoomsSummary | null> => ids.length || hadRooms ? bookAndSummarize(db, eventId, ids) : Promise.resolve(null);
+	let rooms: RoomsSummary | null = null;
 	let inviteErrors: string[] = [];
 	if (input.moveOccurrenceToPast) {
 		if (!occurrence || existing.repeat === "none" || startsAt >= new Date()) return NextResponse.json({ error: "Choose a past time for this occurrence" }, { status: 400 });
@@ -137,8 +152,9 @@ export async function PATCH(request: Request, { params }: CalendarEventRoutePara
 			const refused = await batched([insertMoved, excludeOriginal]);
 			if (refused) return refused;
 		}
+		rooms = await settleRooms(head.id, roomsAfter, bookedNow.length > 0);
 		if (attendees.length && existing.mailboxId && input.from && !isInboundInvite) {
-			const movedFile = createCalendarInvitation({ isPrivate: moved.isPrivate, transparent: moved.transparent, title: moved.title, description: moved.description, location: moved.location, startsAt, endsAt, uid: moved.id, organizer: input.from, attendees, sequence: 0, reminderMinutes: moved.reminderMinutes, repeat: "none", repeatDays: [], repeatAnchorDay: null, repeatUntil: null, repeatInterval: 1, repeatWeekday: null, repeatWeek: null, excludedOccurrences: [], overrides: [] });
+			const movedFile = createCalendarInvitation({ isPrivate: moved.isPrivate, transparent: moved.transparent, title: moved.title, description: moved.description, location: invitationLocation(moved.location, rooms?.acceptedNames ?? []), startsAt, endsAt, uid: moved.id, organizer: input.from, attendees, sequence: 0, reminderMinutes: moved.reminderMinutes, repeat: "none", repeatDays: [], repeatAnchorDay: null, repeatUntil: null, repeatInterval: 1, repeatWeekday: null, repeatWeek: null, excludedOccurrences: [], overrides: [] });
 			// The series keeps its UID: tell guests it dropped this occurrence, with the same repeat/override context a PATCH resend carries.
 			const seriesOverrides = (await db.select().from(calendarEventOverrides).where(eq(calendarEventOverrides.eventId, existing.id))).map((override) => ({ recurrenceId: new Date(override.occurrenceMs), startsAt: override.startsAt, endsAt: override.endsAt }));
 			const seriesFile = createCalendarInvitation({ isPrivate: existing.isPrivate, transparent: existing.transparent, title: existing.title, description: existing.description, location: existing.location, startsAt: existing.startsAt, endsAt: existing.endsAt, uid: existing.id, organizer: input.from, attendees, sequence: seriesSequence, reminderMinutes: existing.reminderMinutes, repeat: existing.repeat, rrule: existing.rrule, repeatDays: parseCalendarRepeatDays(existing.repeatDays), repeatAnchorDay: existing.repeatAnchorDay, repeatUntil: existing.repeatUntil, repeatInterval: existing.repeat === "weekdays" ? 1 : normalizeRepeatInterval(existing.repeatInterval), repeatWeekday: existing.repeatWeekday, repeatWeek: existing.repeatWeek, excludedOccurrences: newExcluded, overrides: seriesOverrides });
@@ -146,7 +162,7 @@ export async function PATCH(request: Request, { params }: CalendarEventRoutePara
 			inviteErrors.push(...await sendToAttendees(attendees, (to) => sendEmail(env, { userId: user.id, mailboxId: existing.mailboxId!, from: input.from!, to, subject: `Updated invitation: ${existing.title}`, text: existing.description || `This event has been updated: ${existing.title}.`, attachments: [{ filename: "invite.ics", type: "text/calendar; charset=utf-8", content: seriesFile }] })));
 		}
 		if (delegate) await auditDelegate(env, user, existing, "calendar.event_updated_by_delegate", moveTo);
-		return NextResponse.json(inviteErrors.length ? { ok: true, inviteErrors: [...new Set(inviteErrors)] } : { ok: true });
+		return NextResponse.json({ ok: true, ...(inviteErrors.length ? { inviteErrors: [...new Set(inviteErrors)] } : {}), ...roomResponse(rooms) });
 	}
 	const repeatFields = resolveRepeat(existing, input);
 	if (!repeatFields) return NextResponse.json({ error: "Choose at least one weekday" }, { status: 400 });
@@ -183,6 +199,9 @@ export async function PATCH(request: Request, { params }: CalendarEventRoutePara
 			const refused = await batched(splitSeriesStatements(db, ownerId, existing, splitAt, fresh, endPatch));
 			if (refused) return refused;
 		}
+		// The old series is shorter now and keeps the rooms it had; the new one takes the named rooms, or the old series' own.
+		if (bookedNow.length) await bookAndSummarize(db, existing.id, bookedNow);
+		rooms = await settleRooms(fresh.id, roomsAfter, false);
 		// Overrides at or after the split belong to the fork; earlier ones stay on the truncated original.
 		const stored = await db.select().from(calendarEventOverrides).where(eq(calendarEventOverrides.eventId, existing.id));
 		for (const override of stored) {
@@ -202,7 +221,7 @@ export async function PATCH(request: Request, { params }: CalendarEventRoutePara
 					sequence: nextSequence,
 				},
 				fork: {
-					uid: forkId, isPrivate: event.isPrivate, transparent: event.transparent, title: event.title, description: event.description, location: event.location,
+					uid: forkId, isPrivate: event.isPrivate, transparent: event.transparent, title: event.title, description: event.description, location: invitationLocation(event.location, rooms?.acceptedNames ?? []),
 					startsAt: event.startsAt, endsAt: event.endsAt,
 					repeat: event.repeat, rrule: event.rrule, repeatDays, repeatAnchorDay: event.repeatAnchorDay ?? null,
 					repeatUntil: event.repeatUntil, repeatInterval: event.repeatInterval,
@@ -217,7 +236,7 @@ export async function PATCH(request: Request, { params }: CalendarEventRoutePara
 			inviteErrors.push(...await sendToAttendees(attendees, (to) => sendEmail(env, { userId: user.id, mailboxId: existing.mailboxId!, from: input.from!, to, subject: `Invitation: ${event.title}`, text: event.description || `You are invited to ${event.title}.`, attachments: [{ filename: "invite.ics", type: "text/calendar; charset=utf-8", content: forkFile }] })));
 		}
 		if (delegate) await auditDelegate(env, user, existing, "calendar.event_updated_by_delegate", moveTo);
-		return NextResponse.json(inviteErrors.length ? { ok: true, inviteErrors: [...new Set(inviteErrors)] } : { ok: true });
+		return NextResponse.json({ ok: true, ...(inviteErrors.length ? { inviteErrors: [...new Set(inviteErrors)] } : {}), ...roomResponse(rooms) });
 	}
 	const edit = db.update(calendarEvents).set({ title: event.title, description: event.description, location: event.location, attendees: event.attendees, color: event.color, repeat: event.repeat, repeatDays: event.repeatDays, repeatAnchorDay: event.repeatAnchorDay, repeatInterval: event.repeatInterval, repeatWeekday: event.repeatWeekday, repeatWeek: event.repeatWeek, repeatUntil: event.repeatUntil, rrule: event.rrule, ...(shifted ? { excludedOccurrences: shifted.excludedOccurrences } : {}), eventSequence: nextSequence, reminderMinutes: event.reminderMinutes, isPrivate: event.isPrivate, transparent: event.transparent, lastRemindedStart: null, timeZone, startsAt, endsAt, updatedAt: new Date() }).where(eq(calendarEvents.id, existing.id));
 	// The edit and the move to another calendar succeed or fail together.
@@ -230,13 +249,14 @@ export async function PATCH(request: Request, { params }: CalendarEventRoutePara
 		if (refused) return refused;
 	} else await edit;
 	if (shifted?.moved) await shiftOverrides(db, ownerId, existing.id, shifted.shift);
+	rooms = await settleRooms(head.id, roomsAfter, bookedNow.length > 0);
 	if (attendees.length && existing.mailboxId && input.from && !isInboundInvite) {
 		const overrides = (await db.select().from(calendarEventOverrides).where(eq(calendarEventOverrides.eventId, existing.id))).map((override) => ({ recurrenceId: new Date(override.occurrenceMs), startsAt: override.startsAt, endsAt: override.endsAt }));
-		const file = createCalendarInvitation({ isPrivate: event.isPrivate, transparent: event.transparent, title: event.title, description: event.description, location: event.location, startsAt: event.startsAt, endsAt: event.endsAt, uid: existing.id, organizer: input.from, attendees, sequence: nextSequence, reminderMinutes: event.reminderMinutes, repeat: event.repeat, rrule: event.rrule, repeatDays, repeatAnchorDay: event.repeatAnchorDay, repeatUntil: event.repeatUntil, repeatInterval: event.repeatInterval, repeatWeekday: event.repeatWeekday, repeatWeek: event.repeatWeek, excludedOccurrences: parseExcludedOccurrences(event.excludedOccurrences), overrides });
+		const file = createCalendarInvitation({ isPrivate: event.isPrivate, transparent: event.transparent, title: event.title, description: event.description, location: invitationLocation(event.location, rooms?.acceptedNames ?? []), startsAt: event.startsAt, endsAt: event.endsAt, uid: existing.id, organizer: input.from, attendees, sequence: nextSequence, reminderMinutes: event.reminderMinutes, repeat: event.repeat, rrule: event.rrule, repeatDays, repeatAnchorDay: event.repeatAnchorDay, repeatUntil: event.repeatUntil, repeatInterval: event.repeatInterval, repeatWeekday: event.repeatWeekday, repeatWeek: event.repeatWeek, excludedOccurrences: parseExcludedOccurrences(event.excludedOccurrences), overrides });
 		inviteErrors.push(...await sendToAttendees(attendees, (to) => sendEmail(env, { userId: user.id, mailboxId: existing.mailboxId!, from: input.from!, to, subject: `Updated invitation: ${event.title}`, text: event.description || `This event has been updated: ${event.title}.`, attachments: [{ filename: "invite.ics", type: "text/calendar; charset=utf-8", content: file }] })));
 	}
 	if (delegate) await auditDelegate(env, user, existing, "calendar.event_updated_by_delegate", moveTo);
-	return NextResponse.json(inviteErrors.length ? { ok: true, inviteErrors: [...new Set(inviteErrors)] } : { ok: true });
+	return NextResponse.json({ ok: true, ...(inviteErrors.length ? { inviteErrors: [...new Set(inviteErrors)] } : {}), ...roomResponse(rooms) });
 }
 
 export async function DELETE(request: Request, { params }: CalendarEventRouteParams) {
