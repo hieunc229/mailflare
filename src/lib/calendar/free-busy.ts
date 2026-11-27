@@ -1,6 +1,7 @@
 import { and, eq, gt, inArray, isNull, lt, ne, or, sql } from "drizzle-orm";
 import { getDb } from "@/db";
-import { calendarEvents, davCalendarObjects } from "@/db/schema";
+import { calendarEvents, davCalendarObjects, users } from "@/db/schema";
+import { addZonedDays } from "./invite";
 import { inviteEventId } from "./invite-id";
 import { expandEvent } from "./rrule";
 import { isBusyEvent } from "./visibility";
@@ -81,8 +82,11 @@ export async function busyIntervals(env: CloudflareEnv, targets: FreeBusyTargets
 		const rows = await db.select({
 			id: calendarEvents.id, davObjectId: calendarEvents.davObjectId, userId: calendarEvents.userId, startsAt: calendarEvents.startsAt, endsAt: calendarEvents.endsAt, timeZone: calendarEvents.timeZone, repeat: calendarEvents.repeat, rrule: calendarEvents.rrule,
 			repeatDays: calendarEvents.repeatDays, repeatAnchorDay: calendarEvents.repeatAnchorDay, repeatUntil: calendarEvents.repeatUntil, excludedOccurrences: calendarEvents.excludedOccurrences,
-			recurrenceId: calendarEvents.recurrenceId, transparent: calendarEvents.transparent, responseStatus: calendarEvents.responseStatus,
+			recurrenceId: calendarEvents.recurrenceId, transparent: calendarEvents.transparent, responseStatus: calendarEvents.responseStatus, allDay: calendarEvents.allDay,
 		}).from(calendarEvents).where(and(inArray(calendarEvents.userId, ids.slice(index, index + USER_CHUNK)), lt(calendarEvents.startsAt, end), or(gt(calendarEvents.endsAt, start), and(ne(calendarEvents.repeat, "none"), or(isNull(calendarEvents.repeatUntil), sql`${calendarEvents.repeatUntil} + (${calendarEvents.endsAt} - ${calendarEvents.startsAt}) > ${Math.floor(from / 1000)}`)))));
+		// An all-day event is stored as the instants of its midnights; one with no zone of its own (a floating invitation) means midnight in its owner's.
+		const ownerZones = new Map<string, string>();
+		if (rows.some((row) => row.allDay && !row.timeZone)) for (const owner of await db.select({ id: users.id, timeZone: users.timeZone }).from(users).where(inArray(users.id, ids.slice(index, index + USER_CHUNK)))) if (owner.timeZone) ownerZones.set(owner.id, owner.timeZone);
 		for (const row of rows) {
 			if (!isBusyEvent(row)) continue;
 			// The event being edited: all of it, or (with an occurrence named) that occurrence and the moved row that replaced it.
@@ -96,12 +100,16 @@ export async function busyIntervals(env: CloudflareEnv, targets: FreeBusyTargets
 			const used = spent.get(row.userId) ?? 0;
 			const limit = Math.min(MAX_OCCURRENCES, share - used);
 			if (limit <= 0) { list.push([from, to]); continue; }
-			const { starts, exhausted } = expandEvent(row, new Date(from - duration), end, limit);
+			// A day of an all-day series ends at the next midnight of its zone, so on a 23- or 25-hour day it is not 24 hours long.
+			const zone = row.allDay ? row.timeZone ?? ownerZones.get(row.userId) ?? "UTC" : null;
+			const days = Math.max(1, Math.round(duration / DAY));
+			const lengthAt = (start: number) => zone ? addZonedDays(new Date(start), days, zone).getTime() - start : duration;
+			const { starts, exhausted } = expandEvent(zone ? { ...row, timeZone: zone } : row, new Date(from - duration), end, limit);
 			spent.set(row.userId, used + 1 + starts.length);
 			if (exhausted || starts.length >= limit) { list.push([from, to]); continue; }
 			for (const at of starts) {
 				if (edited && targets.excludeOccurrence !== undefined && at.getTime() >= targets.excludeOccurrence) continue;
-				const occurrenceEnd = at.getTime() + duration;
+				const occurrenceEnd = at.getTime() + lengthAt(at.getTime());
 				if (occurrenceEnd > from && at.getTime() < to) list.push([Math.max(at.getTime(), from), Math.min(occurrenceEnd, to)]);
 			}
 		}
