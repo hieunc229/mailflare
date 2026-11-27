@@ -65,7 +65,9 @@ export async function GET(request: Request) {
 		for (const row of overrideRows) (overrides[row.eventId] ??= []).push({ occurrenceMs: row.occurrenceMs, startsAt: row.startsAt, endsAt: row.endsAt });
 		for (const row of responseRows) (occurrenceResponses[row.eventId] ??= []).push({ occurrenceMs: row.occurrenceMs, guest: row.guest, status: row.status });
 	}
-	return NextResponse.json(roomIds.length ? { events, overrides, occurrenceResponses, roomEvents: await listRoomEvents(db, user, roomIds, { start, end }) } : { events, overrides, occurrenceResponses });
+	if (!roomIds.length) return NextResponse.json({ events, overrides, occurrenceResponses });
+	const schedule = await listRoomEvents(db, user, roomIds, { start, end });
+	return NextResponse.json({ events, overrides, occurrenceResponses, roomEvents: schedule.events, ...(schedule.truncated ? { roomEventsTruncated: true } : {}) });
 }
 
 export async function POST(request: Request) {
