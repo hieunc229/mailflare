@@ -2,7 +2,7 @@
 
 ## Cloudflare error 9109: Invalid access token
 
-The Deploy to Cloudflare flow can deploy the Worker, but its deployment token is not exposed to Mailflare at runtime. Create a separate Cloudflare API token and set it as `CF_TOKEN`.
+Deploy to Cloudflare's deployment token is not exposed to Mailflare at runtime. Create a separate Cloudflare API token and set it as `CF_TOKEN`.
 
 Verify the token:
 
@@ -11,7 +11,7 @@ curl "https://api.cloudflare.com/client/v4/user/tokens/verify" \
   -H "Authorization: Bearer <CF_TOKEN>"
 ```
 
-The response should report `success: true` and an active status. Check that:
+Expect `success: true` and an active status. Check that:
 
 - `CF_TOKEN` contains the token secret, not its ID.
 - The value does not include the word `Bearer`.
@@ -22,19 +22,19 @@ If you use a legacy Global API Key, set `CF_EMAIL` and `CF_API_KEY` instead of p
 
 ## Cloudflare error 10000 on Email Routing
 
-Update the token so it can read the zone and manage its DNS, Email Routing settings, and Email Routing rules. The recommended scoped permissions are listed in the [deployment guide](deployment.md#step-1-setup-cf_token).
+The token must read the zone and manage its DNS, Email Routing settings and Email Routing rules. Scoped permissions: [deployment guide](deployment.md#step-1-setup-cf_token).
 
 ## Cloudflare error 2008 for existing MX records
 
-Cloudflare Email Routing cannot be enabled while another mail provider's MX records are present. Mailflare shows a confirmation before replacing them. Continuing deletes the existing MX records and points incoming mail to Cloudflare Email Routing, so the previous provider will stop receiving mail. The `CF_TOKEN` needs **DNS Edit** permission for this action.
+Email Routing cannot be enabled while another provider's MX records exist. Mailflare asks for confirmation first; continuing deletes those MX records and points incoming mail to Cloudflare Email Routing, so the previous provider stops receiving mail. `CF_TOKEN` needs **DNS Edit** permission.
 
 ## Resend or SES domain stays "not verified"
 
-The status is the provider's own, not Mailflare's. After the DNS records are added it can stay pending for several minutes (Resend and SES check public DNS, not Cloudflare's dashboard), and **Check status** re-asks the provider without creating anything. If one record stays stuck, look at the per-record statuses listed under the domain row, then check for a duplicate or older TXT record on the same name, a CNAME that is proxied through Cloudflare (it must be DNS only), or a record created at the wrong name (`send.example.com.example.com`). `dig TXT resend._domainkey.example.com +short` shows what the public sees.
+The status is the provider's, not Mailflare's. After adding the DNS records it can stay pending for several minutes (Resend and SES check public DNS, not Cloudflare's dashboard); **Check status** re-asks the provider without creating anything. If one record stays stuck, see the per-record statuses under the domain row, then check for a duplicate or older TXT record on the same name, a CNAME that is proxied through Cloudflare (it must be DNS only), or a record created at the wrong name (`send.example.com.example.com`). `dig TXT resend._domainkey.example.com +short` shows what the public sees.
 
 ## "This domain has MX records for another mail service"
 
-Only one service can own a domain's MX records. Setting up a receiving provider shows the records it would replace and waits for your confirmation; confirming means the previous service stops receiving mail for that domain.
+Only one service can own a domain's MX records. Setting up a receiving provider shows the records it would replace and waits for confirmation; confirming stops the previous service receiving mail for that domain.
 
 ## Resend says the key can only send mail
 
@@ -50,9 +50,9 @@ A sending-only Resend key cannot add domains or webhooks. Replace it with a full
 
 ## D1 error 7404: Database could not be found
 
-D1 database IDs belong to a specific Cloudflare account. This error commonly means `wrangler.jsonc` contains an ID copied from another account.
+D1 database IDs are account-specific; this usually means `wrangler.jsonc` has an ID copied from another account.
 
-For a reusable one-click deployment repository, remove the committed `database_id` and keep only `database_name`. Cloudflare can then provision the database in the target account.
+In a reusable one-click deployment repository, remove the committed `database_id` and keep only `database_name`; Cloudflare then provisions the database in the target account.
 
 For remote migrations after the first deployment:
 
@@ -61,13 +61,13 @@ For remote migrations after the first deployment:
 3. Add that ID to your local `wrangler.jsonc`.
 4. Run `npm run db:migrate:remote`.
 
-Do not commit that account-specific ID to a reusable public repository.
+Do not commit that ID to a reusable public repository.
 
 ## Scheduled backups are not running
 
-Deploy the complete Worker with `npm run deploy`. A local Next.js server or a source-only update does not provision the cron trigger declared in `wrangler.jsonc`.
+Deploy the complete Worker with `npm run deploy`; a local Next.js server or source-only update does not provision the cron trigger declared in `wrangler.jsonc`.
 
-Also confirm that automatic backups are enabled under **Admin → Backups** and that the Worker has its `DB` and `BUCKET` bindings.
+Also confirm automatic backups are enabled under **Admin → Backups** and that the Worker has its `DB` and `BUCKET` bindings.
 
 ## Inbound mail is not arriving
 
@@ -81,7 +81,7 @@ Confirm that:
 
 ## The password-reset email never arrives
 
-The reset form always answers success, so it cannot tell you why no mail was sent. Check the Worker logs for one of these lines:
+The reset form always answers success. Check the Worker logs for one of these lines:
 
 - `Password reset skipped: account has no recovery email` — set the recovery email on the account first.
 - `Password reset skipped: account is disabled` — re-enable the account first.
