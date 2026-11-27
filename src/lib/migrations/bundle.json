@@ -986,6 +986,14 @@
       "statements": [
         "CREATE TABLE `contact_details` (\n\t`contact_id` text PRIMARY KEY NOT NULL,\n\t`details` text DEFAULT '{}' NOT NULL,\n\t`updated_at` integer NOT NULL,\n\tFOREIGN KEY (`contact_id`) REFERENCES `contacts`(`id`) ON UPDATE no action ON DELETE cascade\n);"
       ]
+    },
+    {
+      "name": "0103_vacation_responder.sql",
+      "statements": [
+        "ALTER TABLE `mailboxes` ADD `auto_reply_start_at` integer;",
+        "ALTER TABLE `mailboxes` ADD `auto_reply_end_at` integer;",
+        "ALTER TABLE `mailboxes` ADD `auto_reply_activated_at` integer;"
+      ]
     }
   ]
 }

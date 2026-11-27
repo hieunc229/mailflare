@@ -4,6 +4,7 @@ import { getDb } from "@/db";
 import { schemaDialect } from "@/db/dialect";
 import { agentDraftMetadata, agentJobs, mailboxAgentSettings, mailboxes, messages, users } from "@/db/schema";
 import { draftsVisibleTo } from "@/lib/email/draft-access";
+import { isResponderActive } from "@/lib/email/auto-reply";
 import { getMailboxAccessLevel } from "@/lib/mailboxes/access";
 import { normalizeEmailAddress } from "@/lib/email/address";
 import { htmlToReadableText } from "@/lib/email/reply-content-utils";
@@ -32,7 +33,9 @@ export async function scheduleAutoDraft(env: CloudflareEnv, input: { mailboxId: 
 	const [settings] = await db.select().from(mailboxAgentSettings).where(eq(mailboxAgentSettings.mailboxId, input.mailboxId)).limit(1);
 	const [mailbox] = await db.select().from(mailboxes).where(eq(mailboxes.id, input.mailboxId)).limit(1);
 	if (mailbox && (await getMailboxDomainAddresses(db, mailbox)).includes(normalizeEmailAddress(input.sender))) return;
-	if (!settings?.autoDraftEnabled || mailbox?.autoReplyEnabled) return;
+	// Auto-drafts pause only while the responder is actually answering mail:
+	// a scheduled or lapsed vacation window must not suppress them.
+	if (!settings?.autoDraftEnabled || (mailbox && isResponderActive(mailbox))) return;
 	const reviewerUserId = settings.reviewerUserId || input.ownerUserId;
 	const [reviewer] = await db.select().from(users).where(eq(users.id, reviewerUserId)).limit(1);
 	if (!reviewer || reviewer.disabled || !(await getMailboxAccessLevel(db, reviewer, input.mailboxId))?.canSendOnBehalf) return;
@@ -71,8 +74,8 @@ export async function processAgentDraftJob(env: CloudflareEnv, jobId: string) {
 		const [reviewer] = await db.select().from(users).where(eq(users.id, job.reviewerUserId)).limit(1);
 		if (!settings?.autoDraftEnabled || !source || source.status !== "received" || !reviewer || reviewer.disabled) return void await skip("Settings, source, or reviewer changed");
 		if (!(await getMailboxAccessLevel(db, reviewer, job.mailboxId))?.canSendOnBehalf) return void await skip("Reviewer lost send permission");
-		const [mailbox] = await db.select({ autoReplyEnabled: mailboxes.autoReplyEnabled }).from(mailboxes).where(eq(mailboxes.id, job.mailboxId)).limit(1);
-		if (mailbox?.autoReplyEnabled) return void await skip("Out-of-office reply is enabled");
+		const [mailbox] = await db.select({ autoReplyEnabled: mailboxes.autoReplyEnabled, autoReplyBody: mailboxes.autoReplyBody, autoReplyStartAt: mailboxes.autoReplyStartAt, autoReplyEndAt: mailboxes.autoReplyEndAt }).from(mailboxes).where(eq(mailboxes.id, job.mailboxId)).limit(1);
+		if (mailbox && isResponderActive(mailbox)) return void await skip("Out-of-office reply is enabled");
 		const since = new Date(); since.setUTCHours(0, 0, 0, 0);
 		const [usage] = await db.select({ count: sql<number>`count(*)` }).from(agentJobs).where(and(eq(agentJobs.mailboxId, job.mailboxId), eq(agentJobs.status, "completed"), gte(agentJobs.createdAt, since)));
 		if ((usage?.count ?? 0) >= settings.dailyLimit) return void await skip("Daily draft limit reached");

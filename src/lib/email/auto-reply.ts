@@ -9,7 +9,9 @@ import { newId } from "@/lib/ids";
 import type { MailboxAutoReplyInput } from "./auto-reply-types";
 import { hasListOrBulkPrecedence } from "@/lib/email/bulk-mail";
 
-const autoReplyIntervalMs = 24 * 60 * 60 * 1000;
+// One reply per sender per window. Four days matches the interval Dovecot's
+// vacation plugin commonly uses (:days 4).
+const autoReplyIntervalMs = 4 * 24 * 60 * 60 * 1000;
 
 export async function sendMailboxAutoReply(
 	env: CloudflareEnv,
@@ -17,30 +19,43 @@ export async function sendMailboxAutoReply(
 ): Promise<void> {
 	const recipient = normalizeEmailAddress(input.fromAddress);
 	const deliveredAddress = normalizeEmailAddress(input.deliveredAddress);
-	if (!recipient.includes("@") || recipient === deliveredAddress || shouldSkipAutoReply(recipient, input.headers)) return;
+	if (!recipient.includes("@") || recipient === deliveredAddress || shouldSkipAutoReply(recipient, input.envelopeFrom, input.headers)) return;
 
 	const db = getDb(env);
-	const senderDecision = await resolveInboundAddress(db, recipient);
-	if (senderDecision?.mailbox?.mailboxId === input.mailboxId) return;
 	const [mailbox] = await db
 		.select({
 			autoReplyEnabled: mailboxes.autoReplyEnabled,
 			autoReplySubject: mailboxes.autoReplySubject,
 			autoReplyBody: mailboxes.autoReplyBody,
+			autoReplyStartAt: mailboxes.autoReplyStartAt,
+			autoReplyEndAt: mailboxes.autoReplyEndAt,
+			autoReplyActivatedAt: mailboxes.autoReplyActivatedAt,
 			displayName: mailboxes.displayName,
 		})
 		.from(mailboxes)
 		.where(eq(mailboxes.id, input.mailboxId))
 		.limit(1);
-	if (!mailbox?.autoReplyEnabled || !mailbox.autoReplyBody.trim()) return;
+	if (!mailbox || !isResponderActive(mailbox)) return;
 
+	// The sender may belong to this same account (own mailbox, alias or a
+	// shared mailbox); an auto-responder must never reply to it.
+	const senderDecision = await resolveInboundAddress(db, recipient);
+	if (senderDecision?.mailbox?.userId === input.userId) return;
+
+	// Only deliveries recorded during the current activation and window count:
+	// re-enabling the responder or a new scheduled window resets the throttle.
+	const floor = Math.max(
+		mailbox.autoReplyActivatedAt?.getTime() ?? 0,
+		mailbox.autoReplyStartAt?.getTime() ?? 0,
+		Date.now() - autoReplyIntervalMs,
+	);
 	const [recentDelivery] = await db
 		.select({ id: autoReplyDeliveries.id })
 		.from(autoReplyDeliveries)
 		.where(and(
 			eq(autoReplyDeliveries.mailboxId, input.mailboxId),
 			eq(autoReplyDeliveries.recipient, recipient),
-			gte(autoReplyDeliveries.sentAt, new Date(Date.now() - autoReplyIntervalMs)),
+			gte(autoReplyDeliveries.sentAt, new Date(floor)),
 		))
 		.limit(1);
 	if (recentDelivery) return;
@@ -84,9 +99,34 @@ export async function sendMailboxAutoReply(
 		});
 }
 
-function shouldSkipAutoReply(recipient: string, headers?: Record<string, string>): boolean {
-	const localPart = recipient.slice(0, recipient.indexOf("@"));
-	if (/^(mailer-daemon|postmaster|no-?reply|do-?not-?reply)$/i.test(localPart)) return true;
+type AutoReplyWindow = {
+	autoReplyEnabled: boolean;
+	autoReplyBody: string;
+	autoReplyStartAt: Date | null;
+	autoReplyEndAt: Date | null;
+};
+
+export function isResponderActive(mailbox: AutoReplyWindow, now = new Date()): boolean {
+	if (!mailbox.autoReplyEnabled || !mailbox.autoReplyBody.trim()) return false;
+	if (mailbox.autoReplyStartAt && now < mailbox.autoReplyStartAt) return false;
+	if (mailbox.autoReplyEndAt && now > mailbox.autoReplyEndAt) return false;
+	return true;
+}
+
+function shouldSkipAutoReply(recipient: string, envelopeFrom: string | null | undefined, headers?: Record<string, string>): boolean {
+	// Bounces arrive with an empty envelope sender, a <> Return-Path or both.
+	if (envelopeFrom != null && !envelopeFrom.replace(/[<>]/g, "").trim()) return true;
+	const returnPath = getHeaderEntry(headers, "return-path");
+	if (returnPath && !returnPath[1].replace(/[<>]/g, "").trim()) return true;
+
+	// Normalise away the +tag and separators so noreply@, no-reply@,
+	// do_not_reply@ and notifications-noreply@ are all caught.
+	const localPart = recipient
+		.slice(0, recipient.indexOf("@"))
+		.split("+")[0]
+		.replace(/[._-]/g, "");
+	if (/^(mailerdaemon|postmaster|bounces?)$/.test(localPart)) return true;
+	if (/(noreply|donotreply)/.test(localPart)) return true;
 
 	const autoSubmitted = getHeader(headers, "auto-submitted").toLowerCase();
 	if (autoSubmitted && autoSubmitted !== "no") return true;
@@ -95,8 +135,11 @@ function shouldSkipAutoReply(recipient: string, headers?: Record<string, string>
 		.some((name) => !!getHeader(headers, name));
 }
 
+function getHeaderEntry(headers: Record<string, string> | undefined, name: string): [string, string] | undefined {
+	if (!headers) return undefined;
+	return Object.entries(headers).find(([key]) => key.toLowerCase() === name);
+}
+
 function getHeader(headers: Record<string, string> | undefined, name: string): string {
-	if (!headers) return "";
-	const entry = Object.entries(headers).find(([key]) => key.toLowerCase() === name);
-	return entry?.[1]?.trim() ?? "";
+	return getHeaderEntry(headers, name)?.[1]?.trim() ?? "";
 }

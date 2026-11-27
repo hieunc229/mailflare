@@ -124,6 +124,12 @@ export const mailboxes = sqliteTable(
 		autoReplyEnabled: bool("auto_reply_enabled").notNull().default(false),
 		autoReplySubject: text("auto_reply_subject").notNull().default("Out of office"),
 		autoReplyBody: text("auto_reply_body").notNull().default(""),
+		autoReplyStartAt: timestamp("auto_reply_start_at"),
+		autoReplyEndAt: timestamp("auto_reply_end_at"),
+		// Set when the responder is turned on; per-sender throttle rows older
+		// than this no longer count, so toggling it off and back on resets who
+		// has been replied to.
+		autoReplyActivatedAt: timestamp("auto_reply_activated_at"),
 		avatarKey: text("avatar_key"),
 		type: text("type", { enum: ["personal", "shared"] }).notNull().default("personal"),
 		useAllDomains: bool("use_all_domains").notNull().default(true),

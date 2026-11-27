@@ -18,6 +18,8 @@ async function managedMailbox(request: Request, id: string) {
 		localPart: mailboxes.localPart, displayName: mailboxes.displayName,
 		type: mailboxes.type, disabled: mailboxes.disabled,
 		useAllDomains: mailboxes.useAllDomains, createdAt: mailboxes.createdAt,
+		autoReplyEnabled: mailboxes.autoReplyEnabled,
+		autoReplyStartAt: mailboxes.autoReplyStartAt, autoReplyEndAt: mailboxes.autoReplyEndAt,
 	}).from(mailboxes).innerJoin(users, eq(mailboxes.userId, users.id))
 		.where(and(eq(mailboxes.id, id), or(eq(users.id, auth.userId), eq(users.createdByUserId, auth.userId)))).limit(1);
 	if (!mailbox) return { env, mailbox: null, error: NextResponse.json({ error: "Mailbox not found" }, { status: 404 }) };
@@ -36,6 +38,12 @@ export async function PATCH(request: Request, { params }: AdminMailboxRouteParam
 	const parsed = updateMailboxSchema.safeParse(await request.json().catch(() => null));
 	if (!parsed.success) return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
 	const db = getDb(access.env);
+	const values = getMailboxUpdateValues(parsed.data, { autoReplyEnabled: access.mailbox!.autoReplyEnabled });
+	const autoReplyStartAt = "autoReplyStartAt" in values ? values.autoReplyStartAt : access.mailbox!.autoReplyStartAt;
+	const autoReplyEndAt = "autoReplyEndAt" in values ? values.autoReplyEndAt : access.mailbox!.autoReplyEndAt;
+	if (autoReplyStartAt && autoReplyEndAt && autoReplyStartAt >= autoReplyEndAt) {
+		return NextResponse.json({ error: "The auto-reply end must be after its start" }, { status: 400 });
+	}
 	if (parsed.data.useAllDomains === true) {
 		try {
 			await ensureMailboxDomainRouting(access.env, db, { id: access.mailbox!.id, domainId: access.mailbox!.domainId, localPart: access.mailbox!.localPart, useAllDomains: true });
@@ -43,7 +51,6 @@ export async function PATCH(request: Request, { params }: AdminMailboxRouteParam
 			return NextResponse.json({ error: error instanceof Error ? error.message : "Failed to configure inbound routing" }, { status: 502 });
 		}
 	}
-	const values = getMailboxUpdateValues(parsed.data);
 	if (Object.keys(values).length) await db.update(mailboxes).set(values).where(eq(mailboxes.id, access.mailbox!.id));
 	return NextResponse.json({ ok: true });
 }

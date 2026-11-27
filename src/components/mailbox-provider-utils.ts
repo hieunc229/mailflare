@@ -52,6 +52,8 @@ export async function fetchMailboxOptions(force = false): Promise<MailboxOption[
 				autoReplyEnabled: m.autoReplyEnabled,
 				autoReplySubject: m.autoReplySubject,
 				autoReplyBody: m.autoReplyBody,
+				autoReplyStartAt: m.autoReplyStartAt ?? null,
+				autoReplyEndAt: m.autoReplyEndAt ?? null,
 				hasAvatar: m.hasAvatar,
 				type: m.type,
 				permission: m.permission,
