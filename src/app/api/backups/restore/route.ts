@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { assertPrimaryAdmin } from "@/lib/auth/admin";
 import { requireUser } from "@/lib/auth/cookies";
+import { MigrationRequiredError } from "@/lib/auth/unauthorized";
 import { restoreDatabaseRecords } from "@/lib/backups/export";
 import { getEnv } from "@/lib/cloudflare";
 import { hasValidSessionMutationOrigin } from "@/lib/auth/origin";
@@ -18,6 +19,8 @@ export async function POST(request: Request) {
 		await restoreDatabaseRecords(env.DB, await file.arrayBuffer());
 		return NextResponse.json({ ok: true });
 	} catch (error) {
+		// A database behind on migrations answers 409; this route's 400 is for a bad backup file.
+		if (error instanceof MigrationRequiredError) throw error;
 		const message = error instanceof Error ? error.message : "Failed to restore backup";
 		return NextResponse.json({ error: message }, { status: 400 });
 	}

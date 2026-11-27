@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { assertPrimaryAdmin } from "@/lib/auth/admin";
 import { requireUser } from "@/lib/auth/cookies";
+import { MigrationRequiredError } from "@/lib/auth/unauthorized";
 import type { LicenseKeyRequest } from "./types";
 
 const licenseKeySchema = z.object({
@@ -13,7 +14,9 @@ export async function requireLicenseAdmin(env: CloudflareEnv, request: Request):
 	try {
 		assertPrimaryAdmin(await requireUser(env, request));
 		return null;
-	} catch {
+	} catch (error) {
+		// A pending migration is not a permission problem: let the 409 fallback answer it.
+		if (error instanceof MigrationRequiredError) throw error;
 		return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 	}
 }
