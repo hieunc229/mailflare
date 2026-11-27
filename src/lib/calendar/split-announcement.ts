@@ -13,8 +13,8 @@ export type SplitAnnouncementSide = {
 	repeatDays: number[];
 	repeatAnchorDay: number | null;
 	/**
-	 * Exclusive end of the series. It is written as the RRULE UNTIL verbatim, the same convention the
-	 * series writer uses everywhere; Mailflare's own parser re-adds its one-second inclusive pad on read.
+	 * Exclusive end of the series. It is written as the RRULE UNTIL one second earlier (UNTIL is
+	 * inclusive), the same as the feed; Mailflare's own parser re-adds that one-second pad on read.
 	 */
 	repeatUntil: Date | null;
 	repeatInterval: number;

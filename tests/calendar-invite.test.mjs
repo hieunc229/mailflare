@@ -602,14 +602,14 @@ test("outgoing recurring invitations carry RRULE, EXDATE and RECURRENCE-ID overr
 		excludedOccurrences: [Date.parse("2026-12-08T17:00:00Z")],
 		overrides: [{ recurrenceId, startsAt: new Date("2026-12-15T19:00:00Z"), endsAt: new Date("2026-12-15T19:30:00Z") }],
 	}));
-	assert.match(text, /RRULE:FREQ=MONTHLY;BYDAY=2TU;INTERVAL=3;UNTIL=20270608T170000Z/);
+	assert.match(text, /RRULE:FREQ=MONTHLY;BYDAY=2TU;INTERVAL=3;UNTIL=20270608T165959Z/);
 	assert.match(text, /EXDATE:20261208T170000Z/);
 	assert.match(text, /RECURRENCE-ID:20261215T170000Z/);
 	assert.match(text, /\r\nSEQUENCE:5\r\n/);
 	assert.match(text, /\r\nBEGIN:VALARM\r\n/);
 	const back = parseInvite(text);
 	assert.equal(back.sequence, 5);
-	assert.equal(back.rrule, "FREQ=MONTHLY;BYDAY=2TU;INTERVAL=3;UNTIL=20270608T170000Z");
+	assert.equal(back.rrule, "FREQ=MONTHLY;BYDAY=2TU;INTERVAL=3;UNTIL=20270608T165959Z");
 	assert.deepEqual(back.excludedDates.map((date) => date.toISOString()), ["2026-12-08T17:00:00.000Z"]);
 	const repeat = inviteRepeat(back.rrule);
 	assert.equal(repeat.repeat, "monthly");
@@ -655,10 +655,10 @@ test("split announcement truncates the original UID and invites the fork UID", (
 	});
 	const truncation = new TextDecoder().decode(truncationFile);
 	const fork = new TextDecoder().decode(forkFile);
-	// File (1) keeps the original DTSTART with UNTIL at the split, the EXDATE and the pre-split override.
+	// File (1) keeps the original DTSTART with UNTIL one second before the split, the EXDATE and the pre-split override.
 	assert.match(truncation, /UID:evt_orig@mailflare/);
 	assert.match(truncation, /DTSTART:20261110T170000Z/);
-	assert.match(truncation, /RRULE:FREQ=WEEKLY;UNTIL=20261124T170000Z/);
+	assert.match(truncation, /RRULE:FREQ=WEEKLY;UNTIL=20261124T165959Z/);
 	assert.match(truncation, /\r\nSEQUENCE:3\r\n/);
 	assert.match(truncation, /EXDATE:20261117T170000Z/);
 	assert.match(truncation, /RECURRENCE-ID:20261112T170000Z/);
@@ -799,4 +799,14 @@ test("buildSplitAnnouncement passes the zone to both files", () => {
 	});
 	const { truncationFile, forkFile } = buildSplitAnnouncement({ original: side("a"), fork: side("b"), organizer: "me@example.com", attendees: ["g@example.com"] });
 	for (const file of [truncationFile, forkFile]) assert.match(new TextDecoder().decode(file), /DTSTART;TZID=Asia\/Tokyo:/);
+});
+
+test("a series bound written for guests reads back as the same exclusive bound", () => {
+	const text = new TextDecoder().decode(createCalendarInvitation({
+		title: "Team sync", description: "", location: "", uid: "evt_until", sequence: 0,
+		startsAt: new Date("2026-11-10T17:00:00Z"), endsAt: new Date("2026-11-10T17:30:00Z"),
+		repeat: "monthly", repeatDays: [], repeatAnchorDay: null, repeatUntil: new Date("2027-06-08T17:00:00Z"),
+		repeatInterval: 3, repeatWeekday: 2, repeatWeek: 2, excludedOccurrences: [], overrides: [],
+	}));
+	assert.equal(inviteRepeat(parseInvite(text).rrule).repeatUntil.toISOString(), "2027-06-08T17:00:00.000Z");
 });

@@ -22,7 +22,7 @@ type CalendarInvitationInput = {
 	repeatDays?: number[];
 	/** Month day (1-31) of a plain monthly repeat. */
 	repeatAnchorDay?: number | null;
-	/** Exclusive end of the series; written as the RRULE UNTIL in UTC. */
+	/** Exclusive end of the series; written as the RRULE UNTIL in UTC, one second earlier (UNTIL is inclusive). */
 	repeatUntil?: Date | null;
 	/** Step between recurrences: every N days/weeks/months/years. */
 	repeatInterval?: number | null;
@@ -57,7 +57,8 @@ function invitationRecurrenceRule(input: CalendarInvitationInput): string | null
 		parts.push("FREQ=WEEKLY", `BYDAY=${days.map((day) => INVITE_BYDAY[day]).join(",")}`);
 	}
 	if (Number.isInteger(interval) && (interval as number) > 1) parts.push(`INTERVAL=${interval}`);
-	if (input.repeatUntil) parts.push(`UNTIL=${formatIcsUtc(input.repeatUntil)}`);
+	// repeatUntil is an exclusive bound in the app; RFC 5545 UNTIL is inclusive, so stop one second earlier.
+	if (input.repeatUntil) parts.push(`UNTIL=${formatIcsUtc(new Date(input.repeatUntil.getTime() - 1000))}`);
 	return `RRULE:${parts.join(";")}`;
 }
 
