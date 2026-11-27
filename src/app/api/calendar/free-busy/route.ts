@@ -13,17 +13,18 @@ import { readJsonObject } from "@/lib/http/request";
 
 const NO_STORE = { "Cache-Control": "no-store" };
 /**
- * The event the caller is editing, only when they may edit it (an occurrence id names its series). Anything else, a missing event
+ * The event the caller is editing, only when they may edit it (an occurrence id names its series and where saving would split it). Anything else, a missing event
  * included, gives null and no sign of why, so the field cannot be used to probe events or calendars.
  */
 async function editableEvent(env: CloudflareEnv, user: { id: string }, requested: string | null): Promise<{ id: string; owner: boolean; occurrence?: number } | null> {
 	if (!requested) return null;
 	const named = parseCalendarOccurrenceId(requested);
 	const db = getDb(env);
-	const [event] = await db.select({ id: calendarEvents.id, userId: calendarEvents.userId, calendarId: calendarEvents.calendarId, davObjectId: calendarEvents.davObjectId, recurrenceId: calendarEvents.recurrenceId }).from(calendarEvents).where(eq(calendarEvents.id, named?.seriesId ?? requested)).limit(1);
+	const [event] = await db.select({ id: calendarEvents.id, repeat: calendarEvents.repeat, userId: calendarEvents.userId, calendarId: calendarEvents.calendarId, davObjectId: calendarEvents.davObjectId, recurrenceId: calendarEvents.recurrenceId }).from(calendarEvents).where(eq(calendarEvents.id, named?.seriesId ?? requested)).limit(1);
 	if (!event || !roleAtLeast(await getEventAccess(db, user, event), "edit")) return null;
 	const owner = event.userId === user.id;
-	if (named) return { id: event.id, owner, occurrence: named.startsAt.getTime() };
+	// Saving an occurrence of a repeating series splits it there, so that occurrence and the later ones move; a custom rule cannot be split, so it moves whole.
+	if (named) return event.repeat === "custom" ? { id: event.id, owner } : { id: event.id, owner, occurrence: named.startsAt.getTime() };
 	// A moved occurrence is a row of its own: it stands for one occurrence of its series, at the time it replaced.
 	if (event.davObjectId && event.davObjectId !== event.id && event.recurrenceId) return { id: event.davObjectId, owner, occurrence: event.recurrenceId.getTime() };
 	return { id: event.id, owner };

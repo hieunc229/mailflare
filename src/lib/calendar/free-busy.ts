@@ -27,7 +27,7 @@ export type FreeBusyTargets = {
 	resourceIds?: string[];
 	/** An event being edited: it, its moved occurrences and every guest's copy of its invitation are left out, so it does not clash with itself. The caller must have checked the right to edit it. */
 	excludeEventId?: string;
-	/** Start (ms) of the one occurrence being edited: only that occurrence, and the moved row that replaced it, is left out; the rest of the series counts. */
+	/** Start (ms) of an occurrence of the series being edited: saving it splits the series there, so that occurrence and every later one (and the moved rows from it on) are left out; the earlier ones still count. */
 	excludeOccurrence?: number;
 	/**
 	 * Also look up the UID a CalDAV client stored for that event and leave out copies carrying it. Only for the event's owner: for
@@ -88,7 +88,7 @@ export async function busyIntervals(env: CloudflareEnv, targets: FreeBusyTargets
 			// The event being edited: all of it, or (with an occurrence named) that occurrence and the moved row that replaced it.
 			const edited = excluded.has(row.id);
 			const movedRow = !!targets.excludeEventId && row.davObjectId === targets.excludeEventId && row.id !== targets.excludeEventId;
-			if (targets.excludeOccurrence === undefined ? edited || movedRow : movedRow && row.recurrenceId?.getTime() === targets.excludeOccurrence) continue;
+			if (targets.excludeOccurrence === undefined ? edited || movedRow : movedRow && row.recurrenceId !== null && row.recurrenceId.getTime() >= targets.excludeOccurrence) continue;
 			const duration = row.endsAt.getTime() - row.startsAt.getTime();
 			if (duration <= 0) continue;
 			const list = collected.get(row.userId)!;
@@ -97,7 +97,7 @@ export async function busyIntervals(env: CloudflareEnv, targets: FreeBusyTargets
 			spent.set(row.userId, (spent.get(row.userId) ?? 0) + 1 + starts.length);
 			if (exhausted) { list.push([from, to]); continue; }
 			for (const at of starts) {
-				if (edited && at.getTime() === targets.excludeOccurrence) continue;
+				if (edited && targets.excludeOccurrence !== undefined && at.getTime() >= targets.excludeOccurrence) continue;
 				const occurrenceEnd = at.getTime() + duration;
 				if (occurrenceEnd > from && at.getTime() < to) list.push([Math.max(at.getTime(), from), Math.min(occurrenceEnd, to)]);
 			}
