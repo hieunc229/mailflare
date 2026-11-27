@@ -40,7 +40,7 @@ function setup(organisers) {
 const run = async (organisers) => {
 	const db = setup(organisers);
 	statements = [];
-	const events = await listRoomEvents(db, { id: "me" }, ["r1"], range);
+	const { events } = await listRoomEvents(db, { id: "me" }, ["r1"], range);
 	return { events, count: statements.length };
 };
 
@@ -61,9 +61,9 @@ test("what each viewer may read is unchanged: titles for a read grant on a defau
 	assert.equal(title.e1a, "Busy");
 	assert.equal(title.e2a, "Busy");
 	sqlite.exec("UPDATE users SET disabled = 1 WHERE id = 'o0'");
-	const again = await listRoomEvents(globalThis.roomQ.db, { id: "me" }, ["r1"], range);
+	const { events: again } = await listRoomEvents(globalThis.roomQ.db, { id: "me" }, ["r1"], range);
 	assert.equal(again.find((event) => event.id === "e0a").title, "Busy", "a disabled owner opens nothing");
 	sqlite.exec("UPDATE calendar_events SET user_id = 'me' WHERE id = 'e3a'");
-	const own = await listRoomEvents(globalThis.roomQ.db, { id: "me" }, ["r1"], range);
+	const { events: own } = await listRoomEvents(globalThis.roomQ.db, { id: "me" }, ["r1"], range);
 	assert.equal(own.find((event) => event.id === "e3a").title, "Title 3a", "my own event");
 });

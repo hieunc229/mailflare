@@ -42,7 +42,9 @@ export async function GET(request: Request) {
 	const seriesOf = (event: (typeof visible)[number]) => event.davObjectId ?? event.id;
 	const booked = await roomsByEvent(db, [...new Set(visible.filter((event) => !(event as { redacted?: boolean }).redacted).map(seriesOf))]);
 	const events = visible.map((event) => !(event as { redacted?: boolean }).redacted && booked.has(seriesOf(event)) ? { ...event, rooms: booked.get(seriesOf(event)) } : event);
-	return NextResponse.json(roomIds.length ? { events, roomEvents: await listRoomEvents(db, user, roomIds, { start, end }) } : { events });
+	if (!roomIds.length) return NextResponse.json({ events });
+	const schedule = await listRoomEvents(db, user, roomIds, { start, end });
+	return NextResponse.json({ events, roomEvents: schedule.events, ...(schedule.truncated ? { roomEventsTruncated: true } : {}) });
 }
 
 export async function POST(request: Request) {

@@ -1,4 +1,4 @@
-import { and, eq, inArray, or } from "drizzle-orm";
+import { and, asc, eq, inArray, or } from "drizzle-orm";
 import type { getDb } from "@/db";
 import { calendarEvents, calendarResourceBookings } from "@/db/schema";
 import { overlapsWindow } from "./busy-expand";
@@ -11,7 +11,7 @@ type Db = ReturnType<typeof getDb>;
 
 /** Rooms per schedule request, and the events read for them. */
 export const MAX_SCHEDULE_ROOMS = 20;
-const MAX_SCHEDULE_ROWS = 2000;
+export const MAX_SCHEDULE_ROWS = 2000;
 const BOOKING_CHUNK = 90;
 
 export type RoomEventView = {
@@ -40,12 +40,14 @@ export type RoomEventView = {
  * series) in the window, with the title only for events the viewer may read; everything else is "Busy" with nothing about
  * who, where or what. Never a calendar id, owner, guest or description. Declined bookings hold nothing, so they are not shown.
  */
-export async function listRoomEvents(db: Db, user: { id: string }, resourceIds: string[], range: { start: Date; end: Date }): Promise<RoomEventView[]> {
+export async function listRoomEvents(db: Db, user: { id: string }, resourceIds: string[], range: { start: Date; end: Date }): Promise<{ events: RoomEventView[]; /** More bookings exist in the window than the cap lets through: the earliest are returned. */ truncated: boolean }> {
 	const ids = [...new Set(resourceIds)];
-	if (!ids.length) return [];
-	const rows = await db.select({ resourceId: calendarResourceBookings.resourceId, bookedEventId: calendarResourceBookings.eventId, event: calendarEvents }).from(calendarResourceBookings)
+	if (!ids.length) return { events: [], truncated: false };
+	const found = await db.select({ resourceId: calendarResourceBookings.resourceId, bookedEventId: calendarResourceBookings.eventId, event: calendarEvents }).from(calendarResourceBookings)
 		.innerJoin(calendarEvents, or(eq(calendarEvents.id, calendarResourceBookings.eventId), eq(calendarEvents.davObjectId, calendarResourceBookings.eventId)))
-		.where(and(inArray(calendarResourceBookings.resourceId, ids), eq(calendarResourceBookings.status, "accepted"), overlapsWindow(range.start, range.end))).limit(MAX_SCHEDULE_ROWS);
+		.where(and(inArray(calendarResourceBookings.resourceId, ids), eq(calendarResourceBookings.status, "accepted"), overlapsWindow(range.start, range.end))).orderBy(asc(calendarEvents.startsAt), asc(calendarEvents.id)).limit(MAX_SCHEDULE_ROWS + 1);
+	const truncated = found.length > MAX_SCHEDULE_ROWS;
+	const rows = found.slice(0, MAX_SCHEDULE_ROWS);
 	// A moved occurrence is private when its series is, whatever CLASS it carries itself (as in the calendar lists).
 	const booked = [...new Set(rows.map((row) => row.bookedEventId))];
 	const privateSeries = new Set<string>();
@@ -64,7 +66,7 @@ export async function listRoomEvents(db: Db, user: { id: string }, resourceIds: 
 			color: shown.redacted ? null : event.color, redacted: shown.redacted === true,
 		});
 	}
-	return views;
+	return { events: views, truncated };
 }
 
 export type EventRoom = { resourceId: string; status: "accepted" | "declined"; conflictAt: string | null };
