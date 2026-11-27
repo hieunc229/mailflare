@@ -240,7 +240,10 @@ await db.delete(calendarResources).where(eq(calendarResources.id, `res_${stamp}`
 await db.insert(calendarResources).values({ id: `res2_${stamp}`, name: `Room2 ${stamp}` } as never);
 const roomSlot = new Date(Date.now() + 3 * 86_400_000);
 for (const name of ["a", "b"]) await db.insert(calendarEvents).values({ id: `evt_${name}_${stamp}`, userId, title: "Race", startsAt: roomSlot, endsAt: new Date(roomSlot.getTime() + 3_600_000) } as never);
-const raced = await Promise.all([`evt_a_${stamp}`, `evt_b_${stamp}`].map((id) => bookRooms(db as never, id, [`res2_${stamp}`])));
+// Two separate connections, so a real server (PostgreSQL, MySQL, a SQLite file) races for real. An in-memory database exists only on its own connection, so it shares one.
+const inMemory = /memory/i.test(url);
+const secondDb = inMemory ? db : createDb(openExternalDatabase(config, false) as unknown as D1Database);
+const raced = await Promise.all([bookRooms(db as never, `evt_a_${stamp}`, [`res2_${stamp}`]), bookRooms(secondDb as never, `evt_b_${stamp}`, [`res2_${stamp}`])]);
 check("two bookings of one room slot at once leave exactly one accepted", raced.map((result) => result.rooms[0].status).sort().join() === "accepted,declined");
 const [{ accepted_rooms }] = await db.all<{ accepted_rooms: number }>(sql`SELECT count(*) AS accepted_rooms FROM calendar_resource_bookings WHERE resource_id = ${`res2_${stamp}`} AND status = 'accepted'`);
 check("exactly one accepted booking row is stored", Number(accepted_rooms) === 1);
