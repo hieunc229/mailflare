@@ -163,6 +163,8 @@ test("only a moved occurrence of a CalDAV series has its rooms locked; a repeati
 	assert.equal(roomsAreLocked({ id: "e1", repeat: "none" }), false);
 	assert.equal(roomsAreLocked({ id: "e1@123", repeat: "weekly", davObjectId: null }), false, "an occurrence of an ordinary repeating event");
 	assert.equal(roomsAreLocked({ id: "e1", repeat: "custom", davObjectId: "e1" }), false, "the master of a CalDAV series");
+	assert.equal(roomsAreLocked({ id: "e1@123", repeat: "custom", davObjectId: "e1" }), false, "an expanded occurrence of a CalDAV series: its id is master@time and it keeps the master as davObjectId");
+	assert.equal(roomsAreLocked({ id: "e2@456", repeat: "none", davObjectId: "e1" }), true, "an override row, expanded or not, belongs to another event's series");
 	assert.equal(roomsAreLocked({ id: "e2", repeat: "none", davObjectId: "e1" }), true, "an override row: one moved occurrence");
 });
 
