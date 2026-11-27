@@ -7,12 +7,6 @@ import { assertResolvesPublic, isPublicHttpsUrl, PUBLIC_HTTPS_URL_MESSAGE } from
 
 export type WebhookEventType = "message.inbound" | "message.outbound" | "message.failed";
 
-export const WEBHOOK_EVENT_TYPES: WebhookEventType[] = [
-	"message.inbound",
-	"message.outbound",
-	"message.failed",
-];
-
 /** Retry work is carried on the existing outbound queue so no new binding is required. */
 export type WebhookRetryMessage = {
 	kind: "webhook.retry";

@@ -49,10 +49,6 @@ export function endDriveDrag() {
 	dragged = [];
 }
 
-export function draggedDriveIds(): Set<string> {
-	return new Set(dragged.map((item) => item.id));
-}
-
 /**
  * Whether the current drag may land on a target. Anything not yet trashed may go to the trash, and trashed attachments
  * may go back to the attachments list. Moving (which also restores from the trash) is for the owner's own Drive items,

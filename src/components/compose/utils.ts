@@ -61,24 +61,3 @@ export function formatAttachmentSize(size: number): string {
 	if (size < 1024 * 1024) return `${Math.ceil(size / 1024)} KB`;
 	return `${(size / (1024 * 1024)).toFixed(1)} MB`;
 }
-
-export function applyMailboxSignature(
-	text: string,
-	previousSignature: string | null | undefined,
-	nextSignature: string | null | undefined,
-): string {
-	const previousBlock = formatSignatureBlock(previousSignature);
-	const nextBlock = formatSignatureBlock(nextSignature);
-	if (previousBlock && text.includes(previousBlock)) {
-		return text.replace(previousBlock, nextBlock);
-	}
-	if (!nextBlock || text.includes(nextBlock)) return text;
-	if (!text) return nextBlock;
-	if (/^\s*[^\n]+ wrote:\n>/i.test(text)) return `${nextBlock}${text}`;
-	return `${text}${nextBlock}`;
-}
-
-function formatSignatureBlock(signature: string | null | undefined): string {
-	const value = signature?.trim() ?? "";
-	return value ? `\n\n${value}` : "";
-}

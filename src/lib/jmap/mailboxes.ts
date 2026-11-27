@@ -3,7 +3,6 @@ import { mailboxChangesSince } from "./changes";
 import { folders, messages } from "@/db/schema";
 import { draftsVisibleTo } from "@/lib/email/draft-access";
 import { newId } from "@/lib/ids";
-import { JmapError } from "./errors";
 import { decodeMailboxRef, encodeMailboxRef, roleToStatus, SYSTEM_ROLES } from "./ids";
 import { getMailboxState } from "./state";
 import type { AccessibleMailbox, JmapContext, JmapMethodHandler, SystemRole } from "./types";
@@ -295,9 +294,4 @@ export function pick(item: Record<string, unknown>, properties: string[] | null 
 	const result: Record<string, unknown> = { id: item.id };
 	for (const key of properties) if (key in item) result[key] = item[key];
 	return result;
-}
-
-export function ensureJmapError(error: unknown): never {
-	if (error instanceof JmapError) throw error;
-	throw error;
 }

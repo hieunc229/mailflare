@@ -1,4 +1,4 @@
-import { and, asc, eq } from "drizzle-orm";
+import { asc, eq } from "drizzle-orm";
 import type { getDb } from "@/db";
 import { folders } from "@/db/schema";
 import type { SessionUser } from "@/lib/auth/types";
@@ -18,13 +18,4 @@ export function listFoldersForMailbox(db: Db, mailboxId: string) {
 		.from(folders)
 		.where(eq(folders.mailboxId, mailboxId))
 		.orderBy(asc(folders.name));
-}
-
-export async function getFolderForMailbox(db: Db, folderId: string, mailboxId: string) {
-	const [folder] = await db
-		.select()
-		.from(folders)
-		.where(and(eq(folders.id, folderId), eq(folders.mailboxId, mailboxId)))
-		.limit(1);
-	return folder ?? null;
 }
