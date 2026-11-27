@@ -15,6 +15,7 @@ import { moveSeriesStatements } from "@/lib/calendar/series-rows";
 import { calendarExistsGuard } from "@/lib/calendar/calendars";
 import { listVisibleEvents } from "@/lib/calendar/event-list";
 import { busyIntervals } from "@/lib/calendar/free-busy";
+import { bookRooms } from "@/lib/calendar/room-booking";
 import { isOrgFreeBusyEnabled, resolveFreeBusyAddresses, viewableFreeBusyUsers } from "@/lib/calendar/free-busy-access";
 import { calendarScopes, changeShare, getCalendarRole, grantShare, listVisibleCalendars, revokeShare } from "@/lib/calendar/shares";
 import { applyPendingMigrations, getMigrationStatus } from "@/lib/migrations/service";
@@ -212,6 +213,20 @@ await db.delete(calendarEvents).where(eq(calendarEvents.id, `evt_room_${stamp}`)
 const [{ bookings }] = await db.all<{ bookings: number }>(sql`SELECT count(*) AS bookings FROM calendar_resource_bookings WHERE id = ${`crb_${stamp}`}`);
 check("deleting an event removes its room booking", Number(bookings) === 0);
 await db.delete(calendarResources).where(eq(calendarResources.id, `res_${stamp}`));
+// Rooms: two saves for one slot at once end with one accepted (the compare-and-swap token), and the room's busy time is the winner's.
+await db.insert(calendarResources).values({ id: `res2_${stamp}`, name: `Room2 ${stamp}` } as never);
+const roomSlot = new Date(Date.now() + 3 * 86_400_000);
+for (const name of ["a", "b"]) await db.insert(calendarEvents).values({ id: `evt_${name}_${stamp}`, userId, title: "Race", startsAt: roomSlot, endsAt: new Date(roomSlot.getTime() + 3_600_000) } as never);
+const raced = await Promise.all([`evt_a_${stamp}`, `evt_b_${stamp}`].map((id) => bookRooms(db as never, id, [`res2_${stamp}`])));
+check("two bookings of one room slot at once leave exactly one accepted", raced.map((result) => result.rooms[0].status).sort().join() === "accepted,declined");
+const [{ acceptedRooms }] = await db.all<{ acceptedRooms: number }>(sql`SELECT count(*) AS acceptedRooms FROM calendar_resource_bookings WHERE resource_id = ${`res2_${stamp}`} AND status = 'accepted'`);
+check("exactly one accepted booking row is stored", Number(acceptedRooms) === 1);
+const roomBusy = await busyIntervals(env, { userIds: [], resourceIds: [`res2_${stamp}`] }, new Date(roomSlot.getTime() - 3_600_000), new Date(roomSlot.getTime() + 7_200_000));
+check("the room is busy for the accepted booking only", roomBusy.get(`res2_${stamp}`)?.length === 1 && roomBusy.get(`res2_${stamp}`)![0][0] === roomSlot.getTime());
+await db.delete(calendarEvents).where(inArray(calendarEvents.id, [`evt_a_${stamp}`, `evt_b_${stamp}`]));
+const freed = await busyIntervals(env, { userIds: [], resourceIds: [`res2_${stamp}`] }, new Date(roomSlot.getTime() - 3_600_000), new Date(roomSlot.getTime() + 7_200_000));
+check("deleting the events frees the room", freed.get(`res2_${stamp}`)?.length === 0);
+await db.delete(calendarResources).where(eq(calendarResources.id, `res2_${stamp}`));
 await db.insert(davCollections).values({ id: `card:${userId}`, userId, kind: "addressbook" } as never);
 await db.insert(davCards).values({ id: `card_${stamp}`, userId, collectionId: `card:${userId}`, name: "a.vcf", uid: "uid-1", body: "BEGIN:VCARD", version: "3.0", size: 11 } as never);
 await db.update(davCards).set({ body: "BEGIN:VCARD\nEND:VCARD" }).where(eq(davCards.id, `card_${stamp}`));

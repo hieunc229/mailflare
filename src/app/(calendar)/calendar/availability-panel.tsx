@@ -1,9 +1,10 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useContext, useEffect, useMemo, useRef, useState } from "react";
 import { getUserTimeZone, parseUserDateTimeLocal } from "@/lib/time/utils";
 import { fetchAvailability, type PersonAvailability } from "./availability-api";
 import { FIND_DAYS, MAX_FIND_DURATION_MS, MAX_GUESTS, availabilityWindow, findFreeSlots, parseGuestAddresses } from "./availability-utils";
+import { AvailabilityRoomsContext } from "./availability-rooms";
 import { AvailabilityView, type FindState } from "./availability-view";
 
 /** The pause after the last keystroke before the server is asked (spec F9 8.6). */
@@ -17,8 +18,10 @@ type Found = { key: string; at: Date; selfLeftOut?: boolean; state: "loading" | 
  * Who is free when the event is: reads the guest field and the event's times, asks `/api/calendar/free-busy` for the event's day
  * and a day either side once typing pauses, and offers "Find a time". A failure never blocks saving; it only shows here.
  */
-export function AvailabilityPanel({ guests, rooms = [], startsAt, endsAt, excludeEventId, selfAddress, onPick }: { guests: string; /** Rooms chosen for the event: a row each, and they count in "Find a time". */ rooms?: { id: string; name: string }[]; startsAt: string; endsAt: string; excludeEventId?: string; selfAddress?: string; onPick: (start: Date, end: Date) => void }) {
+export function AvailabilityPanel({ guests, startsAt, endsAt, excludeEventId, selfAddress, onPick }: { guests: string; startsAt: string; endsAt: string; excludeEventId?: string; selfAddress?: string; onPick: (start: Date, end: Date) => void }) {
 	const zone = getUserTimeZone();
+	// The rooms chosen for the event (a row each, and they count in "Find a time") come from the editor around the panel.
+	const rooms = useContext(AvailabilityRoomsContext);
 	const parsedGuests = useMemo(() => parseGuestAddresses(guests), [guests]);
 	const roomKey = rooms.map((room) => room.id).join(",");
 	const roomIds = useMemo(() => (roomKey ? roomKey.split(",") : []), [roomKey]);
