@@ -55,10 +55,12 @@ export function OrgFreeBusyCard() {
 			setAvailable(answer.data.available);
 			setStatus(t("general.orgFreeBusySaved"));
 		} else {
-			setStatus(answer.code === "TEAM_REQUIRED" ? t("general.orgFreeBusyNeedsTeam") : t("general.orgFreeBusySaveFailed"));
 			// What was stored, and whether a licence is still there, may differ from what the page last knew.
 			const fresh = await request({ cache: "no-store" });
 			if (fresh.ok) { setEnabled(fresh.data.enabled); setAvailable(fresh.data.available); }
+			// A licence refusal is already said by the note under the switch once it shows: do not say the same sentence twice.
+			const noted = answer.code === "TEAM_REQUIRED" && fresh.ok && !fresh.data.available;
+			setStatus(noted ? "" : answer.code === "TEAM_REQUIRED" ? t("general.orgFreeBusyNeedsTeam") : t("general.orgFreeBusySaveFailed"));
 		}
 		setSaving(false);
 	}, [t]);

@@ -30,7 +30,7 @@ async function mount() {
 }
 const unmount = async () => { await act(async () => root.unmount()); container.remove(); };
 const text = () => container.textContent;
-const flip = async () => { await act(async () => { container.querySelector('[role="switch"]').click(); await Promise.resolve(); await Promise.resolve(); }); };
+const flip = async () => { await act(async () => { container.querySelector('[role="switch"]').click(); for (let tick = 0; tick < 10; tick += 1) await Promise.resolve(); }); };
 
 test("a failed save whose body is not JSON shows the translated generic error, never a parser message", async () => {
 	globalThis.orgCard.respond = (url, init) => (init?.method === "PUT" ? new Response("<html>Bad gateway</html>", { status: 502 }) : Response.json({ available: true, enabled: false }));
@@ -53,7 +53,7 @@ test("a refusal caused by the licence says so in the translated words, then the 
 	assert.match(text(), /needs a Team licence\./);
 	assert.deepEqual(globalThis.orgCard.calls.map((call) => call[1]), ["PUT", "GET"], "it asked again what is available");
 	assert.ok(container.querySelector('[role="switch"]'), "the card stays so the message is not lost");
-	assert.match(text(), /Turn on only with a Team licence|needs a Team licence/);
+	assert.equal((text().match(/Organisation-wide free\/busy needs a Team licence\./g) ?? []).length, 1, `said once: ${text()}`);
 	await unmount();
 });
 
