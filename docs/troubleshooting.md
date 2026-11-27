@@ -84,5 +84,7 @@ Confirm that:
 The reset form always answers success, so it cannot tell you why no mail was sent. Check the Worker logs for one of these lines:
 
 - `Password reset skipped: account has no recovery email` — set the recovery email on the account first.
+- `Password reset skipped: account is disabled` — re-enable the account first.
+- `Password reset skipped: set APP_URL to this install's public URL so reset links cannot be built from the Host header` — set `APP_URL` to the public HTTPS address. It is required on Docker, Node and Vercel, which never build reset links from the request's Host header.
 - `Password reset requested but no domain can send mail` — enable sending on a domain (Cloudflare, Resend or SES) with an active mailbox owned by an enabled user.
 - `Password reset request failed` — the sending provider rejected the message; the error follows.
