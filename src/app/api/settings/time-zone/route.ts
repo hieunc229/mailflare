@@ -3,15 +3,15 @@ import { NextResponse } from "next/server";
 import { getDb } from "@/db";
 import { calendarEvents, calendarResourceBookings, users } from "@/db/schema";
 import { roomsBookable } from "@/lib/calendar/room-licence";
-import { declineBookingsStatement, rebookEvents } from "@/lib/calendar/room-save";
+import { declineBookingsOfStatement, PENDING_RECHECK, rebookEvents } from "@/lib/calendar/room-save";
 import { getCurrentUser } from "@/lib/auth/cookies";
 import { getEnv } from "@/lib/cloudflare";
 import { hasValidSessionMutationOrigin } from "@/lib/auth/origin";
 import { parseTimeZoneUpdate } from "./utils";
 import { getRequestTimeZone } from "@/lib/time/utils";
 
-/** Events with rooms whose bookings one zone change re-checks (the rest keep what they had until their next save). */
-const MAX_RECHECKED = 200;
+/** Events with rooms re-checked in the request that changes the zone; the rest wait declined (fail closed) until their next save. */
+const RECHECKED_IN_REQUEST = 20;
 
 export async function PATCH(request: Request) {
 	const env = getEnv();
@@ -20,6 +20,8 @@ export async function PATCH(request: Request) {
 	if (!hasValidSessionMutationOrigin(request)) return NextResponse.json({ error: "Invalid origin" }, { status: 403 });
 	const input = await parseTimeZoneUpdate(request);
 	if (!input) return NextResponse.json({ error: "Choose a valid timezone" }, { status: 400 });
+	// The same zone again changes nothing: nothing is frozen, declined or checked.
+	if (input.timeZone === (user.timeZone ?? null)) return NextResponse.json({ timeZone: input.timeZone });
 	const db = getDb(env);
 	// Legacy series have no recorded timezone. Freeze their current recurrence
 	// before changing the account preference, so future instants do not move.
@@ -29,17 +31,17 @@ export async function PATCH(request: Request) {
 		ne(calendarEvents.repeat, "none"),
 	));
 	const setZone = db.update(users).set({ timeZone: input.timeZone }).where(eq(users.id, user.id));
-	// Events with no zone of their own (repeating, or all-day) are expanded in the account's zone, so this moves them, and a room they
-	// booked may now be taken at the new time: their bookings are declined in the same batch and checked again after it.
-	const moving = (await db.select({ id: calendarEvents.id }).from(calendarEvents).innerJoin(calendarResourceBookings, eq(calendarResourceBookings.eventId, calendarEvents.id))
-		.where(and(eq(calendarEvents.userId, user.id), isNull(calendarEvents.timeZone), or(ne(calendarEvents.repeat, "none"), eq(calendarEvents.allDay, true)))).limit(MAX_RECHECKED + 1)).map((row) => row.id);
-	if (!moving.length) {
-		await freeze;
-		await setZone;
-		return NextResponse.json({ timeZone: input.timeZone });
-	}
-	const ids = [...new Set(moving)].slice(0, MAX_RECHECKED);
-	await db.batch([freeze, setZone, ...ids.map((id) => declineBookingsStatement(db, id))] as never);
-	await rebookEvents(db, ids, roomsBookable(env));
+	// The events that move are those read in the account's zone: an all-day event with no zone, and a repeating one with no zone only when the account
+	// had none before (otherwise the freeze above keeps its instants). Their accepted bookings are declined in this batch by ONE statement that selects them
+	// itself, first (before the freeze changes which events have no zone), and the room step books them again after it.
+	const moving = db.select({ id: calendarEvents.id }).from(calendarEvents).where(and(
+		eq(calendarEvents.userId, user.id), isNull(calendarEvents.timeZone),
+		user.timeZone ? eq(calendarEvents.allDay, true) : or(eq(calendarEvents.allDay, true), ne(calendarEvents.repeat, "none")),
+	));
+	await db.batch([declineBookingsOfStatement(db, moving), freeze, setZone] as never);
+	// Re-check only a few here; any others stay declined and waiting, which fails closed, and are checked at their next save.
+	const waiting = await db.selectDistinct({ id: calendarResourceBookings.eventId }).from(calendarResourceBookings).innerJoin(calendarEvents, eq(calendarEvents.id, calendarResourceBookings.eventId))
+		.where(and(eq(calendarEvents.userId, user.id), eq(calendarResourceBookings.status, "declined"), eq(calendarResourceBookings.conflictAt, PENDING_RECHECK))).limit(RECHECKED_IN_REQUEST);
+	if (waiting.length) await rebookEvents(db, waiting.map((row) => row.id), roomsBookable(env));
 	return NextResponse.json({ timeZone: input.timeZone });
 }

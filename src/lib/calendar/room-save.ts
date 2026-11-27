@@ -44,6 +44,12 @@ export function invitationLocation(location: string, roomNames: string[]): strin
 export const declineBookingsStatement = (db: Db, eventId: string) => db.update(calendarResourceBookings).set({ status: "declined", conflictAt: PENDING_RECHECK }).where(and(eq(calendarResourceBookings.eventId, eventId), eq(calendarResourceBookings.status, "accepted")));
 
 /**
+ * One statement for a whole set of events: the `accepted` bookings of the events a subquery selects become `declined` and wait for their re-check
+ * (see `PENDING_RECHECK`). It reads the set itself, in the same statement, so nothing can slip between choosing the events and declining them.
+ */
+export const declineBookingsOfStatement = (db: Db, eventIds: Parameters<typeof inArray>[1]) => db.update(calendarResourceBookings).set({ status: "declined", conflictAt: PENDING_RECHECK }).where(and(inArray(calendarResourceBookings.eventId, eventIds as never), eq(calendarResourceBookings.status, "accepted")));
+
+/**
  * The event is already saved at its new time, so a room check that cannot finish must not leave its bookings `accepted` for times
  * nobody checked: they are declined (fail closed). The next save of the event checks them again.
  */
@@ -82,6 +88,9 @@ export const roomResponse = (summary: RoomsSummary | null) => (summary && summar
  * thrown at the caller; the next save of the event re-checks it. `canBook` says whether the installation may book rooms (`roomsBookable(env)`).
  */
 export async function rebookEvents(db: Db, eventIds: string[], canBook: () => Promise<boolean>): Promise<void> {
+	// One licence check per call, however many events have a declined room.
+	let licensed: Promise<boolean> | undefined;
+	const bookable = () => (licensed ??= canBook());
 	for (const id of new Set(eventIds)) {
 		try {
 			const booked = await bookedRooms(db, id);
@@ -89,7 +98,7 @@ export async function rebookEvents(db: Db, eventIds: string[], canBook: () => Pr
 			// Booking needs a Team licence (D-13). Without one a declined room stays declined, whichever path changed the event; only a
 			// licence check is needed (and only then) when there is a declined room to decide about. If the check itself fails, so does the event's check.
 			const declined = booked.filter((room) => room.status === "declined" && !room.pending).map((room) => room.id);
-			const frozen = declined.length && !(await canBook()) ? declined : [];
+			const frozen = declined.length && !(await bookable()) ? declined : [];
 			await bookRooms(db, id, booked.map((room) => room.id), { declined: frozen });
 		} catch (error) {
 			console.error("Room check after an event change failed", error);
