@@ -1,6 +1,6 @@
 # Bounce and complaint suppression list
 
-Mailflare can remember addresses that bounced permanently or reported your mail as spam, per sending domain, and optionally stop sending to them. It is **off by default**, on upgrades and on new installations. Nothing changes until the primary administrator picks a mode under **Admin → Email → Deliverability**.
+Records addresses that bounced permanently or reported your mail as spam, per sending domain, and optionally stops sending to them. **Off by default**, including upgrades and new installs. Nothing changes until the primary administrator picks a mode under **Admin → Email → Deliverability**.
 
 ## Modes
 
@@ -20,7 +20,7 @@ The mode applies to the whole installation. The list itself is per sending domai
 
   A returned message alone is **not enforced**. A co-recipient of a message you sent knows its `Message-ID` and the other addresses, so it can forge a bounce for them. These entries are stored **unconfirmed** and start to count once a second returned message names the same address for a *different* original message, or an administrator confirms the entry. A person who received two of your messages could still forge both, so use this source as a hint and review the list.
 
-Connect or disconnect Resend and SES on the Deliverability page. Providers retry unacknowledged events, so with the mode off the endpoints still answer `200`.
+Connect or disconnect Resend and SES on the Deliverability page. Providers retry unacknowledged events, so the endpoints answer `200` even with the mode off.
 
 ## What "skip suppressed recipients" does
 
@@ -35,7 +35,7 @@ Connect or disconnect Resend and SES on the Deliverability page. Providers retry
 
 ## Managing the list
 
-The Deliverability page lists a domain's entries (address, reason, source, event count, last event), with search and a reason filter. **Remove** deletes an entry, after which the next message to that address is attempted again; removals are audit-logged (`deliverability.suppression_removed`). If the same address bounces again it returns to the list.
+The Deliverability page lists a domain's entries (address, reason, source, event count, last event) with search and a reason filter. **Remove** deletes an entry; the next message to that address is attempted again, and a new bounce re-adds it. Removals are audit-logged (`deliverability.suppression_removed`).
 
 Unconfirmed entries show an **Unconfirmed** badge. **Confirm** makes one enforceable (audit-logged as `deliverability.suppression_confirmed`); **Remove** deletes it. Entries from signed provider events (SES, Resend with one recipient) and manual entries are confirmed from the start, and a later confirmed event confirms an unconfirmed entry. An unconfirmed event never changes an entry that is already confirmed.
 
