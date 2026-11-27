@@ -38,3 +38,19 @@ export async function bookAndSummarize(db: Db, eventId: string, resourceIds: str
 
 /** The response fields for an event with rooms; an event without any answers exactly as it did before rooms existed. */
 export const roomResponse = (summary: RoomsSummary | null) => (summary && summary.rooms.length ? { rooms: summary.rooms, resourceConflicts: summary.resourceConflicts } : {});
+
+/**
+ * Re-checks the rooms of events changed somewhere other than the web editor (a phone's CalDAV write, the MCP update tool): a new
+ * time or rule can now clash. Events with no rooms cost one read. The event is already saved, so a failure here is logged, never
+ * thrown at the caller; the next save of the event re-checks it.
+ */
+export async function rebookEvents(db: Db, eventIds: string[]): Promise<void> {
+	for (const id of new Set(eventIds)) {
+		try {
+			const booked = await bookedRoomIds(db, id);
+			if (booked.length) await bookRooms(db, id, booked);
+		} catch (error) {
+			console.error("Room check after an event change failed", error);
+		}
+	}
+}

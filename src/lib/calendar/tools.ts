@@ -1,4 +1,5 @@
 import { and, eq, gte, lt, ne, or } from "drizzle-orm";
+import { rebookEvents } from "./room-save";
 import { z } from "zod";
 import { getDb } from "@/db";
 import { calendarEvents } from "@/db/schema";
@@ -139,6 +140,7 @@ export async function runCalendarTool(context: CalendarToolContext, name: Calend
 			await db.update(calendarEvents).set({ title: item.title ?? row.title, description: item.description ?? row.description, location: item.location ?? row.location, startsAt, endsAt, timeZone, color: item.color ? normalizeCalendarColor(item.color) : row.color, ...repeatForToolUpdate(row, item, startsAt, timeZone), ...(shifted ? { excludedOccurrences: shifted.excludedOccurrences } : {}), attendees: item.attendees ? JSON.stringify(item.attendees) : row.attendees, updatedAt: new Date() }).where(and(eq(calendarEvents.id, row.id), eq(calendarEvents.userId, context.user.id)));
 			if (shifted?.moved) await shiftOverrides(db, context.user.id, row.id, shifted.shift);
 		}
+		await rebookEvents(db, ids);
 		return { eventIds: ids, status: "updated" };
 	}
 	const ids = input.eventIds as string[];
