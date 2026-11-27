@@ -593,6 +593,12 @@
         "ALTER TABLE `calendar_resources` ADD `booking_token` longtext NOT NULL DEFAULT ('');",
         "ALTER TABLE `calendar_resource_bookings` ADD `conflict_at` bigint;"
       ]
+    },
+    {
+      "name": "0033_booking_event_resources.sql",
+      "statements": [
+        "ALTER TABLE `booking_events` ADD `resource_ids` longtext NOT NULL DEFAULT ('[]');"
+      ]
     }
   ]
 }

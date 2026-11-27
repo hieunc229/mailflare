@@ -1226,6 +1226,8 @@ export const bookingEvents = sqliteTable(
 		description: text("description").notNull().default(""),
 		color: text("color").notNull().default("#2563eb"),
 		hostIds: text("host_ids").notNull().default("[]"),
+		/** JSON list of `calendar_resources` ids the event type reserves with each booking (Team, D-13); `[]` books no room. */
+		resourceIds: text("resource_ids").notNull().default("[]"),
 		durationMinutes: integer("duration_minutes").notNull(),
 		location: text("location").notNull().default(""),
 		weekdays: text("weekdays").notNull().default("[1,2,3,4,5]"),

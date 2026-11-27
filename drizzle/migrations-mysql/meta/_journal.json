@@ -232,6 +232,13 @@
       "when": 1795027674151,
       "tag": "0032_calendar_room_booking_guard",
       "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "6",
+      "when": 1795027675151,
+      "tag": "0033_booking_event_resources",
+      "breakpoints": true
     }
   ]
 }

@@ -1065,6 +1065,12 @@
         "ALTER TABLE `calendar_resources` ADD `booking_token` text DEFAULT '' NOT NULL;",
         "ALTER TABLE `calendar_resource_bookings` ADD `conflict_at` integer;"
       ]
+    },
+    {
+      "name": "0109_booking_event_resources.sql",
+      "statements": [
+        "ALTER TABLE `booking_events` ADD `resource_ids` text DEFAULT '[]' NOT NULL;"
+      ]
     }
   ]
 }

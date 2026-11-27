@@ -143,17 +143,22 @@ test("an event beyond the window does not block it", async () => {
 	assert.equal((await slots(base, 14)).length, 10 * ALL_DAY.length);
 });
 
-test("a transparent (free) event still blocks a booking slot before CS-8", async () => {
+// CHANGED in CS-8 (Ruling: D-6, the shared service skips events marked free): these two pinned the old behaviour.
+test("a transparent (free) event no longer blocks a booking slot (it did before CS-8)", async () => {
 	setup();
 	event("h1", at(0, 9), at(0, 11), { transparent: 1 });
-	assert.deepEqual(times(await slots(), MON), []);
+	assert.deepEqual(times(await slots(), MON), ALL_DAY);
 });
 
-test("a repeating event with no zone of its own is read in UTC before CS-8", async () => {
+test("a repeating event with no zone of its own is read in its owner's zone (it was read in UTC before CS-8)", async () => {
 	setup();
-	sqlite.exec("UPDATE users SET time_zone = 'Asia/Kolkata' WHERE id = 'h1'");
-	event("h1", at(0, 9), at(0, 11), { repeat: "daily", time_zone: null });
-	assert.deepEqual(times(await slots(), MON), []);
+	sqlite.exec("UPDATE users SET time_zone = 'America/New_York' WHERE id = 'h1'");
+	event("h1", Date.UTC(2030, 2, 1, 14), Date.UTC(2030, 2, 1, 15), { repeat: "weekly", time_zone: null });
+	mock.timers.reset();
+	mock.timers.enable({ apis: ["Date"], now: Date.UTC(2030, 2, 4) });
+	const list = await slots({ ...base, timeRanges: [{ startTime: "13:00", endTime: "15:00" }] }, 14);
+	assert.deepEqual(times(list, "2030-03-08"), ["13:00", "13:15", "13:30"]);
+	assert.deepEqual(times(list, "2030-03-15"), ["14:00", "14:15", "14:30"], "was 13:00, 13:15, 13:30 (UTC)");
 });
 
 test("a rule whose walk hits the work budget is busy for the whole window: unknown is never offered as free", async () => {
