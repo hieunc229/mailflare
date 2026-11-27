@@ -755,3 +755,48 @@ test("a failing invitation is reported per attendee instead of rejecting", async
 	assert.deepEqual(sent, ["a@example.com", "c@example.com"]);
 	assert.deepEqual(await sendToAttendees([], async () => { throw new Error("unused"); }), []);
 });
+
+const tzInput = {
+	title: "T", description: "", location: "", uid: "evt_tz", organizer: "me@example.com",
+	attendees: ["g@example.com"], sequence: 0,
+	startsAt: new Date("2026-11-08T23:00:00Z"), endsAt: new Date("2026-11-08T23:30:00Z"),
+	repeat: "weekdays", repeatDays: [1, 3, 5], repeatAnchorDay: null, repeatUntil: null,
+	repeatInterval: 1, repeatWeekday: null, repeatWeek: null,
+	excludedOccurrences: [Date.parse("2026-11-10T23:00:00Z")],
+	overrides: [{ recurrenceId: new Date("2026-11-10T23:00:00Z"), startsAt: new Date("2026-11-11T01:00:00Z"), endsAt: new Date("2026-11-11T01:30:00Z") }],
+};
+
+test("a recurring Tokyo series is written in the event zone", () => {
+	const text = new TextDecoder().decode(createCalendarInvitation({ ...tzInput, timeZone: "Asia/Tokyo" }));
+	assert.match(text, /DTSTART;TZID=Asia\/Tokyo:20261109T080000\r\n/);
+	assert.match(text, /DTEND;TZID=Asia\/Tokyo:20261109T083000/);
+	assert.match(text, /RRULE:FREQ=WEEKLY;BYDAY=MO,WE,FR/);
+	assert.match(text, /EXDATE;TZID=Asia\/Tokyo:20261111T080000/);
+	assert.match(text, /RECURRENCE-ID;TZID=Asia\/Tokyo:20261111T080000/);
+	assert.match(text, /DTSTART;TZID=Asia\/Tokyo:20261111T100000/);
+	assert.doesNotMatch(text, /DTSTART:2026/);
+	assert.equal(parseInvite(text).startsAt.toISOString(), "2026-11-08T23:00:00.000Z");
+});
+
+test("a non-recurring event with a zone stays in UTC", () => {
+	const text = new TextDecoder().decode(createCalendarInvitation({ ...tzInput, repeat: "none", timeZone: "Asia/Tokyo" }));
+	assert.match(text, /DTSTART:20261108T230000Z/);
+	assert.doesNotMatch(text, /TZID/);
+});
+
+test("an unknown zone falls back to UTC", () => {
+	const text = new TextDecoder().decode(createCalendarInvitation({ ...tzInput, timeZone: "Not/AZone" }));
+	assert.match(text, /DTSTART:20261108T230000Z/);
+});
+
+test("buildSplitAnnouncement passes the zone to both files", () => {
+	const side = (uid) => ({
+		uid, title: "T", description: "", location: "",
+		startsAt: new Date("2026-11-08T23:00:00Z"), endsAt: new Date("2026-11-08T23:30:00Z"),
+		repeat: "weekly", repeatDays: [], repeatAnchorDay: null, repeatUntil: null,
+		repeatInterval: 1, repeatWeekday: null, repeatWeek: null, reminderMinutes: null,
+		excludedOccurrences: [], overrides: [], sequence: 0, timeZone: "Asia/Tokyo",
+	});
+	const { truncationFile, forkFile } = buildSplitAnnouncement({ original: side("a"), fork: side("b"), organizer: "me@example.com", attendees: ["g@example.com"] });
+	for (const file of [truncationFile, forkFile]) assert.match(new TextDecoder().decode(file), /DTSTART;TZID=Asia\/Tokyo:/);
+});

@@ -39,12 +39,12 @@ function local(value: Date, timeZone: string): string {
 	return `${get("year")}${get("month")}${get("day")}T${get("hour")}${get("minute")}${get("second")}`;
 }
 
-function validTimeZone(value: string | null): string | null {
+export function validTimeZone(value: string | null): string | null {
 	if (!value) return null;
 	try { new Intl.DateTimeFormat("en", { timeZone: value }); return value; } catch { return null; }
 }
 
-function dateProperty(name: string, value: Date, timeZone: string | null): string {
+export function dateProperty(name: string, value: Date, timeZone: string | null): string {
 	return timeZone ? `${name};TZID=${timeZone}:${local(value, timeZone)}` : `${name}:${utc(value)}`;
 }
 

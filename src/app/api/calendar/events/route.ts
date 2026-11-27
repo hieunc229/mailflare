@@ -82,7 +82,7 @@ export async function POST(request: Request) {
 	await getDb(env).insert(calendarEvents).values(savedEvent);
 	let inviteErrors: string[] = [];
 	if (attendees.length && input.mailboxId) {
-		const calendarFile = createCalendarInvitation({ title: event.title, description: event.description, location: event.location, startsAt, endsAt, uid: event.id, organizer: input.from || undefined, attendees, sequence: 0, reminderMinutes: event.reminderMinutes, repeat, repeatDays, repeatAnchorDay: event.repeatAnchorDay, repeatUntil: null, repeatInterval, repeatWeekday, repeatWeek, excludedOccurrences: [], overrides: [] });
+		const calendarFile = createCalendarInvitation({ title: event.title, description: event.description, location: event.location, startsAt, endsAt, uid: event.id, organizer: input.from || undefined, attendees, sequence: 0, reminderMinutes: event.reminderMinutes, repeat, repeatDays, repeatAnchorDay: event.repeatAnchorDay, repeatUntil: null, repeatInterval, repeatWeekday, repeatWeek, excludedOccurrences: [], overrides: [], timeZone: savedEvent.timeZone });
 		inviteErrors = await sendToAttendees(attendees, (to) => sendEmail(env, { userId: user.id, mailboxId: input.mailboxId!, from: input.from ?? "", to, subject: `Invitation: ${event.title}`, text: event.description || `You are invited to ${event.title}.`, attachments: [{ filename: "invite.ics", type: "text/calendar; charset=utf-8", content: calendarFile }] }));
 	}
 	return NextResponse.json(inviteErrors.length ? { event: savedEvent, inviteErrors } : { event: savedEvent });

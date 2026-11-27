@@ -1,3 +1,4 @@
+import { dateProperty, validTimeZone } from "./feed";
 import { escapeIcsText, formatIcsUtc, isIcsAddress, joinIcsLines } from "./ics";
 
 type CalendarInvitationInput = {
@@ -28,9 +29,11 @@ type CalendarInvitationInput = {
 	/** Weekday (0-6) and week (1-5, -1 = last) of an nth-weekday monthly repeat. */
 	repeatWeekday?: number | null;
 	repeatWeek?: number | null;
-	/** Starts (epoch ms) of cancelled occurrences; written as EXDATE in UTC. */
+	/** IANA zone of the event. A recurring series is written in it (TZID) so BYDAY/BYMONTHDAY and DST match the guest's calendar; absent or unknown writes UTC. */
+	timeZone?: string | null;
+	/** Starts (epoch ms) of cancelled occurrences; written as EXDATE (in the zone when one is given, else UTC). */
 	excludedOccurrences?: number[];
-	/** Moved or added occurrences; each becomes a VEVENT with RECURRENCE-ID in UTC. */
+	/** Moved or added occurrences; each becomes a VEVENT with RECURRENCE-ID (in the zone when one is given, else UTC). */
 	overrides?: { recurrenceId: Date; startsAt: Date; endsAt: Date }[];
 };
 
@@ -63,19 +66,20 @@ export function createCalendarInvitation(input: CalendarInvitationInput): ArrayB
 	const sequence = Number.isSafeInteger(input.sequence) && (input.sequence as number) >= 0 ? (input.sequence as number) : 0;
 	const stamp = formatIcsUtc(new Date());
 	const rule = invitationRecurrenceRule(input);
+	const zone = rule ? validTimeZone(input.timeZone ?? null) : null;
 	const excluded = [...new Set((input.excludedOccurrences ?? []).filter((ms) => Number.isSafeInteger(ms) && ms >= 0))].sort((a, b) => a - b);
 	const organizerLine = organizer ? [`ORGANIZER:mailto:${organizer}`] : [];
 	const attendeeLines = organizer ? (input.attendees ?? []).filter((address) => isIcsAddress(address)).map((address) => `ATTENDEE;ROLE=REQ-PARTICIPANT;PARTSTAT=NEEDS-ACTION;RSVP=TRUE:mailto:${address}`) : [];
-	const lines = ["BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//Mailflare//Calendar//EN", "CALSCALE:GREGORIAN", `METHOD:${input.method ?? "REQUEST"}`, "BEGIN:VEVENT", `UID:${input.uid}@mailflare`, `DTSTAMP:${stamp}`, `SEQUENCE:${sequence}`, `DTSTART:${formatIcsUtc(input.startsAt)}`, `DTEND:${formatIcsUtc(input.endsAt)}`, `SUMMARY:${escapeIcsText(input.title)}`, `DESCRIPTION:${escapeIcsText(input.description)}`, `LOCATION:${escapeIcsText(input.location)}`,
+	const lines = ["BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//Mailflare//Calendar//EN", "CALSCALE:GREGORIAN", `METHOD:${input.method ?? "REQUEST"}`, "BEGIN:VEVENT", `UID:${input.uid}@mailflare`, `DTSTAMP:${stamp}`, `SEQUENCE:${sequence}`, dateProperty("DTSTART", input.startsAt, zone), dateProperty("DTEND", input.endsAt, zone), `SUMMARY:${escapeIcsText(input.title)}`, `DESCRIPTION:${escapeIcsText(input.description)}`, `LOCATION:${escapeIcsText(input.location)}`,
 		...(organizerLine),
 		...attendeeLines,
 		...(rule ? [rule] : []),
-		...(excluded.length ? [`EXDATE:${excluded.map((ms) => formatIcsUtc(new Date(ms))).join(",")}`] : []),
+		...(excluded.length ? (zone ? excluded.map((ms) => dateProperty("EXDATE", new Date(ms), zone)) : [`EXDATE:${excluded.map((ms) => formatIcsUtc(new Date(ms))).join(",")}`]) : []),
 		// One best-effort reminder; -PTnM is always a valid DURATION, so large offsets stay in minutes.
 		...(input.reminderMinutes != null ? ["BEGIN:VALARM", "ACTION:DISPLAY", `DESCRIPTION:${escapeIcsText(input.title)}`, `TRIGGER:-PT${input.reminderMinutes}M`, "END:VALARM"] : []),
 		"END:VEVENT"];
 	for (const override of input.overrides ?? []) {
-		lines.push("BEGIN:VEVENT", `UID:${input.uid}@mailflare`, `DTSTAMP:${stamp}`, `SEQUENCE:${sequence}`, `RECURRENCE-ID:${formatIcsUtc(override.recurrenceId)}`, `DTSTART:${formatIcsUtc(override.startsAt)}`, `DTEND:${formatIcsUtc(override.endsAt)}`, `SUMMARY:${escapeIcsText(input.title)}`, `DESCRIPTION:${escapeIcsText(input.description)}`, `LOCATION:${escapeIcsText(input.location)}`, ...organizerLine, ...attendeeLines, "END:VEVENT");
+		lines.push("BEGIN:VEVENT", `UID:${input.uid}@mailflare`, `DTSTAMP:${stamp}`, `SEQUENCE:${sequence}`, dateProperty("RECURRENCE-ID", override.recurrenceId, zone), dateProperty("DTSTART", override.startsAt, zone), dateProperty("DTEND", override.endsAt, zone), `SUMMARY:${escapeIcsText(input.title)}`, `DESCRIPTION:${escapeIcsText(input.description)}`, `LOCATION:${escapeIcsText(input.location)}`, ...organizerLine, ...attendeeLines, "END:VEVENT");
 	}
 	lines.push("END:VCALENDAR");
 	return new TextEncoder().encode(joinIcsLines(lines)).buffer as ArrayBuffer;
