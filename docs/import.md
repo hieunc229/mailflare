@@ -107,7 +107,7 @@ Requests that fail, are too large or are rate limited are handled as for the cal
 2. Export once and download all the `.zip` files. A big Drive comes in several parts; pick them all together, or one at a time.
 3. In Mailflare, pick the `.zip` files. The **Drive** card appears. If your export has several product folders and none is called `Drive`, choose the one that holds your files.
 
-The zips are opened in your browser and each file is sent from there to your Drive, one at a time, in 64 MiB parts. Nothing is unzipped on the server. Keep the tab open until it finishes. If it stops, pick the same files again: finished files are skipped and a half-sent file continues after its last stored part. To get there, the part of the file that is already stored is read again from the zip on your computer (nothing of it is uploaded again), so resuming a very large file takes a while before it sends anything new.
+The zips are opened in your browser and each file is sent from there to your Drive, one at a time, in 64 MiB parts (16 MiB on Vercel). Nothing is unzipped on the server. Keep the tab open until it finishes. If it stops, pick the same files again: finished files are skipped and a half-sent file continues after its last stored part. To get there, the part of the file that is already stored is read again from the zip on your computer (nothing of it is uploaded again), so resuming a very large file takes a while before it sends anything new.
 
 ### What the import does
 
@@ -123,7 +123,7 @@ The zips are opened in your browser and each file is sent from there to your Dri
 | Limit | Value |
 | --- | --- |
 | Per-user Drive storage | The admin's limit (Settings → General); a file that does not fit stops the import with "Drive storage is full". The card warns first when the files together are larger than the free space. |
-| One file | The same as an upload in Drive (about 640 GB; 10,000 parts of 64 MiB). The 25 MB and 50 MB limits are for mail attachments and do not apply to Drive. |
+| One file | The same as an upload in Drive (about 640 GB; 10,000 parts of 64 MiB, or about 167 GB with 16 MiB parts on Vercel). The 25 MB and 50 MB limits are for mail attachments and do not apply to Drive. |
 | Files in one import | 200,000. Choose fewer zip files at a time for more. |
 | Entries in one zip, central directory | 500,000 entries, 64 MB |
 | Folder depth | 24 levels in all, counting the folder you import into and its parents. Files in deeper folders are skipped and counted on the card; the rest of the import goes on |
@@ -136,7 +136,7 @@ Names are cleaned before they are used: control characters, text-direction overr
 
 ### Requests and daily limits
 
-Every file is sent from your browser to your Mailflare server, so a big import is a lot of requests. A small file takes 3: one to start the upload, one for its part, one to complete it; a file over 64 MiB takes one more per further 64 MiB. Planning the files and folders adds one request per up to 140 files. So 5,000 small files are about 15,000 requests and 50,000 files about 150,000.
+Every file is sent from your browser to your Mailflare server, so a big import is a lot of requests. A small file takes 3: one to start the upload, one for its part, one to complete it; a file over one part takes one more request per further part (64 MiB, or 16 MiB on Vercel). Planning the files and folders adds one request per up to 140 files. So 5,000 small files are about 15,000 requests and 50,000 files about 150,000.
 
 On Cloudflare's free plan the limits are 100,000 Worker requests, about 5 million D1 rows read and 100,000 D1 rows written per day. These figures are estimates from reading the code, not measurements:
 
