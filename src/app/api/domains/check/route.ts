@@ -7,7 +7,7 @@ import { setupDomainSchema } from "@/lib/validators";
 export async function POST(request: Request) {
 	const env = getEnv();
 	await requireUser(env, request);
-	const parsed = setupDomainSchema.safeParse(await request.json());
+	const parsed = setupDomainSchema.safeParse(await request.json().catch(() => null));
 	if (!parsed.success) {
 		return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
 	}
