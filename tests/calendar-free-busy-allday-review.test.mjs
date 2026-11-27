@@ -33,3 +33,20 @@ test("a daily all-day series in London: the 25-hour day of the clocks going back
 	const result = await busy(from, to);
 	assert.deepEqual(result, [[from, to]], JSON.stringify(result.map(([a, b]) => [new Date(a).toISOString(), new Date(b).toISOString()])));
 });
+
+test("a stored zone that is not a zone does not make free/busy throw: it counts as missing", async () => {
+	for (const zone of ["Not/AZone", ""]) {
+		setup("America/New_York");
+		const start = Date.UTC(2030, 10, 1, 4);
+		sqlite.exec(`INSERT INTO calendar_events (id, user_id, title, starts_at, ends_at, created_at, updated_at, all_day, time_zone, repeat) VALUES ('a', 'u1', 'Away', ${secs(start)}, ${secs(start + 24 * H)}, 1, 1, 1, '${zone}', 'daily')`);
+		const result = await busy(Date.UTC(2030, 10, 1), Date.UTC(2030, 10, 5));
+		assert.ok(result.length >= 1, `zone ${JSON.stringify(zone)}`);
+		assert.equal(result[0][0], start);
+	}
+});
+
+test("a bad zone on a timed event is as harmless as before", async () => {
+	setup();
+	sqlite.exec(`INSERT INTO calendar_events (id, user_id, title, starts_at, ends_at, created_at, updated_at, time_zone, repeat) VALUES ('t', 'u1', 'T', ${secs(Date.UTC(2030, 10, 1, 13))}, ${secs(Date.UTC(2030, 10, 1, 14))}, 1, 1, 'Not/AZone', 'daily')`);
+	assert.ok((await busy(Date.UTC(2030, 10, 2), Date.UTC(2030, 10, 5))).length >= 1);
+});
