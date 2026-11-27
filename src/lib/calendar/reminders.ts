@@ -24,7 +24,7 @@ export async function runCalendarReminders(env: CloudflareEnv, now: Date): Promi
 		const db = getDb(env);
 		const horizon = new Date(now.getTime() + MAX_REMINDER_MINUTES * 60_000);
 		const page = (after: string) => db
-			.select({ event: calendarEvents })
+			.select({ event: calendarEvents, ownerZone: users.timeZone })
 			.from(calendarEvents)
 			// Accounts with Calendar hidden get no reminders: they cannot open the event anyway.
 			.innerJoin(users, and(eq(users.id, calendarEvents.userId), eq(users.calendarEnabled, true)))
@@ -51,8 +51,8 @@ export async function runCalendarReminders(env: CloudflareEnv, now: Date): Promi
 					overridesById.set(row.eventId, list);
 				}
 			}
-			for (const { event } of rows) {
-				const due = dueReminderOccurrences(event, now, event.lastRemindedStart?.getTime() ?? 0, MAX_OCCURRENCES_PER_EVENT, overridesById.get(event.id));
+			for (const { event, ownerZone } of rows) {
+				const due = dueReminderOccurrences(event, now, event.lastRemindedStart?.getTime() ?? 0, MAX_OCCURRENCES_PER_EVENT, overridesById.get(event.id), ownerZone);
 				if (!due.length) continue;
 
 				const newest = due[due.length - 1].start;
@@ -66,7 +66,7 @@ export async function runCalendarReminders(env: CloudflareEnv, now: Date): Promi
 					.returning({ id: calendarEvents.id });
 				if (!claimed.length) continue;
 
-				const zone = normalizeTimeZone(event.timeZone);
+				const zone = normalizeTimeZone(event.timeZone ?? ownerZone);
 				for (const occurrence of due) {
 					await sendPushContent(env, [event.userId], {
 						title: event.title.slice(0, 180),

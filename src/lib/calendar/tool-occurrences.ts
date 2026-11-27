@@ -34,11 +34,18 @@ function nthWeekday(event: EventRow): { weekday: number; week: number } | null {
 		: null;
 }
 
-function occurrenceStart(event: EventRow, index: number): Date {
+/**
+ * The zone a series expands in: its own when it has one, else the caller's default, else UTC. Callers with user
+ * context pass the zone the calendar shows the series in, so a NULL-zone legacy row matches the app's own view.
+ */
+function expansionZone(event: EventRow, defaultZone?: string | null): string {
+	return normalizeTimeZone(event.timeZone ?? defaultZone);
+}
+
+function occurrenceStart(event: EventRow, index: number, zone: string): Date {
 	if (index === 0) return event.startsAt;
 	// A listed-days repeat steps day by day and filters by weekday, so its interval is always 1.
 	const interval = event.repeat === "weekdays" ? 1 : validInterval(event.repeatInterval);
-	const zone = normalizeTimeZone(event.timeZone);
 	const fields = zonedDateFields(event.startsAt, zone);
 	if (event.repeat === "monthly") {
 		const nth = nthWeekday(event);
@@ -63,11 +70,12 @@ function occurrenceStart(event: EventRow, index: number): Date {
 	return dateFromZonedFields(fields, zone);
 }
 
-export function expandToolEvents(events: EventRow[], start: Date, end: Date, max = 500, overrides?: Map<string, ToolOccurrenceOverride[]>) {
+/** `defaultZone` expands events that carry no zone of their own: the calendar UI uses the viewer's zone for them. */
+export function expandToolEvents(events: EventRow[], start: Date, end: Date, max = 500, overrides?: Map<string, ToolOccurrenceOverride[]>, defaultZone?: string | null) {
 	const result: Array<{ id: string; seriesId: string; title: string; description: string; location: string; attendees: string[]; color: string; repeat: string; timeZone: string; startsAt: string; endsAt: string }> = [];
 	for (const event of events) {
 		const duration = event.endsAt.getTime() - event.startsAt.getTime();
-		const zone = normalizeTimeZone(event.timeZone);
+		const zone = expansionZone(event, defaultZone);
 		const first = zonedDateFields(event.startsAt, zone);
 		const target = zonedDateFields(new Date(start.getTime() - duration), zone);
 		const interval = event.repeat === "weekdays" ? 1 : validInterval(event.repeatInterval);
@@ -82,7 +90,7 @@ export function expandToolEvents(events: EventRow[], start: Date, end: Date, max
 		const byMs = new Map((overrides?.get(event.id) ?? []).map((override) => [override.occurrenceMs, override]));
 		const ruleMs = new Set<number>();
 		for (let index = event.repeat === "none" ? 0 : initial; index < (event.repeat === "none" ? 1 : initial + 400); index++) {
-			const at = occurrenceStart(event, index);
+			const at = occurrenceStart(event, index, zone);
 			if (at >= end || (event.repeatUntil && at >= event.repeatUntil)) break;
 			ruleMs.add(at.getTime());
 			if (at.getTime() + duration <= start.getTime() || excluded.has(at.getTime())) continue;
