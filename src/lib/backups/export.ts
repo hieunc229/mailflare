@@ -144,6 +144,7 @@ export async function restoreDatabaseRecords(db: D1Database, content: ArrayBuffe
 	if (unmigrated.length) throw new Error(`Apply pending database migrations before restoring ${unmigrated.join(", ")}.`);
 	const restoreTables = BACKUP_TABLES.filter((table) => (table !== "shared_attachment_links" || sharedLinksTable) && (table !== "booking_events" || bookingTable) && (table !== "passkey_credentials" || passkeyTable) && (!table.startsWith("drive_") || driveTableNames.includes(table)) && (!LATER_MIGRATION_TABLES.includes(table) || laterTableNames.includes(table)));
 	const userColumns = await listColumnNames(db, "users");
+	const appSettingsColumns = restoreTables.includes("app_settings") ? await listColumnNames(db, "app_settings") : null;
 	const bookingColumns = bookingTable ? await listColumnNames(db, "booking_events") : null;
 	// The passkey table can predate later credential columns (aaguid); filter
 	// those out instead of failing after the restore has already torn down data.
@@ -182,7 +183,9 @@ export async function restoreDatabaseRecords(db: D1Database, content: ArrayBuffe
 							? messageColumns
 							: table === "mailbox_promotion_settings"
 								? promotionSettingColumns
-								: deliverabilityColumns.get(table) ?? null;
+								: table === "app_settings"
+									? appSettingsColumns
+									: deliverabilityColumns.get(table) ?? null;
 			const statements = rows.slice(index, index + INSERT_BATCH_SIZE).map((row) => createInsertStatement(db, dialect, table, row, columns));
 			// MySQL checks foreign keys per statement, so the batch suspends them for its own connection.
 			if (statements.length > 0) await db.batch(dialect === "mysql" ? [db.prepare("SET FOREIGN_KEY_CHECKS = 0"), ...statements, db.prepare("SET FOREIGN_KEY_CHECKS = 1")] : statements);

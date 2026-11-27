@@ -9,6 +9,7 @@ import { apiKeyLookupPrefix } from "@/lib/api-keys";
 import { isListedAsAppPassword } from "@/lib/auth/app-password-utils";
 import { getClientIp } from "@/lib/auth/client-ip";
 import { isDavEnabled } from "@/lib/dav/settings";
+import { isImapEnabled } from "@/lib/imap/settings";
 import { isNodeRuntime, isVercelRuntime } from "@/lib/runtime";
 
 export type AppPasswordProtocol = "jmap" | "caldav" | "carddav" | "imap" | "submission";
@@ -25,12 +26,15 @@ const PROTOCOL_SCOPE: Record<AppPasswordProtocol, AppPasswordScope> = {
 
 /**
  * The scopes a new app password may carry on this server: JMAP always, and
- * `dav` (CalDAV and CardDAV) while an administrator has turned it on. IMAP and
- * SMTP submission are added when their servers ship, so nobody can mint a
- * credential nothing accepts.
+ * `dav` and `imap` are available only while their administrator-controlled
+ * protocol switches are on, so credentials cannot be minted for disabled servers.
  */
 export async function availableAppPasswordProtocols(env: CloudflareEnv): Promise<AppPasswordScope[]> {
-	return (await isDavEnabled(env)) ? ["jmap", "dav"] : ["jmap"];
+	const [dav, imap] = await Promise.all([isDavEnabled(env), isImapEnabled(env)]);
+	const protocols: AppPasswordScope[] = ["jmap"];
+	if (dav) protocols.push("dav");
+	if (imap) protocols.push("imap");
+	return protocols;
 }
 
 /**

@@ -2991,5 +2991,9 @@
 	"domains.forceRemoveConfirm": "{reason}\n\nતો પણ {host} બળજબરીથી દૂર કરવું છે? Mailflare પહેલાં તેના _mta-sts અને _smtp._tls DNS રેકોર્ડ દૂર કરવાનો પ્રયાસ કરશે, પછી ડોમેન, તેના બધા મેઇલબોક્સ અને તેમના બધા સંદેશા કાઢી નાખશે, ભલે રેકોર્ડ દૂર કરવામાં નિષ્ફળતા મળે. મેઇલ સર્વર થોડા સમય માટે કેશ થયેલી MTA-STS નીતિ લાગુ કરતા રહી શકે છે. પછી તમને હાથથી દૂર કરવાના DNS રેકોર્ડની યાદી મળશે.\n\nપુષ્ટિ કરવા માટે {host} લખો.",
 	"domains.forceRemoved": "{host} દૂર કરાયું",
 	"domains.forceRemovedRecords": "આ DNS રેકોર્ડ તમે જાતે દૂર કરો:",
-	"domains.forceRemovedCache": "મેઇલ સર્વર {date} સુધી જૂની MTA-STS નીતિ લાગુ કરતા રહી શકે છે."
+	"domains.forceRemovedCache": "મેઇલ સર્વર {date} સુધી જૂની MTA-STS નીતિ લાગુ કરતા રહી શકે છે.",
+	"general.imap": "IMAP",
+	"general.imapEnabled": "Allow mail apps to connect over IMAP",
+	"general.imapHint": "When enabled, users can create IMAP-scoped app passwords. IMAP access is not available while this is off.",
+	"general.imapSaved": "IMAP setting saved."
 }

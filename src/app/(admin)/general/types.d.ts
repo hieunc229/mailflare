@@ -5,4 +5,6 @@ export interface GeneralSettings {
 	driveStorageLimitGb: number | null;
 	/** CalDAV/CardDAV sync; off until an administrator turns it on. */
 	davEnabled: boolean;
+	/** IMAP app-password authentication; off until enabled by an administrator. */
+	imapEnabled: boolean;
 }

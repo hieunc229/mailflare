@@ -1555,6 +1555,8 @@ export const appSettings = sqliteTable("app_settings", {
 	autoUpdateDispatchedVersion: text("auto_update_dispatched_version"),
 	/** CalDAV/CardDAV endpoints (/dav/*) answer only when an administrator turns this on. */
 	davEnabled: bool("dav_enabled").notNull().default(false),
+	/** IMAP app-password authentication is available only when an administrator turns this on. */
+	imapEnabled: bool("imap_enabled").notNull().default(false),
 	/** "off" ignores bounce and complaint events, "record" stores them, "enforce" also refuses to send to those recipients. */
 	suppressionMode: text("suppression_mode", { enum: ["off", "record", "enforce"] }).notNull().default("off"),
 	/** Resend webhook for email.bounced and email.complained; separate from the receiving webhook above. */

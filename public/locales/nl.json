@@ -2991,5 +2991,9 @@
 	"domains.forceRemoveConfirm": "{reason}\n\n{host} toch geforceerd verwijderen? Mailflare probeert de DNS-records _mta-sts en _smtp._tls te verwijderen en verwijdert daarna het domein, alle mailboxen erop en al hun berichten, ook als dat verwijderen mislukt. Mailservers kunnen het gecachete MTA-STS-beleid nog een tijd blijven toepassen. Daarna krijgt u de DNS-records die u handmatig moet verwijderen.\n\nTyp {host} om te bevestigen.",
 	"domains.forceRemoved": "{host} verwijderd",
 	"domains.forceRemovedRecords": "Verwijder deze DNS-records zelf:",
-	"domains.forceRemovedCache": "Mailservers kunnen het oude MTA-STS-beleid nog tot {date} blijven toepassen."
+	"domains.forceRemovedCache": "Mailservers kunnen het oude MTA-STS-beleid nog tot {date} blijven toepassen.",
+	"general.imap": "IMAP",
+	"general.imapEnabled": "Allow mail apps to connect over IMAP",
+	"general.imapHint": "When enabled, users can create IMAP-scoped app passwords. IMAP access is not available while this is off.",
+	"general.imapSaved": "IMAP setting saved."
 }

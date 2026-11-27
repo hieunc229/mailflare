@@ -23,11 +23,14 @@ export default function GeneralSettingsPage() {
 	const [davEnabled, setDavEnabled] = useState(false);
 	const [davSaving, setDavSaving] = useState(false);
 	const [davStatus, setDavStatus] = useState("");
+	const [imapEnabled, setImapEnabled] = useState(false);
+	const [imapSaving, setImapSaving] = useState(false);
+	const [imapStatus, setImapStatus] = useState("");
 
 	useEffect(() => {
 		let active = true;
 		void loadGeneralSettings().then((settings) => {
-			if (active) { setMaxMb(settings.outboundAttachmentMaxMb); setCeilingMb(settings.outboundAttachmentCeilingMb); setUnlimited(settings.driveStorageLimitGb === null); if (settings.driveStorageLimitGb !== null) setLimitGb(settings.driveStorageLimitGb); setDavEnabled(settings.davEnabled); setLoaded(true); }
+			if (active) { setMaxMb(settings.outboundAttachmentMaxMb); setCeilingMb(settings.outboundAttachmentCeilingMb); setUnlimited(settings.driveStorageLimitGb === null); if (settings.driveStorageLimitGb !== null) setLimitGb(settings.driveStorageLimitGb); setDavEnabled(settings.davEnabled); setImapEnabled(settings.imapEnabled); setLoaded(true); }
 		}).catch((error) => { if (active) setStatus(error instanceof Error ? error.message : t("general.loadFailed")); });
 		return () => { active = false; };
 	}, [t]);
@@ -72,6 +75,19 @@ export default function GeneralSettingsPage() {
 		} finally { setDavSaving(false); }
 	}
 
+	async function saveImap(event: React.FormEvent<HTMLFormElement>) {
+		event.preventDefault();
+		setImapSaving(true);
+		setImapStatus("");
+		try {
+			const settings = await saveGeneralSettings({ imapEnabled });
+			setImapEnabled(settings.imapEnabled);
+			setImapStatus(t("general.imapSaved"));
+		} catch (error) {
+			setImapStatus(error instanceof Error ? error.message : t("general.saveFailed"));
+		} finally { setImapSaving(false); }
+	}
+
 	return <div className="space-y-6">
 		<div><h1 className="text-2xl md:text-3xl font-medium text-neutral-900">{t("general.title")}</h1><p className="mt-2 text-sm text-neutral-500">{t("general.description")}</p></div>
 		<Card className="rounded-3xl border-0 bg-white p-6">
@@ -100,6 +116,15 @@ export default function GeneralSettingsPage() {
 				<p className="text-sm text-neutral-500">{t("general.davHint")}</p>
 				{davStatus && <p role="status" className="text-sm text-neutral-700">{davStatus}</p>}
 				<Button type="submit" disabled={!loaded || davSaving}>{davSaving ? t("common.saving") : t("general.save")}</Button>
+			</form></CardContent>
+		</Card>
+		<Card className="rounded-3xl border-0 bg-white p-6">
+			<CardHeader className="py-0"><CardTitle>{t("general.imap")}</CardTitle></CardHeader>
+			<CardContent className="pt-6"><form onSubmit={saveImap} className="space-y-4">
+				<div className="flex items-center gap-3"><Switch id="imap-enabled" checked={imapEnabled} onCheckedChange={setImapEnabled} disabled={!loaded || imapSaving} /><Label htmlFor="imap-enabled">{t("general.imapEnabled")}</Label></div>
+				<p className="text-sm text-neutral-500">{t("general.imapHint")}</p>
+				{imapStatus && <p role="status" className="text-sm text-neutral-700">{imapStatus}</p>}
+				<Button type="submit" disabled={!loaded || imapSaving}>{imapSaving ? t("common.saving") : t("general.save")}</Button>
 			</form></CardContent>
 		</Card>
 	</div>;
