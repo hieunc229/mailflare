@@ -502,9 +502,15 @@ export function MessageFolderPage({
 		updateFirstPage(updater);
 		for (const page of Object.values(pages)) page.updateMessages(updater);
 	}, [updateFirstPage, pages]);
-	const [scrollElement, setScrollElement] = useState<HTMLDivElement | null>(null);
+	const [scrollElement, setScrollElementState] = useState<HTMLDivElement | null>(null);
+	const scrollElementRef = useRef<HTMLDivElement | null>(null);
+	const setScrollElement = useCallback((element: HTMLDivElement | null) => {
+		scrollElementRef.current = element;
+		setScrollElementState(element);
+	}, []);
 	useEffect(() => {
-		if (scrollElement) scrollElement.scrollTop = 0;
+		const element = scrollElementRef.current;
+		if (element) element.scrollTop = 0;
 	}, [viewKey, scrollElement]);
 	const { counts, isLoading: countsLoading } = useMessageCounts(selectedMailbox?.id, !mailboxesLoading);
 	const { mailboxes: accessibleMailboxes } = useSelectedMailbox();
