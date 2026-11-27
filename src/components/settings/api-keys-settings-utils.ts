@@ -60,3 +60,16 @@ export async function revokeManagedApiKey(id: string): Promise<void> {
 		throw new Error(typeof data.error === "string" ? data.error : "Could not revoke API key");
 	}
 }
+
+/** Lets an MCP key release the send reviews it created; the route refuses keys without `mcp:request-send`. */
+export async function setMcpKeyOwnSendApproval(id: string, canApproveOwnSends: boolean): Promise<void> {
+	const response = await authFetch("/api/agent/mcp-keys", {
+		method: "PATCH",
+		headers: { "Content-Type": "application/json" },
+		body: JSON.stringify({ id, canApproveOwnSends }),
+	});
+	if (!response.ok) {
+		const data = await responseData(response);
+		throw new Error(typeof data.error === "string" ? data.error : "Could not update send approval for this key");
+	}
+}

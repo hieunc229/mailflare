@@ -986,6 +986,12 @@
       "statements": [
         "CREATE TABLE `contact_details` (\n\t`contact_id` text PRIMARY KEY NOT NULL,\n\t`details` text DEFAULT '{}' NOT NULL,\n\t`updated_at` integer NOT NULL,\n\tFOREIGN KEY (`contact_id`) REFERENCES `contacts`(`id`) ON UPDATE no action ON DELETE cascade\n);"
       ]
+    },
+    {
+      "name": "0103_approve_own_sends.sql",
+      "statements": [
+        "ALTER TABLE `api_keys` ADD `can_approve_own_sends` integer DEFAULT false NOT NULL;"
+      ]
     }
   ]
 }

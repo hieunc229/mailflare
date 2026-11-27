@@ -10,7 +10,7 @@ const { app, newDatabase } = await loadApp("mcp-cancel-scheduled", `export { cre
 	`,
 	"@/lib/agent/tools": `export const EMAIL_TOOL_NAMES = []; export const emailToolDescriptions = { edit_draft: "" }; export const emailToolSchemas = { edit_draft: { shape: {} } }; export const runEmailTool = () => { throw new Error("not under test"); };`,
 	"@/lib/agent/edit-draft": `export const editAgentDraft = () => { throw new Error("not under test"); };`,
-	"@/lib/agent/approvals/utils": `export const requestAgentSend = () => { throw new Error("not under test"); }; export const getAgentSendRequest = () => { throw new Error("not under test"); };`,
+	"@/lib/agent/approvals/utils": `export const requestAgentSend = () => { throw new Error("not under test"); }; export const getAgentSendRequest = () => { throw new Error("not under test"); }; export const confirmAgentSend = () => { throw new Error("not under test"); };`,
 	"@/lib/calendar/tools": `export const CALENDAR_TOOL_NAMES = []; export const calendarToolDescriptions = {}; export const calendarToolSchemas = {}; export const calendarToolScope = () => "mcp:calendar-read"; export const runCalendarTool = () => { throw new Error("not under test"); };`,
 	"./admin-tools": `export const registerAdminMcpTools = () => {};`,
 } });

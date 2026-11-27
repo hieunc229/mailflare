@@ -1,6 +1,7 @@
-import { and, eq, inArray } from "drizzle-orm";
+import { and, eq, gte, inArray } from "drizzle-orm";
 import { getDb } from "@/db";
 import { agentDraftMetadata, agentSendApprovals, contacts, messageAttachments, messages } from "@/db/schema";
+import { isUniqueConstraintError } from "@/lib/database-errors";
 import { getEmailAddress, splitEmailAddressList } from "@/lib/email/address";
 import { getAuthorizedSenderAddress } from "@/lib/email/sender";
 import { loadMessageAttachmentContents } from "@/lib/email/attachments";
@@ -49,6 +50,9 @@ export async function requestAgentSend(env: CloudflareEnv, user: SessionUser, dr
 	if (metadata.revision !== expectedRevision) throw new Error("Draft changed; reopen it for review");
 	if (metadata.scheduledAt && metadata.scheduledAt.getTime() <= Date.now()) throw new Error("Scheduled time has passed; update the draft before review");
 	const [existing] = await getDb(env).select({ id: agentSendApprovals.id }).from(agentSendApprovals).where(and(eq(agentSendApprovals.draftId, draftId), inArray(agentSendApprovals.status, ["claimed", "sent", "unknown"]))).limit(1);
+	// A row in flight stays in that set: `confirmAgentSend` only moves an approval out of `pending`
+	// when it claims it, and every later write is conditional on the state it owns, so a stale read
+	// elsewhere cannot turn `claimed` into `expired` and free a second approval for this draft.
 	if (existing) throw new Error("This draft has a delivery already in progress or awaiting reconciliation");
 	const { payload, hash } = await snapshot(env, draft, metadata.scheduledAt);
 	const id = newId("approval");
@@ -89,14 +93,31 @@ export async function confirmAgentSend(env: CloudflareEnv, user: SessionUser, ap
 	if (!approval) throw new Error("Approval not found");
 	if (approval.status !== "pending") return { status: approval.status, messageId: approval.messageId };
 	if (approval.expiresAt < new Date()) {
-		await db.update(agentSendApprovals).set({ status: "expired" }).where(eq(agentSendApprovals.id, approvalId));
+		// Expiry is a `pending` -> `expired` transition, never a write by id: a confirmation that read
+		// this row before the deadline can claim it after our read, and clobbering `claimed` here would
+		// drop the row out of the partial unique delivery index (agent_send_approvals_delivery_idx) and
+		// let requestAgentSend mint a second approval while the first send is still running.
+		const expired = await db.update(agentSendApprovals).set({ status: "expired" }).where(and(eq(agentSendApprovals.id, approvalId), eq(agentSendApprovals.status, "pending"))).returning({ id: agentSendApprovals.id });
+		// We lost: someone claimed or decided it between the read and this write. Report that state.
+		if (!expired.length) return getAgentSendRequest(env, user, approvalId);
 		throw new Error("Approval expired");
 	}
 	const { draft, metadata } = await currentDraft(env, user, approval.draftId);
 	const current = await snapshot(env, draft, metadata.scheduledAt);
 	if (metadata.revision !== approval.revision || current.hash !== approval.payloadHash) throw new Error("Draft changed; review it again");
 	if (metadata.scheduledAt && metadata.scheduledAt.getTime() <= Date.now()) throw new Error("Scheduled time has passed; update the draft before confirming");
-	const claimed = await db.update(agentSendApprovals).set({ status: "claimed", claimedAt: new Date() }).where(and(eq(agentSendApprovals.id, approvalId), eq(agentSendApprovals.status, "pending"))).returning({ id: agentSendApprovals.id });
+	let claimed: { id: string }[];
+	try {
+		// The deadline rides the claim: an approval that expired between the read above and this write
+		// cannot be taken even when the maintenance job has not marked it `expired` yet.
+		claimed = await db.update(agentSendApprovals).set({ status: "claimed", claimedAt: new Date() }).where(and(eq(agentSendApprovals.id, approvalId), eq(agentSendApprovals.status, "pending"), gte(agentSendApprovals.expiresAt, new Date()))).returning({ id: agentSendApprovals.id });
+	} catch (error) {
+		// Two pending approvals for one draft can coexist; when the first is already in flight, this
+		// claim lands on the partial unique delivery index (agent_send_approvals_delivery_idx). Answer
+		// like the request path above, not with driver wording.
+		if (isUniqueConstraintError(error)) throw new Error("This draft has a delivery already in progress or awaiting reconciliation");
+		throw error;
+	}
 	if (!claimed.length) return getAgentSendRequest(env, user, approvalId);
 	try {
 		const result = await sendEmail(env, {
@@ -108,11 +129,13 @@ export async function confirmAgentSend(env: CloudflareEnv, user: SessionUser, ap
 			scheduledAt: metadata.scheduledAt ?? undefined,
 			publicOrigin,
 		});
-		await db.update(agentSendApprovals).set({ status: "sent", messageId: result.messageId }).where(eq(agentSendApprovals.id, approvalId));
+		// Only ever move the row out of the states this caller owns (`claimed`, or `unknown` written by
+		// maintenance while the send ran); a concurrent expiry or cancel is never overwritten.
+		await db.update(agentSendApprovals).set({ status: "sent", messageId: result.messageId }).where(and(eq(agentSendApprovals.id, approvalId), inArray(agentSendApprovals.status, ["claimed", "unknown"])));
 		await db.update(messages).set({ status: "trash" }).where(and(eq(messages.id, draft.id), eq(messages.status, "draft")));
 		return { status: "sent", messageId: result.messageId, scheduled: !!result.scheduled };
 	} catch (error) {
-		await db.update(agentSendApprovals).set({ status: "unknown" }).where(eq(agentSendApprovals.id, approvalId));
+		await db.update(agentSendApprovals).set({ status: "unknown" }).where(and(eq(agentSendApprovals.id, approvalId), inArray(agentSendApprovals.status, ["claimed", "unknown"])));
 		throw new Error(`Delivery outcome needs review: ${error instanceof Error ? error.message : "provider error"}`);
 	}
 }

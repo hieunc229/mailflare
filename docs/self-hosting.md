@@ -185,7 +185,7 @@ and the DNS page shows what to set by hand.
 
 Set `AI_BASE_URL`, `AI_API_KEY`, and `AI_MODEL` in the container environment to configure the built-in assistant. These values stay on the server. Assistant chat is available by default when a provider is configured; a mailbox manager can change its writing instructions and availability through the settings button in the assistant panel. Automatic reply drafts remain off until enabled there. Auto-draft work is recorded in SQLite and retried after a restart by the local scheduler. AI failure does not reject inbound mail. Out-of-office auto-replies and AI auto-drafts are separate features; turn off out-of-office replies before enabling auto-drafts for a mailbox.
 
-The MCP endpoint is `/mcp`. Create a dedicated mailbox-scoped Bearer key in **Assistant → MCP** and give the key to a client that supports custom HTTP headers. The endpoint uses Streamable HTTP; `request_send` gives the client a review URL, and only an authenticated Mailflare browser session can confirm delivery. MCP read and draft tools remain available when no AI model is configured.
+The MCP endpoint is `/mcp`. Create a dedicated mailbox-scoped Bearer key in **Assistant → MCP** and give the key to a client that supports custom HTTP headers. The endpoint uses Streamable HTTP. `request_send` gives the client a review URL; delivery is confirmed on the review page, or by the key itself through `approve_send` once its approve-own-sends permission is enabled (off by default; set `canApproveOwnSends` through `PATCH /api/agent/mcp-keys`). `approve_send` covers only the review requests that key created, and is unavailable on MySQL deployments. MCP read and draft tools remain available when no AI model is configured.
 
 ## Running without Docker
 

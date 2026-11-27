@@ -6,6 +6,7 @@ export type ManagedApiKey = {
 	scopes: string;
 	mailboxIds: string[];
 	mailboxScopeEnabled: boolean;
+	canApproveOwnSends: boolean;
 	createdAt: string;
 	lastUsedAt: string | null;
 };
