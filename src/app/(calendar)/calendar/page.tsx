@@ -29,6 +29,7 @@ import { useSidebar } from "@/components/sidebar-state";
 import { UpcomingSidebar } from "../upcoming-sidebar";
 import { DayEvents } from "./day-events";
 import { MonthGrid } from "./month-grid";
+import { PublishDialog } from "./publish-dialog";
 import { CalendarSubscribeDialog } from "./subscribe-dialog";
 import { InviteResponseDialog } from "./invite-response-dialog";
 import { CalendarList } from "./calendar-list";
@@ -84,6 +85,7 @@ export default function CalendarPage() {
   }
   const [monthPickerOpen, setMonthPickerOpen] = useState(false);
   const [subscribeOpen, setSubscribeOpen] = useState(false);
+  const [publishOpen, setPublishOpen] = useState(false);
   const [pickerMonth, setPickerMonth] = useState(() => new Date());
   const monthPickerRef = useRef<HTMLDivElement | null>(null);
   const monthPickerPopupRef = useRef<HTMLDivElement | null>(null);
@@ -593,6 +595,7 @@ export default function CalendarPage() {
                     <DropdownMenu.Item onSelect={() => setVisibleDate(new Date())} className="cursor-pointer rounded-lg px-3 py-2 text-neutral-700 outline-none data-[highlighted]:bg-neutral-100 md:hidden">{t("calendar.today")}</DropdownMenu.Item>
                     <DropdownMenu.Item onSelect={() => setCalendarsOpen(true)} className="cursor-pointer rounded-lg px-3 py-2 text-neutral-700 outline-none data-[highlighted]:bg-neutral-100 [@media(pointer:coarse)]:py-3">{t("calendar.calendars.manage")}</DropdownMenu.Item>
                     <DropdownMenu.Item onSelect={() => setSubscribeOpen(true)} className="cursor-pointer rounded-lg px-3 py-2 text-neutral-700 outline-none data-[highlighted]:bg-neutral-100">{t("calendar.subscribe")}</DropdownMenu.Item>
+                    <DropdownMenu.Item onSelect={() => setPublishOpen(true)} className="cursor-pointer rounded-lg px-3 py-2 text-neutral-700 outline-none data-[highlighted]:bg-neutral-100 [@media(pointer:coarse)]:py-3">{t("calendar.publish")}</DropdownMenu.Item>
                     <DropdownMenu.Separator className="my-1 h-px bg-neutral-100" />
                     <DropdownMenu.Label className="px-3 pb-1 pt-2 text-xs font-medium text-neutral-500">{t("calendar.view")}</DropdownMenu.Label>
                     {(["month", "week", "day"] as const).map((option) => <DropdownMenu.Item key={option} onSelect={() => chooseView(option)} className="flex cursor-pointer items-center gap-2 rounded-lg px-3 py-2 text-neutral-700 outline-none data-[highlighted]:bg-neutral-100"><span className="flex h-4 w-4 shrink-0 items-center justify-center">{view === option && <Check className="h-4 w-4 text-blue-600" />}</span>{t(`calendar.${option}`)}</DropdownMenu.Item>)}
@@ -674,6 +677,7 @@ export default function CalendarPage() {
       </section>
 
       <CalendarSubscribeDialog open={subscribeOpen} onOpenChange={setSubscribeOpen} />
+      <PublishDialog open={publishOpen} onOpenChange={setPublishOpen} />
       <Dialog open={calendarsOpen} onOpenChange={setCalendarsOpen}>
         <DialogContent className="max-h-[calc(100vh-4rem)] w-[min(420px,calc(100vw-32px))] overflow-y-auto">
           <DialogHeader>
