@@ -1,11 +1,12 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Loader2 } from "@/components/icons";
 import { useLanguage } from "@/components/language-provider";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import type { ImportJobSummary } from "@/lib/import/jobs-types";
+import { createLatestRequestGate } from "@/lib/client/latest-request";
 import { fetchImportJobs, removeImportJob, resumeImportJob } from "@/app/(settings)/settings/import/utils";
 import { getImportJobPercent, IMPORT_JOBS_POLL_MS, isImportJobActive } from "./import-jobs-utils";
 
@@ -27,9 +28,14 @@ export function ImportJobs({ refreshKey }: { refreshKey: number }) {
 	const [resumeError, setResumeError] = useState<string | null>(null);
 	const [removeError, setRemoveError] = useState<string | null>(null);
 	const previous = useRef<Map<string, ImportJobSummary["status"]>>(new Map());
+	// The poll and the reload after an action overlap, so only the newest one may repaint the list.
+	const gate = useMemo(() => createLatestRequestGate(), []);
 
-	const load = useCallback(() => fetchImportJobs()
+	const load = useCallback(() => {
+		const token = gate.begin();
+		return fetchImportJobs()
 		.then((next) => {
+			if (!gate.isCurrent(token)) return;
 			const finishedNow = next.some((job) => {
 				const before = previous.current.get(job.id);
 				return !!before && (before === "queued" || before === "running") && !isImportJobActive(job);
@@ -42,8 +48,9 @@ export function ImportJobs({ refreshKey }: { refreshKey: number }) {
 			// Keep the last list; the next poll retries.
 		})
 		.finally(() => {
-			setLoaded(true);
-		}), []);
+			if (gate.isCurrent(token)) setLoaded(true);
+		});
+	}, [gate]);
 
 	const hasActive = jobs.some(isImportJobActive);
 

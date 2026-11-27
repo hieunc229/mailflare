@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import toast from "react-hot-toast";
 import { Copy, Link2, X } from "@/components/icons";
 import { useLanguage } from "@/components/language-provider";
@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { authFetch } from "@/lib/auth/client";
+import { createLatestRequestGate } from "@/lib/client/latest-request";
 import type { DriveItemDto, DriveShareDto, DriveShareRole } from "@/lib/drive/types";
 import { Select } from "@/components/ui/select";
 
@@ -21,6 +22,9 @@ export function DriveShareDialog({ item, onClose, onChanged }: { item: DriveItem
 	const [role, setRole] = useState<DriveShareRole>("view");
 	const [busy, setBusy] = useState(false);
 	const id = item?.id;
+	// The dialog is usable while its first read is still on the wire, so a share
+	// added or removed meanwhile must not be repainted from that older snapshot.
+	const gate = useMemo(() => createLatestRequestGate(), []);
 
 	// Clear the previous item's sharing state as soon as a different item (or language) is shown.
 	const [loadedFor, setLoadedFor] = useState({ id, t });
@@ -33,20 +37,21 @@ export function DriveShareDialog({ item, onClose, onChanged }: { item: DriveItem
 		if (!id) return;
 		// A slow response for an earlier item must not fill in the item shown now.
 		let active = true;
+		const token = gate.begin();
 		void authFetch(`/api/drive/items/${id}/shares`).then(async (response) => {
 			if (!response.ok) {
 				if (active) toast.error(t("drive.shareFailed"));
 				return;
 			}
 			const data = await response.json() as { shares: DriveShareDto[]; linkToken: string | null };
-			if (!active) return;
+			if (!active || !gate.isCurrent(token)) return;
 			setShares(data.shares);
 			setLinkToken(data.linkToken);
 		}).catch(() => {
 			if (active) toast.error(t("drive.shareFailed"));
 		});
 		return () => { active = false; };
-	}, [id, t]);
+	}, [id, t, gate]);
 
 	async function request(input: string, init: RequestInit) {
 		setBusy(true);
@@ -63,19 +68,19 @@ export function DriveShareDialog({ item, onClose, onChanged }: { item: DriveItem
 		event.preventDefault();
 		if (!item || !email.trim()) return;
 		const data = await request(`/api/drive/items/${item.id}/shares`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email, role }) });
-		if (data?.shares) { setShares(data.shares); setEmail(""); }
+		if (data?.shares) { setShares(data.shares); gate.invalidate(); setEmail(""); }
 	}
 
 	async function removePerson(shareId: string) {
 		if (!item) return;
 		const data = await request(`/api/drive/items/${item.id}/shares?shareId=${encodeURIComponent(shareId)}`, { method: "DELETE" });
-		if (data?.shares) setShares(data.shares);
+		if (data?.shares) { setShares(data.shares); gate.invalidate(); }
 	}
 
 	async function toggleLink() {
 		if (!item) return;
 		const data = await request(`/api/drive/items/${item.id}/link`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ enabled: !linkToken }) });
-		if (data) setLinkToken(data.linkToken ?? null);
+		if (data) { setLinkToken(data.linkToken ?? null); gate.invalidate(); }
 	}
 
 	const linkUrl = linkToken ? `${window.location.origin}/d/${linkToken}` : "";
