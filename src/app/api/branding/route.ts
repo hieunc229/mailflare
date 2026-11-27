@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { assertPrimaryAdmin } from "@/lib/auth/admin";
 import { requireUser } from "@/lib/auth/cookies";
 import { getBranding, updateBranding } from "@/lib/branding/service";
+import { isAccentColorId } from "@/lib/branding/accents";
 import { getEnv } from "@/lib/cloudflare";
 import { BRANDING_ICON_TYPES, isBrandingIcon, MAX_BRANDING_ICON_SIZE } from "./utils";
 
@@ -21,9 +22,13 @@ export async function PUT(request: Request) {
 
 	const form = await request.formData();
 	const appName = String(form.get("appName") ?? "").trim();
+	const accentColor = form.get("accentColor");
 	const iconValue = form.get("icon");
 	if (!appName || appName.length > 60) {
 		return NextResponse.json({ error: "App name must be between 1 and 60 characters" }, { status: 400 });
+	}
+	if (!isAccentColorId(accentColor)) {
+		return NextResponse.json({ error: "Unknown accent color" }, { status: 400 });
 	}
 	const icon = isBrandingIcon(iconValue) && iconValue.size > 0 ? iconValue : null;
 	if (icon && !BRANDING_ICON_TYPES.includes(icon.type)) {
@@ -34,7 +39,7 @@ export async function PUT(request: Request) {
 	}
 
 	try {
-		return NextResponse.json(await updateBranding(env, { appName, icon }));
+		return NextResponse.json(await updateBranding(env, { appName, accentColor, icon }));
 	} catch (error) {
 		const message = error instanceof Error ? error.message : "Unable to update branding";
 		const status = /license is required/i.test(message) ? 403 : 500;
