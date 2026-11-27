@@ -246,7 +246,6 @@ test("the compact rail keeps a small primary set and reaches the rest from overf
 		message: message({ hasUnsubscribe: true }),
 		onAction: async (action) => { actions.push(action); },
 		compact: true,
-		active: true,
 	});
 	t.after(cleanup);
 
@@ -276,9 +275,7 @@ test("the compact rail keeps a small primary set and reaches the rest from overf
 		message: message({ read: true }),
 		onAction: async (action) => { actions.push(action); },
 		compact: true,
-		active: false,
 	});
-	assert.match(container.querySelector("div.absolute").className, /(^|\s)bg-\(--row-bg\)(\s|$)/, "a normal row's rail still paints the row surface; the row picks the colour through --row-bg");
 	assert.ok(menuItem(container, "common.markUnread"), "the overflow action follows the current read state");
 });
 
@@ -510,13 +507,12 @@ export function NoteBadge() { return null; }
 	["@/components/messages/message-list-refresh-button", `export function MessageListRefreshButton() { return null; }`],
 	["@/components/messages/message-list-row-actions", `
 import React from "react";
-export function MessageListRowActions({ message, onAction, onSnoozeChange, compact, active }) {
+export function MessageListRowActions({ message, onAction, onSnoozeChange, compact }) {
   globalThis.__rowSnoozeCallbacks[message.id] = onSnoozeChange;
   return React.createElement("div", {
     "data-testid": "row-actions",
     "data-message-id": message.id,
     "data-compact": String(!!compact),
-    "data-active": String(!!active),
   },
     React.createElement("button", { "aria-label": "stub-archive", onClick: () => { void onAction("archive"); } }),
     React.createElement("button", { "aria-label": "stub-read", onClick: () => { void onAction("read"); } }),
@@ -715,11 +711,10 @@ test("the compact list exposes actions only beside an open desktop reader", asyn
 		"keyboard focus uses the same row surface as the rail",
 	);
 
-	// Whether the list is the split (compact) one is decided by the layout from the container width;
-	// a list that is not compact, such as a tablet in single-column reading, gets no hover rail.
+	// Whether the list is the split (compact) one is decided by the layout from the container width.
 	const hidden = await renderFolderPage({ selectedMessageId: "m1", compact: false });
 	t.after(hidden.cleanup);
-	assert.equal(rowActions(hidden.container, "m1"), null, "a single-column list does not add desktop hover actions");
+	assert.equal(rowActions(hidden.container, "m1")?.dataset.compact, "false", "a non-compact list uses the full-width rail, never the compact one");
 
 	const coarse = await renderFolderPage({ selectedMessageId: "m1", hover: false });
 	t.after(coarse.cleanup);
