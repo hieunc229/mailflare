@@ -21,7 +21,7 @@ import { authorizeCalendarRequest, calendarKeyCanSendInvitations } from "@/lib/c
 import { buildSplitAnnouncement } from "@/lib/calendar/split-announcement";
 import { readJsonObject } from "@/lib/http/request";
 import { resolveBookableRooms } from "@/lib/calendar/resources";
-import { bookAndSummarize, bookedRoomIds, declineBookingsStatement, invitationLocation, roomResponse, type RoomsSummary } from "@/lib/calendar/room-save";
+import { bookAndSummarize, bookedRooms, declineBookingsStatement, invitationLocation, roomResponse, type RoomsSummary } from "@/lib/calendar/room-save";
 import { getLicenseEntitlements } from "@/lib/licenses/service";
 import { calendarExistsGuard } from "@/lib/calendar/calendars";
 import { getEventAccess, resolveCalendarForWrite, roleAtLeast } from "@/lib/calendar/shares";
@@ -120,17 +120,22 @@ export async function PATCH(request: Request, { params }: CalendarEventRoutePara
 	const keptGuests = delegate ? existing.attendees : JSON.stringify(attendees);
 	if (!delegate && attendees.length && existing.mailboxId && input.from && !calendarKeyCanSendInvitations(key, existing.mailboxId)) return NextResponse.json({ error: "Sending invitations requires mail send permission for this mailbox" }, { status: 403 });
 	// Rooms follow the series, not the occurrence row: the master's bookings. Named rooms replace them; a save that names none keeps them and re-checks them.
-	const bookedNow = await bookedRoomIds(db, head.id);
+	const bookedRows = await bookedRooms(db, head.id);
+	const bookedNow = bookedRows.map((row) => row.id);
+	// Booking needs a Team licence. Without one, only a room that is ACCEPTED counts as kept, and a declined one stays declined: it is never
+	// re-checked into an acceptance, and naming it again is a new booking.
+	const canBook = bookedNow.length || input.resourceIds !== undefined ? (await getLicenseEntitlements(env)).canShareMailboxes : true;
+	const frozen = canBook ? [] : bookedRows.filter((row) => row.status === "declined").map((row) => row.id);
 	let requestedRooms: string[] | null = null;
 	// A moved occurrence is a row of its own, but its rooms are the series': saving it never changes them.
 	if (input.resourceIds !== undefined && head.id === existing.id) {
-		const checked = await resolveBookableRooms(db, input.resourceIds, { booked: bookedNow, canBook: (await getLicenseEntitlements(env)).canShareMailboxes });
+		const checked = await resolveBookableRooms(db, input.resourceIds, { booked: canBook ? bookedNow : bookedRows.filter((row) => row.status === "accepted").map((row) => row.id), canBook });
 		if (!checked.ok) return NextResponse.json({ error: checked.error, ...(checked.code ? { code: checked.code } : {}) }, { status: checked.status });
 		requestedRooms = checked.ids;
 	}
 	const roomsAfter = requestedRooms ?? bookedNow;
 	// Settling the rooms is a no-op for an event that has none and names none.
-	const settleRooms = (eventId: string, ids: string[], hadRooms: boolean): Promise<RoomsSummary | null> => ids.length || hadRooms ? bookAndSummarize(db, eventId, ids) : Promise.resolve(null);
+	const settleRooms = (eventId: string, ids: string[], hadRooms: boolean): Promise<RoomsSummary | null> => ids.length || hadRooms ? bookAndSummarize(db, eventId, ids, { declined: frozen.filter((id) => ids.includes(id)) }) : Promise.resolve(null);
 	// Whatever is written below can change when the event happens, so its bookings are declined in the same batch and booked again after.
 	const declineRooms = bookedNow.length ? [declineBookingsStatement(db, head.id)] : [];
 	let rooms: RoomsSummary | null = null;
@@ -203,7 +208,7 @@ export async function PATCH(request: Request, { params }: CalendarEventRoutePara
 			if (refused) return refused;
 		}
 		// The old series is shorter now and keeps the rooms it had; the new one takes the named rooms, or the old series' own.
-		if (bookedNow.length) await bookAndSummarize(db, existing.id, bookedNow);
+		if (bookedNow.length) await bookAndSummarize(db, existing.id, bookedNow, { declined: frozen });
 		rooms = await settleRooms(fresh.id, roomsAfter, false);
 		// Overrides at or after the split belong to the fork; earlier ones stay on the truncated original.
 		const stored = await db.select().from(calendarEventOverrides).where(eq(calendarEventOverrides.eventId, existing.id));

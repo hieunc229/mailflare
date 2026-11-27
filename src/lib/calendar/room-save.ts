@@ -14,6 +14,11 @@ export type RoomsSummary = {
 	acceptedNames: string[];
 };
 
+/** The rooms an event is booked for with their status: what a save that names no rooms keeps. */
+export async function bookedRooms(db: Db, eventId: string): Promise<{ id: string; status: "accepted" | "declined" }[]> {
+	return (await db.select({ id: calendarResourceBookings.resourceId, status: calendarResourceBookings.status }).from(calendarResourceBookings).where(eq(calendarResourceBookings.eventId, eventId)));
+}
+
 /** The rooms an event is booked for, accepted or declined: what a save that names no rooms keeps. */
 export async function bookedRoomIds(db: Db, eventId: string): Promise<string[]> {
 	return (await db.select({ id: calendarResourceBookings.resourceId }).from(calendarResourceBookings).where(eq(calendarResourceBookings.eventId, eventId))).map((row) => row.id);
@@ -45,9 +50,9 @@ async function declineUnchecked(db: Db, eventId: string): Promise<void> {
  * Books the rooms (see `bookRooms`) and describes the outcome for the response and the invitation. A failure does not escape: the
  * event is saved, so the caller still audits, invites and answers; the rooms come back declined.
  */
-export async function bookAndSummarize(db: Db, eventId: string, resourceIds: string[]): Promise<RoomsSummary> {
+export async function bookAndSummarize(db: Db, eventId: string, resourceIds: string[], options: { declined?: string[] } = {}): Promise<RoomsSummary> {
 	let rooms: Awaited<ReturnType<typeof bookRooms>>["rooms"];
-	try { ({ rooms } = await bookRooms(db, eventId, resourceIds)); } catch (error) {
+	try { ({ rooms } = await bookRooms(db, eventId, resourceIds, options)); } catch (error) {
 		console.error("Booking rooms failed after the event was saved", error);
 		await declineUnchecked(db, eventId);
 		rooms = [...new Set(resourceIds)].map((resourceId) => ({ resourceId, status: "unconfirmed" as const, conflictAt: null, occurrences: [] }));
