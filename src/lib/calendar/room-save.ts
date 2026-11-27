@@ -1,7 +1,7 @@
 import { and, eq, inArray } from "drizzle-orm";
 import type { getDb } from "@/db";
 import { calendarResourceBookings, calendarResources } from "@/db/schema";
-import { bookRooms } from "./room-booking";
+import { bookRooms, PENDING_RECHECK } from "./room-booking";
 
 type Db = ReturnType<typeof getDb>;
 
@@ -20,11 +20,7 @@ export async function bookedRooms(db: Db, eventId: string): Promise<{ id: string
 		.map((row) => ({ id: row.id, status: row.status, pending: row.status === "declined" && row.conflictAt?.getTime() === 0 }));
 }
 
-/**
- * Marks a booking that was `accepted` and is only declined until the room step has checked it again (see `declineBookingsStatement`):
- * its clash date is the epoch. A real decline has a date or none; a licence that has lapsed must keep those declined, and these it may re-check.
- */
-export const PENDING_RECHECK = new Date(0);
+export { PENDING_RECHECK };
 
 /** The rooms an event is booked for, accepted or declined: what a save that names no rooms keeps. */
 export async function bookedRoomIds(db: Db, eventId: string): Promise<string[]> {
@@ -73,7 +69,7 @@ export async function bookAndSummarize(db: Db, eventId: string, resourceIds: str
 	const names = new Map<string, string>();
 	if (rooms.length) for (const row of await db.select({ id: calendarResources.id, name: calendarResources.name }).from(calendarResources).where(inArray(calendarResources.id, rooms.map((room) => room.resourceId)))) names.set(row.id, row.name);
 	return {
-		rooms: rooms.map((room) => ({ resourceId: room.resourceId, name: names.get(room.resourceId) ?? "", status: room.status, conflictAt: room.conflictAt?.toISOString() ?? null })),
+		rooms: rooms.map((room) => ({ resourceId: room.resourceId, name: names.get(room.resourceId) ?? "", status: room.status, conflictAt: room.conflictAt && room.conflictAt.getTime() > 0 ? room.conflictAt.toISOString() : null })),
 		resourceConflicts: rooms.filter((room) => room.status === "declined" && room.occurrences.length).map((room) => ({ resourceId: room.resourceId, occurrences: room.occurrences })),
 		acceptedNames: rooms.filter((room) => room.status === "accepted").map((room) => names.get(room.resourceId) ?? "").filter(Boolean),
 	};
