@@ -52,6 +52,6 @@ export async function deleteUnreferencedObjects(
 	if (unique.length === 0) return [];
 	const referenced = await findReferencedKeys(db, unique, exclude);
 	const deletable = unique.filter((key) => !referenced.has(key));
-	for (let index = 0; index < deletable.length; index += 500) await env.BUCKET.delete(deletable.slice(index, index + 500));
+	for (let index = 0; index < deletable.length; index += 1000) await env.BUCKET.delete(deletable.slice(index, index + 1000));
 	return deletable;
 }

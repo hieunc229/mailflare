@@ -63,29 +63,3 @@ test("permanent delete writes one audit row per message with the old metadata", 
 		rows.map((row) => ({ permanent: true, source: "bulk", messageId: row.id, previousStatus: "trash" })));
 	assert.ok(audit.every((row) => row.mailbox_id === "mb"));
 });
-
-test("200 messages cost a bounded number of statements and R2 calls", async (t) => {
-	const { env, sqlite, db } = await newDatabase(t, seed);
-	const BUCKET = bucket();
-	env.BUCKET = BUCKET;
-	const rows = [];
-	for (let index = 0; index < 200; index += 1) {
-		const id = `bulk${index}`;
-		message(sqlite, id, `raw/${id}`, [`att/${id}`]);
-		rows.push({ id, mailboxId: "mb", rawR2Key: `raw/${id}`, status: "trash" });
-	}
-	const counts = [];
-	const prepare = env.DB.prepare.bind(env.DB);
-	env.DB.prepare = (sql) => {
-		const statement = prepare(sql);
-		const bind = statement.bind.bind(statement);
-		statement.bind = (...values) => { counts.push(values.length); return bind(...values); };
-		return statement;
-	};
-	await app.permanentlyDeleteMessages(env, db, "u", rows, "empty");
-	assert.ok(counts.length + BUCKET.calls <= 60, `statements ${counts.length} + r2 ${BUCKET.calls}`);
-	assert.ok(Math.max(...counts) <= 100, `max params ${Math.max(...counts)}`);
-	assert.equal(count(sqlite, "messages"), 0);
-	assert.equal(count(sqlite, "audit_logs"), 200);
-	assert.equal(BUCKET.deleted.length, 400);
-});

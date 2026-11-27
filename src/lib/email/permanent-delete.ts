@@ -1,6 +1,6 @@
 import type { AppDatabase } from "@/db";
-import { deleteMessagesWithObjects } from "@/lib/email/message-cleanup";
-import { createAuditLogs } from "@/lib/mailboxes/audit";
+import { buildMessageDeletes, deleteMessageObjects } from "@/lib/email/message-cleanup";
+import { buildAuditLogInserts } from "@/lib/mailboxes/audit";
 
 /** Ids per statement: keeps each query under D1's 100 bound parameters. */
 const PERMANENT_DELETE_CHUNK = 50;
@@ -26,13 +26,18 @@ export async function permanentlyDeleteMessages(
 ): Promise<number> {
 	for (let index = 0; index < rows.length; index += PERMANENT_DELETE_CHUNK) {
 		const chunk = rows.slice(index, index + PERMANENT_DELETE_CHUNK);
-		await deleteMessagesWithObjects(env, db, chunk.map((row) => ({ id: row.id, rawR2Key: row.rawR2Key })));
-		await createAuditLogs(env, chunk.map((row) => ({
-			actorUserId,
-			mailboxId: row.mailboxId,
-			action: "email.delete",
-			metadata: { permanent: true, source, messageId: row.id, previousStatus: row.status },
-		})));
+		const items = chunk.map((row) => ({ id: row.id, rawR2Key: row.rawR2Key }));
+		// Objects first, then the row delete and its audit rows in one batch (one D1 call).
+		await deleteMessageObjects(env, items);
+		await db.batch([
+			...buildMessageDeletes(db, items.map((item) => item.id)),
+			...buildAuditLogInserts(db, chunk.map((row) => ({
+				actorUserId,
+				mailboxId: row.mailboxId,
+				action: "email.delete",
+				metadata: { permanent: true, source, messageId: row.id, previousStatus: row.status },
+			}))),
+		] as never);
 	}
 	return rows.length;
 }
