@@ -22,6 +22,10 @@ globalThis.requestAnimationFrame = dom.window.requestAnimationFrame.bind(dom.win
 globalThis.cancelAnimationFrame = dom.window.cancelAnimationFrame.bind(dom.window);
 globalThis.localStorage = dom.window.localStorage;
 globalThis.sessionStorage = dom.window.sessionStorage;
+globalThis.ResizeObserver = class {
+	observe() {}
+	disconnect() {}
+};
 
 const languageStub = `
 export function useLanguage() {
@@ -35,6 +39,7 @@ export const Button = React.forwardRef(function Button({ children, variant, size
   return React.createElement("button", { ref, className, ...props }, children);
 });
 export function Tooltip({ children }) { return children; }
+export function Skeleton(props) { return React.createElement("div", props); }
 export function Dialog({ open, children }) {
   return open ? React.createElement("div", { "data-testid": "snooze-dialog" }, children) : null;
 }
@@ -57,6 +62,7 @@ function Icon(props) { return React.createElement("span", { "aria-hidden": "true
 export const Archive = Icon;
 export const ArchiveRestore = Icon;
 export const CalendarClock = Icon;
+export const Calendar04 = Icon;
 export const ChevronLeft = Icon;
 export const ChevronRight = Icon;
 export const Clock = Icon;
@@ -245,10 +251,10 @@ test("the compact rail keeps a small primary set and reaches the rest from overf
 
 	const rail = container.querySelector("div.absolute");
 	assert.ok(rail, "the action rail is absolute inside the row");
-	assert.match(rail.className, /(^|\s)bg-blue-50(\s|$)/, "the active row uses the active-row surface");
-	assert.match(rail.className, /(^|\s)h-8(\s|$)/, "the rail is content-sized instead of spanning the row");
-	assert.match(rail.className, /(^|\s)rounded-full(\s|$)/);
-	assert.match(rail.className, /has-\[\[data-state=open\]\]:opacity-100/, "the pill stays visible while the overflow menu is open");
+	assert.ok(rail.classList.contains("bg-(--row-bg)"), "the rail inherits its surface from the parent row");
+	assert.match(rail.className, /(^|\s)h-14(\s|$)/, "the compact rail matches the row height");
+	assert.ok(rail.classList.contains("before:to-(--row-bg)"), "the fade uses the same inherited surface");
+	assert.match(rail.className, /has-\[\[data-state=open\]\]:opacity-100/, "the rail stays visible while the overflow menu is open");
 	assert.doesNotMatch(rail.className, /(^|\s)inset-y-0(\s|$)/, "the rail has no full-height dead click area");
 	assert.equal(container.querySelector('[aria-label="actions.unsubscribe"]')?.dataset.iconOnly, "true", "the unsubscribe action is icon-sized in the compact rail");
 
@@ -270,7 +276,7 @@ test("the compact rail keeps a small primary set and reaches the rest from overf
 		compact: true,
 		active: false,
 	});
-	assert.match(container.querySelector("div.absolute").className, /(^|\s)bg-neutral-50(\s|$)/, "a normal row uses the row surface");
+	assert.ok(container.querySelector("div.absolute").classList.contains("bg-(--row-bg)"), "a normal row also inherits its surface");
 	assert.ok(menuItem(container, "common.markUnread"), "the overflow action follows the current read state");
 });
 
@@ -692,29 +698,28 @@ function rowActions(container, messageId) {
 	return container.querySelector(`[data-testid="row-actions"][data-message-id="${messageId}"]`);
 }
 
-test("the compact list exposes actions only beside an open desktop reader", async (t) => {
+test("the compact list exposes hover actions at any split width", async (t) => {
 	const open = await renderFolderPage({ selectedMessageId: "m1" });
 	t.after(open.cleanup);
 	const activeActions = rowActions(open.container, "m1");
 	assert.ok(activeActions, "the open row keeps its hover actions in the split list");
 	assert.equal(activeActions.dataset.compact, "true");
-	assert.equal(activeActions.dataset.active, "true");
+	assert.ok(activeActions.parentElement.classList.contains("[--row-bg:var(--color-blue-50)]"), "the parent row defines the active surface inherited by the rail");
 	assert.ok(rowActions(open.container, "m2"), "every eligible row can be acted on from the list");
-	assert.match(
-		rowActions(open.container, "m2").parentElement.className,
-		/focus-within:bg-neutral-50/,
-		"keyboard focus uses the same row surface as the rail",
+	assert.ok(
+		rowActions(open.container, "m2").parentElement.classList.contains("focus-within:[--row-bg:var(--color-neutral-50)]"),
+		"keyboard focus sets the same inherited row surface as the rail",
 	);
 
-	const hidden = await renderFolderPage({ selectedMessageId: "m1", desktop: false });
-	t.after(hidden.cleanup);
-	assert.equal(rowActions(hidden.container, "m1"), null, "the hidden tablet list does not add desktop hover actions");
+	const narrow = await renderFolderPage({ selectedMessageId: "m1", desktop: false });
+	t.after(narrow.cleanup);
+	assert.ok(rowActions(narrow.container, "m1"), "narrow split lists keep actions when the pointer can hover");
 
 	const coarse = await renderFolderPage({ selectedMessageId: "m1", hover: false });
 	t.after(coarse.cleanup);
 	assert.equal(rowActions(coarse.container, "m1"), null, "wide touch screens get no invisible hover-only rail");
 
-	const mobile = await renderFolderPage({ selectedMessageId: "m1", desktop: false, mobile: true });
+	const mobile = await renderFolderPage({ selectedMessageId: "m1", desktop: false, mobile: true, hover: false });
 	t.after(mobile.cleanup);
 	assert.equal(rowActions(mobile.container, "m1"), null, "mobile keeps its swipe-only rows");
 

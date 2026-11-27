@@ -20,6 +20,10 @@ for (const key of ["window", "document", "HTMLElement", "Element", "Node", "Even
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 globalThis.requestAnimationFrame = dom.window.requestAnimationFrame.bind(dom.window);
 globalThis.cancelAnimationFrame = dom.window.cancelAnimationFrame.bind(dom.window);
+globalThis.ResizeObserver = class {
+	observe() {}
+	disconnect() {}
+};
 
 const mocks = new Map([
 	["next/link", `
@@ -272,7 +276,8 @@ test("refresh keeps the current filters and page, and preserves the selection", 
 		],
 		counts: [() => jsonResponse(countsBody())],
 	});
-	const { container, cleanup } = await renderPage(true);
+	// Pagination belongs to the full-width list; compact lists now scroll continuously.
+	const { container, cleanup } = await renderPage(false);
 	t.after(cleanup);
 
 	await act(async () => {
