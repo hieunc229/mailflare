@@ -15,7 +15,8 @@ export async function GET(request: Request, { params }: PublicBookingRouteContex
 	if (!found) return NextResponse.json({ error: "Booking event not found" }, { status: 404 });
 	const slots = await availableBookingSlots(getEnv(), found.event, 60);
 	// The visitor gets times and nothing else: not which rooms the event type holds, nor why a time is gone.
-	const { resourceIds: _rooms, ...event } = found.event;
+	const event = { ...found.event };
+	delete event.resourceIds;
 	return NextResponse.json({ event, hostName: found.hostName, slots });
 }
 

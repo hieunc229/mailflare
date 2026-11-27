@@ -13,7 +13,6 @@ const fixture = await loadFixture({ name: "booking-reserve", entryPoint: "src/li
 const { reserveBooking } = await fixture.import();
 let sqlite;
 let beforeBatch = null;
-let failBookRooms = false;
 after(() => { sqlite?.close(); delete globalThis.reserve; fixture.dispose(); });
 
 const H = 3_600_000;
@@ -42,7 +41,6 @@ function setup() {
 		return next;
 	};
 	beforeBatch = null;
-	failBookRooms = false;
 	for (const id of ["h1", "h2", "o"]) sqlite.exec(`INSERT INTO users (id, email, name, password_hash, role, created_at) VALUES ('${id}', '${id}@one.test', 'U', 'x', 'user', 1)`);
 	for (const id of ["r1", "r2"]) sqlite.exec(`INSERT INTO calendar_resources (id, name, created_at, updated_at) VALUES ('${id}', 'Room ${id}', 1, 1)`);
 }
