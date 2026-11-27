@@ -1,6 +1,6 @@
 import { and, eq, inArray } from "drizzle-orm";
 import type { getDb } from "@/db";
-import { calendarResourceBookings, calendarResources } from "@/db/schema";
+import { calendarEvents, calendarResourceBookings, calendarResources } from "@/db/schema";
 import { bookRooms, PENDING_RECHECK } from "./room-booking";
 
 type Db = ReturnType<typeof getDb>;
@@ -44,6 +44,16 @@ export const declineBookingsStatement = (db: Db, eventId: string) => db.update(c
  * (see `PENDING_RECHECK`). It reads the set itself, in the same statement, so nothing can slip between choosing the events and declining them.
  */
 export const declineBookingsOfStatement = (db: Db, eventIds: Parameters<typeof inArray>[1]) => db.update(calendarResourceBookings).set({ status: "declined", conflictAt: PENDING_RECHECK }).where(and(inArray(calendarResourceBookings.eventId, eventIds as never), eq(calendarResourceBookings.status, "accepted")));
+
+/** How many events a request re-checks after declining a whole set of them (see `declineBookingsOfStatement`); the rest stay declined and waiting, which fails closed. */
+export const RECHECKED_IN_REQUEST = 20;
+
+/** Re-checks up to `RECHECKED_IN_REQUEST` of a user's events whose bookings are waiting for their check. */
+export async function rebookWaiting(db: Db, userId: string, canBook: () => Promise<boolean>): Promise<void> {
+	const waiting = await db.selectDistinct({ id: calendarResourceBookings.eventId }).from(calendarResourceBookings).innerJoin(calendarEvents, eq(calendarEvents.id, calendarResourceBookings.eventId))
+		.where(and(eq(calendarEvents.userId, userId), eq(calendarResourceBookings.status, "declined"), eq(calendarResourceBookings.conflictAt, PENDING_RECHECK))).limit(RECHECKED_IN_REQUEST);
+	if (waiting.length) await rebookEvents(db, waiting.map((row) => row.id), canBook);
+}
 
 /**
  * The event is already saved at its new time, so a room check that cannot finish must not leave its bookings `accepted` for times

@@ -1,17 +1,14 @@
 import { and, eq, isNull, ne, or } from "drizzle-orm";
 import { NextResponse } from "next/server";
 import { getDb } from "@/db";
-import { calendarEvents, calendarResourceBookings, users } from "@/db/schema";
+import { calendarEvents, users } from "@/db/schema";
 import { roomsBookable } from "@/lib/calendar/room-licence";
-import { declineBookingsOfStatement, PENDING_RECHECK, rebookEvents } from "@/lib/calendar/room-save";
+import { declineBookingsOfStatement, rebookWaiting } from "@/lib/calendar/room-save";
 import { getCurrentUser } from "@/lib/auth/cookies";
 import { getEnv } from "@/lib/cloudflare";
 import { hasValidSessionMutationOrigin } from "@/lib/auth/origin";
 import { parseTimeZoneUpdate } from "./utils";
 import { getRequestTimeZone } from "@/lib/time/utils";
-
-/** Events with rooms re-checked in the request that changes the zone; the rest wait declined (fail closed) until their next save. */
-const RECHECKED_IN_REQUEST = 20;
 
 export async function PATCH(request: Request) {
 	const env = getEnv();
@@ -40,8 +37,6 @@ export async function PATCH(request: Request) {
 	));
 	await db.batch([declineBookingsOfStatement(db, moving), freeze, setZone] as never);
 	// Re-check only a few here; any others stay declined and waiting, which fails closed, and are checked at their next save.
-	const waiting = await db.selectDistinct({ id: calendarResourceBookings.eventId }).from(calendarResourceBookings).innerJoin(calendarEvents, eq(calendarEvents.id, calendarResourceBookings.eventId))
-		.where(and(eq(calendarEvents.userId, user.id), eq(calendarResourceBookings.status, "declined"), eq(calendarResourceBookings.conflictAt, PENDING_RECHECK))).limit(RECHECKED_IN_REQUEST);
-	if (waiting.length) await rebookEvents(db, waiting.map((row) => row.id), roomsBookable(env));
+	await rebookWaiting(db, user.id, roomsBookable(env));
 	return NextResponse.json({ timeZone: input.timeZone });
 }
