@@ -6,9 +6,9 @@ import { loadFixture } from "./helpers/fixtures.mjs";
 
 const load = async (name, entryPoint, mocks = {}) => {
 	const fixture = await loadFixture({ name, entryPoint, mocks });
-	const module = await fixture.import();
+	const loaded = await fixture.import();
 	after(() => fixture.dispose());
-	return module;
+	return loaded;
 };
 
 const queue = await load("vercel-queue", "server/runtime/vercel-queue.ts");
