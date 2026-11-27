@@ -98,3 +98,23 @@ test("a booking is never decided from the cache: the POST reads the calendar liv
 	await POST(new Request("http://x/api/public/booking/book_1", { method: "POST", body: JSON.stringify({ name: "G", email: "g@x.test", startsAt: new Date(T0 + 9 * H).toISOString() }) }), { params: Promise.resolve({ eventId: "book_1" }) });
 	assert.ok(queries > reads);
 });
+
+test("the key carries the type's last edit, so an owner's change shows at once", async () => {
+	setup();
+	await get();
+	const first = [...stored.keys()][0];
+	sqlite.exec("UPDATE booking_events SET duration_minutes = 45, updated_at = 99999 WHERE id = 'book_1'");
+	const changed = await (await get()).json();
+	assert.equal(stored.size, 2, "a new entry, not the old one");
+	assert.equal(changed.event.durationMinutes, 45);
+	assert.ok(changed.slots.every((slot) => Date.parse(slot.endsAt) - Date.parse(slot.startsAt) === 45 * 60_000), "slots are of the new length");
+	assert.notEqual([...stored.keys()].find((key) => key !== first), first);
+});
+
+test("reached by username and slug, or by id, it is one entry", async () => {
+	setup();
+	await get("book_1");
+	const byName = await GET(new Request("http://x/api/public/booking/intro?username=hana"), { params: Promise.resolve({ eventId: "intro" }) });
+	assert.equal(byName.status, 200);
+	assert.equal(stored.size, 1);
+});
