@@ -1,7 +1,7 @@
 import { and, eq, inArray, ne, or } from "drizzle-orm";
 import type { getDb } from "@/db";
 import { calendarEvents, calendarResourceBookings } from "@/db/schema";
-import { expandRowBusy, loadOwnerZones, mergeBusy, needsOwnerZone, overlapsWindow, type BusyInterval } from "./free-busy";
+import { expandRowBusy, loadOwnerZones, mergeBusy, needsOwnerZone, overlapsWindow, type BusyInterval } from "./busy-expand";
 
 type Db = ReturnType<typeof getDb>;
 

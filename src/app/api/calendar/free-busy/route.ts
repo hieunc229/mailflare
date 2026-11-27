@@ -39,7 +39,8 @@ const iso = ([from, to]: BusyInterval) => [new Date(from).toISOString(), new Dat
 /**
  * Busy times of the people named by address (spec F9 8.4, D-10). Whoever the caller may not see, whoever has no account, and any
  * outside address all get the same `{ status: "unknown" }`, so the answer says nothing about who has an account here.
- * `resourceIds` (rooms, CS-7) is accepted and ignored until rooms exist: no key is answered for them.
+ * `resourceIds` names rooms (D-7, D-10): any caller allowed to use the calendar sees a room's busy times, whatever their licence
+ * (existing rooms stay readable), and an id that is not a room is left out of the answer. Rooms are keyed by their id.
  */
 export async function POST(request: Request) {
 	const env = getEnv();
@@ -51,11 +52,13 @@ export async function POST(request: Request) {
 	const editing = await editableEvent(env, user, parsed.excludeEventId);
 	const accounts = await resolveFreeBusyAddresses(env, parsed.addresses);
 	const visible = await viewableFreeBusyUsers(env, user.id, [...new Set(accounts.values())]);
-	const busy = visible.size ? await busyIntervals(env, { userIds: [...visible], excludeEventId: editing?.id, excludeOccurrence: editing?.occurrence, excludeStoredUid: editing?.owner }, parsed.start, parsed.end) : new Map<string, BusyInterval[]>();
+	const busy = visible.size || parsed.resourceIds.length ? await busyIntervals(env, { userIds: [...visible], resourceIds: parsed.resourceIds, excludeEventId: editing?.id, excludeOccurrence: editing?.occurrence, excludeStoredUid: editing?.owner }, parsed.start, parsed.end) : new Map<string, BusyInterval[]>();
 	const results: Record<string, { status: "ok"; busy: string[][] } | { status: "unknown" }> = {};
 	for (const address of parsed.addresses) {
 		const id = accounts.get(address);
 		results[address] = id && visible.has(id) ? { status: "ok", busy: (busy.get(id) ?? []).map(iso) } : { status: "unknown" };
 	}
+	// A room is answered under its id; an id that names no room is left out (the editor reads a missing key as unknown).
+	for (const id of parsed.resourceIds) if (busy.has(id)) results[id] = { status: "ok", busy: busy.get(id)!.map(iso) };
 	return NextResponse.json({ results }, { headers: NO_STORE });
 }

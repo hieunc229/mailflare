@@ -4,7 +4,7 @@ import { calendarEvents, calendarResourceBookings, calendarResources } from "@/d
 import { isUniqueConstraintError } from "@/lib/database-errors";
 import { requireGuard } from "@/lib/dav/writes";
 import { newId } from "@/lib/ids";
-import { expandRowBusy, loadOwnerZones, needsOwnerZone, type BusyInterval } from "./free-busy";
+import { expandRowBusy, loadOwnerZones, needsOwnerZone, type BusyInterval } from "./busy-expand";
 import { roomBusyIntervals } from "./room-busy";
 
 type Db = ReturnType<typeof getDb>;
