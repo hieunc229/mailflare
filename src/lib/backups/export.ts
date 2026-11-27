@@ -154,6 +154,8 @@ export async function restoreDatabaseRecords(db: D1Database, content: ArrayBuffe
 	const promotionSettingColumns = restoreTables.includes("mailbox_promotion_settings") ? await listColumnNames(db, "mailbox_promotion_settings") : null;
 	// These tables gained columns after they shipped (MTA-STS settings, the report kind); a backup from a newer
 	// database drops them here instead of failing after the teardown.
+	// app_settings gains a column with most settings (calendar_org_free_busy); a backup from a newer database drops the ones this database lacks.
+	const appSettingsColumns = existing.has("app_settings") ? await listColumnNames(db, "app_settings") : null;
 	const deliverabilityColumns = new Map<string, Set<string>>();
 	for (const table of ["domain_deliverability", "deliverability_reports"]) if (existing.has(table)) deliverabilityColumns.set(table, await listColumnNames(db, table));
 	// Mark users deleted before removing them: the passkey trigger permits the
@@ -182,7 +184,9 @@ export async function restoreDatabaseRecords(db: D1Database, content: ArrayBuffe
 							? messageColumns
 							: table === "mailbox_promotion_settings"
 								? promotionSettingColumns
-								: deliverabilityColumns.get(table) ?? null;
+								: table === "app_settings"
+									? appSettingsColumns
+									: deliverabilityColumns.get(table) ?? null;
 			const statements = rows.slice(index, index + INSERT_BATCH_SIZE).map((row) => createInsertStatement(db, dialect, table, row, columns));
 			// MySQL checks foreign keys per statement, so the batch suspends them for its own connection.
 			if (statements.length > 0) await db.batch(dialect === "mysql" ? [db.prepare("SET FOREIGN_KEY_CHECKS = 0"), ...statements, db.prepare("SET FOREIGN_KEY_CHECKS = 1")] : statements);
