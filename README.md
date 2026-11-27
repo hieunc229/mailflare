@@ -107,7 +107,7 @@ See [self-hosting](docs/self-hosting.md).
 
 [![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2Fhieunc229%2Fmailflare&env=CRON_SECRET&envDescription=See%20docs%2Fvercel.md&envLink=https%3A%2F%2Fgithub.com%2Fhieunc229%2Fmailflare%2Fblob%2Fmain%2Fdocs%2Fvercel.md)
 
-Vercel needs a hosted database (such as Turso, connected from the Vercel Marketplace) and storage: a private Vercel Blob store, AWS S3 or Backblaze B2 (check the [Blob free limits](docs/vercel.md#storage) for mail); queues use Vercel Queues (beta). Mail arrives through the [email relay Worker](deploy/cloudflare-email-relay/README.md), Resend or Amazon SES. The Hobby plan works for non-commercial use. After deploying, add the database and storage, and start the [five-minute schedule](docs/vercel.md#five-minute-schedule).
+Vercel needs a hosted database (such as Turso, connected from the Vercel Marketplace) and storage: a Vercel Blob store (**it must be private**), AWS S3 or Backblaze B2 (check the [Blob free limits](docs/vercel.md#storage) for mail); queues use Vercel Queues (beta). Mail arrives through the [email relay Worker](deploy/cloudflare-email-relay/README.md), Resend or Amazon SES. The Hobby plan works for non-commercial use. After deploying, add the database and storage, and start the [five-minute schedule](docs/vercel.md#five-minute-schedule). Keep the database in the same region as the functions: the [first setup](docs/vercel.md#first-setup) can otherwise take many minutes.
 
 Setup steps, variables and limits: [Vercel guide](docs/vercel.md).
 

@@ -9,7 +9,7 @@ Mailflare. Vercel works, with more services to set up and the [limits](#limits) 
 | --- | --- | --- |
 | Vercel Hobby or Pro | The app, with 300 s functions, and its job queue ([Vercel Queues](https://vercel.com/docs/queues), beta). Hobby is for non-commercial use only. | |
 | PostgreSQL, MySQL or Turso ([databases](databases.md)) | All records and rate limit counters | See [database](#database) |
-| Vercel Blob, AWS S3 or Backblaze B2 | Raw mail, attachments, Drive, backups | See [storage](#storage) |
+| Vercel Blob (**private** store), AWS S3 or Backblaze B2 | Raw mail, attachments, Drive, backups | See [storage](#storage) |
 | | Protects the cron routes | `CRON_SECRET`: a long random string |
 | | Public address | `APP_URL=https://mail.example.com`; defaults to the project's production domain |
 
@@ -29,16 +29,22 @@ Either way works:
 A PostgreSQL provider with an HTTP driver (Neon) or a connection pooler suits serverless functions best, because
 each query otherwise opens its own connection. Turso is reached over HTTP.
 
+**Keep the database near the functions.** Create it in the region your functions run in, or change the region under
+Settings → Functions → Function Region (Vercel starts in Washington, D.C., `iad1`) and redeploy. A distant database
+slows every page, and [first setup](#first-setup) most of all.
+
 ### Storage
 
 Pick one:
 
-- **Vercel Blob.** In the project's Storage tab, create a Blob store with **private** access and connect it, keeping
-  the default variable prefix. Vercel sets `BLOB_STORE_ID` (or `BLOB_READ_WRITE_TOKEN`), and Mailflare reads
-  either. No bucket CORS is needed. **Check the [Hobby limits](https://vercel.com/docs/vercel-blob/usage-and-pricing)
-  first:** 1 GB, 10,000 simple and 2,000 advanced operations a month. Every stored file is an advanced operation,
-  and each incoming message stores several, so a few hundred messages can use up the month. Over a limit, Hobby
-  loses access to Blob for 30 days, which stops mail.
+- **Vercel Blob. The store must be private.** In the project's Storage tab, create a Blob store, choose **Private**
+  access and connect it, keeping the default variable prefix. Mailflare writes private files only, so a public store
+  does not work; if you made one, create a private store and connect that instead. Vercel sets `BLOB_STORE_ID` (or
+  `BLOB_READ_WRITE_TOKEN`), and Mailflare reads either. No bucket CORS is needed. **Check the
+  [Hobby limits](https://vercel.com/docs/vercel-blob/usage-and-pricing) first:** 1 GB, 10,000 simple and 2,000
+  advanced operations a month. Every stored file is an advanced operation, and each incoming message stores several,
+  so a few hundred messages can use up the month. Over a limit, Hobby loses access to Blob for 30 days, which stops
+  mail.
 - **AWS S3 or Backblaze B2.** `S3_BUCKET`, `S3_REGION`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY`, or the four
   `B2_*`. Then [allow browser uploads on the bucket](#bucket-cors).
 
@@ -65,10 +71,25 @@ Nothing here is required. Set these only to replace the defaults:
 3. With S3 or Backblaze, [allow browser uploads on the bucket](#bucket-cors).
 4. Turn off Deployment Protection for the production domain: the five-minute schedule, cron and mail providers must
    reach it.
-5. Open `/setup`, create the admin account and add your domain.
+5. Open `/setup`, wait for the [first setup](#first-setup) to finish, then create the admin account and add your
+   domain.
 6. [Start the five-minute schedule](#five-minute-schedule).
 
 Preview deployments need their own database, storage and `APP_URL`.
+
+### First setup
+
+The first visit to `/setup` creates the database tables. On Turso that is more than a hundred migrations, sent one
+statement at a time over the network, so it can take several minutes, and the page shows **Checking installation**
+meanwhile.
+
+If it seems stuck:
+
+1. Leave the page open for five minutes.
+2. Reload it. On Turso and PostgreSQL each finished migration is saved, so setup continues where it stopped. Reload
+   again if needed.
+3. [Move the functions near the database](#database) and redeploy.
+4. If it still does not finish, look for `/api/setup/prepare` in the project's Vercel logs.
 
 ### Five-minute schedule
 
