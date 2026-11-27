@@ -48,7 +48,7 @@ test("TRANSP:TRANSPARENT is free, TRANSP:OPAQUE is busy", () => {
 });
 
 test("an invitation's flags are set for a new event only; a refresh never carries them", () => {
-	const common = { title: "T", description: "", location: "", sequence: 1, rrule: null, startsAt: new Date("2026-11-04T17:00:00Z"), endsAt: new Date("2026-11-04T18:00:00Z"), excludedDates: [] };
+	const common = { title: "T", description: "", location: "", sequence: 1, organizer: null, attendees: [], rrule: null, startsAt: new Date("2026-11-04T17:00:00Z"), endsAt: new Date("2026-11-04T18:00:00Z"), excludedDates: [] };
 	assert.deepEqual(inviteEventFlags({ ...common, isPrivate: true, transparent: true }), { isPrivate: true, transparent: true });
 	assert.deepEqual(inviteEventFlags(common), { isPrivate: false, transparent: false });
 	const refresh = inviteEventValues({ ...common, isPrivate: true, transparent: true }, "UTC", "[]");

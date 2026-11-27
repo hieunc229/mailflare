@@ -6,9 +6,9 @@ import { fileURLToPath } from "node:url";
 const read = (path) => readFileSync(fileURLToPath(new URL(`../${path}`, import.meta.url)), "utf8");
 const journal = (directory) => JSON.parse(read(`${directory}/meta/_journal.json`)).entries;
 const DIALECTS = [
-	["sqlite", "drizzle/migrations", "0109_booking_event_resources", "0107_calendar_room_booking_guard", "bundle.json", /ALTER TABLE `booking_events` ADD `resource_ids` text DEFAULT '\[\]' NOT NULL[\s\S]*ALTER TABLE `calendar_resources` ADD `public_booking` integer DEFAULT false NOT NULL/],
-	["postgres", "drizzle/migrations-pg", "0033_booking_event_resources", "0031_calendar_room_booking_guard", "bundle-postgres.json", /ALTER TABLE "booking_events" ADD COLUMN "resource_ids" text DEFAULT '\[\]' NOT NULL[\s\S]*ALTER TABLE "calendar_resources" ADD COLUMN "public_booking" boolean DEFAULT false NOT NULL/],
-	["mysql", "drizzle/migrations-mysql", "0033_booking_event_resources", "0031_calendar_room_booking_guard", "bundle-mysql.json", /ALTER TABLE `booking_events` ADD `resource_ids` longtext NOT NULL DEFAULT \('\[\]'\)[\s\S]*ALTER TABLE `calendar_resources` ADD `public_booking` boolean NOT NULL DEFAULT false/],
+	["sqlite", "drizzle/migrations", "0109_booking_event_resources", "0108_calendar_room_booking_guard", "bundle.json", /ALTER TABLE `booking_events` ADD `resource_ids` text DEFAULT '\[\]' NOT NULL[\s\S]*ALTER TABLE `calendar_resources` ADD `public_booking` integer DEFAULT false NOT NULL/],
+	["postgres", "drizzle/migrations-pg", "0033_booking_event_resources", "0032_calendar_room_booking_guard", "bundle-postgres.json", /ALTER TABLE "booking_events" ADD COLUMN "resource_ids" text DEFAULT '\[\]' NOT NULL[\s\S]*ALTER TABLE "calendar_resources" ADD COLUMN "public_booking" boolean DEFAULT false NOT NULL/],
+	["mysql", "drizzle/migrations-mysql", "0033_booking_event_resources", "0032_calendar_room_booking_guard", "bundle-mysql.json", /ALTER TABLE `booking_events` ADD `resource_ids` longtext NOT NULL DEFAULT \('\[\]'\)[\s\S]*ALTER TABLE `calendar_resources` ADD `public_booking` boolean NOT NULL DEFAULT false/],
 ];
 
 for (const [dialect, directory, tag, previous, bundle, pattern] of DIALECTS) {
