@@ -86,6 +86,12 @@ Also kept on every dialect: foreign keys and cascades, the JMAP change log, mail
 | One agent job per mailbox | Atomic in the claim statement | Atomic | Checked just before the claim (small race window) |
 | `batch` atomicity | Atomic | Atomic | Atomic for DML; MySQL commits DDL implicitly, so a failed migration can leave earlier statements applied |
 | `neon` (HTTP) | n/a | Batches run as separate statements (the HTTP protocol has no interactive transaction); use `node-postgres` for atomic batches | n/a |
+| Interactive transaction (`transaction()`) | Yes on the self-hosted SQLite file and on `better-sqlite3`/`bun:sqlite`/`libsql`; a D1 binding has none | Yes on `node-postgres`, `postgres-js` and `pglite`; **not** on `neon` (HTTP) | Yes on `mysql2` **and** on `planetscale` (its HTTP API takes a transaction body) |
+
+Each driver declares this rather than it being guessed from the transport, because a restore decides from it: on a
+driver without a transaction a failed restore cannot be rolled back, so the backup page warns that data may already
+have been replaced and asks for the backup (or a snapshot) to be restored again. That is the only case where a
+restore is not all-or-nothing.
 
 Why search is the main difference: FTS5 is an SQLite extension, PostgreSQL's equivalent (`tsvector`) and MySQL's `FULLTEXT` have different grammars and ranking, and the search syntax (`from:`, `subject:`, quoted phrases, `-term`) is translated into plain predicates on those dialects instead. That is correct but unindexed, so searches scan the messages of the mailbox being searched. For large mailboxes, D1/SQLite, or PostgreSQL with `pg_trgm`, searches faster.
 

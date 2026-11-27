@@ -158,6 +158,7 @@ and the DNS page shows what to set by hand.
 | `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_REGION` | unset | Amazon SES credentials; override ones saved in the app |
 | `INBOUND_WEBHOOK_SECRET` | unset | Enables `/api/inbound` for the relay Worker |
 | `INBOUND_REQUIRE_SIGNED_HEADERS` | unset | Set to `1` once the relay Worker is updated: refuses relays that do not sign the header map with a timestamp (older relays stay accepted without it, and their requests can be replayed) |
+| `MAILFLARE_ENCRYPTION_KEY` | unset | Key for credentials Mailflare stores encrypted (external IMAP/POP3 account passwords). Generate it once with `openssl rand -base64 32` — or `npx wrangler secret put MAILFLARE_ENCRYPTION_KEY` on Workers — and keep it: without it those passwords cannot be stored or read, and nothing falls back to plaintext. Only the length and a few obvious placeholders (`change-me`, `replace-me`, `your-key`, …) are checked, so the value is used **verbatim as UTF-8**: any trimmed string of at least 32 characters works, and a base64, hex or raw-looking key are all just text — re-encoding the same bytes is a different key. Changing it makes passwords already stored unreadable, so re-enter them after a rotation. Backups carry the sealed value unchanged: restoring onto an install with the same key keeps the passwords working, and restoring onto an install with a different key leaves the accounts listed but unable to fetch until their passwords are entered again |
 | `TURNSTILE_SECRET_KEY` | unset | Bot protection on login and reset forms (`NEXT_PUBLIC_TURNSTILE_SITE_KEY` at build time) |
 | `VAPID_PUBLIC_KEY` | unset | Public Web Push application-server key |
 | `VAPID_PRIVATE_KEY` | unset | Secret Web Push application-server key |
@@ -170,7 +171,24 @@ and the DNS page shows what to set by hand.
 
 - **Backups.** The daily 02:00 UTC backup and the admin Backups page work
   unchanged; files land under `/data/blobs/backups`. Back up the whole volume
-  for a full copy.
+  for a full copy. Backup images carry encrypted credentials as they are stored,
+  so a restore on the same install (or any install holding the same
+  `MAILFLARE_ENCRYPTION_KEY`) keeps them working; after a restore onto a
+  different key, or after rotating the key, open each external account and enter
+  its password again. The restore checks the shape of every encrypted value
+  before it wipes anything, so a broken or truncated one is refused up front,
+  and on PostgreSQL, MySQL and the self-hosted SQLite file the restore runs in
+  one transaction on a connection of its own, so a failure rolls the whole
+  restore back and other requests keep working throughout. **On Cloudflare D1 and
+  on the Neon HTTP driver there is no interactive transaction:** the checks are
+  then the only protection, and a failure the checks did not foresee can leave
+  the data partly replaced. (PlanetScale's HTTP API does take a transaction body,
+  so it rolls back like the drivers above; `docs/databases.md` lists every
+  driver.) Take a backup (or a database snapshot) before restoring on a binding
+  without transactions, and if a restore fails there, run it again before using
+  the installation — the error message says the same. A backup is trusted input either way — the check proves
+  the shape of those bytes, not who wrote them, so restore only files this
+  install (or the same key) produced.
 - **Updates.** Pull the new image and recreate the container; migrations run
   at start (see [Prebuilt image](#prebuilt-image-no-build)). The in-app update button is disabled on self-hosted installs.
 - **Logs.** `docker compose logs -f mailflare`.

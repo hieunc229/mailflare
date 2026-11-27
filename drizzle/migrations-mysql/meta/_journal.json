@@ -190,6 +190,13 @@
       "when": 1795027668151,
       "tag": "0026_contact_details",
       "breakpoints": true
+    },
+    {
+      "idx": 27,
+      "version": "5",
+      "when": 1795027669151,
+      "tag": "0035_external_accounts",
+      "breakpoints": true
     }
   ]
 }

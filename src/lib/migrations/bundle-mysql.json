@@ -511,6 +511,15 @@
         "CREATE TABLE `contact_details` (\n\t`contact_id` varchar(191) NOT NULL,\n\t`details` longtext NOT NULL DEFAULT ('{}'),\n\t`updated_at` bigint NOT NULL,\n\tCONSTRAINT `contact_details_contact_id` PRIMARY KEY(`contact_id`)\n);",
         "ALTER TABLE `contact_details` ADD CONSTRAINT `contact_details_contact_id_contacts_id_fk` FOREIGN KEY (`contact_id`) REFERENCES `contacts`(`id`) ON DELETE cascade ON UPDATE no action;"
       ]
+    },
+    {
+      "name": "0035_external_accounts.sql",
+      "statements": [
+        "CREATE TABLE `external_accounts` (\n\t`id` varchar(191) NOT NULL,\n\t`mailbox_id` varchar(191) NOT NULL,\n\t`user_id` varchar(191) NOT NULL,\n\t`protocol` varchar(64) NOT NULL,\n\t`host` varchar(191) COLLATE utf8mb4_bin NOT NULL,\n\t`port` bigint NOT NULL,\n\t`tls_mode` varchar(64) NOT NULL DEFAULT 'implicit-tls',\n\t`username` varchar(191) COLLATE utf8mb4_bin NOT NULL,\n\t`password_encrypted` longtext NOT NULL,\n\t`enabled` boolean NOT NULL DEFAULT true,\n\t`last_synced_at` bigint,\n\t`last_error` longtext,\n\t`sync_cursor` longtext,\n\t`created_at` bigint NOT NULL,\n\t`updated_at` bigint NOT NULL,\n\tCONSTRAINT `external_accounts_id` PRIMARY KEY(`id`),\n\tCONSTRAINT `external_accounts_mailbox_host_user_idx` UNIQUE(`mailbox_id`,`host`,`username`)\n);",
+        "ALTER TABLE `external_accounts` ADD CONSTRAINT `external_accounts_mailbox_id_mailboxes_id_fk` FOREIGN KEY (`mailbox_id`) REFERENCES `mailboxes`(`id`) ON DELETE cascade ON UPDATE no action;",
+        "CREATE INDEX `external_accounts_poll_idx` ON `external_accounts` (`enabled`,`last_synced_at`);",
+        "CREATE INDEX `external_accounts_user_idx` ON `external_accounts` (`user_id`);"
+      ]
     }
   ]
 }

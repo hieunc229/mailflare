@@ -36,3 +36,9 @@ CF_TOKEN=your_api_token_with_zone_email_permissions
 # S3_REGION=us-east-1
 # S3_ACCESS_KEY_ID=AKIA...
 # S3_SECRET_ACCESS_KEY=your_secret_access_key
+
+# Optional: key for credentials Mailflare stores encrypted, starting with external IMAP/POP3 account
+# passwords. Generate once with `openssl rand -base64 32` (or `npx wrangler secret put MAILFLARE_ENCRYPTION_KEY`
+# on Workers) and keep it: without it those passwords cannot be read and nothing falls back to plaintext.
+# Changing it makes already-stored passwords unreadable, so re-enter them after a rotation.
+# MAILFLARE_ENCRYPTION_KEY=

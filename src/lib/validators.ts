@@ -5,6 +5,18 @@ import { isValidHostname, normalizeHostname } from "@/lib/domains/utils";
 import { getEmailAddress, splitEmailAddressList } from "@/lib/email/address";
 import { normalizeRecipientLocalPart } from "@/lib/email/recipient-address";
 import { DEFAULT_FOLDER_COLOR, FOLDER_COLOR_VALUES } from "@/lib/folders/colors";
+import {
+	DEFAULT_EXTERNAL_ACCOUNT_TLS_MODE,
+	EXTERNAL_ACCOUNT_PROTOCOLS,
+	EXTERNAL_ACCOUNT_TLS_MODES,
+} from "@/lib/external-accounts/protocols";
+import {
+	CONTROL_CHARACTER_MESSAGE,
+	hasControlCharacter,
+	isExternalAccountHost,
+	MAX_IDENTITY_LENGTH,
+} from "@/lib/external-accounts/host";
+import { hasUnpairedSurrogate, UNPAIRED_SURROGATE_MESSAGE } from "@/lib/external-accounts/text";
 import { MAX_FOLLOW_UP_DAYS } from "@/lib/follow-ups/follow-up-utils";
 import { isValidBase64 } from "@/lib/email/base64";
 import { MAIL_TYPE_BULK, MAIL_TYPE_UNSAFE_ACTION } from "@/lib/email/mail-type-rule";
@@ -545,3 +557,71 @@ export const webhookUpdateSchema = z.object({
 	maxAttempts: z.number().int().min(1).max(10).optional(),
 	rotateSecret: z.literal(true).optional(),
 });
+
+
+/**
+ * A host a poller can dial: a DNS name or an IPv4 literal. No scheme, port or path — those have their own
+ * fields — and no IPv6 literal yet, which needs brackets to be unambiguous in a URL.
+ *
+ * Capped at 191 characters because that is what the MySQL identity columns are (`varchar(191)`): a longer host
+ * would reach the database and fail there instead of returning a validation error. The validator lowercases it,
+ * so `IMAP.Example.com` is the same account as `imap.example.com` on every dialect.
+ */
+const externalAccountHostSchema = z
+	.string()
+	.trim()
+	.min(1)
+	.max(MAX_IDENTITY_LENGTH)
+	.refine((value) => !hasControlCharacter(value), { message: CONTROL_CHARACTER_MESSAGE })
+	.transform(normalizeHostname)
+	.refine(isExternalAccountHost, {
+		message: "Enter a mail server hostname such as imap.example.com",
+	});
+
+/**
+ * The login name on the external server. 191 characters for the same reason as the host: it is part of the
+ * unique identity, and MySQL indexes it as `varchar(191)`. Case is preserved and compared exactly (the MySQL
+ * column uses a binary collation), because an external login such as `User@example.com` can be case-sensitive.
+ */
+const externalAccountUsernameSchema = z
+	.string()
+	.trim()
+	.min(1)
+	.max(MAX_IDENTITY_LENGTH)
+	.refine((value) => !hasUnpairedSurrogate(value), { message: UNPAIRED_SURROGATE_MESSAGE })
+	.refine((value) => !hasControlCharacter(value), { message: CONTROL_CHARACTER_MESSAGE });
+
+/**
+ * A mail password, not a Mailflare one: any character, never trimmed. An unpaired surrogate is refused here
+ * because the credential is stored as UTF-8, where it would be replaced with U+FFFD and never read back.
+ */
+const externalAccountPasswordSchema = z
+	.string()
+	.min(1)
+	.max(1024)
+	.refine((value) => !hasUnpairedSurrogate(value), { message: UNPAIRED_SURROGATE_MESSAGE });
+
+/** Shared by create and update; a password is required to create and optional (absent = unchanged) to update. */
+const externalAccountFields = {
+	protocol: z.enum(EXTERNAL_ACCOUNT_PROTOCOLS),
+	host: externalAccountHostSchema,
+	port: z.number().int().min(1).max(65535),
+	tlsMode: z.enum(EXTERNAL_ACCOUNT_TLS_MODES).default(DEFAULT_EXTERNAL_ACCOUNT_TLS_MODE),
+	username: externalAccountUsernameSchema,
+	password: externalAccountPasswordSchema,
+	enabled: z.boolean().default(true),
+};
+
+export const externalAccountSchema = z.object(externalAccountFields);
+
+export const updateExternalAccountSchema = z
+	.object({
+		protocol: externalAccountFields.protocol.optional(),
+		host: externalAccountHostSchema.optional(),
+		port: externalAccountFields.port.optional(),
+		tlsMode: z.enum(EXTERNAL_ACCOUNT_TLS_MODES).optional(),
+		username: externalAccountUsernameSchema.optional(),
+		password: externalAccountPasswordSchema.optional(),
+		enabled: z.boolean().optional(),
+	})
+	.refine((value) => Object.values(value).some((item) => item !== undefined), { message: "Nothing to update" });

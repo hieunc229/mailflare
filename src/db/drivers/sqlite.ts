@@ -8,12 +8,13 @@ const sqliteParam = (value: unknown) => {
 
 /** libSQL / Turso: remote (`libsql://`, `https://`) and local `file:` databases. */
 export function openLibsql({ url, authToken }: OpenOptions): SqlExecutor {
-	return lazyExecutor("sqlite", async () => {
+	return lazyExecutor("sqlite", "atomic", async () => {
 		const { createClient } = await import("@libsql/client");
 		const client = createClient({ url, authToken });
 		type Executable = { execute(statement: { sql: string; args: unknown[] }): Promise<{ rows: Array<Record<string, unknown>>; columns: string[]; rowsAffected: number; lastInsertRowid?: bigint }> };
 		const executorFor = (target: Executable, transaction?: SqlExecutor["transaction"]): SqlExecutor => ({
 			dialect: "sqlite",
+			transactions: "atomic",
 			async query(sql, values, mode): Promise<QueryResult> {
 				const result = await target.execute({ sql, args: values.map(sqliteParam) });
 				const rows = mode === "array" ? result.rows.map((row) => result.columns.map((_, i) => (row as unknown as unknown[])[i])) : result.rows.map((row) => ({ ...row }));
@@ -42,7 +43,7 @@ export function openLibsql({ url, authToken }: OpenOptions): SqlExecutor {
 
 /** A local SQLite file through better-sqlite3 (Node only). */
 export function openBetterSqlite3({ url }: OpenOptions): SqlExecutor {
-	return lazyExecutor("sqlite", async () => {
+	return lazyExecutor("sqlite", "atomic", async () => {
 		const name = "better-sqlite3";
 		const Database = ((await import(/* @vite-ignore */ name)) as { default: new (path: string) => import("better-sqlite3").Database }).default;
 		const path = url.replace(/^(file|sqlite):(\/\/)?/i, "") || ":memory:";
@@ -63,7 +64,7 @@ export function openBetterSqlite3({ url }: OpenOptions): SqlExecutor {
 
 /** A local SQLite file through bun:sqlite (Bun runtime only). */
 export function openBunSqlite({ url }: OpenOptions): SqlExecutor {
-	return lazyExecutor("sqlite", async () => {
+	return lazyExecutor("sqlite", "atomic", async () => {
 		const name = "bun:sqlite";
 		const { Database } = (await import(/* @vite-ignore */ name)) as { Database: new (path: string) => BunDatabase };
 		const db = new Database(url.replace(/^(file|sqlite):(\/\/)?/i, "") || ":memory:");
@@ -92,20 +93,40 @@ interface BunDatabase {
 	close(): void;
 }
 
-/** In-process drivers share one connection, so a transaction is BEGIN/COMMIT around awaited statements. */
+/**
+ * In-process drivers share one connection, so work on it is serialised: a transaction holds the connection until
+ * it commits or rolls back, and everything else — including a statement prepared before the transaction started —
+ * waits outside rather than running inside it. The callback gets a scoped executor that does not wait, so only the
+ * owner can reach the open transaction. This mirrors `server/runtime/sqlite-database.ts`, the default adapter.
+ */
 function syncSqliteExecutor(run: (sql: string, values: unknown[], mode: "array" | "object") => QueryResult, close: () => Promise<void>): SqlExecutor {
-	let chain: Promise<unknown> = Promise.resolve();
-	const executor: SqlExecutor = {
+	let lock: Promise<void> = Promise.resolve();
+	/** Runs `work` with exclusive use of the connection; the returned promise settles when it is released. */
+	const exclusive = async <T>(work: () => Promise<T>): Promise<T> => {
+		const previous = lock;
+		let release!: () => void;
+		lock = new Promise<void>((resolve) => {
+			release = resolve;
+		});
+		await previous;
+		try {
+			return await work();
+		} finally {
+			release();
+		}
+	};
+	const runUngated = async (sql: string, values: unknown[], mode: "array" | "object") => run(sql, values.map(sqliteParam), mode);
+	return {
 		dialect: "sqlite",
-		async query(sql, values, mode) {
-			return run(sql, values.map(sqliteParam), mode);
-		},
-		// One connection means one transaction at a time; later callers wait for the earlier to finish.
+		transactions: "atomic",
+		query: (sql, values, mode) => exclusive(() => runUngated(sql, values, mode)),
 		transaction(fn) {
-			const result = chain.then(async () => {
+			return exclusive(async () => {
 				run("BEGIN", [], "array");
+				// The owner's view: same connection, no waiting, reachable only from inside this callback.
+				const scope: SqlExecutor = { dialect: "sqlite", transactions: "atomic", query: (sql, values, mode) => runUngated(sql, values, mode) };
 				try {
-					const value = await fn(executor);
+					const value = await fn(scope);
 					run("COMMIT", [], "array");
 					return value;
 				} catch (error) {
@@ -113,10 +134,7 @@ function syncSqliteExecutor(run: (sql: string, values: unknown[], mode: "array" 
 					throw error;
 				}
 			});
-			chain = result.catch(() => undefined);
-			return result;
 		},
-		close,
+		close: () => exclusive(close),
 	};
-	return executor;
 }
