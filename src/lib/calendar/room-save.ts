@@ -25,6 +25,13 @@ export function invitationLocation(location: string, roomNames: string[]): strin
 }
 
 /**
+ * The statement that goes in the same batch as any write that can change when an event happens: its bookings become `declined`
+ * (fail closed) and the room step then books them again. If the process dies between the two, no booking stays `accepted` for a
+ * time nobody checked. For an event with no rooms it matches nothing.
+ */
+export const declineBookingsStatement = (db: Db, eventId: string) => db.update(calendarResourceBookings).set({ status: "declined", conflictAt: null }).where(eq(calendarResourceBookings.eventId, eventId));
+
+/**
  * The event is already saved at its new time, so a room check that cannot finish must not leave its bookings `accepted` for times
  * nobody checked: they are declined (fail closed). The next save of the event checks them again.
  */

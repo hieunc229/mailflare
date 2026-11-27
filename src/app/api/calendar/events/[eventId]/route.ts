@@ -21,7 +21,7 @@ import { authorizeCalendarRequest, calendarKeyCanSendInvitations } from "@/lib/c
 import { buildSplitAnnouncement } from "@/lib/calendar/split-announcement";
 import { readJsonObject } from "@/lib/http/request";
 import { resolveBookableRooms } from "@/lib/calendar/resources";
-import { bookAndSummarize, bookedRoomIds, invitationLocation, roomResponse, type RoomsSummary } from "@/lib/calendar/room-save";
+import { bookAndSummarize, bookedRoomIds, declineBookingsStatement, invitationLocation, roomResponse, type RoomsSummary } from "@/lib/calendar/room-save";
 import { getLicenseEntitlements } from "@/lib/licenses/service";
 import { calendarExistsGuard } from "@/lib/calendar/calendars";
 import { getEventAccess, resolveCalendarForWrite, roleAtLeast } from "@/lib/calendar/shares";
@@ -131,6 +131,8 @@ export async function PATCH(request: Request, { params }: CalendarEventRoutePara
 	const roomsAfter = requestedRooms ?? bookedNow;
 	// Settling the rooms is a no-op for an event that has none and names none.
 	const settleRooms = (eventId: string, ids: string[], hadRooms: boolean): Promise<RoomsSummary | null> => ids.length || hadRooms ? bookAndSummarize(db, eventId, ids) : Promise.resolve(null);
+	// Whatever is written below can change when the event happens, so its bookings are declined in the same batch and booked again after.
+	const declineRooms = bookedNow.length ? [declineBookingsStatement(db, head.id)] : [];
 	let rooms: RoomsSummary | null = null;
 	let inviteErrors: string[] = [];
 	if (input.moveOccurrenceToPast) {
@@ -147,10 +149,10 @@ export async function PATCH(request: Request, { params }: CalendarEventRoutePara
 		const insertMoved = db.insert(calendarEvents).values(moved);
 		const excludeOriginal = db.update(calendarEvents).set({ excludedOccurrences: JSON.stringify(newExcluded), eventSequence: seriesSequence, updatedAt: now }).where(eq(calendarEvents.id, existing.id));
 		if (moveTo !== undefined) {
-			const refused = await batched([insertMoved, excludeOriginal, ...moveSeriesStatements(db, ownerId, head.id, moveTo)]);
+			const refused = await batched([insertMoved, excludeOriginal, ...declineRooms, ...moveSeriesStatements(db, ownerId, head.id, moveTo)]);
 			if (refused) return refused;
 		} else {
-			const refused = await batched([insertMoved, excludeOriginal]);
+			const refused = await batched([insertMoved, excludeOriginal, ...declineRooms]);
 			if (refused) return refused;
 		}
 		rooms = await settleRooms(head.id, roomsAfter, bookedNow.length > 0);
@@ -194,10 +196,10 @@ export async function PATCH(request: Request, { params }: CalendarEventRoutePara
 		const fresh = { ...event, id: forkId, eventSequence: 0, davObjectId: null, recurrenceId: null, ...(moveTo !== undefined ? { calendarId: moveTo } : {}), createdAt: now, updatedAt: now };
 		const endPatch = existing.rrule ? { rrule: limitRrule(existing.rrule, splitAt, existing.startsAt, existing.timeZone, existing.allDay), eventSequence: nextSequence, updatedAt: now } : { repeatUntil: splitAt, eventSequence: nextSequence, updatedAt: now };
 		if (moveTo !== undefined) {
-			const refused = await batched([...splitSeriesStatements(db, ownerId, existing, splitAt, fresh, endPatch), ...moveSeriesStatements(db, ownerId, head.id, moveTo)]);
+			const refused = await batched([...splitSeriesStatements(db, ownerId, existing, splitAt, fresh, endPatch), ...declineRooms, ...moveSeriesStatements(db, ownerId, head.id, moveTo)]);
 			if (refused) return refused;
 		} else {
-			const refused = await batched(splitSeriesStatements(db, ownerId, existing, splitAt, fresh, endPatch));
+			const refused = await batched([...splitSeriesStatements(db, ownerId, existing, splitAt, fresh, endPatch), ...declineRooms]);
 			if (refused) return refused;
 		}
 		// The old series is shorter now and keeps the rooms it had; the new one takes the named rooms, or the old series' own.
@@ -245,8 +247,8 @@ export async function PATCH(request: Request, { params }: CalendarEventRoutePara
 	const propagate = existing.davObjectId === existing.id && flags.isPrivate !== existing.isPrivate
 		? [db.update(calendarEvents).set({ isPrivate: flags.isPrivate }).where(and(eq(calendarEvents.userId, ownerId), eq(calendarEvents.davObjectId, existing.id), ne(calendarEvents.id, existing.id)))]
 		: [];
-	if (moveTo !== undefined || propagate.length) {
-		const refused = await batched([edit, ...propagate, ...(moveTo !== undefined ? moveSeriesStatements(db, ownerId, head.id, moveTo) : [])]);
+	if (moveTo !== undefined || propagate.length || declineRooms.length) {
+		const refused = await batched([edit, ...propagate, ...declineRooms, ...(moveTo !== undefined ? moveSeriesStatements(db, ownerId, head.id, moveTo) : [])]);
 		if (refused) return refused;
 	} else await edit;
 	if (shifted?.moved) await shiftOverrides(db, ownerId, existing.id, shifted.shift);
