@@ -27,18 +27,22 @@ export type RoomsPickerProps = {
 	onAdd: (id: string) => void;
 	onRemove: (id: string) => void;
 	onRetry: () => void;
+	/** Only the rooms this says yes to are offered to add (a booking page offers just the ones open to public pages); every room still names its chip. */
+	isOffered?: (room: RoomOption) => boolean;
+	/** What to say about a chosen room instead of its booking status (a booking type has none), by room id. */
+	notes?: Record<string, string>;
 };
 
 /**
  * The editor's room chips (spec F9 8.5). A saved booking says in words whether the room is Booked or Declined, and a declined one
  * names the first date it clashed; colour is never the only signal. Nothing shows when no room exists and none is chosen.
  */
-export function RoomsPicker({ rooms, state, canBook, selected, saved, disabled, readOnly, onAdd, onRemove, onRetry }: RoomsPickerProps) {
+export function RoomsPicker({ rooms, state, canBook, selected, saved, disabled, readOnly, onAdd, onRemove, onRetry, isOffered, notes }: RoomsPickerProps) {
 	const { t } = useLanguage();
 	const labelId = useId();
 	const noteId = useId();
 	const byId = new Map(rooms.map((room) => [room.id, room]));
-	const offered = rooms.filter((room) => !selected.includes(room.id));
+	const offered = rooms.filter((room) => !selected.includes(room.id) && (isOffered?.(room) ?? true));
 	const full = selected.length >= MAX_EVENT_ROOMS;
 	// A room turned off or deleted since it was booked is still shown, by what is left of it.
 	const chips = selected.map((id) => ({ id, room: byId.get(id), booking: saved.find((item) => item.resourceId === id) }));
@@ -58,7 +62,7 @@ export function RoomsPicker({ rooms, state, canBook, selected, saved, disabled, 
 					{chips.map(({ id, room, booking }) => {
 						const name = room?.name ?? (state === "ready" ? t("calendar.rooms.removedRoom") : state === "loading" ? t("calendar.rooms.loading") : t("calendar.rooms.notLoaded"));
 						const declined = booking?.status === "declined";
-						const status = !booking ? "" : declined
+						const status = notes?.[id] ? notes[id] : !booking ? "" : declined
 							? booking.conflictAt ? t("calendar.rooms.declinedOn", { date: formatUserDate(new Date(booking.conflictAt), { dateStyle: "medium" }) }) : t("calendar.rooms.declined")
 							: t("calendar.rooms.booked");
 						return (

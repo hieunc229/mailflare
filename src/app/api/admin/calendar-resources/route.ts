@@ -51,9 +51,11 @@ export async function PATCH(request: Request) {
 	if (auth.response) return auth.response;
 	const body = await readJsonObject(request);
 	if (!body) return Response.json({ error: "Invalid JSON body" }, { status: 400, headers: NO_STORE });
+	// Opening a room to public booking pages is a Team feature (D-13); closing one is always allowed, as turning a room off is.
+	if (body.publicBooking === true && !(await getLicenseEntitlements(env)).canShareMailboxes) return Response.json({ error: "Opening rooms to public booking pages needs a Team licence", code: "TEAM_REQUIRED" }, { status: 403, headers: NO_STORE });
 	const result = await updateResource(getDb(env), body);
 	if (!result.ok) return refuse(result);
-	const changed = ["name", "kind", "capacity", "location", "description", "disabled"].filter((key) => Object.prototype.hasOwnProperty.call(body, key));
+	const changed = ["name", "kind", "capacity", "location", "description", "disabled", "publicBooking"].filter((key) => Object.prototype.hasOwnProperty.call(body, key));
 	await createAuditLog(env, { actorUserId: auth.user.id, action: "calendar.resource_updated", metadata: { resourceId: result.resource.id, name: result.resource.name, changed } });
 	return Response.json({ resource: result.resource }, { headers: NO_STORE });
 }

@@ -36,7 +36,7 @@ function setup({ team = true, rooms = '["r1"]' } = {}) {
 		return next;
 	};
 	sqlite.exec("INSERT INTO users (id, email, name, password_hash, role, created_at, time_zone, booking_username) VALUES ('h1', 'h1@one.test', 'Hana Host', 'x', 'user', 1, 'UTC', 'hana'), ('o', 'o@one.test', 'Org', 'x', 'user', 1, 'UTC', null)");
-	sqlite.exec("INSERT INTO calendar_resources (id, name, location, created_at, updated_at) VALUES ('r1', 'Boardroom Vault', 'Floor 9', 1, 1)");
+	sqlite.exec("INSERT INTO calendar_resources (id, name, location, public_booking, created_at, updated_at) VALUES ('r1', 'Boardroom Vault', 'Floor 9', 1, 1, 1)");
 	sqlite.exec(`INSERT INTO booking_events (id, user_id, name, slug, host_ids, resource_ids, duration_minutes, weekdays, time_ranges, time_zone, enabled, created_at, updated_at) VALUES ('book_1', 'h1', 'Intro', 'intro', '["h1"]', '${rooms}', 30, '[1,2,3,4,5]', '[{"startTime":"09:00","endTime":"11:00"}]', 'UTC', 1, 1, 1)`);
 	mock.timers.reset();
 	mock.timers.enable({ apis: ["Date"], now: T0 });
@@ -132,4 +132,12 @@ test("the public page gets an allowlisted event: what the page draws and its own
 	const { event } = await (await get()).json();
 	assert.deepEqual(Object.keys(event).sort(), ["color", "description", "durationMinutes", "endTime", "id", "location", "name", "slug", "startTime", "timeRanges", "timeZone", "userId", "weekdays"]);
 	for (const hidden of ["hostIds", "resourceIds", "enabled", "createdAt", "updatedAt"]) assert.equal(hidden in event, false, hidden);
+});
+
+test("a room the administrator switched off for public booking pages fails closed, like a room that was turned off", async () => {
+	setup();
+	sqlite.exec("UPDATE calendar_resources SET public_booking = 0");
+	assert.deepEqual((await (await get()).json()).slots, []);
+	assert.equal((await post()).status, 403);
+	assert.deepEqual(guestEvents(), []);
 });

@@ -29,7 +29,7 @@ function setup({ team = true } = {}) {
 	sqlite?.close();
 	sqlite = installSqlite("bookShared", { schema, extra: { team } });
 	sqlite.exec("INSERT INTO users (id, email, name, password_hash, role, created_at, time_zone) VALUES ('h1', 'h1@one.test', 'H1', 'x', 'user', 1, 'UTC'), ('h2', 'h2@one.test', 'H2', 'x', 'user', 1, 'UTC'), ('o', 'o@one.test', 'O', 'x', 'user', 1, 'UTC')");
-	for (const [id, disabled] of [["r1", 0], ["r2", 0], ["off", 1]]) sqlite.exec(`INSERT INTO calendar_resources (id, name, disabled, created_at, updated_at) VALUES ('${id}', 'Room ${id}', ${disabled}, 1, 1)`);
+	for (const [id, disabled] of [["r1", 0], ["r2", 0], ["off", 1], ["priv", 0]]) sqlite.exec(`INSERT INTO calendar_resources (id, name, disabled, public_booking, created_at, updated_at) VALUES ('${id}', 'Room ${id}', ${disabled}, ${id === 'priv' ? 0 : 1}, 1, 1)`);
 	mock.timers.reset();
 	mock.timers.enable({ apis: ["Date"], now: T0 });
 }
@@ -87,6 +87,7 @@ test("host and room are both read: either one busy removes the slot", async () =
 test("a room that is turned off, gone, or whose Team licence lapsed offers no slots at all (fails closed)", async () => {
 	setup();
 	assert.deepEqual(await slots({ ...base, resourceIds: ["off"] }), []);
+	assert.deepEqual(await slots({ ...base, resourceIds: ["priv"] }), [], "not opened to public booking pages");
 	assert.deepEqual(await slots({ ...base, resourceIds: ["r1", "ghost"] }), []);
 	setup({ team: false });
 	assert.deepEqual(await slots({ ...base, resourceIds: ["r1"] }), []);

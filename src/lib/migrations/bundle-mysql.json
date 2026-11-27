@@ -597,7 +597,8 @@
     {
       "name": "0033_booking_event_resources.sql",
       "statements": [
-        "ALTER TABLE `booking_events` ADD `resource_ids` longtext NOT NULL DEFAULT ('[]');"
+        "ALTER TABLE `booking_events` ADD `resource_ids` longtext NOT NULL DEFAULT ('[]');",
+        "ALTER TABLE `calendar_resources` ADD `public_booking` boolean NOT NULL DEFAULT false;"
       ]
     }
   ]

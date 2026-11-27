@@ -1,4 +1,4 @@
-import type { RoomSnapshot } from "../calendar/room-state";
+import type { BookingRoomStore } from "./room-options";
 import type { BookingForm, BookingHost } from "./types";
 
 export type BookingEditorProps = {
@@ -9,7 +9,7 @@ export type BookingEditorProps = {
 	hosts: BookingHost[];
 	canManageHosts: boolean;
 	/** The shared rooms store (Team): the section shows only when a room exists or one is chosen. */
-	roomStore: RoomSnapshot;
+	roomStore: BookingRoomStore;
 	onRetryRooms: () => void;
 	currentUserId: string;
 	saving: boolean;

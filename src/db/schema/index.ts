@@ -1104,6 +1104,8 @@ export const calendarResources = sqliteTable(
 		description: text("description").notNull().default(""),
 		/** Hidden from pickers; existing bookings are kept. */
 		disabled: bool("disabled").notNull().default(false),
+		/** An administrator opened the room to public booking pages (Team, off by default): owners may attach only such rooms to a booking event type. */
+		publicBooking: bool("public_booking").notNull().default(false),
 		/** The last booking attempt's token: a booking is written only if it still holds (compare-and-swap, one winner per room). */
 		bookingToken: text("booking_token").notNull().default(""),
 		createdByUserId: text("created_by_user_id").references(() => users.id, { onDelete: "set null" }),

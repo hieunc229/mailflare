@@ -1069,7 +1069,8 @@
     {
       "name": "0109_booking_event_resources.sql",
       "statements": [
-        "ALTER TABLE `booking_events` ADD `resource_ids` text DEFAULT '[]' NOT NULL;"
+        "ALTER TABLE `booking_events` ADD `resource_ids` text DEFAULT '[]' NOT NULL;",
+        "ALTER TABLE `calendar_resources` ADD `public_booking` integer DEFAULT false NOT NULL;"
       ]
     }
   ]

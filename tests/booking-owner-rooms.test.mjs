@@ -18,10 +18,11 @@ const mocks = {
 };
 const collection = await loadFixture({ name: "booking-owner-collection", entryPoint: "src/app/api/booking/route.ts", mocks });
 const item = await loadFixture({ name: "booking-owner-item", entryPoint: "src/app/api/booking/[eventId]/route.ts", mocks });
+const roomsRoute = await loadFixture({ name: "booking-owner-rooms-list", entryPoint: "src/app/api/booking/rooms/route.ts", mocks });
 const { GET, POST } = await collection.import();
 const { PATCH } = await item.import();
 let sqlite;
-after(() => { sqlite?.close(); delete globalThis.own; collection.dispose(); item.dispose(); });
+after(() => { sqlite?.close(); delete globalThis.own; collection.dispose(); item.dispose(); roomsRoute.dispose(); });
 
 const body = (extra = {}) => ({ name: "Intro", slug: "intro", description: "", color: "#2563eb", hostIds: [], durationMinutes: 30, location: "", weekdays: [1, 2, 3], timeRanges: [{ startTime: "09:00", endTime: "17:00" }], timeZone: "UTC", enabled: true, ...extra });
 const send = (handler, payload, context) => handler(new Request("http://x/api/booking", { method: "POST", body: JSON.stringify(payload) }), context);
@@ -31,7 +32,7 @@ function setup({ team = true } = {}) {
 	sqlite?.close();
 	sqlite = installSqlite("own", { schema, extra: { team, user: { id: "h1", email: "h1@one.test", name: "Hana", role: "user", calendarEnabled: true } } });
 	sqlite.exec("INSERT INTO users (id, email, name, password_hash, role, created_at) VALUES ('h1', 'h1@one.test', 'Hana', 'x', 'user', 1)");
-	for (const [id, disabled] of [["r1", 0], ["r2", 0], ["off", 1]]) sqlite.exec(`INSERT INTO calendar_resources (id, name, disabled, created_at, updated_at) VALUES ('${id}', 'Room ${id}', ${disabled}, 1, 1)`);
+	for (const [id, disabled] of [["r1", 0], ["r2", 0], ["off", 1], ["priv", 0]]) sqlite.exec(`INSERT INTO calendar_resources (id, name, disabled, public_booking, created_at, updated_at) VALUES ('${id}', 'Room ${id}', ${disabled}, ${id === 'priv' ? 0 : 1}, 1, 1)`);
 }
 
 test("an owner with a Team licence creates an event type with rooms; the list gives them back", async () => {
@@ -105,4 +106,31 @@ test("a type whose stored rooms cannot be read is not silently reset by a save t
 	assert.deepEqual(stored(), ["garbage"], "nothing was written");
 	assert.equal((await send(PATCH, body({ resourceIds: ["r2"] }), context)).status, 200);
 	assert.deepEqual(stored(), ['["r2"]']);
+});
+
+test("a room the administrator has not opened to public booking pages cannot be newly attached", async () => {
+	setup();
+	const refused = await send(POST, body({ resourceIds: ["priv"] }));
+	assert.equal(refused.status, 400);
+	assert.match((await refused.json()).error, /public booking pages/);
+	assert.deepEqual(stored(), []);
+});
+
+test("one already attached stays when the switch is turned off, can be removed, and a save naming it again is kept", async () => {
+	setup();
+	const created = await (await send(POST, body({ resourceIds: ["r1"] }))).json();
+	const context = { params: Promise.resolve({ eventId: created.event.id }) };
+	sqlite.exec("UPDATE calendar_resources SET public_booking = 0 WHERE id = 'r1'");
+	assert.equal((await send(PATCH, body({ resourceIds: ["r1"], name: "Renamed" }), context)).status, 200);
+	assert.equal((await send(PATCH, body({ resourceIds: [] }), context)).status, 200);
+});
+
+test("the owner's room list shows every room with what it can be used for, so a room that is off is labelled as off", async () => {
+	setup();
+	sqlite.exec("UPDATE calendar_resources SET location = 'Floor 2'");
+	const { GET: rooms } = await roomsRoute.import();
+	const { rooms: list, canBook } = await (await rooms(new Request("http://x/api/booking/rooms"))).json();
+	assert.equal(canBook, true);
+	assert.deepEqual(list.map((room) => [room.id, room.state]).sort(), [["off", "off"], ["priv", "private"], ["r1", "available"], ["r2", "available"]]);
+	assert.deepEqual(Object.keys(list[0]).sort(), ["capacity", "id", "kind", "location", "name", "state"]);
 });

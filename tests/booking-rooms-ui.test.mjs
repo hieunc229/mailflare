@@ -23,7 +23,7 @@ const noop = () => {};
 const form = (extra = {}) => ({ ...emptyBookingForm("UTC", "h1"), name: "Intro", slug: "intro", ...extra });
 const render = (props = {}) => renderToStaticMarkup(createElement(BookingEditor, {
 	form: form(), open: true, editingId: "book_1", username: "hana", hosts: [{ id: "h1", name: "Hana", email: "h@x.test" }], canManageHosts: false, currentUserId: "h1", saving: false,
-	roomStore: { rooms, canBook: true, state: "ready", shown: [] }, onRetryRooms: noop, onChange: noop, onClose: noop, onSave: noop, onDelete: noop, onToggleEnabled: noop, onClosed: noop, ...props,
+	roomStore: { rooms: rooms.map((room) => ({ ...room, state: "available" })), canBook: true, state: "ready" }, onRetryRooms: noop, onChange: noop, onClose: noop, onSave: noop, onDelete: noop, onToggleEnabled: noop, onClosed: noop, ...props,
 }));
 
 test("a new form has no rooms, and an event type's saved list becomes the form's", () => {
@@ -43,39 +43,55 @@ test("the editor has a Rooms section when rooms exist, summarised as none until 
 
 test("chosen rooms are listed by name; a room that no longer exists is said so rather than hidden", () => {
 	assert.match(render({ form: form({ resourceIds: ["r1", "r2"] }) }), /Reserves Boardroom, Annex/);
-	assert.match(render({ form: form({ resourceIds: ["gone"] }), roomStore: { rooms: [], canBook: true, state: "ready", shown: [] } }), /Reserves A room that no longer exists/);
+	assert.match(render({ form: form({ resourceIds: ["gone"] }), roomStore: { rooms: [], canBook: true, state: "ready" } }), /Reserves A room that no longer exists/);
 });
 
 test("while the room list is loading or failed, a chosen room is not called deleted", () => {
 	for (const state of ["loading", "error"]) {
-		const html = render({ form: form({ resourceIds: ["r1"] }), roomStore: { rooms: [], canBook: false, state, shown: [] } });
+		const html = render({ form: form({ resourceIds: ["r1"] }), roomStore: { rooms: [], canBook: false, state } });
 		assert.doesNotMatch(html, /no longer exists/, state);
 		assert.doesNotMatch(html, /turned off or deleted/, state);
 		assert.match(html, state === "error" ? /Rooms could not be loaded/ : /Loading rooms/, state);
 	}
 });
 
-test("a chosen room that is turned off or deleted warns that the page offers no times, whether or not the section is open", () => {
+const withState = (state) => rooms.map((room) => ({ ...room, state }));
+const described = (html) => { const id = /aria-describedby="([^"]+)"/.exec(html)?.[1]; return id && new RegExp(`<p id="${id.replace(/:/g, ":")}"[^>]*>(?:<svg.*?</svg>)?([^<]*)</p>`).exec(html)?.[1]; };
+
+test("a chosen room that is turned off or deleted is explained in text the Rooms heading is described by (not a standing alert)", () => {
 	const html = render({ form: form({ resourceIds: ["r1", "gone"] }) });
-	assert.match(html, /role="alert"[^>]*>.*?<\/svg>A room here is turned off or deleted/);
-	assert.doesNotMatch(render({ form: form({ resourceIds: ["r1"] }) }), /turned off or deleted/);
+	assert.match(described(html) ?? "", /A room here is turned off or deleted/);
+	assert.doesNotMatch(html, /role="alert"/);
+	assert.equal(described(render({ form: form({ resourceIds: ["r1"] }) })), undefined);
 });
 
-test("rooms chosen without a Team licence warn that the page offers no times", () => {
-	assert.match(render({ form: form({ resourceIds: ["r1"] }), roomStore: { rooms, canBook: false, state: "ready", shown: [] } }), /role="alert"[^>]*>.*?<\/svg>Booking rooms needs a Team licence/);
-	assert.doesNotMatch(render({ form: form({ resourceIds: ["r1"] }) }), /needs a Team licence/);
+test("a room that is off is labelled turned off, one closed to public pages says so, only a deleted one is called removed", () => {
+	const html = render({ form: form({ resourceIds: ["r1", "r2", "gone"] }), roomStore: { rooms: [{ ...rooms[0], state: "off" }, { ...rooms[1], state: "private" }], canBook: true, state: "ready" } });
+	assert.match(html, /Boardroom \(turned off\)/);
+	assert.match(html, /Annex \(not open to public booking pages\)/);
+	assert.match(html, /A room that no longer exists/);
+	assert.match(described(html) ?? "", /turned off or deleted/);
+});
+
+test("rooms closed to public booking pages are not offered, and warn when already chosen", () => {
+	const html = render({ form: form({ resourceIds: ["r1"] }), roomStore: { rooms: withState("private"), canBook: true, state: "ready" } });
+	assert.match(described(html) ?? "", /no longer open to public booking pages/);
+});
+
+test("rooms chosen without a Team licence are explained too", () => {
+	assert.match(described(render({ form: form({ resourceIds: ["r1"] }), roomStore: { rooms: withState("available"), canBook: false, state: "ready" } })) ?? "", /Booking rooms needs a Team licence/);
 });
 
 test("with no room in the installation and none chosen the section is absent", () => {
-	assert.doesNotMatch(render({ roomStore: { rooms: [], canBook: false, state: "ready", shown: [] } }), /<span>Rooms<\/span>/);
+	assert.doesNotMatch(render({ roomStore: { rooms: [], canBook: false, state: "ready" } }), /<span>Rooms<\/span>/);
 });
 
 test("a failed room list shows the section so it can be retried", () => {
-	assert.match(render({ roomStore: { rooms: [], canBook: false, state: "error", shown: [] } }), /<span>Rooms<\/span>/);
+	assert.match(render({ roomStore: { rooms: [], canBook: false, state: "error" } }), /<span>Rooms<\/span>/);
 });
 
 const catalogs = [["en", en], ...readdirSync(new URL("../public/locales", import.meta.url)).filter((file) => file.endsWith(".json")).map((file) => [file, read(`public/locales/${file}`)])];
-const KEYS = ["booking.editor.rooms", "booking.editor.roomsHint", "booking.editor.roomsNone", "booking.editor.roomsSummary", "booking.editor.roomsLoading", "booking.editor.roomsOff", "booking.editor.roomsNeedTeam", "calendar.rooms.notLoaded"];
+const KEYS = ["booking.editor.rooms", "booking.editor.roomsHint", "booking.editor.roomsNone", "booking.editor.roomsSummary", "booking.editor.roomsLoading", "booking.editor.roomsOff", "booking.editor.roomsNeedTeam", "calendar.rooms.notLoaded", "booking.editor.roomTurnedOff", "booking.editor.roomNotPublic", "booking.editor.roomsPrivate", "booking.editor.statusOff", "booking.editor.statusPrivate"];
 
 test("every catalog (34) carries the booking rooms strings, in English, with the same placeholders", () => {
 	assert.equal(catalogs.length, 34);

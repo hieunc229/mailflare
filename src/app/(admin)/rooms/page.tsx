@@ -42,6 +42,12 @@ export default function RoomsPage() {
 		onSuccess: () => { setTarget(null); setError(""); void refresh(); },
 		onError: (failure) => setError(t((failure instanceof RoomsError ? failure.key : "rooms.saveFailed") as never)),
 	});
+	// A room is opened to (or closed to) public booking pages with its own switch and request: opening needs a Team licence, closing never does.
+	const publicBooking = useMutation({
+		mutationFn: ({ room, value }: { room: Room; value: boolean }) => send("PATCH", { id: room.id, publicBooking: value }, "save"),
+		onSuccess: () => { setNotice(""); void refresh(); },
+		onError: (failure) => setNotice(t((failure instanceof RoomsError ? failure.key : "rooms.saveFailed") as never)),
+	});
 	const remove = useMutation({
 		mutationFn: async (room: Room) => {
 			if (!(await confirmDestructive(t("rooms.deleteConfirm", { name: room.name })))) return;
@@ -58,7 +64,7 @@ export default function RoomsPage() {
 	return (
 		<>
 			<RoomsView state={isLoading ? "loading" : isError ? "error" : "ready"} rooms={data?.resources ?? []} available={data?.available ?? false} notice={notice} deleting={remove.isPending}
-				onAdd={() => { setError(""); setTarget("new"); }} onEdit={(room) => { setError(""); setTarget(room); }} onDelete={(room) => remove.mutate(room)} onRetry={() => void refetch()} />
+				onAdd={() => { setError(""); setTarget("new"); }} onEdit={(room) => { setError(""); setTarget(room); }} onDelete={(room) => remove.mutate(room)} onRetry={() => void refetch()} onPublicBooking={(room, value) => publicBooking.mutate({ room, value })} />
 			<RoomDialog target={target} saving={save.isPending} error={error} onClose={() => setTarget(null)} onSave={(body, id) => save.mutate({ body, id })} />
 		</>
 	);

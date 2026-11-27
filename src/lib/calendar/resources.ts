@@ -19,10 +19,10 @@ const MAX_REPORTED_EVENTS = 200;
 const IDS_CHUNK = 90;
 
 const fail = (status: ResourceFailure["status"], error: string, code?: ResourceFailure["code"]): ResourceFailure => ({ ok: false, status, error, ...(code ? { code } : {}) });
-const select = { id: calendarResources.id, name: calendarResources.name, kind: calendarResources.kind, capacity: calendarResources.capacity, location: calendarResources.location, description: calendarResources.description, disabled: calendarResources.disabled };
+const select = { id: calendarResources.id, name: calendarResources.name, kind: calendarResources.kind, capacity: calendarResources.capacity, location: calendarResources.location, description: calendarResources.description, disabled: calendarResources.disabled, publicBooking: calendarResources.publicBooking };
 const hasOwn = (body: Record<string, unknown>, key: string) => Object.prototype.hasOwnProperty.call(body, key);
 
-type Fields = Partial<Pick<ResourceSummary, "name" | "kind" | "capacity" | "location" | "description" | "disabled">>;
+type Fields = Partial<Pick<ResourceSummary, "name" | "kind" | "capacity" | "location" | "description" | "disabled" | "publicBooking">>;
 
 /** The fields a request names, checked and trimmed. A field left out stays out (a create fills the defaults, an update keeps the stored value). */
 function parseFields(body: Record<string, unknown>): Fields | ResourceFailure {
@@ -50,6 +50,10 @@ function parseFields(body: Record<string, unknown>): Fields | ResourceFailure {
 		if (typeof body.disabled !== "boolean") return fail(400, "disabled is true or false");
 		fields.disabled = body.disabled;
 	}
+	if (hasOwn(body, "publicBooking")) {
+		if (typeof body.publicBooking !== "boolean") return fail(400, "publicBooking is true or false");
+		fields.publicBooking = body.publicBooking;
+	}
 	return fields;
 }
 
@@ -73,7 +77,7 @@ export async function createResource(db: Db, actorId: string, body: Record<strin
 	if (Number((await db.select({ n: count() }).from(calendarResources))[0].n) >= MAX_RESOURCES) return fail(409, `An installation can have up to ${MAX_RESOURCES} rooms and resources`, "RESOURCE_LIMIT");
 	if (await nameTaken(db, fields.name!)) return fail(409, "A room or resource with that name already exists", "NAME_TAKEN");
 	const now = new Date();
-	const resource: ResourceSummary = { id: newId("res"), name: fields.name!, kind: fields.kind ?? "room", capacity: fields.capacity ?? null, location: fields.location ?? "", description: fields.description ?? "", disabled: fields.disabled ?? false };
+	const resource: ResourceSummary = { id: newId("res"), name: fields.name!, kind: fields.kind ?? "room", capacity: fields.capacity ?? null, location: fields.location ?? "", description: fields.description ?? "", disabled: fields.disabled ?? false, publicBooking: fields.publicBooking ?? false };
 	try { await db.insert(calendarResources).values({ ...resource, createdByUserId: actorId, createdAt: now, updatedAt: now }); } catch (error) {
 		if (isUniqueConstraintError(error)) return fail(409, "A room or resource with that name already exists", "NAME_TAKEN");
 		throw error;

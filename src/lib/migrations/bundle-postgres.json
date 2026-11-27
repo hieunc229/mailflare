@@ -638,7 +638,8 @@
     {
       "name": "0033_booking_event_resources.sql",
       "statements": [
-        "ALTER TABLE \"booking_events\" ADD COLUMN \"resource_ids\" text DEFAULT '[]' NOT NULL;"
+        "ALTER TABLE \"booking_events\" ADD COLUMN \"resource_ids\" text DEFAULT '[]' NOT NULL;",
+        "ALTER TABLE \"calendar_resources\" ADD COLUMN \"public_booking\" boolean DEFAULT false NOT NULL;"
       ]
     }
   ]
