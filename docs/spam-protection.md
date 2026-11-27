@@ -1,10 +1,10 @@
 # Spam protection
 
-Mailflare analyzes stored incoming messages locally. The filter combines trusted authentication results, sender relationships, mailbox-scoped reputation, bounded Bayesian token learning, URL checks, message structure, and attachment metadata. Message bodies are never sent to an external service. Optional lookups do send the sender's IP address and the sender and link domains: Spamhaus DQS (with your key), abuse.ch URLhaus (with your key) and, unless switched off under **Admin → Spam filter**, domain-age queries to rdap.org. Redirects from these lookups are followed only to public https hosts.
+Stored incoming messages are analyzed locally. The filter combines trusted authentication results, sender relationships, mailbox-scoped reputation, bounded Bayesian token learning, URL checks, message structure, and attachment metadata. Message bodies are never sent to an external service. Optional lookups do send the sender's IP address and the sender and link domains: Spamhaus DQS (with your key), abuse.ch URLhaus (with your key) and, unless switched off under **Admin → Spam filter**, domain-age queries to rdap.org. Redirects from these lookups are followed only to public https hosts.
 
 Scores range from 0 to 100. Messages scoring 55 or higher move to Spam by default (see **Strictness** below).
 
-A passing SPF, DKIM or DMARC result only proves that mail came from the domain it claims, and a throwaway domain passes for its own mail. Passes therefore lower the score in full only for senders you have a relationship with: a manually saved contact, an address you have written to, a sender or domain you have repeatedly marked as legitimate, or an address that has already written to the mailbox at least twice without being reported as spam. For a first-time sender a pass counts for half (at most 7 points instead of 14), while a failure still adds its full score. A first-time sender (no saved contact, and no earlier message from that exact address) that pitches search-engine or traffic services for your own website (it names your domain, matches at least two typical SEO sales phrases, is not a reply and has no unsubscribe header) also gets a +45 signal.
+A passing SPF, DKIM or DMARC result only proves mail came from the claimed domain; a throwaway domain passes for its own mail. Passes therefore lower the score in full only for senders you have a relationship with: a manually saved contact, an address you have written to, a sender or domain you have repeatedly marked as legitimate, or an address that has already written to the mailbox at least twice without being reported as spam. For a first-time sender a pass counts for half (at most 7 points instead of 14), while a failure still adds its full score. A first-time sender (no saved contact, and no earlier message from that exact address) that pitches search-engine or traffic services for your own website (it names your domain, matches at least two typical SEO sales phrases, is not a reply and has no unsubscribe header) also gets a +45 signal.
 
 Scores from 40 up to your Spam threshold (54 at the default Strict level, 69 at Normal, 84 at Relaxed) are recorded as suspicious but remain in their normal Inbox or custom folder. Analysis failures also deliver normally. Automatic replies and new-message notifications are suppressed for messages placed in Spam.
 
@@ -16,13 +16,13 @@ Use **Report spam** to train a message as spam. Use **Not spam** from the Spam f
 
 Learning is scoped to the message's mailbox, only explicit user feedback trains the classifier, and changing a decision reverses the previous training first.
 
-Mailflare accepts mail before this analysis. Forward-only routing occurs before stored-message filtering and is outside the filter's v1 scope.
+Mail is accepted before analysis. Forward-only routing happens before stored-message filtering and is outside the filter's v1 scope.
 
 ## Rules for newsletters and promotional mail
 
-Routing rules can match on **Newsletter or promotional mail** instead of text. One rule is enough to move all such mail to a folder, Spam or Trash, or to forward it with a kept copy. Pick it in the rule's field list under **Settings → Inbox** (mailbox rules) or **Domain routing**; there is no value to enter.
+Routing rules can match **Newsletter or promotional mail** instead of text: one rule moves all such mail to a folder, Spam or Trash, or forwards it with a kept copy. Pick it in the rule's field list under **Settings → Inbox** (mailbox rules) or **Domain routing**; no value to enter.
 
-The condition is usually newsletters and marketing mail, but some notifications (for example GitHub or ticketing tools) carry the same headers and match too. Because a match can be wrong, these rules are limited to actions that keep the message: a folder, Spam, Trash, or a forward that keeps a copy. Reject and forwarding without a copy are refused, in the interface and by the API.
+Matches are mostly newsletters and marketing, but some notifications (GitHub, ticketing tools) carry the same headers and match too. Because a match can be wrong, rules are limited to actions that keep the message: a folder, Spam, Trash, or a forward that keeps a copy. Reject and forwarding without a copy are refused, in the interface and by the API.
 
 Detection reads headers only, so it works the same for mail received through Cloudflare, SMTP, Resend and SES. A message counts when it has any of:
 
