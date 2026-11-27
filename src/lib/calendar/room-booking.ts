@@ -16,7 +16,7 @@ export const ROOM_MAX_OCCURRENCES = 500;
 export const MAX_CONFLICT_DATES = 10;
 /** Tries before a booking gives up on winning the room and is declined. */
 export const MAX_ROOM_ATTEMPTS = 5;
-/** Work the check may spend reading one room's other bookings: the same limit as one person's free/busy. */
+/** Work one save may spend reading its rooms' other bookings, in total: the same limit as one person's free/busy. */
 export const ROOM_CHECK_BUDGET = 20_000;
 const DAY = 86_400_000;
 
@@ -52,10 +52,10 @@ function clashes(mine: BusyInterval[], others: BusyInterval[]): number[] {
  * bookings, then writes in one batch whose first statements swap the token for a fresh one only if it is still the one read, and
  * whose guard fails the whole batch when the swap matched nothing. Whoever writes a booking for a room first changes the token,
  * so a second booking that read before it cannot commit; it reads again, sees the winner, and is declined. Every writer that
- * changes a room's bookings goes through here, so every change moves the token. A driver that cannot run a batch as one
- * transaction (Neon over HTTP) can still let two writers interleave, so after writing, an accepted booking reads the room once
- * more for an earlier overlapping booking (D-8) and gives way to it. After `MAX_ROOM_ATTEMPTS` lost races the booking is declined
- * without a clash date: never accepted unchecked.
+ * changes a room's bookings goes through here, so every change moves the token. Only rooms that end up accepted are swapped. A
+ * driver that cannot run a batch as one transaction (Neon over HTTP) can still let two writers interleave, so there an accepted
+ * booking reads the room once more after writing and gives way to any overlapping accepted booking (D-8, failing closed: both
+ * may decline). After `MAX_ROOM_ATTEMPTS` lost races the booking is declined without a clash date: never accepted unchecked.
  */
 export async function bookRooms(db: Db, eventId: string, resourceIds: string[], options: { now?: Date } = {}): Promise<BookingResult> {
 	const [row] = await db.select().from(calendarEvents).where(eq(calendarEvents.id, eventId)).limit(1);
@@ -76,20 +76,18 @@ export async function bookRooms(db: Db, eventId: string, resourceIds: string[], 
 	const spanStart = mine.length ? mine[0][0] : from;
 	const spanEnd = mine.length ? mine[mine.length - 1][1] : from;
 	const outcome = (resourceId: string, status: RoomOutcome["status"], found: number[]): RoomOutcome => ({ resourceId, status, conflictAt: found.length ? new Date(found[0]) : null, occurrences: found.slice(0, MAX_CONFLICT_DATES).map((at) => new Date(at).toISOString()) });
-	/** One batch: the guards, then this event's bookings replaced. Returns the rows written, to compare against later bookings. */
+	/** One batch: the guards, then this event's bookings replaced. */
 	const write = async (rooms: RoomOutcome[], guards: unknown[]) => {
-		// Stored in whole seconds; compare against what is stored.
-		const created = new Date(Math.floor(Date.now() / 1000) * 1000);
+		const created = new Date();
 		const rows = rooms.map((room) => ({ id: newId("crb"), resourceId: room.resourceId, eventId, status: room.status, conflictAt: room.conflictAt, createdAt: created }));
 		await db.batch([...guards, db.delete(calendarResourceBookings).where(eq(calendarResourceBookings.eventId, eventId)), ...(rows.length ? [db.insert(calendarResourceBookings).values(rows)] : [])] as never);
-		return rows;
 	};
 	for (let attempt = 0; attempt < MAX_ROOM_ATTEMPTS; attempt += 1) {
 		// The token first: anything written after this read moves it, so a stale check cannot commit.
 		const tokens = new Map((await db.select({ id: calendarResources.id, token: calendarResources.bookingToken }).from(calendarResources).where(inArray(calendarResources.id, wanted))).map((room) => [room.id, room.token]));
 		const ids = wanted.filter((id) => tokens.has(id));
 		if (!ids.length) { await write([], []); return { rooms: [] }; }
-		const others = mine.length ? await roomBusyIntervals(db, ids, new Date(spanStart), new Date(spanEnd), { excludeEventId: eventId, budget: ROOM_CHECK_BUDGET }) : new Map<string, RoomBusy>();
+		const others = mine.length ? await roomBusyIntervals(db, ids, new Date(spanStart), new Date(spanEnd), { excludeEventId: eventId, budget: ROOM_CHECK_BUDGET, roomCap: ROOM_CHECK_BUDGET }) : new Map<string, RoomBusy>();
 		const rooms = ids.map((id) => {
 			const taken = others.get(id);
 			// A room whose bookings could not all be read cannot be promised: declined, with no date.
@@ -97,26 +95,30 @@ export async function bookRooms(db: Db, eventId: string, resourceIds: string[], 
 			const found = taken ? clashes(mine, taken.busy) : [];
 			return outcome(id, found.length ? "declined" : "accepted", found);
 		});
-		const guards = ids.flatMap((id) => {
+		// Only a room that ends up accepted needs its token swapped: a decline holds nothing, so a stale one is harmless.
+		const guards = rooms.filter((room) => room.status === "accepted").flatMap(({ resourceId: id }) => {
 			const next = crypto.randomUUID();
 			return [
 				db.update(calendarResources).set({ bookingToken: next }).where(and(eq(calendarResources.id, id), eq(calendarResources.bookingToken, tokens.get(id)!))),
 				...requireGuard(db, sql`not exists (select 1 from ${calendarResources} where ${and(eq(calendarResources.id, id), eq(calendarResources.bookingToken, next))})`),
 			];
 		});
-		let written: Awaited<ReturnType<typeof write>>;
-		try { written = await write(rooms, guards); } catch (error) {
+		try { await write(rooms, guards); } catch (error) {
 			if (!isUniqueConstraintError(error)) throw error;
+			// Two saves that lost to each other would lose again together: wait a little, differently each time.
+			await new Promise((resolve) => setTimeout(resolve, Math.random() * 20 * (attempt + 1)));
 			continue;
 		}
-		// D-8's re-read: a booking made before this one that overlaps it wins, whatever the driver let through.
+		// A driver whose batch is not one transaction (Neon over HTTP) can let two writers interleave between the swap and the insert, and
+		// both end accepted. Such a driver re-reads once after writing and an accepted booking gives way to ANY overlapping accepted one
+		// of another event, whichever came first: when two slipped in, the later check sees the other and declines, and both may decline.
+		// That fails closed. Atomic drivers (D1, SQLite, PostgreSQL and MySQL over a connection) skip it.
 		const accepted = rooms.filter((room) => room.status === "accepted" && mine.length);
-		if (accepted.length) {
-			const before = new Map(written.filter((booking) => booking.status === "accepted").map((booking) => [booking.resourceId, { createdAt: booking.createdAt, id: booking.id }] as const));
-			const earlier = await roomBusyIntervals(db, accepted.map((room) => room.resourceId), new Date(spanStart), new Date(spanEnd), { excludeEventId: eventId, budget: ROOM_CHECK_BUDGET, before });
+		if (accepted.length && (db as { batchIsAtomic?: boolean }).batchIsAtomic === false) {
+			const rivals = await roomBusyIntervals(db, accepted.map((room) => room.resourceId), new Date(spanStart), new Date(spanEnd), { excludeEventId: eventId, budget: ROOM_CHECK_BUDGET, roomCap: ROOM_CHECK_BUDGET });
 			for (const room of accepted) {
-				const taken = earlier.get(room.resourceId);
-				const found = taken ? (taken.truncated ? [] : clashes(mine, taken.busy)) : [];
+				const taken = rivals.get(room.resourceId);
+				const found = taken && !taken.truncated ? clashes(mine, taken.busy) : [];
 				if (!found.length && !taken?.truncated) continue;
 				Object.assign(room, outcome(room.resourceId, "declined", found));
 				await db.update(calendarResourceBookings).set({ status: "declined", conflictAt: room.conflictAt }).where(and(eq(calendarResourceBookings.eventId, eventId), eq(calendarResourceBookings.resourceId, room.resourceId)));
