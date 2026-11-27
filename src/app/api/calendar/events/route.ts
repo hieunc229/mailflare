@@ -22,6 +22,8 @@ import { resolveCalendarForWrite } from "@/lib/calendar/shares";
 import { createAuditLog } from "@/lib/mailboxes/audit";
 import { resolveBookableRooms } from "@/lib/calendar/resources";
 import { listRoomEvents, MAX_SCHEDULE_ROOMS, roomsByEvent } from "@/lib/calendar/room-schedule";
+import { roomsBookable } from "@/lib/calendar/room-licence";
+import { recheckWaitingOnLoad } from "@/lib/calendar/room-save";
 import { bookAndSummarize, invitationLocation, roomResponse, type RoomsSummary } from "@/lib/calendar/room-save";
 import { getLicenseEntitlements } from "@/lib/licenses/service";
 
@@ -36,15 +38,18 @@ export async function GET(request: Request) {
 	const db = getDb(env);
 	const roomIds = url.searchParams.getAll("resourceIds").flatMap((value) => value.split(",")).map((value) => value.trim()).filter(Boolean);
 	if (new Set(roomIds).size > MAX_SCHEDULE_ROOMS) return NextResponse.json({ error: `Ask for at most ${MAX_SCHEDULE_ROOMS} rooms at a time` }, { status: 400 });
+	// Bookings left waiting for their check are settled a few at a time as their owner loads the calendar (before the list is read, so it shows the result); a small count lets the page say so.
+	const roomsPending = await recheckWaitingOnLoad(db, user.id, roomsBookable(env));
+	const extra = roomsPending > 0 ? { roomsPending } : {};
 	const visible = await listVisibleEvents(db, user, { start, end }, requested);
 	// An event shows its rooms to whoever can read it in full; a redacted one hides them with the rest.
 	// Rooms belong to the series: a moved occurrence (an override row) reports its master's.
 	const seriesOf = (event: (typeof visible)[number]) => event.davObjectId ?? event.id;
 	const booked = await roomsByEvent(db, [...new Set(visible.filter((event) => !(event as { redacted?: boolean }).redacted).map(seriesOf))]);
 	const events = visible.map((event) => !(event as { redacted?: boolean }).redacted && booked.has(seriesOf(event)) ? { ...event, rooms: booked.get(seriesOf(event)) } : event);
-	if (!roomIds.length) return NextResponse.json({ events });
+	if (!roomIds.length) return NextResponse.json({ events, ...extra });
 	const schedule = await listRoomEvents(db, user, roomIds, { start, end });
-	return NextResponse.json({ events, roomEvents: schedule.events, ...(schedule.truncated ? { roomEventsTruncated: true } : {}) });
+	return NextResponse.json({ events, ...extra, roomEvents: schedule.events, ...(schedule.truncated ? { roomEventsTruncated: true } : {}) });
 }
 
 export async function POST(request: Request) {

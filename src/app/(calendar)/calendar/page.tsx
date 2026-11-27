@@ -117,6 +117,8 @@ export default function CalendarPage() {
   const [roomIds, setRoomIds] = useState<string[]>([]);
   // The rooms switched on in the sidebar have more bookings in this period than one answer carries.
   const [roomsTruncated, setRoomsTruncated] = useState(false);
+  // Bookings that a change left waiting for their check: the server settles a few with each load, so this counts down.
+  const [roomsPending, setRoomsPending] = useState(0);
   const roomStore = useRoomState();
   const shownRoomsKey = activeShownRooms(roomStore.shown, roomStore.rooms).join(",");
   // The rooms chosen for the event, by name, for the availability rows below the guests.
@@ -200,7 +202,7 @@ export default function CalendarPage() {
     void authFetch(`/api/calendar/events?start=${start.toISOString()}&end=${end.toISOString()}${asked}`)
       .then((response) => {
         if (!response.ok) throw new Error(t("calendar.loadFailed"));
-        return response.json() as Promise<{ events?: Parameters<typeof expandCalendarEvents>[0]; roomEvents?: RoomScheduleEvent[]; roomEventsTruncated?: boolean }>;
+        return response.json() as Promise<{ events?: Parameters<typeof expandCalendarEvents>[0]; roomEvents?: RoomScheduleEvent[]; roomEventsTruncated?: boolean; roomsPending?: number }>;
       })
       .then((data) => {
         if (!active) return;
@@ -208,6 +210,7 @@ export default function CalendarPage() {
         const booked = roomScheduleEvents(data.roomEvents ?? [], roomStore.rooms, new Set(own.map((event) => event.id)), t("calendar.busy"));
         setEvents(expandCalendarEvents([...own, ...booked], start, end));
         setRoomsTruncated(data.roomEventsTruncated === true);
+        setRoomsPending(data.roomsPending ?? 0);
       })
       .catch(() => { if (active) toast.error(t("calendar.loadFailed")); })
       .finally(() => { if (active) setLoading(false); });
@@ -598,6 +601,7 @@ export default function CalendarPage() {
       <UpcomingSidebar events={events} onSelect={editEvent} />
 
       <section aria-busy={loading} className="min-h-0 min-w-0 flex-1 rounded-t-3xl bg-white flex flex-col overflow-hidden">
+        {roomsPending > 0 && <p role="status" className="shrink-0 bg-blue-50 px-4 py-2 text-xs text-blue-900">{t("calendar.rooms.pending", { count: roomsPending })}</p>}
         {roomsTruncated && shownRoomsKey && <p role="status" className="shrink-0 bg-amber-50 px-4 py-2 text-xs text-amber-900">{t("calendar.rooms.truncated")}</p>}
         <div className="min-h-0 min-w-0 flex-1 overflow-auto overscroll-contain">
           {view === "month" ? (

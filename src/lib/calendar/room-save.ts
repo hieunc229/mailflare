@@ -1,4 +1,4 @@
-import { and, eq, inArray } from "drizzle-orm";
+import { and, count, eq, inArray } from "drizzle-orm";
 import type { getDb } from "@/db";
 import { calendarEvents, calendarResourceBookings, calendarResources } from "@/db/schema";
 import { bookRooms, PENDING_RECHECK } from "./room-booking";
@@ -48,11 +48,33 @@ export const declineBookingsOfStatement = (db: Db, eventIds: Parameters<typeof i
 /** How many events a request re-checks after declining a whole set of them (see `declineBookingsOfStatement`); the rest stay declined and waiting, which fails closed. */
 export const RECHECKED_IN_REQUEST = 20;
 
-/** Re-checks up to `RECHECKED_IN_REQUEST` of a user's events whose bookings are waiting for their check. */
-export async function rebookWaiting(db: Db, userId: string, canBook: () => Promise<boolean>): Promise<void> {
-	const waiting = await db.selectDistinct({ id: calendarResourceBookings.eventId }).from(calendarResourceBookings).innerJoin(calendarEvents, eq(calendarEvents.id, calendarResourceBookings.eventId))
-		.where(and(eq(calendarEvents.userId, userId), eq(calendarResourceBookings.status, "declined"), eq(calendarResourceBookings.conflictAt, PENDING_RECHECK))).limit(RECHECKED_IN_REQUEST);
+const waitingOf = (userId: string) => and(eq(calendarEvents.userId, userId), eq(calendarResourceBookings.status, "declined"), eq(calendarResourceBookings.conflictAt, PENDING_RECHECK));
+
+/** Re-checks up to `limit` of a user's events whose bookings are waiting for their check. */
+export async function rebookWaiting(db: Db, userId: string, canBook: () => Promise<boolean>, limit = RECHECKED_IN_REQUEST): Promise<void> {
+	const waiting = await db.selectDistinct({ id: calendarResourceBookings.eventId }).from(calendarResourceBookings).innerJoin(calendarEvents, eq(calendarEvents.id, calendarResourceBookings.eventId)).where(waitingOf(userId)).limit(limit);
 	if (waiting.length) await rebookEvents(db, waiting.map((row) => row.id), canBook);
+}
+
+/** Events re-checked when their owner loads the calendar: five events at most, each a bounded handful of statements, so the load stays cheap. */
+export const RECHECKED_ON_LOAD = 5;
+
+/**
+ * Settles waiting bookings lazily, for a request that loads the calendar: one cheap probe of the caller's own bookings, and only when something waits,
+ * up to `RECHECKED_ON_LOAD` events are checked and the rest counted. Bounded, and it never throws: whatever goes wrong is logged and the bookings stay declined
+ * (fail closed). Returns how many are still waiting, for a small note in the calendar.
+ */
+export async function recheckWaitingOnLoad(db: Db, userId: string, canBook: () => Promise<boolean>): Promise<number> {
+	try {
+		const waiting = await db.selectDistinct({ id: calendarResourceBookings.eventId }).from(calendarResourceBookings).innerJoin(calendarEvents, eq(calendarEvents.id, calendarResourceBookings.eventId)).where(waitingOf(userId)).limit(RECHECKED_ON_LOAD);
+		if (!waiting.length) return 0;
+		await rebookEvents(db, waiting.map((row) => row.id), canBook);
+		const [left] = await db.select({ n: count() }).from(calendarResourceBookings).innerJoin(calendarEvents, eq(calendarEvents.id, calendarResourceBookings.eventId)).where(waitingOf(userId));
+		return Number(left?.n ?? 0);
+	} catch (error) {
+		console.error("Re-checking waiting rooms failed", error);
+		return 0;
+	}
 }
 
 /**
