@@ -1,9 +1,6 @@
 # Self-hosting Mailflare (Docker)
 
-Mailflare can run as a single container on any host instead of Cloudflare
-Workers. The same code serves both; the container provides its own database
-(SQLite on a volume), blob storage (files on the same volume), job queue,
-realtime WebSocket, backup schedule and an SMTP listener for inbound mail.
+Runs as a single container on any host instead of Cloudflare Workers (same code). The container provides its own database (SQLite on a volume), blob storage (files on the same volume), job queue, realtime WebSocket, backup schedule and an SMTP listener for inbound mail.
 
 ## Quick start
 
@@ -13,30 +10,25 @@ cp .env.docker.example .env.docker      # edit: how to receive and send mail
 docker compose up -d --build
 ```
 
-Open `http://your-host:3000/setup`, create the admin account and add your
-domain. All data lives in the `mailflare-data` volume (`/data` in the
-container): the SQLite database, raw messages, attachments and backups.
+Open `http://your-host:3000/setup`, create the admin account, add your domain. All data lives in the `mailflare-data` volume (`/data`): SQLite database, raw messages, attachments, backups.
 
-Behind a reverse proxy, set `APP_URL=https://mail.example.com` so links in
-password-reset mail and the JMAP session point at the public address, and
-forward WebSocket upgrades for `/api/realtime`. Also set `TRUST_PROXY=1`:
-without it every request appears to come from the proxy's address, so login
-rate limits are shared by all users. Leave it unset when the container is
-exposed directly. Passkeys also bind to this
-origin, so they need `APP_URL` (or a direct HTTPS connection) to work.
+Behind a reverse proxy:
+
+- Set `APP_URL=https://mail.example.com` so password-reset links and the JMAP session use the public address.
+- Forward WebSocket upgrades for `/api/realtime`.
+- Set `TRUST_PROXY=1`; without it every request appears to come from the proxy, so login rate limits are shared by all users. Leave unset when exposed directly.
+- Passkeys bind to this origin, so they need `APP_URL` (or a direct HTTPS connection).
 
 ### Prebuilt image (no build)
 
-Every push to `main` publishes a multi-arch (`linux/amd64`, `linux/arm64`)
-image to `ghcr.io/hieunc229/mailflare`. Use it instead of building from source:
+Every push to `main` publishes a multi-arch (`linux/amd64`, `linux/arm64`) image to `ghcr.io/hieunc229/mailflare`:
 
 ```bash
 cp .env.docker.example .env.docker      # edit: how to receive and send mail
 docker compose -f docker-compose.image.yml up -d
 ```
 
-`docker-compose.image.yml` only needs that file and `.env.docker`; no source
-checkout. `docker-compose.yml` still builds from source.
+`docker-compose.image.yml` needs only that file and `.env.docker` (no source checkout). `docker-compose.yml` builds from source.
 
 | Tag | Meaning |
 | --- | --- |
@@ -46,90 +38,48 @@ checkout. `docker-compose.yml` still builds from source.
 
 **Upgrade (NAS or server).**
 
-1. Back up: copy the `mailflare-data` volume, or download a backup from the
-   admin Backups page.
+1. Back up: copy the `mailflare-data` volume, or download a backup from the admin Backups page.
 2. Pull the image and recreate the container: `docker compose -f
    docker-compose.image.yml pull && docker compose -f docker-compose.image.yml up -d`.
-   On a NAS UI, pull the image and recreate the container the same way.
-3. Keep the volume and `.env.docker` as they are; they hold your data and
-   settings.
+   On a NAS UI, do the same there.
+3. Keep the volume and `.env.docker`; they hold your data and settings.
 
-Pending migrations run when the container starts, before it serves requests. A
-failed migration stops the start (the container exits with an error in
-`docker compose logs`). Migrations only move forward: to go back to an older
-image after one has been applied, pin an older `sha-` tag and restore the
-volume or backup taken in step 1.
+Pending migrations run at container start, before serving requests. A failed migration stops the start (the container exits; see `docker compose logs`). Migrations only move forward: to go back after one was applied, pin an older `sha-` tag and restore the volume or backup from step 1.
 
-Turnstile is not in the prebuilt image: its site key is fixed at build time.
-To use it, build from source with
-`docker build --build-arg NEXT_PUBLIC_TURNSTILE_SITE_KEY=<key> .` (or set the
-arg under `build:` in `docker-compose.yml`) and set `TURNSTILE_SECRET_KEY`.
+Turnstile is not in the prebuilt image (its site key is fixed at build time). Build from source with
+`docker build --build-arg NEXT_PUBLIC_TURNSTILE_SITE_KEY=<key> .` (or set the arg under `build:` in `docker-compose.yml`) and set `TURNSTILE_SECRET_KEY`.
 
 ### PWA and push notifications
 
-Mailflare can be installed as a PWA and can deliver new-mail notifications
-after the browser is closed. Generate one VAPID key pair for the installation:
+Mailflare installs as a PWA and can deliver new-mail notifications after the browser is closed. Generate one VAPID key pair per installation:
 
 ```bash
 npm run push:keys
 ```
 
-Set the printed `VAPID_PUBLIC_KEY` and `VAPID_PRIVATE_KEY` values in the
-runtime environment, plus `VAPID_SUBJECT` as either a `mailto:` contact or the
-public HTTPS URL of the installation. Keep the private key secret. Browsers
-require HTTPS for service workers and Web Push (localhost is the development
-exception). Users can then enable push under **Settings → Inbox → Notifications**.
+Set the printed `VAPID_PUBLIC_KEY` and `VAPID_PRIVATE_KEY` in the runtime environment, plus `VAPID_SUBJECT` (a `mailto:` contact or the installation's public HTTPS URL). Keep the private key secret. Browsers require HTTPS for service workers and Web Push (localhost excepted). Users enable push under **Settings → Inbox → Notifications**.
 
 ## Receiving mail
 
 Pick one; both can be on at once.
 
-**Built-in SMTP listener (default).** The container listens on port 25 and
-accepts mail for every domain you add. Point the domain's MX record at the
-host, set `MAIL_HOSTNAME` to that host's name, and make sure port 25 is
-reachable from the internet (several clouds block it by default; Hetzner and
-most VPS providers do not). The domain page in the app lists the MX, SPF and
-DMARC records to create. Domain routing rules work as on Cloudflare: reject
-rules answer the sender with a 550 during delivery, forward rules relay the
-message through your outbound SMTP.
+**Built-in SMTP listener (default).** Listens on port 25 and accepts mail for every domain you add. Point the domain's MX record at the host, set `MAIL_HOSTNAME` to the host's name, and make port 25 reachable from the internet (several clouds block it by default; Hetzner and most VPS providers do not). The app's domain page lists the MX, SPF and DMARC records to create. Routing rules work as on Cloudflare: reject rules answer the sender with a 550 during delivery; forward rules relay the message through your outbound SMTP.
 
-Optional: `SMTP_TLS_KEY` and `SMTP_TLS_CERT` (paths inside the container)
-enable STARTTLS with your own certificate. Without them STARTTLS is not
-offered, which is safe but means transport encryption depends on the sender.
+Optional: `SMTP_TLS_KEY` and `SMTP_TLS_CERT` (paths inside the container) enable STARTTLS with your own certificate. Without them STARTTLS is not offered: safe, but transport encryption depends on the sender.
 
-**Cloudflare Email Routing relay.** Keep MX on Cloudflare and deploy the
-Worker in `deploy/cloudflare-email-relay`. It posts each message to
-`/api/inbound` on your server, signed with `INBOUND_WEBHOOK_SECRET`, and acts
-on the reject or forward decision the server returns. Set
-`SMTP_INBOUND_PORT=0` if you do not want the listener at all.
+**Cloudflare Email Routing relay.** Keep MX on Cloudflare and deploy the Worker in `deploy/cloudflare-email-relay`. It posts each message to `/api/inbound` on your server, signed with `INBOUND_WEBHOOK_SECRET`, and acts on the reject or forward decision returned. Set `SMTP_INBOUND_PORT=0` to disable the listener.
 
 ## Sending mail
 
-**Any SMTP relay.** `SMTP_URL=smtps://user:pass@host:465` (or `smtp://`
-with STARTTLS). Works with your hosting provider's relay, Amazon SES,
-Postmark, Mailgun, or a Postfix you run. Set
-`SMTP_TLS_REJECT_UNAUTHORIZED=false` only for a relay with a self-signed
-certificate on a private network.
+**Any SMTP relay.** `SMTP_URL=smtps://user:pass@host:465` (or `smtp://` with STARTTLS). Works with your hosting provider's relay, Amazon SES, Postmark, Mailgun or your own Postfix. Set `SMTP_TLS_REJECT_UNAUTHORIZED=false` only for a relay with a self-signed certificate on a private network.
 
-**Cloudflare Email Sending.** `CF_ACCOUNT_ID` plus a `CF_TOKEN` with Email
-Sending: Edit. The domain must be a Cloudflare zone with Email Sending set
-up; Mailflare calls the REST API, no Workers plan needed.
+**Cloudflare Email Sending.** `CF_ACCOUNT_ID` plus a `CF_TOKEN` with Email Sending: Edit. The domain must be a Cloudflare zone with Email Sending set up; Mailflare calls the REST API, no Workers plan needed.
 
-**Resend or Amazon SES, per domain.** Instead of one global relay, each domain
-can send through Resend or SES with their APIs (no SMTP involved), and receive
-through them too, once Mailflare can manage the domain's DNS with `CF_TOKEN`.
-Add the credentials on the domain page, or set `RESEND_API_KEY` /
-`AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY` and `AWS_REGION`. Receiving
-through either needs `APP_URL` set to your public HTTPS address. See
-[Sending and receiving providers](providers.md). Using SES as a plain SMTP
-relay through `SMTP_URL`, described above, still works and needs none of this.
+**Resend or Amazon SES, per domain.** Instead of one global relay, each domain can send (and receive, once Mailflare can manage its DNS with `CF_TOKEN`) through the Resend or SES APIs, no SMTP involved. Add credentials on the domain page, or set `RESEND_API_KEY` / `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY` and `AWS_REGION`. Receiving needs `APP_URL` set to your public HTTPS address. See [Sending and receiving providers](providers.md). SES as a plain SMTP relay through `SMTP_URL` still works and needs none of this.
 
 ## Cloudflare zone management (optional)
 
-If `CF_TOKEN` can also edit DNS and Email Routing on your zones, adding a
-domain configures Email Routing and the sending subdomain automatically,
-exactly as on Workers. Without it, domains are recorded as manually managed
-and the DNS page shows what to set by hand.
+If `CF_TOKEN` can also edit DNS and Email Routing on your zones, adding a domain configures Email Routing and the sending subdomain automatically, as on Workers. Without it, domains are recorded as manually managed and the DNS page shows what to set by hand.
 
 ## Configuration reference
 
@@ -168,22 +118,14 @@ and the DNS page shows what to set by hand.
 
 ## Operations
 
-- **Backups.** The daily 02:00 UTC backup and the admin Backups page work
-  unchanged; files land under `/data/blobs/backups`. Back up the whole volume
-  for a full copy.
-- **Updates.** Pull the new image and recreate the container; migrations run
-  at start (see [Prebuilt image](#prebuilt-image-no-build)). The in-app update button is disabled on self-hosted installs.
+- **Backups.** Daily 02:00 UTC backup and the admin Backups page work unchanged; files land under `/data/blobs/backups`. Back up the whole volume for a full copy.
+- **Updates.** Pull the new image and recreate the container; migrations run at start (see [Prebuilt image](#prebuilt-image-no-build)). The in-app update button is disabled on self-hosted installs.
 - **Logs.** `docker compose logs -f mailflare`.
-- **Queues.** Jobs are held in memory and are not re-queued after a restart.
-  Inbound mail is written to the volume before it is queued, but a message
-  whose job is lost stays unparsed, and the nightly clean-up removes raw
-  inbound files that no message references after 24 hours. Scheduled and
-  undo-send mail that has not been sent when the container restarts is not
-  sent automatically.
+- **Queues.** Jobs are held in memory and not re-queued after a restart. Inbound mail is written to the volume before queuing, but a message whose job is lost stays unparsed, and the nightly clean-up removes raw inbound files no message references after 24 hours. Scheduled and undo-send mail not yet sent at restart is not sent automatically.
 
 ## Email assistant and MCP
 
-Set `AI_BASE_URL`, `AI_API_KEY`, and `AI_MODEL` in the container environment to configure the built-in assistant. These values stay on the server. Assistant chat is available by default when a provider is configured; a mailbox manager can change its writing instructions and availability through the settings button in the assistant panel. Automatic reply drafts remain off until enabled there. Auto-draft work is recorded in SQLite and retried after a restart by the local scheduler. AI failure does not reject inbound mail. Out-of-office auto-replies and AI auto-drafts are separate features; turn off out-of-office replies before enabling auto-drafts for a mailbox.
+Set `AI_BASE_URL`, `AI_API_KEY` and `AI_MODEL` in the container environment (server-only). Assistant chat is available by default once a provider is configured; a mailbox manager changes its writing instructions and availability via the settings button in the assistant panel. Automatic reply drafts stay off until enabled there. Auto-draft work is recorded in SQLite and retried after a restart by the local scheduler. AI failure does not reject inbound mail. Out-of-office auto-replies and AI auto-drafts are separate; turn off out-of-office replies before enabling auto-drafts for a mailbox.
 
 The MCP endpoint is `/mcp`. Create a key in **Settings → API keys** with **Allow MCP access** enabled, choose its mailboxes and tools, and give it to a client that supports custom HTTP headers. The endpoint uses Streamable HTTP; `request_send` gives the client a review URL, and only an authenticated Mailflare browser session can confirm delivery. MCP read and draft tools remain available when no AI model is configured.
 
@@ -195,5 +137,4 @@ npm run build:node
 MAILFLARE_RUNTIME=node NODE_ENV=production DATA_DIR=./data node dist/server.mjs
 ```
 
-Port 25 needs root or a capability (`setcap cap_net_bind_service=+ep`); use
-`SMTP_INBOUND_PORT=2525` behind a port forward otherwise.
+Port 25 needs root or a capability (`setcap cap_net_bind_service=+ep`); otherwise use `SMTP_INBOUND_PORT=2525` behind a port forward.
