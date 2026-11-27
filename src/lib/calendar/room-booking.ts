@@ -19,6 +19,11 @@ export const MAX_ROOM_ATTEMPTS = 5;
 /** Work one save may spend reading its rooms' other bookings, in total: the same limit as one person's free/busy. */
 export const ROOM_CHECK_BUDGET = 20_000;
 const DAY = 86_400_000;
+/**
+ * Marks a booking that was `accepted` and is only declined until the room step has checked it again: its clash date is the epoch. A real decline has a date
+ * (never earlier than one second after it) or none; a licence that has lapsed must keep those declined, and these it may re-check.
+ */
+export const PENDING_RECHECK = new Date(0);
 
 export type RoomOutcome = {
 	resourceId: string;
@@ -80,7 +85,7 @@ export async function bookRooms(db: Db, eventId: string, resourceIds: string[], 
 	const mine = mergeBusy([...(duration > 0 ? expandRowBusy(row, zone, from, to, ROOM_MAX_OCCURRENCES).busy : []), ...moved.filter((other) => other.id !== eventId && other.endsAt > other.startsAt).flatMap((other) => expandRowBusy(other, zone, from, to, 1).busy)]);
 	const spanStart = mine.length ? mine[0][0] : from;
 	const spanEnd = mine.length ? mine[mine.length - 1][1] : from;
-	const outcome = (resourceId: string, status: RoomOutcome["status"], found: number[]): RoomOutcome => ({ resourceId, status, conflictAt: found.length ? new Date(found[0]) : null, occurrences: found.slice(0, MAX_CONFLICT_DATES).map((at) => new Date(at).toISOString()) });
+	const outcome = (resourceId: string, status: RoomOutcome["status"], found: number[]): RoomOutcome => ({ resourceId, status, conflictAt: found.length ? new Date(Math.max(found[0], 1000)) : null, occurrences: found.slice(0, MAX_CONFLICT_DATES).map((at) => new Date(at).toISOString()) });
 	/** One batch: the guards, then this event's bookings replaced. */
 	const write = async (rooms: RoomOutcome[], guards: unknown[]) => {
 		const created = new Date();
@@ -133,7 +138,9 @@ export async function bookRooms(db: Db, eventId: string, resourceIds: string[], 
 		return { rooms: [...rooms, ...held] };
 	}
 	const known = new Set((await db.select({ id: calendarResources.id }).from(calendarResources).where(inArray(calendarResources.id, [...wanted, ...frozen]))).map((room) => room.id));
-	const rooms = [...wanted.filter((id) => known.has(id)).map((id) => outcome(id, "unconfirmed", [])), ...[...frozen].filter((id) => known.has(id)).map((id) => outcome(id, "declined", []))];
+	// A room this event held (accepted) and could not confirm again is waiting for its check, not declined for a reason.
+	const held = new Set((await db.select({ id: calendarResourceBookings.resourceId }).from(calendarResourceBookings).where(and(eq(calendarResourceBookings.eventId, eventId), eq(calendarResourceBookings.status, "accepted")))).map((row) => row.id));
+	const rooms = [...wanted.filter((id) => known.has(id)).map((id) => ({ ...outcome(id, "unconfirmed", []), conflictAt: held.has(id) ? PENDING_RECHECK : null })), ...[...frozen].filter((id) => known.has(id)).map((id) => outcome(id, "declined", []))];
 	await write(rooms, []);
 	return { rooms };
 }

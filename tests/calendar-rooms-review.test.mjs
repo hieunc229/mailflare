@@ -17,7 +17,7 @@ const mocks = {
 };
 const load = (name, entryPoint, extra = mocks) => loadFixture({ name, entryPoint, mocks: extra });
 const fixtures = [await load("room-rv-list", "src/app/api/calendar/events/route.ts"), await load("room-rv-item", "src/app/api/calendar/events/[eventId]/route.ts"), await load("room-rv-book", "src/lib/calendar/room-booking.ts", {}), await load("room-rv-save", "src/lib/calendar/room-save.ts", {}), await load("room-rv-utils", "src/app/(calendar)/calendar/room-utils.ts", {})];
-const [{ GET: listEvents, POST: createEvent }, { PATCH: patchEvent }, { bookRooms }, { bookAndSummarize, rebookEvents }, { roomSaveErrorKey }] = await Promise.all(fixtures.map((fixture) => fixture.import()));
+const [{ GET: listEvents, POST: createEvent }, { PATCH: patchEvent }, { bookRooms, MAX_ROOM_ATTEMPTS }, { bookAndSummarize, rebookEvents }, { roomSaveErrorKey }] = await Promise.all(fixtures.map((fixture) => fixture.import()));
 let sqlite;
 let beforeBatch = null;
 after(() => { sqlite?.close(); delete globalThis.roomRv; for (const fixture of fixtures) fixture.dispose(); });
@@ -197,4 +197,34 @@ test("a moved occurrence of a private series is private in a room's schedule, wh
 	assert.ok(body.roomEvents.length >= 2);
 	assert.equal(JSON.stringify(body.roomEvents).includes("Layoffs"), false);
 	assert.ok(body.roomEvents.every((item) => item.redacted));
+});
+
+test("m-1: a real clash date is never the epoch, which marks a booking waiting for its check", async () => {
+	const db = setup();
+	const early = event("u2", 0, 3_600_000);
+	const mine = event("u1", 0, 3_600_000);
+	await bookRooms(db, early, ["r1"], { now: new Date(0) });
+	const result = await bookRooms(db, mine, ["r1"], { now: new Date(0) });
+	assert.equal(result.rooms[0].status, "declined");
+	assert.ok(result.rooms[0].conflictAt.getTime() >= 1000, "clamped to one second");
+	assert.equal(sqlite.prepare("SELECT conflict_at FROM calendar_resource_bookings WHERE event_id = ?").get(mine).conflict_at, 1, "stored as one second, not 0");
+});
+
+test("m-2: a booking that was accepted and then lost every retry is marked as waiting for its check, not given a dateless decline; the answer shows no date", async () => {
+	const db = setup();
+	const a = event("u1", at(0, 9), at(0, 10));
+	await book(db, a, ["r1"]);
+	assert.deepEqual(bookingsOf(a), [["r1", "accepted"]]);
+	let attempts = 0;
+	beforeBatch = (database) => { attempts += 1; database.exec(`UPDATE calendar_resources SET booking_token = 'moved-${attempts}' WHERE id = 'r1'`); };
+	const summary = await bookAndSummarize(db, a, ["r1"]);
+	assert.equal(attempts, MAX_ROOM_ATTEMPTS);
+	assert.deepEqual(summary.rooms.map((room) => [room.status, room.conflictAt]), [["unconfirmed", null]]);
+	assert.equal(sqlite.prepare("SELECT status, conflict_at FROM calendar_resource_bookings WHERE event_id = ?").get(a).conflict_at, 0, "pending marker");
+	// A room that was never accepted gets the plain decline.
+	beforeBatch = null;
+	const fresh = event("u2", at(0, 12), at(0, 13));
+	beforeBatch = (database) => { database.exec(`UPDATE calendar_resources SET booking_token = 'again-${Math.random()}' WHERE id = 'r2'`); };
+	await bookAndSummarize(db, fresh, ["r2"]);
+	assert.equal(sqlite.prepare("SELECT conflict_at FROM calendar_resource_bookings WHERE event_id = ?").get(fresh).conflict_at, null);
 });
