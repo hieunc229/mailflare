@@ -2,7 +2,7 @@
 
 > **Schema or migration change? Update all three dialects (SQLite, PostgreSQL, MySQL).** See AGENTS.md "Database schema changes" and "Schema and migrations" in `docs/architecture.md`.
 
-Detail for every area below: `docs/architecture.md` (section named in each bullet). User docs: `docs/*.md`.
+Detail for every area below: `docs/architecture.md` (the matching section). User docs: `docs/*.md`.
 
 ## Commands
 
@@ -37,17 +37,17 @@ node --test tests/*.test.mjs   # tests
 
 - **Three DB dialects.** One schema (`src/db/schema/index.ts`), migrations in `drizzle/migrations/` (SQLite), `drizzle/migrations-pg/`, `drizzle/migrations-mysql/`. A schema change needs all three, plus the trigger/seed twin when it touches `messages`, `folders`, `mailboxes` or `mailbox_aliases`. `tests/database-dialects.test.mjs` fails on divergence or a stale bundle. Never edit an applied migration. `drizzle-kit generate` prompts interactively about a snapshot rename conflict for SQLite, so recent SQLite migrations are hand-written in the generated style.
 - **Raw SQL works on all three.** No bare `0`/`1` as boolean, no `x = 0` on boolean columns, no `||` for strings on MySQL, quote reserved words via `sql.identifier`, no raw `ON CONFLICT ... DO UPDATE SET col = col + 1`. Helpers: `src/db/sql.ts`, `src/db/introspect.ts`, `src/lib/database-errors.ts`.
-- **Backups.** A migration that creates, renames or removes a persisted table updates the backup lists in the same change (AGENTS.md "Database backup and restore"): `BACKUP_TABLES`, `INTERNAL_TABLES`, `LATER_MIGRATION_TABLES`, `BACKUP_TABLE_GROUPS`.
+- **Backups.** A migration that creates, renames or removes a persisted table updates the backup lists in the same change (AGENTS.md "Database backup and restore"): `BACKUP_TABLES`, `INTERNAL_TABLES`, `LATER_MIGRATION_TABLES`, `BACKUP_TABLE_GROUPS`, `DatabaseBackupTable` (`src/lib/backups/types.d.ts`).
 - **Optional tables/columns** (migration not applied yet): detect with `isMissingTableError` / `isMissingColumnError` (`src/lib/database-errors.ts`); drizzle wraps driver errors as "Failed query" with the message on `cause`, so matching `String(error)` misses it.
 - **Bindings** only via `getEnv()` / `getEnvAsync()` (`src/lib/cloudflare.ts`) then `getDb(env)`. Never read `cloudflare:workers` env directly for storage. Branch on runtime with `isOffWorkers` / `isVercelRuntime` / `isNodeRuntime` (`src/lib/runtime.ts`).
-- **Auth.** Prefer `requireSessionUser` (`src/lib/api/auth.ts`, returns 401) over `requireUser` (throws, becomes 500; many older routes still use it). Scope message queries by accessible mailbox ids, never `userId`.
+- **Auth.** Prefer `requireSessionUser` (`src/lib/api/auth.ts`, returns 401) over `requireUser` (throws, becomes 500; most older routes still use it). Scope message queries by accessible mailbox ids, never `userId`.
 - **Drafts are private**: gate every reader query with `draftsVisibleTo` / `isOthersDraft` (`src/lib/email/draft-access.ts`).
 - **Rules need `scope`**: every `routing_rules` row sets `domain` or `mailbox` explicitly. Keep the reject / mailbox-alias / catch-all phase order.
 - **TOTP**: every check goes through `verifySecondFactor`, never `matchTotpStep`.
 - **Never write** `jmap_changes*`, `dav_changes` from application code (trigger-written, derived).
 - `RealtimeHub` must stay exported from `worker.ts`. `CF_EMAIL_WORKER_NAME` (default `mailflare`), Worker `name` and `WORKER_SELF_REFERENCE` service in `wrangler.jsonc` must agree.
 - Never commit `src/pages` (breaks `tsc`; the Vercel build writes it).
-- Statements passed to `db.batch` come from the same `getDb(env)` instance. D1 binds at most 100 parameters per statement.
+- Statements passed to `db.batch` must come from the same `getDb(env)` instance. D1 binds at most 100 parameters per statement.
 - `cloudflare-env.d.ts` is generated (500KB): `cf-typegen`, never hand-edit.
 - New recurring jobs go in `src/lib/scheduled/jobs.ts`.
 - Dangerous input (DMARC/TLS-RPT mail) is attacker-controlled: keep the caps and the verified-reporter rule in `report-parse.ts` / `ingest.ts`.
@@ -56,7 +56,7 @@ node --test tests/*.test.mjs   # tests
 
 Next.js App Router on Cloudflare Workers via vinext. Drizzle over D1 (or PostgreSQL, MySQL, libSQL via `DATABASE_URL`), R2 for raw MIME, attachments and backups, Queues for mail, a Durable Object for realtime, cron for scheduled jobs. Also runs self-hosted (Node/Docker) and on Vercel.
 
-One line per area; detail in `docs/architecture.md` under the quoted heading.
+One line per area; detail in `docs/architecture.md` in the matching section.
 
 - **worker.ts is the entrypoint**: `fetch` (realtime WebSocket, `guardMtaStsHost`), `email` (Email Routing; `resolveIncomingMail` in `src/lib/email/incoming.ts`), `queue` (one consumer for inbound, outbound, agent), `scheduled`.
 - **Mail pipeline**: inbound `processInboundMessage` (`src/lib/email/inbound.ts`); outbound `send.ts` / `sender.ts`; composer `rich-text-editor.tsx`; threading `resolveThreadId` (`threading.ts`). Use `splitEmailAddressList`, not `getEmailAddress`, for address lists.
@@ -89,9 +89,9 @@ One line per area; detail in `docs/architecture.md` under the quoted heading.
 ## Conventions
 
 - Tabs for indentation. `@/*` maps to `src/*`.
-- Types and pure helpers go in sibling `*-types.d.ts` and `*-utils.ts` files; follow this for anything non-trivial.
+- Types and pure helpers go in sibling `*-types.d.ts` and `*-utils.ts` files (41 and 27 of them); follow this for anything non-trivial.
 - API routes return `NextResponse.json({ error: "..." }, { status })`; no shared error envelope helper.
-- UI: Tailwind v4 + shadcn/Radix in `src/components/ui/`. `DialogContent` has no max height: add `max-h-[calc(100vh-4rem)] overflow-y-auto` to dialogs with more than a few fields.
+- UI: Tailwind v4 + shadcn/Radix in `src/components/ui/`. `DialogContent` has no max height: add `max-h-[calc(100vh-4rem)] overflow-y-auto` to dialogs with more than a few fields (otherwise the submit button goes off-screen).
 
 <!-- BEGIN:nextjs-agent-rules -->
 
