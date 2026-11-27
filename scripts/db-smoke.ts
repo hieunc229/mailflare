@@ -133,7 +133,7 @@ check("booking refuses a busy slot", (await createBookedCalendarEvents(env, even
 // reserved with the booking and given back when the booking is lost.
 const deskStart = new Date(Date.now() + 2 * 86_400_000);
 const deskEnd = new Date(deskStart.getTime() + 1_800_000);
-await db.insert(calendarResources).values({ id: `res_book_${stamp}`, name: `Booking room ${stamp}` } as never);
+await db.insert(calendarResources).values({ id: `res_book_${stamp}`, name: `Booking room ${stamp}`, publicBooking: true } as never);
 await db.insert(calendarEvents).values({ id: `evt_free_${stamp}`, userId, title: "Lunch", startsAt: deskStart, endsAt: deskEnd, transparent: true } as never);
 const roomEvent = { hostIds: [userId], resourceIds: [`res_book_${stamp}`], name: "Desk", location: "", color: "blue", timeZone: "UTC", weekdays: [0, 1, 2, 3, 4, 5, 6], timeRanges: [{ startTime: "00:00", endTime: "23:45" }], durationMinutes: 30 } as never;
 check("a booking with a room reserves it", (await reserveBooking(env, roomEvent, "Roomer", "r@example.com", deskStart.toISOString(), deskEnd.toISOString())) === true);

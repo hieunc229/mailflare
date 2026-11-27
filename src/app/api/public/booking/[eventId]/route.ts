@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { availableBookingSlots } from "@/lib/booking/availability";
 import { getEnv } from "@/lib/cloudflare";
+import { cachedJson } from "@/lib/http/edge-cache";
 import { toPublicBookingEvent } from "@/lib/booking/public-event";
 import { reserveBooking } from "@/lib/booking/reserve";
 import { bookingRoomsUsable, locationWithRooms } from "@/lib/booking/rooms";
@@ -10,11 +11,16 @@ import { pickGuestLocale } from "@/lib/booking/confirmation-utils";
 import type { PublicBookingRouteContext, PublicBookingSubmission } from "./types";
 import { loadPublicBookingEvent, parseBookingGuestEmails } from "./utils";
 
+/** How long a slot list is kept (30 to 60 seconds). */
+const SLOT_CACHE_SECONDS = 45;
+
 export async function GET(request: Request, { params }: PublicBookingRouteContext) {
 	const { eventId } = await params;
 	const found = await loadPublicBookingEvent(eventId, new URL(request.url).searchParams.get("username"));
 	if (!found) return NextResponse.json({ error: "Booking event not found" }, { status: 404 });
-	const slots = await availableBookingSlots(getEnv(), found.event, 60);
+	// The slot list is the expensive read and the same for everyone: kept for 45 seconds per event type and day. It is only a view: a booking is
+	// always decided live in the POST, so a slot taken in that time is refused there ("no longer available").
+	const slots = await cachedJson(`booking-slots/${found.event.id}/${new Date().toISOString().slice(0, 10)}/60`, SLOT_CACHE_SECONDS, () => availableBookingSlots(getEnv(), found.event, 60));
 	// The visitor gets times and nothing else: not which rooms the event type holds, nor why a time is gone.
 	return NextResponse.json({ event: toPublicBookingEvent(found.event), hostName: found.hostName, slots });
 }
