@@ -156,6 +156,10 @@ export async function restoreDatabaseRecords(db: D1Database, content: ArrayBuffe
 	// database drops them here instead of failing after the teardown.
 	const deliverabilityColumns = new Map<string, Set<string>>();
 	for (const table of ["domain_deliverability", "deliverability_reports"]) if (existing.has(table)) deliverabilityColumns.set(table, await listColumnNames(db, table));
+	// `message_attachments` gained the extracted-text columns after it shipped; a backup that carries them still
+	// restores into a database that has not applied that migration. The text is derived from the object, so
+	// dropping it costs a re-extraction, not data.
+	const messageAttachmentColumns = await listColumnNames(db, "message_attachments");
 	// Mark users deleted before removing them: the passkey trigger permits the
 	// cascade to remove the last credential only for an account that is being
 	// purged. Deleting users first also empties the table the restore inserts
@@ -182,7 +186,9 @@ export async function restoreDatabaseRecords(db: D1Database, content: ArrayBuffe
 							? messageColumns
 							: table === "mailbox_promotion_settings"
 								? promotionSettingColumns
-								: deliverabilityColumns.get(table) ?? null;
+								: table === "message_attachments"
+									? messageAttachmentColumns
+									: deliverabilityColumns.get(table) ?? null;
 			const statements = rows.slice(index, index + INSERT_BATCH_SIZE).map((row) => createInsertStatement(db, dialect, table, row, columns));
 			// MySQL checks foreign keys per statement, so the batch suspends them for its own connection.
 			if (statements.length > 0) await db.batch(dialect === "mysql" ? [db.prepare("SET FOREIGN_KEY_CHECKS = 0"), ...statements, db.prepare("SET FOREIGN_KEY_CHECKS = 1")] : statements);

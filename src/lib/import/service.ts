@@ -19,6 +19,13 @@ export async function importMessagesToMailbox(
 		mailboxId: string;
 		destination: ImportDestination;
 		messages: ImportMessageInput[];
+		/**
+		 * Decode text/* attachment bodies as each message is stored. Queue consumers
+		 * pass true (they have a CPU budget to spare for a decode); a direct request
+		 * leaves it off. PDF is never parsed here — those rows stay at "none" for
+		 * getAttachmentText.
+		 */
+		extractText?: boolean;
 	},
 ): Promise<ImportMailboxResult> {
 	const result: ImportMailboxResult = { imported: 0, skipped: 0, errors: [] };
@@ -32,6 +39,7 @@ export async function importMessagesToMailbox(
 				raw: message.raw,
 				read: message.read,
 				starred: message.starred,
+				extractText: input.extractText,
 			});
 			if (imported) {
 				result.imported += 1;
@@ -56,6 +64,7 @@ async function importMessageToMailbox(
 		raw: ArrayBuffer;
 		read?: boolean;
 		starred?: boolean;
+		extractText?: boolean;
 	},
 ): Promise<boolean> {
 	const parsed = await parseRawMime(input.raw);
@@ -122,7 +131,7 @@ async function importMessageToMailbox(
 		await env.BUCKET.put(rawR2Key, input.raw, {
 			httpMetadata: { contentType: "message/rfc822" },
 		});
-		await storeMessageAttachments(env, messageId, parsed.attachments, { validate: false });
+		await storeMessageAttachments(env, messageId, parsed.attachments, { validate: false, extractText: input.extractText });
 	} catch (error) {
 		await deleteMessageWithObjects(env, db, messageId, rawR2Key);
 		throw error;

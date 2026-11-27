@@ -553,6 +553,14 @@
         "CREATE TABLE \"contact_details\" (\n\t\"contact_id\" text PRIMARY KEY NOT NULL,\n\t\"details\" text DEFAULT '{}' NOT NULL,\n\t\"updated_at\" bigint NOT NULL\n);",
         "ALTER TABLE \"contact_details\" ADD CONSTRAINT \"contact_details_contact_id_contacts_id_fk\" FOREIGN KEY (\"contact_id\") REFERENCES \"public\".\"contacts\"(\"id\") ON DELETE cascade ON UPDATE no action;"
       ]
+    },
+    {
+      "name": "0032_attachment_extraction.sql",
+      "statements": [
+        "ALTER TABLE \"message_attachments\" ADD COLUMN \"extracted_text\" text;",
+        "ALTER TABLE \"message_attachments\" ADD COLUMN \"extract_status\" text DEFAULT 'none' NOT NULL;",
+        "ALTER TABLE \"message_attachments\" ADD COLUMN \"extracted_at\" bigint;"
+      ]
     }
   ]
 }

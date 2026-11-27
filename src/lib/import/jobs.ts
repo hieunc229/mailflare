@@ -368,6 +368,8 @@ async function runFileChunk(env: CloudflareEnv, job: JobRow): Promise<Chunk> {
 		mailboxId: job.mailboxId,
 		destination: parseImportDestination(spec.destination),
 		messages,
+		// A queue consumer decodes text attachments; PDFs stay for the lazy path.
+		extractText: true,
 	});
 	const next = cursor.batch + 1;
 	return { result, cursor: { batch: next }, totalDelta: 0, done: next >= spec.batches, consumedKey: key };
@@ -422,6 +424,8 @@ async function runImapChunk(
 				mailboxId: job.mailboxId,
 				destination: parseImportDestination(source.destination),
 				messages: fetched.messages,
+				// A queue consumer decodes text attachments; PDFs stay for the lazy path.
+				extractText: true,
 			})
 		: empty;
 

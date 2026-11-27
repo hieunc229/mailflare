@@ -551,6 +551,17 @@ export const messageAttachments = sqliteTable(
 			.default("attachment"),
 		contentId: text("content_id"),
 		r2Key: text("r2_key").notNull().unique(),
+		/**
+		 * Text of a text/* or PDF attachment, for search to index later. Capped at
+		 * MAX_EXTRACTED_TEXT_BYTES and null unless `extract_status` is "done".
+		 */
+		extractedText: text("extracted_text"),
+		/** "none" until extraction has run, and then the outcome; "none" rows extract on first use. */
+		extractStatus: text("extract_status", { enum: ["none", "done", "failed", "skipped"] })
+			.notNull()
+			.default("none"),
+		/** When extraction last ran, for any status other than "none". */
+		extractedAt: timestamp("extracted_at"),
 		/** Set when the attachment is moved to the Drive trash; hidden from the email until restored, purged after 30 days. */
 		trashedAt: timestamp("trashed_at"),
 		createdAt: timestamp("created_at")

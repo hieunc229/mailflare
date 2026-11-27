@@ -243,7 +243,9 @@ export async function processInboundMessage(
 		}).onConflictDoNothing().returning({ id: messages.id });
 		if (!inserted.length) return;
 
-		await storeMessageAttachments(env, messageId, parsed.attachments);
+		// Text attachments are decoded here; PDFs are left at "none" so the parser
+		// never sits between this message insert and its remaining attachments.
+		await storeMessageAttachments(env, messageId, parsed.attachments, { extractText: true });
 		if (status !== "spam" && status !== "trash") {
 			await registerInboundInvite(env, { userId: decision.mailbox.userId, mailboxId: decision.mailbox.mailboxId, messageId, senderAddress: fromAddr, attachments: parsed.attachments });
 		}
