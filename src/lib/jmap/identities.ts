@@ -7,7 +7,8 @@ import { deleteMessageWithObjects } from "@/lib/email/message-cleanup";
 import { decodeIdentityId, identityId } from "./ids";
 import { listJmapMailboxes, listSendableAddresses } from "./access";
 import { getEmailState } from "./state";
-import { JmapError } from "./errors";
+import { invalidArguments, JmapError } from "./errors";
+import { safeIdKeys, stringArrayArg } from "./args";
 import type { JmapContext, JmapMethodHandler } from "./types";
 
 /** One Identity per address the account may send from. */
@@ -34,24 +35,27 @@ export async function buildIdentities(ctx: JmapContext) {
 
 export const identityGet: JmapMethodHandler = async (ctx, args) => {
 	const all = await buildIdentities(ctx);
-	const ids = args.ids as string[] | null | undefined;
+	const ids = stringArrayArg(args.ids, "ids");
 	const list = ids ? all.filter((item) => ids.includes(item.id as string)) : all;
 	const found = new Set(list.map((item) => item.id as string));
 	return { accountId: ctx.accountId, state: "identities", list, notFound: ids ? ids.filter((id) => !found.has(id)) : [] };
 };
 
 export const identityChanges: JmapMethodHandler = async () => ({ type: "cannotCalculateChanges" });
-export const identitySet: JmapMethodHandler = async (ctx, args) => ({
-	accountId: ctx.accountId,
-	oldState: "identities",
-	newState: "identities",
-	created: {},
-	updated: {},
-	destroyed: [],
-	notCreated: Object.fromEntries(Object.keys((args.create ?? {}) as object).map((id) => [id, { type: "forbidden" }])),
-	notUpdated: Object.fromEntries(Object.keys((args.update ?? {}) as object).map((id) => [id, { type: "forbidden" }])),
-	notDestroyed: Object.fromEntries(((args.destroy ?? []) as string[]).map((id) => [id, { type: "forbidden" }])),
-});
+export const identitySet: JmapMethodHandler = async (ctx, args) => {
+	if (args.destroy !== undefined && args.destroy !== null && !Array.isArray(args.destroy)) throw invalidArguments("destroy must be an array of ids");
+	return {
+		accountId: ctx.accountId,
+		oldState: "identities",
+		newState: "identities",
+		created: {},
+		updated: {},
+		destroyed: [],
+		notCreated: Object.fromEntries(Object.keys((args.create ?? {}) as object).map((id) => [id, { type: "forbidden" }])),
+		notUpdated: Object.fromEntries(Object.keys((args.update ?? {}) as object).map((id) => [id, { type: "forbidden" }])),
+		notDestroyed: Object.fromEntries(safeIdKeys((args.destroy ?? []) as unknown[]).map((key) => [key, { type: "forbidden" }])),
+	};
+};
 
 /**
  * EmailSubmission/set: send a draft. Mailflare's send writes a fresh Sent row,
@@ -61,12 +65,29 @@ export const identitySet: JmapMethodHandler = async (ctx, args) => ({
  */
 export const emailSubmissionSet: JmapMethodHandler = async (ctx, args) => {
 	const oldState = await getEmailState(ctx);
-	const created: Record<string, unknown> = {};
-	const notCreated: Record<string, unknown> = {};
+	// Client-controlled keys: a null-prototype map keeps "__proto__" an own property.
+	const created: Record<string, unknown> = Object.create(null);
+	const notCreated: Record<string, unknown> = Object.create(null);
 	const destroyedEmails: string[] = [];
 
+	if (args.destroy !== undefined && args.destroy !== null && !Array.isArray(args.destroy)) throw invalidArguments("destroy must be an array of ids");
+	// Response keys are computed before any send: key coercion on a malformed id
+	// would otherwise throw after earlier submissions already went out.
+	const destroyKeys = safeIdKeys((args.destroy ?? []) as unknown[]);
 	for (const [creationId, value] of Object.entries((args.create ?? {}) as Record<string, Record<string, unknown>>)) {
-		const emailId = ctx.createdIds[String(value.emailId).replace(/^#/, "")] ?? String(value.emailId ?? "");
+		if (!value || typeof value !== "object") {
+			notCreated[creationId] = { type: "invalidProperties", description: "The record must be an object" };
+			continue;
+		}
+		// String() on a non-string id would invoke the value's own toString and
+		// can throw mid-loop; a malformed reference just cannot match a draft.
+		const emailIdRef = typeof value.emailId === "string" ? value.emailId : "";
+		const ref = emailIdRef.replace(/^#/, "");
+		// An inherited property like "constructor" is not a creation id: reading
+		// it as a map would substitute a Function into the draft lookup and throw
+		// a bind error after earlier submissions already went out.
+		const mapped = Object.prototype.hasOwnProperty.call(ctx.createdIds, ref) ? ctx.createdIds[ref] : undefined;
+		const emailId = typeof mapped === "string" ? mapped : emailIdRef;
 		const identity = typeof value.identityId === "string" ? decodeIdentityId(value.identityId) : null;
 		const accessible = await listJmapMailboxes(ctx);
 		if (!identity || !accessible.some((mailbox) => mailbox.id === identity.mailboxId && mailbox.permission !== "read_only")) {
@@ -136,12 +157,14 @@ export const emailSubmissionSet: JmapMethodHandler = async (ctx, args) => {
 		accountId: ctx.accountId,
 		oldState,
 		newState: await getEmailState(ctx),
-		created,
+		// Spread back to a plain object so a "__proto__" id survives as an own
+		// property without changing the response's object shape for callers.
+		created: { ...created },
 		updated: {},
 		destroyed: [],
-		notCreated,
+		notCreated: { ...notCreated },
 		notUpdated: Object.fromEntries(Object.keys((args.update ?? {}) as object).map((id) => [id, { type: "forbidden" }])),
-		notDestroyed: Object.fromEntries(((args.destroy ?? []) as string[]).map((id) => [id, { type: "forbidden" }])),
+		notDestroyed: Object.fromEntries(destroyKeys.map((key) => [key, { type: "forbidden" }])),
 		// Surfaced so the processor can append the implicit Email/set response.
 		__destroyedEmails: destroyedEmails,
 	};
@@ -151,7 +174,7 @@ export const emailSubmissionGet: JmapMethodHandler = async (ctx, args) => ({
 	accountId: ctx.accountId,
 	state: await getEmailState(ctx),
 	list: [],
-	notFound: (args.ids ?? []) as string[],
+	notFound: stringArrayArg(args.ids, "ids") ?? [],
 });
 export const emailSubmissionQuery: JmapMethodHandler = async (ctx) => ({ accountId: ctx.accountId, queryState: await getEmailState(ctx), canCalculateChanges: false, position: 0, ids: [], total: 0 });
 export const emailSubmissionChanges: JmapMethodHandler = async () => ({ type: "cannotCalculateChanges" });

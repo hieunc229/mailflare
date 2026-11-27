@@ -3,7 +3,8 @@ import { mailboxChangesSince } from "./changes";
 import { folders, messages } from "@/db/schema";
 import { draftsVisibleTo } from "@/lib/email/draft-access";
 import { newId } from "@/lib/ids";
-import { JmapError } from "./errors";
+import { invalidArguments, JmapError } from "./errors";
+import { numberArg, safeIdKeys, stringArrayArg } from "./args";
 import { decodeMailboxRef, encodeMailboxRef, roleToStatus, SYSTEM_ROLES } from "./ids";
 import { getMailboxState } from "./state";
 import type { AccessibleMailbox, JmapContext, JmapMethodHandler, SystemRole } from "./types";
@@ -145,8 +146,8 @@ export async function buildAllMailboxes(ctx: JmapContext) {
 
 export const mailboxGet: JmapMethodHandler = async (ctx, args) => {
 	const all = await buildAllMailboxes(ctx);
-	const ids = args.ids as string[] | null | undefined;
-	const properties = args.properties as string[] | null | undefined;
+	const ids = stringArrayArg(args.ids, "ids");
+	const properties = stringArrayArg(args.properties, "properties");
 	const wanted = ids ? all.filter((item) => ids.includes(item.id as string)) : all;
 	const found = new Set(wanted.map((item) => item.id as string));
 	return {
@@ -159,15 +160,20 @@ export const mailboxGet: JmapMethodHandler = async (ctx, args) => {
 
 export const mailboxQuery: JmapMethodHandler = async (ctx, args) => {
 	const all = await buildAllMailboxes(ctx);
+	if (args.filter !== undefined && args.filter !== null && typeof args.filter !== "object") throw invalidArguments("filter must be an object");
 	const filter = (args.filter ?? {}) as { parentId?: string | null; name?: string; role?: string | null; hasAnyRole?: boolean };
+	if (filter.parentId !== undefined && filter.parentId !== null && typeof filter.parentId !== "string") throw invalidArguments("filter.parentId must be a mailbox id");
+	if (filter.name !== undefined && typeof filter.name !== "string") throw invalidArguments("filter.name must be a string");
+	if (filter.role !== undefined && filter.role !== null && typeof filter.role !== "string") throw invalidArguments("filter.role must be a role");
+	if (filter.hasAnyRole !== undefined && typeof filter.hasAnyRole !== "boolean") throw invalidArguments("filter.hasAnyRole must be a boolean");
 	let rows = all;
 	if (filter.parentId !== undefined) rows = rows.filter((item) => item.parentId === filter.parentId);
 	if (filter.name) rows = rows.filter((item) => String(item.name).toLowerCase().includes(filter.name!.toLowerCase()));
 	if (filter.role !== undefined) rows = rows.filter((item) => item.role === filter.role);
 	if (filter.hasAnyRole !== undefined) rows = rows.filter((item) => (item.role !== null) === filter.hasAnyRole);
 	rows = [...rows].sort((a, b) => Number(a.sortOrder) - Number(b.sortOrder));
-	const position = Math.max(Number(args.position ?? 0), 0);
-	const limit = args.limit == null ? rows.length : Math.max(Number(args.limit), 0);
+	const position = Math.max(numberArg(args.position ?? 0), 0);
+	const limit = args.limit == null ? rows.length : Math.max(numberArg(args.limit), 0);
 	return {
 		accountId: ctx.accountId,
 		queryState: await getMailboxState(ctx),
@@ -184,15 +190,26 @@ export const mailboxChanges: JmapMethodHandler = async (ctx, args) => mailboxCha
 export const mailboxSet: JmapMethodHandler = async (ctx, args) => {
 	const oldState = await getMailboxState(ctx);
 	if (args.ifInState && args.ifInState !== oldState) return { type: "stateMismatch" };
+	// Arg-level errors are answered before any write commits (RFC 8620 §3.6.2).
+	if (args.destroy !== undefined && args.destroy !== null && !Array.isArray(args.destroy)) throw invalidArguments("destroy must be an array of ids");
+	// Response keys are computed before any write: key coercion on a malformed
+	// id would otherwise throw inside the loop after earlier destroys committed.
+	const destroyKeys = safeIdKeys((args.destroy ?? []) as unknown[]);
+	const destroyItems = ((args.destroy ?? []) as unknown[]).map((id, index) => ({ id, key: destroyKeys[index] }));
 	const accessible = await listJmapMailboxes(ctx);
-	const created: Record<string, unknown> = {};
-	const notCreated: Record<string, unknown> = {};
-	const updated: Record<string, null> = {};
-	const notUpdated: Record<string, unknown> = {};
+	// Client-controlled keys: a null-prototype map keeps "__proto__" an own property.
+	const created: Record<string, unknown> = Object.create(null);
+	const notCreated: Record<string, unknown> = Object.create(null);
+	const updated: Record<string, null> = Object.create(null);
+	const notUpdated: Record<string, unknown> = Object.create(null);
 	const destroyed: string[] = [];
-	const notDestroyed: Record<string, unknown> = {};
+	const notDestroyed: Record<string, unknown> = Object.create(null);
 
 	for (const [creationId, value] of Object.entries((args.create ?? {}) as Record<string, Record<string, unknown>>)) {
+		if (!value || typeof value !== "object") {
+			notCreated[creationId] = { type: "invalidProperties", description: "The record must be an object" };
+			continue;
+		}
 		const parent = typeof value.parentId === "string" ? decodeMailboxRef(value.parentId) : null;
 		const name = typeof value.name === "string" ? value.name.trim() : "";
 		const mailbox = parent && accessible.find((row) => row.id === parent.mailboxId);
@@ -223,6 +240,10 @@ export const mailboxSet: JmapMethodHandler = async (ctx, args) => {
 			notUpdated[id] = { type: "notFound" };
 			continue;
 		}
+		if (!patch || typeof patch !== "object") {
+			notUpdated[id] = { type: "invalidProperties", description: "The patch must be an object" };
+			continue;
+		}
 		const keys = Object.keys(patch).filter((key) => key !== "isSubscribed" && key !== "sortOrder");
 		if (ref.kind !== "folder") {
 			notUpdated[id] = keys.length ? { type: "forbidden", description: "System mailboxes cannot be changed" } : undefined!;
@@ -247,21 +268,21 @@ export const mailboxSet: JmapMethodHandler = async (ctx, args) => {
 		updated[id] = null;
 	}
 
-	for (const id of (args.destroy ?? []) as string[]) {
+	for (const { id, key } of destroyItems) {
 		const ref = decodeMailboxRef(id);
 		const mailbox = ref && accessible.find((row) => row.id === ref.mailboxId);
 		if (!ref || !mailbox) {
-			notDestroyed[id] = { type: "notFound" };
+			notDestroyed[key] = { type: "notFound" };
 			continue;
 		}
 		if (ref.kind !== "folder" || mailbox.permission !== "full_access") {
-			notDestroyed[id] = { type: "forbidden" };
+			notDestroyed[key] = { type: "forbidden" };
 			continue;
 		}
 		// The folder id comes from the client: it must belong to the mailbox the permission was checked on.
 		const [folder] = await ctx.db.select({ id: folders.id }).from(folders).where(and(eq(folders.id, ref.folderId), eq(folders.mailboxId, mailbox.id))).limit(1);
 		if (!folder) {
-			notDestroyed[id] = { type: "notFound" };
+			notDestroyed[key] = { type: "notFound" };
 			continue;
 		}
 		if (args.onDestroyRemoveEmails) {
@@ -269,24 +290,26 @@ export const mailboxSet: JmapMethodHandler = async (ctx, args) => {
 		} else {
 			const [inUse] = await ctx.db.select({ n: count() }).from(messages).where(and(eq(messages.folderId, ref.folderId), eq(messages.mailboxId, mailbox.id), isNull(messages.snoozedUntil)));
 			if ((inUse?.n ?? 0) > 0) {
-				notDestroyed[id] = { type: "mailboxHasEmail" };
+				notDestroyed[key] = { type: "mailboxHasEmail" };
 				continue;
 			}
 		}
 		await ctx.db.delete(folders).where(and(eq(folders.id, ref.folderId), eq(folders.mailboxId, mailbox.id)));
-		destroyed.push(id);
+		destroyed.push(key);
 	}
 
 	return {
 		accountId: ctx.accountId,
 		oldState,
 		newState: await getMailboxState(ctx),
-		created,
-		updated,
+		// Spread back to a plain object so a "__proto__" id survives as an own
+		// property without changing the response's object shape for callers.
+		created: { ...created },
+		updated: { ...updated },
 		destroyed,
-		notCreated,
-		notUpdated,
-		notDestroyed,
+		notCreated: { ...notCreated },
+		notUpdated: { ...notUpdated },
+		notDestroyed: { ...notDestroyed },
 	};
 };
 
