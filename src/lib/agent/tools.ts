@@ -1,4 +1,4 @@
-import { and, desc, eq, isNull, lt, or } from "drizzle-orm";
+import { and, desc, eq, isNull, lt, lte, or } from "drizzle-orm";
 import { draftsVisibleTo, isOthersDraft } from "@/lib/email/draft-access";
 import { z } from "zod";
 import { scheduledMessageCondition } from "@/lib/email/scheduled";
@@ -67,11 +67,21 @@ export const emailToolDescriptions: Record<EmailToolName, string> = {
 export const EMAIL_TOOL_NAMES = Object.keys(emailToolSchemas) as EmailToolName[];
 
 function publicMessage(row: typeof messages.$inferSelect) {
+	// The link has to open in the app: message statuses and route folders do not
+	// always share a name (queued -> scheduled, failed -> sent). Templates surface
+	// here through search_emails/get_email and render in the generic reader.
+	const section =
+		row.status === "draft" ? "drafts"
+		: row.status === "queued" ? "scheduled"
+		: row.status === "failed" ? "sent"
+		: row.status === "received" && row.folderId ? `folders/${encodeURIComponent(row.folderId)}`
+		: row.status === "received" || row.status === "template" ? "inbox"
+		: row.status;
 	return {
 		id: row.id, mailboxId: row.mailboxId, from: row.fromAddr, to: row.toAddr,
 		cc: row.ccAddr, subject: row.subject, snippet: row.snippet, direction: row.direction,
 		status: row.status, read: row.read, starred: row.starred, threadId: row.threadId,
-		url: `/${row.status === "draft" ? "drafts" : row.status === "received" ? "inbox" : row.status}/${encodeURIComponent(row.id)}`,
+		url: `/${section}/${encodeURIComponent(row.id)}`,
 		createdAt: row.createdAt,
 	};
 }
@@ -129,7 +139,7 @@ export async function runEmailTool(context: AgentToolContext, name: EmailToolNam
 		if (folder === "draft") conditions.push(eq(messages.status, "draft"), eq(messages.userId, context.user.id));
 		else if (folder === "sent") conditions.push(eq(messages.status, "sent"));
 		else if (folder === "scheduled") conditions.push(scheduledMessageCondition(db));
-		else if (folder === "inbox") conditions.push(eq(messages.status, "received"), isNull(messages.folderId));
+		else if (folder === "inbox") conditions.push(eq(messages.direction, "inbound"), eq(messages.status, "received"), isNull(messages.folderId), or(isNull(messages.snoozedUntil), lte(messages.snoozedUntil, new Date()))!);
 		else if (folder === "archived" || folder === "trash" || folder === "spam") conditions.push(eq(messages.status, folder));
 		else conditions.push(or(eq(messages.userId, context.user.id), eq(messages.direction, "inbound"))!);
 		if (name === "search_emails") conditions.push(...buildSearchConditions(input.query as string, context.timeZone));
@@ -181,12 +191,18 @@ export async function runEmailTool(context: AgentToolContext, name: EmailToolNam
 		await requireAccess(context, false, true);
 		const ids = name === "move_email" ? [input.emailId as string] : [...new Set(input.emailIds as string[])];
 		const rows = await Promise.all(ids.map((messageId) => ownMessage(context, messageId)));
-		if (rows.some((row) => row.status === "draft" || row.status === "sent")) throw new Error("Cannot move this message");
+		// A queued message still has a live send job the queue claims by job row alone:
+		// moving it would file it away while the delivery still goes out. Deliberately
+		// stricter than the UI, whose message actions allow the same bad move today.
+		if (rows.some((row) => row.status === "draft" || row.status === "sent" || row.status === "queued")) throw new Error("Cannot move this message");
 		const destination = input.destination as string;
 		if (context.origin === "chat") return { action: name, status: "pending_approval", emailIds: ids, destination, emails: rows.map(publicMessage) };
 		for (const row of rows) {
 			const moved = await updateMessageStatusForUser(context.env, context.user, row.id, destination === "inbox" ? "received" : destination);
 			if (!moved) throw new Error("Message could not be moved");
+			// Same contract as the app's move actions: leaving for any folder clears the
+			// custom folder, and a move to Inbox also wakes a snooze.
+			await db.update(messages).set(destination === "inbox" ? { folderId: null, snoozedUntil: null } : { folderId: null }).where(eq(messages.id, row.id));
 		}
 		return { emailIds: ids, destination, status: "approved" };
 	}
