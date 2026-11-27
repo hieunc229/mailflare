@@ -21,6 +21,8 @@ export type PublishViewProps = {
 	onTurnOff: () => void;
 	onCopy: (url: string) => void;
 	onRetry: () => void;
+	/** A dialog around the card already has this title; saying it twice makes a screen reader read it twice. */
+	hideTitle?: boolean;
 };
 
 function UrlRow({ label, hint, value, copyLabel, onCopy }: { label: string; hint: string; value: string; copyLabel: string; onCopy: () => void }) {
@@ -45,11 +47,11 @@ export function PublishView(props: PublishViewProps) {
 	const titleId = useId();
 	const on = props.state === "on";
 	return (
-		<section aria-labelledby={titleId} className="space-y-3 text-sm text-neutral-700">
+		<section aria-labelledby={props.hideTitle ? undefined : titleId} className="space-y-3 text-sm text-neutral-700">
 			<div className="flex items-center justify-between gap-3">
-				<h3 id={titleId} className="font-semibold text-neutral-900">{t("calendar.publish.title")}</h3>
+				{!props.hideTitle && <h3 id={titleId} className="font-semibold text-neutral-900">{t("calendar.publish.title")}</h3>}
 				{(props.state === "on" || props.state === "off") && (
-					<span className={`rounded-full px-2 py-0.5 text-xs font-medium ${on ? "bg-green-100 text-green-800" : "bg-neutral-100 text-neutral-700"}`}>{t(on ? "calendar.publish.status.on" : "calendar.publish.status.off")}</span>
+					<span className={`ml-auto rounded-full px-2 py-0.5 text-xs font-medium ${on ? "bg-green-100 text-green-800" : "bg-neutral-100 text-neutral-700"}`}>{t(on ? "calendar.publish.status.on" : "calendar.publish.status.off")}</span>
 				)}
 			</div>
 			{props.state === "loading" && (

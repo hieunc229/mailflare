@@ -14,7 +14,7 @@ export function PublishDialog({ open, onOpenChange }: { open: boolean; onOpenCha
 					<DialogTitle>{t("calendar.publish.title")}</DialogTitle>
 					<DialogDescription>{t("calendar.publish.description")}</DialogDescription>
 				</DialogHeader>
-				{open && <PublishCard />}
+				{open && <PublishCard hideTitle />}
 			</DialogContent>
 		</Dialog>
 	);
