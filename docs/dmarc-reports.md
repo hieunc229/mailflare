@@ -86,7 +86,7 @@ The same job deletes reports, daily totals and acknowledged alerts older than 18
 
 ## Data
 
-Tables `domain_deliverability`, `deliverability_reports`, `dmarc_daily_stats` and `deliverability_alerts` (migration sqlite `0098`, PostgreSQL and MySQL `0022`). All four are in backups and restore before their migration is applied. `dmarc_daily_stats` is backed up without its serial `id` (a PostgreSQL restore would leave the sequence behind explicit ids); its identity is the `(domain, day, row key)` unique key. No raw report XML is kept. Reports contain sender IP addresses and domain names, no message content, and no forensic (`ruf`) reports are requested.
+Tables `domain_deliverability`, `deliverability_reports`, `dmarc_daily_stats` and `deliverability_alerts` (migration sqlite `0100`, PostgreSQL and MySQL `0024`). All four are in backups and restore before their migration is applied. `dmarc_daily_stats` is backed up without its serial `id` (a PostgreSQL restore would leave the sequence behind explicit ids); its identity is the `(domain, day, row key)` unique key. No raw report XML is kept. Reports contain sender IP addresses and domain names, no message content, and no forensic (`ruf`) reports are requested.
 
 TLS-RPT reports use the same address, parser limits and trust rules; see [mta-sts.md](mta-sts.md) for them and for MTA-STS. Report rows carry a `kind` (`dmarc` or `tlsrpt`) and every count on this page reads DMARC reports only.
 
