@@ -1776,6 +1776,7 @@
 	"calendar.publish.copyFailed": "Could not copy. Select the link and copy it by hand.",
 	"calendar.publish.once": "Copy these links now: they cannot be shown again. To get new ones, turn the link off and on again.",
 	"calendar.publish.alreadyOn": "The link has been on since {date}. It cannot be shown again. To get a new one, turn it off and on again; the old link stops working.",
+	"calendar.publish.keyName": "Published free/busy link",
 	"invite.heading": "Gayyata",
 	"invite.reply.heading": "Amsar gayyata",
 	"invite.reply.accepted": "{guest} ya karɓa",

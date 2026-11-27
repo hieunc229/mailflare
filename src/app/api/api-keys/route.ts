@@ -15,7 +15,7 @@ import { isListedAsAppPassword } from "@/lib/auth/app-password-utils";
 import { getSessionTokenFromRequestHeaders } from "@/lib/auth/session";
 import { consumeStepUpGrant } from "@/lib/auth/webauthn/grants";
 import { authError } from "@/lib/http/auth-error";
-import { freeBusyKeyId } from "@/lib/calendar/free-busy-link";
+import { freeBusyKeyId } from "@/lib/calendar/free-busy-key-id";
 import { createAuditLog } from "@/lib/mailboxes/audit";
 
 const createKeySchema = z.object({
