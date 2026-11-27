@@ -5,7 +5,7 @@ import { parseBookingTimeRanges, parseBookingWeekdays } from "@/lib/booking/util
 import type { BookingEventRecord } from "@/lib/booking/types";
 import { getEnv } from "@/lib/cloudflare";
 import { parseBookingHostIds } from "@/lib/booking/hosts";
-import { parseBookingResourceIds } from "@/lib/booking/rooms";
+import { parseBookingResourceIds } from "@/lib/booking/resource-ids";
 
 export function parseBookingGuestEmails(value: unknown, bookerEmail: string): string[] | null {
 	if (value === undefined || value === "") return [];

@@ -14,6 +14,7 @@ import { authFetch } from "@/lib/auth/client";
 import { getUserTimeZone } from "@/lib/time/utils";
 import { useSidebar } from "@/components/sidebar-state";
 import { UpcomingSidebar } from "../upcoming-sidebar";
+import { retryRooms, useRoomState } from "../calendar/room-state";
 import { BookingEditor } from "./booking-editor";
 import { BookingListSkeleton } from "./booking-list-skeleton";
 import { visibleBookingEvents } from "./default-events";
@@ -23,6 +24,7 @@ import { availabilityLabel, durationLabel, emptyBookingForm, formFromEvent } fro
 export default function BookingsPage() {
 	const { t } = useLanguage();
 	const { minimal: sidebarMinimal, mobile } = useSidebar();
+	const roomStore = useRoomState();
 	const minimal = sidebarMinimal || mobile;
 	const [events, setEvents] = useState<BookingEvent[]>([]);
 	const [username, setUsername] = useState("");
@@ -143,7 +145,7 @@ export default function BookingsPage() {
 						</section>
 					</div>
 				</div>
-				{form && <BookingEditor form={form} open={panelOpen} editingId={editingId} username={username} hosts={hosts} canManageHosts={canManageHosts} currentUserId={currentUserId} saving={saving} onChange={setForm} onClose={closeEditor} onSave={() => void save()} onDelete={() => { const event = events.find((item) => item.id === editingId); if (event) void remove(event); }} onToggleEnabled={() => { const event = events.find((item) => item.id === editingId); if (event) void setEnabled(event, !event.enabled); }} onClosed={() => { if (!panelOpen) { setForm(null); setEditingId(null); } }} />}
+				{form && <BookingEditor roomStore={roomStore} onRetryRooms={retryRooms} form={form} open={panelOpen} editingId={editingId} username={username} hosts={hosts} canManageHosts={canManageHosts} currentUserId={currentUserId} saving={saving} onChange={setForm} onClose={closeEditor} onSave={() => void save()} onDelete={() => { const event = events.find((item) => item.id === editingId); if (event) void remove(event); }} onToggleEnabled={() => { const event = events.find((item) => item.id === editingId); if (event) void setEnabled(event, !event.enabled); }} onClosed={() => { if (!panelOpen) { setForm(null); setEditingId(null); } }} />}
 			</div>
 		</section>
 	</div>;

@@ -70,6 +70,14 @@ test("a booking for a free slot reserves the room and confirms to the visitor", 
 	assert.equal(globalThis.pub.sent.length, 1);
 });
 
+test("only after a successful booking does the visitor's confirmation name the rooms they hold, in the location", async () => {
+	setup();
+	sqlite.exec("UPDATE booking_events SET location = 'Head office'");
+	assert.equal((await post()).status, 200);
+	assert.equal(globalThis.pub.sent[0].event.location, "Head office; Boardroom Vault");
+	assert.equal("resourceIds" in globalThis.pub.sent[0].event, false);
+});
+
 test("a room that is taken between the page and the booking fails with the same answer as a taken time, leaves no event and sends nothing", async () => {
 	setup();
 	const slot = new Date(at(9)).toISOString();

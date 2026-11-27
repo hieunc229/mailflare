@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { availableBookingSlots } from "@/lib/booking/availability";
 import { getEnv } from "@/lib/cloudflare";
 import { reserveBooking } from "@/lib/booking/reserve";
-import { bookingRoomsUsable } from "@/lib/booking/rooms";
+import { bookingRoomsUsable, locationWithRooms } from "@/lib/booking/rooms";
 import { sendBookingConfirmation } from "@/lib/booking/confirmation";
 import { allowBookingAttempt } from "@/lib/auth/rate-limit";
 import { pickGuestLocale } from "@/lib/booking/confirmation-utils";
@@ -38,6 +38,7 @@ export async function POST(request: Request, { params }: PublicBookingRouteConte
 	if (!slot) return NextResponse.json({ error: "That time is no longer available." }, { status: 409 });
 	if (!(await reserveBooking(getEnv(), found.event, name, email, slot.startsAt, slot.endsAt, guestEmails, notes))) return NextResponse.json({ error: "That time is no longer available." }, { status: 409 });
 	const locale = pickGuestLocale(/(?:^|;\s*)mailflare-locale=([^;]+)/.exec(request.headers.get("cookie") ?? "")?.[1], request.headers.get("accept-language"));
-	await sendBookingConfirmation(getEnv(), { event: found.event, hostName: found.hostName, guestName: name, guestEmail: email, notes, startsAt: slot.startsAt, endsAt: slot.endsAt, locale, publicOrigin: new URL(request.url).origin });
+	const { resourceIds = [], ...published } = found.event;
+	await sendBookingConfirmation(getEnv(), { event: { ...published, location: await locationWithRooms(getEnv(), published.location, resourceIds) }, hostName: found.hostName, guestName: name, guestEmail: email, notes, startsAt: slot.startsAt, endsAt: slot.endsAt, locale, publicOrigin: new URL(request.url).origin });
 	return NextResponse.json({ booked: true, startsAt: slot.startsAt, endsAt: slot.endsAt });
 }
