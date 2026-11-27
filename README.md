@@ -52,9 +52,10 @@ Mailflare currently supports 34 languages, including English, Português (Brasil
 You can receive and send mail for free.
 
 - **Receiving**: Cloudflare Email Routing is free.
-- **Sending**: Use the free tier of Resend (3,000 emails a month) or Amazon SES. Cloudflare's own sending needs the $5/month Paid Worker plan.
+- **Sending**: Use Cloudflare Email Sending first. It is on the same account as the rest of Mailflare, with no extra vendor and no sandbox, and it is the default for new domains. Workers Paid ($5/month) includes 3,000 emails a month, then $0.35 per 1,000. Workers Free can only send to verified addresses. Email Sending is in beta, and new accounts start with a low daily quota that grows over time.
+- **Alternatives**: Resend (free tier, 3,000 a month) or Amazon SES ($0.10 per 1,000; new accounts start in a sandbox). Switch per domain in Admin → Domains. See [docs/providers.md](docs/providers.md).
 
-New Amazon SES accounts start in a sandbox. Ask AWS for production access to lift it. Prices change, so check [Resend](https://resend.com/pricing), [Amazon SES](https://aws.amazon.com/ses/pricing/) and [Cloudflare](https://developers.cloudflare.com/workers/platform/pricing/).
+Prices change, so check [Resend](https://resend.com/pricing), [Amazon SES](https://aws.amazon.com/ses/pricing/) and [Cloudflare](https://developers.cloudflare.com/workers/platform/pricing/).
 
 ## Deploy
 
