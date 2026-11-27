@@ -130,6 +130,7 @@ A schema change needs a migration for each database type. See [Databases](docs/d
 
 ## Documentation
 
+- [Admin runbook](docs/admin-runbook.md)
 - [Deployment and configuration](docs/deployment.md)
 - [Deploying to Vercel (experimental)](docs/vercel.md)
 - [Databases](docs/databases.md)
