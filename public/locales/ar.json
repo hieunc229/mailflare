@@ -3075,5 +3075,9 @@
 	"domains.forceRemoveConfirm": "{reason}\n\nهل تريد حذف {host} بالقوة رغم ذلك؟ سيحاول Mailflare إزالة سجلَّي DNS ‏_mta-sts و_smtp._tls، ثم يحذف النطاق وجميع صناديق البريد فيه وكل رسائلها، حتى لو فشلت هذه الإزالة. قد تواصل خوادم البريد تطبيق سياسة MTA-STS المخزنة مؤقتًا لبعض الوقت. بعد ذلك ستحصل على سجلات DNS التي عليك إزالتها يدويًا.\n\nاكتب {host} للتأكيد.",
 	"domains.forceRemoved": "تمت إزالة {host}",
 	"domains.forceRemovedRecords": "أزل سجلات DNS هذه بنفسك:",
-	"domains.forceRemovedCache": "قد تواصل خوادم البريد تطبيق سياسة MTA-STS القديمة حتى {date}."
+	"domains.forceRemovedCache": "قد تواصل خوادم البريد تطبيق سياسة MTA-STS القديمة حتى {date}.",
+	"commandPalette.calendar": "Open Calendar",
+	"commandPalette.contacts": "Open Contacts",
+	"commandPalette.drive": "Open Drive",
+	"commandPalette.focusSearch": "Focus mail search"
 }

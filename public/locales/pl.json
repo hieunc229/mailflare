@@ -3033,5 +3033,9 @@
 	"domains.forceRemoveConfirm": "{reason}\n\nUsunąć {host} na siłę mimo to? Mailflare spróbuje usunąć rekordy DNS _mta-sts i _smtp._tls, a następnie usunie domenę, wszystkie jej skrzynki i wszystkie ich wiadomości, nawet jeśli usunięcie rekordów się nie powiedzie. Serwery pocztowe mogą jeszcze przez jakiś czas stosować zapisaną w pamięci podręcznej politykę MTA-STS. Potem otrzymasz listę rekordów DNS do usunięcia ręcznie.\n\nWpisz {host}, aby potwierdzić.",
 	"domains.forceRemoved": "Usunięto {host}",
 	"domains.forceRemovedRecords": "Usuń samodzielnie te rekordy DNS:",
-	"domains.forceRemovedCache": "Serwery pocztowe mogą stosować starą politykę MTA-STS do {date}."
+	"domains.forceRemovedCache": "Serwery pocztowe mogą stosować starą politykę MTA-STS do {date}.",
+	"commandPalette.calendar": "Open Calendar",
+	"commandPalette.contacts": "Open Contacts",
+	"commandPalette.drive": "Open Drive",
+	"commandPalette.focusSearch": "Focus mail search"
 }

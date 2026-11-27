@@ -2991,5 +2991,9 @@
 	"domains.forceRemoveConfirm": "{reason}\n\nఅయినా {host} ను బలవంతంగా తొలగించాలా? Mailflare ముందుగా దాని _mta-sts, _smtp._tls DNS రికార్డులను తొలగించడానికి ప్రయత్నిస్తుంది, ఆ తర్వాత రికార్డుల తొలగింపు విఫలమైనా డొమైన్‌ను, దానిలోని అన్ని మెయిల్‌బాక్స్‌లను, వాటిలోని అన్ని సందేశాలను తొలగిస్తుంది. మెయిల్ సర్వర్‌లు కొంతకాలం కాష్ చేసిన MTA-STS విధానాన్ని వర్తింపజేస్తూనే ఉండవచ్చు. ఆ తర్వాత మీరు చేతితో తొలగించాల్సిన DNS రికార్డుల జాబితా అందుతుంది.\n\nధృవీకరించడానికి {host} టైప్ చేయండి.",
 	"domains.forceRemoved": "{host} తొలగించబడింది",
 	"domains.forceRemovedRecords": "ఈ DNS రికార్డులను మీరే తొలగించండి:",
-	"domains.forceRemovedCache": "మెయిల్ సర్వర్‌లు {date} వరకు పాత MTA-STS విధానాన్ని వర్తింపజేస్తూనే ఉండవచ్చు."
+	"domains.forceRemovedCache": "మెయిల్ సర్వర్‌లు {date} వరకు పాత MTA-STS విధానాన్ని వర్తింపజేస్తూనే ఉండవచ్చు.",
+	"commandPalette.calendar": "Open Calendar",
+	"commandPalette.contacts": "Open Contacts",
+	"commandPalette.drive": "Open Drive",
+	"commandPalette.focusSearch": "Focus mail search"
 }
