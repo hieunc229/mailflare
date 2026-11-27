@@ -1,10 +1,10 @@
 # API and integrations
 
-Mailflare exposes APIs for domain, account, and mailbox management, and for sending email. Authentication and mailbox permissions still apply to these routes.
+APIs for domain, account and mailbox management and for sending email. Authentication and mailbox permissions apply to all routes.
 
 ## Domain management
 
-Adding or removing a domain from Mailflare also updates Cloudflare Email Routing and sending resources. Each domain has a `sendingProvider` and a `receivingProvider` (`none`, `cloudflare`, `resend` or `ses`); see [Sending and receiving providers](providers.md).
+Adding or removing a domain also updates Cloudflare Email Routing and sending resources. Each domain has a `sendingProvider` and a `receivingProvider` (`none`, `cloudflare`, `resend` or `ses`); see [Sending and receiving providers](providers.md).
 
 | Mailflare route | Purpose |
 | --- | --- |
@@ -26,7 +26,7 @@ The hostname must be the apex of a zone available to the configured Cloudflare c
 
 ### Domain management over the API
 
-The same operations are available to scripts through admin API keys with the `domains` scope, using `Authorization: Bearer <key>`. Create these keys in Admin > API keys. The owner must retain the admin role; personal mail keys from Settings cannot grant domain access.
+Same operations for scripts via admin API keys with the `domains` scope (`Authorization: Bearer <key>`), created in Admin > API keys. The owner must retain the admin role; personal mail keys from Settings cannot grant domain access.
 
 | Mailflare route | Purpose |
 | --- | --- |
@@ -41,7 +41,7 @@ The same operations are available to scripts through admin API keys with the `do
 
 ### Inbound provider endpoints
 
-Resend and Amazon SES deliver mail by calling the app, so these routes are public and authenticate themselves rather than using a session or API key:
+Resend and Amazon SES deliver by calling the app: these routes are public and authenticate themselves (no session or API key):
 
 | Route | Authenticated by |
 | --- | --- |
@@ -53,9 +53,9 @@ Resend and Amazon SES deliver mail by calling the app, so these routes are publi
 
 ### Calendar
 
-Each user has a personal calendar at **Calendar** in the dashboard. Events have a title, description, location, attendees, color, time zone and an optional repeat (`daily`, `weekly`, `monthly`, `yearly` or `weekdays`, with an end date and skipped occurrences). `repeatInterval` (1 to 999, always 1 for `weekdays`) sets the step between repeats. `weekdays` repeats on the days in `repeatDays` (0 to 6, Monday to Friday by default). A `monthly` repeat can fall on the nth weekday of the month: set `repeatWeekday` (0 to 6) and `repeatWeek` (1 to 5, or -1 for the last) together. Changing or deleting a repeating event affects the whole series unless you choose a starting occurrence.
+Each user has a personal calendar under **Calendar**. Events have a title, description, location, attendees, color, time zone and an optional repeat (`daily`, `weekly`, `monthly`, `yearly` or `weekdays`, with an end date and skipped occurrences). `repeatInterval` (1 to 999, always 1 for `weekdays`) sets the step between repeats. `weekdays` repeats on the days in `repeatDays` (0 to 6, Monday to Friday by default). A `monthly` repeat can fall on the nth weekday of the month: set `repeatWeekday` (0 to 6) and `repeatWeek` (1 to 5, or -1 for the last) together. Changing or deleting a repeating event affects the whole series unless you choose a starting occurrence.
 
-When you add attendees and choose a sending mailbox, Mailflare emails each attendee an invitation with a calendar (`.ics`) file from that mailbox, and sends updates and cancellations the same way. Events created through MCP tools or the assistant record attendees but do not send invitations.
+With attendees and a sending mailbox, each attendee is emailed an invitation with a calendar (`.ics`) file from that mailbox; updates and cancellations are sent the same way. Events created through MCP tools or the assistant record attendees but send no invitations.
 
 | Mailflare route | Purpose |
 | --- | --- |
@@ -64,13 +64,13 @@ When you add attendees and choose a sending mailbox, Mailflare emails each atten
 | `PATCH /api/calendar/events/[eventId]` | Update an event or series. For a repeating event, pass an occurrence ID or `effectiveFrom` to change it from that occurrence onward. Like `POST`, the response carries `inviteErrors` when some updated invitations could not be sent |
 | `DELETE /api/calendar/events/[eventId]` | Delete an event, or a series from an occurrence onward |
 
-These routes accept the dashboard session or an API key (`Authorization: Bearer <key>`) with the **Read calendar** (`calendar:read`) or **Manage calendar** (`calendar:write`) scope, which you choose when creating the key in **Settings → API keys**. A key can only send invitations if it also has the `send` scope for the chosen mailbox. MCP and the assistant use separate calendar tools, described in [Email assistant and MCP](email-assistant-and-mcp.md).
+Auth: dashboard session, or an API key (`Authorization: Bearer <key>`) with the **Read calendar** (`calendar:read`) or **Manage calendar** (`calendar:write`) scope, chosen in **Settings → API keys**. A key sends invitations only with the `send` scope for the chosen mailbox. MCP and the assistant use separate calendar tools, described in [Email assistant and MCP](email-assistant-and-mcp.md).
 
 ### Booking pages
 
-Open **Booking** to create booking events: a name, link (slug), duration, location, weekdays, one or more daily time ranges, a time zone and an on/off switch. Two disabled templates (15 and 30 minute meetings) are offered to start from. Each user gets a booking username, derived from their email and unique across the instance; an administrator can change it. Booking events are served at `/book/<username>` (the list) and `/book/<username>/<event>` (one event), with no login.
+**Booking** creates booking events: a name, link (slug), duration, location, weekdays, one or more daily time ranges, a time zone and an on/off switch. Two disabled templates (15 and 30 minute meetings) are offered to start from. Each user gets a booking username, derived from their email and unique across the instance; an administrator can change it. Booking events are served at `/book/<username>` (the list) and `/book/<username>/<event>` (one event), with no login.
 
-A guest picks a slot, enters a name, email, optional extra guest emails and notes, and the booking is added to the host's calendar with the guest as attendee. Slots come from the host's availability: every 15 minutes inside the allowed ranges, up to 60 days ahead, at least an hour from now, and only where the host's calendar is free, repeating events included. The booking is inserted in one statement that re-checks for conflicts, so two guests cannot take the same slot. Mailflare emails the booker a confirmation with a calendar file, sent from the event owner's mailbox (customizable per event); extra guests are not emailed. The booking page also confirms on screen.
+A guest picks a slot and enters a name, email, optional extra guest emails and notes; the booking is added to the host's calendar with the guest as attendee. Slots: every 15 minutes inside the allowed ranges, up to 60 days ahead, at least an hour from now, only where the host's calendar (repeating events included) is free. The booking is inserted in one statement that re-checks for conflicts, so two guests cannot take the same slot. The booker is emailed a confirmation with a calendar file, sent from the event owner's mailbox (customizable per event); extra guests are not emailed. The booking page also confirms on screen.
 
 On a Team license an administrator can add other users as hosts of a booking event. The booking is created on every host's calendar, and a slot is offered only when all hosts are free.
 
@@ -85,7 +85,7 @@ On a Team license an administrator can add other users as hosts of a booking eve
 
 ## Account and mailbox management
 
-Admin > API keys can also grant the `accounts`, `mailboxes` and `storage` scopes independently. These routes use `Authorization: Bearer <key>` and require the key owner to retain the admin role. Account management requires a Pro or Team license; creating a shared mailbox requires a Team license. Each key can access only accounts created by its owner and mailboxes owned by those accounts or the admin.
+Admin > API keys can also grant `accounts`, `mailboxes` and `storage` scopes independently. Routes use `Authorization: Bearer <key>` and require the key owner to retain the admin role. Account management requires a Pro or Team license; creating a shared mailbox requires a Team license. Each key can access only accounts created by its owner and mailboxes owned by those accounts or the admin.
 
 The `storage` scope reports and tests object storage: `GET /api/v1/storage` returns `{ storage: { provider: "backblaze" | "s3" | "r2" | "files", configured, bucket, endpoint }, warning }` (credentials are never returned; `warning` explains a half-set `B2_*` configuration), and `POST /api/v1/storage` round-trips a small object and returns `{ ok, error?, latencyMs, storage }` (HTTP 502 on failure). Backblaze B2 (`B2_KEY_ID`, `B2_APPLICATION_KEY`, `B2_BUCKET`, `B2_ENDPOINT`) or AWS S3 (`S3_BUCKET`, `S3_REGION`, credentials) replaces R2 for all stored objects when configured.
 
@@ -107,14 +107,9 @@ Admin API keys cannot read or send mail. Enable **Allow MCP access** when creati
 
 ### Choose aliases when creating an account
 
-In **Admin > Accounts > New account**, the primary address is assigned by default.
-Add optional aliases by choosing each username and domain, or enable **Use all domains**
-to also receive and send as the primary username on every available active domain owned
-by the same admin, including domains added later.
+In **Admin > Accounts > New account** the primary address is assigned by default. Add aliases by choosing each username and domain, or enable **Use all domains** to also receive and send as the primary username on every active domain owned by the same admin, including domains added later.
 
-The dashboard, admin API, and MCP `manage_accounts` create action share the same
-creation handler. For example, this API body creates `sam@example.com` with just
-`sales@example.net` as an additional alias:
+The dashboard, admin API and MCP `manage_accounts` create action share one handler. This body creates `sam@example.com` with `sales@example.net` as an additional alias:
 
 ```json
 {
@@ -128,36 +123,19 @@ creation handler. For example, this API body creates `sam@example.com` with just
 }
 ```
 
-Pass the same object as `data` to `manage_accounts` with `action: "create"`.
-`aliases` defaults to an empty list. Alias domains must
-be active and owned by the admin creating the account. Duplicate addresses and conflicts
-with existing mailboxes or aliases are rejected, including equivalent dot/plus variants.
-An alias shares its mailbox's delivery, message storage, and sending permissions.
+Pass the same object as `data` to `manage_accounts` with `action: "create"`. `aliases` defaults to an empty list. Alias domains must be active and owned by the admin creating the account. Duplicate addresses and conflicts with existing mailboxes or aliases are rejected, including equivalent dot/plus variants. An alias shares its mailbox's delivery, message storage and sending permissions.
 
-For backward compatibility, API/MCP requests that omit `useAllDomains` still default
-to `true`; pass `false` explicitly for primary-only or selected-alias accounts. The
-dashboard sends `false` unless the checkbox is enabled. This changes initial address
-assignment, not existing mailbox management permissions. Existing accounts are not
-modified and no database migration is required.
+For backward compatibility, API/MCP requests that omit `useAllDomains` default to `true`; pass `false` for primary-only or selected-alias accounts. The dashboard sends `false` unless the checkbox is enabled. This changes initial address assignment, not mailbox management permissions. Existing accounts are not modified; no database migration is required.
 
-Creation validates all selected addresses before provisioning. Account, mailbox, and
-alias records are inserted atomically. If Cloudflare routing fails, the new records
-are removed and routing changes from that attempt are rolled back, preserving existing
-rules. If cleanup itself fails, the response reports that manual checking is needed.
+Creation validates all selected addresses before provisioning, then inserts account, mailbox and alias records atomically. If Cloudflare routing fails, the new records are removed and that attempt's routing changes are rolled back, preserving existing rules. If cleanup itself fails, the response reports that manual checking is needed.
 
 ### Masked addresses ("Hide My Email")
 
-Each mailbox's settings page can also mint **masked** aliases: a random address on an
-active domain with an optional label, created via **Generate masked address**. Sending
-from a masked alias uses the label — or the bare address when it has none — so the
-account and mailbox names never reach the recipient. Replies to mail delivered to a
-masked alias default to replying from it. Toggling an alias off stops its incoming
-mail, including through catch-all rules, and removes it from the sender list until it
-is re-enabled.
+A mailbox's settings page can mint **masked** aliases via **Generate masked address**: a random address on an active domain with an optional label. Sending from one uses the label (or the bare address when none), so account and mailbox names never reach the recipient. Replies to mail delivered to a masked alias default to replying from it. Toggling an alias off stops its incoming mail, including through catch-all rules, and removes it from the sender list until re-enabled.
 
 ## Sending email
 
-Send email through `POST /api/v1/send`. `to`, `cc` and `bcc` accept either a comma-separated header string or an array of addresses; each entry may carry a display name (`"Maya Chen" <maya@example.net>`). A message can reach up to 50 recipients across the three fields. `mailboxId` is required: it is the id of the mailbox you send from, and a key limited to specific mailboxes must include it (otherwise the request is refused with 404). Attachments are optional and use Base64-encoded content:
+`POST /api/v1/send`. `to`, `cc` and `bcc` accept either a comma-separated header string or an array of addresses; each entry may carry a display name (`"Maya Chen" <maya@example.net>`). A message can reach up to 50 recipients across the three fields. `mailboxId` is required: it is the id of the mailbox you send from, and a key limited to specific mailboxes must include it (otherwise the request is refused with 404). Attachments are optional and use Base64-encoded content:
 
 ```json
 {
@@ -192,21 +170,28 @@ To send a reply that threads correctly in the recipient's client, pass the paren
 }
 ```
 
-`GET /api/messages/{id}/thread` (session auth) returns every stored message in the same conversation, oldest first, excluding drafts and trash. `GET /api/messages?group=thread` collapses a list to one row per conversation (its newest message matching the filter) and adds `threadCount`, `threadUnread` and `threadMessageIds`, the ids that row stands for within the current filter, so bulk actions can act on the whole conversation.
+`GET /api/messages/{id}/thread` (session auth) returns the conversation's stored messages, oldest first, excluding drafts and trash. `GET /api/messages?group=thread` collapses a list to one row per conversation (its newest message matching the filter) and adds `threadCount`, `threadUnread` and `threadMessageIds`, the ids that row stands for within the current filter, so bulk actions can act on the whole conversation.
 
 `POST /api/messages/bulk` (session auth) with `action: "delete"` permanently removes the given messages, including their raw MIME and attachment objects, but only those already in Trash or Spam; others are skipped and counted in `skipped`. `POST /api/messages/empty` with `{ mailboxId, folder: "trash" | "spam" }` permanently deletes that folder's messages in batches of 100 and returns `{ deleted, remaining }`; call it again until `remaining` is 0. Both write an `email.delete` audit entry per message with `permanent: true`.
 
-Each user can also choose **Settings > Inbox > Trash and Spam clean-up** to delete Trash and Spam automatically after a number of days (`GET`/`PATCH /api/settings/trash-retention` with `{ days: number | null }`, 1 to 365, `null` for never). It applies to messages in mailboxes the user owns. `messages.trashed_at` records when a message entered either folder; database triggers keep it current, and the scheduled maintenance run deletes expired messages in batches of 200, with `source: "retention"` in the audit entry.
+**Settings > Inbox > Trash and Spam clean-up** deletes Trash and Spam automatically after a number of days (`GET`/`PATCH /api/settings/trash-retention` with `{ days: number | null }`, 1 to 365, `null` for never). It applies to mailboxes the user owns. `messages.trashed_at` records when a message entered either folder; database triggers keep it current, and the scheduled maintenance run deletes expired messages in batches of 200, with `source: "retention"` in the audit entry.
 
 Messages composed in Mailflare are sent as HTML with a plain-text alternative derived from it. Quoted or forwarded content is wrapped in `<div class="mailflare-quote" data-mailflare-quote="1">` so the reader can fold it. `POST /api/drafts` accepts `forwardOfMessageId`, which copies that message's attachments onto the new draft; `DELETE /api/drafts/{id}/attachments/{attachmentId}` removes one, and `POST /api/send` with `draftId` sends the draft's stored files along with any uploaded in the request.
 
-The dashboard composer accepts up to 10 attachments. An administrator sets the outgoing per-file and combined limit from 1 MB up to the runtime's ceiling on **General** (`/general`): 25 MB on Cloudflare Workers (each file is held in a 128 MB isolate while it is read and sent) and 50 MB on Node/Docker. The default is 25 MB; a stored value above the ceiling is clamped when it is saved and when it is used. `POST /api/v1/send` takes attachments as base64 in a JSON body capped at 40 MiB (about 30 MB of files), which is the effective limit there whatever the setting. Attachment metadata is stored in D1 and file content is stored in R2. Normal message downloads require access to the mailbox containing the message.
-The limits below apply to domains that send through Cloudflare. Resend and Amazon SES take attachments directly, within the same administrator limit; files over 20 MB, or that would take the message past 20 MB, are sent as the same download links (so receiving servers that refuse large encoded messages are not hit). Raising the limit above 25 MB is only possible on Node/Docker. Cloudflare Email Sending limits the entire encoded message, including attachments, to 5 MiB for general recipients, or 25 MiB for verified destination addresses. To stay under the general limit, files over 3 MB and smaller files that would exceed the message budget are sent as R2 download links. The recipient can download them for 30 days; anyone with the link can access the file during that time. The outgoing cap still applies to those files. The sentence added above the links defaults to the sender's interface language; an administrator can replace it on **General** (`{days}` is the link lifetime, an empty text adds no sentence, the links are always included, and HTML in it is escaped). Cloudflare also limits recipient count to 50, subject length to 998 characters, and headers to 16 KB.
-Incoming mail that exceeds the attachment count or 25 MB decoded attachment limit is rejected during delivery, so the sender's mail provider can report a delivery failure. Cloudflare Email Routing also limits the entire raw message to 25 MiB, including MIME encoding, and may reject it before Mailflare runs.
+Attachment limits:
+
+- Dashboard composer: up to 10 attachments.
+- Outgoing per-file and combined limit: an administrator sets 1 MB up to the runtime ceiling on **General** (`/general`). Ceiling: 25 MB on Cloudflare Workers (each file is held in a 128 MB isolate while read and sent), 50 MB on Node/Docker. Default 25 MB. A stored value above the ceiling is clamped when saved and when used.
+- `POST /api/v1/send`: base64 attachments in a JSON body capped at 40 MiB (about 30 MB of files); this is the effective limit there whatever the setting.
+- Storage: metadata in D1, file content in R2. Downloads require access to the message's mailbox.
+- Resend and Amazon SES: attachments sent directly within the same administrator limit; files over 20 MB, or that would take the message past 20 MB, go as download links (as for Cloudflare, below), so receiving servers that refuse large encoded messages are not hit.
+- Cloudflare sending: Email Sending limits the whole encoded message, attachments included, to 5 MiB for general recipients or 25 MiB for verified destination addresses. To stay under the general limit, files over 3 MB and smaller files that would exceed the message budget are sent as R2 download links (valid 30 days; anyone with the link can access the file; the outgoing cap still applies). The sentence above the links defaults to the sender's interface language; an administrator can replace it on **General** (`{days}` is the link lifetime, empty text adds no sentence, links are always included, HTML is escaped). Cloudflare also limits recipients to 50, subject length to 998 characters and headers to 16 KB.
+- Raising the limit above 25 MB is only possible on Node/Docker.
+- Incoming mail over the attachment count or the 25 MB decoded attachment limit is rejected during delivery, so the sender's provider can report a failure. Cloudflare Email Routing also limits the raw message to 25 MiB including MIME encoding, and may reject it before Mailflare runs.
 
 ## JMAP
 
-Mailflare serves [JMAP](https://jmap.io) (RFC 8620 core and RFC 8621 mail, plus submission) so external mail apps can read and send mail. Discovery is at `/.well-known/jmap`, which redirects to `/jmap/session`. Authenticate with an API key that has the `jmap` scope, either as `Authorization: Bearer <key>` or as the password of HTTP Basic auth (the username is ignored; repeated wrong guesses are rate limited; plain HTTP still works but sends the key in the clear, so use HTTPS). Create one under Settings > App passwords: it is a 16-character password limited to the mailboxes you pick, shown once, and you confirm your identity (password and second step, or a passkey) to create it. The page lists each app password with when, how (protocol) and from which IP address it was last used, and revokes it. Changing or resetting your password, changing two-step sign-in, or signing out everywhere revokes every app password, mobile device key and older JMAP-only key; a general API key that adds `jmap` to other scopes is kept. Creating an API key with the `jmap` scope needs the same confirmation.
+[JMAP](https://jmap.io) (RFC 8620 core, RFC 8621 mail, submission) lets external mail apps read and send mail. Discovery is at `/.well-known/jmap`, which redirects to `/jmap/session`. Authenticate with an API key that has the `jmap` scope, either as `Authorization: Bearer <key>` or as the password of HTTP Basic auth (the username is ignored; repeated wrong guesses are rate limited; plain HTTP still works but sends the key in the clear, so use HTTPS). Create one under Settings > App passwords: it is a 16-character password limited to the mailboxes you pick, shown once, and you confirm your identity (password and second step, or a passkey) to create it. The page lists each app password with when, how (protocol) and from which IP address it was last used, and revokes it. Changing or resetting your password, changing two-step sign-in, or signing out everywhere revokes every app password, mobile device key and older JMAP-only key; a general API key that adds `jmap` to other scopes is kept. Creating an API key with the `jmap` scope needs the same confirmation.
 
 The account id is the user id. Each Mailflare mailbox appears as a top-level JMAP Mailbox with system children (`inbox`, `drafts`, `sent`, `archive`, `junk`, `trash`) and one child per user folder; a message belongs to exactly one of them. Supported methods: `Mailbox/get|query|set|changes` (folders only), `Thread/get|changes`, `Email/get|query|set|import|changes`, `SearchSnippet/get`, `Identity/get|set|changes`, `EmailSubmission/get|query|set|changes`, and `Core/echo`. `Email/copy` and `Email/parse` are not implemented. `Email/changes`, `Mailbox/changes` and `Thread/changes` return real deltas; `*/queryChanges`, `Identity/changes` and `EmailSubmission/changes` return `cannotCalculateChanges`, so clients re-query those; `/jmap/eventsource` pushes state changes by polling. `Email/set` creates drafts, updates `$seen` and `$flagged`, moves between mailboxes, and destroys (to Trash first, then permanently). `EmailSubmission/set` sends a draft and reports it destroyed, since the sent copy is a new message. Blob download and upload follow the Session's `downloadUrl` and `uploadUrl`.
 
@@ -250,6 +235,6 @@ Terms combine with AND. Admins can check or rebuild the index with `GET` / `POST
 
 ## Real-time updates
 
-Mailflare uses a Durable Object WebSocket hub to notify connected users after an inbound message is stored. Mailbox owners, the domain administrator, and delegated users receive events for mailboxes they can access.
+A Durable Object WebSocket hub notifies connected users after an inbound message is stored. Mailbox owners, the domain administrator and delegated users receive events for mailboxes they can access.
 
 The `REALTIME` binding and its migration are declared in `wrangler.jsonc`. When a WebSocket is temporarily unavailable, the app retries the connection and uses a slower refresh until it recovers.
