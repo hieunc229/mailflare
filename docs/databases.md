@@ -1,8 +1,6 @@
 # Databases
 
-Mailflare stores its data in **Cloudflare D1** by default. Nothing needs configuring for that: deploy with the `DB` binding from `wrangler.jsonc` and you are done.
-
-Set `DATABASE_URL` to use another database instead. Every database [Drizzle ORM](https://orm.drizzle.team) supports is covered by three dialects:
+Default: **Cloudflare D1** via the `DB` binding in `wrangler.jsonc`; no configuration. Set `DATABASE_URL` to use another database. Three [Drizzle ORM](https://orm.drizzle.team) dialects:
 
 | Dialect | Drivers (`DATABASE_DRIVER`) | Typical services |
 | --- | --- | --- |
@@ -10,7 +8,7 @@ Set `DATABASE_URL` to use another database instead. Every database [Drizzle ORM]
 | PostgreSQL | `node-postgres`, `postgres-js`, `neon`, `pglite` | Supabase, Neon, Vercel Postgres, Prisma Postgres, RDS, Cloud SQL, self-hosted, embedded PGlite |
 | MySQL | `mysql2`, `planetscale` | MySQL 8, MariaDB 11, TiDB, PlanetScale, Aurora |
 
-The driver is inferred from the URL. Set `DATABASE_DRIVER` only to override it. Names such as `pg`, `postgres`, `supabase`, `vercel`, `turso`, `mysql`, `tidb` and `mariadb` are accepted as aliases.
+The driver is inferred from the URL; set `DATABASE_DRIVER` only to override. Aliases accepted: `pg`, `postgres`, `supabase`, `vercel`, `turso`, `mysql`, `tidb` and `mariadb`.
 
 ## Configuration
 
@@ -40,15 +38,15 @@ On Cloudflare Workers set them as Worker variables or secrets (`npx wrangler sec
 | PlanetScale | `mysql://user:pass@aws.connect.psdb.cloud/db` | Detected from the hostname; HTTP driver, works on Workers. |
 | Hyperdrive (Workers) | `DATABASE_DRIVER=node-postgres` (or `mysql2`) and a `HYPERDRIVE` binding | The binding's connection string is used when `DATABASE_URL` is unset. |
 
-Create an empty database (and user) first. Mailflare creates its tables.
+Create an empty database (and user) first; Mailflare creates its tables.
 
 ### Workers and the schema dialect
 
-The table definitions are built for the active dialect when the app starts, so on Workers `DATABASE_URL` (or `DATABASE_DRIVER` with a Hyperdrive binding) must be available as a variable or secret, not only at request time. Changing database means a new, empty database: use **Backups** to move data (below).
+Table definitions are built for the active dialect at app start, so on Workers `DATABASE_URL` (or `DATABASE_DRIVER` with a Hyperdrive binding) must be a variable or secret, not only available at request time. Changing database means a new, empty database; move data with **Backups** (below).
 
 ## Migrations
 
-Migrations are plain SQL, one directory per dialect, applied by the same code everywhere (Admin → Settings, `/api/setup/prepare`, and automatically on start when self-hosted):
+Plain SQL, one directory per dialect, applied by the same code everywhere (Admin → Settings, `/api/setup/prepare`, automatically on start when self-hosted):
 
 | Dialect | Directory | Ledger table |
 | --- | --- | --- |
@@ -56,9 +54,9 @@ Migrations are plain SQL, one directory per dialect, applied by the same code ev
 | PostgreSQL | `drizzle/migrations-pg` | `mailflare_migrations` |
 | MySQL | `drizzle/migrations-mysql` | `mailflare_migrations` |
 
-PostgreSQL and MySQL start from a single baseline generated from the current schema (`0000_baseline.sql`), followed by `0001_triggers_and_seeds.sql` for what drizzle-kit cannot generate (seed rows and triggers). SQLite keeps its full history.
+PostgreSQL and MySQL: one generated baseline (`0000_baseline.sql`), then `0001_triggers_and_seeds.sql` for what drizzle-kit cannot generate (seed rows, triggers). SQLite keeps its full history.
 
-Changing the schema (`src/db/schema/index.ts`) means generating a migration for each dialect:
+After changing `src/db/schema/index.ts`, generate a migration per dialect:
 
 ```bash
 npm run db:generate        # SQLite  -> drizzle/migrations
@@ -67,13 +65,13 @@ npm run db:generate:mysql  # MySQL -> drizzle/migrations-mysql
 npm run db:bundle          # rebuild the bundles the Worker applies
 ```
 
-`tests/database-dialects.test.mjs` fails if the dialects drift apart (different tables or columns, a stale bundle, an unindexable MySQL column).
+`tests/database-dialects.test.mjs` fails on dialect drift (different tables or columns, stale bundle, unindexable MySQL column).
 
 ## What is the same everywhere
 
-The application code is written once. `getDb(env)` and `env.DB` work as before: on other databases `env.DB` is an adapter with the D1 interface (`prepare`, `bind`, `batch`) over the configured driver, and the Drizzle instance is built for the right dialect. Stored values are identical across dialects: timestamps are whole seconds in a `bigint`, booleans are booleans (`tinyint(1)` on MySQL), so SQL fragments and **backups are portable**: a backup taken on D1 restores onto PostgreSQL or MySQL and back.
+Application code is dialect-independent. `getDb(env)` and `env.DB` work unchanged: on other databases `env.DB` is an adapter with the D1 interface (`prepare`, `bind`, `batch`) over the configured driver, and Drizzle is built for the right dialect. Stored values are identical: timestamps are whole seconds in a `bigint`, booleans are booleans (`tinyint(1)` on MySQL). **Backups are portable**: a D1 backup restores onto PostgreSQL or MySQL and back.
 
-Also kept on every dialect: foreign keys and cascades, the JMAP change log, mailbox revisions and the CalDAV/CardDAV change log (via triggers), automatic `trashed_at` tracking, and seed rows. TiDB and PlanetScale do not support triggers, so the trigger-based items (both change logs, `trashed_at` tracking) are not available there; CalDAV/CardDAV sync needs MySQL, MariaDB or PostgreSQL.
+Also on every dialect: foreign keys and cascades, the JMAP change log, mailbox revisions and the CalDAV/CardDAV change log (via triggers), automatic `trashed_at` tracking, and seed rows. TiDB and PlanetScale do not support triggers, so the trigger-based items (both change logs, `trashed_at` tracking) are not available there; CalDAV/CardDAV sync needs MySQL, MariaDB or PostgreSQL.
 
 ## What differs
 
@@ -87,12 +85,12 @@ Also kept on every dialect: foreign keys and cascades, the JMAP change log, mail
 | `batch` atomicity | Atomic | Atomic | Atomic for DML; MySQL commits DDL implicitly, so a failed migration can leave earlier statements applied |
 | `neon` (HTTP) | n/a | Batches run as separate statements (the HTTP protocol has no interactive transaction); use `node-postgres` for atomic batches | n/a |
 
-Why search is the main difference: FTS5 is an SQLite extension, PostgreSQL's equivalent (`tsvector`) and MySQL's `FULLTEXT` have different grammars and ranking, and the search syntax (`from:`, `subject:`, quoted phrases, `-term`) is translated into plain predicates on those dialects instead. That is correct but unindexed, so searches scan the messages of the mailbox being searched. For large mailboxes, D1/SQLite, or PostgreSQL with `pg_trgm`, searches faster.
+Search differs because FTS5 is SQLite-only; `tsvector` and `FULLTEXT` have different grammars and ranking. On PostgreSQL and MySQL the search syntax (`from:`, `subject:`, quoted phrases, `-term`) is translated into plain predicates: correct but unindexed, scanning the searched mailbox's messages. For large mailboxes prefer D1/SQLite, or PostgreSQL with `pg_trgm`.
 
 Other things to know:
 
-- **Moving between databases** is done with **Admin → Backups**: take a backup, point `DATABASE_URL` at the new empty database, finish setup, restore. Raw mail and attachments live in object storage and are unaffected.
-- **Connections.** Self-hosted (Node) uses a connection pool. On Workers a TCP connection cannot outlive a request, so each query opens its own connection; put Hyperdrive (or a pooler such as Supabase's, Neon's or PlanetScale's) in front, or pick an HTTP driver (`neon`, `planetscale`, `libsql`).
+- **Moving between databases**: **Admin → Backups**: take a backup, point `DATABASE_URL` at the new empty database, finish setup, restore. Raw mail and attachments live in object storage and are unaffected.
+- **Connections.** Self-hosted (Node) uses a connection pool. On Workers a TCP connection cannot outlive a request, so each query opens its own; put Hyperdrive (or a pooler such as Supabase's, Neon's or PlanetScale's) in front, or pick an HTTP driver (`neon`, `planetscale`, `libsql`).
 - **Case sensitivity.** SQLite and PostgreSQL compare text case-sensitively; MySQL's default collations do not, so on MySQL two accounts whose emails differ only by case collide on the unique index.
 - **Reserved words.** All SQL is generated with quoted identifiers; hand-written SQL in your own migrations should quote `key`, `read`, `repeat`, `change` and friends for MySQL.
 - **Not covered:** SingleStore and other Drizzle dialects outside SQLite, PostgreSQL and MySQL.
@@ -110,9 +108,9 @@ MAILFLARE_DB_DIALECT=postgres npm run db:smoke -- postgres://postgres:pw@127.0.0
 MAILFLARE_DB_DIALECT=mysql npm run db:smoke -- mysql://root:pw@127.0.0.1:3306/mailflare
 ```
 
-`db:smoke` applies the migrations and exercises the query shapes the app relies on (inserts, upserts, `returning`, triggers, batches, search, backups, bookings). Set `MAILFLARE_DB_DIALECT` to match the URL when running it (the app derives it from `DATABASE_URL` by itself).
+`db:smoke` applies the migrations and exercises the app's query shapes (inserts, upserts, `returning`, triggers, batches, search, backups, bookings). Set `MAILFLARE_DB_DIALECT` to match the URL (the app derives it from `DATABASE_URL` itself).
 
-Self-hosted with Docker Compose and PostgreSQL (add next to the `mailflare` service, then set `DATABASE_URL=postgres://mailflare:change-me@db:5432/mailflare` in `.env.docker`):
+Docker Compose with PostgreSQL (add next to the `mailflare` service, then set `DATABASE_URL=postgres://mailflare:change-me@db:5432/mailflare` in `.env.docker`):
 
 ```yaml
   db:
@@ -126,7 +124,7 @@ Self-hosted with Docker Compose and PostgreSQL (add next to the `mailflare` serv
       - mailflare-db:/var/lib/postgresql/data
 ```
 
-Run the app itself against another database:
+Run the app against another database:
 
 ```bash
 DATABASE_URL=postgres://postgres:pw@127.0.0.1:5432/mailflare npm run dev:node
