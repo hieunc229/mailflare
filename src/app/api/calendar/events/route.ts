@@ -38,7 +38,7 @@ export async function GET(request: Request) {
 	if (new Set(roomIds).size > MAX_SCHEDULE_ROOMS) return NextResponse.json({ error: `Ask for at most ${MAX_SCHEDULE_ROOMS} rooms at a time` }, { status: 400 });
 	const visible = await listVisibleEvents(db, user, { start, end }, requested);
 	// An event shows its rooms to whoever can read it in full; a redacted one hides them with the rest.
-	const booked = await roomsByEvent(db, visible.filter((event) => !event.redacted).map((event) => event.id));
+	const booked = await roomsByEvent(db, visible.filter((event) => !(event as { redacted?: boolean }).redacted).map((event) => event.id));
 	const events = visible.map((event) => booked.has(event.id) ? { ...event, rooms: booked.get(event.id) } : event);
 	return NextResponse.json(roomIds.length ? { events, roomEvents: await listRoomEvents(db, user, roomIds, { start, end }) } : { events });
 }

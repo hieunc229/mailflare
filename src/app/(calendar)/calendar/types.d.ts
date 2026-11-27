@@ -39,6 +39,10 @@ export type CalendarEvent = {
   inviteMessageId?: string | null;
   /** JSON map of guest address to accepted, tentative or declined. */
   attendeeResponses?: string | null;
+  /** The rooms the event is booked for, accepted or declined (only for events the viewer may read in full). */
+  rooms?: { resourceId: string; status: "accepted" | "declined"; conflictAt: string | null }[];
+  /** Set on a booking drawn from a room's schedule: the room, not a calendar, it belongs to. */
+  roomId?: string;
 };
 
 export type CalendarView = "month" | "week" | "day";
