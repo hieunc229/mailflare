@@ -56,6 +56,8 @@ export async function roomBusyIntervals(db: Db, resourceIds: string[], start: Da
 		if (rows.length > MAX_ROOM_ROWS) for (const id of ids.slice(index, index + ROOM_CHUNK)) truncated.add(id);
 		const zones = rows.some((row) => needsOwnerZone(row)) ? await loadOwnerZones(db, [...new Set(rows.map((row) => row.userId))]) : new Map<string, string>();
 		for (const row of rows.slice(0, MAX_ROOM_ROWS)) {
+			// The row being edited is itself a moved occurrence (its booking is its series'): it does not clash with itself.
+			if (options.excludeEventId !== undefined && row.id === options.excludeEventId && row.id !== row.bookedEventId) continue;
 			const edited = options.excludeEventId !== undefined && row.bookedEventId === options.excludeEventId;
 			// The edited series' later occurrences, and the moved rows that replaced them, are about to change with the save.
 			if (edited && row.id !== row.bookedEventId && (row.recurrenceId === null || row.recurrenceId.getTime() >= options.excludeOccurrence!)) continue;
