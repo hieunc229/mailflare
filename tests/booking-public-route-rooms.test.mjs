@@ -126,3 +126,10 @@ test("an event type that predates rooms (the default list) is unchanged", async 
 	setup({ rooms: "[]" });
 	assert.equal((await get()).status, 200);
 });
+
+test("the public page gets an allowlisted event: what the page draws and its owner id (the page checks it against the URL), nothing else", async () => {
+	setup();
+	const { event } = await (await get()).json();
+	assert.deepEqual(Object.keys(event).sort(), ["color", "description", "durationMinutes", "endTime", "id", "location", "name", "slug", "startTime", "timeRanges", "timeZone", "userId", "weekdays"]);
+	for (const hidden of ["hostIds", "resourceIds", "enabled", "createdAt", "updatedAt"]) assert.equal(hidden in event, false, hidden);
+});
