@@ -94,7 +94,7 @@ export async function POST(request: Request, { params }: InviteRouteParams) {
 	if (plan.action === "delete") {
 		await db.delete(calendarEvents).where(where);
 	} else if (plan.action === "exclude" && existing) {
-		await db.batch([db.update(calendarEvents).set({ excludedOccurrences: addExcludedOccurrence(existing.excludedOccurrences, plan.occurrence), inviteSender: existing.inviteSender || sender, updatedAt: new Date() }).where(where), declineBookingsStatement(db, id)] as never);
+		await db.batch([declineBookingsStatement(db, id), db.update(calendarEvents).set({ excludedOccurrences: addExcludedOccurrence(existing.excludedOccurrences, plan.occurrence), inviteSender: existing.inviteSender || sender, updatedAt: new Date() }).where(where)] as never);
 		await rebookEvents(db, [id], roomsBookable(env));
 		eventId = existing.id;
 	} else if (plan.action === "none") {
@@ -111,7 +111,7 @@ export async function POST(request: Request, { params }: InviteRouteParams) {
 		// The colour is chosen only when the row is created, so one the user changed is kept.
 		const write = db.insert(calendarEvents).values({ id, userId: user.id, mailboxId: message.mailboxId, color: response === "tentative" ? "#7c3aed" : "#2563eb", ...inviteEventFlags(invite), ...values }).onConflictDoUpdate({ target: calendarEvents.id, set: values });
 		// An answered update can move an event that has rooms: declined in the same batch, checked again after it.
-		if (existing) { await db.batch([write, declineBookingsStatement(db, id)] as never); await rebookEvents(db, [id], roomsBookable(env)); } else await write;
+		if (existing) { await db.batch([declineBookingsStatement(db, id), write] as never); await rebookEvents(db, [id], roomsBookable(env)); } else await write;
 		eventId = id;
 	}
 

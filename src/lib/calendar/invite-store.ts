@@ -125,7 +125,7 @@ export async function registerInboundInvite(env: CloudflareEnv, input: { userId:
 		if (plan.action === "exclude") {
 			if (!existing) return;
 			// An event with rooms is declined in the same batch and checked again after it (a stop in between leaves none accepted unchecked).
-			await db.batch([db.update(calendarEvents).set({ excludedOccurrences: addExcludedOccurrence(existing.excludedOccurrences, plan.occurrence), inviteSender: existing.inviteSender || sender, updatedAt: new Date() }).where(where), declineBookingsStatement(db, id)] as never);
+			await db.batch([declineBookingsStatement(db, id), db.update(calendarEvents).set({ excludedOccurrences: addExcludedOccurrence(existing.excludedOccurrences, plan.occurrence), inviteSender: existing.inviteSender || sender, updatedAt: new Date() }).where(where)] as never);
 			await rebookEvents(db, [id], roomsBookable(env));
 			return;
 		}
@@ -135,10 +135,10 @@ export async function registerInboundInvite(env: CloudflareEnv, input: { userId:
 			return;
 		}
 		const moved = existing.startsAt.getTime() !== invite.startsAt.getTime() || existing.endsAt.getTime() !== invite.endsAt.getTime();
-		await db.batch([db.update(calendarEvents).set({
+		await db.batch([declineBookingsStatement(db, id), db.update(calendarEvents).set({
 			...values, inviteMessageId: input.messageId,
 			responseStatus: moved ? "needs-action" : existing.responseStatus,
-		}).where(where), declineBookingsStatement(db, id)] as never);
+		}).where(where)] as never);
 		await rebookEvents(db, [id], roomsBookable(env));
 	} catch (error) {
 		console.error(`Invitation registration failed for ${input.messageId}`, error);
