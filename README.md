@@ -31,6 +31,7 @@ Self-host it on Cloudflare, Docker or Vercel (experimental). **Or try [Mailflare
 
 - **Email**: Custom domain mailboxes, personal or shared, with access you control. Send and receive with Cloudflare Email, Resend or Amazon SES.
 - **Routing rules**: Store, forward, reject or sort incoming mail, including a one-rule filter for newsletters and promotions.
+- **Plus-addressing**: `user+tag@` mail reaches the `user` mailbox and can drive rules. See [Plus-addressing](docs/plus-addressing.md).
 - **Calendar**: Repeating events with time zones. Attendees get email invitations.
 - **Booking**: Share a public link so anyone can book a free time on your calendar.
 - **Drive**: Store and share files.
@@ -134,6 +135,7 @@ A schema change needs a migration for each database type. See [Databases](docs/d
 - [Deploying to Vercel (experimental)](docs/vercel.md)
 - [Databases](docs/databases.md)
 - [Sending and receiving providers](docs/providers.md)
+- [Plus-addressing](docs/plus-addressing.md)
 - [API and integrations](docs/api.md)
 - [Email assistant and MCP](docs/email-assistant-and-mcp.md)
 - [Importing from Google Takeout](docs/import.md)
