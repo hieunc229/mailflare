@@ -11,7 +11,7 @@ Mailflare runs on SQLite/D1, PostgreSQL and MySQL from one schema file. Any chan
 5. Touching `messages`, `folders`, `mailboxes` or `mailbox_aliases` behaviour that SQLite does with triggers (JMAP change log, `trashed_at`, search index): add the equivalent trigger SQL to a new hand-written PostgreSQL and MySQL migration too.
 6. Run `node --test tests/*.test.mjs` (`tests/database-dialects.test.mjs` fails if the dialects diverge or a bundle is stale) and, if a database is available, `npm run db:smoke -- <DATABASE_URL>`.
 
-Raw SQL must also work on all three dialects; see "The database is D1 unless `DATABASE_URL` says otherwise" in CLAUDE.md and `docs/databases.md`. Never edit an already-applied migration; add a new one.
+Raw SQL must also work on all three dialects; see "The database is D1 unless `DATABASE_URL` says otherwise" in `docs/architecture.md` and `docs/databases.md`. Never edit an already-applied migration; add a new one.
 
 ## Database backup and restore
 
