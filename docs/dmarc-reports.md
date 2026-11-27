@@ -70,7 +70,7 @@ No URL from a report is ever fetched. The only network call is a reverse DNS (PT
 
 ## Alerts
 
-A daily job (02:00 UTC cron on Workers, the daily block of the Node scheduler) looks at domains that have reporting on. Spoofing and regression are evaluated **per verified reporter**, from that reporter's own rows only, with the source limit (2,000 sources) applied per reporter and at most 20 reporters of the day evaluated: reporters with history (distinct report days in the prior 30 days, most first) always come first and new reporters, busiest first, fill only the remaining slots, so fresh high-volume domains cannot push an established reporter out; the per-reporter results are merged into one alert per kind, each source tagged with its reporter. A forger therefore only ever affects its own buckets: its claim that an address passed for a month cannot hide another reporter's failures for that address.
+A daily job (02:00 UTC cron on Workers, the daily block of the Node scheduler) looks at domains that have reporting on. Spoofing and regression are evaluated **per verified reporter**, from that reporter's own rows only, with the source limit (2,000 sources) applied per reporter and at most 20 reporters seen yesterday evaluated: reporters with history (distinct report days in the prior 30 days, most first) always come first and new reporters, busiest first, fill only the remaining slots, so fresh high-volume domains cannot push an established reporter out; the per-reporter results are merged into one alert per kind, each source tagged with its reporter. A forger therefore only ever affects its own buckets: its claim that an address passed for a month cannot hide another reporter's failures for that address.
 
 | Alert | Rule |
 |---|---|
