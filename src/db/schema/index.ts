@@ -258,6 +258,16 @@ export const folders = sqliteTable(
 			.references(() => mailboxes.id, { onDelete: "cascade" }),
 		name: text("name").notNull(),
 		color: text("color").notNull().default("#2563eb"),
+		/**
+		 * Days mail may stay in this folder before the scheduled purge deletes it; null means no folder rule, so
+		 * only the owner's Trash/Spam retention (`users.trashRetentionDays`) applies. A folder rule is the only
+		 * thing that expires mail outside Trash and Spam: it deletes filed mail (`status` `received`/`archived`,
+		 * `direction` not `outbound`) whose `messages.createdAt` is past the window. It never deletes drafts,
+		 * sent copies (including imported Sent mail), Trash/Spam, mail a live outbound job owns, or any status
+		 * outside that short list. Imported mail carries its own `Date` header as `createdAt`, so an import of old
+		 * mail is eligible immediately.
+		 */
+		retentionDays: integer("retention_days"),
 		createdAt: timestamp("created_at")
 			.notNull()
 			.$defaultFn(() => new Date()),

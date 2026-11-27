@@ -418,6 +418,11 @@ export const updateTrashRetentionSettingsSchema = z.object({
 	days: z.number().int().min(1).max(365).nullable(),
 });
 
+/** Per-folder retention: whole days in the same 1-365 range as Trash retention, or null to inherit it. */
+export const updateFolderRetentionSettingsSchema = z.object({
+	days: z.number().int().min(1).max(365).nullable(),
+});
+
 export const updateRemoteContentSettingsSchema = z.object({
 	mode: z.enum(["ask", "new_sender", "allow"]),
 });
