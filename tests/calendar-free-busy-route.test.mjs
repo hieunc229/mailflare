@@ -212,3 +212,40 @@ test("excludeEventId with an occurrence id of a series that keeps a custom rule 
 	const out = await days({ excludeEventId: `evt_cu@${T0 + 7 * DAY + 16 * 3_600_000}` });
 	assert.ok(!out.includes(sixteen(0)) && !out.includes(sixteen(7)), "the first occurrence goes too");
 });
+
+// ---- A moved row's own id ------------------------------------------------------------------------------------------------
+
+function weeklyWithMovedRow(caller = "u2") {
+	setup();
+	sqlite.exec("INSERT INTO dav_collections (id, user_id, kind, display_name, created_at, updated_at) VALUES ('cal:u3', 'u3', 'calendar', 'u3', 1, 1), ('cal:wk', 'u2', 'calendar', 'Wk', 1, 1)");
+	sqlite.exec("INSERT INTO calendar_shares (id, calendar_id, grantee_user_id, role, created_at) VALUES ('g9', 'cal:u3', 'u2', 'freebusy', 1), ('g10', 'cal:u3', 'u1', 'freebusy', 1)");
+	globalThis.calFbRt.user = { id: caller, calendarEnabled: true };
+	sqlite.exec(`INSERT INTO calendar_events (id, user_id, calendar_id, title, repeat, excluded_occurrences, starts_at, ends_at, created_at, updated_at) VALUES ('evt_wk', 'u2', 'cal:wk', 'Wk', 'weekly', '[${(T0 + 7 * DAY + 16 * 3_600_000)}]', ${seconds(0, 16)}, ${seconds(0, 17)}, 1, 1)`);
+	sqlite.exec(`INSERT INTO calendar_events (id, user_id, calendar_id, title, starts_at, ends_at, dav_object_id, recurrence_id, created_at, updated_at) VALUES ('evt_wk_ov', 'u2', 'cal:wk', 'Moved', ${seconds(7, 20)}, ${seconds(7, 21)}, 'evt_wk', ${seconds(7, 16)}, 1, 1)`);
+	// u3 holds copies of the series and of the moved row (each invitation carries <id>@mailflare).
+	sqlite.exec(`INSERT INTO calendar_events (id, user_id, title, repeat, starts_at, ends_at, response_status, created_at, updated_at) VALUES ('${copyId("u3", "evt_wk@mailflare")}', 'u3', 'Wk', 'weekly', ${seconds(0, 16)}, ${seconds(0, 17)}, 'accepted', 1, 1)`);
+	sqlite.exec(`INSERT INTO calendar_events (id, user_id, title, starts_at, ends_at, response_status, created_at, updated_at) VALUES ('${copyId("u3", "evt_wk_ov@mailflare")}', 'u3', 'Moved', ${seconds(7, 20)}, ${seconds(7, 21)}, 'accepted', 1, 1)`);
+}
+const dayPairs = async (extra) => busyOf((await post({ addresses: ["u3@one.test"], start: iso(0), end: iso(15), ...extra }).then((r) => r.json())).results, "u3@one.test").map((pair) => pair.join());
+
+test("a moved row's own id leaves out that row and the guests' copies of it, and nothing of the series", async () => {
+	weeklyWithMovedRow();
+	const slot = (days, from, to) => [iso(days, from), iso(days, to)].join();
+	const before = await dayPairs({});
+	assert.ok(before.includes(slot(7, 20, 21)) && before.includes(slot(0, 16, 17)) && before.includes(slot(14, 16, 17)));
+	const out = await dayPairs({ excludeEventId: "evt_wk_ov" });
+	assert.ok(!out.includes(slot(7, 20, 21)), "the moved row's copy goes");
+	assert.ok(out.includes(slot(0, 16, 17)) && out.includes(slot(14, 16, 17)), "the series stays");
+});
+
+test("a moved row needs the right to edit its series too, or the field is ignored without a trace", async () => {
+	weeklyWithMovedRow("u1");
+	// u1 may edit the moved row's calendar only through a grant on cal:wk; give edit on the row's calendar... the series lives in the same calendar, so move the series elsewhere.
+	sqlite.exec("INSERT INTO dav_collections (id, user_id, kind, display_name, created_at, updated_at) VALUES ('cal:other', 'u2', 'calendar', 'Other', 1, 1)");
+	sqlite.exec("INSERT INTO calendar_shares (id, calendar_id, grantee_user_id, role, created_at) VALUES ('g11', 'cal:wk', 'u1', 'edit', 1)");
+	sqlite.exec("UPDATE calendar_events SET calendar_id = 'cal:other' WHERE id = 'evt_wk'");
+	const baseline = JSON.stringify(await dayPairs({}));
+	assert.equal(JSON.stringify(await dayPairs({ excludeEventId: "evt_wk_ov" })), baseline, "edit on the row's calendar alone is not enough");
+	sqlite.exec("INSERT INTO calendar_shares (id, calendar_id, grantee_user_id, role, created_at) VALUES ('g12', 'cal:other', 'u1', 'edit', 1)");
+	assert.notEqual(JSON.stringify(await dayPairs({ excludeEventId: "evt_wk_ov" })), baseline);
+});

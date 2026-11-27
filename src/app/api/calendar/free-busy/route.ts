@@ -25,8 +25,12 @@ async function editableEvent(env: CloudflareEnv, user: { id: string }, requested
 	const owner = event.userId === user.id;
 	// Saving an occurrence of a repeating series splits it there, so that occurrence and the later ones move; a custom rule cannot be split, so it moves whole.
 	if (named) return event.repeat === "custom" ? { id: event.id, owner } : { id: event.id, owner, occurrence: named.startsAt.getTime() };
-	// A moved occurrence is a row of its own: it stands for one occurrence of its series, at the time it replaced.
-	if (event.davObjectId && event.davObjectId !== event.id && event.recurrenceId) return { id: event.davObjectId, owner, occurrence: event.recurrenceId.getTime() };
+	// A moved occurrence is a row of its own, and saving it changes that row alone: only it and its guests' copies (UID <its id>@mailflare) are left out, not the series.
+	// Like the save, this needs the right to edit the series' row too.
+	if (event.davObjectId && event.davObjectId !== event.id) {
+		const [head] = await db.select({ userId: calendarEvents.userId, calendarId: calendarEvents.calendarId }).from(calendarEvents).where(eq(calendarEvents.id, event.davObjectId)).limit(1);
+		if (head && !roleAtLeast(await getEventAccess(db, user, head), "edit")) return null;
+	}
 	return { id: event.id, owner };
 }
 
