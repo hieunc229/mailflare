@@ -2,6 +2,7 @@ import { and, eq, isNull, ne, or } from "drizzle-orm";
 import { NextResponse } from "next/server";
 import { getDb } from "@/db";
 import { calendarEvents, calendarResourceBookings, users } from "@/db/schema";
+import { roomsBookable } from "@/lib/calendar/room-licence";
 import { declineBookingsStatement, rebookEvents } from "@/lib/calendar/room-save";
 import { getCurrentUser } from "@/lib/auth/cookies";
 import { getEnv } from "@/lib/cloudflare";
@@ -39,6 +40,6 @@ export async function PATCH(request: Request) {
 	}
 	const ids = [...new Set(moving)].slice(0, MAX_RECHECKED);
 	await db.batch([freeze, setZone, ...ids.map((id) => declineBookingsStatement(db, id))] as never);
-	await rebookEvents(db, ids);
+	await rebookEvents(db, ids, roomsBookable(env));
 	return NextResponse.json({ timeZone: input.timeZone });
 }

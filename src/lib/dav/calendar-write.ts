@@ -1,4 +1,5 @@
 import { and, eq, inArray, ne, not, or, sql } from "drizzle-orm";
+import { roomsBookable } from "@/lib/calendar/room-licence";
 import { declineBookingsStatement, rebookEvents } from "@/lib/calendar/room-save";
 import { getDb } from "@/db";
 import { auditLogs, calendarEvents, calendarShares, davCalendarObjects, davChanges } from "@/db/schema";
@@ -194,7 +195,7 @@ export async function putCalendarResource(ctx: DavContext, name: string, request
 	const [last] = results[results.length - 1] as { seq: number | null }[];
 	const etag = etagFromSeq(last?.seq, now);
 	// A moved or re-timed event may now clash with another booking of its rooms.
-	await rebookEvents(db, [id]);
+	await rebookEvents(db, [id], roomsBookable(ctx.env));
 	// What a delegate sent is not what the server keeps (RFC 4791 5.3.4): no ETag, the client fetches the resource to learn it.
 	if (delegate) return new Response(null, { status: atName ? 204 : 201, headers: BASE_HEADERS });
 	return atName ? replaced(etag) : created(etag);

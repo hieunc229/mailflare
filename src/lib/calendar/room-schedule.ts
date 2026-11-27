@@ -77,7 +77,8 @@ export async function roomsByEvent(db: Db, eventIds: string[]): Promise<Map<stri
 	for (let index = 0; index < eventIds.length; index += BOOKING_CHUNK) {
 		for (const row of await db.select({ eventId: calendarResourceBookings.eventId, resourceId: calendarResourceBookings.resourceId, status: calendarResourceBookings.status, conflictAt: calendarResourceBookings.conflictAt }).from(calendarResourceBookings).where(inArray(calendarResourceBookings.eventId, eventIds.slice(index, index + BOOKING_CHUNK)))) {
 			const list = map.get(row.eventId) ?? [];
-			list.push({ resourceId: row.resourceId, status: row.status, conflictAt: row.conflictAt?.toISOString() ?? null });
+			// The epoch marks a booking awaiting its re-check, not a clash.
+			list.push({ resourceId: row.resourceId, status: row.status, conflictAt: row.conflictAt && row.conflictAt.getTime() > 0 ? row.conflictAt.toISOString() : null });
 			map.set(row.eventId, list);
 		}
 	}

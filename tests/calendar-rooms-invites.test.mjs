@@ -73,5 +73,5 @@ test("an occurrence cancelled by the organiser re-checks the series' rooms too",
 test("answering an invitation from the message page re-checks the rooms the same way (wired in the route)", () => {
 	const route = readFileSync(new URL("../src/app/api/messages/[messageId]/invite/route.ts", import.meta.url), "utf8");
 	assert.equal([...route.matchAll(/declineBookingsStatement\(db, id\)/g)].length, 2, "the exclude and the update paths");
-	assert.equal([...route.matchAll(/rebookEvents\(db, \[id\]\)/g)].length, 2);
+	assert.equal([...route.matchAll(/rebookEvents\(db, \[id\], roomsBookable\(env\)\)/g)].length, 2);
 });

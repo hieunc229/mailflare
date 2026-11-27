@@ -120,11 +120,11 @@ export async function PATCH(request: Request, { params }: CalendarEventRoutePara
 	// Booking needs a Team licence. Without one, only a room that is ACCEPTED counts as kept, and a declined one stays declined: it is never
 	// re-checked into an acceptance, and naming it again is a new booking.
 	const canBook = bookedNow.length || input.resourceIds !== undefined ? (await getLicenseEntitlements(env)).canShareMailboxes : true;
-	const frozen = canBook ? [] : bookedRows.filter((row) => row.status === "declined").map((row) => row.id);
+	const frozen = canBook ? [] : bookedRows.filter((row) => row.status === "declined" && !row.pending).map((row) => row.id);
 	let requestedRooms: string[] | null = null;
 	// A moved occurrence is a row of its own, but its rooms are the series': saving it never changes them.
 	if (input.resourceIds !== undefined && head.id === existing.id) {
-		const checked = await resolveBookableRooms(db, input.resourceIds, { booked: canBook ? bookedNow : bookedRows.filter((row) => row.status === "accepted").map((row) => row.id), canBook });
+		const checked = await resolveBookableRooms(db, input.resourceIds, { booked: canBook ? bookedNow : bookedRows.filter((row) => row.status === "accepted" || row.pending).map((row) => row.id), canBook });
 		if (!checked.ok) return NextResponse.json({ error: checked.error, ...(checked.code ? { code: checked.code } : {}) }, { status: checked.status });
 		requestedRooms = checked.ids;
 	}
