@@ -6,7 +6,7 @@ import { getCurrentUser } from "@/lib/auth/cookies";
 import { getEnv } from "@/lib/cloudflare";
 import { getEmailAddress } from "@/lib/email/address";
 import { isOthersDraft } from "@/lib/email/draft-access";
-import { readCloudflareAuthentication, readStoredAuthentication } from "@/lib/email/provider-trace";
+import { readCloudflareAuthentication, isIntakeStorageKey, readStoredAuthentication } from "@/lib/email/provider-trace";
 import { getMailboxAccessLevel } from "@/lib/mailboxes/access";
 import { isOffWorkers } from "@/lib/runtime";
 import type { MessageAuthenticationResponse } from "@/lib/email/authentication-types";
