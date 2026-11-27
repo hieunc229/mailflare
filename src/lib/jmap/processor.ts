@@ -66,7 +66,12 @@ function resolveReferences(args: Record<string, unknown>, responses: JmapInvocat
 			resolved[key] = value;
 			continue;
 		}
-		const ref = value as { resultOf: string; name: string; path: string };
+		// RFC 8620 §3.7: the reference must be { resultOf, name, path } with string values;
+		// any other shape is a malformed reference, not a server failure.
+		const ref = (value ?? {}) as { resultOf?: unknown; name?: unknown; path?: unknown };
+		if (typeof ref.resultOf !== "string" || typeof ref.name !== "string" || typeof ref.path !== "string") {
+			throw new JmapError("invalidResultReference", `Malformed result reference ${key}`);
+		}
 		const source = responses.find(([name, , callId]) => callId === ref.resultOf && name === ref.name);
 		if (!source) throw new JmapError("invalidResultReference", `No response ${ref.name} for call ${ref.resultOf}`);
 		resolved[key.slice(1)] = resolvePointer(source[1], ref.path);
@@ -181,7 +186,22 @@ export function validateRequest(body: unknown): JmapRequest {
 	}
 	if (request.methodCalls.length > LIMITS.maxCallsInRequest) throw new JmapError("limit", "Too many method calls", { limit: "maxCallsInRequest" });
 	for (const call of request.methodCalls) {
-		if (!Array.isArray(call) || call.length !== 3 || typeof call[0] !== "string" || typeof call[2] !== "string") throw new JmapError("notRequest");
+		// RFC 8620 §3.3: a call is [name, args, id] where args is an Object, so a
+		// string, number, array or null args slot makes the whole request malformed.
+		if (
+			!Array.isArray(call) ||
+			call.length !== 3 ||
+			typeof call[0] !== "string" ||
+			typeof call[2] !== "string" ||
+			typeof call[1] !== "object" ||
+			call[1] === null ||
+			Array.isArray(call[1])
+		) {
+			throw new JmapError("notRequest");
+		}
+	}
+	if (request.createdIds !== undefined && request.createdIds !== null && (typeof request.createdIds !== "object" || Array.isArray(request.createdIds))) {
+		throw new JmapError("notRequest");
 	}
 	return request as JmapRequest;
 }
