@@ -17,7 +17,6 @@ await build({
 			export { clearDavEnabledCache } from "./src/lib/dav/settings.ts";
 			export { generateAppPassword } from "./src/lib/api-keys.ts";
 			export { clearApiKeyVerificationCache } from "./src/lib/api/find-api-key.ts";
-			export { parseCalendarObject } from "./src/lib/dav/calendar-parse.ts";
 			export { SqliteDatabase } from "./server/runtime/sqlite-database.ts";
 			export { applyMigrations } from "./server/runtime/migrate.ts";
 		`,
@@ -39,7 +38,7 @@ await build({
 		build.onLoad({ filter: /.*/, namespace: "stub" }, () => ({ contents: 'export * from "./src/lib/calendar/room-save.ts"; export async function rebookEvents() {}', loader: "ts", resolveDir: root }));
 	} }],
 });
-const { handleDavRequest, clearDavEnabledCache, generateAppPassword, clearApiKeyVerificationCache, parseCalendarObject, SqliteDatabase, applyMigrations } = await import(pathToFileURL(join(outDir, "entry.mjs")).href);
+const { handleDavRequest, clearDavEnabledCache, generateAppPassword, clearApiKeyVerificationCache, SqliteDatabase, applyMigrations } = await import(pathToFileURL(join(outDir, "entry.mjs")).href);
 
 const ORIGIN = "https://mail.example.test";
 const CAL = "/dav/calendars/u1/default/";
