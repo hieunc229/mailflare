@@ -16,6 +16,7 @@ export function PublishCard({ hideTitle = false }: { hideTitle?: boolean }) {
 	const [pending, setPending] = useState(false);
 	const [error, setError] = useState("");
 	const [attempt, setAttempt] = useState(0);
+	const [focus, setFocus] = useState<"urls" | "action" | null>(null);
 
 	function show(result: Awaited<ReturnType<typeof loadPublishStatus>>) {
 		if (!result.ok) { setState("error"); return; }
@@ -35,9 +36,10 @@ export function PublishCard({ hideTitle = false }: { hideTitle?: boolean }) {
 		const result = await turnOnPublish();
 		setPending(false);
 		if (!result.ok) { setError(t("calendar.publish.failed")); return; }
-		if (result.key) { setUrls(publishUrls(window.location.origin, result.key)); setSince(new Date().toLocaleDateString()); setState("on"); return; }
+		if (result.key) { setUrls(publishUrls(window.location.origin, result.key)); setSince(new Date().toLocaleDateString()); setState("on"); setFocus("urls"); return; }
 		// Already on (another tab or device made it): nothing to show but the real date, so ask again.
 		show(await loadPublishStatus());
+		setFocus("action");
 	}
 
 	async function turnOff() {
@@ -49,6 +51,7 @@ export function PublishCard({ hideTitle = false }: { hideTitle?: boolean }) {
 		if (!result.ok) { setError(t("calendar.publish.failed")); return; }
 		setUrls(null);
 		setState("off");
+		setFocus("action");
 		toast.success(t("calendar.publish.turnedOff"));
 	}
 
@@ -61,5 +64,5 @@ export function PublishCard({ hideTitle = false }: { hideTitle?: boolean }) {
 		}
 	}
 
-	return <PublishView state={state} urls={urls} since={since} pending={pending} error={error} onTurnOn={() => void turnOn()} onTurnOff={() => void turnOff()} onCopy={(url) => void copy(url)} onRetry={() => { setState("loading"); setAttempt((value) => value + 1); }} hideTitle={hideTitle} />;
+	return <PublishView state={state} urls={urls} since={since} pending={pending} error={error} onTurnOn={() => void turnOn()} onTurnOff={() => void turnOff()} onCopy={(url) => void copy(url)} onRetry={() => { setFocus(null); setState("loading"); setAttempt((value) => value + 1); }} hideTitle={hideTitle} focus={focus} />;
 }

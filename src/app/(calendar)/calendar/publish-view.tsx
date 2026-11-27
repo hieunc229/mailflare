@@ -1,6 +1,6 @@
 "use client";
 
-import { useId } from "react";
+import { useEffect, useId, useRef } from "react";
 import { AlertCircle, Copy, Loader2 } from "@/components/icons";
 import { useLanguage } from "@/components/language-provider";
 import { Button } from "@/components/ui/button";
@@ -23,6 +23,8 @@ export type PublishViewProps = {
 	onRetry: () => void;
 	/** A dialog around the card already has this title; saying it twice makes a screen reader read it twice. */
 	hideTitle?: boolean;
+	/** Where focus goes once the button that was pressed has been replaced: the first link, or the button that now offers the opposite action. */
+	focus?: "urls" | "action" | null;
 };
 
 function UrlRow({ label, hint, value, copyLabel, onCopy }: { label: string; hint: string; value: string; copyLabel: string; onCopy: () => void }) {
@@ -46,8 +48,14 @@ export function PublishView(props: PublishViewProps) {
 	const { t } = useLanguage();
 	const titleId = useId();
 	const on = props.state === "on";
+	const section = useRef<HTMLElement>(null);
+	const action = useRef<HTMLButtonElement>(null);
+	useEffect(() => {
+		if (props.focus === "urls") section.current?.querySelector("input")?.focus();
+		else if (props.focus === "action") action.current?.focus();
+	}, [props.focus, props.state, props.urls]);
 	return (
-		<section aria-labelledby={props.hideTitle ? undefined : titleId} className="space-y-3 text-sm text-neutral-700">
+		<section ref={section} aria-labelledby={props.hideTitle ? undefined : titleId} className="space-y-3 text-sm text-neutral-700">
 			<div className="flex items-center justify-between gap-3">
 				{!props.hideTitle && <h3 id={titleId} className="font-semibold text-neutral-900">{t("calendar.publish.title")}</h3>}
 				{(props.state === "on" || props.state === "off") && (
@@ -67,7 +75,7 @@ export function PublishView(props: PublishViewProps) {
 			{props.state === "off" && (
 				<>
 					<p>{t("calendar.publish.explain")}</p>
-					<Button type="button" disabled={props.pending} aria-busy={props.pending} onClick={props.onTurnOn} className="[@media(pointer:coarse)]:min-h-11">{props.pending ? t("calendar.publish.turningOn") : t("calendar.publish.turnOn")}</Button>
+					<Button ref={action} type="button" disabled={props.pending} aria-busy={props.pending} onClick={props.onTurnOn} className="[@media(pointer:coarse)]:min-h-11">{props.pending ? t("calendar.publish.turningOn") : t("calendar.publish.turnOn")}</Button>
 				</>
 			)}
 			{on && (
@@ -81,7 +89,7 @@ export function PublishView(props: PublishViewProps) {
 					) : (
 						<p>{t("calendar.publish.alreadyOn", { date: props.since })}</p>
 					)}
-					<Button type="button" variant="outline" disabled={props.pending} aria-busy={props.pending} onClick={props.onTurnOff} className="[@media(pointer:coarse)]:min-h-11">{props.pending ? t("calendar.publish.turningOff") : t("calendar.publish.turnOff")}</Button>
+					<Button ref={action} type="button" variant="outline" disabled={props.pending} aria-busy={props.pending} onClick={props.onTurnOff} className="[@media(pointer:coarse)]:min-h-11">{props.pending ? t("calendar.publish.turningOff") : t("calendar.publish.turnOff")}</Button>
 				</>
 			)}
 			{props.error && <p role="alert" className="text-red-700">{props.error}</p>}
