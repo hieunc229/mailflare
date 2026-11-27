@@ -109,7 +109,7 @@ export async function deleteResource(db: Db, id: unknown, force: boolean, option
 	const ahead = await db.select({ eventId: calendarResourceBookings.eventId }).from(calendarResourceBookings)
 		.innerJoin(calendarEvents, eq(calendarEvents.id, calendarResourceBookings.eventId))
 		.where(and(eq(calendarResourceBookings.resourceId, id), upcoming(options.now ?? new Date()))).limit(MAX_REPORTED_EVENTS + 1);
-	if (ahead.length && !force) return { ...fail(409, "Events still have this room booked", "HAS_BOOKINGS"), bookings: ahead.length };
+	if (ahead.length && !force) return { ...fail(409, "Events still have this room booked", "HAS_BOOKINGS"), bookings: Math.min(ahead.length, MAX_REPORTED_EVENTS), ...(ahead.length > MAX_REPORTED_EVENTS ? { capped: true } : {}) };
 	// One batch: a booking made while this runs is removed with the room rather than left pointing at nothing (the cascade does it on every dialect).
 	await db.batch([db.delete(calendarResourceBookings).where(eq(calendarResourceBookings.resourceId, id)), db.delete(calendarResources).where(eq(calendarResources.id, id))] as never);
 	return { ok: true, name: existing.name, eventIds: ahead.slice(0, MAX_REPORTED_EVENTS).map((row) => row.eventId), bookings: ahead.length };

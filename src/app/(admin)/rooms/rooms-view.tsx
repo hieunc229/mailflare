@@ -55,7 +55,7 @@ export function RoomsView({ state, rooms, available, notice, deleting, onAdd, on
 				{state === "ready" && rooms.length > 0 && (
 					<List>
 						{rooms.map((room) => (
-							<ListRow key={room.id} className="px-5 py-4">
+							<ListRow key={room.id} className="flex-wrap gap-y-2 px-4 py-4 sm:flex-nowrap sm:px-5">
 								<span aria-hidden="true" className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-blue-100 text-blue-700"><Building2 className="h-5 w-5" /></span>
 								<span className="min-w-0 flex-1 space-y-1">
 									<span className="flex min-w-0 flex-wrap items-center gap-2">
@@ -65,7 +65,7 @@ export function RoomsView({ state, rooms, available, notice, deleting, onAdd, on
 									</span>
 									<span className="block truncate text-sm text-neutral-600">{[room.location, room.capacity !== null ? t("rooms.capacityValue", { count: room.capacity }) : ""].filter(Boolean).join(" · ")}</span>
 								</span>
-								<span className="flex shrink-0 gap-1">
+								<span className="ml-auto flex shrink-0 gap-1">
 									<Button type="button" size="sm" variant="outline" className={touch} aria-label={t("rooms.edit", { name: room.name })} onClick={() => onEdit(room)}><Pencil className="h-4 w-4" /></Button>
 									<Button type="button" size="sm" variant="outline" className={touch} aria-label={t("rooms.delete", { name: room.name })} disabled={deleting} onClick={() => onDelete(room)}><Trash2 className="h-4 w-4" /></Button>
 								</span>

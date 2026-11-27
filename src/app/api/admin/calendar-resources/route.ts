@@ -20,7 +20,7 @@ async function authorize(env: CloudflareEnv, request: Request, write: boolean) {
 	return { user: auth.user };
 }
 
-const refuse = (failure: ResourceFailure & { bookings?: number }) => Response.json({ error: failure.error, ...(failure.code ? { code: failure.code } : {}), ...(failure.bookings !== undefined ? { bookings: failure.bookings } : {}) }, { status: failure.status, headers: NO_STORE });
+const refuse = (failure: ResourceFailure & { bookings?: number; capped?: boolean }) => Response.json({ error: failure.error, ...(failure.code ? { code: failure.code } : {}), ...(failure.bookings !== undefined ? { bookings: failure.bookings } : {}), ...(failure.capped ? { capped: true } : {}) }, { status: failure.status, headers: NO_STORE });
 
 /** Every room and resource, disabled ones included. `available` is the Team licence (D-13): without it the list is still readable, new rooms cannot be made. */
 export async function GET(request: Request) {

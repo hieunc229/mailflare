@@ -10,7 +10,7 @@ import { Select } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import type { Room, RoomForm } from "./types";
-import { formFromRoom, NEW_ROOM_FORM, roomBody } from "./utils";
+import { formFromRoom, NEW_ROOM_FORM, parseCapacity, roomBody } from "./utils";
 
 export type RoomDialogProps = {
 	/** The room being edited, "new" while adding one, null when closed. */
@@ -26,6 +26,7 @@ export function RoomFields({ target, saving, error, onSave, onClose }: Omit<Room
 	const { t } = useLanguage();
 	const [form, setForm] = useState<RoomForm>(() => (target === "new" ? NEW_ROOM_FORM : formFromRoom(target)));
 	const body = roomBody(form);
+	const capacityInvalid = parseCapacity(form.capacity) === undefined;
 	const set = <K extends keyof RoomForm>(key: K, value: RoomForm[K]) => setForm((current) => ({ ...current, [key]: value }));
 	return (
 		<form className="space-y-4" onSubmit={(event) => { event.preventDefault(); if (body && !saving) onSave(body, target === "new" ? null : target.id); }}>
@@ -43,7 +44,8 @@ export function RoomFields({ target, saving, error, onSave, onClose }: Omit<Room
 				</div>
 				<div className="space-y-2">
 					<Label htmlFor="room-capacity">{t("rooms.capacity")}</Label>
-					<Input id="room-capacity" inputMode="numeric" value={form.capacity} aria-invalid={body ? undefined : form.capacity.trim() ? true : undefined} onChange={(event) => set("capacity", event.target.value)} />
+					<Input id="room-capacity" inputMode="numeric" value={form.capacity} aria-invalid={capacityInvalid ? true : undefined} aria-describedby={capacityInvalid ? "room-capacity-error" : undefined} onChange={(event) => set("capacity", event.target.value)} />
+					{capacityInvalid && <p id="room-capacity-error" className="text-sm text-red-700">{t("rooms.capacityInvalid")}</p>}
 				</div>
 			</div>
 			<div className="space-y-2">
