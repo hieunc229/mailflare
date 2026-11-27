@@ -2991,5 +2991,10 @@
 	"domains.forceRemoveConfirm": "{reason}\n\nپھر بھی {host} کو زبردستی ہٹانا ہے؟ Mailflare پہلے اس کے _mta-sts اور _smtp._tls DNS ریکارڈ ہٹانے کی کوشش کرے گا، پھر ڈومین، اس کے تمام میل باکس اور ان کے تمام پیغامات حذف کر دے گا، چاہے ریکارڈ ہٹانا ناکام ہو جائے۔ میل سرور کچھ عرصے تک کیش کی گئی MTA-STS پالیسی لاگو کرتے رہ سکتے ہیں۔ اس کے بعد آپ کو وہ DNS ریکارڈ ملیں گے جو ہاتھ سے ہٹانے ہوں گے۔\n\nتصدیق کے لیے {host} ٹائپ کریں۔",
 	"domains.forceRemoved": "{host} ہٹا دیا گیا",
 	"domains.forceRemovedRecords": "یہ DNS ریکارڈ خود ہٹائیں:",
-	"domains.forceRemovedCache": "میل سرور {date} تک پرانی MTA-STS پالیسی لاگو کرتے رہ سکتے ہیں۔"
+	"domains.forceRemovedCache": "میل سرور {date} تک پرانی MTA-STS پالیسی لاگو کرتے رہ سکتے ہیں۔",
+	"dnsSkipped.recheck": "Recheck",
+	"setup.name": "Your name",
+	"setup.namePlaceholder": "Jane Doe",
+	"domains.recheckDns": "Recheck DNS",
+	"resend.keyFromEnv": "Set by RESEND_API_KEY"
 }

@@ -3012,5 +3012,10 @@
 	"domains.forceRemoveConfirm": "{reason}\n\nRemover {host} à força mesmo assim? O Mailflare vai tentar remover os registos DNS _mta-sts e _smtp._tls e depois eliminar o domínio, todas as caixas de correio e todas as respetivas mensagens, mesmo que a remoção dos registos falhe. Os servidores de correio podem continuar a aplicar durante algum tempo a política MTA-STS em cache. Depois receberá a lista de registos DNS a remover manualmente.\n\nIntroduza {host} para confirmar.",
 	"domains.forceRemoved": "{host} removido",
 	"domains.forceRemovedRecords": "Remova estes registos DNS por si:",
-	"domains.forceRemovedCache": "Os servidores de correio podem continuar a aplicar a política MTA-STS antiga até {date}."
+	"domains.forceRemovedCache": "Os servidores de correio podem continuar a aplicar a política MTA-STS antiga até {date}.",
+	"dnsSkipped.recheck": "Recheck",
+	"setup.name": "Your name",
+	"setup.namePlaceholder": "Jane Doe",
+	"domains.recheckDns": "Recheck DNS",
+	"resend.keyFromEnv": "Set by RESEND_API_KEY"
 }

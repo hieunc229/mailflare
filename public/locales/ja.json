@@ -2968,5 +2968,10 @@
 	"domains.forceRemoveConfirm": "{reason}\n\nそれでも {host} を強制削除しますか？ Mailflare は DNS レコード _mta-sts と _smtp._tls の削除を試み、その後、ドメイン、そのすべてのメールボックスとすべてのメッセージを、削除に失敗した場合でも削除します。メールサーバーはキャッシュされた MTA-STS ポリシーをしばらく適用し続ける場合があります。削除後に、手動で削除する DNS レコードの一覧が表示されます。\n\n確認のため {host} と入力してください。",
 	"domains.forceRemoved": "{host} を削除しました",
 	"domains.forceRemovedRecords": "次の DNS レコードは手動で削除してください:",
-	"domains.forceRemovedCache": "メールサーバーは {date} まで古い MTA-STS ポリシーを適用し続ける場合があります。"
+	"domains.forceRemovedCache": "メールサーバーは {date} まで古い MTA-STS ポリシーを適用し続ける場合があります。",
+	"dnsSkipped.recheck": "Recheck",
+	"setup.name": "Your name",
+	"setup.namePlaceholder": "Jane Doe",
+	"domains.recheckDns": "Recheck DNS",
+	"resend.keyFromEnv": "Set by RESEND_API_KEY"
 }
