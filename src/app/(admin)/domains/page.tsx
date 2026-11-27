@@ -292,7 +292,7 @@ export default function DomainsPage() {
 
   const inspectDomain = async () => {
     const normalized = hostname.toLowerCase().trim();
-    if (skipDns || normalized.length < 3 || domainCheck?.hostname === normalized) return;
+    if (!managesDns || skipDns || normalized.length < 3 || domainCheck?.hostname === normalized) return;
 
     setDomainChecking(true);
     setDomainCheckError(null);
@@ -419,7 +419,7 @@ export default function DomainsPage() {
               </div>
                 </>
               )}
-              {domainCheck && !skipDns && (
+              {managesDns && domainCheck && !skipDns && (
                 <div className="flex items-center gap-3 rounded-xl bg-green-50 px-4 py-3 text-sm text-green-700">
                   <CheckCircle2 className="h-4 w-4" />
                   {t("setup.domainFound", { zone: domainCheck.zone.name })}
@@ -433,7 +433,7 @@ export default function DomainsPage() {
               {create.isError && (
                 <div className="space-y-3 rounded-xl bg-red-50 px-4 py-3 text-sm text-red-700">
                   <p>{(create.error as Error).message}</p>
-                  {!isMxConflictError(create.error) && (
+                  {managesDns && !isMxConflictError(create.error) && (
                     <div className="space-y-2">
                       <p className="font-medium">
                         {t("domains.tokenPermissions")}
@@ -478,6 +478,7 @@ export default function DomainsPage() {
             return (
               <DomainItemCard
                 key={d.id}
+                managesDns={managesDns}
                 dns={dns}
                 dnsDetails={dnsViews[d.id]?.dns}
                 onSendingProviderChange={changeSendingProvider}

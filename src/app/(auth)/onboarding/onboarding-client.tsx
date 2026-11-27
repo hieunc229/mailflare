@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
+import { fetchSessionInfo } from "@/hooks/use-current-user";
 import { checkDomain, createDomain, createMailbox, getDomains } from "./utils";
 import type { DomainPreflight } from "./types";
 
@@ -23,9 +24,19 @@ export function OnboardingClient() {
 	const [skipDns, setSkipDns] = useState(false);
 	const [domainId, setDomainId] = useState("");
 	const [localPart, setLocalPart] = useState("me");
+	const [name, setName] = useState("");
+	// False without Cloudflare credentials: there is no zone to check, so DNS is set by hand.
+	const [managesDns, setManagesDns] = useState(true);
 	const [error, setError] = useState<string | null>(null);
 	const [mxConflict, setMxConflict] = useState(false);
 	const [loading, setLoading] = useState(false);
+
+	useEffect(() => {
+		void fetchSessionInfo().then((info) => {
+			setManagesDns(info?.managesDns ?? true);
+			setName((current) => current || (info?.user?.name ?? ""));
+		});
+	}, []);
 
 	useEffect(() => {
 		void getDomains()
@@ -46,8 +57,8 @@ export function OnboardingClient() {
 		try {
 			const normalized = hostname.toLowerCase().trim();
 			let checkedDomain = domainCheck;
-			let sendingRequested = enableSending;
-			if (skipDns) {
+			let sendingRequested = managesDns ? enableSending : true;
+			if (skipDns || !managesDns) {
 				checkedDomain = { hostname: normalized, zone: { id: "manual", name: normalized } };
 			} else if (checkedDomain?.hostname !== normalized) {
 				const result = await checkDomain(normalized);
@@ -87,7 +98,7 @@ export function OnboardingClient() {
 
 	async function inspectDomain() {
 		const normalized = hostname.toLowerCase().trim();
-		if (skipDns || normalized.length < 3 || domainCheck?.hostname === normalized) return;
+		if (!managesDns || skipDns || normalized.length < 3 || domainCheck?.hostname === normalized) return;
 
 		setDomainChecking(true);
 		setError(null);
@@ -117,7 +128,7 @@ export function OnboardingClient() {
 		setError(null);
 
 		try {
-			const { ok, data } = await createMailbox(domainId, localPart);
+			const { ok, data } = await createMailbox(domainId, localPart, name.trim() || localPart);
 			if (!ok) {
 				setError(data.error ?? t("onboarding.createMailboxFailed"));
 				return;
@@ -154,7 +165,9 @@ export function OnboardingClient() {
 				{step === 1 && (
 					<>
 						<p className="rounded-2xl bg-[#eaf1fb] px-4 py-3 text-sm leading-6 text-neutral-700">
-							{t("onboarding.cloudflareDns", { token: "\u0001" }).split("\u0001").flatMap((part, index) => index === 0 ? [part] : [<code key={index} className="no-font-mono text-xs font-semibold text-blue-800">CF_TOKEN</code>, part])}
+							{managesDns
+								? t("onboarding.cloudflareDns", { token: "\u0001" }).split("\u0001").flatMap((part, index) => index === 0 ? [part] : [<code key={index} className="no-font-mono text-xs font-semibold text-blue-800">CF_TOKEN</code>, part])
+								: t("domains.manualDnsNote")}
 						</p>
 						<div className="space-y-2">
 							<Label htmlFor="domain">{t("onboarding.domain")}</Label>
@@ -190,7 +203,7 @@ export function OnboardingClient() {
 								}}
 							/>
 						</div>
-						{!skipDns && (
+						{managesDns && !skipDns && (
 						<div className="flex items-center justify-between gap-4 rounded-2xl bg-neutral-50 px-4 py-3">
 							<div>
 								<Label htmlFor="onboarding-enable-sending">{t("setup.enableSending")}</Label>
@@ -216,7 +229,7 @@ export function OnboardingClient() {
 							)}
 						</div>
 						)}
-						{domainCheck && !skipDns && (
+						{managesDns && domainCheck && !skipDns && (
 							<div className="flex items-center gap-3 rounded-2xl bg-green-50 px-4 py-3 text-sm text-green-700">
 								<CheckCircle2 className="h-4 w-4" />
 								{t("setup.domainFound", { zone: domainCheck.zone.name })}
@@ -252,6 +265,10 @@ export function OnboardingClient() {
 				)}
 				{step === 2 && (
 					<>
+						<div className="space-y-2">
+							<Label htmlFor="name">{t("setup.name")}</Label>
+							<Input id="name" value={name} onChange={(e) => setName(e.target.value)} placeholder={t("setup.namePlaceholder")} autoComplete="name" maxLength={100} />
+						</div>
 						<div className="space-y-2">
 							<Label htmlFor="localPart">{t("onboarding.mailboxAddress")}</Label>
 							<div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2">

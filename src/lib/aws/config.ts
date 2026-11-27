@@ -23,17 +23,22 @@ async function readStored(env: CloudflareEnv): Promise<StoredAws | null> {
 	try { return JSON.parse(row.awsConfig) as StoredAws; } catch { return null; }
 }
 
-/** The saved AWS credentials, falling back to AWS_* environment variables. */
-export async function getAwsConfig(env: CloudflareEnv): Promise<AwsConfig | null> {
-	const stored = await readStored(env);
-	if (stored?.accessKeyId && stored.secretAccessKey && stored.region) {
-		return { accessKeyId: stored.accessKeyId, secretAccessKey: stored.secretAccessKey, region: stored.region };
-	}
+function readEnvConfig(env: CloudflareEnv): AwsConfig | null {
 	const vars = env as unknown as Record<string, string | undefined>;
 	const accessKeyId = vars.AWS_ACCESS_KEY_ID?.trim();
 	const secretAccessKey = vars.AWS_SECRET_ACCESS_KEY?.trim();
 	const region = (vars.AWS_REGION ?? vars.AWS_DEFAULT_REGION)?.trim();
 	return accessKeyId && secretAccessKey && region ? { accessKeyId, secretAccessKey, region } : null;
+}
+
+/** The AWS_* environment variables, falling back to the saved credentials. */
+export async function getAwsConfig(env: CloudflareEnv): Promise<AwsConfig | null> {
+	const fromEnv = readEnvConfig(env);
+	if (fromEnv) return fromEnv;
+	const stored = await readStored(env);
+	return stored?.accessKeyId && stored.secretAccessKey && stored.region
+		? { accessKeyId: stored.accessKeyId, secretAccessKey: stored.secretAccessKey, region: stored.region }
+		: null;
 }
 
 export async function requireAwsConfig(env: CloudflareEnv): Promise<AwsConfig> {
@@ -43,12 +48,13 @@ export async function requireAwsConfig(env: CloudflareEnv): Promise<AwsConfig> {
 }
 
 export async function getAwsConfigStatus(env: CloudflareEnv): Promise<AwsConfigStatus> {
-	const stored = await readStored(env);
+	const fromEnv = !!readEnvConfig(env);
+	const stored = fromEnv ? null : await readStored(env);
 	const config = await getAwsConfig(env);
 	if (!config) return { configured: false, source: null, region: null, accessKeyHint: null, accountId: null };
 	return {
 		configured: true,
-		source: stored?.accessKeyId ? "settings" : "environment",
+		source: fromEnv ? "environment" : "settings",
 		region: config.region,
 		accessKeyHint: config.accessKeyId.slice(-4),
 		accountId: stored?.accountId ?? null,

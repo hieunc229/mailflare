@@ -21,6 +21,7 @@ export type SessionInfo = {
 	status: number;
 	hasMailboxes?: boolean;
 	isSetup?: boolean;
+	managesDns?: boolean;
 	user?: (CurrentUser & { timeZone?: string | null }) | null;
 };
 

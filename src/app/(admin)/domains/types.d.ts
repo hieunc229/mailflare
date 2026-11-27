@@ -69,6 +69,8 @@ export type DomainDnsView = {
 export type DomainDnsCache = Record<string, { domain: Domain; dns: DomainDnsView }>;
 
 export type DomainDnsDetailsProps = {
+	/** False without Cloudflare credentials. */
+	managesDns?: boolean;
 	domain: Domain;
 	dns: DomainDnsView;
 	onSendingProviderChange?: (provider: SendingProvider) => void;
@@ -85,6 +87,7 @@ export type DomainDnsDetailsProps = {
 };
 
 export type DomainItemCardProps = {
+	managesDns?: boolean;
 	item: Domain;
 	dns?: DnsStatusSummary;
 	dnsDetails?: DomainDnsView;

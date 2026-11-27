@@ -256,7 +256,7 @@ export default function DrivePage() {
 
 	return (
 		<div className="relative flex h-full min-h-0 flex-col" onDragEnter={onDragEnter} onDragOver={(event) => { if (canWrite && event.dataTransfer.types.includes("Files")) event.preventDefault(); }} onDragLeave={onDragLeave} onDrop={onDrop}>
-			<Toaster position="bottom-left" containerClassName="text-sm" />
+			<Toaster position="bottom-right" containerClassName="text-sm" />
 			
 			{headerTarget && createPortal(
 				<HeaderSearch value={search} onChange={setSearch} label={t("drive.search")} onSubmit={() => router.push(search.trim() ? `/drive?q=${encodeURIComponent(search.trim())}` : "/drive")} />,

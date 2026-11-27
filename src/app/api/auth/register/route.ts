@@ -47,7 +47,7 @@ export async function POST(request: Request) {
 	const email = `${username}@${domainName}`;
 	const password = firstRunParsed.data.password;
 	const usePasskey = !!firstRunParsed.data.usePasskey;
-	const name = username;
+	const name = firstRunParsed.data.name || username;
 
 	const [existing] = await db.select().from(users).where(eq(users.email, email)).limit(1);
 	if (existing) {
@@ -105,7 +105,7 @@ export async function POST(request: Request) {
 			userId,
 			domainId: domain.id,
 			localPart: username,
-			displayName: username,
+			displayName: name,
 		});
 		await ensureMailboxDomainRouting(env, db, { id: mailboxId, domainId: domain.id, localPart: username, useAllDomains: true });
 	} catch (err) {

@@ -37,8 +37,8 @@ export default function CloudflareReceivingConfig({ domainId, routingOk, routing
 					ok={routingOk}
 					title={t("domains.emailRouting")}
 					hint={t("domains.emailRoutingHint")}
-					action={!routingOk ? (
-						<Button size="sm" variant="outline" className="bg-white" disabled={busy || manual} title={manual ? t("domains.manualDns") : undefined} onClick={() => void setup()}>
+					action={!routingOk && !manual ? (
+						<Button size="sm" variant="outline" className="bg-white" disabled={busy} onClick={() => void setup()}>
 							{busy ? t("domains.settingUp") : t("domains.setup")}
 						</Button>
 					) : undefined}

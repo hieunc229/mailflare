@@ -80,3 +80,19 @@ export const isInboundSmtpMx = (content: string) => /inbound-smtp\.[a-z0-9-]+\.a
 /** Resend inbound MX: the SES-style host, or the newer `receive-<region>.forge.rmta.net` host. */
 export const isResendInboundMx = (content: string) =>
 	isInboundSmtpMx(content) || /^receive-[a-z0-9-]+\.forge\.rmta\.net\.?$/i.test(content.trim());
+
+/**
+ * Whether public DNS already sends this domain's mail to its receiving service. A domain with none selected
+ * counts when its MX is the self-hosted mail host, Cloudflare's relay, Resend or SES.
+ */
+export async function isInboundMxPublished(domain: Pick<DomainRow, "hostname" | "receivingProvider">): Promise<boolean> {
+	const mailHost = process.env.MAIL_HOSTNAME?.trim() || `mail.${domain.hostname}`;
+	const isCloudflare = (target: string) => /\.mx\.cloudflare\.net\.?$/i.test(target.trim());
+	const matchers = {
+		cloudflare: isCloudflare,
+		resend: isResendInboundMx,
+		ses: isInboundSmtpMx,
+		none: (target: string) => same(target, mailHost) || isCloudflare(target) || isResendInboundMx(target),
+	};
+	return (await hasPublicMx(domain.hostname, matchers[domain.receivingProvider])) === true;
+}

@@ -29,6 +29,7 @@ export default function DomainItemCard({
   item,
   dns,
   dnsDetails,
+  managesDns,
   onSendingProviderChange,
   sendingProviderBusy,
   sendingProviderMessage,
@@ -152,6 +153,7 @@ export default function DomainItemCard({
           <DomainDnsDetails
             domain={item}
             dns={dnsDetails}
+            managesDns={managesDns}
             onSendingProviderChange={onSendingProviderChange}
             sendingProviderBusy={sendingProviderBusy}
             sendingProviderMessage={sendingProviderMessage}

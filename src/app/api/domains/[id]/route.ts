@@ -7,6 +7,7 @@ import { requireUser } from "@/lib/auth/cookies";
 import { canManageDomains } from "@/lib/auth/admin";
 import { dnsSkippedUpdate, getDomainForUser, removeDomainForUser } from "@/lib/domains/service";
 import { hasValidSessionMutationOrigin } from "@/lib/auth/origin";
+import { isInboundMxPublished } from "@/lib/domains/receiving-dns";
 import { mtaStsBlockedResponse } from "@/lib/deliverability/mta-sts-block-response";
 
 type Params = { params: Promise<{ id: string }> };
@@ -20,19 +21,25 @@ export async function GET(request: Request, { params }: Params) {
 	return NextResponse.json({ domain });
 }
 
-/** Clears the "DNS skipped" warning once the operator has set the records themselves (activating a manual domain). */
+/**
+ * Clears the "DNS skipped" warning once the operator has set the records themselves (activating a manual domain).
+ * With `verify`, it is cleared only when public DNS shows the domain's MX.
+ */
 export async function PATCH(request: Request, { params }: Params) {
 	const { id } = await params;
 	const env = getEnv();
 	const user = await requireUser(env, request);
 	if (!canManageDomains(user)) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 	if (!hasValidSessionMutationOrigin(request)) return NextResponse.json({ error: "Invalid origin" }, { status: 403 });
-	const body = (await request.json().catch(() => null)) as { dnsSkipped?: unknown } | null;
+	const body = (await request.json().catch(() => null)) as { dnsSkipped?: unknown; verify?: unknown } | null;
 	if (typeof body?.dnsSkipped !== "boolean") {
 		return NextResponse.json({ error: "dnsSkipped must be a boolean" }, { status: 400 });
 	}
 	const domain = await getDomainForUser(env, user.id, id);
 	if (!domain) return NextResponse.json({ error: "Not found" }, { status: 404 });
+	if (body.verify === true && !(await isInboundMxPublished(domain))) {
+		return NextResponse.json({ domain, verified: false });
+	}
 	const update = dnsSkippedUpdate(domain, body.dnsSkipped);
 	await getDb(env).update(domains).set(update).where(eq(domains.id, id));
 	return NextResponse.json({ domain: { ...domain, ...update } });

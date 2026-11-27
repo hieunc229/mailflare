@@ -24,7 +24,7 @@ Resend uses one **API key**, shared by every domain that uses it. Create it at [
 - A **full-access** key lets Mailflare add the domain to Resend, write its DNS records to the Cloudflare zone, verify it, and (for receiving) register the webhook.
 - A **sending-only** key can send, but Resend refuses it for domain and webhook management, so you add the domain at [resend.com/domains](https://resend.com/domains), create its records yourself, and use **Send test email** to confirm. Mailflare says so in the card instead of failing.
 
-The key is checked against Resend when you save it. It can also come from the `RESEND_API_KEY` secret, which is used when no key is saved in the app. Only the primary administrator can change it.
+The key is checked against Resend when you save it. It can also come from the `RESEND_API_KEY` secret, which takes priority over a key saved in the app. Only the primary administrator can change it.
 
 A service with a Resend-compatible API works the same way: set `RESEND_BASE_URL` to its API address and use its key. Every Resend call (sending, domains, webhooks, received mail) goes to that address. If the service refuses a custom `Message-ID` header, set `RESEND_CUSTOM_MESSAGE_ID=false`: Mailflare then sends without it and threads replies on the Message-ID the service reports for the sent email (`message_id` from `GET /emails/{id}`), falling back to its own when none is reported yet. If it refuses other headers Mailflare sets, such as `Auto-Submitted` on system mail and auto-replies, list them in `RESEND_OMIT_HEADERS` (comma-separated) and they are left out of every send.
 
@@ -34,7 +34,7 @@ A service with a Resend-compatible API works the same way: set `RESEND_BASE_URL`
 
 ## Amazon SES
 
-Create an IAM user with programmatic access, then enter its **access key ID**, **secret access key** and **region** in the SES card. Mailflare validates them before saving: it proves the identity with STS, then makes a harmless call to each service it needs, and lists every permission the key lacks. Credentials can also come from `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY` and `AWS_REGION`.
+Create an IAM user with programmatic access, then enter its **access key ID**, **secret access key** and **region** in the SES card. Mailflare validates them before saving: it proves the identity with STS, then makes a harmless call to each service it needs, and lists every permission the key lacks. Credentials can also come from `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY` and `AWS_REGION`, which take priority over saved ones.
 
 The key needs this policy (the card shows it too, with only the missing parts called out):
 
@@ -95,11 +95,11 @@ You cannot clean up the provider that is currently selected.
 
 | Variable | Purpose |
 |---|---|
-| `RESEND_API_KEY` | Resend key used when none is saved in the app |
+| `RESEND_API_KEY` | Resend key; overrides one saved in the app |
 | `RESEND_BASE_URL` | Base URL of the Resend API (default `https://api.resend.com`); point it at a Resend-compatible service to send and receive through that instead |
 | `RESEND_CUSTOM_MESSAGE_ID` | `false` stops sending Mailflare's own `Message-ID` header, for compatible services that refuse it (default: sent) |
 | `RESEND_OMIT_HEADERS` | Comma-separated headers left out of every Resend send, for compatible services that refuse them (default: none) |
-| `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_REGION` | SES credentials used when none are saved in the app |
+| `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_REGION` | SES credentials; override ones saved in the app |
 | `APP_URL` | Public HTTPS address; required for Resend and SES receiving, because the providers call this app |
 
 Settings saved in the app take precedence over these variables. Keys saved in the app are stored as plain text in the `app_settings` table (as the AI provider key already is), so protect database backups accordingly.

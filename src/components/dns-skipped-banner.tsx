@@ -22,26 +22,54 @@ async function fetchSkippedDomains(): Promise<SkippedDomain[] | null> {
 	}
 }
 
+/** Clears the flag on domains whose DNS is now in place and returns the rest. */
+async function dropPublishedDomains(domains: SkippedDomain[]): Promise<SkippedDomain[]> {
+	const published = await Promise.all(
+		domains.map(async (domain) => {
+			try {
+				const res = await authFetch(`/api/domains/${domain.id}`, {
+					method: "PATCH",
+					headers: { "Content-Type": "application/json" },
+					body: JSON.stringify({ dnsSkipped: false, verify: true }),
+				});
+				if (!res.ok) return false;
+				return ((await res.json()) as { verified?: boolean }).verified !== false;
+			} catch {
+				return false;
+			}
+		}),
+	);
+	return domains.filter((_, index) => !published[index]);
+}
+
 export function DnsSkippedBanner() {
 	const { t } = useLanguage();
 	const user = useCurrentUser();
 	const [domains, setDomains] = useState<SkippedDomain[]>([]);
 	const [busy, setBusy] = useState(false);
 
-	const applyDomains = useCallback((next: SkippedDomain[] | null) => {
+	const canManage = !!user && (user.isPrimaryAdmin || (user.role === "admin" && user.canManageDomains));
+
+	const load = useCallback(async () => {
+		const next = await fetchSkippedDomains();
 		if (next) setDomains(next);
 	}, []);
 
-	const load = useCallback(async () => {
-		applyDomains(await fetchSkippedDomains());
-	}, [applyDomains]);
-
+	// Nothing is shown until DNS has been checked, so a configured domain never flashes the warning.
 	useEffect(() => {
-		void fetchSkippedDomains().then(applyDomains);
-	}, [applyDomains]);
+		if (!user) return;
+		let active = true;
+		void fetchSkippedDomains().then(async (next) => {
+			if (!next) return;
+			const pending = canManage ? await dropPublishedDomains(next) : next;
+			if (active) setDomains(pending);
+		});
+		return () => {
+			active = false;
+		};
+	}, [user, canManage]);
 
 	if (domains.length === 0) return null;
-	const canManage = !!user && (user.isPrimaryAdmin || (user.role === "admin" && user.canManageDomains));
 
 	async function markDone() {
 		setBusy(true);

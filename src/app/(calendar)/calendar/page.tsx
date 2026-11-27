@@ -471,7 +471,7 @@ export default function CalendarPage() {
 
   return (
     <div className={clsx("flex h-full min-h-0 flex-col bg-[#f6f8fc] pl-3 max-md:pl-0 lg:flex-row transition-[gap] duration-200 ease-in-out motion-reduce:transition-none", minimal ? "gap-0" : "gap-3")}>
-      <Toaster position="bottom-left" />
+      <Toaster position="bottom-right" />
       <h1 className="sr-only">{t("account.calendar")}</h1>
       {loading && <RouteLoadingBarPortal />}
       {headerTarget && createPortal(

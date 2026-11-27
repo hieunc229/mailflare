@@ -107,6 +107,12 @@ export async function POST(request: Request) {
 
 	const address = `${localPart}@${domain.hostname}`;
 
+	// The primary mailbox shows the account's name, so a name given for it belongs to the account.
+	const displayName = parsed.data.displayName?.trim();
+	if (displayName && ownerUserId === user.id && address === user.email) {
+		await db.update(users).set({ name: displayName }).where(eq(users.id, user.id));
+	}
+
 	return NextResponse.json({
 		id,
 		address,

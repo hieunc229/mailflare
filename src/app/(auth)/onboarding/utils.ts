@@ -43,11 +43,12 @@ export async function createDomain(
 export async function createMailbox(
 	domainId: string,
 	localPart: string,
+	displayName: string,
 ): Promise<{ ok: boolean; data: MailboxCreateResult }> {
 	const res = await authFetch("/api/mailboxes", {
 		method: "POST",
 		headers: { "Content-Type": "application/json" },
-		body: JSON.stringify({ domainId, localPart, displayName: localPart }),
+		body: JSON.stringify({ domainId, localPart, displayName }),
 	});
 
 	return {
