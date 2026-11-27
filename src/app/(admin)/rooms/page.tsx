@@ -11,14 +11,14 @@ import type { Room } from "./types";
 import { roomErrorKey } from "./utils";
 
 type Answer = { resources: Room[]; available: boolean };
-class RoomsError extends Error { constructor(readonly key: string, readonly status = 0, readonly code?: string, readonly bookings?: number) { super(key); } }
+class RoomsError extends Error { constructor(readonly key: string, readonly status = 0, readonly code?: string, readonly bookings?: number, readonly capped = false) { super(key); } }
 
 async function send(method: "POST" | "PATCH" | "DELETE", body: unknown, action: "save" | "delete") {
 	let response: Response;
 	try { response = await authFetch("/api/admin/calendar-resources", { method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }); } catch { throw new RoomsError(roomErrorKey(action, 0)); }
 	if (response.ok) return;
-	const data = (await response.json().catch(() => ({}))) as { code?: string; bookings?: number };
-	throw new RoomsError(roomErrorKey(action, response.status, data.code), response.status, data.code, data.bookings);
+	const data = (await response.json().catch(() => ({}))) as { code?: string; bookings?: number; capped?: boolean };
+	throw new RoomsError(roomErrorKey(action, response.status, data.code), response.status, data.code, data.bookings, data.capped === true);
 }
 
 /** Admin: the rooms and equipment people can book (spec F9 8.7). Adding needs a Team licence; everything else stays possible after one lapses. */
@@ -48,7 +48,7 @@ export default function RoomsPage() {
 			try { await send("DELETE", { id: room.id }, "delete"); } catch (failure) {
 				// Events still have it booked ahead: say how many and ask again before dropping those bookings.
 				if (!(failure instanceof RoomsError) || failure.code !== "HAS_BOOKINGS") throw failure;
-				if (!(await confirmDestructive(t("rooms.deleteBooked", { count: failure.bookings ?? 0, name: room.name })))) return;
+				if (!(await confirmDestructive(t("rooms.deleteBooked", { count: failure.capped ? `${failure.bookings}+` : failure.bookings ?? 0, name: room.name })))) return;
 				await send("DELETE", { id: room.id, force: true }, "delete");
 			}
 		},
