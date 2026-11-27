@@ -129,3 +129,18 @@ test("a failed change keeps focus on the button that was pressed", async () => {
 	assert.ok(document.activeElement === button("Turn on"), "focus is on the expected element, not " + document.activeElement?.tagName);
 	await unmount();
 });
+
+test("the date a link has been on since follows the app's language, like the rest of the calendar", async () => {
+	reset();
+	document.documentElement.lang = "de";
+	try {
+		globalThis.pubUiR.respond = server({ on: true });
+		await mount();
+		assert.match(text(), /05\.01\.2030/);
+		await unmount();
+		document.documentElement.lang = "en";
+		await mount();
+		assert.match(text(), /Jan 5, 2030/);
+		await unmount();
+	} finally { document.documentElement.lang = ""; }
+});
