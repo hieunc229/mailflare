@@ -34,8 +34,8 @@ export function PublishCard() {
 		const result = await turnOnPublish();
 		setPending(false);
 		if (!result.ok) { setError(t("calendar.publish.failed")); return; }
-		setUrls(result.key ? publishUrls(window.location.origin, result.key) : null);
-		setSince(new Date().toLocaleDateString());
+		// Already on (another tab or device made it): keep what this tab shows rather than overwrite it with less.
+		if (result.key) { setUrls(publishUrls(window.location.origin, result.key)); setSince(new Date().toLocaleDateString()); }
 		setState("on");
 	}
 

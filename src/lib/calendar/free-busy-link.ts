@@ -9,7 +9,7 @@ export const FREEBUSY_SCOPE = "calendar:freebusy";
 
 /**
  * A user's publish key has an id of its own making, so "one per user" is the primary key's job: two requests turning it on at once
- * cannot both insert, whatever the database (no schema change, no lock).
+ * cannot both insert (no schema change, no lock); `enableFreeBusyLink` tells the winner from the loser on every database.
  */
 export const freeBusyKeyId = (userId: string) => `freebusy_${userId}`;
 
@@ -23,8 +23,9 @@ export async function enableFreeBusyLink(db: AppDatabase, userId: string): Promi
 	const issued = await generateApiKey();
 	const [made] = await db.insert(apiKeys).values({
 		id: freeBusyKeyId(userId), userId, name: "Published free/busy", prefix: issued.prefix, keyHash: issued.hash, keySha256: issued.sha256, scopes: scopesToJson([FREEBUSY_SCOPE]), mailboxScopeEnabled: true,
-	}).onConflictDoNothing().returning({ id: apiKeys.id });
-	return made ? { created: true, key: issued.fullKey } : { created: false };
+	}).onConflictDoNothing().returning({ id: apiKeys.id, keySha256: apiKeys.keySha256 });
+	// MySQL has no RETURNING: its shim reads the row back by id, so a request that lost the race can be handed the winner's row. Only the stored hash says whose secret it is.
+	return made?.keySha256 === issued.sha256 ? { created: true, key: issued.fullKey } : { created: false };
 }
 
 /** True when a link was removed. */
@@ -38,7 +39,7 @@ export async function disableFreeBusyLink(db: AppDatabase, userId: string): Prom
  * is the same null, so the answer cannot be used to probe accounts. The scope must be exactly this one: hasScope would let a "*" key through.
  */
 export async function authenticateFreeBusyKey(env: CloudflareEnv, secret: string): Promise<{ userId: string; keyId: string } | null> {
-	const key = await authenticateApiKeyValue(env, secret);
+	const key = await authenticateApiKeyValue(env, secret, { scope: FREEBUSY_SCOPE });
 	if (!key || key.scopes.length !== 1 || key.scopes[0] !== FREEBUSY_SCOPE || !key.user.calendarEnabled) return null;
 	return { userId: key.userId, keyId: key.keyId };
 }
