@@ -68,7 +68,7 @@ export function SidebarProvider({ children, expandedWidth = 260, mobileOverlay =
 				}
 			})
 			.catch(() => undefined);
-	}, []);
+	}, [expandedWidth]);
 
 	function toggle() {
 		if (overlay) {

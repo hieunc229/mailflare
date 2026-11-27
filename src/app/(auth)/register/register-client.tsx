@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { AlertTriangle, ArrowRight, CheckCircle2, LoaderCircle, MailPlus, XCircle } from "@/components/icons";
 import { useEffect, useState } from "react";
 import { useLanguage } from "@/components/language-provider";
+import type { TranslationKey } from "@/lib/i18n/types";
 import { AuthShell } from "@/components/auth/auth-shell";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -20,6 +21,10 @@ import {
   submitRegistration,
 } from "./utils";
 import type { DomainPreflight, DomainSetupResult, SetupRequirementCheck } from "./types";
+
+// A raw message from the server or an error object, or a translation key
+// resolved at render time so locale switches never need to re-run requests.
+type SetupError = string | { key: TranslationKey };
 
 export function RegisterClient() {
   const { t } = useLanguage();
@@ -43,20 +48,64 @@ export function RegisterClient() {
   const [checks, setChecks] = useState<SetupRequirementCheck[]>([]);
   const [databaseMigrated, setDatabaseMigrated] = useState(false);
   const [preparationComplete, setPreparationComplete] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<SetupError | null>(null);
   const [mxChecking, setMxChecking] = useState(true);
   const [mxRecordsExist, setMxRecordsExist] = useState<boolean | null>(null);
   const [replaceMxRecords, setReplaceMxRecords] = useState(false);
   const [mxCheckRevision, setMxCheckRevision] = useState(0);
-  const [loading, setLoading] = useState(false);
+  // Bumped by the "Check again" button to re-run setup preparation.
+  const [preparationRevision, setPreparationRevision] = useState(0);
+  const [loading, setLoading] = useState(true);
   const [turnstileReset, setTurnstileReset] = useState(0);
   const [usePasskey, setUsePasskey] = useState(false);
 
+  // Runs on mount and whenever `preparationRevision` changes; a superseded or
+  // unmounted attempt must never apply its results over a newer one.
   useEffect(() => {
-    void runPreparation();
-  }, []);
+    let cancelled = false;
+    // Defer to the next frame so the preparation's loading state is not set
+    // synchronously inside the effect.
+    const frame = requestAnimationFrame(() => {
+      void (async () => {
+        setLoading(true);
+        setError(null);
+        setPreparationComplete(false);
+
+        try {
+          const preparation = await prepareSetup();
+          if (cancelled) return;
+          setChecks(preparation.data.checks ?? []);
+          setDatabaseMigrated(!!preparation.data.migrated);
+          if (!preparation.ok) {
+            setError(preparation.data.error ?? { key: "setup.completeConfig" });
+            return;
+          }
+
+          const data = await getSetupStatus();
+          if (cancelled) return;
+          setHasAdminAccount(data.hasAdminAccount);
+          setHasPrimaryDomain(data.hasPrimaryDomain);
+          setPrimaryDomain(data.primaryDomain?.hostname ?? null);
+          setPrimaryDomainSendingRequested(data.primaryDomain?.sendingRequested ?? null);
+          setManagesDns(data.managesDns ?? true);
+          setPreparationComplete(true);
+        } catch (error) {
+          if (!cancelled) {
+            setError(error instanceof Error ? error.message : { key: "setup.prepFailed" });
+          }
+        } finally {
+          if (!cancelled) setLoading(false);
+        }
+      })();
+    });
+    return () => {
+      cancelled = true;
+      cancelAnimationFrame(frame);
+    };
+  }, [preparationRevision]);
 
   const accountDomain = setupDomain ?? primaryDomain;
+  const errorMessage = typeof error === "string" ? error : error ? t(error.key) : null;
 
   // Reset the MX check state whenever a new check starts (or DNS is skipped).
   const [mxCheckFor, setMxCheckFor] = useState({ step, accountDomain, mxCheckRevision, setupSkipDns, t });
@@ -103,34 +152,6 @@ export function RegisterClient() {
     };
   }, [step, accountDomain, mxCheckRevision, setupSkipDns, managesDns, t]);
 
-  async function runPreparation() {
-    setLoading(true);
-    setError(null);
-    setPreparationComplete(false);
-
-    try {
-      const preparation = await prepareSetup();
-      setChecks(preparation.data.checks ?? []);
-      setDatabaseMigrated(!!preparation.data.migrated);
-      if (!preparation.ok) {
-        setError(preparation.data.error ?? t("setup.completeConfig"));
-        return;
-      }
-
-      const data = await getSetupStatus();
-      setHasAdminAccount(data.hasAdminAccount);
-      setHasPrimaryDomain(data.hasPrimaryDomain);
-      setPrimaryDomain(data.primaryDomain?.hostname ?? null);
-      setPrimaryDomainSendingRequested(data.primaryDomain?.sendingRequested ?? null);
-      setManagesDns(data.managesDns ?? true);
-      setPreparationComplete(true);
-    } catch (error) {
-      setError(error instanceof Error ? error.message : t("setup.prepFailed"));
-    } finally {
-      setLoading(false);
-    }
-  }
-
   async function onDomainSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setLoading(true);
@@ -141,7 +162,7 @@ export function RegisterClient() {
       if (skipDns) {
         const { ok, data } = await submitPrimaryDomain(hostname, true);
         if (!ok || !data.domain) {
-          setError(typeof data.error === "string" ? data.error : t("setup.domainFailed"));
+          setError(typeof data.error === "string" ? data.error : { key: "setup.domainFailed" });
           return;
         }
         setSetupDomain(data.domain.hostname);
@@ -158,7 +179,7 @@ export function RegisterClient() {
       const { ok, data } = result;
       if (!ok || !data.domain) {
         setError(
-          typeof data.error === "string" ? data.error : t("setup.domainFailed"),
+          typeof data.error === "string" ? data.error : { key: "setup.domainFailed" },
         );
         return;
       }
@@ -166,7 +187,7 @@ export function RegisterClient() {
       setSetupEnableSending(managesDns ? usedCachedCheck && enableSending : true);
       setStep(3);
     } catch {
-      setError(t("auth.serverUnreachable"));
+      setError({ key: "auth.serverUnreachable" });
     } finally {
       setLoading(false);
     }
@@ -183,7 +204,7 @@ export function RegisterClient() {
       if (!ok || !data.domain) {
         setDomainCheck(null);
         setEnableSending(false);
-        setError(typeof data.error === "string" ? data.error : t("setup.domainCheckFailed"));
+        setError(typeof data.error === "string" ? data.error : { key: "setup.domainCheckFailed" });
         return;
       }
 
@@ -192,7 +213,7 @@ export function RegisterClient() {
     } catch {
       setDomainCheck(null);
       setEnableSending(false);
-      setError(t("auth.serverUnreachable"));
+      setError({ key: "auth.serverUnreachable" });
     } finally {
       setDomainChecking(false);
     }
@@ -207,7 +228,7 @@ export function RegisterClient() {
       const form = new FormData(e.currentTarget);
       const domain = setupDomain ?? primaryDomain;
       if (!domain) {
-        setError(t("setup.domainIncomplete"));
+        setError({ key: "setup.domainIncomplete" });
         return;
       }
 
@@ -230,15 +251,15 @@ export function RegisterClient() {
         }
         setError(
           data.code === "passkey_unavailable"
-            ? t("authError.passkeyUnavailable")
-            : typeof data.error === "string" ? data.error : t("setup.registrationFailed"),
+            ? { key: "authError.passkeyUnavailable" }
+            : typeof data.error === "string" ? data.error : { key: "setup.registrationFailed" },
         );
         setTurnstileReset((value) => value + 1);
         return;
       }
       window.location.assign(data.redirect ?? "/login");
     } catch {
-      setError(t("auth.serverUnreachable"));
+      setError({ key: "auth.serverUnreachable" });
       setTurnstileReset((value) => value + 1);
     } finally {
       setLoading(false);
@@ -327,9 +348,9 @@ export function RegisterClient() {
               </div>
             )}
           </div>
-          {error && (
+          {errorMessage && (
             <p role="alert" className="rounded-2xl border border-red-100 bg-red-50 px-4 py-3 text-sm font-medium text-red-700">
-              {error}
+              {errorMessage}
             </p>
           )}
           {preparationComplete ? (
@@ -346,7 +367,7 @@ export function RegisterClient() {
               variant="outline"
               className="h-11 w-full rounded-full px-6 active:scale-[0.98]"
               disabled={loading}
-              onClick={() => void runPreparation()}
+              onClick={() => setPreparationRevision((value) => value + 1)}
             >
               {loading ? t("setup.checkingShort") : t("setup.checkAgain")}
             </Button>
@@ -418,9 +439,9 @@ export function RegisterClient() {
               {t("setup.domainFound", { zone: domainCheck.zone.name })}
             </div>
           )}
-          {error && (
+          {errorMessage && (
             <p role="alert" className="rounded-2xl border border-red-100 bg-red-50 px-4 py-3 text-sm font-medium text-red-700">
-              {error}
+              {errorMessage}
             </p>
           )}
           <Button
@@ -522,9 +543,9 @@ export function RegisterClient() {
             {/* <p className="text-xs leading-5 text-neutral-500">Used later for password reset.</p> */}
           </div>
 
-          {error && (
+          {errorMessage && (
             <p role="alert" className="rounded-2xl border border-red-100 bg-red-50 px-4 py-3 text-sm font-medium text-red-700">
-              {error}
+              {errorMessage}
             </p>
           )}
 					{!mxChecking && mxRecordsExist === null && (
