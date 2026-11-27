@@ -55,6 +55,44 @@ export function mergeBusy(intervals: BusyInterval[]): BusyInterval[] {
 	return merged;
 }
 
+type ExpandableRow = Parameters<typeof expandEvent>[0] & { allDay: boolean; userId: string };
+
+/**
+ * One row's occurrences as intervals clamped to [from, to] (ms), expanded the way the calendar view does (an all-day day ends at
+ * the next midnight of its zone, a zoneless repeating or all-day row uses `ownerZone`). `limit` bounds the walk; `used` is the work
+ * it cost (one per series plus one per occurrence found) and `truncated` says the limit ended it, so occurrences may be missing.
+ * `cutoff` leaves out occurrences starting at or after it.
+ */
+export function expandRowBusy(row: ExpandableRow, ownerZone: string | undefined, from: number, to: number, limit: number, cutoff?: number): { busy: BusyInterval[]; used: number; truncated: boolean } {
+	const duration = row.endsAt.getTime() - row.startsAt.getTime();
+	// A day of an all-day series ends at the next midnight of its zone, so on a 23- or 25-hour day it is not 24 hours long.
+	const zone = row.allDay || needsOwnerZone(row) ? (validZone(row.timeZone) ? row.timeZone : ownerZone ?? "UTC") : null;
+	const days = Math.max(1, Math.round(duration / DAY));
+	const lengthAt = (start: number) => zone && row.allDay ? addZonedDays(new Date(start), days, zone).getTime() - start : duration;
+	// Its last day can be a day longer than the row (a 25-hour day against 24), so look back one day further than its length.
+	const lookback = zone && row.allDay ? (days + 1) * DAY : duration;
+	const { starts, exhausted } = expandEvent(zone ? { ...row, timeZone: zone } : row, new Date(from - lookback), new Date(to), limit);
+	const busy: BusyInterval[] = [];
+	for (const at of starts) {
+		if (cutoff !== undefined && at.getTime() >= cutoff) continue;
+		const occurrenceEnd = at.getTime() + lengthAt(at.getTime());
+		if (occurrenceEnd > from && at.getTime() < to) busy.push([Math.max(at.getTime(), from), Math.min(occurrenceEnd, to)]);
+	}
+	return { busy, used: 1 + starts.length, truncated: exhausted || starts.length >= limit };
+}
+
+/** Rows that can be in [start, end): they start before it ends and end after it starts, or repeat on into it. */
+export const overlapsWindow = (start: Date, end: Date) => and(lt(calendarEvents.startsAt, end), or(gt(calendarEvents.endsAt, start), and(ne(calendarEvents.repeat, "none"), or(isNull(calendarEvents.repeatUntil), sql`${calendarEvents.repeatUntil} + (${calendarEvents.endsAt} - ${calendarEvents.startsAt} + ${DAY / 1000}) > ${Math.floor(start.getTime() / 1000)}`))));
+
+/** The time zone of each account in `ids` that has a usable one (chunked: D1 binds at most 100 parameters). */
+export async function loadOwnerZones(db: ReturnType<typeof getDb>, ids: string[]): Promise<Map<string, string>> {
+	const zones = new Map<string, string>();
+	for (let index = 0; index < ids.length; index += USER_CHUNK) for (const owner of await db.select({ id: users.id, timeZone: users.timeZone }).from(users).where(inArray(users.id, ids.slice(index, index + USER_CHUNK)))) if (validZone(owner.timeZone)) zones.set(owner.id, owner.timeZone);
+	return zones;
+}
+
+export { needsOwnerZone };
+
 /**
  * The one answer to "when is this person busy" (D-9): the editor, the publish URL and CalDAV all read it, so they cannot disagree.
  * Callers decide who may see whom (`viewableFreeBusyUsers`); this only turns events into intervals. Every calendar a person owns
@@ -90,38 +128,26 @@ export async function busyIntervals(env: CloudflareEnv, targets: FreeBusyTargets
 			id: calendarEvents.id, davObjectId: calendarEvents.davObjectId, userId: calendarEvents.userId, startsAt: calendarEvents.startsAt, endsAt: calendarEvents.endsAt, timeZone: calendarEvents.timeZone, repeat: calendarEvents.repeat, rrule: calendarEvents.rrule,
 			repeatDays: calendarEvents.repeatDays, repeatAnchorDay: calendarEvents.repeatAnchorDay, repeatUntil: calendarEvents.repeatUntil, excludedOccurrences: calendarEvents.excludedOccurrences,
 			recurrenceId: calendarEvents.recurrenceId, transparent: calendarEvents.transparent, responseStatus: calendarEvents.responseStatus, allDay: calendarEvents.allDay,
-		}).from(calendarEvents).where(and(inArray(calendarEvents.userId, ids.slice(index, index + USER_CHUNK)), lt(calendarEvents.startsAt, end), or(gt(calendarEvents.endsAt, start), and(ne(calendarEvents.repeat, "none"), or(isNull(calendarEvents.repeatUntil), sql`${calendarEvents.repeatUntil} + (${calendarEvents.endsAt} - ${calendarEvents.startsAt} + ${DAY / 1000}) > ${Math.floor(from / 1000)}`)))));
+		}).from(calendarEvents).where(and(inArray(calendarEvents.userId, ids.slice(index, index + USER_CHUNK)), overlapsWindow(start, end)));
 		// An all-day event is stored as the instants of its midnights. A repeating or all-day row with no zone of its own is a legacy one, and the calendar view expands
 		// those in the viewer's own zone (`calendarTimeZone` in the calendar's utils.ts, the user's setting), which for the owner is `users.time_zone`; so this does too, and the two agree.
-		const ownerZones = new Map<string, string>();
-		if (rows.some((row) => needsOwnerZone(row))) for (const owner of await db.select({ id: users.id, timeZone: users.timeZone }).from(users).where(inArray(users.id, ids.slice(index, index + USER_CHUNK)))) if (validZone(owner.timeZone)) ownerZones.set(owner.id, owner.timeZone);
+		const ownerZones = rows.some((row) => needsOwnerZone(row)) ? await loadOwnerZones(db, ids.slice(index, index + USER_CHUNK)) : new Map<string, string>();
 		for (const row of rows) {
 			if (!isBusyEvent(row)) continue;
 			// The event being edited: all of it, or (with an occurrence named) that occurrence and the moved row that replaced it.
 			const edited = excluded.has(row.id);
 			const movedRow = !!targets.excludeEventId && row.davObjectId === targets.excludeEventId && row.id !== targets.excludeEventId;
 			if (targets.excludeOccurrence === undefined ? edited || movedRow : movedRow && row.recurrenceId !== null && row.recurrenceId.getTime() >= targets.excludeOccurrence) continue;
-			const duration = row.endsAt.getTime() - row.startsAt.getTime();
-			if (duration <= 0) continue;
+			if (row.endsAt.getTime() - row.startsAt.getTime() <= 0) continue;
 			const list = collected.get(row.userId)!;
 			// What is left of this person's share is the limit on the expansion itself, so one series cannot carry them far past it; reaching the limit counts as running out.
 			const used = spent.get(row.userId) ?? 0;
 			const limit = Math.min(MAX_OCCURRENCES, share - used);
 			if (limit <= 0) { list.push([from, to]); continue; }
-			// A day of an all-day series ends at the next midnight of its zone, so on a 23- or 25-hour day it is not 24 hours long.
-			const zone = row.allDay || needsOwnerZone(row) ? (validZone(row.timeZone) ? row.timeZone : ownerZones.get(row.userId) ?? "UTC") : null;
-			const days = Math.max(1, Math.round(duration / DAY));
-			const lengthAt = (start: number) => zone && row.allDay ? addZonedDays(new Date(start), days, zone).getTime() - start : duration;
-			// Its last day can be a day longer than the row (a 25-hour day against 24), so look back one day further than its length.
-			const lookback = zone && row.allDay ? (days + 1) * DAY : duration;
-			const { starts, exhausted } = expandEvent(zone ? { ...row, timeZone: zone } : row, new Date(from - lookback), end, limit);
-			spent.set(row.userId, used + 1 + starts.length);
-			if (exhausted || starts.length >= limit) { list.push([from, to]); continue; }
-			for (const at of starts) {
-				if (edited && targets.excludeOccurrence !== undefined && at.getTime() >= targets.excludeOccurrence) continue;
-				const occurrenceEnd = at.getTime() + lengthAt(at.getTime());
-				if (occurrenceEnd > from && at.getTime() < to) list.push([Math.max(at.getTime(), from), Math.min(occurrenceEnd, to)]);
-			}
+			const walked = expandRowBusy(row, ownerZones.get(row.userId), from, to, limit, edited && targets.excludeOccurrence !== undefined ? targets.excludeOccurrence : undefined);
+			spent.set(row.userId, used + walked.used);
+			if (walked.truncated) list.push([from, to]);
+			else list.push(...walked.busy);
 		}
 	}
 	return new Map([...collected].map(([id, list]) => [id, mergeBusy(list)]));
