@@ -53,7 +53,9 @@ function resolvePointer(value: unknown, path: string): unknown {
 			});
 		}
 		if (current === null || typeof current !== "object") throw new JmapError("invalidResultReference", `Path ${path} not found`);
-		current = (current as Record<string, unknown>)[segment];
+		// An inherited member is a miss: "__proto__" or "constructor" resolving
+		// a prototype object or Function would inject it into the method args.
+		current = Object.prototype.hasOwnProperty.call(current, segment) ? (current as Record<string, unknown>)[segment] : undefined;
 	}
 	return current;
 }
@@ -62,6 +64,9 @@ function resolvePointer(value: unknown, path: string): unknown {
 function resolveReferences(args: Record<string, unknown>, responses: JmapInvocation[]): Record<string, unknown> {
 	const resolved: Record<string, unknown> = {};
 	for (const [key, value] of Object.entries(args)) {
+		// "__proto__", bare or behind a "#" reference, would write through the
+		// __proto__ setter on `resolved` rather than land as an own property.
+		if (key === "__proto__" || key === "#__proto__") continue;
 		if (!key.startsWith("#")) {
 			resolved[key] = value;
 			continue;
@@ -77,7 +82,9 @@ function resolveReferences(args: Record<string, unknown>, responses: JmapInvocat
 /** Client creation ids (`#draft1`) become server ids once the create has run. */
 function resolveCreatedIds(args: Record<string, unknown>, createdIds: Record<string, string>): Record<string, unknown> {
 	const walk = (value: unknown): unknown => {
-		if (typeof value === "string" && value.startsWith("#") && createdIds[value.slice(1)]) return createdIds[value.slice(1)];
+		// An inherited property like "constructor" is not a creation id: reading
+		// it as one substitutes a Function into the args instead of staying absent.
+		if (typeof value === "string" && value.startsWith("#") && Object.prototype.hasOwnProperty.call(createdIds, value.slice(1))) return createdIds[value.slice(1)];
 		if (Array.isArray(value)) return value.map(walk);
 		if (value && typeof value === "object") return Object.fromEntries(Object.entries(value).map(([k, v]) => [k, walk(v)]));
 		return value;
@@ -111,7 +118,11 @@ function describeCall(name: string, args: Record<string, unknown>, ms: number) {
 
 export async function processRequest(ctx: JmapContext, request: JmapRequest): Promise<JmapResponse> {
 	const responses: JmapInvocation[] = [];
-	Object.assign(ctx.createdIds, request.createdIds ?? {});
+	// Object.assign copies through [[Set]], which runs the "__proto__" setter: a
+	// client map could replace this object's prototype and forge #id lookups.
+	for (const [key, id] of Object.entries(request.createdIds ?? {})) {
+		if (key !== "__proto__") ctx.createdIds[key] = id;
+	}
 	const startedAt = Date.now();
 	const calls: ReturnType<typeof describeCall>[] = [];
 
@@ -119,7 +130,9 @@ export async function processRequest(ctx: JmapContext, request: JmapRequest): Pr
 		const callStartedAt = Date.now();
 		const readOnly = READ_ONLY_METHOD.test(name);
 		if (!readOnly) ctx.memo = undefined;
-		const handler = METHODS[name];
+		// The method name is a client key: "constructor" and friends resolve
+		// through Object.prototype and would be invoked as handlers.
+		const handler = Object.prototype.hasOwnProperty.call(METHODS, name) ? METHODS[name] : undefined;
 		if (!handler) {
 			responses.push(["error", { type: "unknownMethod" }, callId]);
 			continue;
