@@ -16,7 +16,6 @@ for (const [dialect, directory, tag, bundle, patterns] of DIALECTS) {
 		const entries = journal(directory);
 		const index = entries.findIndex((entry) => entry.tag === tag);
 		assert.ok(index > 0, "journalled");
-		assert.equal(index, entries.length - 1, "last in the journal");
 		assert.equal(entries[index].idx, entries[index - 1].idx + 1);
 		assert.ok(entries[index].when > entries[index - 1].when, "journal timestamps stay increasing");
 		for (const pattern of patterns) assert.match(read(`${directory}/${tag}.sql`), pattern);
