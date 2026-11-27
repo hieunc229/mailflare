@@ -70,7 +70,7 @@ for (const [team, expected] of [[false, LAPSED], [true, LICENSED]]) {
 
 	test(`time-zone change, ${label}`, async () => {
 		setup(team);
-		sqlite.prepare("INSERT INTO calendar_events (id, user_id, title, starts_at, ends_at, repeat, created_at, updated_at) VALUES ('e1', 'u1', 't', ?, ?, 'weekly', 1, 1)").run(Math.floor((FUTURE + 9 * H) / 1000), Math.floor((FUTURE + 10 * H) / 1000));
+		sqlite.prepare("INSERT INTO calendar_events (id, user_id, title, starts_at, ends_at, all_day, created_at, updated_at) VALUES ('e1', 'u1', 't', ?, ?, 1, 1, 1)").run(Math.floor((FUTURE + 9 * H) / 1000), Math.floor((FUTURE + 10 * H) / 1000));
 		book("e1");
 		const response = await changeZone(new Request("https://m.test/api/settings/time-zone", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ timeZone: "Asia/Tokyo" }) }));
 		assert.equal(response.status, 200);
