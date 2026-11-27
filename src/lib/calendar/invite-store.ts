@@ -1,4 +1,5 @@
 import { and, desc, eq, isNotNull, isNull } from "drizzle-orm";
+import { declineBookingsStatement, rebookEvents } from "./room-save";
 import { getDb } from "@/db";
 import { calendarEventOverrides, calendarEvents, calendarInviteTombstones, calendarOccurrenceResponses, users } from "@/db/schema";
 import { newId } from "@/lib/ids";
@@ -211,7 +212,9 @@ export async function registerInboundInvite(env: CloudflareEnv, input: { userId:
 		}
 		if (plan.action === "exclude") {
 			if (!existing) return;
-			await db.update(calendarEvents).set({ excludedOccurrences: addExcludedOccurrence(existing.excludedOccurrences, plan.occurrence), inviteSender: existing.inviteSender || sender, updatedAt: new Date() }).where(where);
+			// An event with rooms is declined in the same batch and checked again after it (a stop in between leaves none accepted unchecked).
+			await db.batch([db.update(calendarEvents).set({ excludedOccurrences: addExcludedOccurrence(existing.excludedOccurrences, plan.occurrence), inviteSender: existing.inviteSender || sender, updatedAt: new Date() }).where(where), declineBookingsStatement(db, id)] as never);
+			await rebookEvents(db, [id]);
 			return;
 		}
 		if (plan.action === "upsert-override") {
@@ -228,12 +231,13 @@ export async function registerInboundInvite(env: CloudflareEnv, input: { userId:
 			return;
 		}
 		const moved = existing.startsAt.getTime() !== invite.startsAt.getTime() || existing.endsAt.getTime() !== invite.endsAt.getTime();
-		await db.update(calendarEvents).set({
+		await db.batch([db.update(calendarEvents).set({
 			...values, inviteMessageId: input.messageId,
 			responseStatus: moved ? "needs-action" : existing.responseStatus,
 			// Fill in a reminder only when the row has none; never overwrite the user's own setting.
 			...(existing?.reminderMinutes == null && invite.alarmMinutes != null ? { reminderMinutes: invite.alarmMinutes } : {}),
-		}).where(where);
+		}).where(where), declineBookingsStatement(db, id)] as never);
+		await rebookEvents(db, [id]);
 		// A refreshed series keeps its per-occurrence edits; new RDATEs join them, dropped ones stay.
 		await mergeRdateOverrides(db, id, invite);
 	} catch (error) {

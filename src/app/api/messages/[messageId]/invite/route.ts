@@ -9,6 +9,7 @@ import { getEnv } from "@/lib/cloudflare";
 import { buildCounterIcs, buildReplyIcs, buildReplyText, parseCounterProposal, parseInvite, type InviteResponse, type ParsedInvite } from "@/lib/calendar/invite";
 import { findInviteAttachment, MAX_INVITE_BYTES } from "@/lib/calendar/invite-attachment";
 import { addExcludedOccurrence, normalizeInviteSender, planInviteAnswer } from "@/lib/calendar/invite-rules";
+import { declineBookingsStatement, rebookEvents } from "@/lib/calendar/room-save";
 import { inviteEventFlags, inviteEventId, inviteEventValues, recipientInviteTimeZone, sameInviteSender, upsertEventOverride } from "@/lib/calendar/invite-store";
 import { hasValidSessionMutationOrigin } from "@/lib/auth/origin";
 import { getEmailAddress, splitEmailAddressList } from "@/lib/email/address";
@@ -131,7 +132,8 @@ export async function POST(request: Request, { params }: InviteRouteParams) {
 	if (plan.action === "delete") {
 		await db.delete(calendarEvents).where(where);
 	} else if (plan.action === "exclude" && existing) {
-		await db.update(calendarEvents).set({ excludedOccurrences: addExcludedOccurrence(existing.excludedOccurrences, plan.occurrence), inviteSender: existing.inviteSender || sender, updatedAt: new Date() }).where(where);
+		await db.batch([db.update(calendarEvents).set({ excludedOccurrences: addExcludedOccurrence(existing.excludedOccurrences, plan.occurrence), inviteSender: existing.inviteSender || sender, updatedAt: new Date() }).where(where), declineBookingsStatement(db, id)] as never);
+		await rebookEvents(db, [id]);
 		eventId = existing.id;
 	} else if (plan.action === "none") {
 		eventId = existing?.id ?? null;
@@ -154,7 +156,9 @@ export async function POST(request: Request, { params }: InviteRouteParams) {
 		// The reminder is written once on insert, and on update only when the row has none.
 		const insertValues = invite.alarmMinutes != null ? { ...values, reminderMinutes: invite.alarmMinutes } : values;
 		const updateValues = existing?.reminderMinutes == null ? insertValues : values;
-		await db.insert(calendarEvents).values({ id, userId: user.id, mailboxId: message.mailboxId, color: response === "tentative" ? "#7c3aed" : "#2563eb", ...inviteEventFlags(invite), ...insertValues }).onConflictDoUpdate({ target: calendarEvents.id, set: updateValues });
+		const write = db.insert(calendarEvents).values({ id, userId: user.id, mailboxId: message.mailboxId, color: response === "tentative" ? "#7c3aed" : "#2563eb", ...inviteEventFlags(invite), ...insertValues }).onConflictDoUpdate({ target: calendarEvents.id, set: updateValues });
+		// An answered update can move an event that has rooms: declined in the same batch, checked again after it.
+		if (existing) { await db.batch([write, declineBookingsStatement(db, id)] as never); await rebookEvents(db, [id]); } else await write;
 		eventId = id;
 	}
 
