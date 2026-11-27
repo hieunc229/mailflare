@@ -49,8 +49,10 @@ Mailflare does not run an antivirus engine. What it does instead:
   directory are read with two bounded range requests (at most 1000 entries and 1 MiB of
   directory). Password-protected or unreadable archives are flagged.
 * A flagged attachment shows the reasons in the viewer, and the download stays disabled
-  until the user ticks "I understand the risk". The server refuses an unacknowledged
-  download of a flagged file with HTTP 409, so a direct link cannot bypass it.
+  until the user ticks "I understand the risk". The web download and ZIP routes refuse an
+  unacknowledged download of a flagged file with HTTP 409. The gate is a warning in the web
+  app, not an access control: the original-message (.eml) download, JMAP clients, and
+  download links Mailflare creates for large attachments you send serve the bytes without it.
 
 This stops one-click downloads of things that are dangerous by design. It does not find
 malware in an ordinary-looking PDF or image; put ClamAV or a provider scan in front of the
