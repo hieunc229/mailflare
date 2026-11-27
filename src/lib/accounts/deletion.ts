@@ -1,6 +1,6 @@
-import { and, eq, inArray, isNotNull, isNull, lte } from "drizzle-orm";
+import { and, eq, inArray, isNotNull, isNull, lte, ne, or } from "drizzle-orm";
 import { getDb } from "@/db";
-import { calendarEvents, calendarShares, davCollections, driveItems, mailboxes, messageAttachments, messages, sessions, users } from "@/db/schema";
+import { calendarEvents, calendarResourceBookings, calendarShares, davCollections, driveItems, mailboxes, messageAttachments, messages, sessions, users } from "@/db/schema";
 import { canManageUsers, isPrimaryAdmin } from "@/lib/auth/admin";
 import type { SessionUser } from "@/lib/auth/types";
 import { deleteDriveItems } from "@/lib/drive/access";
@@ -12,6 +12,8 @@ import { avatarKeyFor } from "@/app/api/profile/avatar/utils";
 import { getAccountPurgeCutoff } from "./deletion-utils";
 import type { DeleteAccountsInput, DeleteAccountsResult } from "./deletion-types";
 import { transferCalendars } from "@/lib/calendar/calendars";
+import { roomsBookable } from "@/lib/calendar/room-licence";
+import { declineBookingsOfStatement, rebookWaiting } from "@/lib/calendar/room-save";
 import { deleteUnreferencedObjects } from "@/lib/drive/shared-objects";
 
 const CHUNK = 50;
@@ -42,7 +44,17 @@ export async function transferAccountData(env: CloudflareEnv, fromId: string, fr
 	}
 	// Extra calendars change owner first, so their events (moved next) are never owned by someone other than their calendar.
 	await transferCalendars(db, fromId, toId);
-	await db.update(calendarEvents).set({ userId: toId }).where(eq(calendarEvents.userId, fromId));
+	// The events move to another owner. Those with no zone of their own (an all-day event, or a repeating one) are read in their owner's zone, so they may
+	// now happen at another time: their accepted bookings are declined in the same batch by one statement that selects them itself, first, and about 20 are
+	// checked again here (the rest wait declined, which fails closed).
+	const moving = db.select({ id: calendarEvents.id }).from(calendarEvents).where(and(eq(calendarEvents.userId, fromId), isNull(calendarEvents.timeZone), or(eq(calendarEvents.allDay, true), ne(calendarEvents.repeat, "none"))));
+	const hasRooms = (await db.select({ id: calendarResourceBookings.id }).from(calendarResourceBookings).innerJoin(calendarEvents, eq(calendarEvents.id, calendarResourceBookings.eventId)).where(eq(calendarEvents.userId, fromId)).limit(1)).length > 0;
+	if (!hasRooms) {
+		await db.update(calendarEvents).set({ userId: toId }).where(eq(calendarEvents.userId, fromId));
+		return;
+	}
+	await db.batch([declineBookingsOfStatement(db, moving), db.update(calendarEvents).set({ userId: toId }).where(eq(calendarEvents.userId, fromId))] as never);
+	await rebookWaiting(db, toId, roomsBookable(env));
 }
 
 /**
