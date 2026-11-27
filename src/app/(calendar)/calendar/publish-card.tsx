@@ -17,7 +17,7 @@ export function PublishCard({ hideTitle = false }: { hideTitle?: boolean }) {
 	const [pending, setPending] = useState(false);
 	const [error, setError] = useState("");
 	const [attempt, setAttempt] = useState(0);
-	const [focus, setFocus] = useState<"urls" | "action" | null>(null);
+	const [focus, setFocus] = useState<"urls" | "action" | "retry" | null>(null);
 
 	function show(result: Awaited<ReturnType<typeof loadPublishStatus>>) {
 		if (!result.ok) { setState("error"); return; }
@@ -39,8 +39,9 @@ export function PublishCard({ hideTitle = false }: { hideTitle?: boolean }) {
 		if (!result.ok) { setError(t("calendar.publish.failed")); return; }
 		if (result.key) { setUrls(publishUrls(window.location.origin, result.key)); setSince(formatUserDate(new Date(), { dateStyle: "medium" })); setState("on"); setFocus("urls"); return; }
 		// Already on (another tab or device made it): nothing to show but the real date, so ask again.
-		show(await loadPublishStatus());
-		setFocus("action");
+		const reloaded = await loadPublishStatus();
+		show(reloaded);
+		setFocus(reloaded.ok ? "action" : "retry");
 	}
 
 	async function turnOff() {
