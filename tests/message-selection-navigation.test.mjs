@@ -20,6 +20,8 @@ for (const key of ["window", "document", "HTMLElement", "Element", "Node", "Even
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 globalThis.requestAnimationFrame = dom.window.requestAnimationFrame.bind(dom.window);
 globalThis.cancelAnimationFrame = dom.window.cancelAnimationFrame.bind(dom.window);
+// jsdom does no layout. The split layout shows two columns only when its container is wide enough.
+Object.defineProperty(dom.window.HTMLElement.prototype, "clientWidth", { configurable: true, get() { return 1200; } });
 globalThis.ResizeObserver = class {
 	observe() {}
 	disconnect() {}
@@ -99,6 +101,7 @@ export function usePageLoading() {}
 	["@/components/sidebar-mobile-utils", `
 export function useIsMobile() { return false; }
 export function useIsDesktop() { return globalThis.__testIsDesktop !== false; }
+export function useIsSingleColumnViewport() { return globalThis.__testIsDesktop === false; }
 export function useHasHover() { return true; }
 `],
 	["@/components/messages/use-conversation-view", `
@@ -208,16 +211,22 @@ globalThis.__testMailboxState = {
 	mailboxes: [],
 };
 
+// The real hook returns the same arrays and callbacks until the data changes. The paged list
+// effects depend on that, so a stub that builds new ones on every render loops forever.
+const pageResults = new Map();
 globalThis.__testMessageList = (filters) => {
 	const offset = filters?.offset ?? 0;
-	const messages = allMessages.slice(offset, offset + 25);
-	return {
-		messages,
-		isLoading: false,
-		total: allMessages.length,
-		limit: 25,
-		updateMessages() {},
-	};
+	if (!pageResults.has(offset)) {
+		pageResults.set(offset, {
+			messages: allMessages.slice(offset, offset + 25),
+			isLoading: false,
+			total: allMessages.length,
+			messageTotal: allMessages.length,
+			limit: 25,
+			updateMessages() {},
+		});
+	}
+	return pageResults.get(offset);
 };
 
 async function renderInbox({ desktop = true, twoColumnReading = true } = {}) {
@@ -271,8 +280,10 @@ test("opening a message keeps the selection made while no message was open", asy
 	assert.doesNotMatch(container.textContent, /common\.selectedCount:1/, "the bulk action bar disappears");
 });
 
+// The split list loads later pages as the reader scrolls, so it has no pager. The pager belongs to
+// the full-width list, which stays mounted (hidden) while a message is open in single-column reading.
 test("opening a message keeps the selection on a page other than the first", async (t) => {
-	const { container, cleanup } = await renderInbox();
+	const { container, cleanup } = await renderInbox({ desktop: false, twoColumnReading: false });
 	t.after(cleanup);
 
 	const nextPage = container.querySelector('button[aria-label="list.nextPage"]');
@@ -291,7 +302,7 @@ test("opening a message keeps the selection on a page other than the first", asy
 		globalThis.__setTestPathname("/inbox/m26");
 	});
 
-	assert.equal(checkedBoxes(container).length, 1, "the sidebar list stays on the same page and keeps the selected row");
+	assert.equal(checkedBoxes(container).length, 1, "the list stays on the same page and keeps the selected row");
 	assert.ok(container.querySelector('[data-testid="message-detail"]'), "the focused message stays visible on the second page too");
 });
 

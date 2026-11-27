@@ -17,6 +17,7 @@ const mocks = {
 	"@/lib/auth/cookies": "export async function requireUser(){return globalThis.__user}",
 	"@/lib/auth/origin": "export const hasValidSessionMutationOrigin=()=>true",
 	"@/lib/deliverability/mta-sts-block-response": "export async function mtaStsBlockedResponse(){return null}",
+	"@/lib/domains/dns-view": "export const getDomainDnsView=async()=>({});export const isDomainDnsReady=async()=>true;export const markDomainDnsReady=async()=>{}",
 	"@/lib/domains/service": "export const dnsSkippedUpdate=()=>({});export const getDomainForUser=async()=>null;export async function removeDomainForUser(env,userId,id,force){globalThis.__calls.push(force);if(force&&force.confirm!=='example.com')throw Object.assign(new Error('Type the domain name'),{status:400});return {leftovers:[{name:'_mta-sts.example.com',type:'TXT'}],cachedUntil:'2026-01-01T00:00:00.000Z'}}",
 };
 const names = Object.keys(mocks).map((name) => name.replace(/[/.-]/g, "\\$&")).join("|");

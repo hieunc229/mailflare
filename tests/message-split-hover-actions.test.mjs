@@ -20,6 +20,11 @@ for (const key of ["window", "document", "HTMLElement", "Element", "Node", "Even
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 globalThis.requestAnimationFrame = dom.window.requestAnimationFrame.bind(dom.window);
 globalThis.cancelAnimationFrame = dom.window.cancelAnimationFrame.bind(dom.window);
+globalThis.ResizeObserver = class {
+	observe() {}
+	unobserve() {}
+	disconnect() {}
+};
 globalThis.localStorage = dom.window.localStorage;
 globalThis.sessionStorage = dom.window.sessionStorage;
 
@@ -42,6 +47,7 @@ export function DialogContent({ children }) { return React.createElement("div", 
 export function DialogHeader({ children }) { return React.createElement("div", null, children); }
 export function DialogDescription({ children }) { return React.createElement("div", null, children); }
 export function DialogTitle({ children }) { return React.createElement("h2", null, children); }
+export function Skeleton({ className }) { return React.createElement("div", { className }); }
 export function Input(props) { return React.createElement("input", props); }
 export function Checkbox({ className, ...props }) { return React.createElement("input", { type: "checkbox", className, ...props }); }
 export async function confirmDestructive(message) {
@@ -56,6 +62,7 @@ import React from "react";
 function Icon(props) { return React.createElement("span", { "aria-hidden": "true", ...props }); }
 export const Archive = Icon;
 export const ArchiveRestore = Icon;
+export const Calendar04 = Icon;
 export const CalendarClock = Icon;
 export const ChevronLeft = Icon;
 export const ChevronRight = Icon;
@@ -239,16 +246,16 @@ test("the compact rail keeps a small primary set and reaches the rest from overf
 		message: message({ hasUnsubscribe: true }),
 		onAction: async (action) => { actions.push(action); },
 		compact: true,
-		active: true,
 	});
 	t.after(cleanup);
 
 	const rail = container.querySelector("div.absolute");
 	assert.ok(rail, "the action rail is absolute inside the row");
-	assert.match(rail.className, /(^|\s)bg-blue-50(\s|$)/, "the active row uses the active-row surface");
-	assert.match(rail.className, /(^|\s)h-8(\s|$)/, "the rail is content-sized instead of spanning the row");
-	assert.match(rail.className, /(^|\s)rounded-full(\s|$)/);
-	assert.match(rail.className, /has-\[\[data-state=open\]\]:opacity-100/, "the pill stays visible while the overflow menu is open");
+	assert.match(rail.className, /(^|\s)bg-\(--row-bg\)(\s|$)/, "the rail paints the row surface through --row-bg, so active, selected and hovered rows match");
+	assert.match(rail.className, /(^|\s)bottom-0(\s|$)/);
+	assert.match(rail.className, /(^|\s)right-0(\s|$)/, "the rail is pinned to the row's trailing corner instead of spanning the row");
+	assert.match(rail.className, /before:bg-linear-to-r/, "a fade hides the subject text under the rail");
+	assert.match(rail.className, /has-\[\[data-state=open\]\]:opacity-100/, "the rail stays visible while the overflow menu is open");
 	assert.doesNotMatch(rail.className, /(^|\s)inset-y-0(\s|$)/, "the rail has no full-height dead click area");
 	assert.equal(container.querySelector('[aria-label="actions.unsubscribe"]')?.dataset.iconOnly, "true", "the unsubscribe action is icon-sized in the compact rail");
 
@@ -268,9 +275,7 @@ test("the compact rail keeps a small primary set and reaches the rest from overf
 		message: message({ read: true }),
 		onAction: async (action) => { actions.push(action); },
 		compact: true,
-		active: false,
 	});
-	assert.match(container.querySelector("div.absolute").className, /(^|\s)bg-neutral-50(\s|$)/, "a normal row uses the row surface");
 	assert.ok(menuItem(container, "common.markUnread"), "the overflow action follows the current read state");
 });
 
@@ -502,13 +507,12 @@ export function NoteBadge() { return null; }
 	["@/components/messages/message-list-refresh-button", `export function MessageListRefreshButton() { return null; }`],
 	["@/components/messages/message-list-row-actions", `
 import React from "react";
-export function MessageListRowActions({ message, onAction, onSnoozeChange, compact, active }) {
+export function MessageListRowActions({ message, onAction, onSnoozeChange, compact }) {
   globalThis.__rowSnoozeCallbacks[message.id] = onSnoozeChange;
   return React.createElement("div", {
     "data-testid": "row-actions",
     "data-message-id": message.id,
     "data-compact": String(!!compact),
-    "data-active": String(!!active),
   },
     React.createElement("button", { "aria-label": "stub-archive", onClick: () => { void onAction("archive"); } }),
     React.createElement("button", { "aria-label": "stub-read", onClick: () => { void onAction("read"); } }),
@@ -638,7 +642,7 @@ function actionApiResponse(input, init) {
 	return jsonResponse({ ok: true });
 }
 
-async function renderFolderPage({ config = inboxFolderConfig, selectedMessageId, messages, desktop = true, mobile = false, hover = true, grouped = false } = {}) {
+async function renderFolderPage({ config = inboxFolderConfig, selectedMessageId, messages, desktop = true, mobile = false, hover = true, grouped = false, compact = true } = {}) {
 	globalThis.__isDesktop = desktop;
 	globalThis.__isMobile = mobile;
 	globalThis.__hasHover = hover;
@@ -659,7 +663,7 @@ async function renderFolderPage({ config = inboxFolderConfig, selectedMessageId,
 	await act(async () => {
 		reactRoot.render(createElement(MessageFolderPage, {
 			config,
-			compact: true,
+			compact,
 			selectedMessageId,
 		}));
 	});
@@ -670,7 +674,7 @@ async function renderFolderPage({ config = inboxFolderConfig, selectedMessageId,
 			await act(async () => {
 				reactRoot.render(createElement(MessageFolderPage, {
 					config,
-					compact: true,
+					compact,
 					selectedMessageId: nextSelectedMessageId,
 				}));
 			});
@@ -698,23 +702,25 @@ test("the compact list exposes actions only beside an open desktop reader", asyn
 	const activeActions = rowActions(open.container, "m1");
 	assert.ok(activeActions, "the open row keeps its hover actions in the split list");
 	assert.equal(activeActions.dataset.compact, "true");
-	assert.equal(activeActions.dataset.active, "true");
+	// The rail no longer takes an `active` prop: it inherits the row surface through --row-bg.
+	assert.match(activeActions.parentElement.className, /\[--row-bg:var\(--color-blue-50\)\]/, "the open row paints the active surface that its rail inherits");
 	assert.ok(rowActions(open.container, "m2"), "every eligible row can be acted on from the list");
 	assert.match(
 		rowActions(open.container, "m2").parentElement.className,
-		/focus-within:bg-neutral-50/,
+		/focus-within:\[--row-bg:var\(--color-neutral-50\)\]/,
 		"keyboard focus uses the same row surface as the rail",
 	);
 
-	const hidden = await renderFolderPage({ selectedMessageId: "m1", desktop: false });
+	// Whether the list is the split (compact) one is decided by the layout from the container width.
+	const hidden = await renderFolderPage({ selectedMessageId: "m1", compact: false });
 	t.after(hidden.cleanup);
-	assert.equal(rowActions(hidden.container, "m1"), null, "the hidden tablet list does not add desktop hover actions");
+	assert.equal(rowActions(hidden.container, "m1")?.dataset.compact, "false", "a non-compact list uses the full-width rail, never the compact one");
 
 	const coarse = await renderFolderPage({ selectedMessageId: "m1", hover: false });
 	t.after(coarse.cleanup);
 	assert.equal(rowActions(coarse.container, "m1"), null, "wide touch screens get no invisible hover-only rail");
 
-	const mobile = await renderFolderPage({ selectedMessageId: "m1", desktop: false, mobile: true });
+	const mobile = await renderFolderPage({ selectedMessageId: "m1", desktop: false, mobile: true, compact: false });
 	t.after(mobile.cleanup);
 	assert.equal(rowActions(mobile.container, "m1"), null, "mobile keeps its swipe-only rows");
 

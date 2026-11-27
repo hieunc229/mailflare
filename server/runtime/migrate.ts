@@ -2,8 +2,15 @@ import { readdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { SqliteDatabase } from "./sqlite-database";
 
+/** Leading number first, then the whole name: wrangler's `compareMigrationPaths`, so `9_a` comes before `0010_a` and `100_z`. A name with no number sorts last. */
+function compareMigrationNames(a: string, b: string): number {
+	const number = (name: string) => { const match = /^(\d+)/.exec(name); return match ? Number(match[1]) : Number.POSITIVE_INFINITY; };
+	const byNumber = number(a) === number(b) ? 0 : number(a) < number(b) ? -1 : 1;
+	return byNumber || (a < b ? -1 : a > b ? 1 : 0);
+}
+
 /**
- * Apply the repository's D1 migrations to the local database in journal
+ * Apply the repository's D1 migrations to the local database in file-name
  * order, recording them in `d1_migrations` exactly as Wrangler does. A fresh
  * database and an upgraded one therefore follow the same path, and the
  * hand-copied bootstrap schema in src/lib/setup/migration.ts is never used
@@ -16,16 +23,10 @@ export async function applyMigrations(database: SqliteDatabase, migrationsDir: s
 	);
 	const applied = new Set(db.prepare("SELECT name FROM d1_migrations").all().map((row) => (row as { name: string }).name));
 
-	let order: string[];
-	try {
-		const journal = JSON.parse(await readFile(join(migrationsDir, "meta", "_journal.json"), "utf8")) as { entries: Array<{ tag: string }> };
-		order = journal.entries.map((entry) => `${entry.tag}.sql`);
-	} catch {
-		order = [];
-	}
-	const files = (await readdir(migrationsDir)).filter((name) => name.endsWith(".sql")).sort();
-	// Anything the journal does not list (hand-written migrations) runs after it, in name order.
-	const names = [...order.filter((name) => files.includes(name)), ...files.filter((name) => !order.includes(name))];
+	// File-name order, as `wrangler d1 migrations apply` runs them. The journal lists them in that order too, but it leaves out some
+	// early migrations (0021, 0041 to 0050) that later journalled ones may alter (a column added to the 0049 `booking_events`), so
+	// running the journalled ones first would try to alter tables that do not exist yet. Installs made in the old order skip every file by name.
+	const names = (await readdir(migrationsDir)).filter((name) => name.endsWith(".sql")).sort(compareMigrationNames);
 
 	const ran: string[] = [];
 	for (const name of names) {

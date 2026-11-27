@@ -215,7 +215,8 @@ test("the stack anchors in the content column, clears the mobile compose button 
 	assert.equal(region.getAttribute("aria-label"), "Message action notifications");
 	const classes = region.className;
 	assert.match(classes, /z-30/);
-	assert.match(classes, /--sidebar-width/);
+	assert.match(classes, /md:\[inset-inline-start:1\.5rem\]/);
+	assert.doesNotMatch(classes, /--sidebar-width/);
 	assert.match(classes, /bottom-\[max\(5rem/);
 	assert.match(classes, /env\(safe-area-inset-bottom/);
 
