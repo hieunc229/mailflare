@@ -17,14 +17,15 @@ export function PublishCard() {
 	const [error, setError] = useState("");
 	const [attempt, setAttempt] = useState(0);
 
+	function show(result: Awaited<ReturnType<typeof loadPublishStatus>>) {
+		if (!result.ok) { setState("error"); return; }
+		setSince(result.status.enabled && result.status.createdAt ? new Date(result.status.createdAt).toLocaleDateString() : "");
+		setState(result.status.enabled ? "on" : "off");
+	}
+
 	useEffect(() => {
 		let active = true;
-		void loadPublishStatus().then((result) => {
-			if (!active) return;
-			if (!result.ok) { setState("error"); return; }
-			setSince(result.status.enabled && result.status.createdAt ? new Date(result.status.createdAt).toLocaleDateString() : "");
-			setState(result.status.enabled ? "on" : "off");
-		});
+		void loadPublishStatus().then((result) => { if (active) show(result); });
 		return () => { active = false; };
 	}, [attempt]);
 
@@ -34,9 +35,9 @@ export function PublishCard() {
 		const result = await turnOnPublish();
 		setPending(false);
 		if (!result.ok) { setError(t("calendar.publish.failed")); return; }
-		// Already on (another tab or device made it): keep what this tab shows rather than overwrite it with less.
-		if (result.key) { setUrls(publishUrls(window.location.origin, result.key)); setSince(new Date().toLocaleDateString()); }
-		setState("on");
+		if (result.key) { setUrls(publishUrls(window.location.origin, result.key)); setSince(new Date().toLocaleDateString()); setState("on"); return; }
+		// Already on (another tab or device made it): nothing to show but the real date, so ask again.
+		show(await loadPublishStatus());
 	}
 
 	async function turnOff() {
