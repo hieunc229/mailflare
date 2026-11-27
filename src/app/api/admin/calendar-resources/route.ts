@@ -40,7 +40,7 @@ export async function POST(request: Request) {
 	if (!(await getLicenseEntitlements(env)).canShareMailboxes) return Response.json({ error: "Rooms need a Team licence", code: "TEAM_REQUIRED" }, { status: 403, headers: NO_STORE });
 	const result = await createResource(getDb(env), auth.user.id, body);
 	if (!result.ok) return refuse(result);
-	await createAuditLog(env, { actorUserId: auth.user.id, action: "calendar.resource_created", metadata: { resourceId: result.resource.id, name: result.resource.name } });
+	await createAuditLog(env, { actorUserId: auth.user.id, action: "calendar.resource_created", metadata: { resourceId: result.resource.id, name: result.resource.name, publicBooking: result.resource.publicBooking } });
 	return Response.json({ resource: result.resource }, { status: 201, headers: NO_STORE });
 }
 

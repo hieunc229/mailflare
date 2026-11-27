@@ -65,3 +65,10 @@ test("closing it is always allowed, with a lapsed licence too, and is audited", 
 	assert.equal(sqlite.prepare("SELECT public_booking AS p FROM calendar_resources").get().p, 0);
 	assert.deepEqual(audit().at(-1).metadata.changed, ["publicBooking"]);
 });
+
+test("creating a room records whether it was opened to public booking pages in the audit entry", async () => {
+	setup();
+	await POST(send("POST", { name: "Open", publicBooking: true }));
+	await POST(send("POST", { name: "Closed" }));
+	assert.deepEqual(audit().map((entry) => [entry.action, entry.metadata.name, entry.metadata.publicBooking]), [["calendar.resource_created", "Open", true], ["calendar.resource_created", "Closed", false]]);
+});
