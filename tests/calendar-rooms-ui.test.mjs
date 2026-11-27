@@ -147,3 +147,20 @@ test("an unconfirmed room has its own message, distinct from a declined one", ()
 	assert.match(en["calendar.rooms.unconfirmedToast"], /save it again/);
 	assert.doesNotMatch(en["calendar.rooms.unconfirmedToast"], /declined|not free/i);
 });
+
+test("an occurrence of a series shows its rooms read-only with a note: no add, no remove", () => {
+	const html = pick({ selected: ["r1"], saved: [{ resourceId: "r1", status: "accepted", conflictAt: null }], readOnly: true });
+	assert.match(html, /Boardroom/);
+	assert.match(html, /Booked/);
+	assert.doesNotMatch(html, /role="combobox"/);
+	assert.doesNotMatch(html, /aria-label="Remove /);
+	assert.match(html, /Rooms belong to the whole series/);
+	assert.doesNotMatch(pick({ selected: ["r1"] }), /Rooms belong to the whole series/);
+});
+
+test("the editor makes the picker read-only for an occurrence and then does not send rooms", () => {
+	const page = readFileSync(new URL("../src/app/(calendar)/calendar/page.tsx", import.meta.url), "utf8");
+	assert.match(page, /const roomsLocked = /);
+	assert.match(page, /readOnly=\{roomsLocked\}/);
+	assert.match(page, /!roomsLocked && \(roomStore\.rooms\.length > 0 \|\| roomIds\.length > 0\) \? \{ resourceIds: roomIds \}/);
+});

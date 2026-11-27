@@ -133,6 +133,8 @@ export default function CalendarPage() {
   const [location, setLocation] = useState("");
   const [description, setDescription] = useState("");
   const [editing, setEditing] = useState<CalendarEvent | null>(null);
+  // An occurrence of a series (or a moved occurrence) belongs to the series' rooms: shown, not editable, and not sent.
+  const roomsLocked = !!editing && (editing.repeat !== "none" || (!!editing.davObjectId && editing.davObjectId !== editing.id));
   const guestReplies = (() => {
     try {
       const responses = JSON.parse(editing?.attendeeResponses || "{}") as Record<string, string>;
@@ -331,7 +333,7 @@ export default function CalendarPage() {
         body: JSON.stringify({
           title, startsAt: savedStart.toISOString(), endsAt: savedEnd.toISOString(), color, repeat, repeatDays, repeatAnchorDay, repeatInterval: interval, repeatWeekday: weekday, repeatWeek: week, reminderMinutes, isPrivate, transparent, ...(calendarId ? { calendarId } : {}), effectiveFrom: effectiveFrom?.toISOString(), moveOccurrenceToPast: movingToPast, attendees: delegate && !editing ? [] : guests.split(","),
           timeZone: getUserTimeZone(),
-          ...(roomStore.rooms.length > 0 || roomIds.length > 0 ? { resourceIds: roomIds } : {}),
+          ...(!roomsLocked && (roomStore.rooms.length > 0 || roomIds.length > 0) ? { resourceIds: roomIds } : {}),
           description,
           location,
           mailboxId: selectedMailbox?.id,
@@ -889,7 +891,7 @@ export default function CalendarPage() {
               </div>}
               {(roomStore.rooms.length > 0 || roomIds.length > 0 || roomStore.state === "error") && <div className="grid grid-cols-[24px_minmax(0,1fr)] items-start gap-3">
                 <Building2 aria-hidden="true" className="mt-2 h-5 w-5 text-neutral-600" />
-                <RoomsPicker rooms={roomStore.rooms} state={roomStore.state} canBook={roomStore.canBook} selected={roomIds} saved={editing?.rooms ?? []} disabled={pendingAction === "save"}
+                <RoomsPicker rooms={roomStore.rooms} state={roomStore.state} canBook={roomStore.canBook} selected={roomIds} saved={editing?.rooms ?? []} disabled={pendingAction === "save"} readOnly={roomsLocked}
                   onAdd={(id) => setRoomIds((current) => current.includes(id) ? current : [...current, id])} onRemove={(id) => setRoomIds((current) => current.filter((item) => item !== id))} onRetry={retryRooms} />
               </div>}
               {!delegate && <div className="grid grid-cols-[24px_minmax(0,1fr)] items-start gap-3">

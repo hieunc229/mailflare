@@ -22,6 +22,8 @@ export type RoomsPickerProps = {
 	/** What the server last said of the saved event's rooms, by room id: absent for a room chosen just now. */
 	saved: EventRoom[];
 	disabled?: boolean;
+	/** An occurrence of a series: its rooms are the series', so they are shown and cannot be changed here. */
+	readOnly?: boolean;
 	onAdd: (id: string) => void;
 	onRemove: (id: string) => void;
 	onRetry: () => void;
@@ -31,7 +33,7 @@ export type RoomsPickerProps = {
  * The editor's room chips (spec F9 8.5). A saved booking says in words whether the room is Booked or Declined, and a declined one
  * names the first date it clashed; colour is never the only signal. Nothing shows when no room exists and none is chosen.
  */
-export function RoomsPicker({ rooms, state, canBook, selected, saved, disabled, onAdd, onRemove, onRetry }: RoomsPickerProps) {
+export function RoomsPicker({ rooms, state, canBook, selected, saved, disabled, readOnly, onAdd, onRemove, onRetry }: RoomsPickerProps) {
 	const { t } = useLanguage();
 	const labelId = useId();
 	const noteId = useId();
@@ -63,14 +65,14 @@ export function RoomsPicker({ rooms, state, canBook, selected, saved, disabled, 
 							<li key={id} className={`flex min-w-0 max-w-full items-center gap-1.5 rounded-full border py-1 pl-3 pr-1 text-sm ${declined ? "border-red-300 bg-red-50 text-red-800" : "border-neutral-200 bg-neutral-50 text-neutral-800"}`}>
 								{declined ? <AlertCircle aria-hidden="true" className="h-4 w-4 shrink-0" /> : booking ? <Check aria-hidden="true" className="h-4 w-4 shrink-0 text-green-700" /> : <Building2 aria-hidden="true" className="h-4 w-4 shrink-0 text-neutral-600" />}
 								<span className="min-w-0"><span className="block truncate font-medium">{name}</span>{status && <span className="block truncate text-xs">{status}</span>}</span>
-								<button type="button" disabled={disabled} onClick={() => onRemove(id)} aria-label={t("calendar.rooms.remove", { name })} className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full hover:bg-neutral-200 disabled:opacity-50 ${focus} ${touch}`}><X aria-hidden="true" className="h-4 w-4" /></button>
+								{!readOnly && <button type="button" disabled={disabled} onClick={() => onRemove(id)} aria-label={t("calendar.rooms.remove", { name })} className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full hover:bg-neutral-200 disabled:opacity-50 ${focus} ${touch}`}><X aria-hidden="true" className="h-4 w-4" /></button>}
 							</li>
 						);
 					})}
 				</ul>
 			)}
 			{state === "loading" && !chips.length && <p role="status" className="px-2 text-sm text-neutral-600">{t("calendar.rooms.loading")}</p>}
-			{state === "ready" && offered.length > 0 && (
+			{state === "ready" && !readOnly && offered.length > 0 && (
 				<div className="relative min-w-0">
 					<Select value="" containerClassName="contents" disabled={disabled || !canBook || full} aria-label={t("calendar.rooms.add")} aria-describedby={!canBook || full ? noteId : undefined}
 						onChange={(event) => { if (event.target.value) onAdd(event.target.value); }}
@@ -80,7 +82,8 @@ export function RoomsPicker({ rooms, state, canBook, selected, saved, disabled, 
 					</Select>
 				</div>
 			)}
-			{state === "ready" && (!canBook || full) && <p id={noteId} className="px-2 text-xs text-neutral-600">{full ? t("calendar.rooms.limit", { count: MAX_EVENT_ROOMS }) : t("calendar.rooms.needsTeam")}</p>}
+			{readOnly && selected.length > 0 && <p className="px-2 text-xs text-neutral-600">{t("calendar.rooms.seriesNote")}</p>}
+			{state === "ready" && !readOnly && (!canBook || full) && <p id={noteId} className="px-2 text-xs text-neutral-600">{full ? t("calendar.rooms.limit", { count: MAX_EVENT_ROOMS }) : t("calendar.rooms.needsTeam")}</p>}
 		</div>
 	);
 }
