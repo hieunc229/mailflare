@@ -5,7 +5,7 @@ import { bookRooms } from "./room-booking";
 
 type Db = ReturnType<typeof getDb>;
 
-export type RoomState = { resourceId: string; name: string; status: "accepted" | "declined"; /** First clashing occurrence, ISO. */ conflictAt: string | null };
+export type RoomState = { resourceId: string; name: string; status: "accepted" | "declined" | "unconfirmed"; /** First clashing occurrence, ISO. */ conflictAt: string | null };
 export type RoomsSummary = {
 	rooms: RoomState[];
 	/** Declined rooms with up to ten clashing dates each (D-8). */
@@ -50,7 +50,7 @@ export async function bookAndSummarize(db: Db, eventId: string, resourceIds: str
 	try { ({ rooms } = await bookRooms(db, eventId, resourceIds)); } catch (error) {
 		console.error("Booking rooms failed after the event was saved", error);
 		await declineUnchecked(db, eventId);
-		rooms = [...new Set(resourceIds)].map((resourceId) => ({ resourceId, status: "declined" as const, conflictAt: null, occurrences: [] }));
+		rooms = [...new Set(resourceIds)].map((resourceId) => ({ resourceId, status: "unconfirmed" as const, conflictAt: null, occurrences: [] }));
 	}
 	const names = new Map<string, string>();
 	if (rooms.length) for (const row of await db.select({ id: calendarResources.id, name: calendarResources.name }).from(calendarResources).where(inArray(calendarResources.id, rooms.map((room) => room.resourceId)))) names.set(row.id, row.name);

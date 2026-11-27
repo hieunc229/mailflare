@@ -22,7 +22,11 @@ const DAY = 86_400_000;
 
 export type RoomOutcome = {
 	resourceId: string;
-	status: "accepted" | "declined";
+	/**
+	 * `unconfirmed`: nothing clashed, but the room could not be checked or won (every try lost a race, or the step failed). It is stored
+	 * as `declined`, never accepted unchecked, and the caller tells the organiser to save again.
+	 */
+	status: "accepted" | "declined" | "unconfirmed";
 	/** The first occurrence that clashed (null when accepted, or when the room could not be checked). */
 	conflictAt: Date | null;
 	/** Up to `MAX_CONFLICT_DATES` clashing starts, ISO. */
@@ -55,7 +59,7 @@ function clashes(mine: BusyInterval[], others: BusyInterval[]): number[] {
  * changes a room's bookings goes through here, so every change moves the token. Only rooms that end up accepted are swapped. A
  * driver that cannot run a batch as one transaction (Neon over HTTP) can still let two writers interleave, so there an accepted
  * booking reads the room once more after writing and gives way to any overlapping accepted booking (D-8, failing closed: both
- * may decline). After `MAX_ROOM_ATTEMPTS` lost races the booking is declined without a clash date: never accepted unchecked.
+ * may decline). After `MAX_ROOM_ATTEMPTS` lost races the booking is declined without a clash date and reported as `unconfirmed`: never accepted unchecked.
  */
 export async function bookRooms(db: Db, eventId: string, resourceIds: string[], options: { now?: Date } = {}): Promise<BookingResult> {
 	const [row] = await db.select().from(calendarEvents).where(eq(calendarEvents.id, eventId)).limit(1);
@@ -79,7 +83,7 @@ export async function bookRooms(db: Db, eventId: string, resourceIds: string[], 
 	/** One batch: the guards, then this event's bookings replaced. */
 	const write = async (rooms: RoomOutcome[], guards: unknown[]) => {
 		const created = new Date();
-		const rows = rooms.map((room) => ({ id: newId("crb"), resourceId: room.resourceId, eventId, status: room.status, conflictAt: room.conflictAt, createdAt: created }));
+		const rows = rooms.map((room) => ({ id: newId("crb"), resourceId: room.resourceId, eventId, status: room.status === "unconfirmed" ? "declined" : room.status, conflictAt: room.conflictAt, createdAt: created }));
 		await db.batch([...guards, db.delete(calendarResourceBookings).where(eq(calendarResourceBookings.eventId, eventId)), ...(rows.length ? [db.insert(calendarResourceBookings).values(rows)] : [])] as never);
 	};
 	for (let attempt = 0; attempt < MAX_ROOM_ATTEMPTS; attempt += 1) {
@@ -127,7 +131,7 @@ export async function bookRooms(db: Db, eventId: string, resourceIds: string[], 
 		return { rooms };
 	}
 	const known = new Set((await db.select({ id: calendarResources.id }).from(calendarResources).where(inArray(calendarResources.id, wanted))).map((room) => room.id));
-	const rooms = wanted.filter((id) => known.has(id)).map((id) => outcome(id, "declined", []));
+	const rooms = wanted.filter((id) => known.has(id)).map((id) => outcome(id, "unconfirmed", []));
 	await write(rooms, []);
 	return { rooms };
 }

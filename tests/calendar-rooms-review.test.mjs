@@ -136,7 +136,8 @@ test("if the room check fails after an event was saved, its bookings are decline
 	const real = db.batch;
 	db.batch = async (list) => { if (list.length > 3) throw new Error("database busy"); return real(list); };
 	const summary = await bookAndSummarize(db, a, ["r1"]);
-	assert.deepEqual(summary.rooms.map((room) => [room.resourceId, room.status]), [["r1", "declined"]]);
+	assert.deepEqual(summary.rooms.map((room) => [room.resourceId, room.status]), [["r1", "unconfirmed"]], "the room step did not finish: nothing was found to clash");
+	assert.deepEqual(summary.resourceConflicts, []);
 	assert.deepEqual(summary.acceptedNames, []);
 	assert.deepEqual(bookingsOf(a), [["r1", "declined"]]);
 	// The same for a change made on a phone.
@@ -156,7 +157,7 @@ test("an event saved while the room step fails still answers 200, audits the del
 	const response = await createEvent(new Request("https://m.test/api/calendar/events", json({ title: "Planning", startsAt: fat(0, 9), endsAt: fat(0, 10), calendarId: "cal:work", resourceIds: ["r1"] }, "POST")));
 	assert.equal(response.status, 200);
 	const body = await response.json();
-	assert.deepEqual(body.rooms.map((room) => room.status), ["declined"]);
+	assert.deepEqual(body.rooms.map((room) => room.status), ["unconfirmed"]);
 	assert.equal(sqlite.prepare("SELECT count(*) AS n FROM calendar_events").get().n, 1);
 	assert.deepEqual(globalThis.roomRv.audit.map((entry) => entry.action), ["calendar.event_created_by_delegate"]);
 });
