@@ -20,6 +20,11 @@ for (const key of ["window", "document", "HTMLElement", "Element", "Node", "Even
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 globalThis.requestAnimationFrame = dom.window.requestAnimationFrame.bind(dom.window);
 globalThis.cancelAnimationFrame = dom.window.cancelAnimationFrame.bind(dom.window);
+globalThis.ResizeObserver = class {
+	observe() {}
+	unobserve() {}
+	disconnect() {}
+};
 
 const mocks = new Map([
 	["next/link", `
@@ -82,6 +87,7 @@ export function usePageLoading() {}
 	["@/components/sidebar-mobile-utils", `
 export function useIsMobile() { return false; }
 export function useIsDesktop() { return true; }
+export function useIsSingleColumnViewport() { return false; }
 export function useHasHover() { return true; }
 `],
 	["@/components/messages/use-conversation-view", `

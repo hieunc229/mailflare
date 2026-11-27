@@ -42,6 +42,7 @@ export function DialogContent({ children }) { return React.createElement("div", 
 export function DialogHeader({ children }) { return React.createElement("div", null, children); }
 export function DialogDescription({ children }) { return React.createElement("div", null, children); }
 export function DialogTitle({ children }) { return React.createElement("h2", null, children); }
+export function Skeleton({ className }) { return React.createElement("div", { className }); }
 export function Input(props) { return React.createElement("input", props); }
 export function Checkbox({ className, ...props }) { return React.createElement("input", { type: "checkbox", className, ...props }); }
 export async function confirmDestructive(message) {
@@ -56,6 +57,7 @@ import React from "react";
 function Icon(props) { return React.createElement("span", { "aria-hidden": "true", ...props }); }
 export const Archive = Icon;
 export const ArchiveRestore = Icon;
+export const Calendar04 = Icon;
 export const CalendarClock = Icon;
 export const ChevronLeft = Icon;
 export const ChevronRight = Icon;
@@ -245,10 +247,11 @@ test("the compact rail keeps a small primary set and reaches the rest from overf
 
 	const rail = container.querySelector("div.absolute");
 	assert.ok(rail, "the action rail is absolute inside the row");
-	assert.match(rail.className, /(^|\s)bg-blue-50(\s|$)/, "the active row uses the active-row surface");
-	assert.match(rail.className, /(^|\s)h-8(\s|$)/, "the rail is content-sized instead of spanning the row");
-	assert.match(rail.className, /(^|\s)rounded-full(\s|$)/);
-	assert.match(rail.className, /has-\[\[data-state=open\]\]:opacity-100/, "the pill stays visible while the overflow menu is open");
+	assert.match(rail.className, /(^|\s)bg-\(--row-bg\)(\s|$)/, "the rail paints the row surface through --row-bg, so active, selected and hovered rows match");
+	assert.match(rail.className, /(^|\s)bottom-0(\s|$)/);
+	assert.match(rail.className, /(^|\s)right-0(\s|$)/, "the rail is pinned to the row's trailing corner instead of spanning the row");
+	assert.match(rail.className, /before:bg-linear-to-r/, "a fade hides the subject text under the rail");
+	assert.match(rail.className, /has-\[\[data-state=open\]\]:opacity-100/, "the rail stays visible while the overflow menu is open");
 	assert.doesNotMatch(rail.className, /(^|\s)inset-y-0(\s|$)/, "the rail has no full-height dead click area");
 	assert.equal(container.querySelector('[aria-label="actions.unsubscribe"]')?.dataset.iconOnly, "true", "the unsubscribe action is icon-sized in the compact rail");
 
