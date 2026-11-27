@@ -15,6 +15,7 @@ import { clearSecondFactorAttempt, reserveSecondFactorAttempt } from "@/lib/auth
 import { countUnusedRecoveryCodes } from "@/lib/auth/recovery-codes";
 import { createDeviceKey, revokeDeviceKey } from "@/lib/auth/device-keys";
 import { authenticateApiRequest } from "@/lib/api/key-auth";
+import { migrationRequired } from "@/lib/http/migration-required";
 
 function json(body: unknown, status = 200, headers: Record<string, string> = {}) {
 	return NextResponse.json(body, { status, headers: { "Cache-Control": "no-store", ...headers } });
@@ -41,42 +42,47 @@ export async function POST(request: Request) {
 	}
 
 	const db = getDb(env);
-	let userId: string;
-	if ("password" in parsed.data) {
-		const [user] = await db.select().from(users).where(eq(users.email, parsed.data.email)).limit(1);
-		if (!user || !verifyPassword(parsed.data.password, user.passwordHash)) return json({ error: "Invalid credentials" }, 401);
-		if (user.disabled || user.deletedAt) return json({ error: "Account disabled" }, 403);
-		if (user.requireSecondFactor) {
-			// The app can only finish with TOTP or a recovery code. Without one of
-			// those, point the user at an app password rather than issuing a key
-			// after the password alone.
-			const codesAvailable = user.totpEnabled && (await countUnusedRecoveryCodes(env, user.id)) > 0;
-			if (!(user.totpEnabled && user.totpSecret) && !codesAvailable) {
-				return json({ error: "This account requires a passkey. Create an app password in the web app instead." }, 403);
+	try {
+		let userId: string;
+		if ("password" in parsed.data) {
+			const [user] = await db.select().from(users).where(eq(users.email, parsed.data.email)).limit(1);
+			if (!user || !verifyPassword(parsed.data.password, user.passwordHash)) return json({ error: "Invalid credentials" }, 401);
+			if (user.disabled || user.deletedAt) return json({ error: "Account disabled" }, 403);
+			if (user.requireSecondFactor) {
+				// The app can only finish with TOTP or a recovery code. Without one of
+				// those, point the user at an app password rather than issuing a key
+				// after the password alone.
+				const codesAvailable = user.totpEnabled && (await countUnusedRecoveryCodes(env, user.id)) > 0;
+				if (!(user.totpEnabled && user.totpSecret) && !codesAvailable) {
+					return json({ error: "This account requires a passkey. Create an app password in the web app instead." }, 403);
+				}
+				return json({ ok: true, mfaRequired: true, challengeToken: await createLoginChallenge(env, user.id) });
 			}
-			return json({ ok: true, mfaRequired: true, challengeToken: await createLoginChallenge(env, user.id) });
+			userId = user.id;
+		} else {
+			const challengeUserId = await getLoginChallengeUserId(env, parsed.data.challengeToken);
+			if (!challengeUserId) return json({ error: "This sign-in attempt has expired. Start again." }, 401);
+			const [user] = await db.select().from(users).where(eq(users.id, challengeUserId)).limit(1);
+			if (!user || user.disabled || user.deletedAt) return json({ error: "Account disabled" }, 403);
+			const attempt = await reserveSecondFactorAttempt(env, user.id, request);
+			if (!attempt) return json({ error: "Too many wrong codes. Try again later." }, 429, { "Retry-After": "900" });
+			if (!(await verifySecondFactor(env, user, parsed.data.code))) return json({ error: "That code did not match" }, 401);
+			await clearSecondFactorAttempt(env, attempt);
+			if (!(await consumeLoginChallenge(env, parsed.data.challengeToken))) {
+				return json({ error: "This sign-in attempt has expired. Start again." }, 401);
+			}
+			userId = user.id;
 		}
-		userId = user.id;
-	} else {
-		const challengeUserId = await getLoginChallengeUserId(env, parsed.data.challengeToken);
-		if (!challengeUserId) return json({ error: "This sign-in attempt has expired. Start again." }, 401);
-		const [user] = await db.select().from(users).where(eq(users.id, challengeUserId)).limit(1);
-		if (!user || user.disabled || user.deletedAt) return json({ error: "Account disabled" }, 403);
-		const attempt = await reserveSecondFactorAttempt(env, user.id, request);
-		if (!attempt) return json({ error: "Too many wrong codes. Try again later." }, 429, { "Retry-After": "900" });
-		if (!(await verifySecondFactor(env, user, parsed.data.code))) return json({ error: "That code did not match" }, 401);
-		await clearSecondFactorAttempt(env, attempt);
-		if (!(await consumeLoginChallenge(env, parsed.data.challengeToken))) {
-			return json({ error: "This sign-in attempt has expired. Start again." }, 401);
-		}
-		userId = user.id;
-	}
 
-	const [user] = await db.select({ email: users.email }).from(users).where(eq(users.id, userId)).limit(1);
-	const device = await createDeviceKey(env, userId, parsed.data.deviceName);
-	await recordAuthActivity(env, { action: "auth.device_login", userId, request });
-	const origin = env.APP_URL?.trim().replace(/\/+$/, "") || new URL(request.url).origin;
-	return json({ ok: true, key: device.key, keyId: device.id, email: user?.email, sessionUrl: `${origin}/jmap/session` });
+		const [user] = await db.select({ email: users.email }).from(users).where(eq(users.id, userId)).limit(1);
+		const device = await createDeviceKey(env, userId, parsed.data.deviceName);
+		await recordAuthActivity(env, { action: "auth.device_login", userId, request });
+		const origin = env.APP_URL?.trim().replace(/\/+$/, "") || new URL(request.url).origin;
+		return json({ ok: true, key: device.key, keyId: device.id, email: user?.email, sessionUrl: `${origin}/jmap/session` });
+	} catch (error) {
+		// A database behind on migrations must not read as invalid credentials or a disabled account.
+		return migrationRequired(error);
+	}
 }
 
 /** Signing out in the app: the device key revokes itself (and its push registration). */

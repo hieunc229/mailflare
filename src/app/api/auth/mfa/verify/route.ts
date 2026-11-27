@@ -12,6 +12,7 @@ import { verifySecondFactor } from "@/lib/auth/mfa";
 import { clearSecondFactorAttempt, reserveSecondFactorAttempt } from "@/lib/auth/second-factor-attempts";
 import { completeLogin } from "@/lib/auth/login-response";
 import { authError } from "@/lib/http/auth-error";
+import { migrationRequired } from "@/lib/http/migration-required";
 
 /** Second step of a login: trade a challenge plus a TOTP or recovery code for a session. */
 export async function POST(request: Request) {
@@ -33,20 +34,25 @@ export async function POST(request: Request) {
 	const userId = await getLoginChallengeUserId(env, parsed.data.challengeToken);
 	if (!userId) return authError("passkey_expired", 401);
 	const db = getDb(env);
-	const [user] = await db.select().from(users).where(eq(users.id, userId)).limit(1);
-	if (!user || user.disabled || user.deletedAt) return authError("account_disabled", 403);
-	const attempt = await reserveSecondFactorAttempt(env, user.id, request);
-	if (!attempt) return authError("rate_limited", 429, { "Retry-After": "900" });
-	const method = await verifySecondFactor(env, user, parsed.data.code);
-	if (!method) return authError("code_mismatch", 401);
-	await clearSecondFactorAttempt(env, attempt);
-	if (!(await consumeLoginChallenge(env, parsed.data.challengeToken))) {
-		return authError("passkey_expired", 401);
-	}
+	try {
+		const [user] = await db.select().from(users).where(eq(users.id, userId)).limit(1);
+		if (!user || user.disabled || user.deletedAt) return authError("account_disabled", 403);
+		const attempt = await reserveSecondFactorAttempt(env, user.id, request);
+		if (!attempt) return authError("rate_limited", 429, { "Retry-After": "900" });
+		const method = await verifySecondFactor(env, user, parsed.data.code);
+		if (!method) return authError("code_mismatch", 401);
+		await clearSecondFactorAttempt(env, attempt);
+		if (!(await consumeLoginChallenge(env, parsed.data.challengeToken))) {
+			return authError("passkey_expired", 401);
+		}
 
-	// The factor is proven; the single challenge is burned so a replay cannot
-	// mint a second session.
-	const response = await completeLogin(env, request, user.id, { body: { method } });
-	await recordAuthActivity(env, { action: "auth.mfa_verified", userId: user.id, request });
-	return response;
+		// The factor is proven; the single challenge is burned so a replay cannot
+		// mint a second session.
+		const response = await completeLogin(env, request, user.id, { body: { method } });
+		await recordAuthActivity(env, { action: "auth.mfa_verified", userId: user.id, request });
+		return response;
+	} catch (error) {
+		// A database behind on migrations must not read as a disabled account or a wrong code.
+		return migrationRequired(error);
+	}
 }

@@ -14,6 +14,7 @@ import { completeLogin } from "@/lib/auth/login-response";
 import { countPasskeys } from "@/lib/auth/webauthn/credentials";
 import { countUnusedRecoveryCodes } from "@/lib/auth/recovery-codes";
 import { authError } from "@/lib/http/auth-error";
+import { migrationRequired } from "@/lib/http/migration-required";
 
 export async function POST(request: Request) {
 	const env = getEnv();
@@ -34,32 +35,38 @@ export async function POST(request: Request) {
 	}
 
 	const db = getDb(env);
-	const [user] = await db.select().from(users).where(eq(users.email, parsed.data.email)).limit(1);
-	// A passwordless account has no usable password; it still takes the same
-	// generic error so the response cannot be used to enumerate accounts.
-	if (!user || !verifyPassword(parsed.data.password, user.passwordHash)) {
-		return authError("invalid_credentials", 401);
-	}
-	if (user.disabled || user.deletedAt) return authError("account_disabled", 403);
+	try {
+		const [user] = await db.select().from(users).where(eq(users.email, parsed.data.email)).limit(1);
+		// A passwordless account has no usable password; it still takes the same
+		// generic error so the response cannot be used to enumerate accounts.
+		if (!user || !verifyPassword(parsed.data.password, user.passwordHash)) {
+			return authError("invalid_credentials", 401);
+		}
+		if (user.disabled || user.deletedAt) return authError("account_disabled", 403);
 
-	// The password is right but this account requires a second factor: hand
-	// back a short-lived challenge instead of a session.
-	if (user.requireSecondFactor) {
-		const [passkeys, recoveryCodes] = await Promise.all([
-			countPasskeys(env, user.id),
-			countUnusedRecoveryCodes(env, user.id),
-		]);
-		const methods = [
-			...(passkeys > 0 ? ["passkey"] : []),
-			...(user.totpEnabled && user.totpSecret ? ["totp"] : []),
-			...(user.totpEnabled && recoveryCodes > 0 ? ["recovery"] : []),
-		];
-		if (methods.length === 0) return authError("verification_required", 409);
-		const challengeToken = await createLoginChallenge(env, user.id);
-		const pending = NextResponse.json({ ok: true, mfaRequired: true, challengeToken, methods });
-		pending.headers.set("Cache-Control", "no-store");
-		return pending;
-	}
+		// The password is right but this account requires a second factor: hand
+		// back a short-lived challenge instead of a session.
+		if (user.requireSecondFactor) {
+			const [passkeys, recoveryCodes] = await Promise.all([
+				countPasskeys(env, user.id),
+				countUnusedRecoveryCodes(env, user.id),
+			]);
+			const methods = [
+				...(passkeys > 0 ? ["passkey"] : []),
+				...(user.totpEnabled && user.totpSecret ? ["totp"] : []),
+				...(user.totpEnabled && recoveryCodes > 0 ? ["recovery"] : []),
+			];
+			if (methods.length === 0) return authError("verification_required", 409);
+			const challengeToken = await createLoginChallenge(env, user.id);
+			const pending = NextResponse.json({ ok: true, mfaRequired: true, challengeToken, methods });
+			pending.headers.set("Cache-Control", "no-store");
+			return pending;
+		}
 
-	return completeLogin(env, request, user.id);
+		return await completeLogin(env, request, user.id);
+	} catch (error) {
+		// A deploy whose D1 is behind on migrations: say which fix is needed. No session
+		// is created for this request, so the 409 cannot pass anyone in.
+		return migrationRequired(error);
+	}
 }
