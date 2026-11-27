@@ -408,6 +408,8 @@
 	"contacts.loadFailed": "Unable to load contacts",
 	"contacts.saveFailed": "Unable to save contact",
 	"contacts.deleteFailed": "Unable to delete contact",
+	"contacts.export": ".vcf dışa aktar",
+	"contacts.exportFailed": "Kişiler dışa aktarılamadı",
 	"avatar.change": "{name} profil fotoğrafını değiştir",
 	"avatar.upload": "{name} profil fotoğrafını yükle",
 	"avatar.title": "Profil fotoğrafı",

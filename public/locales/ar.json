@@ -437,6 +437,8 @@
 	"contacts.loadFailed": "Unable to load contacts",
 	"contacts.saveFailed": "Unable to save contact",
 	"contacts.deleteFailed": "Unable to delete contact",
+	"contacts.export": "تصدير .vcf",
+	"contacts.exportFailed": "فشل تصدير جهات الاتصال",
 	"avatar.change": "تغيير صورة الملف الشخصي لـ {name}",
 	"avatar.upload": "رفع صورة الملف الشخصي لـ {name}",
 	"avatar.title": "صورة الملف الشخصي",

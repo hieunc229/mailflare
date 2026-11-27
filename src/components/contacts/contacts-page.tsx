@@ -2,7 +2,8 @@
 
 import { useEffect, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Plus, Search, UsersRound } from "@/components/icons";
+import toast from "react-hot-toast";
+import { Download, Plus, Search, UsersRound } from "@/components/icons";
 import { useLanguage } from "@/components/language-provider";
 import { useCompose } from "@/components/compose/compose-context";
 import { useSelectedMailbox } from "@/components/mailbox-provider";
@@ -17,7 +18,7 @@ import { ContactEditDialog } from "./contact-edit-dialog";
 import { ContactRow } from "./contact-row";
 import { CONTACT_COLUMNS } from "./contacts-page-utils";
 import type { ContactListItem } from "./contacts-page-types";
-import { fetchContacts } from "./contacts-page-utils";
+import { exportContacts, fetchContacts } from "./contacts-page-utils";
 
 const SEARCH_DEBOUNCE_MS = 250;
 
@@ -32,6 +33,7 @@ export function ContactsPage() {
 	const [editOpen, setEditOpen] = useState(false);
 	const [editing, setEditing] = useState<ContactListItem | null>(null);
 	const [deleting, setDeleting] = useState<ContactListItem | null>(null);
+	const [exporting, setExporting] = useState(false);
 
 	useEffect(() => {
 		const timer = setTimeout(() => setQuery(input.trim()), SEARCH_DEBOUNCE_MS);
@@ -53,6 +55,18 @@ export function ContactsPage() {
 		setEditOpen(true);
 	}
 
+	async function onExport() {
+		if (!mailboxId || exporting) return;
+		setExporting(true);
+		try {
+			await exportContacts(mailboxId);
+		} catch (error) {
+			toast.error(error instanceof Error ? error.message : t("contacts.exportFailed"));
+		} finally {
+			setExporting(false);
+		}
+	}
+
 	const items = contacts.data ?? [];
 
 	return (
@@ -60,10 +74,16 @@ export function ContactsPage() {
 		<div className="w-full max-w-3xl space-y-6">
 			<div className="flex items-center justify-between gap-4">
 				<h1 className="text-2xl font-medium md:text-3xl">{t("contacts.title")}</h1>
-				<Button type="button" className={mobilePrimaryActionClass} onClick={openCreate} disabled={!mailboxId}>
-					<Plus className="h-4 w-4" />
-					{t("contacts.add")}
-				</Button>
+				<div className="flex items-center gap-2">
+					<Button type="button" variant="outline" onClick={onExport} disabled={!mailboxId || exporting}>
+						<Download className="h-4 w-4" />
+						{t("contacts.export")}
+					</Button>
+					<Button type="button" className={mobilePrimaryActionClass} onClick={openCreate} disabled={!mailboxId}>
+						<Plus className="h-4 w-4" />
+						{t("contacts.add")}
+					</Button>
+				</div>
 			</div>
 
 			<div className="relative">

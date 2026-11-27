@@ -417,6 +417,8 @@
 	"contacts.loadFailed": "Unable to load contacts",
 	"contacts.saveFailed": "Unable to save contact",
 	"contacts.deleteFailed": "Unable to delete contact",
+	"contacts.export": "Hamisha .vcf",
+	"contacts.exportFailed": "Kuhamisha anwani nje kumeshindwa",
 	"avatar.change": "Badilisha picha ya wasifu ya {name}",
 	"avatar.upload": "Pakia picha ya wasifu ya {name}",
 	"avatar.title": "Picha ya wasifu",

@@ -412,6 +412,8 @@
 	"contacts.loadFailed": "Unable to load contacts",
 	"contacts.saveFailed": "Unable to save contact",
 	"contacts.deleteFailed": "Unable to delete contact",
+	"contacts.export": "导出 .vcf",
+	"contacts.exportFailed": "无法导出联系人",
 	"avatar.change": "更换 {name} 的头像",
 	"avatar.upload": "上传 {name} 的头像",
 	"avatar.title": "头像",

@@ -417,6 +417,8 @@
 	"contacts.loadFailed": "Unable to load contacts",
 	"contacts.saveFailed": "Unable to save contact",
 	"contacts.deleteFailed": "Unable to delete contact",
+	"contacts.export": ".vcf ರಫ್ತು ಮಾಡಿ",
+	"contacts.exportFailed": "ಸಂಪರ್ಕಗಳನ್ನು ರಫ್ತು ಮಾಡಲಾಗಲಿಲ್ಲ",
 	"avatar.change": "{name} ಅವರ ಪ್ರೊಫೈಲ್ ಚಿತ್ರ ಬದಲಿಸಿ",
 	"avatar.upload": "{name} ಅವರ ಪ್ರೊಫೈಲ್ ಚಿತ್ರ ಅಪ್‌ಲೋಡ್ ಮಾಡಿ",
 	"avatar.title": "ಪ್ರೊಫೈಲ್ ಚಿತ್ರ",
