@@ -75,7 +75,7 @@ Optional: `SMTP_TLS_KEY` and `SMTP_TLS_CERT` (paths inside the container) enable
 
 **Cloudflare Email Sending.** `CF_ACCOUNT_ID` plus a `CF_TOKEN` with Email Sending: Edit. The domain must be a Cloudflare zone with Email Sending set up; Mailflare calls the REST API, no Workers plan needed.
 
-**Resend or Amazon SES, per domain.** Instead of one global relay, each domain can send (and receive, once Mailflare can manage its DNS with `CF_TOKEN`) through the Resend or SES APIs, no SMTP involved. Add credentials on the domain page, or set `RESEND_API_KEY` / `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY` and `AWS_REGION`. Receiving needs `APP_URL` set to your public HTTPS address. See [Sending and receiving providers](providers.md). SES as a plain SMTP relay through `SMTP_URL` still works and needs none of this.
+**Resend or Amazon SES, per domain.** Instead of one global relay, once Mailflare can manage the domain's DNS with `CF_TOKEN`, each domain can send and receive through the Resend or SES APIs, no SMTP involved. Add credentials on the domain page, or set `RESEND_API_KEY` / `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY` and `AWS_REGION`. Receiving needs `APP_URL` set to your public HTTPS address. See [Sending and receiving providers](providers.md). SES as a plain SMTP relay through `SMTP_URL` still works and needs none of this.
 
 ## Cloudflare zone management (optional)
 
