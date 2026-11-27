@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { assertPrimaryAdmin } from "@/lib/auth/admin";
 import { requireUser } from "@/lib/auth/cookies";
+import { MigrationRequiredError } from "@/lib/auth/unauthorized";
 import { getEnv } from "@/lib/cloudflare";
 import { isNodeRuntime } from "@/lib/runtime";
 import type {
@@ -27,7 +28,9 @@ export async function authorizeAdminRequest(request: Request) {
 
   try {
     user = await requireUser(env, request);
-  } catch {
+  } catch (error) {
+    // A database behind on migrations is not a signed-out admin: let the 409 fallback answer.
+    if (error instanceof MigrationRequiredError) throw error;
     return {
       error: NextResponse.json({ error: "Unauthorized" }, { status: 401 }),
     };

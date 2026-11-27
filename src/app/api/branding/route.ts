@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { assertPrimaryAdmin } from "@/lib/auth/admin";
 import { requireUser } from "@/lib/auth/cookies";
+import { MigrationRequiredError } from "@/lib/auth/unauthorized";
 import { getBranding, updateBranding } from "@/lib/branding/service";
 import { getEnv } from "@/lib/cloudflare";
 import { BRANDING_ICON_TYPES, isBrandingIcon, MAX_BRANDING_ICON_SIZE } from "./utils";
@@ -15,7 +16,9 @@ export async function PUT(request: Request) {
 	const env = getEnv();
 	try {
 		assertPrimaryAdmin(await requireUser(env, request));
-	} catch {
+	} catch (error) {
+		// A pending migration is not a permission problem: let the 409 fallback answer it.
+		if (error instanceof MigrationRequiredError) throw error;
 		return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 	}
 
