@@ -39,7 +39,7 @@ import { AvailabilityPanel } from "./availability-panel";
 import { RoomsPicker } from "./rooms-picker";
 import { AvailabilityRoomsContext } from "./availability-rooms";
 import { useRoomState, retryRooms } from "./room-state";
-import { activeShownRooms, roomSaveErrorKey, roomScheduleEvents } from "./room-utils";
+import { activeShownRooms, roomSaveErrorKey, roomScheduleEvents, roomsAreLocked } from "./room-utils";
 import type { RoomScheduleEvent } from "./room-types";
 import { useCurrentUser } from "@/hooks/use-current-user";
 import { useCalendarState } from "./calendar-state";
@@ -124,8 +124,8 @@ export default function CalendarPage() {
   const [location, setLocation] = useState("");
   const [description, setDescription] = useState("");
   const [editing, setEditing] = useState<CalendarEvent | null>(null);
-  // An occurrence of a series (or a moved occurrence) belongs to the series' rooms: shown, not editable, and not sent.
-  const roomsLocked = !!editing && (editing.repeat !== "none" || (!!editing.davObjectId && editing.davObjectId !== editing.id));
+  // A moved occurrence of a CalDAV series has its series' rooms: shown, not editable, and not sent.
+  const roomsLocked = roomsAreLocked(editing);
   const guestReplies = (() => {
     try {
       const responses = JSON.parse(editing?.attendeeResponses || "{}") as Record<string, string>;

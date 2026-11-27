@@ -20,7 +20,7 @@ const view = await loadFixture({ name: "rooms-ui-avail", entryPoint: "src/app/(c
 const api = await loadFixture({ name: "rooms-ui-api", entryPoint: "src/app/(calendar)/calendar/availability-api.ts", mocks });
 const { RoomsPicker } = await picker.import();
 const { RoomListView } = await list.import();
-const { toggleShownRoom, activeShownRooms, roomScheduleEvents, roomSaveErrorKey, MAX_SHOWN_ROOMS, MAX_EVENT_ROOMS } = await utils.import();
+const { toggleShownRoom, activeShownRooms, roomScheduleEvents, roomSaveErrorKey, roomsAreLocked, MAX_SHOWN_ROOMS, MAX_EVENT_ROOMS } = await utils.import();
 const { visibleCalendarEvents } = await listUtils.import();
 const { AvailabilityView } = await view.import();
 const { fetchAvailability } = await api.import();
@@ -158,9 +158,18 @@ test("an occurrence of a series shows its rooms read-only with a note: no add, n
 	assert.doesNotMatch(pick({ selected: ["r1"] }), /Rooms belong to the whole series/);
 });
 
-test("the editor makes the picker read-only for an occurrence and then does not send rooms", () => {
+test("only a moved occurrence of a CalDAV series has its rooms locked; a repeating event's rooms stay editable (the editor opens an expanded occurrence of it)", () => {
+	assert.equal(roomsAreLocked(null), false);
+	assert.equal(roomsAreLocked({ id: "e1", repeat: "none" }), false);
+	assert.equal(roomsAreLocked({ id: "e1@123", repeat: "weekly", davObjectId: null }), false, "an occurrence of an ordinary repeating event");
+	assert.equal(roomsAreLocked({ id: "e1", repeat: "custom", davObjectId: "e1" }), false, "the master of a CalDAV series");
+	assert.equal(roomsAreLocked({ id: "e2", repeat: "none", davObjectId: "e1" }), true, "an override row: one moved occurrence");
+});
+
+test("the editor locks the picker only for those, and then does not send rooms", () => {
 	const page = readFileSync(new URL("../src/app/(calendar)/calendar/page.tsx", import.meta.url), "utf8");
-	assert.match(page, /const roomsLocked = /);
+	assert.match(page, /const roomsLocked = roomsAreLocked\(editing\);/);
 	assert.match(page, /readOnly=\{roomsLocked\}/);
 	assert.match(page, /!roomsLocked && \(roomStore\.rooms\.length > 0 \|\| roomIds\.length > 0\) \? \{ resourceIds: roomIds \}/);
+	assert.doesNotMatch(page, /editing\.repeat !== "none" \|\| \(!!editing\.davObjectId/);
 });
