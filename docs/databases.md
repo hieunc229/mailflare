@@ -1,6 +1,6 @@
 # Databases
 
-Default: **Cloudflare D1** via the `DB` binding in `wrangler.jsonc`; no configuration. Set `DATABASE_URL` to use another database. Three [Drizzle ORM](https://orm.drizzle.team) dialects:
+Default: **Cloudflare D1** via the `DB` binding in `wrangler.jsonc`; no configuration. Set `DATABASE_URL` to use another database. Three [Drizzle ORM](https://orm.drizzle.team) dialects cover every database Drizzle supports:
 
 | Dialect | Drivers (`DATABASE_DRIVER`) | Typical services |
 | --- | --- | --- |
@@ -42,7 +42,7 @@ Create an empty database (and user) first; Mailflare creates its tables.
 
 ### Workers and the schema dialect
 
-Table definitions are built for the active dialect at app start, so on Workers `DATABASE_URL` (or `DATABASE_DRIVER` with a Hyperdrive binding) must be a variable or secret, not only available at request time. Changing database means a new, empty database; move data with **Backups** (below).
+Table definitions are built for the active dialect at app start, so on Workers `DATABASE_URL` (or `DATABASE_DRIVER` with a Hyperdrive binding) must be available as a variable or secret, not only at request time. Changing database means a new, empty database; move data with **Backups** (below).
 
 ## Migrations
 
@@ -69,7 +69,7 @@ npm run db:bundle          # rebuild the bundles the Worker applies
 
 ## What is the same everywhere
 
-Application code is dialect-independent. `getDb(env)` and `env.DB` work unchanged: on other databases `env.DB` is an adapter with the D1 interface (`prepare`, `bind`, `batch`) over the configured driver, and Drizzle is built for the right dialect. Stored values are identical: timestamps are whole seconds in a `bigint`, booleans are booleans (`tinyint(1)` on MySQL). **Backups are portable**: a D1 backup restores onto PostgreSQL or MySQL and back.
+Application code is dialect-independent. `getDb(env)` and `env.DB` work unchanged: on other databases `env.DB` is an adapter with the D1 interface (`prepare`, `bind`, `batch`) over the configured driver, and Drizzle is built for the right dialect. Stored values are identical: timestamps are whole seconds in a `bigint`, booleans are booleans (`tinyint(1)` on MySQL). **SQL fragments and backups are portable**: a D1 backup restores onto PostgreSQL or MySQL and back.
 
 Also on every dialect: foreign keys and cascades, the JMAP change log, mailbox revisions and the CalDAV/CardDAV change log (via triggers), automatic `trashed_at` tracking, and seed rows. TiDB and PlanetScale do not support triggers, so the trigger-based items (both change logs, `trashed_at` tracking) are not available there; CalDAV/CardDAV sync needs MySQL, MariaDB or PostgreSQL.
 
