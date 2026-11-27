@@ -2,7 +2,9 @@ import { and, eq, inArray, or } from "drizzle-orm";
 import type { getDb } from "@/db";
 import { calendarEvents, calendarResourceBookings } from "@/db/schema";
 import { overlapsWindow } from "./busy-expand";
-import { getEventAccess } from "./shares";
+import { calendarCollectionId } from "@/lib/dav/changes";
+import { grantedCalendars } from "./shares";
+import type { CalendarRole } from "./shares-types";
 import { redactEvent } from "./visibility";
 
 type Db = ReturnType<typeof getDb>;
@@ -48,13 +50,13 @@ export async function listRoomEvents(db: Db, user: { id: string }, resourceIds: 
 	const booked = [...new Set(rows.map((row) => row.bookedEventId))];
 	const privateSeries = new Set<string>();
 	for (let index = 0; index < booked.length; index += BOOKING_CHUNK) for (const row of await db.select({ id: calendarEvents.id }).from(calendarEvents).where(and(inArray(calendarEvents.id, booked.slice(index, index + BOOKING_CHUNK)), eq(calendarEvents.isPrivate, true)))) privateSeries.add(row.id);
-	// One role lookup per calendar, not per event.
-	const roles = new Map<string, Awaited<ReturnType<typeof getEventAccess>>>();
+	// The viewer's roles come from one read of their grants, never a lookup per organiser or calendar. A grant counts only for events whose
+	// owner is the calendar's owner and is active with Calendar on (what `grantedCalendars` returns), as `getEventAccess` decides it.
+	const grants = rows.some(({ event }) => event.userId !== user.id) ? await grantedCalendars(db, user.id) : [];
+	const granted = new Map(grants.map((grant) => [`${grant.id}|${grant.ownerId}`, grant.role as CalendarRole]));
 	const views: RoomEventView[] = [];
 	for (const { resourceId, bookedEventId, event } of rows) {
-		const key = `${event.userId}|${event.calendarId ?? ""}`;
-		if (!roles.has(key)) roles.set(key, await getEventAccess(db, user, event));
-		const role = roles.get(key);
+		const role: CalendarRole | null = event.userId === user.id ? "owner" : granted.get(`${event.calendarId ?? calendarCollectionId(event.userId)}|${event.userId}`) ?? null;
 		const shown = redactEvent(privateSeries.has(bookedEventId) ? { ...event, isPrivate: true } : event, role && role !== "freebusy" ? role : "freebusy");
 		views.push({
 			id: event.id, resourceId, title: shown.title, startsAt: event.startsAt, endsAt: event.endsAt, repeat: event.repeat, repeatDays: event.repeatDays, repeatAnchorDay: event.repeatAnchorDay, repeatUntil: event.repeatUntil,
