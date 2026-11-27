@@ -8,7 +8,7 @@ import { messages, outboundJobs } from "@/db/schema";
 import { getContactDisplayNameMap } from "@/lib/contacts/service";
 import { getPartyDisplayName } from "@/lib/contacts/utils";
 import { getFirstEmailAddressEntry, normalizeEmailAddress } from "@/lib/email/address";
-import { getMailboxAccessLevel, hasMailboxPermission, listAccessibleMailboxes } from "@/lib/mailboxes/access";
+import { listAccessibleMailboxes, canReadMailbox } from "@/lib/mailboxes/access";
 import { tracksAccountIdentity } from "@/lib/profile/identity-utils";
 import { buildSearchConditions } from "@/lib/search/conditions";
 import { getRequestTimeZone } from "@/lib/time/utils";
@@ -19,7 +19,7 @@ import type { ListMessage } from "./types";
 import { getOpenCounts } from "@/lib/tracking/open-tracking";
 import { summarizeNotesForRows } from "@/lib/notes/service";
 import { isMissingTableError } from "@/lib/database-errors";
-import { parseLimit, parseOffset } from "@/lib/api/query-params";
+import { parseLimit, parseMailboxIdList, parseOffset } from "@/lib/api/query-params";
 import { draftsVisibleTo } from "@/lib/email/draft-access";
 import { categoryScopeCondition } from "@/lib/promotions/settings";
 
@@ -33,6 +33,15 @@ export async function GET(request: Request) {
 	const url = new URL(request.url);
 	const direction = url.searchParams.get("direction");
 	const mailboxId = url.searchParams.get("mailboxId");
+	// `mailboxIds` selects a subset of the accessible mailboxes for a unified view
+	// (inbox, sent, starred, ...) restricted to the accounts the user picked.
+	const mailboxIdList = parseMailboxIdList(url.searchParams.get("mailboxIds"));
+	if (mailboxIdList.error) {
+		return NextResponse.json({ error: mailboxIdList.error }, { status: 400 });
+	}
+	if (mailboxId && mailboxIdList.ids) {
+		return NextResponse.json({ error: "mailboxId and mailboxIds are mutually exclusive" }, { status: 400 });
+	}
 	const folderId = url.searchParams.get("folderId");
 	const status = url.searchParams.get("status");
 	const query = url.searchParams.get("q")?.trim();
@@ -55,18 +64,29 @@ export async function GET(request: Request) {
 	const db = getDb(env);
 	const accessibleMailboxes = await listAccessibleMailboxes(db, user);
 	const accessibleMailboxIds = accessibleMailboxes.map((mailbox) => mailbox.id);
+	const requestedMailboxIds = mailboxIdList.ids;
+	// The mailbox set this request reads from: one mailbox, a chosen subset, or every
+	// mailbox the user can reach. Filters that reason about categories and the thread
+	// enrichment scope below all follow it.
+	const scopedMailboxIds = mailboxId ? [mailboxId] : requestedMailboxIds ?? accessibleMailboxIds;
 	const conditions: SQL[] = [];
 	if (mailboxId) {
-		const mailbox = accessibleMailboxes.find((mailbox) => mailbox.id === mailboxId);
 		// Reuse this request's authorization; retain the fallback for mailboxes
 		// omitted by the list's domain join (for example, legacy orphaned rows).
-		const canRead = mailbox
-			? hasMailboxPermission(mailbox.permission, "read_only")
-			: (await getMailboxAccessLevel(db, user, mailboxId))?.canRead;
-		if (!canRead) {
+		if (!(await canReadMailbox(db, user, mailboxId, accessibleMailboxes))) {
 			return NextResponse.json({ error: "Mailbox not found" }, { status: 404 });
 		}
 		conditions.push(eq(messages.mailboxId, mailboxId));
+	} else if (requestedMailboxIds) {
+		// Every id in the subset must be readable. Unknown and forbidden ids get the
+		// same 404 as the single-mailbox path, so the response never reveals which
+		// ids exist.
+		for (const id of requestedMailboxIds) {
+			if (!(await canReadMailbox(db, user, id, accessibleMailboxes))) {
+				return NextResponse.json({ error: "Mailbox not found" }, { status: 404 });
+			}
+		}
+		conditions.push(inArray(messages.mailboxId, requestedMailboxIds));
 	} else if (accessibleMailboxIds.length > 0) {
 		conditions.push(inArray(messages.mailboxId, accessibleMailboxIds));
 	} else {
@@ -91,7 +111,7 @@ export async function GET(request: Request) {
 		conditions.push(isNull(messages.folderId));
 		conditions.push(or(isNull(messages.snoozedUntil), lte(messages.snoozedUntil, new Date()))!);
 		// Promotions is its own view, only for mailboxes that turned it on; the Inbox hides what `separate` mailboxes moved there.
-		const hidden = await categoryScopeCondition(db, mailboxId ? [mailboxId] : accessibleMailboxIds, category ? "promotions" : "inbox");
+		const hidden = await categoryScopeCondition(db, scopedMailboxIds, category ? "promotions" : "inbox");
 		if (hidden) conditions.push(hidden);
 	}
 	if (starred === "true") {
@@ -172,11 +192,9 @@ export async function GET(request: Request) {
 	// Conversation sizes for the rows on this page, so the list can show "(3)"
 	// next to a subject the way threaded clients do.
 	const threadIds = Array.from(new Set(rows.map((row) => row.threadId).filter((id): id is string => !!id)));
-	const scope = mailboxId
-		? eq(messages.mailboxId, mailboxId)
-		: accessibleMailboxIds.length > 0
-			? inArray(messages.mailboxId, accessibleMailboxIds)
-			: eq(messages.userId, user.id);
+	const scope = scopedMailboxIds.length > 0
+		? inArray(messages.mailboxId, scopedMailboxIds)
+		: eq(messages.userId, user.id);
 	// These enrichments depend only on the selected page, not on each other.
 	const [countRows, jobs, openCounts, noteSummaries, contactMaps] = await Promise.all([
 		threadIds.length > 0

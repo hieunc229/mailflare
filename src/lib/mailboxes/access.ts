@@ -147,6 +147,22 @@ export async function listAccessibleMailboxIds(db: AppDatabase, user: Pick<Sessi
 	return rows.map((row) => row.id);
 }
 
+/**
+ * Read access for one mailbox id. An already-loaded accessible list answers from memory;
+ * ids it omits fall back to a direct lookup, which also covers legacy rows the list's
+ * domain join drops.
+ */
+export async function canReadMailbox(
+	db: AppDatabase,
+	user: Pick<SessionUser, "id" | "email" | "role">,
+	mailboxId: string,
+	accessible?: readonly { id: string; permission: MailboxPermission }[],
+): Promise<boolean> {
+	const listed = accessible?.find((mailbox) => mailbox.id === mailboxId);
+	if (listed) return hasMailboxPermission(listed.permission, "read_only");
+	return (await getMailboxAccessLevel(db, user, mailboxId))?.canRead ?? false;
+}
+
 function buildAccess(
 	mailbox: MailboxAccessLevel["mailbox"],
 	permission: MailboxPermission,
