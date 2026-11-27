@@ -83,7 +83,7 @@ export async function busyIntervals(env: CloudflareEnv, targets: FreeBusyTargets
 			id: calendarEvents.id, davObjectId: calendarEvents.davObjectId, userId: calendarEvents.userId, startsAt: calendarEvents.startsAt, endsAt: calendarEvents.endsAt, timeZone: calendarEvents.timeZone, repeat: calendarEvents.repeat, rrule: calendarEvents.rrule,
 			repeatDays: calendarEvents.repeatDays, repeatAnchorDay: calendarEvents.repeatAnchorDay, repeatUntil: calendarEvents.repeatUntil, excludedOccurrences: calendarEvents.excludedOccurrences,
 			recurrenceId: calendarEvents.recurrenceId, transparent: calendarEvents.transparent, responseStatus: calendarEvents.responseStatus, allDay: calendarEvents.allDay,
-		}).from(calendarEvents).where(and(inArray(calendarEvents.userId, ids.slice(index, index + USER_CHUNK)), lt(calendarEvents.startsAt, end), or(gt(calendarEvents.endsAt, start), and(ne(calendarEvents.repeat, "none"), or(isNull(calendarEvents.repeatUntil), sql`${calendarEvents.repeatUntil} + (${calendarEvents.endsAt} - ${calendarEvents.startsAt}) > ${Math.floor(from / 1000)}`)))));
+		}).from(calendarEvents).where(and(inArray(calendarEvents.userId, ids.slice(index, index + USER_CHUNK)), lt(calendarEvents.startsAt, end), or(gt(calendarEvents.endsAt, start), and(ne(calendarEvents.repeat, "none"), or(isNull(calendarEvents.repeatUntil), sql`${calendarEvents.repeatUntil} + (${calendarEvents.endsAt} - ${calendarEvents.startsAt} + ${DAY / 1000}) > ${Math.floor(from / 1000)}`)))));
 		// An all-day event is stored as the instants of its midnights; one with no zone of its own (a floating invitation) means midnight in its owner's.
 		const ownerZones = new Map<string, string>();
 		if (rows.some((row) => row.allDay && !row.timeZone)) for (const owner of await db.select({ id: users.id, timeZone: users.timeZone }).from(users).where(inArray(users.id, ids.slice(index, index + USER_CHUNK)))) if (owner.timeZone) ownerZones.set(owner.id, owner.timeZone);
@@ -104,7 +104,9 @@ export async function busyIntervals(env: CloudflareEnv, targets: FreeBusyTargets
 			const zone = row.allDay ? row.timeZone ?? ownerZones.get(row.userId) ?? "UTC" : null;
 			const days = Math.max(1, Math.round(duration / DAY));
 			const lengthAt = (start: number) => zone ? addZonedDays(new Date(start), days, zone).getTime() - start : duration;
-			const { starts, exhausted } = expandEvent(zone ? { ...row, timeZone: zone } : row, new Date(from - duration), end, limit);
+			// Its last day can be a day longer than the row (a 25-hour day against 24), so look back one day further than its length.
+			const lookback = zone ? (days + 1) * DAY : duration;
+			const { starts, exhausted } = expandEvent(zone ? { ...row, timeZone: zone } : row, new Date(from - lookback), end, limit);
 			spent.set(row.userId, used + 1 + starts.length);
 			if (exhausted || starts.length >= limit) { list.push([from, to]); continue; }
 			for (const at of starts) {
