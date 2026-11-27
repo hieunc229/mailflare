@@ -122,7 +122,8 @@ export async function PATCH(request: Request, { params }: CalendarEventRoutePara
 	// Rooms follow the series, not the occurrence row: the master's bookings. Named rooms replace them; a save that names none keeps them and re-checks them.
 	const bookedNow = await bookedRoomIds(db, head.id);
 	let requestedRooms: string[] | null = null;
-	if (input.resourceIds !== undefined) {
+	// A moved occurrence is a row of its own, but its rooms are the series': saving it never changes them.
+	if (input.resourceIds !== undefined && head.id === existing.id) {
 		const checked = await resolveBookableRooms(db, input.resourceIds, { booked: bookedNow, canBook: (await getLicenseEntitlements(env)).canShareMailboxes });
 		if (!checked.ok) return NextResponse.json({ error: checked.error, ...(checked.code ? { code: checked.code } : {}) }, { status: checked.status });
 		requestedRooms = checked.ids;

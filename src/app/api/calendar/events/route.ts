@@ -43,8 +43,10 @@ export async function GET(request: Request) {
 	if (new Set(roomIds).size > MAX_SCHEDULE_ROOMS) return NextResponse.json({ error: `Ask for at most ${MAX_SCHEDULE_ROOMS} rooms at a time` }, { status: 400 });
 	const visible = await listVisibleEvents(db, user, { start, end }, requested);
 	// An event shows its rooms to whoever can read it in full; a redacted one hides them with the rest.
-	const booked = await roomsByEvent(db, visible.filter((event) => !(event as { redacted?: boolean }).redacted).map((event) => event.id));
-	const events = visible.map((event) => booked.has(event.id) ? { ...event, rooms: booked.get(event.id) } : event);
+	// Rooms belong to the series: a moved occurrence (an override row) reports its master's.
+	const seriesOf = (event: (typeof visible)[number]) => event.davObjectId ?? event.id;
+	const booked = await roomsByEvent(db, [...new Set(visible.filter((event) => !(event as { redacted?: boolean }).redacted).map(seriesOf))]);
+	const events = visible.map((event) => !(event as { redacted?: boolean }).redacted && booked.has(seriesOf(event)) ? { ...event, rooms: booked.get(seriesOf(event)) } : event);
 	// Additive occurrence data for the expanders: moved/extra occurrences and per-occurrence guest replies.
 	const overrides: Record<string, Array<{ occurrenceMs: number; startsAt: Date; endsAt: Date }>> = {};
 	const occurrenceResponses: Record<string, Array<{ occurrenceMs: number; guest: string; status: string }>> = {};

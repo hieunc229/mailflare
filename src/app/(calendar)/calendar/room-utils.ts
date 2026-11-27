@@ -47,8 +47,8 @@ export function roomScheduleEvents(schedule: RoomScheduleEvent[], rooms: RoomOpt
 }
 
 /** The translation key for a refused booking, by status and code, so the server's English text is never shown. */
-export function roomSaveErrorKey(status: number, code?: string): string | null {
+export function roomSaveErrorKey(_status: number, code?: string): string | null {
+	// Only a refusal that is about the rooms; every other 400 and 403 keeps the editor's own message.
 	if (code === "TEAM_REQUIRED") return "calendar.rooms.error.team";
-	if (code === "ROOM_UNKNOWN" || code === "TOO_MANY_ROOMS") return "calendar.rooms.error.invalid";
-	return status === 403 || status === 400 ? "calendar.rooms.error.invalid" : null;
+	return code === "ROOM_UNKNOWN" || code === "TOO_MANY_ROOMS" ? "calendar.rooms.error.invalid" : null;
 }

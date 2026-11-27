@@ -9,6 +9,8 @@ import { Button } from "@/components/ui/button";
 import { List, ListRow } from "@/components/ui/list";
 import type { Room } from "./types";
 
+const touch = "[@media(pointer:coarse)]:min-h-11 [@media(pointer:coarse)]:min-w-11";
+
 export type RoomsViewProps = {
 	state: "loading" | "error" | "ready";
 	rooms: Room[];
@@ -64,8 +66,8 @@ export function RoomsView({ state, rooms, available, notice, deleting, onAdd, on
 									<span className="block truncate text-sm text-neutral-600">{[room.location, room.capacity !== null ? t("rooms.capacityValue", { count: room.capacity }) : ""].filter(Boolean).join(" · ")}</span>
 								</span>
 								<span className="flex shrink-0 gap-1">
-									<Button type="button" size="sm" variant="outline" aria-label={t("rooms.edit", { name: room.name })} onClick={() => onEdit(room)}><Pencil className="h-4 w-4" /></Button>
-									<Button type="button" size="sm" variant="outline" aria-label={t("rooms.delete", { name: room.name })} disabled={deleting} onClick={() => onDelete(room)}><Trash2 className="h-4 w-4" /></Button>
+									<Button type="button" size="sm" variant="outline" className={touch} aria-label={t("rooms.edit", { name: room.name })} onClick={() => onEdit(room)}><Pencil className="h-4 w-4" /></Button>
+									<Button type="button" size="sm" variant="outline" className={touch} aria-label={t("rooms.delete", { name: room.name })} disabled={deleting} onClick={() => onDelete(room)}><Trash2 className="h-4 w-4" /></Button>
 								</span>
 							</ListRow>
 						))}

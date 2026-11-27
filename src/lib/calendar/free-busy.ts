@@ -3,7 +3,7 @@ import { getDb } from "@/db";
 import { calendarEvents, calendarResources, davCalendarObjects } from "@/db/schema";
 import { inviteEventId } from "./invite-id";
 import { expandRowBusy, loadOwnerZones, mergeBusy, needsOwnerZone, overlapsWindow, USER_CHUNK, type BusyInterval } from "./busy-expand";
-import { roomBusyIntervals } from "./room-busy";
+import { ROOM_WORK_BUDGET, roomBusyIntervals } from "./room-busy";
 import { isBusyEvent } from "./visibility";
 
 /** People per request and the longest window (spec F9 section 5, D-9). */
@@ -97,6 +97,6 @@ export async function busyIntervals(env: CloudflareEnv, targets: FreeBusyTargets
 	// A room is taken when an accepted booking says so, whatever its organiser shows as; one that cannot be read in full is busy all window, never free.
 	// Only rooms that exist get an entry: an id that names nothing is left out, as it was before rooms existed.
 	const known = roomIds.length ? (await db.select({ id: calendarResources.id }).from(calendarResources).where(inArray(calendarResources.id, roomIds))).map((room) => room.id) : [];
-	if (known.length) for (const [id, room] of await roomBusyIntervals(db, known, start, end, { excludeEventId: targets.excludeEventId, excludeOccurrence: targets.excludeOccurrence })) collected.set(id, room.truncated ? [[from, to]] : room.busy);
+	if (known.length) for (const [id, room] of await roomBusyIntervals(db, known, start, end, { excludeEventId: targets.excludeEventId, excludeOccurrence: targets.excludeOccurrence, budget: Math.min(ROOM_WORK_BUDGET, Math.floor(MAX_EXPANSION_BUDGET / Math.max(known.length, 1))) })) collected.set(id, room.truncated ? [[from, to]] : room.busy);
 	return new Map([...collected].map(([id, list]) => [id, mergeBusy(list)]));
 }

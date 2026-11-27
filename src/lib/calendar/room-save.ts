@@ -24,9 +24,27 @@ export function invitationLocation(location: string, roomNames: string[]): strin
 	return [location.trim(), roomNames.join(", ")].filter(Boolean).join("; ");
 }
 
-/** Books the rooms (see `bookRooms`) and describes the outcome for the response and the invitation. */
+/**
+ * The event is already saved at its new time, so a room check that cannot finish must not leave its bookings `accepted` for times
+ * nobody checked: they are declined (fail closed). The next save of the event checks them again.
+ */
+async function declineUnchecked(db: Db, eventId: string): Promise<void> {
+	try { await db.update(calendarResourceBookings).set({ status: "declined", conflictAt: null }).where(eq(calendarResourceBookings.eventId, eventId)); } catch (error) {
+		console.error("Declining the rooms of an unchecked event failed", error);
+	}
+}
+
+/**
+ * Books the rooms (see `bookRooms`) and describes the outcome for the response and the invitation. A failure does not escape: the
+ * event is saved, so the caller still audits, invites and answers; the rooms come back declined.
+ */
 export async function bookAndSummarize(db: Db, eventId: string, resourceIds: string[]): Promise<RoomsSummary> {
-	const { rooms } = await bookRooms(db, eventId, resourceIds);
+	let rooms: Awaited<ReturnType<typeof bookRooms>>["rooms"];
+	try { ({ rooms } = await bookRooms(db, eventId, resourceIds)); } catch (error) {
+		console.error("Booking rooms failed after the event was saved", error);
+		await declineUnchecked(db, eventId);
+		rooms = [...new Set(resourceIds)].map((resourceId) => ({ resourceId, status: "declined" as const, conflictAt: null, occurrences: [] }));
+	}
 	const names = new Map<string, string>();
 	if (rooms.length) for (const row of await db.select({ id: calendarResources.id, name: calendarResources.name }).from(calendarResources).where(inArray(calendarResources.id, rooms.map((room) => room.resourceId)))) names.set(row.id, row.name);
 	return {
@@ -51,6 +69,7 @@ export async function rebookEvents(db: Db, eventIds: string[]): Promise<void> {
 			if (booked.length) await bookRooms(db, id, booked);
 		} catch (error) {
 			console.error("Room check after an event change failed", error);
+			await declineUnchecked(db, id);
 		}
 	}
 }

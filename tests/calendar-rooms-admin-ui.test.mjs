@@ -26,6 +26,7 @@ test("a room shows its name, type, location and seats, with named edit and delet
 	assert.match(html, /2nd floor · Seats 12/);
 	assert.match(html, /aria-label="Edit Boardroom"/);
 	assert.match(html, /aria-label="Delete Boardroom"/);
+	assert.match(html, /aria-label="Edit Boardroom"[^>]*|class="[^"]*min-h-11[^"]*"[^>]*aria-label="Edit Boardroom"/, "touch-sized");
 	assert.doesNotMatch(html, /Turned off/);
 	assert.match(render({ rooms: [{ ...room, disabled: true, kind: "equipment", capacity: null }] }), /Equipment.*Turned off/s);
 });
