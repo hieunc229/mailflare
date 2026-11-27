@@ -1,6 +1,6 @@
 # Promotions and Subscriptions
 
-Mailflare can set bulk marketing mail apart from person-to-person mail. It is off for every mailbox until you turn it on, and when it is off nothing about that mailbox changes.
+Separates bulk marketing mail from person-to-person mail. Off for every mailbox until enabled; when off, nothing about the mailbox changes.
 
 ## Turning it on
 
@@ -14,7 +14,7 @@ Mailflare can set bulk marketing mail apart from person-to-person mail. It is of
 
 People with read-only or send-only access to a shared mailbox see its mode but cannot change it, and cannot move, override or trash mail.
 
-Turning a mailbox on for the first time sorts the last 90 days of mail in the background (25 messages every 5 minutes, and at most 2,000 messages a day across the installation). Settings shows the progress; a large mailbox simply takes several days. If the job stalls three times in a row it stops and Settings shows the error with a **Try again** button.
+First enable sorts the last 90 days of mail in the background (25 messages every 5 minutes, at most 2,000 a day across the installation). Settings shows progress; a large mailbox takes several days. If the job stalls three times in a row it stops and Settings shows the error with **Try again**.
 
 ## How mail is classified
 
@@ -35,12 +35,10 @@ Each new message is classified once when it arrives, from its headers: `List-Uns
 - **Block** adds a rule that sends mail from the address to Trash.
 - **Trash all** moves that exact sender's unstarred, unfiled mail from the last 90 days to Trash, at most 500 messages per request. You see a count first, and the result says how many moved and how many were left. Mail you moved to Trash stays there for the usual retention period.
 
-Each message moved writes change-log rows on the database, so the limits keep one click from using up a small database's daily write allowance.
-
 ## Database write budget
 
-D1 Free allows 100,000 row writes a day. Each promoted message costs about 6 writes: the row, its indexes and the change-log entry. The background sort therefore reads at most 25 messages per run and at most 2,000 messages a day for the whole installation, whatever the number of mailboxes: 2,000 x 6 = 12,000 writes, about an eighth of the allowance, so mail arriving that day keeps its room. The day is the UTC day, counted in `mailbox_promotion_settings.backfill_day` and `backfill_day_rows`. When the allowance is used up, jobs stay queued and continue after midnight UTC. Move to Promotions and Trash all are bounded by 500 messages per request for the same reason.
+D1 Free allows 100,000 row writes a day. Each promoted message costs about 6 writes: the row, its indexes and the change-log entry. The background sort therefore reads at most 25 messages per run and 2,000 a day for the whole installation, regardless of mailbox count: 2,000 x 6 = 12,000 writes, about an eighth of the allowance, so mail arriving that day keeps its room. The day is the UTC day, counted in `mailbox_promotion_settings.backfill_day` and `backfill_day_rows`. When the allowance is used up, jobs stay queued and continue after midnight UTC. Move to Promotions and Trash all are capped at 500 messages per request for the same reason (each moved message writes change-log rows).
 
 ## Upgrading
 
-The feature needs the pending database migrations. Before they are applied, every mailbox behaves as Off and the settings route answers with `MIGRATION_REQUIRED`.
+Needs the pending database migrations. Until applied, every mailbox behaves as Off and the settings route answers `MIGRATION_REQUIRED`.
