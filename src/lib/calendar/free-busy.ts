@@ -88,7 +88,8 @@ export async function busyIntervals(env: CloudflareEnv, targets: FreeBusyTargets
 			repeatDays: calendarEvents.repeatDays, repeatAnchorDay: calendarEvents.repeatAnchorDay, repeatUntil: calendarEvents.repeatUntil, excludedOccurrences: calendarEvents.excludedOccurrences,
 			recurrenceId: calendarEvents.recurrenceId, transparent: calendarEvents.transparent, responseStatus: calendarEvents.responseStatus, allDay: calendarEvents.allDay,
 		}).from(calendarEvents).where(and(inArray(calendarEvents.userId, ids.slice(index, index + USER_CHUNK)), lt(calendarEvents.startsAt, end), or(gt(calendarEvents.endsAt, start), and(ne(calendarEvents.repeat, "none"), or(isNull(calendarEvents.repeatUntil), sql`${calendarEvents.repeatUntil} + (${calendarEvents.endsAt} - ${calendarEvents.startsAt} + ${DAY / 1000}) > ${Math.floor(from / 1000)}`)))));
-		// An all-day event is stored as the instants of its midnights; one with no zone of its own (a floating invitation) means midnight in its owner's.
+		// An all-day event is stored as the instants of its midnights. A row with no zone of its own is a legacy one, and the calendar view expands
+		// those in the viewer's own zone (`calendarTimeZone` in the calendar's utils.ts, the user's setting), which for the owner is `users.time_zone`; so this does too, and the two agree.
 		const ownerZones = new Map<string, string>();
 		if (rows.some((row) => row.allDay && !validZone(row.timeZone))) for (const owner of await db.select({ id: users.id, timeZone: users.timeZone }).from(users).where(inArray(users.id, ids.slice(index, index + USER_CHUNK)))) if (validZone(owner.timeZone)) ownerZones.set(owner.id, owner.timeZone);
 		for (const row of rows) {
