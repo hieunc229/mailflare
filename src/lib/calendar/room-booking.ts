@@ -1,4 +1,4 @@
-import { and, eq, inArray, sql } from "drizzle-orm";
+import { and, eq, inArray, or, sql } from "drizzle-orm";
 import type { getDb } from "@/db";
 import { calendarEvents, calendarResourceBookings, calendarResources } from "@/db/schema";
 import { isUniqueConstraintError } from "@/lib/database-errors";
@@ -139,7 +139,8 @@ export async function bookRooms(db: Db, eventId: string, resourceIds: string[], 
 	}
 	const known = new Set((await db.select({ id: calendarResources.id }).from(calendarResources).where(inArray(calendarResources.id, [...wanted, ...frozen]))).map((room) => room.id));
 	// A room this event held (accepted) and could not confirm again is waiting for its check, not declined for a reason.
-	const held = new Set((await db.select({ id: calendarResourceBookings.resourceId }).from(calendarResourceBookings).where(and(eq(calendarResourceBookings.eventId, eventId), eq(calendarResourceBookings.status, "accepted")))).map((row) => row.id));
+	// The caller usually declined its bookings already (in the batch that wrote the event), marked as waiting for their check, so those count as held too.
+	const held = new Set((await db.select({ id: calendarResourceBookings.resourceId }).from(calendarResourceBookings).where(and(eq(calendarResourceBookings.eventId, eventId), or(eq(calendarResourceBookings.status, "accepted"), and(eq(calendarResourceBookings.status, "declined"), eq(calendarResourceBookings.conflictAt, PENDING_RECHECK)))))).map((row) => row.id));
 	const rooms = [...wanted.filter((id) => known.has(id)).map((id) => ({ ...outcome(id, "unconfirmed", []), conflictAt: held.has(id) ? PENDING_RECHECK : null })), ...[...frozen].filter((id) => known.has(id)).map((id) => outcome(id, "declined", []))];
 	await write(rooms, []);
 	return { rooms };
