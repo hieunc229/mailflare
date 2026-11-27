@@ -73,7 +73,7 @@ test("dense rows add spacing on coarse pointers only", async () => {
 	const { readFileSync } = await import("node:fs");
 	const src = (f) => readFileSync(join(root, f), "utf8");
 	assert.match(src("src/components/messages/conversation-notes.tsx"), /flex gap-0\.5 pointer-coarse:gap-2\.5/);
-	assert.match(src("src/components/messages/message-list-row-actions.tsx"), /gap-0\.5 pointer-coarse:gap-2 /);
+	assert.match(src("src/components/ui/button.tsx"), /round: "h-8 w-8 pointer-coarse:size-11 /);
 	assert.match(src("src/components/messages/message-folder-page.tsx"), /pointer-coarse:grid-cols-\[24px_minmax\(0,1fr\)\]/);
 });
 
