@@ -2,24 +2,24 @@
 
 ## Google Calendar
 
-Settings → Import → **Google Takeout: Calendar, Contacts, Drive** brings your Google Calendar events, Google Contacts and Google Drive files into Mailflare. Pick all your Takeout files at once: each card (Calendar, Contacts, Drive) appears when its files are found.
+Settings → Import → **Google Takeout: Calendar, Contacts, Drive** imports Google Calendar events, Contacts and Drive files. Pick all Takeout files at once: each card (Calendar, Contacts, Drive) appears when its files are found.
 
 ### Get the file
 
 1. Open [Google Takeout](https://takeout.google.com), choose **Deselect all**, then tick **Calendar**.
-2. Export once. Google emails you a link to one or more `.zip` files.
+2. Export once. Google emails a link to one or more `.zip` files.
 3. In Mailflare, pick the `.zip` files, or the `.ics` files inside them (one per calendar; your main calendar is named after your Google address).
 
-The files are opened in your browser. Only the parsed events are uploaded, a few at a time. Keep the tab open until it finishes. If it stops, pick the same files again: events already imported are skipped.
+Files are opened in the browser; only parsed events are uploaded, a few at a time. Keep the tab open. If it stops, pick the same files again: imported events are skipped.
 
 ### What the import does
 
-- **One color per calendar.** Mailflare has a single calendar per account, so each Google calendar becomes a color. The calendar name is not stored.
-- **Preview** shows how many events and recurring series are in the file without importing anything.
-- **Your Google address** (filled in when the file is named after it) is left out of guest lists, and events you declined are skipped. You can turn that off with *Skip events you declined*.
+- **One color per calendar.** Mailflare has one calendar per account, so each Google calendar becomes a color. The calendar name is not stored.
+- **Preview** counts events and recurring series; imports nothing.
+- **Your Google address** (filled in when the file is named after it) is left out of guest lists; declined events are skipped (turn off with *Skip events you declined*).
 - **Reminders** are imported when *Import reminders* is on. Only the smallest relative reminder before the start is kept.
-- Imported events never email anyone, and later edits of them never send invitations.
-- **Importing a file again adds nothing twice.** An event is skipped when it was imported before, or when it already arrived on your calendar as an emailed invitation. Re-importing never overwrites: to refresh an event, delete it and import again.
+- Imported events never email anyone; later edits never send invitations.
+- **Re-importing adds nothing twice.** An event is skipped if imported before or already on your calendar as an emailed invitation. Never overwrites: to refresh an event, delete it and import again.
 
 ### What is not carried over
 
@@ -43,35 +43,35 @@ HTML in descriptions is turned into plain text. Links in files are never opened.
 
 | Limit | Value |
 | --- | --- |
-| One `.ics` file | 64 MB |
+| One `.ics` file | 64 MiB |
 | Events read from one file | 50,000 (the rest are not read, and the summary says so) |
-| One request | Up to 50 series and 500 events (a series and its changed occurrences are one series), 256 KB from the browser, 1 MB hard limit, 1,000 events in all |
-| One event | 500 changes of the same series, 512 KB |
+| One request | Up to 50 series and 500 events (a series and its changed occurrences are one series), 256 KiB from the browser, 1 MiB hard limit, 1,000 events in all |
+| One event | 500 changes of the same series, 512 KiB |
 | Excluded dates of one series | 1,000 `EXDATE` values (more are ignored), plus one date per cancelled, declined or changed occurrence |
 | Title / location | 500 characters |
 | Description | 8,000 characters |
 | Guests | 100 |
 
-A request the server cannot take is split in halves and retried, down to single events. A request body is kept under 1 MB by its encoded size; one event with all its changes that is still larger is not imported and is counted as too large. When the server answers "too many requests", the import waits (for the time the server names, else 2, 4 and 8 seconds) and sends the same request again. After five tries it stops and tells you; choose the same files again later and it continues.
+A request the server cannot take is halved and retried, down to single events. Bodies are kept under 1 MiB by encoded size; one event with all its changes still larger is not imported and is counted as too large. On "too many requests" the import waits (the time the server names, else 2, 4 and 8 seconds) and resends. After five tries it stops; choose the same files again later and it continues.
 
 ## Google Contacts
 
 ### Get the file
 
 1. Open [Google Takeout](https://takeout.google.com), choose **Deselect all**, then tick **Contacts**.
-2. Export once and download the `.zip` files. Contacts come as `.vcf` files (one per label, and *All Contacts*).
+2. Export once and download the `.zip` files. Contacts are `.vcf` files (one per label, plus *All Contacts*).
 3. In Mailflare, pick the `.zip` files, or the `.vcf` files inside them. A Google contacts `.csv` (from contacts.google.com → Export → Google CSV) works too, including the older style that starts with the `FF FE` byte order mark. A `.csv` is only offered when its first row looks like a Google contacts header.
 
-Contacts go to the address book of the mailbox selected at the top of the page, the same place the Contacts page edits. Only the owner of an address book can import into it: for a shared mailbox you were given access to, the Import button stays off. The files are opened in your browser. Only the parsed contacts are uploaded, a few at a time. Keep the tab open until it finishes. If it stops, pick the same files again.
+Contacts go to the address book of the mailbox selected at the top of the page (the one the Contacts page edits). Only the address book's owner can import: for a shared mailbox you were given access to, the Import button stays off. Files are opened in the browser; only parsed contacts are uploaded, a few at a time. Keep the tab open. If it stops, pick the same files again.
 
 ### What the import does
 
-- **One contact per email address.** Mailflare keys contacts by address, so a card with three addresses becomes three contacts, each showing the card's other addresses under *Other addresses*.
+- **One contact per email address.** Contacts are keyed by address: a card with three addresses becomes three contacts, each showing the others under *Other addresses*.
 - **Names.** A name you set yourself in the address book is kept. Any other name (for example one learned from mail you received) is replaced by the imported name, and the contact is marked as imported. Importing again may update a name that came from an import, but never one you edited. Imported contacts count as saved contacts: the spam filter and the agent's send review treat them like contacts you added by hand. Blocked contacts stay blocked, and remote-content settings are not touched.
 - **Details** (phones, postal addresses, organization, title, birthday, note) are saved with the contact and shown read only in the contact dialog and when you edit a contact. A card with one address and nothing else saves no details. A later import adds the new phones and postal addresses to the stored ones and keeps the organization, birthday and note when the card has none; it never erases details. Only people who can manage the mailbox see the details; read-only delegates see the contact without them.
-- **Photos.** *Import photos* (vCard only) uploads a card's embedded picture, only for contacts that have none yet (never your own profile picture), and only when it is a JPEG, PNG, GIF or WebP up to 10 MB. Pictures are converted in your browser with the same tool as the contact photo form. Picture links in files are never opened, and Google CSV photo columns are ignored. Gravatar is not asked for imported contacts.
-- **Preview** counts contacts, those with an email address and those without, and imports nothing.
-- **Importing a file again changes nothing.** The summary says how many contacts were added, updated and already up to date.
+- **Photos.** *Import photos* (vCard only) uploads a card's embedded picture, only for contacts that have none yet (never your own profile picture), and only when it is a JPEG, PNG, GIF or WebP up to 10 MiB. Pictures are converted in your browser with the same tool as the contact photo form. Picture links in files are never opened, and Google CSV photo columns are ignored. Gravatar is not asked for imported contacts.
+- **Preview** counts contacts, with and without an email address; imports nothing.
+- **Re-importing changes nothing.** The summary gives contacts added, updated and already up to date.
 
 ### What is not carried over
 
@@ -90,24 +90,24 @@ The details of a contact need a database migration (Admin → Settings). Until i
 
 | Limit | Value |
 | --- | --- |
-| One `.vcf` or `.csv` file | 64 MB |
+| One `.vcf` or `.csv` file | 64 MiB |
 | Contacts read from one file | 50,000 (the rest are not read, and the summary says so) |
-| One request | Up to 100 contacts, 256 KB from the browser, 1 MB hard limit, 400 addresses in all |
-| One contact in a vCard file | 128 KB of text without its photo |
-| Photo | 10 MB source, up to about 750 KB of base64 per line (larger photos are skipped) |
+| One request | Up to 100 contacts, 256 KiB from the browser, 1 MiB hard limit, 400 addresses in all |
+| One contact in a vCard file | 128 KiB of text without its photo |
+| Photo | 10 MiB source, up to about 750 KB of base64 per line (larger photos are skipped) |
 | Name | 100 characters |
 
-Requests that fail, are too large or are rate limited are handled as for the calendar: halved and retried, then counted, or waited out and stopped after five tries.
+Failed, too-large or rate-limited requests are handled as for the calendar: halved and retried, then counted, or waited out and stopped after five tries.
 
 ## Google Drive
 
 ### Get the files
 
 1. Open [Google Takeout](https://takeout.google.com), choose **Deselect all**, then tick **Drive**.
-2. Export once and download all the `.zip` files. A big Drive comes in several parts; pick them all together, or one at a time.
+2. Export once and download all the `.zip` files. A big Drive comes in several parts; pick them together or one at a time.
 3. In Mailflare, pick the `.zip` files. The **Drive** card appears. If your export has several product folders and none is called `Drive`, choose the one that holds your files.
 
-The zips are opened in your browser and each file is sent from there to your Drive, one at a time, in 64 MiB parts (16 MiB on Vercel). Nothing is unzipped on the server. Keep the tab open until it finishes. If it stops, pick the same files again: finished files are skipped and a half-sent file continues after its last stored part. To get there, the part of the file that is already stored is read again from the zip on your computer (nothing of it is uploaded again), so resuming a very large file takes a while before it sends anything new.
+Zips are opened in the browser and each file is sent to your Drive one at a time, in 64 MiB parts (16 MiB on Vercel). Nothing is unzipped on the server. Keep the tab open. If it stops, pick the same files again: finished files are skipped and a half-sent file continues after its last stored part. The already-stored part is re-read from the zip locally (not re-uploaded), so resuming a very large file takes a while before anything new is sent.
 
 ### What the import does
 
@@ -123,9 +123,9 @@ The zips are opened in your browser and each file is sent from there to your Dri
 | Limit | Value |
 | --- | --- |
 | Per-user Drive storage | The admin's limit (Settings → General); a file that does not fit stops the import with "Drive storage is full". The card warns first when the files together are larger than the free space. |
-| One file | The same as an upload in Drive (about 640 GB; 10,000 parts of 64 MiB, or about 167 GB with 16 MiB parts on Vercel). The 25 MB and 50 MB limits are for mail attachments and do not apply to Drive. |
+| One file | Same as a Drive upload: 10,000 parts x 64 MiB = 625 GiB (about 671 GB); on Vercel 10,000 x 16 MiB = 156 GiB (about 168 GB). The 25 MB and 50 MB limits are for mail attachments and do not apply to Drive. |
 | Files in one import | 200,000. Choose fewer zip files at a time for more. |
-| Entries in one zip, central directory | 500,000 entries, 64 MB |
+| Entries in one zip, central directory | 500,000 entries, 64 MiB |
 | Folder depth | 24 levels in all, counting the folder you import into and its parents. Files in deeper folders are skipped and counted on the card; the rest of the import goes on |
 | Name | 255 characters per folder or file; longer names are not imported |
 | One request to the server | Up to 140 files in up to 25 folders, or up to 100 folder paths holding at most 64 distinct folders (ancestors counted); they carry names and sizes only |
@@ -136,7 +136,7 @@ Names are cleaned before they are used: control characters, text-direction overr
 
 ### Requests and daily limits
 
-Every file is sent from your browser to your Mailflare server, so a big import is a lot of requests. A small file takes 3: one to start the upload, one for its part, one to complete it; a file over one part takes one more request per further part (64 MiB, or 16 MiB on Vercel). Planning the files and folders adds one request per up to 140 files. So 5,000 small files are about 15,000 requests and 50,000 files about 150,000.
+Every file goes from the browser to your Mailflare server, so a big import is many requests. A small file takes 3 (start, one part, complete); each further part (64 MiB, or 16 MiB on Vercel) adds one. Planning files and folders adds one request per up to 140 files. So 5,000 small files are about 15,000 requests and 50,000 files about 150,000.
 
 On Cloudflare's free plan the limits are 100,000 Worker requests, about 5 million D1 rows read and 100,000 D1 rows written per day. These figures are estimates from reading the code, not measurements:
 
@@ -152,4 +152,4 @@ A request that gets a server error or "too many requests" (starting, sending a p
 
 ## Translations
 
-The text of this screen was machine-translated into every language and needs review by native speakers. Corrections are welcome as pull requests, see [Adding a language](localization.md).
+This screen's text is machine-translated and needs native-speaker review. Corrections welcome as pull requests, see [Adding a language](localization.md).
