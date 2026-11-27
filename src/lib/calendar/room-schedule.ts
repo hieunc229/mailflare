@@ -1,0 +1,78 @@
+import { and, eq, inArray, or } from "drizzle-orm";
+import type { getDb } from "@/db";
+import { calendarEvents, calendarResourceBookings } from "@/db/schema";
+import { overlapsWindow } from "./busy-expand";
+import { getEventAccess } from "./shares";
+import { redactEvent } from "./visibility";
+
+type Db = ReturnType<typeof getDb>;
+
+/** Rooms per schedule request, and the events read for them. */
+export const MAX_SCHEDULE_ROOMS = 20;
+const MAX_SCHEDULE_ROWS = 2000;
+const BOOKING_CHUNK = 90;
+
+export type RoomEventView = {
+	id: string;
+	resourceId: string;
+	title: string;
+	startsAt: Date;
+	endsAt: Date;
+	repeat: string;
+	repeatDays: string;
+	repeatAnchorDay: number | null;
+	repeatUntil: Date | null;
+	rrule: string | null;
+	excludedOccurrences: string;
+	timeZone: string | null;
+	allDay: boolean;
+	davObjectId: string | null;
+	recurrenceId: Date | null;
+	color: string | null;
+	/** The viewer may not read this event: the title is a placeholder to translate. */
+	redacted: boolean;
+};
+
+/**
+ * What the rooms' schedules show a viewer (spec F9 8.7): the accepted bookings' events (and the moved occurrences of those
+ * series) in the window, with the title only for events the viewer may read; everything else is "Busy" with nothing about
+ * who, where or what. Never a calendar id, owner, guest or description. Declined bookings hold nothing, so they are not shown.
+ */
+export async function listRoomEvents(db: Db, user: { id: string }, resourceIds: string[], range: { start: Date; end: Date }): Promise<RoomEventView[]> {
+	const ids = [...new Set(resourceIds)];
+	if (!ids.length) return [];
+	const rows = await db.select({ resourceId: calendarResourceBookings.resourceId, event: calendarEvents }).from(calendarResourceBookings)
+		.innerJoin(calendarEvents, or(eq(calendarEvents.id, calendarResourceBookings.eventId), eq(calendarEvents.davObjectId, calendarResourceBookings.eventId)))
+		.where(and(inArray(calendarResourceBookings.resourceId, ids), eq(calendarResourceBookings.status, "accepted"), overlapsWindow(range.start, range.end))).limit(MAX_SCHEDULE_ROWS);
+	// One role lookup per calendar, not per event.
+	const roles = new Map<string, Awaited<ReturnType<typeof getEventAccess>>>();
+	const views: RoomEventView[] = [];
+	for (const { resourceId, event } of rows) {
+		const key = `${event.userId}|${event.calendarId ?? ""}`;
+		if (!roles.has(key)) roles.set(key, await getEventAccess(db, user, event));
+		const role = roles.get(key);
+		const shown = redactEvent(event, role && role !== "freebusy" ? role : "freebusy");
+		views.push({
+			id: event.id, resourceId, title: shown.title, startsAt: event.startsAt, endsAt: event.endsAt, repeat: event.repeat, repeatDays: event.repeatDays, repeatAnchorDay: event.repeatAnchorDay, repeatUntil: event.repeatUntil,
+			rrule: event.rrule, excludedOccurrences: event.excludedOccurrences, timeZone: event.timeZone, allDay: event.allDay, davObjectId: event.davObjectId, recurrenceId: event.recurrenceId,
+			color: shown.redacted ? null : event.color, redacted: shown.redacted === true,
+		});
+	}
+	return views;
+}
+
+export type EventRoom = { resourceId: string; status: "accepted" | "declined"; conflictAt: string | null };
+
+/** The rooms each of these events is booked for, for the editor's chips. */
+export async function roomsByEvent(db: Db, eventIds: string[]): Promise<Map<string, EventRoom[]>> {
+	const map = new Map<string, EventRoom[]>();
+	for (let index = 0; index < eventIds.length; index += BOOKING_CHUNK) {
+		for (const row of await db.select({ eventId: calendarResourceBookings.eventId, resourceId: calendarResourceBookings.resourceId, status: calendarResourceBookings.status, conflictAt: calendarResourceBookings.conflictAt }).from(calendarResourceBookings).where(inArray(calendarResourceBookings.eventId, eventIds.slice(index, index + BOOKING_CHUNK)))) {
+			const list = map.get(row.eventId) ?? [];
+			list.push({ resourceId: row.resourceId, status: row.status, conflictAt: row.conflictAt?.toISOString() ?? null });
+			map.set(row.eventId, list);
+		}
+	}
+	for (const list of map.values()) list.sort((a, b) => a.resourceId.localeCompare(b.resourceId));
+	return map;
+}

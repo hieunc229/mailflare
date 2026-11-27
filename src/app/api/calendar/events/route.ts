@@ -21,6 +21,7 @@ import { listVisibleEvents } from "@/lib/calendar/event-list";
 import { resolveCalendarForWrite } from "@/lib/calendar/shares";
 import { createAuditLog } from "@/lib/mailboxes/audit";
 import { resolveBookableRooms } from "@/lib/calendar/resources";
+import { listRoomEvents, MAX_SCHEDULE_ROOMS, roomsByEvent } from "@/lib/calendar/room-schedule";
 import { bookAndSummarize, invitationLocation, roomResponse, type RoomsSummary } from "@/lib/calendar/room-save";
 import { getLicenseEntitlements } from "@/lib/licenses/service";
 
@@ -32,8 +33,14 @@ export async function GET(request: Request) {
 	const start = new Date(url.searchParams.get("start") ?? Date.now());
 	const end = new Date(url.searchParams.get("end") ?? start.getTime() + 31 * 86_400_000);
 	const requested = url.searchParams.getAll("calendarIds").flatMap((value) => value.split(",")).map((value) => value.trim()).filter(Boolean);
-	const events = await listVisibleEvents(getDb(env), user, { start, end }, requested);
-	return NextResponse.json({ events });
+	const db = getDb(env);
+	const roomIds = url.searchParams.getAll("resourceIds").flatMap((value) => value.split(",")).map((value) => value.trim()).filter(Boolean);
+	if (new Set(roomIds).size > MAX_SCHEDULE_ROOMS) return NextResponse.json({ error: `Ask for at most ${MAX_SCHEDULE_ROOMS} rooms at a time` }, { status: 400 });
+	const visible = await listVisibleEvents(db, user, { start, end }, requested);
+	// An event shows its rooms to whoever can read it in full; a redacted one hides them with the rest.
+	const booked = await roomsByEvent(db, visible.filter((event) => !event.redacted).map((event) => event.id));
+	const events = visible.map((event) => booked.has(event.id) ? { ...event, rooms: booked.get(event.id) } : event);
+	return NextResponse.json(roomIds.length ? { events, roomEvents: await listRoomEvents(db, user, roomIds, { start, end }) } : { events });
 }
 
 export async function POST(request: Request) {
