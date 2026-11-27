@@ -6,18 +6,38 @@ Raw mail, attachments, Drive files, avatars and database backups all live in one
 
 | Host | Default | Also works |
 | --- | --- | --- |
-| Cloudflare Workers | R2 (`BUCKET` binding) | Backblaze B2, AWS S3 |
-| Vercel | none, you must pick one | private Vercel Blob store, AWS S3, Backblaze B2 |
-| Docker or Node | files under `/data/blobs` | Backblaze B2, AWS S3 |
+| Cloudflare Workers | R2 (`BUCKET` binding) | Backblaze B2, AWS S3, any S3-compatible provider |
+| Vercel | none, you must pick one | private Vercel Blob store, AWS S3, Backblaze B2, any S3-compatible provider |
+| Docker or Node | files under `/data/blobs` | Backblaze B2, AWS S3, any S3-compatible provider |
 
 If B2 and S3 are both configured, B2 wins. A configured S3 or B2 bucket also wins over R2, local files and Vercel Blob.
 
-Only two kinds of endpoint are accepted:
+Endpoints:
 
 - B2: `B2_ENDPOINT` must look like `s3.<region>.backblazeb2.com`.
-- S3: AWS only, always `s3.<region>.amazonaws.com`. There is no endpoint setting.
+- AWS S3: no endpoint setting; the host is always `s3.<region>.amazonaws.com`.
+- Any other S3-compatible provider: add `S3_ENDPOINT` to the `S3_*` variables, see below.
 
-Other S3-compatible providers (Hetzner, IDrive e2, Wasabi and so on) are not supported today.
+## S3-compatible providers
+
+Set `S3_BUCKET`, `S3_REGION`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY` and `S3_ENDPOINT`. The provider shows as `s3-compatible` in `GET /api/v1/storage`, which also reports the endpoint and `pathStyle` (never the keys).
+
+- `S3_ENDPOINT` is a host, with or without `https://` and a port. No path, query or credentials. It must be https; `http://` is accepted only for `localhost`, `127.0.0.1` and `[::1]` on Docker or Node, for a local MinIO.
+- `S3_REGION` is whatever the provider documents (`auto`, `fsn1`, `eu-central-1`). Lowercase letters, digits and hyphens.
+- Buckets are addressed as `bucket.endpoint`, so the bucket name must be DNS-safe (lowercase, no dots). Set `S3_FORCE_PATH_STYLE=true` to use `endpoint/bucket` instead, which MinIO and some providers need. Loopback endpoints always use path style. `S3_FORCE_PATH_STYLE` has no effect on AWS S3.
+- Requests to a custom endpoint do not follow redirects.
+- If B2 is also configured, B2 wins. A wrong `S3_ENDPOINT` never falls back to AWS: the setup is reported as broken.
+
+| Provider | `S3_ENDPOINT` | `S3_REGION` | Docs |
+| --- | --- | --- | --- |
+| Hetzner Object Storage | `fsn1.your-objectstorage.com` (the location is part of the host; `nbg1` also exists) | `fsn1` | [Hetzner](https://docs.hetzner.com/storage/object-storage/getting-started/using-s3-api-tools) |
+| IDrive e2 | the endpoint your dashboard shows for the bucket's region, such as `s3.us-west-1.idrivee2.com`; each account gets its own list | the region code in that host, `us-west-1` | [IDrive e2](https://www.idrive.com/e2/region-endpoints) |
+| Wasabi | `s3.eu-central-1.wasabisys.com`: use the host of the bucket's own region, or writes fail | `eu-central-1` | [Wasabi](https://docs.wasabi.com/docs/what-are-the-service-urls-for-wasabis-different-storage-regions) |
+
+OVH, Scaleway, DigitalOcean Spaces, MinIO and Cloudflare R2 over S3 use the same variables with the endpoint their docs list. None of these providers has been tested against Mailflare. In particular:
+
+- On Vercel, the browser uploads straight to the bucket with a presigned PUT, so the bucket needs a CORS rule (see below). Whether a provider supports bucket CORS is not verified here. Storj's S3 gateway has no bucket CORS, so it will not work for Vercel direct uploads.
+- Drive uploads use multipart upload on the server. Providers that do not implement the S3 multipart API will fail on large files.
 
 Variables and setup: [Workers](deployment.md#object-storage-r2-backblaze-b2-or-aws-s3), [Vercel](vercel.md#storage), [Docker](self-hosting.md#configuration-reference).
 
@@ -58,4 +78,4 @@ Database backups go into the same store as everything else, under `backups/datab
 
 ## Bucket CORS
 
-On Vercel, large uploads go from the browser straight to an S3 or B2 bucket, so the bucket needs a CORS rule. See [Bucket CORS](vercel.md#bucket-cors). Workers and Docker upload through the app and need no rule.
+On Vercel, large uploads go from the browser straight to an S3, S3-compatible or B2 bucket, so the bucket needs a CORS rule. See [Bucket CORS](vercel.md#bucket-cors). Workers and Docker upload through the app and need no rule.

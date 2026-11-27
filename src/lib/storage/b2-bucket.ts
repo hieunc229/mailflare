@@ -81,18 +81,27 @@ export class B2Object {
 	}
 }
 
+/** Where an object lives: `bucket.endpoint/key` (virtual-hosted, the default) or `endpoint/bucket/key` (path style). */
+function addressOf(config: B2Config, key: string | null): { protocol: "https" | "http"; host: string; path: string } {
+	const protocol = config.protocol ?? "https";
+	if (config.pathStyle) return { protocol, host: config.endpoint, path: `/${encodeURIComponent(config.bucket)}${key === null ? "" : encodePath(key)}` };
+	return { protocol, host: `${config.bucket}.${config.endpoint}`, path: key === null ? "/" : encodePath(key) };
+}
+
 export class B2Bucket {
 	private readonly credentials: AwsConfig;
-	private readonly host: string;
+	/** A custom endpoint is an admin-set host: never replay a signed request somewhere else. */
+	private readonly custom: boolean;
 
 	constructor(private readonly config: B2Config) {
 		this.credentials = { accessKeyId: config.keyId, secretAccessKey: config.applicationKey, region: config.region };
-		this.host = `${config.bucket}.${config.endpoint}`;
+		this.custom = config.protocol !== undefined;
 	}
 
 	private request(key: string | null, init: { method?: string; query?: Record<string, string>; body?: string | ArrayBuffer; headers?: Record<string, string> } = {}) {
 		if (key !== null) assertPlainKey(key);
-		return awsRequest({ config: this.credentials, service: "s3", host: this.host, path: key === null ? "/" : encodePath(key), ...init });
+		const { protocol, host, path } = addressOf(this.config, key);
+		return awsRequest({ config: this.credentials, service: "s3", host, path, protocol, ...(this.custom ? { redirect: "manual" as const } : {}), ...init });
 	}
 
 	private metadataHeaders(options?: PutOptions): Record<string, string> {
@@ -161,7 +170,7 @@ export class B2Bucket {
 	async createMultipartUpload(key: string, options?: { httpMetadata?: B2HttpMetadata; customMetadata?: Record<string, string> }) {
 		const response = await this.request(key, { method: "POST", query: { uploads: "" }, headers: this.metadataHeaders(options) });
 		const uploadId = xmlTag(await response.text(), "UploadId");
-		if (!uploadId) throw new Error("Backblaze did not return an upload id");
+		if (!uploadId) throw new Error("The storage provider did not return an upload id");
 		return this.resumeMultipartUpload(key, uploadId);
 	}
 
@@ -193,9 +202,10 @@ export class B2Bucket {
 /** A URL that lets the holder PUT exactly `size` bytes to `key`, straight to the bucket. */
 export function presignPutUrl(config: B2Config, key: string, size: number, expiresSeconds: number): Promise<string> {
 	assertPlainKey(key);
+	const { protocol, host, path } = addressOf(config, key);
 	return presignS3Url({
 		method: "PUT",
-		url: new URL(`https://${config.bucket}.${config.endpoint}${encodePath(key)}`),
+		url: new URL(`${protocol}://${host}${path}`),
 		headers: { "content-length": String(size) },
 		region: config.region,
 		credentials: { accessKeyId: config.keyId, secretAccessKey: config.applicationKey },

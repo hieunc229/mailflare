@@ -58,6 +58,8 @@ export function createNodeRuntime(): NodeRuntime {
 		B2_ENDPOINT: optional("B2_ENDPOINT"),
 		S3_BUCKET: optional("S3_BUCKET"),
 		S3_REGION: optional("S3_REGION") ?? optional("AWS_REGION"),
+		S3_ENDPOINT: optional("S3_ENDPOINT"),
+		S3_FORCE_PATH_STYLE: optional("S3_FORCE_PATH_STYLE"),
 		S3_ACCESS_KEY_ID: optional("S3_ACCESS_KEY_ID") ?? optional("AWS_ACCESS_KEY_ID"),
 		S3_SECRET_ACCESS_KEY: optional("S3_SECRET_ACCESS_KEY") ?? optional("AWS_SECRET_ACCESS_KEY"),
 		CF_TOKEN: optional("CF_TOKEN"),

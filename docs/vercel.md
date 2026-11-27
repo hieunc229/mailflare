@@ -51,7 +51,7 @@ Pick one (see [Choosing storage](storage.md) for prices):
   advanced operations a month. Every stored file is an advanced operation, and each incoming message stores several,
   so a few hundred messages can use up the month. Over a limit, Hobby loses access to Blob for 30 days, which stops
   mail.
-- **AWS S3 or Backblaze B2.** `S3_BUCKET`, `S3_REGION`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY`, or the four
+- **AWS S3, another S3-compatible provider or Backblaze B2.** `S3_BUCKET`, `S3_REGION`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY` (add `S3_ENDPOINT`, and `S3_FORCE_PATH_STYLE` if the provider needs it, for a non-AWS host; [providers](storage.md#s3-compatible-providers)), or the four
   `B2_*`. Then [allow browser uploads on the bucket](#bucket-cors).
 
 An S3 or Backblaze bucket wins over a connected Blob store. Nothing moves files between stores, so changing storage
@@ -139,6 +139,8 @@ S3 or Backblaze bucket has to allow it (Vercel Blob already does). On S3:
 ```
 
 On Backblaze B2, add a CORS rule for the `s3_put` operation with the same origin.
+
+On another S3-compatible provider, add the same rule with its own CORS tool or API, if it has one ([providers](storage.md#s3-compatible-providers)).
 
 ## Receiving mail
 
