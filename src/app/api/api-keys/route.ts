@@ -96,8 +96,9 @@ export async function DELETE(request: Request) {
 	if (!key) return NextResponse.json({ error: "Key not found" }, { status: 404 });
 	if (parseScopes(key.scopes).some((scope) => (ADMIN_API_KEY_SCOPES as readonly string[]).includes(scope))) return NextResponse.json({ error: "Manage this key in Admin API keys" }, { status: 403 });
 	await db.update(agentSendApprovals).set({ status: "cancelled" }).where(and(eq(agentSendApprovals.requestKeyId, id), eq(agentSendApprovals.status, "pending")));
-	await db.delete(apiKeys).where(and(eq(apiKeys.id, id), eq(apiKeys.userId, user.id)));
+	const removed = await db.delete(apiKeys).where(and(eq(apiKeys.id, id), eq(apiKeys.userId, user.id))).returning({ id: apiKeys.id });
 	// The published free/busy link is one of these keys: cutting it here is the same act as turning it off on the calendar (spec D-14).
-	if (id === freeBusyKeyId(user.id)) await createAuditLog(env, { actorUserId: user.id, targetUserId: user.id, action: "calendar.freebusy_unpublished" });
+	// Audited only by the request whose delete removed it, so two at once leave one row.
+	if (removed.length > 0 && id === freeBusyKeyId(user.id)) await createAuditLog(env, { actorUserId: user.id, targetUserId: user.id, action: "calendar.freebusy_unpublished" });
 	return NextResponse.json({ ok: true });
 }
