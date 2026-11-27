@@ -1,7 +1,6 @@
 # Deploying Mailflare to Vercel
 
-Cloudflare Workers (see [deployment](deployment.md)) and [Docker](self-hosting.md) are the recommended ways to run
-Mailflare. Vercel works, with more services to set up and the [limits](#limits) below.
+[Cloudflare Workers](deployment.md) and [Docker](self-hosting.md) are recommended. Vercel works, with more services to set up and the [limits](#limits) below.
 
 ## What you need
 
@@ -13,12 +12,11 @@ Mailflare. Vercel works, with more services to set up and the [limits](#limits) 
 | | Protects the cron routes | `CRON_SECRET`: a long random string |
 | | Public address | `APP_URL=https://mail.example.com`; defaults to the project's production domain |
 
-The app refuses to start and lists what is missing until the database, storage, `CRON_SECRET` and a public address
-are set.
+The app refuses to start, listing what is missing, until the database, storage, `CRON_SECRET` and a public address are set.
 
 ### Database
 
-Either way works:
+Either:
 
 - **Connect it in Vercel.** Add Turso from the Vercel Marketplace and press **Connect Project**, keeping the default
   variable prefix. Vercel sets `TURSO_DATABASE_URL` and `TURSO_AUTH_TOKEN`, and Mailflare reads them. Marketplace
@@ -26,18 +24,11 @@ Either way works:
 - **Set it yourself.** `DATABASE_URL`, plus `DATABASE_AUTH_TOKEN` for Turso. When both are present, `DATABASE_URL`
   wins.
 
-**Turn database branching off.** If the Turso connection has **Create database branch for deployment** enabled, each
-deployment gets its own copy of the database, and anything saved in the previous deployment's branch (including
-first setup) is missing from the next one. Leave it unchecked, at least for Production, when you connect the
-project. To change an existing connection, disconnect the database from the project, connect it again without that
-option, and redeploy. Records already saved in a branch are not copied back.
+**Turn database branching off.** With **Create database branch for deployment** enabled on the Turso connection, each deployment gets its own database copy, and anything saved in the previous branch (including first setup) is missing from the next. Leave it unchecked, at least for Production. To fix an existing connection: disconnect the database, reconnect without that option, redeploy. Records already saved in a branch are not copied back.
 
-A PostgreSQL provider with an HTTP driver (Neon) or a connection pooler suits serverless functions best, because
-each query otherwise opens its own connection. Turso is reached over HTTP.
+For PostgreSQL, prefer an HTTP driver (Neon) or a connection pooler, since each query otherwise opens its own connection. Turso is reached over HTTP.
 
-**Keep the database near the functions.** Create it in the region your functions run in, or change the region under
-Settings → Functions → Function Region (Vercel starts in Washington, D.C., `iad1`) and redeploy. A distant database
-slows every page, and [first setup](#first-setup) most of all.
+**Keep the database near the functions.** Create it in the functions' region, or change the region under Settings → Functions → Function Region (default Washington, D.C., `iad1`) and redeploy. A distant database slows every page, [first setup](#first-setup) most of all.
 
 ### Storage
 
@@ -85,9 +76,7 @@ Preview deployments need their own database, storage and `APP_URL`.
 
 ### First setup
 
-The first visit to `/setup` creates the database tables. On Turso that is more than a hundred migrations, sent one
-statement at a time over the network, so it can take several minutes, and the page shows **Checking installation**
-meanwhile.
+The first visit to `/setup` creates the tables. On Turso that is over a hundred migrations sent one statement at a time, so it can take several minutes; the page shows **Checking installation** meanwhile.
 
 If it seems stuck:
 
@@ -99,22 +88,17 @@ If it seems stuck:
 
 ### Five-minute schedule
 
-Follow-up and calendar reminders, the import sweep, the promotions backfill, auto-update and other housekeeping are
-meant to run every five minutes. Vercel Hobby only allows daily cron jobs, so Mailflare schedules the next run
-itself with a delayed message on Vercel Queues. It starts with the first queued job; to start it right after
-deploying:
+Follow-up and calendar reminders, the import sweep, the promotions backfill, auto-update and other housekeeping run every five minutes. Hobby allows only daily cron jobs, so Mailflare schedules the next run itself with a delayed Vercel Queues message. It starts with the first queued job; to start it right after deploying:
 
 ```bash
 curl https://mail.example.com/api/internal/cron/frequent -H "Authorization: Bearer $CRON_SECRET"
 ```
 
-It runs on production only. If it ever stops, the next queued job or the daily cron run in `vercel.json` (03:00 UTC)
-starts it again. It uses a few queue operations every five minutes, from the same quota as the mail queues.
+Production only. If it stops, the next queued job or the daily cron run in `vercel.json` (03:00 UTC) restarts it. It uses a few queue operations every five minutes, from the same quota as the mail queues.
 
 #### With QStash
 
-With QStash as the queue, create a [QStash schedule](https://upstash.com/docs/qstash/features/schedules) instead,
-once, with your own address and secrets:
+With QStash as the queue, create a [QStash schedule](https://upstash.com/docs/qstash/features/schedules) once instead, with your own address and secrets:
 
 ```bash
 curl -X POST "https://qstash.upstash.io/v2/schedules/https://mail.example.com/api/internal/cron/frequent" \
@@ -126,13 +110,11 @@ curl -X POST "https://qstash.upstash.io/v2/schedules/https://mail.example.com/ap
   -H "Upstash-Forward-Authorization: Bearer $CRON_SECRET"
 ```
 
-Outside the default region, replace `https://qstash.upstash.io` with your `QSTASH_URL`. Running the command again
-updates the same schedule. It uses 288 messages a day of your QStash quota, which the mail queues share.
+Outside the default region, replace `https://qstash.upstash.io` with your `QSTASH_URL`. Re-running updates the same schedule. It uses 288 messages a day of your QStash quota, shared with the mail queues.
 
 ### Bucket CORS
 
-Bodies over 4 MB (attachments, Drive parts, imports, backup restore) go from the browser straight to storage. An
-S3 or Backblaze bucket has to allow it (Vercel Blob already does). On S3:
+Bodies over 4 MB (attachments, Drive parts, imports, backup restore) go from the browser straight to storage, so an S3 or Backblaze bucket must allow it (Vercel Blob already does). On S3:
 
 ```json
 [{ "AllowedOrigins": ["https://mail.example.com"], "AllowedMethods": ["PUT"], "AllowedHeaders": ["*"] }]
@@ -161,7 +143,7 @@ Resend or Amazon SES per domain, `SMTP_URL`, or `CF_ACCOUNT_ID` with `CF_TOKEN`,
 - **No live push in the browser.** Lists refresh every 30 seconds. Web Push notifications still work with the
   `VAPID_*` variables.
 - **API requests stop at 4.5 MB.** The web app works around it; the REST API, MCP and JMAP clients cannot. JMAP
-  advertises a 4 MB upload limit.
+  advertises a 4 MiB upload limit.
 - **Attachments** stay limited to 25 MB per message.
 - **No IMAP import.** Import `.eml`, `.mbox` or Google Takeout files instead.
 - **Rate limits** fall back to per-instance counting if the database (or Redis) is unreachable.
