@@ -56,7 +56,7 @@ export async function PATCH(request: Request, { params }: CalendarEventRoutePara
 			const movedFile = createCalendarInvitation({ title: moved.title, description: moved.description, location: moved.location, startsAt, endsAt, uid: moved.id, organizer: input.from, attendees, sequence: 0, reminderMinutes: moved.reminderMinutes, repeat: "none", repeatDays: [], repeatAnchorDay: null, repeatUntil: null, repeatInterval: 1, repeatWeekday: null, repeatWeek: null, excludedOccurrences: [], overrides: [] });
 			// The series keeps its UID: tell guests it dropped this occurrence, with the same repeat/override context a PATCH resend carries.
 			const seriesOverrides = (await db.select().from(calendarEventOverrides).where(eq(calendarEventOverrides.eventId, existing.id))).map((override) => ({ recurrenceId: new Date(override.occurrenceMs), startsAt: override.startsAt, endsAt: override.endsAt }));
-			const seriesFile = createCalendarInvitation({ title: existing.title, description: existing.description, location: existing.location, startsAt: existing.startsAt, endsAt: existing.endsAt, uid: existing.id, organizer: input.from, attendees, sequence: seriesSequence, reminderMinutes: existing.reminderMinutes, repeat: existing.repeat, repeatDays: parseCalendarRepeatDays(existing.repeatDays), repeatAnchorDay: existing.repeatAnchorDay, repeatUntil: existing.repeatUntil, repeatInterval: existing.repeat === "weekdays" ? 1 : normalizeRepeatInterval(existing.repeatInterval), repeatWeekday: existing.repeatWeekday, repeatWeek: existing.repeatWeek, excludedOccurrences: newExcluded, overrides: seriesOverrides });
+			const seriesFile = createCalendarInvitation({ title: existing.title, description: existing.description, location: existing.location, startsAt: existing.startsAt, endsAt: existing.endsAt, uid: existing.id, organizer: input.from, attendees, sequence: seriesSequence, reminderMinutes: existing.reminderMinutes, repeat: existing.repeat, repeatDays: parseCalendarRepeatDays(existing.repeatDays), repeatAnchorDay: existing.repeatAnchorDay, repeatUntil: existing.repeatUntil, repeatInterval: existing.repeat === "weekdays" ? 1 : normalizeRepeatInterval(existing.repeatInterval), repeatWeekday: existing.repeatWeekday, repeatWeek: existing.repeatWeek, excludedOccurrences: newExcluded, overrides: seriesOverrides, timeZone: existing.timeZone });
 			inviteErrors.push(...await sendToAttendees(attendees, (to) => sendEmail(env, { userId: user.id, mailboxId: existing.mailboxId!, from: input.from!, to, subject: `Updated invitation: ${moved.title}`, text: moved.description || `This event has been updated: ${moved.title}.`, attachments: [{ filename: "invite.ics", type: "text/calendar; charset=utf-8", content: movedFile }] })));
 			inviteErrors.push(...await sendToAttendees(attendees, (to) => sendEmail(env, { userId: user.id, mailboxId: existing.mailboxId!, from: input.from!, to, subject: `Updated invitation: ${existing.title}`, text: existing.description || `This event has been updated: ${existing.title}.`, attachments: [{ filename: "invite.ics", type: "text/calendar; charset=utf-8", content: seriesFile }] })));
 		}
@@ -101,7 +101,7 @@ export async function PATCH(request: Request, { params }: CalendarEventRoutePara
 					repeatWeekday: existing.repeatWeekday, repeatWeek: existing.repeatWeek,
 					reminderMinutes: existing.reminderMinutes, excludedOccurrences: parseExcludedOccurrences(existing.excludedOccurrences),
 					overrides: toOverrides(await db.select().from(calendarEventOverrides).where(eq(calendarEventOverrides.eventId, existing.id))),
-					sequence: nextSequence,
+					sequence: nextSequence, timeZone: existing.timeZone,
 				},
 				fork: {
 					uid: forkId, title: event.title, description: event.description, location: event.location,
@@ -111,7 +111,7 @@ export async function PATCH(request: Request, { params }: CalendarEventRoutePara
 					repeatWeekday: event.repeatWeekday, repeatWeek: event.repeatWeek,
 					reminderMinutes: event.reminderMinutes, excludedOccurrences: parseExcludedOccurrences(event.excludedOccurrences),
 					overrides: toOverrides(await db.select().from(calendarEventOverrides).where(eq(calendarEventOverrides.eventId, forkId))),
-					sequence: 0,
+					sequence: 0, timeZone: event.timeZone,
 				},
 				organizer: input.from, attendees,
 			});
@@ -123,7 +123,7 @@ export async function PATCH(request: Request, { params }: CalendarEventRoutePara
 	await db.update(calendarEvents).set({ title: event.title, description: event.description, location: event.location, attendees: event.attendees, color: event.color, repeat: event.repeat, repeatDays: event.repeatDays, repeatAnchorDay: event.repeatAnchorDay, repeatInterval: event.repeatInterval, repeatWeekday: event.repeatWeekday, repeatWeek: event.repeatWeek, repeatUntil: event.repeatUntil, eventSequence: nextSequence, reminderMinutes: event.reminderMinutes, lastRemindedStart: null, timeZone, startsAt, endsAt, updatedAt: new Date() }).where(eq(calendarEvents.id, existing.id));
 	if (attendees.length && existing.mailboxId && input.from && !isInboundInvite) {
 		const overrides = (await db.select().from(calendarEventOverrides).where(eq(calendarEventOverrides.eventId, existing.id))).map((override) => ({ recurrenceId: new Date(override.occurrenceMs), startsAt: override.startsAt, endsAt: override.endsAt }));
-		const file = createCalendarInvitation({ title: event.title, description: event.description, location: event.location, startsAt: event.startsAt, endsAt: event.endsAt, uid: existing.id, organizer: input.from, attendees, sequence: nextSequence, reminderMinutes: event.reminderMinutes, repeat: event.repeat, repeatDays, repeatAnchorDay: event.repeatAnchorDay, repeatUntil: event.repeatUntil, repeatInterval: event.repeatInterval, repeatWeekday: event.repeatWeekday, repeatWeek: event.repeatWeek, excludedOccurrences: parseExcludedOccurrences(event.excludedOccurrences), overrides });
+		const file = createCalendarInvitation({ title: event.title, description: event.description, location: event.location, startsAt: event.startsAt, endsAt: event.endsAt, uid: existing.id, organizer: input.from, attendees, sequence: nextSequence, reminderMinutes: event.reminderMinutes, repeat: event.repeat, repeatDays, repeatAnchorDay: event.repeatAnchorDay, repeatUntil: event.repeatUntil, repeatInterval: event.repeatInterval, repeatWeekday: event.repeatWeekday, repeatWeek: event.repeatWeek, excludedOccurrences: parseExcludedOccurrences(event.excludedOccurrences), overrides, timeZone: event.timeZone });
 		inviteErrors.push(...await sendToAttendees(attendees, (to) => sendEmail(env, { userId: user.id, mailboxId: existing.mailboxId!, from: input.from!, to, subject: `Updated invitation: ${event.title}`, text: event.description || `This event has been updated: ${event.title}.`, attachments: [{ filename: "invite.ics", type: "text/calendar; charset=utf-8", content: file }] })));
 	}
 	return NextResponse.json(inviteErrors.length ? { ok: true, inviteErrors: [...new Set(inviteErrors)] } : { ok: true });

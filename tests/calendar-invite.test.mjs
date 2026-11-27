@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import test, { after } from "node:test";
@@ -809,4 +809,21 @@ test("a series bound written for guests reads back as the same exclusive bound",
 		repeatInterval: 3, repeatWeekday: 2, repeatWeek: 2, excludedOccurrences: [], overrides: [],
 	}));
 	assert.equal(inviteRepeat(parseInvite(text).rrule).repeatUntil.toISOString(), "2027-06-08T17:00:00.000Z");
+});
+
+test("a TZID series keeps UNTIL in UTC", () => {
+	const text = new TextDecoder().decode(createCalendarInvitation({ ...tzInput, timeZone: "Asia/Tokyo", repeatUntil: new Date("2026-12-07T23:00:00Z") }));
+	assert.match(text, /DTSTART;TZID=Asia\/Tokyo:20261109T080000/);
+	assert.match(text, /RRULE:FREQ=WEEKLY;BYDAY=MO,WE,FR;UNTIL=20261207T225959Z\r\n/);
+});
+
+test("a New York series keeps its local clock time across the March DST change", () => {
+	const text = new TextDecoder().decode(createCalendarInvitation({
+		...tzInput, repeat: "weekly", repeatDays: [], excludedOccurrences: [],
+		overrides: [{ recurrenceId: new Date("2027-03-15T13:00:00Z"), startsAt: new Date("2027-03-15T14:00:00Z"), endsAt: new Date("2027-03-15T14:30:00Z") }],
+		startsAt: new Date("2027-03-08T14:00:00Z"), endsAt: new Date("2027-03-08T14:30:00Z"), timeZone: "America/New_York",
+	}));
+	// 14:00Z on 8 Mar is 09:00 EST; 13:00Z on 15 Mar is 09:00 EDT: the same local time across the change.
+	assert.match(text, /DTSTART;TZID=America\/New_York:20270308T090000/);
+	assert.match(text, /RECURRENCE-ID;TZID=America\/New_York:20270315T090000/);
 });
