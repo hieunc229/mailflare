@@ -1,21 +1,4 @@
-import { Skeleton, SkeletonRows } from "@/components/ui/skeleton";
-import { RouteLoadingBar } from "@/components/route-loading-bar";
-
-export function PageSkeleton() {
-	return <RouteLoadingBar />;
-}
-
-export function ListPageSkeleton() {
-	return (
-		<div className="h-full min-h-0">
-			<div className="flex h-14 items-center justify-between border-b border-neutral-200 px-6">
-				<Skeleton className="h-4 w-36" />
-				<Skeleton className="h-4 w-24" />
-			</div>
-			<SkeletonRows count={8} />
-		</div>
-	);
-}
+import { Skeleton } from "@/components/ui/skeleton";
 
 export function MessageDetailSkeleton() {
 	return (
@@ -39,15 +22,6 @@ export function MessageDetailSkeleton() {
 				<Skeleton className="h-4 w-4/5" />
 				<Skeleton className="h-4 w-5/6" />
 			</div>
-		</div>
-	);
-}
-
-export function TableSkeleton() {
-	return (
-		<div className="overflow-hidden rounded-lg border border-neutral-200 bg-white">
-			<Skeleton className="h-10 w-full rounded-none" />
-			<SkeletonRows count={6} />
 		</div>
 	);
 }
