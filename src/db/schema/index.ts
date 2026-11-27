@@ -1104,6 +1104,8 @@ export const calendarResources = sqliteTable(
 		description: text("description").notNull().default(""),
 		/** Hidden from pickers; existing bookings are kept. */
 		disabled: bool("disabled").notNull().default(false),
+		/** The last booking attempt's token: a booking is written only if it still holds (compare-and-swap, one winner per room). */
+		bookingToken: text("booking_token").notNull().default(""),
 		createdByUserId: text("created_by_user_id").references(() => users.id, { onDelete: "set null" }),
 		createdAt: timestamp("created_at").notNull().$defaultFn(() => new Date()),
 		updatedAt: timestamp("updated_at").notNull().$defaultFn(() => new Date()),
@@ -1119,6 +1121,8 @@ export const calendarResourceBookings = sqliteTable(
 		resourceId: text("resource_id").notNull().references(() => calendarResources.id, { onDelete: "cascade" }),
 		eventId: text("event_id").notNull().references(() => calendarEvents.id, { onDelete: "cascade" }),
 		status: text("status", { enum: ["accepted", "declined"] }).notNull(),
+		/** For a declined booking, the first occurrence that clashed. */
+		conflictAt: timestamp("conflict_at"),
 		createdAt: timestamp("created_at").notNull().$defaultFn(() => new Date()),
 	},
 	(t) => [

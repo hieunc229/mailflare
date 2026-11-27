@@ -1058,6 +1058,13 @@
       "statements": [
         "ALTER TABLE `app_settings` ADD `calendar_org_free_busy` integer DEFAULT 0 NOT NULL;"
       ]
+    },
+    {
+      "name": "0108_calendar_room_booking_guard.sql",
+      "statements": [
+        "ALTER TABLE `calendar_resources` ADD `booking_token` text DEFAULT '' NOT NULL;",
+        "ALTER TABLE `calendar_resource_bookings` ADD `conflict_at` integer;"
+      ]
     }
   ]
 }

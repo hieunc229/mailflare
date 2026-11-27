@@ -225,6 +225,13 @@
       "when": 1795027636043,
       "tag": "0031_calendar_org_free_busy",
       "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "6",
+      "when": 1795027637043,
+      "tag": "0032_calendar_room_booking_guard",
+      "breakpoints": true
     }
   ]
 }
