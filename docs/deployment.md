@@ -124,6 +124,8 @@ Remote migrations require the target account's `database_id` in your local `wran
 
 ## Object storage (R2, Backblaze B2 or AWS S3)
 
+Not sure which to use? See [Choosing storage](storage.md) for prices and a recommendation.
+
 Raw mail, attachments, Drive files, avatars, branding icons, JMAP uploads and backups all live in one bucket. By default that is the `BUCKET` R2 binding in `wrangler.jsonc`. To use Backblaze B2 instead, set four Worker variables (as secrets, or in `.dev.vars` locally):
 
 | Variable | Example | Purpose |
