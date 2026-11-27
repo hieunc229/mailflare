@@ -1,4 +1,4 @@
-import { Archive, Clock, CalendarClock, MailOpen, Send, ShieldAlert, Star, Tag, Trash2 } from "@/components/icons";
+import { Archive, Clock, CalendarClock, Send, ShieldAlert, Star, Tag, Trash2 } from "@/components/icons";
 import type { MessageFolderConfig } from "./types";
 
 export const inboxFolderConfig: MessageFolderConfig = {

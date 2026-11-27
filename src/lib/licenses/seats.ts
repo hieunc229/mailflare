@@ -1,4 +1,4 @@
-import { and, count, eq } from "drizzle-orm";
+import { count, eq } from "drizzle-orm";
 import { getDb } from "@/db";
 import { users } from "@/db/schema";
 import { getLicenseEntitlements } from "./service";

@@ -43,7 +43,6 @@ import {
   FOLDER_COLOR_OPTIONS,
 } from "@/lib/folders/colors";
 import type { FolderColor } from "@/lib/folders/types";
-import { cn } from "@/lib/utils";
 import { NavItem } from "./components-nav";
 import type { NavLink } from "./components-nav-types";
 import type { CustomFolder } from "./dashboard-nav-types";
