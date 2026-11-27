@@ -33,18 +33,9 @@ async function mount() {
 	await act(settle);
 }
 const unmount = async () => { await act(async () => root.unmount()); container.remove(); };
-const text = () => container.textContent;
 const button = (label) => [...container.querySelectorAll("button")].find((node) => node.textContent.trim() === label || node.getAttribute("aria-label") === label);
-const click = async (label) => { await act(async () => { button(label).click(); await settle(); }); };
 const reset = () => { Object.assign(globalThis.pubUiR2, { calls: [], confirm: true, confirms: [], toasts: [], copied: [], clipboardFails: false }); };
 const status = (enabled, extra = {}) => Response.json(enabled ? { enabled: true, createdAt: "2030-01-05T10:00:00.000Z", lastUsedAt: null, ...extra } : { enabled: false });
-const server = (state = { on: false }) => (url, init) => {
-	const method = init?.method ?? "GET";
-	if (method === "GET") return status(state.on);
-	if (method === "POST") { if (state.failPost) return Response.json({ error: "x" }, { status: 500 }); const created = !state.on; state.on = true; return Response.json(created ? { enabled: true, created: true, key: "ep_secret1" } : { enabled: true, created: false }); }
-	if (method === "DELETE") { if (state.failDelete) return new Response("<html>bad gateway</html>", { status: 502 }); state.on = false; return Response.json({ enabled: false }); }
-	throw new Error(method);
-};
 
 
 const clickFocused = async (label) => { await act(async () => { const node = button(label); node.focus(); node.click(); await settle(); }); };
