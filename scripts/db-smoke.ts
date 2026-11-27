@@ -25,6 +25,7 @@ import { buildSearchConditions } from "@/lib/search/conditions";
 import { createBookedCalendarEvents } from "@/lib/booking/create";
 import { importCalendarGroups } from "@/lib/calendar/import-store";
 import { importContacts } from "@/lib/contacts/import-store";
+import { reserveBooking } from "@/lib/booking/reserve";
 import { exportDatabaseRecords, restoreDatabaseRecords } from "@/lib/backups/export";
 import { getSearchIndexStatus } from "@/lib/search/index-admin";
 import { recordReputationObservation } from "@/lib/spam/repository";
@@ -128,6 +129,22 @@ const startsAt = new Date(Date.now() + 86_400_000).toISOString();
 const endsAt = new Date(Date.now() + 86_400_000 + 1_800_000).toISOString();
 check("booking inserts", (await createBookedCalendarEvents(env, event, "Guest", "g@example.com", startsAt, endsAt)) === true);
 check("booking refuses a busy slot", (await createBookedCalendarEvents(env, event, "Guest", "g@example.com", startsAt, endsAt)) === false);
+// CS-8: an event marked free does not stop a booking write (`is not true` on a boolean column, on every dialect), and an event type's room is
+// reserved with the booking and given back when the booking is lost.
+const deskStart = new Date(Date.now() + 2 * 86_400_000);
+const deskEnd = new Date(deskStart.getTime() + 1_800_000);
+await db.insert(calendarResources).values({ id: `res_book_${stamp}`, name: `Booking room ${stamp}` } as never);
+await db.insert(calendarEvents).values({ id: `evt_free_${stamp}`, userId, title: "Lunch", startsAt: deskStart, endsAt: deskEnd, transparent: true } as never);
+const roomEvent = { hostIds: [userId], resourceIds: [`res_book_${stamp}`], name: "Desk", location: "", color: "blue", timeZone: "UTC", weekdays: [0, 1, 2, 3, 4, 5, 6], timeRanges: [{ startTime: "00:00", endTime: "23:45" }], durationMinutes: 30 } as never;
+check("a booking with a room reserves it", (await reserveBooking(env, roomEvent, "Roomer", "r@example.com", deskStart.toISOString(), deskEnd.toISOString())) === true);
+const [{ room_rows }] = await db.all<{ room_rows: number }>(sql`SELECT count(*) AS room_rows FROM calendar_resource_bookings WHERE resource_id = ${`res_book_${stamp}`} AND status = 'accepted'`);
+check("the booked room is accepted once", Number(room_rows) === 1);
+check("a second visitor for the same room and time is refused", (await reserveBooking(env, { ...(roomEvent as object), hostIds: [userId] } as never, "Late", "l@example.com", deskStart.toISOString(), deskEnd.toISOString())) === false);
+const [{ late_events }] = await db.all<{ late_events: number }>(sql`SELECT count(*) AS late_events FROM calendar_events WHERE user_id = ${userId} AND title = 'Desk with Late'`);
+check("and leaves no event behind", Number(late_events) === 0);
+await db.run(sql`DELETE FROM calendar_events WHERE title LIKE 'Desk with %'`);
+await db.delete(calendarEvents).where(eq(calendarEvents.id, `evt_free_${stamp}`));
+await db.delete(calendarResources).where(eq(calendarResources.id, `res_book_${stamp}`));
 
 const importGroups = Array.from({ length: 9 }, (_, n) => ["BEGIN:VEVENT", `UID:smoke-${n}@google.com`, "DTSTART:20261104T090000Z", "RRULE:FREQ=DAILY", `SUMMARY:Imported ${n}`, "END:VEVENT"].join("\r\n"));
 const importInput = { userId, userZone: "UTC", ownAddresses: [], color: "#16a34a", reminders: true, skipDeclined: true, groups: importGroups };
