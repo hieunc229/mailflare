@@ -20,6 +20,8 @@ for (const key of ["window", "document", "HTMLElement", "Element", "Node", "Even
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 globalThis.requestAnimationFrame = dom.window.requestAnimationFrame.bind(dom.window);
 globalThis.cancelAnimationFrame = dom.window.cancelAnimationFrame.bind(dom.window);
+// The desktop fixture must have room for the list and reader in JSDOM.
+Object.defineProperty(HTMLElement.prototype, "clientWidth", { configurable: true, get: () => 1200 });
 globalThis.ResizeObserver = class {
 	observe() {}
 	disconnect() {}
@@ -99,6 +101,7 @@ export function usePageLoading() {}
 	["@/components/sidebar-mobile-utils", `
 export function useIsMobile() { return false; }
 export function useIsDesktop() { return globalThis.__testIsDesktop !== false; }
+export function useIsSingleColumnViewport() { return globalThis.__testIsDesktop === false; }
 export function useHasHover() { return true; }
 `],
 	["@/components/messages/use-conversation-view", `
@@ -208,15 +211,17 @@ globalThis.__testMailboxState = {
 	mailboxes: [],
 };
 
+const messagePages = [allMessages.slice(0, 25), allMessages.slice(25)];
+const updateMessages = () => {};
 globalThis.__testMessageList = (filters) => {
 	const offset = filters?.offset ?? 0;
-	const messages = allMessages.slice(offset, offset + 25);
+	const messages = messagePages[offset / 25] ?? [];
 	return {
 		messages,
 		isLoading: false,
 		total: allMessages.length,
 		limit: 25,
-		updateMessages() {},
+		updateMessages,
 	};
 };
 
@@ -275,13 +280,10 @@ test("opening a message keeps the selection on a page other than the first", asy
 	const { container, cleanup } = await renderInbox();
 	t.after(cleanup);
 
-	const nextPage = container.querySelector('button[aria-label="list.nextPage"]');
-	assert.ok(nextPage, "the first page has a next-page button");
-	await act(async () => {
-		nextPage.click();
-	});
-
-	const rowCheckbox = container.querySelectorAll('input[type="checkbox"]')[1];
+	// The compact list now preloads the next page instead of exposing pagination.
+	const secondPageLink = container.querySelector('a[href="/inbox/m26"]');
+	assert.ok(secondPageLink, "the next page is loaded in the continuous split list");
+	const rowCheckbox = secondPageLink.closest(".group").querySelector('input[type="checkbox"]');
 	await act(async () => {
 		rowCheckbox.click();
 	});
