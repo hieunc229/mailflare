@@ -103,7 +103,7 @@
 	"message.detailsChecking": "認証を確認しています…",
 	"message.detailsContact": "保存済みの連絡先",
 	"message.detailsDomainMismatch": "署名ドメインが送信者のドメインと異なります。",
-	"message.detailsMailedBy": "送信元",
+	"message.detailsMailedBy": "メール送信者",
 	"message.detailsSecurity": "セキュリティ",
 	"message.detailsSignedBy": "署名者",
 	"message.detailsReplyTo": "返信先",

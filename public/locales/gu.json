@@ -107,7 +107,7 @@
 	"message.detailsChecking": "પ્રમાણીકરણ ચકાસી રહ્યાં છીએ…",
 	"message.detailsContact": "સાચવેલ સંપર્ક",
 	"message.detailsDomainMismatch": "સહીનું ડોમેન મોકલનારના ડોમેન કરતાં અલગ છે.",
-	"message.detailsMailedBy": "મોકલનાર",
+	"message.detailsMailedBy": "મોકલનાર સર્વર",
 	"message.detailsSecurity": "સુરક્ષા",
 	"message.detailsSignedBy": "હસ્તાક્ષરકર્તા",
 	"message.detailsReplyTo": "જવાબ આપો",

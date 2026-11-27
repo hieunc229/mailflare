@@ -107,7 +107,7 @@
 	"message.detailsChecking": "அங்கீகாரம் சரிபார்க்கப்படுகிறது…",
 	"message.detailsContact": "சேமிக்கப்பட்ட தொடர்பு",
 	"message.detailsDomainMismatch": "கையொப்ப டொமைன் அனுப்புநரின் டொமைனிலிருந்து வேறுபடுகிறது.",
-	"message.detailsMailedBy": "அனுப்பியவர்",
+	"message.detailsMailedBy": "அனுப்பிய சர்வர்",
 	"message.detailsSecurity": "பாதுகாப்பு",
 	"message.detailsSignedBy": "கையொப்பமிட்டவர்",
 	"message.detailsReplyTo": "பதிலளிக்க",

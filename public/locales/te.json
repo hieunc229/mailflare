@@ -107,7 +107,7 @@
 	"message.detailsChecking": "ప్రామాణీకరణను తనిఖీ చేస్తోంది…",
 	"message.detailsContact": "సేవ్ చేసిన పరిచయం",
 	"message.detailsDomainMismatch": "సంతకం డొమైన్ పంపినవారి డొమైన్‌కు భిన్నంగా ఉంది.",
-	"message.detailsMailedBy": "పంపినవారు",
+	"message.detailsMailedBy": "పంపిన సర్వర్",
 	"message.detailsSecurity": "భద్రత",
 	"message.detailsSignedBy": "సంతకం చేసినవారు",
 	"message.detailsReplyTo": "దీనికి ప్రత్యుత్తరం",

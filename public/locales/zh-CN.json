@@ -103,7 +103,7 @@
 	"message.detailsChecking": "正在检查身份验证…",
 	"message.detailsContact": "已保存的联系人",
 	"message.detailsDomainMismatch": "签名域名与发件人域名不同。",
-	"message.detailsMailedBy": "发送者",
+	"message.detailsMailedBy": "发送域",
 	"message.detailsSecurity": "安全性",
 	"message.detailsSignedBy": "签名者",
 	"message.detailsReplyTo": "回复至",

@@ -1823,7 +1823,7 @@
 	"invite.cancelled": "Evento cancelado",
 	"invite.organizerRole": "Organizador",
 	"invite.needsConfirmation": "Requer confirmação",
-	"invite.moreGuests": "+{count} mais",
+	"invite.moreGuests": "+{count} outros",
 	"invite.changeResponse": "Alterar resposta",
 	"invite.accept": "Aceitar",
 	"invite.maybe": "Talvez",

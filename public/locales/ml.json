@@ -107,7 +107,7 @@
 	"message.detailsChecking": "പ്രാമാണീകരണം പരിശോധിക്കുന്നു…",
 	"message.detailsContact": "സംരക്ഷിച്ച കോൺടാക്റ്റ്",
 	"message.detailsDomainMismatch": "ഒപ്പിട്ട ഡൊമെയ്ൻ അയച്ചയാളുടെ ഡൊമെയ്നിൽ നിന്ന് വ്യത്യസ്തമാണ്.",
-	"message.detailsMailedBy": "അയച്ചത്",
+	"message.detailsMailedBy": "അയച്ച സെർവർ",
 	"message.detailsSecurity": "സുരക്ഷ",
 	"message.detailsSignedBy": "ഒപ്പിട്ടത്",
 	"message.detailsReplyTo": "മറുപടി നൽകാൻ",

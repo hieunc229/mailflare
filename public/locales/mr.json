@@ -107,7 +107,7 @@
 	"message.detailsChecking": "प्रमाणीकरण तपासत आहे…",
 	"message.detailsContact": "जतन केलेला संपर्क",
 	"message.detailsDomainMismatch": "स्वाक्षरीचे डोमेन प्रेषकाच्या डोमेनपेक्षा वेगळे आहे.",
-	"message.detailsMailedBy": "पाठवणारा",
+	"message.detailsMailedBy": "पाठवणारा सर्व्हर",
 	"message.detailsSecurity": "सुरक्षा",
 	"message.detailsSignedBy": "स्वाक्षरीकर्ता",
 	"message.detailsReplyTo": "यास उत्तर द्या",

@@ -107,7 +107,7 @@
 	"message.detailsChecking": "සත්‍යාපනය පරීක්ෂා කරමින්…",
 	"message.detailsContact": "සුරකින ලද සම්බන්ධතාව",
 	"message.detailsDomainMismatch": "අත්සන් වසම යවන්නාගේ වසමට වඩා වෙනස් ය.",
-	"message.detailsMailedBy": "යවනු ලැබුවේ",
+	"message.detailsMailedBy": "යැවූ සේවාදායකය",
 	"message.detailsSecurity": "ආරක්ෂාව",
 	"message.detailsSignedBy": "අත්සන් කළේ",
 	"message.detailsReplyTo": "පිළිතුරු දෙන්න",
