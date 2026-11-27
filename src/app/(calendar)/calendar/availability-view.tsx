@@ -10,7 +10,8 @@ import type { PersonAvailability } from "./availability-api";
 const touch = "[@media(pointer:coarse)]:min-h-11 [@media(pointer:coarse)]:min-w-11";
 const focus = "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600";
 
-export type AvailabilityRow = { address: string; availability: PersonAvailability };
+/** `label` is what the row is called when it is not an address: a room's name. */
+export type AvailabilityRow = { address: string; availability: PersonAvailability; label?: string };
 export type FindState = { state: "idle" | "loading" | "error" | "ready"; slots: { start: Date; end: Date }[] };
 
 export type AvailabilityViewProps = {
@@ -70,14 +71,15 @@ export function AvailabilityView(props: AvailabilityViewProps) {
 			)}
 			{(props.state === "ready" || (props.state === "loading" && props.rows.length > 0)) && (
 				<ul aria-busy={props.state === "loading" ? true : undefined} className={`space-y-2 ${props.state === "loading" ? "opacity-60" : ""}`}>
-					{props.rows.map(({ address, availability }) => {
+					{props.rows.map(({ address, availability, label }) => {
+						const who = label ?? address;
 						const blocks = availability.status === "ok" && dayStart && dayEnd ? busyBlocks(availability.busy, dayStart, dayEnd) : [];
 						const clash = availability.status === "ok" && event.start && event.end ? overlapsAny(availability.busy, event.start, event.end) : false;
 						const times = blocks.map((block) => t("calendar.availability.range", { from: clock(block.from, zone), to: clock(block.to, zone) })).join(", ");
 						return (
 							<li key={address} className="space-y-1">
 								<div className="flex flex-wrap items-baseline justify-between gap-x-3">
-									<span className="min-w-0 truncate font-medium text-neutral-900">{address}</span>
+									<span className="min-w-0 truncate font-medium text-neutral-900">{who}</span>
 									{availability.status === "unknown"
 										? <span className="text-xs text-neutral-600">{t("calendar.availability.noAccess")}</span>
 										: <span className={`text-xs ${clash ? "font-medium text-red-700" : "text-neutral-600"}`}>{t(clash ? "calendar.availability.conflict" : "calendar.availability.free")}</span>}
@@ -88,7 +90,7 @@ export function AvailabilityView(props: AvailabilityViewProps) {
 										{span && <span data-event-span aria-hidden="true" title={t("calendar.availability.eventMarker")} style={{ left: `${span.left}%`, width: `${span.width}%` }} className="pointer-events-none absolute inset-y-0 border-x-2 border-neutral-900 bg-neutral-900/10" />}
 									</div>
 								)}
-								<span className="sr-only">{availability.status === "unknown" ? t("calendar.availability.noAccessFor", { name: address }) : blocks.length ? t("calendar.availability.busyAt", { name: address, times }) : t("calendar.availability.freeAllDay", { name: address })}</span>
+								<span className="sr-only">{availability.status === "unknown" ? t("calendar.availability.noAccessFor", { name: who }) : blocks.length ? t("calendar.availability.busyAt", { name: who, times }) : t("calendar.availability.freeAllDay", { name: who })}</span>
 							</li>
 						);
 					})}

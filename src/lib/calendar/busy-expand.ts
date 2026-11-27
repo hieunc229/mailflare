@@ -13,7 +13,7 @@ export const USER_CHUNK = 40;
 export const validZone = (zone: string | null | undefined): zone is string => !!zone && isValidTimeZone(zone);
 
 /** A row that repeats, or an all-day one, with no usable zone of its own: the calendar view expands it in the viewer's zone (`calendarTimeZone`), which for the owner is `users.time_zone`. */
-export const needsOwnerZone = (row: { timeZone: string | null; allDay: boolean; repeat: string }) => !validZone(row.timeZone) && (row.allDay || row.repeat !== "none");
+export const needsOwnerZone = (row: { timeZone?: string | null; allDay: boolean; repeat: string }) => !validZone(row.timeZone) && (row.allDay || row.repeat !== "none");
 
 export type BusyInterval = [startMs: number, endMs: number];
 /** Sorts, then joins intervals that overlap or touch; empty ones are dropped. */

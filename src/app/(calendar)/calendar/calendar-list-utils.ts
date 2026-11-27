@@ -23,7 +23,8 @@ export function toggleHidden(hidden: string[], id: string): string[] {
 export function visibleCalendarEvents(events: CalendarEvent[], hidden: string[], defaultId: string | undefined): CalendarEvent[] {
 	if (!hidden.length) return events;
 	const set = new Set(hidden);
-	return events.filter((event) => !set.has(event.calendarId ?? defaultId ?? ""));
+	// A booking drawn from a room's schedule belongs to the room, not to a calendar: hiding a calendar does not hide it.
+	return events.filter((event) => !!event.roomId || !set.has(event.calendarId ?? defaultId ?? ""));
 }
 
 /** Whether saving this event in another calendar moves a whole series: a repeating event, or a moved occurrence of a CalDAV series (an override row). */

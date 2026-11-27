@@ -6,7 +6,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import type { DragEvent, PointerEvent as ReactPointerEvent } from "react";
 import { createPortal } from "react-dom";
 import toast, { Toaster } from "react-hot-toast";
-import { AlignLeft, CalendarClock, CalendarDays, CalendarPlus2, Check, ChevronDown, ChevronLeft, ChevronRight, Clock3, LockKeyhole, MapPin, Palette, Bell, Plus, Repeat2, Trash2, UsersRound, X } from "@/components/icons";
+import { AlignLeft, Building2, CalendarClock, CalendarDays, CalendarPlus2, Check, ChevronDown, ChevronLeft, ChevronRight, Clock3, LockKeyhole, MapPin, Palette, Bell, Plus, Repeat2, Trash2, UsersRound, X } from "@/components/icons";
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -36,6 +36,10 @@ import { CalendarList } from "./calendar-list";
 import { calendarLabel, canWriteEvents, eventErrorKey, movesSeries, visibleCalendarEvents, writableCalendars } from "./calendar-list-utils";
 import { EventViewDialog } from "./event-view-dialog";
 import { AvailabilityPanel } from "./availability-panel";
+import { RoomsPicker } from "./rooms-picker";
+import { useRoomState, retryRooms } from "./room-state";
+import { activeShownRooms, roomSaveErrorKey, roomScheduleEvents } from "./room-utils";
+import type { RoomScheduleEvent } from "./room-types";
 import { useCurrentUser } from "@/hooks/use-current-user";
 import { useCalendarState } from "./calendar-state";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -120,6 +124,9 @@ export default function CalendarPage() {
   const [adding, setAdding] = useState(false);
   const [closingEventEditor, setClosingEventEditor] = useState(false);
   const [guests, setGuests] = useState("");
+  const [roomIds, setRoomIds] = useState<string[]>([]);
+  const roomStore = useRoomState();
+  const shownRoomsKey = activeShownRooms(roomStore.shown, roomStore.rooms).join(",");
   const [location, setLocation] = useState("");
   const [description, setDescription] = useState("");
   const [editing, setEditing] = useState<CalendarEvent | null>(null);
@@ -205,22 +212,26 @@ export default function CalendarPage() {
     const monthDates = view === "month" ? monthGridDates(visibleDate) : null;
     const start = new Date(Math.min(today.getTime(), weekStart.getTime(), startOfDay(visibleDate).getTime(), monthDates?.[0].getTime() ?? Infinity));
     const end = new Date(Math.max(addDays(today, 90).getTime(), addDays(weekStart, 7).getTime(), addDays(visibleDate, 1).getTime(), monthDates ? addDays(monthDates[41], 1).getTime() : 0));
-    void authFetch(`/api/calendar/events?start=${start.toISOString()}&end=${end.toISOString()}`)
+    // Rooms whose schedules are switched on in the sidebar come with the same request.
+    const asked = shownRoomsKey ? `&resourceIds=${encodeURIComponent(shownRoomsKey)}` : "";
+    void authFetch(`/api/calendar/events?start=${start.toISOString()}&end=${end.toISOString()}${asked}`)
       .then((response) => {
         if (!response.ok) throw new Error(t("calendar.loadFailed"));
-        return response.json() as Promise<{ events?: Parameters<typeof expandCalendarEvents>[0]; overrides?: CalendarOverridesInput; occurrenceResponses?: Record<string, CalendarOccurrenceResponse[]> }>;
+        return response.json() as Promise<{ events?: Parameters<typeof expandCalendarEvents>[0]; overrides?: CalendarOverridesInput; occurrenceResponses?: Record<string, CalendarOccurrenceResponse[]>; roomEvents?: RoomScheduleEvent[] }>;
       })
       .then((data) => {
         if (!active) return;
         const overrides = toCalendarOverrides(data.overrides);
         overridesRef.current = overrides;
         setOccurrenceResponses(data.occurrenceResponses ?? {});
-        setEvents(expandCalendarEvents((data.events ?? []).map((event) => (event.redacted ? { ...event, title: t("calendar.busy") } : event)), start, end, overrides));
+        const own = (data.events ?? []).map((event) => (event.redacted ? { ...event, title: t("calendar.busy") } : event));
+        const booked = roomScheduleEvents(data.roomEvents ?? [], roomStore.rooms, new Set(own.map((event) => event.id)), t("calendar.busy"));
+        setEvents(expandCalendarEvents([...own, ...booked], start, end, overrides));
       })
       .catch(() => { if (active) toast.error(t("calendar.loadFailed")); })
       .finally(() => { if (active) setLoading(false); });
     return () => { active = false; };
-  }, [today, visibleDate, weekStart, view, fetchVersion, t]);
+  }, [today, visibleDate, weekStart, view, fetchVersion, t, shownRoomsKey, roomStore.rooms]);
 
   const shownEvents = useMemo(() => visibleCalendarEvents(events, hiddenCalendars, defaultCalendar?.id), [events, hiddenCalendars, defaultCalendar?.id]);
 
@@ -250,6 +261,7 @@ export default function CalendarPage() {
     setIsPrivate(false);
     setTransparent(false);
     setCalendarId(defaultCalendar?.id ?? "");
+    setRoomIds([]);
     setGuests("");
     setLocation("");
     setDescription("");
@@ -264,6 +276,15 @@ export default function CalendarPage() {
   const selectedCalendar = calendars.find((calendar) => calendar.id === calendarId);
   const delegate = selectedCalendar ? selectedCalendar.role !== "owner" : !!editing?.role && editing.role !== "owner";
   const calendarChoices = writableCalendars(calendars, editing);
+
+  type SavedRooms = { rooms?: { resourceId: string; name: string; status: string }[]; resourceConflicts?: { resourceId: string; occurrences: string[] }[] };
+  // A declined room is not an error: the event is saved. Say which room and the first date it clashed.
+  function announceDeclinedRooms(saved: SavedRooms | null) {
+    for (const room of (saved?.rooms ?? []).filter((item) => item.status === "declined")) {
+      const first = saved?.resourceConflicts?.find((item) => item.resourceId === room.resourceId)?.occurrences[0];
+      toast(first ? t("calendar.rooms.declinedToast", { room: room.name, date: formatUserDate(new Date(first), { dateStyle: "medium" }) }) : t("calendar.rooms.declinedToastNoDate", { room: room.name }), { duration: 10_000 });
+    }
+  }
 
   async function addEvent() {
     setPendingAction("save");
@@ -304,6 +325,7 @@ export default function CalendarPage() {
         body: JSON.stringify({
           title, startsAt: savedStart.toISOString(), endsAt: savedEnd.toISOString(), color, repeat, repeatDays, repeatAnchorDay, repeatInterval: interval, repeatWeekday: weekday, repeatWeek: week, reminderMinutes, isPrivate, transparent, ...(calendarId ? { calendarId } : {}), effectiveFrom: effectiveFrom?.toISOString(), moveOccurrenceToPast: movingToPast, attendees: delegate && !editing ? [] : guests.split(","),
           timeZone: getUserTimeZone(),
+          ...(roomStore.rooms.length > 0 || roomIds.length > 0 ? { resourceIds: roomIds } : {}),
           description,
           location,
           mailboxId: selectedMailbox?.id,
@@ -312,13 +334,14 @@ export default function CalendarPage() {
         }),
       });
       if (response.ok) {
-        const result = (await response.json().catch(() => ({}))) as { inviteErrors?: string[] };
-        if (result.inviteErrors?.length) toast.error(t("calendar.inviteFailed"));
+        const saved = (await response.json().catch(() => ({}))) as { inviteErrors?: string[] } & SavedRooms;
+        if (saved.inviteErrors?.length) toast.error(t("calendar.inviteFailed"));
+        announceDeclinedRooms(saved as SavedRooms);
         setEventsVersion((version) => version + 1);
         setClosingEventEditor(true);
       } else {
         const result = (await response.json()) as { error?: string; code?: string };
-        const refused = eventErrorKey(response.status, result.code);
+        const refused = roomSaveErrorKey(response.status, result.code) ?? eventErrorKey(response.status, result.code);
         toast.error(refused ? t(refused as never) : result.error ?? t("calendar.saveFailed"));
       }
     } catch {
@@ -375,6 +398,7 @@ export default function CalendarPage() {
     setEndsAt(formatLocalDateTime(new Date(event.endsAt)));
     setDurationOptionsOpen(false);
     setGuests(JSON.parse(event.attendees || "[]").join(", "));
+    setRoomIds((event.rooms ?? []).map((room) => room.resourceId));
     setClosingEventEditor(false);
     setAdding(true);
   }
@@ -443,6 +467,7 @@ export default function CalendarPage() {
         return;
       }
       saved = true;
+      announceDeclinedRooms((await response.json().catch(() => null)) as SavedRooms | null);
       setEventsVersion((version) => version + 1);
     } catch {
       toast.error(t("calendar.updateTimeFailed"));
@@ -687,7 +712,7 @@ export default function CalendarPage() {
           <CalendarList />
         </DialogContent>
       </Dialog>
-      <EventViewDialog event={viewing} calendarName={(() => { const calendar = calendars.find((item) => item.id === viewing?.calendarId); return calendar ? calendarLabel(calendar, t as never) : ""; })()} onClose={() => setViewing(null)} />
+      <EventViewDialog event={viewing} roomName={roomStore.rooms.find((room) => room.id === viewing?.roomId)?.name} calendarName={(() => { const calendar = calendars.find((item) => item.id === viewing?.calendarId); return calendar ? calendarLabel(calendar, t as never) : ""; })()} onClose={() => setViewing(null)} />
       <InviteResponseDialog event={pendingInvite} onClose={() => setPendingInvite(null)} onAnswered={() => setEventsVersion((version) => version + 1)} />
 
       {adding && createPortal(
@@ -855,9 +880,14 @@ export default function CalendarPage() {
                 {guestReplies && <p className="mt-1 px-2 text-xs text-neutral-600">{t("calendar.guestResponses", { list: guestReplies })}</p>}
                 {occurrenceReplies && <p className="mt-1 px-2 text-xs text-neutral-600">{t("calendar.occurrenceResponses", { list: occurrenceReplies })}</p>}
               </div>}
-              {!delegate && <div className="grid grid-cols-[24px_minmax(0,1fr)] items-start gap-3">
+              {(roomStore.rooms.length > 0 || roomIds.length > 0 || roomStore.state === "error") && <div className="grid grid-cols-[24px_minmax(0,1fr)] items-start gap-3">
+                <Building2 aria-hidden="true" className="mt-2 h-5 w-5 text-neutral-600" />
+                <RoomsPicker rooms={roomStore.rooms} state={roomStore.state} canBook={roomStore.canBook} selected={roomIds} saved={editing?.rooms ?? []} disabled={pendingAction === "save"}
+                  onAdd={(id) => setRoomIds((current) => current.includes(id) ? current : [...current, id])} onRemove={(id) => setRoomIds((current) => current.filter((item) => item !== id))} onRetry={retryRooms} />
+              </div>}
+              {(!delegate || roomIds.length > 0) && <div className="grid grid-cols-[24px_minmax(0,1fr)] items-start gap-3">
                 <div />
-                <AvailabilityPanel guests={guests} excludeEventId={editing?.id} selfAddress={currentUser?.email} startsAt={startsAt} endsAt={endsAt} onPick={(start, end) => { setStartsAt(formatLocalDateTime(start)); setEndsAt(formatLocalDateTime(end)); }} />
+                <AvailabilityPanel guests={delegate ? "" : guests} rooms={roomIds.flatMap((id) => { const room = roomStore.rooms.find((item) => item.id === id); return room ? [{ id, name: room.name }] : []; })} excludeEventId={editing?.id} selfAddress={currentUser?.email} startsAt={startsAt} endsAt={endsAt} onPick={(start, end) => { setStartsAt(formatLocalDateTime(start)); setEndsAt(formatLocalDateTime(end)); }} />
               </div>}
               <div className="grid grid-cols-[24px_minmax(0,1fr)] items-center gap-3">
                 <MapPin aria-hidden="true" className="h-5 w-5 text-neutral-600" />
