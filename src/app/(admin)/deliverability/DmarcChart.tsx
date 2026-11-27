@@ -24,7 +24,7 @@ export function DmarcChart({ series }: { series: DmarcSeriesDay[] }) {
 		{max === 0 && <p className="mt-4 text-sm text-neutral-500">{t("dmarc.chart.empty")}</p>}
 		{max > 0 && <div className="mt-5 flex gap-3" role="img" aria-label={t("dmarc.chart.label")}>
 			<div aria-hidden className="flex h-48 flex-col justify-between pb-5 text-right text-[10px] text-neutral-500"><span>{max.toLocaleString()}</span><span>0</span></div>
-			<div className="flex min-w-0 flex-1 items-end gap-1 border-b border-neutral-200">
+			<div className="flex min-w-0 flex-1 items-end gap-px border-b border-neutral-200 sm:gap-1">
 				{series.map((day, index) => {
 					const shares = segmentPercents(day, max);
 					return <div key={day.day} title={label(day)} className="flex h-48 min-w-0 flex-1 flex-col items-center">

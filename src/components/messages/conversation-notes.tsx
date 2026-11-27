@@ -213,7 +213,7 @@ function NoteItem({ note }: { note: ConversationNote }) {
 				{error && <p role="alert" className="mt-1 text-xs text-red-600">{error}</p>}
 			</div>
 			{!editing && (note.canEdit || note.canDelete) && (
-				<span className="absolute bottom-2 right-3 flex gap-0.5 rounded-full bg-amber-50/90 transition-opacity [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-focus-within:opacity-100 [@media(hover:hover)]:group-hover:opacity-100">
+				<span className="absolute bottom-2 right-3 flex gap-0.5 pointer-coarse:gap-2.5 rounded-full bg-amber-50/90 transition-opacity [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-focus-within:opacity-100 [@media(hover:hover)]:group-hover:opacity-100">
 					{note.canEdit && (
 						<Tooltip label={t("note.edit")}>
 							<Button

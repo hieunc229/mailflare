@@ -211,7 +211,7 @@ function MessageListRowComponent({
 		const compactRow = (
 			<div
 				role={swipeable ? undefined : "listitem"}
-				className={`group relative grid grid-cols-[20px_minmax(0,1fr)] gap-3 border-l-2 px-4 py-3 bg-(--row-bg) transition-colors ${active || opening
+				className={`group relative grid grid-cols-[20px_minmax(0,1fr)] pointer-coarse:grid-cols-[24px_minmax(0,1fr)] gap-3 border-l-2 px-4 py-3 bg-(--row-bg) transition-colors ${active || opening
 					? "border-l-blue-600 [--row-bg:var(--color-blue-50)]"
 					: selected
 						? "border-l-transparent [--row-bg:var(--color-neutral-50)]"

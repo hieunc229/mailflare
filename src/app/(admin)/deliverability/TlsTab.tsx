@@ -93,7 +93,7 @@ export function TlsTab({ domainId }: { domainId: string }) {
 				<thead className={headClass}><tr><Th>{t("tls.col.policy")}</Th><Th>{t("tls.col.mx")}</Th><Th right>{t("tls.col.success")}</Th><Th right>{t("tls.col.failure")}</Th></tr></thead>
 				<tbody className="divide-y divide-neutral-100">
 					{stats.policies.map((row) => { const key = policyKey(row.policyType); return <tr key={`${row.policyType}|${row.mxHost ?? ""}`}><td className="px-4 py-3">{key ? t(key) : row.policyType}</td><td className="break-all px-4 py-3">{row.mxHost ?? ""}</td><td className={cell}>{row.success.toLocaleString()}</td><td className={cell}>{row.failure.toLocaleString()}</td></tr>; })}
-					{stats.policies.length === 0 && <tr><td colSpan={4} className="px-4 py-8 text-center text-neutral-500">{t("tls.daily.empty")}</td></tr>}
+					{stats.policies.length === 0 && <tr><td colSpan={4} className="px-4 py-8 text-center text-neutral-500">{t("tls.policies.empty")}</td></tr>}
 				</tbody>
 			</Table>
 			<Table title={t("tls.reporters.title")} minWidth="min-w-[480px]">

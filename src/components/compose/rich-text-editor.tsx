@@ -243,7 +243,7 @@ export function RichTextEditor({
 				style={{ gridTemplateRows: toolbarVisible ? "1fr" : "0fr" }}
 			>
 				<div className="min-h-0 overflow-hidden">
-					<div className={cn("relative flex items-center gap-0.5 max-md:gap-2 border-t border-neutral-100 px-4 py-3 max-md:border-t-0", toolbarClassName)}>
+					<div className={cn("relative flex items-center gap-0.5 pointer-coarse:gap-2 max-md:gap-2 border-t border-neutral-100 px-4 py-3 max-md:border-t-0", toolbarClassName)}>
 						{toolbarStart}
 						<div className="contents max-md:hidden">{formatButtons}</div>
 						{toolbarEnd}

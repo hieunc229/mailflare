@@ -5,6 +5,7 @@ import type { DragEvent } from "react";
 import { BellRing, ChevronUp, Eye, EyeOff, FileText, Forward, Maximize2, Minimize2, Minus, Paperclip, Reply, Trash2, X } from "@/components/icons";
 import { useRouter } from "next/navigation";
 import { useLanguage } from "@/components/language-provider";
+import { touchTarget } from "@/lib/touch-target";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -30,7 +31,8 @@ import { RecipientInput } from "./recipient-input";
 import { RichTextEditor } from "./rich-text-editor";
 import { ScheduleSendMenu } from "./schedule-send-menu";
 import { isPastSchedule } from "./schedule-send-utils";
-import { DELIVERY_WAIT_MS, SCHEDULED_NOTICE_MS, SENT_NOTICE_MS, resolveSendNotice, splitSendTemplate } from "./send-notice-utils";
+import { isToastPaused } from "@/lib/promotions/move-utils";
+import { DELIVERY_WAIT_MS, composeToastDurationMs, SCHEDULED_NOTICE_MS, SENT_NOTICE_MS, resolveSendNotice, splitSendTemplate } from "./send-notice-utils";
 import type { SendNoticeParts, SendResult } from "./send-notice-utils";
 import {
 	applyMailboxSignatureHtml,
@@ -85,6 +87,9 @@ export function ComposeForm({
 	const [modalMode, setModalMode] = useState(false);
 	const [minimized, setMinimized] = useState(false);
 	const [toast, setToast] = useState<Toast>(null);
+	// Hover or focus stops the countdown, like the promotions toast.
+	const [toastHolds, setToastHolds] = useState({ hover: false, focus: false });
+	const toastRef = useRef<HTMLDivElement>(null);
 	const [loading, setLoading] = useState(false);
 	const [loadingDraft, setLoadingDraft] = useState(false);
 	const [deletingDraft, setDeletingDraft] = useState(false);
@@ -182,11 +187,22 @@ export function ComposeForm({
 		? formatEmailAddress(selectedFrom, selectedMailbox.displayName)
 		: "";
 
+	const toastPaused = isToastPaused(toastHolds);
+	function dismissToast() {
+		// Keep keyboard focus inside the composer instead of dropping it to <body> when the toast unmounts.
+		if (toastRef.current?.contains(document.activeElement)) {
+			formRef.current?.querySelector<HTMLElement>("[contenteditable='true'], textarea, input:not([type='hidden']):not([type='file'])")?.focus();
+		}
+		// The removed toast never fires pointerleave/blur, so clear the holds or the next toast would never auto-hide.
+		setToastHolds({ hover: false, focus: false });
+		setToast(null);
+	}
+
 	useEffect(() => {
-		if (!toast) return;
-		const timer = setTimeout(() => setToast(null), 3200);
+		if (!toast || toastPaused) return;
+		const timer = setTimeout(() => setToast(null), composeToastDurationMs(toast.type));
 		return () => clearTimeout(timer);
-	}, [toast]);
+	}, [toast, toastPaused]);
 
 	useEffect(() => {
 		if (!draftIdToLoad) return;
@@ -671,6 +687,8 @@ export function ComposeForm({
 	function addAttachments(files: FileList | null) {
 		if (!files) return;
 		const nextFiles = Array.from(files);
+		// Reset first so a rejected file can be picked again once the problem is fixed.
+		if (attachmentInput.current) attachmentInput.current.value = "";
 		const nextCount = storedAttachments.length + attachments.length + nextFiles.length;
 		const totalSize =
 			storedAttachments.reduce((total, item) => total + item.size, 0) +
@@ -696,7 +714,6 @@ export function ComposeForm({
 			...current,
 			...nextFiles.map((file) => ({ id: crypto.randomUUID(), file })),
 		]);
-		if (attachmentInput.current) attachmentInput.current.value = "";
 	}
 
 	function onFileDragEnter(event: DragEvent<HTMLFormElement>) {
@@ -747,10 +764,10 @@ export function ComposeForm({
 					<button
 						type="button"
 						onClick={() => void removeStoredAttachment(attachment.id)}
-						className="rounded-full p-1 text-neutral-500 hover:bg-neutral-200 hover:text-neutral-700"
+						aria-label={`${t("compose.removeAttachment")} ${attachment.filename}`}
+						className={cn("relative rounded-full p-1 text-neutral-500 hover:bg-neutral-200 hover:text-neutral-700", touchTarget)}
 					>
-						<X className="h-3.5 w-3.5" />
-						<span className="sr-only">{t("compose.removeAttachment")}</span>
+						<X className="h-3.5 w-3.5" aria-hidden="true" />
 					</button>
 				</div>
 			))}
@@ -771,10 +788,10 @@ export function ComposeForm({
 								current.filter((item) => item.id !== attachment.id),
 							)
 						}
-						className="rounded-full p-1 text-neutral-500 hover:bg-neutral-200 hover:text-neutral-700"
+						aria-label={`${t("compose.removeAttachment")} ${attachment.file.name}`}
+						className={cn("relative rounded-full p-1 text-neutral-500 hover:bg-neutral-200 hover:text-neutral-700", touchTarget)}
 					>
-						<X className="h-3.5 w-3.5" />
-						<span className="sr-only">{t("compose.removeAttachment")}</span>
+						<X className="h-3.5 w-3.5" aria-hidden="true" />
 					</button>
 				</div>
 			))}
@@ -800,14 +817,28 @@ export function ComposeForm({
 			{mode === "popup" && modalMode && !minimized && <div className="fixed inset-0 z-40 bg-black/65 dark:bg-black/75" aria-hidden="true" />}
 			{toast && (
 				<div
+					ref={toastRef}
 					role={toast.type === "error" ? "alert" : "status"}
+					onPointerEnter={() => setToastHolds((current) => ({ ...current, hover: true }))}
+					onPointerLeave={() => setToastHolds((current) => ({ ...current, hover: false }))}
+					onFocusCapture={() => setToastHolds((current) => ({ ...current, focus: true }))}
+					onBlurCapture={(event) => { if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setToastHolds((current) => ({ ...current, focus: false })); }}
+					onKeyDown={(event) => { if (event.key === "Escape") { event.stopPropagation(); dismissToast(); } }}
 					className={cn(
-						"fixed z-[60] max-w-[calc(100vw-3rem)] rounded-lg px-4 py-3 text-sm font-medium shadow-lg",
+						"fixed z-[60] flex max-w-[calc(100vw-3rem)] items-start gap-3 rounded-lg px-4 py-3 text-sm font-medium shadow-lg",
 						"inset-x-6 bottom-[max(5rem,calc(env(safe-area-inset-bottom,0px)+4.5rem))] md:bottom-6 md:[inset-inline-end:auto] md:[inset-inline-start:1.5rem]",
 						toast.type === "success" ? "bg-green-600 text-white" : "bg-red-600 text-white",
 					)}
 				>
-					{toast.message}
+					<span className="min-w-0 flex-1 break-words">{toast.message}</span>
+					<button
+						type="button"
+						onClick={dismissToast}
+						aria-label={t("promotions.toast.dismiss")}
+						className="-m-1 inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-base leading-none text-white/80 hover:bg-white/15 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
+					>
+						<span aria-hidden="true">×</span>
+					</button>
 				</div>
 			)}
 			<form onSubmit={onSubmit} className={cn(frameClass, closing && "compose-sheet-closing")} data-compose-surface={mode === "popup" ? "" : undefined} style={dragY ? { transform: `translateY(${dragY}px)`, transition: "none" } : undefined} ref={formRef} role={modalMode && !minimized ? "dialog" : mode === "popup" ? "region" : undefined} aria-modal={modalMode && !minimized || undefined} aria-label={mode === "popup" ? t("compose.dialogLabel") : undefined} onKeyDown={(event) => { if (modalMode && !minimized && event.key === "Escape" && !event.defaultPrevented) { event.preventDefault(); setModalMode(false); } }} onDragEnterCapture={minimized ? undefined : onFileDragEnter} onDragOverCapture={minimized ? undefined : onFileDragOver} onDragLeaveCapture={minimized ? undefined : onFileDragLeave} onDropCapture={minimized ? undefined : onFileDrop}>
@@ -977,7 +1008,7 @@ export function ComposeForm({
 									aria-label={t("compose.attachFiles")}
 									onClick={() => attachmentInput.current?.click()}
 									disabled={loading || loadingDraft}
-									className="rounded-md p-1.5 text-neutral-500 hover:bg-neutral-100 hover:text-neutral-900 disabled:pointer-events-none disabled:opacity-50 max-md:px-2"
+									className={cn("relative rounded-md p-1.5 text-neutral-500 hover:bg-neutral-100 hover:text-neutral-900 disabled:pointer-events-none disabled:opacity-50 max-md:px-2", touchTarget)}
 								>
 									<Paperclip className="h-4 w-4" />
 								</button>
