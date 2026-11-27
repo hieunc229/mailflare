@@ -38,7 +38,7 @@ export async function PATCH(request: Request, { params }: BookingEventRouteConte
 	const storedRooms = parseBookingResourceIds(current.resourceIds);
 	// A list that cannot be read is not "no rooms": a save (or the on/off switch) that names none must not quietly turn the checks off.
 	if (!storedRooms && !(Array.isArray((body as { resourceIds?: unknown } | null)?.resourceIds) && (body as { resourceIds: unknown[] }).resourceIds.length)) return NextResponse.json({ error: "The saved rooms for this booking page could not be read. Choose the rooms again before saving." }, { status: 409 });
-	const rooms = await resolveBookingRooms(db, body, { booked: storedRooms ?? [], canBook: (await getLicenseEntitlements(env)).canShareMailboxes });
+	const rooms = await resolveBookingRooms(db, body, { booked: storedRooms ?? [], canBook: (await getLicenseEntitlements(env)).canShareMailboxes, hostCount: hostIds.length });
 	if (!rooms.ok) return NextResponse.json({ error: rooms.error }, { status: rooms.status });
 	const [taken] = await db.select({ id: bookingEvents.id }).from(bookingEvents).where(and(eq(bookingEvents.userId, user.id), eq(bookingEvents.slug, input.slug))).limit(1);
 	if (taken && taken.id !== eventId) return NextResponse.json({ error: "This event link is already in use." }, { status: 409 });

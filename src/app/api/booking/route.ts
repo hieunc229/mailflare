@@ -46,7 +46,7 @@ export async function POST(request: Request) {
 	const canManageHosts = user.role === "admin" && (await getLicenseEntitlements(env)).canShareMailboxes;
 	const hostIds = await validBookingHostIds(db, user.id, input.hostIds, canManageHosts);
 	if (!hostIds) return NextResponse.json({ error: "Choose users from the host list." }, { status: 400 });
-	const rooms = await resolveBookingRooms(db, body, { booked: [], canBook: (await getLicenseEntitlements(env)).canShareMailboxes });
+	const rooms = await resolveBookingRooms(db, body, { booked: [], canBook: (await getLicenseEntitlements(env)).canShareMailboxes, hostCount: hostIds.length });
 	if (!rooms.ok) return NextResponse.json({ error: rooms.error }, { status: rooms.status });
 	const [taken] = await db.select({ id: bookingEvents.id }).from(bookingEvents).where(and(eq(bookingEvents.userId, user.id), eq(bookingEvents.slug, input.slug))).limit(1);
 	if (taken) return NextResponse.json({ error: "This event link is already in use." }, { status: 409 });

@@ -141,7 +141,7 @@ export async function availableBookingSlots(env: CloudflareEnv, event: BookingEv
 	days = Math.min(days, MAX_BOOKING_DAYS);
 	const end = new Date(now.getTime() + (days + 2) * 86_400_000);
 	const resourceIds = event.resourceIds ?? [];
-	if (resourceIds.length && !(await bookingRoomsUsable(env, resourceIds))) return [];
+	if (resourceIds.length && !(await bookingRoomsUsable(env, resourceIds, event.hostIds.length))) return [];
 	const intervals = await busyIntervals(env, { userIds: event.hostIds, resourceIds }, now, end);
 	const busy = mergeBusy([...intervals.values()].flat());
 	const slots: { startsAt: string; endsAt: string; localDate: string; time: string }[] = [];

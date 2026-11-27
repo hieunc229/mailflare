@@ -32,7 +32,7 @@ export async function POST(request: Request, { params }: PublicBookingRouteConte
 	const notes = typeof body?.notes === "string" ? body.notes.trim() : "";
 	if (!guestEmails || notes.length > 2000 || (body?.notes !== undefined && typeof body.notes !== "string")) return NextResponse.json({ error: "Check the guest emails and meeting notes." }, { status: 400 });
 	// Rooms are Team-only (D-13): without a licence, or with a room gone or turned off, nothing new is booked (as CS-7's save refuses with 403).
-	if (!(await bookingRoomsUsable(getEnv(), found.event.resourceIds ?? []))) return NextResponse.json({ error: "Booking is not available right now." }, { status: 403 });
+	if (!(await bookingRoomsUsable(getEnv(), found.event.resourceIds ?? [], found.event.hostIds.length))) return NextResponse.json({ error: "Booking is not available right now." }, { status: 403 });
 	const slots = await availableBookingSlots(getEnv(), found.event, 60);
 	const slot = slots.find((item) => item.startsAt === body.startsAt);
 	if (!slot) return NextResponse.json({ error: "That time is no longer available." }, { status: 409 });

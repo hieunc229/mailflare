@@ -13,9 +13,11 @@ export { MAX_BOOKING_ROOMS, parseBookingResourceIds } from "./resource-ids";
  * booking pages (an administrator's per-room switch). A room that
  * is gone or turned off cannot be promised to a visitor, and silently dropping it would book them without the room the owner chose.
  */
-export async function bookingRoomsUsable(env: CloudflareEnv, resourceIds: string[]): Promise<boolean> {
+export async function bookingRoomsUsable(env: CloudflareEnv, resourceIds: string[], hostCount = 1): Promise<boolean> {
 	const ids = [...new Set(resourceIds)];
 	if (!ids.length) return true;
+	// The room booking hangs on one host's copy of the event, which another host could delete: rooms need a single host.
+	if (hostCount > 1) return false;
 	if (!(await getLicenseEntitlements(env)).canShareMailboxes) return false;
 	const rooms = await getDb(env).select({ id: calendarResources.id, disabled: calendarResources.disabled, publicBooking: calendarResources.publicBooking }).from(calendarResources).where(inArray(calendarResources.id, ids));
 	return rooms.length === ids.length && rooms.every((room) => !room.disabled && room.publicBooking);
@@ -26,10 +28,11 @@ export async function bookingRoomsUsable(env: CloudflareEnv, resourceIds: string
  * the Team licence, one already attached stays whatever the licence says, and removing is always allowed). A request that names no
  * rooms keeps `booked`, so an older client that does not know the field cannot drop them.
  */
-export async function resolveBookingRooms(db: Parameters<typeof resolveBookableRooms>[0], body: unknown, options: { booked: string[]; canBook: boolean }): Promise<BookableRooms> {
+export async function resolveBookingRooms(db: Parameters<typeof resolveBookableRooms>[0], body: unknown, options: { booked: string[]; canBook: boolean; hostCount: number }): Promise<BookableRooms> {
 	const requested = body && typeof body === "object" && "resourceIds" in body ? (body as { resourceIds: unknown }).resourceIds : options.booked;
 	const rooms = await resolveBookableRooms(db, requested, options);
 	if (!rooms.ok) return rooms;
+	if (rooms.ids.length && options.hostCount > 1) return { ok: false, status: 400, error: "Rooms can be attached to a booking type with one host", code: "ROOM_UNKNOWN" };
 	// Only rooms an administrator opened to public booking pages can be newly attached; one already attached stays until the owner removes it (the page offers no times meanwhile).
 	const added = rooms.ids.filter((id) => !options.booked.includes(id));
 	if (added.length) {

@@ -141,3 +141,11 @@ test("a room the administrator switched off for public booking pages fails close
 	assert.equal((await post()).status, 403);
 	assert.deepEqual(guestEvents(), []);
 });
+
+test("a type with several hosts and rooms is refused with 403 and offers no times", async () => {
+	setup();
+	sqlite.exec("INSERT INTO users (id, email, name, password_hash, role, created_at, time_zone) VALUES ('h2', 'h2@one.test', 'Two', 'x', 'user', 1, 'UTC')");
+	sqlite.exec(`UPDATE booking_events SET host_ids = '["h1","h2"]'`);
+	assert.deepEqual((await (await get()).json()).slots, []);
+	assert.equal((await post()).status, 403);
+});

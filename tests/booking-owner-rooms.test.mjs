@@ -134,3 +134,16 @@ test("the owner's room list shows every room with what it can be used for, so a 
 	assert.deepEqual(list.map((room) => [room.id, room.state]).sort(), [["off", "off"], ["priv", "private"], ["r1", "available"], ["r2", "available"]]);
 	assert.deepEqual(Object.keys(list[0]).sort(), ["capacity", "id", "kind", "location", "name", "state"]);
 });
+
+test("rooms and several hosts do not go together: either save is refused", async () => {
+	setup();
+	globalThis.own.user = { ...globalThis.own.user, role: "admin" };
+	sqlite.exec("INSERT INTO users (id, email, name, password_hash, role, created_at) VALUES ('h2', 'h2@one.test', 'Two', 'x', 'user', 1)");
+	const refused = await send(POST, body({ hostIds: ["h2"], resourceIds: ["r1"] }));
+	assert.equal(refused.status, 400);
+	assert.match((await refused.json()).error, /one host/);
+	assert.equal((await send(POST, body({ hostIds: ["h2"], slug: "pair" }))).status, 200, "several hosts alone are fine");
+	const single = await (await send(POST, body({ resourceIds: ["r1"] }))).json();
+	assert.equal((await send(PATCH, body({ hostIds: ["h2"], resourceIds: ["r1"] }), { params: Promise.resolve({ eventId: single.event.id }) })).status, 400);
+	assert.equal((await send(PATCH, body({ hostIds: ["h2"] }), { params: Promise.resolve({ eventId: single.event.id }) })).status, 400, "adding a host to a type that has rooms");
+});

@@ -117,3 +117,9 @@ test("the sixty-day page the public route asks for fits the shared service's 62-
 	const list = await slots(base, 60);
 	assert.deepEqual(times(list, "2030-03-08"), [], "an event 59 days out is read");
 });
+
+test("a type with several hosts and rooms offers nothing: the room booking lives on one host's event, which another host could delete", async () => {
+	setup();
+	assert.deepEqual(await slots({ ...base, hostIds: ["h1", "h2"], resourceIds: ["r1"] }), []);
+	assert.ok((await slots({ ...base, hostIds: ["h1", "h2"] })).length > 0, "several hosts without rooms are unaffected");
+});
