@@ -36,8 +36,9 @@ export async function PATCH(request: Request, { params }: BookingEventRouteConte
 	const [current] = await db.select({ resourceIds: bookingEvents.resourceIds }).from(bookingEvents).where(and(eq(bookingEvents.id, eventId), eq(bookingEvents.userId, user.id))).limit(1);
 	if (!current) return NextResponse.json({ error: "Booking event not found" }, { status: 404 });
 	const storedRooms = parseBookingResourceIds(current.resourceIds);
-	// A list that cannot be read is not "no rooms": a save (or the on/off switch) that names none must not quietly turn the checks off.
-	if (!storedRooms && !(Array.isArray((body as { resourceIds?: unknown } | null)?.resourceIds) && (body as { resourceIds: unknown[] }).resourceIds.length)) return NextResponse.json({ error: "The saved rooms for this booking page could not be read. Choose the rooms again before saving." }, { status: 409 });
+	// A list that cannot be read is not "no rooms": a save (or the on/off switch) that names no rooms must not quietly turn the checks off. Naming
+	// the list, even an empty one, is a choice the owner made, and it repairs the type.
+	if (!storedRooms && !Array.isArray((body as { resourceIds?: unknown } | null)?.resourceIds)) return NextResponse.json({ error: "The saved rooms for this booking page could not be read. Choose the rooms again (or none) before saving." }, { status: 409 });
 	const rooms = await resolveBookingRooms(db, body, { booked: storedRooms ?? [], canBook: (await getLicenseEntitlements(env)).canShareMailboxes, hostCount: hostIds.length });
 	if (!rooms.ok) return NextResponse.json({ error: rooms.error }, { status: rooms.status });
 	const [taken] = await db.select({ id: bookingEvents.id }).from(bookingEvents).where(and(eq(bookingEvents.userId, user.id), eq(bookingEvents.slug, input.slug))).limit(1);
