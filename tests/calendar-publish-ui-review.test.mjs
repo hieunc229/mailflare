@@ -94,3 +94,38 @@ test("the dialog hides the card's heading", () => {
 	const dialog = readFileSync(new URL("../src/app/(calendar)/calendar/publish-dialog.tsx", import.meta.url), "utf8");
 	assert.match(dialog, /<PublishCard hideTitle \/>/);
 });
+
+const clickFocused = async (label) => { await act(async () => { const node = button(label); node.focus(); node.click(); await settle(); }); };
+
+test("focus is not lost when the button that was pressed goes away: after Turn on it lands on the first link; after Turn off, on Turn on", async () => {
+	reset();
+	globalThis.pubUiR.respond = server();
+	await mount();
+	await clickFocused("Turn on");
+	assert.ok(document.activeElement === container.querySelector("input"), "focus is on the expected element, not " + document.activeElement?.tagName);
+	await clickFocused("Turn off");
+	assert.ok(document.activeElement === button("Turn on"), "focus is on the expected element, not " + document.activeElement?.tagName);
+	await unmount();
+});
+
+test("when the link was already on, focus lands on Turn off; a cancelled Turn off leaves focus where it was", async () => {
+	reset();
+	const state = { on: false };
+	globalThis.pubUiR.respond = (url, init) => (init?.method === "POST" ? (state.on = true, Response.json({ enabled: true, created: false })) : status(state.on));
+	await mount();
+	await clickFocused("Turn on");
+	assert.ok(document.activeElement === button("Turn off"), "focus is on the expected element, not " + document.activeElement?.tagName);
+	globalThis.pubUiR.confirm = false;
+	await clickFocused("Turn off");
+	assert.ok(document.activeElement === button("Turn off"), "focus is on the expected element, not " + document.activeElement?.tagName);
+	await unmount();
+});
+
+test("a failed change keeps focus on the button that was pressed", async () => {
+	reset();
+	globalThis.pubUiR.respond = server({ on: false, failPost: true });
+	await mount();
+	await clickFocused("Turn on");
+	assert.ok(document.activeElement === button("Turn on"), "focus is on the expected element, not " + document.activeElement?.tagName);
+	await unmount();
+});
