@@ -1,4 +1,4 @@
-import { and, asc, eq, inArray, isNull, ne, notInArray, or } from "drizzle-orm";
+import { and, asc, eq, getTableColumns, inArray, isNull, ne, notInArray, or } from "drizzle-orm";
 import { getDb } from "@/db";
 import { messageAttachments, messages } from "@/db/schema";
 import { getContactCardMap } from "@/lib/contacts/service";
@@ -12,8 +12,13 @@ import type { SessionUser } from "@/lib/auth/types";
  * The conversation a message belongs to: every stored message in the same
  * mailbox sharing its thread id, oldest first. Drafts and trashed messages are
  * left out, matching what threaded clients show. Bodies come along so the
- * reader can expand any message without another round trip.
+ * reader can expand any message without another round trip. Callers that
+ * fetch bodies one at a time (`GET /api/messages/{id}`) pass `bodies: "none"`
+ * to skip the text and HTML columns entirely; those rows carry
+ * `bodyOmitted: true` so a client can tell "not loaded" from "empty".
  */
+export type ThreadBodies = "all" | "none";
+
 /** The R2 key is an internal pointer and never leaves the server. */
 function withoutRawKey<T extends { rawR2Key: string | null }>(row: T): Omit<T, "rawR2Key"> {
 	const copy: Partial<T> = { ...row };
@@ -21,8 +26,17 @@ function withoutRawKey<T extends { rawR2Key: string | null }>(row: T): Omit<T, "
 	return copy as Omit<T, "rawR2Key">;
 }
 
-export async function getMessageThreadForUser(env: CloudflareEnv, user: SessionUser, messageId: string) {
+type MessageRow = typeof messages.$inferSelect;
+type ThreadRow = Omit<MessageRow, "textBody" | "htmlBody"> & Partial<Pick<MessageRow, "textBody" | "htmlBody">>;
+
+export async function getMessageThreadForUser(env: CloudflareEnv, user: SessionUser, messageId: string, options: { bodies?: ThreadBodies } = {}) {
+	const omitBodies = options.bodies === "none";
 	const db = getDb(env);
+	const { textBody: _text, htmlBody: _html, ...metadataColumns } = getTableColumns(messages);
+	void _text;
+	void _html;
+	// Without bodies the heavy columns are never read from the database.
+	const selectRows = () => (omitBodies ? db.select(metadataColumns).from(messages) : db.select().from(messages));
 	const [message] = await db
 		.select({ mailboxId: messages.mailboxId, userId: messages.userId, threadId: messages.threadId, status: messages.status, privateDraft: messages.privateDraft })
 		.from(messages)
@@ -32,10 +46,8 @@ export async function getMessageThreadForUser(env: CloudflareEnv, user: SessionU
 	const access = await getMailboxAccessLevel(db, user, message.mailboxId);
 	if (!access?.canRead) return null;
 
-	const rows = message.threadId
-		? await db
-				.select()
-				.from(messages)
+	const rows: ThreadRow[] = message.threadId
+		? await selectRows()
 				.where(
 					and(
 						eq(messages.mailboxId, message.mailboxId),
@@ -49,7 +61,7 @@ export async function getMessageThreadForUser(env: CloudflareEnv, user: SessionU
 				)
 				.orderBy(asc(messages.createdAt))
 				.limit(200)
-		: await db.select().from(messages).where(eq(messages.id, messageId)).limit(1);
+		: await selectRows().where(eq(messages.id, messageId)).limit(1);
 
 	const ids = rows.map((row) => row.id);
 	const attachmentQuery = ids.length ? listThreadAttachments(db, ids) : null;
@@ -75,6 +87,7 @@ export async function getMessageThreadForUser(env: CloudflareEnv, user: SessionU
 			const firstTo = getFirstEmailAddressEntry(row.toAddr);
 			return {
 				...withoutRawKey(row),
+				...(omitBodies ? { textBody: null, htmlBody: null, bodyOmitted: true } : {}),
 				// The reader already fetched the open message; its thread copy does not need the body again.
 				...(row.id === messageId ? { textBody: null, htmlBody: null } : {}),
 				fromContactName: getPartyDisplayName(row.fromAddr, contact),

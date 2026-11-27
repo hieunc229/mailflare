@@ -659,6 +659,20 @@
       "when": 1795027687014,
       "tag": "0102_contact_details",
       "breakpoints": true
+    },
+    {
+      "idx": 95,
+      "version": "6",
+      "when": 1795200488014,
+      "tag": "0105_drop_redundant_message_indexes",
+      "breakpoints": true
+    },
+    {
+      "idx": 96,
+      "version": "6",
+      "when": 1795200489014,
+      "tag": "0106_message_unsubscribe",
+      "breakpoints": true
     }
   ]
 }

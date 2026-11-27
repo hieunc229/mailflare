@@ -511,6 +511,20 @@
         "CREATE TABLE `contact_details` (\n\t`contact_id` varchar(191) NOT NULL,\n\t`details` longtext NOT NULL DEFAULT ('{}'),\n\t`updated_at` bigint NOT NULL,\n\tCONSTRAINT `contact_details_contact_id` PRIMARY KEY(`contact_id`)\n);",
         "ALTER TABLE `contact_details` ADD CONSTRAINT `contact_details_contact_id_contacts_id_fk` FOREIGN KEY (`contact_id`) REFERENCES `contacts`(`id`) ON DELETE cascade ON UPDATE no action;"
       ]
+    },
+    {
+      "name": "0029_drop_redundant_message_indexes.sql",
+      "statements": [
+        "DROP INDEX `messages_mailbox_idx` ON `messages`;",
+        "DROP INDEX `messages_inbox_page_idx` ON `messages`;"
+      ]
+    },
+    {
+      "name": "0030_message_unsubscribe.sql",
+      "statements": [
+        "CREATE TABLE `message_unsubscribe` (\n\t`message_id` varchar(191) NOT NULL,\n\t`url` longtext,\n\t`one_click` boolean NOT NULL DEFAULT false,\n\t`mailto` longtext,\n\t`dkim_covers` boolean NOT NULL DEFAULT false,\n\t`checked_at` bigint NOT NULL,\n\tCONSTRAINT `message_unsubscribe_message_id` PRIMARY KEY(`message_id`)\n);",
+        "ALTER TABLE `message_unsubscribe` ADD CONSTRAINT `message_unsubscribe_message_id_messages_id_fk` FOREIGN KEY (`message_id`) REFERENCES `messages`(`id`) ON DELETE cascade ON UPDATE no action;"
+      ]
     }
   ]
 }

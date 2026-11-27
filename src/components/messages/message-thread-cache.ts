@@ -66,7 +66,7 @@ export function fetchMessageThread(messageId: string): Promise<ThreadMessage[]> 
 	if (pending) return pending;
 
 	const requestGeneration = generation;
-	const request = authFetch(`/api/messages/${messageId}/thread`)
+	const request = authFetch(`/api/messages/${messageId}/thread?bodies=none`)
 		.then(async (response) => {
 			if (!response.ok) return [];
 			const data = await response.json() as ThreadResponse;
