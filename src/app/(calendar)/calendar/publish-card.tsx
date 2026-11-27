@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import toast from "react-hot-toast";
 import { useLanguage } from "@/components/language-provider";
 import { confirmDestructive } from "@/components/ui/confirm-dialog";
+import { formatUserDate } from "@/lib/time/utils";
 import { loadPublishStatus, publishUrls, turnOffPublish, turnOnPublish } from "./publish-api";
 import { PublishView } from "./publish-view";
 
@@ -20,7 +21,7 @@ export function PublishCard({ hideTitle = false }: { hideTitle?: boolean }) {
 
 	function show(result: Awaited<ReturnType<typeof loadPublishStatus>>) {
 		if (!result.ok) { setState("error"); return; }
-		setSince(result.status.enabled && result.status.createdAt ? new Date(result.status.createdAt).toLocaleDateString() : "");
+		setSince(result.status.enabled && result.status.createdAt ? formatUserDate(result.status.createdAt, { dateStyle: "medium" }) : "");
 		setState(result.status.enabled ? "on" : "off");
 	}
 
@@ -36,7 +37,7 @@ export function PublishCard({ hideTitle = false }: { hideTitle?: boolean }) {
 		const result = await turnOnPublish();
 		setPending(false);
 		if (!result.ok) { setError(t("calendar.publish.failed")); return; }
-		if (result.key) { setUrls(publishUrls(window.location.origin, result.key)); setSince(new Date().toLocaleDateString()); setState("on"); setFocus("urls"); return; }
+		if (result.key) { setUrls(publishUrls(window.location.origin, result.key)); setSince(formatUserDate(new Date(), { dateStyle: "medium" })); setState("on"); setFocus("urls"); return; }
 		// Already on (another tab or device made it): nothing to show but the real date, so ask again.
 		show(await loadPublishStatus());
 		setFocus("action");
