@@ -1,6 +1,6 @@
 # API and integrations
 
-APIs for domain, account and mailbox management and for sending email. Authentication and mailbox permissions apply to all routes.
+APIs for domain, account and mailbox management and for sending email. Authentication and mailbox permissions still apply to these routes.
 
 ## Domain management
 
@@ -183,7 +183,7 @@ Attachment limits:
 - Dashboard composer: up to 10 attachments.
 - Outgoing per-file and combined limit: an administrator sets 1 MB up to the runtime ceiling on **General** (`/general`). Ceiling: 25 MB on Cloudflare Workers (each file is held in a 128 MB isolate while read and sent), 50 MB on Node/Docker. Default 25 MB. A stored value above the ceiling is clamped when saved and when used.
 - `POST /api/v1/send`: base64 attachments in a JSON body capped at 40 MiB (about 30 MB of files); this is the effective limit there whatever the setting.
-- Storage: metadata in D1, file content in R2. Downloads require access to the message's mailbox.
+- Storage: metadata in D1, file content in R2. Normal message downloads require access to the message's mailbox.
 - Resend and Amazon SES: attachments sent directly within the same administrator limit; files over 20 MB, or that would take the message past 20 MB, go as download links (as for Cloudflare, below), so receiving servers that refuse large encoded messages are not hit.
 - Cloudflare sending: Email Sending limits the whole encoded message, attachments included, to 5 MiB for general recipients or 25 MiB for verified destination addresses. To stay under the general limit, files over 3 MB and smaller files that would exceed the message budget are sent as R2 download links (valid 30 days; anyone with the link can access the file; the outgoing cap still applies). The sentence above the links defaults to the sender's interface language; an administrator can replace it on **General** (`{days}` is the link lifetime, empty text adds no sentence, links are always included, HTML is escaped). Cloudflare also limits recipients to 50, subject length to 998 characters and headers to 16 KB.
 - Raising the limit above 25 MB is only possible on Node/Docker.
