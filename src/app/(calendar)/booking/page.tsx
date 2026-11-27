@@ -22,7 +22,7 @@ import { BookingEditor } from "./booking-editor";
 import { BookingListSkeleton } from "./booking-list-skeleton";
 import { visibleBookingEvents } from "./default-events";
 import type { BookingEvent, BookingForm, BookingHost } from "./types";
-import { availabilityLabel, durationLabel, emptyBookingForm, formFromEvent } from "./utils";
+import { availabilityLabel, bookingSaveErrorKey, durationLabel, emptyBookingForm, formFromEvent } from "./utils";
 
 export default function BookingsPage() {
 	const { t } = useLanguage();
@@ -77,8 +77,8 @@ export default function BookingsPage() {
 		setSaving(true);
 		try {
 			const response = await authFetch(editingId ? `/api/booking/${editingId}` : "/api/booking", { method: editingId ? "PATCH" : "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(form) });
-			const data = await response.json() as { event?: BookingEvent; error?: string };
-			if (!response.ok || !data.event) { toast.error(data.error ?? t("booking.saveFailed")); return; }
+			const data = await response.json() as { event?: BookingEvent; error?: string; code?: string };
+			if (!response.ok || !data.event) { const key = bookingSaveErrorKey(data.code); toast.error(key ? t(key) : data.error ?? t("booking.saveFailed")); return; }
 			setEvents((current) => editingId ? current.map((item) => item.id === editingId ? data.event! : item) : [...current, data.event!]);
 			closeEditor();
 			toast.success(editingId ? t("booking.saved") : t("booking.created"));

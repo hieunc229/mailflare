@@ -12,7 +12,7 @@ const mocks = {
 	"@/lib/cloudflare": "export function getEnv(){return {}}",
 	"@/lib/auth/cookies": "export async function getCurrentUser(){return globalThis.own.user}",
 	"@/lib/auth/origin": "export function hasValidSessionMutationOrigin(){return true}",
-	"@/lib/calendar/api-auth": "export function calendarAccessError(){return null}",
+	"@/lib/calendar/api-auth": "export function calendarAccessError(){return globalThis.own.noCalendar?Response.json({error:'Calendar is off'},{status:403}):null}",
 	"@/lib/licenses/service": "export async function getLicenseEntitlements(){return {canShareMailboxes:globalThis.own.team}}",
 	"@/lib/booking/username": "export async function ensureBookingUsername(){return 'hana'}",
 };
@@ -31,7 +31,7 @@ const stored = () => sqlite.prepare("SELECT resource_ids FROM booking_events").a
 function setup({ team = true } = {}) {
 	sqlite?.close();
 	sqlite = installSqlite("own", { schema, extra: { team, user: { id: "h1", email: "h1@one.test", name: "Hana", role: "user", calendarEnabled: true } } });
-	sqlite.exec("INSERT INTO users (id, email, name, password_hash, role, created_at) VALUES ('h1', 'h1@one.test', 'Hana', 'x', 'user', 1)");
+	sqlite.exec("INSERT INTO users (id, email, name, password_hash, role, created_at) VALUES ('h1', 'h1@one.test', 'Hana', 'x', 'user', 1), ('h2', 'h2@one.test', 'Two', 'x', 'user', 1)");
 	for (const [id, disabled] of [["r1", 0], ["r2", 0], ["off", 1], ["priv", 0]]) sqlite.exec(`INSERT INTO calendar_resources (id, name, disabled, public_booking, created_at, updated_at) VALUES ('${id}', 'Room ${id}', ${disabled}, ${id === 'priv' ? 0 : 1}, 1, 1)`);
 }
 
@@ -126,23 +126,41 @@ test("one already attached stays when the switch is turned off, can be removed, 
 	assert.equal((await send(PATCH, body({ resourceIds: [] }), context)).status, 200);
 });
 
-test("the owner's room list shows every room with what it can be used for, so a room that is off is labelled as off", async () => {
+test("the owner's room list offers the rooms open to public pages, and names an unavailable room only when one of the owner's own types holds it", async () => {
 	setup();
-	sqlite.exec("UPDATE calendar_resources SET location = 'Floor 2'");
 	const { GET: rooms } = await roomsRoute.import();
-	const { rooms: list, canBook } = await (await rooms(new Request("http://x/api/booking/rooms"))).json();
-	assert.equal(canBook, true);
-	assert.deepEqual(list.map((room) => [room.id, room.state]).sort(), [["off", "off"], ["priv", "private"], ["r1", "available"], ["r2", "available"]]);
-	assert.deepEqual(Object.keys(list[0]).sort(), ["capacity", "id", "kind", "location", "name", "state"]);
+	const list = async () => (await (await rooms(new Request("http://x/api/booking/rooms"))).json());
+	let answer = await list();
+	assert.equal(answer.canBook, true);
+	assert.deepEqual(answer.rooms.map((room) => [room.id, room.state]).sort(), [["r1", "available"], ["r2", "available"]], "off and private rooms are not named");
+	assert.doesNotMatch(JSON.stringify(answer), /Room off|Room priv/);
+	assert.deepEqual(Object.keys(answer.rooms[0]).sort(), ["capacity", "id", "kind", "location", "name", "state"]);
+	sqlite.exec(`INSERT INTO booking_events (id, user_id, name, slug, host_ids, resource_ids, duration_minutes, weekdays, time_ranges, time_zone, enabled, created_at, updated_at) VALUES ('mine', 'h1', 'Mine', 'mine', '["h1"]', '["off","priv"]', 30, '[1]', '[{"startTime":"09:00","endTime":"10:00"}]', 'UTC', 1, 1, 1)`);
+	answer = await list();
+	assert.deepEqual(answer.rooms.map((room) => [room.id, room.state]).sort(), [["off", "off"], ["priv", "private"], ["r1", "available"], ["r2", "available"]]);
+	sqlite.exec("UPDATE booking_events SET user_id = 'h2'");
+	assert.deepEqual((await list()).rooms.map((room) => room.id).sort(), ["r1", "r2"], "someone else's type does not unlock the names");
+});
+
+test("the owner's room list needs a signed-in user with Calendar", async () => {
+	setup();
+	const { GET: rooms } = await roomsRoute.import();
+	globalThis.own.user = null;
+	assert.equal((await rooms(new Request("http://x/api/booking/rooms"))).status, 401);
+	globalThis.own.user = { id: "h1", email: "h1@one.test", name: "Hana", role: "user", calendarEnabled: true };
+	globalThis.own.noCalendar = true;
+	assert.equal((await rooms(new Request("http://x/api/booking/rooms"))).status, 403);
+	globalThis.own.noCalendar = false;
 });
 
 test("rooms and several hosts do not go together: either save is refused", async () => {
 	setup();
 	globalThis.own.user = { ...globalThis.own.user, role: "admin" };
-	sqlite.exec("INSERT INTO users (id, email, name, password_hash, role, created_at) VALUES ('h2', 'h2@one.test', 'Two', 'x', 'user', 1)");
 	const refused = await send(POST, body({ hostIds: ["h2"], resourceIds: ["r1"] }));
 	assert.equal(refused.status, 400);
-	assert.match((await refused.json()).error, /one host/);
+	const refusedBody = await refused.json();
+	assert.match(refusedBody.error, /one host/);
+	assert.equal(refusedBody.code, "ROOMS_SINGLE_HOST_ONLY");
 	assert.equal((await send(POST, body({ hostIds: ["h2"], slug: "pair" }))).status, 200, "several hosts alone are fine");
 	const single = await (await send(POST, body({ resourceIds: ["r1"] }))).json();
 	assert.equal((await send(PATCH, body({ hostIds: ["h2"], resourceIds: ["r1"] }), { params: Promise.resolve({ eventId: single.event.id }) })).status, 400);

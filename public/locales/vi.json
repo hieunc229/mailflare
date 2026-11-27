@@ -2029,6 +2029,7 @@
 	"booking.editor.roomsPrivate": "A room here is no longer open to public booking pages, so this page offers no times until you remove it.",
 	"booking.editor.statusOff": "Turned off",
 	"booking.editor.statusPrivate": "Not open to public booking pages",
+	"booking.error.roomsSingleHost": "Rooms can be attached to a booking page with one host. Remove the extra hosts or the rooms.",
 	"booking.editor.roomsSummary": "Reserves {rooms}",
 	"booking.editor.confirmationDefault": "Xác nhận mặc định",
 	"booking.editor.confirmationCustom": "Xác nhận tùy chỉnh",

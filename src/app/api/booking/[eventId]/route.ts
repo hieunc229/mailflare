@@ -40,7 +40,7 @@ export async function PATCH(request: Request, { params }: BookingEventRouteConte
 	// the list, even an empty one, is a choice the owner made, and it repairs the type.
 	if (!storedRooms && !Array.isArray((body as { resourceIds?: unknown } | null)?.resourceIds)) return NextResponse.json({ error: "The saved rooms for this booking page could not be read. Choose the rooms again (or none) before saving." }, { status: 409 });
 	const rooms = await resolveBookingRooms(db, body, { booked: storedRooms ?? [], canBook: (await getLicenseEntitlements(env)).canShareMailboxes, hostCount: hostIds.length });
-	if (!rooms.ok) return NextResponse.json({ error: rooms.error }, { status: rooms.status });
+	if (!rooms.ok) return NextResponse.json({ error: rooms.error, ...(rooms.code ? { code: rooms.code } : {}) }, { status: rooms.status });
 	const [taken] = await db.select({ id: bookingEvents.id }).from(bookingEvents).where(and(eq(bookingEvents.userId, user.id), eq(bookingEvents.slug, input.slug))).limit(1);
 	if (taken && taken.id !== eventId) return NextResponse.json({ error: "This event link is already in use." }, { status: 409 });
 	try {

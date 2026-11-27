@@ -32,7 +32,7 @@ export async function resolveBookingRooms(db: Parameters<typeof resolveBookableR
 	const requested = body && typeof body === "object" && "resourceIds" in body ? (body as { resourceIds: unknown }).resourceIds : options.booked;
 	const rooms = await resolveBookableRooms(db, requested, options);
 	if (!rooms.ok) return rooms;
-	if (rooms.ids.length && options.hostCount > 1) return { ok: false, status: 400, error: "Rooms can be attached to a booking type with one host", code: "ROOM_UNKNOWN" };
+	if (rooms.ids.length && options.hostCount > 1) return { ok: false, status: 400, error: "Rooms can be attached to a booking type with one host", code: "ROOMS_SINGLE_HOST_ONLY" };
 	// Only rooms an administrator opened to public booking pages can be newly attached; one already attached stays until the owner removes it (the page offers no times meanwhile).
 	const added = rooms.ids.filter((id) => !options.booked.includes(id));
 	if (added.length) {

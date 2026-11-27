@@ -71,3 +71,8 @@ export function nextBookingTimeRange(ranges: BookingTimeRange[], durationMinutes
 	const format = (minutes: number) => `${String(Math.floor(minutes / 60)).padStart(2, "0")}:${String(minutes % 60).padStart(2, "0")}`;
 	return { startTime: format(start), endTime: format(end) };
 }
+
+/** The translation key for a refused save, from the server's code (never its English text); null when there is no specific message. */
+export function bookingSaveErrorKey(code: unknown): TranslationKey | null {
+	return code === "ROOMS_SINGLE_HOST_ONLY" ? "booking.error.roomsSingleHost" : null;
+}

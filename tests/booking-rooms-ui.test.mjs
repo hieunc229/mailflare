@@ -15,7 +15,7 @@ const mocks = {
 const editor = await loadFixture({ name: "booking-rooms-editor", entryPoint: "src/app/(calendar)/booking/booking-editor.tsx", mocks });
 const utils = await loadFixture({ name: "booking-rooms-utils", entryPoint: "src/app/(calendar)/booking/utils.ts", mocks: {} });
 const { BookingEditor } = await editor.import();
-const { emptyBookingForm, formFromEvent } = await utils.import();
+const { emptyBookingForm, formFromEvent, bookingSaveErrorKey } = await utils.import();
 after(() => { delete globalThis.bookRoomsUi; editor.dispose(); utils.dispose(); });
 
 const rooms = [{ id: "r1", name: "Boardroom", kind: "room", capacity: 12, location: "2nd floor" }, { id: "r2", name: "Annex", kind: "room", capacity: null, location: "" }];
@@ -91,7 +91,7 @@ test("a failed room list shows the section so it can be retried", () => {
 });
 
 const catalogs = [["en", en], ...readdirSync(new URL("../public/locales", import.meta.url)).filter((file) => file.endsWith(".json")).map((file) => [file, read(`public/locales/${file}`)])];
-const KEYS = ["booking.editor.rooms", "booking.editor.roomsHint", "booking.editor.roomsNone", "booking.editor.roomsSummary", "booking.editor.roomsLoading", "booking.editor.roomsOff", "booking.editor.roomsNeedTeam", "calendar.rooms.notLoaded", "booking.editor.roomTurnedOff", "booking.editor.roomNotPublic", "booking.editor.roomsPrivate", "booking.editor.statusOff", "booking.editor.statusPrivate"];
+const KEYS = ["booking.editor.rooms", "booking.editor.roomsHint", "booking.editor.roomsNone", "booking.editor.roomsSummary", "booking.editor.roomsLoading", "booking.editor.roomsOff", "booking.editor.roomsNeedTeam", "calendar.rooms.notLoaded", "booking.editor.roomTurnedOff", "booking.editor.roomNotPublic", "booking.editor.roomsPrivate", "booking.editor.statusOff", "booking.editor.statusPrivate", "booking.error.roomsSingleHost"];
 
 test("every catalog (34) carries the booking rooms strings, in English, with the same placeholders", () => {
 	assert.equal(catalogs.length, 34);
@@ -99,4 +99,11 @@ test("every catalog (34) carries the booking rooms strings, in English, with the
 		assert.equal(typeof catalog[key], "string", `${name}: ${key}`);
 		assert.equal(catalog[key], en[key], `${name}: ${key} is English until translated`);
 	}
+});
+
+test("a refused save is explained by a translated message chosen from the server's code, not the server's English", () => {
+	assert.equal(bookingSaveErrorKey("ROOMS_SINGLE_HOST_ONLY"), "booking.error.roomsSingleHost");
+	assert.equal(bookingSaveErrorKey("something else"), null);
+	assert.equal(bookingSaveErrorKey(undefined), null);
+	assert.match(en["booking.error.roomsSingleHost"], /one host/);
 });
