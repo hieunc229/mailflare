@@ -92,10 +92,13 @@ export async function busyIntervals(env: CloudflareEnv, targets: FreeBusyTargets
 			const duration = row.endsAt.getTime() - row.startsAt.getTime();
 			if (duration <= 0) continue;
 			const list = collected.get(row.userId)!;
-			if ((spent.get(row.userId) ?? 0) > share) { list.push([from, to]); continue; }
-			const { starts, exhausted } = expandEvent(row, new Date(from - duration), end, MAX_OCCURRENCES);
-			spent.set(row.userId, (spent.get(row.userId) ?? 0) + 1 + starts.length);
-			if (exhausted) { list.push([from, to]); continue; }
+			// What is left of this person's share is the limit on the expansion itself, so one series cannot carry them far past it; reaching the limit counts as running out.
+			const used = spent.get(row.userId) ?? 0;
+			const limit = Math.min(MAX_OCCURRENCES, share - used);
+			if (limit <= 0) { list.push([from, to]); continue; }
+			const { starts, exhausted } = expandEvent(row, new Date(from - duration), end, limit);
+			spent.set(row.userId, used + 1 + starts.length);
+			if (exhausted || starts.length >= limit) { list.push([from, to]); continue; }
 			for (const at of starts) {
 				if (edited && targets.excludeOccurrence !== undefined && at.getTime() >= targets.excludeOccurrence) continue;
 				const occurrenceEnd = at.getTime() + duration;

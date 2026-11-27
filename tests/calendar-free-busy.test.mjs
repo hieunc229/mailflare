@@ -358,3 +358,20 @@ test("busyIntervals: without an occurrence the whole series goes, moved rows inc
 	event("u1", at(0, 15), at(0, 16), { dav_object_id: master, recurrence_id: secs(at(0, 9)) });
 	assert.deepEqual((await busyIntervals({}, { userIds: ["u1"], excludeEventId: "evt_all" }, ...win(at(0), at(9)))).get("u1"), []);
 });
+
+test("busyIntervals: one series can no longer carry a person past their share: the share is a limit on the expansion itself", async () => {
+	setup(50);
+	const ids = Array.from({ length: 50 }, (_, index) => `u${index + 1}`);
+	const share = Math.floor(MAX_EXPANSION_BUDGET / 50);
+	const perRow = 1 + 63;
+	const fitting = Math.floor(share / perRow);
+	sqlite.exec("BEGIN");
+	for (let index = 0; index < fitting; index += 1) event("u1", at(-1, 1), at(-1, 1.5), { repeat: "daily" });
+	sqlite.exec("COMMIT");
+	const whole = await busyIntervals({}, { userIds: ids }, ...win(at(0), at(62)));
+	assert.equal(whole.get("u1").length, 62, `${fitting} daily series fit inside a share of ${share}`);
+	event("u1", at(-1, 3), at(-1, 3.5), { repeat: "daily" });
+	const over = await busyIntervals({}, { userIds: ids }, ...win(at(0), at(62)));
+	assert.deepEqual(over.get("u1"), [[at(0), at(62)]], "the row that does not fit makes the window busy, not just the row after it");
+	assert.deepEqual(over.get("u2"), []);
+});
