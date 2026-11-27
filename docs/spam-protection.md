@@ -6,7 +6,7 @@ Scores range from 0 to 100. Messages scoring 55 or higher move to Spam by defaul
 
 A passing SPF, DKIM or DMARC result only proves that mail came from the domain it claims, and a throwaway domain passes for its own mail. Passes therefore lower the score in full only for senders you have a relationship with: a manually saved contact, an address you have written to, a sender or domain you have repeatedly marked as legitimate, or an address that has already written to the mailbox at least twice without being reported as spam. For a first-time sender a pass counts for half (at most 7 points instead of 14), while a failure still adds its full score. A first-time sender (no saved contact, and no earlier message from that exact address) that pitches search-engine or traffic services for your own website (it names your domain, matches at least two typical SEO sales phrases, is not a reply and has no unsubscribe header) also gets a +45 signal.
 
-Scores from 40 through 69 are recorded as suspicious but remain in their normal Inbox or custom folder. Analysis failures also deliver normally. Automatic replies and new-message notifications are suppressed for messages placed in Spam.
+Scores from 40 up to your Spam threshold (54 at the default Strict level, 69 at Normal, 84 at Relaxed) are recorded as suspicious but remain in their normal Inbox or custom folder. Analysis failures also deliver normally. Automatic replies and new-message notifications are suppressed for messages placed in Spam.
 
 The Spam Filter switch is under **Settings → Inbox → Spam protection** and is enabled by default. Disabling it affects future incoming messages; it does not move or rescan existing mail.
 
