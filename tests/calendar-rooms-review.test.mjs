@@ -228,3 +228,15 @@ test("m-2: a booking that was accepted and then lost every retry is marked as wa
 	await bookAndSummarize(db, fresh, ["r2"]);
 	assert.equal(sqlite.prepare("SELECT conflict_at FROM calendar_resource_bookings WHERE event_id = ?").get(fresh).conflict_at, null);
 });
+
+test("m-2 through the real save: a booked event that is moved and then loses every retry is left waiting for its check (the save had already declined it), not dateless-declined", async () => {
+	setup();
+	const id = event("u1", FUTURE + 9 * H, FUTURE + 10 * H);
+	sqlite.prepare("INSERT INTO calendar_resource_bookings (id, resource_id, event_id, status, created_at) VALUES ('b1', 'r1', ?, 'accepted', 1)").run(id);
+	let bumps = 0;
+	beforeBatch = (database) => { bumps += 1; database.exec(`UPDATE calendar_resources SET booking_token = 'moved-${bumps}' WHERE id = 'r1'`); };
+	const response = await patchEvent(new Request(`https://m.test/api/calendar/events/${id}`, json({ title: "Moved", startsAt: fat(0, 13), endsAt: fat(0, 14) }, "PATCH")), { params: Promise.resolve({ eventId: id }) });
+	assert.equal(response.status, 200);
+	assert.deepEqual((await response.json()).rooms.map((room) => [room.status, room.conflictAt]), [["unconfirmed", null]]);
+	assert.equal(sqlite.prepare("SELECT conflict_at FROM calendar_resource_bookings WHERE event_id = ?").get(id).conflict_at, 0, "waiting for its check, so a later check may accept it");
+});
