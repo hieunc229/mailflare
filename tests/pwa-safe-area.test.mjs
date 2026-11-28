@@ -37,7 +37,7 @@ test("the safe-area utility pads all four sides from env(safe-area-inset-*)", ()
 test("layout-less pages, auth shell, skeletons and the mobile drawer clear the safe areas", () => {
 	const files = [
 		["src/app/page.tsx", /safe-area min-h-dvh/, /safe-area min-h-dvh/],
-		["src/app/d/[token]/page.tsx", /safe-area-inset-top/, /safe-area-inset-bottom/],
+		["src/app/d/[token]/public-drive-client.tsx", /safe-area-inset-top/, /safe-area-inset-bottom/],
 		["src/app/book/[userId]/page.tsx", /safe-area-inset-top/, /safe-area-inset-bottom/],
 		["src/app/book/[userId]/[eventId]/page.tsx", /safe-area-inset-top/, /safe-area-inset-bottom/],
 		["src/components/auth/auth-shell.tsx", /pt-\[env\(safe-area-inset-top\)\]/, /pl-\[env\(safe-area-inset-left\)\]/],
