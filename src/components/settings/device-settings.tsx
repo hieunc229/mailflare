@@ -17,32 +17,34 @@ import { loadDevices, signOutDevice } from "./device-settings-utils";
 export function DeviceSettings() {
 	const { t } = useLanguage();
 	const [devices, setDevices] = useState<MobileDevice[] | null>(null);
-	const [error, setError] = useState<string | null>(null);
+	const [loadError, setLoadError] = useState<string | null>(null);
+	const [actionError, setActionError] = useState<string | null>(null);
 	const [busy, setBusy] = useState<string | null>(null);
 
 	useEffect(() => {
-		loadDevices().then(setDevices).catch((err) => setError(err instanceof Error ? err.message : t("devices.loadFailed")));
+		loadDevices().then(setDevices).catch((err) => setLoadError(err instanceof Error ? err.message : t("devices.loadFailed")));
 	}, [t]);
 
 	async function remove(device: MobileDevice) {
 		if (!await confirmDestructive(t("devices.signOutConfirm", { name: device.name }))) return;
 		setBusy(device.id);
+		setActionError(null);
 		try {
 			await signOutDevice(device.id);
 			setDevices((list) => list?.filter((item) => item.id !== device.id) ?? null);
 		} catch (err) {
-			setError(err instanceof Error ? err.message : t("devices.loadFailed"));
+			setActionError(err instanceof Error ? err.message : t("domains.requestFailed"));
 		} finally {
 			setBusy(null);
 		}
 	}
 
-	if (!devices) return <p className="text-sm text-neutral-500">{error ?? t("devices.loading")}</p>;
+	if (!devices) return loadError ? <p role="alert" className="text-sm text-red-600">{loadError}</p> : <p className="text-sm text-neutral-500">{t("devices.loading")}</p>;
 	if (devices.length === 0) return <p className="text-sm text-neutral-500">{t("devices.empty")}</p>;
 
 	return (
 		<div className="space-y-3">
-			{error ? <p className="text-sm text-red-600">{error}</p> : null}
+			{actionError ? <p role="alert" className="text-sm text-red-600">{actionError}</p> : null}
 			<ul className="divide-y divide-neutral-100 rounded-2xl bg-neutral-50">
 				{devices.map((device) => (
 					<li key={device.id} className="flex items-center gap-3 p-4">
