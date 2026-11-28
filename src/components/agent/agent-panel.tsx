@@ -365,6 +365,12 @@ export function AgentPanel({ open, fullSize, onClose, onToggleFullSize }: AgentP
 		finally { setApprovingId(null); }
 	}
 
+	// Stable handlers so memoised turns can ignore handler props without ever calling a stale function.
+	const handlersRef = useRef({ openDraftComposer, startDraftReview, confirmAction });
+	useLayoutEffect(() => { handlersRef.current = { openDraftComposer, startDraftReview, confirmAction }; });
+	const onOpenDraft = useCallback((draftId: string) => handlersRef.current.openDraftComposer(draftId), []);
+	const onApproveDraft = useCallback((draftId: string, revision: number) => void handlersRef.current.startDraftReview(draftId, revision), []);
+	const onApproveAction = useCallback((item: AgentMessage) => void handlersRef.current.confirmAction(item), []);
 	const draftActions = uniqueAgentDraftActions(messages);
 	const activeTool = busy ? activeAgentTool(messages) : null;
 	return <section id="email-assistant-panel" className="flex h-full w-full min-w-0 flex-col overflow-hidden rounded-3xl border border-neutral-200/70 bg-white text-neutral-900 shadow-xl shadow-neutral-300/30 max-md:rounded-b-none max-md:border-0 max-md:shadow-none" aria-label={t("agent.panel.label")}>
@@ -379,7 +385,7 @@ export function AgentPanel({ open, fullSize, onClose, onToggleFullSize }: AgentP
 					{settings && !providerConfigured && <p className="rounded-2xl border border-amber-100 bg-amber-50 p-3 text-amber-800">{t("agent.panel.configureProvider")}</p>}
 					{loadingConversation && <ConversationSkeleton />}
 					{!loadingConversation && messages.length === 0 && settings && <div className="pt-3"><label className="agent-welcome-heading mt-1 font-medium leading-tight text-neutral-800">{t("agent.panel.welcome")}</label><div className="mt-7 space-y-2">{welcomePrompts.map((item) => { const Icon = item.icon; return <button key={item.label} type="button" className="agent-welcome-prompt flex w-full items-center gap-3 rounded-2xl bg-[#f0f3f9] px-3 py-3 text-left transition-colors hover:bg-[#e6ecf6] disabled:cursor-not-allowed disabled:opacity-50" disabled={!providerConfigured || busy} onClick={() => submitMessage(item.prompt)}><span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white text-neutral-800"><Icon size={18} /></span><span className="min-w-0"><span className="block font-medium text-neutral-800">{item.label}</span><span className="block text-xs text-neutral-500">{item.detail}</span></span></button>; })}</div></div>}
-					{groupAgentMessages(messages).map((turn) => <AgentTurnView key={turn.id} turn={turn} draftActions={draftActions} onOpenDraft={openDraftComposer} onApproveDraft={(draftId, revision) => void startDraftReview(draftId, revision)} onApproveAction={(item) => void confirmAction(item)} approvingId={approvingId} />)}
+					{groupAgentMessages(messages).map((turn) => <AgentTurnView key={turn.id} turn={turn} draftActions={draftActions} onOpenDraft={onOpenDraft} onApproveDraft={onApproveDraft} onApproveAction={onApproveAction} approvingId={approvingId} />)}
 					{jobs.filter((job) => job.status === "completed" && job.draftId).slice(0, 5).map((job) => <div key={job.id} className="rounded-2xl border border-neutral-200 bg-white p-3"><p>{t("agent.panel.autoDraftReady")}</p><div className="mt-2 flex gap-3 text-blue-700"><button type="button" onClick={() => openDraftComposer(job.draftId!)}>{t("agent.panel.openDraft")}</button><button type="button" disabled={busy} onClick={() => submitMessage(`Read the thread containing email ${job.sourceMessageId} and draft another reply. Preserve the existing draft.`)}>{t("agent.panel.regenerate")}</button><button type="button" className="text-red-600" onClick={() => void discardJobDraft(job.draftId!)}>{t("agent.panel.discard")}</button></div></div>)}
 				</div>
 			</div>

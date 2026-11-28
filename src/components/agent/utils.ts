@@ -1,6 +1,6 @@
 import type { Translator } from "../../lib/i18n/utils";
 import type { KeyboardEvent } from "react";
-import type { AgentActionProposal, AgentDraftAction, AgentEmailReference, AgentEvent, AgentMessage, AgentTurn, QueuedAgentMessage } from "./types";
+import type { AgentActionProposal, AgentDraftAction, AgentEmailReference, AgentEvent, AgentMessage, AgentTurn, AgentTurnProps, QueuedAgentMessage } from "./types";
 
 export function enqueueAgentMessage(messages: QueuedAgentMessage[], text: string): QueuedAgentMessage[] {
 	return [...messages, { id: crypto.randomUUID(), text: text.trim() }];
@@ -47,11 +47,18 @@ export function draftFromToolContent(content: string) {
 	catch { return null; }
 }
 
+// A message object never changes content (updates replace it), so each tool result is parsed once. Callers only read it.
+const parsedTools = new WeakMap<AgentMessage, ReturnType<typeof parseAgentToolContent>>();
+
 export function uniqueAgentDraftActions(messages: AgentMessage[]): AgentDraftAction[] {
 	const byDraft = new Map<string, AgentDraftAction>();
 	for (const item of messages) {
 		if (item.role !== "tool" || item.toolState === "running" || item.toolState === "failed") continue;
-		const result = parseAgentToolContent(item.content);
+		let result = parsedTools.get(item);
+		if (result === undefined) {
+			result = parseAgentToolContent(item.content);
+			parsedTools.set(item, result);
+		}
 		if (result?.status === "sent" && typeof result.draftId === "string") {
 			byDraft.delete(result.draftId);
 			continue;
@@ -218,4 +225,23 @@ export function agentToolLabel(name: string | null | undefined, state: AgentMess
 	if (name === "get_thread" && emails !== null) return { label: t("agent.tool.threadCount", { count: emails }), description };
 	if ((name === "move_emails" || name === "move_email") && emails !== null) return { label: t(result?.status === "approved" ? "agent.tool.movedCount" : "agent.tool.preparedCount", { count: emails }), description };
 	return { label: agentToolText(name, "completed", t)!, description };
+}
+
+/**
+ * Whether a memoised turn can skip re-rendering. Messages are replaced, never mutated, so identity is enough;
+ * handler props are ignored because the panel passes stable wrappers that read the latest functions.
+ */
+export function agentTurnPropsEqual(previous: AgentTurnProps, next: AgentTurnProps): boolean {
+	const a = previous.turn;
+	const b = next.turn;
+	if (a.id !== b.id || a.running !== b.running || a.durationMs !== b.durationMs || a.user !== b.user || a.assistant !== b.assistant) return false;
+	if (a.activity.length !== b.activity.length || a.activity.some((item, index) => item !== b.activity[index])) return false;
+	if (previous.approvingId !== next.approvingId) return false;
+	const own = (props: AgentTurnProps) => props.draftActions.filter((action) => props.turn.activity.some((item) => item.id === action.messageId));
+	const before = own(previous);
+	const after = own(next);
+	return before.length === after.length && before.every((action, index) => {
+		const other = after[index];
+		return action.messageId === other.messageId && action.draftId === other.draftId && action.revision === other.revision && action.scheduledAt === other.scheduledAt;
+	});
 }
