@@ -124,6 +124,8 @@ Remote migrations require the target account's `database_id` in your local `wran
 
 ## Object storage (R2, Backblaze B2 or AWS S3)
 
+Not sure which to use? See [Choosing storage](storage.md) for prices and a recommendation.
+
 Raw mail, attachments, Drive files, avatars, branding icons, JMAP uploads and backups all live in one bucket. By default that is the `BUCKET` R2 binding in `wrangler.jsonc`. To use Backblaze B2 instead, set four Worker variables (as secrets, or in `.dev.vars` locally):
 
 | Variable | Example | Purpose |
@@ -141,6 +143,8 @@ npx wrangler secret put B2_ENDPOINT
 ```
 
 To use AWS S3 instead, set `S3_BUCKET`, `S3_REGION` and credentials: `S3_ACCESS_KEY_ID` and `S3_SECRET_ACCESS_KEY`, which fall back to `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY` so one IAM user can serve SES and storage. The bucket must be private and in the named region; the IAM user needs `s3:GetObject`, `s3:PutObject`, `s3:DeleteObject` and `s3:AbortMultipartUpload` on `arn:aws:s3:::<bucket>/*`. If both are configured, B2 wins.
+
+For any other S3-compatible provider (Hetzner, IDrive e2, Wasabi, OVH, Scaleway, DigitalOcean Spaces, MinIO, R2 over S3) set the same `S3_*` variables plus `S3_ENDPOINT`, the provider's host (`fsn1.your-objectstorage.com`, with or without `https://`). `S3_REGION` is the label the provider documents (it may be `auto`). Buckets are addressed as `bucket.endpoint` unless `S3_FORCE_PATH_STYLE=true`, which uses `endpoint/bucket` and is needed by MinIO and some providers. Examples are in [Choosing storage](storage.md#s3-compatible-providers).
 
 When all four B2 variables (or the S3 ones) are present that storage replaces R2 everywhere; with any missing, R2 stays in use (a partial setup is reported by `GET /api/v1/storage`). The R2 binding can stay in `wrangler.jsonc` and is simply unused. Use a bucket-restricted application key with read and write access, and keep the bucket private. Notes:
 

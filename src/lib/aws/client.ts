@@ -39,17 +39,21 @@ export type AwsRequest = {
 	headers?: Record<string, string>;
 	/** Region used to sign; defaults to the config's. */
 	region?: string;
+	/** Defaults to https; http is for a local S3-compatible server. */
+	protocol?: "https" | "http";
+	/** "manual" keeps signed requests from being replayed against another host; a 3xx then fails like any error. */
+	redirect?: "manual";
 };
 
 export async function awsRequest(request: AwsRequest): Promise<Response> {
 	const { config, service } = request;
 	const region = request.region ?? config.region;
-	const url = new URL(`https://${request.host ?? `${service}.${region}.amazonaws.com`}${request.path ?? "/"}`);
+	const url = new URL(`${request.protocol ?? "https"}://${request.host ?? `${service}.${region}.amazonaws.com`}${request.path ?? "/"}`);
 	for (const [name, value] of Object.entries(request.query ?? {})) url.searchParams.set(name, value);
 	const body = request.body ?? "";
 	const method = request.method ?? "GET";
 	const headers = await signAwsRequest({ method, url, headers: request.headers ?? {}, body, region, service, credentials: config, });
-	const response = await fetch(url, { method, headers, body: method === "GET" || method === "HEAD" ? undefined : body });
+	const response = await fetch(url, { method, headers, body: method === "GET" || method === "HEAD" ? undefined : body, ...(request.redirect ? { redirect: request.redirect } : {}) });
 	if (!response.ok) throw await parseError(response);
 	return response;
 }

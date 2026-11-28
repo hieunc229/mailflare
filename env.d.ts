@@ -58,11 +58,16 @@ interface CloudflareEnv {
 	B2_BUCKET?: string;
 	B2_ENDPOINT?: string;
 	/**
-	 * AWS S3 storage, used when B2 is not configured. Credentials fall back to AWS_ACCESS_KEY_ID /
+	 * AWS S3 storage, used when B2 is not configured. With S3_ENDPOINT it is any S3-compatible provider instead
+	 * (Hetzner, IDrive e2, Wasabi, MinIO, ...): a host such as fsn1.your-objectstorage.com, https only (http for
+	 * localhost on Node), and S3_REGION may be any label the provider documents. S3_FORCE_PATH_STYLE=true
+	 * addresses endpoint/bucket/key instead of bucket.endpoint/key. Credentials fall back to AWS_ACCESS_KEY_ID /
 	 * AWS_SECRET_ACCESS_KEY (read from the environment), so an existing SES key can serve both.
 	 */
 	S3_BUCKET?: string;
 	S3_REGION?: string;
+	S3_ENDPOINT?: string;
+	S3_FORCE_PATH_STYLE?: string;
 	S3_ACCESS_KEY_ID?: string;
 	S3_SECRET_ACCESS_KEY?: string;
 	CF_TOKEN?: string;

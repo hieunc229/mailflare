@@ -55,7 +55,7 @@ export function vercelConfigProblems(input: Vars): string[] {
 		const partial = describeB2Problem(storageVars);
 		if (partial) problems.push(partial);
 		else if (!readBlobCredentials(vars)) {
-			problems.push("Object storage is required: connect a private Vercel Blob store (BLOB_STORE_ID or BLOB_READ_WRITE_TOKEN), or set S3_BUCKET, S3_REGION and credentials, or B2_KEY_ID, B2_APPLICATION_KEY, B2_BUCKET and B2_ENDPOINT");
+			problems.push("Object storage is required: connect a private Vercel Blob store (BLOB_STORE_ID or BLOB_READ_WRITE_TOKEN), or set S3_BUCKET, S3_REGION and credentials (plus S3_ENDPOINT for a non-AWS provider), or B2_KEY_ID, B2_APPLICATION_KEY, B2_BUCKET and B2_ENDPOINT");
 		}
 	}
 	if (!readQStashConfig(vars) && QSTASH_VARS.some((name) => vars[name]?.trim())) {

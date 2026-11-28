@@ -39,7 +39,7 @@ A self-hosted alternative to Google Workspace. Setup **custom domain Emails**, *
 ### Technical
 
 - **Databases**: Cloudflare D1 (default), PostgreSQL, MySQL, Turso / libSQL, or a local SQLite file. Set `DATABASE_URL` to switch. Works with Supabase, Neon, PlanetScale, TiDB and more. See [Databases](docs/databases.md).
-- **File storage**: Cloudflare R2, Backblaze B2 or AWS S3.
+- **File storage**: Cloudflare R2, Backblaze B2 or AWS S3. See [Choosing storage](docs/storage.md).
 - **Hosting**: Cloudflare Workers, a single Docker container, or Vercel.
 - **Admin**: Users, API keys, webhooks, audit logs and backups.
 - **Import**: Bring in mail from IMAP, Gmail Takeout, `.eml` and `.mbox` files, and Google Calendar events, Google Contacts and Google Drive files from Takeout. See [Importing from Google Takeout](docs/import.md).
@@ -133,6 +133,7 @@ A schema change needs a migration for each database type. See [Databases](docs/d
 - [Deployment and configuration](docs/deployment.md)
 - [Deploying to Vercel](docs/vercel.md)
 - [Databases](docs/databases.md)
+- [Choosing storage](docs/storage.md)
 - [Sending and receiving providers](docs/providers.md)
 - [API and integrations](docs/api.md)
 - [Email assistant and MCP](docs/email-assistant-and-mcp.md)

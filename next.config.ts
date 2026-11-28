@@ -12,10 +12,18 @@ const isVercel = runtime === "vercel";
  * the configured S3 or Backblaze bucket, and the Vercel Blob API. Read at build time, like the variables
  * themselves, which need a redeploy to change.
  */
-function uploadSources(env = process.env): string[] {
+export function uploadSources(env = process.env): string[] {
 	const sources = ["https://vercel.com/api/blob/"];
 	const region = env.S3_REGION || env.AWS_REGION || env.AWS_DEFAULT_REGION;
-	if (env.S3_BUCKET && region) sources.push(`https://${env.S3_BUCKET.trim()}.s3.${region.trim()}.amazonaws.com`);
+	const custom = env.S3_ENDPOINT?.trim();
+	if (custom) {
+		// Any S3-compatible provider (vercel-env.ts and b2-config.ts validate the same variable at runtime).
+		try {
+			const url = new URL(/^https:\/\//i.test(custom) ? custom : `https://${custom}`);
+			const pathStyle = /^(true|1)$/i.test(env.S3_FORCE_PATH_STYLE?.trim() ?? "");
+			if (env.S3_BUCKET && url.protocol === "https:" && url.pathname === "/" && !url.search && !url.username) sources.push(pathStyle ? url.origin : `https://${env.S3_BUCKET.trim()}.${url.host}`);
+		} catch { /* a bad endpoint is reported at startup */ }
+	} else if (env.S3_BUCKET && region) sources.push(`https://${env.S3_BUCKET.trim()}.s3.${region.trim()}.amazonaws.com`);
 	const endpoint = env.B2_ENDPOINT?.trim().replace(/^https?:\/\//i, "").replace(/\/+$/, "").toLowerCase();
 	if (env.B2_BUCKET && endpoint) sources.push(`https://${env.B2_BUCKET.trim()}.${endpoint}`);
 	return sources;

@@ -36,3 +36,6 @@ CF_TOKEN=your_api_token_with_zone_email_permissions
 # S3_REGION=us-east-1
 # S3_ACCESS_KEY_ID=AKIA...
 # S3_SECRET_ACCESS_KEY=your_secret_access_key
+# Any other S3-compatible provider (Hetzner, IDrive e2, Wasabi, OVH, Scaleway, MinIO, ...): add the endpoint host.
+# S3_REGION is then whatever the provider documents (fsn1, auto, eu-central-1). Path style: S3_FORCE_PATH_STYLE=true.
+# S3_ENDPOINT=fsn1.your-objectstorage.com
