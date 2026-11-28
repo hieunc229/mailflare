@@ -150,13 +150,14 @@ export async function DELETE(request: Request, { params }: CalendarEventRoutePar
 		return NextResponse.json({ ok: true });
 	}
 	await db.delete(calendarEvents).where(eq(calendarEvents.id, existing.id));
+	let inviteErrors: string[] = [];
 	if (!isInboundInvite && existing.mailboxId && input.from) {
 		let attendees: string[] = [];
 		try { attendees = (JSON.parse(existing.attendees || "[]") as string[]).filter((address) => /^\S+@\S+\.\S+$/.test(address)); } catch { attendees = []; }
 		if (attendees.length) {
 			const file = createCalendarInvitation({ title: existing.title, description: existing.description, location: existing.location, startsAt: existing.startsAt, endsAt: existing.endsAt, uid: existing.id, method: "CANCEL", organizer: input.from, attendees, sequence: (existing.eventSequence ?? 0) + 1, reminderMinutes: null, repeat: "none", repeatDays: [], repeatAnchorDay: null, repeatUntil: null, repeatInterval: 1, repeatWeekday: null, repeatWeek: null, excludedOccurrences: [], overrides: [] });
-			await Promise.all(attendees.map((to) => sendEmail(env, { userId: user.id, mailboxId: existing.mailboxId!, from: input.from!, to, subject: `Cancelled: ${existing.title}`, text: `This event has been cancelled: ${existing.title}.`, attachments: [{ filename: "invite.ics", type: "text/calendar; charset=utf-8", content: file }] })));
+			inviteErrors = await sendToAttendees(attendees, (to) => sendEmail(env, { userId: user.id, mailboxId: existing.mailboxId!, from: input.from!, to, subject: `Cancelled: ${existing.title}`, text: `This event has been cancelled: ${existing.title}.`, attachments: [{ filename: "invite.ics", type: "text/calendar; charset=utf-8", content: file }] }));
 		}
 	}
-	return NextResponse.json({ ok: true });
+	return NextResponse.json(inviteErrors.length ? { ok: true, inviteErrors: [...new Set(inviteErrors)] } : { ok: true });
 }
