@@ -49,6 +49,7 @@ function toRow(id: string, userId: string, color: string, event: ImportEvent): C
 		title: event.title, description: event.description, location: event.location,
 		attendees: JSON.stringify(event.attendees), color,
 		repeat: event.repeat, repeatDays: JSON.stringify(event.repeatDays), repeatAnchorDay: event.repeatAnchorDay, repeatUntil: event.repeatUntil,
+		repeatInterval: event.repeatInterval, repeatWeekday: event.repeatWeekday, repeatWeek: event.repeatWeek,
 		excludedOccurrences: JSON.stringify(event.excluded.map((date) => date.getTime())),
 		timeZone: event.timeZone, startsAt: event.startsAt, endsAt: event.endsAt, reminderMinutes: event.reminderMinutes,
 	};

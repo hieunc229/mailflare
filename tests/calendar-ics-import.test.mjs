@@ -79,12 +79,29 @@ test("recurrence: weekly BYDAY, COUNT, and rules Mailflare cannot store become o
 	const count = parse(vevent("DTSTART;TZID=America/New_York:20261102T090000", "RRULE:FREQ=DAILY;COUNT=3", "SUMMARY:r"));
 	assert.equal(count.master.repeat, "daily");
 	assert.equal(count.master.repeatUntil.toISOString(), "2026-11-04T14:00:01.000Z");
-	for (const rule of ["FREQ=WEEKLY;INTERVAL=2", "FREQ=YEARLY", "FREQ=MONTHLY;BYDAY=2TU", "FREQ=MONTHLY;BYSETPOS=-1;BYDAY=FR", "FREQ=WEEKLY;BYMONTH=3", "FREQ=MONTHLY;BYMONTHDAY=-1", "FREQ=WEEKLY;BYDAY=TU"]) {
+	for (const rule of ["FREQ=MONTHLY;BYDAY=2TU", "FREQ=MONTHLY;BYSETPOS=-1;BYDAY=FR", "FREQ=WEEKLY;BYMONTH=3", "FREQ=MONTHLY;BYMONTHDAY=-1", "FREQ=WEEKLY;BYDAY=TU"]) {
 		const g = parse(vevent("DTSTART;TZID=America/New_York:20261102T090000", `RRULE:${rule}`, "SUMMARY:s"));
 		assert.equal(g.simplified, true, rule);
 		assert.equal(g.master.repeat, "none", rule);
 		assert.equal(g.master.startsAt.toISOString(), "2026-11-02T14:00:00.000Z", rule);
 	}
+	const ny = (start, rule) => parse(vevent(`DTSTART;TZID=America/New_York:${start}`, `RRULE:${rule}`, "SUMMARY:s"));
+	const yearly = ny("20261102T090000", "FREQ=YEARLY");
+	assert.equal(yearly.master.repeat, "yearly");
+	assert.equal(yearly.simplified, false);
+	const biweekly = ny("20261102T090000", "FREQ=WEEKLY;INTERVAL=2");
+	assert.equal(biweekly.master.repeat, "weekly");
+	assert.equal(biweekly.master.repeatInterval, 2);
+	const nth = ny("20261110T090000", "FREQ=MONTHLY;BYDAY=2TU");
+	assert.equal(nth.master.repeat, "monthly");
+	assert.equal(nth.master.repeatWeekday, 2);
+	assert.equal(nth.master.repeatWeek, 2);
+	assert.equal(nth.simplified, false);
+	assert.equal(ny("20261124T090000", "FREQ=MONTHLY;BYDAY=2TU").simplified, true);
+	assert.equal(ny("20261124T090000", "FREQ=MONTHLY;BYDAY=-1TU").master.repeatWeek, -1);
+	assert.equal(ny("20261105T090000", "FREQ=YEARLY;BYMONTH=11;BYMONTHDAY=5").master.repeat, "yearly");
+	assert.equal(ny("20261106T090000", "FREQ=YEARLY;BYMONTH=11;BYMONTHDAY=5").simplified, true);
+	assert.equal(ny("20240229T090000", "FREQ=YEARLY").simplified, true);
 	const rdate = parse(vevent("DTSTART;TZID=America/New_York:20261102T090000", "RRULE:FREQ=DAILY", "RDATE:20261201T090000Z", "SUMMARY:s"));
 	assert.equal(rdate.simplified, true);
 	const plain = parse(vevent("DTSTART;TZID=America/New_York:20261102T090000", "RRULE:FREQ=WEEKLY;BYDAY=MO", "SUMMARY:s"));
@@ -108,7 +125,7 @@ test("EXDATE, overrides and cancellations", () => {
 	assert.equal(gone.skipped, 1);
 	// An override with no master is a one-off event; one on a simplified master's own date replaces it.
 	assert.equal(parse(moved.join("\r\n")).overrides.length, 1);
-	const simple = ["BEGIN:VEVENT", "UID:u1", "DTSTART;TZID=America/New_York:20261104T090000", "RRULE:FREQ=YEARLY", "SUMMARY:Y", "END:VEVENT"];
+	const simple = ["BEGIN:VEVENT", "UID:u1", "DTSTART;TZID=America/New_York:20261104T090000", "RRULE:FREQ=MONTHLY;BYSETPOS=-1;BYDAY=FR", "SUMMARY:Y", "END:VEVENT"];
 	const sg = parse([...simple, ...moved].join("\r\n"));
 	assert.equal(sg.master, null);
 	assert.equal(sg.overrides.length, 1);
@@ -123,6 +140,8 @@ test("reminders: smallest relative DISPLAY alarm before START, END-related ignor
 	assert.equal(parse(base(alarm("ACTION:EMAIL", "TRIGGER:-PT10M"), alarm("ACTION:DISPLAY", "TRIGGER:-PT20M"))).master.reminderMinutes, 20);
 	assert.equal(parse(base(alarm("ACTION:EMAIL", "TRIGGER:-PT10M"))).master.reminderMinutes, 10);
 	assert.equal(parse(base(alarm("ACTION:DISPLAY", "TRIGGER:-P30D"))).master.reminderMinutes, null);
+	assert.equal(parse(base(alarm("ACTION:DISPLAY", "TRIGGER:-PT0M"))).master.reminderMinutes, 0);
+	assert.equal(parse(base(alarm("ACTION:DISPLAY", "TRIGGER:-P0DT0H0M0S"))).master.reminderMinutes, 0);
 	assert.equal(parse(base(alarm("ACTION:DISPLAY", "TRIGGER:-PT30M")), { reminders: false }).master.reminderMinutes, null);
 });
 
