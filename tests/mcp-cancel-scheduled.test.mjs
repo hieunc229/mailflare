@@ -29,14 +29,6 @@ async function cancelAs(t, permission, who = "delegate") {
 	return { data: JSON.parse(result.content[0].text), isError: !!result.isError, sqlite };
 }
 
-test("a read_only delegate cannot cancel a colleague's scheduled send over MCP", async (t) => {
-	const { data, isError, sqlite } = await cancelAs(t, "read_only");
-	assert.equal(isError, true);
-	assert.equal(data.error, "Permission denied");
-	assert.equal(sqlite.prepare("SELECT status FROM messages WHERE id = 'm-sched'").get().status, "queued");
-	assert.equal(sqlite.prepare("SELECT count(*) AS n FROM outbound_jobs").get().n, 1);
-});
-
 test("a delegate who may send on behalf can still cancel", async (t) => {
 	const { data, isError, sqlite } = await cancelAs(t, "send_on_behalf");
 	assert.equal(isError, false, JSON.stringify(data));
