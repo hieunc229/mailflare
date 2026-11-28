@@ -3,7 +3,7 @@ import type { AppDatabase } from "@/db";
 import { domains, folders, mailboxAliases, mailboxes, routingRules } from "@/db/schema";
 import { getEmailAddress } from "@/lib/email/address";
 import { getMailboxDomainAddresses } from "@/lib/mailboxes/domain-addresses";
-import { isBulkMail, type MailHeaders } from "@/lib/email/bulk-mail";
+import { getMailHeader, isBulkMail, type MailHeaders } from "@/lib/email/bulk-mail";
 import { MAIL_TYPE_BULK } from "@/lib/email/mail-type-rule";
 import { normalizeRecipientLocalPart, parseRecipientAddress } from "@/lib/email/recipient-address";
 
@@ -86,7 +86,7 @@ export async function resolveInboundAddress(
 	if (!domain) return null;
 
 	const domainRules = await listDomainRules(db, domain.id);
-	const matchInput: RuleMatchInput = { toAddress, fromAddress, headers: options.headers };
+	const matchInput: RuleMatchInput = { toAddress, fromAddress, headers: options.headers, subject: getMailHeader(options.headers, "subject") || undefined };
 
 	// Phase 1 — block rules run before any mailbox lookup so they can block a sender
 	// even when the recipient is a real mailbox.

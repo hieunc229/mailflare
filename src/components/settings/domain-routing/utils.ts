@@ -12,6 +12,9 @@ import type {
 	DomainRuleOperator,
 } from "./types";
 
+/** Fields the rule dialog offers; `content` stays in the labels for stored rules only. */
+export const SELECTABLE_MATCH_FIELDS: DomainRuleField[] = ["recipient", "sender", "title", "mail_type"];
+
 export const MATCH_FIELD_LABELS: Record<DomainRuleField, TranslationKey> = {
 	recipient: "routing.field.recipient",
 	sender: "routing.field.sender",

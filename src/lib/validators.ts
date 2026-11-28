@@ -492,6 +492,7 @@ export const domainRoutingRuleSchema = z
 	})
 	.superRefine((value, ctx) => {
 		checkMailTypeRule(value, ctx);
+		if (value.matchField === "content") ctx.addIssue({ code: "custom", path: ["matchField"], message: "Domain rules cannot match on message content" });
 		if (value.action === "store" && !value.mailboxId) {
 			ctx.addIssue({
 				code: "custom",
