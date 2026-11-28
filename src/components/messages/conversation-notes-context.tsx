@@ -11,7 +11,7 @@ const ConversationNotesContext = createContext<ConversationNotesState | null>(nu
  * The notes of the open conversation, shared by the toolbar button, the notes
  * under the subject and each email's menu. Refetches when mail changes.
  */
-export function ConversationNotesProvider({ messageId, emails, children }: ConversationNotesProviderProps) {
+export function ConversationNotesProvider({ messageId, emails, liveRefresh = true, children }: ConversationNotesProviderProps) {
 	const [notes, setNotes] = useState<ConversationNote[]>([]);
 	const [loading, setLoading] = useState(true);
 	const [open, setOpen] = useState(false);
@@ -52,13 +52,13 @@ export function ConversationNotesProvider({ messageId, emails, children }: Conve
 				void load();
 			}, 150);
 		}
-		window.addEventListener("mailflare:messages-changed", scheduleLoad);
+		if (liveRefresh) window.addEventListener("mailflare:messages-changed", scheduleLoad);
 		return () => {
 			cancelled = true;
 			window.removeEventListener("mailflare:messages-changed", scheduleLoad);
 			if (refreshTimer) window.clearTimeout(refreshTimer);
 		};
-	}, [messageId]);
+	}, [messageId, liveRefresh]);
 
 	const startNote = useCallback((target?: string) => {
 		setAttachTo(target ?? null);

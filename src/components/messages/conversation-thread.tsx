@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import type { ReactNode } from "react";
 import { formatUserDate } from "@/lib/time/utils";
 import { ChevronsUpDown, Paperclip } from "@/components/icons";
 import { ContactAvatar } from "@/components/contacts/contact-avatar";
@@ -26,8 +27,6 @@ import {
 } from "./conversation-thread-utils";
 import clsx from "clsx";
 import { Button } from "@/components/ui/button";
-import { useMessageListVisibility } from "./message-list-visibility";
-import { useAssistantOpen } from "../agent/assistant-open-state";
 
 /**
  * The other messages in a conversation, ordered oldest to newest and collapsed
@@ -142,6 +141,17 @@ export function ConversationThread({
 	);
 }
 
+/** The remote-content policy is read only for bodies that are on screen, not for every collapsed card. */
+function ExpandedRemoteContent({ senderEmail, spam, html, quotedHtml, plain }: { senderEmail: string; spam: boolean; html: string | null | undefined; quotedHtml: string | null | undefined; plain: ReactNode }) {
+	const remote = useRemoteContent(senderEmail, spam);
+	return (
+		<>
+			{html ? <EmailHtmlRenderer html={html} autoAllowRemote={remote.autoAllow} onAllowRemote={remote.allowSender} /> : plain}
+			{quotedHtml && <QuotedEmailToggle html={quotedHtml} autoAllowRemote={remote.autoAllow} onAllowRemote={remote.allowSender} />}
+		</>
+	);
+}
+
 export function ConversationMessageCard({
 	message,
 	mailboxId,
@@ -158,14 +168,10 @@ export function ConversationMessageCard({
 	const expanded = locallyExpanded;
 	const sender = getConversationSender(message, currentAccountName);
 	const senderEmail = getConversationSenderEmail(message);
-	const remote = useRemoteContent(senderEmail, message.status === "spam");
 	const recipients = getConversationRecipients(message, showFullRecipientAddresses ? "full" : "address");
 	// const href = `${getMessageBackHref(message.direction, message.status)}/${message.id}`;
 	const outbound = message.direction === "outbound";
 	const attachments = message.attachments.filter((attachment) => attachment.disposition === "attachment");
-	const { visible: messageListVisible } = useMessageListVisibility();
-	const isAssistantOpen = useAssistantOpen();
-	const isAnyPanelVisible = messageListVisible || isAssistantOpen;
 
 	const [prevRead, setPrevRead] = useState(message.read);
 	if (message.read !== prevRead) {
@@ -271,12 +277,13 @@ export function ConversationMessageCard({
 					<div className="pb-4 pt-2 sm:pl-[var(--reader-indent,30px)]">
 						{outbound && <MessageOpenStatus messageId={message.id} />}
 						{outbound && message.status !== "draft" && <MessageFollowUpStatus messageId={message.id} />}
-						{body.html ? (
-							<EmailHtmlRenderer html={body.html} autoAllowRemote={remote.autoAllow} onAllowRemote={remote.allowSender} />
-						) : (
-							<pre className="whitespace-pre-wrap font-sans text-sm text-neutral-900">{body.text}</pre>
-						)}
-						{body.quotedHtml && <QuotedEmailToggle html={body.quotedHtml} autoAllowRemote={remote.autoAllow} onAllowRemote={remote.allowSender} />}
+						<ExpandedRemoteContent
+							senderEmail={senderEmail}
+							spam={message.status === "spam"}
+							html={body.html}
+							quotedHtml={body.quotedHtml}
+							plain={<pre className="whitespace-pre-wrap font-sans text-sm text-neutral-900">{body.text}</pre>}
+						/>
 						{attachments.length > 0 && (
 							<ul className="mt-4 flex flex-wrap gap-2">
 								{attachments.map((attachment) => (

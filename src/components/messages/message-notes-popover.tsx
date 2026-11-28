@@ -155,7 +155,7 @@ export function MessageNotesPopover({ messageId, count, preview }: { messageId: 
 			onClick={(event: MouseEvent) => event.stopPropagation()}
 		>
 			{armed ? (
-				<ConversationNotesProvider messageId={messageId} emails={NO_EMAILS}>
+				<ConversationNotesProvider messageId={messageId} emails={NO_EMAILS} liveRefresh={open}>
 					<Trigger fallbackCount={count ?? 0} label={label} expanded={open} onToggle={() => (open ? close() : (setArmed(true), setOpen(true)))} />
 					{panel}
 				</ConversationNotesProvider>

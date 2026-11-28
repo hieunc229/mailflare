@@ -15,6 +15,8 @@ export type ConversationNotesProviderProps = {
 	messageId: string;
 	/** The emails of the conversation that are on screen. */
 	emails: NoteEmail[];
+	/** Refetch on mail changes. A provider that is mounted but hidden turns this off. Defaults to true. */
+	liveRefresh?: boolean;
 	children: ReactNode;
 };
 
