@@ -36,3 +36,23 @@ CF_TOKEN=your_api_token_with_zone_email_permissions
 # S3_REGION=us-east-1
 # S3_ACCESS_KEY_ID=AKIA...
 # S3_SECRET_ACCESS_KEY=your_secret_access_key
+
+# Optional: Web Push (browser notifications). Generate a VAPID key pair.
+# VAPID_PUBLIC_KEY=
+# VAPID_PRIVATE_KEY=
+# VAPID_SUBJECT=mailto:you@example.com
+
+# Optional: bot protection on login and reset forms (site key at build time via NEXT_PUBLIC_TURNSTILE_SITE_KEY).
+# TURNSTILE_SECRET_KEY=
+
+# Optional: spam and abuse reputation lookups.
+# SPAMHAUS_DQS_KEY=
+# ABUSECH_AUTH_KEY=
+
+# Optional: Apple push notifications for the mobile app.
+# APNS_KEY_ID=
+# APNS_TEAM_ID=
+# APNS_PRIVATE_KEY=
+
+# Optional: name of the Email Worker that receives routed mail.
+# CF_EMAIL_WORKER_NAME=
