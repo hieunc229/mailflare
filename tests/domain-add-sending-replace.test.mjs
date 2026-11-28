@@ -13,7 +13,7 @@ const mocks = {
 	"@/lib/deliverability/mta-sts-guard": "export const assertMxChangeAllowed=async()=>{};export const republishMtaStsAfterMxChange=async()=>{};export const assertDomainRemovable=async()=>{};export class ForceDeleteConfirmError extends Error{};export const forceCleanupMtaSts=async()=>({leftovers:[],cachedUntil:null});",
 	"@/lib/mailboxes/audit": "export async function createAuditLog(){}",
 	"drizzle-orm": "export const eq=(c,v)=>({eq:[c,v]});export const and=(...a)=>({and:a});export const ne=(c,v)=>({ne:[c,v]});export const inArray=(c,v)=>({inArray:[c,v]});",
-	"@/db/schema": "export const domains={};export const mailboxes={};",
+	"@/db/schema": "export const domains={};export const mailboxes={};export const mailboxAliases={};",
 	"@/db": "const rows={from(){return rows},where(){return rows},limit(){return Promise.resolve([])}};export function getDb(){return {select(){return rows}}}",
 	"@/lib/mailboxes/domain-addresses": "export async function ensureMailboxDomainRouting(){}",
 	"@/lib/ids": "export const newId=(p)=>p",
