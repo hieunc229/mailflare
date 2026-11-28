@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
 import type { AnySQLiteColumn } from "drizzle-orm/sqlite-core";
+import { schemaDialect } from "../dialect";
 import { kit } from "./kits";
 
 // Written once against the dialect kit (see kits.ts): SQLite by default, PostgreSQL or MySQL when
@@ -177,7 +178,6 @@ export const autoReplyDeliveries = sqliteTable(
 	},
 	(t) => [
 		uniqueIndex("auto_reply_deliveries_mailbox_recipient_idx").on(t.mailboxId, t.recipient),
-		index("auto_reply_deliveries_sent_idx").on(t.sentAt),
 	],
 );
 
@@ -202,7 +202,6 @@ export const mailboxAccess = sqliteTable(
 	(t) => [
 		uniqueIndex("mailbox_access_mailbox_user_idx").on(t.mailboxId, t.userId),
 		index("mailbox_access_user_idx").on(t.userId),
-		index("mailbox_access_mailbox_idx").on(t.mailboxId),
 		index("mailbox_access_created_by_idx").on(t.createdByUserId),
 	],
 );
@@ -230,7 +229,6 @@ export const contacts = sqliteTable(
 	},
 	(t) => [
 		uniqueIndex("contacts_user_email_idx").on(t.userId, t.email),
-		index("contacts_user_idx").on(t.userId),
 	],
 );
 
@@ -265,7 +263,6 @@ export const folders = sqliteTable(
 	(t) => [
 		uniqueIndex("folders_mailbox_name_idx").on(t.mailboxId, t.name),
 		index("folders_user_idx").on(t.userId),
-		index("folders_mailbox_idx").on(t.mailboxId),
 	],
 );
 
@@ -431,14 +428,19 @@ export const messages = sqliteTable(
 			desc(t.createdAt),
 			desc(t.id),
 		),
-		index("messages_thread_key_idx").on(
-			t.mailboxId,
-			t.status,
-			t.folderId,
-			sql`coalesce(${t.threadId}, ${t.id})`,
-			t.createdAt,
-		),
-		index("messages_mailbox_thread_key_idx").on(t.mailboxId, sql`coalesce(${t.threadId}, ${t.id})`),
+		// MySQL drops both in migration 0027 and cannot key an expression, so its schema does not declare them.
+		...(schemaDialect() === "mysql"
+			? []
+			: [
+					index("messages_thread_key_idx").on(
+						t.mailboxId,
+						t.status,
+						t.folderId,
+						sql`coalesce(${t.threadId}, ${t.id})`,
+						t.createdAt,
+					),
+					index("messages_mailbox_thread_key_idx").on(t.mailboxId, sql`coalesce(${t.threadId}, ${t.id})`),
+				]),
 		index("messages_nav_cover_idx").on(
 			t.mailboxId,
 			t.status,
@@ -495,7 +497,6 @@ export const spamTokenStats = sqliteTable(
 	},
 	(t) => [
 		uniqueIndex("spam_token_stats_mailbox_token_idx").on(t.mailboxId, t.token),
-		index("spam_token_stats_mailbox_idx").on(t.mailboxId),
 	],
 );
 
@@ -513,7 +514,6 @@ export const spamReputation = sqliteTable(
 	},
 	(t) => [
 		uniqueIndex("spam_reputation_mailbox_type_key_idx").on(t.mailboxId, t.type, t.key),
-		index("spam_reputation_mailbox_idx").on(t.mailboxId),
 	],
 );
 
@@ -970,7 +970,6 @@ export const calendarEventOverrides = sqliteTable(
 	},
 	(t) => [
 		uniqueIndex("calendar_event_overrides_event_occurrence_idx").on(t.eventId, t.occurrenceMs),
-		index("calendar_event_overrides_event_idx").on(t.eventId),
 	],
 );
 
@@ -1014,7 +1013,6 @@ export const calendarOccurrenceResponses = sqliteTable(
 	},
 	(t) => [
 		uniqueIndex("calendar_occurrence_responses_event_occurrence_guest_idx").on(t.eventId, t.occurrenceMs, t.guest),
-		index("calendar_occurrence_responses_event_idx").on(t.eventId),
 	],
 );
 
@@ -1147,7 +1145,7 @@ export const bookingEvents = sqliteTable(
 		createdAt: timestamp("created_at").notNull().$defaultFn(() => new Date()),
 		updatedAt: timestamp("updated_at").notNull().$defaultFn(() => new Date()),
 	},
-	(t) => [index("booking_events_user_idx").on(t.userId), uniqueIndex("booking_events_user_slug_idx").on(t.userId, t.slug)],
+	(t) => [uniqueIndex("booking_events_user_slug_idx").on(t.userId, t.slug)],
 );
 
 /**
@@ -1205,7 +1203,6 @@ export const routingRules = sqliteTable(
 	(t) => [
 		index("routing_rules_domain_scope_idx").on(t.domainId, t.scope, t.enabled),
 		index("routing_rules_mailbox_idx").on(t.mailboxId),
-		index("routing_rules_priority_idx").on(t.priority),
 		index("routing_rules_user_idx").on(t.userId),
 		index("routing_rules_folder_idx").on(t.folderId),
 	],
@@ -1250,7 +1247,6 @@ export const webhookDeliveries = sqliteTable(
 	},
 	(t) => [
 		index("webhook_deliveries_webhook_idx").on(t.webhookId, t.createdAt),
-		index("webhook_deliveries_status_idx").on(t.status),
 	],
 );
 
@@ -1501,7 +1497,9 @@ export const auditLogs = sqliteTable(
 		index("audit_logs_mailbox_idx").on(t.mailboxId),
 		index("audit_logs_created_idx").on(t.createdAt),
 		index("audit_logs_message_id_idx").on(t.messageId),
-		index("audit_logs_target_user_idx").on(t.targetUserId),
+		// MySQL installs hold `action` as longtext, which can only be indexed by prefix, and drizzle cannot express a prefix. That index
+		// (`action`(64), see mysql 0027) is created by migration and left out here, so the column stays longtext and nothing is regenerated.
+		...(schemaDialect() === "mysql" ? [] : [index("audit_logs_target_action_created_idx").on(t.targetUserId, t.action, t.createdAt)]),
 	],
 );
 

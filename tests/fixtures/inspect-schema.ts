@@ -41,6 +41,6 @@ for (const value of Object.values(schema.schema)) {
 	for (const index of config.indexes) track(index.config.name, index.config.columns);
 	for (const unique of config.uniqueConstraints ?? []) track(unique.name ?? "unique", unique.columns);
 	for (const fk of config.foreignKeys) for (const column of fk.reference().columns) if (column.name) indexed.add(column.name);
-	out[config.name] = { columns, indexed: [...indexed], indexBytes };
+	out[config.name] = { columns, indexed: [...indexed], indexBytes, indexNames: config.indexes.map((index) => index.config.name) };
 }
 console.log(JSON.stringify(out));

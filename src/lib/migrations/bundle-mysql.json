@@ -511,6 +511,26 @@
         "CREATE TABLE `contact_details` (\n\t`contact_id` varchar(191) NOT NULL,\n\t`details` longtext NOT NULL DEFAULT ('{}'),\n\t`updated_at` bigint NOT NULL,\n\tCONSTRAINT `contact_details_contact_id` PRIMARY KEY(`contact_id`)\n);",
         "ALTER TABLE `contact_details` ADD CONSTRAINT `contact_details_contact_id_contacts_id_fk` FOREIGN KEY (`contact_id`) REFERENCES `contacts`(`id`) ON DELETE cascade ON UPDATE no action;"
       ]
+    },
+    {
+      "name": "0027_schema_lows.sql",
+      "statements": [
+        "CREATE INDEX `audit_logs_target_action_created_idx` ON `audit_logs` (`target_user_id`,`action`(64),`created_at`);",
+        "DROP INDEX `mailbox_access_mailbox_idx` ON `mailbox_access`;",
+        "DROP INDEX `contacts_user_idx` ON `contacts`;",
+        "DROP INDEX `folders_mailbox_idx` ON `folders`;",
+        "DROP INDEX `spam_token_stats_mailbox_idx` ON `spam_token_stats`;",
+        "DROP INDEX `spam_reputation_mailbox_idx` ON `spam_reputation`;",
+        "DROP INDEX `calendar_event_overrides_event_idx` ON `calendar_event_overrides`;",
+        "DROP INDEX `calendar_occurrence_responses_event_idx` ON `calendar_occurrence_responses`;",
+        "DROP INDEX `booking_events_user_idx` ON `booking_events`;",
+        "DROP INDEX `auto_reply_deliveries_sent_idx` ON `auto_reply_deliveries`;",
+        "DROP INDEX `webhook_deliveries_status_idx` ON `webhook_deliveries`;",
+        "DROP INDEX `routing_rules_priority_idx` ON `routing_rules`;",
+        "DROP INDEX `audit_logs_target_user_idx` ON `audit_logs`;",
+        "DROP INDEX `messages_thread_key_idx` ON `messages`;",
+        "DROP INDEX `messages_mailbox_thread_key_idx` ON `messages`;"
+      ]
     }
   ]
 }
