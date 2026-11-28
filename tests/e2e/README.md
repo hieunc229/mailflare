@@ -1,5 +1,7 @@
 # Passkey browser tests
 
+These specs are not run by CI. Run them by hand against a disposable instance with `npm run test:e2e`.
+
 Install Chromium once with `npx playwright install chromium`, then run:
 
 ```sh
