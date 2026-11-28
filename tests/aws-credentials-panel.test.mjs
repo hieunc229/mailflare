@@ -105,6 +105,11 @@ const NOT_CONFIGURED = {
 	policy: { Version: "2012-10-17", Statement: [{ Effect: "Allow", Action: ["ses:GetAccount"], Resource: "*" }] },
 };
 
+const CONFIGURED = {
+	status: { configured: true, source: "settings", region: "us-east-1", accessKeyHint: "…MPLE", accountId: "123456789012" },
+	policy: NOT_CONFIGURED.policy,
+};
+
 const REFUSAL = {
 	error: "These credentials work but have no SES permissions. Attach the policy shown below.",
 	report: {
@@ -175,4 +180,27 @@ test("requestJson keeps the parsed body on a rejected response", async () => {
 	assert.equal(error.message, "nope");
 	assert.deepEqual(error.data.report, REFUSAL.report);
 	assert.equal(typeof en["aws.missingSummary"], "string");
+});
+
+const REPORT = { ...REFUSAL.report, sending: true, productionAccess: true, missing: [] };
+
+test("mounting with saved credentials reads status without validating them", async () => {
+	const calls = stubApi([{ body: CONFIGURED }]);
+	await renderPanel();
+
+	assert.equal(calls.length, 1);
+	assert.equal(calls[0].method, "GET");
+	assert.ok(!calls.some((call) => call.method === "POST"));
+});
+
+test("Re-check validates once and shows the capability rows", async () => {
+	const calls = stubApi([{ body: CONFIGURED }, { body: { report: REPORT } }]);
+	await renderPanel();
+	const { act } = await import("react");
+	const recheck = [...document.querySelectorAll("button")].find((b) => b.textContent === en["aws.recheck"]);
+	assert.ok(recheck, "Re-check button");
+	await act(async () => { recheck.click(); });
+
+	assert.deepEqual(calls.map((call) => call.method), ["GET", "POST"]);
+	assert.ok(document.body.textContent.includes(en["aws.sesSending"]));
 });

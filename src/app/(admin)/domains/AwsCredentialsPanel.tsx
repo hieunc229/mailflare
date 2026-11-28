@@ -46,14 +46,13 @@ export default function AwsCredentialsPanel({ need, onChanged }: Props) {
 	useEffect(() => {
 		let active = true;
 		requestJson<PanelResponse>("/api/admin/aws", "GET")
-			.then(async (data) => {
+			.then((data) => {
 				if (!active) return;
 				setStatus(data.status);
 				setPolicy(data.policy);
 				if (data.status.region) setRegion(data.status.region);
 				if (!data.status.configured) { onChanged?.(false, null); return; }
-				const checked = await requestJson<{ report: AwsCapabilityReport }>("/api/admin/aws", "POST", {});
-				if (active) { setReport(checked.report); onChanged?.(true, checked.report); }
+				onChanged?.(true, null);
 			})
 			.catch((err) => { if (active) { setError(err instanceof Error ? err.message : t("aws.loadFailed")); setStatus((current) => current ?? { configured: false, source: null, region: null, accessKeyHint: null, accountId: null }); } });
 		return () => { active = false; };
