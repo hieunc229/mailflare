@@ -8,6 +8,7 @@ import { authFetch } from "@/lib/auth/client";
 import type { ResendDomainView } from "@/lib/domains/resend-domain-types";
 import ResendKeyRow from "./ResendKeyRow";
 import { StatusRow } from "./status-row";
+import { useProviderAction } from "./use-provider-action";
 
 type ResendResponse = { keyConfigured?: boolean; canManageDomains?: boolean; resend?: ResendDomainView | null; error?: string };
 
@@ -25,9 +26,7 @@ export default function ResendDomainSection({ domainId, onStatus }: { domainId: 
 	const [canManage, setCanManage] = useState(true);
 	const [loading, setLoading] = useState(true);
 	const [reload, setReload] = useState(0);
-	const [busy, setBusy] = useState<"setup" | "verify" | "test" | null>(null);
-	const [error, setError] = useState("");
-	const [notice, setNotice] = useState("");
+	const { busy, error, notice, setError, setNotice, run } = useProviderAction();
 
 	useEffect(() => {
 		let active = true;
@@ -50,15 +49,6 @@ export default function ResendDomainSection({ domainId, onStatus }: { domainId: 
 		if (loading) return;
 		onStatus?.(keyConfigured === false ? "no_key" : canManage ? (view?.status ?? null) : null);
 	}, [loading, keyConfigured, canManage, view, onStatus]);
-
-	async function run(kind: "setup" | "verify" | "test", action: () => Promise<void>) {
-		setBusy(kind);
-		setError("");
-		setNotice("");
-		try { await action(); }
-		catch (err) { setError(err instanceof Error ? err.message : t("domains.requestFailed")); }
-		finally { setBusy(null); }
-	}
 
 	const domainAction = (action: "setup" | "verify") => run(action, async () => {
 		const data = await postJson<ResendResponse>(`/api/domains/${domainId}/resend`, "POST", { action }, t);
