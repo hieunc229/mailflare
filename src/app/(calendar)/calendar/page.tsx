@@ -577,7 +577,7 @@ export default function CalendarPage() {
               ))}
             </div>
             {days.map((day) => (
-              <div key={dateKey(day)} className={"relative border-l border-neutral-100"}
+              <div key={dateKey(day)} role="group" aria-label={formatUserDate(day, { dateStyle: "full" })} className={"relative border-l border-neutral-100"}
                 onDragOver={(event) => {
                   if (!draggedEvent) return;
                   event.preventDefault();

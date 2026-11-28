@@ -5,6 +5,7 @@ import type { DragEvent, PointerEvent as ReactPointerEvent } from "react";
 import clsx from "clsx";
 import { useLanguage } from "@/components/language-provider";
 import { normalizeCalendarColor } from "@/lib/calendar/colors";
+import { formatUserDate } from "@/lib/time/utils";
 import { addDays, dateKey, EVENT_COLOR_CLASSES, eventPosition, formatEventRange, isPendingInvite, PAST_EVENT_COLOR_CLASSES, PENDING_EVENT_CLASSES } from "./utils";
 import type { CalendarEvent, EventResizeEdge } from "./types";
 import type { DayEventsProps } from "./day-events-types";
@@ -41,6 +42,7 @@ function DayEventsImpl({ day, events, currentTime, busy, activeEventId, onEdit, 
 							onDragStart={(dragEvent: DragEvent<HTMLButtonElement>) => onDragStart(dragEvent, event)}
 							onDragEnd={onDragEnd}
 							title={`${event.title} · ${range}`}
+							aria-label={`${event.title}, ${formatUserDate(day, { dateStyle: "full" })}, ${range}`}
 							className={`absolute left-1 right-1 z-10 flex cursor-move flex-col items-start justify-start overflow-hidden rounded-lg pr-2 pl-4 text-left hover:brightness-95 ${isPendingInvite(event) ? PENDING_EVENT_CLASSES : isPastEvent ? PAST_EVENT_COLOR_CLASSES[color] : EVENT_COLOR_CLASSES[color]} ${position.height >= 20 ? "py-1.5" : "py-0"} ${activeEventId === event.id ? "opacity-40" : ""}`}
 							style={{ top: position.top, height: position.height }}>
 							<span className="absolute top-1 left-1 block h-[calc(100%-8px)] w-1 rounded-xl bg-current" />
