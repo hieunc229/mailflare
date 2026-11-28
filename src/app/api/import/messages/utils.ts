@@ -1,13 +1,21 @@
 import { readFormDataBody } from "@/lib/http/request";
 import { DEFAULT_IMPORT_DESTINATION, parseImportDestination } from "@/lib/import/destination";
 import type { ImportDestination } from "@/lib/import/destination-types";
-import { splitMboxBytes } from "@/lib/import/mbox";
+import { splitMbox } from "@/lib/import/gmail-takeout-utils";
 import type { ImportMessageInput } from "@/lib/import/types";
 
 export const MAX_IMPORT_REQUEST_SIZE = 25 * 1024 * 1024;
 /** Without `background`, the request imports inline (the Takeout uploader), so it stays small. */
 const MAX_INLINE_IMPORT_MESSAGES = 100;
 const MAX_BACKGROUND_IMPORT_MESSAGES = 5000;
+
+/** One message per mbox entry; a file with no "From " separator line is a single raw message. */
+export async function splitMboxUpload(buffer: ArrayBuffer): Promise<ArrayBuffer[]> {
+	const parts: ArrayBuffer[] = [];
+	for await (const raw of splitMbox((async function* () { yield new Uint8Array(buffer); })())) parts.push(raw.buffer as ArrayBuffer);
+	if (parts.length === 0 && new Uint8Array(buffer).some((byte) => byte > 32)) return [buffer];
+	return parts;
+}
 
 function isMboxFile(filename: string, type: string): boolean {
 	const name = filename.toLowerCase();
@@ -62,7 +70,7 @@ export async function parseImportForm(request: Request): Promise<{
 	for (const file of files) {
 		if (isMboxFile(file.name, file.type)) {
 			// Split the bytes, not decoded text, so 8-bit bodies reach the parser as they were written.
-			for (const [index, raw] of splitMboxBytes(await file.arrayBuffer()).entries()) {
+			for (const [index, raw] of (await splitMboxUpload(await file.arrayBuffer())).entries()) {
 				const filename = `${file.name}#${index + 1}`;
 				messages.push({ filename, raw, ...getMessageFlags(flags, filename) });
 			}
