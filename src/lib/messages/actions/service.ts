@@ -32,6 +32,8 @@ import type {
 } from "./types";
 
 const MAX_ACTION_MESSAGES = 5000;
+/** Filter training costs several round trips per message; later rows of a bulk action are moved without it. */
+const MAX_SPAM_TRAINING_PER_REQUEST = 50;
 const MESSAGE_ID_CHUNK = 90;
 const MESSAGE_QUERY_CONCURRENCY = 5;
 const D1_BOUND_PARAMETER_BUDGET = 90;
@@ -284,6 +286,7 @@ export async function applyMessageActionForUser(
 	const skipped: MessageActionSkipped[] = [];
 	const plans: Array<{ plan: PlannedUpdate; record: MessageActionRecord }> = [];
 	const seen = new Set<string>();
+	let trained = 0;
 
 	for (const row of rows) {
 		seen.add(row.id);
@@ -312,8 +315,9 @@ export async function applyMessageActionForUser(
 		const next = { ...previous, ...result.patch };
 		const fields = Object.keys(result.patch) as MessageStateField[];
 		const changedFields = getChangedStateFields(previous, next);
-		const trainingAction = action === "spam" || (action === "inbox" && row.status === "spam");
+		const trainingAction = (action === "spam" || (action === "inbox" && row.status === "spam")) && trained < MAX_SPAM_TRAINING_PER_REQUEST;
 		if (changedFields.length === 0 && !trainingAction) continue;
+		if (trainingAction) trained += 1;
 
 		if (trainingAction) {
 			try {
