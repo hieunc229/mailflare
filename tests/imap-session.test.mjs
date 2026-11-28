@@ -128,7 +128,7 @@ test("flags come from the columns, the IMAP-only table and well-formed keywords 
 test("the folder view reports expunges (highest first), new messages and flag changes, and stays put between refreshes", async (t) => {
 	const { env, sqlite, addMessage } = await world(t);
 	const ids = [addMessage(), addMessage(), addMessage()];
-	const view = await m.FolderView.open(env, "m1", "inbox");
+	const view = await m.FolderView.open(env, "m1", "inbox", "u1");
 	assert.deepEqual(view.uids, [1, 2, 3]);
 	assert.equal(view.exists, 3);
 	assert.deepEqual(await view.refresh(), { expunged: [], exists: null, flagged: [], vanished: [], highestModseq: null, uidvalidityChanged: false });
@@ -151,7 +151,7 @@ test("the folder view reports expunges (highest first), new messages and flag ch
 test("opening a folder nothing was ever delivered to gives it UIDVALIDITY and UIDNEXT 1", async (t) => {
 	const { env, sqlite } = await world(t);
 	sqlite.prepare("INSERT INTO folders (id, user_id, mailbox_id, name, created_at) VALUES ('f9', 'u1', 'm1', 'Empty', 1)").run();
-	const view = await m.FolderView.open(env, "m1", "f:f9");
+	const view = await m.FolderView.open(env, "m1", "f:f9", "u1");
 	assert.equal(view.exists, 0);
 	assert.equal(view.uidNext, 1);
 	assert.ok(view.uidvalidity > 0);

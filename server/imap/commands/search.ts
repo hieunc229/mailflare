@@ -34,7 +34,7 @@ export async function runSearch(c: ImapConnection, command: ParsedCommand, uidMo
 	let highest: number | null = null;
 	if (usesModseq(criteria)) {
 		c.enableCondstore();
-		if (uids.length) highest = await maxModseqOf(c.env, view.mailboxId, view.folderKey, uids);
+		if (uids.length) highest = await maxModseqOf(c.env, view.mailboxId, view.folderKey, uids, view.userId);
 	}
 	if (returns === null) {
 		c.untagged(`SEARCH${numbers.length ? ` ${numbers.join(" ")}` : ""}${highest !== null ? ` (MODSEQ ${highest})` : ""}`);

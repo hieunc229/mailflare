@@ -153,7 +153,7 @@ export async function storeFlags(env: CloudflareEnv, identity: ImapIdentity, mai
 		);
 	};
 	for (const group of chunksOf(ids, STEP)) {
-		const rows = await loadMessageRows(env, mailboxId, group, folderKey);
+		const rows = await loadMessageRows(env, mailboxId, identity.userId, group, folderKey);
 		const changes: Array<{ id: string; row: MessageFlagsRow; next: NextFlags }> = [];
 		for (const id of group) {
 			const row = rows.get(id);

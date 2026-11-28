@@ -196,8 +196,8 @@ async function respond(c: ImapConnection, rows: Row[], items: Item[], uidMode: b
 		const slice = rows.slice(at, at + 90);
 		// The mod-sequence is read before the flags: a change in between then shows up as a newer number at the next refresh,
 		// where the other order would pair old flags with a number that already counts the change.
-		const modseqs = needsModseq || sent ? await modseqsOf(c.env, selected.mailboxId, selected.view.folderKey, slice.map((row) => row.uid)) : null;
-		const found = await loadMessageRows(c.env, selected.mailboxId, slice.map((row) => row.id));
+		const modseqs = needsModseq || sent ? await modseqsOf(c.env, selected.mailboxId, selected.view.folderKey, slice.map((row) => row.uid), selected.view.userId) : null;
+		const found = await loadMessageRows(c.env, selected.mailboxId, c.identity!.userId, slice.map((row) => row.id));
 		const delivered: Row[] = [];
 		try {
 			for (const row of slice) {
@@ -299,7 +299,7 @@ export async function runFetch(c: ImapConnection, command: ParsedCommand, uidMod
 	let rows = numbers.map((msn) => ({ msn, uid: view.uids[msn - 1], id: view.messageIds[msn - 1] }));
 	if (modifiers.changedSince !== null) {
 		if (modifiers.vanished) await c.sendVanished(await vanishedSince(c.env, view, modifiers.changedSince, resolveRanges(ranges, Math.max(view.uidNext - 1, 0))), true);
-		const changed = await changedSince(c.env, view.mailboxId, view.folderKey, modifiers.changedSince);
+		const changed = await changedSince(c.env, view.mailboxId, view.folderKey, modifiers.changedSince, view.userId);
 		rows = rows.filter((row) => changed.has(row.uid));
 	}
 	// A body section fetched without PEEK marks the message read (RFC 3501 6.4.5), in a read-write session only,

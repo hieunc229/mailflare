@@ -667,7 +667,7 @@ test("a SEARCH has at most 64 keys, nested ones included", async (t) => {
 test("one command reads at most 2000 messages in total, and no query is run once no candidate is left", async (t) => {
 	const w = await world(t);
 	for (let index = 0; index < 12; index += 1) await w.addRaw(`s${index}`, RAW_ALTERNATIVE, { subject: `Subject ${index}` });
-	const view = await FolderView.open(w.env, "m1", "inbox");
+	const view = await FolderView.open(w.env, "m1", "inbox", "u1");
 	const criteria = (text) => parseSearchCriteria(text.split(" ").map((value) => ({ type: "ATOM", value })), decoderFor(null));
 
 	// Two header tests over the same 12 messages: 24 reads between them.

@@ -181,7 +181,7 @@ test("subtractPresent removes the UIDs that exist from the ranges and keeps the 
 });
 
 async function openView(env) {
-	return FolderView.open(env, "m1", "inbox");
+	return FolderView.open(env, "m1", "inbox", "u1");
 }
 
 test("vanishedSince lists the UIDs expunged after a mod-sequence, from the rows that are kept", async (t) => {
@@ -243,15 +243,15 @@ test("changedSince and modseqsOf read the mod-sequences of the folder", async (t
 	const since = sqlite.prepare("SELECT highest_modseq FROM imap_folder_state WHERE id = 'm1:inbox'").get().highest_modseq;
 	sqlite.prepare("UPDATE messages SET starred = ? WHERE id = ?").run(1, ids[1]);
 	await sync();
-	assert.deepEqual([...(await changedSince(env, "m1", "inbox", since))], [2]);
-	assert.deepEqual([...(await changedSince(env, "m1", "inbox", 0))].sort(), [1, 2, 3]);
-	const found = await modseqsOf(env, "m1", "inbox", [1, 2, 3]);
+	assert.deepEqual([...(await changedSince(env, "m1", "inbox", since, "u1"))], [2]);
+	assert.deepEqual([...(await changedSince(env, "m1", "inbox", 0, "u1"))].sort(), [1, 2, 3]);
+	const found = await modseqsOf(env, "m1", "inbox", [1, 2, 3], "u1");
 	assert.ok(found.get(2) > since && found.get(1) <= since);
-	assert.equal(await maxModseqOf(env, "m1", "inbox", [1, 3]), Math.max(found.get(1), found.get(3)));
-	assert.equal(await maxModseqOf(env, "m1", "inbox", [1, 2, 3, 99]), found.get(2));
-	assert.equal(await maxModseqOf(env, "m1", "inbox", []), 0);
-	assert.deepEqual([...(await modseqsOf(env, "m1", "inbox", [2, 3, 99])).keys()].sort(), [2, 3]);
-	const many = await modseqsOf(env, "m1", "inbox", Array.from({ length: 250 }, (_, index) => index + 1));
+	assert.equal(await maxModseqOf(env, "m1", "inbox", [1, 3], "u1"), Math.max(found.get(1), found.get(3)));
+	assert.equal(await maxModseqOf(env, "m1", "inbox", [1, 2, 3, 99], "u1"), found.get(2));
+	assert.equal(await maxModseqOf(env, "m1", "inbox", [], "u1"), 0);
+	assert.deepEqual([...(await modseqsOf(env, "m1", "inbox", [2, 3, 99], "u1")).keys()].sort(), [2, 3]);
+	const many = await modseqsOf(env, "m1", "inbox", Array.from({ length: 250 }, (_, index) => index + 1), "u1");
 	assert.equal(many.size, 3, "chunked lookups give the same answer");
 });
 
@@ -885,9 +885,9 @@ test("maxModseqOf looks past one chunk of UIDs", async (t) => {
 	sqlite.prepare("UPDATE messages SET starred = 1 WHERE id = ?").run(ids[150]);
 	await sync();
 	const top = sqlite.prepare("SELECT max(modseq) AS top FROM imap_uids").get().top;
-	assert.equal(await maxModseqOf(env, "m1", "inbox", Array.from({ length: 200 }, (_, index) => index + 1)), top);
+	assert.equal(await maxModseqOf(env, "m1", "inbox", Array.from({ length: 200 }, (_, index) => index + 1), "u1"), top);
 	assert.ok(top > 200, "the changed message has the highest one");
-	assert.equal(await maxModseqOf(env, "m1", "inbox", [1, 2, 3]), 3 <= top ? sqlite.prepare("SELECT max(modseq) AS top FROM imap_uids WHERE uid <= 3").get().top : 0);
+	assert.equal(await maxModseqOf(env, "m1", "inbox", [1, 2, 3], "u1"), 3 <= top ? sqlite.prepare("SELECT max(modseq) AS top FROM imap_uids WHERE uid <= 3").get().top : 0);
 });
 
 test("a log too large for one command is not read at all before the other path is taken", async (t) => {

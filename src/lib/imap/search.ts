@@ -4,6 +4,7 @@ import { imapMessageFlags, imapUids, messages } from "@/db/schema";
 import { containsLike } from "@/db/sql";
 import { parseModseq } from "./condstore";
 import { bad, no } from "./errors";
+import { draftsVisibleTo } from "@/lib/email/draft-access";
 import { MimeIndexError, getMessageIndex, readSection } from "./fetch";
 import { parseSequenceSet, selectByNumber, selectByUid, type SetRange } from "./sets";
 import type { FolderView } from "./view";
@@ -319,7 +320,7 @@ export class SearchEvaluator {
 			.from(imapUids)
 			.innerJoin(messages, and(eq(messages.id, imapUids.messageId), eq(messages.mailboxId, imapUids.mailboxId)))
 			.leftJoin(imapMessageFlags, eq(imapMessageFlags.messageId, messages.id))
-			.where(and(eq(imapUids.mailboxId, this.view.mailboxId), eq(imapUids.folderKey, this.view.folderKey), condition));
+			.where(and(eq(imapUids.mailboxId, this.view.mailboxId), eq(imapUids.folderKey, this.view.folderKey), draftsVisibleTo(this.view.userId), condition));
 		return new Set(rows.map((row) => Number(row.uid)).filter((uid) => within.has(uid)));
 	}
 

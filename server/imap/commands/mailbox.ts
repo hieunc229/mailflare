@@ -1,4 +1,8 @@
+import { and, count as count_, eq } from "drizzle-orm";
 import type { ParsedCommand } from "imap-handler";
+import { getDb } from "@/db";
+import { imapUids, messages } from "@/db/schema";
+import { draftsVisibleTo } from "@/lib/email/draft-access";
 import { bad, no } from "@/lib/imap/errors";
 import { decodeFolderName, encodeFolderName } from "@/lib/imap/folders";
 import { SHARED_PREFIX, findFolder, type Namespace, type NamespaceFolder } from "@/lib/imap/namespace";
@@ -55,7 +59,7 @@ export async function runSelect(c: ImapConnection, command: ParsedCommand, exami
 	const unwatch = await c.notifier.watch(mailboxId, c.identity!.userId, () => c.changed());
 	let view: FolderView;
 	try {
-		view = await FolderView.open(c.env, mailboxId, folder.key);
+		view = await FolderView.open(c.env, mailboxId, folder.key, c.identity!.userId);
 	} catch (error) {
 		unwatch();
 		throw error;
@@ -121,7 +125,7 @@ function parseSelectParams(c: ImapConnection, arg: Arg): { qresync: Resync | nul
 async function resync(c: ImapConnection, view: FolderView, request: Resync): Promise<void> {
 	const within = request.known ? resolveRanges(request.known, Math.max(view.uidNext - 1, 0)) : null;
 	await c.sendVanished(await vanishedSince(c.env, view, request.modseq, within), true);
-	const changed = await changedSince(c.env, view.mailboxId, view.folderKey, request.modseq);
+	const changed = await changedSince(c.env, view.mailboxId, view.folderKey, request.modseq, view.userId);
 	const flagged = view.uids.flatMap((uid, index) => (changed.has(uid) ? [{ msn: index + 1, uid }] : []));
 	if (flagged.length) await sendFlags(c, flagged);
 }
@@ -136,12 +140,13 @@ async function statusLine(c: ImapConnection, folder: NamespaceFolder, items: Sta
 	await syncMailbox(c.env, mailboxId);
 	await ensureFolderState(c.env, mailboxId, folder.key!);
 	const [state] = (await c.env.DB.prepare("SELECT uidvalidity, uid_next, highest_modseq FROM imap_folder_state WHERE id = ?").bind(`${mailboxId}:${folder.key}`).all<{ uidvalidity: number; uid_next: number; highest_modseq: number }>()).results;
+	// Counts cover the messages the user may see: another user's draft is not counted.
 	const count = async (unseenOnly: boolean) => {
-		const query = unseenOnly
-			? "SELECT count(*) AS n FROM imap_uids u INNER JOIN messages m ON m.id = u.message_id AND m.mailbox_id = u.mailbox_id WHERE u.mailbox_id = ? AND u.folder_key = ? AND m.read = ?"
-			: "SELECT count(*) AS n FROM imap_uids WHERE mailbox_id = ? AND folder_key = ?";
-		const bindings = unseenOnly ? [mailboxId, folder.key, false] : [mailboxId, folder.key];
-		const [row] = (await c.env.DB.prepare(query).bind(...bindings).all<{ n: number }>()).results;
+		const [row] = await getDb(c.env)
+			.select({ n: count_() })
+			.from(imapUids)
+			.innerJoin(messages, and(eq(messages.id, imapUids.messageId), eq(messages.mailboxId, imapUids.mailboxId)))
+			.where(and(eq(imapUids.mailboxId, mailboxId), eq(imapUids.folderKey, folder.key!), draftsVisibleTo(c.identity!.userId), ...(unseenOnly ? [eq(messages.read, false)] : [])));
 		return Number(row?.n ?? 0);
 	};
 	const parts: string[] = [];

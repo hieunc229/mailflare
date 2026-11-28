@@ -1,3 +1,7 @@
+import { and, eq, gt, inArray, max } from "drizzle-orm";
+import { getDb } from "@/db";
+import { imapUids, messages } from "@/db/schema";
+import { DRAFT_FILTER_PARAMS, draftsVisibleTo } from "@/lib/email/draft-access";
 import type { FolderView } from "./view";
 
 /**
@@ -8,7 +12,8 @@ import type { FolderView } from "./view";
 type Env = Pick<CloudflareEnv, "DB">;
 export type UidRange = [number, number];
 
-const ID_CHUNK = 90;
+/** A statement binds at most 100 parameters on D1: the mailbox, the folder, the user of the draft filter and the UIDs. */
+const ID_CHUNK = 90 - DRAFT_FILTER_PARAMS;
 /** UIDs read per page of the expunge log, and ranges per VANISHED line. */
 const PAGE = 5000;
 export const RANGES_PER_LINE = 1000;
@@ -56,33 +61,49 @@ function lowerIndex(sorted: number[], value: number): number {
 
 export const formatRanges = (ranges: UidRange[]): string => ranges.map(([low, high]) => (low === high ? String(low) : `${low}:${high}`)).join(",");
 
-const marks = (count: number) => Array.from({ length: count }, () => "?").join(", ");
+/** The folder's UIDs with their messages, for the messages `userId` may see: another user's draft has no UID here. */
+const visibleUids = (env: Env, mailboxId: string, folderKey: string, userId: string) =>
+	getDb(env as CloudflareEnv)
+		.select({ uid: imapUids.uid, modseq: imapUids.modseq })
+		.from(imapUids)
+		.innerJoin(messages, and(eq(messages.id, imapUids.messageId), eq(messages.mailboxId, imapUids.mailboxId)))
+		.where(and(eq(imapUids.mailboxId, mailboxId), eq(imapUids.folderKey, folderKey), draftsVisibleTo(userId)));
 
-/** The mod-sequence of each of these UIDs (those the folder has). */
-export async function modseqsOf(env: Env, mailboxId: string, folderKey: string, uids: number[]): Promise<Map<number, number>> {
+/** The mod-sequence of each of these UIDs (those the folder has and `userId` may see). */
+export async function modseqsOf(env: Env, mailboxId: string, folderKey: string, uids: number[], userId: string): Promise<Map<number, number>> {
 	const result = new Map<number, number>();
 	for (let at = 0; at < uids.length; at += ID_CHUNK) {
-		const part = uids.slice(at, at + ID_CHUNK);
-		const rows = (await env.DB.prepare(`SELECT uid, modseq FROM imap_uids WHERE mailbox_id = ? AND folder_key = ? AND uid IN (${marks(part.length)})`).bind(mailboxId, folderKey, ...part).all<{ uid: number; modseq: number }>()).results;
+		const rows = await getDb(env as CloudflareEnv)
+			.select({ uid: imapUids.uid, modseq: imapUids.modseq })
+			.from(imapUids)
+			.innerJoin(messages, and(eq(messages.id, imapUids.messageId), eq(messages.mailboxId, imapUids.mailboxId)))
+			.where(and(eq(imapUids.mailboxId, mailboxId), eq(imapUids.folderKey, folderKey), draftsVisibleTo(userId), inArray(imapUids.uid, uids.slice(at, at + ID_CHUNK))));
 		for (const row of rows) result.set(Number(row.uid), Number(row.modseq));
 	}
 	return result;
 }
 
-/** The highest mod-sequence among these UIDs of the folder (0 when none exists), computed by the database. */
-export async function maxModseqOf(env: Env, mailboxId: string, folderKey: string, uids: number[]): Promise<number> {
+/** The highest mod-sequence among these UIDs of the folder that `userId` may see (0 when none exists), computed by the database. */
+export async function maxModseqOf(env: Env, mailboxId: string, folderKey: string, uids: number[], userId: string): Promise<number> {
 	let top = 0;
 	for (let at = 0; at < uids.length; at += ID_CHUNK) {
-		const part = uids.slice(at, at + ID_CHUNK);
-		const [row] = (await env.DB.prepare(`SELECT max(modseq) AS top FROM imap_uids WHERE mailbox_id = ? AND folder_key = ? AND uid IN (${marks(part.length)})`).bind(mailboxId, folderKey, ...part).all<{ top: number | null }>()).results;
+		const [row] = await getDb(env as CloudflareEnv)
+			.select({ top: max(imapUids.modseq) })
+			.from(imapUids)
+			.innerJoin(messages, and(eq(messages.id, imapUids.messageId), eq(messages.mailboxId, imapUids.mailboxId)))
+			.where(and(eq(imapUids.mailboxId, mailboxId), eq(imapUids.folderKey, folderKey), draftsVisibleTo(userId), inArray(imapUids.uid, uids.slice(at, at + ID_CHUNK))));
 		top = Math.max(top, Number(row?.top ?? 0));
 	}
 	return top;
 }
 
-/** The UIDs of the folder changed after `since` (a new message and a flag change both count). */
-export async function changedSince(env: Env, mailboxId: string, folderKey: string, since: number): Promise<Set<number>> {
-	const rows = (await env.DB.prepare("SELECT uid FROM imap_uids WHERE mailbox_id = ? AND folder_key = ? AND modseq > ?").bind(mailboxId, folderKey, since).all<{ uid: number }>()).results;
+/** The UIDs of the folder changed after `since` (a new message and a flag change both count), for the messages `userId` may see. */
+export async function changedSince(env: Env, mailboxId: string, folderKey: string, since: number, userId: string): Promise<Set<number>> {
+	const rows = await getDb(env as CloudflareEnv)
+		.select({ uid: imapUids.uid })
+		.from(imapUids)
+		.innerJoin(messages, and(eq(messages.id, imapUids.messageId), eq(messages.mailboxId, imapUids.mailboxId)))
+		.where(and(eq(imapUids.mailboxId, mailboxId), eq(imapUids.folderKey, folderKey), draftsVisibleTo(userId), gt(imapUids.modseq, since)));
 	return new Set(rows.map((row) => Number(row.uid)));
 }
 
@@ -154,7 +175,8 @@ async function countLog(env: Env, view: FolderView, since: number, limit: number
 async function fromExistingUids(env: Env, view: FolderView, within: UidRange[] | null): Promise<UidRange[]> {
 	const [state] = (await env.DB.prepare("SELECT uid_next FROM imap_folder_state WHERE id = ?").bind(`${view.mailboxId}:${view.folderKey}`).all<{ uid_next: number }>()).results;
 	const top = Number(state?.uid_next ?? 1) - 1;
-	const rows = (await env.DB.prepare("SELECT uid FROM imap_uids WHERE mailbox_id = ? AND folder_key = ? ORDER BY uid").bind(view.mailboxId, view.folderKey).all<{ uid: number }>()).results;
+	// Only the UIDs the user may see count as present: a message that turned into another user's draft has vanished for this user.
+	const rows = (await visibleUids(env, view.mailboxId, view.folderKey, view.userId)).sort((a, b) => Number(a.uid) - Number(b.uid));
 	const candidates: UidRange[] = (within ?? [[1, top]]).map(([low, high]): UidRange => [Math.max(low, 1), Math.min(high, top)]).filter(([low, high]) => low <= high);
 	return subtractPresent(candidates, rows.map((row) => Number(row.uid)));
 }

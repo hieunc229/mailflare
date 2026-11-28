@@ -57,7 +57,7 @@ export async function runStore(c: ImapConnection, command: ParsedCommand, uidMod
 		c.enableCondstore();
 		await syncMailbox(c.env, c.selected!.mailboxId);
 		guard = { jmapSeq: (await syncedChangeSeq(c.env, c.selected!.mailboxId)) ?? 0, unwritten: new Set() };
-		const current = await modseqsOf(c.env, c.selected!.mailboxId, view.folderKey, rows.map((row) => row.uid));
+		const current = await modseqsOf(c.env, c.selected!.mailboxId, view.folderKey, rows.map((row) => row.uid), view.userId);
 		modified = rows.filter((row) => (current.get(row.uid) ?? 0) > unchangedSince!);
 		todo = rows.filter((row) => !modified.includes(row));
 	}
@@ -68,7 +68,7 @@ export async function runStore(c: ImapConnection, command: ParsedCommand, uidMod
 	const sent = new Map<number, number>();
 	if (!item[2] || unchangedSince !== null) await sendFlags(c, done.map(({ msn, uid }) => ({ msn, uid })), !item[2], sent);
 	// A silent STORE sends nothing: the client is taken to hold the versions as they are right after its own write.
-	else for (const [uid, value] of await modseqsOf(c.env, c.selected!.mailboxId, view.folderKey, done.map((row) => row.uid))) sent.set(uid, value);
+	else for (const [uid, value] of await modseqsOf(c.env, c.selected!.mailboxId, view.folderKey, done.map((row) => row.uid), view.userId)) sent.set(uid, value);
 	view.noteOwn(sent);
 	if (modified.length) return { code: `MODIFIED ${compactSet(modified.map((row) => (uidMode ? row.uid : row.msn)))}`, text: "Conditional STORE failed" };
 }

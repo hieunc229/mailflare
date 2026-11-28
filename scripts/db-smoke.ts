@@ -343,10 +343,10 @@ await db.delete(messages).where(eq(messages.id, logged));
 await syncMailbox(env, imapMailbox);
 
 // IMAP CONDSTORE and QRESYNC: the mod-sequence reads, the expunge log prune (state lock, floor update and delete in one batch, old rows read through the age index) and the vanished-UID answer on both sides of the floor.
-const inboxView = await FolderView.open(env, imapMailbox, "inbox");
-const inboxChanged = await changedSince(env, imapMailbox, "inbox", 0);
-const inboxModseqs = await modseqsOf(env, imapMailbox, "inbox", [...inboxChanged]);
-check("imap mod-sequence reads (by UID list, maximum in SQL, changed since) agree", inboxChanged.size >= 1 && inboxModseqs.size === inboxChanged.size && (await maxModseqOf(env, imapMailbox, "inbox", [...inboxChanged])) === Math.max(...inboxModseqs.values()));
+const inboxView = await FolderView.open(env, imapMailbox, "inbox", userId);
+const inboxChanged = await changedSince(env, imapMailbox, "inbox", 0, userId);
+const inboxModseqs = await modseqsOf(env, imapMailbox, "inbox", [...inboxChanged], userId);
+check("imap mod-sequence reads (by UID list, maximum in SQL, changed since) agree", inboxChanged.size >= 1 && inboxModseqs.size === inboxChanged.size && (await maxModseqOf(env, imapMailbox, "inbox", [...inboxChanged], userId)) === Math.max(...inboxModseqs.values()));
 const [loggedExpunges] = await db.all<{ n: number }>(sql`SELECT count(*) AS n FROM imap_expunged WHERE mailbox_id = ${imapMailbox} AND folder_key = 'inbox'`);
 const vanishedFromLog = await vanishedSince(env, inboxView, 0, null);
 await db.run(sql`UPDATE imap_expunged SET created_at = 1 WHERE mailbox_id = ${imapMailbox}`);

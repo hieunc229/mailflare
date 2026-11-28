@@ -33,7 +33,7 @@ async function pick(c: ImapConnection, command: ParsedCommand, uidMode: boolean,
 	const numbers = uidMode ? selectByUid(ranges, view.uids) : selectByNumber(ranges, view.exists);
 	if (numbers.length > cap) throw no(`Too many messages in one command; use at most ${cap}`, "LIMIT");
 	const wanted = numbers.map((msn) => ({ uid: view.uids[msn - 1], id: view.messageIds[msn - 1] }));
-	const found = new Map((await loadFolderRows(c.env, selected.mailboxId, view.folderKey, wanted.map((entry) => entry.id))).map((entry) => [entry.row.id, entry.row]));
+	const found = new Map((await loadFolderRows(c.env, selected.mailboxId, view.folderKey, wanted.map((entry) => entry.id), view.userId)).map((entry) => [entry.row.id, entry.row]));
 	const kept = wanted.filter((entry) => found.has(entry.id));
 	return { picked: { rows: kept.map((entry) => found.get(entry.id)!), uids: kept.map((entry) => entry.uid) }, destArg };
 }

@@ -1,6 +1,7 @@
-import { and, eq, inArray, isNull } from "drizzle-orm";
+import { and, asc, eq, inArray, isNull } from "drizzle-orm";
 import { getDb } from "@/db";
-import { imapMessageFlags, messageAttachments, messages } from "@/db/schema";
+import { imapMessageFlags, imapUids, messageAttachments, messages } from "@/db/schema";
+import { DRAFT_FILTER_PARAMS, draftsVisibleTo, logMessageHidden, privateDraftForStatus } from "@/lib/email/draft-access";
 import { copyMessageAttachments } from "@/lib/email/attachments";
 import { deleteUnreferencedObjects } from "@/lib/drive/shared-objects";
 import { deleteMessageWithObjects } from "@/lib/email/message-cleanup";
@@ -32,16 +33,19 @@ const STATEMENTS_PER_BATCH = 40;
 
 const chunksOf = <T>(items: T[], size: number) => Array.from({ length: Math.ceil(items.length / size) }, (_, index) => items.slice(index * size, (index + 1) * size));
 
-/** The rows of these messages that are in `mailboxId` and still in folder `key`, with whether each is flagged \Deleted. */
-export async function loadFolderRows(env: CloudflareEnv, mailboxId: string, key: string, ids: string[]): Promise<Array<{ row: MessageRow; deleted: boolean }>> {
+/**
+ * The rows of these messages that are in `mailboxId` and still in folder `key`, with whether each is flagged \Deleted.
+ * Another user's draft is never returned (`draftsVisibleTo`), so no write path can reach one.
+ */
+export async function loadFolderRows(env: CloudflareEnv, mailboxId: string, key: string, ids: string[], userId: string): Promise<Array<{ row: MessageRow; deleted: boolean }>> {
 	const db = getDb(env);
 	const result: Array<{ row: MessageRow; deleted: boolean }> = [];
-	for (const chunk of chunksOf(ids, 90)) {
+	for (const chunk of chunksOf(ids, 90 - DRAFT_FILTER_PARAMS)) {
 		const found = await db
 			.select({ row: messages, deleted: imapMessageFlags.deleted })
 			.from(messages)
 			.leftJoin(imapMessageFlags, eq(imapMessageFlags.messageId, messages.id))
-			.where(and(eq(messages.mailboxId, mailboxId), inArray(messages.id, chunk)));
+			.where(and(eq(messages.mailboxId, mailboxId), draftsVisibleTo(userId), inArray(messages.id, chunk)));
 		for (const entry of found) if (folderKeyOf(entry.row) === key) result.push({ row: entry.row, deleted: !!entry.deleted });
 	}
 	return result;
@@ -102,9 +106,11 @@ export async function moveMessages(env: CloudflareEnv, identity: ImapIdentity, r
 	if (!rows.length) return;
 	const db = getDb(env);
 	const groups = new Map<string, { from: MessageRow; to: { status: string; folderId: string | null }; ids: string[] }>();
+	const becomesPrivate = new Set<string>();
 	for (const row of rows) {
 		const placed = placeIn(row, dest);
 		if ("error" in placed) throw no(placed.error, "CANNOT");
+		if (!row.privateDraft && privateDraftForStatus(placed.status).privateDraft) becomesPrivate.add(row.id);
 		const id = JSON.stringify([row.status, row.folderId, placed.status, placed.folderId]);
 		const group = groups.get(id) ?? { from: row, to: placed, ids: [] };
 		group.ids.push(row.id);
@@ -114,7 +120,7 @@ export async function moveMessages(env: CloudflareEnv, identity: ImapIdentity, r
 		chunksOf(ids, ID_CHUNK).map((chunk) =>
 			db
 				.update(messages)
-				.set({ status: to.status, folderId: to.folderId, ...(dest.key === "inbox" ? { snoozedUntil: null } : {}) })
+				.set({ status: to.status, folderId: to.folderId, ...privateDraftForStatus(to.status), ...(to.status === "draft" ? { userId: identity.userId } : {}), ...(dest.key === "inbox" ? { snoozedUntil: null } : {}) })
 				.where(and(eq(messages.mailboxId, dest.mailboxId), inArray(messages.id, chunk), eq(messages.status, from.status), from.folderId === null ? isNull(messages.folderId) : eq(messages.folderId, from.folderId))),
 		),
 	);
@@ -122,8 +128,10 @@ export async function moveMessages(env: CloudflareEnv, identity: ImapIdentity, r
 	// One transaction for the whole command when it fits one batch; a larger MOVE is a few batches that each hold whole groups.
 	for (const part of chunksOf([...statements, ...flagResets], STATEMENTS_PER_BATCH)) await db.batch(part as never);
 	// What follows concerns the messages that are in the destination now; one that another client filed elsewhere meanwhile was not moved by this command.
-	const landed = new Set((await loadFolderRows(env, dest.mailboxId, dest.key, rows.map((row) => row.id))).map((entry) => entry.row.id));
+	const landed = new Set((await loadFolderRows(env, dest.mailboxId, dest.key, rows.map((row) => row.id), identity.userId)).map((entry) => entry.row.id));
 	const moved = rows.filter((row) => landed.has(row.id));
+	// A message that turned into a draft is gone for the mailbox's other readers (the same entry JMAP writes).
+	for (const row of moved) if (becomesPrivate.has(row.id)) await logMessageHidden(db, row);
 	if (dest.key === "trash") {
 		await createAuditLogs(env, moved.map((row) => ({ actorUserId: identity.userId, mailboxId: dest.mailboxId, messageId: row.id, action: "email.delete", metadata: { status: "trash", source: "imap" } })));
 	}
@@ -180,9 +188,11 @@ export async function copyMessages(env: CloudflareEnv, identity: ImapIdentity, r
 				...columns,
 				id,
 				mailboxId: dest.mailboxId,
-				userId: sameMailbox ? row.userId : dest.key === "sent" || dest.key === "drafts" ? identity.userId : dest.ownerUserId,
+				// A private draft is its author's wherever it goes; the copier saw it, so the copier is the author.
+				userId: placements[index].status === "draft" || row.privateDraft ? identity.userId : sameMailbox ? row.userId : dest.key === "sent" ? identity.userId : dest.ownerUserId,
 				folderId: placements[index].folderId,
 				status: placements[index].status,
+				...privateDraftForStatus(placements[index].status),
 				snoozedUntil: null,
 				rawR2Key: rawKeys.get(id) ?? null,
 				// A thread is a notion of one mailbox.
@@ -233,13 +243,20 @@ const MAX_EXPUNGE_CANDIDATES = 10_000;
  */
 export async function expungeDeleted(env: CloudflareEnv, identity: ImapIdentity, mailboxId: string, key: FolderKey, only?: (uid: number) => boolean): Promise<number> {
 	await syncMailbox(env, mailboxId);
-	const candidates = (await env.DB
-		.prepare("SELECT u.uid AS uid, u.message_id AS message_id FROM imap_uids u INNER JOIN imap_message_flags f ON f.message_id = u.message_id WHERE u.mailbox_id = ? AND u.folder_key = ? AND f.deleted = ? ORDER BY u.uid LIMIT ?")
-		.bind(mailboxId, key, true, MAX_EXPUNGE_CANDIDATES)
-		.all<{ uid: number; message_id: string }>()).results.filter((row) => !only || only(Number(row.uid)));
+	// Only messages the user may see are candidates: another user's flagged draft is neither expunged nor counted against the cap.
+	const candidates = (
+		await getDb(env)
+			.select({ uid: imapUids.uid, message_id: imapUids.messageId })
+			.from(imapUids)
+			.innerJoin(imapMessageFlags, eq(imapMessageFlags.messageId, imapUids.messageId))
+			.innerJoin(messages, and(eq(messages.id, imapUids.messageId), eq(messages.mailboxId, imapUids.mailboxId)))
+			.where(and(eq(imapUids.mailboxId, mailboxId), eq(imapUids.folderKey, key), eq(imapMessageFlags.deleted, true), draftsVisibleTo(identity.userId)))
+			.orderBy(asc(imapUids.uid))
+			.limit(MAX_EXPUNGE_CANDIDATES)
+	).filter((row) => !only || only(Number(row.uid)));
 	let removed = 0;
-	for (const chunk of chunksOf(candidates.map((row) => row.message_id), 90)) {
-		const current = (await loadFolderRows(env, mailboxId, key, chunk)).filter((entry) => entry.deleted).map((entry) => entry.row);
+	for (const chunk of chunksOf(candidates.map((row) => row.message_id), 90 - DRAFT_FILTER_PARAMS)) {
+		const current = (await loadFolderRows(env, mailboxId, key, chunk, identity.userId)).filter((entry) => entry.deleted).map((entry) => entry.row);
 		if (!current.length) continue;
 		const permanent = current.filter((row) => row.status === "trash" || row.status === "draft");
 		removed += (await trashUnchanged(env, identity, current.filter((row) => !permanent.includes(row)))).length;

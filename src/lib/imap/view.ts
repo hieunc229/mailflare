@@ -1,6 +1,7 @@
-import { and, eq, inArray } from "drizzle-orm";
+import { and, asc, eq, inArray } from "drizzle-orm";
 import { getDb } from "@/db";
-import { imapMessageFlags, messages } from "@/db/schema";
+import { imapMessageFlags, imapUids, messages } from "@/db/schema";
+import { DRAFT_FILTER_PARAMS, draftsVisibleTo } from "@/lib/email/draft-access";
 import { folderKeyOf } from "./folders";
 import { ensureFolderState, syncMailbox } from "./sync";
 
@@ -10,6 +11,9 @@ import { ensureFolderState, syncMailbox } from "./sync";
  * `refresh` brings it up to date with the IMAP state tables and says what to send;
  * between refreshes nothing changes, so sequence numbers stay stable while a FETCH,
  * STORE or SEARCH runs (RFC 3501 section 7.4.1).
+ *
+ * The view is the one of a user: other users' drafts (`draftsVisibleTo`) are not in it, so every command that works from
+ * the view (sequence numbers, UID sets, SEARCH, FETCH, STORE, COPY, MOVE, EXPUNGE) can neither see nor reach them.
  */
 export type ViewUpdate = {
 	/** Sequence numbers of removed messages, highest first, each valid when it is sent. */
@@ -28,7 +32,8 @@ export type ViewUpdate = {
 
 type FolderStateRow = { uidvalidity: number; uid_next: number; highest_modseq: number };
 
-const ID_CHUNK = 90;
+/** D1 binds at most 100 parameters per statement: the mailbox, the user of the draft filter and the ids. */
+const ID_CHUNK = 90 - DRAFT_FILTER_PARAMS;
 
 export class FolderView {
 	uids: number[] = [];
@@ -38,12 +43,12 @@ export class FolderView {
 	uidNext = 1;
 	private highestModseq = -1;
 
-	private constructor(private readonly env: CloudflareEnv, readonly mailboxId: string, readonly folderKey: string) {}
+	private constructor(private readonly env: CloudflareEnv, readonly mailboxId: string, readonly folderKey: string, readonly userId: string) {}
 
-	static async open(env: CloudflareEnv, mailboxId: string, folderKey: string): Promise<FolderView> {
+	static async open(env: CloudflareEnv, mailboxId: string, folderKey: string, userId: string): Promise<FolderView> {
 		await syncMailbox(env, mailboxId);
 		await ensureFolderState(env, mailboxId, folderKey);
-		const view = new FolderView(env, mailboxId, folderKey);
+		const view = new FolderView(env, mailboxId, folderKey, userId);
 		await view.load();
 		return view;
 	}
@@ -66,12 +71,17 @@ export class FolderView {
 	/** The state is read before the UID list: a change committed in between is picked up by the next refresh. */
 	private async load(): Promise<void> {
 		const state = await this.readState();
-		const rows = (await this.env.DB.prepare("SELECT uid, message_id, modseq FROM imap_uids WHERE mailbox_id = ? AND folder_key = ? ORDER BY uid").bind(this.mailboxId, this.folderKey).all<{ uid: number; message_id: string; modseq: number }>()).results;
+		const rows = await getDb(this.env)
+			.select({ uid: imapUids.uid, messageId: imapUids.messageId, modseq: imapUids.modseq })
+			.from(imapUids)
+			.innerJoin(messages, and(eq(messages.id, imapUids.messageId), eq(messages.mailboxId, imapUids.mailboxId)))
+			.where(and(eq(imapUids.mailboxId, this.mailboxId), eq(imapUids.folderKey, this.folderKey), draftsVisibleTo(this.userId)))
+			.orderBy(asc(imapUids.uid));
 		this.uidvalidity = Number(state.uidvalidity);
 		this.uidNext = Number(state.uid_next);
 		this.highestModseq = Number(state.highest_modseq);
 		this.uids = rows.map((row) => Number(row.uid));
-		this.messageIds = rows.map((row) => row.message_id);
+		this.messageIds = rows.map((row) => row.messageId);
 		this.modseqs = rows.map((row) => Number(row.modseq));
 	}
 
@@ -123,8 +133,8 @@ export type MessageFlagsRow = {
 	keywords: string | null;
 };
 
-/** The columns FETCH and SEARCH need per message, for messages of this mailbox only (and, with `folderKey`, only those still in that folder). */
-export async function loadMessageRows(env: CloudflareEnv, mailboxId: string, ids: string[], folderKey?: string): Promise<Map<string, MessageFlagsRow>> {
+/** The columns FETCH and SEARCH need per message, for messages of this mailbox only that `userId` may see (and, with `folderKey`, only those still in that folder). */
+export async function loadMessageRows(env: CloudflareEnv, mailboxId: string, userId: string, ids: string[], folderKey?: string): Promise<Map<string, MessageFlagsRow>> {
 	const result = new Map<string, MessageFlagsRow>();
 	const db = getDb(env);
 	for (let at = 0; at < ids.length; at += ID_CHUNK) {
@@ -132,7 +142,7 @@ export async function loadMessageRows(env: CloudflareEnv, mailboxId: string, ids
 			.select({ id: messages.id, folderId: messages.folderId, read: messages.read, starred: messages.starred, status: messages.status, createdAt: messages.createdAt, answered: imapMessageFlags.answered, forwarded: imapMessageFlags.forwarded, deleted: imapMessageFlags.deleted, keywords: imapMessageFlags.keywords })
 			.from(messages)
 			.leftJoin(imapMessageFlags, eq(imapMessageFlags.messageId, messages.id))
-			.where(and(eq(messages.mailboxId, mailboxId), inArray(messages.id, ids.slice(at, at + ID_CHUNK))));
+			.where(and(eq(messages.mailboxId, mailboxId), draftsVisibleTo(userId), inArray(messages.id, ids.slice(at, at + ID_CHUNK))));
 		for (const { folderId, ...row } of rows) {
 			if (folderKey === undefined || folderKeyOf({ mailboxId, folderId, status: row.status }) === folderKey) result.set(row.id, row);
 		}
