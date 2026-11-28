@@ -56,6 +56,8 @@ export default function BackupsPage() {
   // Local edits to the backup settings; until the first edit the loaded settings are shown.
   const [editedSettings, setSettings] = useState<BackupSettings | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  // The table-group dialog edits this copy; only its Save button commits it.
+  const [draft, setDraft] = useState<BackupSettings | null>(null);
   const backups = useQuery({
     queryKey: ["backups"],
     queryFn: fetchBackups,
@@ -74,6 +76,7 @@ export default function BackupsPage() {
     mutationFn: saveBackupSettings,
     onSuccess: (_data, nextSettings) => {
       savedSettings.current = nextSettings;
+      setSettings(nextSettings);
       setSettingsOpen(false);
       return queryClient.invalidateQueries({ queryKey: ["backups"] });
     },
@@ -152,7 +155,7 @@ export default function BackupsPage() {
                   <Upload className="h-4 w-4" />
                   {restore.isPending ? t("backups.restoring") : t("backups.restore")}
                 </DropdownMenu.Item>
-                <DropdownMenu.Item disabled={!settings || autoSaveSettings.isPending} onSelect={() => setSettingsOpen(true)} className="flex cursor-pointer items-center gap-2 rounded-md px-3 py-2 text-neutral-900 outline-none hover:bg-neutral-100 focus:bg-neutral-100 data-[disabled]:pointer-events-none data-[disabled]:opacity-50">
+                <DropdownMenu.Item disabled={!settings || autoSaveSettings.isPending} onSelect={() => { setDraft(settings); setSettingsOpen(true); }} className="flex cursor-pointer items-center gap-2 rounded-md px-3 py-2 text-neutral-900 outline-none hover:bg-neutral-100 focus:bg-neutral-100 data-[disabled]:pointer-events-none data-[disabled]:opacity-50">
                   <Settings className="h-4 w-4" />
                   {t("backups.settings")}
                 </DropdownMenu.Item>
@@ -168,19 +171,19 @@ export default function BackupsPage() {
             <DialogTitle>{t("backups.tablesTitle")}</DialogTitle>
             <DialogDescription>{t("backups.tablesDescription")}</DialogDescription>
           </DialogHeader>
-          {settings && <div className="space-y-5">
+          {draft && <div className="space-y-5">
             <div className="divide-y divide-neutral-100">
               {BACKUP_TABLE_GROUPS.map((group) => {
-                const enabled = !settings.excludedTableGroups.includes(group.id);
-                const lastEnabled = enabled && settings.excludedTableGroups.length === BACKUP_TABLE_GROUPS.length - 1;
+                const enabled = !draft.excludedTableGroups.includes(group.id);
+                const lastEnabled = enabled && draft.excludedTableGroups.length === BACKUP_TABLE_GROUPS.length - 1;
                 return <div key={group.id} className="flex items-start justify-between gap-4 py-4 first:pt-0 last:pb-0">
                   <div className="min-w-0"><p className="text-sm font-medium text-neutral-900">{group.label}</p><p className="mt-1 break-words text-xs text-neutral-500">{t("backups.tables", { list: group.tables.join(", ") })}</p></div>
-                  <Switch checked={enabled} disabled={lastEnabled} onCheckedChange={(checked) => setSettings({ ...settings, excludedTableGroups: checked ? settings.excludedTableGroups.filter((id) => id !== group.id) : [...settings.excludedTableGroups, group.id] })} aria-label={t("backups.backUpGroup", { group: group.label })} />
+                  <Switch checked={enabled} disabled={lastEnabled} onCheckedChange={(checked) => setDraft({ ...draft, excludedTableGroups: checked ? draft.excludedTableGroups.filter((id) => id !== group.id) : [...draft.excludedTableGroups, group.id] })} aria-label={t("backups.backUpGroup", { group: group.label })} />
                 </div>;
               })}
             </div>
             {saveSettings.error && <p role="alert" className="text-sm text-red-700">{saveSettings.error instanceof Error ? saveSettings.error.message : t("backups.saveSettingsFailed")}</p>}
-            <Button onClick={() => saveSettings.mutate(settings)} disabled={saveSettings.isPending}><Save className="h-4 w-4" />{saveSettings.isPending ? t("common.saving") : t("backups.saveSettings")}</Button>
+            <Button onClick={() => saveSettings.mutate(draft)} disabled={saveSettings.isPending}><Save className="h-4 w-4" />{saveSettings.isPending ? t("common.saving") : t("backups.saveSettings")}</Button>
           </div>}
         </DialogContent>
       </Dialog>
