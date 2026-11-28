@@ -80,3 +80,35 @@ test("a forced delete needs the typed host name; with it the domain goes even wh
 	assert.deepEqual([audit[0].actor, audit[0].action], ["u1", "domain.force_delete"]);
 	assert.deepEqual(JSON.parse(audit[0].metadata).leftovers, ["_mta-sts.example.com", "mta-sts.example.com", "_smtp._tls.example.com"]);
 });
+
+test("removing a domain deletes its aliases explicitly before the domain row", async (t) => {
+	const f = await fixture(t, {});
+	f.raw.prepare("INSERT INTO mailboxes (id, user_id, domain_id, local_part, type, created_at) VALUES ('mb1', 'u1', 'd1', 'k', 'personal', 1)").run();
+	f.raw.prepare("INSERT INTO mailbox_aliases (id, mailbox_id, domain_id, local_part, created_at) VALUES ('al1', 'mb1', 'd1', 'shop', 1)").run();
+	const statements = [];
+	const prepare = f.env.DB.prepare.bind(f.env.DB);
+	f.env.DB.prepare = (sql) => {
+		statements.push(sql.toLowerCase());
+		return prepare(sql);
+	};
+	const warn = console.warn;
+	console.warn = () => {};
+	t.after(() => { console.warn = warn; });
+	await domains.removeDomainForUser(f.env, "u1", "d1");
+	const aliases = statements.findIndex((sql) => sql.startsWith('delete from "mailbox_aliases"'));
+	const domain = statements.findIndex((sql) => sql.startsWith('delete from "domains"'));
+	assert.ok(domain >= 0, "domain deleted");
+	assert.ok(aliases >= 0 && aliases < domain, "aliases deleted before the domain");
+});
+
+test("a domain that cannot be deleted keeps its aliases", async (t) => {
+	const f = await fixture(t, {});
+	f.raw.prepare("INSERT INTO mailboxes (id, user_id, domain_id, local_part, type, created_at) VALUES ('mb1', 'u1', 'd1', 'k', 'personal', 1)").run();
+	f.raw.prepare("INSERT INTO mailbox_aliases (id, mailbox_id, domain_id, local_part, created_at) VALUES ('al1', 'mb1', 'd1', 'shop', 1)").run();
+	f.raw.exec("CREATE TRIGGER domains_blocked BEFORE DELETE ON domains BEGIN SELECT RAISE(ABORT, 'blocked'); END");
+	const warn = console.warn;
+	console.warn = () => {};
+	t.after(() => { console.warn = warn; });
+	await assert.rejects(domains.removeDomainForUser(f.env, "u1", "d1"), /blocked/);
+	assert.equal(f.raw.prepare("SELECT count(*) AS n FROM mailbox_aliases").get().n, 1);
+});

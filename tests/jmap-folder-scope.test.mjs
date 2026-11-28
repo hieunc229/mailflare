@@ -69,3 +69,30 @@ test("a full-access owner can still rename their own folder", async (t) => {
 	assert.ok("mb-delegate~f~f-own" in result.updated);
 	assert.equal(sqlite.prepare("SELECT name FROM folders WHERE id = 'f-own'").get().name, "Renamed");
 });
+
+test("destroying a folder with snoozed mail clears folder_id before deleting the folder", async (t) => {
+	const { env, db, sqlite } = await newDatabase(t, seed);
+	sqlite.exec("UPDATE messages SET folder_id = 'f-own', snoozed_until = 4102444800000 WHERE id = 'm-own'");
+	const statements = [];
+	const prepare = env.DB.prepare.bind(env.DB);
+	env.DB.prepare = (sql) => {
+		statements.push(sql.toLowerCase());
+		return prepare(sql);
+	};
+	const result = await app.mailboxSet(context(db, env), { destroy: ["mb-delegate~f~f-own"] });
+	assert.deepEqual(result.destroyed, ["mb-delegate~f~f-own"]);
+	const cleared = statements.findIndex((sql) => sql.startsWith('update "messages" set "folder_id"'));
+	const deleted = statements.findIndex((sql) => sql.startsWith('delete from "folders"'));
+	assert.ok(deleted >= 0, "folder deleted");
+	assert.ok(cleared >= 0 && cleared < deleted, "folder_id cleared before the delete");
+	assert.equal(sqlite.prepare("SELECT folder_id FROM messages WHERE id = 'm-own'").get().folder_id, null);
+	assert.equal(sqlite.prepare("SELECT status FROM messages WHERE id = 'm-own'").get().status, "received");
+});
+
+test("a folder that cannot be deleted keeps its mail in it", async (t) => {
+	const { env, db, sqlite } = await newDatabase(t, seed);
+	sqlite.exec("UPDATE messages SET folder_id = 'f-own', snoozed_until = 4102444800000 WHERE id = 'm-own'");
+	sqlite.exec("CREATE TRIGGER folders_blocked BEFORE DELETE ON folders BEGIN SELECT RAISE(ABORT, 'blocked'); END");
+	await assert.rejects(app.mailboxSet(context(db, env), { destroy: ["mb-delegate~f~f-own"] }), /blocked/);
+	assert.equal(sqlite.prepare("SELECT folder_id FROM messages WHERE id = 'm-own'").get().folder_id, "f-own");
+});

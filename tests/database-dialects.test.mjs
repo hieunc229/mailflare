@@ -138,6 +138,21 @@ test("MySQL never indexes a TEXT column", () => {
 	}
 });
 
+test("MySQL keeps audit_logs.action as longtext, as installed; its index there is a prefix index made by migration", () => {
+	const { columns, indexed } = schemas.mysql.audit_logs;
+	assert.equal(columns.find((column) => column.name === "action").sqlType, "longtext");
+	assert.equal(indexed.includes("action"), false);
+	assert.ok(schemas.postgres.audit_logs.indexed.includes("action"));
+});
+
+test("MySQL does not declare the thread-key indexes its migration drops; the other dialects keep them", () => {
+	for (const name of ["messages_thread_key_idx", "messages_mailbox_thread_key_idx"]) {
+		assert.equal(schemas.mysql.messages.indexNames.includes(name), false, name);
+		assert.ok(schemas.postgres.messages.indexNames.includes(name), name);
+		assert.ok(schemas.sqlite.messages.indexNames.includes(name), name);
+	}
+});
+
 test("MySQL keeps every index under the InnoDB key size limit", () => {
 	for (const [table, { indexBytes }] of Object.entries(schemas.mysql)) {
 		for (const [name, bytes] of Object.entries(indexBytes)) assert.ok(bytes <= 3072, `${table}.${name} is ${bytes} bytes`);

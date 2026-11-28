@@ -12,7 +12,7 @@ type Queryable = {
 	query(options: { sql: string; rowsAsArray?: boolean }, values: unknown[]): Promise<[unknown, unknown]>;
 };
 
-function mysqlExecutor(queryable: Queryable, transaction?: SqlExecutor["transaction"]): SqlExecutor {
+function mysqlExecutor(queryable: Queryable, transaction?: SqlExecutor["transaction"], discard?: () => void): SqlExecutor {
 	return {
 		dialect: "mysql",
 		async query(sql, values, mode) {
@@ -22,6 +22,7 @@ function mysqlExecutor(queryable: Queryable, transaction?: SqlExecutor["transact
 			return { rows: [], affectedRows: header.affectedRows ?? 0, insertId: header.insertId };
 		},
 		transaction,
+		discard,
 	};
 }
 
@@ -39,11 +40,16 @@ export function openMysql2({ url, shared }: OpenOptions): SqlExecutor {
 			charset: "utf8mb4",
 			timezone: "Z",
 		};
-		const inTransaction = async <T,>(connection: Awaited<ReturnType<typeof lib.createConnection>>, fn: (tx: SqlExecutor) => Promise<T>) => {
+		const inTransaction = async <T,>(connection: Awaited<ReturnType<typeof lib.createConnection>>, fn: (tx: SqlExecutor) => Promise<T>, discard?: () => void) => {
 			await connection.beginTransaction();
+			let discarded = false;
 			try {
-				const result = await fn(mysqlExecutor(connection as unknown as Queryable));
-				await connection.commit();
+				const result = await fn(mysqlExecutor(connection as unknown as Queryable, undefined, discard && (() => { discarded = true; discard(); })));
+				// A connection the work gave up on (its lock could not be released) may fail here; the work itself finished.
+				await connection.commit().catch((error: unknown) => {
+					if (!discarded) throw error;
+					console.error("COMMIT failed on a discarded connection:", error);
+				});
 				return result;
 			} catch (error) {
 				await connection.rollback().catch(() => undefined);
@@ -55,10 +61,12 @@ export function openMysql2({ url, shared }: OpenOptions): SqlExecutor {
 			return {
 				...mysqlExecutor(pool as unknown as Queryable, async (fn) => {
 					const connection = await pool.getConnection();
+					let broken = false;
 					try {
-						return await inTransaction(connection as never, fn);
+						return await inTransaction(connection as never, fn, () => (broken = true));
 					} finally {
-						connection.release();
+						if (broken) connection.destroy();
+						else connection.release();
 					}
 				}),
 				close: () => pool.end(),

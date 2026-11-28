@@ -19,6 +19,8 @@ export interface SqlExecutor {
 	query(sql: string, params: unknown[], mode: RowMode): Promise<QueryResult>;
 	/** Run `fn` atomically on one connection. Absent for HTTP drivers that cannot hold a transaction open. */
 	transaction?<T>(fn: (tx: SqlExecutor) => Promise<T>): Promise<T>;
+	/** On a transaction's executor: do not reuse this connection (a pooled one is destroyed, not returned to the pool). */
+	discard?(): void;
 	close?(): Promise<void>;
 }
 

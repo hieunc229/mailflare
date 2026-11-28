@@ -553,6 +553,33 @@
         "CREATE TABLE \"contact_details\" (\n\t\"contact_id\" text PRIMARY KEY NOT NULL,\n\t\"details\" text DEFAULT '{}' NOT NULL,\n\t\"updated_at\" bigint NOT NULL\n);",
         "ALTER TABLE \"contact_details\" ADD CONSTRAINT \"contact_details_contact_id_contacts_id_fk\" FOREIGN KEY (\"contact_id\") REFERENCES \"public\".\"contacts\"(\"id\") ON DELETE cascade ON UPDATE no action;"
       ]
+    },
+    {
+      "name": "0027_schema_lows.sql",
+      "statements": [
+        "DROP INDEX IF EXISTS \"mailbox_access_mailbox_idx\";",
+        "DROP INDEX IF EXISTS \"contacts_user_idx\";",
+        "DROP INDEX IF EXISTS \"folders_mailbox_idx\";",
+        "DROP INDEX IF EXISTS \"spam_token_stats_mailbox_idx\";",
+        "DROP INDEX IF EXISTS \"spam_reputation_mailbox_idx\";",
+        "DROP INDEX IF EXISTS \"calendar_event_overrides_event_idx\";",
+        "DROP INDEX IF EXISTS \"calendar_occurrence_responses_event_idx\";",
+        "DROP INDEX IF EXISTS \"booking_events_user_idx\";",
+        "DROP INDEX IF EXISTS \"auto_reply_deliveries_sent_idx\";",
+        "DROP INDEX IF EXISTS \"webhook_deliveries_status_idx\";",
+        "DROP INDEX IF EXISTS \"routing_rules_priority_idx\";",
+        "ALTER TABLE \"users\" ALTER COLUMN \"remote_content_mode\" SET DEFAULT 'ask';",
+        "DROP TRIGGER messages_jmap_changed ON messages;",
+        "CREATE TRIGGER messages_jmap_changed AFTER INSERT OR UPDATE OF mailbox_id, folder_id, status, read, starred, category, direction, thread_id, provider_message_id, in_reply_to, references_header, from_addr, to_addr, cc_addr, bcc_addr, reply_to, subject, snippet, text_body, html_body, created_at, snoozed_until, private_draft OR DELETE ON messages\nFOR EACH ROW EXECUTE FUNCTION mailflare_messages_changed();"
+      ]
+    },
+    {
+      "name": "0028_audit_index_concurrent.sql",
+      "statements": [
+        "DROP INDEX CONCURRENTLY IF EXISTS \"audit_logs_target_action_created_idx\";",
+        "CREATE INDEX CONCURRENTLY IF NOT EXISTS \"audit_logs_target_action_created_idx\" ON \"audit_logs\" USING btree (\"target_user_id\",\"action\",\"created_at\");",
+        "DROP INDEX CONCURRENTLY IF EXISTS \"audit_logs_target_user_idx\";"
+      ]
     }
   ]
 }

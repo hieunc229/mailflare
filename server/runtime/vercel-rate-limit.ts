@@ -1,4 +1,5 @@
 import type { DatabaseDialect } from "@/db/dialect";
+import { counterIncrementSql } from "@/db/sql";
 import { isMissingTableError } from "@/lib/database-errors";
 import { openRateLimiter } from "./misc";
 
@@ -55,13 +56,12 @@ export type RateLimitStore = { db: () => D1Database; dialect: DatabaseDialect };
 
 async function countHit(store: RateLimitStore, bucket: string, expiresAt: number): Promise<number> {
 	const db = store.db();
-	const insert = `INSERT INTO ${TABLE} (bucket, hits, expires_at) VALUES (?, 1, ?)`;
 	let row: { hits: number | string } | null;
 	if (store.dialect === "mysql") {
-		await db.prepare(`${insert} ON DUPLICATE KEY UPDATE hits = hits + 1`).bind(bucket, expiresAt).run();
+		await db.prepare(counterIncrementSql("mysql", TABLE)).bind(bucket, expiresAt).run();
 		row = await db.prepare(`SELECT hits FROM ${TABLE} WHERE bucket = ?`).bind(bucket).first();
 	} else {
-		row = await db.prepare(`${insert} ON CONFLICT (bucket) DO UPDATE SET hits = ${TABLE}.hits + 1 RETURNING hits`).bind(bucket, expiresAt).first();
+		row = await db.prepare(counterIncrementSql(store.dialect, TABLE)).bind(bucket, expiresAt).first();
 	}
 	// PostgreSQL drivers may hand a bigint back as a string.
 	const hits = Number(row?.hits);

@@ -511,6 +511,30 @@
         "CREATE TABLE `contact_details` (\n\t`contact_id` varchar(191) NOT NULL,\n\t`details` longtext NOT NULL DEFAULT ('{}'),\n\t`updated_at` bigint NOT NULL,\n\tCONSTRAINT `contact_details_contact_id` PRIMARY KEY(`contact_id`)\n);",
         "ALTER TABLE `contact_details` ADD CONSTRAINT `contact_details_contact_id_contacts_id_fk` FOREIGN KEY (`contact_id`) REFERENCES `contacts`(`id`) ON DELETE cascade ON UPDATE no action;"
       ]
+    },
+    {
+      "name": "0027_schema_lows.sql",
+      "statements": [
+        "CREATE INDEX `audit_logs_target_action_created_idx` ON `audit_logs` (`target_user_id`,`action`(64),`created_at`);",
+        "DROP INDEX `mailbox_access_mailbox_idx` ON `mailbox_access`;",
+        "DROP INDEX `contacts_user_idx` ON `contacts`;",
+        "DROP INDEX `folders_mailbox_idx` ON `folders`;",
+        "DROP INDEX `spam_token_stats_mailbox_idx` ON `spam_token_stats`;",
+        "DROP INDEX `spam_reputation_mailbox_idx` ON `spam_reputation`;",
+        "DROP INDEX `calendar_event_overrides_event_idx` ON `calendar_event_overrides`;",
+        "DROP INDEX `calendar_occurrence_responses_event_idx` ON `calendar_occurrence_responses`;",
+        "DROP INDEX `booking_events_user_idx` ON `booking_events`;",
+        "DROP INDEX `auto_reply_deliveries_sent_idx` ON `auto_reply_deliveries`;",
+        "DROP INDEX `webhook_deliveries_status_idx` ON `webhook_deliveries`;",
+        "DROP INDEX `routing_rules_priority_idx` ON `routing_rules`;",
+        "DROP INDEX `audit_logs_target_user_idx` ON `audit_logs`;",
+        "DROP INDEX `messages_thread_key_idx` ON `messages`;",
+        "DROP INDEX `messages_mailbox_thread_key_idx` ON `messages`;",
+        "ALTER TABLE `users` ALTER COLUMN `remote_content_mode` SET DEFAULT 'ask';",
+        "ALTER TABLE `mailbox_promotion_settings` MODIFY `backfill_scanned` bigint NOT NULL DEFAULT 0, MODIFY `backfill_stalls` bigint NOT NULL DEFAULT 0, MODIFY `backfill_day` bigint NOT NULL DEFAULT 0, MODIFY `backfill_day_rows` bigint NOT NULL DEFAULT 0;",
+        "CREATE TRIGGER messages_jmap_au_v2 AFTER UPDATE ON messages FOR EACH ROW\nBEGIN\n\tIF NOT (OLD.mailbox_id <=> NEW.mailbox_id AND OLD.folder_id <=> NEW.folder_id AND OLD.status <=> NEW.status AND OLD.`read` <=> NEW.`read` AND OLD.starred <=> NEW.starred AND OLD.category <=> NEW.category AND OLD.direction <=> NEW.direction AND OLD.thread_id <=> NEW.thread_id AND OLD.provider_message_id <=> NEW.provider_message_id AND OLD.in_reply_to <=> NEW.in_reply_to AND OLD.references_header <=> NEW.references_header AND OLD.from_addr <=> NEW.from_addr AND OLD.to_addr <=> NEW.to_addr AND OLD.cc_addr <=> NEW.cc_addr AND OLD.bcc_addr <=> NEW.bcc_addr AND OLD.reply_to <=> NEW.reply_to AND OLD.subject <=> NEW.subject AND OLD.snippet <=> NEW.snippet AND OLD.text_body <=> NEW.text_body AND OLD.html_body <=> NEW.html_body AND OLD.created_at <=> NEW.created_at AND OLD.snoozed_until <=> NEW.snoozed_until AND OLD.private_draft <=> NEW.private_draft) THEN\n\t\tIF NEW.mailbox_id IS NOT NULL THEN\n\t\t\tINSERT INTO jmap_mailbox_revisions (mailbox_id, revision) VALUES (NEW.mailbox_id, 1) ON DUPLICATE KEY UPDATE revision = revision + 1;\n\t\tEND IF;\n\t\tIF OLD.mailbox_id IS NOT NULL AND NOT (OLD.mailbox_id <=> NEW.mailbox_id) THEN\n\t\t\tINSERT INTO jmap_mailbox_revisions (mailbox_id, revision) VALUES (OLD.mailbox_id, 1) ON DUPLICATE KEY UPDATE revision = revision + 1;\n\t\tEND IF;\n\t\tIF OLD.mailbox_id <=> NEW.mailbox_id THEN\n\t\t\tIF NEW.mailbox_id IS NOT NULL THEN\n\t\t\t\tINSERT INTO jmap_changes (mailbox_id, object_type, object_id, thread_id, `change`)\n\t\t\t\tVALUES (NEW.mailbox_id, 'email', NEW.id, coalesce(NEW.thread_id, NEW.id), 'updated');\n\t\t\tEND IF;\n\t\tELSE\n\t\t\tIF OLD.mailbox_id IS NOT NULL THEN\n\t\t\t\tINSERT INTO jmap_changes (mailbox_id, object_type, object_id, thread_id, `change`)\n\t\t\t\tVALUES (OLD.mailbox_id, 'email', OLD.id, coalesce(OLD.thread_id, OLD.id), 'destroyed');\n\t\t\tEND IF;\n\t\t\tIF NEW.mailbox_id IS NOT NULL THEN\n\t\t\t\tINSERT INTO jmap_changes (mailbox_id, object_type, object_id, thread_id, `change`)\n\t\t\t\tVALUES (NEW.mailbox_id, 'email', NEW.id, coalesce(NEW.thread_id, NEW.id), 'created');\n\t\t\tEND IF;\n\t\tEND IF;\n\tEND IF;\nEND;",
+        "DROP TRIGGER IF EXISTS messages_jmap_au;"
+      ]
     }
   ]
 }
