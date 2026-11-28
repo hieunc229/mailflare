@@ -4,9 +4,15 @@ import { extname, join, resolve, sep } from "node:path";
 /** A fixed-window limiter with the `RateLimit` binding's shape. */
 export function openRateLimiter(limit: number, periodSeconds: number): RateLimit {
 	const windows = new Map<string, { count: number; resetAt: number }>();
+	let nextSweepAt = 0;
 	return {
 		async limit({ key }: { key: string }) {
 			const now = Date.now();
+			// Drop finished windows once the map is large, so keys that never return do not accumulate. At most one scan per window.
+			if (windows.size > 5000 && now >= nextSweepAt) {
+				nextSweepAt = now + periodSeconds * 1000;
+				for (const [entryKey, entry] of windows) if (entry.resetAt <= now) windows.delete(entryKey);
+			}
 			const current = windows.get(key);
 			if (!current || current.resetAt <= now) {
 				windows.set(key, { count: 1, resetAt: now + periodSeconds * 1000 });
