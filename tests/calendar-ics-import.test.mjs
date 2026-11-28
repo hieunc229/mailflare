@@ -5,6 +5,7 @@ import { dirname, join } from "node:path";
 import test, { after } from "node:test";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { build } from "esbuild";
+import { assertLinear } from "./helpers/scaling.mjs";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 const dir = mkdtempSync(join(tmpdir(), "mailflare-ics-import-"));
@@ -158,10 +159,8 @@ test("Google conference link becomes one Join line; only https is kept", () => {
 test("HTML descriptions become text without regex backtracking", () => {
 	assert.equal(icsHtmlToText("Hi<br>there<p>para</p><a href=\"https://x\">link</a> &amp;&lt;b&gt; &quot;q&quot; &#39;s&#39;"), "Hi\nthere\npara\nlink &<b> \"q\" 's'");
 	assert.equal(icsHtmlToText("plain text < not a tag"), "plain text < not a tag");
-	const started = Date.now();
-	const out = icsHtmlToText("<".repeat(100_000));
-	assert.ok(Date.now() - started < 500);
-	assert.ok(out.length <= 100_000);
+	assertLinear((n) => "<".repeat(n), icsHtmlToText, 5_000, "icsHtmlToText", 4, 300);
+	assert.ok(icsHtmlToText("<".repeat(100_000)).length <= 100_000);
 	assert.equal(parse(vevent("DTSTART:20261104T090000Z", "SUMMARY:h", "DESCRIPTION:a<br>b")).master.description, "a\nb");
 });
 

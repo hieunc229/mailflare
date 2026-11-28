@@ -5,6 +5,7 @@ import { dirname, join } from "node:path";
 import test, { after } from "node:test";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { build } from "esbuild";
+import { assertLinear } from "./helpers/scaling.mjs";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 const dir = mkdtempSync(join(tmpdir(), "mailflare-google-csv-"));
@@ -51,10 +52,8 @@ test("trailing blank lines after the last allowed row do not mark the file trunc
 });
 
 test("a hostile file parses in linear time", () => {
-	const started = performance.now();
-	parseCsv('"'.repeat(200_000) + "\n" + ",".repeat(200_000) + "\n" + '""'.repeat(100_000));
-	parseCsv("a,".repeat(300_000));
-	assert.ok(performance.now() - started < 1500);
+	assertLinear((n) => '"'.repeat(n) + "\n" + ",".repeat(n) + "\n" + '""'.repeat(n / 2), parseCsv, 1_500_000, "quotes and commas");
+	assertLinear((n) => "a,".repeat(n), parseCsv, 1_500_000, "fields");
 });
 
 test("decoding: UTF-8 with or without a BOM, and UTF-16LE with a BOM", () => {
