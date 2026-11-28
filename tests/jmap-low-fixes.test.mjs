@@ -20,20 +20,13 @@ async function setup(t, extra = "") {
 	return newDatabase(t, `${sharedMailboxSeed("full_access")}${extra}`);
 }
 
-test("a message snoozed into the future is not in the JMAP Inbox query", async (t) => {
+// Snoozing ends by the clock, which writes nothing and so never reaches Email/changes: a client that cached "no mailbox" would never see the message return.
+test("snoozed mail keeps its Inbox membership in JMAP", async (t) => {
 	const { env, db } = await setup(t, `
-		${insert({ names: "snoozed_until" })} ('m-plain', 'admin', 'mb-team', 'inbound', 'a@x.test', 'team@example.com', 'S', 'b', 'received', 10, NULL),
-			('m-future', 'admin', 'mb-team', 'inbound', 'a@x.test', 'team@example.com', 'S', 'b', 'received', 11, ${now() + DAY}),
-			('m-due', 'admin', 'mb-team', 'inbound', 'a@x.test', 'team@example.com', 'S', 'b', 'received', 12, ${now() - DAY});`);
+		${insert({ names: "snoozed_until" })} ('m-future', 'admin', 'mb-team', 'inbound', 'a@x.test', 'team@example.com', 'S', 'b', 'received', 11, ${now() + DAY});`);
 	const { ids } = await app.emailQuery(jmap(db, env, "delegate"), { filter: { inMailbox: "mb-team~inbox" } });
-	assert.deepEqual([...ids].sort(), ["m-due", "m-plain"]);
-});
-
-test("mailboxIdsFor leaves a snoozed message out of the Inbox until it is due", () => {
-	const row = { mailboxId: "mb-team", folderId: null, status: "received" };
-	assert.deepEqual(app.mailboxIdsFor({ ...row, snoozedUntil: new Date(Date.now() + DAY * 1000) }), {});
-	assert.deepEqual(app.mailboxIdsFor({ ...row, snoozedUntil: null }), { "mb-team~inbox": true });
-	assert.deepEqual(app.mailboxIdsFor({ ...row, snoozedUntil: new Date(Date.now() - DAY * 1000) }), { "mb-team~inbox": true });
+	assert.deepEqual(ids, ["m-future"]);
+	assert.deepEqual(app.mailboxIdsFor({ mailboxId: "mb-team", folderId: null, status: "received", snoozedUntil: new Date(Date.now() + DAY * 1000) }), { "mb-team~inbox": true });
 });
 
 test("snippet highlighting never splits an HTML entity", async (t) => {

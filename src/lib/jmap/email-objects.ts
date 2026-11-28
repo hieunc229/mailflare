@@ -22,8 +22,6 @@ export function toAddressObjects(value: string | null | undefined): EmailAddress
 export function mailboxIdsFor(row: MessageRow): Record<string, boolean> {
 	if (!row.mailboxId) return {};
 	if (row.folderId) return { [encodeMailboxRef({ kind: "folder", mailboxId: row.mailboxId, folderId: row.folderId })]: true };
-	// Snoozed mail is out of the Inbox until it is due.
-	if (row.status === "received" && row.snoozedUntil && row.snoozedUntil.getTime() > Date.now()) return {};
 	const role = statusToRole(row.status);
 	return role ? { [encodeMailboxRef({ kind: "role", mailboxId: row.mailboxId, role })]: true } : {};
 }
