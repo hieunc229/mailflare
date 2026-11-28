@@ -37,6 +37,8 @@ export const INTERNAL_TABLES = [
 	"d1_migrations",
 	// The migration ledger of PostgreSQL and MySQL databases.
 	"mailflare_migrations",
+	// Statement progress of a migration that runs without a transaction (MySQL); it exists only while one is unfinished.
+	"mailflare_migration_steps",
 	// JMAP state counters, also derived: the jmap_messages_* triggers on
 	// `messages` insert and bump a row per mailbox as messages are restored.
 	// Exporting it would make restore fail, since the triggers recreate these
