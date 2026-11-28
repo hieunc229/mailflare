@@ -9,7 +9,7 @@ import { getEmailAddress, normalizeEmailAddress, splitEmailAddressList } from "@
 import { isSharedMailDomain } from "@/lib/spam/domain-utils";
 import { getLatestEmailContent } from "@/lib/email/reply-content-utils";
 import { formatUserDate } from "@/lib/time/utils";
-import { sanitizeEmailHtml } from "@/app/(dashboard)/inbox/[messageId]/email-html-sanitizer";
+import { sanitizeEmailHtml } from "@/lib/email/html";
 import { escapeHtml, htmlToPlainText, textToHtml, wrapQuotedHtml } from "@/components/compose/rich-text-utils";
 import type {
   BlockMessageContactInput,

@@ -26,11 +26,13 @@ export function createBackupFilename(now: Date): string {
 export function mergeLegacyMessageBodies(document: DatabaseBackupDocument): void {
 	const tables = document.tables as Record<string, DatabaseRecord[]>;
 	const bodyRows = tables.message_bodies;
-	if (!bodyRows) return;
+	if (bodyRows === undefined || bodyRows === null) return;
+	if (!Array.isArray(bodyRows)) throw new Error("Backup contains an invalid message_bodies record");
 
 	const bodiesByMessageId = new Map<string, DatabaseRecord>();
 	for (const body of bodyRows) {
-		if (!isDatabaseRecord(body) || typeof body.message_id !== "string") {
+		// Scalar values only: a nested one cannot be bound, and would fail the insert after the teardown.
+		if (!isDatabaseRecord(body) || typeof body.message_id !== "string" || Object.values(body).some((value) => value !== null && typeof value === "object")) {
 			throw new Error("Backup contains an invalid message_bodies record");
 		}
 		bodiesByMessageId.set(body.message_id, body);
