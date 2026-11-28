@@ -74,7 +74,6 @@ import {
 	ItalicIcon as HugeItalicIcon,
 	KeyRoundIcon as HugeKeyRoundIcon,
 	KeyboardIcon as HugeKeyboardIcon,
-	Layout2ColumnIcon as HugeLayout2ColumnIcon,
 	Link02Icon as HugeLink02Icon,
 	ListChecksIcon as HugeListChecksIcon,
 	ListFilterIcon as HugeListFilterIcon,
@@ -229,7 +228,6 @@ export const CircleX = createIcon(HugeCircleXIcon, "CircleX");
 export const Clock = createIcon(HugeClockIcon, "Clock");
 export const Clock3 = createIcon(HugeClock03Icon, "Clock3");
 export const Cloud = createIcon(HugeCloudIcon, "Cloud");
-export const Columns2 = createIcon(HugeLayout2ColumnIcon, "Columns2");
 export const Copy = createIcon(HugeCopyIcon, "Copy");
 export const CornerDownLeft = createIcon(HugeCornerDownLeftIcon, "CornerDownLeft");
 export const CornerDownRight = createIcon(HugeCornerDownRightIcon, "CornerDownRight");
