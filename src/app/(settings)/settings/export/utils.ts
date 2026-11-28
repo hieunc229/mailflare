@@ -1,20 +1,13 @@
 import { authFetch } from "@/lib/auth/client";
 
-export async function exportMailbox(mailboxId: string, filename: string): Promise<void> {
-	const params = new URLSearchParams({ mailboxId });
-	const response = await authFetch(`/api/export/messages?${params.toString()}`);
-	if (!response.ok) {
-		const data = (await response.json()) as { error?: string };
-		throw new Error(data.error ?? "Export failed");
+/** Probes the export for an error, then lets the browser stream the download (the route names the file). */
+export async function exportMailbox(mailboxId: string): Promise<void> {
+	const url = `/api/export/messages?${new URLSearchParams({ mailboxId }).toString()}`;
+	try {
+		const response = await authFetch(url, { method: "HEAD" });
+		if (!response.ok) throw new Error(response.status === 404 ? "Mailbox not found" : "Export failed");
+	} catch (error) {
+		if (error instanceof Error && (error.message === "Mailbox not found" || error.message === "Export failed")) throw error;
 	}
-
-	const blob = await response.blob();
-	const url = URL.createObjectURL(blob);
-	const link = document.createElement("a");
-	link.href = url;
-	link.download = filename;
-	document.body.appendChild(link);
-	link.click();
-	link.remove();
-	URL.revokeObjectURL(url);
+	window.location.assign(url);
 }

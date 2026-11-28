@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { getDb } from "@/db";
 import { requireUser } from "@/lib/auth/cookies";
 import { getEnv } from "@/lib/cloudflare";
-import { exportMailboxToMbox } from "@/lib/export/mbox";
+import { exportMailboxToMboxStream } from "@/lib/export/mbox";
 import { getMailboxAccessLevel } from "@/lib/mailboxes/access";
 
 export async function GET(request: Request) {
@@ -17,7 +17,7 @@ export async function GET(request: Request) {
 		return NextResponse.json({ error: "Mailbox not found" }, { status: 404 });
 	}
 
-	const mbox = await exportMailboxToMbox(env, mailboxId, user.id);
+	const mbox = exportMailboxToMboxStream(env, mailboxId, user.id);
 	const address = `${access.mailbox.localPart}.mbox`;
 	return new Response(mbox, {
 		headers: {
