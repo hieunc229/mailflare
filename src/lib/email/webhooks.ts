@@ -50,18 +50,22 @@ export async function dispatchWebhooks(
 	const db = getDb(env);
 	const hooks = await db.select().from(webhooks).where(eq(webhooks.userId, userId));
 
-	for (const hook of hooks) {
-		if (!hook.enabled) continue;
-		if (!parseWebhookEvents(hook.events).includes(eventType)) continue;
-
+	const matching = hooks.filter((hook) => hook.enabled && parseWebhookEvents(hook.events).includes(eventType));
+	const body = JSON.stringify({ type: eventType, data: payload });
+	// The first attempt runs in the queue consumer, so a send or an inbound message never waits on customer endpoints.
+	await Promise.allSettled(matching.map(async (hook) => {
 		try {
-			const body = JSON.stringify({ type: eventType, data: payload });
-			const delivery = await createDelivery(db, hook.id, eventType, body);
-			await attemptDelivery(env, db, hook, delivery);
+			const delivery = await createDelivery(db, hook.id, eventType, body, { queued: true });
+			try {
+				await env.OUTBOUND_QUEUE.send({ kind: "webhook.retry", deliveryId: delivery.id } satisfies WebhookRetryMessage);
+			} catch (error) {
+				console.error(`Failed to enqueue webhook delivery ${delivery.id}, attempting inline`, error);
+				await attemptDelivery(env, db, hook, delivery);
+			}
 		} catch (error) {
 			console.error(`Webhook dispatch failed for ${hook.id}`, error);
 		}
-	}
+	}));
 }
 
 type PendingDelivery = Pick<DeliveryRow, "id" | "payload" | "eventType" | "attempts">;
@@ -71,6 +75,7 @@ async function createDelivery(
 	webhookId: string,
 	eventType: string,
 	payload: string,
+	options?: { queued?: boolean },
 ): Promise<PendingDelivery> {
 	const id = newId("whd");
 	await db.insert(webhookDeliveries).values({
@@ -78,8 +83,10 @@ async function createDelivery(
 		webhookId,
 		eventType,
 		payload,
-		status: "pending",
+		// A queued first attempt is a retry the consumer picks up now; it only posts deliveries in that state.
+		status: options?.queued ? "retrying" : "pending",
 		attempts: 0,
+		...(options?.queued ? { nextRetryAt: new Date() } : {}),
 	});
 	return { id, payload, eventType, attempts: 0 };
 }
