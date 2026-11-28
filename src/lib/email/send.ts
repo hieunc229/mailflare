@@ -9,6 +9,7 @@ import { getAuthorizedSenderAddress } from "@/lib/email/sender";
 import { getEmailAddress, getEmailAddressList, joinEmailAddressList, splitEmailAddressList } from "@/lib/email/address";
 import { formatMessageIdHeader, normalizeMessageId, parseMessageIdList } from "@/lib/email/threading";
 import { createAuditLog } from "@/lib/mailboxes/audit";
+import { deleteMessageWithObjects } from "@/lib/email/message-cleanup";
 import { loadMessageAttachmentContents, storeMessageAttachments, validateAttachments } from "@/lib/email/attachments";
 import type { AttachmentContent } from "@/lib/email/attachment-types";
 import { getOutboundAttachmentMaxMb } from "@/lib/email/attachment-policy";
@@ -155,23 +156,6 @@ export async function sendEmail(
 	}
 
 	const jobId = newId("job");
-	await db.insert(outboundJobs).values({
-		id: jobId,
-		userId: input.userId,
-		messageId,
-		status: "queued",
-		payload: JSON.stringify({
-			...input,
-			from: sender.fromAddr,
-			to,
-			cc,
-			bcc,
-			mailboxId: sender.mailboxId,
-			attachments: attachments.map(({ content: _content, ...attachment }) => attachment),
-		}),
-		scheduledAt,
-	});
-
 	const delivery: PreparedDelivery = {
 		input: { ...input, attachments: undefined },
 		messageId,
@@ -184,18 +168,42 @@ export async function sendEmail(
 		headers,
 		attachments,
 	};
-	if (scheduledAt) {
-		await enqueueScheduledDelivery(env, delivery, scheduledAt);
-		if (userScheduledAt) {
-			return { messageId, scheduled: true, scheduledAt: scheduledAt.toISOString() };
-		}
-		// Send the window as a duration: client and server clocks need not agree.
-		return {
+	try {
+		await db.insert(outboundJobs).values({
+			id: jobId,
+			userId: input.userId,
 			messageId,
-			scheduled: true,
-			undoSeconds,
-			undoRemainingMs: Math.max(0, scheduledAt.getTime() - Date.now()),
-		};
+			status: "queued",
+			payload: JSON.stringify({
+				...input,
+				from: sender.fromAddr,
+				to,
+				cc,
+				bcc,
+				mailboxId: sender.mailboxId,
+				attachments: attachments.map(({ content: _content, ...attachment }) => attachment),
+			}),
+			scheduledAt,
+		});
+
+		if (scheduledAt) {
+			await enqueueScheduledDelivery(env, delivery, scheduledAt);
+			if (userScheduledAt) {
+				return { messageId, scheduled: true, scheduledAt: scheduledAt.toISOString() };
+			}
+			// Send the window as a duration: client and server clocks need not agree.
+			return {
+				messageId,
+				scheduled: true,
+				undoSeconds,
+				undoRemainingMs: Math.max(0, scheduledAt.getTime() - Date.now()),
+			};
+		}
+	} catch (error) {
+		// outbound_jobs.message_id is ON DELETE SET NULL, so the job must go explicitly or it would outlive its message.
+		await db.delete(outboundJobs).where(eq(outboundJobs.id, jobId)).catch(() => undefined);
+		await deleteMessageWithObjects(env, db, messageId, null).catch((cleanupError) => console.error("Send rollback failed", cleanupError));
+		throw error;
 	}
 
 	await deliverEmail(env, delivery);
