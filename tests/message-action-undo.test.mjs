@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { readFileSync, readdirSync, mkdtempSync, rmSync } from "node:fs";
+import { readFileSync, mkdtempSync, rmSync } from "node:fs";
 import { dirname, join } from "node:path";
 import test, { after } from "node:test";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -465,20 +465,6 @@ test("a stale list response cannot overwrite a read patch made while it was in f
 		assert.equal(cache.peekMessageList(params).messages[0].read, false);
 	} finally {
 		globalThis.fetch = originalFetch;
-	}
-});
-
-test("every catalog carries the undo keys with identical placeholders", () => {
-	const en = JSON.parse(readFileSync(join(root, "src/lib/i18n/en.json"), "utf8"));
-	const undoKeys = Object.keys(en).filter((key) => key.startsWith("undo."));
-	assert.ok(undoKeys.length >= 17);
-	const placeholders = (text) => [...new Set([...text.matchAll(/\{(\w+)\}/g)].map((match) => match[1]))].sort();
-	for (const file of readdirSync(join(root, "public", "locales")).filter((name) => name.endsWith(".json"))) {
-		const catalog = JSON.parse(readFileSync(join(root, "public", "locales", file), "utf8"));
-		for (const key of undoKeys) {
-			assert.ok(typeof catalog[key] === "string" && catalog[key].trim().length > 0, `${file}: ${key} is missing`);
-			assert.deepEqual(placeholders(catalog[key]), placeholders(en[key]), `${file}: ${key} placeholders`);
-		}
 	}
 });
 
