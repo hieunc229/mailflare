@@ -139,9 +139,9 @@ test("an error in the response stream does not crash the process", async () => {
 	process.on("uncaughtException", onCrash);
 	try {
 		await withServer(handler, {}, async (base) => {
-			await fetch(`${base}/dav/`).then((response) => response.text()).catch(() => undefined);
+			const first = await fetch(`${base}/dav/`).then(async (response) => { await response.text().catch(() => undefined); return response.status; });
 			await new Promise((resolve) => setTimeout(resolve, 100));
-			assert.equal((await fetch(`${base}/dav/`).then((r) => r.status).catch(() => "reset")) !== undefined, true);
+			assert.equal(await fetch(`${base}/dav/`).then((r) => r.status), first);
 		});
 	} finally {
 		process.off("uncaughtException", onCrash);
