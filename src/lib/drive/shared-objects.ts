@@ -24,19 +24,21 @@ export async function findReferencedKeys(
 	const unique = [...new Set(keys)];
 	const excludedItems = new Set(exclude.driveItemIds);
 	const excludedAttachments = new Set(exclude.attachmentIds);
+	// Excluded ids are dropped in memory: binding them too would pass D1's 100-parameter limit.
+	// All lookups go out as one batch (one D1 call), however many keys there are.
+	const queries: PromiseLike<unknown>[] = [];
 	for (let index = 0; index < unique.length; index += KEY_CHUNK) {
 		const chunk = unique.slice(index, index + KEY_CHUNK);
-		// Excluded ids are dropped in memory: binding them too would pass D1's 100-parameter limit.
-		const itemRows = await db
-			.select({ id: driveItems.id, key: driveItems.r2Key })
-			.from(driveItems)
-			.where(inArray(driveItems.r2Key, chunk));
-		const attachmentRows = await db
-			.select({ id: messageAttachments.id, key: messageAttachments.r2Key })
-			.from(messageAttachments)
-			.where(inArray(messageAttachments.r2Key, chunk));
-		for (const row of itemRows) if (row.key && !excludedItems.has(row.id)) referenced.add(row.key);
-		for (const row of attachmentRows) if (row.key && !excludedAttachments.has(row.id)) referenced.add(row.key);
+		queries.push(
+			db.select({ id: driveItems.id, key: driveItems.r2Key }).from(driveItems).where(inArray(driveItems.r2Key, chunk)),
+			db.select({ id: messageAttachments.id, key: messageAttachments.r2Key }).from(messageAttachments).where(inArray(messageAttachments.r2Key, chunk)),
+		);
+	}
+	if (queries.length === 0) return referenced;
+	const results = (await db.batch(queries as never)) as { id: string; key: string | null }[][];
+	for (const [position, rows] of results.entries()) {
+		const excluded = position % 2 === 0 ? excludedItems : excludedAttachments;
+		for (const row of rows) if (row.key && !excluded.has(row.id)) referenced.add(row.key);
 	}
 	return referenced;
 }
@@ -52,6 +54,6 @@ export async function deleteUnreferencedObjects(
 	if (unique.length === 0) return [];
 	const referenced = await findReferencedKeys(db, unique, exclude);
 	const deletable = unique.filter((key) => !referenced.has(key));
-	for (let index = 0; index < deletable.length; index += 500) await env.BUCKET.delete(deletable.slice(index, index + 500));
+	for (let index = 0; index < deletable.length; index += 1000) await env.BUCKET.delete(deletable.slice(index, index + 1000));
 	return deletable;
 }

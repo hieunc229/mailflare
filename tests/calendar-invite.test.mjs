@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import test, { after } from "node:test";
@@ -602,14 +602,14 @@ test("outgoing recurring invitations carry RRULE, EXDATE and RECURRENCE-ID overr
 		excludedOccurrences: [Date.parse("2026-12-08T17:00:00Z")],
 		overrides: [{ recurrenceId, startsAt: new Date("2026-12-15T19:00:00Z"), endsAt: new Date("2026-12-15T19:30:00Z") }],
 	}));
-	assert.match(text, /RRULE:FREQ=MONTHLY;BYDAY=2TU;INTERVAL=3;UNTIL=20270608T170000Z/);
+	assert.match(text, /RRULE:FREQ=MONTHLY;BYDAY=2TU;INTERVAL=3;UNTIL=20270608T165959Z/);
 	assert.match(text, /EXDATE:20261208T170000Z/);
 	assert.match(text, /RECURRENCE-ID:20261215T170000Z/);
 	assert.match(text, /\r\nSEQUENCE:5\r\n/);
 	assert.match(text, /\r\nBEGIN:VALARM\r\n/);
 	const back = parseInvite(text);
 	assert.equal(back.sequence, 5);
-	assert.equal(back.rrule, "FREQ=MONTHLY;BYDAY=2TU;INTERVAL=3;UNTIL=20270608T170000Z");
+	assert.equal(back.rrule, "FREQ=MONTHLY;BYDAY=2TU;INTERVAL=3;UNTIL=20270608T165959Z");
 	assert.deepEqual(back.excludedDates.map((date) => date.toISOString()), ["2026-12-08T17:00:00.000Z"]);
 	const repeat = inviteRepeat(back.rrule);
 	assert.equal(repeat.repeat, "monthly");
@@ -655,10 +655,10 @@ test("split announcement truncates the original UID and invites the fork UID", (
 	});
 	const truncation = new TextDecoder().decode(truncationFile);
 	const fork = new TextDecoder().decode(forkFile);
-	// File (1) keeps the original DTSTART with UNTIL at the split, the EXDATE and the pre-split override.
+	// File (1) keeps the original DTSTART with UNTIL one second before the split, the EXDATE and the pre-split override.
 	assert.match(truncation, /UID:evt_orig@mailflare/);
 	assert.match(truncation, /DTSTART:20261110T170000Z/);
-	assert.match(truncation, /RRULE:FREQ=WEEKLY;UNTIL=20261124T170000Z/);
+	assert.match(truncation, /RRULE:FREQ=WEEKLY;UNTIL=20261124T165959Z/);
 	assert.match(truncation, /\r\nSEQUENCE:3\r\n/);
 	assert.match(truncation, /EXDATE:20261117T170000Z/);
 	assert.match(truncation, /RECURRENCE-ID:20261112T170000Z/);
@@ -754,4 +754,76 @@ test("a failing invitation is reported per attendee instead of rejecting", async
 	assert.deepEqual(failed, ["b@example.com"]);
 	assert.deepEqual(sent, ["a@example.com", "c@example.com"]);
 	assert.deepEqual(await sendToAttendees([], async () => { throw new Error("unused"); }), []);
+});
+
+const tzInput = {
+	title: "T", description: "", location: "", uid: "evt_tz", organizer: "me@example.com",
+	attendees: ["g@example.com"], sequence: 0,
+	startsAt: new Date("2026-11-08T23:00:00Z"), endsAt: new Date("2026-11-08T23:30:00Z"),
+	repeat: "weekdays", repeatDays: [1, 3, 5], repeatAnchorDay: null, repeatUntil: null,
+	repeatInterval: 1, repeatWeekday: null, repeatWeek: null,
+	excludedOccurrences: [Date.parse("2026-11-10T23:00:00Z")],
+	overrides: [{ recurrenceId: new Date("2026-11-10T23:00:00Z"), startsAt: new Date("2026-11-11T01:00:00Z"), endsAt: new Date("2026-11-11T01:30:00Z") }],
+};
+
+test("a recurring Tokyo series is written in the event zone", () => {
+	const text = new TextDecoder().decode(createCalendarInvitation({ ...tzInput, timeZone: "Asia/Tokyo" }));
+	assert.match(text, /DTSTART;TZID=Asia\/Tokyo:20261109T080000\r\n/);
+	assert.match(text, /DTEND;TZID=Asia\/Tokyo:20261109T083000/);
+	assert.match(text, /RRULE:FREQ=WEEKLY;BYDAY=MO,WE,FR/);
+	assert.match(text, /EXDATE;TZID=Asia\/Tokyo:20261111T080000/);
+	assert.match(text, /RECURRENCE-ID;TZID=Asia\/Tokyo:20261111T080000/);
+	assert.match(text, /DTSTART;TZID=Asia\/Tokyo:20261111T100000/);
+	assert.doesNotMatch(text, /DTSTART:2026/);
+	assert.equal(parseInvite(text).startsAt.toISOString(), "2026-11-08T23:00:00.000Z");
+});
+
+test("a non-recurring event with a zone stays in UTC", () => {
+	const text = new TextDecoder().decode(createCalendarInvitation({ ...tzInput, repeat: "none", timeZone: "Asia/Tokyo" }));
+	assert.match(text, /DTSTART:20261108T230000Z/);
+	assert.doesNotMatch(text, /TZID/);
+});
+
+test("an unknown zone falls back to UTC", () => {
+	const text = new TextDecoder().decode(createCalendarInvitation({ ...tzInput, timeZone: "Not/AZone" }));
+	assert.match(text, /DTSTART:20261108T230000Z/);
+});
+
+test("buildSplitAnnouncement passes the zone to both files", () => {
+	const side = (uid) => ({
+		uid, title: "T", description: "", location: "",
+		startsAt: new Date("2026-11-08T23:00:00Z"), endsAt: new Date("2026-11-08T23:30:00Z"),
+		repeat: "weekly", repeatDays: [], repeatAnchorDay: null, repeatUntil: null,
+		repeatInterval: 1, repeatWeekday: null, repeatWeek: null, reminderMinutes: null,
+		excludedOccurrences: [], overrides: [], sequence: 0, timeZone: "Asia/Tokyo",
+	});
+	const { truncationFile, forkFile } = buildSplitAnnouncement({ original: side("a"), fork: side("b"), organizer: "me@example.com", attendees: ["g@example.com"] });
+	for (const file of [truncationFile, forkFile]) assert.match(new TextDecoder().decode(file), /DTSTART;TZID=Asia\/Tokyo:/);
+});
+
+test("a series bound written for guests reads back as the same exclusive bound", () => {
+	const text = new TextDecoder().decode(createCalendarInvitation({
+		title: "Team sync", description: "", location: "", uid: "evt_until", sequence: 0,
+		startsAt: new Date("2026-11-10T17:00:00Z"), endsAt: new Date("2026-11-10T17:30:00Z"),
+		repeat: "monthly", repeatDays: [], repeatAnchorDay: null, repeatUntil: new Date("2027-06-08T17:00:00Z"),
+		repeatInterval: 3, repeatWeekday: 2, repeatWeek: 2, excludedOccurrences: [], overrides: [],
+	}));
+	assert.equal(inviteRepeat(parseInvite(text).rrule).repeatUntil.toISOString(), "2027-06-08T17:00:00.000Z");
+});
+
+test("a TZID series keeps UNTIL in UTC", () => {
+	const text = new TextDecoder().decode(createCalendarInvitation({ ...tzInput, timeZone: "Asia/Tokyo", repeatUntil: new Date("2026-12-07T23:00:00Z") }));
+	assert.match(text, /DTSTART;TZID=Asia\/Tokyo:20261109T080000/);
+	assert.match(text, /RRULE:FREQ=WEEKLY;BYDAY=MO,WE,FR;UNTIL=20261207T225959Z\r\n/);
+});
+
+test("a New York series keeps its local clock time across the March DST change", () => {
+	const text = new TextDecoder().decode(createCalendarInvitation({
+		...tzInput, repeat: "weekly", repeatDays: [], excludedOccurrences: [],
+		overrides: [{ recurrenceId: new Date("2027-03-15T13:00:00Z"), startsAt: new Date("2027-03-15T14:00:00Z"), endsAt: new Date("2027-03-15T14:30:00Z") }],
+		startsAt: new Date("2027-03-08T14:00:00Z"), endsAt: new Date("2027-03-08T14:30:00Z"), timeZone: "America/New_York",
+	}));
+	// 14:00Z on 8 Mar is 09:00 EST; 13:00Z on 15 Mar is 09:00 EDT: the same local time across the change.
+	assert.match(text, /DTSTART;TZID=America\/New_York:20270308T090000/);
+	assert.match(text, /RECURRENCE-ID;TZID=America\/New_York:20270315T090000/);
 });

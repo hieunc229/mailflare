@@ -1,4 +1,4 @@
-import { and, eq, isNull } from "drizzle-orm";
+import { and, eq, inArray, isNull } from "drizzle-orm";
 import { getDb } from "@/db";
 import { messageAttachments, messages } from "@/db/schema";
 import { newId } from "@/lib/ids";
@@ -202,11 +202,23 @@ export async function deleteMessageAttachment(
 
 /** Remove every attachment object of a message; the rows cascade with the message row. */
 export async function deleteMessageAttachmentObjects(env: CloudflareEnv, messageId: string): Promise<void> {
+	await deleteMessagesAttachmentObjects(env, [messageId]);
+}
+
+/**
+ * Batch form: one select per 50 messages, then one shared-object check and R2 delete for all
+ * keys. An object another message or a Drive item outside the batch still references is kept.
+ */
+export async function deleteMessagesAttachmentObjects(env: CloudflareEnv, messageIds: string[]): Promise<void> {
 	const db = getDb(env);
-	const rows = await db
-		.select({ id: messageAttachments.id, r2Key: messageAttachments.r2Key })
-		.from(messageAttachments)
-		.where(eq(messageAttachments.messageId, messageId));
+	const rows: { id: string; r2Key: string }[] = [];
+	// 50 ids per statement keeps it under D1's 100 bound parameters.
+	for (let index = 0; index < messageIds.length; index += 50) {
+		rows.push(...await db
+			.select({ id: messageAttachments.id, r2Key: messageAttachments.r2Key })
+			.from(messageAttachments)
+			.where(inArray(messageAttachments.messageId, messageIds.slice(index, index + 50))));
+	}
 	// A Drive item saved from this attachment keeps the object alive.
 	await deleteUnreferencedObjects(env, db, rows.map((row) => row.r2Key), { attachmentIds: rows.map((row) => row.id) });
 }

@@ -5,7 +5,7 @@ import { withStorage } from "@/lib/storage";
 import { openFileBucket } from "./file-bucket";
 import { mailerConfigFromEnv, openMailer, type Mailer } from "./mailer";
 import { openAssets, openRateLimiter } from "./misc";
-import { openQueue, type InProcessQueue } from "./queue";
+import { INBOUND_QUEUE_OPTIONS, openQueue, type InProcessQueue } from "./queue";
 import { RealtimeHubRegistry } from "./realtime";
 import { openSqliteDatabase, type SqliteDatabase } from "./sqlite-database";
 import type { NodeRuntime } from "./types";
@@ -28,7 +28,7 @@ export function createNodeRuntime(): NodeRuntime {
 	const database = getDatabaseConfig({}).driver === "d1" ? openSqliteDatabase(join(dataDir, "mailflare.sqlite")) : undefined;
 	const bucket = openFileBucket(join(dataDir, "blobs"));
 	const mailer = openMailer(mailerConfigFromEnv());
-	const inboundQueue = openQueue("mailflare-inbound");
+	const inboundQueue = openQueue("mailflare-inbound", INBOUND_QUEUE_OPTIONS);
 	const outboundQueue = openQueue("mailflare-outbound");
 	const agentQueue = openQueue("mailflare-agent");
 	const realtime = new RealtimeHubRegistry();

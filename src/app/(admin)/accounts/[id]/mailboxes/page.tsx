@@ -6,6 +6,7 @@ import { useParams } from "next/navigation";
 import { Plus, Trash2 } from "@/components/icons";
 import { useLanguage } from "@/components/language-provider";
 import { Button } from "@/components/ui/button";
+import { confirmDestructive } from "@/components/ui/confirm-dialog";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
@@ -15,6 +16,7 @@ import {
   fetchManagedAccount,
   fetchManagedDomains,
   fetchManagedMailboxes,
+  getMailboxAddress,
   removeManagedMailbox,
 } from "../utils";
 
@@ -74,10 +76,12 @@ export default function AccountMailboxesPage() {
     }
   }
 
-  async function removeMailbox(mailboxId: string) {
+  async function removeMailbox(mailbox: ManagedMailbox) {
+    const address = getMailboxAddress(mailbox);
+    if (!await confirmDestructive(t("mailbox.deleteConfirm", { address }))) return;
     setMessage(null);
     try {
-      await removeManagedMailbox(mailboxId);
+      await removeManagedMailbox(mailbox.id);
       await load();
     } catch (error) {
       setMessage(
@@ -120,8 +124,8 @@ export default function AccountMailboxesPage() {
                 type="button"
                 variant="ghost"
                 size="icon"
-                onClick={() => void removeMailbox(mailbox.id)}
-                aria-label={t("account.mailboxes.removeInbox")}
+                onClick={() => void removeMailbox(mailbox)}
+                aria-label={`${t("account.mailboxes.removeInbox")}: ${getMailboxAddress(mailbox)}`}
               >
                 <Trash2 className="h-4 w-4 text-red-600" />
               </Button>
