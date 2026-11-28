@@ -1,10 +1,10 @@
-import { and, eq, inArray, isNotNull, isNull, lte } from "drizzle-orm";
+import { and, eq, gt, inArray, isNotNull, isNull, lte, sql } from "drizzle-orm";
+import { concatText } from "@/db/sql";
 import { getDb } from "@/db";
 import { calendarEvents, driveItems, mailboxes, messageAttachments, messages, sessions, users } from "@/db/schema";
 import { canManageUsers, isPrimaryAdmin } from "@/lib/auth/admin";
 import type { SessionUser } from "@/lib/auth/types";
 import { deleteDriveItems } from "@/lib/drive/access";
-import { driveObjectKey } from "@/lib/drive/utils";
 import { newId } from "@/lib/ids";
 import { getAccountSeatError } from "@/lib/licenses/seats";
 import { removeMailboxDomainRouting } from "@/lib/mailboxes/domain-addresses";
@@ -14,6 +14,7 @@ import type { DeleteAccountsInput, DeleteAccountsResult } from "./deletion-types
 import { deleteUnreferencedObjects } from "@/lib/drive/shared-objects";
 
 const CHUNK = 50;
+const PURGE_PAGE = 1000;
 
 function chunks<T>(items: T[], size = CHUNK): T[][] {
 	const out: T[][] = [];
@@ -30,8 +31,9 @@ export async function transferAccountData(env: CloudflareEnv, fromId: string, fr
 	const items = await db.select().from(driveItems).where(eq(driveItems.ownerId, fromId));
 	if (items.length) {
 		// Stored objects are keyed by owner unless the row records its key, so pin the key before the owner changes.
-		for (const row of items) {
-			if (row.kind === "file" && !row.r2Key) await db.update(driveItems).set({ r2Key: driveObjectKey(fromId, row.id) }).where(eq(driveItems.id, row.id));
+		// One set-based update; the key is `drive/<owner>/<item>`, as driveObjectKey builds it.
+		if (items.some((row) => row.kind === "file" && !row.r2Key)) {
+			await db.update(driveItems).set({ r2Key: concatText("drive/", sql`${driveItems.ownerId}`, "/", sql`${driveItems.id}`) }).where(and(eq(driveItems.ownerId, fromId), eq(driveItems.kind, "file"), isNull(driveItems.r2Key)));
 		}
 		const folderId = newId();
 		await db.insert(driveItems).values({ id: folderId, ownerId: toId, parentId: null, kind: "folder", name: `Files from ${fromName}`.slice(0, 255) });
@@ -105,12 +107,25 @@ async function purgeAccount(env: CloudflareEnv, account: typeof users.$inferSele
 	const rootItems = await db.select().from(driveItems).where(and(eq(driveItems.ownerId, account.id), isNull(driveItems.parentId)));
 	if (rootItems.length) await deleteDriveItems(env, rootItems);
 	for (const mailbox of owned) {
-		const raw = await db.select({ key: messages.rawR2Key }).from(messages).where(and(eq(messages.mailboxId, mailbox.id), isNotNull(messages.rawR2Key)));
-		const attachments = await db.select({ id: messageAttachments.id, key: messageAttachments.r2Key }).from(messageAttachments).innerJoin(messages, eq(messages.id, messageAttachments.messageId)).where(eq(messages.mailboxId, mailbox.id));
-		const rawKeys = raw.map((row) => row.key).filter((key): key is string => !!key);
-		for (const group of chunks(rawKeys, 500)) await env.BUCKET.delete(group);
-		// Another user's Drive item may share an attachment object.
-		await deleteUnreferencedObjects(env, db, attachments.map((row) => row.key), { attachmentIds: attachments.map((row) => row.id) });
+		// Pages by id keep a mailbox with millions of messages out of memory; the rows stay until the user row cascades.
+		for (let cursor = ""; ;) {
+			const page = await db.select({ id: messages.id, key: messages.rawR2Key }).from(messages).where(and(eq(messages.mailboxId, mailbox.id), isNotNull(messages.rawR2Key), gt(messages.id, cursor))).orderBy(messages.id).limit(PURGE_PAGE);
+			if (!page.length) break;
+			const keys = page.map((row) => row.key).filter((key): key is string => !!key);
+			if (keys.length) await env.BUCKET.delete(keys);
+			cursor = page[page.length - 1].id;
+		}
+		// Attachment rows of earlier pages still exist, so each page excludes every attachment seen so far: a key
+		// shared across pages would otherwise count as referenced forever.
+		const purgedAttachmentIds: string[] = [];
+		for (let cursor = ""; ;) {
+			const page = await db.select({ id: messageAttachments.id, key: messageAttachments.r2Key }).from(messageAttachments).innerJoin(messages, eq(messages.id, messageAttachments.messageId)).where(and(eq(messages.mailboxId, mailbox.id), gt(messageAttachments.id, cursor))).orderBy(messageAttachments.id).limit(PURGE_PAGE);
+			if (!page.length) break;
+			purgedAttachmentIds.push(...page.map((row) => row.id));
+			// Another user's Drive item may share an attachment object.
+			await deleteUnreferencedObjects(env, db, page.map((row) => row.key), { attachmentIds: purgedAttachmentIds });
+			cursor = page[page.length - 1].id;
+		}
 	}
 	await env.BUCKET.delete(account.avatarKey ?? avatarKeyFor(account.id));
 	await db.delete(users).where(eq(users.id, account.id));
