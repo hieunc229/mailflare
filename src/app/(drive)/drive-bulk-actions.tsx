@@ -85,18 +85,18 @@ export function DriveBulkActions({ selected, trashView, onDone }: { selected: Dr
 
 	/** Applies a trash action to the Drive items and the email attachments in the selection. */
 	async function act(action: "trash" | "restore" | "delete"): Promise<number | null> {
+		// A failed part has already toasted its own error; the other part still changed, so the list must refresh.
 		let total = 0;
+		let succeeded = false;
 		if (driveIds.length) {
 			const done = await bulk({ action, ids: driveIds }, t("drive.actionFailed"));
-			if (done === null) return null;
-			total += done;
+			if (done !== null) { total += done; succeeded = true; }
 		}
 		if (attachmentIds.length) {
 			const done = await attachmentAction(action, attachmentIds, t("drive.actionFailed"));
-			if (done === null) return null;
-			total += done;
+			if (done !== null) { total += done; succeeded = true; }
 		}
-		return total;
+		return succeeded ? total : null;
 	}
 
 	async function loadFolders(open: boolean) {
