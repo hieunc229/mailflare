@@ -235,7 +235,7 @@ for (const enabled of [true, false]) {
 test("account creation still enforces admin authorization and the Team license", async (t) => {
 	const f = await fixture(t);
 	assert.equal((await f.post("api", {}, "invalid-test-key")).status, 401);
-	assert.equal((await f.post("dashboard", {}, "invalid-test-session")).status, 403);
+	assert.equal((await f.post("dashboard", {}, "invalid-test-session")).status, 401);
 	f.database.db.exec("UPDATE license_settings SET state = 'inactive'");
 	assert.equal((await f.post("api")).status, 403);
 	assert.equal((await f.post("dashboard")).status, 403);

@@ -24,6 +24,7 @@ globalThis.cancelAnimationFrame = dom.window.cancelAnimationFrame.bind(dom.windo
 
 const mock = new Map([
 	["@/lib/auth/client", `
+export const AUTH_SESSION_CHANGED_EVENT = "mailflare:auth-session-changed";
 export function authFetch(...args) { return globalThis.__testAuthFetch(...args); }
 `],
 	["@/lib/search/query-utils", `
