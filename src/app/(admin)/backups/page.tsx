@@ -450,7 +450,7 @@ export default function BackupsPage() {
                   backup.status === "queued" ||
                   backup.status === "running"
                 }
-                onClick={() => deleteBackup.mutate(backup.id)}
+                onClick={async () => { if (await confirmDestructive(`${t("backups.delete")}: ${backup.filename ?? backup.id}`)) deleteBackup.mutate(backup.id); }}
               >
                 <Trash2 className="h-4 w-4 text-red-600" />
               </Button>

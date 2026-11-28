@@ -93,3 +93,31 @@ test("Save in the dialog persists the draft", async (t) => {
 	assert.equal(globalThis.savedSettings.length, 1);
 	assert.deepEqual(globalThis.savedSettings[0].excludedTableGroups, ["accounts"]);
 });
+
+const ONE = { id: "b1", filename: "mailflare-1.json", status: "completed", size: 10, createdAt: "2026-01-01", trigger: "manual", error: null };
+const deleteButton = (c) => c.querySelector('button[title="backups.delete"]');
+
+test("delete asks for confirmation naming the file and does nothing when cancelled", async (t) => {
+	const c = await mount(t, [ONE]);
+	globalThis.confirmAnswer = false;
+	await click(deleteButton(c));
+	await settle();
+	assert.equal(globalThis.confirmCalls.length, 1);
+	assert.ok(globalThis.confirmCalls[0].includes("mailflare-1.json"));
+	assert.deepEqual(globalThis.removedIds, []);
+});
+
+test("delete runs after the admin confirms", async (t) => {
+	const c = await mount(t, [ONE]);
+	globalThis.confirmAnswer = true;
+	await click(deleteButton(c));
+	await settle();
+	assert.deepEqual(globalThis.removedIds, ["b1"]);
+});
+
+test("a backup without a filename is confirmed by id", async (t) => {
+	const c = await mount(t, [{ ...ONE, filename: null }]);
+	await click(deleteButton(c));
+	await settle();
+	assert.ok(globalThis.confirmCalls[0].includes("b1"));
+});
