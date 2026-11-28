@@ -2,6 +2,9 @@
   "name": "mailflare",
   "version": "0.5.6",
   "private": true,
+  "engines": {
+    "node": "^22.18.0 || ^24.11.0"
+  },
   "scripts": {
     "dev": "npm run db:bundle && vp dev --port 3000",
     "build": "npm run db:bundle && vp build",
@@ -135,7 +138,7 @@
     "@types/bcryptjs": "^2.4.6",
     "@types/better-sqlite3": "^9.6.0",
     "@types/css-tree": "^3.2.0",
-    "@types/node": "^24.0.0",
+    "@types/node": "^22.0.0",
     "@types/nodemailer": "^8.0.1",
     "@types/pg": "^8.23.1",
     "@types/qrcode": "^1.5.6",
