@@ -4,21 +4,10 @@ import { useEffect, useRef } from "react";
 import type { ShortcutDefinition } from "./types";
 import { consumeEvent, createSequenceState, matchSequence, recordKey } from "./hotkey-sequence";
 import { hasCommandModifier, isModifierKey } from "./use-hotkeys-utils";
+import { hasOpenDialogOrMenu, isTypingInInput } from "./keyboard-guards";
 
 interface UseHotkeysOptions {
   enabled?: boolean;
-}
-
-export function isTypingInInput(target: EventTarget | null): boolean {
-  if (!target || !(target instanceof HTMLElement)) return false;
-  const tagName = target.tagName.toUpperCase();
-  const isInputOrTextarea =
-    tagName === "INPUT" || tagName === "TEXTAREA" || tagName === "SELECT" ||
-    target.closest('[role="combobox"]') !== null;
-  const isContentEditable =
-    target.isContentEditable ||
-    target.getAttribute("contenteditable") === "true";
-  return isInputOrTextarea || isContentEditable;
 }
 
 const sequenceState = createSequenceState();
@@ -75,7 +64,7 @@ export function useHotkeys(
       const key = e.key.toLowerCase();
 
       // Always allow Cmd+K / Ctrl+K
-      if ((e.metaKey || e.ctrlKey) && key === "k") {
+      if (!isInput && !hasOpenDialogOrMenu(document) && (e.metaKey || e.ctrlKey) && key === "k") {
         const cmdK = shortcutsRef.current.find(
           (s) =>
             s.key.toLowerCase() === "k" &&
@@ -88,15 +77,7 @@ export function useHotkeys(
         }
       }
 
-      if (isInput) {
-        if (e.key === "Escape") {
-          const esc = shortcutsRef.current.find(
-            (s) => s.key.toLowerCase() === "escape" || s.key.toLowerCase() === "esc"
-          );
-          if (esc) esc.action();
-        }
-        return;
-      }
+      if (isInput) return;
 
       if (isModifierKey(key)) return;
 
@@ -105,7 +86,7 @@ export function useHotkeys(
       // Cmd+C would fire the compose shortcut instead of copying.
       if (hasCommandModifier(e)) return;
 
-      if (e.target instanceof Element && e.target.closest('[role="dialog"], [role="menu"], [role="listbox"]')) return;
+      if (hasOpenDialogOrMenu(document)) return;
 
       // Handle sequence buffer (shared; push once per event)
       if (recordKey(sequenceState, e, key)) {
@@ -117,7 +98,7 @@ export function useHotkeys(
 
       const sequenceMatch = matchSequence(sequenceState, shortcutsRef.current);
 
-      if (sequenceMatch) {
+      if (sequenceMatch?.key.includes(" ")) {
         e.preventDefault();
         consumeEvent(sequenceState, e);
         sequenceMatch.action();
@@ -134,6 +115,7 @@ export function useHotkeys(
       });
 
       if (singleMatch) {
+        if (key === "enter" && (e.target as HTMLElement | null)?.closest?.('a[href], button, select, summary, [role="button"], [role="link"]')) return;
         e.preventDefault();
         consumeEvent(sequenceState, e);
         singleMatch.action();

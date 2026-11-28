@@ -1,7 +1,7 @@
 "use client";
 
 import React, { createContext, useContext, useState, useMemo } from "react";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import {
   Inbox,
   Star,
@@ -40,6 +40,11 @@ interface ShortcutsContextValue {
 
 const ShortcutsContext = createContext<ShortcutsContextValue | null>(null);
 
+function isMessageRoute(pathname: string): boolean {
+  return /^\/(inbox|sent|drafts|archived|starred|promotions|scheduled|snoozed|spam|trash)(\/|$)/.test(pathname)
+    || pathname.startsWith("/folders/");
+}
+
 export function useShortcuts() {
   const ctx = useContext(ShortcutsContext);
   if (!ctx) {
@@ -59,6 +64,7 @@ export function ShortcutsProvider({
 }) {
   const { t } = useLanguage();
   const router = useRouter();
+  const pathname = usePathname();
   const { openComposer } = useCompose();
   const {
     enabled: shortcutsEnabled,
@@ -149,6 +155,12 @@ export function ShortcutsProvider({
       },
       {
         key: "g s",
+        label: t("shortcut.goSent"),
+        category: "Navigation",
+        action: () => router.push("/sent"),
+      },
+      {
+        key: "g r",
         label: t("shortcut.goStarred"),
         category: "Navigation",
         action: () => router.push("/starred"),
@@ -161,9 +173,9 @@ export function ShortcutsProvider({
       },
       {
         key: "g t",
-        label: t("shortcut.goSent"),
+        label: t("shortcut.goStarred"),
         category: "Navigation",
-        action: () => router.push("/sent"),
+        action: () => router.push("/starred"),
       },
       {
         key: "g d",
@@ -189,18 +201,31 @@ export function ShortcutsProvider({
         category: "Navigation",
         action: () => router.push("/trash"),
       },
+      ...(isMessageRoute(pathname) ? [
+        { key: "j", action: "next", label: "Next message" },
+        { key: "ArrowDown", action: "next", label: "Next message" },
+        { key: "k", action: "previous", label: "Previous message" },
+        { key: "ArrowUp", action: "previous", label: "Previous message" },
+        { key: "enter", action: "open", label: "Open selected message" },
+      ].map(({ key, action, label }) => ({
+        key,
+        label,
+        category: "Navigation" as const,
+        action: () => window.dispatchEvent(new CustomEvent("mailflare:message-list-shortcut", { detail: action })),
+      })) : []),
       {
         key: "escape",
-        label: t("shortcut.dismiss"),
+        label: t("shortcut.backToList"),
         category: "General",
         action: () => {
           setIsCommandPaletteOpen(false);
           setIsHelpModalOpen(false);
+          window.dispatchEvent(new CustomEvent("mailflare:message-list-shortcut", { detail: "back" }));
         },
       },
       ...customShortcuts,
     ];
-  }, [router, openComposer, customShortcuts, t]);
+  }, [router, pathname, openComposer, customShortcuts, t]);
 
   useHotkeys(baseShortcuts, { enabled: shortcutsEnabled && !shortcutsPreferenceLoading });
 
@@ -229,7 +254,7 @@ export function ShortcutsProvider({
         title: t("shortcut.goStarred"),
         category: "Navigation",
         icon: Star,
-        shortcut: "g s",
+        shortcut: "g r",
         perform: () => router.push("/starred"),
       },
       {
@@ -245,7 +270,7 @@ export function ShortcutsProvider({
         title: t("shortcut.goSent"),
         category: "Navigation",
         icon: Send,
-        shortcut: "g t",
+        shortcut: "g s",
         perform: () => router.push("/sent"),
       },
       {
