@@ -1,5 +1,5 @@
 import { sql, type AnyColumn, type SQL } from "drizzle-orm";
-import { schemaDialect } from "./dialect";
+import { schemaDialect, type DatabaseDialect } from "./dialect";
 
 /**
  * SQL that differs between SQLite, PostgreSQL and MySQL, in one place. Everything else the app writes
@@ -43,6 +43,14 @@ export function charIndex(haystack: AnyColumn | SQL, needle: string): SQL {
 export function concatText(...parts: Array<SQL | string>): SQL {
 	const list = parts.map((part) => (typeof part === "string" ? sql.raw(`'${part.replace(/'/g, "''")}'`) : part));
 	return dialect === "mysql" ? sql`concat(${sql.join(list, sql`, `)})` : sql.join(list, sql` || `);
+}
+
+/** Upsert that adds one to a `(bucket, hits, expires_at)` counter row; MySQL has no `RETURNING`, so the caller reads the row back. */
+export function counterIncrementSql(counterDialect: DatabaseDialect, table: string): string {
+	const insert = `INSERT INTO ${table} (bucket, hits, expires_at) VALUES (?, 1, ?)`;
+	return counterDialect === "mysql"
+		? `${insert} ON DUPLICATE KEY UPDATE hits = hits + 1`
+		: `${insert} ON CONFLICT (bucket) DO UPDATE SET hits = ${table}.hits + 1 RETURNING hits`;
 }
 
 /** Boolean literals for `WHERE`: PostgreSQL rejects a bare `0` or `1` there. */
