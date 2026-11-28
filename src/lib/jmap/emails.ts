@@ -142,9 +142,6 @@ export const emailGet: JmapMethodHandler = async (ctx, args) => {
 	return { accountId: ctx.accountId, state: await getEmailState(ctx), list, notFound: ids.filter((id) => !found.has(id)) };
 };
 
-/** How many ordered ids Email/query loads when it has to resolve an anchor or collapse threads. */
-const MATERIALISED_QUERY_LIMIT = 10_000;
-
 export const emailQuery: JmapMethodHandler = async (ctx, args) => {
 	const { ids: accessibleIds, condition } = await scope(ctx);
 	const filter = filterToSql(args.filter as Filter | null | undefined, new Set(accessibleIds), ctx.auth.userId);
@@ -162,37 +159,33 @@ export const emailQuery: JmapMethodHandler = async (ctx, args) => {
 		return Number(row?.n ?? 0);
 	};
 
-	let page: string[];
-	let total: number | undefined;
-	if (!args.anchor && !collapse) {
-		// Plain paging is done in SQL, so neither the page nor the total is bounded.
-		if (args.calculateTotal || position < 0) total = await countTotal();
-		if (position < 0) position = Math.max(total! + position, 0);
-		const rows = await ctx.db.select({ id: messages.id }).from(messages).where(where).orderBy(...order).limit(limit).offset(position);
-		page = rows.map((row) => row.id);
-	} else {
-		// Anchors and collapsed threads are resolved by materialising the ordered
-		// id list up to a bound; positions past it are not reachable this way.
-		const allRows = await ctx.db
-			.select({ id: messages.id, thread: threadKey })
+	// Collapsing keeps the first message of each thread in the requested order; an anchor's position is its rank in that set.
+	const orderBy = sql.join(order, sql`, `);
+	let base = where;
+	if (collapse) {
+		const firstOfThread = ctx.db
+			.select({ id: messages.id, rn: sql<number>`row_number() over (partition by ${threadKey} order by ${orderBy})`.as("rn") })
 			.from(messages)
 			.where(where)
-			.orderBy(...order)
-			.limit(MATERIALISED_QUERY_LIMIT);
-		let ordered = allRows.map((row) => row.id);
-		if (collapse) {
-			const seen = new Set<string>();
-			ordered = allRows.filter((row) => (seen.has(row.thread) ? false : (seen.add(row.thread), true))).map((row) => row.id);
-		}
-		if (args.anchor) {
-			const index = ordered.indexOf(String(args.anchor));
-			if (index < 0) return { type: "anchorNotFound" };
-			// An offset that reaches before the first result clamps to 0 (RFC 8620 §5.5).
-			position = Math.max(index + Number(args.anchorOffset ?? 0), 0);
-		} else if (position < 0) position = Math.max(ordered.length + position, 0);
-		page = ordered.slice(position, position + limit);
-		if (args.calculateTotal) total = allRows.length < MATERIALISED_QUERY_LIMIT ? ordered.length : await countTotal();
+			.as("first_of_thread");
+		base = inArray(messages.id, ctx.db.select({ id: firstOfThread.id }).from(firstOfThread).where(eq(firstOfThread.rn, 1)));
 	}
+	if (args.anchor) {
+		const ranked = ctx.db
+			.select({ id: messages.id, rn: sql<number>`row_number() over (order by ${orderBy})`.as("rn") })
+			.from(messages)
+			.where(base)
+			.as("ranked");
+		const [hit] = await ctx.db.select({ rn: ranked.rn }).from(ranked).where(eq(ranked.id, String(args.anchor)));
+		if (!hit) return { type: "anchorNotFound" };
+		// An offset that reaches before the first result clamps to 0 (RFC 8620 §5.5). Number(): PostgreSQL returns bigint as text.
+		position = Math.max(Number(hit.rn) - 1 + Number(args.anchorOffset ?? 0), 0);
+	}
+	let total: number | undefined;
+	if (args.calculateTotal || position < 0) total = await countTotal();
+	if (position < 0) position = Math.max(total! + position, 0);
+	const rows = await ctx.db.select({ id: messages.id }).from(messages).where(base).orderBy(...order).limit(limit).offset(position);
+	const page = rows.map((row) => row.id);
 
 	return {
 		accountId: ctx.accountId,
