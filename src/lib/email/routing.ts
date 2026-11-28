@@ -1,4 +1,4 @@
-import { eq, and, asc, desc } from "drizzle-orm";
+import { eq, and, asc, desc, sql } from "drizzle-orm";
 import type { AppDatabase } from "@/db";
 import { domains, folders, mailboxAliases, mailboxes, routingRules } from "@/db/schema";
 import { getEmailAddress } from "@/lib/email/address";
@@ -259,15 +259,9 @@ function toResolvedMailbox(
 
 /** Records that a domain rule fired, for the "last matched" column in the routing UI. */
 export async function recordRuleMatch(db: AppDatabase, ruleId: string): Promise<void> {
-	const [rule] = await db
-		.select({ matchCount: routingRules.matchCount })
-		.from(routingRules)
-		.where(eq(routingRules.id, ruleId))
-		.limit(1);
-	if (!rule) return;
 	await db
 		.update(routingRules)
-		.set({ matchCount: rule.matchCount + 1, lastMatchedAt: new Date() })
+		.set({ matchCount: sql`${routingRules.matchCount} + 1`, lastMatchedAt: new Date() })
 		.where(eq(routingRules.id, ruleId));
 }
 

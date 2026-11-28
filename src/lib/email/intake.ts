@@ -1,4 +1,4 @@
-import { forwardedMarker, getAccountForwardingDestination, isForwardedMarkerValid, MAILFLARE_FORWARDED_HEADER } from "@/lib/email/account-forwarding";
+import { forwardedMarker, getAccountForwardingDestination, isForwardedMarkerValid, plainMailbox, MAILFLARE_FORWARDED_HEADER } from "@/lib/email/account-forwarding";
 import { resolveIncomingMail } from "@/lib/email/incoming";
 import { inboundStorageKey } from "@/lib/email/inbound-id";
 import type { InboundQueueMessage } from "@/lib/email/inbound";
@@ -35,7 +35,7 @@ export async function intakeIncomingMail(env: CloudflareEnv, input: IntakeInput,
 
 	// Report mail is never forwarded, by a rule or by the account's forwarding address.
 	if (!alreadyForwarded && decision?.action !== "report") {
-		const destination = await getAccountForwardingDestination(env, input.to);
+		const destination = await getAccountForwardingDestination(env, input.to, plainMailbox(decision));
 		if (destination) await actions.forward?.(destination, marker);
 	}
 

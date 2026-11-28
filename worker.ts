@@ -28,6 +28,7 @@ import { inboundAttachmentLimitReasonFromRaw } from "./src/lib/email/inbound-att
 import { hasValidSessionMutationOrigin } from "./src/lib/auth/origin";
 import {
 	getAccountForwardingDestination,
+	plainMailbox,
 	isForwardedMarkerValid,
 	MAILFLARE_FORWARDED_HEADER,
 } from "./src/lib/email/account-forwarding";
@@ -114,7 +115,7 @@ export default {
 
 			// Report mail is never forwarded, by a rule or by the account's forwarding address.
 			if (!alreadyForwarded && decision?.action !== "report") {
-				const forwardingDestination = await getAccountForwardingDestination(env, message.to);
+				const forwardingDestination = await getAccountForwardingDestination(env, message.to, plainMailbox(decision));
 				if (forwardingDestination) {
 					await forwardMessage(env, message, forwardingDestination);
 				}
