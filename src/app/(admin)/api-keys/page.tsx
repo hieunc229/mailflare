@@ -38,7 +38,7 @@ export default function ApiKeysPage() {
 	const [copied, setCopied] = useState(false);
 	const [createOpen, setCreateOpen] = useState(false);
 
-	const { data, isLoading } = useQuery({
+	const { data, isLoading, isError, refetch } = useQuery({
 		queryKey: ["admin-api-keys"],
 		queryFn: async () => {
 			const res = await authFetch("/api/admin/api-keys");
@@ -136,7 +136,13 @@ export default function ApiKeysPage() {
 				{isLoading && (
 					<SectionRowSkeleton />
 				)}
-				{!isLoading && (data?.apiKeys ?? []).length === 0 && (
+				{isError && (
+					<div role="alert" className="flex items-center gap-3 rounded-2xl bg-red-50 px-5 py-4 text-sm text-red-700">
+						<span className="flex-1">{t("list.loadFailed")}</span>
+						<Button type="button" variant="outline" size="sm" onClick={() => void refetch()}>{t("webhooks.retry")}</Button>
+					</div>
+				)}
+				{!isLoading && !isError && (data?.apiKeys ?? []).length === 0 && (
 					<p className="rounded-2xl bg-white px-5 py-4 text-sm text-neutral-500">
 						{t("apiKeys.none")}
 					</p>

@@ -81,6 +81,7 @@ export default function MailboxesPage() {
 		queryKey: ["domains", "options"],
 		queryFn: async () => {
 			const res = await authFetch("/api/domains");
+			if (!res.ok) throw new Error(t("list.loadFailed"));
 			return (await res.json()) as { domains: Domain[] };
 		},
 	});
@@ -89,6 +90,7 @@ export default function MailboxesPage() {
 		queryKey: ["mailboxes"],
 		queryFn: async () => {
 			const res = await authFetch("/api/mailboxes");
+			if (!res.ok) throw new Error(t("list.loadFailed"));
 			return (await res.json()) as MailboxesResponse;
 		},
 	});
@@ -252,7 +254,13 @@ export default function MailboxesPage() {
 				{mailboxes.isLoading && (
 					<SectionRowSkeleton />
 				)}
-				{!mailboxes.isLoading && (mailboxes.data?.mailboxes ?? []).length === 0 && (
+				{(mailboxes.isError || domains.isError) && (
+					<div role="alert" className="flex items-center gap-3 rounded-2xl bg-red-50 px-5 py-4 text-sm text-red-700">
+						<span className="flex-1">{t("list.loadFailed")}</span>
+						<Button type="button" variant="outline" size="sm" onClick={() => { void mailboxes.refetch(); void domains.refetch(); }}>{t("webhooks.retry")}</Button>
+					</div>
+				)}
+				{!mailboxes.isLoading && !mailboxes.isError && (mailboxes.data?.mailboxes ?? []).length === 0 && (
 					<p className="rounded-2xl bg-white px-5 py-4 text-sm text-neutral-500">
 						{t("mailboxes.none")}
 					</p>

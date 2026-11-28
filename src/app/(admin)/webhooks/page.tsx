@@ -159,6 +159,11 @@ export default function WebhooksPage() {
 
 			{webhooks.isLoading ? (
 				<SectionRowSkeleton />
+			) : webhooks.isError ? (
+				<div role="alert" className="flex items-center gap-3 rounded-2xl bg-red-50 px-5 py-4 text-sm text-red-700">
+					<span className="flex-1">{t("list.loadFailed")}</span>
+					<Button type="button" variant="outline" size="sm" onClick={() => void webhooks.refetch()}>{t("webhooks.retry")}</Button>
+				</div>
 			) : !webhooks.data?.length ? (
 				<Card>
 					<CardContent className="pt-6 text-sm text-neutral-500">

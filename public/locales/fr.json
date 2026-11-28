@@ -3012,5 +3012,6 @@
 	"domains.forceRemoveConfirm": "{reason}\n\nForcer quand même la suppression de {host} ? Mailflare va essayer de retirer ses enregistrements DNS _mta-sts et _smtp._tls, puis supprimer le domaine, toutes ses boîtes mail et tous leurs messages, même si ce retrait échoue. Les serveurs de messagerie peuvent continuer un temps à appliquer la politique MTA-STS mise en cache. Vous recevrez ensuite la liste des enregistrements DNS à supprimer à la main.\n\nSaisissez {host} pour confirmer.",
 	"domains.forceRemoved": "{host} supprimé",
 	"domains.forceRemovedRecords": "Supprimez vous-même ces enregistrements DNS :",
-	"domains.forceRemovedCache": "Les serveurs de messagerie peuvent continuer à appliquer l'ancienne politique MTA-STS jusqu'au {date}."
+	"domains.forceRemovedCache": "Les serveurs de messagerie peuvent continuer à appliquer l'ancienne politique MTA-STS jusqu'au {date}.",
+	"list.loadFailed": "Impossible de charger cette liste."
 }

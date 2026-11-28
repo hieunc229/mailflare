@@ -2991,5 +2991,6 @@
 	"domains.forceRemoveConfirm": "{reason}\n\nতবুও কি {host} জোর করে মুছবেন? Mailflare প্রথমে এর _mta-sts ও _smtp._tls DNS রেকর্ড সরানোর চেষ্টা করবে, তারপর ডোমেইন, এর সব মেলবক্স এবং সেগুলোর সব বার্তা মুছে ফেলবে, রেকর্ড সরানো ব্যর্থ হলেও। মেইল সার্ভার কিছু সময় ক্যাশ করা MTA-STS নীতি প্রয়োগ করতে পারে। পরে আপনি হাতে সরানোর জন্য DNS রেকর্ডের তালিকা পাবেন।\n\nনিশ্চিত করতে {host} লিখুন।",
 	"domains.forceRemoved": "{host} সরানো হয়েছে",
 	"domains.forceRemovedRecords": "এই DNS রেকর্ডগুলো নিজে সরান:",
-	"domains.forceRemovedCache": "মেইল সার্ভার {date} পর্যন্ত পুরনো MTA-STS নীতি প্রয়োগ করতে পারে।"
+	"domains.forceRemovedCache": "মেইল সার্ভার {date} পর্যন্ত পুরনো MTA-STS নীতি প্রয়োগ করতে পারে।",
+	"list.loadFailed": "এই তালিকা লোড করা যায়নি।"
 }

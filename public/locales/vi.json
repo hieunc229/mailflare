@@ -2968,5 +2968,6 @@
 	"domains.forceRemoveConfirm": "{reason}\n\nVẫn xóa cưỡng bức {host}? Mailflare sẽ thử gỡ các bản ghi DNS _mta-sts và _smtp._tls, rồi xóa tên miền, mọi hộp thư trong đó và toàn bộ thư, kể cả khi việc gỡ bản ghi thất bại. Máy chủ thư có thể vẫn áp dụng chính sách MTA-STS đã lưu trong bộ nhớ đệm thêm một thời gian. Sau đó bạn sẽ nhận danh sách các bản ghi DNS cần tự gỡ.\n\nNhập {host} để xác nhận.",
 	"domains.forceRemoved": "Đã xóa {host}",
 	"domains.forceRemovedRecords": "Hãy tự gỡ các bản ghi DNS sau:",
-	"domains.forceRemovedCache": "Máy chủ thư có thể vẫn áp dụng chính sách MTA-STS cũ đến hết {date}."
+	"domains.forceRemovedCache": "Máy chủ thư có thể vẫn áp dụng chính sách MTA-STS cũ đến hết {date}.",
+	"list.loadFailed": "Không thể tải danh sách này."
 }
