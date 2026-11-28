@@ -40,7 +40,6 @@ test("folder counts group straight off the counts index", async (t) => {
 	const result = await plans(t, () => app.counts.GET(new Request("http://localhost/api/messages/counts?mailboxId=mb-team")));
 	const grouped = result.find((entry) => /group by/i.test(entry.sql));
 	assert.ok(grouped, "the counts statement ran");
-	console.log("counts plan (production statement):", grouped.plan);
 	assert.match(grouped.plan, /USING INDEX messages_counts_cover_idx \(mailbox_id=\?\)/);
 	assert.doesNotMatch(grouped.plan, /TEMP B-TREE/);
 });
@@ -57,7 +56,6 @@ test("the counts grouping with the draft filter is covered by the counts index",
 		.groupBy(app.messages.mailboxId, app.messages.folderId, app.messages.direction, app.messages.status, app.messages.read, app.messages.starred, app.messages.snoozedUntil)
 		.toSQL();
 	const plan = sqlite.prepare(`EXPLAIN QUERY PLAN ${sql}`).all(...params).map((row) => row.detail).join(" | ");
-	console.log("counts plan (without the scheduled subquery):", plan);
 	assert.match(plan, /USING COVERING INDEX messages_counts_cover_idx/);
 	assert.doesNotMatch(plan, /TEMP B-TREE/);
 });
@@ -66,13 +64,11 @@ test("message navigation reads the covering index", async (t) => {
 	const result = await plans(t, () => app.navigation.GET(new Request("http://localhost/api/messages/navigation?folder=archived&mailboxId=mb-team")));
 	const nav = result.find((entry) => /order by/i.test(entry.sql));
 	assert.ok(nav, "the navigation statement ran");
-	console.log("navigation plan:", nav.plan);
 	assert.match(nav.plan, /USING COVERING INDEX messages_nav_cover_idx/);
 });
 
 test("inbox navigation reads the covering index without a sort", async (t) => {
 	const result = await plans(t, () => app.navigation.GET(new Request("http://localhost/api/messages/navigation?folder=inbox&mailboxId=mb-team")));
 	const nav = result.find((entry) => /order by/i.test(entry.sql));
-	console.log("inbox navigation plan:", nav.plan);
 	assert.match(nav.plan, /USING COVERING INDEX messages_nav_cover_idx/);
 });
