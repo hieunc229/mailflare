@@ -90,3 +90,32 @@ test("APNs provider tokens are verifiable ES256 JWTs", async () => {
 	);
 	assert.equal(valid, true);
 });
+
+test("sendNativePush does not query devices when native push is not configured", async () => {
+	const mocks = {
+		"@/db": `export const getDb = () => ({ select: () => { globalThis.__nativePushSelects += 1; throw new Error("device query"); } });`,
+		"@/db/schema": "export const pushDevices = {};",
+	};
+	const file = join(outDir, "native-send.mjs");
+	await build({
+		entryPoints: [join(root, "src/lib/push/native.ts")],
+		outfile: file,
+		bundle: true,
+		platform: "node",
+		format: "esm",
+		target: "node22",
+		logLevel: "silent",
+		alias: { "@": join(root, "src") },
+		plugins: [{
+			name: "native-mocks",
+			setup(builder) {
+				builder.onResolve({ filter: /^@\/db(\/schema)?$/ }, ({ path }) => ({ path, namespace: "mock" }));
+				builder.onLoad({ filter: /.*/, namespace: "mock" }, ({ path }) => ({ contents: mocks[path], loader: "js" }));
+			},
+		}],
+	});
+	globalThis.__nativePushSelects = 0;
+	const native = await import(pathToFileURL(file).href);
+	await native.sendNativePush({}, ["u1"], { messageId: "m1", mailboxId: "mb" });
+	assert.equal(globalThis.__nativePushSelects, 0);
+});

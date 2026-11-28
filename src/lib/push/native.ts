@@ -90,6 +90,8 @@ export async function buildApnsPayload(device: { publicKey: string | null; previ
 /** Sends a new-message push to every registered device of `userIds`. Expired tokens are dropped. */
 export async function sendNativePush(env: CloudflareEnv, userIds: string[], message: NewMessageNotification): Promise<void> {
 	if (userIds.length === 0) return;
+	// A registered device cannot be reached without an APNs key or a relay, so skip the lookup.
+	if (!isNativePushConfigured(env)) return;
 	const db = getDb(env);
 	const devices = await db.select().from(pushDevices).where(inArray(pushDevices.userId, userIds));
 	if (devices.length === 0) {

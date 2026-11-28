@@ -1,3 +1,5 @@
+import { AUTH_SESSION_CHANGED_EVENT } from "@/lib/auth/client";
+
 /**
  * The latest read/star values this tab has seen per message, so undo snapshots
  * the screen rather than an older action's "applied" state. A pending overlay
@@ -42,10 +44,22 @@ type PendingRow = {
 	threadUnread?: number;
 };
 
+/** Cap on the read caches: oldest entries go first, so a long session does not grow them without bound. */
+const KNOWN_LIMIT = 5000;
+
 const knownFields = new Map<string, KnownMessageFields>();
 const knownThreads = new Map<string, KnownThread>();
 const pendingLayers = new Map<string, PendingLayer>();
 const pendingListeners = new Set<() => void>();
+
+function setBounded<V>(map: Map<string, V>, key: string, value: V): void {
+	map.delete(key);
+	map.set(key, value);
+	if (map.size > KNOWN_LIMIT) {
+		const oldest = map.keys().next().value;
+		if (oldest !== undefined) map.delete(oldest);
+	}
+}
 
 function clampCount(value: number, size: number): number {
 	if (!Number.isFinite(value)) return 0;
@@ -60,7 +74,7 @@ export function rememberMessageFields(messageIds: string[], patch: KnownMessageF
 	if (patch.read === undefined && patch.starred === undefined) return;
 	for (const id of messageIds) {
 		const current = knownFields.get(id) ?? {};
-		knownFields.set(id, {
+		setBounded(knownFields, id, {
 			...current,
 			...(patch.read !== undefined ? { read: patch.read } : {}),
 			...(patch.starred !== undefined ? { starred: patch.starred } : {}),
@@ -91,7 +105,7 @@ export function rememberMessageRows(rows: PendingRow[]): void {
 		}
 		if (row.threadMessageIds?.length) {
 			const messageIds = [...new Set(row.threadMessageIds)];
-			knownThreads.set(row.id, {
+			setBounded(knownThreads, row.id, {
 				messageIds,
 				threadUnread: clampCount(row.threadUnread ?? 0, messageIds.length),
 			});
@@ -338,6 +352,16 @@ export function captureMessageFields(ids: string[]): Map<string, KnownMessageFie
 	}
 	return captured;
 }
+
+function clearKnownMessageFields(): void {
+	knownFields.clear();
+	knownThreads.clear();
+	pendingLayers.clear();
+	notifyPendingListeners();
+}
+
+// Another account must not see this one's remembered fields or pending overlays.
+if (typeof window !== "undefined") window.addEventListener(AUTH_SESSION_CHANGED_EVENT, clearKnownMessageFields);
 
 /** Test-only reset. */
 export function clearKnownMessageFieldsForTests(): void {

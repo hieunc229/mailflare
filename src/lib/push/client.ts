@@ -36,10 +36,20 @@ export async function registerMailflareServiceWorker(): Promise<ServiceWorkerReg
 	return registration;
 }
 
+/** The server's push `enabled` flag, kept for the session once a load succeeded (a failed load is retried). */
+let enabledCache: boolean | null = null;
+
 async function loadPushConfig(): Promise<PushConfigResponse> {
 	const response = await authFetch("/api/push/config", { redirectOnUnauthorized: false });
 	if (!response.ok) throw new Error("Failed to load push notification settings");
 	return (await response.json()) as PushConfigResponse;
+}
+
+async function enabledPushConfig(): Promise<boolean> {
+	if (enabledCache !== null) return enabledCache;
+	const config = await loadPushConfig();
+	enabledCache = config.enabled;
+	return config.enabled;
 }
 
 async function saveSubscription(subscription: PushSubscription): Promise<void> {
@@ -88,6 +98,7 @@ export async function getPushState(): Promise<{
 }
 
 export async function enablePushNotifications(): Promise<void> {
+	enabledCache = null;
 	if (!browserSupportsPush()) throw new Error("Push notifications are not supported by this browser");
 	const permission = await Notification.requestPermission();
 	if (permission !== "granted") throw new Error("Notification permission was not granted");
@@ -113,6 +124,7 @@ export async function enablePushNotifications(): Promise<void> {
 }
 
 export async function disablePushNotifications(): Promise<void> {
+	enabledCache = null;
 	if (!("serviceWorker" in navigator)) return;
 	const registration = await navigator.serviceWorker.getRegistration("/");
 	const subscription = await registration?.pushManager.getSubscription();
@@ -130,10 +142,10 @@ export async function disablePushNotifications(): Promise<void> {
 
 export async function hasActivePushSubscription(): Promise<boolean> {
 	if (!("serviceWorker" in navigator) || Notification.permission !== "granted") return false;
-	const [registration, config] = await Promise.all([
+	const [registration, enabled] = await Promise.all([
 		navigator.serviceWorker.getRegistration("/"),
-		loadPushConfig(),
+		enabledPushConfig(),
 	]);
-	if (!config.enabled) return false;
+	if (!enabled) return false;
 	return !!(await registration?.pushManager.getSubscription());
 }
