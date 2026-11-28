@@ -7,8 +7,8 @@ import { seedDemoData } from "@/lib/seed";
 import { demoCredentials } from "@/lib/seed-utils";
 
 export async function POST(request: Request) {
-	if (process.env.NODE_ENV === "production") {
-		return NextResponse.json({ error: "Not available in production" }, { status: 403 });
+	if (process.env.NODE_ENV === "production" || process.env.MAILFLARE_DEMO_SEED !== "1") {
+		return NextResponse.json({ error: "Not available" }, { status: 403 });
 	}
 	const env = getEnv();
 	// E2E runs reuse the demo account; reset removes the state a previous run

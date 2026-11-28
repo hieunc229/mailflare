@@ -15,6 +15,7 @@ export default defineConfig({
 		? undefined
 		: {
 				command: "npm run dev -- --strictPort",
+				env: { MAILFLARE_DEMO_SEED: "1" },
 				url: "http://localhost:3000/login",
 				// Use PLAYWRIGHT_BASE_URL explicitly when targeting an existing dev server.
 				reuseExistingServer: false,
