@@ -54,7 +54,6 @@ export type SendEmailInput = {
 	publicOrigin?: string;
 };
 
-/** How long a send started from the composer waits before it is delivered. */
 const MAX_RECIPIENTS = 50;
 const MAX_QUEUE_DELAY_SECONDS = 24 * 60 * 60;
 
@@ -187,7 +186,7 @@ export async function sendEmail(
 		});
 
 		if (scheduledAt) {
-			await enqueueScheduledDelivery(env, delivery, scheduledAt);
+			await enqueueOutboundJob(env, delivery.jobId, delivery.messageId, scheduledAt);
 			if (userScheduledAt) {
 				return { messageId, scheduled: true, scheduledAt: scheduledAt.toISOString() };
 			}
@@ -389,14 +388,6 @@ export async function enqueueOutboundJob(
 	);
 }
 
-async function enqueueScheduledDelivery(
-	env: CloudflareEnv,
-	delivery: PreparedDelivery,
-	scheduledAt: Date,
-): Promise<void> {
-	await enqueueOutboundJob(env, delivery.jobId, delivery.messageId, scheduledAt);
-}
-
 function deliveryFromJob(jobId: string, messageId: string, payload: string): PreparedDelivery {
 	const input = JSON.parse(payload) as SendEmailInput;
 	const to = toRecipientList(input.to);
@@ -475,7 +466,7 @@ export async function processOutboundQueue(
 	const scheduledAt = job.scheduledAt ?? new Date(payload.scheduledAt);
 	const delivery = deliveryFromJob(payload.jobId, payload.messageId, job.payload);
 	if (scheduledAt.getTime() > Date.now()) {
-		await enqueueScheduledDelivery(env, delivery, scheduledAt);
+		await enqueueOutboundJob(env, delivery.jobId, delivery.messageId, scheduledAt);
 		return;
 	}
 	// Load first: a failure here must leave the job queued so the queue retry can send it.

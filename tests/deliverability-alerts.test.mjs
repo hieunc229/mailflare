@@ -9,7 +9,13 @@ const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 const outDir = mkdtempSync(join(root, "tests", ".tmp-alerts-"));
 after(() => rmSync(outDir, { recursive: true, force: true }));
 await build({ entryPoints: { utils: join(root, "src/lib/deliverability/daily-utils.ts") }, outdir: outDir, outExtension: { ".js": ".mjs" }, bundle: true, platform: "node", format: "esm", target: "node22", tsconfig: join(root, "tsconfig.json"), logLevel: "silent" });
-const { evaluateAlerts, mergeReporterAlerts, ALERT_RULES } = await import(pathToFileURL(join(outDir, "utils.mjs")).href);
+const { evaluateSourceAlerts, evaluateNoReports, mergeReporterAlerts, ALERT_RULES } = await import(pathToFileURL(join(outDir, "utils.mjs")).href);
+
+// All three rules on one set of totals (one reporter's, or the whole domain's).
+function evaluateAlerts(input) {
+	const noReports = evaluateNoReports(input);
+	return [...evaluateSourceAlerts(input), ...(noReports ? [noReports] : [])];
+}
 
 const DAY = 86_400_000;
 const NOW = new Date("2025-11-19T02:00:00Z");
