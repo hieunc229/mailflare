@@ -1,4 +1,4 @@
-import { and, eq, isNull } from "drizzle-orm";
+import { and, eq, isNull, notInArray } from "drizzle-orm";
 import { getDb } from "@/db";
 import { mfaRecoveryCodes } from "@/db/schema";
 import { newId } from "@/lib/ids";
@@ -23,12 +23,15 @@ export function normalizeRecoveryCode(code: string): string {
 export async function issueRecoveryCodes(env: CloudflareEnv, userId: string): Promise<string[]> {
 	const db = getDb(env);
 	const codes = Array.from({ length: CODE_COUNT }, generateCode);
-	await db.delete(mfaRecoveryCodes).where(eq(mfaRecoveryCodes.userId, userId));
-	await db.insert(mfaRecoveryCodes).values(
-		await Promise.all(
-			codes.map(async (code) => ({ id: newId("rc"), userId, codeHash: await hashSessionToken(normalizeRecoveryCode(code)) })),
-		),
+	const rows = await Promise.all(
+		codes.map(async (code) => ({ id: newId("rc"), userId, codeHash: await hashSessionToken(normalizeRecoveryCode(code)) })),
 	);
+	// Insert first, then drop the older codes, in one batch. Where the driver cannot hold a transaction (Neon HTTP)
+	// a failed insert then leaves the old codes in place instead of none.
+	await db.batch([
+		db.insert(mfaRecoveryCodes).values(rows),
+		db.delete(mfaRecoveryCodes).where(and(eq(mfaRecoveryCodes.userId, userId), notInArray(mfaRecoveryCodes.id, rows.map((row) => row.id)))),
+	]);
 	return codes;
 }
 
