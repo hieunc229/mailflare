@@ -93,9 +93,10 @@ export function startSmtpListener(
 					return;
 				}
 				const raw = Buffer.concat(chunks);
+				const rawBuffer = toArrayBuffer(raw);
 				let attachmentLimitReason: string | null;
 				try {
-					attachmentLimitReason = await inboundAttachmentLimitReasonFromRaw(toArrayBuffer(raw));
+					attachmentLimitReason = await inboundAttachmentLimitReasonFromRaw(rawBuffer);
 				} catch (error) {
 					console.error("SMTP attachment inspection failed", error);
 					callback(Object.assign(new Error("Temporary failure, try again later"), { responseCode: 451 }));
@@ -120,7 +121,7 @@ export function startSmtpListener(
 				for (const recipient of session.envelope.rcptTo) {
 					const result = await intakeIncomingMail(
 						env,
-						{ from, to: recipient.address, raw: toArrayBuffer(raw), headers, senderIp, verdicts },
+						{ from, to: recipient.address, raw: rawBuffer, headers, senderIp, verdicts },
 						{
 							reject: (reason) => {
 								rejectReason = reason;
