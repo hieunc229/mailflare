@@ -1006,6 +1006,7 @@
 	"dnsSkipped.warning": "DNS isn't configured for {domains}. Mail won't arrive until the records are set.",
 	"dnsSkipped.review": "Review DNS",
 	"dnsSkipped.markDone": "I've set it up",
+	"dnsSkipped.updateFailed": "Could not update the DNS status for every domain. Try again.",
 	"dnsSkipped.recheck": "Recheck",
 	"setup.checkingCloudflare": "Checking Cloudflare access...",
 	"setup.requiredToSend": "Required to send email.",

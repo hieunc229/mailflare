@@ -1,3 +1,4 @@
+import { avatarInitial } from "@/lib/avatar-colors";
 import { getEmailAddress } from "@/lib/email/address";
 
 export function getManagedContactAvatarUrl(mailboxId: string, address: string, version = 0): string {
@@ -7,5 +8,5 @@ export function getManagedContactAvatarUrl(mailboxId: string, address: string, v
 }
 
 export function getContactAvatarInitial(name: string, address: string): string {
-	return (name.trim() || getEmailAddress(address)).slice(0, 1).toUpperCase();
+	return avatarInitial(name.trim() || getEmailAddress(address));
 }

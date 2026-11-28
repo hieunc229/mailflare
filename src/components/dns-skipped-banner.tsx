@@ -37,6 +37,7 @@ export function DnsSkippedBanner() {
 	const user = useCurrentUser();
 	const [domains, setDomains] = useState<CheckedDomain[]>([]);
 	const [busy, setBusy] = useState(false);
+	const [updateFailed, setUpdateFailed] = useState(false);
 	const canManage = !!user && (user.isPrimaryAdmin || (user.role === "admin" && user.canManageDomains));
 
 	const load = useCallback(async () => {
@@ -61,8 +62,10 @@ export function DnsSkippedBanner() {
 	/** `verify` looks DNS up again; without it the operator's word is taken. */
 	async function update(verify: boolean) {
 		setBusy(true);
+		setUpdateFailed(false);
 		try {
-			await Promise.all(domains.map((domain) => patchDomain(domain.id, { dnsSkipped: false, verify })));
+			const results = await Promise.allSettled(domains.map((domain) => patchDomain(domain.id, { dnsSkipped: false, verify })));
+			if (results.some((result) => result.status === "rejected")) setUpdateFailed(true);
 		} finally {
 			setBusy(false);
 			await load();
@@ -80,6 +83,7 @@ export function DnsSkippedBanner() {
 					<Button type="button" size="sm" variant="outline" disabled={busy} onClick={() => void update(false)}>{t("dnsSkipped.markDone")}</Button>
 				</>
 			)}
+			{updateFailed && <p role="alert" className="basis-full font-medium text-red-700">{t("dnsSkipped.updateFailed")}</p>}
 		</div>
 	);
 }

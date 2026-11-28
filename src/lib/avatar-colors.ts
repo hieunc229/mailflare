@@ -22,3 +22,9 @@ export function getAvatarColorStyle(identity: string): { backgroundColor: string
 	const color = avatarColors[(hash >>> 0) % avatarColors.length];
 	return { backgroundColor: color.background, color: color.foreground };
 }
+
+/** First user-perceived character of a name, upper-cased; whole code points so emoji are not split. */
+export function avatarInitial(value: string): string {
+	const first = Array.from(value.trim())[0];
+	return first ? first.toUpperCase() : "";
+}

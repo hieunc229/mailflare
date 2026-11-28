@@ -1,3 +1,4 @@
+import { avatarInitial } from "@/lib/avatar-colors";
 import { adminPageTitles } from "./admin-page-titles";
 import type { MailboxOption } from "./mailbox-provider";
 
@@ -10,7 +11,7 @@ export function getMailboxName(mailbox: MailboxOption): string {
 }
 
 export function getAccountInitial(value: string): string {
-	return value.trim().slice(0, 1).toUpperCase() || "M";
+	return avatarInitial(value) || "M";
 }
 
 export function isAdminPath(pathname: string): boolean {

@@ -7,7 +7,7 @@ import { useLanguage } from "@/components/language-provider";
 import { ProgressiveAvatarImage } from "@/components/progressive-avatar-image";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
-import { getAvatarColorStyle } from "@/lib/avatar-colors";
+import { avatarInitial, getAvatarColorStyle } from "@/lib/avatar-colors";
 import { getAccountPurgeDate, getAccountStatus } from "@/lib/accounts/deletion-utils";
 import { formatAccountDate, formatAccountDateTime } from "./utils";
 import type { AccountsTableProps } from "./accounts-table-types";
@@ -57,7 +57,7 @@ export function AccountsTable({ accounts, currentUserId, isPrimaryAdmin, loading
 				: t(`accounts.status.${status}`);
 			const identity = <>
 				<span className="min-w-0 flex items-center gap-4">
-					<span style={getAvatarColorStyle(account.email)} className="relative flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-full font-semibold">{account.name.charAt(0).toUpperCase()}{account.hasAvatar && <ProgressiveAvatarImage src={`/api/accounts/${account.id}/avatar`} alt="" className="absolute inset-0 h-full w-full object-cover" />}</span>
+					<span style={getAvatarColorStyle(account.email)} className="relative flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-full font-semibold">{avatarInitial(account.name)}{account.hasAvatar && <ProgressiveAvatarImage src={`/api/accounts/${account.id}/avatar`} alt="" className="absolute inset-0 h-full w-full object-cover" />}</span>
 					<span className="min-w-0"><span className="flex items-center gap-2"><span className="truncate font-semibold text-neutral-900">{account.name}</span><span className={`rounded-full px-2 py-0.5 text-xs font-medium capitalize ${account.isPrimaryAdmin ? "bg-amber-100 text-amber-800" : "bg-neutral-100 text-neutral-600"}`}>{account.isPrimaryAdmin ? t("accounts.primaryAdmin") : t(account.role === "admin" ? "accounts.role.admin" : "accounts.role.user")}</span></span><span className="block truncate text-sm text-neutral-500">{account.email}</span></span>
 				</span>
 				<span className="hidden md:block"><span className={`rounded-full px-2 py-0.5 text-xs font-medium ${STATUS_STYLES[status]}`}>{statusLabel}</span></span>
