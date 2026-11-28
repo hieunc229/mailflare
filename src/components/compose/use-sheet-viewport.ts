@@ -11,7 +11,8 @@ export function useSheetViewport(ref: RefObject<HTMLElement | null>, enabled: bo
 		if (!enabled || !viewport || !element) return;
 		function update() {
 			if (!viewport || !element) return;
-			const style = getSheetViewportStyle(window.innerHeight, viewport.height, viewport.offsetTop);
+			// Not window.innerHeight: iOS shrinks it when Safari scrolls the page for the keyboard, which would drop the sheet behind the keyboard.
+			const style = getSheetViewportStyle(document.documentElement.clientHeight, viewport.height, viewport.offsetTop);
 			element.style.setProperty("--sheet-height", style.height);
 			element.style.setProperty("--sheet-bottom", style.bottom);
 			element.style.setProperty("--sheet-pad", style.padding);

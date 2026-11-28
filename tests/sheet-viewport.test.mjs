@@ -15,3 +15,11 @@ test("sheet shrinks above the keyboard and drops safe-area padding", () => {
 	assert.equal(style.bottom, "350px");
 	assert.equal(style.padding, "0.5rem");
 });
+
+// Values measured in iOS Safari on an iPhone 17 Pro: clientHeight stays 714 while innerHeight falls to 617.
+test("sheet follows the visual viewport when iOS scrolls the page for the keyboard", () => {
+	const style = getSheetViewportStyle(714, 384, 97);
+	assert.equal(style.height, "384px");
+	assert.equal(style.bottom, "233px");
+	assert.equal(style.padding, "0.5rem");
+});
