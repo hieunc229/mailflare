@@ -94,7 +94,7 @@ export function PasswordSettings() {
 		}
 	}
 
-	if (!status) return <p role={loadFailed ? "alert" : undefined} className="text-sm text-neutral-500">{loadFailed ? t("settings.password.failed") : t("mfa.loading")}</p>;
+	if (!status) return <p role={loadFailed ? "alert" : undefined} className="text-sm text-neutral-500">{loadFailed ? t("mfa.loadFailed") : t("mfa.loading")}</p>;
 
 	return (
 		<div className="space-y-4">
