@@ -25,7 +25,7 @@ await build({
 });
 const { fetchMailboxOptions, clearMailboxesCache, isAddressBookOwner } = await import(pathToFileURL(join(dir, "entry.mjs")).href);
 
-const listing = (mailboxes) => { globalThis.__mailboxTestFetch = async () => ({ json: async () => ({ mailboxes }) }); clearMailboxesCache(); };
+const listing = (mailboxes) => { globalThis.__mailboxTestFetch = async () => ({ ok: true, json: async () => ({ mailboxes }) }); clearMailboxesCache(); };
 const row = (id, userId, extra = {}) => ({ id, userId, domainId: "d", localPart: id, hostname: "x.test", type: "personal", permission: "full_access", ...extra });
 
 test("the mailbox options keep who owns each mailbox", async () => {
