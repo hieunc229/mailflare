@@ -1,5 +1,6 @@
 "use client";
 
+import type { Translator } from "@/lib/i18n/utils";
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { useLanguage } from "@/components/language-provider";
@@ -10,10 +11,10 @@ import { StatusRow } from "./status-row";
 
 type ResendResponse = { keyConfigured?: boolean; canManageDomains?: boolean; resend?: ResendDomainView | null; error?: string };
 
-async function postJson<T>(url: string, method: string, body: unknown): Promise<T> {
+async function postJson<T>(url: string, method: string, body: unknown, t: Translator): Promise<T> {
 	const response = await authFetch(url, { method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
 	const data = (await response.json()) as T & { error?: string };
-	if (!response.ok) throw new Error(data.error ?? "Request failed");
+	if (!response.ok) throw new Error(data.error ?? t("domains.requestFailed"));
 	return data;
 }
 
@@ -60,11 +61,11 @@ export default function ResendDomainSection({ domainId, onStatus }: { domainId: 
 	}
 
 	const domainAction = (action: "setup" | "verify") => run(action, async () => {
-		const data = await postJson<ResendResponse>(`/api/domains/${domainId}/resend`, "POST", { action });
+		const data = await postJson<ResendResponse>(`/api/domains/${domainId}/resend`, "POST", { action }, t);
 		setView(data.resend ?? null);
 	});
 	const sendTest = () => run("test", async () => {
-		const data = await postJson<{ to: string }>(`/api/domains/${domainId}/resend`, "POST", { action: "test" });
+		const data = await postJson<{ to: string }>(`/api/domains/${domainId}/resend`, "POST", { action: "test" }, t);
 		setNotice(t("resend.testSent", { to: data.to }));
 	});
 

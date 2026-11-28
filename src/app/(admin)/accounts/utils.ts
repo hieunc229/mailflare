@@ -1,18 +1,5 @@
+import { formatUserDate } from "@/lib/time/utils";
 import type { Account } from "./types";
-
-const accountDateFormatter = new Intl.DateTimeFormat(undefined, {
-	month: "short",
-	day: "numeric",
-	year: "numeric",
-});
-
-const accountDateTimeFormatter = new Intl.DateTimeFormat(undefined, {
-	month: "short",
-	day: "numeric",
-	year: "numeric",
-	hour: "numeric",
-	minute: "2-digit",
-});
 
 export function getAccountInitials(account: Pick<Account, "name" | "email">): string {
 	const source = account.name.trim() || account.email;
@@ -25,9 +12,9 @@ export function getAccountMailbox(account: Pick<Account, "localPart" | "hostname
 }
 
 export function formatAccountDate(value: string): string {
-	return accountDateFormatter.format(new Date(value));
+	return formatUserDate(value, { month: "short", day: "numeric", year: "numeric" });
 }
 
 export function formatAccountDateTime(value: string): string {
-	return accountDateTimeFormatter.format(new Date(value));
+	return formatUserDate(value, { month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit" });
 }

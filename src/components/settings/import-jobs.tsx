@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import type { ImportJobSummary } from "@/lib/import/jobs-types";
 import { fetchImportJobs, removeImportJob, resumeImportJob } from "@/app/(settings)/settings/import/utils";
+import { formatUserDate } from "@/lib/time/utils";
 import { getImportJobPercent, IMPORT_JOBS_POLL_MS, isImportJobActive } from "./import-jobs-utils";
 
 const STATUS_STYLE: Record<ImportJobSummary["status"], string> = {
@@ -115,7 +116,7 @@ export function ImportJobs({ refreshKey }: { refreshKey: number }) {
 									<p className="truncate text-sm font-medium text-neutral-900">{job.label}</p>
 									<p className="text-xs text-neutral-500">
 										{job.kind === "imap" ? t("importPage.imap") : t("importPage.backupFile")} ·{" "}
-										{new Date(job.createdAt).toLocaleString()}
+										{formatUserDate(job.createdAt, { dateStyle: "medium", timeStyle: "short" })}
 									</p>
 								</div>
 								<div className="flex shrink-0 items-center gap-2">

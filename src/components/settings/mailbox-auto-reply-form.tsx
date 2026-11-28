@@ -18,7 +18,7 @@ export function MailboxAutoReplyForm() {
     useSelectedMailbox();
   const mailboxSettings: MailboxAutoReplySettings = {
     enabled: selectedMailbox?.autoReplyEnabled ?? false,
-    subject: selectedMailbox?.autoReplySubject ?? "Out of office",
+    subject: selectedMailbox?.autoReplySubject ?? t("settings.autoReply.subjectPlaceholder"),
     body: selectedMailbox?.autoReplyBody ?? "",
   };
   const mailboxKey = {

@@ -18,6 +18,7 @@ import { authErrorText } from "@/lib/auth/error-messages";
 import { isPasskeyCancellation, isPasskeyUnsupported } from "@/lib/auth/webauthn/browser-errors";
 import { ClientRequestError } from "@/lib/http/client-error";
 import type { StepUpAction } from "@/lib/auth/webauthn/step-up-types";
+import { formatUserDate } from "@/lib/time/utils";
 
 /** The security changes the first-passkey choice can ask for, in order. */
 type PolicyStep = "mfa.disable" | "password.remove" | "second_factor.toggle";
@@ -55,7 +56,7 @@ export function PasskeySettings() {
 
 	function displayName(passkey: PasskeySummary) {
 		if (passkey.name.trim()) return passkey.name;
-		return passkeyProvider(passkey.aaguid) ?? t("passkey.defaultName", { date: new Date(passkey.createdAt).toLocaleDateString() });
+		return passkeyProvider(passkey.aaguid) ?? t("passkey.defaultName", { date: formatUserDate(passkey.createdAt, { year: "numeric", month: "short", day: "numeric" }) });
 	}
 
 	async function onCheck() {
@@ -238,12 +239,12 @@ export function PasskeySettings() {
 									</div>
 									<p className="mt-1 text-xs text-neutral-500">
 										{passkey.lastUsedAt
-											? t("passkey.lastUsed", { date: new Date(passkey.lastUsedAt).toLocaleString() })
+											? t("passkey.lastUsed", { date: formatUserDate(passkey.lastUsedAt, { year: "numeric", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }) })
 											: t("passkey.neverUsed")}
 										{" · "}
 										{passkey.backedUp ? t("passkey.backedUp") : t("passkey.deviceOnly")}
 									</p>
-									<p className="mt-0.5 text-xs text-neutral-500">{t("passkey.createdAt", { date: new Date(passkey.createdAt).toLocaleDateString() })}</p>
+									<p className="mt-0.5 text-xs text-neutral-500">{t("passkey.createdAt", { date: formatUserDate(passkey.createdAt, { year: "numeric", month: "short", day: "numeric" }) })}</p>
 								</div>
 							</div>
 							<div className="flex shrink-0 items-center gap-1">
