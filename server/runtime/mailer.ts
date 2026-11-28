@@ -33,8 +33,9 @@ function messageIdFor(from: Builder["from"]): string {
 /**
  * The `send_email` binding's builder API over SMTP (any provider, or your
  * own MTA) or Cloudflare's Email Sending REST endpoint. A Message-ID is
- * generated here and passed as a header so threading behaves the same as on
- * Workers, where Cloudflare returns the id it assigned.
+ * generated here as a fallback; SMTP receives it as nodemailer's `messageId`,
+ * while Cloudflare Email Sending assigns its own (a custom Message-ID header
+ * is rejected) and we return that.
  */
 export class Mailer {
 	private transporter: Transporter | null = null;
@@ -91,7 +92,7 @@ export class Mailer {
 					subject: message.subject,
 					text: message.text,
 					html: message.html,
-					headers,
+					headers: Object.fromEntries(Object.entries(headers).filter(([key]) => key.toLowerCase() !== "message-id")),
 					attachments: (message.attachments ?? []).map((attachment) => ({
 						filename: attachment.filename,
 						type: attachment.type,
@@ -105,7 +106,8 @@ export class Mailer {
 				const detail = await response.text().catch(() => "");
 				throw new Error(`Cloudflare Email Sending failed (${response.status}): ${detail.slice(0, 300)}`);
 			}
-			return { messageId };
+			const sent = await response.json().catch(() => null);
+			return { messageId: sent?.result?.message_id ?? sent?.result?.messageId ?? messageId };
 		}
 
 		throw new Error("Outbound mail is not configured. Set SMTP_URL, or CF_ACCOUNT_ID and CF_TOKEN.");
