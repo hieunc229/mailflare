@@ -204,6 +204,17 @@ function restoreDocument(template: HTMLTemplateElement, doc: MailDocument, full:
 	return html.outerHTML;
 }
 
+// DOMPurify keeps no per-call state here (no hooks or config), so one instance serves every call until the window changes.
+let cachedPurifier: ReturnType<typeof createDOMPurify> | undefined;
+let purifierWindow: unknown;
+function getPurifier() {
+	if (!cachedPurifier || purifierWindow !== window) {
+		cachedPurifier = createDOMPurify(window);
+		purifierWindow = window;
+	}
+	return cachedPurifier;
+}
+
 /** Ordinary divs are portable in signatures and quoted fragments; no nested html/body tags. */
 function outgoingFragment(template: HTMLTemplateElement, doc: MailDocument): string {
 	const root = template.content.querySelector(doc.rootTag)!;
@@ -326,7 +337,7 @@ export function prepareEmailHtml(source: string, options: Options = {}) {
 		}
 	}
 	if (options.editor) body.insertBefore(editorHeadStyles, body.firstChild);
-	const purifier = createDOMPurify(window);
+	const purifier = getPurifier();
 	const cleaned = purifier.sanitize(template.content, {
 		USE_PROFILES: { html: true },
 		ADD_TAGS: ["style", rootTag, bodyTag],
