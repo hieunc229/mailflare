@@ -8,8 +8,8 @@ import type { ApiAuthResult } from "@/lib/api/key-auth-types";
 import { getEnv } from "@/lib/cloudflare";
 import { buildCounterIcs, buildReplyIcs, buildReplyText, parseCounterProposal, parseInvite, type InviteResponse, type ParsedInvite } from "@/lib/calendar/invite";
 import { findInviteAttachment, MAX_INVITE_BYTES } from "@/lib/calendar/invite-attachment";
-import { addExcludedOccurrence, normalizeInviteSender, planInviteAnswer } from "@/lib/calendar/invite-rules";
-import { inviteEventId, inviteEventValues, recipientInviteTimeZone, sameInviteSender, upsertEventOverride } from "@/lib/calendar/invite-store";
+import { addExcludedOccurrence, inviteSenderMatches, normalizeInviteSender, planInviteAnswer } from "@/lib/calendar/invite-rules";
+import { inviteEventId, inviteEventValues, recipientInviteTimeZone, upsertEventOverride } from "@/lib/calendar/invite-store";
 import { hasValidSessionMutationOrigin } from "@/lib/auth/origin";
 import { getEmailAddress, splitEmailAddressList } from "@/lib/email/address";
 import { getAttachmentForUser, listMessageAttachments } from "@/lib/email/attachments";
@@ -125,7 +125,7 @@ export async function POST(request: Request, { params }: InviteRouteParams) {
 	const [existing] = await db.select().from(calendarEvents).where(where).limit(1);
 	const sender = normalizeInviteSender(message.fromAddr);
 	// An event already on the calendar can only be changed by a message from whoever created it.
-	if (existing && !sameInviteSender(existing, sender)) return NextResponse.json({ error: "This invitation does not come from the sender of the existing event" }, { status: 409 });
+	if (existing && !inviteSenderMatches(existing, sender)) return NextResponse.json({ error: "This invitation does not come from the sender of the existing event" }, { status: 409 });
 	const plan = planInviteAnswer(invite, response, existing);
 	let eventId: string | null = null;
 	if (plan.action === "delete") {
