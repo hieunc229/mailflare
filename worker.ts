@@ -171,9 +171,9 @@ export default {
 	async scheduled(controller: ScheduledController, rawEnv: CloudflareEnv, ctx: ExecutionContext) {
 		const env = withDatabase(withStorage(rawEnv));
 		const now = new Date(controller.scheduledTime);
-		// Both crons run the frequent jobs; the daily ones belong to 02:00 UTC alone. The lists are shared with
-		// the self-hosted scheduler and the Vercel cron routes (src/lib/scheduled/jobs.ts).
-		const jobs = [...frequentJobs(env, now), autoUpdateJob(env), ...(controller.cron === "0 2 * * *" ? dailyJobs(env, now) : [])];
+		// The `*/5` trigger also fires at 02:00 and carries the frequent jobs, so the daily trigger runs the daily list
+		// alone. The lists are shared with the self-hosted scheduler and the Vercel cron routes (src/lib/scheduled/jobs.ts).
+		const jobs = controller.cron === "0 2 * * *" ? dailyJobs(env, now) : [...frequentJobs(env, now), autoUpdateJob(env)];
 		for (const job of jobs) ctx.waitUntil(runScheduledJob(job));
 	},
 } satisfies ExportedHandler<CloudflareEnv>;

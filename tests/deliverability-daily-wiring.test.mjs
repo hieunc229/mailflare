@@ -18,6 +18,11 @@ test("the Worker runs the daily jobs only on the 02:00 UTC cron", () => {
 	assert.match(line, /controller\.cron === "0 2 \* \* \*"/);
 });
 
+test("the 02:00 cron runs the daily jobs and not the frequent ones", () => {
+	const line = read("worker.ts").split("\n").find((entry) => entry.includes("dailyJobs(env, now)"));
+	assert.match(line, /controller\.cron === "0 2 \* \* \*" \? dailyJobs\(env, now\) : \[\.\.\.frequentJobs\(env, now\), autoUpdateJob\(env\)\]/);
+});
+
 test("the Node scheduler runs them after the hour and day guard", () => {
 	const source = read("server/runtime/scheduler.ts");
 	assert.ok(source.indexOf("dailyJobs(env, now)") > source.indexOf("lastRunDay = day"));
