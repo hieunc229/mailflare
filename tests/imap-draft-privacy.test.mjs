@@ -328,7 +328,6 @@ test("CONDSTORE and QRESYNC never report another user's draft", async (t) => {
 	const client = await loggedIn(w, key, "me@example.test");
 	t.after(() => client.end());
 	assert.equal((await client.cmd("ENABLE QRESYNC")).status, "OK");
-	const hidden = uidOf(w, "theirs") || 1;
 	await client.cmd(`SELECT ${TEAM}/Drafts`);
 	await client.cmd("CLOSE");
 	const resync = await client.cmd(`SELECT ${TEAM}/Drafts (QRESYNC (${Number(w.sqlite.prepare("SELECT uidvalidity FROM imap_folder_state WHERE id = 'ms:drafts'").get().uidvalidity)} 1))`);
@@ -339,5 +338,19 @@ test("CONDSTORE and QRESYNC never report another user's draft", async (t) => {
 	const vanished = await client.cmd("UID FETCH 1:* (UID) (CHANGEDSINCE 1 VANISHED)");
 	assert.doesNotMatch(vanished.text, new RegExp(`UID ${uidOf(w, "theirs")}\\b`));
 	assert.doesNotMatch(vanished.text, new RegExp(`VANISHED[^\\r\\n]*\\b${uidOf(w, "theirs")}\\b`));
-	void hidden;
+});
+
+test("a private draft released in place ends the session instead of shifting sequence numbers", async (t) => {
+	const w = await world(t);
+	// A private draft its author filed in the inbox (kept private wherever it is moved), then ordinary mail.
+	w.addMessage({ id: "pd", mailbox_id: "ms", user_id: "u2", private_draft: 1, direction: "outbound", subject: `${SECRET} filed` });
+	w.addMessage({ id: "ok1", mailbox_id: "ms", user_id: "u2", subject: "ordinary" });
+	const { client } = await selected(w, "INBOX");
+	t.after(() => client.end());
+	assert.deepEqual((await client.cmd("UID SEARCH ALL")).text.match(/\* SEARCH ([\d ]*)\r\n/)?.[1].trim(), String(uidOf(w, "ok1")), "the private draft is not in the view");
+	w.sqlite.prepare("UPDATE messages SET private_draft = 0 WHERE id = 'pd'").run();
+	await new Promise((resolve) => setTimeout(resolve, 300));
+	const noop = await client.cmd("NOOP").catch((error) => ({ text: String(error.message) }));
+	assert.match(noop.text, /BYE|closed/, "the view is reset rather than renumbered");
+	assert.doesNotMatch(noop.text, /\* 2 EXISTS/);
 });

@@ -42,6 +42,7 @@ export class FolderView {
 	uidvalidity = 0;
 	uidNext = 1;
 	private highestModseq = -1;
+	private previousUidNext = 1;
 
 	private constructor(private readonly env: CloudflareEnv, readonly mailboxId: string, readonly folderKey: string, readonly userId: string) {}
 
@@ -103,9 +104,14 @@ export class FolderView {
 		const none: ViewUpdate = { expunged: [], exists: null, flagged: [], vanished: [], highestModseq: null, uidvalidityChanged: false };
 		if (Number(state.uidvalidity) !== this.uidvalidity) return { ...none, uidvalidityChanged: true };
 		if (Number(state.highest_modseq) === this.highestModseq && Number(state.uid_next) === this.uidNext) return none;
+		this.previousUidNext = this.uidNext;
 		const before = { uids: this.uids, modseqs: this.modseqs };
 		const announced = this.highestModseq;
 		await this.load();
+		// A message that became visible without a new UID (a private draft released in place) would sit among UIDs the client already
+		// holds, which shifts their sequence numbers without an EXPUNGE and sits below the UIDNEXT the client knows: the view is reset.
+		const known = new Set(before.uids);
+		if (this.uids.some((uid) => !known.has(uid) && uid < this.previousUidNext)) return { ...none, uidvalidityChanged: true };
 		const kept = new Map(this.uids.map((uid, index) => [uid, index]));
 		const expunged: number[] = [];
 		for (let index = before.uids.length - 1; index >= 0; index -= 1) if (!kept.has(before.uids[index])) expunged.push(index + 1);
