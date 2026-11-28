@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { createServer } from "node:http";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -113,6 +114,80 @@ test("B2Bucket speaks S3: put, get, range, head, delete, multipart", async () =>
 		globalThis.fetch = origFetch;
 		server.close();
 	}
+});
+
+/** A fake S3 that records DeleteObjects batches and single DELETEs; `refuseBatch` answers batches with 501. */
+async function withDeleteServer(t, { refuseBatch = false, errorKeys = new Set(), missing = new Set() } = {}) {
+	const batches = [];
+	const singles = [];
+	const server = createServer(async (req, res) => {
+		const chunks = [];
+		for await (const chunk of req) chunks.push(chunk);
+		const body = Buffer.concat(chunks);
+		const url = new URL(req.url, "http://x");
+		if (req.method === "POST" && url.searchParams.has("delete")) {
+			batches.push({ body: body.toString(), checksum: req.headers["x-amz-checksum-sha256"], md5: req.headers["content-md5"], bodyHash: createHash("sha256").update(body).digest("base64") });
+			if (refuseBatch) { res.writeHead(501); return res.end("<Error><Code>NotImplemented</Code></Error>"); }
+			const keys = [...body.toString().matchAll(/<Key>([^<]*)<\/Key>/g)].map((m) => m[1]);
+			const errors = keys.filter((key) => errorKeys.has(key)).map((key) => `<Error><Key>${key}</Key><Code>InternalError</Code></Error>`)
+				.concat(keys.filter((key) => missing.has(key)).map((key) => `<Error><Key>${key}</Key><Code>NoSuchKey</Code></Error>`));
+			res.writeHead(200);
+			return res.end(`<DeleteResult>${errors.join("")}</DeleteResult>`);
+		}
+		if (req.method === "DELETE") {
+			const key = decodeURIComponent(url.pathname.slice(1));
+			singles.push(key);
+			if (missing.has(key)) { res.writeHead(404); return res.end("<Error><Code>NoSuchKey</Code></Error>"); }
+			res.writeHead(204);
+			return res.end();
+		}
+		res.writeHead(400);
+		res.end();
+	});
+	await new Promise((done) => server.listen(0, "127.0.0.1", done));
+	const origFetch = globalThis.fetch;
+	globalThis.fetch = (input, init) => {
+		const url = new URL(typeof input === "string" ? input : input.href ?? input.url);
+		return origFetch(new URL(url.pathname + url.search, `http://127.0.0.1:${server.address().port}`), init);
+	};
+	t.after(() => { globalThis.fetch = origFetch; server.close(); });
+	return { batches, singles, bucket: new B2Bucket({ keyId: "k", applicationKey: "s", bucket: "mail", endpoint: "s3.us-west-004.backblazeb2.com", region: "us-west-004" }) };
+}
+
+test("B2Bucket.delete sends one DeleteObjects request per 1000 keys", async (t) => {
+	const { batches, singles, bucket } = await withDeleteServer(t);
+	const keys = Array.from({ length: 1001 }, (_, index) => `raw/${index} &.eml`);
+	await bucket.delete(keys);
+	assert.equal(singles.length, 0);
+	assert.equal(batches.length, 2);
+	const sent = batches.flatMap((batch) => [...batch.body.matchAll(/<Key>([^<]*)<\/Key>/g)].map((m) => m[1]));
+	assert.deepEqual(sent, keys.map((key) => key.replace(/&/g, "&amp;")));
+	assert.equal(batches[0].body.match(/<Key>/g).length, 1000);
+	for (const batch of batches) assert.equal(batch.checksum, batch.bodyHash);
+});
+
+test("B2Bucket.delete falls back to per-key deletes when the endpoint refuses DeleteObjects", async (t) => {
+	const { batches, singles, bucket } = await withDeleteServer(t, { refuseBatch: true });
+	await bucket.delete(["a", "b", "c"]);
+	assert.equal(batches.length, 1);
+	assert.deepEqual(singles.sort(), ["a", "b", "c"]);
+});
+
+test("B2Bucket.delete tolerates missing keys and retries only the keys a batch could not delete", async (t) => {
+	const { singles, bucket } = await withDeleteServer(t, { missing: new Set(["gone"]), errorKeys: new Set(["flaky"]) });
+	await bucket.delete(["gone", "flaky", "fine"]);
+	assert.deepEqual(singles, ["flaky"]);
+});
+
+test("B2Bucket.delete tolerates a missing key on the single-DELETE fallback", async (t) => {
+	const { bucket, singles } = await withDeleteServer(t, { refuseBatch: true, missing: new Set(["gone"]) });
+	await bucket.delete(["gone"]);
+	assert.deepEqual(singles, ["gone"]);
+});
+
+test("B2Bucket.delete still refuses a dot-segment key", async (t) => {
+	const { bucket } = await withDeleteServer(t);
+	await assert.rejects(bucket.delete(["ok", "a/../b"]), /segment/);
 });
 
 test("AWS S3 config uses S3_* with AWS_* credential fallback, and B2 wins", () => {
