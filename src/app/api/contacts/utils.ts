@@ -1,6 +1,6 @@
-import { and, asc, eq, or, sql } from "drizzle-orm";
+import { and, asc, eq, gt, or, sql } from "drizzle-orm";
 import { draftsVisibleTo } from "@/lib/email/draft-access";
-import { addressListIncludes } from "@/lib/email/address";
+import { getEmailAddressList, normalizeEmailAddress } from "@/lib/email/address";
 import type { getDb } from "@/db";
 import { contactDetails, contacts, messages } from "@/db/schema";
 import { escapeLike, insensitiveLike } from "@/db/sql";
@@ -65,6 +65,8 @@ export async function listContacts(db: Db, input: { userId: string; query: strin
 		.limit(input.limit);
 }
 
+const PAGE_SIZE = 1000;
+
 /**
  * Contacts belong to the user who owns the mailbox, so a shared mailbox's contact list is its creator's whole
  * address book. Anyone who is not that owner may only see contacts whose address appears on mail in this mailbox.
@@ -72,25 +74,40 @@ export async function listContacts(db: Db, input: { userId: string; query: strin
  */
 export async function addressesSeenInMailbox(db: Db, mailboxId: string, emails: string[], viewerUserId: string): Promise<Set<string>> {
 	const seen = new Set<string>();
-	const unique = [...new Set(emails)];
-	// D1 allows 100 bound parameters per statement: 3 per address plus the mailbox id.
-	for (let offset = 0; offset < unique.length; offset += 25) {
-		const chunk = unique.slice(offset, offset + 25);
-		const conditions = chunk.flatMap((email) => {
+	// Normalised address -> the caller's spelling.
+	const wanted = new Map<string, string>();
+	for (const email of emails) {
+		const key = normalizeEmailAddress(email);
+		if (key && !wanted.has(key)) wanted.set(key, email);
+	}
+	if (wanted.size === 0) return seen;
+	// A short list is narrowed in SQL (3 bound parameters per address; D1 allows 100 per statement). A long list
+	// cannot be, so the mailbox is read in id order and checked in code; either way every page is one query.
+	const narrow = wanted.size <= 25
+		? or(...[...wanted.values()].flatMap((email) => {
 			const pattern = `%${escapeLike(email)}%`;
 			return [eq(messages.fromAddr, email), insensitiveLike(messages.toAddr, pattern), insensitiveLike(messages.ccAddr, pattern)];
-		});
-		// The LIKE only narrows candidates; the verdict below is an exact address comparison.
-		const rows = await db
-			.select({ fromAddr: messages.fromAddr, toAddr: messages.toAddr, ccAddr: messages.ccAddr })
+		}))
+		: undefined;
+	let lastId: string | null = null;
+	for (;;) {
+		const rows: Array<{ id: string; fromAddr: string | null; toAddr: string | null; ccAddr: string | null }> = await db
+			.select({ id: messages.id, fromAddr: messages.fromAddr, toAddr: messages.toAddr, ccAddr: messages.ccAddr })
 			.from(messages)
-			.where(and(eq(messages.mailboxId, mailboxId), draftsVisibleTo(viewerUserId), or(...conditions)!))
-			.limit(500);
-		for (const email of chunk) {
-			if (rows.some((row) => [row.fromAddr, row.toAddr, row.ccAddr].some((value) => addressListIncludes(value, email)))) seen.add(email);
+			.where(and(eq(messages.mailboxId, mailboxId), draftsVisibleTo(viewerUserId), lastId ? gt(messages.id, lastId) : undefined, narrow))
+			.orderBy(asc(messages.id))
+			.limit(PAGE_SIZE);
+		for (const row of rows) {
+			for (const value of [row.fromAddr, row.toAddr, row.ccAddr]) {
+				for (const address of getEmailAddressList(value)) {
+					const email = wanted.get(address);
+					if (email !== undefined) seen.add(email);
+				}
+			}
 		}
+		if (seen.size === wanted.size || rows.length < PAGE_SIZE) return seen;
+		lastId = rows[rows.length - 1].id;
 	}
-	return seen;
 }
 
 export function toContactDetails(contact: Awaited<ReturnType<typeof getContactByEmail>>) {
