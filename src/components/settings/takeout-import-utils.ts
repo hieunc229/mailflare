@@ -81,16 +81,28 @@ function progressKey(mailboxId: string, source: TakeoutSource): string {
 
 /** How many messages of this source an earlier, interrupted import already finished. */
 export function getTakeoutProgress(mailboxId: string, source: TakeoutSource): number {
-	const value = Number(localStorage.getItem(progressKey(mailboxId, source)));
-	return Number.isFinite(value) && value > 0 ? Math.floor(value) : 0;
+	try {
+		const value = Number(localStorage.getItem(progressKey(mailboxId, source)));
+		return Number.isFinite(value) && value > 0 ? Math.floor(value) : 0;
+	} catch {
+		return 0; // Storage blocked: resuming is best effort.
+	}
 }
 
 export function saveTakeoutProgress(mailboxId: string, source: TakeoutSource, committed: number): void {
-	localStorage.setItem(progressKey(mailboxId, source), String(committed));
+	try {
+		localStorage.setItem(progressKey(mailboxId, source), String(committed));
+	} catch {
+		// Storage blocked or full: the import still runs, it just cannot be resumed.
+	}
 }
 
 export function clearTakeoutProgress(mailboxId: string, source: TakeoutSource): void {
-	localStorage.removeItem(progressKey(mailboxId, source));
+	try {
+		localStorage.removeItem(progressKey(mailboxId, source));
+	} catch {
+		// Nothing was saved.
+	}
 }
 
 export function emptyTakeoutSummary(): TakeoutImportSummary {
