@@ -64,6 +64,8 @@ export async function upsertContactsFromAddresses(
 	userId: string,
 	addresses: string[],
 	source: ContactSource = "outbound",
+	/** `seenAt` (by normalized address) is when each address last appeared in a message; default is now. */
+	options: { seenAt?: Map<string, Date>; lookupAvatar?: boolean } = {},
 ): Promise<void> {
 	const entries = new Map<string, { email: string; displayName: string | null }>();
 	for (const address of addresses) {
@@ -93,7 +95,7 @@ export async function upsertContactsFromAddresses(
 				email: entry.email,
 				displayName: entry.displayName,
 				source,
-				lastSeenAt: now,
+				lastSeenAt: options.seenAt?.get(entry.email) ?? now,
 			});
 			continue;
 		}
@@ -101,10 +103,12 @@ export async function upsertContactsFromAddresses(
 		const nextSource = current.source === "manual" || current.source === "import" || (current.source === "outbound" && source === "inbound")
 			? current.source
 			: source;
+		const seen = options.seenAt?.get(entry.email);
 		updateQueries.push(db.update(contacts).set({
 			displayName: nextDisplayName,
 			source: nextSource,
-			lastSeenAt: now,
+			// A supplied date never moves lastSeenAt backwards.
+			lastSeenAt: seen ? (current.lastSeenAt && current.lastSeenAt > seen ? current.lastSeenAt : seen) : now,
 		}).where(eq(contacts.id, current.id)));
 	}
 
@@ -115,6 +119,7 @@ export async function upsertContactsFromAddresses(
 		await Promise.all(updateQueries.slice(index, index + 10));
 	}
 
+	if (options.lookupAvatar === false) return;
 	const newEmails = insertRows.slice(0, MAX_AVATAR_LOOKUPS).map((row) => row.email);
 	for (let index = 0; index < newEmails.length; index += 4) {
 		const batch = newEmails.slice(index, index + 4);

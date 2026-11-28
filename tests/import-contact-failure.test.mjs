@@ -81,7 +81,7 @@ test("a failed contact update keeps the imported message", async (t) => {
 	assert.deepEqual(result, { imported: 1, skipped: 0, errors: [] });
 	assert.equal(database.db.prepare("SELECT count(*) AS n FROM messages").get().n, 1);
 	assert.equal(stored.length, 1);
-	assert.match(errors.join("\n"), /Import contact update failed takeout-1\.eml D1_ERROR: Network connection lost/);
+	assert.match(errors.join("\n"), /Import contact update failed D1_ERROR: Network connection lost/);
 });
 
 test("import errors show the driver's reason instead of the query and its values", () => {
