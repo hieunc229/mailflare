@@ -2992,5 +2992,6 @@
 	"domains.forceRemoved": "{host} imeondolewa",
 	"domains.forceRemovedRecords": "Ondoa rekodi hizi za DNS mwenyewe:",
 	"domains.forceRemovedCache": "Seva za barua zinaweza kuendelea kutumia sera ya zamani ya MTA-STS hadi {date}.",
-	"list.loadFailed": "Imeshindwa kupakia orodha hii."
+	"list.loadFailed": "Imeshindwa kupakia orodha hii.",
+	"message.loadFailed": "Imeshindwa kupakia ujumbe huu."
 }

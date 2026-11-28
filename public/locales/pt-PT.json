@@ -3013,5 +3013,6 @@
 	"domains.forceRemoved": "{host} removido",
 	"domains.forceRemovedRecords": "Remova estes registos DNS por si:",
 	"domains.forceRemovedCache": "Os servidores de correio podem continuar a aplicar a política MTA-STS antiga até {date}.",
-	"list.loadFailed": "Não foi possível carregar esta lista."
+	"list.loadFailed": "Não foi possível carregar esta lista.",
+	"message.loadFailed": "Não foi possível carregar esta mensagem."
 }

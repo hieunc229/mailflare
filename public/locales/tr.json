@@ -2992,5 +2992,6 @@
 	"domains.forceRemoved": "{host} kaldırıldı",
 	"domains.forceRemovedRecords": "Bu DNS kayıtlarını kendiniz kaldırın:",
 	"domains.forceRemovedCache": "Posta sunucuları eski MTA-STS politikasını {date} tarihine kadar uygulamaya devam edebilir.",
-	"list.loadFailed": "Bu liste yüklenemedi."
+	"list.loadFailed": "Bu liste yüklenemedi.",
+	"message.loadFailed": "Bu ileti yüklenemedi."
 }

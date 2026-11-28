@@ -2992,5 +2992,6 @@
 	"domains.forceRemoved": "{host} wurde entfernt",
 	"domains.forceRemovedRecords": "Entfernen Sie diese DNS-Einträge selbst:",
 	"domains.forceRemovedCache": "Mailserver wenden die alte MTA-STS-Richtlinie möglicherweise noch bis zum {date} an.",
-	"list.loadFailed": "Diese Liste konnte nicht geladen werden."
+	"list.loadFailed": "Diese Liste konnte nicht geladen werden.",
+	"message.loadFailed": "Diese Nachricht konnte nicht geladen werden."
 }

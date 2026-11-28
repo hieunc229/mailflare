@@ -2992,5 +2992,6 @@
 	"domains.forceRemoved": "{host} తొలగించబడింది",
 	"domains.forceRemovedRecords": "ఈ DNS రికార్డులను మీరే తొలగించండి:",
 	"domains.forceRemovedCache": "మెయిల్ సర్వర్‌లు {date} వరకు పాత MTA-STS విధానాన్ని వర్తింపజేస్తూనే ఉండవచ్చు.",
-	"list.loadFailed": "ఈ జాబితాను లోడ్ చేయడం సాధ్యం కాలేదు."
+	"list.loadFailed": "ఈ జాబితాను లోడ్ చేయడం సాధ్యం కాలేదు.",
+	"message.loadFailed": "ఈ సందేశాన్ని లోడ్ చేయడం సాధ్యం కాలేదు."
 }

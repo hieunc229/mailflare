@@ -2969,5 +2969,6 @@
 	"domains.forceRemoved": "已删除 {host}",
 	"domains.forceRemovedRecords": "请自行移除以下 DNS 记录：",
 	"domains.forceRemovedCache": "邮件服务器可能在 {date} 之前继续应用旧的 MTA-STS 策略。",
-	"list.loadFailed": "无法加载此列表。"
+	"list.loadFailed": "无法加载此列表。",
+	"message.loadFailed": "无法加载此邮件。"
 }

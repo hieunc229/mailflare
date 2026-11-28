@@ -2992,5 +2992,6 @@
 	"domains.forceRemoved": "{host} removed",
 	"domains.forceRemovedRecords": "Remove these DNS records yourself:",
 	"domains.forceRemovedCache": "Mail servers may keep applying the old MTA-STS policy until {date}.",
-	"list.loadFailed": "Could not load this list."
+	"list.loadFailed": "Could not load this list.",
+	"message.loadFailed": "Could not load this message."
 }

@@ -3076,5 +3076,6 @@
 	"domains.forceRemoved": "تمت إزالة {host}",
 	"domains.forceRemovedRecords": "أزل سجلات DNS هذه بنفسك:",
 	"domains.forceRemovedCache": "قد تواصل خوادم البريد تطبيق سياسة MTA-STS القديمة حتى {date}.",
-	"list.loadFailed": "تعذّر تحميل هذه القائمة."
+	"list.loadFailed": "تعذّر تحميل هذه القائمة.",
+	"message.loadFailed": "تعذّر تحميل هذه الرسالة."
 }

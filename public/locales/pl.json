@@ -3034,5 +3034,6 @@
 	"domains.forceRemoved": "Usunięto {host}",
 	"domains.forceRemovedRecords": "Usuń samodzielnie te rekordy DNS:",
 	"domains.forceRemovedCache": "Serwery pocztowe mogą stosować starą politykę MTA-STS do {date}.",
-	"list.loadFailed": "Nie udało się wczytać tej listy."
+	"list.loadFailed": "Nie udało się wczytać tej listy.",
+	"message.loadFailed": "Nie udało się wczytać tej wiadomości."
 }

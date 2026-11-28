@@ -2969,5 +2969,6 @@
 	"domains.forceRemoved": "{host} dihapus",
 	"domains.forceRemovedRecords": "Hapus sendiri rekaman DNS berikut:",
 	"domains.forceRemovedCache": "Server email mungkin masih menerapkan kebijakan MTA-STS lama hingga {date}.",
-	"list.loadFailed": "Tidak dapat memuat daftar ini."
+	"list.loadFailed": "Tidak dapat memuat daftar ini.",
+	"message.loadFailed": "Tidak dapat memuat pesan ini."
 }

@@ -3034,5 +3034,6 @@
 	"domains.forceRemoved": "{host} удалён",
 	"domains.forceRemovedRecords": "Удалите эти DNS-записи самостоятельно:",
 	"domains.forceRemovedCache": "Почтовые серверы могут применять старую политику MTA-STS до {date}.",
-	"list.loadFailed": "Не удалось загрузить этот список."
+	"list.loadFailed": "Не удалось загрузить этот список.",
+	"message.loadFailed": "Не удалось загрузить это сообщение."
 }

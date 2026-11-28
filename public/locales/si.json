@@ -2992,5 +2992,6 @@
 	"domains.forceRemoved": "{host} ඉවත් කරන ලදී",
 	"domains.forceRemovedRecords": "මෙම DNS වාර්තා ඔබම ඉවත් කරන්න:",
 	"domains.forceRemovedCache": "තැපැල් සේවාදායක {date} දක්වා පැරණි MTA-STS ප්‍රතිපත්තිය ක්‍රියාත්මක කරමින් සිටිය හැක.",
-	"list.loadFailed": "මෙම ලැයිස්තුව පූරණය කළ නොහැකි විය."
+	"list.loadFailed": "මෙම ලැයිස්තුව පූරණය කළ නොහැකි විය.",
+	"message.loadFailed": "මෙම පණිවිඩය පූරණය කළ නොහැකි විය."
 }

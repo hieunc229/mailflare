@@ -2983,5 +2983,6 @@
 	"domains.forceRemoved": "{host}을(를) 삭제했습니다",
 	"domains.forceRemovedRecords": "다음 DNS 레코드는 직접 제거하세요:",
 	"domains.forceRemovedCache": "메일 서버는 {date}까지 이전 MTA-STS 정책을 계속 적용할 수 있습니다.",
-	"list.loadFailed": "이 목록을 불러오지 못했습니다."
+	"list.loadFailed": "이 목록을 불러오지 못했습니다.",
+	"message.loadFailed": "이 메시지를 불러오지 못했습니다."
 }

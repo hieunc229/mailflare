@@ -3013,5 +3013,6 @@
 	"domains.forceRemoved": "{host} eliminado",
 	"domains.forceRemovedRecords": "Quita estos registros DNS por tu cuenta:",
 	"domains.forceRemovedCache": "Los servidores de correo pueden seguir aplicando la antigua política MTA-STS hasta el {date}.",
-	"list.loadFailed": "No se pudo cargar esta lista."
+	"list.loadFailed": "No se pudo cargar esta lista.",
+	"message.loadFailed": "No se pudo cargar este mensaje."
 }

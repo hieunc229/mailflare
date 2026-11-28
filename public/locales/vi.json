@@ -2969,5 +2969,6 @@
 	"domains.forceRemoved": "Đã xóa {host}",
 	"domains.forceRemovedRecords": "Hãy tự gỡ các bản ghi DNS sau:",
 	"domains.forceRemovedCache": "Máy chủ thư có thể vẫn áp dụng chính sách MTA-STS cũ đến hết {date}.",
-	"list.loadFailed": "Không thể tải danh sách này."
+	"list.loadFailed": "Không thể tải danh sách này.",
+	"message.loadFailed": "Không thể tải tin nhắn này."
 }

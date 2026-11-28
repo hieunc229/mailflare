@@ -2992,5 +2992,6 @@
 	"domains.forceRemoved": "{host} நீக்கப்பட்டது",
 	"domains.forceRemovedRecords": "இந்த DNS பதிவுகளை நீங்களே நீக்குங்கள்:",
 	"domains.forceRemovedCache": "அஞ்சல் சேவையகங்கள் {date} வரை பழைய MTA-STS கொள்கையைத் தொடர்ந்து பயன்படுத்தலாம்.",
-	"list.loadFailed": "இந்தப் பட்டியலை ஏற்ற முடியவில்லை."
+	"list.loadFailed": "இந்தப் பட்டியலை ஏற்ற முடியவில்லை.",
+	"message.loadFailed": "இந்தச் செய்தியை ஏற்ற முடியவில்லை."
 }

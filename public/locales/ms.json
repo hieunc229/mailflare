@@ -2983,5 +2983,6 @@
 	"domains.forceRemoved": "{host} telah dialih keluar",
 	"domains.forceRemovedRecords": "Alih keluar sendiri rekod DNS ini:",
 	"domains.forceRemovedCache": "Pelayan mel mungkin terus menggunakan dasar MTA-STS lama sehingga {date}.",
-	"list.loadFailed": "Tidak dapat memuatkan senarai ini."
+	"list.loadFailed": "Tidak dapat memuatkan senarai ini.",
+	"message.loadFailed": "Tidak dapat memuatkan mesej ini."
 }

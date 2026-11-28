@@ -2983,5 +2983,6 @@
 	"domains.forceRemoved": "ลบ {host} แล้ว",
 	"domains.forceRemovedRecords": "โปรดลบเรกคอร์ด DNS เหล่านี้ด้วยตนเอง:",
 	"domains.forceRemovedCache": "เซิร์ฟเวอร์อีเมลอาจยังคงใช้นโยบาย MTA-STS เดิมจนถึง {date}",
-	"list.loadFailed": "ไม่สามารถโหลดรายการนี้ได้"
+	"list.loadFailed": "ไม่สามารถโหลดรายการนี้ได้",
+	"message.loadFailed": "ไม่สามารถโหลดข้อความนี้ได้"
 }

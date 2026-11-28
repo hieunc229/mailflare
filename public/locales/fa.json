@@ -2992,5 +2992,6 @@
 	"domains.forceRemoved": "{host} حذف شد",
 	"domains.forceRemovedRecords": "این رکوردهای DNS را خودتان حذف کنید:",
 	"domains.forceRemovedCache": "ممکن است سرورهای ایمیل تا {date} سیاست قدیمی MTA-STS را همچنان اعمال کنند.",
-	"list.loadFailed": "بارگیری این فهرست ممکن نشد."
+	"list.loadFailed": "بارگیری این فهرست ممکن نشد.",
+	"message.loadFailed": "بارگیری این پیام ممکن نشد."
 }

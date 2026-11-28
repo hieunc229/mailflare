@@ -85,6 +85,8 @@ function MessageDetailContent({ messageId }: { messageId: string }) {
     return !!cached?.message && !cached.body;
   });
   const [bodyError, setBodyError] = useState(false);
+  const [loadFailed, setLoadFailed] = useState(false);
+  const [reloadKey, setReloadKey] = useState(0);
   const [previewAttachment, setPreviewAttachment] =
     useState<MessageAttachment | null>(null);
   const [threadExpanded, setThreadExpanded] = useState(false);
@@ -153,8 +155,14 @@ function MessageDetailContent({ messageId }: { messageId: string }) {
         return;
       }
       setLoading(true);
-      const nextData = await fetchMessageDetail(messageId).catch(() => fetchMessageDetail(messageId)).catch(() => ({ error: t("message.notFound") }));
+      setLoadFailed(false);
+      const nextData = await fetchMessageDetail(messageId).catch(() => fetchMessageDetail(messageId)).catch(() => null);
       if (!cancelled) {
+        if (!nextData) {
+          setLoadFailed(true);
+          setLoading(false);
+          return;
+        }
         setData(nextData);
         setLoading(false);
         if ("message" in nextData && nextData.message && !nextData.message.read) markMessageReadOnOpen(nextData.message.id);
@@ -165,7 +173,7 @@ function MessageDetailContent({ messageId }: { messageId: string }) {
     return () => {
       cancelled = true;
     };
-  }, [messageId]);
+  }, [messageId, reloadKey]);
 
   // Read, star and membership changes (including undo) can target the message
   // that is already open. Keep the mounted reader in sync with the detail cache;
@@ -288,6 +296,16 @@ function MessageDetailContent({ messageId }: { messageId: string }) {
   }
 
   if (!message) {
+    if (loadFailed) {
+      return (
+        <div role="alert" className="flex items-center gap-3 px-6 py-4 text-sm text-red-700">
+          <span>{t("message.loadFailed")}</span>
+          <Button type="button" variant="outline" size="sm" onClick={() => { setLoading(true); setReloadKey((key) => key + 1); }}>
+            {t("webhooks.retry")}
+          </Button>
+        </div>
+      );
+    }
     return (
       <p className="px-6 py-4 text-sm text-neutral-500">
         {data?.error ?? t("message.notFound")}

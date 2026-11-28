@@ -2992,5 +2992,6 @@
 	"domains.forceRemoved": "An cire {host}",
 	"domains.forceRemovedRecords": "Ka cire waɗannan bayanan DNS da kanka:",
 	"domains.forceRemovedCache": "Sabobin wasiƙa na iya ci gaba da amfani da tsohuwar manufar MTA-STS har zuwa {date}.",
-	"list.loadFailed": "An kasa loda wannan jerin."
+	"list.loadFailed": "An kasa loda wannan jerin.",
+	"message.loadFailed": "An kasa loda wannan saƙo."
 }

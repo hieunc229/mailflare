@@ -2992,5 +2992,6 @@
 	"domains.forceRemoved": "{host} काढून टाकले",
 	"domains.forceRemovedRecords": "हे DNS रेकॉर्ड तुम्ही स्वतः काढा:",
 	"domains.forceRemovedCache": "मेल सर्व्हर {date} पर्यंत जुने MTA-STS धोरण लागू करत राहू शकतात.",
-	"list.loadFailed": "ही यादी लोड करता आली नाही."
+	"list.loadFailed": "ही यादी लोड करता आली नाही.",
+	"message.loadFailed": "हा संदेश लोड करता आला नाही."
 }

@@ -2969,5 +2969,6 @@
 	"domains.forceRemoved": "{host} を削除しました",
 	"domains.forceRemovedRecords": "次の DNS レコードは手動で削除してください:",
 	"domains.forceRemovedCache": "メールサーバーは {date} まで古い MTA-STS ポリシーを適用し続ける場合があります。",
-	"list.loadFailed": "このリストを読み込めませんでした。"
+	"list.loadFailed": "このリストを読み込めませんでした。",
+	"message.loadFailed": "このメッセージを読み込めませんでした。"
 }
