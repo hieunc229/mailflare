@@ -7,6 +7,7 @@ import { requireUser } from "@/lib/auth/cookies";
 import { getEnv } from "@/lib/cloudflare";
 import { deleteEmailRoutingRuleForAddress, ensureEmailRoutingRuleToWorker } from "@/lib/cloudflare-api";
 import { parseRecipientAddress } from "@/lib/email/recipient-address";
+import { readJsonObject } from "@/lib/http/request";
 import { newId } from "@/lib/ids";
 import { getMailboxDomainAddresses } from "@/lib/mailboxes/domain-addresses";
 import { getMailboxSettingsAccess } from "@/lib/mailboxes/settings-access";
@@ -110,7 +111,9 @@ export async function POST(request: Request, { params }: MailboxRouteParams) {
 	const { id } = await params;
 	const env = getEnv();
 	const user = await requireUser(env, request);
-	const parsed = mailboxAliasBodySchema.safeParse(await request.json());
+	const body = await readJsonObject(request);
+	if (!body) return NextResponse.json({ error: "Request body must be a JSON object" }, { status: 400 });
+	const parsed = mailboxAliasBodySchema.safeParse(body);
 	if (!parsed.success) {
 		return NextResponse.json({ error: "Enter a valid alias username and domain" }, { status: 400 });
 	}
@@ -220,7 +223,9 @@ export async function PATCH(request: Request, { params }: MailboxRouteParams) {
 	const { id } = await params;
 	const env = getEnv();
 	const user = await requireUser(env, request);
-	const parsed = updateMailboxAliasSchema.safeParse(await request.json());
+	const body = await readJsonObject(request);
+	if (!body) return NextResponse.json({ error: "Request body must be a JSON object" }, { status: 400 });
+	const parsed = updateMailboxAliasSchema.safeParse(body);
 	if (!parsed.success) {
 		return NextResponse.json({ error: "Invalid alias update" }, { status: 400 });
 	}

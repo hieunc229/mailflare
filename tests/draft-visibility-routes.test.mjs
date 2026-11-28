@@ -31,7 +31,7 @@ async function setup(t, who) {
 	env.BUCKET = { get: async () => ({ body: "raw", size: 3 }), head: async () => ({}) };
 	globalThis.draftEnv = env;
 	globalThis.draftUser = user(who);
-	globalThis.draftAuth = { userId: who, scopes: ["read"], mailboxIds: null, keyId: "k" };
+	globalThis.draftAuth = { userId: who, user: user(who), scopes: ["read"], mailboxIds: null, keyId: "k" };
 	return { env, db };
 }
 const get = (path) => new Request(`http://localhost${path}`, { headers: { accept: "*/*" } });

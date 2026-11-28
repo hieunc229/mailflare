@@ -7,6 +7,7 @@ import { authenticateAdminApiKey } from "@/lib/api/admin-auth";
 import { getDomainForUser } from "@/lib/domains/service";
 import { getDomainDnsView } from "@/lib/domains/dns-view";
 import type { DnsAuthRecord } from "@/lib/domains/dns-audit";
+import { adoptCloudflareZone } from "@/lib/domains/adopt-zone";
 import { setupDomainDnsRecord } from "@/lib/domains/dns-setup";
 import { MxConflictError } from "@/lib/domains/receiving-dns";
 import { mtaStsBlockedResponse } from "@/lib/deliverability/mta-sts-block-response";
@@ -23,7 +24,7 @@ export async function POST(request: Request, { params }: Params) {
 	}
 
 	const { id } = await params;
-	const domain = await getDomainForUser(env, auth.userId, id);
+	let domain = await getDomainForUser(env, auth.userId, id);
 	if (!domain) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
 	const body = (await request.json().catch(() => ({}))) as { record?: string; replaceMx?: boolean };
@@ -33,6 +34,8 @@ export async function POST(request: Request, { params }: Params) {
 	}
 
 	try {
+		// A domain added with DNS skipped gets its real zone on the first setup.
+		domain = await adoptCloudflareZone(env, domain);
 		await setupDomainDnsRecord(env, domain, record, { replaceMx: body.replaceMx === true });
 		const dns = await getDomainDnsView(env, domain);
 		const [updated] = await getDb(env)

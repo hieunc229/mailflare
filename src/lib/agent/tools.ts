@@ -66,7 +66,9 @@ export const emailToolDescriptions: Record<EmailToolName, string> = {
 
 export const EMAIL_TOOL_NAMES = Object.keys(emailToolSchemas) as EmailToolName[];
 
-function publicMessage(row: typeof messages.$inferSelect) {
+type PublicMessageRow = Pick<typeof messages.$inferSelect, "id" | "mailboxId" | "fromAddr" | "toAddr" | "ccAddr" | "subject" | "snippet" | "direction" | "status" | "read" | "starred" | "threadId" | "createdAt">;
+
+function publicMessage(row: PublicMessageRow) {
 	return {
 		id: row.id, mailboxId: row.mailboxId, from: row.fromAddr, to: row.toAddr,
 		cc: row.ccAddr, subject: row.subject, snippet: row.snippet, direction: row.direction,
@@ -138,7 +140,11 @@ export async function runEmailTool(context: AgentToolContext, name: EmailToolNam
 			conditions.push(or(lt(messages.createdAt, cursor.createdAt), and(eq(messages.createdAt, cursor.createdAt), lt(messages.id, cursor.id)))!);
 		}
 		const pageSize = input.limit as number;
-		const rows = await db.select().from(messages).where(and(...conditions)).orderBy(desc(messages.createdAt), desc(messages.id)).limit(pageSize + 1);
+		const rows = await db.select({
+			id: messages.id, mailboxId: messages.mailboxId, fromAddr: messages.fromAddr, toAddr: messages.toAddr, ccAddr: messages.ccAddr,
+			subject: messages.subject, snippet: messages.snippet, direction: messages.direction, status: messages.status, read: messages.read,
+			starred: messages.starred, threadId: messages.threadId, createdAt: messages.createdAt,
+		}).from(messages).where(and(...conditions)).orderBy(desc(messages.createdAt), desc(messages.id)).limit(pageSize + 1);
 		return { emails: rows.slice(0, pageSize).map(publicMessage), nextCursor: rows.length > pageSize ? rows[pageSize - 1]?.id : null };
 	}
 	if (name === "get_email") {

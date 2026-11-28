@@ -120,7 +120,7 @@ npm run db:migrate:local
 npm run dev
 ```
 
-Add your Cloudflare credentials to `.dev.vars`, then open [localhost:3000](http://localhost:3000). Run `npm run db:seed` to load sample data.
+Add your Cloudflare credentials to `.dev.vars`, then open [localhost:3000](http://localhost:3000). To load sample data, start the dev server with `MAILFLARE_DEMO_SEED=1` set, then run `npm run db:seed`.
 
 - `npm run build`: build the Worker
 - `npm run deploy`: build and deploy

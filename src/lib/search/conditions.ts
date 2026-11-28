@@ -39,6 +39,19 @@ function buildLikeConditions(parsed: ParsedSearchQuery): SQL[] {
 }
 
 /**
+ * An FTS5 rowid predicate for one free-text value, optionally limited to the FTS column filter `columns`
+ * (`"subject"`, `"{to_addr cc_addr}"`, ...). Null on dialects without FTS5 or when nothing in the value is
+ * indexable, so the caller keeps its LIKE predicate. A leading `-` is literal text here, never a negation.
+ */
+export function ftsMatchCondition(value: string, columns: string | null): SQL | null {
+	if (schemaDialect() !== "sqlite") return null;
+	const { match, exclude } = buildFtsMatch({ text: value.replace(/(^|\s)-+/g, "$1"), needsFullText: false });
+	if (!match || exclude) return null;
+	const expression = columns ? `${columns} : (${match})` : match;
+	return sql`${messages}.rowid IN (SELECT rowid FROM messages_fts WHERE messages_fts MATCH ${expression})`;
+}
+
+/**
  * Translate a search string into WHERE conditions on `messages`. Text goes to
  * the FTS5 index by rowid; everything else is a plain column predicate, so the
  * caller ANDs these with its own scope (mailbox access, folder, status).

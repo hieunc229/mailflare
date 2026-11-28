@@ -81,6 +81,9 @@ test("assistant reads mail, creates an editable reply draft, and invokes tools t
 	const direct = { ...context, origin: "mcp" };
 	const listed = await runEmailTool(context, "list_emails", { folder: "inbox", limit: 20 });
 	assert.equal(listed.emails[0].id, "email-1");
+	// list_emails returns the public fields only, never a body.
+	assert.deepEqual(Object.keys(listed.emails[0]).sort(), ["cc", "createdAt", "direction", "from", "id", "mailboxId", "read", "snippet", "starred", "status", "subject", "threadId", "to", "url"]);
+	assert.doesNotMatch(JSON.stringify(listed), /meet Tuesday/);
 	const email = await runEmailTool(context, "get_email", { emailId: "email-1" });
 	assert.match(email.text, /meet Tuesday/);
 	const thread = await runEmailTool(context, "get_thread", { emailId: "email-1" });
@@ -241,4 +244,33 @@ test("email pagination does not skip messages that share a created_at second", a
 		cursor = page.nextCursor;
 	} while (cursor);
 	assert.deepEqual(ids, ["tie-c", "tie-b", "tie-a", "email-3", "email-2", "email-1"]);
+});
+
+test("chat history window keeps earlier user and assistant turns after many tool rows", async (t) => {
+	const context = await paginationContext(t);
+	const db = context.env.DB.db;
+	db.exec(`INSERT INTO agent_conversations (id, user_id, mailbox_id, title, created_at, updated_at) VALUES ('conv-long', 'user-1', 'mailbox-1', 'Long', 1, 1);
+		INSERT INTO agent_chat_messages (id, conversation_id, role, content, created_at) VALUES
+			('h-user', 'conv-long', 'user', 'Earlier question about invoices', 10), ('h-assistant', 'conv-long', 'assistant', 'Earlier answer', 11);`);
+	const insert = db.prepare("INSERT INTO agent_chat_messages (id, conversation_id, role, tool_name, content, created_at) VALUES (?, 'conv-long', 'tool', 'list_emails', 'result', ?)");
+	for (let index = 0; index < 40; index += 1) insert.run(`h-tool-${index}`, 100 + index);
+	const requests = [];
+	const server = createServer(async (request, response) => {
+		let raw = "";
+		for await (const chunk of request) raw += chunk;
+		requests.push(JSON.parse(raw));
+		response.writeHead(200, { "Content-Type": "text/event-stream" });
+		const chunk = (delta, finishReason = null) => response.write(`data: ${JSON.stringify({ id: "history-mock", object: "chat.completion.chunk", created: 1, model: "test-model", choices: [{ index: 0, delta, finish_reason: finishReason }] })}\n\n`);
+		chunk({ role: "assistant", content: "Done." });
+		chunk({}, "stop");
+		response.end("data: [DONE]\n\n");
+	});
+	await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+	t.after(() => server.close());
+	context.env = { ...context.env, AI_BASE_URL: `http://127.0.0.1:${server.address().port}/v1`, AI_API_KEY: "test-key", AI_MODEL: "test-model" };
+	const { stream } = await createAgentChatStream(context, "And now?", "conv-long");
+	await new Response(stream).text();
+	const sent = JSON.stringify(requests[0].messages);
+	assert.match(sent, /Earlier question about invoices/);
+	assert.match(sent, /Earlier answer/);
 });

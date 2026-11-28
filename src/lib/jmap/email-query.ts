@@ -1,5 +1,6 @@
-import { aliasedTable, and, asc, desc, eq, exists, gt, gte, inArray, isNotNull, isNull, lt, ne, not, or, sql } from "drizzle-orm";
-import type { SQL } from "drizzle-orm";
+import { aliasedTable, and, asc, desc, eq, exists, gte, inArray, isNotNull, isNull, lt, ne, not, or, sql } from "drizzle-orm";
+import type { AnyColumn, SQL } from "drizzle-orm";
+import { ftsMatchCondition } from "@/lib/search/conditions";
 import { mailboxPromotionSettings, messageAttachments, messages } from "@/db/schema";
 import { concatText, containsLike, escapeLike, insensitiveLike as like, matchEverything, matchNothing } from "@/db/sql";
 import { KEYWORD_DRAFT, KEYWORD_FLAGGED, KEYWORD_PROMOTION, KEYWORD_SEEN } from "./constants";
@@ -80,6 +81,9 @@ function headerCondition(header: string[]): SQL {
 	}
 }
 
+// A NULL column makes LIKE NULL, so NOT(...) would drop the row.
+const nz = (column: AnyColumn) => sql`coalesce(${column}, '')`;
+
 function conditionToSql(condition: FilterCondition, accessible: Set<string>, viewerId: string): SQL[] {
 	const parts: SQL[] = [];
 	if (condition.inMailbox !== undefined) {
@@ -101,24 +105,27 @@ function conditionToSql(condition: FilterCondition, accessible: Set<string>, vie
 	if (condition.someInThreadHaveKeyword) parts.push(threadHasMessage(condition.someInThreadHaveKeyword, true, viewerId));
 	if (condition.allInThreadHaveKeyword) parts.push(not(threadHasMessage(condition.allInThreadHaveKeyword, false, viewerId)));
 	if (condition.noneInThreadHaveKeyword) parts.push(not(threadHasMessage(condition.noneInThreadHaveKeyword, true, viewerId)));
-	if (condition.from) parts.push(containsLike(messages.fromAddr, condition.from));
-	if (condition.to) parts.push(containsLike(messages.toAddr, condition.to));
-	if (condition.cc) parts.push(containsLike(messages.ccAddr, condition.cc));
-	if (condition.bcc) parts.push(containsLike(messages.bccAddr, condition.bcc));
-	if (condition.subject) parts.push(containsLike(messages.subject, condition.subject));
-	if (condition.body) parts.push(or(containsLike(messages.textBody, condition.body), containsLike(messages.htmlBody, condition.body))!);
+	const text = (value: string, columns: string | null, fallback: SQL) => ftsMatchCondition(value, columns) ?? fallback;
+	if (condition.from) parts.push(text(condition.from, "from_addr", containsLike(messages.fromAddr, condition.from)));
+	if (condition.to) parts.push(text(condition.to, "to_addr", containsLike(messages.toAddr, condition.to)));
+	if (condition.cc) parts.push(text(condition.cc, "cc_addr", containsLike(nz(messages.ccAddr), condition.cc)));
+	if (condition.bcc) parts.push(containsLike(nz(messages.bccAddr), condition.bcc));
+	if (condition.subject) parts.push(text(condition.subject, "subject", containsLike(nz(messages.subject), condition.subject)));
+	if (condition.body) {
+		const either = or(containsLike(nz(messages.textBody), condition.body), containsLike(nz(messages.htmlBody), condition.body))!;
+		parts.push(text(condition.body, "{text_body html_body}", either));
+	}
 	if (condition.text) {
 		const pattern = `%${escapeLike(condition.text)}%`;
-		parts.push(
-			or(
-				like(messages.subject, pattern),
-				like(messages.fromAddr, pattern),
-				like(messages.toAddr, pattern),
-				like(messages.ccAddr, pattern),
-				like(messages.textBody, pattern),
-				like(messages.snippet, pattern),
-			)!,
-		);
+		const anyColumn = or(
+			like(nz(messages.subject), pattern),
+			like(messages.fromAddr, pattern),
+			like(messages.toAddr, pattern),
+			like(nz(messages.ccAddr), pattern),
+			like(nz(messages.textBody), pattern),
+			like(nz(messages.snippet), pattern),
+		)!;
+		parts.push(text(condition.text, null, anyColumn));
 	}
 	if (condition.header) parts.push(headerCondition(condition.header));
 	if (condition.hasAttachment !== undefined) {
@@ -177,5 +184,3 @@ export function sortToSql(sort: Comparator[] | null | undefined): SQL[] {
 		}
 	});
 }
-
-export { gt };

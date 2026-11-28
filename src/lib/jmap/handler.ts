@@ -3,7 +3,7 @@ import { authenticateApiRequest, hasScope } from "@/lib/api/key-auth";
 import { allowAppPasswordGuess, basicPassword } from "@/lib/auth/app-passwords";
 import { LIMITS } from "./constants";
 import { corsHeaders, JmapError, problemResponse } from "./errors";
-import { readBlob, storeUpload } from "./blobs";
+import { readBlob, readCappedBody, storeUpload } from "./blobs";
 import { parsePingSeconds, tryDecodeURIComponent } from "./request-utils";
 import { processRequest, sessionState, validateRequest } from "./processor";
 import { buildSession } from "./session";
@@ -101,7 +101,8 @@ export async function handleJmapRequest(request: Request, env: CloudflareEnv): P
 		const type = request.headers.get("content-type") || "application/octet-stream";
 		const disposition = request.headers.get("content-disposition") ?? "";
 		const name = disposition.match(/filename\*?=(?:UTF-8'')?"?([^";]+)"?/i)?.[1] ?? null;
-		const stored = await storeUpload(ctx, await request.arrayBuffer(), type, name ? (tryDecodeURIComponent(name) ?? name) : null);
+		const content = await readCappedBody(request, LIMITS.maxSizeUpload);
+		const stored = content && await storeUpload(ctx, content, type, name ? (tryDecodeURIComponent(name) ?? name) : null);
 		if (!stored) return problemResponse("limit", 413, "Upload too large", { limit: "maxSizeUpload" });
 		return new Response(JSON.stringify(stored), { status: 201, headers: JSON_HEADERS });
 	}

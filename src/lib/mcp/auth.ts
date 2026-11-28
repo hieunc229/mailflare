@@ -27,8 +27,8 @@ export async function authenticateMcpRequest(env: CloudflareEnv, request: Reques
 		if (!user || user.disabled) return null;
 		if (isAdminKey && user.role !== "admin") return null;
 		const allowed = isMailKey ? await db.select({ mailboxId: mcpKeyMailboxes.mailboxId }).from(mcpKeyMailboxes).where(eq(mcpKeyMailboxes.keyId, candidate.id)) : [];
-		const mailboxIds: string[] = [];
-		for (const { mailboxId } of allowed) if ((await getMailboxAccessLevel(db, user, mailboxId))?.canRead) mailboxIds.push(mailboxId);
+		const levels = await Promise.all(allowed.map(({ mailboxId }) => getMailboxAccessLevel(db, user, mailboxId)));
+		const mailboxIds = allowed.filter((_, index) => levels[index]?.canRead).map((row) => row.mailboxId);
 		const stale = new Date(Date.now() - 60_000);
 		await db.update(apiKeys).set({ lastUsedAt: new Date() }).where(and(eq(apiKeys.id, candidate.id), or(isNull(apiKeys.lastUsedAt), lt(apiKeys.lastUsedAt, stale))));
 		return { keyId: candidate.id, user, scopes: allScopes, mailboxIds };

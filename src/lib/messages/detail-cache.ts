@@ -12,9 +12,21 @@ const detailRevisions = new Map<string, number>();
 /** Per-message mutation marker for a completed read/star/membership change. */
 const stateRevisions = new Map<string, number>();
 let generation = 0;
+const REVISION_LIMIT = 5000;
+
+/** Re-inserts the key so the oldest-touched entry is the one evicted past the cap. */
+function bumpRevision(map: Map<string, number>, messageId: string): void {
+	const next = (map.get(messageId) ?? 0) + 1;
+	map.delete(messageId);
+	map.set(messageId, next);
+	if (map.size > REVISION_LIMIT) {
+		const oldest = map.keys().next().value;
+		if (oldest !== undefined) map.delete(oldest);
+	}
+}
 
 function bumpStateRevision(messageId: string): void {
-	stateRevisions.set(messageId, (stateRevisions.get(messageId) ?? 0) + 1);
+	bumpRevision(stateRevisions, messageId);
 }
 
 /** Keep a completed local field change over a detail response that started before it. */
@@ -96,7 +108,7 @@ export function patchCachedMessage(messageId: string, patch: { read?: boolean; s
 }
 
 function bumpDetailRevision(messageId: string): void {
-	detailRevisions.set(messageId, (detailRevisions.get(messageId) ?? 0) + 1);
+	bumpRevision(detailRevisions, messageId);
 }
 
 /** Drops in-flight detail responses without throwing away an already-patched cache. */

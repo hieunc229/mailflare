@@ -31,7 +31,7 @@ import { CalendarSubscribeDialog } from "./subscribe-dialog";
 import { InviteResponseDialog } from "./invite-response-dialog";
 import type { CalendarEvent, CalendarView, EventDragPreview, EventResizeEdge, EventResizeSession } from "./types";
 import {
-  addDays, addMonths, calendarAnchorDay, CALENDAR_END_HOUR, CALENDAR_HOUR_HEIGHT, CALENDAR_START_HOUR,
+  addDays, addMonths, calendarAnchorDay, calendarFetchRange, CALENDAR_END_HOUR, CALENDAR_HOUR_HEIGHT, CALENDAR_START_HOUR,
   currentTimePosition, isPendingInvite, dateKey, defaultCalendarStart, dropStartForPosition, EVENT_COLOR_CLASSES, eventEndAfterMinutes, eventPosition, expandCalendarEvents,
   formatEventRange, formatHour, formatLocalDateTime, toCalendarOverrides,
   monthGridDates, PAST_EVENT_COLOR_CLASSES, rescheduleCalendarOccurrence, resizeEventTimes, startOfDay, startOfMonth, startOfWeek, WEEKDAY_OPTIONS,
@@ -182,8 +182,7 @@ export default function CalendarPage() {
   useEffect(() => {
     let active = true;
     const monthDates = view === "month" ? monthGridDates(visibleDate) : null;
-    const start = new Date(Math.min(today.getTime(), weekStart.getTime(), startOfDay(visibleDate).getTime(), monthDates?.[0].getTime() ?? Infinity));
-    const end = new Date(Math.max(addDays(today, 90).getTime(), addDays(weekStart, 7).getTime(), addDays(visibleDate, 1).getTime(), monthDates ? addDays(monthDates[41], 1).getTime() : 0));
+    const { start, end } = calendarFetchRange(today, weekStart, visibleDate, monthDates);
     void authFetch(`/api/calendar/events?start=${start.toISOString()}&end=${end.toISOString()}`)
       .then((response) => {
         if (!response.ok) throw new Error(t("calendar.loadFailed"));

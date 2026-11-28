@@ -17,7 +17,7 @@ export default function SettingsExportPage() {
 		if (!selectedMailbox?.id) return;
 		setExportState({ error: null, loading: true });
 		try {
-			await exportMailbox(selectedMailbox.id, `${selectedMailbox.localPart}.mbox`);
+			await exportMailbox(selectedMailbox.id);
 		} catch (error) {
 			setExportState({ error: error instanceof Error ? error.message : t("export.failed"), loading: false });
 			return;

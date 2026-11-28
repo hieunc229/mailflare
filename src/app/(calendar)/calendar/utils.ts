@@ -385,3 +385,18 @@ export function resizeEventTimes(event: CalendarEvent, day: Date, edge: EventRes
   }
   return { startsAt, endsAt: new Date(Math.max(boundary.getTime(), startsAt.getTime() + 15 * 60_000)) };
 }
+
+/** The events API refuses ranges over 400 days (MAX_CALENDAR_QUERY_DAYS in api/calendar/events/route.ts); stay under it with a margin. */
+const MAX_FETCH_SPAN_MS = 390 * 86_400_000;
+
+/**
+ * The range the page fetches: the visible window plus today..+90 days (the upcoming list) while that stays small enough for the API.
+ * Paging far from today drops the upcoming part, which the sidebar fetches by itself.
+ */
+export function calendarFetchRange(today: Date, weekStart: Date, visibleDate: Date, monthDates: Date[] | null): { start: Date; end: Date } {
+  const visibleStart = Math.min(weekStart.getTime(), startOfDay(visibleDate).getTime(), monthDates?.[0].getTime() ?? Infinity);
+  const visibleEnd = Math.max(addDays(weekStart, 7).getTime(), addDays(visibleDate, 1).getTime(), monthDates ? addDays(monthDates[41], 1).getTime() : 0);
+  const start = Math.min(today.getTime(), visibleStart);
+  const end = Math.max(addDays(today, 90).getTime(), visibleEnd);
+  return end - start <= MAX_FETCH_SPAN_MS ? { start: new Date(start), end: new Date(end) } : { start: new Date(visibleStart), end: new Date(visibleEnd) };
+}

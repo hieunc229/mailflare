@@ -4,6 +4,7 @@ import { jmapChangeFloor, jmapChanges, mailboxPromotionSettings, messages } from
 import { greatest } from "@/db/sql";
 import { DRAFT_FILTER_PARAMS, draftsVisibleTo } from "@/lib/email/draft-access";
 import { isMissingTableError } from "@/lib/database-errors";
+import { selectInBatches } from "@/lib/db-params";
 import { listFoldersByMailbox, listJmapMailboxes } from "./access";
 import { encodeMailboxRef, SYSTEM_ROLES } from "./ids";
 import type { AccessibleMailbox, JmapContext } from "./types";
@@ -24,11 +25,14 @@ async function accessFingerprint(ctx: JmapContext, mailboxes: AccessibleMailbox[
 	return Array.from(new Uint8Array(digest).slice(0, 8), (b) => b.toString(16).padStart(2, "0")).join("");
 }
 
-/** Sorted ids, among `accessible`, whose Promotions mode is not off. One unbound query: the table holds a row per mailbox at most. */
+/** Sorted ids, among `accessible`, whose Promotions mode is not off; the table holds a row per mailbox at most. */
 async function promotingMailboxIds(ctx: JmapContext, accessible: Set<string>): Promise<string[]> {
 	try {
-		const rows = await ctx.db.select({ id: mailboxPromotionSettings.mailboxId }).from(mailboxPromotionSettings).where(sql`${mailboxPromotionSettings.mode} <> 'off'`);
-		return rows.map((row) => row.id).filter((id) => accessible.has(id)).sort();
+		const rows = await selectInBatches([...accessible], (batch) => ctx.db
+			.select({ id: mailboxPromotionSettings.mailboxId })
+			.from(mailboxPromotionSettings)
+			.where(and(inArray(mailboxPromotionSettings.mailboxId, batch), sql`${mailboxPromotionSettings.mode} <> 'off'`)));
+		return rows.map((row) => row.id).sort();
 	} catch (error) {
 		if (isMissingTableError(error)) return [];
 		throw error;
@@ -122,6 +126,9 @@ async function rowsSince(
 	return { scope, rows: await withoutOthersDrafts(ctx, page), hasMore, lastSeq };
 }
 
+/** Draft-filter statements in flight at once. */
+const DRAFT_FILTER_CONCURRENCY = 5;
+
 /**
  * Other users' drafts in a shared mailbox are private, so their ids stay out of the email feeds and
  * their activity does not mark the mailbox as changed. Two cases need care:
@@ -137,12 +144,15 @@ async function withoutOthersDrafts(ctx: JmapContext, rows: ChangeRow[]): Promise
 	const hidden = new Set<string>();
 	// D1 allows 100 bound parameters per statement; the draft filter takes some of them.
 	const batch = 100 - DRAFT_FILTER_PARAMS;
-	for (let offset = 0; offset < ids.length; offset += batch) {
-		const found = await ctx.db
-			.select({ id: messages.id })
-			.from(messages)
-			.where(and(inArray(messages.id, ids.slice(offset, offset + batch)), not(draftsVisibleTo(ctx.auth.userId))));
-		for (const row of found) hidden.add(row.id);
+	const chunks: string[][] = [];
+	for (let offset = 0; offset < ids.length; offset += batch) chunks.push(ids.slice(offset, offset + batch));
+	for (let start = 0; start < chunks.length; start += DRAFT_FILTER_CONCURRENCY) {
+		const groups = await Promise.all(
+			chunks
+				.slice(start, start + DRAFT_FILTER_CONCURRENCY)
+				.map((chunk) => ctx.db.select({ id: messages.id }).from(messages).where(and(inArray(messages.id, chunk), not(draftsVisibleTo(ctx.auth.userId))))),
+		);
+		for (const found of groups) for (const row of found) hidden.add(row.id);
 	}
 	const result: ChangeRow[] = [];
 	for (const row of rows) {
@@ -180,9 +190,12 @@ export async function threadChangesSince(ctx: JmapContext, args: Record<string, 
 	const result = await rowsSince(ctx, args.sinceState, "email", limit);
 	if (!result) return cannot();
 	const firstChange = new Map<string, string>();
+	// A thread is "created" only when every logged change of it is a creation.
+	const onlyCreated = new Map<string, boolean>();
 	for (const row of result.rows) {
 		const thread = row.threadId ?? row.objectId;
 		if (!firstChange.has(thread)) firstChange.set(thread, row.change);
+		onlyCreated.set(thread, (onlyCreated.get(thread) ?? true) && row.change === "created");
 	}
 	const threads = Array.from(firstChange.keys());
 	const ids = result.scope.mailboxes.map((m) => m.id);
@@ -203,7 +216,7 @@ export async function threadChangesSince(ctx: JmapContext, args: Record<string, 
 	const destroyed: string[] = [];
 	for (const [thread, first] of firstChange) {
 		if (!alive.has(thread)) destroyed.push(thread);
-		else if (first === "created" && result.rows.every((row) => (row.threadId ?? row.objectId) !== thread || row.change === "created")) created.push(thread);
+		else if (first === "created" && onlyCreated.get(thread)) created.push(thread);
 		else updated.push(thread);
 	}
 	const newState = result.hasMore ? formatState(result.lastSeq, result.scope.fingerprint) : result.scope.state;

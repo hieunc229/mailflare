@@ -1,3 +1,6 @@
+/** Most guests one event create or update may invite. */
+export const MAX_ATTENDEES = 50;
+
 /** Sends one message per attendee and returns the addresses that failed, so a saved event is never reported as a failed request. */
 export async function sendToAttendees(attendees: string[], send: (to: string) => Promise<unknown>): Promise<string[]> {
 	const results = await Promise.allSettled(attendees.map((to) => send(to)));

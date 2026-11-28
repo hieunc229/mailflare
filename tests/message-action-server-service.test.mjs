@@ -52,6 +52,7 @@ await build({
 			`);
 			alias(/^@\/lib\/spam\/feedback$/, "mock-spam", `
 				export async function applySpamFeedback(_env, _user, messageId, classification) {
+					(globalThis.__spamTrained ??= []).push(messageId);
 					const status = classification === "spam" ? "spam" : "received";
 					globalThis.__rawSqlite.prepare("UPDATE messages SET status = ?, folder_id = NULL WHERE id = ?").run(status, messageId);
 					return true;
@@ -97,6 +98,7 @@ const user = { id: "user-1" };
 function reset(message = {}) {
 	sqlite.exec("DELETE FROM messages; DELETE FROM message_action_undo_claims; DELETE FROM folders;");
 	globalThis.__undoAudits = [];
+	globalThis.__spamTrained = [];
 	globalThis.__failUndoAudit = false;
 	const row = {
 		id: "m1",
@@ -197,6 +199,43 @@ test("spam and inbox-from-spam apply normally but never issue an undo token", as
 	const inbox = await m.applyMessageActionForUser({}, user, { action: "inbox", messageIds: ["m1"] });
 	assert.equal(inbox.undoToken, undefined);
 	assert.equal(rowState().status, "received");
+});
+
+function seed(count, status) {
+	const insert = sqlite.prepare("INSERT INTO messages (id, mailbox_id, direction, status, read, starred) VALUES (?, 'mb1', 'inbound', ?, 0, 0)");
+	return Array.from({ length: count }, (_, index) => {
+		const id = `s${String(index).padStart(3, "0")}`;
+		insert.run(id, status);
+		return id;
+	});
+}
+
+test("spam trains the first 50 messages and still moves all of them", async () => {
+	reset();
+	sqlite.exec("DELETE FROM messages");
+	const messageIds = seed(60, "received");
+	const result = await m.applyMessageActionForUser({}, user, { action: "spam", messageIds });
+	assert.equal(globalThis.__spamTrained.length, 50);
+	assert.equal(sqlite.prepare("SELECT count(*) AS n FROM messages WHERE status = 'spam'").get().n, 60);
+	assert.equal(result.applied.length, 60);
+	assert.equal(result.undoToken, undefined);
+});
+
+test("not-spam trains at most 50 and moves the rest", async () => {
+	reset();
+	sqlite.exec("DELETE FROM messages");
+	const messageIds = seed(60, "spam");
+	const result = await m.applyMessageActionForUser({}, user, { action: "inbox", messageIds });
+	assert.equal(globalThis.__spamTrained.length, 50);
+	assert.equal(sqlite.prepare("SELECT count(*) AS n FROM messages WHERE status = 'received'").get().n, 60);
+	assert.equal(result.undoToken, undefined);
+});
+
+test("small spam batches are fully trained", async () => {
+	reset();
+	sqlite.exec("DELETE FROM messages");
+	await m.applyMessageActionForUser({}, user, { action: "spam", messageIds: seed(3, "received") });
+	assert.equal(globalThis.__spamTrained.length, 3);
 });
 
 test("only actually changed rows are reported as applied", async () => {

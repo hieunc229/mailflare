@@ -13,7 +13,7 @@ const mocks = {
 	"@/lib/api/auth": "export async function requireSessionUser(){const s=globalThis.appPwRoute;return s.user?{user:s.user,error:null}:{user:null,error:Response.json({error:'Unauthorized'},{status:401})}}",
 	"@/lib/auth/cookies": "export async function requireUser(){return globalThis.appPwRoute.user}",
 	"@/lib/auth/session": "export function getSessionTokenFromRequestHeaders(){return 'session-1'} export async function hashSessionToken(token){return 'hash-'+token}",
-	"@/lib/mailboxes/access": "export async function getMailboxAccessLevel(db,user,id){return globalThis.appPwRoute.readable.includes(id)?{canRead:true}:null}",
+	"@/lib/mailboxes/access": "export async function getMailboxAccessLevel(db,user,id){return globalThis.appPwRoute.readable.includes(id)?{canRead:true}:null} export async function listAccessibleMailboxIds(){return globalThis.appPwRoute.readable}",
 	"@/lib/auth/activity": "export async function recordAuthActivity(env,input){globalThis.appPwRoute.audit.push(input.action)}",
 	// The app-password module pulls in the verification stack, which these routes do not use.
 	"@/lib/auth/app-passwords": "export async function availableAppPasswordProtocols(){return globalThis.appPwRoute.protocols ?? ['jmap']}",

@@ -26,6 +26,7 @@ export async function importGravatarAvatar(
 		).join("");
 		const response = await fetch(
 			`https://gravatar.com/avatar/${hash}?d=404&r=g&s=256`,
+			{ signal: AbortSignal.timeout(3000) },
 		);
 		if (!response.ok) return null;
 
@@ -40,7 +41,7 @@ export async function importGravatarAvatar(
 		const key = contactAvatarKeyFor(userId, normalizedEmail);
 		await env.BUCKET.put(key, image, { httpMetadata: { contentType } });
 		try {
-			const previewResponse = await fetch(`https://gravatar.com/avatar/${hash}?d=404&r=g&s=16`);
+			const previewResponse = await fetch(`https://gravatar.com/avatar/${hash}?d=404&r=g&s=16`, { signal: AbortSignal.timeout(3000) });
 			if (previewResponse.ok) {
 				const previewType = previewResponse.headers.get("Content-Type")?.split(";", 1)[0]?.trim().toLowerCase();
 				const preview = await previewResponse.arrayBuffer();

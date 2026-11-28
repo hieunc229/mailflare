@@ -1,4 +1,4 @@
-import { and, asc, count, countDistinct, desc, eq, inArray, sql } from "drizzle-orm";
+import { and, asc, count, countDistinct, eq, getTableColumns, inArray, sql } from "drizzle-orm";
 import { emailChangesSince, threadChangesSince } from "./changes";
 import { folders, messages } from "@/db/schema";
 import { DRAFT_FILTER_PARAMS, draftsVisibleTo, logMessageHidden, privateDraftForStatus } from "@/lib/email/draft-access";
@@ -10,11 +10,11 @@ import { resolveThreadId } from "@/lib/email/threading";
 import { storeMessageAttachments } from "@/lib/email/attachments";
 import { deleteMessageWithObjects } from "@/lib/email/message-cleanup";
 import { LIMITS, KEYWORD_FLAGGED, KEYWORD_SEEN } from "./constants";
-import { JmapError, invalidArguments } from "./errors";
+import { JmapError } from "./errors";
 import { decodeBlobId, decodeMailboxRef, roleToStatus } from "./ids";
 import { buildEmailObject, loadAttachmentsByMessage, resolveHeaderProperty } from "./email-objects";
 import { importFlags, parseReceivedAt, resolveDraftsMailbox } from "./email-import-utils";
-import { filterToSql, mailboxRefCondition, sortToSql } from "./email-query";
+import { filterToSql, sortToSql } from "./email-query";
 import { getEmailState } from "./state";
 import { loadPromotionModes } from "@/lib/promotions/settings";
 import { listAccessibleMailboxIdSet, listJmapMailboxes } from "./access";
@@ -81,7 +81,14 @@ async function scope(ctx: JmapContext) {
 	return { ids, condition: and(mailboxScope, draftsVisibleTo(ctx.auth.userId))! };
 }
 
-export async function loadMessages(ctx: JmapContext, ids: string[]): Promise<MessageRow[]> {
+const BODY_PROPERTIES = new Set(["size", "preview", "bodyStructure", "bodyValues", "textBody", "htmlBody"]);
+
+/** Whether any requested Email property is computed from the message bodies (null or omitted means all). */
+export function emailGetNeedsBodies(properties: string[] | null | undefined): boolean {
+	return !properties || properties.some((property) => BODY_PROPERTIES.has(property));
+}
+
+export async function loadMessages(ctx: JmapContext, ids: string[], options: { bodies?: boolean } = {}): Promise<MessageRow[]> {
 	if (ids.length === 0) return [];
 	const { ids: accessible, condition } = await scope(ctx);
 	// D1 caps bound parameters per query at 100, and the scope predicate
@@ -91,8 +98,12 @@ export async function loadMessages(ctx: JmapContext, ids: string[]): Promise<Mes
 	const batch = Math.max(1, 100 - accessible.length - DRAFT_FILTER_PARAMS);
 	const unique = [...new Set(ids)];
 	const rows: MessageRow[] = [];
+	// Without bodies every other column is still read; the two body fields come back null.
+	const { textBody: _text, htmlBody: _html, ...metadata } = getTableColumns(messages);
 	for (let offset = 0; offset < unique.length; offset += batch) {
-		rows.push(...(await ctx.db.select().from(messages).where(and(condition, inArray(messages.id, unique.slice(offset, offset + batch))))));
+		const where = and(condition, inArray(messages.id, unique.slice(offset, offset + batch)));
+		if (options.bodies === false) rows.push(...(await ctx.db.select(metadata).from(messages).where(where)).map((row) => ({ ...row, textBody: null, htmlBody: null }) as MessageRow));
+		else rows.push(...(await ctx.db.select().from(messages).where(where)));
 	}
 	return rows;
 }
@@ -113,7 +124,7 @@ export const emailGet: JmapMethodHandler = async (ctx, args) => {
 	const fetchBodies = !!(args.fetchTextBodyValues || args.fetchHTMLBodyValues || args.fetchAllBodyValues);
 	const maxBodyValueBytes = Number(args.maxBodyValueBytes ?? 0);
 
-	const rows = await loadMessages(ctx, ids);
+	const rows = await loadMessages(ctx, ids, { bodies: emailGetNeedsBodies(properties) });
 	const attachments = await loadAttachmentsByMessage(ctx, rows.map((row) => row.id));
 	const promotionModes = await promotionModesOf(ctx, rows);
 	const found = new Set<string>();
@@ -130,9 +141,6 @@ export const emailGet: JmapMethodHandler = async (ctx, args) => {
 	});
 	return { accountId: ctx.accountId, state: await getEmailState(ctx), list, notFound: ids.filter((id) => !found.has(id)) };
 };
-
-/** How many ordered ids Email/query loads when it has to resolve an anchor or collapse threads. */
-const MATERIALISED_QUERY_LIMIT = 10_000;
 
 export const emailQuery: JmapMethodHandler = async (ctx, args) => {
 	const { ids: accessibleIds, condition } = await scope(ctx);
@@ -151,37 +159,33 @@ export const emailQuery: JmapMethodHandler = async (ctx, args) => {
 		return Number(row?.n ?? 0);
 	};
 
-	let page: string[];
-	let total: number | undefined;
-	if (!args.anchor && !collapse) {
-		// Plain paging is done in SQL, so neither the page nor the total is bounded.
-		if (args.calculateTotal || position < 0) total = await countTotal();
-		if (position < 0) position = Math.max(total! + position, 0);
-		const rows = await ctx.db.select({ id: messages.id }).from(messages).where(where).orderBy(...order).limit(limit).offset(position);
-		page = rows.map((row) => row.id);
-	} else {
-		// Anchors and collapsed threads are resolved by materialising the ordered
-		// id list up to a bound; positions past it are not reachable this way.
-		const allRows = await ctx.db
-			.select({ id: messages.id, thread: threadKey })
+	// Collapsing keeps the first message of each thread in the requested order; an anchor's position is its rank in that set.
+	const orderBy = sql.join(order, sql`, `);
+	let base = where;
+	if (collapse) {
+		const firstOfThread = ctx.db
+			.select({ id: messages.id, rn: sql<number>`row_number() over (partition by ${threadKey} order by ${orderBy})`.as("rn") })
 			.from(messages)
 			.where(where)
-			.orderBy(...order)
-			.limit(MATERIALISED_QUERY_LIMIT);
-		let ordered = allRows.map((row) => row.id);
-		if (collapse) {
-			const seen = new Set<string>();
-			ordered = allRows.filter((row) => (seen.has(row.thread) ? false : (seen.add(row.thread), true))).map((row) => row.id);
-		}
-		if (args.anchor) {
-			const index = ordered.indexOf(String(args.anchor));
-			if (index < 0) return { type: "anchorNotFound" };
-			// An offset that reaches before the first result clamps to 0 (RFC 8620 §5.5).
-			position = Math.max(index + Number(args.anchorOffset ?? 0), 0);
-		} else if (position < 0) position = Math.max(ordered.length + position, 0);
-		page = ordered.slice(position, position + limit);
-		if (args.calculateTotal) total = allRows.length < MATERIALISED_QUERY_LIMIT ? ordered.length : await countTotal();
+			.as("first_of_thread");
+		base = inArray(messages.id, ctx.db.select({ id: firstOfThread.id }).from(firstOfThread).where(eq(firstOfThread.rn, 1)));
 	}
+	if (args.anchor) {
+		const ranked = ctx.db
+			.select({ id: messages.id, rn: sql<number>`row_number() over (order by ${orderBy})`.as("rn") })
+			.from(messages)
+			.where(base)
+			.as("ranked");
+		const [hit] = await ctx.db.select({ rn: ranked.rn }).from(ranked).where(eq(ranked.id, String(args.anchor)));
+		if (!hit) return { type: "anchorNotFound" };
+		// An offset that reaches before the first result clamps to 0 (RFC 8620 §5.5). Number(): PostgreSQL returns bigint as text.
+		position = Math.max(Number(hit.rn) - 1 + Number(args.anchorOffset ?? 0), 0);
+	}
+	let total: number | undefined;
+	if (args.calculateTotal || position < 0) total = await countTotal();
+	if (position < 0) position = Math.max(total! + position, 0);
+	const rows = await ctx.db.select({ id: messages.id }).from(messages).where(base).orderBy(...order).limit(limit).offset(position);
+	const page = rows.map((row) => row.id);
 
 	return {
 		accountId: ctx.accountId,
@@ -303,7 +307,31 @@ async function createDraft(ctx: JmapContext, value: Record<string, unknown>, acc
 	return { id };
 }
 
-export const emailSet: JmapMethodHandler = async (ctx, args) => {
+/** D1 binds at most 100 parameters: up to 5 set values plus the ids. */
+const UPDATE_CHUNK = 90;
+
+/** One UPDATE per distinct change set and chunk of ids, run together. */
+async function updateGrouped(ctx: JmapContext, items: Array<{ id: string; set: Partial<MessageRow> }>): Promise<void> {
+	const groups = new Map<string, { set: Partial<MessageRow>; ids: string[] }>();
+	for (const { id, set } of items) {
+		const key = JSON.stringify(set);
+		const group = groups.get(key) ?? { set, ids: [] };
+		group.ids.push(id);
+		groups.set(key, group);
+	}
+	const statements: PromiseLike<unknown>[] = [];
+	for (const { set, ids } of groups.values()) {
+		for (let offset = 0; offset < ids.length; offset += UPDATE_CHUNK) {
+			statements.push(ctx.db.update(messages).set(set).where(inArray(messages.id, ids.slice(offset, offset + UPDATE_CHUNK))));
+		}
+	}
+	await Promise.all(statements);
+}
+
+export const emailSet: JmapMethodHandler = async (callerCtx, args) => {
+	// Write handlers get memo: null, which reloads the access lists on every call. Mailbox access cannot change
+	// inside Email/set, so a call-local memo is safe; the change scope is dropped before newState is read.
+	const ctx: JmapContext = { ...callerCtx, memo: {} };
 	const oldState = await getEmailState(ctx);
 	if (args.ifInState && args.ifInState !== oldState) return { type: "stateMismatch" };
 	const accessible = await listAccessibleMailboxIdSet(ctx);
@@ -329,6 +357,8 @@ export const emailSet: JmapMethodHandler = async (ctx, args) => {
 		created[creationId] = row ? buildEmailObject(row, [], { fetchBodies: false, maxBodyValueBytes: 0, promotionModes: await promotionModesOf(ctx, [row]) }) : { id: result.id };
 	}
 
+	const folderChecks = new Map<string, Promise<boolean>>();
+	const pending: Array<{ id: string; set: Partial<MessageRow>; row: MessageRow }> = [];
 	const updates = Object.entries((args.update ?? {}) as Record<string, Record<string, unknown>>);
 	const rows = await loadMessages(ctx, updates.map(([id]) => id));
 	const byId = new Map(rows.map((row) => [row.id, row]));
@@ -353,8 +383,13 @@ export const emailSet: JmapMethodHandler = async (ctx, args) => {
 		}
 		if (move && typeof move.folderId === "string") {
 			// A folder id in a mailboxIds patch is client input: it must be a folder of the message's own mailbox.
-			const [folder] = await ctx.db.select({ id: folders.id }).from(folders).where(and(eq(folders.id, move.folderId), eq(folders.mailboxId, row.mailboxId))).limit(1);
-			if (!folder) {
+			const key = `${row.mailboxId}:${move.folderId}`;
+			let known = folderChecks.get(key);
+			if (!known) {
+				known = ctx.db.select({ id: folders.id }).from(folders).where(and(eq(folders.id, move.folderId), eq(folders.mailboxId, row.mailboxId))).limit(1).then((found) => found.length > 0);
+				folderChecks.set(key, known);
+			}
+			if (!(await known)) {
 				notUpdated[id] = { type: "invalidProperties", properties: ["mailboxIds"], description: "Unknown folder" };
 				continue;
 			}
@@ -367,10 +402,13 @@ export const emailSet: JmapMethodHandler = async (ctx, args) => {
 			if (move.status !== undefined) Object.assign(set, { status: move.status }, privateDraftForStatus(move.status));
 			if (move.folderId !== undefined) set.folderId = move.folderId;
 		}
-		if (Object.keys(set).length) await ctx.db.update(messages).set(set).where(eq(messages.id, id));
+		if (Object.keys(set).length) pending.push({ id, set, row });
+		updated[id] = null;
+	}
+	await updateGrouped(ctx, pending);
+	for (const { set, row } of pending) {
 		// Moved into Drafts, the message is gone for the mailbox's other readers.
 		if (set.privateDraft && !row.privateDraft) await logMessageHidden(ctx.db, row);
-		updated[id] = null;
 	}
 
 	// JMAP destroy is permanent; Mailflare keeps a trash, so destroy moves there
@@ -378,6 +416,7 @@ export const emailSet: JmapMethodHandler = async (ctx, args) => {
 	const destroyIds = (args.destroy ?? []) as string[];
 	const destroyRows = await loadMessages(ctx, destroyIds);
 	const destroyById = new Map(destroyRows.map((row) => [row.id, row]));
+	const trashIds: string[] = [];
 	for (const id of destroyIds) {
 		const row = destroyById.get(id);
 		if (!row || !row.mailboxId) {
@@ -391,9 +430,11 @@ export const emailSet: JmapMethodHandler = async (ctx, args) => {
 			continue;
 		}
 		if (row.status === "trash" || row.status === "draft") await deleteMessageWithObjects(ctx.env, ctx.db, row.id, row.rawR2Key);
-		else await ctx.db.update(messages).set({ status: "trash", folderId: null }).where(eq(messages.id, id));
+		else trashIds.push(id);
 		destroyed.push(id);
 	}
+	await updateGrouped(ctx, trashIds.map((id) => ({ id, set: { status: "trash", folderId: null } })));
+	ctx.memo!.scope = undefined;
 
 	return { accountId: ctx.accountId, oldState, newState: await getEmailState(ctx), created, updated, destroyed, notCreated, notUpdated, notDestroyed };
 };
@@ -556,8 +597,9 @@ export const searchSnippetGet: JmapMethodHandler = async (ctx, args) => {
 	const highlight = (value: string | null) => {
 		if (!value) return null;
 		if (!term) return escape(value);
-		const re = new RegExp(term.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "ig");
-		return escape(value).replace(re, (match) => `<mark>${match}</mark>`);
+		// Split the raw text on the term and escape each piece, so a match can never cut an entity such as &amp;.
+		const re = new RegExp(`(${term.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")})`, "ig");
+		return value.split(re).map((piece, index) => (index % 2 ? `<mark>${escape(piece)}</mark>` : escape(piece))).join("");
 	};
 	const list = rows.map((row) => {
 		found.add(row.id);
@@ -571,5 +613,3 @@ export const searchSnippetGet: JmapMethodHandler = async (ctx, args) => {
 	});
 	return { accountId: ctx.accountId, list, notFound: ids.filter((id) => !found.has(id)) };
 };
-
-export { count, desc, mailboxRefCondition, invalidArguments };

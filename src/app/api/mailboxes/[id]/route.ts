@@ -4,6 +4,7 @@ import { getDb } from "@/db";
 import { mailboxes, users } from "@/db/schema";
 import { requireUser } from "@/lib/auth/cookies";
 import { getEnv } from "@/lib/cloudflare";
+import { readJsonObject } from "@/lib/http/request";
 import { getMailboxSettingsAccess } from "@/lib/mailboxes/settings-access";
 import { ensureMailboxDomainRouting, removeMailboxDomainRouting } from "@/lib/mailboxes/domain-addresses";
 import { isPrimaryMailbox, tracksAccountIdentity } from "@/lib/profile/identity-utils";
@@ -47,7 +48,9 @@ export async function PATCH(request: Request, { params }: MailboxRouteParams) {
 	const env = getEnv();
 	const user = await requireUser(env, request);
 	if (!hasValidSessionMutationOrigin(request)) return NextResponse.json({ error: "Invalid origin" }, { status: 403 });
-	const parsed = updateMailboxSchema.safeParse(await request.json());
+	const body = await readJsonObject(request);
+	if (!body) return NextResponse.json({ error: "Request body must be a JSON object" }, { status: 400 });
+	const parsed = updateMailboxSchema.safeParse(body);
 
 	if (!parsed.success) {
 		return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });

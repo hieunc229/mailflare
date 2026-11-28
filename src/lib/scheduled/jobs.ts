@@ -1,3 +1,4 @@
+import { purgeOldWebhookDeliveries } from "@/lib/email/webhook-retention";
 import { runAccountRetention } from "@/lib/accounts/deletion";
 import { runAgentMaintenance } from "@/lib/agent/maintenance";
 import { purgeExpiredAuthRows } from "@/lib/auth/purge";
@@ -44,6 +45,7 @@ export function dailyJobs(env: CloudflareEnv, now: Date): ScheduledJob[] {
 		{ name: "Scheduled backup", run: () => runScheduledDatabaseBackup(env, now) },
 		{ name: "Account retention", run: () => runAccountRetention(env, now) },
 		{ name: "Expired auth row purge", run: () => purgeExpiredAuthRows(env, now) },
+		{ name: "Webhook delivery retention", run: () => purgeOldWebhookDeliveries(env, now) },
 		{ name: "Drive trash retention", run: () => runDriveTrashRetention(env, now) },
 		{ name: "JMAP change retention", run: () => runJmapChangeRetention(env, now) },
 		{ name: "Deliverability daily job", run: () => runDeliverabilityDaily(env, now) },

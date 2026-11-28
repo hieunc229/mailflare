@@ -64,11 +64,11 @@ export const emailSubmissionSet: JmapMethodHandler = async (ctx, args) => {
 	const created: Record<string, unknown> = {};
 	const notCreated: Record<string, unknown> = {};
 	const destroyedEmails: string[] = [];
+	const accessible = await listJmapMailboxes(ctx);
 
 	for (const [creationId, value] of Object.entries((args.create ?? {}) as Record<string, Record<string, unknown>>)) {
 		const emailId = ctx.createdIds[String(value.emailId).replace(/^#/, "")] ?? String(value.emailId ?? "");
 		const identity = typeof value.identityId === "string" ? decodeIdentityId(value.identityId) : null;
-		const accessible = await listJmapMailboxes(ctx);
 		if (!identity || !accessible.some((mailbox) => mailbox.id === identity.mailboxId && mailbox.permission !== "read_only")) {
 			notCreated[creationId] = { type: "invalidProperties", properties: ["identityId"] };
 			continue;
@@ -82,6 +82,12 @@ export const emailSubmissionSet: JmapMethodHandler = async (ctx, args) => {
 		const [agentDraft] = await ctx.db.select({ draftId: agentDraftMetadata.draftId }).from(agentDraftMetadata).where(eq(agentDraftMetadata.draftId, draft.id)).limit(1);
 		if (agentDraft) {
 			notCreated[creationId] = { type: "forbidden", description: "Review and confirm this AI draft in Mailflare before sending" };
+			continue;
+		}
+		// Claim the draft before sending, so a concurrent retry cannot send it twice.
+		const claimed = await ctx.db.update(messages).set({ status: "trash" }).where(and(eq(messages.id, draft.id), eq(messages.status, "draft"))).returning({ id: messages.id });
+		if (claimed.length === 0) {
+			notCreated[creationId] = { type: "invalidProperties", properties: ["emailId"], description: "Not a draft of this account" };
 			continue;
 		}
 		try {
@@ -124,6 +130,8 @@ export const emailSubmissionSet: JmapMethodHandler = async (ctx, args) => {
 				mdnBlobIds: [],
 			};
 		} catch (error) {
+			// Nothing was sent: hand the draft back so the client can retry.
+			await ctx.db.update(messages).set({ status: "draft" }).where(and(eq(messages.id, draft.id), eq(messages.status, "trash")));
 			if (error instanceof SuppressedRecipientError) {
 				notCreated[creationId] = suppressedSubmissionError(error, [draft.toAddr, draft.ccAddr, draft.bccAddr]);
 				continue;

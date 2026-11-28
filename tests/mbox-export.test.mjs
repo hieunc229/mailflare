@@ -28,10 +28,12 @@ await build({
 });
 
 const load = (name) => import(pathToFileURL(join(outDir, `${name}.mjs`)).href);
-const { exportMailboxToMbox } = await load("exporter");
+const { exportMailboxToMboxStream } = await load("exporter");
 const { splitMboxBytes, splitMboxMessages } = await load("importer");
 const { SqliteDatabase } = await load("database");
 const { applyMigrations } = await load("migrate");
+
+const text = (stream) => new Response(stream).text();
 
 async function exportBodies(t, bodies) {
 	const database = new SqliteDatabase(join(outDir, `${crypto.randomUUID()}.sqlite`));
@@ -41,7 +43,7 @@ async function exportBodies(t, bodies) {
 	database.db.pragma("foreign_keys = OFF");
 	const insert = database.db.prepare("INSERT INTO messages (id, user_id, mailbox_id, direction, from_addr, to_addr, subject, text_body, status, created_at) VALUES (?, 'u1', 'mbx1', 'inbound', 'maya@example.com', 'me@example.com', ?, ?, 'inbox', ?)");
 	bodies.forEach((body, index) => insert.run(`msg${index}`, `Message ${index}`, body, 1_790_000_000 + index));
-	return exportMailboxToMbox({ DB: database }, "mbx1", "u1");
+	return text(exportMailboxToMboxStream({ DB: database }, "mbx1", "u1"));
 }
 
 test("a body whose first line starts with From is escaped, so the export reads back as one message", async (t) => {
@@ -83,8 +85,48 @@ test("another user's draft is left out of the export", async (t) => {
 	insert.run("m-sent", "u1", "Sent", "shared", "sent", 0);
 	insert.run("m-mine", "u2", "Mine", "own draft", "draft", 1);
 	insert.run("m-theirs", "u1", "Theirs", "private draft", "draft", 1);
-	const mbox = await exportMailboxToMbox({ DB: database }, "mbx1", "u2");
+	const mbox = await text(exportMailboxToMboxStream({ DB: database }, "mbx1", "u2"));
 	assert.match(mbox, /Subject: Sent/);
 	assert.match(mbox, /Subject: Mine/);
 	assert.doesNotMatch(mbox, /Theirs|private draft/);
+});
+
+function bigMailbox(t, count) {
+	const database = new SqliteDatabase(join(outDir, `${crypto.randomUUID()}.sqlite`));
+	t.after(() => database.db.close());
+	return applyMigrations(database, join(root, "drizzle/migrations")).then(() => {
+		database.db.pragma("foreign_keys = OFF");
+		const insert = database.db.prepare("INSERT INTO messages (id, user_id, mailbox_id, direction, from_addr, to_addr, subject, text_body, status, created_at) VALUES (?, 'u1', 'mbx1', 'inbound', 'a@example.com', 'me@example.com', ?, 'body', 'inbox', 1_790_000_000)");
+		for (let i = 0; i < count; i += 1) insert.run(`m${String(i).padStart(3, "0")}`, `S${i}`);
+		return database;
+	});
+}
+
+test("a mailbox larger than one page exports every message once, ties on created_at included", async (t) => {
+	const database = await bigMailbox(t, 450);
+	const parts = splitMboxMessages(await text(exportMailboxToMboxStream({ DB: database }, "mbx1", "u1")));
+	assert.equal(parts.length, 450);
+	const ids = parts.map((part) => /Message-ID: <(m\d+)@/.exec(part)[1]);
+	assert.deepEqual(ids, Array.from({ length: 450 }, (_, i) => `m${String(i).padStart(3, "0")}`));
+	for (let i = 0; i < 450; i += 1) assert.equal(parts.filter((part) => part.includes(`Subject: S${i}\r\n`) || part.includes(`Subject: S${i}\n`)).length, 1);
+});
+
+test("the export reads the mailbox page by page, only when read", async (t) => {
+	const database = await bigMailbox(t, 450);
+	let queries = 0;
+	const prepare = database.prepare.bind(database);
+	database.prepare = (sql) => { if (/from "messages"/i.test(sql)) queries += 1; return prepare(sql); };
+	const stream = exportMailboxToMboxStream({ DB: database }, "mbx1", "u1");
+	await new Promise((resolve) => setTimeout(resolve, 20));
+	assert.equal(queries, 0);
+	const reader = stream.getReader();
+	await reader.read();
+	assert.equal(queries, 1);
+	while (!(await reader.read()).done);
+	assert.equal(queries, 3);
+});
+
+test("an empty mailbox exports an empty body", async (t) => {
+	const database = await bigMailbox(t, 0);
+	assert.equal(await text(exportMailboxToMboxStream({ DB: database }, "mbx1", "u1")), "");
 });
