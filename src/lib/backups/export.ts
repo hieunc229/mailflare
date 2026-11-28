@@ -1,3 +1,5 @@
+import { getTableColumns, getTableName, is, Table } from "drizzle-orm";
+import * as schema from "@/db/schema";
 import { dialectOf, listColumnNames, listTableNames, quoteIdentifier } from "@/db/introspect";
 import type { DatabaseDialect } from "@/db/dialect";
 import type { BackupTableGroupId, DatabaseBackupDocument, DatabaseBackupTable, DatabaseRecord } from "./types";
@@ -125,9 +127,9 @@ export async function restoreDatabaseRecords(db: D1Database, content: ArrayBuffe
 	// Format 1 predates the drive group, so its writers could not have named its
 	// tables in includedTables; only format 2 documents must cover every group.
 	if (document.includedTables && !groupsForDocumentVersion(document.version).every((group) => group.tables.some((table) => document.includedTables?.includes(table)))) throw new Error("This backup contains selected table groups only. Restore requires a backup that includes every table group.");
-	mergeLegacyMessageBodies(document);
-	fillMissingBackupTables(document);
+	// Before any step that reads rows, so a malformed record gets this error instead of a TypeError.
 	validateDatabaseBackup(document);
+	mergeLegacyMessageBodies(document);
 	const dialect = dialectOf(db);
 	const existing = await listTableNames(db);
 	const sharedLinksTable = existing.has("shared_attachment_links");
@@ -156,6 +158,36 @@ export async function restoreDatabaseRecords(db: D1Database, content: ArrayBuffe
 	// database drops them here instead of failing after the teardown.
 	const deliverabilityColumns = new Map<string, Set<string>>();
 	for (const table of ["domain_deliverability", "deliverability_reports"]) if (existing.has(table)) deliverabilityColumns.set(table, await listColumnNames(db, table));
+	const columnsFor = (table: DatabaseBackupTable): Set<string> | null =>
+		table === "users"
+			? userColumns
+			: table === "booking_events"
+				? bookingColumns
+				: table === "passkey_credentials"
+					? passkeyColumns
+					: table === "messages"
+						? messageColumns
+						: table === "mailbox_promotion_settings"
+							? promotionSettingColumns
+							: deliverabilityColumns.get(table) ?? null;
+	// Every other table is restored column for column, so a column the target lacks would fail its insert after the teardown.
+	const strictColumns = new Map<string, Set<string>>();
+	for (const table of restoreTables) if (!columnsFor(table) && (document.tables[table]?.length ?? 0) > 0) strictColumns.set(table, await listColumnNames(db, table));
+	for (const [table, available] of strictColumns) {
+		const omitted = OMITTED_COLUMNS[table as DatabaseBackupTable] ?? [];
+		for (const row of document.tables[table as DatabaseBackupTable] ?? []) if (Object.keys(row).some((column) => !omitted.includes(column) && !available.has(column))) throw new Error(`Backup contains an invalid ${table} record`);
+	}
+	const requiredColumns = requiredColumnsByTable();
+	for (const table of restoreTables) {
+		const available = columnsFor(table) ?? strictColumns.get(table) ?? null;
+		for (const row of document.tables[table] ?? []) assertRequiredColumns(table, row, requiredColumns.get(table), available);
+	}
+	// Before the fill below adds derived columns, which would let a row with nothing recognisable look usable.
+	for (const table of restoreTables) {
+		for (const row of document.tables[table] ?? []) assertRecognisedColumns(table, row, columnsFor(table));
+	}
+	fillMissingBackupTables(document);
+	// Every record was validated above, so the statements built per batch below cannot fail on the data after the teardown.
 	// Mark users deleted before removing them: the passkey trigger permits the
 	// cascade to remove the last credential only for an account that is being
 	// purged. Deleting users first also empties the table the restore inserts
@@ -172,18 +204,7 @@ export async function restoreDatabaseRecords(db: D1Database, content: ArrayBuffe
 	for (const table of restoreTables) {
 		const rows = document.tables[table] ?? [];
 		for (let index = 0; index < rows.length; index += INSERT_BATCH_SIZE) {
-			const columns = table === "users"
-				? userColumns
-				: table === "booking_events"
-					? bookingColumns
-					: table === "passkey_credentials"
-						? passkeyColumns
-						: table === "messages"
-							? messageColumns
-							: table === "mailbox_promotion_settings"
-								? promotionSettingColumns
-								: deliverabilityColumns.get(table) ?? null;
-			const statements = rows.slice(index, index + INSERT_BATCH_SIZE).map((row) => createInsertStatement(db, dialect, table, row, columns));
+			const statements = rows.slice(index, index + INSERT_BATCH_SIZE).map((row) => createInsertStatement(db, dialect, table, row, columnsFor(table)));
 			// MySQL checks foreign keys per statement, so the batch suspends them for its own connection.
 			if (statements.length > 0) await db.batch(dialect === "mysql" ? [db.prepare("SET FOREIGN_KEY_CHECKS = 0"), ...statements, db.prepare("SET FOREIGN_KEY_CHECKS = 1")] : statements);
 		}
@@ -250,12 +271,42 @@ function fillMissingBackupTables(document: DatabaseBackupDocument): void {
 	}
 }
 
+/** Per table, the columns a row must carry: NOT NULL, no default and not generated, from the app's own table definitions. */
+function requiredColumnsByTable(): Map<string, string[]> {
+	const required = new Map<string, string[]>();
+	for (const value of Object.values(schema)) {
+		if (!is(value, Table)) continue;
+		const name = getTableName(value);
+		const columns = Object.values(getTableColumns(value))
+			.filter((column) => column.notNull && !column.hasDefault && !(column as { autoIncrement?: boolean }).autoIncrement)
+			.map((column) => column.name);
+		required.set(name, columns);
+	}
+	return required;
+}
+
+/** A row must carry every required column the target has, and none of them may be null; otherwise its insert would fail after the teardown. */
+function assertRequiredColumns(table: DatabaseBackupTable, row: DatabaseRecord, required: string[] | undefined, availableColumns: Set<string> | null): void {
+	for (const column of required ?? []) {
+		if (availableColumns && !availableColumns.has(column)) continue;
+		if (row[column] === undefined || row[column] === null) throw new Error(`Backup contains an invalid ${table} record`);
+	}
+}
+
+/** A row must name at least one column the target has; otherwise its insert would fail after the teardown. */
+function assertRecognisedColumns(table: DatabaseBackupTable, row: DatabaseRecord, availableColumns: Set<string> | null): void {
+	const omitted = OMITTED_COLUMNS[table] ?? [];
+	if (!Object.keys(row).some((column) => !omitted.includes(column) && (!availableColumns || availableColumns.has(column)))) throw new Error(`Backup contains an invalid ${table} record`);
+}
+
 function validateDatabaseBackup(document: DatabaseBackupDocument): void {
 	for (const table of BACKUP_TABLES) {
 		for (const row of document.tables[table] ?? []) {
 			if (!row || typeof row !== "object" || Array.isArray(row)) {
 				throw new Error(`Backup contains an invalid ${table} record`);
 			}
+			// Column values are scalars; a nested value cannot be bound and would fail the insert after the teardown.
+			if (Object.values(row).some((value) => value !== null && typeof value === "object")) throw new Error(`Backup contains an invalid ${table} record`);
 		}
 	}
 }
