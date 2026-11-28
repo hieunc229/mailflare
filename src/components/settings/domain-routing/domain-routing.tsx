@@ -161,6 +161,15 @@ export function DomainRouting({ domain }: DomainRoutingProps = {}) {
 
 			{(!domain && isMailboxLoading) || rules.isLoading ? (
 				<CardGridSkeleton />
+			) : rules.isError ? (
+				<Card>
+					<CardContent className="pt-6">
+						<div role="alert" className="flex items-center gap-3 rounded-2xl bg-red-50 px-5 py-4 text-sm text-red-700">
+							<span className="flex-1">{t("list.loadFailed")}</span>
+							<Button type="button" variant="outline" size="sm" onClick={() => void rules.refetch()}>{t("webhooks.retry")}</Button>
+						</div>
+					</CardContent>
+				</Card>
 			) : !domain && !mailboxId ? (
 				<Card>
 					<CardContent className="pt-6 text-sm text-neutral-500">

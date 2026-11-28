@@ -164,7 +164,13 @@ export function InboxRules() {
         </Button>
       </div>
       <div className="rounded-3xl bg-white p-6">
-        {(rules.data?.rules ?? []).length === 0 && (
+        {rules.isError && (
+          <div role="alert" className="flex items-center gap-3 rounded-2xl bg-red-50 px-5 py-4 text-sm text-red-700">
+            <span className="flex-1">{t("list.loadFailed")}</span>
+            <Button type="button" variant="outline" size="sm" onClick={() => void rules.refetch()}>{t("webhooks.retry")}</Button>
+          </div>
+        )}
+        {!rules.isError && (rules.data?.rules ?? []).length === 0 && (
           <p className="text-sm text-neutral-500">{t("rules.none")}</p>
         )}
         {remove.isError && (

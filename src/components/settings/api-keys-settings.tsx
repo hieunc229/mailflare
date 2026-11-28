@@ -34,6 +34,7 @@ export function ApiKeysSettings() {
 	const [createOpen, setCreateOpen] = useState(false);
 	const [revokingId, setRevokingId] = useState<string | null>(null);
 	const [error, setError] = useState<string | null>(null);
+	const [loadError, setLoadError] = useState<string | null>(null);
 	const [name, setName] = useState("");
 	const [mcpAllowed, setMcpAllowed] = useState(false);
 	const [createdMcpAllowed, setCreatedMcpAllowed] = useState(false);
@@ -45,7 +46,7 @@ export function ApiKeysSettings() {
 
 	useEffect(() => {
 		let cancelled = false;
-		const refresh = () => void loadManagedApiKeys().then((items) => { if (!cancelled) { setKeys(items); setError(null); } }).catch((cause) => { if (!cancelled) setError(cause instanceof Error ? cause.message : t("apiKeys.loadFailed")); }).finally(() => { if (!cancelled) setLoading(false); });
+		const refresh = () => void loadManagedApiKeys().then((items) => { if (!cancelled) { setKeys(items); setLoadError(null); } }).catch((cause) => { if (!cancelled) setLoadError(cause instanceof Error ? cause.message : t("apiKeys.loadFailed")); }).finally(() => { if (!cancelled) setLoading(false); });
 		refresh();
 		window.addEventListener("mailflare:api-keys-changed", refresh);
 		return () => { cancelled = true; window.removeEventListener("mailflare:api-keys-changed", refresh); };
@@ -122,10 +123,11 @@ export function ApiKeysSettings() {
 		/>
 		</div>
 		<p className="text-sm text-neutral-500">{t("apiKeys.description")}</p>
-		{error && !createOpen && <p role="alert" className="text-sm text-red-600">{error}</p>}
+		{(error ?? (keys.length > 0 ? loadError : null)) && !createOpen && <p role="alert" className="text-sm text-red-600">{error ?? loadError}</p>}
 		<section className="space-y-3">
 			{loading && <SectionRowSkeleton />}
-			{!loading && keys.length === 0 && <p className="rounded-2xl bg-white px-5 py-4 text-sm text-neutral-500">{t("apiKeys.none")}</p>}
+			{!loading && !!loadError && keys.length === 0 && <div role="alert" className="flex items-center gap-3 rounded-2xl bg-red-50 px-5 py-4 text-sm text-red-700"><span className="flex-1">{t("list.loadFailed")}</span><Button type="button" variant="outline" size="sm" onClick={() => window.dispatchEvent(new Event("mailflare:api-keys-changed"))}>{t("webhooks.retry")}</Button></div>}
+			{!loading && !loadError && keys.length === 0 && <p className="rounded-2xl bg-white px-5 py-4 text-sm text-neutral-500">{t("apiKeys.none")}</p>}
 			<List>
 				{keys.map((key) => <ListRow key={key.id} className="px-5 py-4">
 					<span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-blue-100 text-blue-700"><KeyRound className="h-5 w-5" /></span>

@@ -8,7 +8,9 @@ import type { InboxRule, InboxRuleInput, InboxRulesResponse, RuleFoldersResponse
 export async function fetchInboxRules(mailboxId: string): Promise<InboxRulesResponse> {
 	const params = new URLSearchParams({ mailboxId });
 	const response = await authFetch(`/api/routing-rules?${params.toString()}`);
-	return (await response.json()) as InboxRulesResponse;
+	const data = (await response.json()) as InboxRulesResponse & { error?: unknown; code?: string };
+	if (!response.ok) throw requestError({ error: ruleErrorMessage(data.error, "Failed to load rules"), code: data.code }, "Failed to load rules");
+	return data;
 }
 
 export async function fetchRuleFolders(mailboxId: string): Promise<RuleFoldersResponse> {
