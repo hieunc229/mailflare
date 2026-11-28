@@ -270,7 +270,7 @@ export function ShortcutsProvider({
         title: t("shortcut.goSent"),
         category: "Navigation",
         icon: Send,
-        shortcut: "g t",
+        shortcut: "g s",
         perform: () => router.push("/sent"),
       },
       {
