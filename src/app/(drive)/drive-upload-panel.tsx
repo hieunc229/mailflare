@@ -1,8 +1,10 @@
 "use client";
 
 import clsx from "clsx";
+import { useSyncExternalStore } from "react";
 import { AlertCircle, CheckCircle2, X } from "@/components/icons";
 import { useLanguage } from "@/components/language-provider";
+import { clearFinishedUploads, getUploads, subscribeUploads } from "./drive-upload";
 import type { DriveUploadEntry } from "./drive-upload-types";
 
 // Every upload of the session stacked in one card: a row per file with its bar and percentage.
@@ -26,7 +28,7 @@ export function DriveUploadPanel({ uploads, onClose }: { uploads: DriveUploadEnt
 							{entry.status === "done" && <CheckCircle2 size={16} className="shrink-0 text-green-600" aria-label={t("drive.uploadDone")} />}
 							{entry.status === "failed" && <AlertCircle size={16} className="shrink-0 text-red-600" aria-hidden="true" />}
 						</div>
-						{entry.status === "failed" ? <p className="mt-1 text-xs text-red-600">{entry.error ?? t("drive.uploadFailed", { name: entry.name })}</p> : (
+						{entry.status === "failed" ? <p role="alert" className="mt-1 text-xs text-red-600">{entry.error ?? t("drive.uploadFailed", { name: entry.name })}</p> : (
 							<div className="mt-1.5 flex items-center gap-3">
 								<div role="progressbar" aria-label={entry.name} aria-valuemin={0} aria-valuemax={100} aria-valuenow={entry.percent} className="h-1.5 min-w-0 flex-1 overflow-hidden rounded-full bg-neutral-200">
 									<div className={clsx("h-full rounded-full transition-[width] duration-200", entry.status === "done" ? "bg-green-600" : "bg-blue-600")} style={{ width: `${entry.percent}%` }} />
@@ -40,4 +42,10 @@ export function DriveUploadPanel({ uploads, onClose }: { uploads: DriveUploadEnt
 			</ul>
 		</section>
 	);
+}
+
+/** The panel fed by the module-level upload store, so progress ticks never re-render the file list. */
+export function DriveUploads() {
+	const uploads = useSyncExternalStore(subscribeUploads, getUploads, getUploads);
+	return <DriveUploadPanel uploads={uploads} onClose={clearFinishedUploads} />;
 }

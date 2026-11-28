@@ -12,6 +12,7 @@ const { DriveBulkActions } = await loadComponent("src/app/(drive)/drive-bulk-act
 	"@/components/icons": icon,
 	"@/components/language-provider": `export function useLanguage() { return { t: (key) => key }; }`,
 	"@/components/ui/button": button,
+	"./drive-utils": "export const flattenDriveFolders = () => [];",
 	"@/components/ui/confirm-dialog": `export async function confirmDestructive() { return true; }`,
 	"react-hot-toast": `export default { success: (m) => globalThis.__toasts.push(["ok", m]), error: (m) => globalThis.__toasts.push(["err", m]) };`,
 	"@/lib/auth/client": `export async function authFetch(url) { return globalThis.__respond(url); }`,

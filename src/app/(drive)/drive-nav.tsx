@@ -17,31 +17,13 @@ import { authFetch } from "@/lib/auth/client";
 import { formatDriveSize } from "@/lib/drive/utils";
 import { DRIVE_FOLDERS_EVENT, DRIVE_NEW_FOLDER_EVENT, DRIVE_REFRESH_EVENT, DRIVE_STORAGE_EVENT, DRIVE_UPLOAD_EVENT } from "./drive-events";
 import type { DriveStorageDetail } from "./drive-events";
+import { flattenDriveFolders } from "./drive-utils";
+import type { DriveFolderNode } from "./drive-utils";
 import { canDropDrive, driveDropHandlers } from "./drive-drag";
 import type { DriveDropTarget } from "./drive-drag";
 
 const itemClass = "flex cursor-pointer items-center gap-3 rounded-lg px-3 py-2 text-sm text-neutral-700 outline-none data-[highlighted]:bg-neutral-100";
 const FOLDERS_OPEN_KEY = "mailflare-drive-folders-open";
-
-type FolderNode = { id: string; name: string; parentId: string | null };
-
-function flattenFolders(folders: FolderNode[]): (FolderNode & { depth: number })[] {
-	const known = new Set(folders.map((folder) => folder.id));
-	const children = new Map<string | null, FolderNode[]>();
-	for (const folder of folders) {
-		const key = folder.parentId && known.has(folder.parentId) ? folder.parentId : null;
-		children.set(key, [...(children.get(key) ?? []), folder]);
-	}
-	const rows: (FolderNode & { depth: number })[] = [];
-	const visit = (parent: string | null, depth: number) => {
-		for (const folder of (children.get(parent) ?? []).sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: "base" }))) {
-			rows.push({ ...folder, depth });
-			visit(folder.id, depth + 1);
-		}
-	};
-	visit(null, 0);
-	return rows;
-}
 
 export function DriveNav({ onNavigate }: { onNavigate?: () => void }) {
 	const { t } = useLanguage();
@@ -54,7 +36,7 @@ export function DriveNav({ onNavigate }: { onNavigate?: () => void }) {
 	const [foldersOpen, setFoldersOpen] = useState(() => {
 		try { return localStorage.getItem(FOLDERS_OPEN_KEY) === "1"; } catch { /* storage unavailable */ return false; }
 	});
-	const [folders, setFolders] = useState<FolderNode[]>([]);
+	const [folders, setFolders] = useState<DriveFolderNode[]>([]);
 	const compact = minimal && !mobile;
 	const [creating, setCreating] = useState(false);
 	const [folderName, setFolderName] = useState("");
@@ -69,7 +51,7 @@ export function DriveNav({ onNavigate }: { onNavigate?: () => void }) {
 	}, []);
 
 	const loadFolders = useCallback(() => authFetch("/api/drive/folders", { redirectOnUnauthorized: false })
-		.then(async (response) => { if (response.ok) setFolders((await response.json() as { folders: FolderNode[] }).folders); })
+		.then(async (response) => { if (response.ok) setFolders((await response.json() as { folders: DriveFolderNode[] }).folders); })
 		.catch(() => { /* the list stays as it was */ }), []);
 
 	useEffect(() => {
@@ -106,7 +88,7 @@ export function DriveNav({ onNavigate }: { onNavigate?: () => void }) {
 		} finally { setSaving(false); }
 	}
 
-	const rows = useMemo(() => flattenFolders(folders), [folders]);
+	const rows = useMemo(() => flattenDriveFolders(folders), [folders]);
 	const parents = useMemo(() => new Map(folders.map((folder) => [folder.id, folder.parentId])), [folders]);
 	// True when `folderId` is one of `ancestorIds` or sits somewhere beneath one of them.
 	const isInside = useCallback((folderId: string, ancestorIds: Set<string>) => {

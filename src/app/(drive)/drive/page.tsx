@@ -29,9 +29,8 @@ import { ColumnResizeHandle, useDriveColumns } from "../drive-columns";
 import { DriveTypeFilter } from "../drive-type-filter";
 import { isDriveCategory } from "@/lib/drive/category-names";
 import type { DriveCategory } from "@/lib/drive/category-names";
-import { uploadDriveFile } from "../drive-upload";
-import type { DriveUploadEntry } from "../drive-upload-types";
-import { DriveUploadPanel } from "../drive-upload-panel";
+import { addUploads, patchUpload, runWithLimit, UPLOAD_CONCURRENCY, uploadDriveFile } from "../drive-upload";
+import { DriveUploads } from "../drive-upload-panel";
 import { clearDriveListings, readDriveListing, saveDriveListing } from "../drive-cache";
 import type { DriveListing } from "../drive-cache";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -55,7 +54,6 @@ export default function DrivePage() {
 	const types = useMemo(() => typesParam.split(",").filter((entry): entry is DriveCategory => isDriveCategory(entry)), [typesParam]);
 	const [listing, setListing] = useState<{ key: string; data: DriveListing } | null>(null);
 	const [failedKey, setFailedKey] = useState<string | null>(null);
-	const [uploads, setUploads] = useState<DriveUploadEntry[]>([]);
 	const uploadSeq = useRef(0);
 	const [sortKey, setSortKey] = useState<DriveSortKey>("name");
 	const columns = useDriveColumns();
@@ -100,13 +98,12 @@ export default function DrivePage() {
 			if (key !== requestRef.current) return;
 			setListing({ key, data }); setFailedKey(null);
 			window.dispatchEvent(new CustomEvent(DRIVE_STORAGE_EVENT, { detail: { used: data.storageUsed, limit: data.storageLimit } }));
-			window.dispatchEvent(new Event(DRIVE_FOLDERS_EVENT));
 		}).catch(() => {
 			if (key === requestRef.current) setFailedKey(key);
 		});
 	}, [view, folder, query, typesParam, requestKey]);
 	// Reload after a change; other cached listings may be stale now, so they are dropped.
-	const refresh = useCallback(() => { clearDriveListings(); return load(); }, [load]);
+	const refresh = useCallback(() => { clearDriveListings(); return load().then(() => { window.dispatchEvent(new Event(DRIVE_FOLDERS_EVENT)); }); }, [load]);
 
 	useEffect(() => { void load(); }, [load]);
 	// The search box follows the URL whenever the query in it changes.
@@ -127,8 +124,6 @@ export default function DrivePage() {
 		setSelectedIds((current) => { const present = new Set(items.map((item) => item.id)); const next = new Set([...current].filter((id) => present.has(id))); return next.size === current.size ? current : next; });
 	}
 
-	const patchUpload = useCallback((id: string, patch: Partial<DriveUploadEntry>) => setUploads((list) => list.map((entry) => (entry.id === id ? { ...entry, ...patch } : entry))), []);
-
 	const upload = useCallback(async (files: File[]) => {
 		if (!canWrite || !files.length) return;
 		const accepted: { id: string; file: File }[] = [];
@@ -137,9 +132,9 @@ export default function DrivePage() {
 			else accepted.push({ id: `upload-${(uploadSeq.current += 1)}`, file });
 		}
 		if (!accepted.length) return;
-		setUploads((list) => [...list, ...accepted.map(({ id, file }) => ({ id, name: file.name, percent: 0, resumed: false, status: "queued" as const }))]);
+		addUploads(accepted.map(({ id, file }) => ({ id, name: file.name, percent: 0, resumed: false, status: "queued" as const })));
 		let done = 0;
-		for (const { id, file } of accepted) {
+		await runWithLimit(accepted, UPLOAD_CONCURRENCY, async ({ id, file }) => {
 			patchUpload(id, { status: "uploading" });
 			try {
 				await uploadDriveFile(file, folder, (percent, resumed) => patchUpload(id, { percent, resumed }));
@@ -148,9 +143,9 @@ export default function DrivePage() {
 			} catch (error) {
 				patchUpload(id, { status: "failed", error: error instanceof Error && error.message ? error.message : t("drive.uploadFailed", { name: file.name }) });
 			}
-		}
+		});
 		if (done) await refresh();
-	}, [canWrite, folder, refresh, patchUpload, t]);
+	}, [canWrite, folder, refresh, t]);
 
 	const canWriteRef = useRef(canWrite);
 	useEffect(() => { canWriteRef.current = canWrite; }, [canWrite]);
@@ -332,7 +327,7 @@ export default function DrivePage() {
 									<span className="hidden text-neutral-600 md:block">{item.kind === "file" ? formatDriveSize(item.size) : "—"}</span>
 									<DropdownMenu.Root>
 										<DropdownMenu.Trigger asChild>
-											<button type="button" aria-label={t("drive.actions")} className="flex h-9 w-9 items-center justify-center rounded-full text-neutral-600 hover:bg-neutral-200"><MoreVertical size={16} /></button>
+											<button type="button" aria-label={`${t("drive.actions")}: ${item.name}`} className="flex h-9 w-9 items-center justify-center rounded-full text-neutral-600 hover:bg-neutral-200"><MoreVertical size={16} /></button>
 										</DropdownMenu.Trigger>
 										<DropdownMenu.Portal>
 											<DropdownMenu.Content align="end" sideOffset={4} className="z-[200] min-w-52 rounded-xl border border-neutral-200 bg-white p-1.5 shadow-xl">
@@ -385,7 +380,7 @@ export default function DrivePage() {
 				</DialogContent>
 			</Dialog>
 
-			<DriveUploadPanel uploads={uploads} onClose={() => setUploads((list) => list.filter((entry) => entry.status === "queued" || entry.status === "uploading"))} />
+			<DriveUploads />
 
 			<DriveShareDialog item={sharing} onClose={() => setSharing(null)} onChanged={() => void refresh()} />
 		</div>

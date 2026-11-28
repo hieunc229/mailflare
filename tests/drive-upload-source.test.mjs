@@ -26,14 +26,17 @@ await build({
 	outdir: dir, outExtension: { ".js": ".mjs" }, bundle: true, platform: "node", format: "esm", logLevel: "silent",
 	alias: { "@": join(root, "src") }, plugins: [stubAuthClient],
 });
-const { uploadDriveFile, uploadDriveSource, DriveUploadError } = await import(pathToFileURL(join(dir, "u.mjs")).href);
+const { uploadDriveFile, uploadDriveSource, DriveUploadError, runWithLimit, addUploads, patchUpload, getUploads, subscribeUploads, clearFinishedUploads } = await import(pathToFileURL(join(dir, "u.mjs")).href);
 
 let calls;
 let handler;
 let parts;
 /** What the next PUTs answer, oldest first: a status, [status, headers], or "network"; 200 when empty. */
 let putResults;
+/** Cumulative byte counts the fake XHR reports through upload.onprogress before each PUT completes. */
+let progressSteps;
 beforeEach(() => {
+	progressSteps = [];
 	calls = [];
 	parts = [];
 	putResults = [];
@@ -52,6 +55,7 @@ beforeEach(() => {
 		getResponseHeader(name) { return this.headers?.[name] ?? null; }
 		send(chunk) {
 			parts.push({ url: this.url, size: chunk.size });
+			for (const loaded of progressSteps) this.upload.onprogress?.({ lengthComputable: true, loaded });
 			const next = putResults.shift();
 			if (next === "network") { queueMicrotask(() => this.onerror()); return; }
 			[this.status, this.headers] = Array.isArray(next) ? next : [next ?? 200, {}];
@@ -178,4 +182,70 @@ test("an answer that will not change is not retried", async () => {
 	putResults = [413];
 	await assert.rejects(() => uploadDriveSource(source(), null, () => {}, undefined, naps().options), (error) => error.status === 413);
 	assert.equal(parts.length, 1);
+});
+
+test("progress is reported once per whole percent", async () => {
+	handler = (url, init) => (init.method === "POST" && url === "/api/drive/upload" ? json({ id: "drv_1", partSize: 100, parts: 1, uploaded: [] }) : json({ item: {} }));
+	progressSteps = [1, 1, 1, 2, 2];
+	const percents = [];
+	await uploadDriveSource(source({ size: 100, readPart: async () => new Blob([new Uint8Array(100)]) }), null, (percent) => percents.push(percent));
+	assert.deepEqual(percents, [0, 1, 2, 99]);
+});
+
+test("runWithLimit never runs more than the limit and starts in order", async () => {
+	let active = 0;
+	let max = 0;
+	const started = [];
+	await runWithLimit([0, 1, 2, 3, 4, 5, 6], 3, async (item) => {
+		active += 1;
+		max = Math.max(max, active);
+		started.push(item);
+		await new Promise((resolve) => setTimeout(resolve, 5));
+		active -= 1;
+	});
+	assert.equal(max, 3);
+	assert.deepEqual(started, [0, 1, 2, 3, 4, 5, 6]);
+});
+
+test("runWithLimit handles an empty list and a limit above the item count", async () => {
+	await runWithLimit([], 3, async () => assert.fail("no items"));
+	let active = 0;
+	let max = 0;
+	await runWithLimit([1, 2], 5, async () => { active += 1; max = Math.max(max, active); await new Promise((resolve) => setTimeout(resolve, 5)); active -= 1; });
+	assert.equal(max, 2);
+});
+
+const resetUploads = () => { for (const item of getUploads()) patchUpload(item.id, { status: "done" }); clearFinishedUploads(); };
+
+test("upload store snapshots are stable and patches replace one entry", () => {
+	resetUploads();
+	const entry = (id) => ({ id, name: id, percent: 0, resumed: false, status: "queued" });
+	let notified = 0;
+	const unsubscribe = subscribeUploads(() => { notified += 1; });
+	const before = getUploads().length;
+	addUploads([entry("a1"), entry("a2")]);
+	const first = getUploads();
+	assert.equal(getUploads(), first);
+	const a2 = first.find((item) => item.id === "a2");
+	patchUpload("a1", { percent: 40 });
+	assert.notEqual(getUploads(), first);
+	assert.equal(getUploads().find((item) => item.id === "a2"), a2);
+	assert.equal(getUploads().find((item) => item.id === "a1").percent, 40);
+	assert.equal(notified, 2);
+	unsubscribe();
+	patchUpload("a1", { percent: 50 });
+	assert.equal(notified, 2);
+	assert.equal(getUploads().length, before + 2);
+});
+
+test("clearFinishedUploads keeps queued and uploading entries", () => {
+	resetUploads();
+	const entry = (id, status) => ({ id, name: id, percent: 0, resumed: false, status });
+	addUploads([entry("d", "done"), entry("f", "failed"), entry("q", "queued"), entry("u", "uploading")]);
+	clearFinishedUploads();
+	assert.deepEqual(getUploads().map((item) => item.id), ["q", "u"]);
+	patchUpload("q", { status: "done" });
+	patchUpload("u", { status: "done" });
+	clearFinishedUploads();
+	assert.deepEqual(getUploads(), []);
 });

@@ -60,3 +60,28 @@ export function publicContentUrl(token: string, itemId: string, download = false
 export function canPreview(contentType: string): boolean {
 	return contentType.startsWith("image/") && contentType !== "image/svg+xml" || contentType.startsWith("video/") || contentType.startsWith("audio/") || contentType === "application/pdf" || contentType === "text/plain" || contentType === "text/csv" || contentType === "application/json";
 }
+
+export type DriveFolderNode = { id: string; name: string; parentId: string | null };
+
+/**
+ * Flattens the folder list depth-first for tree displays. A folder whose parent is not in the list is a root.
+ * Folders in `moving`, and everything beneath them, come back `disabled` (they cannot be move targets).
+ */
+export function flattenDriveFolders(folders: DriveFolderNode[], moving: ReadonlySet<string> = new Set()): (DriveFolderNode & { depth: number; disabled: boolean })[] {
+	const children = new Map<string | null, DriveFolderNode[]>();
+	const known = new Set(folders.map((folder) => folder.id));
+	for (const folder of folders) {
+		const key = folder.parentId && known.has(folder.parentId) ? folder.parentId : null;
+		children.set(key, [...(children.get(key) ?? []), folder]);
+	}
+	const rows: (DriveFolderNode & { depth: number; disabled: boolean })[] = [];
+	const visit = (parent: string | null, depth: number, blocked: boolean) => {
+		for (const folder of (children.get(parent) ?? []).sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: "base" }))) {
+			const disabled = blocked || moving.has(folder.id);
+			rows.push({ ...folder, depth, disabled });
+			visit(folder.id, depth + 1, disabled);
+		}
+	};
+	visit(null, 0, false);
+	return rows;
+}
