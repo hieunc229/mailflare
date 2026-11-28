@@ -2,7 +2,7 @@ import { eq } from "drizzle-orm";
 import { getDb } from "@/db";
 import { users } from "@/db/schema";
 import { getEmailAddress } from "@/lib/email/address";
-import { resolveInboundAddress } from "@/lib/email/routing";
+import { resolveInboundAddress, type RoutingDecision } from "@/lib/email/routing";
 import { getLicenseEntitlements } from "@/lib/licenses/service";
 
 export const MAILFLARE_FORWARDED_HEADER = "X-Mailflare-Forwarded";
@@ -40,18 +40,28 @@ export async function isForwardedMarkerValid(env: CloudflareEnv, value: string |
 	return diff === 0;
 }
 
+/**
+ * The mailbox of a plain delivery decision, safe to reuse for the account forwarding lookup. A decision made by a rule
+ * may name a different mailbox than a plain lookup would, so those fall back to resolving the address.
+ */
+export function plainMailbox(decision: { action: string; mailbox?: RoutingDecision["mailbox"]; ruleId?: string } | null): { userId: string } | undefined {
+	return decision?.action === "store" && !decision.ruleId ? decision.mailbox : undefined;
+}
+
 export async function getAccountForwardingDestination(
 	env: CloudflareEnv,
 	recipient: string,
+	/** The mailbox the caller already resolved for this recipient; without it the address is resolved here. */
+	mailbox?: { userId: string },
 ): Promise<string | null> {
 	if (!(await getLicenseEntitlements(env)).canForwardEmail) return null;
 	const db = getDb(env);
-	const decision = await resolveInboundAddress(db, recipient);
-	if (!decision?.mailbox) return null;
+	const owner = mailbox ?? (await resolveInboundAddress(db, recipient))?.mailbox;
+	if (!owner) return null;
 	const [account] = await db
 		.select({ forwardingEmail: users.forwardingEmail })
 		.from(users)
-		.where(eq(users.id, decision.mailbox.userId))
+		.where(eq(users.id, owner.userId))
 		.limit(1);
 	const destination = account?.forwardingEmail?.trim() ?? "";
 	if (!destination || getEmailAddress(destination).toLowerCase() === getEmailAddress(recipient).toLowerCase()) {

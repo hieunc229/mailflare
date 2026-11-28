@@ -93,7 +93,6 @@ export function expandToolEvents(events: EventRow[], start: Date, end: Date, max
 			result.push(override
 				? { id: `${event.id}@${at.getTime()}`, seriesId: event.id, title: event.title, description: event.description, location: event.location, attendees, color: event.color, repeat: event.repeat, timeZone: zone, startsAt: override.startsAt.toISOString(), endsAt: override.endsAt.toISOString() }
 				: { id: event.repeat === "none" ? event.id : `${event.id}@${at.getTime()}`, seriesId: event.id, title: event.title, description: event.description, location: event.location, attendees, color: event.color, repeat: event.repeat, timeZone: zone, startsAt: at.toISOString(), endsAt: new Date(at.getTime() + duration).toISOString() });
-			if (result.length >= max) return result.sort((a, b) => a.startsAt.localeCompare(b.startsAt));
 		}
 		// Overrides on no rule occurrence (RDATEs) are extra occurrences, unless excluded or outside the window.
 		for (const override of byMs.values()) {
@@ -102,8 +101,8 @@ export function expandToolEvents(events: EventRow[], start: Date, end: Date, max
 			let attendees: string[] = [];
 			try { attendees = JSON.parse(event.attendees) as string[]; } catch { /* Old malformed data remains readable. */ }
 			result.push({ id: `${event.id}@${override.occurrenceMs}`, seriesId: event.id, title: event.title, description: event.description, location: event.location, attendees, color: event.color, repeat: event.repeat, timeZone: zone, startsAt: override.startsAt.toISOString(), endsAt: override.endsAt.toISOString() });
-			if (result.length >= max) return result.sort((a, b) => a.startsAt.localeCompare(b.startsAt));
 		}
 	}
-	return result.sort((a, b) => a.startsAt.localeCompare(b.startsAt));
+	// Sort before cutting, so a full window keeps the earliest occurrences rather than the first events read.
+	return result.sort((a, b) => a.startsAt.localeCompare(b.startsAt)).slice(0, max);
 }

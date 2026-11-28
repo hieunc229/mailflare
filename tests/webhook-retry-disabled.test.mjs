@@ -37,20 +37,20 @@ await build({
 });
 const { SqliteDatabase, applyMigrations, processWebhookRetry, runDelivery } = await import(pathToFileURL(join(directory, "entry.mjs")).href);
 
-async function setup(t) {
+async function setup(t, { enabled = 0, status = "retrying", nextRetry = 2, fetchStatus = 500 } = {}) {
 	const database = new SqliteDatabase(":memory:");
 	t.after(() => database.db.close());
 	await applyMigrations(database, join(root, "drizzle/migrations"));
 	database.db.exec(`
 		INSERT INTO users (id, email, password_hash, name, role, is_primary_admin, created_at) VALUES ('admin', 'owner@one.test', 'hash', 'Owner', 'admin', 1, 1);
 		INSERT INTO webhooks (id, user_id, url, secret, events, enabled, max_attempts, created_at)
-			VALUES ('hook', 'admin', 'https://hooks.example.com/in', 'secret', 'message.inbound', 0, 5, 1);
+			VALUES ('hook', 'admin', 'https://hooks.example.com/in', 'secret', 'message.inbound', ${enabled}, 5, 1);
 		INSERT INTO webhook_deliveries (id, webhook_id, event_type, payload, status, attempts, next_retry_at, created_at)
-			VALUES ('d', 'hook', 'message.inbound', '{}', 'retrying', 1, 2, 1);
+			VALUES ('d', 'hook', 'message.inbound', '{}', '${status}', 1, ${nextRetry}, 1);
 	`);
 	const scheduled = [];
 	const posted = [];
-	t.mock.method(globalThis, "fetch", async (url) => { posted.push(String(url)); return new Response("down", { status: 500 }); });
+	t.mock.method(globalThis, "fetch", async (url) => { posted.push(String(url)); return new Response("down", { status: fetchStatus }); });
 	const env = { DB: database, OUTBOUND_QUEUE: { send: async (message) => { scheduled.push(message); } } };
 	const delivery = () => database.db.prepare("SELECT status, attempts, error, next_retry_at FROM webhook_deliveries WHERE id = 'd'").get();
 	return { env, scheduled, posted, delivery };
@@ -69,4 +69,32 @@ test("the manual retry button still runs a delivery of a disabled webhook", asyn
 	const result = await runDelivery(env, "d", { userId: "admin" });
 	assert.deepEqual(posted, ["https://hooks.example.com/in"]);
 	assert.equal(result.status, "retrying");
+});
+
+test("a queued retry for a delivery that already succeeded does not post again", async (t) => {
+	const { env, scheduled, posted, delivery } = await setup(t, { enabled: 1, status: "delivered" });
+	await processWebhookRetry(env, { kind: "webhook.retry", deliveryId: "d" });
+	assert.deepEqual(posted, []);
+	assert.deepEqual(scheduled, []);
+	assert.equal(delivery().status, "delivered");
+});
+
+test("a manual retry then the queued retry posts once", async (t) => {
+	const { env, posted } = await setup(t, { enabled: 1, nextRetry: Math.floor(Date.now() / 1000) + 60, fetchStatus: 200 });
+	assert.equal((await runDelivery(env, "d", { userId: "admin" })).status, "delivered");
+	await processWebhookRetry(env, { kind: "webhook.retry", deliveryId: "d" });
+	assert.equal(posted.length, 1);
+});
+
+test("a failing manual retry while a retry is queued does not queue another", async (t) => {
+	const { env, scheduled, delivery } = await setup(t, { enabled: 1, nextRetry: Math.floor(Date.now() / 1000) + 60 });
+	assert.equal((await runDelivery(env, "d", { userId: "admin" })).status, "retrying");
+	assert.deepEqual(scheduled, []);
+	assert.equal(delivery().attempts, 2);
+});
+
+test("a failing manual retry with no queued retry still schedules one", async (t) => {
+	const { env, scheduled } = await setup(t, { enabled: 1, nextRetry: 2 });
+	await runDelivery(env, "d", { userId: "admin" });
+	assert.equal(scheduled.length, 1);
 });

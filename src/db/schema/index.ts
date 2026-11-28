@@ -939,6 +939,7 @@ export const calendarEvents = sqliteTable(
 	(t) => [
 		index("calendar_events_user_starts_idx").on(t.userId, t.startsAt),
 		index("calendar_events_mailbox_idx").on(t.mailboxId),
+		index("calendar_events_repeat_starts_idx").on(t.repeat, t.startsAt, t.id),
 	],
 );
 
@@ -1737,6 +1738,8 @@ export const driveItems = sqliteTable("drive_items", {
 	updatedAt: timestamp("updated_at").notNull().$defaultFn(() => new Date()),
 }, (t) => [
 	index("drive_items_owner_parent_idx").on(t.ownerId, t.parentId),
+	index("drive_items_parent_idx").on(t.parentId),
+	index("drive_items_r2_key_idx").on(t.r2Key),
 	uniqueIndex("drive_items_link_token_idx").on(t.linkToken),
 ]);
 

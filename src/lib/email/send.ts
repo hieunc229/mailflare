@@ -9,6 +9,7 @@ import { getAuthorizedSenderAddress } from "@/lib/email/sender";
 import { getEmailAddress, getEmailAddressList, joinEmailAddressList, splitEmailAddressList } from "@/lib/email/address";
 import { formatMessageIdHeader, normalizeMessageId, parseMessageIdList } from "@/lib/email/threading";
 import { createAuditLog } from "@/lib/mailboxes/audit";
+import { deleteMessageWithObjects } from "@/lib/email/message-cleanup";
 import { loadMessageAttachmentContents, storeMessageAttachments, validateAttachments } from "@/lib/email/attachments";
 import type { AttachmentContent } from "@/lib/email/attachment-types";
 import { getOutboundAttachmentMaxMb } from "@/lib/email/attachment-policy";
@@ -53,7 +54,6 @@ export type SendEmailInput = {
 	publicOrigin?: string;
 };
 
-/** How long a send started from the composer waits before it is delivered. */
 const MAX_RECIPIENTS = 50;
 const MAX_QUEUE_DELAY_SECONDS = 24 * 60 * 60;
 
@@ -155,23 +155,6 @@ export async function sendEmail(
 	}
 
 	const jobId = newId("job");
-	await db.insert(outboundJobs).values({
-		id: jobId,
-		userId: input.userId,
-		messageId,
-		status: "queued",
-		payload: JSON.stringify({
-			...input,
-			from: sender.fromAddr,
-			to,
-			cc,
-			bcc,
-			mailboxId: sender.mailboxId,
-			attachments: attachments.map(({ content: _content, ...attachment }) => attachment),
-		}),
-		scheduledAt,
-	});
-
 	const delivery: PreparedDelivery = {
 		input: { ...input, attachments: undefined },
 		messageId,
@@ -184,18 +167,42 @@ export async function sendEmail(
 		headers,
 		attachments,
 	};
-	if (scheduledAt) {
-		await enqueueScheduledDelivery(env, delivery, scheduledAt);
-		if (userScheduledAt) {
-			return { messageId, scheduled: true, scheduledAt: scheduledAt.toISOString() };
-		}
-		// Send the window as a duration: client and server clocks need not agree.
-		return {
+	try {
+		await db.insert(outboundJobs).values({
+			id: jobId,
+			userId: input.userId,
 			messageId,
-			scheduled: true,
-			undoSeconds,
-			undoRemainingMs: Math.max(0, scheduledAt.getTime() - Date.now()),
-		};
+			status: "queued",
+			payload: JSON.stringify({
+				...input,
+				from: sender.fromAddr,
+				to,
+				cc,
+				bcc,
+				mailboxId: sender.mailboxId,
+				attachments: attachments.map(({ content: _content, ...attachment }) => attachment),
+			}),
+			scheduledAt,
+		});
+
+		if (scheduledAt) {
+			await enqueueOutboundJob(env, delivery.jobId, delivery.messageId, scheduledAt);
+			if (userScheduledAt) {
+				return { messageId, scheduled: true, scheduledAt: scheduledAt.toISOString() };
+			}
+			// Send the window as a duration: client and server clocks need not agree.
+			return {
+				messageId,
+				scheduled: true,
+				undoSeconds,
+				undoRemainingMs: Math.max(0, scheduledAt.getTime() - Date.now()),
+			};
+		}
+	} catch (error) {
+		// outbound_jobs.message_id is ON DELETE SET NULL, so the job must go explicitly or it would outlive its message.
+		await db.delete(outboundJobs).where(eq(outboundJobs.id, jobId)).catch(() => undefined);
+		await deleteMessageWithObjects(env, db, messageId, null).catch((cleanupError) => console.error("Send rollback failed", cleanupError));
+		throw error;
 	}
 
 	await deliverEmail(env, delivery);
@@ -381,14 +388,6 @@ export async function enqueueOutboundJob(
 	);
 }
 
-async function enqueueScheduledDelivery(
-	env: CloudflareEnv,
-	delivery: PreparedDelivery,
-	scheduledAt: Date,
-): Promise<void> {
-	await enqueueOutboundJob(env, delivery.jobId, delivery.messageId, scheduledAt);
-}
-
 function deliveryFromJob(jobId: string, messageId: string, payload: string): PreparedDelivery {
 	const input = JSON.parse(payload) as SendEmailInput;
 	const to = toRecipientList(input.to);
@@ -467,7 +466,7 @@ export async function processOutboundQueue(
 	const scheduledAt = job.scheduledAt ?? new Date(payload.scheduledAt);
 	const delivery = deliveryFromJob(payload.jobId, payload.messageId, job.payload);
 	if (scheduledAt.getTime() > Date.now()) {
-		await enqueueScheduledDelivery(env, delivery, scheduledAt);
+		await enqueueOutboundJob(env, delivery.jobId, delivery.messageId, scheduledAt);
 		return;
 	}
 	// Load first: a failure here must leave the job queued so the queue retry can send it.

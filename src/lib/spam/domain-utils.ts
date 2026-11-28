@@ -1,34 +1,15 @@
+import { isPublicSuffix, publicSuffixDomain } from "@/lib/deliverability/org-domain";
 import { findHeader } from "./analyzers/utils";
 
-/** Second-level suffixes under which names are registered, so `shop.example.co.uk` reduces to `example.co.uk`. */
-const MULTI_PART_SUFFIXES = new Set([
-	"co.uk", "org.uk", "ac.uk", "gov.uk", "me.uk", "ltd.uk", "plc.uk",
-	"com.au", "net.au", "org.au", "edu.au", "gov.au",
-	"co.nz", "org.nz", "net.nz",
-	"co.jp", "ne.jp", "or.jp", "ac.jp",
-	"co.kr", "or.kr",
-	"com.br", "net.br", "org.br",
-	"com.mx", "com.ar", "com.co", "com.pe",
-	"co.za", "org.za",
-	"com.cn", "net.cn", "org.cn",
-	"com.hk", "com.tw", "com.sg", "com.my", "com.ph", "co.th", "co.id",
-	"co.in", "net.in", "org.in",
-	"co.il", "org.il",
-	"com.tr", "com.ua", "com.pl",
-	"co.at", "or.at", "gv.at",
-]);
-
-/** The domain a name is registered under (approximate public-suffix handling, no list dependency). */
+/** The domain a name is registered under, from the Public Suffix List via tldts. */
 export function registrableDomain(host: string): string {
-	const labels = host.toLowerCase().replace(/\.$/, "").split(".").filter(Boolean);
-	if (labels.length <= 2) return labels.join(".");
-	const lastTwo = labels.slice(-2).join(".");
-	return MULTI_PART_SUFFIXES.has(lastTwo) ? labels.slice(-3).join(".") : lastTwo;
+	const name = host.toLowerCase().replace(/\.$/, "");
+	return publicSuffixDomain(name) ?? name;
 }
 
-/** True for a name that is itself a registry suffix such as `co.uk`, which no one owns. */
+/** True for a name that is itself a public suffix such as `co.uk` or `co.ke`, which no one owns. */
 export function isMultiPartSuffix(host: string): boolean {
-	return MULTI_PART_SUFFIXES.has(host.toLowerCase().replace(/\.$/, ""));
+	return isPublicSuffix(host.toLowerCase().replace(/\.$/, ""));
 }
 
 /** Registrable domains that are one provider's mailboxes for the general public. */

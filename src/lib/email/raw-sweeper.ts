@@ -11,6 +11,8 @@ const PREFIX = "inbound/";
 const MIN_AGE_MS = 24 * 60 * 60 * 1000;
 const PAGE = 100;
 const MAX_PAGES = 20;
+/** Where a run that hit MAX_PAGES leaves its list cursor, so the next run continues instead of re-reading the oldest keys. */
+const CURSOR_KEY = "sweep-state/raw-mail-cursor";
 /**
  * Prefixes that only need an age-based sweep. The relay and SNS intake routes write one dedupe object per request
  * and accept timestamps up to their window in the past or future, so those are kept for twice the window plus an
@@ -37,9 +39,20 @@ const LOOKUP_BATCH = 50;
 export async function sweepOrphanedRawMail(env: CloudflareEnv, now = new Date()): Promise<number> {
 	const db = getDb(env);
 	let removed = 0;
-	let cursor: string | undefined;
+	let cursor = (await (await env.BUCKET.get(CURSOR_KEY))?.text()) || undefined;
+	const resumed = !!cursor;
+	// True when the run stopped at MAX_PAGES with keys left to list.
+	let more = false;
 	for (let page = 0; page < MAX_PAGES; page += 1) {
-		const listing = await env.BUCKET.list({ prefix: PREFIX, cursor, limit: PAGE });
+		let listing: Awaited<ReturnType<typeof env.BUCKET.list>>;
+		try {
+			listing = await env.BUCKET.list({ prefix: PREFIX, cursor, limit: PAGE });
+		} catch (error) {
+			if (!resumed || page > 0) throw error;
+			// A stored cursor the bucket no longer accepts: drop it and start over on the next run.
+			console.warn("Raw mail sweep cursor rejected, restarting next run", error);
+			break;
+		}
 		const old = listing.objects.filter((object) => now.getTime() - object.uploaded.getTime() > MIN_AGE_MS).map((object) => object.key);
 		const orphans: string[] = [];
 		for (let index = 0; index < old.length; index += LOOKUP_BATCH) {
@@ -54,7 +67,10 @@ export async function sweepOrphanedRawMail(env: CloudflareEnv, now = new Date())
 		}
 		if (!listing.truncated || !listing.cursor) break;
 		cursor = listing.cursor;
+		more = page === MAX_PAGES - 1;
 	}
+	if (more && cursor) await env.BUCKET.put(CURSOR_KEY, cursor);
+	else await env.BUCKET.delete(CURSOR_KEY);
 	// After the main sweep, so a backlog under these prefixes cannot use up its request budget.
 	for (const { prefix, maxAgeMs } of STALE_PREFIXES) {
 		await sweepStaleObjects(env.BUCKET, prefix, maxAgeMs, now).catch((error) => console.error(`Sweep of ${prefix} failed`, error));

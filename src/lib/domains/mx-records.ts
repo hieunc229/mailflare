@@ -3,7 +3,7 @@ import type { CfDnsRecord } from "@/lib/cloudflare-api.types";
 import type { CloudflareDnsRecordCreate } from "@/lib/cloudflare-dns.types";
 
 function isCloudflareEmailRoutingMx(record: CfDnsRecord): boolean {
-	return record.content?.toLowerCase().endsWith(".mx.cloudflare.net") ?? false;
+	return record.content?.toLowerCase().replace(/\.$/, "").endsWith(".mx.cloudflare.net") ?? false;
 }
 
 function toCreateInput(record: CfDnsRecord): CloudflareDnsRecordCreate {

@@ -511,6 +511,20 @@
         "CREATE TABLE `contact_details` (\n\t`contact_id` varchar(191) NOT NULL,\n\t`details` longtext NOT NULL DEFAULT ('{}'),\n\t`updated_at` bigint NOT NULL,\n\tCONSTRAINT `contact_details_contact_id` PRIMARY KEY(`contact_id`)\n);",
         "ALTER TABLE `contact_details` ADD CONSTRAINT `contact_details_contact_id_contacts_id_fk` FOREIGN KEY (`contact_id`) REFERENCES `contacts`(`id`) ON DELETE cascade ON UPDATE no action;"
       ]
+    },
+    {
+      "name": "0027_drive_items_indexes.sql",
+      "statements": [
+        "ALTER TABLE `drive_items` MODIFY `r2_key` varchar(512);",
+        "CREATE INDEX `drive_items_parent_idx` ON `drive_items` (`parent_id`);",
+        "CREATE INDEX `drive_items_r2_key_idx` ON `drive_items` (`r2_key`);"
+      ]
+    },
+    {
+      "name": "0028_calendar_reminder_index.sql",
+      "statements": [
+        "CREATE INDEX `calendar_events_repeat_starts_idx` ON `calendar_events` (`repeat`,`starts_at`,`id`);"
+      ]
     }
   ]
 }

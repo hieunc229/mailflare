@@ -77,3 +77,8 @@ test("forward rules still require a valid forwarding address", () => {
 	assert.equal(fieldErrors(forward), null);
 	assert.equal(domainRoutingRuleSchema.parse(forward).forwardTo, "team@example.com");
 });
+
+test("a domain rule cannot match on message content", () => {
+	assert.ok(fieldErrors(dialogPayload({ action: "reject", matchField: "content", matchValue: "x" }))?.matchField?.includes("Domain rules cannot match on message content"));
+	assert.equal(fieldErrors(dialogPayload({ action: "reject", matchField: "title", matchValue: "invoice" })), null);
+});

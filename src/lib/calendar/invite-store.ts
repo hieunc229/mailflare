@@ -6,6 +6,7 @@ import type { AttachmentContent } from "@/lib/email/attachment-types";
 import { inviteAttendeeAddresses, inviteRepeat, parseInvite, type ParsedInvite } from "./invite";
 import { isIcsAddress } from "./ics";
 import { getEmailAddress } from "@/lib/email/address";
+import { chunk, ROWS_PER_INSERT, STATEMENTS_PER_BATCH } from "./import-store-utils";
 import { findInviteAttachment, MAX_INVITE_BYTES } from "./invite-attachment";
 import { addExcludedOccurrence, chooseRecipientZone, inboundNeedsRecipientZone, inviteSenderMatches, mergeExcludedOccurrences, normalizeInviteSender, planInboundInvite } from "./invite-rules";
 
@@ -41,30 +42,28 @@ export async function upsertEventOverride(db: ReturnType<typeof getDb>, eventId:
 	await db.insert(calendarEventOverrides).values({ id: newId("ovr"), eventId, occurrenceMs: override.occurrenceMs, startsAt: override.startsAt, endsAt: override.endsAt, createdAt: new Date(), updatedAt: new Date() });
 }
 
-/** Drop the override stored for one occurrence, if any. */
-export async function deleteEventOverride(db: ReturnType<typeof getDb>, eventId: string, occurrenceMs: number): Promise<void> {
-	await db.delete(calendarEventOverrides).where(and(eq(calendarEventOverrides.eventId, eventId), eq(calendarEventOverrides.occurrenceMs, occurrenceMs)));
-}
-
-/** Latest RSVPs on one event the user sent, for the invitation card. */
-export async function listOccurrenceResponses(db: ReturnType<typeof getDb>, eventId: string) {
-	return db.select().from(calendarOccurrenceResponses).where(eq(calendarOccurrenceResponses.eventId, eventId));
-}
+/** RDATEs are sender-controlled, so only this many extra instants are stored per invitation. */
+const MAX_RDATE_OVERRIDES = 100;
 
 /**
- * Extra RDATE instants become overrides, so they survive like exclusions do: only missing ones are added, stored
- * overrides are never removed even when a later revision drops the RDATE.
+ * Extra RDATE instants become overrides, so they survive like exclusions do: only missing ones are added (at most
+ * MAX_RDATE_OVERRIDES), stored overrides are never removed even when a later revision drops the RDATE.
  */
-async function mergeRdateOverrides(db: ReturnType<typeof getDb>, eventId: string, invite: ParsedInvite): Promise<void> {
+export async function mergeRdateOverrides(db: ReturnType<typeof getDb>, eventId: string, invite: ParsedInvite): Promise<void> {
 	if (!invite.rdateDates.length) return;
 	const duration = invite.endsAt.getTime() - invite.startsAt.getTime();
 	const known = new Set((await listEventOverrides(db, eventId)).map((override) => override.occurrenceMs));
+	const now = new Date();
+	const rows: (typeof calendarEventOverrides.$inferInsert)[] = [];
 	for (const date of invite.rdateDates) {
+		if (rows.length >= MAX_RDATE_OVERRIDES) break;
 		const ms = date.getTime();
 		if (known.has(ms)) continue;
 		known.add(ms);
-		await upsertEventOverride(db, eventId, { occurrenceMs: ms, startsAt: date, endsAt: new Date(ms + duration) });
+		rows.push({ id: newId("ovr"), eventId, occurrenceMs: ms, startsAt: date, endsAt: new Date(ms + duration), createdAt: now, updatedAt: now });
 	}
+	const statements = chunk(rows, ROWS_PER_INSERT).map((part) => db.insert(calendarEventOverrides).values(part).onConflictDoNothing());
+	for (const group of chunk(statements, STATEMENTS_PER_BATCH)) await db.batch(group as never);
 }
 
 /**
@@ -83,16 +82,6 @@ export function inviteEventValues(invite: ParsedInvite, timeZone: string | null,
 		inviteSequence: invite.sequence,
 		startsAt: invite.startsAt, endsAt: invite.endsAt, updatedAt: new Date(),
 	};
-}
-
-/**
- * True when `senderAddress` is the sender whose invitation created `existing`. Both the automatic inbound path and the
- * Accept/Decline endpoint use it, so neither lets a later message from someone else rewrite or remove the event.
- * The sender is stored on the row, so deleting the original email does not orphan the event. A row without a stored
- * sender fails closed.
- */
-export function sameInviteSender(existing: { inviteSender?: string | null }, senderAddress: string): boolean {
-	return inviteSenderMatches(existing, senderAddress);
 }
 
 /**
@@ -155,7 +144,7 @@ export async function registerInboundInvite(env: CloudflareEnv, input: { userId:
 		const [existing] = await db.select().from(calendarEvents).where(where).limit(1);
 		// Anyone who learns an invitation UID could otherwise cancel or rewrite the event, so a later message
 		// is applied only when it comes from the sender of the message that created the event.
-		if (existing && !sameInviteSender(existing, input.senderAddress)) return;
+		if (existing && !inviteSenderMatches(existing, input.senderAddress)) return;
 		// A remembered cancellation wins over a late or re-sent revision: only a newer revision from the same
 		// sender clears it and proceeds. Anything else is ignored, and an ignored plan never clears it.
 		const plan = planInboundInvite({ method: effectiveMethod, recurrenceId: invite.recurrenceId, sequence: invite.sequence }, existing);

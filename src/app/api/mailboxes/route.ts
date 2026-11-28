@@ -9,7 +9,7 @@ import { newId } from "@/lib/ids";
 import { getLicenseEntitlements } from "@/lib/licenses/service";
 import { tracksAccountIdentity } from "@/lib/profile/identity-utils";
 import { mailboxSchema } from "@/lib/validators";
-import { ensureMailboxDomainRouting, getMailboxDomainAddresses } from "@/lib/mailboxes/domain-addresses";
+import { ensureMailboxDomainRouting, getMailboxesDomainAddresses } from "@/lib/mailboxes/domain-addresses";
 import { normalizeRecipientLocalPart } from "@/lib/email/recipient-address";
 import { ensurePersonalMailbox } from "./utils";
 
@@ -19,14 +19,15 @@ export async function GET(request: Request) {
 	const db = getDb(env);
 	const rows = await ensurePersonalMailbox(env, db, user);
 	const entitlements = await getLicenseEntitlements(env);
+	const senderAddresses = await getMailboxesDomainAddresses(db, rows);
 	return NextResponse.json({
-		mailboxes: await Promise.all(rows.map(async (mailbox) => ({
+		mailboxes: rows.map((mailbox) => ({
 			...mailbox,
 			...(mailbox.userId === user.id && tracksAccountIdentity(mailbox, user.email)
 				? { displayName: user.name, hasAvatar: !!user.avatarKey }
 				: {}),
-			senderAddresses: await getMailboxDomainAddresses(db, mailbox),
-		}))),
+			senderAddresses: senderAddresses.get(mailbox.id) ?? [],
+		})),
 		canCreateShared: user.role === "admin" && entitlements.canShareMailboxes,
 	});
 }

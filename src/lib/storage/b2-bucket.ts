@@ -12,6 +12,8 @@ type PutValue = ArrayBuffer | ArrayBufferView | string | ReadableStream | Blob |
 type PutOptions = { httpMetadata?: B2HttpMetadata | Headers; customMetadata?: Record<string, string> };
 
 const META_PREFIX = "x-amz-meta-";
+/** S3 DeleteObjects takes at most 1000 keys. */
+const DELETE_BATCH_SIZE = 1000;
 
 /** The URL parser resolves `.` and `..` segments, so such a key would be sent as a different key. */
 function assertPlainKey(key: string) {
@@ -135,8 +137,26 @@ export class B2Bucket {
 
 	async delete(keys: string | string[]): Promise<void> {
 		const list = Array.isArray(keys) ? keys : [keys];
-		for (let index = 0; index < list.length; index += 10) {
-			await Promise.all(list.slice(index, index + 10).map(async (key) => {
+		for (const key of list) assertPlainKey(key);
+		for (let index = 0; index < list.length; index += DELETE_BATCH_SIZE) await this.deleteBatch(list.slice(index, index + DELETE_BATCH_SIZE));
+	}
+
+	/** One S3 DeleteObjects request; a refused batch or a key it could not delete falls back to single DELETEs. */
+	private async deleteBatch(keys: string[]): Promise<void> {
+		const body = `<Delete>${keys.map((key) => `<Object><Key>${escapeXml(key)}</Key></Object>`).join("")}<Quiet>true</Quiet></Delete>`;
+		const bytes = new TextEncoder().encode(body);
+		const checksum = btoa(String.fromCharCode(...new Uint8Array(await crypto.subtle.digest("SHA-256", bytes))));
+		let remaining = keys;
+		try {
+			const response = await this.request(null, { method: "POST", query: { delete: "" }, body, headers: { "Content-Type": "application/xml", "x-amz-checksum-sha256": checksum, "x-amz-sdk-checksum-algorithm": "SHA256" } });
+			// Quiet mode lists only failures; xmlTag returns the key unescaped. A key already gone is a success.
+			const failed = new Set(xmlBlocks(await response.text(), "Error").filter((block) => xmlTag(block, "Code") !== "NoSuchKey").map((block) => xmlTag(block, "Key")));
+			remaining = keys.filter((key) => failed.has(key));
+		} catch (error) {
+			if (!(error instanceof AwsError)) throw error;
+		}
+		for (let index = 0; index < remaining.length; index += 10) {
+			await Promise.all(remaining.slice(index, index + 10).map(async (key) => {
 				try { await this.request(key, { method: "DELETE" }); }
 				catch (error) { if (!(error instanceof AwsError && error.status === 404)) throw error; }
 			}));

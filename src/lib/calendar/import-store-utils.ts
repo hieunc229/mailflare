@@ -3,17 +3,13 @@ import type { ImportEvent, ImportGroup } from "./ics-import-types";
 import type { CalendarImportPlan, CalendarImportRow, ImportGroupIds, PlannedGroup } from "./import-store-types";
 import { inviteEventId } from "./invite-store";
 
-/** 4 rows x 19 bound columns = 76 parameters, under D1's limit of 100. */
+/** 4 rows x 24 bound parameters = 96, under D1's limit of 100. */
 export const ROWS_PER_INSERT = 4;
 /** `id IN (...)` plus the user id: 91 parameters. */
 export const SELECT_CHUNK = 90;
 export const STATEMENTS_PER_BATCH = 50;
 
-export function chunk<T>(items: T[], size: number): T[][] {
-	const chunks: T[][] = [];
-	for (let index = 0; index < items.length; index += size) chunks.push(items.slice(index, index + size));
-	return chunks;
-}
+export { chunk } from "../db-params";
 
 /** The row id of one imported event: stable for (user, UID, occurrence), so a re-import finds it again. */
 export async function icsEventId(userId: string, uid: string, recurrenceMs: number | null): Promise<string> {
@@ -49,6 +45,7 @@ function toRow(id: string, userId: string, color: string, event: ImportEvent): C
 		title: event.title, description: event.description, location: event.location,
 		attendees: JSON.stringify(event.attendees), color,
 		repeat: event.repeat, repeatDays: JSON.stringify(event.repeatDays), repeatAnchorDay: event.repeatAnchorDay, repeatUntil: event.repeatUntil,
+		repeatInterval: event.repeatInterval, repeatWeekday: event.repeatWeekday, repeatWeek: event.repeatWeek,
 		excludedOccurrences: JSON.stringify(event.excluded.map((date) => date.getTime())),
 		timeZone: event.timeZone, startsAt: event.startsAt, endsAt: event.endsAt, reminderMinutes: event.reminderMinutes,
 	};

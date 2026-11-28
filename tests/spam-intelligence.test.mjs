@@ -90,6 +90,17 @@ test("the sending IP comes from the topmost Received hop and skips private addre
 	assert.equal(spam.extractSenderIp({ Received: "from a (a [192.0.2.44]) by mx.cloudflare.net; Fri, 23 Oct 2026" }), "192.0.2.44");
 });
 
+test("registrable domains follow the public suffix list", () => {
+	assert.equal(spam.registrableDomain("mail.safaricom.co.ke"), "safaricom.co.ke");
+	assert.equal(spam.registrableDomain("a.b.example.com.ng"), "example.com.ng");
+	assert.equal(spam.registrableDomain("mail.shop.example.co.uk"), "example.co.uk");
+	assert.equal(spam.registrableDomain("alice.github.io"), "alice.github.io");
+	assert.equal(spam.registrableDomain("co.ke"), "co.ke");
+	assert.equal(spam.registrableDomain("localhost"), "localhost");
+	assert.equal(spam.isLookalikeDomain("safaricorn.co.ke", "safaricom.co.ke"), true);
+	assert.equal(spam.isLookalikeDomain("attacker.co.ke", "victim.co.ke"), false);
+});
+
 test("lookalike domains and brand display names are flagged, real senders are not", () => {
 	assert.equal(spam.registrableDomain("mail.shop.example.co.uk"), "example.co.uk");
 	assert.equal(spam.isLookalikeDomain("paypa1.com", "paypal.com"), true);

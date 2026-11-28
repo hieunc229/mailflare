@@ -47,3 +47,11 @@ test("UNTIL stops before the exclusive repeatUntil so a deleted occurrence is no
 	const ics = buildCalendarFeed([{ ...base, repeat: "weekly", timeZone: "UTC", repeatUntil: new Date("2026-11-09T17:00:00Z") }], { name: "M" });
 	assert.match(ics, /RRULE:FREQ=WEEKLY;UNTIL=20261109T165959Z\r\n/);
 });
+
+test("zoned recurring output keeps the local clock across DST; an unknown zone falls back to UTC", () => {
+	const weekly = { ...base, repeat: "weekly", timeZone: "Europe/Berlin", startsAt: new Date("2026-03-22T08:00:00Z"), endsAt: new Date("2026-03-22T09:00:00Z") };
+	assert.match(buildCalendarFeed([weekly], { name: "M" }), /DTSTART;TZID=Europe\/Berlin:20260322T090000\r\n/);
+	const unknown = buildCalendarFeed([{ ...weekly, timeZone: "Not/AZone" }], { name: "M" });
+	assert.match(unknown, /DTSTART:\d{8}T\d{6}Z\r\n/);
+	assert.doesNotMatch(unknown, /TZID=/);
+});

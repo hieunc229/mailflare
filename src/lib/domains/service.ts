@@ -59,8 +59,11 @@ export async function addDomainForUser(
 	}
 	// A re-add provisions the zone again (MX records, Email Routing, receiving provider), so it is an MX change like any other.
 	if (claimedHostname) await assertMxChangeAllowed(env, claimedHostname);
+	// The preflight's zone is the one provisioning would look up again.
+	let preflightZone: { id: string; name: string } | undefined;
 	if (!options?.skipDns && hasCloudflareCredentials(env)) {
 		const { zone } = await preflightDomain(env, normalizedHostname);
+		preflightZone = zone;
 		const [claimedZone] = await db.select({ userId: domains.userId }).from(domains).where(and(
 			eq(domains.zoneId, zone.id),
 			ne(domains.userId, userId),
@@ -78,6 +81,7 @@ export async function addDomainForUser(
 	const requestedSending = skipDns ? "none" : (options?.sendingProvider ?? (options?.enableSending === false ? "none" : "cloudflare"));
 	const provisioned = await provisionDomainOnCloudflare(env, hostname, {
 		...options,
+		zone: preflightZone,
 		enableSending: requestedSending === "cloudflare",
 		enableRouting: receivingProvider === "cloudflare" ? (options?.enableRouting ?? true) : false,
 		// Routing is skipped for other receivers, so this only reaches the sending step then.

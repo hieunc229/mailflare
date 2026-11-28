@@ -1,6 +1,16 @@
 /** D1 rejects a statement with more than 100 bound parameters. */
 export const D1_MAX_BOUND_PARAMETERS = 100;
 
+/** `id IN (...)` lists stay at 90 ids, leaving room for the other bound parameters. */
+export const D1_IN_CHUNK = 90;
+
+/** Splits a list into groups of `size` (default: one D1-safe IN list). */
+export function chunk<T>(items: T[], size: number = D1_IN_CHUNK): T[][] {
+	const chunks: T[][] = [];
+	for (let index = 0; index < items.length; index += size) chunks.push(items.slice(index, index + size));
+	return chunks;
+}
+
 type BatchQuery<Row> = PromiseLike<Row[]> & { toSQL(): { params: unknown[] } };
 
 /**

@@ -149,7 +149,7 @@ test("files over the event cap and UIDs without an id are reported", async () =>
 });
 
 test("preview counts events, series and simplified series without posting", async () => {
-	const bytes = file(4, (n) => (n === 0 ? ["RRULE:FREQ=WEEKLY;BYDAY=WE"] : n === 1 ? ["RRULE:FREQ=YEARLY"] : n === 2 ? ["STATUS:CANCELLED"] : []));// 2026-11-04 is a Wednesday
+	const bytes = file(4, (n) => (n === 0 ? ["RRULE:FREQ=WEEKLY;BYDAY=WE"] : n === 1 ? ["RRULE:FREQ=MONTHLY;BYSETPOS=-1;BYDAY=FR"] : n === 2 ? ["STATUS:CANCELLED"] : []));// 2026-11-04 is a Wednesday
 	const summary = await previewCalendarBytes(bytes, settings, "UTC", {});
 	assert.equal(summary.events, 3);
 	assert.equal(summary.series, 2);

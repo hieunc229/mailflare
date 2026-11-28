@@ -54,19 +54,6 @@ export function evaluateNoReports(input: { reportsEnabledAt: Date | null; lastRe
 	return enabledLongEnough && silent && !throttled ? { kind: "no_reports", detail: { lastReportAt: input.lastReportAt?.toISOString() ?? null } } : null;
 }
 
-/** All three rules on one set of totals (one reporter's, or the whole domain's in tests). */
-export function evaluateAlerts(input: {
-	yesterday: SourceTotals[];
-	prior30: SourceTotals[];
-	reportsEnabledAt: Date | null;
-	lastReportAt: Date | null;
-	lastNoReportsAlertAt: Date | null;
-	now: Date;
-}): EvaluatedAlert[] {
-	const noReports = evaluateNoReports(input);
-	return [...evaluateSourceAlerts(input), ...(noReports ? [noReports] : [])];
-}
-
 /** One alert per kind for the domain: each reporter's offenders, tagged with the reporter, the busiest five listed. */
 export function mergeReporterAlerts(parts: { reporter: string; alerts: EvaluatedAlert[] }[]): EvaluatedAlert[] {
 	const merged: EvaluatedAlert[] = [];

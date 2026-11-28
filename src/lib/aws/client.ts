@@ -27,6 +27,8 @@ async function parseError(response: Response): Promise<AwsError> {
 	return new AwsError(message || `AWS request failed (${response.status})`, response.status, code || `HTTP${response.status}`);
 }
 
+export const AWS_REQUEST_TIMEOUT_MS = 30_000;
+
 export type AwsRequest = {
 	config: AwsConfig;
 	service: string;
@@ -39,6 +41,8 @@ export type AwsRequest = {
 	headers?: Record<string, string>;
 	/** Region used to sign; defaults to the config's. */
 	region?: string;
+	/** Abort when no response headers arrive in this long; defaults to AWS_REQUEST_TIMEOUT_MS. */
+	timeoutMs?: number;
 };
 
 export async function awsRequest(request: AwsRequest): Promise<Response> {
@@ -49,7 +53,14 @@ export async function awsRequest(request: AwsRequest): Promise<Response> {
 	const body = request.body ?? "";
 	const method = request.method ?? "GET";
 	const headers = await signAwsRequest({ method, url, headers: request.headers ?? {}, body, region, service, credentials: config, });
-	const response = await fetch(url, { method, headers, body: method === "GET" || method === "HEAD" ? undefined : body });
+	const controller = new AbortController();
+	const timer = setTimeout(() => controller.abort(new DOMException("AWS request timed out", "TimeoutError")), request.timeoutMs ?? AWS_REQUEST_TIMEOUT_MS);
+	let response: Response;
+	try {
+		response = await fetch(url, { method, headers, body: method === "GET" || method === "HEAD" ? undefined : body, signal: controller.signal });
+	} finally {
+		clearTimeout(timer);
+	}
 	if (!response.ok) throw await parseError(response);
 	return response;
 }

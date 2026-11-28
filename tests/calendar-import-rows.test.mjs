@@ -73,7 +73,7 @@ test("overrides are separate rows and a partial earlier run completes", async ()
 });
 
 test("duplicate groups in one request insert once; counts follow imported rows", async () => {
-	const simple = parseIcsEventGroup(["BEGIN:VEVENT", "UID:y", "DTSTART:20261104T090000Z", "RRULE:FREQ=YEARLY", "SUMMARY:Y", "END:VEVENT"].join("\r\n"), options);
+	const simple = parseIcsEventGroup(["BEGIN:VEVENT", "UID:y", "DTSTART:20261104T090000Z", "RRULE:FREQ=MONTHLY;BYSETPOS=-1;BYDAY=FR", "SUMMARY:Y", "END:VEVENT"].join("\r\n"), options);
 	const plan = planCalendarImportRows(await planned("u1", [group("a"), group("a"), simple]), new Set(), "u1", "#000");
 	assert.equal(plan.rows.length, 2);
 	assert.equal(plan.simplified, 1);

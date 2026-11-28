@@ -1,5 +1,6 @@
 /** Reads the first 256 KiB of a returned message; real delivery reports are a few KB. */
 export const MAX_DSN_BYTES = 256 * 1024;
+const HEADER_PRECHECK_BYTES = 8 * 1024;
 
 export type DsnRecipient = { finalRecipient: string; action: string; status: string; diagnostic: string };
 export type DeliveryStatus = { originalMessageId: string | null; recipients: DsnRecipient[] };
@@ -32,10 +33,15 @@ function contentTypeParam(value: string, name: string): string | null {
 
 /** A top-level multipart/report of type delivery-status (RFC 3464); null for any other message. */
 export function parseDeliveryStatus(raw: ArrayBuffer): DeliveryStatus | null {
+	const isReport = (type: string) => /^multipart\/report/i.test(type) && contentTypeParam(type, "report-type")?.toLowerCase() === "delivery-status";
+	// Most mail is not a report: read the top-level headers first and decode the body only for a report.
+	// Headers longer than the window fall through to the full decode.
+	const head = new TextDecoder("utf-8").decode(raw.slice(0, HEADER_PRECHECK_BYTES));
+	if (/\r?\n\r?\n/.test(head) && !isReport(splitPart(head).headers.get("content-type") ?? "")) return null;
 	const text = new TextDecoder("utf-8").decode(raw.byteLength > MAX_DSN_BYTES ? raw.slice(0, MAX_DSN_BYTES) : raw);
 	const top = splitPart(text);
 	const contentType = top.headers.get("content-type") ?? "";
-	if (!/^multipart\/report/i.test(contentType) || contentTypeParam(contentType, "report-type")?.toLowerCase() !== "delivery-status") return null;
+	if (!isReport(contentType)) return null;
 	const boundary = contentTypeParam(contentType, "boundary");
 	if (!boundary) return null;
 

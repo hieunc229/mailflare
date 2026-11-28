@@ -129,8 +129,8 @@ async function fixture(t, rule) {
 	database.db.prepare(`
 		INSERT INTO routing_rules (id, user_id, domain_id, scope, mailbox_id, folder_id, pattern, match_field, match_operator,
 			match_value, action, forward_to, keep_copy, reject_reason, enabled, priority, created_at)
-		VALUES ('rule', 'admin', 'one', ?, ?, ?, 'bulk', 'mail_type', 'contains', 'bulk', ?, ?, 0, 'no promos', 1, 10, 1)
-	`).run(rule.scope, rule.scope === "mailbox" ? "box" : null, rule.folderId ?? null, rule.action, rule.forwardTo ?? null);
+		VALUES ('rule', 'admin', 'one', ?, ?, ?, ?, ?, 'contains', ?, ?, ?, 0, 'no promos', 1, 10, 1)
+	`).run(rule.scope, rule.scope === "mailbox" ? "box" : null, rule.folderId ?? null, rule.matchValue ?? "bulk", rule.matchField ?? "mail_type", rule.matchValue ?? "bulk", rule.action, rule.forwardTo ?? null);
 	const env = { DB: database, MAILFLARE_RUNTIME: "node" };
 	globalThis.__mailflareNodeEnv = env;
 	t.after(() => { delete globalThis.__mailflareNodeEnv; });
@@ -171,6 +171,16 @@ test("runtime backstop: a domain mail_type forward without a copy target is skip
 	const db = await fixture(t, { scope: "domain", action: "forward", forwardTo: "archive@other.test" });
 	const hit = await m.resolveInboundAddress(db, "nobody@one.test", "news@x.test", { headers: NEWSLETTER });
 	assert.notEqual(hit?.action, "forward");
+});
+
+test("a domain rule on the subject rejects matching mail", async (t) => {
+	const db = await fixture(t, { scope: "domain", action: "reject", matchField: "title", matchValue: "invoice overdue" });
+	const hit = await m.resolveInboundAddress(db, "me@one.test", "a@x.test", { headers: { Subject: "Re: INVOICE OVERDUE now" } });
+	assert.equal(hit?.action, "reject");
+	const miss = await m.resolveInboundAddress(db, "me@one.test", "a@x.test", { headers: { subject: "hello" } });
+	assert.notEqual(miss?.action, "reject");
+	const none = await m.resolveInboundAddress(db, "me@one.test", "a@x.test", { headers: {} });
+	assert.notEqual(none?.action, "reject");
 });
 
 test("isBulkMail ignores non-string header values", () => {

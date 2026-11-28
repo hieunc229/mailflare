@@ -35,7 +35,7 @@ export function isManualZone(zoneId: string | null | undefined): boolean {
 export async function provisionDomainOnCloudflare(
 	env: CloudflareEnv,
 	hostname: string,
-	options?: { enableRouting?: boolean; enableSending?: boolean; replaceMxRecords?: boolean; skipDns?: boolean },
+	options?: { enableRouting?: boolean; enableSending?: boolean; replaceMxRecords?: boolean; skipDns?: boolean; zone?: { id: string; name: string } },
 ): Promise<DomainProvisioningResult> {
 	const normalized = normalizeHostname(hostname);
 	if (options?.skipDns || !hasCloudflareCredentials(env)) {
@@ -53,7 +53,7 @@ export async function provisionDomainOnCloudflare(
 			changes: { zoneId: MANUAL_ZONE_ID, enabledEmailRouting: false, createdSendingSubdomainTag: null, previousCatchAll: null, createdAddressRules: [], deletedMxRecords: [] },
 		};
 	}
-	const zone = await findZoneByHostname(env, normalized);
+	const zone = options?.zone ?? await findZoneByHostname(env, normalized);
 	if (!zone) {
 		throw new Error(
 			`Zone not found for "${normalized}". The domain must use Cloudflare DNS on this account.`,

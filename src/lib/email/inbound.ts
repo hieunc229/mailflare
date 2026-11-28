@@ -26,7 +26,7 @@ import type { SessionUser } from "@/lib/auth/types";
 import { analyzeSpam } from "@/lib/spam/engine";
 import { ExternalSpamIntelligenceProvider } from "@/lib/spam/providers/external";
 import { getSpamIntelligenceConfig } from "@/lib/spam/settings";
-import type { ProviderVerdicts } from "@/lib/spam/types";
+import type { ProviderVerdicts, SpamIntelligenceProvider } from "@/lib/spam/types";
 import { getReputationKeys } from "@/lib/spam/analyzers/reputation";
 import { recordReputationObservation } from "@/lib/spam/repository";
 import {
@@ -39,6 +39,9 @@ import { loadPromotionModes, type PromotionMode } from "@/lib/promotions/setting
 import { buildNewMessageNotification } from "@/lib/email/inbound-notification";
 import { readHeaderMap } from "@/lib/email/provider-trace";
 import { classifyInboundCategory } from "@/lib/promotions/classify";
+
+/** For mail a mailbox rule already filed: the analysis still runs, without external lookups. */
+const NO_LOOKUPS: SpamIntelligenceProvider = { check: async () => [] };
 
 export type InboundQueueMessage = {
 	from: string;
@@ -89,14 +92,15 @@ export async function processInboundMessage(
 		await dropRaw();
 		return;
 	}
+	const mailbox = decision.mailbox;
 	const [stored] = await db.select({ id: messages.id }).from(messages).where(and(
-		eq(messages.mailboxId, decision.mailbox.mailboxId),
+		eq(messages.mailboxId, mailbox.mailboxId),
 		eq(messages.rawR2Key, payload.rawR2Key),
 	)).limit(1);
 	if (stored) {
 		try {
 			const [existing] = await db.select().from(messages).where(eq(messages.id, stored.id)).limit(1);
-			if (existing && Date.now() - existing.createdAt.getTime() < 30 * 60_000) await scheduleAutoDraft(env, { mailboxId: decision.mailbox.mailboxId, sourceMessageId: existing.id, ownerUserId: decision.mailbox.userId, sender: existing.fromAddr, headers: payload.headers, status: existing.status, folderId: existing.folderId, spamVerdict: existing.spamVerdict, spamAnalysisError: existing.spamAnalysisError });
+			if (existing && Date.now() - existing.createdAt.getTime() < 30 * 60_000) await scheduleAutoDraft(env, { mailboxId: mailbox.mailboxId, sourceMessageId: existing.id, ownerUserId: mailbox.userId, sender: existing.fromAddr, headers: payload.headers, status: existing.status, folderId: existing.folderId, spamVerdict: existing.spamVerdict, spamAnalysisError: existing.spamAnalysisError });
 		} catch (error) { console.error("Auto-draft recovery failed", error); }
 		return;
 	}
@@ -125,28 +129,50 @@ export async function processInboundMessage(
 	}
 	const messageId = await inboundMessageId(payload.rawR2Key);
 	const snippet = buildSnippet(parsed.text, parsed.html);
-	const deliveredAddress = getEmailAddress(payload.to) || `${decision.mailbox.localPart}@${decision.mailbox.hostname}`;
+	const deliveredAddress = getEmailAddress(payload.to) || `${mailbox.localPart}@${mailbox.hostname}`;
 	// Keep the whole To header so reply-all can address everyone; rules and
 	// webhooks still see the envelope recipient the message was delivered to.
 	const toAddr = parsed.toAddr ?? payload.to;
 	const fromAddr = parsed.fromAddr ?? payload.from;
-	const destination = await resolveInboxRuleDestination(db, {
-		mailboxId: decision.mailbox.mailboxId,
-		toAddress: payload.to,
-		fromAddress: fromAddr,
-		subject: parsed.subject,
-		content: [parsed.text, parsed.html, snippet].filter(Boolean).join(" "),
-		headers: payload.headers,
-	});
+	// Three independent reads: the mailbox rules, the owner's spam settings and the thread to file under.
+	const [destination, [owner], threadId] = await Promise.all([
+		resolveInboxRuleDestination(db, {
+			mailboxId: mailbox.mailboxId,
+			toAddress: payload.to,
+			fromAddress: fromAddr,
+			subject: parsed.subject,
+			content: [parsed.text, parsed.html, snippet].filter(Boolean).join(" "),
+			headers: payload.headers,
+		}),
+		db.select({ enabled: users.spamProtectionEnabled, strictness: users.spamStrictness }).from(users).where(eq(users.id, mailbox.userId)).limit(1),
+		(async () => {
+			try {
+				return await resolveThreadId(db, {
+					mailboxId: mailbox.mailboxId,
+					messageId: parsed.messageId,
+					inReplyTo: parsed.inReplyTo,
+					references: parsed.references,
+					senderAddress: getEmailAddress(fromAddr) || null,
+				});
+			} catch (error) {
+				console.error("Inbound thread lookup failed", {
+					rawR2Key: payload.rawR2Key,
+					recipient: payload.to,
+					referenceCount: parsed.references.length,
+					error,
+				});
+				return normalizeMessageId(parsed.messageId) ?? newId("thr");
+			}
+		})(),
+	]);
 	let spamAnalysis: Awaited<ReturnType<typeof analyzeSpam>> | null = null;
 	let spamAnalysisError: string | null = null;
-	const [owner] = await db.select({ enabled: users.spamProtectionEnabled, strictness: users.spamStrictness }).from(users).where(eq(users.id, decision.mailbox.userId)).limit(1);
 	if (owner?.enabled !== false) {
 		try {
 			const intelligence = await getSpamIntelligenceConfig(env);
 			spamAnalysis = await analyzeSpam(db, {
-				mailboxId: decision.mailbox.mailboxId,
-				userId: decision.mailbox.userId,
+				mailboxId: mailbox.mailboxId,
+				userId: mailbox.userId,
 				envelopeFrom: payload.from,
 				headers: payload.headers,
 				verdicts: payload.verdicts,
@@ -154,7 +180,8 @@ export async function processInboundMessage(
 				brands: intelligence.brands,
 				strictness: owner?.strictness,
 				message: parsed,
-				intelligenceProvider: new ExternalSpamIntelligenceProvider(intelligence, env.BUCKET),
+				// A mailbox rule that already filed the message overrides the result below: keep the analysis, skip the DNS/HTTP lookups.
+				intelligenceProvider: destination.status === "received" ? new ExternalSpamIntelligenceProvider(intelligence, env.BUCKET) : NO_LOOKUPS,
 			});
 		} catch (error) {
 			spamAnalysisError = error instanceof Error ? error.message.slice(0, 300) : "Spam analysis failed";
@@ -175,7 +202,7 @@ export async function processInboundMessage(
 	const folderId = status === "spam" ? null : destination.folderId;
 	// A contact the database cannot hold (e.g. an over-long address) must not lose the mail.
 	const contact = await upsertContactFromAddress(env, {
-		userId: decision.mailbox.userId,
+		userId: mailbox.userId,
 		address: fromAddr,
 		source: "inbound",
 		// Spam senders are strangers at best; do not announce them to Gravatar.
@@ -185,35 +212,16 @@ export async function processInboundMessage(
 		return null;
 	});
 	const { category, senderAddress } = await classifyInboundCategory(db, {
-		mailboxId: decision.mailbox.mailboxId,
+		mailboxId: mailbox.mailboxId,
 		from: fromAddr,
 		headers: payload.headers ?? readHeaderMap(buffer),
 		contactSource: contact?.source,
 	});
-	let threadId: string;
-	try {
-		threadId = await resolveThreadId(db, {
-			mailboxId: decision.mailbox.mailboxId,
-			messageId: parsed.messageId,
-			inReplyTo: parsed.inReplyTo,
-			references: parsed.references,
-			senderAddress: getEmailAddress(fromAddr) || null,
-		});
-	} catch (error) {
-		console.error("Inbound thread lookup failed", {
-			rawR2Key: payload.rawR2Key,
-			recipient: payload.to,
-			referenceCount: parsed.references.length,
-			error,
-		});
-		threadId = normalizeMessageId(parsed.messageId) ?? newId("thr");
-	}
-
 	try {
 		const inserted = await db.insert(messages).values({
 			id: messageId,
-			userId: decision.mailbox.userId,
-			mailboxId: decision.mailbox.mailboxId,
+			userId: mailbox.userId,
+			mailboxId: mailbox.mailboxId,
 			folderId,
 			direction: "inbound",
 			providerMessageId: parsed.messageId,
@@ -245,11 +253,11 @@ export async function processInboundMessage(
 
 		await storeMessageAttachments(env, messageId, parsed.attachments);
 		if (status !== "spam" && status !== "trash") {
-			await registerInboundInvite(env, { userId: decision.mailbox.userId, mailboxId: decision.mailbox.mailboxId, messageId, senderAddress: fromAddr, attachments: parsed.attachments });
+			await registerInboundInvite(env, { userId: mailbox.userId, mailboxId: mailbox.mailboxId, messageId, senderAddress: fromAddr, attachments: parsed.attachments });
 		}
 		if (spamAnalysis) {
 			try {
-				await recordReputationObservation(env, decision.mailbox.mailboxId, getReputationKeys(parsed, spamAnalysis.fingerprint));
+				await recordReputationObservation(env, mailbox.mailboxId, getReputationKeys(parsed, spamAnalysis.fingerprint));
 			} catch (error) {
 				console.error(`Spam reputation observation failed for ${messageId}`, error);
 			}
@@ -266,42 +274,46 @@ export async function processInboundMessage(
 	}
 
 	// A returned message is still delivered to the mailbox; recording its failed recipients is best effort.
-	try {
-		await recordDsnBounces(env, { mailboxId: decision.mailbox.mailboxId, raw: buffer });
-	} catch (error) {
-		console.error(`Bounce recording failed for ${messageId}`, error);
-	}
-
-	if (status === "received") {
-		try {
-			await sendMailboxAutoReply(env, {
-				mailboxId: decision.mailbox.mailboxId,
-				userId: decision.mailbox.userId,
-				deliveredAddress,
-				fromAddress: fromAddr,
-				incomingMessageId: parsed.messageId,
-				headers: payload.headers,
-			});
-		} catch (error) {
-			console.error(`Auto-reply failed for mailbox ${decision.mailbox.mailboxId}`, error);
-		}
-	}
+	// Bounce recording and the auto-reply are independent, so they run together.
+	await Promise.all([
+		(async () => {
+			try {
+				await recordDsnBounces(env, { mailboxId: mailbox.mailboxId, raw: buffer });
+			} catch (error) {
+				console.error(`Bounce recording failed for ${messageId}`, error);
+			}
+		})(),
+		status === "received" ? (async () => {
+			try {
+				await sendMailboxAutoReply(env, {
+					mailboxId: mailbox.mailboxId,
+					userId: mailbox.userId,
+					deliveredAddress,
+					fromAddress: fromAddr,
+					incomingMessageId: parsed.messageId,
+					headers: payload.headers,
+				});
+			} catch (error) {
+				console.error(`Auto-reply failed for mailbox ${mailbox.mailboxId}`, error);
+			}
+		})() : undefined,
+	]);
 
 	if (status === "spam" || status === "trash") {
 		console.info(`No notification for ${messageId}: filed as ${status}`);
 	} else {
 		const notificationUserIds = await getMailboxNotificationUserIds(
 			env,
-			decision.mailbox.mailboxId,
-			decision.mailbox.userId,
+			mailbox.mailboxId,
+			mailbox.userId,
 		);
 		// Promotions a `separate` mailbox files away are not announced. Any lookup failure announces: delivery and notification never depend on this.
 		const mode = category === "promotions"
-			? (await loadPromotionModes(db, [decision.mailbox.mailboxId]).catch(() => new Map<string, PromotionMode>())).get(decision.mailbox.mailboxId)
+			? (await loadPromotionModes(db, [mailbox.mailboxId]).catch(() => new Map<string, PromotionMode>())).get(mailbox.mailboxId)
 			: undefined;
 		await notifyUsersOfNewMessage(env, notificationUserIds, buildNewMessageNotification({
 			messageId,
-			mailboxId: decision.mailbox.mailboxId,
+			mailboxId: mailbox.mailboxId,
 			fromAddr,
 			contact,
 			subject: parsed.subject,
@@ -310,7 +322,7 @@ export async function processInboundMessage(
 	}
 	// Spam and blocked mail carry an unauthenticated From; consumers acting on it would be fooled.
 	if (status !== "spam" && status !== "trash") {
-		await dispatchWebhooks(env, decision.mailbox.userId, "message.inbound", {
+		await dispatchWebhooks(env, mailbox.userId, "message.inbound", {
 			messageId,
 			from: fromAddr,
 			to: payload.to,
@@ -323,7 +335,7 @@ export async function processInboundMessage(
 		});
 	}
 	try {
-		await scheduleAutoDraft(env, { mailboxId: decision.mailbox.mailboxId, sourceMessageId: messageId, ownerUserId: decision.mailbox.userId, sender: fromAddr, headers: payload.headers, status, folderId, spamVerdict: spamAnalysis?.verdict, spamAnalysisError });
+		await scheduleAutoDraft(env, { mailboxId: mailbox.mailboxId, sourceMessageId: messageId, ownerUserId: mailbox.userId, sender: fromAddr, headers: payload.headers, status, folderId, spamVerdict: spamAnalysis?.verdict, spamAnalysisError });
 	} catch (error) { console.error("Auto-draft scheduling failed", error); }
 }
 
@@ -339,34 +351,6 @@ export async function storeRawToR2(
 		customMetadata: { from, to },
 	});
 	return key;
-}
-
-export async function getMessageWithBody(env: CloudflareEnv, userId: string, messageId: string) {
-	const db = getDb(env);
-	const [message] = await db
-		.select()
-		.from(messages)
-		.where(eq(messages.id, messageId))
-		.limit(1);
-	if (!message || message.userId !== userId) return null;
-	const contactNames = await getMessageContactNames(env, userId, message.fromAddr, message.toAddr);
-	const attachments = await listMessageAttachments(env, messageId);
-	const unsubscribe = await getUnsubscribeUrlFromRawR2Key(env, message.rawR2Key);
-	const [scheduledJob] = message.direction === "outbound" && message.status === "queued"
-		? await db
-			.select({ scheduledAt: outboundJobs.scheduledAt })
-			.from(outboundJobs)
-			.where(and(eq(outboundJobs.messageId, messageId), eq(outboundJobs.status, "queued"), isNotNull(outboundJobs.scheduledAt)))
-			.limit(1)
-		: [];
-	return {
-		message: { ...message, ...contactNames },
-		body: message,
-		attachments,
-		unsubscribeUrl: unsubscribe?.url ?? null,
-		unsubscribeViaBody: unsubscribe ? null : extractUnsubscribeLinkFromBody(message.htmlBody, message.textBody),
-		scheduledAt: scheduledJob?.scheduledAt?.toISOString() ?? null,
-	};
 }
 
 export async function getMessageWithBodyForUser(env: CloudflareEnv, user: SessionUser, messageId: string) {

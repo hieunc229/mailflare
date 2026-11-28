@@ -50,71 +50,109 @@ export async function getMailboxAliasForAddress(
 	return row ? { label: row.label, masked: row.masked, enabled: row.enabled } : null;
 }
 
+// D1 allows 100 bound parameters per statement.
+const IN_CHUNK = 90;
+
+async function inChunks<T>(ids: string[], query: (chunk: string[]) => Promise<T[]>): Promise<T[]> {
+	const rows: T[] = [];
+	for (let index = 0; index < ids.length; index += IN_CHUNK) rows.push(...(await query(ids.slice(index, index + IN_CHUNK))));
+	return rows;
+}
+
 export async function getMailboxDomainAddresses(
 	db: AppDatabase,
 	mailbox: MailboxDomainAddressInput,
 	includeDisabledAliases = false,
 ): Promise<string[]> {
-	const [primaryDomain] = await db
-		.select({ hostname: domains.hostname, userId: domains.userId })
-		.from(domains)
-		.where(eq(domains.id, mailbox.domainId))
-		.limit(1);
-	if (!primaryDomain) return [];
+	return (await getMailboxesDomainAddresses(db, [mailbox], includeDisabledAliases)).get(mailbox.id) ?? [];
+}
 
-	const primaryAddress = `${mailbox.localPart}@${primaryDomain.hostname}`.toLowerCase();
-	const aliasAddresses = await getMailboxAliasAddresses(db, mailbox.id, includeDisabledAliases);
-	if (!mailbox.useAllDomains) {
-		return [...new Set([primaryAddress, ...aliasAddresses])];
+/** Sender addresses of many mailboxes in a fixed number of queries; keyed by mailbox id, [] when the primary domain is missing. */
+export async function getMailboxesDomainAddresses(
+	db: AppDatabase,
+	mailboxList: MailboxDomainAddressInput[],
+	includeDisabledAliases = false,
+): Promise<Map<string, string[]>> {
+	const result = new Map<string, string[]>();
+	if (!mailboxList.length) return result;
+	const primaryIds = [...new Set(mailboxList.map((mailbox) => mailbox.domainId))];
+	const primaryDomains = new Map((await inChunks(primaryIds, (chunk) => db
+		.select({ id: domains.id, hostname: domains.hostname, userId: domains.userId })
+		.from(domains)
+		.where(inArray(domains.id, chunk)))).map((domain) => [domain.id, domain]));
+	const mailboxIds = mailboxList.map((mailbox) => mailbox.id);
+	const aliasRows = await inChunks(mailboxIds, (chunk) => db
+		.select({ mailboxId: mailboxAliases.mailboxId, localPart: mailboxAliases.localPart, hostname: domains.hostname })
+		.from(mailboxAliases)
+		.innerJoin(domains, eq(mailboxAliases.domainId, domains.id))
+		.where(includeDisabledAliases
+			? inArray(mailboxAliases.mailboxId, chunk)
+			: and(inArray(mailboxAliases.mailboxId, chunk), eq(mailboxAliases.enabled, true))));
+	const aliasAddresses = new Map<string, string[]>();
+	for (const alias of aliasRows) aliasAddresses.set(alias.mailboxId, [...(aliasAddresses.get(alias.mailboxId) ?? []), `${alias.localPart}@${alias.hostname}`.toLowerCase()]);
+
+	const useAll = mailboxList.filter((mailbox) => mailbox.useAllDomains && primaryDomains.has(mailbox.domainId));
+	const ownerIds = [...new Set(useAll.map((mailbox) => (primaryDomains.get(mailbox.domainId) as { userId: string }).userId))];
+	const availableByOwner = new Map<string, Array<{ id: string; hostname: string }>>();
+	for (const domain of await inChunks(ownerIds, (chunk) => db
+		.select({ id: domains.id, hostname: domains.hostname, userId: domains.userId })
+		.from(domains)
+		.where(and(inArray(domains.userId, chunk), eq(domains.status, "active"))))) {
+		availableByOwner.set(domain.userId, [...(availableByOwner.get(domain.userId) ?? []), domain]);
 	}
-
-	const availableDomains = await db
-		.select({ id: domains.id, hostname: domains.hostname })
-		.from(domains)
-		.where(and(eq(domains.userId, primaryDomain.userId), eq(domains.status, "active")));
-	// Only domains this mailbox can actually be assigned on need the collision
-	// check; scanning every tenant's mailboxes made this O(all mailboxes).
-	const candidateDomainIds = [...new Set([mailbox.domainId, ...availableDomains.map((domain) => domain.id)])];
-	const assignedMailboxes = await db
+	// Only domains a mailbox can actually be assigned on need the collision check; scanning every
+	// tenant's mailboxes made this O(all mailboxes).
+	const candidateDomainIds = [...new Set(useAll.flatMap((mailbox) => [mailbox.domainId, ...(availableByOwner.get((primaryDomains.get(mailbox.domainId) as { userId: string }).userId) ?? []).map((domain) => domain.id)]))];
+	const assignedMailboxes = await inChunks(candidateDomainIds, (chunk) => db
 		.select({ id: mailboxes.id, domainId: mailboxes.domainId, localPart: mailboxes.localPart })
 		.from(mailboxes)
-		.where(inArray(mailboxes.domainId, candidateDomainIds));
-	const assignedAliases = await db
-		.select({
-			mailboxId: mailboxAliases.mailboxId,
-			domainId: mailboxAliases.domainId,
-			localPart: mailboxAliases.localPart,
-			enabled: mailboxAliases.enabled,
-		})
+		.where(inArray(mailboxes.domainId, chunk)));
+	const assignedAliases = await inChunks(candidateDomainIds, (chunk) => db
+		.select({ mailboxId: mailboxAliases.mailboxId, domainId: mailboxAliases.domainId, localPart: mailboxAliases.localPart, enabled: mailboxAliases.enabled })
 		.from(mailboxAliases)
-		.where(inArray(mailboxAliases.domainId, candidateDomainIds));
-	const normalizedLocalPart = normalizeRecipientLocalPart(mailbox.localPart);
-	// A domain is taken when another mailbox or alias owns the same normalized
-	// local part on it, and also when this mailbox's own disabled alias does:
-	// without that, disabling the alias would still leave the implicit
-	// use-all-domains address sendable under the mailbox display name.
-	const assignedDomainIds = new Set(
-		[
-			...assignedMailboxes.filter(
-				(item) => item.id !== mailbox.id && normalizeRecipientLocalPart(item.localPart) === normalizedLocalPart,
-			),
-			...assignedAliases.filter(
-				(item) =>
-					(item.mailboxId !== mailbox.id || !item.enabled) &&
-					normalizeRecipientLocalPart(item.localPart) === normalizedLocalPart,
-			),
-		].map((item) => item.domainId),
-	);
+		.where(inArray(mailboxAliases.domainId, chunk)));
+	const byLocalPart = new Map<string, { mailboxes: typeof assignedMailboxes; aliases: typeof assignedAliases }>();
+	const bucket = (localPart: string) => {
+		const key = normalizeRecipientLocalPart(localPart);
+		let entry = byLocalPart.get(key);
+		if (!entry) byLocalPart.set(key, entry = { mailboxes: [], aliases: [] });
+		return entry;
+	};
+	for (const item of assignedMailboxes) bucket(item.localPart).mailboxes.push(item);
+	for (const item of assignedAliases) bucket(item.localPart).aliases.push(item);
 
-	return [
-		...new Set([
-			primaryAddress,
-			...availableDomains
-				.filter((domain) => domain.id !== mailbox.domainId && !assignedDomainIds.has(domain.id))
-				.map((domain) => `${mailbox.localPart}@${domain.hostname}`.toLowerCase()),
-			...aliasAddresses,
-		]),
-	];
+	for (const mailbox of mailboxList) {
+		const primaryDomain = primaryDomains.get(mailbox.domainId);
+		if (!primaryDomain) {
+			result.set(mailbox.id, []);
+			continue;
+		}
+		const primaryAddress = `${mailbox.localPart}@${primaryDomain.hostname}`.toLowerCase();
+		const ownAliases = aliasAddresses.get(mailbox.id) ?? [];
+		if (!mailbox.useAllDomains) {
+			result.set(mailbox.id, [...new Set([primaryAddress, ...ownAliases])]);
+			continue;
+		}
+		// A domain is taken when another mailbox or alias owns the same normalized
+		// local part on it, and also when this mailbox's own disabled alias does:
+		// without that, disabling the alias would still leave the implicit
+		// use-all-domains address sendable under the mailbox display name.
+		const same = byLocalPart.get(normalizeRecipientLocalPart(mailbox.localPart));
+		const assignedDomainIds = new Set([
+			...(same?.mailboxes ?? []).filter((item) => item.id !== mailbox.id),
+			...(same?.aliases ?? []).filter((item) => item.mailboxId !== mailbox.id || !item.enabled),
+		].map((item) => item.domainId));
+		result.set(mailbox.id, [
+			...new Set([
+				primaryAddress,
+				...(availableByOwner.get(primaryDomain.userId) ?? [])
+					.filter((domain) => domain.id !== mailbox.domainId && !assignedDomainIds.has(domain.id))
+					.map((domain) => `${mailbox.localPart}@${domain.hostname}`.toLowerCase()),
+				...ownAliases,
+			]),
+		]);
+	}
+	return result;
 }
 
 export async function ensureMailboxDomainRouting(

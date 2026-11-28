@@ -21,6 +21,9 @@ export type ImportEvent = {
 	repeatDays: number[];
 	repeatAnchorDay: number | null;
 	repeatUntil: Date | null;
+	repeatInterval: number;
+	repeatWeekday: number | null;
+	repeatWeek: number | null;
 	/** Occurrence starts a series skips: EXDATEs, cancelled occurrences and the ones an override replaces. */
 	excluded: Date[];
 	reminderMinutes: number | null;

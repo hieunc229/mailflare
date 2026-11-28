@@ -31,10 +31,13 @@ export async function authenticateApiKeyValue(env: CloudflareEnv, key: string, o
 	if (!user || user.disabled) return null;
 
 	const stale = new Date(Date.now() - LAST_USED_WRITE_INTERVAL_MS);
-	await db
-		.update(apiKeys)
-		.set({ lastUsedAt: new Date(), ...(options?.usage ? { lastUsedProtocol: options.usage.protocol, lastUsedIp: options.usage.ip } : {}) })
-		.where(and(eq(apiKeys.id, candidate.id), or(isNull(apiKeys.lastUsedAt), lt(apiKeys.lastUsedAt, stale))));
+	// The candidate row is read this request, so a fresh key skips the write; the WHERE still guards a concurrent writer.
+	if (!candidate.lastUsedAt || candidate.lastUsedAt < stale) {
+		await db
+			.update(apiKeys)
+			.set({ lastUsedAt: new Date(), ...(options?.usage ? { lastUsedProtocol: options.usage.protocol, lastUsedIp: options.usage.ip } : {}) })
+			.where(and(eq(apiKeys.id, candidate.id), or(isNull(apiKeys.lastUsedAt), lt(apiKeys.lastUsedAt, stale))));
+	}
 
 	const scopes = parseScopes(candidate.scopes);
 	const allowed = candidate.mailboxScopeEnabled
@@ -60,7 +63,12 @@ export async function authenticateApiRequest(env: CloudflareEnv, request: Reques
 			return null;
 		}
 		const separator = decoded.indexOf(":");
-		return authenticateApiKeyValue(env, separator >= 0 ? decoded.slice(separator + 1) : decoded, options);
+		const secret = separator >= 0 ? decoded.slice(separator + 1) : decoded;
+		const result = await authenticateApiKeyValue(env, secret, options);
+		if (result) return result;
+		// A grouped app password ("abcd-efgh ...") as shown in the dashboard; DAV strips the same characters.
+		const ungrouped = secret.replace(/[\s-]/g, "");
+		return ungrouped !== secret ? authenticateApiKeyValue(env, ungrouped, options) : null;
 	}
 	return null;
 }

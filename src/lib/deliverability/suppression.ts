@@ -5,6 +5,7 @@ import { getEmailAddressList } from "@/lib/email/address";
 import { newId } from "@/lib/ids";
 import { getAuthorizedSenderAddress } from "@/lib/email/sender";
 import { parseDeliveryStatus } from "./dsn";
+import { isMissingColumnError, isMissingTableError } from "@/lib/database-errors";
 import {
 	addressDomain, cleanAddress, filterSuppressed, MAX_SUPPRESSION_DETAIL, SuppressedRecipientError,
 	type SuppressionEntry, type SuppressionMode, type SuppressionReason, type SuppressionSource,
@@ -18,13 +19,14 @@ const DSN_LOOKBACK_MS = 30 * 24 * 60 * 60 * 1000;
 const MAX_DSN_ENTRIES = 50;
 const STRENGTH: Record<SuppressionReason, number> = { manual: 0, hard_bounce: 1, complaint: 2 };
 
-/** Installation-wide mode. Reads "off" until the migration that adds the column is applied. */
+/** Installation-wide mode. Reads "off" only while the migration that adds the column is missing; any other error is thrown, so enforcement never silently lapses. */
 export async function getSuppressionMode(env: CloudflareEnv): Promise<SuppressionMode> {
 	try {
 		const [row] = await getDb(env).select({ mode: appSettings.suppressionMode }).from(appSettings).where(eq(appSettings.id, SETTINGS_ID)).limit(1);
 		return row?.mode === "record" || row?.mode === "enforce" ? row.mode : "off";
-	} catch {
-		return "off";
+	} catch (error) {
+		if (isMissingColumnError(error) || isMissingTableError(error)) return "off";
+		throw error;
 	}
 }
 

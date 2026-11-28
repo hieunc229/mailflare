@@ -3,7 +3,7 @@ import { eq } from "drizzle-orm";
 import { getEnv } from "@/lib/cloudflare";
 import { getDb } from "@/db";
 import { users } from "@/db/schema";
-import { verifyPassword } from "@/lib/auth/password";
+import { verifyPasswordAsync } from "@/lib/auth/password";
 import { deviceLoginSchema } from "@/lib/validators";
 import { allowDeviceLoginAttempt } from "@/lib/auth/rate-limit";
 import { readJsonBody } from "@/lib/http/request";
@@ -44,7 +44,8 @@ export async function POST(request: Request) {
 	let userId: string;
 	if ("password" in parsed.data) {
 		const [user] = await db.select().from(users).where(eq(users.email, parsed.data.email)).limit(1);
-		if (!user || !verifyPassword(parsed.data.password, user.passwordHash)) return json({ error: "Invalid credentials" }, 401);
+		const passwordOk = await verifyPasswordAsync(parsed.data.password, user?.passwordHash);
+		if (!user || !passwordOk) return json({ error: "Invalid credentials" }, 401);
 		if (user.disabled || user.deletedAt) return json({ error: "Account disabled" }, 403);
 		if (user.requireSecondFactor) {
 			// The app can only finish with TOTP or a recovery code. Without one of

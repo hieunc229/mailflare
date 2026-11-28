@@ -10,7 +10,7 @@ import { isoBase64URL } from "@simplewebauthn/server/helpers";
 import { eq } from "drizzle-orm";
 import { getDb } from "@/db";
 import { users } from "@/db/schema";
-import { getWebAuthnConfig } from "./config";
+import { getWebAuthnConfig, getWebAuthnOrigin } from "./config";
 import { findPasskeyByCredentialId, recordPasskeyUse, savePasskey, toWebAuthnCredential, type StoredPasskey } from "./credentials";
 import { PasskeyVerificationError } from "./errors";
 
@@ -84,7 +84,7 @@ export async function verifyPasskeyRegistrationResponse(
 	response: RegistrationResponseJSON,
 	expectedChallenge: string,
 ): Promise<VerifiedPasskeyRegistration> {
-	const config = await getWebAuthnConfig(env, request);
+	const config = getWebAuthnOrigin(env, request);
 	const verification = await verifyRegistrationResponse({
 		response,
 		expectedChallenge,
@@ -163,7 +163,7 @@ export async function verifyPasskeyAuthentication(
 		if (isoBase64URL.toUTF8String(handle) !== user.id) throw new PasskeyVerificationError("passkey_not_found");
 	}
 
-	const config = await getWebAuthnConfig(env, request);
+	const config = getWebAuthnOrigin(env, request);
 	const verification = await verifyAuthenticationResponse({
 		response,
 		expectedChallenge,

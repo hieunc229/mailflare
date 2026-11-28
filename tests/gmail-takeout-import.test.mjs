@@ -171,3 +171,10 @@ test("zip entries are listed and deflated entries stream back intact", async () 
 	assert.equal(messages.length, 2);
 	assert.ok(messages[1].endsWith("8-bit body \xff\xfe\r\n"));
 });
+
+test("an unescaped From line inside a body does not split the message", async () => {
+	const raw = "From a@x Thu Oct 22 10:11:12 2026\nSubject: one\n\nHello\nFrom the desk of the CEO\nbye\n\nFrom b@x Thu Oct 22 10:12:12 2026\nSubject: two\n\nhi\n";
+	const messages = await collect(splitMbox(chunked(raw)));
+	assert.equal(messages.length, 2);
+	assert.ok(messages[0].includes("From the desk of the CEO\nbye"));
+});

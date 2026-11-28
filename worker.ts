@@ -28,6 +28,7 @@ import { inboundAttachmentLimitReasonFromRaw } from "./src/lib/email/inbound-att
 import { hasValidSessionMutationOrigin } from "./src/lib/auth/origin";
 import {
 	getAccountForwardingDestination,
+	plainMailbox,
 	isForwardedMarkerValid,
 	MAILFLARE_FORWARDED_HEADER,
 } from "./src/lib/email/account-forwarding";
@@ -114,7 +115,7 @@ export default {
 
 			// Report mail is never forwarded, by a rule or by the account's forwarding address.
 			if (!alreadyForwarded && decision?.action !== "report") {
-				const forwardingDestination = await getAccountForwardingDestination(env, message.to);
+				const forwardingDestination = await getAccountForwardingDestination(env, message.to, plainMailbox(decision));
 				if (forwardingDestination) {
 					await forwardMessage(env, message, forwardingDestination);
 				}
@@ -170,9 +171,9 @@ export default {
 	async scheduled(controller: ScheduledController, rawEnv: CloudflareEnv, ctx: ExecutionContext) {
 		const env = withDatabase(withStorage(rawEnv));
 		const now = new Date(controller.scheduledTime);
-		// Both crons run the frequent jobs; the daily ones belong to 02:00 UTC alone. The lists are shared with
-		// the self-hosted scheduler and the Vercel cron routes (src/lib/scheduled/jobs.ts).
-		const jobs = [...frequentJobs(env, now), autoUpdateJob(env), ...(controller.cron === "0 2 * * *" ? dailyJobs(env, now) : [])];
+		// The `*/5` trigger also fires at 02:00 and carries the frequent jobs, so the daily trigger runs the daily list
+		// alone. The lists are shared with the self-hosted scheduler and the Vercel cron routes (src/lib/scheduled/jobs.ts).
+		const jobs = controller.cron === "0 2 * * *" ? dailyJobs(env, now) : [...frequentJobs(env, now), autoUpdateJob(env)];
 		for (const job of jobs) ctx.waitUntil(runScheduledJob(job));
 	},
 } satisfies ExportedHandler<CloudflareEnv>;

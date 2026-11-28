@@ -191,3 +191,10 @@ test("styled signatures are deterministic and editor copies are inert but export
 	assert.match(prepareEmailHtml(preview, { forOutgoing: true }).html, /\.signature\{color:red;background:url\(https:\/\/remote.example\/bg\)/);
 	assert.equal(sanitizeEditorHtml(prepareEmailHtml(preview, { forOutgoing: true }).html), preview);
 });
+
+test("sanitizing twice gives identical output and still strips scripts", () => {
+	const html = '<p onclick="x()">a</p><script>alert(1)</script>';
+	const first = sanitizeEditorHtml(html);
+	assert.equal(sanitizeEditorHtml(html), first);
+	assert.ok(!/script|onclick/i.test(first), first);
+});

@@ -1,8 +1,7 @@
 import { normalizeTimeZone, zonedDateFields } from "../time/utils";
 import { isIcsAddress } from "./ics";
 import type { ImportEvent, ImportGroup, ImportOptions, SplitIcsResult } from "./ics-import-types";
-import { addZonedDays, inviteRepeat, parseIcsDate, parseIcsDuration, parseProperty, unescapeText, type InviteRepeat, type Property } from "./invite";
-import { normalizeReminderMinutes } from "./reminder-utils";
+import { addZonedDays, inviteRepeat, parseAlarmTrigger, parseIcsDate, parseIcsDuration, parseProperty, unescapeText, type InviteRepeat, type Property } from "./invite";
 
 /**
  * Reads whole iCalendar files (Google Takeout) for import. The file is attacker-controllable, so every step is
@@ -219,12 +218,7 @@ function pickReminderMinutes(alarms: Property[][]): number | null {
 	let any: number | null = null;
 	for (const alarm of alarms) {
 		const trigger = alarm.find((property) => property.name === "TRIGGER");
-		if (!trigger || (trigger.params.VALUE ?? "").toUpperCase() === "DATE-TIME" || (trigger.params.RELATED ?? "START").toUpperCase() !== "START") continue;
-		const value = trigger.value.trim();
-		if (!value.startsWith("-")) continue;
-		const duration = parseIcsDuration(value.slice(1));
-		if (!duration) continue;
-		const minutes = normalizeReminderMinutes(Math.floor((duration.days * 86_400_000 + duration.ms) / 60_000));
+		const minutes = parseAlarmTrigger(trigger);
 		if (minutes === null) continue;
 		any = any === null ? minutes : Math.min(any, minutes);
 		if ((alarm.find((property) => property.name === "ACTION")?.value ?? "").trim().toUpperCase() === "DISPLAY") display = display === null ? minutes : Math.min(display, minutes);
@@ -248,13 +242,24 @@ function rruleIsRepresentable(rrule: string, start: Date, zone: string): boolean
 		if (eq < 1) return false;
 		rule[part.slice(0, eq).trim().toUpperCase()] = part.slice(eq + 1).trim().toUpperCase();
 	}
-	if (Object.keys(rule).some((key) => !["FREQ", "UNTIL", "COUNT", "INTERVAL", "BYDAY", "BYMONTHDAY", "WKST"].includes(key))) return false;
-	if (rule.INTERVAL && rule.INTERVAL !== "1") return false;
+	if (Object.keys(rule).some((key) => !["FREQ", "UNTIL", "COUNT", "INTERVAL", "BYDAY", "BYMONTHDAY", "BYMONTH", "WKST"].includes(key))) return false;
+	if (rule.INTERVAL !== undefined && !(/^\d{1,3}$/.test(rule.INTERVAL) && Number(rule.INTERVAL) >= 1)) return false;
+	if (rule.BYMONTH !== undefined && rule.FREQ !== "YEARLY") return false;
 	if (rule.UNTIL !== undefined && !parseIcsDate({ name: "UNTIL", params: {}, value: rule.UNTIL }, zone)) return false;
 	if (rule.COUNT !== undefined && !(/^\d{1,5}$/.test(rule.COUNT) && Number(rule.COUNT) >= 1 && Number(rule.COUNT) <= MAX_COUNT)) return false;
 	const fields = zonedDateFields(start, zone);
+	if (rule.FREQ === "YEARLY") return !(fields.getUTCMonth() === 1 && fields.getUTCDate() === 29);
 	if (rule.FREQ === "MONTHLY") {
-		if (rule.BYDAY || fields.getUTCDate() > 28) return false;
+		if (rule.BYDAY) {
+			// One nth-weekday code (2TU, -1FR) that DTSTART itself falls on.
+			const match = /^([+-]?\d)([A-Z]{2})$/.exec(rule.BYDAY);
+			if (!match || rule.BYMONTHDAY !== undefined || WEEKDAY_CODES.indexOf(match[2]) !== fields.getUTCDay()) return false;
+			const day = fields.getUTCDate();
+			const week = Number(match[1]);
+			const last = day + 7 > new Date(Date.UTC(fields.getUTCFullYear(), fields.getUTCMonth() + 1, 0)).getUTCDate();
+			return week === -1 ? last : week === Math.ceil(day / 7);
+		}
+		if (fields.getUTCDate() > 28) return false;
 		return rule.BYMONTHDAY === undefined || (/^\d{1,2}$/.test(rule.BYMONTHDAY) && Number(rule.BYMONTHDAY) === fields.getUTCDate());
 	}
 	if (rule.FREQ !== "DAILY" && rule.FREQ !== "WEEKLY") return false;
@@ -362,6 +367,7 @@ function readEvent(raw: RawEvent, options: ImportOptions, own: Set<string>): Out
 			title: oneLine(unescapeText(find("SUMMARY")?.value ?? ""), MAX_TITLE) || "(no title)",
 			description, location, startsAt, endsAt, timeZone,
 			repeat: repeat.repeat, repeatDays: repeat.repeatDays, repeatAnchorDay: repeat.repeatAnchorDay, repeatUntil: repeat.repeatUntil,
+			repeatInterval: repeat.repeatInterval, repeatWeekday: repeat.repeatWeekday, repeatWeek: repeat.repeatWeek,
 			excluded, reminderMinutes: options.reminders ? pickReminderMinutes(alarms) : null,
 			attendees: [...attendees], recurrenceId: recurrence?.date ?? null,
 		},

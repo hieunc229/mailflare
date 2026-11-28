@@ -50,18 +50,22 @@ export async function dispatchWebhooks(
 	const db = getDb(env);
 	const hooks = await db.select().from(webhooks).where(eq(webhooks.userId, userId));
 
-	for (const hook of hooks) {
-		if (!hook.enabled) continue;
-		if (!parseWebhookEvents(hook.events).includes(eventType)) continue;
-
+	const matching = hooks.filter((hook) => hook.enabled && parseWebhookEvents(hook.events).includes(eventType));
+	const body = JSON.stringify({ type: eventType, data: payload });
+	// The first attempt runs in the queue consumer, so a send or an inbound message never waits on customer endpoints.
+	await Promise.allSettled(matching.map(async (hook) => {
 		try {
-			const body = JSON.stringify({ type: eventType, data: payload });
-			const delivery = await createDelivery(db, hook.id, eventType, body);
-			await attemptDelivery(env, db, hook, delivery);
+			const delivery = await createDelivery(db, hook.id, eventType, body, { queued: true });
+			try {
+				await env.OUTBOUND_QUEUE.send({ kind: "webhook.retry", deliveryId: delivery.id } satisfies WebhookRetryMessage);
+			} catch (error) {
+				console.error(`Failed to enqueue webhook delivery ${delivery.id}, attempting inline`, error);
+				await attemptDelivery(env, db, hook, delivery);
+			}
 		} catch (error) {
 			console.error(`Webhook dispatch failed for ${hook.id}`, error);
 		}
-	}
+	}));
 }
 
 type PendingDelivery = Pick<DeliveryRow, "id" | "payload" | "eventType" | "attempts">;
@@ -71,6 +75,7 @@ async function createDelivery(
 	webhookId: string,
 	eventType: string,
 	payload: string,
+	options?: { queued?: boolean },
 ): Promise<PendingDelivery> {
 	const id = newId("whd");
 	await db.insert(webhookDeliveries).values({
@@ -78,8 +83,10 @@ async function createDelivery(
 		webhookId,
 		eventType,
 		payload,
-		status: "pending",
+		// A queued first attempt is a retry the consumer picks up now; it only posts deliveries in that state.
+		status: options?.queued ? "retrying" : "pending",
 		attempts: 0,
+		...(options?.queued ? { nextRetryAt: new Date() } : {}),
 	});
 	return { id, payload, eventType, attempts: 0 };
 }
@@ -90,6 +97,7 @@ async function attemptDelivery(
 	db: AppDatabase,
 	hook: WebhookRow,
 	delivery: PendingDelivery,
+	options?: { scheduleNext?: boolean },
 ): Promise<WebhookDeliveryStatus> {
 	const attempts = delivery.attempts + 1;
 	const startedAt = Date.now();
@@ -143,7 +151,8 @@ async function attemptDelivery(
 		})
 		.where(eq(webhookDeliveries.id, delivery.id));
 
-	if (canRetry) {
+	// A manual retry made while a queued retry is still pending leaves that one in place: no second chain.
+	if (canRetry && options?.scheduleNext !== false) {
 		await scheduleRetry(env, delivery.id, getRetryDelaySeconds(attempts));
 	}
 
@@ -187,6 +196,8 @@ export async function runDelivery(
 	const [hook] = await db.select().from(webhooks).where(eq(webhooks.id, delivery.webhookId)).limit(1);
 	if (!hook) return null;
 	if (options?.userId && hook.userId !== options.userId) return null;
+	// A queued retry only applies to a delivery still waiting for one: a manual retry may have settled it since.
+	if (options?.scheduled && delivery.status !== "retrying") return { status: delivery.status as WebhookDeliveryStatus };
 	// Retries queued before the webhook was switched off must not keep posting to it.
 	// A manual retry is still allowed; it is the operator asking for it.
 	if (options?.scheduled && !hook.enabled) {
@@ -197,7 +208,8 @@ export async function runDelivery(
 		return { status: "failed" };
 	}
 
-	return { status: await attemptDelivery(env, db, hook, delivery) };
+	const chainPending = !options?.scheduled && delivery.status === "retrying" && !!delivery.nextRetryAt && delivery.nextRetryAt.getTime() > Date.now();
+	return { status: await attemptDelivery(env, db, hook, delivery, { scheduleNext: !chainPending }) };
 }
 
 /** Sends a synthetic event so an operator can verify an endpoint from the UI. */

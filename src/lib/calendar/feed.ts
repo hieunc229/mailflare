@@ -1,4 +1,5 @@
 import { escapeIcsText, foldIcsLine, formatIcsUtc, joinIcsLines } from "./ics";
+import { isValidTimeZone } from "../time/utils";
 import { parseCalendarRepeatDays, parseExcludedOccurrences } from "./recurrence";
 
 export { escapeIcsText, foldIcsLine };
@@ -33,15 +34,23 @@ const BYDAY = ["SU", "MO", "TU", "WE", "TH", "FR", "SA"];
 
 const utc = formatIcsUtc;
 
+const localFormatters = new Map<string, Intl.DateTimeFormat>();
+
 function local(value: Date, timeZone: string): string {
-	const parts = new Intl.DateTimeFormat("en-CA", { timeZone, hourCycle: "h23", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", second: "2-digit" }).formatToParts(value);
+	let formatter = localFormatters.get(timeZone);
+	if (!formatter) {
+		formatter = new Intl.DateTimeFormat("en-CA", { timeZone, hourCycle: "h23", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", second: "2-digit" });
+		if (localFormatters.size >= 64) localFormatters.clear();
+		localFormatters.set(timeZone, formatter);
+	}
+	const parts = formatter.formatToParts(value);
 	const get = (type: string) => parts.find((part) => part.type === type)?.value ?? "00";
 	return `${get("year")}${get("month")}${get("day")}T${get("hour")}${get("minute")}${get("second")}`;
 }
 
 function validTimeZone(value: string | null): string | null {
 	if (!value) return null;
-	try { new Intl.DateTimeFormat("en", { timeZone: value }); return value; } catch { return null; }
+	return isValidTimeZone(value) ? value : null;
 }
 
 function dateProperty(name: string, value: Date, timeZone: string | null): string {

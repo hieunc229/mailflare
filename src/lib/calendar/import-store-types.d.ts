@@ -25,6 +25,9 @@ export type CalendarImportRow = {
 	repeatDays: string;
 	repeatAnchorDay: number | null;
 	repeatUntil: Date | null;
+	repeatInterval: number;
+	repeatWeekday: number | null;
+	repeatWeek: number | null;
 	excludedOccurrences: string;
 	timeZone: string;
 	startsAt: Date;

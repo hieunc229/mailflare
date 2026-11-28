@@ -31,6 +31,7 @@ import type { DomainRoutingProps, DomainRule, DomainRuleInput } from "./types";
 import {
 	ACTION_LABELS,
 	MATCH_FIELD_LABELS,
+	SELECTABLE_MATCH_FIELDS,
 	MATCH_OPERATOR_LABELS,
 	createDomainRule,
 	deleteDomainRule,
@@ -256,7 +257,7 @@ export function DomainRouting({ domain }: DomainRoutingProps = {}) {
 										else setForm({ ...form, matchField, matchValue: form.matchField === "mail_type" ? "" : form.matchValue });
 									}}
 								>
-									{Object.entries(MATCH_FIELD_LABELS).map(([value, label]) => (
+									{Object.entries(MATCH_FIELD_LABELS).filter(([value]) => SELECTABLE_MATCH_FIELDS.includes(value as DomainRuleInput["matchField"]) || value === form.matchField).map(([value, label]) => (
 										<option key={value} value={value}>
 											{t(label)}
 										</option>

@@ -5,7 +5,7 @@ import { SuppressedRecipientError, suppressedSubmissionError } from "@/lib/deliv
 import { loadMessageAttachmentContents } from "@/lib/email/attachments";
 import { deleteMessageWithObjects } from "@/lib/email/message-cleanup";
 import { decodeIdentityId, identityId } from "./ids";
-import { listJmapMailboxes, listSendableAddresses } from "./access";
+import { listJmapMailboxes, listSendableAddressesByMailbox } from "./access";
 import { getEmailState } from "./state";
 import { JmapError } from "./errors";
 import type { JmapContext, JmapMethodHandler } from "./types";
@@ -14,9 +14,9 @@ import type { JmapContext, JmapMethodHandler } from "./types";
 export async function buildIdentities(ctx: JmapContext) {
 	const list: Array<Record<string, unknown>> = [];
 	const sendable = (await listJmapMailboxes(ctx)).filter((mailbox) => mailbox.permission !== "read_only");
-	const addresses = await Promise.all(sendable.map((mailbox) => listSendableAddresses(ctx, mailbox)));
-	for (const [index, mailbox] of sendable.entries()) {
-		for (const address of addresses[index]) {
+	const addresses = await listSendableAddressesByMailbox(ctx, sendable);
+	for (const mailbox of sendable) {
+		for (const address of addresses.get(mailbox.id) ?? []) {
 			list.push({
 				id: identityId(mailbox.id, address),
 				name: mailbox.displayName ?? "",

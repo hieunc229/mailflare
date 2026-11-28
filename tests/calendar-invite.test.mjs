@@ -755,3 +755,16 @@ test("a failing invitation is reported per attendee instead of rejecting", async
 	assert.deepEqual(sent, ["a@example.com", "c@example.com"]);
 	assert.deepEqual(await sendToAttendees([], async () => { throw new Error("unused"); }), []);
 });
+test("expandToolEvents keeps the earliest occurrences by time when max is reached", () => {
+	const row = (id, repeat, startsAt) => ({
+		id, title: id, description: "", location: "", attendees: "[]", color: "#2563eb", repeat,
+		repeatDays: "[]", repeatAnchorDay: null, repeatUntil: null, repeatInterval: 1, repeatWeekday: null, repeatWeek: null,
+		excludedOccurrences: "[]", timeZone: "UTC", startsAt: new Date(startsAt), endsAt: new Date(new Date(startsAt).getTime() + 1_800_000),
+	});
+	const events = [row("A", "daily", "2026-01-01T09:00:00Z"), row("B", "none", "2026-01-03T10:00:00Z")];
+	const result = expandToolEvents(events, new Date("2026-01-01T00:00:00Z"), new Date("2026-01-11T00:00:00Z"), 5);
+	assert.equal(result.length, 5);
+	const starts = result.map((item) => item.startsAt);
+	assert.deepEqual(starts, [...starts].sort());
+	assert.ok(result.some((item) => item.seriesId === "B"));
+});
