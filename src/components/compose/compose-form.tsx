@@ -13,6 +13,7 @@ import { Tooltip } from "@/components/ui/tooltip";
 import { useSelectedMailbox } from "@/components/mailbox-provider";
 import { authFetch } from "@/lib/auth/client";
 import { formatEmailAddress, getEmailAddress } from "@/lib/email/address";
+import { sanitizeEmailHtml } from "@/lib/email/html";
 import { clearMessageDetailCache } from "@/lib/messages/detail-cache";
 import { useCompose } from "@/components/compose/compose-context";
 import { cn } from "@/lib/utils";
@@ -45,6 +46,11 @@ import type { ComposeAttachment, ComposeStoredAttachment, ComposeThreading } fro
 import type { ComposeAttachmentPolicy } from "./attachment-policy-types";
 
 type Toast = { type: "success" | "error"; message: string } | null;
+type ComposeBody = { html: string; fromSource?: true };
+
+function outgoingBody({ html, fromSource }: ComposeBody): string {
+	return fromSource ? sanitizeEmailHtml(html, { forOutgoing: true }) ?? "" : html;
+}
 
 export function ComposeForm({
 	mode = "page",
@@ -75,7 +81,7 @@ export function ComposeForm({
 	const [threading, setThreading] = useState<ComposeThreading | null>(null);
 	const [subject, setSubject] = useState("");
 	// The body is HTML; quoted/forwarded content is kept aside and folded.
-	const [html, setHtml] = useState("");
+	const [body, setBody] = useState<ComposeBody>({ html: "" });
 	const [quotedHtml, setQuotedHtml] = useState<string | null>(null);
 	const [attachments, setAttachments] = useState<ComposeAttachment[]>([]);
 	// Attachments the draft already holds server-side (a forwarded message's files).
@@ -220,7 +226,7 @@ export function ComposeForm({
 				);
 				setSubject(draft.subject ?? "");
 				const stored = splitQuotedHtml(draft.htmlBody || textToHtml(draft.textBody));
-				setHtml(stored.body);
+				setBody({ html: stored.body });
 				setQuotedHtml(stored.quoted);
 				setStoredAttachments(draft.attachments?.filter((item) => item.disposition === "attachment") ?? []);
 				setLoadedDraftMailboxId(draft.mailboxId);
@@ -251,7 +257,13 @@ export function ComposeForm({
 	useEffect(() => {
 		if (loadingDraft) return;
 		const nextSignature = selectedMailbox?.signature ?? "";
-		setHtml((current) => applyMailboxSignatureHtml(current, previousSignature.current, nextSignature));
+		const priorSignature = previousSignature.current;
+		setBody((current) => {
+			if (current.fromSource && priorSignature === nextSignature) return current;
+			const html = outgoingBody(current);
+			const updated = applyMailboxSignatureHtml(html, priorSignature, nextSignature);
+			return updated === html ? current : { html: updated };
+		});
 		previousSignature.current = nextSignature;
 	}, [loadingDraft, selectedMailbox?.id, selectedMailbox?.signature]);
 
@@ -261,19 +273,18 @@ export function ComposeForm({
 
 	useEffect(() => {
 		pendingSave.current = null;
-		const bodyContent = htmlToPlainText(html).trim();
-		// Compare text with text: an HTML signature is stored as markup.
-		const signatureContent = htmlToPlainText(applyMailboxSignatureHtml("", "", selectedMailbox?.signature)).trim();
-		const signatureOnly = bodyContent === signatureContent;
-		const hasContent =
-			to.length > 0 || cc.length > 0 || bcc.length > 0 || subject.trim() || quotedHtml || attachments.length > 0 || (bodyContent && !signatureOnly);
-		if (!fromAddr || !hasContent || loadingDraft || reviewInProgressRef.current) return;
+		if (!fromAddr || loadingDraft || reviewInProgressRef.current) return;
 		if (saveTimer.current) clearTimeout(saveTimer.current);
 
 		const generation = draftGeneration.current;
 		const save = () => {
 			const run = saveQueue.current.then(async () => {
 				if (generation !== draftGeneration.current || reviewInProgressRef.current) return;
+				const html = outgoingBody(body);
+				const hasOtherContent = to.length > 0 || cc.length > 0 || bcc.length > 0 || subject.trim() || quotedHtml || attachments.length > 0;
+				// Ignore the automatic signature when deciding whether the body should start a draft.
+				if (!hasOtherContent && !hasMeaningfulHtml(applyMailboxSignatureHtml(html, selectedMailbox?.signature, ""))) return;
+				const fullHtml = joinQuotedHtml(html, quotedHtml);
 				const payload = {
 					mailboxId: selectedMailbox?.id,
 					from: fromAddr,
@@ -281,8 +292,8 @@ export function ComposeForm({
 					cc: recipientsToHeader(cc),
 					bcc: recipientsToHeader(bcc),
 					subject,
-					html: joinQuotedHtml(html, quotedHtml),
-					text: htmlToPlainText(joinQuotedHtml(html, quotedHtml)),
+					html: fullHtml,
+					text: htmlToPlainText(fullHtml),
 					inReplyTo: threading?.inReplyTo ?? null,
 					references: threading?.references ?? null,
 					threadId: threading?.threadId ?? null,
@@ -330,7 +341,7 @@ export function ComposeForm({
 		return () => {
 			if (saveTimer.current) clearTimeout(saveTimer.current);
 		};
-	}, [attachments, bcc, cc, fromAddr, html, loadingDraft, quotedHtml, selectedMailbox?.id, selectedMailbox?.signature, subject, threading, to]);
+	}, [attachments, bcc, body, cc, fromAddr, loadingDraft, quotedHtml, selectedMailbox?.id, selectedMailbox?.signature, subject, threading, to]);
 
 	useEffect(() => {
 		if (!draftIdToLoad || loadingDraft) return;
@@ -348,6 +359,7 @@ export function ComposeForm({
 			setToast({ type: "error", message: t("compose.error.invalidAddress", { address: invalid }) });
 			return;
 		}
+		const html = outgoingBody(body);
 		if (!hasMeaningfulHtml(html) && !quotedHtml) {
 			setToast({ type: "error", message: t("compose.error.emptyBody") });
 			return;
@@ -447,7 +459,7 @@ export function ComposeForm({
 		setThreading(null);
 		setStoredAttachments([]);
 		setSubject("");
-		setHtml(applyMailboxSignatureHtml("", "", selectedMailbox?.signature));
+		setBody({ html: applyMailboxSignatureHtml("", "", selectedMailbox?.signature) });
 		setQuotedHtml(null);
 		setAttachments([]);
 		setScheduledAt(null);
@@ -643,7 +655,7 @@ export function ComposeForm({
 		setThreading(null);
 		setStoredAttachments([]);
 		setSubject("");
-		setHtml(applyMailboxSignatureHtml("", "", selectedMailbox?.signature));
+		setBody({ html: applyMailboxSignatureHtml("", "", selectedMailbox?.signature) });
 		setQuotedHtml(null);
 		setAttachments([]);
 		setScheduledAt(null);
@@ -927,8 +939,10 @@ export function ComposeForm({
 				<Label htmlFor={`${mode}-text`} className="sr-only">{t("compose.body")}</Label>
 				<RichTextEditor
 					id={`${mode}-text`}
-					value={html}
-					onChange={setHtml}
+					value={body.html}
+					valueIsSource={body.fromSource}
+					onChange={(html, fromSource) => setBody({ html, fromSource })}
+					enableHtmlComposition
 					quotedHtml={quotedHtml}
 					disabled={loadingDraft}
 					placeholder={t("compose.bodyPlaceholder")}
@@ -955,7 +969,10 @@ export function ComposeForm({
 									from={fromAddr}
 									onApplyTemplate={({ title, html: templateHtml }) => {
 										setSubject((current) => current.trim() ? current : title);
-										setHtml((current) => (hasMeaningfulHtml(current) ? `${current}${templateHtml}` : templateHtml));
+										setBody((current) => {
+											const html = outgoingBody(current);
+											return { html: hasMeaningfulHtml(html) ? `${html}${templateHtml}` : templateHtml };
+										});
 									}}
 								/>
 							</div>

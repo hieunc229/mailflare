@@ -3,7 +3,11 @@ export type RichTextEditorProps = {
 	id: string;
 	/** Editable HTML. */
 	value: string;
-	onChange: (html: string) => void;
+	/** The controlled value is raw HTML source. Sanitize it at persistence boundaries. */
+	valueIsSource?: boolean;
+	onChange: (html: string, fromSource?: true) => void;
+	/** Enable rich clipboard paste and HTML source editing in the mail composer. */
+	enableHtmlComposition?: boolean;
 	/** Quoted or forwarded HTML shown folded under the editable area. */
 	quotedHtml?: string | null;
 	disabled?: boolean;

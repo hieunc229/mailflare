@@ -11,7 +11,7 @@ const temp = mkdtempSync(join(root, "node_modules", "mailflare-review-behavior-"
 after(() => rmSync(temp, { recursive: true, force: true }));
 
 const dom = new JSDOM("<!doctype html><html><body></body></html>", { url: "https://mail.example/" });
-for (const key of ["window", "document", "HTMLElement", "Element", "Node", "Event", "HTMLInputElement", "File", "FormData"]) {
+for (const key of ["window", "document", "HTMLElement", "Element", "Node", "Event", "HTMLInputElement", "File", "FormData", "DOMParser"]) {
   globalThis[key] = key === "window" ? dom.window : dom.window[key];
 }
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
@@ -51,7 +51,7 @@ import React from "react";
 export function RichTextEditor({value, onChange, toolbarStart, toolbarEnd, footerContent, disabled}) {
   return React.createElement("div", {},
     toolbarStart,
-    React.createElement("textarea", { "data-body": "yes", value: value || "", onChange: event => onChange(event.target.value), disabled }),
+    React.createElement("textarea", { "data-body": "yes", value: value || "", onChange: event => onChange(event.target.value, true), disabled }),
     toolbarEnd, footerContent
   );
 }
@@ -171,6 +171,11 @@ test("agent review does not get invalidated by autosave, and cancellation resume
   await delay(1100);
   requests.length = 0;
 
+  const body = container.querySelector("[data-body]");
+  await act(async () => {
+    Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, "value").set.call(body, '<p>Last-minute edit</p><script>bad()</script>');
+    body.dispatchEvent(new window.Event("input", { bubbles: true }));
+  });
   await act(async () => {
     container.querySelector("form").dispatchEvent(
       new window.Event("submit", { bubbles: true, cancelable: true })
@@ -180,6 +185,9 @@ test("agent review does not get invalidated by autosave, and cancellation resume
   const reviewed = requests.find(x => x.url === "/api/agent/approvals");
   assert.ok(reviewed, "review should request a snapshot");
   assert.equal(reviewed.payload.expectedRevision, revision, "review owns current revision");
+  const reviewedBody = requests.find(x => x.url === "/api/drafts/draft-1" && x.method === "PATCH").payload;
+  assert.equal(reviewedBody.html, "<p>Last-minute edit</p>");
+  assert.equal(reviewedBody.text, "Last-minute edit");
 
   await delay(1200);
   const patchCount = requests.filter(x => x.url === "/api/drafts/draft-1" && x.method === "PATCH").length;
@@ -196,6 +204,32 @@ test("agent review does not get invalidated by autosave, and cancellation resume
   await delay(1200);
   assert.equal(requests.filter(x => x.url === "/api/drafts/draft-1" && x.method === "PATCH").length, 2,
     "a subsequent user edit saves normally after cancelling review");
+});
+
+test("an image-only HTML draft is saved on close without recipients or subject", async () => {
+  const requests = [];
+  globalThis.__reviewTestFetch = async (url, options = {}) => {
+    if (url === "/api/attachment-policy") return response({ maxMb: 25, cloudThresholdBytes: 3000000 });
+    if (url === "/api/drafts" && options.method === "POST") {
+      requests.push(JSON.parse(options.body));
+      return response({ draft: { id: "image-draft" } });
+    }
+    throw new Error("Unexpected route: " + url);
+  };
+  const container = document.body.appendChild(document.createElement("div"));
+  const root = createRoot(container);
+  await act(async () => { root.render(createElement(ComposeForm)); });
+  const input = container.querySelector("[data-body]");
+  await act(async () => {
+    Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, "value").set.call(input, '<img src="https://example.com/photo.png" onerror="bad()"><script>bad()</script>');
+    input.dispatchEvent(new window.Event("input", { bubbles: true }));
+  });
+  await act(async () => root.unmount());
+  container.remove();
+
+  assert.equal(requests.length, 1);
+  assert.match(requests[0].html, /<img[^>]+src="https:\/\/example.com\/photo.png"/);
+  assert.doesNotMatch(requests[0].html, /onerror|<script/);
 });
 
 test("Escape already handled by a menu or dialog does not leave the composer's expanded mode", async t => {

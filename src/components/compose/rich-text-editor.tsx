@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import type { ClipboardEvent, KeyboardEvent } from "react";
 import {
 	Bold,
+	FileCode,
 	Italic,
 	Link2,
 	List,
@@ -18,6 +19,7 @@ import { Tooltip } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import { EmailHtmlRenderer } from "@/components/messages/email-html-renderer";
 import { sanitizeEmailHtml, sanitizeEditorHtml } from "@/lib/email/html";
+import { HtmlSourceEditor } from "./html-source-editor";
 import type { RichTextEditorProps, ToolbarCommand } from "./rich-text-editor-types";
 
 const COMMANDS: ToolbarCommand[] = [
@@ -31,14 +33,14 @@ const COMMANDS: ToolbarCommand[] = [
 ];
 
 /**
- * A small HTML editor built on contentEditable. It stays deliberately light:
- * inline styles, lists, quotes and links, with pasted content flattened to
- * text so a message never carries another site's markup.
+ * A contentEditable editor with an optional HTML source view for composing mail.
  */
 export function RichTextEditor({
 	id,
 	value,
+	valueIsSource = false,
 	onChange,
+	enableHtmlComposition = false,
 	quotedHtml,
 	disabled,
 	placeholder,
@@ -56,18 +58,31 @@ export function RichTextEditor({
 	const [linkOpen, setLinkOpen] = useState(false);
 	const [linkUrl, setLinkUrl] = useState("");
 	const [showQuoted, setShowQuoted] = useState(false);
+	const [htmlMode, setHtmlMode] = useState(false);
+	const [previewHtml, setPreviewHtml] = useState("");
 	const savedRange = useRef<Range | null>(null);
 	const lastEmitted = useRef<string | null>(null);
+	const lastEditorMarkup = useRef("");
 
 	// Keep the DOM in step with the value without resetting the caret on every keystroke.
 	useEffect(() => {
 		const element = editorRef.current;
 		if (!element) return;
 		if (lastEmitted.current !== null && value === lastEmitted.current) return;
-		const safeValue = sanitizeEditorHtml(value);
+		const html = valueIsSource ? sanitizeEmailHtml(value, { forOutgoing: true }) ?? "" : value;
+		const safeValue = sanitizeEditorHtml(html);
 		if (element.innerHTML !== safeValue) element.innerHTML = safeValue;
+		lastEditorMarkup.current = element.innerHTML;
 		lastEmitted.current = null;
-	}, [value]);
+	}, [value, valueIsSource, htmlMode]);
+
+	useEffect(() => {
+		if (!htmlMode) return;
+		const timeout = setTimeout(() => {
+			setPreviewHtml(valueIsSource ? sanitizeEmailHtml(value, { forOutgoing: true }) ?? "" : value);
+		}, 150);
+		return () => clearTimeout(timeout);
+	}, [htmlMode, value, valueIsSource]);
 
 	useEffect(() => {
 		function refresh() {
@@ -88,8 +103,11 @@ export function RichTextEditor({
 	}, []);
 
 	function emit() {
+		const markup = editorRef.current?.innerHTML ?? "";
+		if (valueIsSource && markup === lastEditorMarkup.current) return;
+		lastEditorMarkup.current = markup;
 		// Export validated original resource addresses, never the blocked preview placeholders.
-		const output = sanitizeEmailHtml(editorRef.current?.innerHTML ?? "", { forOutgoing: true }) ?? "";
+		const output = sanitizeEmailHtml(markup, { forOutgoing: true }) ?? "";
 		lastEmitted.current = output;
 		onChange(output);
 	}
@@ -136,8 +154,37 @@ export function RichTextEditor({
 
 	function onPaste(event: ClipboardEvent<HTMLDivElement>) {
 		event.preventDefault();
+		const clipboardHtml = enableHtmlComposition ? event.clipboardData.getData("text/html") : "";
+		if (clipboardHtml) {
+			// Normalize full documents before inserting a fragment into the visual editor.
+			const html = sanitizeEmailHtml(clipboardHtml, { forOutgoing: true });
+			if (html && document.execCommand("insertHTML", false, sanitizeEditorHtml(html))) {
+				emit();
+				return;
+			}
+		}
+		document.execCommand("insertText", false, event.clipboardData.getData("text/plain"));
+		emit();
+	}
+
+	function onSourcePaste(event: ClipboardEvent<HTMLTextAreaElement>) {
+		const clipboardHtml = event.clipboardData.getData("text/html");
 		const text = event.clipboardData.getData("text/plain");
-		document.execCommand("insertText", false, text);
+		// Source copied from a code editor may also have syntax-highlighted clipboard HTML.
+		if (!clipboardHtml || /^\s*<(?:!--|!doctype\s|\/?[a-z][\w:-]*(?:\s|\/?>))/i.test(text)) return;
+		const html = sanitizeEmailHtml(clipboardHtml, { forOutgoing: true });
+		if (!html) return;
+		event.preventDefault();
+		const field = event.currentTarget;
+		field.setRangeText(html, field.selectionStart, field.selectionEnd, "end");
+		onChange(field.value, true);
+	}
+
+	function toggleHtmlMode() {
+		lastEmitted.current = null;
+		setLinkOpen(false);
+		if (!htmlMode && !valueIsSource) setPreviewHtml(value);
+		setHtmlMode(!htmlMode);
 	}
 
 	function onKeyDown(event: KeyboardEvent<HTMLDivElement>) {
@@ -196,9 +243,33 @@ export function RichTextEditor({
 
 	return (
 		<div className={cn("flex min-h-0 flex-1 flex-col", className)}>
-			<div className={cn("sticky top-0 z-10 flex shrink-0 items-center gap-0.5 overflow-x-auto bg-white px-2 py-1 md:hidden", !toolbarVisible && "hidden")}>{formatButtons}</div>
-			<div className="relative flex min-h-0 flex-1 flex-col overflow-y-auto">
-				<div
+			{!htmlMode && <div className={cn("sticky top-0 z-10 flex shrink-0 items-center gap-0.5 overflow-x-auto bg-white px-2 py-1 md:hidden", !toolbarVisible && "hidden")}>{formatButtons}</div>}
+			<div className={cn("relative flex min-h-0 flex-1 flex-col", htmlMode ? "overflow-hidden" : "overflow-y-auto")}>
+				{htmlMode ? (
+					<div key="html-source" className="flex min-h-0 min-w-0 flex-1 flex-col">
+						<section aria-label={t("editor.htmlPreview")} className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+							<div aria-hidden="true" className="shrink-0 border-b border-neutral-200 bg-neutral-50 px-4 py-2 text-xs font-medium text-neutral-600">
+								{t("editor.htmlPreview")}
+							</div>
+							<div className="min-h-0 min-w-0 flex-1 overflow-auto overscroll-contain bg-[#ffffff] p-4 contain-paint">
+								<EmailHtmlRenderer html={previewHtml} preview preserveLeadingQuote />
+							</div>
+						</section>
+						<div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden border-t border-neutral-200 bg-neutral-50">
+							<label htmlFor={id} className="shrink-0 border-b border-neutral-200 px-4 py-2 text-xs font-medium text-neutral-600">
+								{t("editor.htmlSource")}
+							</label>
+							<HtmlSourceEditor
+								id={id}
+								value={value}
+								onChange={(event) => onChange(event.target.value, true)}
+								onPaste={onSourcePaste}
+								disabled={disabled}
+							/>
+						</div>
+					</div>
+				) : <div
+					key="visual-editor"
 					ref={editorRef}
 					id={id}
 					role="textbox"
@@ -213,13 +284,14 @@ export function RichTextEditor({
 					onKeyDown={onKeyDown}
 					className={cn(
 						"email-body max-w-none px-4 py-3 text-sm text-neutral-900 outline-none",
+						enableHtmlComposition && "contain-paint",
 						"min-h-32 grow shrink-0 empty:before:pointer-events-none empty:before:text-neutral-400 empty:before:content-[attr(data-placeholder)]",
 						disabled && "cursor-not-allowed opacity-60",
 						editableClassName,
 					)}
-				/>
+				/>}
 				{quotedHtml && (
-					<div className="shrink-0 px-4 pb-3">
+					<div className={cn("shrink-0 px-4 pb-3", htmlMode && "max-h-[25%] overflow-auto")}>
 						<button
 							type="button"
 							onClick={() => setShowQuoted((open) => !open)}
@@ -243,9 +315,27 @@ export function RichTextEditor({
 				style={{ gridTemplateRows: toolbarVisible ? "1fr" : "0fr" }}
 			>
 				<div className="min-h-0 overflow-hidden">
-					<div className={cn("relative flex items-center gap-0.5 max-md:gap-2 border-t border-neutral-100 px-4 py-3 max-md:border-t-0", toolbarClassName)}>
+					<div className={cn(
+						"relative flex items-center gap-0.5 max-md:gap-2 border-t border-neutral-100 px-4 py-3 max-md:border-t-0",
+						enableHtmlComposition && "max-md:flex-wrap",
+						toolbarClassName,
+					)}>
 						{toolbarStart}
-						<div className="contents max-md:hidden">{formatButtons}</div>
+						{!htmlMode && <div className="contents max-md:hidden">{formatButtons}</div>}
+						{enableHtmlComposition && (
+							<Tooltip label={t("editor.htmlMode")}>
+								<button
+									type="button"
+									aria-label={t("editor.htmlMode")}
+									aria-pressed={htmlMode}
+									disabled={disabled}
+									onClick={toggleHtmlMode}
+									className={cn("rounded-md p-1.5 text-neutral-500 hover:bg-neutral-100 hover:text-neutral-900 max-md:px-2", htmlMode && "bg-neutral-200 text-neutral-900")}
+								>
+									<FileCode className="h-4 w-4" />
+								</button>
+							</Tooltip>
+						)}
 						{toolbarEnd}
 					</div>
 				</div>

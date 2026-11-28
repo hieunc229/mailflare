@@ -7,6 +7,7 @@ import { collapseQuotedEmailHtml } from "@/app/(dashboard)/inbox/[messageId]/quo
 
 const BASE_STYLE = `
 :host { display:block; min-width:0; isolation:isolate; contain:paint; }
+:host(.mf-preview) { contain:none; }
 :host(.mf-dark) { filter:invert(1) hue-rotate(180deg); }
 :host(.mf-dark) img, :host(.mf-dark) video, :host(.mf-dark) picture { filter:invert(1) hue-rotate(180deg); }
 .email-quote-toggle { margin-top:1.4em; }
@@ -17,7 +18,7 @@ const BASE_STYLE = `
 :host(.mf-dense) p { margin-top:0; }
 `;
 
-export function EmailHtmlRenderer({ html, className, dense = false, preserveLeadingQuote = false, autoAllowRemote = false, onAllowRemote }: {
+export function EmailHtmlRenderer({ html, className, dense = false, preserveLeadingQuote = false, autoAllowRemote = false, onAllowRemote, preview = false }: {
 	html: string; className?: string;
 	/** Tighter block spacing for short internal text such as notes. */
 	dense?: boolean;
@@ -26,23 +27,26 @@ export function EmailHtmlRenderer({ html, className, dense = false, preserveLead
 	autoAllowRemote?: boolean;
 	/** Called when the reader chooses to load remote content. */
 	onAllowRemote?: () => void;
+	/** Render original colors with remote resources blocked and links inactive. */
+	preview?: boolean;
 }) {
 	const { t } = useLanguage();
 	const quoteToggleLabel = t("message.quote.toggle");
 	const host = useRef<HTMLDivElement>(null);
 	const [choice, setChoice] = useState<{ source: string; allow: boolean } | null>(null);
 	const [hasRemote, setHasRemote] = useState(false);
-	const allowRemote = choice?.source === html ? choice.allow : autoAllowRemote;
+	const allowRemote = !preview && (choice?.source === html ? choice.allow : autoAllowRemote);
 	// Mail is authored for white paper. Under the dark theme it is inverted
 	// (images inverted back) instead of glaring as a white slab.
 	useEffect(() => {
+		if (preview) return;
 		const root = document.documentElement;
 		const sync = () => host.current?.classList.toggle("mf-dark", root.classList.contains("dark"));
 		sync();
 		const observer = new MutationObserver(sync);
 		observer.observe(root, { attributes: true, attributeFilter: ["class"] });
 		return () => observer.disconnect();
-	}, []);
+	}, [preview]);
 	useEffect(() => {
 		if (!host.current) return;
 		host.current.dir = document.documentElement.dir || "ltr";
@@ -58,6 +62,9 @@ export function EmailHtmlRenderer({ html, className, dense = false, preserveLead
 		const content = document.createElement("template");
 		content.innerHTML = collapseQuotedEmailHtml(prepared.html, preserveLeadingQuote, quoteToggleLabel) ?? "";
 		root.replaceChildren(base, content.content);
+		if (preview) {
+			for (const link of root.querySelectorAll("a[href], area[href]")) link.setAttribute("inert", "");
+		}
 		const mailBody = root.querySelector(prepared.bodyTag);
 		// An LTR scroller cannot reach left-side overflow from an RTL email.
 		if (mailBody) host.current.dir = window.getComputedStyle(mailBody).direction;
@@ -76,9 +83,9 @@ export function EmailHtmlRenderer({ html, className, dense = false, preserveLead
 		};
 		root.addEventListener("click", navigate);
 		return () => root.removeEventListener("click", navigate);
-	}, [html, allowRemote, preserveLeadingQuote, quoteToggleLabel]);
+	}, [html, allowRemote, preserveLeadingQuote, quoteToggleLabel, preview]);
 	return <div className={`min-w-0 max-w-full ${className ?? ""}`}>
-		{hasRemote && !allowRemote && <div className="mb-2 flex justify-end">
+		{hasRemote && !preview && !allowRemote && <div className="mb-2 flex justify-end">
 			<button type="button" aria-pressed={allowRemote} className="rounded px-2 py-1 text-xs text-blue-600 hover:bg-blue-50"
 				onClick={() => {
 					if (!allowRemote) onAllowRemote?.();
@@ -87,6 +94,6 @@ export function EmailHtmlRenderer({ html, className, dense = false, preserveLead
 				{t("message.allowRemote")}
 			</button>
 		</div>}
-		<div className={`max-w-full overflow-x-auto${dense ? " mf-dense" : ""}`} ref={host} />
+		<div className={`max-w-full ${preview ? "mf-preview" : "overflow-x-auto"}${dense ? " mf-dense" : ""}`} ref={host} />
 	</div>;
 }
