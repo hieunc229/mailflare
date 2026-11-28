@@ -44,7 +44,7 @@ export async function GET(request: Request) {
 		.where(eq(apiKeys.userId, user.id));
 	const shown = rows.filter((row) => row.kind !== "device" && !isListedAsAppPassword(row) && !parseScopes(row.scopes).some((scope) => (ADMIN_API_KEY_SCOPES as readonly string[]).includes(scope)));
 	// Only the keys on the page need their mailbox scope, read in D1-safe chunks.
-	const allowed = [];
+	const allowed: Array<typeof mcpKeyMailboxes.$inferSelect> = [];
 	for (const chunk of chunkIds(shown.map((row) => row.id))) allowed.push(...await db.select().from(mcpKeyMailboxes).where(inArray(mcpKeyMailboxes.keyId, chunk)));
 	return NextResponse.json({ apiKeys: shown.map((row) => ({ ...row, mailboxIds: allowed.filter((item) => item.keyId === row.id).map((item) => item.mailboxId) })) });
 }
