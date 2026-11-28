@@ -79,11 +79,18 @@ function rights(mailbox: AccessibleMailbox, system: boolean) {
 	};
 }
 
+const COUNT_PROPERTIES = new Set(["totalEmails", "unreadEmails", "totalThreads", "unreadThreads"]);
+
+/** Whether a Mailbox/get `properties` list asks for any message count (null or omitted means all). */
+export function needsCounts(properties: string[] | null | undefined): boolean {
+	return !properties || properties.some((property) => COUNT_PROPERTIES.has(property));
+}
+
 /** Every Mailbox object visible to the account. */
-export async function buildAllMailboxes(ctx: JmapContext) {
+export async function buildAllMailboxes(ctx: JmapContext, withCounts = true) {
 	const accessible = await listJmapMailboxes(ctx);
 	const ids = accessible.map((row) => row.id);
-	const [foldersByMailbox, counts] = await Promise.all([listFoldersByMailbox(ctx, ids), loadCounts(ctx, ids)]);
+	const [foldersByMailbox, counts] = await Promise.all([listFoldersByMailbox(ctx, ids), withCounts ? loadCounts(ctx, ids) : Promise.resolve(new Map<string, Counts>())]);
 	const list: Array<Record<string, unknown>> = [];
 	let sortBase = 0;
 
@@ -144,9 +151,9 @@ export async function buildAllMailboxes(ctx: JmapContext) {
 }
 
 export const mailboxGet: JmapMethodHandler = async (ctx, args) => {
-	const all = await buildAllMailboxes(ctx);
 	const ids = args.ids as string[] | null | undefined;
 	const properties = args.properties as string[] | null | undefined;
+	const all = await buildAllMailboxes(ctx, needsCounts(properties));
 	const wanted = ids ? all.filter((item) => ids.includes(item.id as string)) : all;
 	const found = new Set(wanted.map((item) => item.id as string));
 	return {
@@ -158,7 +165,7 @@ export const mailboxGet: JmapMethodHandler = async (ctx, args) => {
 };
 
 export const mailboxQuery: JmapMethodHandler = async (ctx, args) => {
-	const all = await buildAllMailboxes(ctx);
+	const all = await buildAllMailboxes(ctx, false);
 	const filter = (args.filter ?? {}) as { parentId?: string | null; name?: string; role?: string | null; hasAnyRole?: boolean };
 	let rows = all;
 	if (filter.parentId !== undefined) rows = rows.filter((item) => item.parentId === filter.parentId);
