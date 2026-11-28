@@ -64,11 +64,11 @@ export const emailSubmissionSet: JmapMethodHandler = async (ctx, args) => {
 	const created: Record<string, unknown> = {};
 	const notCreated: Record<string, unknown> = {};
 	const destroyedEmails: string[] = [];
+	const accessible = await listJmapMailboxes(ctx);
 
 	for (const [creationId, value] of Object.entries((args.create ?? {}) as Record<string, Record<string, unknown>>)) {
 		const emailId = ctx.createdIds[String(value.emailId).replace(/^#/, "")] ?? String(value.emailId ?? "");
 		const identity = typeof value.identityId === "string" ? decodeIdentityId(value.identityId) : null;
-		const accessible = await listJmapMailboxes(ctx);
 		if (!identity || !accessible.some((mailbox) => mailbox.id === identity.mailboxId && mailbox.permission !== "read_only")) {
 			notCreated[creationId] = { type: "invalidProperties", properties: ["identityId"] };
 			continue;

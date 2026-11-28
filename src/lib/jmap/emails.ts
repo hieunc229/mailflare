@@ -307,7 +307,31 @@ async function createDraft(ctx: JmapContext, value: Record<string, unknown>, acc
 	return { id };
 }
 
-export const emailSet: JmapMethodHandler = async (ctx, args) => {
+/** D1 binds at most 100 parameters: up to 5 set values plus the ids. */
+const UPDATE_CHUNK = 90;
+
+/** One UPDATE per distinct change set and chunk of ids, run together. */
+async function updateGrouped(ctx: JmapContext, items: Array<{ id: string; set: Partial<MessageRow> }>): Promise<void> {
+	const groups = new Map<string, { set: Partial<MessageRow>; ids: string[] }>();
+	for (const { id, set } of items) {
+		const key = JSON.stringify(set);
+		const group = groups.get(key) ?? { set, ids: [] };
+		group.ids.push(id);
+		groups.set(key, group);
+	}
+	const statements: PromiseLike<unknown>[] = [];
+	for (const { set, ids } of groups.values()) {
+		for (let offset = 0; offset < ids.length; offset += UPDATE_CHUNK) {
+			statements.push(ctx.db.update(messages).set(set).where(inArray(messages.id, ids.slice(offset, offset + UPDATE_CHUNK))));
+		}
+	}
+	await Promise.all(statements);
+}
+
+export const emailSet: JmapMethodHandler = async (callerCtx, args) => {
+	// Write handlers get memo: null, which reloads the access lists on every call. Mailbox access cannot change
+	// inside Email/set, so a call-local memo is safe; the change scope is dropped before newState is read.
+	const ctx: JmapContext = { ...callerCtx, memo: {} };
 	const oldState = await getEmailState(ctx);
 	if (args.ifInState && args.ifInState !== oldState) return { type: "stateMismatch" };
 	const accessible = await listAccessibleMailboxIdSet(ctx);
@@ -333,6 +357,8 @@ export const emailSet: JmapMethodHandler = async (ctx, args) => {
 		created[creationId] = row ? buildEmailObject(row, [], { fetchBodies: false, maxBodyValueBytes: 0, promotionModes: await promotionModesOf(ctx, [row]) }) : { id: result.id };
 	}
 
+	const folderChecks = new Map<string, Promise<boolean>>();
+	const pending: Array<{ id: string; set: Partial<MessageRow>; row: MessageRow }> = [];
 	const updates = Object.entries((args.update ?? {}) as Record<string, Record<string, unknown>>);
 	const rows = await loadMessages(ctx, updates.map(([id]) => id));
 	const byId = new Map(rows.map((row) => [row.id, row]));
@@ -357,8 +383,13 @@ export const emailSet: JmapMethodHandler = async (ctx, args) => {
 		}
 		if (move && typeof move.folderId === "string") {
 			// A folder id in a mailboxIds patch is client input: it must be a folder of the message's own mailbox.
-			const [folder] = await ctx.db.select({ id: folders.id }).from(folders).where(and(eq(folders.id, move.folderId), eq(folders.mailboxId, row.mailboxId))).limit(1);
-			if (!folder) {
+			const key = `${row.mailboxId}:${move.folderId}`;
+			let known = folderChecks.get(key);
+			if (!known) {
+				known = ctx.db.select({ id: folders.id }).from(folders).where(and(eq(folders.id, move.folderId), eq(folders.mailboxId, row.mailboxId))).limit(1).then((found) => found.length > 0);
+				folderChecks.set(key, known);
+			}
+			if (!(await known)) {
 				notUpdated[id] = { type: "invalidProperties", properties: ["mailboxIds"], description: "Unknown folder" };
 				continue;
 			}
@@ -371,10 +402,13 @@ export const emailSet: JmapMethodHandler = async (ctx, args) => {
 			if (move.status !== undefined) Object.assign(set, { status: move.status }, privateDraftForStatus(move.status));
 			if (move.folderId !== undefined) set.folderId = move.folderId;
 		}
-		if (Object.keys(set).length) await ctx.db.update(messages).set(set).where(eq(messages.id, id));
+		if (Object.keys(set).length) pending.push({ id, set, row });
+		updated[id] = null;
+	}
+	await updateGrouped(ctx, pending);
+	for (const { set, row } of pending) {
 		// Moved into Drafts, the message is gone for the mailbox's other readers.
 		if (set.privateDraft && !row.privateDraft) await logMessageHidden(ctx.db, row);
-		updated[id] = null;
 	}
 
 	// JMAP destroy is permanent; Mailflare keeps a trash, so destroy moves there
@@ -382,6 +416,7 @@ export const emailSet: JmapMethodHandler = async (ctx, args) => {
 	const destroyIds = (args.destroy ?? []) as string[];
 	const destroyRows = await loadMessages(ctx, destroyIds);
 	const destroyById = new Map(destroyRows.map((row) => [row.id, row]));
+	const trashIds: string[] = [];
 	for (const id of destroyIds) {
 		const row = destroyById.get(id);
 		if (!row || !row.mailboxId) {
@@ -395,9 +430,11 @@ export const emailSet: JmapMethodHandler = async (ctx, args) => {
 			continue;
 		}
 		if (row.status === "trash" || row.status === "draft") await deleteMessageWithObjects(ctx.env, ctx.db, row.id, row.rawR2Key);
-		else await ctx.db.update(messages).set({ status: "trash", folderId: null }).where(eq(messages.id, id));
+		else trashIds.push(id);
 		destroyed.push(id);
 	}
+	await updateGrouped(ctx, trashIds.map((id) => ({ id, set: { status: "trash", folderId: null } })));
+	ctx.memo!.scope = undefined;
 
 	return { accountId: ctx.accountId, oldState, newState: await getEmailState(ctx), created, updated, destroyed, notCreated, notUpdated, notDestroyed };
 };
