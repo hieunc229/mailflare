@@ -33,6 +33,13 @@ export function EmailHtmlRenderer({ html, className, dense = false, preserveLead
 	const [choice, setChoice] = useState<{ source: string; allow: boolean } | null>(null);
 	const [hasRemote, setHasRemote] = useState(false);
 	const allowRemote = choice?.source === html ? choice.allow : autoAllowRemote;
+	// The button unmounts once remote content is allowed; keep keyboard focus on the message instead of losing it.
+	const refocus = useRef(false);
+	useEffect(() => {
+		if (!allowRemote || !refocus.current) return;
+		refocus.current = false;
+		host.current?.focus();
+	}, [allowRemote]);
 	// Mail is authored for white paper. Under the dark theme it is inverted
 	// (images inverted back) instead of glaring as a white slab.
 	useEffect(() => {
@@ -79,14 +86,15 @@ export function EmailHtmlRenderer({ html, className, dense = false, preserveLead
 	}, [html, allowRemote, preserveLeadingQuote, quoteToggleLabel]);
 	return <div className={`min-w-0 max-w-full ${className ?? ""}`}>
 		{hasRemote && !allowRemote && <div className="mb-2 flex justify-end">
-			<button type="button" aria-pressed={allowRemote} className="rounded px-2 py-1 text-xs text-blue-600 hover:bg-blue-50"
+			<button type="button" className="rounded px-2 py-1 text-xs text-blue-600 hover:bg-blue-50"
 				onClick={() => {
+					refocus.current = true;
 					if (!allowRemote) onAllowRemote?.();
 					setChoice({ source: html, allow: !allowRemote });
 				}}>
 				{t("message.allowRemote")}
 			</button>
 		</div>}
-		<div className={`max-w-full overflow-x-auto${dense ? " mf-dense" : ""}`} ref={host} />
+		<div className={`max-w-full overflow-x-auto${dense ? " mf-dense" : ""}`} ref={host} tabIndex={-1} />
 	</div>;
 }
