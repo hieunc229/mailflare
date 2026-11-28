@@ -80,6 +80,14 @@ test("blocking from a subdomain blocks the registrable domain", async (t) => {
 	assert.equal(await destination("y@other.co.uk"), "received");
 });
 
+test("blocking a sender under a country suffix blocks only that domain", async (t) => {
+	const { block, destination } = await createFixture(t);
+	assert.deepEqual(await block("x@mail.spammer.co.ke"), { domain: "spammer.co.ke", blocked: true });
+	assert.equal(await destination("y@spammer.co.ke"), "trash");
+	assert.equal(await destination("y@other.co.ke"), "received");
+	await assert.rejects(block("a@co.ke"), refusal("INVALID_DOMAIN"));
+});
+
 test("internationalised domains are stored in punycode and match both spellings", async (t) => {
 	const { block, destination } = await createFixture(t);
 	assert.deepEqual(await block("Info@Bücher.Example"), { domain: "xn--bcher-kva.example", blocked: true });
