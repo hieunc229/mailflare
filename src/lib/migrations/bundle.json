@@ -986,6 +986,13 @@
       "statements": [
         "CREATE TABLE `contact_details` (\n\t`contact_id` text PRIMARY KEY NOT NULL,\n\t`details` text DEFAULT '{}' NOT NULL,\n\t`updated_at` integer NOT NULL,\n\tFOREIGN KEY (`contact_id`) REFERENCES `contacts`(`id`) ON UPDATE no action ON DELETE cascade\n);"
       ]
+    },
+    {
+      "name": "0103_drive_items_indexes.sql",
+      "statements": [
+        "CREATE INDEX `drive_items_parent_idx` ON `drive_items` (`parent_id`);",
+        "CREATE INDEX `drive_items_r2_key_idx` ON `drive_items` (`r2_key`);"
+      ]
     }
   ]
 }
