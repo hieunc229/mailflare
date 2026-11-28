@@ -4,7 +4,7 @@
  * a single source of truth for what the message says.
  */
 
-import { sanitizeEmailHtml } from "@/app/(dashboard)/inbox/[messageId]/email-html-sanitizer";
+import { sanitizeEmailHtml } from "@/lib/email/html";
 
 export const QUOTE_ATTRIBUTE = "data-mailflare-quote";
 const QUOTE_OPEN = `<div class="mailflare-quote" ${QUOTE_ATTRIBUTE}="1">`;

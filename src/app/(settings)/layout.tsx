@@ -1,8 +1,6 @@
 "use client";
 
 import { SkipToContent } from "@/components/skip-to-content";
-import Link from "next/link";
-import { HelpCircle } from "@/components/icons";
 import { AuthGuard } from "@/components/auth/auth-guard";
 import { ComposeProvider } from "@/components/compose/compose-context";
 import { FloatingComposer } from "@/components/compose/floating-composer";
@@ -39,12 +37,6 @@ export default function DashboardLayout({
                     <header className="flex h-16 w-full shrink-0 items-center gap-4 pr-4 text-sm">
                       <MobileMenuButton className="ml-2" />
                       <MailSearchInput />
-                      {/* <Link
-                    href="/settings/account"
-                    className="flex h-10 w-10 items-center justify-center rounded-full text-neutral-600 hover:bg-neutral-200"
-                  >
-                    <HelpCircle className="h-5 w-5" />
-                  </Link> */}
                       <LicenseIndicator />
                       <MailboxSelector />
                     </header>
