@@ -84,8 +84,10 @@ Also kept on every dialect: foreign keys and cascades, the JMAP change log, mail
 | `agent_send_approvals` duplicate-delivery guard | Partial unique index | Partial unique index | Plain index (MySQL has no partial indexes); the status claim still prevents double sends |
 | Wide covering indexes on `messages` | Full | Full | Trimmed to fit InnoDB's 3072-byte key limit; expression keys (`coalesce(thread_id, id)`) dropped; the trailing `id` tie-breaker of `messages_category_page_idx` is dropped too. Conversation view is slower on very large mailboxes |
 | One agent job per mailbox | Atomic in the claim statement | Atomic | Checked just before the claim (small race window) |
-| `batch` atomicity | Atomic | Atomic | Atomic for DML; MySQL commits DDL implicitly, so a failed migration can leave earlier statements applied |
+| `batch` atomicity | Atomic | Atomic | Atomic for DML; MySQL commits DDL implicitly, so a failed migration can leave earlier statements applied, and running it again resumes after the last finished statement (one instance migrates at a time, under a database lock) |
 | `neon` (HTTP) | n/a | Batches run as separate statements (the HTTP protocol has no interactive transaction); use `node-postgres` for atomic batches | n/a |
+
+If you roll back to an older release after a failed MySQL migration, run `DROP TABLE mailflare_migration_steps` first. The migration runner keeps its progress there until the next start finishes, and an older release's backup stops at the table it does not know.
 
 Why search is the main difference: FTS5 is an SQLite extension, PostgreSQL's equivalent (`tsvector`) and MySQL's `FULLTEXT` have different grammars and ranking, and the search syntax (`from:`, `subject:`, quoted phrases, `-term`) is translated into plain predicates on those dialects instead. That is correct but unindexed, so searches scan the messages of the mailbox being searched. For large mailboxes, D1/SQLite, or PostgreSQL with `pg_trgm`, searches faster.
 
