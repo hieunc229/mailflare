@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test, { after } from "node:test";
+import bcrypt from "bcryptjs";
 import { loadFixture, sqliteProxy } from "./helpers/fixtures.mjs";
 
 const fixture = await loadFixture({
@@ -11,7 +12,6 @@ const fixture = await loadFixture({
 		"@/lib/cloudflare": "export function getEnv(){return {}}",
 		"@/lib/auth/cookies": "export async function requireUser(){return globalThis.passwordTest.user}",
 		"@/lib/auth/session": "export function getSessionTokenFromRequestHeaders(){return 'session'} export async function deleteUserSessions(){}",
-		"@/lib/auth/password": "export const PASSWORDLESS_PASSWORD_HASH='!passkey-only'; export function hasPasswordHash(value){return value!=='!passkey-only'} export function hashPassword(value){return 'hashed-'+value} export function verifyPassword(){return false}",
 		"@/lib/auth/webauthn/grants": "export async function consumeStepUpGrant(){return globalThis.passwordTest.consume()} export async function bumpSecurityVersion(){globalThis.passwordTest.sqlite.exec('UPDATE users SET security_version=security_version+1')}",
 		"@/lib/auth/webauthn/credentials": "export async function countPasskeys(){return 1}",
 		"@/lib/auth/activity": "export async function recordAuthActivity(){}",
@@ -48,7 +48,7 @@ test("password and selected second-factor policy are saved together", async () =
 	for (const policy of [true, false]) {
 		setup();
 		assert.equal((await enroll(policy)).status, 200);
-		assert.equal(row().password_hash, "hashed-new-password");
+		assert.ok(bcrypt.compareSync("new-password", row().password_hash), "the stored hash verifies the new password");
 		assert.equal(row().require_second_factor, Number(policy));
 		assert.equal(row().security_version, 1);
 	}
