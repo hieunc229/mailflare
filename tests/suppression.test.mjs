@@ -188,6 +188,16 @@ test("getSuppressionMode reads off when the migration is not applied", async () 
 	assert.equal(await service.getSuppressionMode(failing), "off");
 });
 
+test("getSuppressionMode reads off when the table is missing", async () => {
+	const failing = { DB: { prepare() { throw new Error("no such table: app_settings"); } } };
+	assert.equal(await service.getSuppressionMode(failing), "off");
+});
+
+test("getSuppressionMode rethrows errors that are not a missing migration", async () => {
+	const failing = { DB: { prepare() { throw new Error("connection reset"); } } };
+	await assert.rejects(service.getSuppressionMode(failing), /connection reset/);
+});
+
 test("recordSuppressionEvents does nothing in mode off", async (t) => {
 	const { env, rows } = await createFixture(t, "off");
 	const count = await service.recordSuppressionEvents(env, { sender: "kevin@example.com", source: "resend", entries: [{ email: "anna@example.org", reason: "hard_bounce" }] });
