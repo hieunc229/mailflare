@@ -49,3 +49,10 @@ test("an empty list runs no query", async (t) => {
 	assert.equal((await app.addressesSeenInMailbox(db, "mb-team", [], "delegate")).size, 0);
 	assert.equal(sqls.length, 0);
 });
+
+test("a long list reads at most 5 pages however large the mailbox is", async (t) => {
+	const { db, sqls } = await fixture(t, 7000, `UPDATE messages SET to_addr = 'deep@x.test' WHERE id = 'm6500';`);
+	const emails = ["deep@x.test", ...Array.from({ length: 59 }, (_, i) => `p${i}@x.test`)];
+	assert.deepEqual([...await app.addressesSeenInMailbox(db, "mb-team", emails, "delegate")], []);
+	assert.equal(sqls.length, 5);
+});

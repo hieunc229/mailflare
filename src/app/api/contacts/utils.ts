@@ -66,6 +66,8 @@ export async function listContacts(db: Db, input: { userId: string; query: strin
 }
 
 const PAGE_SIZE = 1000;
+/** A long address list cannot be narrowed in SQL, so the pages read per request are capped; addresses seen only deeper stay hidden from the delegate. */
+const MAX_UNNARROWED_PAGES = 5;
 
 /**
  * Contacts belong to the user who owns the mailbox, so a shared mailbox's contact list is its creator's whole
@@ -90,7 +92,7 @@ export async function addressesSeenInMailbox(db: Db, mailboxId: string, emails: 
 		}))
 		: undefined;
 	let lastId: string | null = null;
-	for (;;) {
+	for (let page = 1; ; page += 1) {
 		const rows: Array<{ id: string; fromAddr: string | null; toAddr: string | null; ccAddr: string | null }> = await db
 			.select({ id: messages.id, fromAddr: messages.fromAddr, toAddr: messages.toAddr, ccAddr: messages.ccAddr })
 			.from(messages)
@@ -105,7 +107,7 @@ export async function addressesSeenInMailbox(db: Db, mailboxId: string, emails: 
 				}
 			}
 		}
-		if (seen.size === wanted.size || rows.length < PAGE_SIZE) return seen;
+		if (seen.size === wanted.size || rows.length < PAGE_SIZE || (!narrow && page >= MAX_UNNARROWED_PAGES)) return seen;
 		lastId = rows[rows.length - 1].id;
 	}
 }
