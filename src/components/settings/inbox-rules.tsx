@@ -7,6 +7,7 @@ import { Folder, Forward, Plus, ShieldAlert, Trash2 } from "@/components/icons";
 import { useLanguage } from "@/components/language-provider";
 import { useSelectedMailbox } from "@/components/mailbox-provider";
 import { Button } from "@/components/ui/button";
+import { confirmDestructive } from "@/components/ui/confirm-dialog";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Dialog,
@@ -211,8 +212,13 @@ export function InboxRules() {
                 variant="ghost"
                 size="sm"
                 disabled={remove.isPending}
-                onClick={() => remove.mutate(rule.id)}
-                className="relative z-10 opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100"
+                onClick={async () => {
+                  const label = rule.matchField === "mail_type"
+                    ? getRuleFieldLabel(rule.matchField, t)
+                    : `${getRuleFieldLabel(rule.matchField, t)} ${getRuleOperatorLabel(rule.matchOperator, t)} ${rule.matchValue || rule.pattern}`;
+                  if (await confirmDestructive({ message: `${t("rules.delete")}: ${label}`, confirmLabel: t("common.delete") })) remove.mutate(rule.id);
+                }}
+                className="relative z-10 opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100 max-md:opacity-100 [@media(pointer:coarse)]:opacity-100"
                 aria-label={t("rules.delete")}
               >
                 <Trash2 className="h-4 w-4" />
