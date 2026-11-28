@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useLanguage } from "@/components/language-provider";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -16,6 +16,7 @@ export function TimeZoneForm({ userId, initialTimeZone }: TimeZoneFormProps) {
 	const [saving, setSaving] = useState(false);
 	const [status, setStatus] = useState<string | null>(null);
 	const deviceTimeZone = Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
+	const zoneOptions = useMemo(() => listTimeZones(deviceTimeZone), [deviceTimeZone]);
 	const currentZone = timeZone.trim() || deviceTimeZone;
 	const validZone = (() => {
 		try { return formatCurrentTimeInZone(currentZone); }
@@ -39,8 +40,8 @@ export function TimeZoneForm({ userId, initialTimeZone }: TimeZoneFormProps) {
 		</div>
 		<div className="space-y-2">
 			<Label htmlFor="account-time-zone">{t("settings.timeZone.title")}</Label>
-			<Input id="account-time-zone" list="account-time-zone-options" value={timeZone} onChange={(event) => { setTimeZone(event.target.value); setStatus(null); }} placeholder={t("settings.timeZone.placeholder", { zone: deviceTimeZone })} autoComplete="off" />
-			<datalist id="account-time-zone-options">{listTimeZones(deviceTimeZone).map((zone) => <option key={zone} value={zone} />)}</datalist>
+			<Input id="account-time-zone" list="account-time-zone-options" value={timeZone} onChange={(event) => { setTimeZone(event.target.value); setStatus(null); }} placeholder={t("settings.timeZone.placeholder", { zone: deviceTimeZone })} autoComplete="off" aria-invalid={!validZone && timeZone.trim() !== "" ? true : undefined} />
+			<datalist id="account-time-zone-options">{zoneOptions.map((zone) => <option key={zone} value={zone} />)}</datalist>
 			{validZone && <p className="text-sm text-neutral-500">{t("settings.timeZone.current", { time: validZone })}</p>}
 		</div>
 		<div className="flex items-center gap-3">
