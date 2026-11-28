@@ -273,7 +273,12 @@ export const mailboxSet: JmapMethodHandler = async (ctx, args) => {
 				continue;
 			}
 		}
-		await ctx.db.delete(folders).where(and(eq(folders.id, ref.folderId), eq(folders.mailboxId, mailbox.id)));
+		// Snoozed mail is not counted above. Clear its folder here rather than through the foreign key: MySQL cascades fire no triggers, so no change would be logged.
+		// One batch, so a folder that cannot be deleted does not lose its mail's folder.
+		await ctx.db.batch([
+			ctx.db.update(messages).set({ folderId: null }).where(and(eq(messages.folderId, ref.folderId), eq(messages.mailboxId, mailbox.id))),
+			ctx.db.delete(folders).where(and(eq(folders.id, ref.folderId), eq(folders.mailboxId, mailbox.id))),
+		]);
 		destroyed.push(id);
 	}
 

@@ -1,6 +1,6 @@
 import { eq, and, ne, inArray } from "drizzle-orm";
 import { getDb } from "@/db";
-import { domains, mailboxes } from "@/db/schema";
+import { domains, mailboxAliases, mailboxes } from "@/db/schema";
 import { ensureMailboxDomainRouting } from "@/lib/mailboxes/domain-addresses";
 import { newId } from "@/lib/ids";
 import {
@@ -259,7 +259,12 @@ export async function removeDomainForUser(
 		}
 	}
 
-	await db.delete(domains).where(eq(domains.id, domainId));
+	// Not left to the foreign key cascade: MySQL cascades fire no triggers, so the alias removal would not be logged.
+	// One batch, so a domain that cannot be deleted keeps its aliases.
+	await db.batch([
+		db.delete(mailboxAliases).where(eq(mailboxAliases.domainId, domainId)),
+		db.delete(domains).where(eq(domains.id, domainId)),
+	]);
 	return cleanup;
 }
 
