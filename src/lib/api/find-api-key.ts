@@ -90,8 +90,8 @@ export async function findApiKeyForSecret(db: AppDatabase, secret: string, optio
 		return hashed;
 	}
 
-	const legacyMatch = and(eq(apiKeys.prefix, apiKeyLookupPrefix(presented)), isNull(apiKeys.keySha256));
-	if (!legacyMatch) return null;
+	// and() with two defined operands always returns SQL; the type allows undefined only for empty input.
+	const legacyMatch = and(eq(apiKeys.prefix, apiKeyLookupPrefix(presented)), isNull(apiKeys.keySha256)) as SQL;
 	const legacy = await db.select().from(apiKeys).where(whereMatch(legacyMatch, kind));
 	for (const candidate of legacy) {
 		if (!verifyApiKey(presented, candidate.keyHash)) continue;
