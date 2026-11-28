@@ -12,11 +12,7 @@ export function refileCutoff(now: Date): Date {
 	return new Date(now.getTime() - REFILE_WINDOW_DAYS * 86_400_000);
 }
 
-export function chunk<T>(items: T[], size: number): T[][] {
-	const chunks: T[][] = [];
-	for (let i = 0; i < items.length; i += size) chunks.push(items.slice(i, i + size));
-	return chunks;
-}
+export { chunk } from "../db-params";
 
 /** The stored marker for a destination: Inbox is the explicit `primary`, never a null the backfill could reclassify. */
 export const targetOf = (category: "promotions" | "inbox"): RefileTarget => (category === "inbox" ? "primary" : "promotions");

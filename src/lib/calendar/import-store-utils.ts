@@ -9,11 +9,7 @@ export const ROWS_PER_INSERT = 4;
 export const SELECT_CHUNK = 90;
 export const STATEMENTS_PER_BATCH = 50;
 
-export function chunk<T>(items: T[], size: number): T[][] {
-	const chunks: T[][] = [];
-	for (let index = 0; index < items.length; index += size) chunks.push(items.slice(index, index + size));
-	return chunks;
-}
+export { chunk } from "../db-params";
 
 /** The row id of one imported event: stable for (user, UID, occurrence), so a re-import finds it again. */
 export async function icsEventId(userId: string, uid: string, recurrenceMs: number | null): Promise<string> {

@@ -17,11 +17,7 @@ export const DETAILS_PER_INSERT = 30;
 export const SELECT_CHUNK = 90;
 export const STATEMENTS_PER_BATCH = 50;
 
-export function chunk<T>(items: T[], size: number): T[][] {
-	const chunks: T[][] = [];
-	for (let index = 0; index < items.length; index += size) chunks.push(items.slice(index, index + size));
-	return chunks;
-}
+export { chunk } from "../db-params";
 
 const object = (value: unknown): Record<string, unknown> | null => (value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : null);
 const strings = (value: unknown, max: number, maxLength: number): value is string[] => Array.isArray(value) && value.length <= max && value.every((item) => typeof item === "string" && item.length <= maxLength);
