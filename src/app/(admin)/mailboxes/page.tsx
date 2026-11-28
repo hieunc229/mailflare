@@ -78,7 +78,7 @@ export default function MailboxesPage() {
 	});
 
 	const domains = useQuery({
-		queryKey: ["domains"],
+		queryKey: ["domains", "options"],
 		queryFn: async () => {
 			const res = await authFetch("/api/domains");
 			return (await res.json()) as { domains: Domain[] };
