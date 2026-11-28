@@ -26,6 +26,7 @@ export function ImportJobs({ refreshKey }: { refreshKey: number }) {
 	const [password, setPassword] = useState("");
 	const [resumeError, setResumeError] = useState<string | null>(null);
 	const [removeError, setRemoveError] = useState<string | null>(null);
+	const [announce, setAnnounce] = useState("");
 	const previous = useRef<Map<string, ImportJobSummary["status"]>>(new Map());
 
 	const load = useCallback(() => fetchImportJobs()
@@ -34,6 +35,10 @@ export function ImportJobs({ refreshKey }: { refreshKey: number }) {
 				const before = previous.current.get(job.id);
 				return !!before && (before === "queued" || before === "running") && !isImportJobActive(job);
 			});
+			for (const job of next) {
+				const before = previous.current.get(job.id);
+				if (before && before !== job.status) setAnnounce(`${job.label}: ${t(`importJobs.status.${job.status}`)}`);
+			}
 			previous.current = new Map(next.map((job) => [job.id, job.status]));
 			setJobs(next);
 			if (finishedNow) window.dispatchEvent(new Event("mailflare:messages-changed"));
@@ -43,7 +48,7 @@ export function ImportJobs({ refreshKey }: { refreshKey: number }) {
 		})
 		.finally(() => {
 			setLoaded(true);
-		}), []);
+		}), [t]);
 
 	const hasActive = jobs.some(isImportJobActive);
 
@@ -90,7 +95,8 @@ export function ImportJobs({ refreshKey }: { refreshKey: number }) {
 	if (loaded && jobs.length === 0) return null;
 
 	return (
-		<section className="space-y-4" aria-live="polite">
+		<section className="space-y-4">
+			<p className="sr-only" role="status">{announce}</p>
 			{hasActive && (
 				<p className="flex items-center gap-2 text-sm text-neutral-600">
 					<Loader2 className="h-4 w-4 animate-spin" aria-hidden />
