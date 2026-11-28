@@ -119,8 +119,8 @@ const draftRequests = () => requests.filter(request => request.url.startsWith("/
 function response(data, status = 200) {
   return { ok: status >= 200 && status < 300, status, async json() { return data; } };
 }
-async function delay(milliseconds) {
-  await act(async () => { await new Promise(resolve => setTimeout(resolve, milliseconds)); });
+async function tick(t, milliseconds) {
+  await act(async () => { t.mock.timers.tick(milliseconds); });
 }
 
 async function openNewMessage(t, signature) {
@@ -146,24 +146,26 @@ async function openNewMessage(t, signature) {
 
 for (const [kind, signature] of Object.entries(signatures)) {
   test(`an untouched new message with a ${kind} signature leaves no draft`, async t => {
+    t.mock.timers.enable({ apis: ["setTimeout"] });
     const closedAtOnce = await openNewMessage(t, signature);
     await closedAtOnce.close(); // closing flushes a pending autosave
     const leftOpen = await openNewMessage(t, signature);
-    await delay(1100); // past the 900 ms autosave delay
+    await tick(t, 1000); // past the 900 ms autosave delay
     await leftOpen.close();
-    await delay(50);
+    await tick(t, 50);
     assert.deepEqual(draftRequests(), []);
   });
 }
 
 for (const kind of ["HTML", "plain-text"]) {
   test(`a typed message with a ${kind} signature still autosaves`, async t => {
+    t.mock.timers.enable({ apis: ["setTimeout"] });
     const { body } = await openNewMessage(t, signatures[kind]);
     await act(async () => {
       Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, "value").set.call(body, `<div>Hello there</div>${body.value}`);
       body.dispatchEvent(new window.Event("input", { bubbles: true }));
     });
-    await delay(1100);
+    await tick(t, 1000);
     const drafts = draftRequests();
     assert.equal(drafts.length, 1, "one draft is saved");
     assert.equal(drafts[0].method, "POST");

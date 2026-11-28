@@ -1,9 +1,9 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
-import { DatabaseSync } from "node:sqlite";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
+import { loadApp } from "./helpers/real-db.mjs";
 
 import {
 	isPrimaryMailbox,
@@ -11,6 +11,10 @@ import {
 	resolveMailboxDisplayName,
 	tracksAccountIdentity,
 } from "../src/lib/profile/identity-utils.ts";
+
+const { app, newDatabase } = await loadApp("mailbox-identity-scope", `
+	export { syncPersonalIdentity } from "./src/lib/profile/sync.ts";
+`);
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 const read = (path) => readFileSync(join(root, path), "utf8");
@@ -42,70 +46,23 @@ test("a secondary mailbox resolves to its own name and avatar", () => {
 	assert.equal(resolveMailboxAvatarKey(secondary, ACCOUNT_EMAIL, "avatars/user-1"), "avatars/mbx-2");
 });
 
-test("renaming the profile leaves sibling mailboxes untouched (issue #36)", () => {
-	const db = new DatabaseSync(":memory:");
-	db.exec(`
-		CREATE TABLE users (id TEXT PRIMARY KEY, email TEXT NOT NULL, name TEXT, avatar_key TEXT);
-		CREATE TABLE domains (id TEXT PRIMARY KEY, hostname TEXT NOT NULL);
-		CREATE TABLE mailboxes (
-			id TEXT PRIMARY KEY, user_id TEXT NOT NULL, domain_id TEXT NOT NULL,
-			local_part TEXT NOT NULL, display_name TEXT, avatar_key TEXT, type TEXT NOT NULL
-		);
-		INSERT INTO users VALUES ('u1', 'sam@example.com', 'Sam Reyes', 'avatars/user-1');
-		INSERT INTO domains VALUES ('d1', 'example.com');
-		INSERT INTO mailboxes VALUES
-			('m1', 'u1', 'd1', 'sam', 'Sam Reyes', 'avatars/user-1', 'personal'),
-			('m2', 'u1', 'd1', 'billing', 'Billing', 'avatars/mbx-2', 'personal'),
-			('m3', 'u1', 'd1', 'projects', 'Projects', NULL, 'personal');
+test("renaming the profile leaves sibling mailboxes untouched (issue #36)", async (t) => {
+	const { db, sqlite } = await newDatabase(t, `
+		INSERT INTO users (id, email, password_hash, name, avatar_key, role, created_at) VALUES ('u1', 'sam@example.com', 'x', 'Sam Reyes', 'avatars/user-1', 'user', 1);
+		INSERT INTO domains (id, user_id, hostname, zone_id, status, created_at) VALUES ('d1', 'u1', 'example.com', 'z', 'active', 1);
+		INSERT INTO mailboxes (id, user_id, domain_id, local_part, display_name, avatar_key, type, created_at) VALUES
+			('m1', 'u1', 'd1', 'sam', 'Sam Reyes', 'avatars/user-1', 'personal', 1),
+			('m2', 'u1', 'd1', 'billing', 'Billing', 'avatars/mbx-2', 'personal', 1),
+			('m3', 'u1', 'd1', 'projects', 'Projects', NULL, 'personal', 1);
 	`);
+	await app.syncPersonalIdentity(db, { userId: "u1", name: "Sam R. Reyes", avatarKey: "avatars/user-2" });
 
-	// What syncPersonalIdentity does now: load every personal mailbox with its
-	// hostname, then write only to the one that carries the account identity.
-	const account = db.prepare("SELECT email FROM users WHERE id = ?").get("u1");
-	const rows = db
-		.prepare(`
-			SELECT m.id, m.local_part, m.type, d.hostname
-			FROM mailboxes m JOIN domains d ON d.id = m.domain_id
-			WHERE m.user_id = ? AND m.type = 'personal'
-		`)
-		.all("u1");
-
-	const identityRows = rows.filter((row) =>
-		tracksAccountIdentity({ localPart: row.local_part, hostname: row.hostname, type: row.type }, account.email),
-	);
-	assert.deepEqual(identityRows.map((row) => row.id), ["m1"], "exactly one mailbox holds the account identity");
-
-	for (const row of identityRows) {
-		db.prepare("UPDATE mailboxes SET display_name = ?, avatar_key = ? WHERE id = ?")
-			.run("Sam R. Reyes", "avatars/user-2", row.id);
-	}
-
-	const named = db
-		.prepare("SELECT id, display_name, avatar_key FROM mailboxes ORDER BY id")
-		.all()
-		.map((row) => ({ ...row }));
+	const named = sqlite.prepare("SELECT id, display_name, avatar_key FROM mailboxes ORDER BY id").all().map((row) => ({ ...row }));
 	assert.deepEqual(named, [
 		{ id: "m1", display_name: "Sam R. Reyes", avatar_key: "avatars/user-2" },
 		{ id: "m2", display_name: "Billing", avatar_key: "avatars/mbx-2" },
 		{ id: "m3", display_name: "Projects", avatar_key: null },
 	]);
-});
-
-test("the identity write is keyed by mailbox id, not by owner and type", () => {
-	const sync = read("src/lib/profile/sync.ts");
-	const updates = [...sync.matchAll(/\.update\(mailboxes\)[\s\S]*?\.where\(([\s\S]*?)\);/g)].map((m) => m[1]);
-	assert.ok(updates.length > 0, "no mailbox update found in syncPersonalIdentity");
-	for (const where of updates) {
-		assert.ok(
-			/eq\(mailboxes\.id,/.test(where),
-			`mailbox identity update must target a single mailbox id, got: ${where.trim()}`,
-		);
-		assert.ok(
-			!/eq\(mailboxes\.type, "personal"\)/.test(where),
-			"an update scoped by type fans the account name out to every personal mailbox",
-		);
-	}
-	assert.match(sync, /tracksAccountIdentity/);
 });
 
 test("the mailbox routes gate the account name on the identity check", () => {

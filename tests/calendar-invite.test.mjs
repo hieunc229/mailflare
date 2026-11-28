@@ -5,6 +5,7 @@ import { dirname, join } from "node:path";
 import test, { after } from "node:test";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { build } from "esbuild";
+import { assertLinear } from "./helpers/scaling.mjs";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 const dir = mkdtempSync(join(tmpdir(), "mailflare-calendar-invite-"));
@@ -298,8 +299,9 @@ test("an escaped backslash followed by n stays a backslash, not a line break", (
 });
 
 test("sender-controlled size is bounded: EXDATE list and RRULE COUNT", () => {
-	const dates = Array.from({ length: 5000 }, (_, i) => `2027${String(1 + (i % 12)).padStart(2, "0")}${String(1 + (i % 28)).padStart(2, "0")}T100000Z`).join(",");
-	const started = Date.now();
+	const makeDates = (count) => Array.from({ length: count }, (_, i) => `2027${String(1 + (i % 12)).padStart(2, "0")}${String(1 + (i % 28)).padStart(2, "0")}T100000Z`).join(",");
+	const dates = makeDates(5000);
+	assertLinear((count) => event("DTSTART:20261105T170000Z", "DTEND:20261105T180000Z", "RRULE:FREQ=WEEKLY", `EXDATE:${makeDates(count)}`), parseInvite, 5000, "EXDATE list", 4, 30);
 	const invite = parseInvite(event("DTSTART:20261105T170000Z", "DTEND:20261105T180000Z", "RRULE:FREQ=WEEKLY", `EXDATE:${dates}`));
 	assert.ok(invite.excludedDates.length <= 1000);
 	assert.ok(JSON.parse(mergeExcludedOccurrences("[]", invite.excludedDates)).length <= 1000);
@@ -309,7 +311,6 @@ test("sender-controlled size is bounded: EXDATE list and RRULE COUNT", () => {
 	assert.equal(huge.repeatUntil, null);
 	const ok = inviteRepeat("FREQ=WEEKLY;BYDAY=MO,WE,FR;COUNT=1000", new Date("2026-11-02T17:00:00Z"), "America/Los_Angeles");
 	assert.ok(ok.repeatUntil instanceof Date);
-	assert.ok(Date.now() - started < 5000, "bounded work");
 });
 
 test("hostile durations and dates never throw", () => {
@@ -360,13 +361,14 @@ test("COUNT of any size gives a finite end or a single event, quickly", () => {
 	const daily1001 = inviteRepeat("FREQ=DAILY;COUNT=1001", start, zone);
 	assert.equal(daily1001.repeat, "daily");
 	assert.equal(daily1001.repeatUntil.toISOString(), "2029-07-30T17:00:01.000Z");
-	const started = performance.now();
 	for (const rule of ["FREQ=DAILY;COUNT=1000000", "FREQ=WEEKLY;COUNT=1000000", "FREQ=MONTHLY;COUNT=1000000", "FREQ=WEEKLY;BYDAY=MO,WE;COUNT=1000000", "FREQ=DAILY;COUNT=99999999999999999999"]) {
 		const repeat = inviteRepeat(rule, start, zone);
 		assert.ok(repeat.repeat === "none" || Number.isFinite(repeat.repeatUntil?.getTime()), rule);
 		assert.equal(repeat.repeat, "none", rule);
 	}
-	assert.ok(performance.now() - started < 100);
+	// Work must not follow the COUNT value: a 1000x larger count costs about the same.
+	const rules = ["FREQ=DAILY", "FREQ=WEEKLY", "FREQ=MONTHLY", "FREQ=WEEKLY;BYDAY=MO,WE"];
+	assertLinear((count) => rules.map((rule) => `${rule};COUNT=${count}`), (list) => { for (let i = 0; i < 200; i++) for (const rule of list) inviteRepeat(rule, start, zone); }, 1_000_000, "COUNT value", 1000);
 	// Large but sane counts are computed directly rather than walked.
 	const weekly5000 = inviteRepeat("FREQ=WEEKLY;COUNT=5000", start, zone);
 	assert.equal(weekly5000.repeat, "weekly");
@@ -728,9 +730,8 @@ test("a crafted ORGANIZER of repeated @ cannot exhaust the CPU (CWE-1333)", () =
 	assert.equal(parsed.organizer, null);
 	// ... and the address check itself stays linear even for a value that bypasses the parser.
 	const invite = { ...parseInvite(event("DTSTART:20261110T100000Z", "SUMMARY:x")), organizer: huge };
-	const started = performance.now();
+	assertLinear((n) => "@".repeat(n), (value) => buildReplyIcs({ ...invite, organizer: value }, value, "accepted"), 64 * 1024, "organizer check", 16, 3000);
 	const reply = buildReplyIcs(invite, huge, "accepted");
-	assert.ok(performance.now() - started < 20, "finishes quickly");
 	assert.ok(!reply.includes("ORGANIZER"));
 	assert.ok(reply.includes("mailto:unknown@invalid"));
 	const outgoing = createCalendarInvitation({ title: "t", description: "", location: "", startsAt: new Date(0), endsAt: new Date(1), uid: "u", organizer: huge, attendees: [huge] });

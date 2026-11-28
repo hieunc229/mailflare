@@ -5,6 +5,7 @@ import test, { after } from "node:test";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { gzipSync } from "node:zlib";
 import { build } from "esbuild";
+import { assertLinear } from "./helpers/scaling.mjs";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 const outDir = mkdtempSync(join(root, "tests", ".tmp-tlsrpt-parse-"));
@@ -87,10 +88,9 @@ test("array lengths are bounded: 1,000 policies and 100 failure details", () => 
 });
 
 test("deeply nested JSON is refused before it is parsed, in linear time", () => {
-	const started = Date.now();
+	assertLinear((n) => `{"organization-name":"${"[".repeat(n)}","policies":[]}`, (text) => { try { parseTlsRptJson(text, opts); } catch {} }, 1_000_000, "brackets in a string", 4, 3);
 	rejects(`{"organization-name":"x","policies":${"[".repeat(200_000)}${"]".repeat(200_000)}}`, /nest/i);
 	rejects(make((report) => { report.policies[0].extra = JSON.parse(`${"[".repeat(20)}${"]".repeat(20)}`); }), /nest/i);
-	assert.ok(Date.now() - started < 1500);
 	// A bracket inside a string is not nesting.
 	assert.ok(parseTlsRptJson(make((report) => { report["organization-name"] = "[[[[[[[[[[[[[[[[[[[[[[[[[[ org"; }), opts));
 });

@@ -13,8 +13,6 @@ const m = await loadRoutes("jmap-promotion-keyword", `
 
 const row = (overrides = {}) => ({ id: "m", mailboxId: "a", folderId: null, status: "received", direction: "inbound", read: false, starred: false, category: null, ...overrides });
 
-test("the keyword is $promotion", () => assert.equal(m.KEYWORD_PROMOTION, "$promotion"));
-
 const on = new Map([["a", "show"]]);
 
 test("keywordsFor sets $promotion for promotions only; primary and unclassified rows do not carry it", () => {

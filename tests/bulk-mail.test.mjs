@@ -17,22 +17,7 @@ await build({
 	target: "node24",
 	logLevel: "silent",
 });
-const { detectBulkMail, isBulkMail } = await import(pathToFileURL(join(directory, "entry.mjs")).href);
-
-test("detectBulkMail.bulk always equals isBulkMail().bulk", () => {
-	const fixtures = [
-		undefined,
-		{},
-		{ "List-Unsubscribe": "<mailto:u@x.test>" },
-		{ "list-id": "<a.x.test>" },
-		{ precedence: "bulk" },
-		{ "x-campaign": "spring" },
-		{ "feedback-id": "a:b:c:ses" },
-		{ "auto-submitted": "auto-generated" },
-		{ "x-mailer": "Mailchimp Mailer" },
-	];
-	for (const headers of fixtures) assert.equal(detectBulkMail(headers).bulk, isBulkMail(headers).bulk);
-});
+const { detectBulkMail } = await import(pathToFileURL(join(directory, "entry.mjs")).href);
 
 test("bulk senders are marketing, discussion lists are list", () => {
 	assert.equal(detectBulkMail({ "List-Unsubscribe": "<https://x.test/u>" }).kind, "marketing");

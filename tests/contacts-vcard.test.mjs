@@ -5,6 +5,7 @@ import { dirname, join } from "node:path";
 import test, { after } from "node:test";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { build } from "esbuild";
+import { assertLinear } from "./helpers/scaling.mjs";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 const dir = mkdtempSync(join(tmpdir(), "mailflare-vcard-"));
@@ -107,26 +108,19 @@ test("garbage never throws", () => {
 });
 
 test("a long hostile line parses in linear time", () => {
-	const started = performance.now();
-	parseVcard(card(`TEL;${"A=\"".repeat(15_000)}:1`, `NOTE:${"\\".repeat(60_000)}`, `EMAIL:${"<".repeat(60_000)}`));
-	assert.ok(performance.now() - started < 1000);
+	assertLinear((n) => card(`TEL;${"A=\"".repeat(n / 4)}:1`, `NOTE:${"\\".repeat(n)}`, `EMAIL:${"<".repeat(n)}`), parseVcard, 2_000_000, "hostile line", 4, 3);
 });
 
 test("a TEL line with 30k repeated parameters parses fast and keeps at most 20 values", () => {
-	const started = performance.now();
+	assertLinear((n) => `TEL${";a".repeat(n)}:+1 555 0100`, (line) => parse(line), 2_000_000, "repeated parameters", 4, 5);
 	const contact = parse(`TEL${";a".repeat(30_000)}:+1 555 0100`);
-	assert.ok(performance.now() - started < 100, `took ${performance.now() - started} ms`);
 	assert.equal(contact.details.phones[0].value, "+1 555 0100");
 	assert.equal(contact.details.phones[0].type, Array.from({ length: 20 }, () => "a").join(", ").slice(0, 32));
 });
 
 test("a 1 MiB body of parameter-heavy lines stays fast, in the browser split and the server parse", () => {
 	const line = `TEL${";TYPE=a,b".repeat(6_000)}:+1 555 0100`;
-	const text = card(...Array.from({ length: Math.ceil((1024 * 1024) / line.length) }, () => line));
-	const started = performance.now();
-	parseVcard(text);
-	splitVcards(bytes(text));
-	assert.ok(performance.now() - started < 500, `took ${performance.now() - started} ms`);
+	assertLinear((size) => card(...Array.from({ length: Math.ceil(size / line.length) }, () => line)), (text) => { parseVcard(text); splitVcards(bytes(text)); }, 2 * 1024 * 1024, "parameter-heavy lines");
 });
 
 test("parameters after the 64th segment are ignored but the value is still found", () => {
@@ -136,10 +130,9 @@ test("parameters after the 64th segment are ignored but the value is still found
 
 test("quoted-printable soft breaks join in one pass and stay bounded", () => {
 	const chunkText = "a".repeat(60_000);
-	const lines = ["BEGIN:VCARD", `NOTE;ENCODING=QUOTED-PRINTABLE:${chunkText}=`, ...Array.from({ length: 80 }, () => `${chunkText}=`), "END:VCARD"];
-	const started = performance.now();
-	const contact = parseVcard(lines.join("\n"));
-	assert.ok(performance.now() - started < 100, `took ${performance.now() - started} ms`);
+	const make = (count) => ["BEGIN:VCARD", `NOTE;ENCODING=QUOTED-PRINTABLE:${chunkText}=`, ...Array.from({ length: count }, () => `${chunkText}=`), "END:VCARD"].join("\n");
+	assertLinear(make, parseVcard, 20, "soft breaks");
+	const contact = parseVcard(make(80));
 	assert.ok((contact.details.note ?? "").length > 0);
 });
 

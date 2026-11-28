@@ -168,6 +168,14 @@ async function render({ folder = "inbox", folderId = null, offset = 0 } = {}) {
 	};
 }
 
+async function waitFor(condition, label, timeoutMs = 3000) {
+	const deadline = Date.now() + timeoutMs;
+	while (!condition()) {
+		if (Date.now() > deadline) assert.fail(`timed out waiting for ${label}`);
+		await new Promise((resolve) => setTimeout(resolve, 10));
+	}
+}
+
 async function resolveNext(data) {
 	const resolve = pending.shift();
 	assert.ok(resolve, "expected a pending message request");
@@ -202,7 +210,7 @@ test("an in-flight refresh cannot put a removed row back", async (t) => {
 	await act(async () => {
 		window.dispatchEvent(new window.CustomEvent("mailflare:messages-changed"));
 	});
-	await new Promise((resolve) => setTimeout(resolve, 180));
+	await waitFor(() => pending.length === 1, "the background refresh to start");
 	assert.equal(pending.length, 1, "the background refresh started");
 
 	await act(async () => {
@@ -217,7 +225,7 @@ test("an in-flight refresh cannot put a removed row back", async (t) => {
 	assert.deepEqual(ids(view.container), ["m1"], "the stale response was ignored");
 	assert.equal(total(view.container), "1");
 
-	await new Promise((resolve) => setTimeout(resolve, 180));
+	await waitFor(() => pending.length === 1, "the replacement request to start");
 	assert.equal(pending.length, 1, "the replacement request started");
 	await resolveNext({ messages: [message("m1")], total: 1, limit: 25, offset: 0 });
 	assert.deepEqual(ids(view.container), ["m1"]);

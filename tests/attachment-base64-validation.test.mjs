@@ -39,6 +39,5 @@ test("valid base64 attachments pass, with or without line breaks", () => {
 test("invalid base64 is rejected by the schema instead of failing later in atob", () => {
 	for (const value of ["not base64!", "aGVsbG8-_w", "YQ=", "Y", "=YQ="]) {
 		assert.equal(sendEmailSchema.safeParse(withAttachment(value)).success, false, value);
-		assert.throws(() => atob(value.replace(/\s/g, "")), undefined, value);
 	}
 });

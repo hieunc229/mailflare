@@ -5,6 +5,7 @@ import { dirname, join } from "node:path";
 import test, { after } from "node:test";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { build } from "esbuild";
+import { assertLinear } from "./helpers/scaling.mjs";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 const outDir = mkdtempSync(join(tmpdir(), "mailflare-reply-bounds-"));
@@ -43,9 +44,7 @@ test("repeated 'wrote:' markers do not overflow the stack", () => {
 });
 
 test("a very long whitespace run in an 'On ... wrote:' candidate line stays fast", () => {
-	const started = Date.now();
-	splitRepliedEmailContent(`On a${" ".repeat(80_000)}b`);
-	assert.ok(Date.now() - started < 500, "linear time");
+	assertLinear((n) => `On a${" ".repeat(n)}b`, splitRepliedEmailContent, 2_000_000, "whitespace run", 4, 20);
 });
 
 test("normal replies still split", () => {

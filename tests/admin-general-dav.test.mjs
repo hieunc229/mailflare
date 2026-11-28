@@ -10,8 +10,6 @@ const mocks = {
 	"@/db": "export function getDb(){return globalThis.adminGeneral.db}",
 	"@/lib/cloudflare": "export function getEnv(){return {}}",
 	"@/lib/api/auth": "export async function requireSessionUser(){const s=globalThis.adminGeneral;return s.user?{user:s.user,error:null}:{user:null,error:Response.json({error:'Unauthorized'},{status:401})}}",
-	"@/lib/auth/admin": "export function isPrimaryAdmin(user){return user.admin===true}",
-	"@/lib/auth/origin": "export function hasValidSessionMutationOrigin(){return true}",
 	"@/lib/email/attachment-policy": "export const MAX_OUTBOUND_ATTACHMENT_MAX_MB=25; export async function getOutboundAttachmentMaxMb(){return 25} export function getOutboundAttachmentCeilingMb(){return 25}",
 	"@/lib/drive/storage": "export async function getDriveStorageLimit(){return null}",
 };
@@ -24,11 +22,11 @@ after(() => {
 	fixture.dispose();
 });
 
-function setup(user = { id: "a", admin: true }) {
+function setup(user = { id: "a", role: "admin", isPrimaryAdmin: true }) {
 	sqlite?.close();
 	sqlite = installSqlite("adminGeneral", { schema, extra: { user } });
 }
-const put = (body) => PUT(new Request("https://mail.test/api/admin/general", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }));
+const put = (body) => PUT(new Request("https://mail.test/api/admin/general", { method: "PUT", headers: { "Content-Type": "application/json", Origin: "https://mail.test" }, body: JSON.stringify(body) }));
 const enabled = () => sqlite.prepare("SELECT dav_enabled FROM app_settings WHERE id = 'default'").get()?.dav_enabled;
 
 test("calendar and contacts sync is off until an administrator turns it on", async () => {
@@ -43,7 +41,7 @@ test("calendar and contacts sync is off until an administrator turns it on", asy
 });
 
 test("only the primary administrator can change it, and the value must be a boolean", async () => {
-	setup({ id: "u", admin: false });
+	setup({ id: "u", role: "user", isPrimaryAdmin: false });
 	assert.equal((await put({ davEnabled: true })).status, 403);
 	setup();
 	assert.equal((await put({ davEnabled: "yes" })).status, 400);

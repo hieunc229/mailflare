@@ -6,6 +6,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { randomBytes } from "node:crypto";
 import { deflateRawSync, gzipSync } from "node:zlib";
 import { build } from "esbuild";
+import { assertLinear } from "./helpers/scaling.mjs";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 const outDir = mkdtempSync(join(root, "tests", ".tmp-report-parse-"));
@@ -195,10 +196,7 @@ test("the row cap keeps the highest-volume rows", () => {
 });
 
 test("an unclosed-tag flood parses in linear time", () => {
-	const flood = "<record>".repeat(15_000) + "<row>".repeat(500_000);
-	const started = performance.now();
-	assert.throws(() => parseDmarcAggregateXml(`<feedback><report_metadata><org_name>x</org_name></report_metadata>${flood}`, opts), ReportError);
-	assert.ok(performance.now() - started < 1500, "must not be quadratic");
+	assertLinear((n) => `<feedback><report_metadata><org_name>x</org_name></report_metadata>${"<record>".repeat(n / 30)}${"<row>".repeat(n)}`, (xml) => assert.throws(() => parseDmarcAggregateXml(xml, opts), ReportError), 1_500_000, "unclosed tags", 4, 3);
 });
 
 test("domain mismatch is rejected; a subdomain of the configured domain is accepted; its parent is not", () => {
@@ -308,10 +306,14 @@ test("a report whose date range is longer than 7 days is rejected", () => {
 
 test("comment, CDATA and quote floods parse in linear time", () => {
 	const head = "<feedback><report_metadata><org_name>x</org_name></report_metadata>";
-	for (const flood of ["<!-- a -->".repeat(100_000) + "<![CDATA[".repeat(10) , '<record a="'.repeat(100_000), "<![CDATA[ <!--".repeat(50_000), "<d:record ".repeat(100_000)]) {
-		const started = performance.now();
-		assert.throws(() => parseDmarcAggregateXml(head + flood, opts), ReportError);
-		assert.ok(performance.now() - started < 1500, `quadratic on ${flood.slice(0, 12)}`);
+	const floods = {
+		comments: (n) => "<!-- a -->".repeat(n) + "<![CDATA[".repeat(10),
+		quotes: (n) => '<record a="'.repeat(n),
+		cdata: (n) => "<![CDATA[ <!--".repeat(n / 2),
+		prefixed: (n) => "<d:record ".repeat(n),
+	};
+	for (const [name, flood] of Object.entries(floods)) {
+		assertLinear((n) => head + flood(n), (xml) => assert.throws(() => parseDmarcAggregateXml(xml, opts), ReportError), 500_000, name, 4, 10);
 	}
 });
 

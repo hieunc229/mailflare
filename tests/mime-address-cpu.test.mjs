@@ -14,25 +14,37 @@ writeFileSync(entry, `
 import { MimeLimitError, parseRawMime } from ${JSON.stringify(join(root, "src/lib/email/parse"))};
 const enc = new TextEncoder();
 // postal-mime before 3.0.1 parsed an address header in time that grew faster than its length.
-const from = "From: " + "a.".repeat(30000);
-let nested = from + "\\r\\n\\r\\nbody\\r\\n";
-for (let i = 0; i < 8; i++) nested = from + "\\r\\nContent-Type: message/rfc822\\r\\n\\r\\n" + nested;
 const cases = {
-	dotted: from + "\\r\\nSubject: x\\r\\n\\r\\nhi\\r\\n",
-	nested9: nested,
-	foldedTo: "To: " + Array.from({ length: 20000 }, () => "a").join(",\\r\\n ") + "\\r\\nSubject: x\\r\\n\\r\\nhi\\r\\n",
+	dotted: (n) => "From: " + "a.".repeat(n) + "\\r\\nSubject: x\\r\\n\\r\\nhi\\r\\n",
+	nested9: (n) => {
+		const from = "From: " + "a.".repeat(n);
+		let nested = from + "\\r\\n\\r\\nbody\\r\\n";
+		for (let i = 0; i < 8; i++) nested = from + "\\r\\nContent-Type: message/rfc822\\r\\n\\r\\n" + nested;
+		return nested;
+	},
+	foldedTo: (n) => "To: " + Array.from({ length: n }, () => "a").join(",\\r\\n ") + "\\r\\nSubject: x\\r\\n\\r\\nhi\\r\\n",
+};
+const sizes = { dotted: 7500, nested9: 7500, foldedTo: 5000 };
+const run = async (text) => {
+	let best = Infinity;
+	let result;
+	for (let i = 0; i < 3; i++) {
+		const start = performance.now();
+		try {
+			await parseRawMime(enc.encode(text).buffer);
+			result = "parsed";
+		} catch (error) {
+			result = error instanceof MimeLimitError ? "rejected" : "other: " + error;
+		}
+		best = Math.min(best, performance.now() - start);
+	}
+	return { result, ms: best };
 };
 const out = {};
-for (const [name, text] of Object.entries(cases)) {
-	const start = performance.now();
-	let result;
-	try {
-		await parseRawMime(enc.encode(text).buffer);
-		result = "parsed";
-	} catch (error) {
-		result = error instanceof MimeLimitError ? "rejected" : "other: " + error;
-	}
-	out[name] = { result, ms: Math.round(performance.now() - start) };
+for (const [name, make] of Object.entries(cases)) {
+	const small = await run(make(sizes[name]));
+	const large = await run(make(4 * sizes[name]));
+	out[name] = { result: large.result, small: small.ms, large: large.ms };
 }
 console.log(JSON.stringify(out));
 `);
@@ -41,9 +53,10 @@ await build({ entryPoints: [entry], bundle: true, outfile: bundle, platform: "no
 
 test("a crafted address header cannot stall parsing", () => {
 	const out = JSON.parse(execFileSync(process.execPath, [bundle], { encoding: "utf8", timeout: 120_000 }));
-	for (const [name, { result, ms }] of Object.entries(out)) {
+	for (const [name, { result, small, large }] of Object.entries(out)) {
 		assert.ok(result === "parsed" || result === "rejected", `${name}: ${result}`);
-		assert.ok(ms < 200, `${name} took ${ms} ms`);
+		assert.ok(large < 10_000, `${name} took ${large} ms`);
+		assert.ok(large < 6 * Math.max(small, 1), `${name} grew ${(large / small).toFixed(1)}x for 4x input (${small.toFixed(1)} -> ${large.toFixed(1)} ms)`);
 	}
 });
 
