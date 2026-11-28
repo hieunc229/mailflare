@@ -5,7 +5,7 @@ import { useLanguage } from "./language-provider";
 import { folderColorKeys } from "@/lib/folders/color-keys";
 import type { TranslationKey } from "@/lib/i18n/types";
 import { useEffect, useState, useSyncExternalStore } from "react";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import {
   Archive,
   BellOff,
@@ -24,6 +24,7 @@ import {
 } from "@/components/icons";
 import { useSelectedMailbox } from "@/components/mailbox-provider";
 import { Button } from "@/components/ui/button";
+import { confirmDestructive } from "@/components/ui/confirm-dialog";
 import {
   Dialog,
   DialogContent,
@@ -37,7 +38,7 @@ import { Label } from "@/components/ui/label";
 import { useMessageCounts } from "@/hooks/use-message-counts";
 import { hasActivePromotions } from "@/lib/promotions/ui-utils";
 import { AUTH_SESSION_CHANGED_EVENT, authFetch } from "@/lib/auth/client";
-import { getMailboxFolders, invalidateFolderCache } from "@/lib/folders/client";
+import { deleteFolder, getMailboxFolders, invalidateFolderCache } from "@/lib/folders/client";
 import {
   DEFAULT_FOLDER_COLOR,
   FOLDER_COLOR_OPTIONS,
@@ -109,6 +110,7 @@ export function DashboardNav({ className }: { className?: string }) {
   const { t } = useLanguage();
   const { minimal, mobile } = useSidebar();
   const pathname = usePathname();
+  const router = useRouter();
   // Storage is read after hydration so the server and first client render agree.
   const hydrated = useSyncExternalStore(subscribeNothing, hydratedOnClient, hydratedOnServer);
   const [moreOpenChoice, setMoreOpen] = useState<boolean | null>(null);
@@ -269,6 +271,35 @@ export function DashboardNav({ className }: { className?: string }) {
     }
   }
 
+  async function removeFolder() {
+    if (!selectedMailbox?.id || !editingFolderId || addingFolder) return;
+    const folder = folders.find((item) => item.id === editingFolderId);
+    if (!folder) return;
+    const confirmed = await confirmDestructive({
+      title: t("navigation.deleteFolder"),
+      message: t("navigation.deleteFolderConfirm", { name: folder.name }),
+      confirmLabel: t("common.delete"),
+    });
+    if (!confirmed) return;
+
+    setAddingFolder(true);
+    setFolderError(null);
+    try {
+      const result = await deleteFolder(selectedMailbox.id, folder.id);
+      if (!result.ok) {
+        setFolderError(result.error ?? t("navigation.deleteFolderFailed"));
+        return;
+      }
+      setFolders((items) => items.filter((item) => item.id !== folder.id));
+      setFolderDialogOpen(false);
+      if (isActiveHref(`/folders/${folder.id}`)) router.push("/inbox");
+    } catch {
+      setFolderError(t("auth.serverUnreachable"));
+    } finally {
+      setAddingFolder(false);
+    }
+  }
+
   return (
     <SidebarScaffold className={className} header={<SidebarHeader href="/inbox" />} footer={<SidebarFooter />}>
       {composeLink && !mobile && <NavItem labelClassName="font-medium" link={composeLink} />}
@@ -345,14 +376,21 @@ export function DashboardNav({ className }: { className?: string }) {
                     </div>
                   </div>
                   {folderError && <p role="alert" className="text-sm text-red-600">{folderError}</p>}
-                  <Button
-                    type="submit"
-                    disabled={addingFolder || !newFolderName.trim()}
-                  >
-                    {editingFolderId
-                      ? t(addingFolder ? "common.saving" : "common.save")
-                      : t(addingFolder ? "navigation.creating" : "navigation.createFolder")}
-                  </Button>
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <Button
+                      type="submit"
+                      disabled={addingFolder || !newFolderName.trim()}
+                    >
+                      {editingFolderId
+                        ? t(addingFolder ? "common.saving" : "common.save")
+                        : t(addingFolder ? "navigation.creating" : "navigation.createFolder")}
+                    </Button>
+                    {editingFolderId && (
+                      <Button type="button" variant="outline" className="text-red-700" disabled={addingFolder} onClick={() => void removeFolder()}>
+                        {t("navigation.deleteFolder")}
+                      </Button>
+                    )}
+                  </div>
                 </form>
               </DialogContent>
             </Dialog>

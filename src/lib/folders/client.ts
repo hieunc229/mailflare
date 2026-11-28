@@ -36,6 +36,22 @@ export function invalidateFolderCache(): void {
 	invalidate();
 }
 
+/** Deletes a custom folder; the server moves its messages to the Inbox. `error` is the server's reason when it refuses. */
+export async function deleteFolder(mailboxId: string, folderId: string): Promise<{ ok: true } | { ok: false; error?: string }> {
+	const params = new URLSearchParams({ id: folderId, mailboxId });
+	const response = await authFetch(`/api/folders?${params.toString()}`, { method: "DELETE" });
+	if (!response.ok) {
+		const body = (await response.json().catch(() => null)) as { error?: unknown } | null;
+		return typeof body?.error === "string" ? { ok: false, error: body.error } : { ok: false };
+	}
+	invalidate();
+	if (typeof window !== "undefined") {
+		window.dispatchEvent(new Event("mailflare:folders-changed"));
+		window.dispatchEvent(new Event("mailflare:messages-changed"));
+	}
+	return { ok: true };
+}
+
 export async function getMailboxFolders<T extends FolderListResponse = FolderListResponse>(
 	mailboxId: string,
 ): Promise<T> {
