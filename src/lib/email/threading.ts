@@ -78,6 +78,15 @@ export async function resolveThreadId(db: Db, input: ResolveThreadInput): Promis
 	return own ?? newId("thr");
 }
 
+/**
+ * The conversation of a draft a JMAP client creates: a reply joins its parent's thread now, because the send keeps
+ * whatever the draft carries. Anything else stays null and gets its thread from the Message-ID at send.
+ */
+export async function resolveDraftThreadId(db: Db, mailboxId: string, inReplyTo: string | null, references: string | null): Promise<string | null> {
+	if (!inReplyTo && !references) return null;
+	return resolveThreadId(db, { mailboxId, messageId: null, inReplyTo, references: parseMessageIdList(references) });
+}
+
 async function isThreadParticipant(db: Db, mailboxId: string, threadId: string, address: string): Promise<boolean> {
 	// The LIKE only narrows candidates (wildcards in the address are escaped); the verdict is an exact address match.
 	const pattern = `%${escapeLike(address.trim().toLowerCase())}%`;

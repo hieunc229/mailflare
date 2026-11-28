@@ -6,7 +6,7 @@ import { newId } from "@/lib/ids";
 import { buildSnippet, parseRawMime } from "@/lib/email/parse";
 import { getAuthorizedSenderAddress } from "@/lib/email/sender";
 import { formatEmailAddress, joinEmailAddressList } from "@/lib/email/address";
-import { resolveThreadId } from "@/lib/email/threading";
+import { resolveDraftThreadId, resolveThreadId } from "@/lib/email/threading";
 import { storeMessageAttachments } from "@/lib/email/attachments";
 import { deleteMessageWithObjects } from "@/lib/email/message-cleanup";
 import { LIMITS, KEYWORD_FLAGGED, KEYWORD_SEEN } from "./constants";
@@ -270,6 +270,7 @@ async function createDraft(ctx: JmapContext, value: Record<string, unknown>, acc
 	const text = partText(value.textBody);
 	const html = partText(value.htmlBody);
 	const references = Array.isArray(value.references) ? (value.references as string[]).join(" ") : null;
+	const inReplyTo = Array.isArray(value.inReplyTo) ? (value.inReplyTo as string[])[0] ?? null : null;
 
 	const id = await insertDraft(ctx, {
 		mailboxId: sender.mailboxId,
@@ -280,8 +281,9 @@ async function createDraft(ctx: JmapContext, value: Record<string, unknown>, acc
 		subject: typeof value.subject === "string" ? value.subject : null,
 		textBody: text || null,
 		htmlBody: html || null,
-		inReplyTo: Array.isArray(value.inReplyTo) ? (value.inReplyTo as string[])[0] ?? null : null,
+		inReplyTo,
 		references,
+		threadId: await resolveDraftThreadId(ctx.db, sender.mailboxId, inReplyTo, references),
 	});
 
 	const uploads: AttachmentContent[] = [];
