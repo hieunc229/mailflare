@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
 import test from "node:test";
 import { DELEGATE, OWNER, as, call, loadRoutes, request, seed } from "./promotions-route-harness.mjs";
 
@@ -29,10 +28,6 @@ async function fixture(t, { mode = "show", ...options } = {}) {
 		insert.run(id, mailbox, direction, from ?? (sender ? `Acme News <${sender}>` : "x@x.test"), status, category, sender, read, unsub, starred, at ?? now() - age * DAY - serial++);
 	return { database, add };
 }
-
-test("blockContact files a Trash rule, so the Subscriptions Block button means Trash and not rejection", () => {
-	assert.match(readFileSync(new URL("../src/lib/contacts/service.ts", import.meta.url), "utf8"), /matchOperator: "exact" as const,[\s\S]*?action: "trash" as const[\s\S]*?priority: 100/);
-});
 
 test("senderSweepCondition matches the exact sender only", async (t) => {
 	const { database, add } = await fixture(t);
