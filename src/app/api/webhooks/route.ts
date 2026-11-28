@@ -1,8 +1,9 @@
 import { NextResponse } from "next/server";
-import { count, desc, eq, inArray, max } from "drizzle-orm";
+import { and, count, desc, eq, gte, inArray, max } from "drizzle-orm";
 import { getEnv } from "@/lib/cloudflare";
 import { getDb } from "@/db";
 import { webhookDeliveries, webhooks } from "@/db/schema";
+import { WEBHOOK_DELIVERY_RETENTION_DAYS } from "@/lib/email/webhook-retention";
 import { parseWebhookEvents } from "@/lib/email/webhooks";
 import { summariseDeliveryStats } from "./utils";
 import { requireSessionUser } from "@/lib/api/auth";
@@ -29,6 +30,8 @@ export async function GET(request: Request) {
 		.where(eq(webhooks.userId, user.id))
 		.orderBy(desc(webhooks.createdAt));
 
+	// Only the retention window is aggregated, so the query stays on the (webhook_id, created_at) index.
+	const since = new Date(Date.now() - WEBHOOK_DELIVERY_RETENTION_DAYS * 86_400_000);
 	// One grouped query gives every endpoint its delivery health without an N+1.
 	const stats = await db
 		.select({
@@ -38,7 +41,7 @@ export async function GET(request: Request) {
 			lastAttemptAt: max(webhookDeliveries.lastAttemptAt),
 		})
 		.from(webhookDeliveries)
-		.where(inArray(webhookDeliveries.webhookId, db.select({ id: webhooks.id }).from(webhooks).where(eq(webhooks.userId, user.id))))
+		.where(and(inArray(webhookDeliveries.webhookId, db.select({ id: webhooks.id }).from(webhooks).where(eq(webhooks.userId, user.id))), gte(webhookDeliveries.createdAt, since)))
 		.groupBy(webhookDeliveries.webhookId, webhookDeliveries.status);
 
 	return NextResponse.json({
