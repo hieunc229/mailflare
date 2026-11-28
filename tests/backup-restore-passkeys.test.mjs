@@ -142,3 +142,15 @@ test("a restore clears the DAV change log and sync state so clients resync from 
 	assert.equal(sqlite.prepare("SELECT COUNT(*) AS count FROM dav_sync_state").get().count, 0);
 	assert.deepEqual(sqlite.prepare("SELECT object_key AS k, change_type AS t FROM dav_changes ORDER BY seq").all(), [{ k: "e1", t: "created" }]);
 });
+
+test("a backup from before remote_content_mode restores users with the schema default, ask, not the old D1 default", async () => {
+	const source = database();
+	addUser(source);
+	const backup = await exportDatabaseRecords(d1(source));
+	const document = JSON.parse(new TextDecoder().decode(backup));
+	for (const user of document.tables.users) delete user.remote_content_mode;
+	const bytes = new TextEncoder().encode(JSON.stringify(document));
+	const target = database();
+	await restoreDatabaseRecords(d1(target), bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength));
+	assert.equal(target.prepare("SELECT remote_content_mode AS mode FROM users WHERE id = 'u1'").get().mode, "ask");
+});

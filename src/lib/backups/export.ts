@@ -185,7 +185,8 @@ export async function restoreDatabaseRecords(db: D1Database, content: ArrayBuffe
 							: table === "mailbox_promotion_settings"
 								? promotionSettingColumns
 								: deliverabilityColumns.get(table) ?? null;
-			const statements = rows.slice(index, index + INSERT_BATCH_SIZE).map((row) => createInsertStatement(db, dialect, table, row, columns));
+			// D1 still defaults remote_content_mode to the old 'allow' (SQLite cannot change a column default), so a backup that predates the column must not fall back to it.
+			const statements = rows.slice(index, index + INSERT_BATCH_SIZE).map((row) => createInsertStatement(db, dialect, table, table === "users" && !("remote_content_mode" in row) ? { ...row, remote_content_mode: "ask" } : row, columns));
 			// MySQL checks foreign keys per statement, so the batch suspends them for its own connection.
 			if (statements.length > 0) await db.batch(dialect === "mysql" ? [db.prepare("SET FOREIGN_KEY_CHECKS = 0"), ...statements, db.prepare("SET FOREIGN_KEY_CHECKS = 1")] : statements);
 		}
