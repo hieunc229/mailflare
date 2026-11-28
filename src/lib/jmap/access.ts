@@ -1,7 +1,7 @@
-import { and, eq, inArray } from "drizzle-orm";
+import { eq, inArray } from "drizzle-orm";
 import { folders, mailboxes } from "@/db/schema";
 import { listAccessibleMailboxes } from "@/lib/mailboxes/access";
-import { getMailboxDomainAddresses } from "@/lib/mailboxes/domain-addresses";
+import { getMailboxesDomainAddresses } from "@/lib/mailboxes/domain-addresses";
 import type { AccessibleMailbox, JmapContext } from "./types";
 
 /** Every Mailflare mailbox the key's user can read, in a JMAP-shaped record. */
@@ -54,8 +54,9 @@ export async function listFoldersByMailbox(ctx: JmapContext, mailboxIds: string[
 }
 
 /** Addresses each mailbox may send from, for Identity objects. */
-export async function listSendableAddresses(ctx: JmapContext, mailbox: AccessibleMailbox): Promise<string[]> {
-	const [row] = await ctx.db.select().from(mailboxes).where(and(eq(mailboxes.id, mailbox.id))).limit(1);
-	if (!row) return [];
-	return getMailboxDomainAddresses(ctx.db, row);
+export async function listSendableAddressesByMailbox(ctx: JmapContext, mailboxList: AccessibleMailbox[]): Promise<Map<string, string[]>> {
+	const ids = mailboxList.map((mailbox) => mailbox.id);
+	const rows: Array<typeof mailboxes.$inferSelect> = [];
+	for (let index = 0; index < ids.length; index += 90) rows.push(...await ctx.db.select().from(mailboxes).where(inArray(mailboxes.id, ids.slice(index, index + 90))));
+	return getMailboxesDomainAddresses(ctx.db, rows);
 }

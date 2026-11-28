@@ -2,7 +2,7 @@ import { and, eq } from "drizzle-orm";
 import type { AppDatabase } from "@/db";
 import { contacts, domains, mailboxes, users } from "@/db/schema";
 import { getContactId } from "@/lib/contacts/utils";
-import { getMailboxDomainAddresses } from "@/lib/mailboxes/domain-addresses";
+import { getMailboxesDomainAddresses } from "@/lib/mailboxes/domain-addresses";
 import { tracksAccountIdentity } from "./identity-utils";
 import type { PersonalIdentity } from "./sync-types";
 
@@ -27,6 +27,7 @@ export async function syncPersonalIdentity(
 		.innerJoin(domains, eq(mailboxes.domainId, domains.id))
 		.where(and(eq(mailboxes.userId, identity.userId), eq(mailboxes.type, "personal")));
 
+	const addressesByMailbox = await getMailboxesDomainAddresses(db, personalMailboxes.map((row) => row.mailbox));
 	for (const { mailbox, hostname } of personalMailboxes) {
 		// Only the primary mailbox mirrors the profile. Secondary mailboxes keep
 		// the name and avatar they were given.
@@ -43,7 +44,7 @@ export async function syncPersonalIdentity(
 		const displayName = isIdentityMailbox ? identity.name : mailbox.displayName ?? identity.name;
 		const avatarKey = isIdentityMailbox ? identity.avatarKey : mailbox.avatarKey;
 
-		for (const email of await getMailboxDomainAddresses(db, mailbox)) {
+		for (const email of addressesByMailbox.get(mailbox.id) ?? []) {
 			await db
 				.insert(contacts)
 				.values({
@@ -73,7 +74,7 @@ export async function getPersonalAddresses(db: AppDatabase, userId: string): Pro
 		.from(mailboxes)
 		.where(and(eq(mailboxes.userId, userId), eq(mailboxes.type, "personal")));
 	const found = new Set<string>();
-	for (const mailbox of personalMailboxes) for (const address of await getMailboxDomainAddresses(db, mailbox)) found.add(address);
+	for (const addresses of (await getMailboxesDomainAddresses(db, personalMailboxes)).values()) for (const address of addresses) found.add(address);
 	return found;
 }
 
@@ -93,8 +94,7 @@ export async function getPersonalIdentityForAddress(
 		.select()
 		.from(mailboxes)
 		.where(and(eq(mailboxes.userId, userId), eq(mailboxes.type, "personal")));
-	for (const mailbox of personalMailboxes) {
-		const addresses = await getMailboxDomainAddresses(db, mailbox);
+	for (const addresses of (await getMailboxesDomainAddresses(db, personalMailboxes)).values()) {
 		if (addresses.includes(email)) return account;
 	}
 	return null;
