@@ -1,22 +1,7 @@
-import { processAgentDraftJob } from "@/lib/agent/jobs/utils";
 import { createBatchBudget } from "@/lib/deliverability/ingest";
-import { processInboundMessage } from "@/lib/email/inbound";
-import { processOutboundQueue, type OutboundQueueMessage } from "@/lib/email/send";
-import { processWebhookRetry, type WebhookRetryMessage } from "@/lib/email/webhooks";
-import { processImportJob } from "@/lib/import/jobs";
-import { isImportJobMessage, isInboundQueueMessage, isWebhookRetryMessage, settleFailedInboundMessage } from "../../worker-utils";
+import { dispatchQueueMessage } from "@/lib/queue-dispatch";
+import { isInboundQueueMessage, settleFailedInboundMessage } from "../../worker-utils";
 import { isQueueName, publishToQStash, queueDestination, QUEUE_MAX_RETRIES, type QStashConfig, type QueueName, type VercelQueueMessage, type VercelQueues } from "./vercel-queue";
-
-/** Routes a message by its shape, exactly as the `queue` handler in worker.ts does. */
-async function dispatch(env: CloudflareEnv, body: unknown, attempt: number): Promise<void> {
-	const kind = typeof body === "object" && body !== null ? (body as { kind?: unknown }).kind : undefined;
-	if (isInboundQueueMessage(body)) await processInboundMessage(env, body, { reportBudget: createBatchBudget() });
-	else if (kind === "agent.draft" && typeof (body as { jobId?: unknown }).jobId === "string") await processAgentDraftJob(env, (body as { jobId: string }).jobId);
-	else if (isWebhookRetryMessage(body)) await processWebhookRetry(env, body as WebhookRetryMessage);
-	else if (isImportJobMessage(body)) await processImportJob(env, { ...body, attempt });
-	else if (kind === "email.scheduled") await processOutboundQueue(env, body as OutboundQueueMessage);
-	else throw new Error("Unknown queue message type");
-}
 
 function logFailure(name: QueueName, body: unknown, attempt: number, error: unknown): void {
 	console.error("Queue processing failed", { queue: name, attempts: attempt, rawR2Key: isInboundQueueMessage(body) ? body.rawR2Key : undefined, error });
@@ -37,7 +22,7 @@ export type QueueOutcome = "done" | "retried" | "dropped";
  */
 export async function consumeQueueMessage(env: CloudflareEnv, config: QStashConfig, name: QueueName, body: unknown, attempt: number): Promise<QueueOutcome> {
 	try {
-		await dispatch(env, body, attempt);
+		await dispatchQueueMessage(env, body, { attempt, reportBudget: createBatchBudget() });
 		return "done";
 	} catch (error) {
 		logFailure(name, body, attempt, error);
@@ -90,9 +75,12 @@ export async function consumeVercelQueueMessage(env: CloudflareEnv, message: Ver
 	await (env as unknown as { VERCEL_QUEUES?: VercelQueues }).VERCEL_QUEUES?.ensureTick();
 	const { queue, body } = message;
 	// A function that crashes or times out never reaches the catch below, so the limit is checked here too.
-	if (deliveryCount > QUEUE_MAX_RETRIES[queue] + 1) return;
+	if (deliveryCount > QUEUE_MAX_RETRIES[queue] + 1) {
+		console.error("Queue message dropped past the retry limit", { queue, deliveryCount });
+		return;
+	}
 	try {
-		await dispatch(env, body, deliveryCount);
+		await dispatchQueueMessage(env, body, { attempt: deliveryCount, reportBudget: createBatchBudget() });
 	} catch (error) {
 		logFailure(queue, body, deliveryCount, error);
 		if (deliveryCount > QUEUE_MAX_RETRIES[queue]) return;
