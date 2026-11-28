@@ -71,46 +71,51 @@ export async function storeMessageAttachments(
 ): Promise<StoredAttachment[]> {
 	if (options?.validate !== false) validateAttachments(attachments, await getOutboundAttachmentMaxMb(env));
 	const db = getDb(env);
-	const stored: StoredAttachment[] = [];
+	const items: StoredAttachment[] = attachments.map((attachment) => {
+		const id = newId("att");
+		const filename = sanitizeFilename(attachment.filename);
+		return {
+			id,
+			messageId,
+			filename,
+			type: attachment.type,
+			size: attachment.content.byteLength,
+			disposition: attachment.disposition ?? "attachment",
+			contentId: attachment.contentId ?? null,
+			r2Key: `attachments/${messageId}/${id}/${filename}`,
+		};
+	});
 
+	// Objects upload together; if any fails, the ones that landed are removed before the error is rethrown.
+	const results = await Promise.allSettled(items.map((item, index) => env.BUCKET.put(item.r2Key, attachments[index].content, {
+		httpMetadata: { contentType: item.type },
+		customMetadata: { filename: item.filename, messageId },
+	})));
+	const failure = results.find((result): result is PromiseRejectedResult => result.status === "rejected");
+	if (failure) {
+		await Promise.all(items.filter((_, index) => results[index].status === "fulfilled").map((item) => env.BUCKET.delete(item.r2Key)));
+		throw failure.reason;
+	}
+
+	// 8 bound parameters per row: 12 rows stay under the 100-parameter limit.
+	const rows = items.map((item) => ({
+		id: item.id,
+		messageId,
+		filename: item.filename,
+		contentType: item.type,
+		size: item.size,
+		disposition: item.disposition,
+		contentId: item.contentId,
+		r2Key: item.r2Key,
+	}));
 	try {
-		for (const attachment of attachments) {
-			const id = newId("att");
-			const filename = sanitizeFilename(attachment.filename);
-			const r2Key = `attachments/${messageId}/${id}/${filename}`;
-			const disposition = attachment.disposition ?? "attachment";
-
-			await env.BUCKET.put(r2Key, attachment.content, {
-				httpMetadata: { contentType: attachment.type },
-				customMetadata: { filename, messageId },
-			});
-			stored.push({
-				id,
-				messageId,
-				filename,
-				type: attachment.type,
-				size: attachment.content.byteLength,
-				disposition,
-				contentId: attachment.contentId ?? null,
-				r2Key,
-			});
-			await db.insert(messageAttachments).values({
-				id,
-				messageId,
-				filename,
-				contentType: attachment.type,
-				size: attachment.content.byteLength,
-				disposition,
-				contentId: attachment.contentId ?? null,
-				r2Key,
-			});
-		}
+		for (let index = 0; index < rows.length; index += 12) await db.insert(messageAttachments).values(rows.slice(index, index + 12));
 	} catch (error) {
-		await Promise.all(stored.map((attachment) => env.BUCKET.delete(attachment.r2Key)));
+		await Promise.all(items.map((item) => env.BUCKET.delete(item.r2Key)));
 		throw error;
 	}
 
-	return stored;
+	return items;
 }
 
 /**
@@ -239,7 +244,11 @@ export async function getAttachmentForUser(
 	attachmentId: string,
 ) {
 	const db = getDb(env);
-	const [message] = await db.select().from(messages).where(eq(messages.id, messageId)).limit(1);
+	const [message] = await db
+		.select({ mailboxId: messages.mailboxId, userId: messages.userId, privateDraft: messages.privateDraft })
+		.from(messages)
+		.where(eq(messages.id, messageId))
+		.limit(1);
 	if (!message || isOthersDraft(message, user.id)) return null;
 
 	if (message.mailboxId) {

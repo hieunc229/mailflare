@@ -20,8 +20,6 @@ export async function sendMailboxAutoReply(
 	if (!recipient.includes("@") || recipient === deliveredAddress || shouldSkipAutoReply(recipient, input.headers)) return;
 
 	const db = getDb(env);
-	const senderDecision = await resolveInboundAddress(db, recipient);
-	if (senderDecision?.mailbox?.mailboxId === input.mailboxId) return;
 	const [mailbox] = await db
 		.select({
 			autoReplyEnabled: mailboxes.autoReplyEnabled,
@@ -33,6 +31,9 @@ export async function sendMailboxAutoReply(
 		.where(eq(mailboxes.id, input.mailboxId))
 		.limit(1);
 	if (!mailbox?.autoReplyEnabled || !mailbox.autoReplyBody.trim()) return;
+	// Only a mailbox that replies needs the sender resolved: a message from the mailbox itself gets no reply.
+	const senderDecision = await resolveInboundAddress(db, recipient);
+	if (senderDecision?.mailbox?.mailboxId === input.mailboxId) return;
 
 	const [recentDelivery] = await db
 		.select({ id: autoReplyDeliveries.id })
