@@ -397,66 +397,74 @@ export default function BackupsPage() {
           <DatabaseBackup className="h-5 w-5 text-neutral-500" />
           <h2 className="font-semibold text-neutral-900">{t("backups.history")}</h2>
         </div>
-        <div className="grid grid-cols-[1fr_110px_110px_170px_120px] gap-4 border-b border-neutral-100 bg-neutral-50 px-4 py-2 text-xs font-semibold uppercase tracking-wide text-neutral-500">
-          <span>{t("backups.col.file")}</span>
-          <span>{t("backups.col.status")}</span>
-          <span>{t("backups.col.size")}</span>
-          <span>{t("backups.col.created")}</span>
-          <span>{t("backups.col.actions")}</span>
-        </div>
         {backups.isLoading && <SkeletonRows count={5} />}
         {!backups.isLoading && (backups.data?.backups ?? []).length === 0 && (
           <p className="px-4 py-6 text-sm text-neutral-500">{t("backups.none")}</p>
         )}
-        {(backups.data?.backups ?? []).map((backup: BackupItem) => (
-          <div
-            key={backup.id}
-            className="grid grid-cols-[1fr_110px_110px_170px_120px] items-center gap-4 border-b border-neutral-100 px-4 py-3 last:border-b-0"
-          >
-            <div className="min-w-0">
-              <p className="truncate text-sm font-medium text-neutral-900">
-                {backup.filename ?? backup.id}
-              </p>
-              <p className="truncate text-xs text-neutral-500">
-                {backup.trigger === "manual" ? t("backups.manual") : t("backups.scheduled")}
-                {backup.error ? `: ${backup.error}` : ""}
-              </p>
-            </div>
-            <Badge variant="outline" className={getStatusClass(backup.status)}>
-              {t(`backups.status.${backup.status}` as TranslationKey)}
-            </Badge>
-            <span className="text-sm text-neutral-600">
-              {formatBackupSize(backup.size)}
-            </span>
-            <span className="text-sm text-neutral-600">
-              {formatBackupDate(backup.createdAt)}
-            </span>
-            <div className="flex gap-1">
-              <Button
-                size="sm"
-                variant="ghost"
-                title={t("backups.download")}
-                disabled={backup.status !== "completed" || download.isPending}
-                onClick={() => download.mutate(backup)}
-              >
-                <Download className="h-4 w-4" />
-              </Button>
-              <Button
-                size="sm"
-                variant="ghost"
-                title={t("backups.delete")}
-                disabled={
-                  deleteBackup.isPending ||
-                  backup.status === "queued" ||
-                  backup.status === "running"
-                }
-                onClick={async () => { if (await confirmDestructive(`${t("backups.delete")}: ${backup.filename ?? backup.id}`)) deleteBackup.mutate(backup.id); }}
-              >
-                <Trash2 className="h-4 w-4 text-red-600" />
-              </Button>
-            </div>
-          </div>
-        ))}
+        <div role="region" tabIndex={0} aria-label={t("backups.history")} className="overflow-x-auto">
+          <table className="w-full min-w-[640px] text-left text-sm">
+            <thead className="bg-neutral-50">
+              <tr className="border-b border-neutral-100">
+                {(["file", "status", "size", "created", "actions"] as const).map((col) => (
+                  <th key={col} scope="col" className="px-4 py-2 text-xs font-semibold uppercase tracking-wide text-neutral-500">
+                    {t(`backups.col.${col}` as TranslationKey)}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {(backups.data?.backups ?? []).map((backup: BackupItem) => {
+                const name = backup.filename ?? backup.id;
+                return (
+                  <tr key={backup.id} className="border-b border-neutral-100 last:border-b-0">
+                    <td className="max-w-xs px-4 py-3">
+                      <p className="truncate text-sm font-medium text-neutral-900">{name}</p>
+                      <p className="truncate text-xs text-neutral-500">
+                        {backup.trigger === "manual" ? t("backups.manual") : t("backups.scheduled")}
+                        {backup.error ? `: ${backup.error}` : ""}
+                      </p>
+                    </td>
+                    <td className="px-4 py-3">
+                      <Badge variant="outline" className={getStatusClass(backup.status)}>
+                        {t(`backups.status.${backup.status}` as TranslationKey)}
+                      </Badge>
+                    </td>
+                    <td className="px-4 py-3 text-sm text-neutral-600">{formatBackupSize(backup.size)}</td>
+                    <td className="px-4 py-3 text-sm text-neutral-600">{formatBackupDate(backup.createdAt)}</td>
+                    <td className="px-4 py-3">
+                      <div className="flex gap-1">
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          title={t("backups.download")}
+                          aria-label={`${t("backups.download")}: ${name}`}
+                          disabled={backup.status !== "completed" || download.isPending}
+                          onClick={() => download.mutate(backup)}
+                        >
+                          <Download className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          title={t("backups.delete")}
+                          aria-label={`${t("backups.delete")}: ${name}`}
+                          disabled={
+                            deleteBackup.isPending ||
+                            backup.status === "queued" ||
+                            backup.status === "running"
+                          }
+                          onClick={async () => { if (await confirmDestructive(`${t("backups.delete")}: ${name}`)) deleteBackup.mutate(backup.id); }}
+                        >
+                          <Trash2 className="h-4 w-4 text-red-600" />
+                        </Button>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
       </section>
     </div>
   );

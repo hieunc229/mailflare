@@ -121,3 +121,27 @@ test("a backup without a filename is confirmed by id", async (t) => {
 	await settle();
 	assert.ok(globalThis.confirmCalls[0].includes("b1"));
 });
+
+test("history is a table in a scrollable labelled region", async (t) => {
+	const c = await mount(t, [ONE]);
+	const region = c.querySelector('[role="region"][aria-label="backups.history"]');
+	assert.ok(region, "labelled region");
+	assert.ok(region.className.includes("overflow-x-auto"));
+	const table = region.querySelector("table");
+	assert.ok(table, "table");
+	assert.equal(table.querySelectorAll('th[scope="col"]').length, 5);
+	assert.deepEqual([...table.querySelectorAll("th")].map((th) => th.textContent),
+		["backups.col.file", "backups.col.status", "backups.col.size", "backups.col.created", "backups.col.actions"]);
+	assert.equal(table.querySelectorAll("tbody tr").length, 1);
+});
+
+test("icon buttons are named after the file", async (t) => {
+	const c = await mount(t, [ONE]);
+	assert.ok(c.querySelector('button[aria-label="backups.download: mailflare-1.json"]'));
+	assert.ok(c.querySelector('button[aria-label="backups.delete: mailflare-1.json"]'));
+});
+
+test("empty history shows the none message", async (t) => {
+	const c = await mount(t, []);
+	assert.ok(c.textContent.includes("backups.none"));
+});
