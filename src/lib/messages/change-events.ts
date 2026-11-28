@@ -40,6 +40,8 @@ export type MessagesChangedDetail = {
 	localOnly?: boolean;
 	/** Set by the realtime channel on events that did not originate in this tab. */
 	realtime?: boolean;
+	/** A periodic refresh (poll tick, reconnect, foreground), not a known change. */
+	sync?: boolean;
 };
 
 export function dispatchMessagesChanged(detail?: MessagesChangedDetail): void {

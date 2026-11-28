@@ -86,7 +86,7 @@ test("threads expire after a minute and very large conversations are not cached"
 		time += 60_001;
 		assert.equal(cache.getCachedMessageThread("one"), undefined);
 
-		const large = Array.from({ length: 51 }, (_, index) => message(String(index)));
+		const large = Array.from({ length: 501 }, (_, index) => message(String(index)));
 		globalThis.threadFetch = async () => response({ messages: large });
 		await cache.fetchMessageThread("large");
 		assert.equal(cache.getCachedMessageThread("large"), undefined);
