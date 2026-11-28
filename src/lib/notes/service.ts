@@ -1,4 +1,4 @@
-import { and, asc, eq, inArray } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import type { AppDatabase } from "@/db";
 import { conversationNotes, messages, users } from "@/db/schema";
 import { getMailboxAccessLevel } from "@/lib/mailboxes/access";
@@ -40,9 +40,10 @@ export async function conversationForUser(db: AppDatabase, user: SessionUser, me
 
 /** Every note of the conversation, oldest first. */
 export async function listConversationNotes(db: AppDatabase, conversation: NoteConversation, userId: string): Promise<ConversationNote[]> {
-	const rows = await selectNotes(db)
-		.where(and(eq(conversationNotes.mailboxId, conversation.mailboxId), inArray(conversationNotes.threadKey, conversation.threadKeys)))
-		.orderBy(asc(conversationNotes.createdAt), asc(conversationNotes.id));
+	const rows = await selectInBatches(conversation.threadKeys, (batch) => selectNotes(db)
+		.where(and(eq(conversationNotes.mailboxId, conversation.mailboxId), inArray(conversationNotes.threadKey, batch))));
+	// Batches arrive one after another; the list is oldest first.
+	rows.sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime() || (a.id < b.id ? -1 : 1));
 	return rows.map((row) => toNote(row, conversation, userId));
 }
 
@@ -116,15 +117,15 @@ function newNoteId(now: Date): string {
 
 /** The note's author and creation time; undefined when the note is not in this conversation. */
 async function noteRow(db: AppDatabase, conversation: NoteConversation, noteId: string) {
-	const [row] = await db
+	const [row] = await selectInBatches(conversation.threadKeys, (batch) => db
 		.select({ authorUserId: conversationNotes.authorUserId, createdAt: conversationNotes.createdAt })
 		.from(conversationNotes)
 		.where(and(
 			eq(conversationNotes.id, noteId),
 			eq(conversationNotes.mailboxId, conversation.mailboxId),
-			inArray(conversationNotes.threadKey, conversation.threadKeys),
+			inArray(conversationNotes.threadKey, batch),
 		))
-		.limit(1);
+		.limit(1));
 	return row;
 }
 
@@ -168,16 +169,16 @@ function toNote(row: NoteRow, conversation: NoteConversation, userId: string): C
 
 /** Avatar key of `authorId`, only when they wrote a note in this conversation. */
 export async function noteAuthorAvatarKey(db: AppDatabase, conversation: NoteConversation, authorId: string): Promise<string | null> {
-	const [row] = await db
+	const [row] = await selectInBatches(conversation.threadKeys, (batch) => db
 		.select({ avatarKey: users.avatarKey })
 		.from(conversationNotes)
 		.innerJoin(users, eq(conversationNotes.authorUserId, users.id))
 		.where(and(
 			eq(conversationNotes.mailboxId, conversation.mailboxId),
-			inArray(conversationNotes.threadKey, conversation.threadKeys),
+			inArray(conversationNotes.threadKey, batch),
 			eq(conversationNotes.authorUserId, authorId),
 		))
-		.limit(1);
+		.limit(1));
 	return row?.avatarKey ?? null;
 }
 
