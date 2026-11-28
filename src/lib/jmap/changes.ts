@@ -122,6 +122,9 @@ async function rowsSince(
 	return { scope, rows: await withoutOthersDrafts(ctx, page), hasMore, lastSeq };
 }
 
+/** Draft-filter statements in flight at once. */
+const DRAFT_FILTER_CONCURRENCY = 5;
+
 /**
  * Other users' drafts in a shared mailbox are private, so their ids stay out of the email feeds and
  * their activity does not mark the mailbox as changed. Two cases need care:
@@ -137,12 +140,15 @@ async function withoutOthersDrafts(ctx: JmapContext, rows: ChangeRow[]): Promise
 	const hidden = new Set<string>();
 	// D1 allows 100 bound parameters per statement; the draft filter takes some of them.
 	const batch = 100 - DRAFT_FILTER_PARAMS;
-	for (let offset = 0; offset < ids.length; offset += batch) {
-		const found = await ctx.db
-			.select({ id: messages.id })
-			.from(messages)
-			.where(and(inArray(messages.id, ids.slice(offset, offset + batch)), not(draftsVisibleTo(ctx.auth.userId))));
-		for (const row of found) hidden.add(row.id);
+	const chunks: string[][] = [];
+	for (let offset = 0; offset < ids.length; offset += batch) chunks.push(ids.slice(offset, offset + batch));
+	for (let start = 0; start < chunks.length; start += DRAFT_FILTER_CONCURRENCY) {
+		const groups = await Promise.all(
+			chunks
+				.slice(start, start + DRAFT_FILTER_CONCURRENCY)
+				.map((chunk) => ctx.db.select({ id: messages.id }).from(messages).where(and(inArray(messages.id, chunk), not(draftsVisibleTo(ctx.auth.userId))))),
+		);
+		for (const found of groups) for (const row of found) hidden.add(row.id);
 	}
 	const result: ChangeRow[] = [];
 	for (const row of rows) {
