@@ -90,3 +90,29 @@ test("import errors show the driver's reason instead of the query and its values
 	assert.equal(describeImportError(new Error("Message is too large")), "Message is too large");
 	assert.equal(describeImportError("nope"), "Import failed");
 });
+
+test("import does not ask Gravatar about imported senders", async (t) => {
+	const database = new SqliteDatabase(":memory:");
+	t.after(() => database.db.close());
+	await applyMigrations(database, join(root, "drizzle/migrations"));
+	const now = Math.floor(Date.now() / 1000);
+	database.db.prepare("INSERT INTO users (id, email, name, password_hash, created_at) VALUES ('u1', 'iris@example.org', 'Iris', 'x', ?)").run(now);
+	database.db.prepare("INSERT INTO domains (id, user_id, hostname, zone_id, created_at) VALUES ('d1', 'u1', 'example.org', 'zone', ?)").run(now);
+	database.db.prepare("INSERT INTO mailboxes (id, user_id, domain_id, local_part, created_at) VALUES ('mb1', 'u1', 'd1', 'iris', ?)").run(now);
+	const urls = [];
+	const originalFetch = globalThis.fetch;
+	globalThis.fetch = async (url) => { urls.push(String(url)); return new Response(null, { status: 404 }); };
+	t.after(() => { globalThis.fetch = originalFetch; });
+	const env = { DB: database, BUCKET: { put: async () => undefined, delete: async () => undefined } };
+
+	const result = await importMessagesToMailbox(env, {
+		userId: "u1",
+		mailboxId: "mb1",
+		destination: { type: "system", section: "inbox" },
+		messages: [{ filename: "a.eml", raw }],
+	});
+
+	assert.equal(result.imported, 1);
+	assert.deepEqual(urls.filter((u) => u.includes("gravatar.com")), []);
+	assert.equal(database.db.prepare("SELECT count(*) AS n FROM contacts").get().n, 1);
+});

@@ -133,6 +133,8 @@ async function importMessageToMailbox(
 		userId: input.userId,
 		address: placement.direction === "outbound" ? toAddr : fromAddr,
 		source: placement.direction === "outbound" ? "outbound" : "inbound",
+		// No Gravatar lookup per imported sender; the avatar is fetched when mail from them next arrives.
+		lookupAvatar: false,
 	}).catch((error) => console.error("Import contact update failed", input.filename, describeImportError(error)));
 
 	return true;
