@@ -1,20 +1,10 @@
 import type { MetadataRoute } from "next";
+import { getHomeBranding } from "./home-server-utils";
+import { buildManifest } from "./manifest-utils";
 
-export default function manifest(): MetadataRoute.Manifest {
-	return {
-		name: "Mailflare",
-		short_name: "Mailflare",
-		description: "Email, anywhere.",
-		id: "/",
-		scope: "/",
-		start_url: "/inbox",
-		display: "standalone",
-		background_color: "#ffffff",
-		theme_color: "#f6f8fc",
-		icons: [
-			{ src: "/icon-192.png", sizes: "192x192", type: "image/png" },
-			{ src: "/icon-512.png", sizes: "512x512", type: "image/png" },
-			{ src: "/icon-maskable-512.png", sizes: "512x512", type: "image/png", purpose: "maskable" },
-		],
-	};
+export const dynamic = "force-dynamic";
+
+export default async function manifest(): Promise<MetadataRoute.Manifest> {
+	const branding = await getHomeBranding();
+	return buildManifest({ appName: branding.appName, hasCustomIcon: !!branding.hasCustomIcon });
 }
