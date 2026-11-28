@@ -3,7 +3,7 @@ import type { ImportEvent, ImportGroup } from "./ics-import-types";
 import type { CalendarImportPlan, CalendarImportRow, ImportGroupIds, PlannedGroup } from "./import-store-types";
 import { inviteEventId } from "./invite-store";
 
-/** 4 rows x 19 bound columns = 76 parameters, under D1's limit of 100. */
+/** 4 rows x 24 bound parameters = 96, under D1's limit of 100. */
 export const ROWS_PER_INSERT = 4;
 /** `id IN (...)` plus the user id: 91 parameters. */
 export const SELECT_CHUNK = 90;

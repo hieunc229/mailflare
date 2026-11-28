@@ -97,7 +97,7 @@ export async function storeMessageAttachments(
 		throw failure.reason;
 	}
 
-	// 8 bound parameters per row: 12 rows stay under the 100-parameter limit.
+	// 9 bound parameters per row (created_at has a default function): 11 rows stay under the 100-parameter limit.
 	const rows = items.map((item) => ({
 		id: item.id,
 		messageId,
@@ -109,7 +109,7 @@ export async function storeMessageAttachments(
 		r2Key: item.r2Key,
 	}));
 	try {
-		for (let index = 0; index < rows.length; index += 12) await db.insert(messageAttachments).values(rows.slice(index, index + 12));
+		for (let index = 0; index < rows.length; index += 11) await db.insert(messageAttachments).values(rows.slice(index, index + 11));
 	} catch (error) {
 		await Promise.all(items.map((item) => env.BUCKET.delete(item.r2Key)));
 		throw error;

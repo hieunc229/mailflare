@@ -135,3 +135,24 @@ test("a parse failure is reported and the rest imports", async (t) => {
 	assert.equal(result.skipped, 1);
 	assert.match(result.errors[0], /^broken\.eml: /);
 });
+
+test("the existing-contact lookup never binds more than 100 parameters", async (t) => {
+	const database = await fixture(t);
+	let widest = 0;
+	const guarded = new Proxy(database, {
+		get(target, key) {
+			if (key !== "prepare") { const value = target[key]; return typeof value === "function" ? value.bind(target) : value; }
+			return (sql) => {
+				const statement = target.prepare(sql);
+				return new Proxy(statement, { get(inner, name) {
+					if (name !== "bind") { const value = inner[name]; return typeof value === "function" ? value.bind(inner) : value; }
+					return (...args) => { widest = Math.max(widest, args.length); return inner.bind(...args); };
+				} });
+			};
+		},
+	});
+	const addresses = Array.from({ length: 150 }, (_, index) => `p${index}@x.test`);
+	await upsertContactsFromAddresses({ DB: guarded }, "u1", addresses, "inbound", { lookupAvatar: false });
+	assert.ok(widest > 0 && widest <= 100, `widest statement bound ${widest} parameters`);
+	assert.equal(database.db.prepare("SELECT COUNT(*) AS n FROM contacts").get().n, 150);
+});

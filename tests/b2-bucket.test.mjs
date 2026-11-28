@@ -179,6 +179,12 @@ test("B2Bucket.delete tolerates missing keys and retries only the keys a batch c
 	assert.deepEqual(singles, ["flaky"]);
 });
 
+test("B2Bucket.delete retries a failed key that contains XML special characters", async (t) => {
+	const { singles, bucket } = await withDeleteServer(t, { errorKeys: new Set(["a&amp;b"]) });
+	await bucket.delete(["a&b", "fine"]);
+	assert.deepEqual(singles, ["a&b"]);
+});
+
 test("B2Bucket.delete tolerates a missing key on the single-DELETE fallback", async (t) => {
 	const { bucket, singles } = await withDeleteServer(t, { refuseBatch: true, missing: new Set(["gone"]) });
 	await bucket.delete(["gone"]);

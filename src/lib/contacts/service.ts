@@ -77,10 +77,10 @@ export async function upsertContactsFromAddresses(
 
 	const db = getDb(env);
 	const emails = [...entries.keys()];
-	const existingRows = await db
+	const existingRows = await selectInBatches(emails, (batch) => db
 		.select()
 		.from(contacts)
-		.where(and(eq(contacts.userId, userId), inArray(contacts.email, emails)));
+		.where(and(eq(contacts.userId, userId), inArray(contacts.email, batch))));
 	const existing = new Map(existingRows.map((contact) => [contact.email, contact]));
 	const now = new Date();
 	const insertRows: Array<typeof contacts.$inferInsert> = [];

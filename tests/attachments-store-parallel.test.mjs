@@ -72,13 +72,13 @@ test("one failed upload removes the objects already written and inserts no rows"
 	assert.deepEqual(db.inserts, []);
 });
 
-test("rows are inserted in batches of 12", async () => {
+test("rows are inserted in batches of 11 (9 bound parameters per row stay under 100)", async () => {
 	const db = fakeDb();
 	const bucket = fakeBucket();
 	globalThis.__attDb = db;
 	const stored = await app.storeMessageAttachments({ BUCKET: bucket }, "m1", files(13), { validate: false });
 	assert.equal(stored.length, 13);
-	assert.deepEqual(db.inserts.map((insert) => insert.rows.length), [12, 1]);
+	assert.deepEqual(db.inserts.map((insert) => insert.rows.length), [11, 2]);
 	assert.deepEqual(stored.map((attachment) => attachment.filename), files(13).map((file) => file.filename));
 	assert.equal(bucket.objects.size, 13);
 });

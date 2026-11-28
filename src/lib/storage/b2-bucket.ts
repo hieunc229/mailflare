@@ -149,9 +149,9 @@ export class B2Bucket {
 		let remaining = keys;
 		try {
 			const response = await this.request(null, { method: "POST", query: { delete: "" }, body, headers: { "Content-Type": "application/xml", "x-amz-checksum-sha256": checksum, "x-amz-sdk-checksum-algorithm": "SHA256" } });
-			// Quiet mode lists only failures, with the key XML-escaped as sent. A key already gone is a success.
+			// Quiet mode lists only failures; xmlTag returns the key unescaped. A key already gone is a success.
 			const failed = new Set(xmlBlocks(await response.text(), "Error").filter((block) => xmlTag(block, "Code") !== "NoSuchKey").map((block) => xmlTag(block, "Key")));
-			remaining = keys.filter((key) => failed.has(escapeXml(key)));
+			remaining = keys.filter((key) => failed.has(key));
 		} catch (error) {
 			if (!(error instanceof AwsError)) throw error;
 		}
