@@ -31,7 +31,8 @@ await build({
 const load = (name) => import(pathToFileURL(join(outDir, `${name}.mjs`)).href);
 const { resolveDatabaseConfig, inferDriver, schemaDialect } = await load("dialect");
 const { numberPlaceholders, normalizeParam } = await load("drivers");
-const { BACKUP_TABLES, INTERNAL_TABLES, INTERNAL_TABLE_PATTERNS } = await load("backups");
+const { BACKUP_TABLES: BACKED_UP_TABLES, EPHEMERAL_TABLES, INTERNAL_TABLES, INTERNAL_TABLE_PATTERNS } = await load("backups");
+const BACKUP_TABLES = [...BACKED_UP_TABLES, ...EPHEMERAL_TABLES];
 
 test("no DATABASE_URL keeps D1", () => {
 	assert.deepEqual(resolveDatabaseConfig({}), { dialect: "sqlite", driver: "d1" });

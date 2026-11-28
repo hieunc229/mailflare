@@ -4,7 +4,9 @@ import type { BackupTableGroupId, DatabaseBackupDocument, DatabaseBackupTable, D
 import { mergeLegacyMessageBodies } from "./utils";
 import { BACKUP_TABLE_GROUPS, getSelectedBackupTables } from "./table-groups";
 
-export const BACKUP_TABLES: DatabaseBackupTable[] = ["users", "user_compose_preferences", "domains", "domain_tracking_hosts", "email_suppressions", "domain_deliverability", "mailboxes", "mailbox_access", "contacts", "contact_details", "dav_collections", "dav_cards", "folders", "mailbox_promotion_settings", "mailbox_sender_preferences", "api_keys", "messages", "message_attachments", "shared_attachment_links", "outbound_jobs", "message_tracking", "message_opens", "follow_ups", "conversation_notes", "routing_rules", "webhooks", "webhook_deliveries", "sessions", "audit_logs", "backup_settings", "backups", "app_settings", "deliverability_reports", "dmarc_daily_stats", "tls_daily_stats", "deliverability_alerts", "license_settings", "email_templates", "calendar_events", "dav_calendar_objects", "calendar_event_overrides", "calendar_occurrence_responses", "calendar_invite_tombstones", "booking_events", "booking_confirmation_templates", "auto_reply_deliveries", "spam_token_stats", "spam_reputation", "spam_feedback", "mailbox_aliases", "password_reset_tokens", "mfa_recovery_codes", "login_challenges", "passkey_credentials", "mailbox_agent_settings", "agent_conversations", "agent_chat_messages", "agent_jobs", "agent_draft_metadata", "agent_send_approvals", "mcp_key_mailboxes", "ai_usage", "drive_items", "drive_upload_parts", "drive_shares"];
+export const BACKUP_TABLES: DatabaseBackupTable[] = ["users", "user_compose_preferences", "domains", "domain_tracking_hosts", "email_suppressions", "domain_deliverability", "mailboxes", "mailbox_access", "contacts", "contact_details", "dav_collections", "dav_cards", "folders", "mailbox_promotion_settings", "mailbox_sender_preferences", "api_keys", "messages", "message_attachments", "shared_attachment_links", "outbound_jobs", "message_tracking", "message_opens", "follow_ups", "conversation_notes", "routing_rules", "webhooks", "webhook_deliveries", "audit_logs", "backup_settings", "backups", "app_settings", "deliverability_reports", "dmarc_daily_stats", "tls_daily_stats", "deliverability_alerts", "license_settings", "email_templates", "calendar_events", "dav_calendar_objects", "calendar_event_overrides", "calendar_occurrence_responses", "calendar_invite_tombstones", "booking_events", "booking_confirmation_templates", "auto_reply_deliveries", "spam_token_stats", "spam_reputation", "spam_feedback", "mailbox_aliases", "mfa_recovery_codes", "passkey_credentials", "mailbox_agent_settings", "agent_conversations", "agent_chat_messages", "agent_jobs", "agent_draft_metadata", "agent_send_approvals", "mcp_key_mailboxes", "ai_usage", "drive_items", "drive_upload_parts", "drive_shares"];
+/** Live sessions, reset tokens and login challenges are wiped on restore and never exported, so a restore cannot revive a revoked sign-in. */
+export const EPHEMERAL_TABLES: DatabaseBackupTable[] = ["sessions", "password_reset_tokens", "login_challenges"];
 /**
  * Tables every backup document must contain. Tables added to BACKUP_TABLES
  * after the format shipped are absent from older documents, so they stay
@@ -12,7 +14,7 @@ export const BACKUP_TABLES: DatabaseBackupTable[] = ["users", "user_compose_pref
  */
 /** Added by migrations 0068 and later; databases that have not applied them yet back up and restore without them. */
 const LATER_MIGRATION_TABLES: DatabaseBackupTable[] = ["domain_tracking_hosts", "message_tracking", "message_opens", "follow_ups", "conversation_notes", "user_compose_preferences", "booking_confirmation_templates", "mailbox_promotion_settings", "mailbox_sender_preferences", "dav_collections", "dav_cards", "dav_calendar_objects", "email_suppressions", "domain_deliverability", "deliverability_reports", "dmarc_daily_stats", "deliverability_alerts", "tls_daily_stats", "contact_details"];
-const REQUIRED_BACKUP_TABLES: DatabaseBackupTable[] = ["users", "domains", "mailboxes", "mailbox_access", "contacts", "folders", "mailbox_promotion_settings", "mailbox_sender_preferences", "api_keys", "messages", "message_attachments", "outbound_jobs", "routing_rules", "webhooks", "webhook_deliveries", "sessions", "audit_logs", "backup_settings", "backups", "app_settings", "license_settings"];
+const REQUIRED_BACKUP_TABLES: DatabaseBackupTable[] = ["users", "domains", "mailboxes", "mailbox_access", "contacts", "folders", "mailbox_promotion_settings", "mailbox_sender_preferences", "api_keys", "messages", "message_attachments", "outbound_jobs", "routing_rules", "webhooks", "webhook_deliveries", "audit_logs", "backup_settings", "backups", "app_settings", "license_settings"];
 const INSERT_BATCH_SIZE = 50;
 /**
  * Serial ids that are never backed up or restored: on PostgreSQL an explicit id does not advance the sequence,
@@ -88,7 +90,7 @@ function groupsForDocumentVersion(version: DatabaseBackupDocument["version"]): t
  */
 export async function assertBackupTablesCoverDatabase(db: D1Database): Promise<Set<string>> {
 	const names = [...(await listTableNames(db))].filter((name) => !INTERNAL_TABLE_PATTERNS.some((pattern) => matchesPattern(name, pattern)) && !INTERNAL_TABLES.includes(name));
-	const covered = new Set<string>(BACKUP_TABLES);
+	const covered = new Set<string>([...BACKUP_TABLES, ...EPHEMERAL_TABLES]);
 	const unlisted = names.filter((name) => !covered.has(name));
 	if (unlisted.length) throw new Error(`Backup aborted: ${unlisted.join(", ")} not listed in BACKUP_TABLES. Add new tables to src/lib/backups/export.ts and assign each to a group in table-groups.ts.`);
 	const assigned = BACKUP_TABLE_GROUPS.flatMap((group) => group.tables);
@@ -155,6 +157,8 @@ export async function restoreDatabaseRecords(db: D1Database, content: ArrayBuffe
 	// into last, so the rest of the teardown has no live accounts to protect.
 	await db.prepare("UPDATE users SET deleted_at = ?").bind(Math.floor(Date.now() / 1000)).run();
 	await db.prepare("DELETE FROM users").run();
+	// Sign everyone out: these are never restored, and a session revoked after the backup must not return.
+	for (const table of EPHEMERAL_TABLES) if (existing.has(table)) await db.prepare(`DELETE FROM ${table}`).run();
 	for (const table of [...restoreTables].reverse()) {
 		if (table === "users") continue;
 		await db.prepare(`DELETE FROM ${table}`).run();
@@ -186,7 +190,7 @@ function isDatabaseBackupDocument(value: unknown): value is DatabaseBackupDocume
 	if (document.format !== "mailflare-database-backup" || typeof document.version !== "number" || ![1, 2].includes(document.version) || !document.tables) return false;
 	if (document.includedTables) {
 		if (!Array.isArray(document.includedTables) || !document.includedTables.length || new Set(document.includedTables).size !== document.includedTables.length) return false;
-		if (!document.includedTables.every((table) => BACKUP_TABLES.includes(table) && Array.isArray(document.tables?.[table]))) return false;
+		if (!document.includedTables.every((table) => (BACKUP_TABLES.includes(table) || EPHEMERAL_TABLES.includes(table)) && Array.isArray(document.tables?.[table]))) return false;
 	} else if (!REQUIRED_BACKUP_TABLES.every((table) => Array.isArray(document.tables?.[table]))) return false;
 	return BACKUP_TABLES.every((table) => {
 		const rows = document.tables?.[table];

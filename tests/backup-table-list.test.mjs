@@ -21,7 +21,7 @@ after(() => rmSync(outDir, { recursive: true, force: true }));
 
 await build({
 	stdin: {
-		contents: `export { BACKUP_TABLES, INTERNAL_TABLES, INTERNAL_TABLE_PATTERNS, assertBackupTablesCoverDatabase } from "./src/lib/backups/export.ts";`,
+		contents: `export { BACKUP_TABLES, EPHEMERAL_TABLES, INTERNAL_TABLES, INTERNAL_TABLE_PATTERNS, assertBackupTablesCoverDatabase } from "./src/lib/backups/export.ts";`,
 		resolveDir: root,
 		sourcefile: "backup-table-list-test-entry.js",
 	},
@@ -34,7 +34,7 @@ await build({
 	logLevel: "silent",
 });
 
-const { BACKUP_TABLES, INTERNAL_TABLES, INTERNAL_TABLE_PATTERNS, assertBackupTablesCoverDatabase } = await import(
+const { BACKUP_TABLES, EPHEMERAL_TABLES, INTERNAL_TABLES, INTERNAL_TABLE_PATTERNS, assertBackupTablesCoverDatabase } = await import(
 	pathToFileURL(join(outDir, "backup-list.mjs")).href
 );
 
@@ -77,13 +77,13 @@ test("every table in a migrated database is backed up or documented as internal"
 	const tables = db.prepare("SELECT name FROM sqlite_master WHERE type = 'table' ORDER BY name").all().map((row) => row.name);
 	const internal = new Set([...INTERNAL_TABLES, ...tables.filter(isPatternTable)]);
 	const leftover = tables.filter((name) => !internal.has(name));
-	assert.deepEqual(leftover.sort(), [...BACKUP_TABLES].sort());
+	assert.deepEqual(leftover.sort(), [...BACKUP_TABLES, ...EPHEMERAL_TABLES].sort());
 });
 
 test("the coverage guard passes on a fully migrated database", async () => {
 	const covered = await assertBackupTablesCoverDatabase(d1);
-	assert.equal(covered.size, BACKUP_TABLES.length);
-	for (const table of BACKUP_TABLES) assert.ok(covered.has(table), `${table} is not covered`);
+	assert.equal(covered.size, BACKUP_TABLES.length + EPHEMERAL_TABLES.length);
+	for (const table of [...BACKUP_TABLES, ...EPHEMERAL_TABLES]) assert.ok(covered.has(table), `${table} is not covered`);
 });
 
 test("every backed-up table sits in exactly one group that only holds backed-up tables", () => {
