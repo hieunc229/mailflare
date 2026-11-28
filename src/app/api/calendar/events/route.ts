@@ -5,7 +5,7 @@ import { calendarEventOverrides, calendarEvents, calendarOccurrenceResponses } f
 import { getEnv } from "@/lib/cloudflare";
 import { newId } from "@/lib/ids";
 import { sendEmail } from "@/lib/email/send";
-import { sendToAttendees } from "@/lib/calendar/invite-delivery";
+import { MAX_ATTENDEES, sendToAttendees } from "@/lib/calendar/invite-delivery";
 import { assertInviteesAllowed } from "@/lib/deliverability/suppression";
 import { SuppressedRecipientError, suppressedRecipientBody } from "@/lib/deliverability/suppression-utils";
 import { createCalendarInvitation } from "@/lib/calendar/utils";
@@ -18,6 +18,8 @@ import { chunkIds } from "@/lib/calendar/chunks";
 import { authorizeCalendarRequest, calendarKeyCanSendInvitations } from "@/lib/calendar/api-auth";
 import { readJsonObject } from "@/lib/http/request";
 
+const MAX_CALENDAR_QUERY_DAYS = 400;
+
 export async function GET(request: Request) {
 	const env = getEnv();
 	const { user, error } = await authorizeCalendarRequest(env, request, "calendar:read");
@@ -25,6 +27,8 @@ export async function GET(request: Request) {
 	const url = new URL(request.url);
 	const start = new Date(url.searchParams.get("start") ?? Date.now());
 	const end = new Date(url.searchParams.get("end") ?? start.getTime() + 31 * 86_400_000);
+	if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) return NextResponse.json({ error: "Enter a valid start and end" }, { status: 400 });
+	if (end.getTime() - start.getTime() > MAX_CALENDAR_QUERY_DAYS * 86_400_000) return NextResponse.json({ error: `Choose a range of up to ${MAX_CALENDAR_QUERY_DAYS} days` }, { status: 400 });
 	const db = getDb(env);
 	const events = await db.select().from(calendarEvents).where(and(eq(calendarEvents.userId, user.id), lt(calendarEvents.startsAt, end), or(gte(calendarEvents.endsAt, start), ne(calendarEvents.repeat, "none")))).orderBy(calendarEvents.startsAt);
 	// Additive occurrence data for the expanders: moved/extra occurrences and per-occurrence guest replies.
@@ -67,6 +71,7 @@ export async function POST(request: Request) {
 	if (repeat === "monthly" && (repeatWeekday == null) !== (repeatWeek == null)) return NextResponse.json({ error: "Set both a weekday and a week for this repeat" }, { status: 400 });
 	// A listed-days repeat steps day by day, so its interval is always 1.
 	const attendees = (input.attendees ?? []).map((email) => email.trim()).filter((email) => /^\S+@\S+\.\S+$/.test(email));
+	if (attendees.length > MAX_ATTENDEES) return NextResponse.json({ error: `Invite at most ${MAX_ATTENDEES} attendees` }, { status: 400 });
 	if (attendees.length && input.mailboxId && !calendarKeyCanSendInvitations(key, input.mailboxId)) return NextResponse.json({ error: "Sending invitations requires mail send permission for this mailbox" }, { status: 403 });
 	if (attendees.length && input.mailboxId) {
 		// Before the event is stored: a refused invitation leaves nothing behind, so a retry cannot duplicate it.

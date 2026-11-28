@@ -5,7 +5,7 @@ import { calendarEventOverrides, calendarEvents } from "@/db/schema";
 import { getEnv } from "@/lib/cloudflare";
 import { createCalendarInvitation } from "@/lib/calendar/utils";
 import { sendEmail } from "@/lib/email/send";
-import { sendToAttendees } from "@/lib/calendar/invite-delivery";
+import { MAX_ATTENDEES, sendToAttendees } from "@/lib/calendar/invite-delivery";
 import type { CalendarEventInput } from "../types";
 import type { CalendarEventRouteParams } from "./types";
 import { normalizeCalendarColor } from "@/lib/calendar/colors";
@@ -39,6 +39,7 @@ export async function PATCH(request: Request, { params }: CalendarEventRoutePara
 	if (occurrence && (existing.repeat === "none" || occurrence.startsAt < existing.startsAt || (existing.repeatUntil && occurrence.startsAt >= existing.repeatUntil))) return NextResponse.json({ error: "Occurrence not found" }, { status: 404 });
 	if (existing.repeat !== "none" && effectiveFrom && existing.repeatUntil && effectiveFrom >= existing.repeatUntil) return NextResponse.json({ error: "No future occurrences remain" }, { status: 404 });
 	const attendees = (input.attendees ?? []).map((email) => email.trim()).filter((email) => /^\S+@\S+\.\S+$/.test(email));
+	if (attendees.length > MAX_ATTENDEES) return NextResponse.json({ error: `Invite at most ${MAX_ATTENDEES} attendees` }, { status: 400 });
 	if (attendees.length && existing.mailboxId && input.from && !calendarKeyCanSendInvitations(key, existing.mailboxId)) return NextResponse.json({ error: "Sending invitations requires mail send permission for this mailbox" }, { status: 403 });
 	let inviteErrors: string[] = [];
 	if (input.moveOccurrenceToPast) {
