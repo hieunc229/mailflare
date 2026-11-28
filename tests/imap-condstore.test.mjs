@@ -672,7 +672,7 @@ function recordStatements(w) {
 	return seen;
 }
 
-const MODSEQ_READ = /^SELECT uid, modseq FROM imap_uids/;
+const MODSEQ_READ = /^select "imap_uids"\."uid", "imap_uids"\."modseq" from "imap_uids"/i;
 const webStars = (w, id = "g1") => async () => {
 	w.sqlite.prepare("UPDATE messages SET starred = 1 WHERE id = ?").run(id);
 	await syncMailbox(w.env, "m1");
@@ -874,8 +874,8 @@ test("SEARCH MODSEQ asks the database for the highest mod-sequence instead of lo
 	const seen = recordStatements(w);
 	const answer = await client.cmd("SEARCH MODSEQ 1");
 	assert.ok(answer.text.includes(`\r\n* SEARCH 1 2 3 4 5 (MODSEQ ${Math.max(...w.uidRows().map((row) => row.modseq))})\r\n`) || answer.text.startsWith(`* SEARCH 1 2 3 4 5 (MODSEQ ${Math.max(...w.uidRows().map((row) => row.modseq))})\r\n`));
-	assert.ok(seen.some((sql) => /max\(modseq\)/i.test(sql)));
-	assert.ok(!seen.some((sql) => /^SELECT uid, modseq FROM imap_uids WHERE mailbox_id = \? AND folder_key = \?$/.test(sql)), "no read of every mod-sequence of the folder");
+	assert.ok(seen.some((sql) => /max\("imap_uids"\."modseq"\)/i.test(sql)));
+	assert.ok(!seen.some((sql) => /"imap_uids"\."modseq" from "imap_uids"(?!.*"imap_uids"\."uid" in)/i.test(sql)), "no read of every mod-sequence of the folder");
 });
 
 test("maxModseqOf looks past one chunk of UIDs", async (t) => {
