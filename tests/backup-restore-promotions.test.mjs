@@ -1,13 +1,16 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { dirname, join } from "node:path";
-import test from "node:test";
+import test, { after } from "node:test";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { build } from "esbuild";
 import Database from "better-sqlite3";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
-const outDir = join(root, "node_modules", ".cache", "backup-restore-promotions");
+const cacheDir = join(root, "node_modules", ".cache");
+mkdirSync(cacheDir, { recursive: true });
+const outDir = mkdtempSync(join(cacheDir, "backup-restore-promotions-"));
+after(() => rmSync(outDir, { recursive: true, force: true }));
 const outfile = join(outDir, "backup.mjs");
 await build({
 	stdin: {

@@ -49,7 +49,7 @@ function mime({ attachment, text = "DMARC aggregate report" }) {
 const gz = (xml) => ({ bytes: gzipSync(xml) });
 
 async function fixture(t, { enabled = true } = {}) {
-	const database = new SqliteDatabase(join(outDir, `${crypto.randomUUID()}.sqlite`));
+	const database = new SqliteDatabase(":memory:");
 	t.after(() => database.db.close());
 	await applyMigrations(database, join(root, "drizzle/migrations"));
 	const now = seconds(NOW);
