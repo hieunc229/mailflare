@@ -86,7 +86,7 @@ function DayEventsImpl({ day, events, currentTime, busy, activeEventId, onEdit, 
 							{position.height >= 34 && <span className="block w-full truncate text-[11px] leading-4 opacity-70">{range}</span>}
 						</button>
 						{!isPendingInvite(event) && edges.map((edge: EventResizeEdge) => (
-							<button key={edge} type="button" draggable={false}
+							<button key={edge} type="button" draggable={false} tabIndex={-1} aria-hidden="true"
 								aria-label={t(edge === "start" ? "calendar.resizeEdge.start" : "calendar.resizeEdge.end", { title: event.title })}
 								onPointerDown={(pointerEvent: ReactPointerEvent<HTMLButtonElement>) => onResizeStart(pointerEvent, event, day, edge)}
 								onPointerMove={onResizeMove}

@@ -385,3 +385,13 @@ export function resizeEventTimes(event: CalendarEvent, day: Date, edge: EventRes
   }
   return { startsAt, endsAt: new Date(Math.max(boundary.getTime(), startsAt.getTime() + 15 * 60_000)) };
 }
+
+/** Attendee addresses from a stored JSON column; a bad or non-array value yields no attendees instead of throwing. */
+export function parseAttendees(raw: string | null | undefined): string[] {
+  try {
+    const parsed: unknown = JSON.parse(raw || "[]");
+    return Array.isArray(parsed) ? parsed.filter((entry): entry is string => typeof entry === "string") : [];
+  } catch {
+    return [];
+  }
+}

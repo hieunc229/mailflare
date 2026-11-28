@@ -22,6 +22,7 @@ import type { TranslationKey } from "@/lib/i18n/types";
 import type { CalendarRepeat } from "@/lib/calendar/types";
 import { useLanguage } from "@/components/language-provider";
 import { folderColorKeys } from "@/lib/folders/color-keys";
+import { DialogFrame } from "@/components/dialog-frame";
 import { useSelectedMailbox } from "@/components/mailbox-provider";
 import { useSidebar } from "@/components/sidebar-state";
 import { UpcomingSidebar } from "../upcoming-sidebar";
@@ -33,12 +34,11 @@ import type { CalendarEvent, CalendarView, EventDragPreview, EventResizeEdge, Ev
 import {
   addDays, addMonths, calendarAnchorDay, CALENDAR_END_HOUR, CALENDAR_HOUR_HEIGHT, CALENDAR_START_HOUR,
   currentTimePosition, isPendingInvite, dateKey, defaultCalendarStart, dropStartForPosition, EVENT_COLOR_CLASSES, eventEndAfterMinutes, eventPosition, expandCalendarEvents,
-  formatEventRange, formatHour, formatLocalDateTime, toCalendarOverrides,
+  formatEventRange, formatHour, formatLocalDateTime, parseAttendees, toCalendarOverrides,
   monthGridDates, PAST_EVENT_COLOR_CLASSES, rescheduleCalendarOccurrence, resizeEventTimes, startOfDay, startOfMonth, startOfWeek, WEEKDAY_OPTIONS,
   type CalendarOccurrenceOverride, type CalendarOccurrenceResponse, type CalendarOverridesInput,
 } from "./utils";
 import clsx from "clsx";
-import { DialogFrame } from "@/components/dialog-frame";
 import { Select } from "@/components/ui/select";
 
 const eventFieldClass = "h-9 border-transparent bg-transparent px-2 shadow-none hover:bg-white/60 focus:border-blue-600 focus:bg-white focus:shadow-sm";
@@ -328,7 +328,7 @@ export default function CalendarPage() {
     setStartsAt(formatLocalDateTime(new Date(event.startsAt)));
     setEndsAt(formatLocalDateTime(new Date(event.endsAt)));
     setDurationOptionsOpen(false);
-    setGuests(JSON.parse(event.attendees || "[]").join(", "));
+    setGuests(parseAttendees(event.attendees).join(", "));
     setClosingEventEditor(false);
     setAdding(true);
   }
@@ -365,7 +365,7 @@ export default function CalendarPage() {
           title: event.title,
           description: event.description,
           location: event.location,
-          attendees: JSON.parse(event.attendees || "[]"),
+          attendees: parseAttendees(event.attendees),
           color: event.color,
           repeat: event.repeat,
           repeatDays: parseCalendarRepeatDays(event.repeatDays),
@@ -488,7 +488,8 @@ export default function CalendarPage() {
               <ChevronDown className="h-5 w-5 text-neutral-500" />
             </button>
             {monthPickerOpen && monthPickerPos && createPortal(
-              <div ref={monthPickerPopupRef} role="dialog" aria-label={t("calendar.chooseDate")} style={monthPickerPos} className="fixed z-50 w-[448px] max-w-[calc(100vw-24px)] rounded-2xl bg-[#f7f9fc] p-5 shadow-xl ring-1 ring-neutral-200/70">
+              <div ref={monthPickerPopupRef} style={monthPickerPos} className="fixed z-50 w-[448px] max-w-[calc(100vw-24px)] rounded-2xl bg-[#f7f9fc] p-5 shadow-xl ring-1 ring-neutral-200/70">
+<DialogFrame label={t("calendar.chooseDate")} onClose={() => setMonthPickerOpen(false)} className="outline-none">
                 <div className="mb-4 flex items-center justify-between gap-3">
                   <h2 className="text-xl font-semibold text-neutral-900">
                     {formatUserDate(pickerMonth, { month: "long", year: "numeric" })}
@@ -520,6 +521,7 @@ export default function CalendarPage() {
                     );
                   })}
                 </div>
+</DialogFrame>
               </div>,
               document.body,
             )}
