@@ -1,7 +1,7 @@
 "use client";
 
 import { useRef } from "react";
-import type { PointerEvent } from "react";
+import type { KeyboardEvent, PointerEvent } from "react";
 import type { ResizeHandleProps } from "./resize-handle-types";
 
 export function ResizeHandle({ label, onResizeStart, onResize, onResizeEnd }: ResizeHandleProps) {
@@ -26,9 +26,21 @@ export function ResizeHandle({ label, onResizeStart, onResize, onResizeEnd }: Re
 		onResizeEnd?.();
 	}
 
+	// Same start/resize/end contract as the pointer path, so consumers persist the width.
+	function handleKeyDown(event: KeyboardEvent<HTMLDivElement>) {
+		if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
+		event.preventDefault();
+		const step = event.shiftKey ? 64 : 16;
+		onResizeStart?.();
+		onResize(event.key === "ArrowRight" ? step : -step);
+		onResizeEnd?.();
+	}
+
 	return (
 		<div
 			role="separator"
+			tabIndex={0}
+			onKeyDown={handleKeyDown}
 			aria-label={label}
 			aria-orientation="vertical"
 			className="absolute inset-y-0 right-0 z-20 w-2 translate-x-1/2 cursor-col-resize touch-none"
