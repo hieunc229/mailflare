@@ -59,9 +59,6 @@ export function queueProducer(publish: (body: unknown, delaySeconds?: number) =>
 		async sendBatch(messages: Iterable<{ body: unknown; delaySeconds?: number }>) {
 			for (const message of messages) await send(message.body, { delaySeconds: message.delaySeconds });
 		},
-		async metrics() {
-			return { backlogCount: 0 };
-		},
 	};
 }
 

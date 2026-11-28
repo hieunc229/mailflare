@@ -54,12 +54,6 @@ export class RealtimeHubRegistry {
 		}
 	}
 
-	connections() {
-		let total = 0;
-		for (const set of this.sockets.values()) total += set.size;
-		return total;
-	}
-
 	/** The `DurableObjectNamespace` surface the app uses: `getByName(id).fetch(...)`. */
 	namespace(): DurableObjectNamespace {
 		const notify = (userId: string, payload: unknown) => this.notify(userId, payload);

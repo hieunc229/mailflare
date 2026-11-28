@@ -230,9 +230,8 @@ class MysqlUpdateShim implements PromiseLike<unknown> {
 	}
 
 	private async execute() {
-		const { column } = primaryKey(this.table);
 		// Rows are identified before the write, because the write may change the columns the condition reads.
-		const before = this.wantsReturning ? await this.db.select({ key: column }).from(this.table).where(this.condition) : [];
+		const before = this.wantsReturning ? await this.db.select({ key: primaryKey(this.table).column }).from(this.table).where(this.condition) : [];
 		const result = await this.db.update(this.table).set(this.values).where(this.condition);
 		if (!this.wantsReturning) return result;
 		// A claim (`UPDATE ... WHERE status = 'pending'`) loses the race when the write matched nothing.

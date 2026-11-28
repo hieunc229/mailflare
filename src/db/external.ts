@@ -81,17 +81,6 @@ function buildDrizzle(config: DatabaseConfig, ctx: ExecutorContext, schema: Reco
 			if (method === "get") return { rows: result.rows[0] as never };
 			return { rows: result.rows as never[] };
 		},
-		async (queries) => {
-			const run = async (exec: SqlExecutor) => {
-				const out: Array<{ rows: never }> = [];
-				for (const query of queries) {
-					const result = await exec.query(query.sql, query.params, "array");
-					out.push({ rows: (query.method === "get" ? result.rows[0] : result.rows) as never });
-				}
-				return out;
-			};
-			return ctx.base.transaction ? ctx.base.transaction(run) : run(ctx.base);
-		},
 		{ schema },
 	);
 	return wrapDatabase(db, "sqlite", ctx);

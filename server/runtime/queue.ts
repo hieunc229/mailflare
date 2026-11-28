@@ -31,10 +31,6 @@ export class InProcessQueue {
 		for (const message of messages) await this.send(message.body, { delaySeconds: message.delaySeconds });
 	}
 
-	async metrics() {
-		return { backlogCount: this.timers.size };
-	}
-
 	private schedule(pending: Pending, delayMs: number) {
 		const timer = setTimeout(() => {
 			this.timers.delete(timer);
