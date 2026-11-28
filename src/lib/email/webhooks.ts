@@ -90,6 +90,7 @@ async function attemptDelivery(
 	db: AppDatabase,
 	hook: WebhookRow,
 	delivery: PendingDelivery,
+	options?: { scheduleNext?: boolean },
 ): Promise<WebhookDeliveryStatus> {
 	const attempts = delivery.attempts + 1;
 	const startedAt = Date.now();
@@ -143,7 +144,8 @@ async function attemptDelivery(
 		})
 		.where(eq(webhookDeliveries.id, delivery.id));
 
-	if (canRetry) {
+	// A manual retry made while a queued retry is still pending leaves that one in place: no second chain.
+	if (canRetry && options?.scheduleNext !== false) {
 		await scheduleRetry(env, delivery.id, getRetryDelaySeconds(attempts));
 	}
 
@@ -187,6 +189,8 @@ export async function runDelivery(
 	const [hook] = await db.select().from(webhooks).where(eq(webhooks.id, delivery.webhookId)).limit(1);
 	if (!hook) return null;
 	if (options?.userId && hook.userId !== options.userId) return null;
+	// A queued retry only applies to a delivery still waiting for one: a manual retry may have settled it since.
+	if (options?.scheduled && delivery.status !== "retrying") return { status: delivery.status as WebhookDeliveryStatus };
 	// Retries queued before the webhook was switched off must not keep posting to it.
 	// A manual retry is still allowed; it is the operator asking for it.
 	if (options?.scheduled && !hook.enabled) {
@@ -197,7 +201,8 @@ export async function runDelivery(
 		return { status: "failed" };
 	}
 
-	return { status: await attemptDelivery(env, db, hook, delivery) };
+	const chainPending = !options?.scheduled && delivery.status === "retrying" && !!delivery.nextRetryAt && delivery.nextRetryAt.getTime() > Date.now();
+	return { status: await attemptDelivery(env, db, hook, delivery, { scheduleNext: !chainPending }) };
 }
 
 /** Sends a synthetic event so an operator can verify an endpoint from the UI. */
