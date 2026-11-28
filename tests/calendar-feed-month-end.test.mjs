@@ -42,3 +42,14 @@ for (const [startsAt, anchor] of [["2026-01-31T09:00:00Z", 31], ["2026-01-30T09:
 		assert.deepEqual(feedDays, appDays, rule);
 	});
 }
+
+test("a month-end event keeps literal dates in the feed rule and the app, including the leap day", () => {
+	const feedEvent = event("2026-01-31T09:00:00Z", 31);
+	const rule = buildCalendarFeed([feedEvent], { name: "M" }).split("\r\n").find((line) => line.startsWith("RRULE:"));
+	assert.equal(rule, "RRULE:FREQ=MONTHLY;BYMONTHDAY=28,29,30,31;BYSETPOS=-1");
+	const app = expandCalendarEvents([{ ...feedEvent, startsAt: feedEvent.startsAt.toISOString(), endsAt: feedEvent.endsAt.toISOString() }], new Date("2026-01-01T00:00:00Z"), new Date("2029-01-01T00:00:00Z"));
+	const days = app.map((occurrence) => occurrence.startsAt.slice(0, 10));
+	assert.ok(days.includes("2027-02-28"));
+	assert.ok(days.includes("2028-02-29"));
+	assert.ok(!days.includes("2027-03-03"));
+});
