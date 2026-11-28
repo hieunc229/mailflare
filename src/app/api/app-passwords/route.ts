@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 import { desc, eq } from "drizzle-orm";
 import { getDb } from "@/db";
-import { apiKeys, mcpKeyMailboxes } from "@/db/schema";
+import { apiKeys } from "@/db/schema";
+import { insertApiKeyRow } from "@/lib/api-key-store";
 import { generateAppPassword, parseScopes, scopesToJson } from "@/lib/api-keys";
 import { requireSessionUser } from "@/lib/api/auth";
 import { recordAuthActivity } from "@/lib/auth/activity";
@@ -14,7 +15,7 @@ import { getEnv } from "@/lib/cloudflare";
 import { authError } from "@/lib/http/auth-error";
 import { readJsonBody } from "@/lib/http/request";
 import { newId } from "@/lib/ids";
-import { getMailboxAccessLevel } from "@/lib/mailboxes/access";
+import { listAccessibleMailboxIds } from "@/lib/mailboxes/access";
 import { appPasswordCreateSchema } from "@/lib/validators";
 
 const NO_STORE = { "Cache-Control": "no-store" };
@@ -65,7 +66,10 @@ export async function POST(request: Request) {
 	// Every protocol offered today reads mail, so a mailbox is always needed; `dav` (user-level) will relax this.
 	const mailboxScoped = protocols.some((protocol) => protocol !== "dav");
 	if (mailboxScoped && !mailboxIds.length) return NextResponse.json({ error: "Choose a mailbox for mail access" }, { status: 400 });
-	for (const mailboxId of mailboxIds) if (!(await getMailboxAccessLevel(db, auth.user, mailboxId))?.canRead) return NextResponse.json({ error: "Mailbox not found" }, { status: 403 });
+	if (mailboxIds.length) {
+		const readable = new Set(await listAccessibleMailboxIds(db, auth.user));
+		if (mailboxIds.some((mailboxId) => !readable.has(mailboxId))) return NextResponse.json({ error: "Mailbox not found" }, { status: 403 });
+	}
 
 	const sessionToken = getSessionTokenFromRequestHeaders(request);
 	if (!stepUpToken || !sessionToken) return authError("verification_required", 400);
@@ -75,7 +79,7 @@ export async function POST(request: Request) {
 
 	const { fullKey, prefix, hash, sha256 } = await generateAppPassword();
 	const id = newId("key");
-	await db.insert(apiKeys).values({
+	await insertApiKeyRow(db, {
 		id,
 		kind: "app",
 		userId: auth.user.id,
@@ -85,8 +89,7 @@ export async function POST(request: Request) {
 		keySha256: sha256,
 		scopes: scopesToJson(protocols),
 		mailboxScopeEnabled: mailboxScoped,
-	});
-	if (mailboxScoped) await db.insert(mcpKeyMailboxes).values(mailboxIds.map((mailboxId) => ({ keyId: id, mailboxId })));
+	}, mailboxScoped ? mailboxIds : []);
 	await recordAuthActivity(env, { action: "auth.app_password_created", userId: auth.user.id, request });
 	return NextResponse.json({ id, name, key: fullKey, protocols, mailboxIds }, { headers: NO_STORE });
 }

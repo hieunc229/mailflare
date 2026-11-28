@@ -3,13 +3,15 @@ import { and, eq, inArray } from "drizzle-orm";
 import { z } from "zod";
 import { getEnv } from "@/lib/cloudflare";
 import { getDb } from "@/db";
-import { agentSendApprovals, apiKeys, mcpKeyMailboxes } from "@/db/schema";
+import { apiKeys, mcpKeyMailboxes } from "@/db/schema";
 import { requireUser } from "@/lib/auth/cookies";
+import { insertApiKeyRow, revokeApiKey } from "@/lib/api-key-store";
 import { generateApiKey, generateAppPassword, parseScopes, scopesToJson } from "@/lib/api-keys";
 import { API_KEY_SCOPES } from "@/lib/api/scopes";
 import { newId } from "@/lib/ids";
 import { ADMIN_API_KEY_SCOPES } from "@/lib/api/scopes";
-import { getMailboxAccessLevel } from "@/lib/mailboxes/access";
+import { chunkIds } from "@/lib/calendar/chunks";
+import { listAccessibleMailboxIds } from "@/lib/mailboxes/access";
 import { hasValidSessionMutationOrigin } from "@/lib/auth/origin";
 import { isListedAsAppPassword } from "@/lib/auth/app-password-utils";
 import { getSessionTokenFromRequestHeaders } from "@/lib/auth/session";
@@ -40,9 +42,11 @@ export async function GET(request: Request) {
 		})
 		.from(apiKeys)
 		.where(eq(apiKeys.userId, user.id));
-	const keyIds = rows.map((row) => row.id);
-	const allowed = keyIds.length ? await db.select().from(mcpKeyMailboxes).where(inArray(mcpKeyMailboxes.keyId, keyIds)) : [];
-	return NextResponse.json({ apiKeys: rows.filter((row) => row.kind !== "device" && !isListedAsAppPassword(row) && !parseScopes(row.scopes).some((scope) => (ADMIN_API_KEY_SCOPES as readonly string[]).includes(scope))).map((row) => ({ ...row, mailboxIds: allowed.filter((item) => item.keyId === row.id).map((item) => item.mailboxId) })) });
+	const shown = rows.filter((row) => row.kind !== "device" && !isListedAsAppPassword(row) && !parseScopes(row.scopes).some((scope) => (ADMIN_API_KEY_SCOPES as readonly string[]).includes(scope)));
+	// Only the keys on the page need their mailbox scope, read in D1-safe chunks.
+	const allowed = [];
+	for (const chunk of chunkIds(shown.map((row) => row.id))) allowed.push(...await db.select().from(mcpKeyMailboxes).where(inArray(mcpKeyMailboxes.keyId, chunk)));
+	return NextResponse.json({ apiKeys: shown.map((row) => ({ ...row, mailboxIds: allowed.filter((item) => item.keyId === row.id).map((item) => item.mailboxId) })) });
 }
 
 export async function POST(request: Request) {
@@ -59,7 +63,10 @@ export async function POST(request: Request) {
 	const db = getDb(env);
 	const mailboxIds = [...new Set(parsed.data.mailboxIds)];
 	if (!mailboxIds.length && parsed.data.scopes.some((scope) => !scope.startsWith("calendar:"))) return NextResponse.json({ error: "Choose a mailbox for mail permissions" }, { status: 400 });
-	for (const mailboxId of mailboxIds) if (!(await getMailboxAccessLevel(db, user, mailboxId))?.canRead) return NextResponse.json({ error: "Mailbox not found" }, { status: 403 });
+	if (mailboxIds.length) {
+		const readable = new Set(await listAccessibleMailboxIds(db, user));
+		if (mailboxIds.some((mailboxId) => !readable.has(mailboxId))) return NextResponse.json({ error: "Mailbox not found" }, { status: 403 });
+	}
 	// A jmap key signs in like an app password, without a second step, so minting one needs the same fresh confirmation.
 	// It is checked after the request validated, so a typo does not burn the grant.
 	if (parsed.data.scopes.includes("jmap")) {
@@ -68,7 +75,7 @@ export async function POST(request: Request) {
 		if (!(await consumeStepUpGrant(env, { token: parsed.data.stepUpToken, userId: user.id, sessionToken, action: "app_password.create" }))) return authError("verification_required", 401);
 	}
 	const id = newId("key");
-	await db.insert(apiKeys).values({
+	await insertApiKeyRow(db, {
 		id,
 		userId: user.id,
 		name: parsed.data.name,
@@ -77,8 +84,7 @@ export async function POST(request: Request) {
 		keySha256: sha256,
 		scopes: scopesToJson([...new Set(parsed.data.scopes)]),
 		mailboxScopeEnabled: true,
-	});
-	if (mailboxIds.length) await db.insert(mcpKeyMailboxes).values(mailboxIds.map((mailboxId) => ({ keyId: id, mailboxId })));
+	}, mailboxIds);
 
 	return NextResponse.json({ id, name: parsed.data.name, prefix, key: fullKey, mailboxIds });
 }
@@ -90,10 +96,9 @@ export async function DELETE(request: Request) {
 	const id = new URL(request.url).searchParams.get("id");
 	if (!id) return NextResponse.json({ error: "Key required" }, { status: 400 });
 	const db = getDb(env);
-	const [key] = await db.select({ id: apiKeys.id, scopes: apiKeys.scopes }).from(apiKeys).where(and(eq(apiKeys.id, id), eq(apiKeys.userId, user.id))).limit(1);
+	const [key] = await db.select({ id: apiKeys.id, kind: apiKeys.kind, scopes: apiKeys.scopes }).from(apiKeys).where(and(eq(apiKeys.id, id), eq(apiKeys.userId, user.id))).limit(1);
 	if (!key) return NextResponse.json({ error: "Key not found" }, { status: 404 });
 	if (parseScopes(key.scopes).some((scope) => (ADMIN_API_KEY_SCOPES as readonly string[]).includes(scope))) return NextResponse.json({ error: "Manage this key in Admin API keys" }, { status: 403 });
-	await db.update(agentSendApprovals).set({ status: "cancelled" }).where(and(eq(agentSendApprovals.requestKeyId, id), eq(agentSendApprovals.status, "pending")));
-	await db.delete(apiKeys).where(and(eq(apiKeys.id, id), eq(apiKeys.userId, user.id)));
+	await revokeApiKey(db, env, { id, userId: user.id, kind: key.kind, scopes: key.scopes, request });
 	return NextResponse.json({ ok: true });
 }

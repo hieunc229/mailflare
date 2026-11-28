@@ -1,12 +1,13 @@
 import { and, eq, inArray } from "drizzle-orm";
 import { z } from "zod";
 import { getDb } from "@/db";
-import { agentSendApprovals, apiKeys, mcpKeyMailboxes } from "@/db/schema";
+import { apiKeys, mcpKeyMailboxes } from "@/db/schema";
 import { getEnv } from "@/lib/cloudflare";
 import { getCurrentUser } from "@/lib/auth/cookies";
+import { insertApiKeyRow, revokeApiKey } from "@/lib/api-key-store";
 import { generateApiKey, parseScopes, scopesToJson } from "@/lib/api-keys";
 import { ADMIN_API_KEY_SCOPES } from "@/lib/api/scopes";
-import { getMailboxAccessLevel } from "@/lib/mailboxes/access";
+import { listAccessibleMailboxIds } from "@/lib/mailboxes/access";
 import { newId } from "@/lib/ids";
 import { hasValidSessionMutationOrigin } from "@/lib/auth/origin";
 
@@ -34,11 +35,13 @@ export async function POST(request: Request) {
 	const db = getDb(env);
 	const mailboxIds = [...new Set(parsed.data.mailboxIds)];
 	if (!mailboxIds.length && parsed.data.scopes.some((scope) => !scope.startsWith("mcp:calendar-"))) return Response.json({ error: "Choose a mailbox for mail permissions" }, { status: 400 });
-	for (const mailboxId of mailboxIds) if (!(await getMailboxAccessLevel(db, user, mailboxId))?.canRead) return Response.json({ error: "Mailbox not found" }, { status: 403 });
+	if (mailboxIds.length) {
+		const readable = new Set(await listAccessibleMailboxIds(db, user));
+		if (mailboxIds.some((mailboxId) => !readable.has(mailboxId))) return Response.json({ error: "Mailbox not found" }, { status: 403 });
+	}
 	const { fullKey, prefix, hash, sha256 } = await generateApiKey();
 	const id = newId("key");
-	await db.insert(apiKeys).values({ id, kind: "mcp", userId: user.id, name: parsed.data.name, prefix, keyHash: hash, keySha256: sha256, scopes: scopesToJson([...new Set(parsed.data.scopes)]) });
-	if (mailboxIds.length) await db.insert(mcpKeyMailboxes).values(mailboxIds.map((mailboxId) => ({ keyId: id, mailboxId })));
+	await insertApiKeyRow(db, { id, kind: "mcp", userId: user.id, name: parsed.data.name, prefix, keyHash: hash, keySha256: sha256, scopes: scopesToJson([...new Set(parsed.data.scopes)]) }, mailboxIds);
 	return Response.json({ id, name: parsed.data.name, prefix, key: fullKey, mailboxIds, scopes: parsed.data.scopes });
 }
 
@@ -49,9 +52,8 @@ export async function DELETE(request: Request) {
 	if (!hasValidSessionMutationOrigin(request)) return Response.json({ error: "Invalid origin" }, { status: 403 });
 	const id = new URL(request.url).searchParams.get("id");
 	if (!id) return Response.json({ error: "Key required" }, { status: 400 });
-	const [owned] = await getDb(env).select({ id: apiKeys.id }).from(apiKeys).where(and(eq(apiKeys.id, id), eq(apiKeys.userId, user.id), eq(apiKeys.kind, "mcp"))).limit(1);
+	const [owned] = await getDb(env).select({ id: apiKeys.id, scopes: apiKeys.scopes }).from(apiKeys).where(and(eq(apiKeys.id, id), eq(apiKeys.userId, user.id), eq(apiKeys.kind, "mcp"))).limit(1);
 	if (!owned) return Response.json({ error: "Key not found" }, { status: 404 });
-	await getDb(env).update(agentSendApprovals).set({ status: "cancelled" }).where(and(eq(agentSendApprovals.requestKeyId, id), eq(agentSendApprovals.status, "pending")));
-	await getDb(env).delete(apiKeys).where(and(eq(apiKeys.id, id), eq(apiKeys.userId, user.id), eq(apiKeys.kind, "mcp")));
+	await revokeApiKey(getDb(env), env, { id, userId: user.id, kind: "mcp", scopes: owned.scopes, request });
 	return Response.json({ ok: true });
 }
