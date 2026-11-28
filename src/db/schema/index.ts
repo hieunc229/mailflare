@@ -939,6 +939,7 @@ export const calendarEvents = sqliteTable(
 	(t) => [
 		index("calendar_events_user_starts_idx").on(t.userId, t.startsAt),
 		index("calendar_events_mailbox_idx").on(t.mailboxId),
+		index("calendar_events_repeat_starts_idx").on(t.repeat, t.startsAt, t.id),
 	],
 );
 

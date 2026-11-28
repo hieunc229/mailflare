@@ -519,6 +519,12 @@
         "CREATE INDEX `drive_items_parent_idx` ON `drive_items` (`parent_id`);",
         "CREATE INDEX `drive_items_r2_key_idx` ON `drive_items` (`r2_key`);"
       ]
+    },
+    {
+      "name": "0028_calendar_reminder_index.sql",
+      "statements": [
+        "CREATE INDEX `calendar_events_repeat_starts_idx` ON `calendar_events` (`repeat`,`starts_at`,`id`);"
+      ]
     }
   ]
 }
