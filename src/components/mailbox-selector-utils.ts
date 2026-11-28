@@ -1,3 +1,4 @@
+import { adminPageTitles } from "./admin-page-titles";
 import type { MailboxOption } from "./mailbox-provider";
 
 export function getMailboxAddress(mailbox: MailboxOption): string {
@@ -13,13 +14,5 @@ export function getAccountInitial(value: string): string {
 }
 
 export function isAdminPath(pathname: string): boolean {
-	return (
-		pathname === "/admin" ||
-		pathname.startsWith("/mailboxes") ||
-		pathname.startsWith("/domains") ||
-		pathname.startsWith("/api-keys") ||
-		pathname.startsWith("/webhooks") ||
-		pathname.startsWith("/activity") ||
-		pathname.startsWith("/backups")
-	);
+	return Object.keys(adminPageTitles).some((path) => pathname === path || (path !== "/agent" && pathname.startsWith(`${path}/`)));
 }
