@@ -38,23 +38,26 @@ async function runRaw(db: DrizzleLike, ctx: ExecutorContext, query: SQL, mode: R
 export function wrapDatabase<T extends object>(db: T, dialect: DatabaseDialect, ctx: ExecutorContext): T {
 	const raw = db as unknown as DrizzleLike;
 
-	const batch = async (queries: PromiseLike<unknown>[]) => {
-		const runAll = async () => {
-			const results: unknown[] = [];
-			for (const query of queries) results.push(await query);
-			return results;
-		};
+	/** Runs `fn` on one connection inside a transaction when the driver can hold one; statements it issues share that connection. */
+	const atomically = async <R>(fn: () => Promise<R>): Promise<R> => {
 		const { base } = ctx;
-		if (!base.transaction || ctx.tx) return runAll();
+		if (!base.transaction || ctx.tx) return fn();
 		return base.transaction(async (tx) => {
 			ctx.tx = tx;
 			try {
-				return await runAll();
+				return await fn();
 			} finally {
 				ctx.tx = null;
 			}
 		});
 	};
+
+	const batch = (queries: PromiseLike<unknown>[]) =>
+		atomically(async () => {
+			const results: unknown[] = [];
+			for (const query of queries) results.push(await query);
+			return results;
+		});
 
 	const overrides: Record<string, unknown> = {
 		async all(query: SQL) {
@@ -75,6 +78,7 @@ export function wrapDatabase<T extends object>(db: T, dialect: DatabaseDialect, 
 			};
 		},
 		batch,
+		atomically,
 	};
 
 	if (dialect === "mysql") {

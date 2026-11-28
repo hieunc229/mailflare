@@ -553,6 +553,35 @@
         "CREATE TABLE \"contact_details\" (\n\t\"contact_id\" text PRIMARY KEY NOT NULL,\n\t\"details\" text DEFAULT '{}' NOT NULL,\n\t\"updated_at\" bigint NOT NULL\n);",
         "ALTER TABLE \"contact_details\" ADD CONSTRAINT \"contact_details_contact_id_contacts_id_fk\" FOREIGN KEY (\"contact_id\") REFERENCES \"public\".\"contacts\"(\"id\") ON DELETE cascade ON UPDATE no action;"
       ]
+    },
+    {
+      "name": "0027_imap_state.sql",
+      "statements": [
+        "CREATE TABLE \"imap_expunged\" (\n\t\"mailbox_id\" text NOT NULL,\n\t\"folder_key\" text NOT NULL,\n\t\"uid\" bigint NOT NULL,\n\t\"modseq\" bigint NOT NULL,\n\t\"created_at\" bigint DEFAULT (extract(epoch from now())::bigint) NOT NULL\n);",
+        "CREATE TABLE \"imap_folder_state\" (\n\t\"id\" text PRIMARY KEY NOT NULL,\n\t\"mailbox_id\" text NOT NULL,\n\t\"folder_key\" text NOT NULL,\n\t\"uidvalidity\" bigint NOT NULL,\n\t\"uid_next\" bigint DEFAULT 1 NOT NULL,\n\t\"highest_modseq\" bigint DEFAULT 0 NOT NULL,\n\t\"initialized_at\" bigint DEFAULT (extract(epoch from now())::bigint) NOT NULL\n);",
+        "CREATE TABLE \"imap_mailbox_state\" (\n\t\"mailbox_id\" text PRIMARY KEY NOT NULL,\n\t\"jmap_seq\" bigint NOT NULL,\n\t\"modseq\" bigint DEFAULT 1 NOT NULL,\n\t\"updated_at\" bigint DEFAULT (extract(epoch from now())::bigint) NOT NULL\n);",
+        "CREATE TABLE \"imap_message_cache\" (\n\t\"message_id\" text PRIMARY KEY NOT NULL,\n\t\"size\" bigint NOT NULL,\n\t\"synth_key\" text,\n\t\"envelope\" text NOT NULL,\n\t\"bodystructure\" text NOT NULL,\n\t\"header_size\" bigint NOT NULL,\n\t\"created_at\" bigint DEFAULT (extract(epoch from now())::bigint) NOT NULL\n);",
+        "CREATE TABLE \"imap_message_flags\" (\n\t\"message_id\" text PRIMARY KEY NOT NULL,\n\t\"answered\" boolean DEFAULT false NOT NULL,\n\t\"forwarded\" boolean DEFAULT false NOT NULL,\n\t\"deleted\" boolean DEFAULT false NOT NULL,\n\t\"keywords\" text DEFAULT '[]' NOT NULL,\n\t\"updated_at\" bigint DEFAULT (extract(epoch from now())::bigint) NOT NULL\n);",
+        "CREATE TABLE \"imap_uids\" (\n\t\"mailbox_id\" text NOT NULL,\n\t\"folder_key\" text NOT NULL,\n\t\"uid\" bigint NOT NULL,\n\t\"message_id\" text NOT NULL,\n\t\"modseq\" bigint NOT NULL,\n\t\"content_hash\" text\n);",
+        "ALTER TABLE \"imap_folder_state\" ADD CONSTRAINT \"imap_folder_state_mailbox_id_mailboxes_id_fk\" FOREIGN KEY (\"mailbox_id\") REFERENCES \"public\".\"mailboxes\"(\"id\") ON DELETE cascade ON UPDATE no action;",
+        "ALTER TABLE \"imap_mailbox_state\" ADD CONSTRAINT \"imap_mailbox_state_mailbox_id_mailboxes_id_fk\" FOREIGN KEY (\"mailbox_id\") REFERENCES \"public\".\"mailboxes\"(\"id\") ON DELETE cascade ON UPDATE no action;",
+        "ALTER TABLE \"imap_message_cache\" ADD CONSTRAINT \"imap_message_cache_message_id_messages_id_fk\" FOREIGN KEY (\"message_id\") REFERENCES \"public\".\"messages\"(\"id\") ON DELETE cascade ON UPDATE no action;",
+        "ALTER TABLE \"imap_message_flags\" ADD CONSTRAINT \"imap_message_flags_message_id_messages_id_fk\" FOREIGN KEY (\"message_id\") REFERENCES \"public\".\"messages\"(\"id\") ON DELETE cascade ON UPDATE no action;",
+        "CREATE UNIQUE INDEX \"imap_expunged_uid_idx\" ON \"imap_expunged\" USING btree (\"mailbox_id\",\"folder_key\",\"uid\");",
+        "CREATE INDEX \"imap_expunged_modseq_idx\" ON \"imap_expunged\" USING btree (\"mailbox_id\",\"folder_key\",\"modseq\");",
+        "CREATE UNIQUE INDEX \"imap_folder_state_folder_idx\" ON \"imap_folder_state\" USING btree (\"mailbox_id\",\"folder_key\");",
+        "CREATE UNIQUE INDEX \"imap_uids_uid_idx\" ON \"imap_uids\" USING btree (\"mailbox_id\",\"folder_key\",\"uid\");",
+        "CREATE UNIQUE INDEX \"imap_uids_message_idx\" ON \"imap_uids\" USING btree (\"mailbox_id\",\"folder_key\",\"message_id\");",
+        "CREATE INDEX \"imap_uids_message_id_idx\" ON \"imap_uids\" USING btree (\"message_id\");",
+        "CREATE INDEX \"imap_uids_modseq_idx\" ON \"imap_uids\" USING btree (\"mailbox_id\",\"folder_key\",\"modseq\");"
+      ]
+    },
+    {
+      "name": "0028_imap_expunged_floor.sql",
+      "statements": [
+        "ALTER TABLE \"imap_folder_state\" ADD COLUMN \"expunged_floor\" bigint DEFAULT 0 NOT NULL;",
+        "CREATE INDEX \"imap_expunged_created_idx\" ON \"imap_expunged\" USING btree (\"created_at\",\"mailbox_id\",\"folder_key\",\"modseq\");"
+      ]
     }
   ]
 }

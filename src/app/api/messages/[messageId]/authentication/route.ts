@@ -6,7 +6,7 @@ import { getCurrentUser } from "@/lib/auth/cookies";
 import { getEnv } from "@/lib/cloudflare";
 import { getEmailAddress } from "@/lib/email/address";
 import { isOthersDraft } from "@/lib/email/draft-access";
-import { readCloudflareAuthentication, readSesAuthentication } from "@/lib/email/provider-trace";
+import { readCloudflareAuthentication, isIntakeStorageKey, readStoredAuthentication } from "@/lib/email/provider-trace";
 import { getMailboxAccessLevel } from "@/lib/mailboxes/access";
 import { isOffWorkers } from "@/lib/runtime";
 import type { MessageAuthenticationResponse } from "@/lib/email/authentication-types";
@@ -49,14 +49,16 @@ export async function GET(request: Request, { params }: MessageAuthenticationRou
 	// message has no equivalent provider trace.
 	if (message.direction !== "inbound") return unavailable("outbound");
 	if (!message.rawR2Key) return unavailable("not-retained");
+	// The provider trace belongs to messages stored at intake; imported and appended messages are not checked.
+	if (!isIntakeStorageKey(message.rawR2Key)) return unavailable("untrusted");
 
 	const object = await env.BUCKET.get(message.rawR2Key, { range: { offset: 0, length: HEADER_SCAN_BYTES } });
 	if (!object) return unavailable("unavailable");
 	const raw = await object.arrayBuffer();
 	const fromAddress = getEmailAddress(message.fromAddr);
-	// Imported mail and self-hosted SMTP keep whatever headers the sender wrote.
+	// Imported, appended or copied mail and self-hosted SMTP keep whatever headers the sender wrote.
 	const receivedByWorker = !isOffWorkers(env) && message.rawR2Key.startsWith("inbound/");
-	const authentication = readSesAuthentication(raw, fromAddress)
+	const authentication = readStoredAuthentication(message.rawR2Key, raw, fromAddress)
 		?? (receivedByWorker ? readCloudflareAuthentication(raw, fromAddress) : null);
 	if (!authentication) return unavailable("untrusted");
 
