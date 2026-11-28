@@ -19,3 +19,5 @@ DROP INDEX IF EXISTS "auto_reply_deliveries_sent_idx";
 DROP INDEX IF EXISTS "webhook_deliveries_status_idx";
 --> statement-breakpoint
 DROP INDEX IF EXISTS "routing_rules_priority_idx";
+--> statement-breakpoint
+ALTER TABLE "users" ALTER COLUMN "remote_content_mode" SET DEFAULT 'ask';

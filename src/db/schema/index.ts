@@ -44,7 +44,7 @@ export const users = sqliteTable("users", {
 	// Off shows the mailbox only. On shows Name <mailbox> on To, Cc, and Bcc.
 	showFullRecipientAddresses: bool("show_full_recipient_addresses").notNull().default(false),
 	// When the reader loads remote images and styles without being asked: always ask, only for senders not yet allowed, or always.
-	remoteContentMode: text("remote_content_mode", { enum: ["ask", "new_sender", "allow"] }).notNull().default("allow"),
+	remoteContentMode: text("remote_content_mode", { enum: ["ask", "new_sender", "allow"] }).notNull().default("ask"),
 	// TOTP second factor. The secret is written at enrolment and only counts
 	// once the user has proven a code from their authenticator.
 	totpSecret: text("totp_secret"),

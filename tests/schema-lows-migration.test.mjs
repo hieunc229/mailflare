@@ -74,3 +74,15 @@ test("PostgreSQL builds the audit index concurrently, replacing a half-built one
 	]);
 	assert.ok(postgres.filter((migration) => migration.statements.some((statement) => /CONCURRENTLY/.test(statement))).every((migration) => migration === owner));
 });
+
+test("PG and MySQL migrations set the remote content default to ask; MySQL promotion counters are bigint", () => {
+	const pg = statementsOf(postgres).join("\n");
+	const my = statementsOf(mysql).join("\n");
+	assert.match(pg, /ALTER TABLE "users" ALTER COLUMN "remote_content_mode" SET DEFAULT 'ask'/);
+	assert.match(my, /ALTER TABLE `users` ALTER COLUMN `remote_content_mode` SET DEFAULT 'ask'/);
+	for (const column of ["backfill_scanned", "backfill_stalls", "backfill_day", "backfill_day_rows"]) {
+		assert.match(my, new RegExp(`MODIFY \`${column}\` bigint NOT NULL DEFAULT 0`));
+	}
+	assert.equal(statementsOf(mysql).filter((statement) => /^ALTER TABLE `mailbox_promotion_settings` MODIFY `backfill_/.test(statement)).length, 1, "one table rewrite, not four");
+	assert.match(schemaSource, /"remote_content_mode"[^\n]*\.default\("ask"\)/);
+});
