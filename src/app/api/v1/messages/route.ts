@@ -4,7 +4,7 @@ import type { SQL } from "drizzle-orm";
 import { getEnv } from "@/lib/cloudflare";
 import { authenticateApiKey, requireScope } from "@/lib/api/auth";
 import { getDb } from "@/db";
-import { messages, users } from "@/db/schema";
+import { messages } from "@/db/schema";
 import { getMailboxAccessLevel, listAccessibleMailboxIds } from "@/lib/mailboxes/access";
 import { buildSearchConditions } from "@/lib/search/conditions";
 import { draftsVisibleTo } from "@/lib/email/draft-access";
@@ -25,7 +25,7 @@ export async function GET(request: Request) {
 	const limit = parseLimit(url.searchParams.get("limit"), 50, 100);
 
 	const db = getDb(env);
-	const [user] = await db.select().from(users).where(eq(users.id, auth.userId)).limit(1);
+	const user = auth.user;
 	if (!user || user.disabled) {
 		return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 	}
