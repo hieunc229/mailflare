@@ -6,6 +6,7 @@ import type { AttachmentContent } from "@/lib/email/attachment-types";
 import { inviteAttendeeAddresses, inviteRepeat, parseInvite, type ParsedInvite } from "./invite";
 import { isIcsAddress } from "./ics";
 import { getEmailAddress } from "@/lib/email/address";
+import { chunk, ROWS_PER_INSERT, STATEMENTS_PER_BATCH } from "./import-store-utils";
 import { findInviteAttachment, MAX_INVITE_BYTES } from "./invite-attachment";
 import { addExcludedOccurrence, chooseRecipientZone, inboundNeedsRecipientZone, inviteSenderMatches, mergeExcludedOccurrences, normalizeInviteSender, planInboundInvite } from "./invite-rules";
 
@@ -51,20 +52,28 @@ export async function listOccurrenceResponses(db: ReturnType<typeof getDb>, even
 	return db.select().from(calendarOccurrenceResponses).where(eq(calendarOccurrenceResponses.eventId, eventId));
 }
 
+/** RDATEs are sender-controlled, so only this many extra instants are stored per invitation. */
+const MAX_RDATE_OVERRIDES = 100;
+
 /**
- * Extra RDATE instants become overrides, so they survive like exclusions do: only missing ones are added, stored
- * overrides are never removed even when a later revision drops the RDATE.
+ * Extra RDATE instants become overrides, so they survive like exclusions do: only missing ones are added (at most
+ * MAX_RDATE_OVERRIDES), stored overrides are never removed even when a later revision drops the RDATE.
  */
-async function mergeRdateOverrides(db: ReturnType<typeof getDb>, eventId: string, invite: ParsedInvite): Promise<void> {
+export async function mergeRdateOverrides(db: ReturnType<typeof getDb>, eventId: string, invite: ParsedInvite): Promise<void> {
 	if (!invite.rdateDates.length) return;
 	const duration = invite.endsAt.getTime() - invite.startsAt.getTime();
 	const known = new Set((await listEventOverrides(db, eventId)).map((override) => override.occurrenceMs));
+	const now = new Date();
+	const rows: (typeof calendarEventOverrides.$inferInsert)[] = [];
 	for (const date of invite.rdateDates) {
+		if (rows.length >= MAX_RDATE_OVERRIDES) break;
 		const ms = date.getTime();
 		if (known.has(ms)) continue;
 		known.add(ms);
-		await upsertEventOverride(db, eventId, { occurrenceMs: ms, startsAt: date, endsAt: new Date(ms + duration) });
+		rows.push({ id: newId("ovr"), eventId, occurrenceMs: ms, startsAt: date, endsAt: new Date(ms + duration), createdAt: now, updatedAt: now });
 	}
+	const statements = chunk(rows, ROWS_PER_INSERT).map((part) => db.insert(calendarEventOverrides).values(part).onConflictDoNothing());
+	for (const group of chunk(statements, STATEMENTS_PER_BATCH)) await db.batch(group as never);
 }
 
 /**
