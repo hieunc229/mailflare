@@ -57,6 +57,9 @@ export default function DomainItemCard({
           <img
             src={`https://${item.hostname}/favicon.ico`}
             alt=""
+            loading="lazy"
+            decoding="async"
+            referrerPolicy="no-referrer"
             className="absolute inset-0 h-full w-full object-contain p-1"
             onError={(event) => event.currentTarget.remove()}
           />

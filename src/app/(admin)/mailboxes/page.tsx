@@ -24,7 +24,8 @@ import { SectionRowSkeleton } from "@/components/page-skeletons";
 import { clearMailboxesCache } from "@/components/mailbox-provider-utils";
 import { ProgressiveAvatarImage } from "@/components/progressive-avatar-image";
 import { authFetch } from "@/lib/auth/client";
-import type { CurrentAccountResponse, Domain, MailboxOwner, MailboxesResponse } from "./types";
+import { fetchSessionInfo } from "@/hooks/use-current-user";
+import type { Domain, MailboxOwner, MailboxesResponse } from "./types";
 import { formatAccountDateTime } from "../accounts/utils";
 import { getMailboxAddress, getMailboxesBase, getMailboxName } from "./utils";
 
@@ -48,11 +49,8 @@ export default function MailboxesPage() {
 	const [createOpen, setCreateOpen] = useState(false);
 
 	const account = useQuery({
-		queryKey: ["auth", "me"],
-		queryFn: async () => {
-			const res = await authFetch("/api/auth/me", { redirectOnUnauthorized: false });
-			return (await res.json()) as CurrentAccountResponse;
-		},
+		queryKey: ["session-info"],
+		queryFn: () => fetchSessionInfo(),
 	});
 
 	// Prefill empty create fields with the signed-in account when the dialog opens or the account loads.
