@@ -1,4 +1,4 @@
-import { aliasedTable, and, asc, desc, eq, exists, gt, gte, inArray, isNotNull, isNull, lt, ne, not, or, sql } from "drizzle-orm";
+import { aliasedTable, and, asc, desc, eq, exists, gte, inArray, isNotNull, isNull, lt, lte, ne, not, or, sql } from "drizzle-orm";
 import type { AnyColumn, SQL } from "drizzle-orm";
 import { ftsMatchCondition } from "@/lib/search/conditions";
 import { mailboxPromotionSettings, messageAttachments, messages } from "@/db/schema";
@@ -17,7 +17,8 @@ export function mailboxRefCondition(ref: MailboxRef): SQL {
 	// negated folder condition (inMailboxOtherThan, NOT) still matches them.
 	if (ref.kind === "folder") return and(base, isNotNull(messages.folderId), eq(messages.folderId, ref.folderId))!;
 	const status = roleToStatus(ref.role);
-	if (ref.role === "inbox") return and(base, eq(messages.status, status), isNull(messages.folderId))!;
+	// Snoozed mail leaves the Inbox until it is due, as in the web list.
+	if (ref.role === "inbox") return and(base, eq(messages.status, status), isNull(messages.folderId), or(isNull(messages.snoozedUntil), lte(messages.snoozedUntil, new Date())))!;
 	if (ref.role === "sent") return and(base, inArray(messages.status, ["sent", "queued", "failed"]), isNull(messages.folderId))!;
 	return and(base, eq(messages.status, status), isNull(messages.folderId))!;
 }
@@ -184,5 +185,3 @@ export function sortToSql(sort: Comparator[] | null | undefined): SQL[] {
 		}
 	});
 }
-
-export { gt };

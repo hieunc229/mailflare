@@ -60,3 +60,26 @@ test("B2Bucket refuses keys with . or .. segments before sending a request", asy
 	await assert.rejects(bucket.put("a/./b", "x"));
 	assert.deepEqual(calls, []);
 });
+
+const { readCappedBody } = await bundle("src/lib/jmap/blobs.ts", "blobs-capped.mjs");
+
+test("readBlob of an upload does not list the account's mailboxes", async () => {
+	const ctx = context("u1");
+	const stored = await storeUpload(ctx, new TextEncoder().encode("hello").buffer, "text/plain", "a.txt");
+	const db = new Proxy({}, { get() { throw new Error("database touched"); } });
+	const blob = await readBlob({ ...ctx, db, memo: undefined }, stored.blobId);
+	assert.equal(blob.size, 5);
+	assert.equal(blob.type, "text/plain");
+});
+
+test("readCappedBody rejects by content-length without reading the body", async () => {
+	const body = new ReadableStream({ pull() { throw new Error("body read"); } });
+	const request = new Request("http://x.test/up", { method: "POST", body, duplex: "half", headers: { "content-length": "99999999999" } });
+	assert.equal(await readCappedBody(request, 100), null);
+});
+
+test("readCappedBody caps a stream that has no content-length", async () => {
+	const chunked = (bytes) => new Request("http://x.test/up", { method: "POST", duplex: "half", body: new ReadableStream({ start(controller) { for (let i = 0; i < bytes; i += 10) controller.enqueue(new Uint8Array(Math.min(10, bytes - i))); controller.close(); } }) });
+	assert.equal(await readCappedBody(chunked(101), 100), null);
+	assert.equal((await readCappedBody(chunked(100), 100)).byteLength, 100);
+});

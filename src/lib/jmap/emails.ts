@@ -1,4 +1,4 @@
-import { and, asc, count, countDistinct, desc, eq, getTableColumns, inArray, sql } from "drizzle-orm";
+import { and, asc, count, countDistinct, eq, getTableColumns, inArray, sql } from "drizzle-orm";
 import { emailChangesSince, threadChangesSince } from "./changes";
 import { folders, messages } from "@/db/schema";
 import { DRAFT_FILTER_PARAMS, draftsVisibleTo, logMessageHidden, privateDraftForStatus } from "@/lib/email/draft-access";
@@ -10,11 +10,11 @@ import { resolveThreadId } from "@/lib/email/threading";
 import { storeMessageAttachments } from "@/lib/email/attachments";
 import { deleteMessageWithObjects } from "@/lib/email/message-cleanup";
 import { LIMITS, KEYWORD_FLAGGED, KEYWORD_SEEN } from "./constants";
-import { JmapError, invalidArguments } from "./errors";
+import { JmapError } from "./errors";
 import { decodeBlobId, decodeMailboxRef, roleToStatus } from "./ids";
 import { buildEmailObject, loadAttachmentsByMessage, resolveHeaderProperty } from "./email-objects";
 import { importFlags, parseReceivedAt, resolveDraftsMailbox } from "./email-import-utils";
-import { filterToSql, mailboxRefCondition, sortToSql } from "./email-query";
+import { filterToSql, sortToSql } from "./email-query";
 import { getEmailState } from "./state";
 import { loadPromotionModes } from "@/lib/promotions/settings";
 import { listAccessibleMailboxIdSet, listJmapMailboxes } from "./access";
@@ -597,8 +597,9 @@ export const searchSnippetGet: JmapMethodHandler = async (ctx, args) => {
 	const highlight = (value: string | null) => {
 		if (!value) return null;
 		if (!term) return escape(value);
-		const re = new RegExp(term.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "ig");
-		return escape(value).replace(re, (match) => `<mark>${match}</mark>`);
+		// Split the raw text on the term and escape each piece, so a match can never cut an entity such as &amp;.
+		const re = new RegExp(`(${term.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")})`, "ig");
+		return value.split(re).map((piece, index) => (index % 2 ? `<mark>${escape(piece)}</mark>` : escape(piece))).join("");
 	};
 	const list = rows.map((row) => {
 		found.add(row.id);
@@ -612,5 +613,3 @@ export const searchSnippetGet: JmapMethodHandler = async (ctx, args) => {
 	});
 	return { accountId: ctx.accountId, list, notFound: ids.filter((id) => !found.has(id)) };
 };
-
-export { count, desc, mailboxRefCondition, invalidArguments };

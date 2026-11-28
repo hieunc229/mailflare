@@ -27,6 +27,35 @@ export async function storeUpload(ctx: JmapContext, body: ArrayBuffer, type: str
 	return { accountId: ctx.accountId, blobId: uploadBlobId(id), type, size: body.byteLength };
 }
 
+/**
+ * The request body as bytes, or null once it is known to exceed `max`: by its content-length before anything is
+ * read, or while streaming (a chunked body has no length) after which the stream is cancelled.
+ */
+export async function readCappedBody(request: Request, max: number): Promise<ArrayBuffer | null> {
+	if (Number(request.headers.get("content-length") ?? 0) > max) return null;
+	if (!request.body) return new ArrayBuffer(0);
+	const reader = request.body.getReader();
+	const chunks: Uint8Array[] = [];
+	let total = 0;
+	for (;;) {
+		const { done, value } = await reader.read();
+		if (done) break;
+		total += value.byteLength;
+		if (total > max) {
+			await reader.cancel();
+			return null;
+		}
+		chunks.push(value);
+	}
+	const bytes = new Uint8Array(total);
+	let offset = 0;
+	for (const chunk of chunks) {
+		bytes.set(chunk, offset);
+		offset += chunk.byteLength;
+	}
+	return bytes.buffer;
+}
+
 export async function readUpload(ctx: JmapContext, uploadId: string) {
 	if (!UPLOAD_ID.test(uploadId)) return null;
 	const object = await ctx.env.BUCKET.get(uploadKey(ctx, uploadId));
@@ -61,12 +90,11 @@ export async function storeRawDraftMime(ctx: JmapContext, messageId: string, raw
 export async function readBlob(ctx: JmapContext, blobId: string): Promise<{ body: ReadableStream | ArrayBuffer; type: string; name: string | null; size: number } | null> {
 	const decoded = decodeBlobId(blobId);
 	if (!decoded) return null;
-	const accessible = await listAccessibleMailboxIdSet(ctx);
-
 	if (decoded.kind === "up") {
 		const upload = await readUpload(ctx, decoded.id);
 		return upload ? { body: upload.content, type: upload.type, name: upload.name, size: upload.content.byteLength } : null;
 	}
+	const accessible = await listAccessibleMailboxIdSet(ctx);
 	if (decoded.kind === "att") {
 		const [row] = await ctx.db
 			.select({ r2Key: messageAttachments.r2Key, filename: messageAttachments.filename, type: messageAttachments.contentType, size: messageAttachments.size, mailboxId: messages.mailboxId, status: messages.status, privateDraft: messages.privateDraft, userId: messages.userId })
