@@ -84,6 +84,12 @@ export const emailSubmissionSet: JmapMethodHandler = async (ctx, args) => {
 			notCreated[creationId] = { type: "forbidden", description: "Review and confirm this AI draft in Mailflare before sending" };
 			continue;
 		}
+		// Claim the draft before sending, so a concurrent retry cannot send it twice.
+		const claimed = await ctx.db.update(messages).set({ status: "trash" }).where(and(eq(messages.id, draft.id), eq(messages.status, "draft"))).returning({ id: messages.id });
+		if (claimed.length === 0) {
+			notCreated[creationId] = { type: "invalidProperties", properties: ["emailId"], description: "Not a draft of this account" };
+			continue;
+		}
 		try {
 			const attachments = await loadMessageAttachmentContents(ctx.env, draft.id);
 			const result = await sendEmail(ctx.env, {
@@ -124,6 +130,8 @@ export const emailSubmissionSet: JmapMethodHandler = async (ctx, args) => {
 				mdnBlobIds: [],
 			};
 		} catch (error) {
+			// Nothing was sent: hand the draft back so the client can retry.
+			await ctx.db.update(messages).set({ status: "draft" }).where(and(eq(messages.id, draft.id), eq(messages.status, "trash")));
 			if (error instanceof SuppressedRecipientError) {
 				notCreated[creationId] = suppressedSubmissionError(error, [draft.toAddr, draft.ccAddr, draft.bccAddr]);
 				continue;
