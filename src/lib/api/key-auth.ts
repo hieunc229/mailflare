@@ -63,7 +63,12 @@ export async function authenticateApiRequest(env: CloudflareEnv, request: Reques
 			return null;
 		}
 		const separator = decoded.indexOf(":");
-		return authenticateApiKeyValue(env, separator >= 0 ? decoded.slice(separator + 1) : decoded, options);
+		const secret = separator >= 0 ? decoded.slice(separator + 1) : decoded;
+		const result = await authenticateApiKeyValue(env, secret, options);
+		if (result) return result;
+		// A grouped app password ("abcd-efgh ...") as shown in the dashboard; DAV strips the same characters.
+		const ungrouped = secret.replace(/[\s-]/g, "");
+		return ungrouped !== secret ? authenticateApiKeyValue(env, ungrouped, options) : null;
 	}
 	return null;
 }

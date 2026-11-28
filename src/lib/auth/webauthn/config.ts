@@ -17,14 +17,19 @@ function isLocalhost(hostname: string): boolean {
  * Workers and on a direct Node deployment, but not behind a proxy. Refuse a
  * non-local HTTP origin because browsers reject WebAuthn there anyway.
  */
-export async function getWebAuthnConfig(env: CloudflareEnv, request: Request): Promise<WebAuthnConfig> {
+export function getWebAuthnOrigin(env: CloudflareEnv, request: Request): Pick<WebAuthnConfig, "origin" | "rpID"> {
 	const configured = env.APP_URL?.trim();
 	const url = new URL(configured || request.url);
 	if (url.protocol !== "https:" && !isLocalhost(url.hostname)) {
 		throw new WebAuthnOriginError();
 	}
+	return { origin: url.origin, rpID: url.hostname };
+}
+
+/** The origin checks plus the RP display name, which only the options paths need. */
+export async function getWebAuthnConfig(env: CloudflareEnv, request: Request): Promise<WebAuthnConfig> {
 	const { appName } = await getBranding(env);
-	return { origin: url.origin, rpID: url.hostname, rpName: appName };
+	return { ...getWebAuthnOrigin(env, request), rpName: appName };
 }
 
 /** Where mailed links and admin recovery links should point. */

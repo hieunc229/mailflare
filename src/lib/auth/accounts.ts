@@ -44,7 +44,8 @@ export type AccountSummary = {
 /** Resolve tokens to live, enabled users; dead tokens are dropped. */
 export async function resolveAccounts(env: CloudflareEnv, tokens: string[]): Promise<AccountSummary[]> {
 	if (tokens.length === 0) return [];
-	const db = getDb(env);
+	// Sessions are read from the primary: a lagging replica could still honour a revoked one.
+	const db = getDb({ DB: env.DB_PRIMARY ?? env.DB });
 	const hashes = await Promise.all(tokens.map((token) => hashSessionToken(token)));
 	const rows = await db
 		.select({ tokenHash: sessions.tokenHash, user: users })
