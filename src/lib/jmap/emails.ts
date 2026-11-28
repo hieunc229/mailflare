@@ -1,4 +1,4 @@
-import { and, asc, count, countDistinct, desc, eq, inArray, sql } from "drizzle-orm";
+import { and, asc, count, countDistinct, desc, eq, getTableColumns, inArray, sql } from "drizzle-orm";
 import { emailChangesSince, threadChangesSince } from "./changes";
 import { folders, messages } from "@/db/schema";
 import { DRAFT_FILTER_PARAMS, draftsVisibleTo, logMessageHidden, privateDraftForStatus } from "@/lib/email/draft-access";
@@ -81,7 +81,14 @@ async function scope(ctx: JmapContext) {
 	return { ids, condition: and(mailboxScope, draftsVisibleTo(ctx.auth.userId))! };
 }
 
-export async function loadMessages(ctx: JmapContext, ids: string[]): Promise<MessageRow[]> {
+const BODY_PROPERTIES = new Set(["size", "preview", "bodyStructure", "bodyValues", "textBody", "htmlBody"]);
+
+/** Whether any requested Email property is computed from the message bodies (null or omitted means all). */
+export function emailGetNeedsBodies(properties: string[] | null | undefined): boolean {
+	return !properties || properties.some((property) => BODY_PROPERTIES.has(property));
+}
+
+export async function loadMessages(ctx: JmapContext, ids: string[], options: { bodies?: boolean } = {}): Promise<MessageRow[]> {
 	if (ids.length === 0) return [];
 	const { ids: accessible, condition } = await scope(ctx);
 	// D1 caps bound parameters per query at 100, and the scope predicate
@@ -91,8 +98,12 @@ export async function loadMessages(ctx: JmapContext, ids: string[]): Promise<Mes
 	const batch = Math.max(1, 100 - accessible.length - DRAFT_FILTER_PARAMS);
 	const unique = [...new Set(ids)];
 	const rows: MessageRow[] = [];
+	// Without bodies every other column is still read; the two body fields come back null.
+	const { textBody: _text, htmlBody: _html, ...metadata } = getTableColumns(messages);
 	for (let offset = 0; offset < unique.length; offset += batch) {
-		rows.push(...(await ctx.db.select().from(messages).where(and(condition, inArray(messages.id, unique.slice(offset, offset + batch))))));
+		const where = and(condition, inArray(messages.id, unique.slice(offset, offset + batch)));
+		if (options.bodies === false) rows.push(...(await ctx.db.select(metadata).from(messages).where(where)).map((row) => ({ ...row, textBody: null, htmlBody: null }) as MessageRow));
+		else rows.push(...(await ctx.db.select().from(messages).where(where)));
 	}
 	return rows;
 }
@@ -113,7 +124,7 @@ export const emailGet: JmapMethodHandler = async (ctx, args) => {
 	const fetchBodies = !!(args.fetchTextBodyValues || args.fetchHTMLBodyValues || args.fetchAllBodyValues);
 	const maxBodyValueBytes = Number(args.maxBodyValueBytes ?? 0);
 
-	const rows = await loadMessages(ctx, ids);
+	const rows = await loadMessages(ctx, ids, { bodies: emailGetNeedsBodies(properties) });
 	const attachments = await loadAttachmentsByMessage(ctx, rows.map((row) => row.id));
 	const promotionModes = await promotionModesOf(ctx, rows);
 	const found = new Set<string>();
