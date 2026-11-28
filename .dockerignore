@@ -16,3 +16,8 @@ coverage
 docs/screenshots
 docs/demo.mp4
 src/pages
+docs
+tests
+e2e
+changelog
+sponsors
