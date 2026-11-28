@@ -15,6 +15,7 @@ import { useSelectedMailbox } from "@/components/mailbox-provider";
 import { usePageLoading } from "@/components/page-loading";
 import { formatScheduledSendTime } from "./scheduled-send-utils";
 import { useHasHover, useIsMobile } from "@/components/sidebar-mobile-utils";
+import { refreshMessageViews } from "@/hooks/message-refresh";
 import { useMessageCounts } from "@/hooks/use-message-counts";
 import { useMessages } from "@/hooks/use-messages";
 import type { BulkMessageAction } from "@/app/api/messages/bulk/types";
@@ -480,7 +481,7 @@ export function MessageFolderPage({
 		read: unreadOnly ? "unread" as const : "all" as const,
 		group: grouped ? "thread" as const : undefined,
 	};
-	const { messages: firstPage, isLoading, total, messageTotal, limit, updateMessages: updateFirstPage } = useMessages(config.folder, selectedMailbox?.id, listFilters, !mailboxesLoading, config.folderId);
+	const { messages: firstPage, isLoading, loadError, total, messageTotal, limit, updateMessages: updateFirstPage } = useMessages(config.folder, selectedMailbox?.id, listFilters, !mailboxesLoading, config.folderId);
 	const viewKey = [query, selectedMailbox?.id ?? "", config.folder, config.folderId ?? "", grouped, unreadOnly].join("\u0000");
 	const [loadedPages, setLoadedPages] = useState<{ key: string; pages: Record<number, MessageListPageData> }>({ key: viewKey, pages: {} });
 	const pages = useMemo(() => lazy && loadedPages.key === viewKey ? loadedPages.pages : {}, [lazy, loadedPages, viewKey]);
@@ -861,6 +862,13 @@ export function MessageFolderPage({
 				)}
 			</div>
 
+			{loadError && (
+				<div role="alert" className="flex shrink-0 items-center gap-3 border-b border-red-100 bg-red-50 px-6 py-2 text-sm font-medium text-red-700">
+					<span className="flex-1">{t("list.refreshFailed")}</span>
+					<Button type="button" variant="outline" size="sm" onClick={() => void refreshMessageViews().catch(() => setActionError(t("list.refreshFailed")))}>{t("webhooks.retry")}</Button>
+				</div>
+			)}
+
 			{actionError && (
 				<p role="alert" className="shrink-0 border-b border-red-100 bg-red-50 px-6 py-2 text-sm font-medium text-red-700">
 					{actionError}
@@ -886,7 +894,7 @@ export function MessageFolderPage({
 					) : messages.map(renderRow)}
 				</div>
 				{isLoading && messages.length === 0 && <MessageListSkeleton compact={compact || isMobile} />}
-				{!isLoading && messages.length === 0 && promotionsOff && (
+				{!isLoading && !loadError && messages.length === 0 && promotionsOff && (
 					<p className="px-6 py-4 text-sm text-neutral-500">
 						{t("folder.empty.promotionsOff")}{" "}
 						<Link href="/settings/inbox" className="font-medium text-blue-700 underline-offset-2 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600">
@@ -894,7 +902,7 @@ export function MessageFolderPage({
 						</Link>
 					</p>
 				)}
-				{!isLoading && messages.length === 0 && !promotionsOff && (
+				{!isLoading && !loadError && messages.length === 0 && !promotionsOff && (
 					<p className="px-6 py-4 text-sm text-neutral-500">
 						{hasActiveFilters ? t("list.noMatch") : config.emptyTextKey ? t(config.emptyTextKey) : config.emptyText}
 					</p>

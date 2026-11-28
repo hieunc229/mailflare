@@ -221,6 +221,8 @@ export function useMessages(
 	});
 	// Loading until the first request settles, so a disabled list never reads as empty.
 	const [isLoading, setIsLoading] = useState(!initialPage);
+	// True after the latest load attempt failed, so a failed request is not shown as an empty folder.
+	const [loadError, setLoadError] = useState(false);
 	const listRef = useRef(list);
 	useEffect(() => {
 		listRef.current = list;
@@ -239,7 +241,10 @@ export function useMessages(
 		const listKey = getListMembershipKey(getMessageQueryParams(folder, mailboxId, filters, folderId));
 		async function loadMessages(force = false, showLoading = false) {
 			const currentRequest = ++requestNumber;
-			if (showLoading) setIsLoading(true);
+			if (showLoading) {
+				setIsLoading(true);
+				setLoadError(false);
+			}
 			try {
 				const params = getMessageQueryParams(folder, mailboxId, filters, folderId);
 				const data = await fetchMessageList(params, force);
@@ -252,7 +257,11 @@ export function useMessages(
 						limit: data.limit ?? filters?.limit ?? 25,
 						offset: data.offset ?? filters?.offset ?? 0,
 					});
+					setLoadError(false);
 				}
+			} catch (error) {
+				if (!cancelled && currentRequest === requestNumber) setLoadError(true);
+				throw error;
 			} finally {
 				if (!cancelled && currentRequest === requestNumber) setIsLoading(false);
 			}
@@ -400,5 +409,5 @@ export function useMessages(
 		};
 	}, [enabled, filters?.group, filters?.limit, filters?.offset, filters?.query, filters?.read, filters?.title, folder, folderId, mailboxId]);
 
-	return { messages: list.messages, unreadCount, isLoading, total: list.total, messageTotal: list.messageTotal, limit: list.limit, offset: list.offset, updateMessages };
+	return { messages: list.messages, unreadCount, isLoading, loadError, total: list.total, messageTotal: list.messageTotal, limit: list.limit, offset: list.offset, updateMessages };
 }
