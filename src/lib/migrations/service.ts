@@ -45,6 +45,13 @@ const LOCK_NAME = "mailflare_migrations";
 /** Drivers that hold a real pooled connection, the only kind a lock can be tied to. */
 const LOCKING_DRIVERS = new Set(["node-postgres", "postgres-js", "mysql2"]);
 
+/**
+ * A PostgreSQL migration with an index build `CONCURRENTLY` cannot run in a transaction, so its statements run one by one with
+ * no progress record. Every statement must therefore be safe to run again (`IF [NOT] EXISTS`), and a retry runs all of them.
+ * Only a statement that starts as an index build counts; the word inside a function body or comment does not.
+ */
+const CONCURRENT_INDEX = /^\s*(CREATE|DROP)\s+(UNIQUE\s+)?INDEX\s+CONCURRENTLY\b/i;
+
 const ALREADY_APPLIED_ERRNOS = new Set([1050, 1060, 1061, 1091, 1826]);
 const ALREADY_APPLIED_CODES = new Set(["ER_TABLE_EXISTS_ERROR", "ER_DUP_FIELDNAME", "ER_DUP_KEYNAME", "ER_CANT_DROP_FIELD_OR_KEY", "ER_FK_DUP_NAME"]);
 
@@ -156,7 +163,10 @@ export async function applyPendingMigrations(db: D1Database): Promise<MigrationR
 			if (!migration) continue;
 
 			try {
-				if (dialect === "mysql") {
+				if (dialect === "postgres" && migration.statements.some((statement) => CONCURRENT_INDEX.test(statement))) {
+					for (const statement of migration.statements) await db.prepare(statement).run();
+					await db.prepare(`INSERT INTO ${table} (name) VALUES (?)`).bind(name).run();
+				} else if (dialect === "mysql") {
 					// MySQL cannot make DDL atomic. Statements run one at a time (no wrapping transaction). Each statement is recorded
 					// as it finishes and the migration itself last, so a failed migration is retried from where it stopped.
 					await runStatementsWithLedger(db, migration);
