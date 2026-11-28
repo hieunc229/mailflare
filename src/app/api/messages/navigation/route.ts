@@ -133,15 +133,16 @@ async function loadNavigationRows(
 	windowSize: number,
 ): Promise<NavigationRows> {
 	const base = and(...conditions);
-	const fullList = async (): Promise<NavigationRows> => ({
-		rows: await db
+	const fullList = async (): Promise<NavigationRows> => {
+		const fetched = await db
 			.select(NAV_COLUMNS)
 			.from(messages)
 			.where(base)
-			.orderBy(desc(messages.createdAt), desc(messages.id)),
-		hasNewer: false,
-		hasOlder: false,
-	});
+			.orderBy(desc(messages.createdAt), desc(messages.id))
+			.limit(windowSize + 1);
+		const hasOlder = fetched.length > windowSize;
+		return { rows: hasOlder ? fetched.slice(0, windowSize) : fetched, hasNewer: false, hasOlder };
+	};
 	if (!around) return fullList();
 
 	const [anchor] = await db
