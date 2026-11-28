@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
+import { useQueryClient } from "@tanstack/react-query";
 import { Upload } from "@/components/icons";
 import { useLanguage } from "@/components/language-provider";
 import { Button } from "@/components/ui/button";
@@ -11,9 +12,9 @@ import { ProgressiveAvatarImage } from "@/components/progressive-avatar-image";
 import { Label } from "@/components/ui/label";
 import { useSecurityStatus } from "@/components/settings/security-status-store";
 import { StepUpDialog } from "@/components/settings/step-up-dialog";
+import { forgetManagedAccount, loadManagedAccount } from "./account-cache";
 import type { ManagedAccount } from "./types";
 import {
-	fetchManagedAccount,
 	getManagedAccountAvatarUrl,
 	saveManagedAccount,
 	uploadManagedAccountAvatar,
@@ -27,6 +28,7 @@ function normalizeForwarding(value: string | null | undefined): string | null {
 export default function AccountDetailsPage() {
 	const { t } = useLanguage();
 	const { id } = useParams<{ id: string }>();
+	const queryClient = useQueryClient();
 	const [account, setAccount] = useState<ManagedAccount | null>(null);
 	const [saving, setSaving] = useState(false);
 	const [message, setMessage] = useState<string | null>(null);
@@ -37,13 +39,13 @@ export default function AccountDetailsPage() {
 	const { status: securityStatus } = useSecurityStatus();
 
 	useEffect(() => {
-		void fetchManagedAccount(id)
+		void loadManagedAccount(queryClient, id)
 			.then((loaded) => {
 				setAccount(loaded);
 				setSavedForwarding(normalizeForwarding(loaded.forwardingEmail));
 			})
 			.catch((error) => setMessage(error instanceof Error ? error.message : t("account.loadFailed")));
-	}, [id, t]);
+	}, [id, t, queryClient]);
 
 	function onSave() {
 		if (!account) return;
@@ -57,6 +59,7 @@ export default function AccountDetailsPage() {
 		setMessage(null);
 		try {
 			await saveManagedAccount(account, stepUpToken);
+			forgetManagedAccount(queryClient, id);
 			setSavedForwarding(normalizeForwarding(account.forwardingEmail));
 			setMessage(t("account.updated"));
 		} catch (error) {
@@ -70,6 +73,7 @@ export default function AccountDetailsPage() {
 		if (!file || !account) return;
 		try {
 			await uploadManagedAccountAvatar(account.id, file);
+			forgetManagedAccount(queryClient, id);
 			setAccount({ ...account, hasAvatar: true });
 			setAvatarVersion(Date.now());
 		} catch (error) {

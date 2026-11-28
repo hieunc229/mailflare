@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
+import { useQueryClient } from "@tanstack/react-query";
 import { Copy, KeyRound } from "@/components/icons";
 import { useLanguage } from "@/components/language-provider";
 import { Button } from "@/components/ui/button";
@@ -14,12 +15,13 @@ import type { SecurityStatus } from "@/components/settings/passkey-settings-type
 import { authFetch } from "@/lib/auth/client";
 import { requestError } from "@/lib/http/client-error";
 import type { ManagedAccount } from "../types";
-import { fetchManagedAccount } from "../utils";
+import { forgetManagedAccount, loadManagedAccount } from "../account-cache";
 import { saveAccountPassword } from "./utils";
 
 export default function AccountPasswordPage() {
 	const { t } = useLanguage();
 	const { id } = useParams<{ id: string }>();
+	const queryClient = useQueryClient();
 	const [account, setAccount] = useState<ManagedAccount | null>(null);
 	const [password, setPassword] = useState("");
 	const [saving, setSaving] = useState(false);
@@ -32,11 +34,11 @@ export default function AccountPasswordPage() {
 	const [copied, setCopied] = useState(false);
 
 	useEffect(() => {
-		void fetchManagedAccount(id)
+		void loadManagedAccount(queryClient, id)
 			.then(setAccount)
 			.catch((error) => setMessage(error instanceof Error ? error.message : t("account.loadFailed")));
 		void loadSecurityStatus().then(setAdminSecurity).catch(() => undefined);
-	}, [id, t]);
+	}, [id, t, queryClient]);
 
 	async function createRecoveryLink(stepUpToken: string) {
 		const res = await authFetch(`/api/accounts/${id}/recovery`, {
@@ -47,6 +49,7 @@ export default function AccountPasswordPage() {
 		const data = (await res.json()) as { link?: string; error?: string; code?: string };
 		if (!res.ok || !data.link) throw requestError(data, t("account.recovery.failed"));
 		setRecoveryLink(data.link);
+		forgetManagedAccount(queryClient, id);
 	}
 
 	return (
@@ -150,6 +153,7 @@ export default function AccountPasswordPage() {
 				onOpenChange={(open) => !open && setPendingReset(false)}
 				onAuthorized={async (token) => {
 					await saveAccountPassword({ account, password, stepUpToken: token, setPassword, setSaving, setMessage, t });
+					forgetManagedAccount(queryClient, id);
 					setPendingReset(false);
 				}}
 			/>
