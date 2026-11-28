@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { KeyRound, ShieldCheck } from "@/components/icons";
 import { useLanguage } from "@/components/language-provider";
 import { Button } from "@/components/ui/button";
@@ -52,6 +52,9 @@ export function StepUpDialog({
 	const [showPassword, setShowPassword] = useState(false);
 	const [error, setError] = useState<string | null>(null);
 	const [busy, setBusy] = useState(false);
+	// Read after the prompt returns: a dialog that was closed meanwhile must not run its action.
+	const openRef = useRef(open);
+	useEffect(() => { openRef.current = open; }, [open]);
 
 	const passwordPathAllowed = hasPassword && (!requireSecondFactor || totpEnabled);
 	const needsCode = hasPassword && totpEnabled && (requireSecondFactor || action === "mfa.disable");
@@ -73,6 +76,7 @@ export function StepUpDialog({
 		setError(null);
 		try {
 			const token = await getToken();
+			if (!openRef.current) return;
 			const keepOpen = await onAuthorized(token);
 			if (keepOpen === true) {
 				// The next step of the same flow asks for its own proof.
@@ -94,7 +98,7 @@ export function StepUpDialog({
 	}
 
 	return (
-		<Dialog open={open} onOpenChange={close}>
+		<Dialog open={open} onOpenChange={(next) => { if (!next && busy) return; close(next); }}>
 			<DialogContent className="sm:max-w-[440px]">
 				<DialogHeader>
 					{step && step.total > 1 && (
