@@ -143,19 +143,12 @@ export async function restoreDatabaseRecords(db: D1Database, content: ArrayBuffe
 	const unmigrated = LATER_MIGRATION_TABLES.filter((table) => document.tables[table]?.length && !laterTableNames.includes(table));
 	if (unmigrated.length) throw new Error(`Apply pending database migrations before restoring ${unmigrated.join(", ")}.`);
 	const restoreTables = BACKUP_TABLES.filter((table) => (table !== "shared_attachment_links" || sharedLinksTable) && (table !== "booking_events" || bookingTable) && (table !== "passkey_credentials" || passkeyTable) && (!table.startsWith("drive_") || driveTableNames.includes(table)) && (!LATER_MIGRATION_TABLES.includes(table) || laterTableNames.includes(table)));
-	const userColumns = await listColumnNames(db, "users");
-	const bookingColumns = bookingTable ? await listColumnNames(db, "booking_events") : null;
-	// The passkey table can predate later credential columns (aaguid); filter
-	// those out instead of failing after the restore has already torn down data.
-	const passkeyColumns = passkeyTable ? await listColumnNames(db, "passkey_credentials") : null;
-	// Likewise `messages.category` and `sender_address` (derived, so dropping them loses nothing) before their migration.
-	const messageColumns = await listColumnNames(db, "messages");
-	// The backfill state columns of `mailbox_promotion_settings` (stall count, error, daily counter) arrive with a later migration than the table; they are job bookkeeping, so dropping them restarts nothing that matters.
-	const promotionSettingColumns = restoreTables.includes("mailbox_promotion_settings") ? await listColumnNames(db, "mailbox_promotion_settings") : null;
-	// These tables gained columns after they shipped (MTA-STS settings, the report kind); a backup from a newer
-	// database drops them here instead of failing after the teardown.
-	const deliverabilityColumns = new Map<string, Set<string>>();
-	for (const table of ["domain_deliverability", "deliverability_reports"]) if (existing.has(table)) deliverabilityColumns.set(table, await listColumnNames(db, table));
+	// Filter every table's columns against the live schema now: a failure after the teardown would leave an empty database.
+	const tableColumns = new Map<string, Set<string>>();
+	for (const table of restoreTables) {
+		const columns = await listColumnNames(db, table);
+		if (columns.size) tableColumns.set(table, columns);
+	}
 	// Mark users deleted before removing them: the passkey trigger permits the
 	// cascade to remove the last credential only for an account that is being
 	// purged. Deleting users first also empties the table the restore inserts
@@ -172,17 +165,7 @@ export async function restoreDatabaseRecords(db: D1Database, content: ArrayBuffe
 	for (const table of restoreTables) {
 		const rows = document.tables[table] ?? [];
 		for (let index = 0; index < rows.length; index += INSERT_BATCH_SIZE) {
-			const columns = table === "users"
-				? userColumns
-				: table === "booking_events"
-					? bookingColumns
-					: table === "passkey_credentials"
-						? passkeyColumns
-						: table === "messages"
-							? messageColumns
-							: table === "mailbox_promotion_settings"
-								? promotionSettingColumns
-								: deliverabilityColumns.get(table) ?? null;
+			const columns = tableColumns.get(table) ?? null;
 			const statements = rows.slice(index, index + INSERT_BATCH_SIZE).map((row) => createInsertStatement(db, dialect, table, row, columns));
 			// MySQL checks foreign keys per statement, so the batch suspends them for its own connection.
 			if (statements.length > 0) await db.batch(dialect === "mysql" ? [db.prepare("SET FOREIGN_KEY_CHECKS = 0"), ...statements, db.prepare("SET FOREIGN_KEY_CHECKS = 1")] : statements);
