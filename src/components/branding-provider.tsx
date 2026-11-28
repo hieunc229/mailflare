@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useContext, useEffect, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { Branding } from "@/lib/branding/types";
 import type { BrandingContextValue } from "./branding-provider-types";
 import { DEFAULT_BRANDING, fetchBranding } from "./branding-provider-utils";
@@ -19,9 +19,20 @@ export function BrandingProvider({ children, initialBranding }: { children: Reac
 		}
 	}
 
-	async function refreshBranding() {
-		applyBranding(await fetchBranding());
-	}
+	// Stable identity: consumers must not re-render because the provider did.
+	const applyRef = useRef(applyBranding);
+	useLayoutEffect(() => {
+		applyRef.current = applyBranding;
+	});
+	const refreshBranding = useCallback(async () => {
+		applyRef.current(await fetchBranding());
+	}, []);
+
+	const value = useMemo(() => ({
+		...branding,
+		iconUrl: branding.hasCustomIcon ? `/api/branding/icon?v=${iconVersion}` : "/icon-96.png",
+		refreshBranding,
+	}), [branding, iconVersion, refreshBranding]);
 
 	useEffect(() => {
 		// The server layout already supplied the branding; refetching it on mount is
@@ -30,11 +41,7 @@ export function BrandingProvider({ children, initialBranding }: { children: Reac
 	}, [initialBranding]);
 
 	return (
-		<BrandingContext.Provider value={{
-			...branding,
-			iconUrl: branding.hasCustomIcon ? `/api/branding/icon?v=${iconVersion}` : "/icon-96.png",
-			refreshBranding,
-		}}>
+		<BrandingContext.Provider value={value}>
 			{children}
 		</BrandingContext.Provider>
 	);
