@@ -30,14 +30,6 @@ test("shouldBindEmailCatchAllToWorker is false off Workers (issue #42)", () => {
 		"isNodeRuntime must keep detecting MAILFLARE_RUNTIME=node",
 	);
 	assert.match(runtime, /return isNodeRuntime\(env\) \|\| isVercelRuntime\(env\);/, "off Workers means Node or Vercel");
-
-	const isNodeRuntime = (env) => (env ?? undefined)?.MAILFLARE_RUNTIME === "node";
-	const shouldBindEmailCatchAllToWorker = (env) => !isNodeRuntime(env);
-
-	assert.equal(shouldBindEmailCatchAllToWorker({ MAILFLARE_RUNTIME: "node" }), false);
-	assert.equal(shouldBindEmailCatchAllToWorker({ MAILFLARE_RUNTIME: "cloudflare" }), true);
-	assert.equal(shouldBindEmailCatchAllToWorker({}), true);
-	assert.equal(shouldBindEmailCatchAllToWorker(undefined), true);
 });
 
 test("provision.ts imports isOffWorkers next to hasCloudflareCredentials", () => {
