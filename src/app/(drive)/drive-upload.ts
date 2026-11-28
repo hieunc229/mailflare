@@ -1,6 +1,7 @@
 import { authFetch, getAuthHeaders } from "@/lib/auth/client";
 import { parseRetryAfter, sleepFor } from "@/lib/import/takeout-calendar-utils";
 import { needsDirectUpload, prepareUpload } from "@/lib/uploads/client";
+import type { DriveUploadEntry } from "./drive-upload-types";
 
 /** Tries for one request (starting, one part, completing). */
 const TRIES = 5;
@@ -107,7 +108,13 @@ export async function uploadDriveSource(source: DriveUploadSource, parentId: str
 	const partBytes = (index: number) => Math.max(0, Math.min(partSize, source.size - index * partSize));
 	let sent = [...stored].reduce((total, part) => total + partBytes(part - 1), 0);
 	// Held at 99% until the server has assembled the parts.
-	const report = (bytes: number) => onProgress(source.size ? Math.min(99, Math.floor((bytes / source.size) * 100)) : 99, resumed);
+	let lastPercent = -1;
+	const report = (bytes: number) => {
+		const percent = source.size ? Math.min(99, Math.floor((bytes / source.size) * 100)) : 99;
+		if (percent === lastPercent) return;
+		lastPercent = percent;
+		onProgress(percent, resumed);
+	};
 	report(sent);
 	for (let index = 0; index < parts; index += 1) {
 		if (stored.has(index + 1)) continue;
@@ -141,3 +148,35 @@ export async function uploadDriveSource(source: DriveUploadSource, parentId: str
 export function uploadDriveFile(file: File, parentId: string | null, onProgress: (percent: number, resumed: boolean) => void): Promise<void> {
 	return uploadDriveSource({ name: file.name, size: file.size, type: file.type, fingerprint: String(file.lastModified), readPart: async (index, partSize) => file.slice(index * partSize, (index + 1) * partSize) }, parentId, onProgress);
 }
+
+export const UPLOAD_CONCURRENCY = 3;
+
+/** Runs the worker over the items, at most `limit` at a time, starting them in order. A worker must not throw. */
+export async function runWithLimit<T>(items: T[], limit: number, worker: (item: T) => Promise<void>): Promise<void> {
+	let next = 0;
+	const loop = async () => {
+		while (next < items.length) await worker(items[next++]);
+	};
+	await Promise.all(Array.from({ length: Math.min(limit, items.length) }, loop));
+}
+
+// Upload progress lives outside React state so a progress tick re-renders only the upload panel, never the file list.
+let uploads: DriveUploadEntry[] = [];
+const uploadListeners = new Set<() => void>();
+const setUploads = (next: DriveUploadEntry[]) => {
+	uploads = next;
+	uploadListeners.forEach((listener) => listener());
+};
+
+export const getUploads = (): DriveUploadEntry[] => uploads;
+
+export function subscribeUploads(listener: () => void): () => void {
+	uploadListeners.add(listener);
+	return () => { uploadListeners.delete(listener); };
+}
+
+export const addUploads = (entries: DriveUploadEntry[]): void => setUploads([...uploads, ...entries]);
+
+export const patchUpload = (id: string, patch: Partial<DriveUploadEntry>): void => setUploads(uploads.map((entry) => (entry.id === id ? { ...entry, ...patch } : entry)));
+
+export const clearFinishedUploads = (): void => setUploads(uploads.filter((entry) => entry.status === "queued" || entry.status === "uploading"));

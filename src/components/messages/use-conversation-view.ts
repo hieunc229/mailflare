@@ -44,3 +44,32 @@ export function useConversationView(): [boolean, (next: boolean) => void] {
 
 	return [enabled, update];
 }
+
+/**
+ * A boolean preference kept in localStorage, readable on the first client render and shared by every
+ * mounted user. `read` keeps each preference's own default; `serverValue` is what the server renders.
+ */
+export function createLocalPref(options: { key: string; changeEvent: string; read: () => boolean; serverValue: boolean }): () => [boolean, (next: boolean) => void] {
+	// Set only while storage refuses writes, so the toggle still applies for this page.
+	let unsaved: boolean | undefined;
+	const subscribe = (onStoreChange: () => void) => {
+		window.addEventListener(options.changeEvent, onStoreChange);
+		window.addEventListener("storage", onStoreChange);
+		return () => {
+			window.removeEventListener(options.changeEvent, onStoreChange);
+			window.removeEventListener("storage", onStoreChange);
+		};
+	};
+	const getSnapshot = () => unsaved ?? options.read();
+	const getServerSnapshot = () => options.serverValue;
+	const update = (next: boolean) => {
+		try {
+			localStorage.setItem(options.key, next ? "on" : "off");
+			unsaved = undefined;
+		} catch {
+			unsaved = next;
+		}
+		window.dispatchEvent(new Event(options.changeEvent));
+	};
+	return () => [useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot), update];
+}

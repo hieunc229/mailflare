@@ -11,6 +11,7 @@ import { requestUnsubscribe } from "@/components/messages/unsubscribe-button-uti
 import { Button } from "@/components/ui/button";
 import { confirmDestructive, confirmDialog } from "@/components/ui/confirm-dialog";
 import { Select } from "@/components/ui/select";
+import { useIsMobile } from "@/components/sidebar-mobile-utils";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useMessageCounts } from "@/hooks/use-message-counts";
 import { dispatchMessagesChanged } from "@/lib/messages/change-events";
@@ -38,6 +39,7 @@ const LOADING: ListState = { status: "loading", senders: [], total: 0 };
 
 export function SubscriptionsPage() {
 	const { t } = useLanguage();
+	const isMobile = useIsMobile();
 	const { mailboxes, selectedMailbox, isLoading: mailboxesLoading } = useSelectedMailbox();
 	// A refetch after an action flips isLoading again; the list stays up, only the first load shows a skeleton.
 	// No mailbox id asks for every mailbox the user can read, which is what the picker needs.
@@ -232,7 +234,28 @@ export function SubscriptionsPage() {
 				<ListMessage state={list.status} onRetry={() => void load(mailboxId, offset)} />
 			) : (
 				<div aria-busy={busy}>
-					<table className="hidden w-full table-fixed text-start text-sm md:table">
+					{isMobile ? (
+					<ul className="divide-y divide-neutral-100">
+						{rows.map((item) => (
+							<li key={item.row.senderAddress} className="space-y-3 py-4">
+								<div className="flex items-start justify-between gap-2">
+									<SenderCell {...item} />
+									<RowActions {...props(item)} />
+								</div>
+								<dl className="grid grid-cols-3 gap-2 text-sm">
+									<Stat label={t("subscriptions.col.messages")}><MessageCount count={item.row.total} /></Stat>
+									<Stat label={t("subscriptions.col.lastReceived")}><LastReceived value={item.row.lastReceived} /></Stat>
+									<Stat label={t("subscriptions.col.readRate")}><ReadRate rate={item.row.readRate} /></Stat>
+								</dl>
+								<div className="flex items-center gap-2 text-sm">
+									<span className="text-neutral-600">{t("subscriptions.col.category")}</span>
+									<CategoryControl {...props(item)} />
+								</div>
+							</li>
+						))}
+					</ul>
+					) : (
+					<table className="w-full table-fixed text-start text-sm">
 						<caption className="sr-only">{t("navigation.subscriptions")}</caption>
 						<thead className="border-b border-neutral-200 text-xs font-medium uppercase text-neutral-600">
 							<tr>
@@ -257,25 +280,7 @@ export function SubscriptionsPage() {
 							))}
 						</tbody>
 					</table>
-					<ul className="divide-y divide-neutral-100 md:hidden">
-						{rows.map((item) => (
-							<li key={item.row.senderAddress} className="space-y-3 py-4">
-								<div className="flex items-start justify-between gap-2">
-									<SenderCell {...item} />
-									<RowActions {...props(item)} />
-								</div>
-								<dl className="grid grid-cols-3 gap-2 text-sm">
-									<Stat label={t("subscriptions.col.messages")}><MessageCount count={item.row.total} /></Stat>
-									<Stat label={t("subscriptions.col.lastReceived")}><LastReceived value={item.row.lastReceived} /></Stat>
-									<Stat label={t("subscriptions.col.readRate")}><ReadRate rate={item.row.readRate} /></Stat>
-								</dl>
-								<div className="flex items-center gap-2 text-sm">
-									<span className="text-neutral-600">{t("subscriptions.col.category")}</span>
-									<CategoryControl {...props(item)} />
-								</div>
-							</li>
-						))}
-					</ul>
+					)}
 					{!rows.some((item) => item.view.canChange) && <p className="mt-4 text-sm text-neutral-600">{t("settings.promotions.readOnlyNote")}</p>}
 					<nav aria-label={t("subscriptions.pager.label")} className="mt-4 flex items-center justify-between gap-3">
 						<span className="text-sm text-neutral-600">{t("subscriptions.pager.range", { start: pager.start, end: pager.end, total: pager.total })}</span>

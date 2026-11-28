@@ -40,22 +40,21 @@ export function TemplateMenu({ onApply, onNew }: TemplateMenuProps) {
 						<div className="min-h-0 flex-1 overflow-y-auto">
 							{templates.length === 0 && <p className="px-3 py-2 text-xs text-neutral-500">{t("template.none")}</p>}
 							{templates.map((template) => (
-								<DropdownMenu.Item
-									key={template.id}
-									onSelect={() => onApply({ title: template.subject ?? "", html: template.htmlBody ?? textToHtml(template.textBody ?? "") })}
-									className={`${itemClass} group justify-between gap-2`}
-								>
-									<span className="whitespace-normal break-words">{template.subject || t("template.untitled")}</span>
-									<button
-										type="button"
+								<div key={template.id} className="flex items-center gap-1">
+									<DropdownMenu.Item
+										onSelect={() => onApply({ title: template.subject ?? "", html: template.htmlBody ?? textToHtml(template.textBody ?? "") })}
+										className={`${itemClass} min-w-0 flex-1`}
+									>
+										<span className="whitespace-normal break-words">{template.subject || t("template.untitled")}</span>
+									</DropdownMenu.Item>
+									<DropdownMenu.Item
 										aria-label={t("template.delete")}
-										onPointerDown={(event) => event.stopPropagation()}
-										onClick={(event) => { event.stopPropagation(); void remove(template.id); }}
-										className="shrink-0 rounded p-1 text-neutral-400 opacity-0 hover:text-red-600 group-hover:opacity-100 group-focus:opacity-100"
+										onSelect={(event) => { event.preventDefault(); void remove(template.id); }}
+										className="flex shrink-0 cursor-pointer items-center rounded p-2 text-neutral-500 outline-none hover:text-red-600 data-[highlighted]:bg-neutral-100 data-[highlighted]:text-red-600"
 									>
 										<Trash2 className="h-3.5 w-3.5" />
-									</button>
-								</DropdownMenu.Item>
+									</DropdownMenu.Item>
+								</div>
 							))}
 						</div>
 						<DropdownMenu.Separator className="my-1 h-px bg-neutral-100" />

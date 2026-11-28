@@ -36,8 +36,3 @@ export function getConversationRecipients(message: ThreadMessage, style: Recipie
 	if (names.length <= 3) return names.join(", ");
 	return `${names.slice(0, 3).join(", ")}, +${names.length - 3}`;
 }
-
-export function getAvatarInitial(message: ThreadMessage, currentAccountName?: string): string {
-	const name = getConversationSender(message, currentAccountName) || getEmailAddress(message.fromAddr);
-	return name.trim().charAt(0).toUpperCase() || "?";
-}

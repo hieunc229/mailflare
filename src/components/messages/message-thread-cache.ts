@@ -10,7 +10,7 @@ import type { ThreadMessage, ThreadResponse } from "@/hooks/types";
 
 const CACHE_TTL_MS = 60_000;
 const CACHE_LIMIT = 20;
-const MAX_CACHED_MESSAGES = 50;
+const MAX_CACHED_MESSAGES = 500;
 const MAX_CACHED_BODY_CHARS = 2_000_000;
 
 // Key by anchor message: thread ids are shared across mailboxes.
@@ -124,7 +124,8 @@ if (typeof window !== "undefined") {
 	window.addEventListener("mailflare:messages-changed", (event) => {
 		const detail = getMessagesChangedDetail(event);
 		if (!detail?.kind) {
-			clearMessageThreadCache();
+			// A periodic refresh is not a change; the cache lifetime bounds how stale a thread can get.
+			if (!detail?.sync) clearMessageThreadCache();
 			return;
 		}
 		if (detail.kind === "read") {
@@ -138,4 +139,15 @@ if (typeof window !== "undefined") {
 			});
 		}
 	});
+}
+
+/** A sync event keeps the cache, but the open thread must not read its own stale entry. */
+export function dropThreadOnSync(messageId: string, event: Event): void {
+	if (getMessagesChangedDetail(event)?.sync) threadCache.delete(messageId);
+}
+
+/** Whether an open thread must refetch on this event: read and star changes are patched in place instead. */
+export function threadNeedsRefetch(event: Event): boolean {
+	const kind = getMessagesChangedDetail(event)?.kind;
+	return kind !== "read" && kind !== "patch";
 }

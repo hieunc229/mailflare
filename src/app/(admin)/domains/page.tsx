@@ -20,6 +20,7 @@ import { Switch } from "@/components/ui/switch";
 import { List } from "@/components/ui/list";
 import { CheckCircle2, LoaderCircle, Plus } from "@/components/icons";
 import { authFetch } from "@/lib/auth/client";
+import { fetchSessionInfo } from "@/hooks/use-current-user";
 import type { DnsAuthRecord, DnsStatusSummary, Domain, DomainDnsCache, DomainDnsView, DomainPreflight, ReceivingProvider, SendingProvider } from "./types";
 import DomainItemCard from "./DomainItemCard";
 import { SectionRowSkeleton } from "@/components/page-skeletons";
@@ -33,8 +34,8 @@ export default function DomainsPage() {
   const [hostname, setHostname] = useState("");
   // Self-hosted installs without Cloudflare credentials manage DNS by hand.
   const { data: me } = useQuery({
-    queryKey: ["me"],
-    queryFn: async () => (await (await authFetch("/api/auth/me")).json()) as { managesDns?: boolean },
+    queryKey: ["session-info"],
+    queryFn: () => fetchSessionInfo(),
   });
   const managesDns = me?.managesDns ?? true;
   const [domainCheck, setDomainCheck] = useState<DomainPreflight | null>(null);
@@ -52,10 +53,11 @@ export default function DomainsPage() {
   const [dnsError, setDnsError] = useState<string | null>(null);
   const [dnsViews, setDnsViews] = useState<DomainDnsCache>({});
 
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ["domains"],
     queryFn: async () => {
       const res = await authFetch("/api/domains?includeDns=true");
+      if (!res.ok) throw new Error(t("list.loadFailed"));
       return (await res.json()) as {
         domains: Domain[];
         dns: Record<string, DnsStatusSummary>;
@@ -471,7 +473,13 @@ export default function DomainsPage() {
         {isLoading && (
           <SectionRowSkeleton />
         )}
-        {!isLoading && (data?.domains ?? []).length === 0 && (
+        {isError && (
+          <div role="alert" className="flex items-center gap-3 rounded-2xl bg-red-50 px-5 py-4 text-sm text-red-700">
+          	<span className="flex-1">{t("list.loadFailed")}</span>
+          	<Button type="button" variant="outline" size="sm" onClick={() => void refetch()}>{t("webhooks.retry")}</Button>
+          </div>
+        )}
+        {!isLoading && !isError && (data?.domains ?? []).length === 0 && (
           <p className="rounded-2xl bg-white px-5 py-4 text-sm text-neutral-500">
             {t("domains.none")}
           </p>

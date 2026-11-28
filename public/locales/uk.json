@@ -2446,6 +2446,7 @@
 	"dnsSkipped.warning": "DNS isn't configured for {domains}. Mail won't arrive until the records are set.",
 	"dnsSkipped.review": "Review DNS",
 	"dnsSkipped.markDone": "I've set it up",
+	"dnsSkipped.updateFailed": "Could not update the DNS status for every domain. Try again.",
 	"compose.cancelSend": "Cancel",
 	"compose.sendCancelled": "Sending cancelled. Message moved to Drafts.",
 	"compose.cancelTooLate": "Too late to cancel: the message is already being sent.",
@@ -3033,5 +3034,7 @@
 	"domains.forceRemoveConfirm": "{reason}\n\nВсе одно видалити {host} примусово? Mailflare спробує видалити DNS-записи _mta-sts і _smtp._tls, а потім видалить домен, усі його поштові скриньки та всі листи в них, навіть якщо записи видалити не вдасться. Поштові сервери ще деякий час можуть застосовувати кешовану політику MTA-STS. Після цього ви отримаєте список DNS-записів, які потрібно видалити вручну.\n\nВведіть {host} для підтвердження.",
 	"domains.forceRemoved": "{host} видалено",
 	"domains.forceRemovedRecords": "Видаліть ці DNS-записи самостійно:",
-	"domains.forceRemovedCache": "Поштові сервери можуть застосовувати стару політику MTA-STS до {date}."
+	"domains.forceRemovedCache": "Поштові сервери можуть застосовувати стару політику MTA-STS до {date}.",
+	"list.loadFailed": "Не вдалося завантажити цей список.",
+	"message.loadFailed": "Не вдалося завантажити це повідомлення."
 }

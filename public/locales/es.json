@@ -2430,6 +2430,7 @@
 	"dnsSkipped.warning": "DNS isn't configured for {domains}. Mail won't arrive until the records are set.",
 	"dnsSkipped.review": "Review DNS",
 	"dnsSkipped.markDone": "I've set it up",
+	"dnsSkipped.updateFailed": "Could not update the DNS status for every domain. Try again.",
 	"compose.cancelSend": "Cancel",
 	"compose.sendCancelled": "Sending cancelled. Message moved to Drafts.",
 	"compose.cancelTooLate": "Too late to cancel: the message is already being sent.",
@@ -3012,5 +3013,7 @@
 	"domains.forceRemoveConfirm": "{reason}\n\n¿Eliminar {host} a la fuerza de todos modos? Mailflare intentará quitar sus registros DNS _mta-sts y _smtp._tls y después borrará el dominio, todos sus buzones y todos sus mensajes, aunque eso falle. Los servidores de correo pueden seguir aplicando durante un tiempo la política MTA-STS en caché. Después recibirás los registros DNS que debes quitar a mano.\n\nEscribe {host} para confirmar.",
 	"domains.forceRemoved": "{host} eliminado",
 	"domains.forceRemovedRecords": "Quita estos registros DNS por tu cuenta:",
-	"domains.forceRemovedCache": "Los servidores de correo pueden seguir aplicando la antigua política MTA-STS hasta el {date}."
+	"domains.forceRemovedCache": "Los servidores de correo pueden seguir aplicando la antigua política MTA-STS hasta el {date}.",
+	"list.loadFailed": "No se pudo cargar esta lista.",
+	"message.loadFailed": "No se pudo cargar este mensaje."
 }

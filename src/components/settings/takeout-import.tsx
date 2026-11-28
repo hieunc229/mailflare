@@ -52,6 +52,8 @@ export function TakeoutImport() {
 	const [result, setResult] = useState<{ mode: TakeoutRunState["mode"]; summary: TakeoutImportSummary } | null>(null);
 	const [error, setError] = useState<string | null>(null);
 	const [notice, setNotice] = useState<string | null>(null);
+	// Screen-reader milestones (source changes, finish); the 500 ms progress ticks are not announced.
+	const [announce, setAnnounce] = useState("");
 	const controllerRef = useRef<AbortController | null>(null);
 	const liveRef = useRef<TakeoutRunState | null>(null);
 	const running = run !== null;
@@ -116,6 +118,7 @@ export function TakeoutImport() {
 					summary: total,
 				};
 				liveRef.current = live;
+				setAnnounce(t("importPage.takeoutReading", { source: source.label, index: index + 1, count: sources.length }));
 				const before = total;
 				const chunks = readStreamChunks(await source.open(), (bytes) => {
 					live.bytesRead += bytes;
@@ -139,7 +142,9 @@ export function TakeoutImport() {
 				if (mode === "import") clearTakeoutProgress(mailboxId, source);
 			}
 			setResult({ mode, summary: total });
+			setAnnounce(t(total.aborted ? "importPage.takeoutStopped" : "importPage.takeoutDataFinished"));
 		} catch (caught) {
+			setAnnounce("");
 			setError(caught instanceof Error ? caught.message : String(caught));
 		} finally {
 			controllerRef.current = null;
@@ -161,6 +166,7 @@ export function TakeoutImport() {
 
 	return (
 		<form onSubmit={onSubmit} className="space-y-4">
+			<p className="sr-only" role="status">{announce}</p>
 			<div className="space-y-2">
 				<Label htmlFor="takeout-files">{t("importPage.takeoutFiles")}</Label>
 				<Input
@@ -219,7 +225,7 @@ export function TakeoutImport() {
 				)}
 			</div>
 			{run && (
-				<div className="space-y-1 text-xs text-neutral-500" aria-live="polite">
+				<div className="space-y-1 text-xs text-neutral-500">
 					<div className="flex justify-between gap-4">
 						<span className="truncate">
 							{run.sourceCount > 0
@@ -230,7 +236,16 @@ export function TakeoutImport() {
 							{formatBytes(run.bytesRead)} / {formatBytes(run.bytesTotal)}
 						</span>
 					</div>
-					<div className="h-1.5 overflow-hidden rounded-full bg-neutral-100">
+					<div
+						role="progressbar"
+						aria-valuemin={0}
+						aria-valuemax={100}
+						aria-valuenow={percent}
+						aria-label={run.sourceCount > 0
+							? t("importPage.takeoutReading", { source: run.sourceLabel, index: run.sourceIndex, count: run.sourceCount })
+							: t("importPage.preparing")}
+						className="h-1.5 overflow-hidden rounded-full bg-neutral-100"
+					>
 						<div className="h-full bg-blue-600 transition-[width]" style={{ width: `${percent}%` }} />
 					</div>
 					{run.resumedAt > 0 && <p>{t("importPage.takeoutResumed", { count: run.resumedAt })}</p>}

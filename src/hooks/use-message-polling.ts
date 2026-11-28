@@ -55,7 +55,7 @@ export function useMessagePolling(): MessageRealtimeState {
 		function startFallbackRefresh() {
 			if (fallbackTimer) return;
 			fallbackTimer = window.setInterval(() => {
-				if (!connected && document.visibilityState === "visible") dispatchMessagesChanged();
+				if (!connected && document.visibilityState === "visible") dispatchMessagesChanged({ sync: true });
 			}, isRealtimeSocketAvailable() ? REALTIME_FALLBACK_INTERVAL_MS : REALTIME_POLL_INTERVAL_MS);
 		}
 
@@ -123,7 +123,7 @@ export function useMessagePolling(): MessageRealtimeState {
 				const reconnected = hadConnection;
 				hadConnection = true;
 				setConnected(true);
-				if (reconnected) dispatchMessagesChanged();
+				if (reconnected) dispatchMessagesChanged({ sync: true });
 				sendHeartbeat();
 				heartbeatTimer = window.setInterval(sendHeartbeat, REALTIME_HEARTBEAT_INTERVAL_MS);
 			};
@@ -184,7 +184,7 @@ export function useMessagePolling(): MessageRealtimeState {
 			} else if (message?.type === "status" && !leader) {
 				const wasConnected = connected;
 				setConnected(message.connected);
-				if (message.connected && !wasConnected) dispatchMessagesChanged();
+				if (message.connected && !wasConnected) dispatchMessagesChanged({ sync: true });
 			} else if (message?.type === "notification" && !leader) {
 				handleNotification(message.payload, false);
 			} else if (message?.type === "refresh") {
@@ -205,7 +205,7 @@ export function useMessagePolling(): MessageRealtimeState {
 			if (connected && !force) return;
 			if (now - lastForegroundRefreshAt < 1_000) return;
 			lastForegroundRefreshAt = now;
-			dispatchMessagesChanged();
+			dispatchMessagesChanged({ sync: true });
 		}
 
 		function onVisibilityChange() {

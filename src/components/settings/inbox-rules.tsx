@@ -7,6 +7,7 @@ import { Folder, Forward, Plus, ShieldAlert, Trash2 } from "@/components/icons";
 import { useLanguage } from "@/components/language-provider";
 import { useSelectedMailbox } from "@/components/mailbox-provider";
 import { Button } from "@/components/ui/button";
+import { confirmDestructive } from "@/components/ui/confirm-dialog";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Dialog,
@@ -163,7 +164,13 @@ export function InboxRules() {
         </Button>
       </div>
       <div className="rounded-3xl bg-white p-6">
-        {(rules.data?.rules ?? []).length === 0 && (
+        {rules.isError && (
+          <div role="alert" className="flex items-center gap-3 rounded-2xl bg-red-50 px-5 py-4 text-sm text-red-700">
+            <span className="flex-1">{t("list.loadFailed")}</span>
+            <Button type="button" variant="outline" size="sm" onClick={() => void rules.refetch()}>{t("webhooks.retry")}</Button>
+          </div>
+        )}
+        {!rules.isError && (rules.data?.rules ?? []).length === 0 && (
           <p className="text-sm text-neutral-500">{t("rules.none")}</p>
         )}
         {remove.isError && (
@@ -211,8 +218,13 @@ export function InboxRules() {
                 variant="ghost"
                 size="sm"
                 disabled={remove.isPending}
-                onClick={() => remove.mutate(rule.id)}
-                className="relative z-10 opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100"
+                onClick={async () => {
+                  const label = rule.matchField === "mail_type"
+                    ? getRuleFieldLabel(rule.matchField, t)
+                    : `${getRuleFieldLabel(rule.matchField, t)} ${getRuleOperatorLabel(rule.matchOperator, t)} ${rule.matchValue || rule.pattern}`;
+                  if (await confirmDestructive({ message: `${t("rules.delete")}: ${label}`, confirmLabel: t("common.delete") })) remove.mutate(rule.id);
+                }}
+                className="relative z-10 opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100 max-md:opacity-100 [@media(pointer:coarse)]:opacity-100"
                 aria-label={t("rules.delete")}
               >
                 <Trash2 className="h-4 w-4" />

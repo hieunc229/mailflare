@@ -13,14 +13,14 @@ after(() => rmSync(outDir, { recursive: true, force: true }));
 async function loadManifest() {
 	const outfile = join(outDir, "manifest.mjs");
 	await build({
-		entryPoints: [join(root, "src/app/manifest.ts")],
+		entryPoints: [join(root, "src/app/manifest-utils.ts")],
 		bundle: true,
 		format: "esm",
 		platform: "node",
 		outfile,
 		logLevel: "silent",
 	});
-	return (await import(outfile)).default();
+	return (await import(outfile)).buildManifest({ appName: "Mailflare", hasCustomIcon: false });
 }
 
 test("manifest has a maskable icon entry that exists in public/", async () => {
@@ -66,4 +66,19 @@ test("maskable icon artwork fits inside the safe-zone circle", async () => {
 		assert.ok(Math.hypot(x - centre, y - centre) <= 205, `corner ${x},${y} outside the safe zone`);
 	}
 	assert.ok(x1 - x0 > 250, "logo should still fill about 60% of the width");
+});
+
+test("custom branding renames the manifest and swaps the icon", async () => {
+	await loadManifest();
+	const { buildManifest } = await import(join(outDir, "manifest.mjs"));
+	const manifest = buildManifest({ appName: "Acme Mail", hasCustomIcon: true });
+	assert.equal(manifest.name, "Acme Mail");
+	assert.equal(manifest.short_name, "Acme Mail");
+	assert.deepEqual(manifest.icons, [{ src: "/api/branding/icon", sizes: "192x192 512x512", purpose: "any" }]);
+});
+
+test("manifest route reads branding", () => {
+	const route = readFileSync(join(root, "src/app/manifest.ts"), "utf8");
+	assert.match(route, /getHomeBranding/);
+	assert.match(route, /force-dynamic/);
 });

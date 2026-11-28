@@ -4,7 +4,7 @@ import { cva, type VariantProps } from "class-variance-authority";
 import { cn } from "@/lib/utils";
 
 const buttonVariants = cva(
-	"inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50",
+	"inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50",
 	{
 		variants: {
 			variant: {
@@ -13,7 +13,7 @@ const buttonVariants = cva(
 				ghost: "hover:bg-neutral-100",
 				// Icon button whose hover background grows from the centre.
 				round: "relative isolate rounded-full before:absolute before:inset-0 before:-z-10 before:rounded-full before:bg-neutral-100 before:scale-0 before:opacity-0 before:transition-[scale,opacity] before:duration-150 before:ease-out hover:before:scale-100 hover:before:opacity-100 focus-visible:before:scale-100 focus-visible:before:opacity-100 data-[state=open]:before:scale-100 data-[state=open]:before:opacity-100 motion-reduce:before:transition-none",
-				destructive: "bg-red-600 text-white hover:bg-red-700",
+				destructive: "bg-red-600 text-white hover:bg-red-700 focus-visible:ring-red-600",
 				secondary: "bg-neutral-100"
 			},
 			size: {

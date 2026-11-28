@@ -3,16 +3,17 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
+import { useQueryClient } from "@tanstack/react-query";
 import { Plus, Trash2 } from "@/components/icons";
 import { useLanguage } from "@/components/language-provider";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
+import { forgetManagedAccount, loadManagedAccount } from "../account-cache";
 import type { ManagedAccount, ManagedDomain, ManagedMailbox } from "../types";
 import {
   addManagedMailbox,
-  fetchManagedAccount,
   fetchManagedDomains,
   fetchManagedMailboxes,
   removeManagedMailbox,
@@ -21,6 +22,7 @@ import {
 export default function AccountMailboxesPage() {
   const { t } = useLanguage();
   const { id } = useParams<{ id: string }>();
+  const queryClient = useQueryClient();
   const [account, setAccount] = useState<ManagedAccount | null>(null);
   const [mailboxes, setMailboxes] = useState<ManagedMailbox[]>([]);
   const [domains, setDomains] = useState<ManagedDomain[]>([]);
@@ -31,7 +33,7 @@ export default function AccountMailboxesPage() {
 
   function fetchAll() {
     return Promise.all([
-      fetchManagedAccount(id),
+      loadManagedAccount(queryClient, id),
       fetchManagedMailboxes(id),
       fetchManagedDomains(),
     ]);
@@ -63,6 +65,7 @@ export default function AccountMailboxesPage() {
     setMessage(null);
     try {
       await addManagedMailbox(account, { domainId, localPart });
+      forgetManagedAccount(queryClient, id);
       setLocalPart("");
       await load();
     } catch (error) {
@@ -78,6 +81,7 @@ export default function AccountMailboxesPage() {
     setMessage(null);
     try {
       await removeManagedMailbox(mailboxId);
+      forgetManagedAccount(queryClient, id);
       await load();
     } catch (error) {
       setMessage(

@@ -1,5 +1,6 @@
 "use client";
 
+import type { Translator } from "@/lib/i18n/utils";
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { useLanguage } from "@/components/language-provider";
@@ -7,13 +8,14 @@ import { authFetch } from "@/lib/auth/client";
 import type { ResendDomainView } from "@/lib/domains/resend-domain-types";
 import ResendKeyRow from "./ResendKeyRow";
 import { StatusRow } from "./status-row";
+import { useProviderAction } from "./use-provider-action";
 
 type ResendResponse = { keyConfigured?: boolean; canManageDomains?: boolean; resend?: ResendDomainView | null; error?: string };
 
-async function postJson<T>(url: string, method: string, body: unknown): Promise<T> {
+async function postJson<T>(url: string, method: string, body: unknown, t: Translator): Promise<T> {
 	const response = await authFetch(url, { method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
 	const data = (await response.json()) as T & { error?: string };
-	if (!response.ok) throw new Error(data.error ?? "Request failed");
+	if (!response.ok) throw new Error(data.error ?? t("domains.requestFailed"));
 	return data;
 }
 
@@ -24,9 +26,7 @@ export default function ResendDomainSection({ domainId, onStatus }: { domainId: 
 	const [canManage, setCanManage] = useState(true);
 	const [loading, setLoading] = useState(true);
 	const [reload, setReload] = useState(0);
-	const [busy, setBusy] = useState<"setup" | "verify" | "test" | null>(null);
-	const [error, setError] = useState("");
-	const [notice, setNotice] = useState("");
+	const { busy, error, notice, setError, setNotice, run } = useProviderAction();
 
 	useEffect(() => {
 		let active = true;
@@ -50,21 +50,12 @@ export default function ResendDomainSection({ domainId, onStatus }: { domainId: 
 		onStatus?.(keyConfigured === false ? "no_key" : canManage ? (view?.status ?? null) : null);
 	}, [loading, keyConfigured, canManage, view, onStatus]);
 
-	async function run(kind: "setup" | "verify" | "test", action: () => Promise<void>) {
-		setBusy(kind);
-		setError("");
-		setNotice("");
-		try { await action(); }
-		catch (err) { setError(err instanceof Error ? err.message : t("domains.requestFailed")); }
-		finally { setBusy(null); }
-	}
-
 	const domainAction = (action: "setup" | "verify") => run(action, async () => {
-		const data = await postJson<ResendResponse>(`/api/domains/${domainId}/resend`, "POST", { action });
+		const data = await postJson<ResendResponse>(`/api/domains/${domainId}/resend`, "POST", { action }, t);
 		setView(data.resend ?? null);
 	});
 	const sendTest = () => run("test", async () => {
-		const data = await postJson<{ to: string }>(`/api/domains/${domainId}/resend`, "POST", { action: "test" });
+		const data = await postJson<{ to: string }>(`/api/domains/${domainId}/resend`, "POST", { action: "test" }, t);
 		setNotice(t("resend.testSent", { to: data.to }));
 	});
 

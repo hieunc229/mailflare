@@ -3,7 +3,7 @@
 import clsx from "clsx";
 import { Menu } from "@/components/icons";
 import Link from "next/link";
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import type { ReactNode } from "react";
 import { useSidebar } from "./sidebar-state";
 import { useLanguage } from "./language-provider";
@@ -12,13 +12,22 @@ import { useBranding } from "./branding-provider";
 export function SidebarAside({ children, className }: { children: ReactNode; className?: string }) {
 	const { mobile, mobileOpen, toggle } = useSidebar();
 	const hidden = mobile && !mobileOpen;
+	const asideRef = useRef<HTMLElement>(null);
+
+	// Move focus into the drawer when it opens; closing returns it to the menu button.
+	useEffect(() => {
+		if (!mobile) return;
+		if (mobileOpen) {
+			asideRef.current?.querySelector<HTMLElement>('a[href],button,[tabindex]:not([tabindex="-1"])')?.focus();
+			return () => document.querySelector<HTMLElement>("[data-mobile-menu]")?.focus();
+		}
+	}, [mobile, mobileOpen]);
 
 	useEffect(() => {
 		if (!mobile || !mobileOpen) return;
 		function onKeyDown(event: KeyboardEvent) {
 			if (event.key !== "Escape") return;
 			toggle();
-			document.querySelector<HTMLElement>("[data-mobile-menu]")?.focus();
 		}
 		document.addEventListener("keydown", onKeyDown);
 		return () => document.removeEventListener("keydown", onKeyDown);
@@ -32,6 +41,7 @@ export function SidebarAside({ children, className }: { children: ReactNode; cla
 				className={clsx("fixed inset-0 z-[100] bg-black/40 transition-opacity duration-200 ease-out motion-reduce:transition-none md:hidden", mobileOpen ? "opacity-100" : "pointer-events-none opacity-0")}
 			/>
 			<aside
+				ref={asideRef}
 				aria-hidden={hidden}
 				inert={hidden}
 				className={clsx(

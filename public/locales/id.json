@@ -2398,6 +2398,7 @@
 	"dnsSkipped.warning": "DNS isn't configured for {domains}. Mail won't arrive until the records are set.",
 	"dnsSkipped.review": "Review DNS",
 	"dnsSkipped.markDone": "I've set it up",
+	"dnsSkipped.updateFailed": "Could not update the DNS status for every domain. Try again.",
 	"compose.cancelSend": "Cancel",
 	"compose.sendCancelled": "Sending cancelled. Message moved to Drafts.",
 	"compose.cancelTooLate": "Too late to cancel: the message is already being sent.",
@@ -2968,5 +2969,7 @@
 	"domains.forceRemoveConfirm": "{reason}\n\nTetap hapus paksa {host}? Mailflare akan mencoba menghapus rekaman DNS _mta-sts dan _smtp._tls, lalu menghapus domain, semua kotak surat di dalamnya, dan semua pesannya, meskipun penghapusan rekaman gagal. Server email mungkin masih menerapkan kebijakan MTA-STS yang tersimpan di cache untuk beberapa waktu. Setelah itu Anda akan mendapat daftar rekaman DNS yang harus dihapus secara manual.\n\nKetik {host} untuk mengonfirmasi.",
 	"domains.forceRemoved": "{host} dihapus",
 	"domains.forceRemovedRecords": "Hapus sendiri rekaman DNS berikut:",
-	"domains.forceRemovedCache": "Server email mungkin masih menerapkan kebijakan MTA-STS lama hingga {date}."
+	"domains.forceRemovedCache": "Server email mungkin masih menerapkan kebijakan MTA-STS lama hingga {date}.",
+	"list.loadFailed": "Tidak dapat memuat daftar ini.",
+	"message.loadFailed": "Tidak dapat memuat pesan ini."
 }

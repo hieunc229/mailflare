@@ -7,6 +7,7 @@ import type { SesSendingView } from "@/lib/aws/ses-sending-types";
 import AwsCredentialsPanel from "./AwsCredentialsPanel";
 import { requestJson } from "./api";
 import { StatusRow } from "./status-row";
+import { useProviderAction } from "./use-provider-action";
 
 type SesResponse = { credentials?: boolean; ses?: SesSendingView | null; error?: string };
 
@@ -16,9 +17,7 @@ export default function SesSendingConfig({ domainId, onStatus }: { domainId: str
 	const [view, setView] = useState<SesSendingView | null>(null);
 	const [loading, setLoading] = useState(true);
 	const [reload, setReload] = useState(0);
-	const [busy, setBusy] = useState<"setup" | "verify" | "test" | null>(null);
-	const [error, setError] = useState("");
-	const [notice, setNotice] = useState("");
+	const { busy, error, notice, setError, setNotice, run } = useProviderAction();
 
 	useEffect(() => {
 		let active = true;
@@ -33,13 +32,6 @@ export default function SesSendingConfig({ domainId, onStatus }: { domainId: str
 		if (loading) return;
 		onStatus?.(credentials === false ? "no_credentials" : view ? (view.verified ? "verified" : view.registered ? "pending" : "not_registered") : null);
 	}, [loading, credentials, view, onStatus]);
-
-	const run = useCallback(async (kind: "setup" | "verify" | "test", action: () => Promise<void>) => {
-		setBusy(kind);
-		setError("");
-		setNotice("");
-		try { await action(); } catch (err) { setError(err instanceof Error ? err.message : t("domains.requestFailed")); } finally { setBusy(null); }
-	}, []);
 
 	const domainAction = (action: "setup" | "verify") => run(action, async () => {
 		const data = await requestJson<SesResponse>(`/api/domains/${domainId}/ses`, "POST", { action });

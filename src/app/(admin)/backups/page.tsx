@@ -56,6 +56,8 @@ export default function BackupsPage() {
   // Local edits to the backup settings; until the first edit the loaded settings are shown.
   const [editedSettings, setSettings] = useState<BackupSettings | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  // The table-group dialog edits this copy; only its Save button commits it.
+  const [draft, setDraft] = useState<BackupSettings | null>(null);
   const backups = useQuery({
     queryKey: ["backups"],
     queryFn: fetchBackups,
@@ -74,6 +76,7 @@ export default function BackupsPage() {
     mutationFn: saveBackupSettings,
     onSuccess: (_data, nextSettings) => {
       savedSettings.current = nextSettings;
+      setSettings(nextSettings);
       setSettingsOpen(false);
       return queryClient.invalidateQueries({ queryKey: ["backups"] });
     },
@@ -152,7 +155,7 @@ export default function BackupsPage() {
                   <Upload className="h-4 w-4" />
                   {restore.isPending ? t("backups.restoring") : t("backups.restore")}
                 </DropdownMenu.Item>
-                <DropdownMenu.Item disabled={!settings || autoSaveSettings.isPending} onSelect={() => setSettingsOpen(true)} className="flex cursor-pointer items-center gap-2 rounded-md px-3 py-2 text-neutral-900 outline-none hover:bg-neutral-100 focus:bg-neutral-100 data-[disabled]:pointer-events-none data-[disabled]:opacity-50">
+                <DropdownMenu.Item disabled={!settings || autoSaveSettings.isPending} onSelect={() => { setDraft(settings); setSettingsOpen(true); }} className="flex cursor-pointer items-center gap-2 rounded-md px-3 py-2 text-neutral-900 outline-none hover:bg-neutral-100 focus:bg-neutral-100 data-[disabled]:pointer-events-none data-[disabled]:opacity-50">
                   <Settings className="h-4 w-4" />
                   {t("backups.settings")}
                 </DropdownMenu.Item>
@@ -168,19 +171,19 @@ export default function BackupsPage() {
             <DialogTitle>{t("backups.tablesTitle")}</DialogTitle>
             <DialogDescription>{t("backups.tablesDescription")}</DialogDescription>
           </DialogHeader>
-          {settings && <div className="space-y-5">
+          {draft && <div className="space-y-5">
             <div className="divide-y divide-neutral-100">
               {BACKUP_TABLE_GROUPS.map((group) => {
-                const enabled = !settings.excludedTableGroups.includes(group.id);
-                const lastEnabled = enabled && settings.excludedTableGroups.length === BACKUP_TABLE_GROUPS.length - 1;
+                const enabled = !draft.excludedTableGroups.includes(group.id);
+                const lastEnabled = enabled && draft.excludedTableGroups.length === BACKUP_TABLE_GROUPS.length - 1;
                 return <div key={group.id} className="flex items-start justify-between gap-4 py-4 first:pt-0 last:pb-0">
                   <div className="min-w-0"><p className="text-sm font-medium text-neutral-900">{group.label}</p><p className="mt-1 break-words text-xs text-neutral-500">{t("backups.tables", { list: group.tables.join(", ") })}</p></div>
-                  <Switch checked={enabled} disabled={lastEnabled} onCheckedChange={(checked) => setSettings({ ...settings, excludedTableGroups: checked ? settings.excludedTableGroups.filter((id) => id !== group.id) : [...settings.excludedTableGroups, group.id] })} aria-label={t("backups.backUpGroup", { group: group.label })} />
+                  <Switch checked={enabled} disabled={lastEnabled} onCheckedChange={(checked) => setDraft({ ...draft, excludedTableGroups: checked ? draft.excludedTableGroups.filter((id) => id !== group.id) : [...draft.excludedTableGroups, group.id] })} aria-label={t("backups.backUpGroup", { group: group.label })} />
                 </div>;
               })}
             </div>
             {saveSettings.error && <p role="alert" className="text-sm text-red-700">{saveSettings.error instanceof Error ? saveSettings.error.message : t("backups.saveSettingsFailed")}</p>}
-            <Button onClick={() => saveSettings.mutate(settings)} disabled={saveSettings.isPending}><Save className="h-4 w-4" />{saveSettings.isPending ? t("common.saving") : t("backups.saveSettings")}</Button>
+            <Button onClick={() => saveSettings.mutate(draft)} disabled={saveSettings.isPending}><Save className="h-4 w-4" />{saveSettings.isPending ? t("common.saving") : t("backups.saveSettings")}</Button>
           </div>}
         </DialogContent>
       </Dialog>
@@ -394,66 +397,74 @@ export default function BackupsPage() {
           <DatabaseBackup className="h-5 w-5 text-neutral-500" />
           <h2 className="font-semibold text-neutral-900">{t("backups.history")}</h2>
         </div>
-        <div className="grid grid-cols-[1fr_110px_110px_170px_120px] gap-4 border-b border-neutral-100 bg-neutral-50 px-4 py-2 text-xs font-semibold uppercase tracking-wide text-neutral-500">
-          <span>{t("backups.col.file")}</span>
-          <span>{t("backups.col.status")}</span>
-          <span>{t("backups.col.size")}</span>
-          <span>{t("backups.col.created")}</span>
-          <span>{t("backups.col.actions")}</span>
-        </div>
         {backups.isLoading && <SkeletonRows count={5} />}
         {!backups.isLoading && (backups.data?.backups ?? []).length === 0 && (
           <p className="px-4 py-6 text-sm text-neutral-500">{t("backups.none")}</p>
         )}
-        {(backups.data?.backups ?? []).map((backup: BackupItem) => (
-          <div
-            key={backup.id}
-            className="grid grid-cols-[1fr_110px_110px_170px_120px] items-center gap-4 border-b border-neutral-100 px-4 py-3 last:border-b-0"
-          >
-            <div className="min-w-0">
-              <p className="truncate text-sm font-medium text-neutral-900">
-                {backup.filename ?? backup.id}
-              </p>
-              <p className="truncate text-xs text-neutral-500">
-                {backup.trigger === "manual" ? t("backups.manual") : t("backups.scheduled")}
-                {backup.error ? `: ${backup.error}` : ""}
-              </p>
-            </div>
-            <Badge variant="outline" className={getStatusClass(backup.status)}>
-              {t(`backups.status.${backup.status}` as TranslationKey)}
-            </Badge>
-            <span className="text-sm text-neutral-600">
-              {formatBackupSize(backup.size)}
-            </span>
-            <span className="text-sm text-neutral-600">
-              {formatBackupDate(backup.createdAt)}
-            </span>
-            <div className="flex gap-1">
-              <Button
-                size="sm"
-                variant="ghost"
-                title={t("backups.download")}
-                disabled={backup.status !== "completed" || download.isPending}
-                onClick={() => download.mutate(backup)}
-              >
-                <Download className="h-4 w-4" />
-              </Button>
-              <Button
-                size="sm"
-                variant="ghost"
-                title={t("backups.delete")}
-                disabled={
-                  deleteBackup.isPending ||
-                  backup.status === "queued" ||
-                  backup.status === "running"
-                }
-                onClick={() => deleteBackup.mutate(backup.id)}
-              >
-                <Trash2 className="h-4 w-4 text-red-600" />
-              </Button>
-            </div>
-          </div>
-        ))}
+        <div role="region" tabIndex={0} aria-label={t("backups.history")} className="overflow-x-auto">
+          <table className="w-full min-w-[640px] text-left text-sm">
+            <thead className="bg-neutral-50">
+              <tr className="border-b border-neutral-100">
+                {(["file", "status", "size", "created", "actions"] as const).map((col) => (
+                  <th key={col} scope="col" className="px-4 py-2 text-xs font-semibold uppercase tracking-wide text-neutral-500">
+                    {t(`backups.col.${col}` as TranslationKey)}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {(backups.data?.backups ?? []).map((backup: BackupItem) => {
+                const name = backup.filename ?? backup.id;
+                return (
+                  <tr key={backup.id} className="border-b border-neutral-100 last:border-b-0">
+                    <td className="max-w-xs px-4 py-3">
+                      <p className="truncate text-sm font-medium text-neutral-900">{name}</p>
+                      <p className="truncate text-xs text-neutral-500">
+                        {backup.trigger === "manual" ? t("backups.manual") : t("backups.scheduled")}
+                        {backup.error ? `: ${backup.error}` : ""}
+                      </p>
+                    </td>
+                    <td className="px-4 py-3">
+                      <Badge variant="outline" className={getStatusClass(backup.status)}>
+                        {t(`backups.status.${backup.status}` as TranslationKey)}
+                      </Badge>
+                    </td>
+                    <td className="px-4 py-3 text-sm text-neutral-600">{formatBackupSize(backup.size)}</td>
+                    <td className="px-4 py-3 text-sm text-neutral-600">{formatBackupDate(backup.createdAt)}</td>
+                    <td className="px-4 py-3">
+                      <div className="flex gap-1">
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          title={t("backups.download")}
+                          aria-label={`${t("backups.download")}: ${name}`}
+                          disabled={backup.status !== "completed" || download.isPending}
+                          onClick={() => download.mutate(backup)}
+                        >
+                          <Download className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          title={t("backups.delete")}
+                          aria-label={`${t("backups.delete")}: ${name}`}
+                          disabled={
+                            deleteBackup.isPending ||
+                            backup.status === "queued" ||
+                            backup.status === "running"
+                          }
+                          onClick={async () => { if (await confirmDestructive(`${t("backups.delete")}: ${name}`)) deleteBackup.mutate(backup.id); }}
+                        >
+                          <Trash2 className="h-4 w-4 text-red-600" />
+                        </Button>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
       </section>
     </div>
   );

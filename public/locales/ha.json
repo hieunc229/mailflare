@@ -2414,6 +2414,7 @@
 	"dnsSkipped.warning": "DNS isn't configured for {domains}. Mail won't arrive until the records are set.",
 	"dnsSkipped.review": "Review DNS",
 	"dnsSkipped.markDone": "I've set it up",
+	"dnsSkipped.updateFailed": "Could not update the DNS status for every domain. Try again.",
 	"compose.cancelSend": "Cancel",
 	"compose.sendCancelled": "Sending cancelled. Message moved to Drafts.",
 	"compose.cancelTooLate": "Too late to cancel: the message is already being sent.",
@@ -2991,5 +2992,7 @@
 	"domains.forceRemoveConfirm": "{reason}\n\nKa tabbata kana so ka cire {host} da ƙarfi duk da haka? Mailflare zai yi ƙoƙarin cire bayanan DNS na _mta-sts da _smtp._tls, sannan ya goge yankin, dukkan akwatunan wasiƙarsa da dukkan saƙonninsu, ko da cirewar ta gaza. Sabobin wasiƙa na iya ci gaba da amfani da manufar MTA-STS da aka adana na ɗan lokaci. Daga baya za ka samu jerin bayanan DNS da za ka cire da hannu.\n\nRubuta {host} don tabbatarwa.",
 	"domains.forceRemoved": "An cire {host}",
 	"domains.forceRemovedRecords": "Ka cire waɗannan bayanan DNS da kanka:",
-	"domains.forceRemovedCache": "Sabobin wasiƙa na iya ci gaba da amfani da tsohuwar manufar MTA-STS har zuwa {date}."
+	"domains.forceRemovedCache": "Sabobin wasiƙa na iya ci gaba da amfani da tsohuwar manufar MTA-STS har zuwa {date}.",
+	"list.loadFailed": "An kasa loda wannan jerin.",
+	"message.loadFailed": "An kasa loda wannan saƙo."
 }

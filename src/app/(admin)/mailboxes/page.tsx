@@ -24,7 +24,8 @@ import { SectionRowSkeleton } from "@/components/page-skeletons";
 import { clearMailboxesCache } from "@/components/mailbox-provider-utils";
 import { ProgressiveAvatarImage } from "@/components/progressive-avatar-image";
 import { authFetch } from "@/lib/auth/client";
-import type { CurrentAccountResponse, Domain, MailboxOwner, MailboxesResponse } from "./types";
+import { fetchSessionInfo } from "@/hooks/use-current-user";
+import type { Domain, MailboxOwner, MailboxesResponse } from "./types";
 import { formatAccountDateTime } from "../accounts/utils";
 import { getMailboxAddress, getMailboxesBase, getMailboxName } from "./utils";
 
@@ -48,11 +49,8 @@ export default function MailboxesPage() {
 	const [createOpen, setCreateOpen] = useState(false);
 
 	const account = useQuery({
-		queryKey: ["auth", "me"],
-		queryFn: async () => {
-			const res = await authFetch("/api/auth/me", { redirectOnUnauthorized: false });
-			return (await res.json()) as CurrentAccountResponse;
-		},
+		queryKey: ["session-info"],
+		queryFn: () => fetchSessionInfo(),
 	});
 
 	// Prefill empty create fields with the signed-in account when the dialog opens or the account loads.
@@ -78,9 +76,10 @@ export default function MailboxesPage() {
 	});
 
 	const domains = useQuery({
-		queryKey: ["domains"],
+		queryKey: ["domains", "options"],
 		queryFn: async () => {
 			const res = await authFetch("/api/domains");
+			if (!res.ok) throw new Error(t("list.loadFailed"));
 			return (await res.json()) as { domains: Domain[] };
 		},
 	});
@@ -89,6 +88,7 @@ export default function MailboxesPage() {
 		queryKey: ["mailboxes"],
 		queryFn: async () => {
 			const res = await authFetch("/api/mailboxes");
+			if (!res.ok) throw new Error(t("list.loadFailed"));
 			return (await res.json()) as MailboxesResponse;
 		},
 	});
@@ -252,7 +252,13 @@ export default function MailboxesPage() {
 				{mailboxes.isLoading && (
 					<SectionRowSkeleton />
 				)}
-				{!mailboxes.isLoading && (mailboxes.data?.mailboxes ?? []).length === 0 && (
+				{(mailboxes.isError || domains.isError) && (
+					<div role="alert" className="flex items-center gap-3 rounded-2xl bg-red-50 px-5 py-4 text-sm text-red-700">
+						<span className="flex-1">{t("list.loadFailed")}</span>
+						<Button type="button" variant="outline" size="sm" onClick={() => { void mailboxes.refetch(); void domains.refetch(); }}>{t("webhooks.retry")}</Button>
+					</div>
+				)}
+				{!mailboxes.isLoading && !mailboxes.isError && (mailboxes.data?.mailboxes ?? []).length === 0 && (
 					<p className="rounded-2xl bg-white px-5 py-4 text-sm text-neutral-500">
 						{t("mailboxes.none")}
 					</p>

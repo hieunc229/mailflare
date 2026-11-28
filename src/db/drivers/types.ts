@@ -69,10 +69,6 @@ export function normalizeParam(value: unknown): unknown {
 	return value;
 }
 
-export function toObjects(columns: string[], rows: unknown[][]): Record<string, unknown>[] {
-	return rows.map((row) => Object.fromEntries(columns.map((name, i) => [name, row[i]])));
-}
-
 /** Lazily open a driver the first time it is needed so unused drivers are never imported. */
 export function lazyExecutor(dialect: DatabaseDialect, open: () => Promise<SqlExecutor>): SqlExecutor {
 	let pending: Promise<SqlExecutor> | undefined;

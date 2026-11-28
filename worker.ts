@@ -2,24 +2,19 @@ import { withDatabase } from "./src/db/with-database";
 import { withStorage } from "./src/lib/storage";
 import vinextHandler from "vinext/server/fetch-handler";
 import {
-	processInboundMessage,
 	storeRawToR2,
 	type InboundQueueMessage,
 } from "./src/lib/email/inbound";
-import { processOutboundQueue, type OutboundQueueMessage } from "./src/lib/email/send";
 import {
-	isImportJobMessage,
 	isInboundQueueMessage,
-	isWebhookRetryMessage,
 	settleFailedInboundMessage,
 	withD1BookmarkCookie,
 	withD1ReadSession,
 } from "./worker-utils";
 import { runWithD1Session } from "./src/lib/d1-session-context";
-import { processImportJob } from "./src/lib/import/jobs";
+import { dispatchQueueMessage } from "./src/lib/queue-dispatch";
 import { autoUpdateJob } from "./src/lib/scheduled/auto-update-job";
 import { dailyJobs, frequentJobs, runScheduledJob } from "./src/lib/scheduled/jobs";
-import { processWebhookRetry, type WebhookRetryMessage } from "./src/lib/email/webhooks";
 import { resolveIncomingMail, forwardMessage } from "./src/lib/email/incoming";
 import { createBatchBudget } from "./src/lib/deliverability/ingest";
 import { getUserFromSession } from "./src/lib/auth/session";
@@ -31,7 +26,6 @@ import {
 	isForwardedMarkerValid,
 	MAILFLARE_FORWARDED_HEADER,
 } from "./src/lib/email/account-forwarding";
-import { processAgentDraftJob } from "./src/lib/agent/jobs/utils";
 import { handleDavRequest, isDavPath } from "./src/lib/dav/handler";
 import { guardMtaStsHost, isMtaStsHost } from "./src/lib/deliverability/mta-sts";
 export { RealtimeHub } from "./src/lib/realtime/hub";
@@ -140,19 +134,7 @@ export default {
 		const reportBudget = createBatchBudget();
 		for (const msg of batch.messages) {
 			try {
-				if (isInboundQueueMessage(msg.body)) {
-					await processInboundMessage(env, msg.body, { reportBudget });
-				} else if (typeof msg.body === "object" && msg.body !== null && (msg.body as { kind?: unknown }).kind === "agent.draft" && typeof (msg.body as { jobId?: unknown }).jobId === "string") {
-					await processAgentDraftJob(env, (msg.body as { jobId: string }).jobId);
-				} else if (isWebhookRetryMessage(msg.body)) {
-					await processWebhookRetry(env, msg.body as WebhookRetryMessage);
-				} else if (isImportJobMessage(msg.body)) {
-					await processImportJob(env, { ...msg.body, attempt: msg.attempts });
-				} else if (typeof msg.body === "object" && msg.body !== null && (msg.body as { kind?: unknown }).kind === "email.scheduled") {
-					await processOutboundQueue(env, msg.body as OutboundQueueMessage);
-				} else {
-					throw new Error("Unknown queue message type");
-				}
+				await dispatchQueueMessage(env, msg.body, { attempt: msg.attempts, reportBudget });
 				msg.ack();
 			} catch (err) {
 				console.error("Queue processing failed", {

@@ -4,6 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { LogIn, LogOut } from "@/components/icons";
 import { useLanguage } from "@/components/language-provider";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   fetchActivity,
@@ -56,7 +57,17 @@ export default function ActivityPage() {
                   </td>
                 </tr>
               ))}
-            {!activity.isLoading && (activity.data ?? []).length === 0 && (
+            {activity.isError && (
+              <tr>
+                <td colSpan={4} className="px-5 py-4">
+                  <div role="alert" className="flex items-center gap-3 rounded-2xl bg-red-50 px-5 py-4 text-sm text-red-700">
+                    <span className="flex-1">{t("list.loadFailed")}</span>
+                    <Button type="button" variant="outline" size="sm" onClick={() => void activity.refetch()}>{t("webhooks.retry")}</Button>
+                  </div>
+                </td>
+              </tr>
+            )}
+            {!activity.isLoading && !activity.isError && (activity.data ?? []).length === 0 && (
               <tr>
                 <td colSpan={4} className="px-5 py-4 text-sm text-neutral-500">
                   {t("activity.none")}

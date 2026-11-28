@@ -2414,6 +2414,7 @@
 	"dnsSkipped.warning": "DNS isn't configured for {domains}. Mail won't arrive until the records are set.",
 	"dnsSkipped.review": "Review DNS",
 	"dnsSkipped.markDone": "I've set it up",
+	"dnsSkipped.updateFailed": "Could not update the DNS status for every domain. Try again.",
 	"compose.cancelSend": "Cancel",
 	"compose.sendCancelled": "Sending cancelled. Message moved to Drafts.",
 	"compose.cancelTooLate": "Too late to cancel: the message is already being sent.",
@@ -2991,5 +2992,7 @@
 	"domains.forceRemoveConfirm": "{reason}\n\n{host} yine de zorla kaldırılsın mı? Mailflare önce _mta-sts ve _smtp._tls DNS kayıtlarını kaldırmayı dener, ardından kayıtların kaldırılması başarısız olsa bile alan adını, içindeki tüm posta kutularını ve tüm iletilerini siler. Posta sunucuları önbelleğe alınmış MTA-STS politikasını bir süre uygulamaya devam edebilir. Sonrasında elle kaldırmanız gereken DNS kayıtlarının listesini alırsınız.\n\nOnaylamak için {host} yazın.",
 	"domains.forceRemoved": "{host} kaldırıldı",
 	"domains.forceRemovedRecords": "Bu DNS kayıtlarını kendiniz kaldırın:",
-	"domains.forceRemovedCache": "Posta sunucuları eski MTA-STS politikasını {date} tarihine kadar uygulamaya devam edebilir."
+	"domains.forceRemovedCache": "Posta sunucuları eski MTA-STS politikasını {date} tarihine kadar uygulamaya devam edebilir.",
+	"list.loadFailed": "Bu liste yüklenemedi.",
+	"message.loadFailed": "Bu ileti yüklenemedi."
 }

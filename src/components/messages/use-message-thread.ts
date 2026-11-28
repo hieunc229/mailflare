@@ -6,6 +6,8 @@ import {
 	getCachedMessageThread,
 	isMessageThreadInvalidated,
 	markMessageThreadReadInCaches,
+	dropThreadOnSync,
+	threadNeedsRefetch,
 } from "./message-thread-cache";
 import type { UseMessageThreadResult } from "./conversation-thread-types";
 
@@ -69,9 +71,11 @@ export function useMessageThread(messageId: string, threadId: string | null | un
 				};
 			})));
 		}
-		function scheduleLoad() {
+		function scheduleLoad(event: Event) {
+			if (!threadNeedsRefetch(event)) return;
 			if (document.visibilityState !== "visible") return;
 			if (refreshTimer) window.clearTimeout(refreshTimer);
+			dropThreadOnSync(messageId, event);
 			refreshTimer = window.setTimeout(() => {
 				refreshTimer = null;
 				void load();

@@ -3,7 +3,7 @@
 import clsx from "clsx";
 import { ChevronUp } from "@/components/icons";
 import { usePathname } from "next/navigation";
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useIsMobile } from "./sidebar-mobile-utils";
 
 type SectionNavSheetProps = {
@@ -24,6 +24,16 @@ export function SectionNavSheet({ label, title, children, className }: SectionNa
 		setOpen(false);
 	}
 	const hidden = mobile && !open;
+	const triggerRef = useRef<HTMLButtonElement>(null);
+	const asideRef = useRef<HTMLElement>(null);
+
+	// Focus moves into the sheet on open and back to the pill on close.
+	useEffect(() => {
+		if (!open) return;
+		const trigger = triggerRef.current;
+		asideRef.current?.querySelector<HTMLElement>('a[href],button,[tabindex]:not([tabindex="-1"])')?.focus();
+		return () => trigger?.focus();
+	}, [open]);
 
 	useEffect(() => {
 		if (!open) return;
@@ -37,6 +47,7 @@ export function SectionNavSheet({ label, title, children, className }: SectionNa
 	return (
 		<>
 			<button
+				ref={triggerRef}
 				type="button"
 				onClick={() => setOpen(true)}
 				aria-haspopup="dialog"
@@ -52,7 +63,9 @@ export function SectionNavSheet({ label, title, children, className }: SectionNa
 				className={clsx("fixed inset-0 z-[100] bg-black/40 transition-opacity duration-200 ease-out motion-reduce:transition-none md:hidden", open ? "opacity-100" : "pointer-events-none opacity-0")}
 			/>
 			<aside
+				ref={asideRef}
 				role={mobile ? "dialog" : undefined}
+				aria-modal={mobile ? "true" : undefined}
 				aria-label={title}
 				aria-hidden={hidden}
 				inert={hidden}

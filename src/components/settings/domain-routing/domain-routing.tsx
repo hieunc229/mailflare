@@ -6,6 +6,7 @@ import { Ban, Forward, Inbox, Info, Pencil, Plus, Trash2 } from "@/components/ic
 import { useLanguage } from "@/components/language-provider";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { confirmDestructive } from "@/components/ui/confirm-dialog";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
 	Dialog,
@@ -160,6 +161,15 @@ export function DomainRouting({ domain }: DomainRoutingProps = {}) {
 
 			{(!domain && isMailboxLoading) || rules.isLoading ? (
 				<CardGridSkeleton />
+			) : rules.isError ? (
+				<Card>
+					<CardContent className="pt-6">
+						<div role="alert" className="flex items-center gap-3 rounded-2xl bg-red-50 px-5 py-4 text-sm text-red-700">
+							<span className="flex-1">{t("list.loadFailed")}</span>
+							<Button type="button" variant="outline" size="sm" onClick={() => void rules.refetch()}>{t("webhooks.retry")}</Button>
+						</div>
+					</CardContent>
+				</Card>
 			) : !domain && !mailboxId ? (
 				<Card>
 					<CardContent className="pt-6 text-sm text-neutral-500">
@@ -492,7 +502,7 @@ function RuleSection({
 								<Button variant="ghost" size="sm" onClick={() => onEdit(rule)} aria-label={`${t("routing.editRule")}: ${ruleName}`}>
 									<Pencil className="h-4 w-4" />
 								</Button>
-								<Button variant="ghost" size="sm" onClick={() => onDelete(rule.id)} aria-label={`${t("rules.delete")}: ${ruleName}`}>
+								<Button variant="ghost" size="sm" onClick={async () => { if (await confirmDestructive({ message: `${t("rules.delete")}: ${ruleName}`, confirmLabel: t("common.delete") })) onDelete(rule.id); }} aria-label={`${t("rules.delete")}: ${ruleName}`}>
 									<Trash2 className="h-4 w-4 text-red-600" />
 								</Button>
 							</div>

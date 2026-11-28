@@ -10,9 +10,8 @@ import { useLanguage } from "@/components/language-provider";
 import { Button } from "@/components/ui/button";
 import { authFetch } from "@/lib/auth/client";
 import type { DriveItemDto } from "@/lib/drive/types";
-
-type FolderNode = { id: string; name: string; parentId: string | null };
-type FolderRow = FolderNode & { depth: number; disabled: boolean };
+import { flattenDriveFolders } from "./drive-utils";
+import type { DriveFolderNode } from "./drive-utils";
 
 export async function bulk(body: Record<string, unknown>, fallback: string): Promise<number | null> {
 	try {
@@ -38,34 +37,14 @@ export async function attachmentAction(action: "trash" | "restore" | "delete", i
 	}
 }
 
-/** Flattens the folder list depth-first. Folders being moved, and everything beneath them, cannot be targets. */
-function buildRows(folders: FolderNode[], moving: Set<string>): FolderRow[] {
-	const children = new Map<string | null, FolderNode[]>();
-	const known = new Set(folders.map((folder) => folder.id));
-	for (const folder of folders) {
-		const key = folder.parentId && known.has(folder.parentId) ? folder.parentId : null;
-		children.set(key, [...(children.get(key) ?? []), folder]);
-	}
-	const rows: FolderRow[] = [];
-	const visit = (parent: string | null, depth: number, blocked: boolean) => {
-		for (const folder of (children.get(parent) ?? []).sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: "base" }))) {
-			const disabled = blocked || moving.has(folder.id);
-			rows.push({ ...folder, depth, disabled });
-			visit(folder.id, depth + 1, disabled);
-		}
-	};
-	visit(null, 0, false);
-	return rows;
-}
-
 export function DriveBulkActions({ selected, trashView, onDone }: { selected: DriveItemDto[]; trashView: boolean; onDone: () => void }) {
 	const { t } = useLanguage();
-	const [folders, setFolders] = useState<FolderNode[] | null>(null);
+	const [folders, setFolders] = useState<DriveFolderNode[] | null>(null);
 	const [name, setName] = useState("");
 	const [busy, setBusy] = useState(false);
 	const inputRef = useRef<HTMLInputElement | null>(null);
 	const ids = useMemo(() => selected.map((item) => item.id), [selected]);
-	const rows = useMemo(() => buildRows(folders ?? [], new Set(ids)), [folders, ids]);
+	const rows = useMemo(() => flattenDriveFolders(folders ?? [], new Set(ids)), [folders, ids]);
 	const driveIds = useMemo(() => selected.filter((item) => !item.source).map((item) => item.id), [selected]);
 	const attachmentIds = useMemo(() => selected.filter((item) => item.source).map((item) => item.id), [selected]);
 	// Editors can trash what is shared with them; moving, restoring and deleting forever are for the owner.
@@ -85,18 +64,18 @@ export function DriveBulkActions({ selected, trashView, onDone }: { selected: Dr
 
 	/** Applies a trash action to the Drive items and the email attachments in the selection. */
 	async function act(action: "trash" | "restore" | "delete"): Promise<number | null> {
+		// A failed part has already toasted its own error; the other part still changed, so the list must refresh.
 		let total = 0;
+		let succeeded = false;
 		if (driveIds.length) {
 			const done = await bulk({ action, ids: driveIds }, t("drive.actionFailed"));
-			if (done === null) return null;
-			total += done;
+			if (done !== null) { total += done; succeeded = true; }
 		}
 		if (attachmentIds.length) {
 			const done = await attachmentAction(action, attachmentIds, t("drive.actionFailed"));
-			if (done === null) return null;
-			total += done;
+			if (done !== null) { total += done; succeeded = true; }
 		}
-		return total;
+		return succeeded ? total : null;
 	}
 
 	async function loadFolders(open: boolean) {
@@ -105,7 +84,7 @@ export function DriveBulkActions({ selected, trashView, onDone }: { selected: Dr
 		try {
 			const response = await authFetch("/api/drive/folders");
 			if (!response.ok) throw new Error();
-			setFolders((await response.json() as { folders: FolderNode[] }).folders);
+			setFolders((await response.json() as { folders: DriveFolderNode[] }).folders);
 		} catch { toast.error(t("drive.loadFailed")); }
 	}
 

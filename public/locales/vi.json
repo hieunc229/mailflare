@@ -2398,6 +2398,7 @@
 	"dnsSkipped.warning": "DNS isn't configured for {domains}. Mail won't arrive until the records are set.",
 	"dnsSkipped.review": "Review DNS",
 	"dnsSkipped.markDone": "I've set it up",
+	"dnsSkipped.updateFailed": "Could not update the DNS status for every domain. Try again.",
 	"compose.cancelSend": "Cancel",
 	"compose.sendCancelled": "Sending cancelled. Message moved to Drafts.",
 	"compose.cancelTooLate": "Too late to cancel: the message is already being sent.",
@@ -2968,5 +2969,7 @@
 	"domains.forceRemoveConfirm": "{reason}\n\nVẫn xóa cưỡng bức {host}? Mailflare sẽ thử gỡ các bản ghi DNS _mta-sts và _smtp._tls, rồi xóa tên miền, mọi hộp thư trong đó và toàn bộ thư, kể cả khi việc gỡ bản ghi thất bại. Máy chủ thư có thể vẫn áp dụng chính sách MTA-STS đã lưu trong bộ nhớ đệm thêm một thời gian. Sau đó bạn sẽ nhận danh sách các bản ghi DNS cần tự gỡ.\n\nNhập {host} để xác nhận.",
 	"domains.forceRemoved": "Đã xóa {host}",
 	"domains.forceRemovedRecords": "Hãy tự gỡ các bản ghi DNS sau:",
-	"domains.forceRemovedCache": "Máy chủ thư có thể vẫn áp dụng chính sách MTA-STS cũ đến hết {date}."
+	"domains.forceRemovedCache": "Máy chủ thư có thể vẫn áp dụng chính sách MTA-STS cũ đến hết {date}.",
+	"list.loadFailed": "Không thể tải danh sách này.",
+	"message.loadFailed": "Không thể tải tin nhắn này."
 }

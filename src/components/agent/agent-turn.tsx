@@ -1,16 +1,16 @@
 "use client";
 
-import { useState } from "react";
+import { memo, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import Link from "next/link";
 import remarkGfm from "remark-gfm";
 import { ChevronDown, Clock3 } from "@/components/icons";
 import { useLanguage } from "@/components/language-provider";
 import type { AgentTurnProps } from "./types";
-import { agentDraftIdFromHref, formatAgentDuration } from "./utils";
+import { agentDraftIdFromHref, agentTurnPropsEqual, formatAgentDuration } from "./utils";
 import { AgentDraftActions, AgentPendingActions, AgentToolActivity } from "./tool-activity";
 
-export function AgentTurnView({ turn, draftActions, onOpenDraft, onApproveDraft, onApproveAction, approvingId }: AgentTurnProps) {
+function AgentTurnViewInner({ turn, draftActions, onOpenDraft, onApproveDraft, onApproveAction, approvingId }: AgentTurnProps) {
 	const { t } = useLanguage();
 	const [workOpen, setWorkOpen] = useState(turn.running);
 	const [prevRunning, setPrevRunning] = useState(turn.running);
@@ -32,3 +32,6 @@ export function AgentTurnView({ turn, draftActions, onOpenDraft, onApproveDraft,
 		</div>}
 	</div>;
 }
+
+/** Only the turn that is streaming re-renders; finished turns keep their parsed markdown. */
+export const AgentTurnView = memo(AgentTurnViewInner, agentTurnPropsEqual);

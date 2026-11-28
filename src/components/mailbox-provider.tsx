@@ -5,6 +5,7 @@ import {
 	useCallback,
 	useContext,
 	useEffect,
+	useMemo,
 	useRef,
 	useState,
 } from "react";
@@ -161,8 +162,10 @@ export function MailboxProvider({ children }: { children: ReactNode }) {
 		}
 	}, []);
 
+	const value = useMemo(() => ({ selectedMailbox, setSelectedMailbox, mailboxes, isLoading }), [selectedMailbox, setSelectedMailbox, mailboxes, isLoading]);
+
 	return (
-		<MailboxContext.Provider value={{ selectedMailbox, setSelectedMailbox, mailboxes, isLoading }}>
+		<MailboxContext.Provider value={value}>
 			{children}
 		</MailboxContext.Provider>
 	);

@@ -2478,6 +2478,7 @@
 	"dnsSkipped.warning": "DNS isn't configured for {domains}. Mail won't arrive until the records are set.",
 	"dnsSkipped.review": "Review DNS",
 	"dnsSkipped.markDone": "I've set it up",
+	"dnsSkipped.updateFailed": "Could not update the DNS status for every domain. Try again.",
 	"compose.cancelSend": "Cancel",
 	"compose.sendCancelled": "Sending cancelled. Message moved to Drafts.",
 	"compose.cancelTooLate": "Too late to cancel: the message is already being sent.",
@@ -3075,5 +3076,7 @@
 	"domains.forceRemoveConfirm": "{reason}\n\nهل تريد حذف {host} بالقوة رغم ذلك؟ سيحاول Mailflare إزالة سجلَّي DNS ‏_mta-sts و_smtp._tls، ثم يحذف النطاق وجميع صناديق البريد فيه وكل رسائلها، حتى لو فشلت هذه الإزالة. قد تواصل خوادم البريد تطبيق سياسة MTA-STS المخزنة مؤقتًا لبعض الوقت. بعد ذلك ستحصل على سجلات DNS التي عليك إزالتها يدويًا.\n\nاكتب {host} للتأكيد.",
 	"domains.forceRemoved": "تمت إزالة {host}",
 	"domains.forceRemovedRecords": "أزل سجلات DNS هذه بنفسك:",
-	"domains.forceRemovedCache": "قد تواصل خوادم البريد تطبيق سياسة MTA-STS القديمة حتى {date}."
+	"domains.forceRemovedCache": "قد تواصل خوادم البريد تطبيق سياسة MTA-STS القديمة حتى {date}.",
+	"list.loadFailed": "تعذّر تحميل هذه القائمة.",
+	"message.loadFailed": "تعذّر تحميل هذه الرسالة."
 }

@@ -4,6 +4,7 @@ import { mkdir, readdir, readFile, rm, stat, writeFile } from "node:fs/promises"
 import { dirname, join, resolve, sep } from "node:path";
 import { Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
+import { toBytes } from "./bytes";
 
 /**
  * The R2 bucket API over a directory. Objects are files under `root`; the
@@ -178,7 +179,7 @@ export class FileBucket {
 			uploadId,
 			uploadPart: async (partNumber: number, value: ReadableStream | ArrayBuffer | ArrayBufferView | string | Blob) => {
 				if (!Number.isInteger(partNumber) || partNumber < 1) throw new Error("Invalid part number");
-				const source = value instanceof ReadableStream ? Readable.fromWeb(value as never) : Readable.from(Buffer.from(value instanceof Blob ? await value.arrayBuffer() : typeof value === "string" ? value : value instanceof ArrayBuffer ? value : (value as ArrayBufferView).buffer));
+				const source = value instanceof ReadableStream ? Readable.fromWeb(value as never) : Readable.from(value instanceof Blob ? Buffer.from(await value.arrayBuffer()) : toBytes(value));
 				await pipeline(source, createWriteStream(partPath(partNumber)));
 				const { size } = await stat(partPath(partNumber));
 				return { partNumber, etag: `${partNumber}-${size.toString(16)}` };
@@ -214,7 +215,9 @@ export class FileBucket {
 	async list(options: { prefix?: string; cursor?: string; limit?: number } = {}) {
 		const prefix = options.prefix ?? "";
 		const limit = Math.min(options.limit ?? 1000, 1000);
+		const after = options.cursor;
 		const keys: string[] = [];
+		// Entries are visited in key order: a directory sorts as `name/`, so `a.txt` comes before `a/b`.
 		const walk = async (directory: string, relative: string): Promise<void> => {
 			let entries;
 			try {
@@ -222,22 +225,28 @@ export class FileBucket {
 			} catch {
 				return;
 			}
+			const sortKey = (entry: { name: string; isDirectory(): boolean }) => entry.name + (entry.isDirectory() ? "/" : "");
+			entries.sort((a, b) => (sortKey(a) < sortKey(b) ? -1 : sortKey(a) > sortKey(b) ? 1 : 0));
 			for (const entry of entries) {
+				if (keys.length > limit) return;
 				const key = relative ? `${relative}/${entry.name}` : entry.name;
-				if (entry.isDirectory()) await walk(join(directory, entry.name), key);
-				else if (!entry.name.endsWith(".meta.json") && key.startsWith(prefix)) keys.push(key);
+				if (entry.isDirectory()) {
+					const below = `${key}/`;
+					if (!relative && entry.name === ".multipart") continue;
+					if (!below.startsWith(prefix) && !prefix.startsWith(below)) continue;
+					if (after && below < after && !after.startsWith(below)) continue;
+					await walk(join(directory, entry.name), key);
+				} else if (!entry.name.endsWith(".meta.json") && key.startsWith(prefix) && (!after || key > after)) keys.push(key);
 			}
 		};
 		await walk(this.root, "");
-		keys.sort();
-		const after = options.cursor ? keys.filter((key) => key > options.cursor!) : keys;
-		const page = after.slice(0, limit);
+		const page = keys.slice(0, limit);
 		const objects: { key: string; size: number; uploaded: Date }[] = [];
 		for (const key of page) {
 			const meta = await this.readMeta(key);
 			if (meta) objects.push({ key, size: meta.size, uploaded: new Date(meta.uploaded) });
 		}
-		const truncated = after.length > limit;
+		const truncated = keys.length > limit;
 		return { objects, truncated, cursor: truncated ? page[page.length - 1] : undefined };
 	}
 }

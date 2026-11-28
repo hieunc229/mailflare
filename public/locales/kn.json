@@ -2414,6 +2414,7 @@
 	"dnsSkipped.warning": "DNS isn't configured for {domains}. Mail won't arrive until the records are set.",
 	"dnsSkipped.review": "Review DNS",
 	"dnsSkipped.markDone": "I've set it up",
+	"dnsSkipped.updateFailed": "Could not update the DNS status for every domain. Try again.",
 	"compose.cancelSend": "Cancel",
 	"compose.sendCancelled": "Sending cancelled. Message moved to Drafts.",
 	"compose.cancelTooLate": "Too late to cancel: the message is already being sent.",
@@ -2991,5 +2992,7 @@
 	"domains.forceRemoveConfirm": "{reason}\n\nಆದರೂ {host} ಅನ್ನು ಬಲವಂತವಾಗಿ ತೆಗೆದುಹಾಕಬೇಕೆ? Mailflare ಮೊದಲು ಅದರ _mta-sts ಮತ್ತು _smtp._tls DNS ದಾಖಲೆಗಳನ್ನು ತೆಗೆದುಹಾಕಲು ಪ್ರಯತ್ನಿಸುತ್ತದೆ, ನಂತರ ಡೊಮೇನ್, ಅದರ ಎಲ್ಲಾ ಮೇಲ್‌ಬಾಕ್ಸ್‌ಗಳು ಮತ್ತು ಅವುಗಳ ಎಲ್ಲಾ ಸಂದೇಶಗಳನ್ನು ಅಳಿಸುತ್ತದೆ, ದಾಖಲೆ ತೆಗೆಯುವುದು ವಿಫಲವಾದರೂ ಸಹ. ಮೇಲ್ ಸರ್ವರ್‌ಗಳು ಸ್ವಲ್ಪ ಕಾಲ ಸಂಗ್ರಹಿಸಲಾದ MTA-STS ನೀತಿಯನ್ನು ಅನ್ವಯಿಸುತ್ತಲೇ ಇರಬಹುದು. ನಂತರ ನೀವು ಕೈಯಾರೆ ತೆಗೆಯಬೇಕಾದ DNS ದಾಖಲೆಗಳ ಪಟ್ಟಿಯನ್ನು ಪಡೆಯುತ್ತೀರಿ.\n\nದೃಢೀಕರಿಸಲು {host} ಟೈಪ್ ಮಾಡಿ.",
 	"domains.forceRemoved": "{host} ತೆಗೆದುಹಾಕಲಾಗಿದೆ",
 	"domains.forceRemovedRecords": "ಈ DNS ದಾಖಲೆಗಳನ್ನು ನೀವೇ ತೆಗೆದುಹಾಕಿ:",
-	"domains.forceRemovedCache": "ಮೇಲ್ ಸರ್ವರ್‌ಗಳು {date} ವರೆಗೆ ಹಳೆಯ MTA-STS ನೀತಿಯನ್ನು ಅನ್ವಯಿಸುತ್ತಲೇ ಇರಬಹುದು."
+	"domains.forceRemovedCache": "ಮೇಲ್ ಸರ್ವರ್‌ಗಳು {date} ವರೆಗೆ ಹಳೆಯ MTA-STS ನೀತಿಯನ್ನು ಅನ್ವಯಿಸುತ್ತಲೇ ಇರಬಹುದು.",
+	"list.loadFailed": "ಈ ಪಟ್ಟಿಯನ್ನು ಲೋಡ್ ಮಾಡಲು ಸಾಧ್ಯವಾಗಲಿಲ್ಲ.",
+	"message.loadFailed": "ಈ ಸಂದೇಶವನ್ನು ಲೋಡ್ ಮಾಡಲು ಸಾಧ್ಯವಾಗಲಿಲ್ಲ."
 }

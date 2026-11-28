@@ -1,3 +1,5 @@
+import { avatarInitial } from "@/lib/avatar-colors";
+import { adminPageTitles } from "./admin-page-titles";
 import type { MailboxOption } from "./mailbox-provider";
 
 export function getMailboxAddress(mailbox: MailboxOption): string {
@@ -9,17 +11,9 @@ export function getMailboxName(mailbox: MailboxOption): string {
 }
 
 export function getAccountInitial(value: string): string {
-	return value.trim().slice(0, 1).toUpperCase() || "M";
+	return avatarInitial(value) || "M";
 }
 
 export function isAdminPath(pathname: string): boolean {
-	return (
-		pathname === "/admin" ||
-		pathname.startsWith("/mailboxes") ||
-		pathname.startsWith("/domains") ||
-		pathname.startsWith("/api-keys") ||
-		pathname.startsWith("/webhooks") ||
-		pathname.startsWith("/activity") ||
-		pathname.startsWith("/backups")
-	);
+	return Object.keys(adminPageTitles).some((path) => pathname === path || (path !== "/agent" && pathname.startsWith(`${path}/`)));
 }

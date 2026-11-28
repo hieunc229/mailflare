@@ -7,6 +7,7 @@ import { loadMessageAttachmentContents } from "@/lib/email/attachments";
 import { sendEmail } from "@/lib/email/send";
 import { newId } from "@/lib/ids";
 import type { SessionUser } from "@/lib/auth/types";
+import { claimAgentApproval } from "./claim";
 import type { AgentSendSnapshot } from "./types";
 
 async function sha256(value: ArrayBuffer | string) {
@@ -96,8 +97,9 @@ export async function confirmAgentSend(env: CloudflareEnv, user: SessionUser, ap
 	const current = await snapshot(env, draft, metadata.scheduledAt);
 	if (metadata.revision !== approval.revision || current.hash !== approval.payloadHash) throw new Error("Draft changed; review it again");
 	if (metadata.scheduledAt && metadata.scheduledAt.getTime() <= Date.now()) throw new Error("Scheduled time has passed; update the draft before confirming");
-	const claimed = await db.update(agentSendApprovals).set({ status: "claimed", claimedAt: new Date() }).where(and(eq(agentSendApprovals.id, approvalId), eq(agentSendApprovals.status, "pending"))).returning({ id: agentSendApprovals.id });
-	if (!claimed.length) return getAgentSendRequest(env, user, approvalId);
+	const outcome = await claimAgentApproval(db, approvalId, approval.draftId);
+	if (outcome === "not_pending") return getAgentSendRequest(env, user, approvalId);
+	if (outcome === "in_progress") throw new Error("This draft has a delivery already in progress or awaiting reconciliation");
 	try {
 		const result = await sendEmail(env, {
 			userId: user.id, mailboxId: draft.mailboxId!, from: draft.fromAddr, to: draft.toAddr,

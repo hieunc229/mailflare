@@ -9,7 +9,7 @@ import { MessageActionMenu, MessageActionMenuItem } from "@/components/message-a
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Skeleton } from "@/components/ui/skeleton";
-import { authFetch } from "@/lib/auth/client";
+import { authFetch, getAuthHeaders } from "@/lib/auth/client";
 import { cacheAnsweredInvite, fetchInviteCard, getCachedInviteCard } from "@/lib/calendar/invite-cache";
 import type { InviteResponse, InviteView } from "@/lib/calendar/invite-types";
 import { formatUserDate } from "@/lib/time/utils";
@@ -193,15 +193,9 @@ export function MessageInviteCard({ messageId, hasCalendarAttachment, className 
 			pendingRef.current = null;
 			if (timerRef.current) { clearTimeout(timerRef.current); timerRef.current = null; }
 			try {
-				const headers: Record<string, string> = { "Content-Type": "application/json" };
-				try {
-					const token = window.localStorage.getItem("mailflare-session-token");
-					if (token) headers["Authorization"] = `Bearer ${token}`;
-					headers["X-Time-Zone"] = Intl.DateTimeFormat().resolvedOptions().timeZone ?? "UTC";
-				} catch { /* private mode */ }
 				void fetch(`/api/messages/${messageId}/invite`, {
 					method: "POST",
-					headers,
+					headers: getAuthHeaders({ "Content-Type": "application/json" }),
 					body: JSON.stringify(buildIntentBody(pending)),
 					keepalive: true,
 					credentials: "include",

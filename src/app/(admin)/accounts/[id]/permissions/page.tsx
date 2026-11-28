@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useParams } from "next/navigation";
+import { useQueryClient } from "@tanstack/react-query";
 import { useLanguage } from "@/components/language-provider";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -10,9 +11,9 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 import { ProgressiveAvatarImage } from "@/components/progressive-avatar-image";
 import { getAvatarColorStyle } from "@/lib/avatar-colors";
 import { useCurrentUser, clearCurrentUserCache } from "@/hooks/use-current-user";
+import { forgetManagedAccount, loadManagedAccount } from "../account-cache";
 import type { ManagedAccount } from "../types";
 import {
-	fetchManagedAccount,
 	fetchTransferCandidates,
 	saveManagedAccount,
 	transferPrimaryAdmin,
@@ -22,6 +23,7 @@ import {
 export default function AccountPermissionsPage() {
 	const { t } = useLanguage();
 	const { id } = useParams<{ id: string }>();
+	const queryClient = useQueryClient();
 	const currentUser = useCurrentUser();
 	const [account, setAccount] = useState<ManagedAccount | null>(null);
 	const [saving, setSaving] = useState(false);
@@ -32,10 +34,10 @@ export default function AccountPermissionsPage() {
 	const [transferring, setTransferring] = useState(false);
 
 	useEffect(() => {
-		void fetchManagedAccount(id)
+		void loadManagedAccount(queryClient, id)
 			.then(setAccount)
 			.catch((error) => setMessage(error instanceof Error ? error.message : t("account.permissions.loadFailed")));
-	}, [id, t]);
+	}, [id, t, queryClient]);
 
 	const isPrimary = !!account?.canChangeRole;
 	const transferTarget = useMemo(
@@ -56,6 +58,7 @@ export default function AccountPermissionsPage() {
 		setMessage(null);
 		try {
 			await saveManagedAccount(account);
+			forgetManagedAccount(queryClient, id);
 			// Editing your own flags changes what your navigation shows; drop the cached user.
 			if (currentUser?.id === account.id) clearCurrentUserCache();
 			setMessage(t("account.permissions.updated"));
@@ -72,6 +75,7 @@ export default function AccountPermissionsPage() {
 		setMessage(null);
 		try {
 			await transferPrimaryAdmin(transferTarget.id);
+			forgetManagedAccount(queryClient, id);
 			clearCurrentUserCache();
 			setTransferOpen(false);
 			// A full reload drops the stale cached session so the navigation reflects the new role.

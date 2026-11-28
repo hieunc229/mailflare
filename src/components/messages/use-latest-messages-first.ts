@@ -1,7 +1,6 @@
-import { useCallback, useEffect, useState } from "react";
+import { createLocalPref } from "./use-conversation-view";
 
 const STORAGE_KEY = "mailflare-latest-messages-first";
-const CHANGE_EVENT = "mailflare:latest-messages-first-changed";
 
 function readStored(): boolean {
 	try {
@@ -12,29 +11,4 @@ function readStored(): boolean {
 }
 
 /** Whether conversations display newest to oldest. Enabled by default. */
-export function useLatestMessagesFirst(): [boolean, (next: boolean) => void] {
-	const [enabled, setEnabled] = useState(true);
-
-	useEffect(() => {
-		const sync = () => setEnabled(readStored());
-		sync();
-		window.addEventListener(CHANGE_EVENT, sync);
-		window.addEventListener("storage", sync);
-		return () => {
-			window.removeEventListener(CHANGE_EVENT, sync);
-			window.removeEventListener("storage", sync);
-		};
-	}, []);
-
-	const update = useCallback((next: boolean) => {
-		try {
-			localStorage.setItem(STORAGE_KEY, next ? "on" : "off");
-		} catch {
-			// Private mode or blocked storage: the toggle still applies for this page.
-		}
-		setEnabled(next);
-		window.dispatchEvent(new Event(CHANGE_EVENT));
-	}, []);
-
-	return [enabled, update];
-}
+export const useLatestMessagesFirst = createLocalPref({ key: STORAGE_KEY, changeEvent: "mailflare:latest-messages-first-changed", read: readStored, serverValue: true });

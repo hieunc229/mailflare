@@ -1,6 +1,7 @@
 import nodemailer from "nodemailer";
 import type { Transporter } from "nodemailer";
 import { getEmailAddress } from "@/lib/email/address";
+import { toBytes } from "./bytes";
 
 type Builder = {
 	from: string | { name?: string; email: string };
@@ -70,7 +71,7 @@ export class Mailer {
 				attachments: (message.attachments ?? []).map((attachment) => ({
 					filename: attachment.filename,
 					contentType: attachment.type,
-					content: toBuffer(attachment.content),
+					content: toBytes(attachment.content),
 					contentDisposition: attachment.disposition === "inline" ? "inline" : "attachment",
 					cid: attachment.contentId ?? undefined,
 				})),
@@ -95,7 +96,7 @@ export class Mailer {
 					attachments: (message.attachments ?? []).map((attachment) => ({
 						filename: attachment.filename,
 						type: attachment.type,
-						content: base64(toBuffer(attachment.content)),
+						content: base64(toBytes(attachment.content)),
 						disposition: attachment.disposition === "inline" ? "inline" : "attachment",
 						...(attachment.contentId ? { content_id: attachment.contentId } : {}),
 					})),
@@ -121,12 +122,6 @@ export class Mailer {
 
 function base64(buffer: Buffer): string {
 	return (buffer as unknown as { toString(encoding: string): string }).toString("base64");
-}
-
-function toBuffer(content: ArrayBuffer | ArrayBufferView | string): Buffer {
-	if (typeof content === "string") return Buffer.from(content);
-	if (content instanceof ArrayBuffer) return Buffer.from(new Uint8Array(content));
-	return Buffer.from(content.buffer, content.byteOffset, content.byteLength);
 }
 
 /** SMTP_URL wins; otherwise Cloudflare Email Sending when the account id and token are both set. */
