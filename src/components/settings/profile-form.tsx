@@ -187,7 +187,7 @@ export function ProfileForm({
             {savingProfile ? t("common.saving") : t("settings.profile.save")}
           </Button>
           {profileStatus && (
-            <p className="text-sm text-neutral-500">{profileStatus}</p>
+            <p role="status" className="text-sm text-neutral-500">{profileStatus}</p>
           )}
         </div>
       </form>
@@ -223,7 +223,7 @@ export function ProfileForm({
             {savingRecovery ? t("common.saving") : t("settings.profile.saveRecovery")}
           </Button>
           {recoveryStatus && (
-            <p className="text-sm text-neutral-500">{recoveryStatus}</p>
+            <p role="status" className="text-sm text-neutral-500">{recoveryStatus}</p>
           )}
         </div>
       </form>}

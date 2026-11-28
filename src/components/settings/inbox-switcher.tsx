@@ -56,7 +56,6 @@ function InboxLabel({ mailbox }: { mailbox: MailboxOption }) {
 }
 
 export function InboxSwitcher() {
-	const { t } = useLanguage();
 	const { selectedMailbox, setSelectedMailbox, mailboxes } = useSelectedMailbox();
 	const [open, setOpen] = useState(false);
 	const ref = useRef<HTMLDivElement>(null);
@@ -71,8 +70,6 @@ export function InboxSwitcher() {
 				type="button"
 				onClick={() => setOpen((value) => !value)}
 				aria-expanded={open}
-				aria-haspopup="listbox"
-				aria-label={t("settings.account.switchInbox")}
 				className="flex w-full items-center gap-3 rounded-2xl border border-neutral-200 px-4 py-3 transition-colors hover:bg-neutral-50"
 			>
 				<InboxLabel mailbox={selectedMailbox} />
@@ -80,7 +77,6 @@ export function InboxSwitcher() {
 			</button>
 			{open && (
 				<div
-					role="listbox"
 					className="absolute left-0 right-0 top-full z-50 mt-2 max-h-72 overflow-y-auto rounded-2xl border border-neutral-200 bg-white p-1 shadow-xl shadow-neutral-900/10"
 				>
 					{mailboxes.map((mailbox) => {
@@ -89,8 +85,7 @@ export function InboxSwitcher() {
 							<button
 								key={mailbox.id}
 								type="button"
-								role="option"
-								aria-selected={selected}
+								aria-current={selected ? "true" : undefined}
 								onClick={() => {
 									setSelectedMailbox(mailbox);
 									setOpen(false);
