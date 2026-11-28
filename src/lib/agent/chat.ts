@@ -1,4 +1,4 @@
-import { and, asc, desc, eq } from "drizzle-orm";
+import { and, asc, desc, eq, inArray } from "drizzle-orm";
 import { isOthersDraft } from "@/lib/email/draft-access";
 import { streamText, stepCountIs } from "ai";
 import { getDb } from "@/db";
@@ -53,7 +53,7 @@ export async function createAgentChatStream(context: AgentToolContext, text: str
 		conversation = await getAgentConversation(context, id);
 	}
 	if (!conversation) throw new Error("Cannot create conversation");
-	const history = await db.select().from(agentChatMessages).where(eq(agentChatMessages.conversationId, conversation.id)).orderBy(desc(agentChatMessages.createdAt)).limit(30);
+	const history = await db.select().from(agentChatMessages).where(and(eq(agentChatMessages.conversationId, conversation.id), inArray(agentChatMessages.role, ["user", "assistant"]))).orderBy(desc(agentChatMessages.createdAt)).limit(30);
 	await db.insert(agentChatMessages).values({ id: newId("chat"), conversationId: conversation.id, role: "user", content: text });
 	const prompt = history.reverse().filter((row) => row.role === "user" || row.role === "assistant").map((row) => ({ role: row.role as "user" | "assistant", content: row.content }));
 	// Sent with the latest turn rather than the system prompt so it outweighs emails named earlier in the history; never stored.

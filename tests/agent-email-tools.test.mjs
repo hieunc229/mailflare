@@ -81,6 +81,9 @@ test("assistant reads mail, creates an editable reply draft, and invokes tools t
 	const direct = { ...context, origin: "mcp" };
 	const listed = await runEmailTool(context, "list_emails", { folder: "inbox", limit: 20 });
 	assert.equal(listed.emails[0].id, "email-1");
+	// list_emails returns the public fields only, never a body.
+	assert.deepEqual(Object.keys(listed.emails[0]).sort(), ["cc", "createdAt", "direction", "from", "id", "mailboxId", "read", "snippet", "starred", "status", "subject", "threadId", "to", "url"]);
+	assert.doesNotMatch(JSON.stringify(listed), /meet Tuesday/);
 	const email = await runEmailTool(context, "get_email", { emailId: "email-1" });
 	assert.match(email.text, /meet Tuesday/);
 	const thread = await runEmailTool(context, "get_thread", { emailId: "email-1" });
